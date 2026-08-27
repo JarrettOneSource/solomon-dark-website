@@ -716,6 +716,7 @@ function createRawClient(socket, next, welcome) {
           aim: null,
           cast: { primary: false, quickbar: null },
           movement: { x: 0, y: 0 },
+          viewportHeight: 900,
           viewportWidth: 1600,
         },
         sequence: inputSequence,

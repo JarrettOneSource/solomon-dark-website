@@ -269,7 +269,7 @@ export function nativePrimarySkillProfile(
         hailDamageMinimum: rankedOr(statBook, 38, 'mDamage1', hailRank, 0)
           * factors.damage,
         hailThreshold: Math.round(hailChance * 30),
-        halfAngleDegrees: 15 + widen,
+        halfAngleDegrees: 15 + widen * 0.5,
         kind: 'water',
         minimumColdDurationTicks,
         pushbackPercent: rankedOr(statBook, 33, 'mPushback', chillRank, 0),

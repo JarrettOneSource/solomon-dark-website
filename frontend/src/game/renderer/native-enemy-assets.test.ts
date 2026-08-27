@@ -158,7 +158,9 @@ test('every reachable projectile and welded painter record is selected for prelo
       const record = assetModule.nativeEnemySpriteRecord(atlas, Number(entry))
       assert.ok(record.source.length > 0, key)
     }
-    assert.equal(required.size, 102)
+    assert.equal(required.has('BadGuys:28'), true)
+    assert.equal(required.has('BadGuys:30'), true)
+    assert.equal(required.size, 104)
 
     const deathEffectRecords = [
       ...[10, 11, 15, 20, 21, 27, 49, 55, 69, 86]

@@ -114,6 +114,7 @@ function gameplayInput(x: number, y: number) {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: { x, y },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   }
 }
@@ -453,6 +454,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
       aim: { x: player.position.x, y: 0 },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   })
@@ -519,6 +521,7 @@ test('same-tick wave actors register before player primary actors', () => {
       aim: { x: player.position.x + 1_000, y: player.position.y },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   })
@@ -587,6 +590,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
     aim: { x: 400, y: 300 },
     cast: { primary: true, quickbar: 0 },
     movement: { x: 1, y: -1 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   }
   const weldIds = NATIVE_WELD_BUILDS.map(({ id }) => id)
@@ -601,6 +605,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
         aim: null,
         cast: { primary: false, quickbar: 0 },
         movement: { x: 1, y: -1 },
+        viewportHeight: 900,
         viewportWidth: 1_600,
       },
       `primary ${skillId} crossed the Hub combat seal`,
@@ -620,6 +625,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
         aim: null,
         cast: { primary: false, quickbar: 0 },
         movement: { x: 1, y: -1 },
+        viewportHeight: 900,
         viewportWidth: 1_600,
       },
       `concentration ${skillId} did not cross the Hub selection seal`,
@@ -632,6 +638,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
         aim: null,
         cast: { primary: false, quickbar: null },
         movement: { x: 1, y: -1 },
+        viewportHeight: 900,
         viewportWidth: 1_600,
       },
       `secondary ${skillId} crossed the Hub combat seal`,
@@ -649,6 +656,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
     aim: { x: before.position.x, y: before.position.y - 200 },
     cast: { primary: true, quickbar: null },
     movement: { x: 1, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   } })
   const after = getPlayerCharacter(state, 'caster')
@@ -698,6 +706,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
       aim: { x: player.position.x, y: player.position.y - 100 },
       cast: { primary: true, quickbar: null },
       movement: { x: 1, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   }
@@ -716,6 +725,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
       aim: { x: player.position.x, y: player.position.y - 100 },
       cast: { primary: false, quickbar: 0 },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   })
@@ -745,6 +755,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
       aim: { x: player.position.x, y: player.position.y - 100 },
       cast: { primary: false, quickbar: 0 },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   })
@@ -2103,6 +2114,7 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
     },
     cast: { primary, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   })
   state = stepGameSimulationTick(state, { caster: cast(true) })
@@ -2176,6 +2188,7 @@ test('authoritative primary edges write one shared orb and light phase before de
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     }
   }
@@ -2222,6 +2235,7 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
     aim: { x: 250, y: 50 },
     cast: { primary: true, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   } })
 
@@ -2279,6 +2293,7 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
     aim: { x: 250, y: 0 },
     cast: { primary: true, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   } })
 
@@ -2305,6 +2320,7 @@ test('booked primary ranks feed new casts while existing projectile payloads sta
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     }
   }
@@ -2353,6 +2369,7 @@ test('Battle and Siege factors reach the authoritative primary payment and birth
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     }
   }
@@ -2417,6 +2434,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
     aim: { x: 250, y: 0 },
     cast: { primary, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   })
   const initialMana = getPlayerProgression(state, 'caster').currentMana
@@ -3757,6 +3775,7 @@ test('a primary quickbar edge selects the learned primary before cast authority 
       aim: null,
       cast: { primary: false, quickbar: 7 },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   })
@@ -3770,6 +3789,7 @@ test('Teleport reaches the active-run kernel through a real belt slot and remain
     aim: { x: 400, y: 250 },
     cast: { primary: false, quickbar: 7 },
     movement: { x: 0, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   }
   let college = withPlayerSkillRank(createGameSimulation(), 'local-player', 48, 1)
@@ -3809,6 +3829,7 @@ test('concentration quickbar edges fill and alternate the authoritative A/B sele
     aim: null,
     cast: { primary: false, quickbar: slot },
     movement: { x: 0, y: 0 },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   })
   let state = createGameSimulation()

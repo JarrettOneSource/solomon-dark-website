@@ -85,6 +85,7 @@ function idle(primary = false, quickbar: number | null = null) {
       aim: { x: 250, y: 100 },
       cast: { primary, quickbar },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
   }

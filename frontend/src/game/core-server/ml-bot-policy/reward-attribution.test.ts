@@ -178,6 +178,8 @@ function store(health: number): BoneyardEnemyStore {
     gaitPose: 0,
     headFacingOffset: 0,
     headingDeg: 0,
+    blizzardPushAccumulator: 0,
+    blizzardPushLastTick: null,
     hurricaneContactCooldown: 0,
     id: 7,
     lastDamagedByPlayerId: null,

@@ -132,7 +132,7 @@ test('resolves Water geometry, armor, aura, hail, and permafrost payloads', () =
     hailDamageMaximum: 30,
     hailDamageMinimum: 12,
     hailThreshold: 240,
-    halfAngleDegrees: 85,
+    halfAngleDegrees: 50,
     kind: 'water',
     manaCost: (17.5 + 10 + 20 + 8 + 10 + 10) * 0.75,
     minimumColdDurationTicks: 200,

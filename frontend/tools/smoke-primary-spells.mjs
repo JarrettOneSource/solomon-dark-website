@@ -54,6 +54,14 @@ const SPELLS = [
     startCue: '/game/audio/sfx/start-boulder.wav',
   },
 ]
+const BLIZZARD_SPELL = {
+  castPose: 7,
+  element: 'Water',
+  kind: 'blizzard',
+  loopCue: '/game/audio/sfx/ice-beam-loop.wav',
+  mode: 'channel',
+  startCue: '/game/audio/sfx/ice-start.wav',
+}
 const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
 const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
 const hostOpenedBoneyard = process.env.SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD === '1'
@@ -66,7 +74,9 @@ const performanceAcceptance = process.env.SDR_PRIMARY_PERFORMANCE === '1'
 const nativePhaseExpectation = process.env.SDR_PRIMARY_EXPECT_NATIVE_PHASE === '1'
 const combatAdmissionAcceptance = process.env.SDR_PRIMARY_SPELL_COMBAT_ADMISSION === '1'
 const selectedSpells = requestedSpellKind
-  ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
+  ? requestedSpellKind === BLIZZARD_SPELL.kind
+    ? [BLIZZARD_SPELL]
+    : SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
 if (selectedSpells.length === 0) {
   throw new Error(`Unknown SDR_PRIMARY_SPELL_KIND: ${requestedSpellKind}`)
@@ -222,6 +232,7 @@ try {
   const receipts = []
   const errors = []
   let airPage = null
+  let blizzardPage = null
   let earthPage = null
   let etherPage = null
   let firePage = null
@@ -254,7 +265,8 @@ try {
       })
       if (spell.kind === 'ether') etherPage = page
       else if (spell.kind === 'air') airPage = page
-      else throw new Error('Boneyard-only acceptance is implemented for Ether and Air')
+      else if (spell.kind === 'blizzard') blizzardPage = page
+      else throw new Error('Boneyard-only acceptance is implemented for Ether, Air, and Blizzard')
       continue
     }
     const eventStart = await audioEventCount(page)
@@ -299,6 +311,8 @@ try {
     if (castFrame) assert.equal(castFrame.playerAttachmentPose, spell.castPose)
     const observableKinds = spell.kind === 'fire'
       ? ['fire', 'fire-impact']
+      : spell.kind === 'blizzard'
+        ? ['weld-channel']
       : spell.kind
     let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
     const useTrackingWireFallback = hostOpenedBoneyard && spell.kind === 'ether'
@@ -494,6 +508,8 @@ try {
       firePage = page
     } else if (spell.kind === 'water' && selectedSpells.length === 1) {
       waterPage = page
+    } else if (spell.kind === 'blizzard' && selectedSpells.length === 1) {
+      blizzardPage = page
     } else {
       await page.close()
       await new Promise((resolve) => setTimeout(resolve, 250))
@@ -510,6 +526,8 @@ try {
         ? await castFireInBoneyard(firePage)
         : waterPage
           ? await castWaterInBoneyard(waterPage)
+          : blizzardPage
+            ? await castBlizzardInBoneyard(blizzardPage)
           : null
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
@@ -537,6 +555,11 @@ async function enterHub(page, element) {
     waitUntil: 'domcontentloaded',
   })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
+    await tutorialPrompt.waitFor({ state: 'detached' })
+  }
   if (heldPoseAcceptance && !hostOpenedBoneyard) {
     await page.getByRole('button', { name: 'Settings' }).click()
     const settings = page.getByRole('dialog', { name: 'Settings' })
@@ -866,6 +889,81 @@ async function castAirInBoneyard(page) {
   }
   await waitForAudio(page, eventStart, '/game/audio/sfx/lightning-loop.wav', 'pause')
   return receipt
+}
+
+async function castBlizzardInBoneyard(page) {
+  const canvas = await enterBoneyard(page)
+  const target = await visibleBoneyardEnemy(page, true)
+  assert.ok(target, 'expected one visible enemy for Blizzard acceptance')
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds, 'expected the Boneyard canvas for Blizzard acceptance')
+  const collisionAcceptance = process.env.SDR_PRIMARY_SPELL_BLIZZARD_COLLISION_ACCEPTANCE === '1'
+  const aimWorld = collisionAcceptance
+    ? blizzardCollisionAim(target)
+    : target.enemy
+  const aim = worldScreenPoint(bounds, target.frame, aimWorld)
+  await page.mouse.move(aim.x, aim.y)
+  await page.mouse.down({ button: 'left' })
+  try {
+    const frame = await waitForBoneyardSpell(page, 'weld-blizzard-glow:1004')
+    const wire = await latestWireSpell(page, 'weld-channel')
+    assert.equal(wire.state.buildId, 1004)
+    const channelCount = frame.primarySpellKinds.filter((kind) => (
+      kind === 'weld-channel:1004'
+    )).length
+    const glowCount = frame.primarySpellKinds.filter((kind) => (
+      kind === 'weld-blizzard-glow:1004'
+    )).length
+    assert.ok(channelCount >= 1 && channelCount <= 2)
+    assert.ok(glowCount >= 2)
+    const screenshotPath = `${screenshotRoot}/solomon-primary-blizzard-boneyard.png`
+    await page.screenshot({ path: screenshotPath })
+    return {
+      channelCount,
+      frame,
+      glowCount,
+      aimWorld,
+      screenshotPath,
+      target: target.enemy,
+      wire,
+    }
+  } finally {
+    await page.mouse.up({ button: 'left' })
+  }
+}
+
+function blizzardCollisionAim(target) {
+  const chain = target.frame.enemySamples.find(({ id }) => id === target.enemy.id + 1)
+  assert.ok(chain, 'expected the controlled Blizzard chain target')
+  const dx = chain.x - target.enemy.x
+  const dy = chain.y - target.enemy.y
+  const distance = Math.hypot(dx, dy)
+  assert.ok(distance > 0, 'expected distinct Blizzard direct and chain roots')
+  const perpendicular = { x: dx / distance, y: dy / distance }
+  const directionX = target.enemy.x - target.frame.playerX - perpendicular.x * 30
+  const directionY = target.enemy.y - target.frame.playerY - perpendicular.y * 30
+  const directionLength = Math.hypot(directionX, directionY)
+  assert.ok(directionLength > 0, 'expected a Blizzard collision aim direction')
+  const direction = {
+    x: directionX / directionLength,
+    y: directionY / directionLength,
+  }
+  const horizontalDistance = direction.x === 0
+    ? Number.POSITIVE_INFINITY
+    : direction.x > 0
+      ? (1_550 - target.frame.playerScreenX) / (direction.x * 1.35)
+      : (50 - target.frame.playerScreenX) / (direction.x * 1.35)
+  const verticalDistance = direction.y === 0
+    ? Number.POSITIVE_INFINITY
+    : direction.y > 0
+      ? (850 - target.frame.playerScreenY) / (direction.y * 1.35)
+      : (50 - target.frame.playerScreenY) / (direction.y * 1.35)
+  const aimDistance = Math.min(300, horizontalDistance, verticalDistance)
+  assert.ok(aimDistance > 90, 'expected the Blizzard collision aim to remain on canvas')
+  return {
+    x: target.frame.playerX + direction.x * aimDistance,
+    y: target.frame.playerY + direction.y * aimDistance,
+  }
 }
 
 async function castFireInBoneyard(page) {

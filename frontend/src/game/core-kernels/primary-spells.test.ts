@@ -1837,6 +1837,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
       aim: eastAim,
       cast: { primary, quickbar: null },
       movement: { x: -1, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     })
 

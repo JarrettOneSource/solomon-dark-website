@@ -101,6 +101,7 @@ import {
   type NativeWeldHailstoneRockState,
   type NativeWeldHailRockFadeActorState,
   type NativeWeldHailstonesState,
+  type NativeWeldBlizzardChainFrostState,
   type NativeWeldFrostFadeActorState,
   type NativeWeldGroundSparkFadeActorState,
   type NativeWeldImpactActorState,
@@ -384,7 +385,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 93
+export const GAME_PROTOCOL_VERSION = 94
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2251,12 +2252,16 @@ function gitRevision(value: unknown, field: string): string {
 
 function playerCharacterInput(value: unknown, field: string): PlayerCharacterInput {
   const source = record(value, field)
-  onlyKeys(source, field, ['aim', 'cast', 'movement', 'viewportWidth'])
+  onlyKeys(source, field, ['aim', 'cast', 'movement', 'viewportHeight', 'viewportWidth'])
   const cast = record(source.cast, `${field}.cast`)
   onlyKeys(cast, `${field}.cast`, ['primary', 'quickbar'])
+  const viewportHeight = finite(source.viewportHeight, `${field}.viewportHeight`)
   const viewportWidth = finite(source.viewportWidth, `${field}.viewportWidth`)
-  if (viewportWidth < 1 || viewportWidth > 32_768) {
-    throw new GameProtocolError(`${field}.viewportWidth is outside the native surface range`)
+  if (
+    viewportHeight < 1 || viewportHeight > 32_768
+    || viewportWidth < 1 || viewportWidth > 32_768
+  ) {
+    throw new GameProtocolError(`${field}.viewportHeight/viewportWidth is outside range`)
   }
   return {
     aim: source.aim === null ? null : vector(source.aim, `${field}.aim`),
@@ -2265,6 +2270,7 @@ function playerCharacterInput(value: unknown, field: string): PlayerCharacterInp
       quickbar: skillQuickbarSlot(cast.quickbar, `${field}.cast.quickbar`),
     },
     movement: unitVector(source.movement, `${field}.movement`),
+    viewportHeight,
     viewportWidth,
   }
 }
@@ -2312,6 +2318,13 @@ function nativeLightProviderRegistration(
 function absentNativeLightProviderRegistration(value: unknown, field: string): null {
   if (value !== null) throw new GameProtocolError(`${field} must be null`)
   return null
+}
+
+function absentNativeActorLight(source: Record<string, unknown>, field: string): null {
+  return absentNativeLightProviderRegistration(
+    source.lightRegistration,
+    `${field}.lightRegistration`,
+  )
 }
 
 function nullableNativeLightProviderRegistration(
@@ -5328,10 +5341,7 @@ function nativeSecondaryActor(
   }
   const lightDisposition = nativeSecondaryLightDisposition({ kind, variant })
   const lightRegistration = lightDisposition === 'none'
-    ? absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      )
+    ? absentNativeActorLight(source, field)
     : nativeLightProviderRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
@@ -6419,10 +6429,7 @@ function primarySpellWeldActor(
       colorGreen,
       growthFactor,
       kind: 'weld-meteor-marker',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       rotationDegrees,
       scale: positiveFinite(source.scale, `${field}.scale`),
     } satisfies NativeWeldMeteorMarkerState
@@ -6454,10 +6461,7 @@ function primarySpellWeldActor(
       buildId,
       endpoint,
       kind: 'weld-channel',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       midpoint,
       targetId: source.targetId === null
         ? null
@@ -6536,10 +6540,7 @@ function primarySpellWeldActor(
             `${field}.lightRegistration`,
             'transient',
           )
-        : absentNativeLightProviderRegistration(
-            source.lightRegistration,
-            `${field}.lightRegistration`,
-          ),
+        : absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       presentationRotationDegrees,
       presentationScale,
@@ -6560,45 +6561,53 @@ function primarySpellWeldActor(
       buildId,
       debris,
       kind: 'weld-boulder-debris',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
     } satisfies NativeWeldBoulderDebrisActorState
   }
 
   if (source.kind === 'weld-blizzard-glow') {
     onlyKeys(source, field, [
-      ...commonKeys, 'glowIndex', 'position', 'rotationDegrees', 'scale', 'variant',
+      ...commonKeys, 'rotationDegrees', 'scale', 'variant',
     ])
-    if (buildId !== 1004 || common.ageTicks !== 0 || source.variant !== 24) {
-      throw new GameProtocolError(`${field} does not match the native Blizzard source glow`)
+    const variant = source.variant
+    if (
+      buildId !== 1004
+      || common.ageTicks !== 0
+      || (variant !== 3 && variant !== 24)
+    ) {
+      throw new GameProtocolError(`${field}.BlizzardGlow`)
     }
-    const glowIndex = nonnegativeInteger(source.glowIndex, `${field}.glowIndex`)
-    if (glowIndex > 1) throw new GameProtocolError(`${field}.glowIndex exceeds the pair`)
     const scale = positiveFinite(source.scale, `${field}.scale`)
-    if (scale < 1 || scale >= 1.5) {
-      throw new GameProtocolError(`${field}.scale exceeds the Blizzard glow range`)
+    if (scale < 1 || scale > 1.5) {
+      throw new GameProtocolError(`${field}.scale`)
     }
     const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
     if (rotationDegrees < 0 || rotationDegrees >= 360) {
-      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+      throw new GameProtocolError(`${field}.rotationDegrees`)
     }
     return {
       ...common,
       buildId: 1004,
-      glowIndex: glowIndex as 0 | 1,
       kind: 'weld-blizzard-glow',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
-      position: vector(source.position, `${field}.position`),
+      lightRegistration: absentNativeActorLight(source, field),
       rotationDegrees,
       scale,
-      variant: 24,
+      variant: variant as 3 | 24,
     } satisfies NativeWeldBlizzardGlowState
+  }
+
+  if (source.kind === 'weld-blizzard-chain-frost') {
+    onlyKeys(source, field, commonKeys)
+    if (buildId !== 1004 || common.ageTicks >= 33) {
+      throw new GameProtocolError(`${field}.chainFrost`)
+    }
+    return {
+      ...common,
+      buildId: 1004,
+      kind: 'weld-blizzard-chain-frost',
+      lightRegistration: absentNativeActorLight(source, field),
+    } satisfies NativeWeldBlizzardChainFrostState
   }
 
   if (source.kind === 'weld-flame-lash-fade') {
@@ -6640,10 +6649,7 @@ function primarySpellWeldActor(
       buildId: 1003,
       colorGreen,
       kind: 'weld-flame-lash-fade',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       record: 35,
       rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
@@ -6675,10 +6681,7 @@ function primarySpellWeldActor(
       end: vector(source.end, `${field}.end`),
       endAlpha,
       kind: 'weld-hail-line',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       start: vector(source.start, `${field}.start`),
       width,
     } satisfies NativeWeldHailLineState
@@ -6698,10 +6701,7 @@ function primarySpellWeldActor(
       alphaStep,
       buildId: 1008,
       kind: 'weld-hail-flash',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       record: 15,
     } satisfies NativeWeldHailFlashState
@@ -6719,10 +6719,7 @@ function primarySpellWeldActor(
       buildId: 1008,
       delta: unitVector(source.delta, `${field}.delta`),
       kind: 'weld-hail-knockback',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       remainingTicks,
       targetId: limitedString(source.targetId, `${field}.targetId`, 256),
     } satisfies NativeWeldHailKnockbackState
@@ -6747,10 +6744,7 @@ function primarySpellWeldActor(
       alphaStep,
       buildId: 1008,
       kind: 'weld-hail-terrain-particle',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       record: 45,
       rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
@@ -6779,10 +6773,7 @@ function primarySpellWeldActor(
       enhancedShadow: boolean(source.enhancedShadow, `${field}.enhancedShadow`),
       height: finite(source.height, `${field}.height`),
       kind: 'weld-hail-terrain-bouncer',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       record: 32,
       rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
@@ -6810,34 +6801,29 @@ function primarySpellWeldActor(
       ...common,
       buildId: 1008,
       kind: 'weld-hail-rock-fade',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       rotationDegrees,
     } satisfies NativeWeldHailRockFadeActorState
   }
 
   if (source.kind === 'weld-frost-fade') {
-    onlyKeys(source, field, [...commonKeys, 'position', 'scale'])
-    if (buildId !== 1008) throw new GameProtocolError(`${field}.buildId is not Hailstones`)
-    if (common.ageTicks >= NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS) {
-      throw new GameProtocolError(`${field}.ageTicks exceeds the Hail Frost-fade lifetime`)
-    }
+    onlyKeys(source, field, [...commonKeys, 'scale'])
+    const blizzard = buildId === 1004
+    if (!blizzard && buildId !== 1008) throw new GameProtocolError(`${field}.buildId`)
     const scale = positiveFinite(source.scale, `${field}.scale`)
-    if (scale < 3.75 || scale >= 7.5) {
-      throw new GameProtocolError(`${field}.scale exceeds the native Hail release range`)
+    if (
+      common.ageTicks >= (blizzard ? 3 : NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS)
+      || scale < (blizzard ? 1 : 3.75)
+      || scale > (blizzard ? 1.5 : 7.5)
+    ) {
+      throw new GameProtocolError(`${field} Frost-fade range`)
     }
     return {
       ...common,
-      buildId: 1008,
+      buildId,
       kind: 'weld-frost-fade',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
-      position: vector(source.position, `${field}.position`),
+      lightRegistration: absentNativeActorLight(source, field),
       scale,
     } satisfies NativeWeldFrostFadeActorState
   }
@@ -6877,10 +6863,7 @@ function primarySpellWeldActor(
       alphaStep,
       buildId: 1009,
       kind: 'weld-ground-spark-fade',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       record: nativeRecord as NativeWeldGroundSparkFadeActorState['record'],
       rotationDegrees,
@@ -6950,10 +6933,7 @@ function primarySpellWeldActor(
       kind: 'weld-steam',
       life,
       lifeLoss,
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       phase: nonnegativeFinite(source.phase, `${field}.phase`),
       position: vector(source.position, `${field}.position`),
       remainingDistance: nonnegativeFinite(
@@ -6989,10 +6969,7 @@ function primarySpellWeldActor(
       alphaStep,
       buildId: 1007,
       kind: 'weld-meteor-flash',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       position: vector(source.position, `${field}.position`),
       record: 15,
       scale: 6,
@@ -7153,10 +7130,7 @@ function primarySpellWeldActor(
       ...common,
       buildId: 1007,
       kind: 'weld-persistent',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       phase: 'held',
       pulseSequence,
     } satisfies NativeWeldMeteorFieldState
@@ -7525,10 +7499,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       debris: nativeWeldBoulderDebris(source.debris, `${field}.debris`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'earth-boulder-bit',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       position: vector(source.position, `${field}.position`),
@@ -7536,6 +7507,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     } satisfies PrimarySpellEarthBoulderBitState
   }
   if (source.kind === 'weld-boulder-debris'
+    || source.kind === 'weld-blizzard-chain-frost'
     || source.kind === 'weld-blizzard-glow'
     || source.kind === 'weld-channel'
     || source.kind === 'weld-frost-fade'
@@ -7780,10 +7752,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       id,
       kind: 'earth-called-rock',
       lateralMagnitude,
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       parentId,
       position: vector(source.position, `${field}.position`),
@@ -7822,10 +7791,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       charge,
       id,
       kind: 'earth-impact',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       lifetimeTicks,
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
@@ -8264,10 +8230,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     return {
       ...common,
       kind: 'water',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: absentNativeActorLight(source, field),
       obstructionDistance,
       obstructionPoint,
       underpowered,
@@ -8306,10 +8269,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   return {
     ...common,
     kind: source.kind,
-    lightRegistration: absentNativeLightProviderRegistration(
-      source.lightRegistration,
-      `${field}.lightRegistration`,
-    ),
+    lightRegistration: absentNativeActorLight(source, field),
   }
 }
 
@@ -10620,10 +10580,7 @@ function boneyardEnemyProjectileEffectSnapshot(
           `${field}.lightRegistration`,
           'transient',
         )
-      : absentNativeLightProviderRegistration(
-          source.lightRegistration,
-          `${field}.lightRegistration`,
-        ),
+      : absentNativeActorLight(source, field),
     lifetimeTicks,
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
     ownerProjectileId: positiveInteger(

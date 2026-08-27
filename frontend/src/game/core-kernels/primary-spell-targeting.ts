@@ -1,4 +1,5 @@
 import { actorHeadingFromVector } from './actor-heading.ts'
+import { lineBoundsExitObstruction } from './line-obstruction.ts'
 import type { Vector2 } from './vector.ts'
 
 export const AIR_PRIMARY_CONE_HALF_ANGLE_DEGREES = 15
@@ -17,7 +18,9 @@ export const NATIVE_FIREBALL_SCENERY_EXCEPTION_DISTANCE_SQUARED = 2
 export const NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK = 0x380
 export const NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK = 0x700
 export const NATIVE_PRIMARY_ACTOR_CELL_SIZE = 100
+export const NATIVE_PRIMARY_DIRECTIONAL_APEX_OFFSET = 30
 export const NATIVE_PRIMARY_HOSTILE_FLAG = 0x2
+export const NATIVE_PRIMARY_POLYGON_BROADPHASE_PADDING = 25
 
 const AIR_PRIMARY_CONE_DOT = Math.cos(
   AIR_PRIMARY_CONE_HALF_ANGLE_DEGREES * Math.PI / 180,
@@ -61,6 +64,19 @@ export interface NativePrimaryConeQuery {
   origin: Vector2
   reach: number
   targets: readonly PrimarySpellTarget[]
+}
+
+export interface NativePrimaryPolygonQuery {
+  actorMask: number
+  polygon: readonly Readonly<Vector2>[]
+  targets: readonly PrimarySpellTarget[]
+}
+
+export interface NativePrimaryWorldBounds {
+  readonly h: number
+  readonly w: number
+  readonly x: number
+  readonly y: number
 }
 
 export interface AirPrimaryTargetQuery {
@@ -119,6 +135,7 @@ export function selectAirPrimaryTarget(
   query: AirPrimaryTargetQuery,
 ): PrimarySpellTarget | null {
   const aim = normalized(query.aimDirection)
+  const angleOrigin = directionalApex(query.origin, aim)
   const maxDistanceSquared = query.maxRange * query.maxRange
   let selected: PrimarySpellTarget | null = null
   let selectedDistanceSquared = Number.POSITIVE_INFINITY
@@ -129,11 +146,17 @@ export function selectAirPrimaryTarget(
     query.targets,
   )) {
     if (!nativePrimaryTargetEligible(target, 0x6)) continue
-    const delta = subtract(target.position, query.origin)
-    const distanceSquared = squaredLength(delta)
+    const rangeDelta = subtract(target.position, query.origin)
+    const distanceSquared = squaredLength(rangeDelta)
     if (distanceSquared >= maxDistanceSquared || distanceSquared === 0) continue
-    const inverseDistance = 1 / Math.sqrt(distanceSquared)
-    if ((delta.x * aim.x + delta.y * aim.y) * inverseDistance < AIR_PRIMARY_CONE_DOT) {
+    const angleDelta = subtract(target.position, angleOrigin)
+    const angleDistanceSquared = squaredLength(angleDelta)
+    if (angleDistanceSquared === 0) continue
+    const inverseAngleDistance = 1 / Math.sqrt(angleDistanceSquared)
+    if (
+      (angleDelta.x * aim.x + angleDelta.y * aim.y) * inverseAngleDistance
+      < AIR_PRIMARY_CONE_DOT
+    ) {
       continue
     }
     if (!query.hasLineOfSight(target)) continue
@@ -278,18 +301,84 @@ export function nativePrimaryConeTargets(
   query: NativePrimaryConeQuery,
 ): PrimarySpellTarget[] {
   const aim = normalized(query.aimDirection)
+  const angleOrigin = directionalApex(query.origin, aim)
   const reachSquared = query.reach * query.reach
   const coneDot = Math.cos(query.halfAngleDegrees * Math.PI / 180)
   return nativeBroadphaseOrder(query.origin, query.reach, query.targets).filter((target) => {
     if (!nativePrimaryTargetEligible(target, query.actorMask)) return false
-    const delta = subtract(target.position, query.origin)
-    const distanceSquared = squaredLength(delta)
+    const rangeDelta = subtract(target.position, query.origin)
+    const distanceSquared = squaredLength(rangeDelta)
     if (distanceSquared === 0 || distanceSquared >= reachSquared) return false
-    if ((delta.x * aim.x + delta.y * aim.y) / Math.sqrt(distanceSquared) < coneDot) {
+    const angleDelta = subtract(target.position, angleOrigin)
+    const angleDistanceSquared = squaredLength(angleDelta)
+    if (
+      angleDistanceSquared === 0
+      || (angleDelta.x * aim.x + angleDelta.y * aim.y)
+        / Math.sqrt(angleDistanceSquared) < coneDot
+    ) {
       return false
     }
     return query.hasLineOfSight(target)
   })
+}
+
+export function nativePrimaryPolygonTargets(
+  query: NativePrimaryPolygonQuery,
+): PrimarySpellTarget[] {
+  if (query.polygon.length < 3) return []
+  let minimumX = Number.POSITIVE_INFINITY
+  let minimumY = Number.POSITIVE_INFINITY
+  let maximumX = Number.NEGATIVE_INFINITY
+  let maximumY = Number.NEGATIVE_INFINITY
+  for (const point of query.polygon) {
+    minimumX = Math.min(minimumX, point.x)
+    minimumY = Math.min(minimumY, point.y)
+    maximumX = Math.max(maximumX, point.x)
+    maximumY = Math.max(maximumY, point.y)
+  }
+  return nativeCellRangeOrder({
+    maximumX: Math.fround(maximumX + NATIVE_PRIMARY_POLYGON_BROADPHASE_PADDING),
+    maximumY: Math.fround(maximumY + NATIVE_PRIMARY_POLYGON_BROADPHASE_PADDING),
+    minimumX: Math.fround(minimumX - NATIVE_PRIMARY_POLYGON_BROADPHASE_PADDING),
+    minimumY: Math.fround(minimumY - NATIVE_PRIMARY_POLYGON_BROADPHASE_PADDING),
+    targets: query.targets,
+  }).filter((target) => (
+    nativePrimaryTargetEligible(target, query.actorMask)
+    && nativePointInPolygon(target.position, query.polygon)
+  ))
+}
+
+export function nativePrimaryViewBounds(input: Readonly<{
+  bounds: NativePrimaryWorldBounds
+  focus: Vector2
+  padding: number
+  scale: number
+  viewportHeight: number
+  viewportWidth: number
+}>): NativePrimaryWorldBounds {
+  const viewWidth = Math.fround(input.viewportWidth / input.scale)
+  const viewHeight = Math.fround(input.viewportHeight / input.scale)
+  const cameraX = clampViewAxis(input.focus.x, input.bounds.x, input.bounds.w, viewWidth)
+  const cameraY = clampViewAxis(input.focus.y, input.bounds.y, input.bounds.h, viewHeight)
+  return {
+    x: Math.fround(cameraX - viewWidth / 2 - input.padding),
+    y: Math.fround(cameraY - viewHeight / 2 - input.padding),
+    w: Math.fround(viewWidth + input.padding * 2),
+    h: Math.fround(viewHeight + input.padding * 2),
+  }
+}
+
+export function nativePrimaryViewRayEndpoint(input: Readonly<{
+  direction: Vector2
+  start: Vector2
+  view: NativePrimaryWorldBounds
+}>): Vector2 {
+  const far = {
+    x: Math.fround(input.start.x + Math.fround(input.direction.x * 100_000)),
+    y: Math.fround(input.start.y + Math.fround(input.direction.y * 100_000)),
+  }
+  const endpoint = lineBoundsExitObstruction(input.start, far, input.view)?.point ?? far
+  return { x: Math.fround(endpoint.x), y: Math.fround(endpoint.y) }
 }
 
 export function nativePrimaryRootTargets(
@@ -491,11 +580,28 @@ function nativeBroadphaseOrder(
   const minX = Math.fround(origin.x - reach)
   const minY = Math.fround(origin.y - reach)
   const diameter = Math.fround(reach + reach)
-  const minCellX = nativePrimaryCellCoordinate(minX)
-  const minCellY = nativePrimaryCellCoordinate(minY)
-  const maxCellX = nativePrimaryCellCoordinate(Math.fround(minX + diameter))
-  const maxCellY = nativePrimaryCellCoordinate(Math.fround(minY + diameter))
-  return targets.filter((target) => {
+  return nativeCellRangeOrder({
+    maximumX: Math.fround(minX + diameter),
+    maximumY: Math.fround(minY + diameter),
+    minimumX: minX,
+    minimumY: minY,
+    targets,
+  })
+}
+
+function nativeCellRangeOrder(input: Readonly<{
+  maximumX: number
+  maximumY: number
+  minimumX: number
+  minimumY: number
+  targets: readonly PrimarySpellTarget[]
+}>): PrimarySpellTarget[] {
+  const minCellX = nativePrimaryCellCoordinate(input.minimumX)
+  const minCellY = nativePrimaryCellCoordinate(input.minimumY)
+  const maxCellX = nativePrimaryCellCoordinate(input.maximumX)
+  const maxCellY = nativePrimaryCellCoordinate(input.maximumY)
+  const grid = input.targets.filter((target) => {
+    if ((target.actorFlags & 0x180) !== 0) return false
     const cellX = nativePrimaryCellCoordinate(target.position.x)
     const cellY = nativePrimaryCellCoordinate(target.position.y)
     return cellX >= minCellX
@@ -510,6 +616,10 @@ function nativeBroadphaseOrder(
     const rightCellY = nativePrimaryCellCoordinate(right.position.y)
     return leftCellY - rightCellY || left.cellBindingOrder - right.cellBindingOrder
   })
+  const special = nativeRegistrationOrder(input.targets.filter((target) => (
+    (target.actorFlags & 0x180) !== 0
+  )))
+  return [...grid, ...special]
 }
 
 export function nativePrimaryCellCoordinate(position: number): number {
@@ -535,4 +645,17 @@ function nativePointInPolygon(
     previous = current
   }
   return inside
+}
+
+function directionalApex(origin: Readonly<Vector2>, direction: Readonly<Vector2>): Vector2 {
+  return {
+    x: Math.fround(origin.x - direction.x * NATIVE_PRIMARY_DIRECTIONAL_APEX_OFFSET),
+    y: Math.fround(origin.y - direction.y * NATIVE_PRIMARY_DIRECTIONAL_APEX_OFFSET),
+  }
+}
+
+function clampViewAxis(focus: number, origin: number, size: number, viewSize: number): number {
+  if (size <= viewSize) return Math.fround(origin + size / 2)
+  const halfView = viewSize / 2
+  return Math.fround(Math.min(origin + size - halfView, Math.max(origin + halfView, focus)))
 }

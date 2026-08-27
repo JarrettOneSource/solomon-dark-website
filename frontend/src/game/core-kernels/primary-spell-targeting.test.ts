@@ -19,6 +19,8 @@ import {
   nativeMissileFanTurnScale,
   nativePrimaryConeTargets,
   nativePrimaryRootTargets,
+  nativePrimaryViewBounds,
+  nativePrimaryViewRayEndpoint,
   selectAirPrimaryTarget,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
@@ -82,6 +84,50 @@ test('Lightning prioritizes visible combat actors and falls back to a Gravestone
     ...base,
     hasLineOfSight: (target) => target.kind === 'gravestone',
   })?.id, 'grave:near')
+})
+
+test('directional target angles use the native apex thirty units behind the caster root', () => {
+  const nearEdge = enemy('enemy:near-edge', 10, -10)
+  const query = {
+    aimDirection: { x: 0, y: -1 },
+    hasLineOfSight: () => true,
+    origin: { x: 0, y: 0 },
+    targets: [nearEdge],
+  }
+
+  assert.equal(selectAirPrimaryTarget({
+    ...query,
+    maxRange: 205,
+    previousTargetId: null,
+  })?.id, nearEdge.id)
+  assert.deepEqual(nativePrimaryConeTargets({
+    ...query,
+    actorMask: 0x1082,
+    halfAngleDegrees: 15,
+    reach: 205,
+  }).map(({ id }) => id), [nearEdge.id])
+})
+
+test('primary view rays use both authenticated viewport axes and Blizzard padding', () => {
+  const view = nativePrimaryViewBounds({
+    bounds: { x: 0, y: 0, w: 2_000, h: 1_024 },
+    focus: { x: 1_000, y: 512 },
+    padding: 100,
+    scale: 1.35,
+    viewportHeight: 900,
+    viewportWidth: 1_600,
+  })
+  const viewWidth = Math.fround(1_600 / 1.35)
+  const viewHeight = Math.fround(900 / 1.35)
+  assert.equal(view.w, Math.fround(viewWidth + 200))
+  assert.equal(view.h, Math.fround(viewHeight + 200))
+  const endpoint = nativePrimaryViewRayEndpoint({
+    direction: { x: 1, y: 0 },
+    start: { x: 1_000, y: 512 },
+    view,
+  })
+  assert.equal(endpoint.x, Math.fround(1_000 + viewWidth / 2 + 100))
+  assert.equal(endpoint.y, 512)
 })
 
 test('Lightning retains a missed live target only inside the native wider heading gate', () => {
@@ -468,13 +514,17 @@ test('Air and Water queries skip inactive, pending, and actor-flag-ineligible Co
 
 test('Water cone uses root-only strict reach, LOS, aperture, and column-first cell order', () => {
   const atAngle = (id: string, distance: number, degrees: number, order: number) => ({
-    ...enemy(id, Math.sin(degrees * Math.PI / 180) * distance, -Math.cos(degrees * Math.PI / 180) * distance),
+    ...enemy(
+      id,
+      Math.sin(degrees * Math.PI / 180) * distance,
+      30 - Math.cos(degrees * Math.PI / 180) * distance,
+    ),
     cellBindingOrder: order,
     registrationOrder: order,
   })
   const laterNear = atAngle('enemy:2', 20, 0, 8)
   const firstFar = atAngle('enemy:1', 204.999, 14.999, 3)
-  const exactReach = atAngle('enemy:3', 205, 0, 1)
+  const exactReach = { ...atAngle('enemy:3', 235, 0, 1), position: { x: 0, y: -205 } }
   const outsideAngle = atAngle('enemy:4', 100, 15.01, 2)
   const hidden = atAngle('enemy:5', 100, 0, 4)
   const selected = nativePrimaryConeTargets({

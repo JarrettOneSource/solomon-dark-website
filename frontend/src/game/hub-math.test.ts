@@ -99,6 +99,7 @@ function gameplayInput(movement: { x: number; y: number }) {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement,
+    viewportHeight: 900,
     viewportWidth: 1_600,
   }
 }

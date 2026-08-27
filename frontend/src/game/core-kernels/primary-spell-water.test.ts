@@ -7,6 +7,7 @@ import {
   WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   packWaterFrostTint,
   quantizeWaterFrostAlpha,
+  waterFrostJetChainingPlan,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
   waterFrostJetObstruction,
@@ -298,6 +299,25 @@ test('shares late-life growth and cuts the Normal additive pass after update 14'
   )))
   assert.equal(waterFrostJetPlan(state(overId, 7)).coreScale, 0.8224014043807983)
   assert.equal(waterFrostJetPlan(state(overId, 8)).coreScale, 0.8324013948440552)
+})
+
+test('chaining Frost uses speed two and the fixed half-scale wrapper recurrence', () => {
+  const birth = waterFrostJetChainingPlan({
+    ageTicks: 0,
+    direction: { x: 0, y: -0.5 },
+    id: 44,
+    origin: { x: 100, y: 200 },
+  })
+  assert.equal(birth.coreScale, Math.fround(0.5))
+  assert.deepEqual(birth.velocity, { x: 0, y: -2 })
+  const stepped = waterFrostJetChainingPlan({
+    ageTicks: 1,
+    direction: { x: 0, y: -0.5 },
+    id: 44,
+    origin: { x: 100, y: 200 },
+  })
+  assert.equal(stepped.coreScale, Math.fround(0.5 - 0.009999999776482582))
+  assert.deepEqual(stepped.position, { x: 100, y: 198 })
 })
 
 test('converts clockwise screen-up heading and packs self-lit colors by native truncation', () => {

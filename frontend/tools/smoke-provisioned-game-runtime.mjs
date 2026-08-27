@@ -67,6 +67,8 @@ try {
       aim: null,
       cast: { primary: false, quickbar: null },
       movement: { x: 1, y: 0 },
+      viewportHeight: 900,
+      viewportWidth: 1_600,
     },
     sequence: 1,
     targetTick: welcome.snapshot.tick + 1,

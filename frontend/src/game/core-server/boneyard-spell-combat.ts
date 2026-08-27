@@ -49,6 +49,7 @@ import {
   firstNativeFireballPointContact,
   firstNativePrimaryPointContact,
   nativePrimaryConeTargets,
+  nativePrimaryPolygonTargets,
   nativePrimaryRootTargets,
   nativePrimaryTargetEligible,
   primarySpellTargetPoint,
@@ -62,6 +63,7 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import {
   createNativeWeldBoulderDebrisActor,
+  createNativeWeldBlizzardChainEffects,
   isMagicMissileDerivedWeldBuild,
   nativeWeldHailstoneDrawOffset,
   nativeWeldHailstoneFlightContactSubsteps,
@@ -81,6 +83,10 @@ import {
 } from '../core-kernels/native-weld-hail-contact.ts'
 import { createNativeWeldFlameLashFade } from '../core-kernels/native-weld-flame-lash.ts'
 import {
+  createNativeWeldBlizzardContactGlow,
+  nativeWeldBlizzardContactPolygon,
+} from '../core-kernels/native-weld-blizzard.ts'
+import {
   nativeWeldMeteorDirectRadius,
   nativeWeldMeteorPulseRadius,
 } from '../core-kernels/native-weld-meteor.ts'
@@ -89,6 +95,7 @@ import type { RegisterNativeLightProvider } from '../core-kernels/native-light-p
 import {
   damageBoneyardEnemy,
   positionBoneyardEnemy,
+  setBoneyardEnemyBlizzardPushState,
   setBoneyardEnemyHurricaneContactCooldown,
   tumbleBoneyardArrow,
   type BoneyardEnemyActor,
@@ -1489,30 +1496,146 @@ export function resolveBoneyardSpellCombat(
           break
         }
         case 1004: {
-          const widen = profile.vector.values[6]! * 250
-          const roots = nativePrimaryConeTargets({
-            actorMask: 0x1082,
-            aimDirection: emission.direction,
-            halfAngleDegrees: 15 + widen,
-            hasLineOfSight: (target) => (
-              firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
-            ) === null,
-            origin: emission.queryOrigin,
-            reach: 205 + 4 * widen,
-            targets: primaryTargetRows(enemies).map(({ target }) => target),
+          if (emission.endpoint === null) break
+          const rows = primaryBlizzardTargetRows(enemies, primarySceneryTargets)
+          const polygon = nativeWeldBlizzardContactPolygon({
+            endpoint: emission.endpoint,
+            source: emission.origin,
+            underpowered: emission.underpowered,
+            widen: profile.vector.values[6]!,
+          })
+          const roots = nativePrimaryPolygonTargets({
+            actorMask: 0x1086,
+            polygon: polygon.points,
+            targets: rows.map(({ target }) => target),
           })
           const contactedIds = new Set<string>()
+          const chainSeedIds: string[] = []
+          if (emission.terrainContact) {
+            const glow = createNativeWeldBlizzardContactGlow({
+              direction: emission.direction,
+              id: nextSpellId,
+              ownerId: emission.ownerId,
+              position: emission.endpoint,
+              rng,
+              tick,
+              vector: profile.vector.values,
+              worldKey,
+            })
+            rng = glow.rng
+            ownedTransients.push(glow.actor)
+            nextSpellId += 1
+          }
           for (const root of roots) {
-            let target: PrimarySpellTarget | null = root
-            let damage = emission.damage
-            let previousPoint = emission.origin
-            for (let hop = 0; target && hop <= profile.vector.values[2]!; hop += 1) {
-              if (contactedIds.has(target.id)) break
+            const row = rows.find(({ target }) => target.id === root.id)
+            if (!row) continue
+            if ((root.actorFlags & 0x1080) !== 0) {
+              if (row.kind !== 'arrow') continue
+              const tumbled = tumbleBoneyardArrow(
+                enemies,
+                row.projectile.id,
+                emission.direction,
+                tick,
+                rng,
+              )
+              enemies = tumbled.store
+              rng = tumbled.rng
+              events.push(...tumbled.events)
+              continue
+            }
+            contactedIds.add(root.id)
+            const glow = createNativeWeldBlizzardContactGlow({
+              direction: emission.direction,
+              id: nextSpellId,
+              ownerId: emission.ownerId,
+              position: root.position,
+              rng,
+              tick,
+              vector: profile.vector.values,
+              worldKey,
+            })
+            rng = glow.rng
+            ownedTransients.push(glow.actor)
+            nextSpellId += 1
+            if (row.kind !== 'enemy' || !nativePrimaryTargetEligible(root, 0x2)) continue
+            queueTargetEffect(row.actor.id, {
+              coldSlowFactor: emission.underpowered
+                ? NATIVE_BLIZZARD_WEAK_COLD_SLOW_FACTOR
+                : NATIVE_WELD_FROST_SLOW_FACTOR,
+              coldSlowMaterial: true,
+              coldSlowTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+            })
+            const stunFactor = profile.vector.values[3]!
+            if (!emission.underpowered && stunFactor < 1) {
+              queueTargetEffect(row.actor.id, {
+                stunFactor,
+                stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+              })
+            }
+            const amount = emission.damage * validatedDamageMultiplier(
+              damageMultiplier(row.actor.id, 'air', emission.ownerId),
+            )
+            const damaged = damageBoneyardEnemy(enemies, {
+              lethalObserver,
+              actorId: row.actor.id,
+              amount,
+              sourcePlayerId: emission.ownerId,
+              tick,
+            })
+            if (damaged.accepted) {
+              enemies = damaged.store
+              events.push(...damaged.events)
+              hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, tick))
+            }
+            if (!emission.underpowered && profile.vector.values[5]! > 0) {
+              enemies = applyBlizzardPushback(
+                enemies,
+                row.actor.id,
+                root.actorFlags,
+                emission.queryOrigin,
+                profile.vector.values[5]! * pushStrengthMultiplier(emission.ownerId),
+                tick,
+                resolveEnemyMovement,
+              )
+            }
+            if (!emission.underpowered && profile.vector.values[2]! > 0) {
+              chainSeedIds.push(root.id)
+            }
+          }
+          for (const seedId of chainSeedIds) {
+            let source = primaryTargetRows(enemies).find(({ target }) => (
+              target.id === seedId
+            ))?.target
+            if (!source) continue
+            let damage = Math.fround(emission.damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+            for (let hop = 0; hop < profile.vector.values[2]!; hop += 1) {
+              const target = nearestUnusedAirChainTarget(
+                primaryTargetRows(enemies).map(({ target: candidate }) => candidate),
+                source.position,
+                contactedIds,
+                NATIVE_BLIZZARD_CHAIN_RADIUS,
+              )
+              if (target === null) break
               const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
-                candidate.id === target!.id
+                candidate.id === target.id
               ))
               if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
               contactedIds.add(row.target.id)
+              const direction = normalizedDifference(source.position, row.target.position)
+              const effects = createNativeWeldBlizzardChainEffects({
+                castDirection: emission.direction,
+                direction,
+                firstId: nextSpellId,
+                ownerId: emission.ownerId,
+                rng,
+                source: source.position,
+                tick,
+                vector: profile.vector.values,
+                worldKey,
+              })
+              rng = effects.rng
+              ownedTransients.push(...effects.actors)
+              nextSpellId = effects.nextId
               queueTargetEffect(row.actor.id, {
                 coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
                 coldSlowMaterial: true,
@@ -1524,16 +1647,6 @@ export function resolveBoneyardSpellCombat(
                   stunFactor,
                   stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
                 })
-              }
-              if (profile.vector.values[5]! > 0) {
-                enemies = applyWaterPushback(
-                  enemies,
-                  row.actor,
-                  emission.queryOrigin,
-                  profile.vector.values[5]! * pushStrengthMultiplier(emission.ownerId),
-                  205 + 4 * widen,
-                  resolveEnemyMovement,
-                )
               }
               const amount = damage * validatedDamageMultiplier(
                 damageMultiplier(row.actor.id, 'air', emission.ownerId),
@@ -1550,41 +1663,8 @@ export function resolveBoneyardSpellCombat(
                 events.push(...damaged.events)
                 hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, tick))
               }
-              const currentPoint = primarySpellTargetPoint(row.target)
-              if (hop > 0) {
-                const direction = normalizedDifference(previousPoint, currentPoint)
-                const geometry = airPrimaryBoltGeometry(
-                  previousPoint,
-                  direction,
-                  currentPoint,
-                )
-                ownedTransients.push({
-                  ageTicks: 0,
-                  birthTick: tick,
-                  buildId: 1004,
-                  direction,
-                  endpoint: geometry.endpoint,
-                  id: nextSpellId,
-                  kind: 'weld-channel',
-                  lightRegistration: null,
-                  midpoint: geometry.midpoint,
-                  origin: { ...previousPoint },
-                  ownerId: emission.ownerId,
-                  targetId: row.target.id,
-                  underpowered: emission.underpowered,
-                  variant: nextSpellId % 4,
-                  vector: Object.freeze([...profile.vector.values]),
-                  worldKey,
-                })
-                nextSpellId += 1
-              }
-              previousPoint = currentPoint
+              source = row.target
               damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
-              target = nearestUnusedAirChainTarget(
-                primaryTargetRows(enemies).map(({ target: candidate }) => candidate),
-                row.target.position,
-                contactedIds,
-              )
             }
           }
           break
@@ -1596,7 +1676,7 @@ export function resolveBoneyardSpellCombat(
           const contacts = nativePrimaryConeTargets({
             actorMask: 0x1082,
             aimDirection: emission.direction,
-            halfAngleDegrees: 15 + widen,
+            halfAngleDegrees: 15 + widen * 0.5,
             hasLineOfSight: (target) => (
               firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
             ) === null,
@@ -1922,26 +2002,42 @@ interface PrimaryProjectileTargetRow {
   readonly target: PrimarySpellTarget
 }
 
+interface PrimarySceneryTargetRow {
+  readonly actor: null
+  readonly kind: 'scenery'
+  readonly target: PrimarySpellTarget
+}
+
 type PrimaryWaterTargetRow = PrimaryTargetRow | PrimaryProjectileTargetRow
+type PrimaryBlizzardTargetRow = PrimaryWaterTargetRow | PrimarySceneryTargetRow
 
 const NATIVE_LIGHTNING_CHAIN_RADIUS = 200
+const NATIVE_BLIZZARD_CHAIN_RADIUS = 100
 const NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR = Math.fround(0.600000024)
 const NATIVE_LIGHTNING_STUN_TICKS = 25
 const NATIVE_CHILL_BASE_REACH_OFFSET = 25
 const NATIVE_CHILL_OUTER_RADIUS_FACTOR = 0.75
 const NATIVE_CHILL_INNER_RADIUS_FACTOR = 0.5
 const NATIVE_CHILL_IMPULSE_FACTOR = 2.5
+const NATIVE_BLIZZARD_WEAK_COLD_SLOW_FACTOR = 0.75
+const NATIVE_BLIZZARD_PUSH_FORWARD_OFFSET = 30
+const NATIVE_BLIZZARD_PUSH_QUERY_RADIUS = 25 / 3
+const NATIVE_BLIZZARD_PUSH_ACCUMULATOR_GAIN = 0.10000000149011612
+const NATIVE_BLIZZARD_PUSH_ACCUMULATOR_FACTOR = 5
+const NATIVE_BLIZZARD_PUSH_ACCUMULATOR_MAXIMUM = 2
+const NATIVE_BLIZZARD_PUSH_GAP_TICKS = 3
 
 function nearestUnusedAirChainTarget(
   targets: readonly PrimarySpellTarget[],
   origin: Readonly<Vector2>,
   contactedIds: ReadonlySet<string>,
+  radius = NATIVE_LIGHTNING_CHAIN_RADIUS,
 ): PrimarySpellTarget | null {
   let selected: PrimarySpellTarget | null = null
   let selectedDistanceSquared = Number.POSITIVE_INFINITY
   for (const target of nativePrimaryRootTargets(
     { ...origin },
-    NATIVE_LIGHTNING_CHAIN_RADIUS,
+    radius,
     0x2,
     targets,
   )) {
@@ -2069,6 +2165,63 @@ function applyWaterPushback(
     targetBodyRadius(actor),
   )
   return positionBoneyardEnemy(source, actor.id, resolved).store
+}
+
+function applyBlizzardPushback(
+  source: BoneyardEnemyStore,
+  actorId: number,
+  actorFlags: number,
+  origin: Readonly<Vector2>,
+  pushback: number,
+  tick: number,
+  resolveMovement: ResolveBoneyardSpellEnemyMovement,
+): BoneyardEnemyStore {
+  const actor = boneyardSpellTargetById(source, actorId)
+  if (!actor || pushback <= 0) return source
+  const direction = normalizedDifference(origin, actor.position)
+  const probe = {
+    x: Math.fround(actor.position.x + direction.x * NATIVE_BLIZZARD_PUSH_FORWARD_OFFSET),
+    y: Math.fround(actor.position.y + direction.y * NATIVE_BLIZZARD_PUSH_FORWARD_OFFSET),
+  }
+  const blocked = firstNativePrimaryPointContact({
+    actorMask: 0x2,
+    position: probe,
+    queryRadius: NATIVE_BLIZZARD_PUSH_QUERY_RADIUS,
+    targets: primaryTargetRows(source)
+      .map(({ target }) => target)
+      .filter(({ id }) => id !== `enemy:${actorId}`),
+  }) !== null
+  if (blocked) return source
+
+  const recent = actor.blizzardPushLastTick !== null
+    && tick - actor.blizzardPushLastTick <= NATIVE_BLIZZARD_PUSH_GAP_TICKS
+  const gain = Math.fround(pushback * NATIVE_BLIZZARD_PUSH_ACCUMULATOR_GAIN)
+  const cap = Math.min(
+    NATIVE_BLIZZARD_PUSH_ACCUMULATOR_MAXIMUM,
+    Math.fround(pushback * NATIVE_BLIZZARD_PUSH_ACCUMULATOR_FACTOR),
+  )
+  const accumulator = recent
+    ? Math.fround(Math.min(cap, Math.fround(actor.blizzardPushAccumulator + gain)))
+    : 0
+  let enemies = setBoneyardEnemyBlizzardPushState(source, actorId, accumulator, tick)
+  if (accumulator === 0) return enemies
+
+  const effectivePushback = (actorFlags & 0x40) !== 0
+    ? Math.fround(pushback * 0.05000000074505806)
+    : pushback
+  const magnitude = Math.fround(Math.fround(effectivePushback * 2.5) * accumulator)
+  const requested = {
+    x: Math.fround(actor.position.x + direction.x * magnitude),
+    y: Math.fround(actor.position.y + direction.y * magnitude),
+  }
+  const resolved = resolveMovement(
+    actor.id,
+    actor.position,
+    requested,
+    targetBodyRadius(actor),
+  )
+  enemies = positionBoneyardEnemy(enemies, actor.id, resolved).store
+  return enemies
 }
 
 function parseEnemyTargetId(targetId: string): number | null {
@@ -2201,6 +2354,18 @@ function primaryWaterTargetRows(
       },
     }))
   return [...enemies, ...arrows]
+}
+
+function primaryBlizzardTargetRows(
+  store: BoneyardEnemyStore,
+  sceneryTargets: readonly PrimarySpellTarget[],
+): readonly PrimaryBlizzardTargetRow[] {
+  const scenery = sceneryTargets.map((target): PrimarySceneryTargetRow => ({
+    actor: null,
+    kind: 'scenery',
+    target,
+  }))
+  return [...scenery, ...primaryWaterTargetRows(store)]
 }
 
 function primaryProjectileOwnsSceneryContact(

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type {
+  NativeWeldBlizzardChainFrostState,
   NativeWeldHailstonesState,
   NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
@@ -85,6 +86,20 @@ const hailstones = {
   worldKey: 'boneyard:weld',
 } satisfies NativeWeldHailstonesState
 
+const blizzardChainFrost = {
+  ageTicks: 4,
+  birthTick: 6,
+  buildId: 1004,
+  direction: { x: 1, y: 0 },
+  id: 3,
+  kind: 'weld-blizzard-chain-frost',
+  lightRegistration: null,
+  origin: { x: 300, y: 400 },
+  ownerId: 'wizard',
+  vector: [8, 2, 1, 0.8, 0, 0, 0],
+  worldKey: 'boneyard:weld',
+} satisfies NativeWeldBlizzardChainFrostState
+
 function state(
   projectileState: NativeWeldProjectileState,
   hailstoneState: NativeWeldHailstonesState,
@@ -144,4 +159,31 @@ test('weld presentation interpolates projectile and released carrier motion', ()
   assert.equal(halfwayHail.releaseAgeTicks, 21)
   assert.equal(halfwayHail.releaseFadeScale, 1.375)
   assert.equal(halfwayHail.scale, 0.875)
+})
+
+test('weld presentation copies and advances Blizzard chaining Frost actors', () => {
+  const copied = copyPrimarySpellState({
+    nextId: 4,
+    projectiles: [],
+    transients: [blizzardChainFrost],
+  }).transients[0]
+  assert.ok(copied?.kind === 'weld-blizzard-chain-frost')
+  assert.notEqual(copied.direction, blizzardChainFrost.direction)
+  assert.notEqual(copied.origin, blizzardChainFrost.origin)
+  assert.notEqual(copied.vector, blizzardChainFrost.vector)
+
+  const newer = {
+    ...blizzardChainFrost,
+    ageTicks: 6,
+  }
+  const halfway = interpolatePrimarySpellState(
+    { nextId: 4, projectiles: [], transients: [blizzardChainFrost] },
+    { nextId: 4, projectiles: [], transients: [newer] },
+    0.5,
+    { newerTick: 12, olderTick: 10, targetTick: 11 },
+  ).transients[0]
+  assert.ok(halfway?.kind === 'weld-blizzard-chain-frost')
+  assert.equal(halfway.ageTicks, 5)
+  assert.deepEqual(halfway.direction, blizzardChainFrost.direction)
+  assert.deepEqual(halfway.origin, blizzardChainFrost.origin)
 })

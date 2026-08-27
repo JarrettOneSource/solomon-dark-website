@@ -170,6 +170,8 @@ export type PrimarySpellTransientKind =
   | 'water'
   | 'water-aura'
   | 'water-hail'
+  | 'weld-blizzard-chain-frost'
+  | 'weld-blizzard-glow'
   | 'weld-channel'
   | 'weld-boulder-debris'
   | 'weld-frost-fade'
@@ -276,6 +278,7 @@ export type PrimarySpellChannelTransientState =
 export interface PrimarySpellChannelEmission {
   damage: number
   direction: Vector2
+  endpoint: Vector2 | null
   id: number
   kind: 'air' | 'water' | 'weld'
   manaCost: number
@@ -286,6 +289,7 @@ export interface PrimarySpellChannelEmission {
     | NativeWaterPrimarySkillProfile
     | NativeWeldPrimarySkillProfile
   queryOrigin: Vector2
+  terrainContact: boolean
   underpowered: boolean
   worldKey: string
 }
@@ -562,11 +566,13 @@ export interface PrimarySpellTickContext {
     start: Vector2,
     end: Vector2,
     excludedSourceId?: string,
+    nativeExclusionMask?: number,
   ) => Vector2 | null
   spellRangeEndpoint: (
     ownerId: string,
     start: Vector2,
     direction: Vector2,
+    padding: number,
   ) => Vector2
   spellTargets: (ownerId: string) => readonly PrimarySpellTarget[]
   worldKeyForPlayer: (playerId: string) => string
@@ -1750,6 +1756,25 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   context,
                 )
               : null
+            let endpoint = lightning?.endpoint ?? null
+            let terrainContact = false
+            if (buildId === 1004) {
+              const viewEndpoint = context.spellRangeEndpoint(
+                playerId,
+                emitter,
+                aimDirection,
+                100,
+              )
+              const obstruction = context.spellObstructionPoint(
+                playerId,
+                nextPlayer.position,
+                viewEndpoint,
+                undefined,
+                NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+              )
+              endpoint = obstruction ?? viewEndpoint
+              terrainContact = obstruction !== null
+            }
             const channelDamage = primarySpellChannelDamage(
               authority.primarySkill,
               underpowered,
@@ -1757,6 +1782,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             channelEmissions.push({
               damage: channelDamage,
               direction: { ...aimDirection },
+              endpoint,
               id: nextId,
               kind: 'weld',
               manaCost,
@@ -1764,6 +1790,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               ownerId: playerId,
               primarySkill: authority.primarySkill,
               queryOrigin: { ...nextPlayer.position },
+              terrainContact,
               underpowered,
               worldKey,
             })
@@ -1792,11 +1819,6 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 nextId += 1
               }
             } else {
-              const endpoint = lightning?.endpoint ?? (
-                buildId === 1004
-                  ? context.spellRangeEndpoint(playerId, emitter, aimDirection)
-                  : null
-              )
               const midpoint = lightning?.midpoint ?? (endpoint === null
                 ? null
                 : {
@@ -2082,6 +2104,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           channelEmissions.push({
             damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
             direction: { ...aimDirection },
+            endpoint: air.endpoint,
             id: nextId,
             kind: 'air',
             manaCost,
@@ -2089,6 +2112,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             ownerId: playerId,
             primarySkill: authority.primarySkill,
             queryOrigin: { ...nextPlayer.position },
+            terrainContact: false,
             underpowered,
             worldKey,
           })
@@ -2130,6 +2154,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           channelEmissions.push({
             damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
             direction: { ...aimDirection },
+            endpoint: null,
             id: nextId,
             kind: 'water',
             manaCost,
@@ -2137,6 +2162,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             ownerId: playerId,
             primarySkill: authority.primarySkill,
             queryOrigin: { ...nextPlayer.position },
+            terrainContact: false,
             underpowered,
             worldKey,
           })
@@ -2493,11 +2519,14 @@ function createAirTransient(
     ownerId,
     player.position,
     aimDirection,
+    0,
   )
   const untargetedEndpoint = context.spellObstructionPoint(
     ownerId,
     player.position,
     rangeEndpoint,
+    undefined,
+    NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
   ) ?? rangeEndpoint
   const maxRange = Math.hypot(
     rangeEndpoint.x - player.position.x,
@@ -2510,6 +2539,7 @@ function createAirTransient(
       player.position,
       candidate.position,
       candidate.id,
+      NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
     ) === null,
     maxRange,
     origin: player.position,
@@ -2527,6 +2557,7 @@ function createAirTransient(
       player.position,
       attachment,
       target.id,
+      NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
     ) ?? attachment
     endpoint = { x: clipped.x, y: clipped.y + AIR_PRIMARY_TARGET_Y_OFFSET }
   }
@@ -2827,6 +2858,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'water-aura': return effect.durationTicks
     case 'water-hail': throw new Error('Hail lifetime is state driven')
     case 'weld-boulder-debris': throw new Error('Weld boulder debris lifetime is state driven')
+    case 'weld-blizzard-chain-frost': throw new Error('Weld chaining Frost lifetime is state driven')
     case 'weld-blizzard-glow': throw new Error('Weld Blizzard glow lifetime is state driven')
     case 'weld-channel': throw new Error('Weld channel lifetime is state driven')
     case 'weld-frost-fade': throw new Error('Weld Frost fade lifetime is state driven')
@@ -2851,6 +2883,7 @@ function isNativeWeldWorldActor(
   effect: PrimarySpellTransientState,
 ): effect is NativeWeldWorldActor {
   return effect.kind === 'weld-boulder-debris'
+    || effect.kind === 'weld-blizzard-chain-frost'
     || effect.kind === 'weld-blizzard-glow'
     || effect.kind === 'weld-channel'
     || effect.kind === 'weld-frost-fade'

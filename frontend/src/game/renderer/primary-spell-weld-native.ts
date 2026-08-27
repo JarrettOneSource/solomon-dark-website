@@ -3,6 +3,7 @@ import type {
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import type {
+  NativeWeldBlizzardChainFrostState,
   NativeWeldBoulderDebrisActorState,
   NativeWeldChannelActorState,
   NativeWeldEtherealBoulderState,
@@ -14,6 +15,7 @@ import type {
   NativeWeldMeteorFlashActorState,
   NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import { waterFrostJetChainingPlan } from '../core-kernels/primary-spell-water.ts'
 import type {
   NativeWeldHailFlashState,
   NativeWeldHailLineState,
@@ -46,7 +48,7 @@ import {
 const DEG = Math.PI / 180
 
 export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
-  5, 6, 15, 16, 18, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
+  5, 6, 15, 16, 18, 28, 30, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
   110, 111, 112,
   168, 169, 170, 171,
   ...integerRange(251, 266),
@@ -81,6 +83,7 @@ export type NativeWeldPresentationState =
   | NativeWeldProjectileState
   | Extract<PrimarySpellTransientState, {
       kind:
+        | 'weld-blizzard-chain-frost'
         | 'weld-blizzard-glow'
         | 'weld-boulder-debris'
         | 'weld-channel'
@@ -158,6 +161,7 @@ export function isNativeWeldPresentationState(
   state: PrimarySpellProjectileState | PrimarySpellTransientState,
 ): state is NativeWeldPresentationState {
   return state.kind === 'weld'
+    || state.kind === 'weld-blizzard-chain-frost'
     || state.kind === 'weld-blizzard-glow'
     || state.kind === 'weld-boulder-debris'
     || state.kind === 'weld-channel'
@@ -184,6 +188,7 @@ export function nativeWeldVisualPlan(
 ): NativeWeldVisualPlan {
   switch (state.kind) {
     case 'weld': return projectilePlan(state, presentationFrame)
+    case 'weld-blizzard-chain-frost': return blizzardChainFrostPlan(state)
     case 'weld-blizzard-glow': return blizzardGlowPlan(state, presentationFrame)
     case 'weld-boulder-debris': return debrisPlan(state)
     case 'weld-channel': return channelPlan(state)
@@ -376,16 +381,38 @@ function blizzardGlowPlan(
   state: NativeWeldBlizzardGlowState,
   frame: number,
 ): NativeWeldVisualPlan {
-  return positioned(state.position, lightningCore(
+  return positioned(state.origin, lightningCore(
     state.id,
     frame,
     state.scale,
     1,
-    `blizzard-source-glow-${state.glowIndex}`,
+    state.variant === 24 ? 'blizzard-source-glow' : 'blizzard-contact-glow',
   ).map((draw) => Object.freeze({
     ...draw,
     rotationRadians: draw.rotationRadians + state.rotationDegrees * DEG,
   })))
+}
+
+function blizzardChainFrostPlan(
+  state: NativeWeldBlizzardChainFrostState,
+): NativeWeldVisualPlan {
+  const plan = waterFrostJetChainingPlan(state)
+  return positioned(plan.position, plan.draws.map((draw) => sprite(
+    draw.sprite === 'core' ? 30 : 28,
+    `blizzard-chain-frost-${draw.pass}`,
+    {
+      alpha: draw.alpha,
+      blend: draw.blend,
+      offset: {
+        x: Math.fround(draw.position.x - plan.position.x),
+        y: Math.fround(draw.position.y - plan.position.y),
+      },
+      rotationRadians: draw.rotation,
+      scaleX: draw.scale,
+      scaleY: draw.scale,
+      tint: packRgb(draw.color.red, draw.color.green, draw.color.blue),
+    },
+  )))
 }
 
 function flameLashMeshes(
@@ -815,12 +842,12 @@ function frostFadePlan(
   state: NativeWeldFrostFadeActorState,
   frame: number,
 ): NativeWeldVisualPlan {
-  return positioned(state.position, elementVfxSprites(
+  return positioned(state.origin, elementVfxSprites(
     'water',
     frame,
     state.scale,
-    Math.max(0, 1 - state.ageTicks * 0.05),
-    'hailstones-release-frost',
+    Math.max(0, 1 - state.ageTicks * (state.buildId === 1004 ? 0.4 : 0.05)),
+    state.buildId === 1004 ? 'blizzard-chain-frost-fade' : 'hailstones-release-frost',
   ))
 }
 

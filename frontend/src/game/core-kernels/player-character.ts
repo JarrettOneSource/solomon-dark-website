@@ -20,6 +20,7 @@ export interface PlayerCharacterInput {
     quickbar: number | null
   }
   movement: Vector2
+  viewportHeight: number
   viewportWidth: number
 }
 
@@ -80,14 +81,17 @@ export const PLAYER_CHARACTER_MOVEMENT_RETENTION = 0.9
 export const PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED = Math.fround(0.01)
 export const PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL = 25
 export const NATIVE_GAMEPLAY_VIEWPORT_WIDTH = 1_600
+export const NATIVE_GAMEPLAY_VIEWPORT_HEIGHT = 900
 
 export function createIdlePlayerCharacterInput(
   viewportWidth = NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
+  viewportHeight = NATIVE_GAMEPLAY_VIEWPORT_HEIGHT,
 ): PlayerCharacterInput {
   return {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportHeight,
     viewportWidth,
   }
 }

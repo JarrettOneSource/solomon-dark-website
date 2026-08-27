@@ -352,6 +352,16 @@ Global membership is the opted-in client set of the process-wide shared-Hub
 host rather than Hub-world residency. Boneyard membership is exact live-run
 identity. Preferences remain connection sideband state and never enter world
 snapshots or saves.
+Protocol 94 adds the logical viewport height beside the existing width in each
+authenticated player input. Width and height remain bounded surface facts, not
+client-owned collision outcomes. The host combines them with the active
+Region bounds, native camera scale, and caster root to derive the current
+primary view. Lightning/Flame clip to that view; Blizzard expands it by 100,
+applies mask-`0x380` terrain clipping, and uses the resulting endpoint for both
+its authoritative contact polygon and replicated beam. Blizzard push
+accumulator/timestamp state belongs to each hostile actor; the spell computes
+only the requested impulse and the active world remains the sole static/dynamic
+collision and cell-rebind owner.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or

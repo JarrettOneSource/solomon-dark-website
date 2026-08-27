@@ -597,6 +597,7 @@ export default function HubScene({
       onGamepadQuickbarSelection: setControllerQuickbarSlot,
       onInput: publishInput,
       primaryCastingEnabled: false,
+      viewportHeight: () => viewportRef.current.height,
       viewportWidth: () => viewportRef.current.width,
       projectDirection: (direction) => {
         const snapshot = samplePresentation()

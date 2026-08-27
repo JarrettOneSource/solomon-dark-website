@@ -923,6 +923,7 @@ async function enterRawHub(displayName, element) {
           aim: null,
           cast: { primary: false, quickbar: null },
           movement,
+          viewportHeight: 900,
           viewportWidth: 1600,
         },
         sequence,

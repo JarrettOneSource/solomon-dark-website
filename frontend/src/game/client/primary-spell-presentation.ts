@@ -142,6 +142,14 @@ interface FixedTransientTiming {
   lifetimeTicks: number
 }
 
+function fixedTiming(
+  ageZeroTick: number,
+  lifetimeTicks: number,
+  firstVisibleAge: 0 | 1 = 0,
+): FixedTransientTiming {
+  return { ageZeroTick, firstVisibleAge, lifetimeTicks }
+}
+
 interface BracketedFixedTransient {
   newer?: PrimarySpellTransientState
   older?: PrimarySpellTransientState
@@ -229,13 +237,12 @@ function fixedTransientTiming(
   snapshotTick: number,
 ): FixedTransientTiming | null {
   switch (effect.kind) {
-    case 'air': return {
-      ageZeroTick: effect.birthTick,
-      firstVisibleAge: 0,
-      lifetimeTicks: effect.underpowered
+    case 'air': return fixedTiming(
+      effect.birthTick,
+      effect.underpowered
         ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
         : PRIMARY_SPELL_AIR_LIFETIME_TICKS,
-    }
+    )
     case 'air-hurricane': return null
     case 'earth-boulder-bit': return null
     case 'earth-called-rock': return null
@@ -248,59 +255,50 @@ function fixedTransientTiming(
     case 'player-staff-smoke':
     case 'player-staff-spin':
     case 'player-staff-pike-break': return null
-    case 'earth-impact': return {
-      ageZeroTick: effect.birthTick,
-      firstVisibleAge: 0,
-      lifetimeTicks: effect.lifetimeTicks,
-    }
-    case 'ether-impact': return {
-      ageZeroTick: effect.birthTick,
-      firstVisibleAge: 0,
-      lifetimeTicks: PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
-    }
-    case 'ether-blast': return {
-      ageZeroTick: effect.birthTick,
-      firstVisibleAge: 0,
-      lifetimeTicks: NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
-    }
-    case 'ether-pierce-streak': return {
-      ageZeroTick: snapshotTick - effect.ageTicks,
-      firstVisibleAge: 0,
-      lifetimeTicks: 10,
-    }
-    case 'fire': return {
-      ageZeroTick: snapshotTick - effect.ageTicks,
-      firstVisibleAge: 0,
-      lifetimeTicks: nativeFireParticleLifetimeTicks(effect.id),
-    }
+    case 'earth-impact': return fixedTiming(effect.birthTick, effect.lifetimeTicks)
+    case 'ether-impact': return fixedTiming(
+      effect.birthTick,
+      PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
+    )
+    case 'ether-blast': return fixedTiming(
+      effect.birthTick,
+      NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
+    )
+    case 'ether-pierce-streak': return fixedTiming(snapshotTick - effect.ageTicks, 10)
+    case 'fire': return fixedTiming(
+      snapshotTick - effect.ageTicks,
+      nativeFireParticleLifetimeTicks(effect.id),
+    )
     case 'fire-ember':
     case 'fire-good-imp':
     case 'fire-patch': return null
-    case 'fire-explosion': return {
-      ageZeroTick: snapshotTick - effect.ageTicks,
-      firstVisibleAge: 0,
-      lifetimeTicks: NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
-    }
-    case 'fire-impact': return {
-      ageZeroTick: snapshotTick - effect.ageTicks,
-      firstVisibleAge: 0,
-      lifetimeTicks: PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
-    }
-    case 'water': return {
-      ageZeroTick: snapshotTick - effect.ageTicks,
-      firstVisibleAge: 1,
-      lifetimeTicks: waterFrostJetLifetimeTicks(effect.id),
-    }
-    case 'water-aura': return {
-      ageZeroTick: effect.birthTick,
-      firstVisibleAge: 0,
-      lifetimeTicks: effect.durationTicks,
-    }
+    case 'fire-explosion': return fixedTiming(
+      snapshotTick - effect.ageTicks,
+      NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
+    )
+    case 'fire-impact': return fixedTiming(
+      snapshotTick - effect.ageTicks,
+      PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+    )
+    case 'water': return fixedTiming(
+      snapshotTick - effect.ageTicks,
+      waterFrostJetLifetimeTicks(effect.id),
+      1,
+    )
+    case 'water-aura': return fixedTiming(effect.birthTick, effect.durationTicks)
     case 'water-hail': return null
     case 'weld-boulder-debris': return null
-    case 'weld-blizzard-glow': return null
+    case 'weld-blizzard-chain-frost':
+    case 'weld-blizzard-glow':
+    case 'weld-frost-fade': return fixedTiming(
+      effect.birthTick,
+      effect.kind === 'weld-blizzard-chain-frost'
+        ? waterFrostJetLifetimeTicks(effect.id)
+        : effect.kind === 'weld-blizzard-glow'
+          ? 1
+          : effect.buildId === 1004 ? 3 : 20,
+    )
     case 'weld-channel':
-    case 'weld-frost-fade':
     case 'weld-flame-lash-fade':
     case 'weld-ground-spark-fade':
     case 'weld-hail-flash':
@@ -737,29 +735,6 @@ function interpolateTransient(
       vector: [...actor.vector],
     }
   }
-  if (older.kind === 'weld-blizzard-glow' && newer.kind === 'weld-blizzard-glow') {
-    const actor = blend < 1 ? older : newer
-    return {
-      ...actor,
-      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
-      direction: lerpVector(older.direction, newer.direction, blend),
-      origin: lerpVector(older.origin, newer.origin, blend),
-      position: lerpVector(older.position, newer.position, blend),
-      vector: [...actor.vector],
-    }
-  }
-  if (older.kind === 'weld-frost-fade' && newer.kind === 'weld-frost-fade') {
-    const actor = blend < 1 ? older : newer
-    return {
-      ...actor,
-      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
-      direction: lerpVector(older.direction, newer.direction, blend),
-      lightRegistration: null,
-      origin: lerpVector(older.origin, newer.origin, blend),
-      position: lerpVector(older.position, newer.position, blend),
-      vector: [...actor.vector],
-    }
-  }
   if (
     older.kind === 'weld-flame-lash-fade'
     && newer.kind === 'weld-flame-lash-fade'
@@ -975,6 +950,12 @@ function interpolateTransient(
       vector: [...actor.vector],
     }
   }
+  if (
+    (older.kind === 'weld-blizzard-chain-frost'
+      && newer.kind === 'weld-blizzard-chain-frost')
+    || (older.kind === 'weld-blizzard-glow' && newer.kind === 'weld-blizzard-glow')
+    || (older.kind === 'weld-frost-fade' && newer.kind === 'weld-frost-fade')
+  ) return copyTransient(blend < 1 ? older : newer)
   if (isWeldTransient(older) || isWeldTransient(newer)) return copyTransient(discrete)
   throw new Error('Unsupported primary spell transient pair')
 }
@@ -1026,10 +1007,8 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function isWeldTransient(effect: PrimarySpellTransientState): boolean {
-  return effect.kind === 'weld-blizzard-glow'
-    || effect.kind === 'weld-boulder-debris'
+  return effect.kind === 'weld-boulder-debris'
     || effect.kind === 'weld-channel'
-    || effect.kind === 'weld-frost-fade'
     || effect.kind === 'weld-flame-lash-fade'
     || effect.kind === 'weld-ground-spark-fade'
     || effect.kind === 'weld-hail-flash'
@@ -1212,18 +1191,17 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       vector: [...effect.vector],
     }
   }
-  if (effect.kind === 'weld-blizzard-glow') {
+  if (effect.kind === 'weld-blizzard-chain-frost'
+    || effect.kind === 'weld-blizzard-glow'
+    || effect.kind === 'weld-frost-fade') {
     return {
       ...effect,
       direction: { ...effect.direction },
-      lightRegistration: null,
       origin: { ...effect.origin },
-      position: { ...effect.position },
       vector: [...effect.vector],
     }
   }
-  if (effect.kind === 'weld-frost-fade'
-    || effect.kind === 'weld-flame-lash-fade'
+  if (effect.kind === 'weld-flame-lash-fade'
     || effect.kind === 'weld-ground-spark-fade'
     || effect.kind === 'weld-hail-flash'
     || effect.kind === 'weld-hail-rock-fade'

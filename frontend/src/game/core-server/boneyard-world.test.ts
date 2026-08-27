@@ -49,6 +49,7 @@ function movementInput(x: number, y: number) {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: { x, y },
+    viewportHeight: 900,
     viewportWidth: 1_600,
   }
 }

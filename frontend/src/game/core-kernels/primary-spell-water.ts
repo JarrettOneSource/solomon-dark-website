@@ -72,6 +72,13 @@ export interface WaterFrostJetEmission {
   origin: Vector2
 }
 
+export interface WaterFrostJetChainingState {
+  readonly ageTicks: number
+  readonly direction: Vector2
+  readonly id: number
+  readonly origin: Vector2
+}
+
 export interface WaterFrostJetObstruction {
   distance: number
   point: Vector2
@@ -178,6 +185,43 @@ export function waterFrostJetPlan(
   const heading = Math.atan2(state.direction.x, -state.direction.y)
   const motion = waterFrostJetMotion(state)
   const { position, velocity } = motion
+  return waterFrostJetPlanFromFields(kind, fields, heading, position, velocity)
+}
+
+export function waterFrostJetChainingPlan(
+  state: WaterFrostJetChainingState,
+): WaterFrostJetPlan {
+  const fields = waterFrostJetFields(state.id, state.ageTicks, 'normal', false)
+  let lifetime = waterFrostJetInitialLifetime(state.id)
+  let coreScale = Math.fround(0.5)
+  const completedUpdates = Math.max(0, Math.floor(state.ageTicks))
+  for (let tick = 0; tick < completedUpdates; tick += 1) {
+    lifetime = Math.fround(lifetime - FROST_LIFETIME_STEP)
+    if (lifetime < 1) coreScale = Math.fround(coreScale + FROST_CORE_GROWTH)
+    coreScale = Math.fround(coreScale - FROST_CORE_GROWTH)
+  }
+  const velocity = frostVelocity(state.direction)
+  const position = float32Vector(state.origin)
+  for (let tick = 0; tick < completedUpdates; tick += 1) {
+    position.x = Math.fround(position.x + velocity.x)
+    position.y = Math.fround(position.y + velocity.y)
+  }
+  return waterFrostJetPlanFromFields(
+    'normal',
+    { ...fields, coreScale },
+    Math.atan2(state.direction.x, -state.direction.y),
+    position,
+    velocity,
+  )
+}
+
+function waterFrostJetPlanFromFields(
+  kind: WaterFrostJetKind,
+  fields: WaterFrostJetFields,
+  heading: number,
+  position: Vector2,
+  velocity: Vector2,
+): WaterFrostJetPlan {
   const coreColor = color(1 - fields.colorRamp, 1, 1)
   const glintPosition = {
     x: Math.fround(position.x + Math.fround(velocity.x * 3)),

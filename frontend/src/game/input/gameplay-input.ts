@@ -1,5 +1,6 @@
 import {
   createIdlePlayerCharacterInput,
+  NATIVE_GAMEPLAY_VIEWPORT_HEIGHT,
   NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
@@ -68,6 +69,7 @@ interface BrowserGameplayInputOptions {
   projectSecondaryAim?: () => Vector2 | null
   secondaryAtPointer?: () => boolean
   target?: BrowserInputTarget
+  viewportHeight?: () => number
   viewportWidth?: () => number
   visibilityTarget?: BrowserVisibilityTarget
 }
@@ -88,6 +90,7 @@ export function createBrowserGameplayInput({
   projectSecondaryAim = () => null,
   secondaryAtPointer = () => true,
   target = window,
+  viewportHeight = () => NATIVE_GAMEPLAY_VIEWPORT_HEIGHT,
   viewportWidth = () => NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
@@ -166,7 +169,11 @@ export function createBrowserGameplayInput({
       aim = projectSecondaryAim() ?? aim
     }
     const movementSample = movement.sample(controller.gamepad ? [controller.gamepad] : [])
+    const currentViewportHeight = viewportHeight()
     const currentViewportWidth = viewportWidth()
+    if (!Number.isFinite(currentViewportHeight) || currentViewportHeight < 1) {
+      throw new RangeError('gameplay viewport height must be positive and finite')
+    }
     if (!Number.isFinite(currentViewportWidth) || currentViewportWidth < 1) {
       throw new RangeError('gameplay viewport width must be positive and finite')
     }
@@ -179,6 +186,7 @@ export function createBrowserGameplayInput({
           quickbar: heldQuickbarInputs.at(-1)?.slot ?? null,
         },
         movement: { ...movementSample.movement },
+        viewportHeight: currentViewportHeight,
         viewportWidth: currentViewportWidth,
       },
     }

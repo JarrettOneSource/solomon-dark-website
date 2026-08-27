@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  createNativeWeldBlizzardContactGlow,
   createNativeWeldBlizzardSourceGlows,
   nativeWeldBlizzardBeamPlan,
+  nativeWeldBlizzardContactPolygon,
 } from './native-weld-blizzard.ts'
 import { createNativeRng, drawNativeFloat } from './native-rng.ts'
 
@@ -19,13 +21,12 @@ test('Blizzard creates exactly two one-frame source glows in four-word order', (
     vector: [8, 2, 1, 0.8, 0, 0, 0],
     worldKey: 'boneyard:1',
   })
-  assert.deepEqual(result.actors.map(({ glowIndex, id, variant }) => ({
-    glowIndex,
+  assert.deepEqual(result.actors.map(({ id, variant }) => ({
     id,
     variant,
   })), [
-    { glowIndex: 0, id: 30, variant: 24 },
-    { glowIndex: 1, id: 31, variant: 24 },
+    { id: 30, variant: 24 },
+    { id: 31, variant: 24 },
   ])
   let expected = sourceRng
   for (let index = 0; index < 2; index += 1) {
@@ -71,4 +72,62 @@ test('Blizzard uses its exact two-quad geometry and disables the record-6/31 bra
   })
   assert.equal(weak.width, Math.fround(0.375))
   assert.equal(weak.tint, 0x80bfff)
+})
+
+test('Blizzard contact uses the shifted, extended root polygon instead of Frost cone geometry', () => {
+  const neutral = nativeWeldBlizzardContactPolygon({
+    endpoint: { x: 100, y: 0 },
+    source: { x: 0, y: 0 },
+    underpowered: false,
+    widen: 0,
+  })
+  assert.equal(neutral.beamWidth, Math.fround(0.75))
+  assert.equal(neutral.halfWidth, 20)
+  assert.deepEqual(neutral.points, [
+    { x: 0, y: -5 },
+    { x: 150, y: -5 },
+    { x: 150, y: 35 },
+    { x: 0, y: 35 },
+  ])
+
+  const widened = nativeWeldBlizzardContactPolygon({
+    endpoint: { x: 100, y: 0 },
+    source: { x: 0, y: 0 },
+    underpowered: false,
+    widen: 0.04,
+  })
+  assert.equal(widened.beamWidth, Math.fround(1.12))
+  assert.equal(widened.halfWidth, 28)
+  const weak = nativeWeldBlizzardContactPolygon({
+    endpoint: { x: 100, y: 0 },
+    source: { x: 0, y: 0 },
+    underpowered: true,
+    widen: 0.04,
+  })
+  assert.equal(weak.beamWidth, Math.fround(Math.fround(1.12) * 0.5))
+  assert.equal(weak.halfWidth, 20)
+})
+
+test('Blizzard terrain and root glows are independent variant-three one-frame actors', () => {
+  const sourceRng = createNativeRng(9)
+  const result = createNativeWeldBlizzardContactGlow({
+    direction: { x: 1, y: 0 },
+    id: 41,
+    ownerId: 'wizard',
+    position: { x: 100, y: 30 },
+    rng: sourceRng,
+    tick: 8,
+    vector: [8, 2, 1, 0.8, 0, 0, 0],
+    worldKey: 'boneyard:1',
+  })
+  assert.deepEqual({
+    position: result.actor.origin,
+    variant: result.actor.variant,
+  }, {
+    position: { x: 100, y: 10 },
+    variant: 3,
+  })
+  let expected = drawNativeFloat(sourceRng, Math.fround(0.5)).state
+  expected = drawNativeFloat(expected, 360).state
+  assert.deepEqual(result.rng, expected)
 })

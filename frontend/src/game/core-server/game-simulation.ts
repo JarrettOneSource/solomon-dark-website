@@ -15,7 +15,10 @@ import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.
 import { isBoneyardPlayerCombatEnabled } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import { lineBoundsExitObstruction } from '../core-kernels/line-obstruction.ts'
+import {
+  nativePrimaryViewBounds,
+  nativePrimaryViewRayEndpoint,
+} from '../core-kernels/primary-spell-targeting.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import {
   HUB_REGION_DEFINITIONS,
@@ -297,6 +300,7 @@ import {
   acknowledgeNativeTutorialMovementInstruction,
   applyNativeTutorialSurfaceAction,
   NATIVE_TUTORIAL_FIRES,
+  nativeTutorialCameraBounds,
   nativeTutorialCameraLockSafetyClear,
   nativeTutorialForcedVelocity,
   nativeTutorialHostileScenePaused,
@@ -2761,6 +2765,7 @@ function finishGameSimulationTick(
     start: Vector2,
     end: Vector2,
     excludedSourceId?: string,
+    nativeExclusionMask = 0,
   ): Vector2 | null => {
     if (result.world.kind === 'boneyard') {
       return firstBoneyardLineObstruction(
@@ -2769,6 +2774,7 @@ function finishGameSimulationTick(
         boneyardSpellBounds!,
         boneyardCollision!,
         excludedSourceId,
+        nativeExclusionMask,
       )
     }
     const region = result.world.participants[playerId]?.region
@@ -3369,21 +3375,29 @@ function finishGameSimulationTick(
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
     spellObstructionPoint,
-    spellRangeEndpoint: (playerId, start, direction) => {
+    spellRangeEndpoint: (playerId, start, direction, padding) => {
       const bounds = result.world.kind === 'boneyard'
-        ? boneyardSpellBounds!
+        ? result.world.tutorial !== null
+          ? nativeTutorialCameraBounds(result.world.tutorial) ?? result.world.bounds
+          : result.world.arenaTransition?.cameraBounds ?? result.world.bounds
         : (() => {
             const region = result.world.participants[playerId]?.region
             if (region === undefined) return { x: start.x, y: start.y, w: 0, h: 0 }
             const definition = HUB_REGION_DEFINITIONS[region]
             return { x: 0, y: 0, w: definition.width, h: definition.height }
           })()
-      const length = 2 * Math.hypot(bounds.w, bounds.h)
-      const far = {
-        x: start.x + direction.x * length,
-        y: start.y + direction.y * length,
-      }
-      return lineBoundsExitObstruction(start, far, bounds)?.point ?? far
+      const input = primaryInputs[playerId] ?? createIdlePlayerCharacterInput()
+      const focus = resolvedPlayers[playerId]?.position ?? start
+      const scale = result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35
+      const view = nativePrimaryViewBounds({
+        bounds,
+        focus,
+        padding,
+        scale,
+        viewportHeight: input.viewportHeight,
+        viewportWidth: input.viewportWidth,
+      })
+      return nativePrimaryViewRayEndpoint({ direction, start, view })
     },
     spellTargets: () => result.world.kind === 'boneyard'
       ? boneyardPrimarySpellTargets(result.world)

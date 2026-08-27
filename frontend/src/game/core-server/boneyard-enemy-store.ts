@@ -347,6 +347,8 @@ export interface BoneyardEnemyLightingState {
 }
 
 export interface BoneyardEnemyActor {
+  readonly blizzardPushAccumulator: number
+  readonly blizzardPushLastTick: number | null
   readonly bodyGaitPhase: number
   readonly bodyPose: number
   readonly brain: BoneyardEnemyBrain
@@ -476,6 +478,8 @@ export interface BoneyardEnemyProjectileEffect {
 }
 
 export interface BoneyardMaggotActor {
+  readonly blizzardPushAccumulator: number
+  readonly blizzardPushLastTick: number | null
   readonly combatActive: boolean
   readonly collisionRadius: number
   readonly currentHealth: number
@@ -1404,6 +1408,39 @@ export function setBoneyardEnemyHurricaneContactCooldown(
   return { ...source, maggots }
 }
 
+export function setBoneyardEnemyBlizzardPushState(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+  accumulator: number,
+  lastTick: number,
+): BoneyardEnemyStore {
+  if (!Number.isFinite(accumulator) || accumulator < 0) {
+    throw new RangeError('enemy Blizzard push accumulator must be finite and non-negative')
+  }
+  if (!Number.isSafeInteger(lastTick) || lastTick < 0) {
+    throw new RangeError('enemy Blizzard push tick must be a non-negative safe integer')
+  }
+  const actorIndex = source.actors.findIndex((actor) => actor.id === actorId)
+  if (actorIndex >= 0) {
+    const actors = [...source.actors]
+    actors[actorIndex] = {
+      ...actors[actorIndex]!,
+      blizzardPushAccumulator: accumulator,
+      blizzardPushLastTick: lastTick,
+    }
+    return { ...source, actors }
+  }
+  const maggotIndex = source.maggots.findIndex((maggot) => maggot.id === actorId)
+  if (maggotIndex < 0) return source
+  const maggots = [...source.maggots]
+  maggots[maggotIndex] = {
+    ...maggots[maggotIndex]!,
+    blizzardPushAccumulator: accumulator,
+    blizzardPushLastTick: lastTick,
+  }
+  return { ...source, maggots }
+}
+
 /**
  * Arrow::vslot+0x64 removes the projectile once Chill Wind crosses its tumble
  * threshold, then transfers record 2 into one world-owned Anim_SpinAway.
@@ -1918,6 +1955,8 @@ function materializeSpawnIntents(
       : 0
     const hurricaneContactCooldown = drawInteger(work, 100)
     const actor: BoneyardEnemyActor = {
+      blizzardPushAccumulator: 0,
+      blizzardPushLastTick: null,
       bodyGaitPhase,
       bodyPose: restBodyPose,
       brain,
@@ -3429,6 +3468,8 @@ function spawnCoffinMaggots(
     const path = createNativeEnemyPathState(work.steeringRngState)
     work.steeringRngState = path.rngState
     work.maggots.push(Object.freeze({
+      blizzardPushAccumulator: 0,
+      blizzardPushLastTick: null,
       collisionRadius: NATIVE_MAGGOT_PROGRAM.collisionRadius,
       combatActive: false,
       currentHealth: family.maggotHealth,

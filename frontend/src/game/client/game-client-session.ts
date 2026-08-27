@@ -993,12 +993,16 @@ export function connectGameClientSession(
         if (!Number.isFinite(requestedInput.viewportWidth) || requestedInput.viewportWidth < 1) {
           throw new Error('game input must contain a positive finite viewport width')
         }
+        if (!Number.isFinite(requestedInput.viewportHeight) || requestedInput.viewportHeight < 1) {
+          throw new Error('game input must contain a positive finite viewport height')
+        }
         const input: PlayerCharacterInput = {
           aim: requestedInput.aim ? { ...requestedInput.aim } : null,
           cast: { ...requestedInput.cast },
           movement: length > 1
             ? { x: movement.x / length, y: movement.y / length }
             : { ...movement },
+          viewportHeight: requestedInput.viewportHeight,
           viewportWidth: requestedInput.viewportWidth,
         }
         if (!sameInput(input, currentInput)) advanceLocalHubPresentation(now())
@@ -1738,6 +1742,7 @@ function copyInput(input: PlayerCharacterInput): PlayerCharacterInput {
     aim: input.aim ? { ...input.aim } : null,
     cast: { ...input.cast },
     movement: { ...input.movement },
+    viewportHeight: input.viewportHeight,
     viewportWidth: input.viewportWidth,
   }
 }
@@ -1748,6 +1753,7 @@ function sameInput(first: PlayerCharacterInput, second: PlayerCharacterInput): b
     && first.aim?.y === second.aim?.y
     && first.movement.x === second.movement.x
     && first.movement.y === second.movement.y
+    && first.viewportHeight === second.viewportHeight
     && first.viewportWidth === second.viewportWidth
 }
 

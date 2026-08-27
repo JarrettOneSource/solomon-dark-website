@@ -219,6 +219,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
       aim: { x: 800, y: 450 },
       cast: { primary: true, quickbar: 7 },
       movement: { x: 1, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
     sequence: 4,
@@ -229,6 +230,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
       aim: { x: 800, y: 450 },
       cast: { primary: true, quickbar: 7 },
       movement: { x: 1, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
     sequence: 4,
@@ -1615,8 +1617,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v93 carries party-rejoin waiting, online preferences, match chat, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 93)
+test('protocol v94 carries party-rejoin waiting, online preferences, match chat, viewport dimensions, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 94)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2453,6 +2455,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: null,
       cast: { primary: false, quickbar: null },
       movement: { x: 2, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
     sequence: 1,
@@ -2464,6 +2467,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: { x: 1, y: Number.POSITIVE_INFINITY },
       cast: { primary: false, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
     sequence: 1,
@@ -2475,6 +2479,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: null,
       cast: { primary: 1, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 1_600,
     },
     sequence: 1,
@@ -2492,11 +2497,24 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: null,
       cast: { primary: false, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportHeight: 900,
       viewportWidth: 0,
     },
     sequence: 1,
     targetTick: 1,
   })), /viewportWidth/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-input',
+    input: {
+      aim: null,
+      cast: { primary: false, quickbar: null },
+      movement: { x: 0, y: 0 },
+      viewportHeight: 0,
+      viewportWidth: 1_600,
+    },
+    sequence: 1,
+    targetTick: 1,
+  })), /viewportHeight/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-ping',
     nonce: -1,
@@ -5260,13 +5278,34 @@ test('protocol strictly round-trips every welded projectile and persistent actor
   }, {
     ...common,
     buildId: 1004,
-    glowIndex: 0,
     kind: 'weld-blizzard-glow',
     lightRegistration: null,
-    position: { x: 800, y: 400 },
     rotationDegrees: 45,
     scale: 1.25,
     variant: 24,
+    vector: [8, 2, 1, 0.8, 0, 0, 0],
+  }, {
+    ...common,
+    buildId: 1004,
+    kind: 'weld-blizzard-glow',
+    lightRegistration: null,
+    rotationDegrees: 90,
+    scale: 1.1,
+    variant: 3,
+    vector: [8, 2, 1, 0.8, 0, 0, 0],
+  }, {
+    ...common,
+    buildId: 1004,
+    direction: { x: 0.5, y: 0 },
+    kind: 'weld-blizzard-chain-frost',
+    lightRegistration: null,
+    vector: [8, 2, 1, 0.8, 0, 0, 0],
+  }, {
+    ...common,
+    buildId: 1004,
+    kind: 'weld-frost-fade',
+    lightRegistration: null,
+    scale: 1.2,
     vector: [8, 2, 1, 0.8, 0, 0, 0],
   }, {
     ...common,
@@ -5365,7 +5404,6 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     buildId: 1008,
     kind: 'weld-frost-fade',
     lightRegistration: null,
-    position: { x: 800, y: 380 },
     scale: 5,
     vector: [7, 2, 1, 1, 0.2, 0.5],
   }, {

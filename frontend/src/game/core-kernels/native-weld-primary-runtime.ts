@@ -1,6 +1,7 @@
 import { actorHeadingFromVector } from './actor-heading.ts'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
 import {
+  advanceNativeRngWords,
   drawNativeFloat,
   drawNativeInteger,
   type NativeRngState,
@@ -40,6 +41,7 @@ import {
   type NativeWeldBoulderDebrisParticleState,
 } from './native-weld-boulder-debris.ts'
 import type { NativeWeldGroundSparkFadeSeed } from './native-weld-ground-spark.ts'
+import { waterFrostJetLifetimeTicks } from './primary-spell-water.ts'
 import {
   stepNativeWeldSteamActor,
   type NativeWeldSteamActorState,
@@ -304,11 +306,16 @@ export interface NativeWeldHailRockFadeActorState extends NativeWeldOwnedActorBa
 }
 
 export interface NativeWeldFrostFadeActorState extends NativeWeldOwnedActorBase {
-  readonly buildId: 1008
+  readonly buildId: 1004 | 1008
   readonly kind: 'weld-frost-fade'
   readonly lightRegistration: null
-  readonly position: Vector2
   readonly scale: number
+}
+
+export interface NativeWeldBlizzardChainFrostState extends NativeWeldOwnedActorBase {
+  readonly buildId: 1004
+  readonly kind: 'weld-blizzard-chain-frost'
+  readonly lightRegistration: null
 }
 
 export interface NativeWeldGroundSparkFadeActorState extends NativeWeldOwnedActorBase {
@@ -324,6 +331,7 @@ export interface NativeWeldGroundSparkFadeActorState extends NativeWeldOwnedActo
 }
 
 export type NativeWeldWorldActor =
+  | NativeWeldBlizzardChainFrostState
   | NativeWeldBlizzardGlowState
   | NativeWeldBoulderDebrisActorState
   | NativeWeldChannelActorState
@@ -370,7 +378,6 @@ export const NATIVE_WELD_HAILSTONES_SPEED = NATIVE_WELD_HAIL_SUBSTEP_DISTANCE
 export const NATIVE_WELD_HAILSTONES_LOOKAHEAD = NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE
 export const NATIVE_WELD_HAIL_ROCK_FADE_LIFETIME_TICKS = 400
 export const NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS = 20
-
 const NATIVE_WELD_BALL_LIGHTNING_SPEED_FACTOR = 0.8500000238418579
 const NATIVE_WELD_BALL_LIGHTNING_INITIAL_ACCELERATION = 2
 const NATIVE_WELD_BALL_LIGHTNING_ACCELERATION_DECAY = 0.8999999761581421
@@ -386,6 +393,83 @@ const NATIVE_WELD_GROUND_SPARK_TURN_RANGE = 20
 
 export function nativeWeldAudioPlan(buildId: NativeWeldBuildId): NativeWeldAudioPlan {
   return WELD_AUDIO_PLANS[buildId]
+}
+
+export function createNativeWeldBlizzardChainEffects(input: Readonly<{
+  castDirection: Vector2
+  direction: Vector2
+  firstId: number
+  ownerId: string
+  rng: NativeRngState
+  source: Vector2
+  tick: number
+  vector: readonly number[]
+  worldKey: string
+}>): Readonly<{
+  actors: readonly (NativeWeldFrostFadeActorState | NativeWeldBlizzardChainFrostState)[]
+  nextId: number
+  rng: NativeRngState
+}> {
+  let rng = input.rng
+  const fadeRadius = drawNativeFloat(rng, 10); rng = fadeRadius.state
+  const fadeDirection = drawNativeUnitVector(rng); rng = fadeDirection.rng
+  const fadeScale = drawNativeFloat(rng, Math.fround(0.5)); rng = fadeScale.state
+  rng = drawNativeFloat(rng, Math.fround(0.75)).state
+  const fadePosition = Object.freeze({
+    x: Math.fround(input.source.x + Math.fround(fadeDirection.value.x * fadeRadius.value)),
+    y: Math.fround(
+      input.source.y - 15 + Math.fround(fadeDirection.value.y * fadeRadius.value),
+    ),
+  })
+  const actors: (NativeWeldFrostFadeActorState | NativeWeldBlizzardChainFrostState)[] = [
+    Object.freeze({
+      ageTicks: 0,
+      birthTick: input.tick,
+      buildId: 1004,
+      direction: Object.freeze({ ...input.direction }),
+      id: input.firstId,
+      kind: 'weld-frost-fade',
+      lightRegistration: null,
+      origin: fadePosition,
+      ownerId: input.ownerId,
+      scale: Math.fround(fadeScale.value + 1),
+      vector: Object.freeze([...input.vector]),
+      worldKey: input.worldKey,
+    }),
+  ]
+  let nextId = input.firstId + 1
+  const chaining = drawNativeInteger(rng, 2); rng = chaining.state
+  if (chaining.value === 1) {
+    rng = advanceNativeRngWords(rng, 4)
+    const radius = drawNativeFloat(rng, 10); rng = radius.state
+    const headingJitter = drawNativeFloat(rng, 2, true); rng = headingJitter.state
+    const castHeading = Math.atan2(input.castDirection.x, -input.castDirection.y)
+    const jittered = castHeading + headingJitter.value * Math.PI / 180
+    const chainHeading = Math.atan2(input.direction.x, -input.direction.y)
+      + Math.sin(input.tick * 65 * Math.PI / 180) * 20 * Math.PI / 180
+    const position = Object.freeze({
+      x: Math.fround(input.source.x + Math.sin(jittered) * radius.value),
+      y: Math.fround(input.source.y - 15 - Math.cos(jittered) * radius.value),
+    })
+    actors.push(Object.freeze({
+      ageTicks: 0,
+      birthTick: input.tick,
+      buildId: 1004,
+      direction: Object.freeze({
+        x: Math.fround(Math.sin(chainHeading) * 0.5),
+        y: Math.fround(-Math.cos(chainHeading) * 0.5),
+      }),
+      id: nextId,
+      kind: 'weld-blizzard-chain-frost',
+      lightRegistration: null,
+      origin: position,
+      ownerId: input.ownerId,
+      vector: Object.freeze([...input.vector]),
+      worldKey: input.worldKey,
+    }))
+    nextId += 1
+  }
+  return Object.freeze({ actors: Object.freeze(actors), nextId, rng })
 }
 
 export function spawnNativeWeldOneShot(
@@ -1097,12 +1181,11 @@ export function releaseNativeWeldPersistentActor(input: {
         id: input.firstChildId,
         kind: 'weld-frost-fade',
         lightRegistration: null,
-        origin: carrierOrigin,
-        ownerId: actor.ownerId,
-        position: Object.freeze({
+        origin: Object.freeze({
           x: carrierOrigin.x,
           y: Math.fround(carrierOrigin.y - 20),
         }),
+        ownerId: actor.ownerId,
         scale: Math.fround(Math.fround(presentation.value + 0.75) * 5),
         vector: Object.freeze([...actor.vector]),
         worldKey: actor.worldKey,
@@ -1271,6 +1354,14 @@ export function stepNativeWeldWorldActor(
   readonly rng: NativeRngState
   readonly terrainContact?: NativeWeldEtherealBoulderState
 } {
+  if (actor.kind === 'weld-blizzard-chain-frost') {
+    return {
+      actor: actor.ageTicks + 1 < waterFrostJetLifetimeTicks(actor.id)
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+        : null,
+      rng: sourceRng,
+    }
+  }
   if (actor.kind === 'weld-blizzard-glow') return { actor: null, rng: sourceRng }
   if (actor.kind === 'weld-flame-lash-fade') {
     return { actor: stepNativeWeldFlameLashFade(actor), rng: sourceRng }
@@ -1310,9 +1401,12 @@ export function stepNativeWeldWorldActor(
     }
   }
   if (actor.kind === 'weld-frost-fade') {
+    const nextAge = actor.ageTicks + 1
     return {
-      actor: actor.ageTicks + 1 < NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS
-        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+      actor: nextAge < (actor.buildId === 1004
+        ? 3
+        : NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS)
+        ? Object.freeze({ ...actor, ageTicks: nextAge })
         : null,
       rng: sourceRng,
     }
@@ -1483,6 +1577,21 @@ export function stepNativeWeldWorldActor(
       })),
     }),
     rng: sourceRng,
+  }
+}
+
+function drawNativeUnitVector(
+  source: NativeRngState,
+): { readonly rng: NativeRngState; readonly value: Vector2 } {
+  const heading = drawNativeInteger(source, 100_001)
+  const degrees = Math.fround(Math.fround(heading.value / 100_000) * 360)
+  const radians = degrees * Math.PI / 180
+  return {
+    rng: heading.state,
+    value: Object.freeze({
+      x: Math.fround(Math.sin(radians)),
+      y: Math.fround(-Math.cos(radians)),
+    }),
   }
 }
 

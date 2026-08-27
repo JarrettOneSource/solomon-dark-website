@@ -335,6 +335,8 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
       ...actor,
       config: { ...actor.config, maximumHealth: 100 },
       currentHealth: 100,
+      blizzardPushAccumulator: 0,
+      blizzardPushLastTick: null,
       hurricaneContactCooldown: 0,
     }],
   }
@@ -388,6 +390,8 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
       ...enemies,
       actors: [{
         ...enemies.actors[0]!,
+        blizzardPushAccumulator: 0,
+        blizzardPushLastTick: null,
         hurricaneContactCooldown: 0,
         position: { x: 280, y: 0 },
       }],
@@ -444,6 +448,8 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     emergenceTick: 24,
     gaitPose: 0,
     headingDeg: 90,
+    blizzardPushAccumulator: 0,
+    blizzardPushLastTick: null,
     hurricaneContactCooldown: 0,
     id: 1,
     launchTrajectory: 'edge',
@@ -498,6 +504,8 @@ test('low-charge Hurricane contact suppresses the ordinary target hit sound only
       ...actor,
       config: { ...actor.config, maximumHealth: 100 },
       currentHealth: 100,
+      blizzardPushAccumulator: 0,
+      blizzardPushLastTick: null,
       hurricaneContactCooldown: 0,
     }],
   }, spellState({
@@ -1206,7 +1214,7 @@ test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () =
     { position: { x: 50, y: 0 }, token: 'SKELETON' },
     { position: { x: 200, y: 0 }, token: 'SKELETON' },
     { position: { x: 205, y: 0 }, token: 'SKELETON' },
-    { position: { x: 100, y: 30 }, token: 'SKELETON' },
+    { position: { x: 100, y: 35 }, token: 'SKELETON' },
   ])
   const water = emission({ id: 11, kind: 'water' })
   const lineStarts: Readonly<{ x: number; y: number }>[] = []
@@ -1480,10 +1488,11 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
   )), true)
 })
 
-test('Blizzard Beam combines its widened cone with chaining and applies Cold before Stun', () => {
+test('Blizzard Beam uses its root polygon, 100-unit chains, and Cold-before-Stun order', () => {
   const spawned = spawnEnemies([
     { position: { x: 100, y: 0 }, token: 'SKELETON' },
-    { position: { x: 180, y: 10 }, token: 'SKELETON' },
+    { position: { x: 200, y: -60 }, token: 'SKELETON' },
+    { position: { x: 100, y: 100 }, token: 'SKELETON' },
   ])
   const enemies = {
     ...spawned,
@@ -1497,14 +1506,157 @@ test('Blizzard Beam combines its widened cone with chaining and applies Cold bef
     2,
   )
 
-  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2])
+  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1])
   assert.deepEqual(result.targetEffects.map(({ patch, targetId }) => ({
     kind: patch.coldSlowTicks === undefined ? 'stun' : 'cold',
     targetId,
   })), [
     { kind: 'cold', targetId: 1 }, { kind: 'stun', targetId: 1 },
-    { kind: 'cold', targetId: 2 }, { kind: 'stun', targetId: 2 },
   ])
+  assert.equal(result.spells.transients.some(({ kind }) => kind === 'weld-channel'), false)
+})
+
+test('Blizzard root membership covers every survival family and excludes Coffin', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 50, y: 0 }, token: 'SKELETON' },
+    { position: { x: 80, y: 0 }, token: 'SKELETONARCHER' },
+    { position: { x: 110, y: 0 }, token: 'SKELETONMAGE' },
+    { position: { x: 140, y: 0 }, token: 'IMP' },
+    { position: { x: 170, y: 0 }, token: 'ZOMBIE' },
+    { position: { x: 200, y: 0 }, token: 'WRAITH' },
+    { position: { x: 230, y: 0 }, token: 'DEMON' },
+    { position: { x: 260, y: 0 }, token: 'COFFIN' },
+  ])
+  const profile = weldProfile(1004, [200, 10, 0, 1, 0, 0, 0], 'channel')
+  const result = resolveCombatWithAuthority(
+    spawned,
+    spellState({}),
+    [emission({ damage: 0.01, id: 20, kind: 'weld', primarySkill: profile })],
+    2,
+  )
+  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2, 3, 4, 5, 6, 7])
+  assert.equal(result.spells.transients.filter(({ kind }) => (
+    kind === 'weld-blizzard-glow'
+  )).length, 7)
+})
+
+test('Blizzard admits every flags-four scenery root for glow only', () => {
+  const scenery = [
+    ['tree', 50], ['monument', 80], ['gravestone', 110], ['building', 140], ['goodie', 170],
+    ['outside-body-overlap', 200],
+  ].map(([name, x], registrationOrder): PrimarySpellTarget => ({
+    active: true,
+    actorFlags: 0x4,
+    attachment: { x: 0, y: 0 },
+    bodyRadius: 500,
+    cellBindingOrder: registrationOrder,
+    id: `scenery:${name}`,
+    kind: name === 'gravestone' ? 'gravestone' : 'scenery',
+    nativePriority: 1_000,
+    pendingRemove: false,
+    position: { x: Number(x), y: name === 'outside-body-overlap' ? 100 : 0 },
+    registrationOrder,
+  }))
+  const profile = weldProfile(1004, [200, 10, 0, 1, 0, 0, 0], 'channel')
+  const result = resolveCombatWithAuthority(
+    spawnEnemies([]),
+    spellState({}),
+    [emission({ damage: 1, id: 21, kind: 'weld', primarySkill: profile })],
+    2,
+    { primarySceneryTargets: scenery },
+  )
+  assert.deepEqual(result.hits, [])
+  const glows = result.spells.transients.filter(({ kind }) => kind === 'weld-blizzard-glow')
+  assert.equal(glows.length, 5)
+  assert.ok(glows.every((glow) => glow.kind === 'weld-blizzard-glow'
+    && glow.variant === 3))
+})
+
+test('Blizzard mask 0x1086 tumbles Arrow through its fixed virtual branch', () => {
+  const base = spawnEnemies([])
+  const arrow = enemyArrow({ id: 9, position: { x: 50, y: 0 } })
+  const enemies: BoneyardEnemyStore = {
+    ...base,
+    nextProjectileEffectId: 30,
+    projectiles: [arrow],
+  }
+  const profile = weldProfile(1004, [200, 10, 0, 1, 0, 0, 0], 'channel')
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({}),
+    [emission({ damage: 1, id: 22, kind: 'weld', primarySkill: profile })],
+    2,
+    { rngSeed: 23 },
+  )
+  assert.deepEqual(result.enemies.projectiles, [])
+  assert.deepEqual(result.events.map(({ projectileId, type }) => ({ projectileId, type })), [{
+    projectileId: 9,
+    type: 'projectile-retired',
+  }])
+  assert.equal(result.enemies.projectileEffects[0]?.kind, 'arrow-tumble')
+})
+
+test('underpowered Blizzard keeps direct damage but suppresses chain, Stun, and push', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 100, y: 80 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({ ...actor, currentHealth: 100, maximumHealth: 100 })),
+  }
+  const profile = weldProfile(1004, [200, 10, 2, 0.25, 0, 0.2, 0.04], 'channel')
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({}),
+    [emission({
+      damage: 1,
+      id: 12,
+      kind: 'weld',
+      primarySkill: profile,
+      underpowered: true,
+    })],
+    2,
+  )
+
+  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1])
+  assert.deepEqual(result.targetEffects, [{
+    patch: { coldSlowFactor: 0.75, coldSlowMaterial: true, coldSlowTicks: 25 },
+    targetId: 1,
+    worldKey: WORLD_KEY,
+  }])
+  assert.deepEqual(result.enemies.actors.map(({ position }) => position), [
+    { x: 100, y: 0 }, { x: 100, y: 80 },
+  ])
+})
+
+test('Blizzard push arms after a gap, ramps on sustained roots, and respects its forward blocker', () => {
+  const spawned = spawnEnemies([{ position: { x: 100, y: 0 }, token: 'SKELETON' }])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({ ...actor, currentHealth: 100, maximumHealth: 100 })),
+  }
+  const profile = weldProfile(1004, [200, 10, 0, 1, 0, 0.2, 0], 'channel')
+  const cast = emission({ damage: 1, id: 13, kind: 'weld', primarySkill: profile })
+  const armed = resolveCombatWithAuthority(enemies, spellState({}), [cast], 10)
+  assert.equal(armed.enemies.actors[0]!.blizzardPushAccumulator, 0)
+  assert.equal(armed.enemies.actors[0]!.blizzardPushLastTick, 10)
+  assert.deepEqual(armed.enemies.actors[0]!.position, { x: 100, y: 0 })
+
+  const ramped = resolveCombatWithAuthority(armed.enemies, spellState({}), [cast], 11)
+  assert.equal(
+    ramped.enemies.actors[0]!.blizzardPushAccumulator,
+    Math.fround(0.2 * 0.10000000149011612),
+  )
+  assert.ok(ramped.enemies.actors[0]!.position.x > 100)
+
+  const withBlocker = spawnEnemies([
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 130, y: 0 }, token: 'SKELETON' },
+  ])
+  const blocked = resolveCombatWithAuthority(withBlocker, spellState({}), [cast], 20)
+  assert.equal(blocked.enemies.actors[0]!.blizzardPushLastTick, null)
+  assert.equal(blocked.enemies.actors[0]!.blizzardPushAccumulator, 0)
 })
 
 test('Steam particle contact installs its ten-tick Steamed payload and exports the pulse', () => {
@@ -2311,6 +2463,7 @@ function transient(options: {
 
 function emission(options: {
   damage?: number
+  endpoint?: Readonly<{ x: number; y: number }> | null
   id: number
   kind: PrimarySpellChannelEmission['kind']
   underpowered?: boolean
@@ -2320,6 +2473,7 @@ function emission(options: {
   return {
     damage: options.damage ?? 0.025,
     direction: { x: 1, y: 0 },
+    endpoint: options.endpoint === undefined ? { x: 400, y: -10 } : options.endpoint,
     id: options.id,
     kind: options.kind,
     manaCost: options.kind === 'air' ? 0.12 : 0.125,
@@ -2366,6 +2520,7 @@ function emission(options: {
           slowdownScale: 1,
         }),
     queryOrigin: { x: 0, y: 0 },
+    terrainContact: false,
     underpowered: options.underpowered ?? false,
     worldKey: options.worldKey ?? WORLD_KEY,
   }

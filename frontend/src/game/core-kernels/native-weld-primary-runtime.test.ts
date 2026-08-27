@@ -5,11 +5,17 @@ import './native-weld-hail-contact.test.ts'
 import './native-weld-flame-lash.test.ts'
 import './native-weld-blizzard.test.ts'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
-import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
+import {
+  advanceNativeRngWords,
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+} from './native-rng.ts'
 import {
   createNativeWeldMeteorSpawnProgram,
 } from './native-weld-meteor.ts'
 import {
+  createNativeWeldBlizzardChainEffects,
   createNativeWeldChannelActor,
   createNativeWeldPersistentActor,
   createNativeWeldMeteor,
@@ -24,6 +30,41 @@ import {
   stepNativeWeldWorldActor,
   updateNativeWeldPersistentActor,
 } from './native-weld-primary-runtime.ts'
+
+test('Blizzard chains own Frost fade and optional chaining-particle births without a beam', () => {
+  const rng = createNativeRng(27)
+  const effects = createNativeWeldBlizzardChainEffects({
+    castDirection: { x: 1, y: 0 },
+    direction: { x: 1, y: 0 },
+    firstId: 10,
+    ownerId: 'wizard',
+    rng,
+    source: { x: 100, y: 20 },
+    tick: 5,
+    vector: [8, 2, 2, 0.5, 0, 0.2, 0.04],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(effects.actors[0]?.kind, 'weld-frost-fade')
+  const fade = effects.actors[0]
+  assert.ok(fade?.kind === 'weld-frost-fade')
+  assert.equal(fade.buildId, 1004)
+  assert.equal('position' in fade, false)
+
+  let expected = drawNativeFloat(rng, 10).state
+  expected = drawNativeInteger(expected, 100_001).state
+  expected = drawNativeFloat(expected, Math.fround(0.5)).state
+  expected = drawNativeFloat(expected, Math.fround(0.75)).state
+  const selector = drawNativeInteger(expected, 2); expected = selector.state
+  if (selector.value === 1) {
+    expected = advanceNativeRngWords(expected, 4)
+    expected = drawNativeFloat(expected, 10).state
+    expected = drawNativeFloat(expected, 2, true).state
+    assert.equal(effects.actors[1]?.kind, 'weld-blizzard-chain-frost')
+  } else {
+    assert.equal(effects.actors.length, 1)
+  }
+  assert.deepEqual(effects.rng, expected)
+})
 
 test('welded missiles share one damage draw and consume constructor RNG in fan order', () => {
   const rng = createNativeRng(17)

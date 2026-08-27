@@ -50,7 +50,7 @@ const WORLD_KEY = 'boneyard:weld-render'
 
 test('Weld atlas membership covers every recovered direct owner', () => {
   for (const record of [
-    5, 6, 15, 16, 18, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
+    5, 6, 15, 16, 18, 28, 30, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
     110, 111, 112, 168, 169, 170, 171, 251, 266, 271, 282,
     1836, 1839, 2008, 2010,
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
@@ -170,6 +170,21 @@ test('channel and Steam plans use their concrete native classes', () => {
   assert.ok(glows.actors.every((glow) => (
     nativeWeldVisualPlan(glow).sprites.some(({ record }) => record === 110)
   )))
+  const chainFrost = nativeWeldVisualPlan({
+    ageTicks: 0,
+    birthTick: 2,
+    buildId: 1004,
+    direction: { x: 0.5, y: 0 },
+    id: 22,
+    kind: 'weld-blizzard-chain-frost',
+    lightRegistration: null,
+    origin: { x: 100, y: 0 },
+    ownerId: 'wizard',
+    vector: blizzard.vector,
+    worldKey: WORLD_KEY,
+  })
+  assert.ok(chainFrost.sprites.some(({ record }) => record === 30))
+  assert.ok(chainFrost.sprites.some(({ record }) => record === 28))
 
   const fade = createNativeWeldFlameLashFade({
     direction: { x: 1, y: 0 }, id: 3, origin: { x: 100, y: 0 }, ownerId: 'wizard',
