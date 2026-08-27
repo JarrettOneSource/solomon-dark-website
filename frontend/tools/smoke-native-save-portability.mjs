@@ -63,6 +63,7 @@ async function runAnonymousJourney(browser) {
     acceptDownloads: true,
     viewport: { height: 900, width: 1600 },
   })
+  await mockDevelopmentDeployment(context)
   const page = await context.newPage()
   const diagnostics = collectDiagnostics(page)
   try {
@@ -108,6 +109,7 @@ async function runCloudJourney(browser, token) {
     acceptDownloads: true,
     viewport: { height: 900, width: 1600 },
   })
+  await mockDevelopmentDeployment(context)
   await context.addInitScript((value) => localStorage.setItem('sdr.token', value), token)
   const page = await context.newPage()
   const diagnostics = collectDiagnostics(page)
@@ -343,4 +345,11 @@ async function registerSmokeAccount(username, password) {
     throw new Error(`smoke account registration failed (${response.status})`)
   }
   return payload.token
+}
+
+async function mockDevelopmentDeployment(context) {
+  await context.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
 }
