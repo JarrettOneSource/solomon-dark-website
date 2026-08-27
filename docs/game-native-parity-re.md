@@ -50612,9 +50612,14 @@ browser errors, physical memory, repeated level-ups, and all stress rows.
   whose `preserveDrawingBuffer` remains false. This is a browser transport
   edge, not a native screen membership or lighting-clock branch.
 
-The SkillPicker alone must preserve its default framebuffer between explicit
-manual paints. Other continuously rendered game canvases keep the ordinary
-discardable buffer. Regression coverage must pin this modal-only context
-attribute, and physical acceptance must reproduce three complete captures
-across Safari chrome expansion/retraction without increasing the world or
-picker membership.
+Candidate `d8e1f304f36191525f8205294e102f60177899f2` tested a modal-only
+`preserveDrawingBuffer`. Physical capture falsifies it: hashes
+`c5dfd3e461c2da54af8d46411b8250c1c126bda15430753cd46cb6cec5569fd1`,
+`e6a8cf6ff9e3ab3a54f2dccb251dd6fe98e767d9d7736a4e4de21b7ddbe85046`,
+and `139a8f356f67823a5df618ababa55b845e7ea65369dbb95828382a2c2dbc5700`
+still include one partial card frame, while instrumentation stalls reach
+`118 ms`. The flag is removed. The complete darkened/frozen world is stable in
+all frames; only the DVT-triggered Safari chrome transition exposes the
+manually painted UI buffer. That instrumentation edge is not evidence that the
+reported world-light clock still advances, and it does not justify a permanent
+buffer or removal of native picker animation.
