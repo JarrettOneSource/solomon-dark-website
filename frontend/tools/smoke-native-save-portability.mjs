@@ -293,7 +293,10 @@ function collectDiagnostics(page) {
   const consoleErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
   page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
+    if (message.type() === 'error') {
+      const location = message.location().url
+      consoleErrors.push(`${message.text()}${location ? ` [${location}]` : ''}`)
+    }
   })
   return { consoleErrors, pageErrors }
 }
