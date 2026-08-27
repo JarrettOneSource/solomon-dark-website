@@ -2670,14 +2670,14 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
   )
 })
 
-test('Coffin opening emits exactly three emerging helpers, then replenishes below its owned cap', () => {
+test('Coffin opening and open charge emit independently of the active Maggot cap', () => {
   let result = spawnOne(
     'coffin-program',
     'COFFIN',
     { x: 0, y: 0 },
     { player: livingTarget(10, 0) },
   )
-  result = withCoffinMaximumMaggots(result, 4)
+  result = withCoffinMaximumMaggots(result, 0)
   result = withCoffinRemaining(result, 1)
   result = step(result.store, 1, { player: livingTarget(10, 0) })
   assert.equal(result.store.actors[0]!.brain.phase, 'rising')
@@ -2696,51 +2696,113 @@ test('Coffin opening emits exactly three emerging helpers, then replenishes belo
   const release = result.events.find((event) => event.type === 'coffin-maggot-release')
   assert.equal(release?.count, 3)
   assert.equal(result.store.maggots.length, 3)
-  assert.equal(boneyardEnemyLiveCount(result.store), 4)
+  assert.equal(boneyardEnemyLiveCount(result.store), 1)
   assert.equal(new Set(result.store.maggots.map((maggot) => maggot.id)).size, 3)
   assert.ok(result.store.maggots.every((maggot) => (
     (maggot as unknown as { movementPhase?: string }).movementPhase === 'emerging'
   )))
-  assert.deepEqual(new Set(result.store.maggots.map((maggot) => (
-    (maggot as unknown as { launchTrajectory?: string }).launchTrajectory
-  ))), new Set(['lid', 'edge']))
+  const coffin = result.store.actors[0]!
+  const coffinBrain = coffin.brain
+  if (coffinBrain.family !== 'coffin') throw new Error('expected Coffin brain')
+  assert.ok(result.store.maggots.every((maggot) => {
+    const segment = maggot.launchTrajectory === 'edge'
+      ? { end: { x: 15.5, y: -29.5 }, maximum: 200, minimum: 140, start: { x: 5.5, y: 8.5 } }
+      : { end: { x: 5.5, y: -41.5 }, maximum: 330, minimum: 270, start: { x: -9.5, y: -4.5 } }
+    const start = coffinLaunchPointForTest(segment.start, coffinBrain)
+    const end = coffinLaunchPointForTest(segment.end, coffinBrain)
+    const sourceHeading = coffinBrain.launchScale < 0
+      ? positiveDegrees(360 - maggot.headingDeg)
+      : maggot.headingDeg
+    const localX = maggot.position.x - coffin.position.x
+    const localY = maggot.position.y - coffin.position.y
+    return sourceHeading >= segment.minimum
+      && sourceHeading < segment.maximum
+      && localX >= Math.min(start.x, end.x)
+      && localX <= Math.max(start.x, end.x)
+      && localY >= start.y - 8
+      && localY <= start.y
+      && Math.abs(Math.hypot(maggot.launchVelocity.x, maggot.launchVelocity.y) - 1) < 1e-12
+      && maggot.emergencePhase >= 0
+      && maggot.emergencePhase < 5
+      && maggot.landingBounceVelocity >= -0.5
+      && maggot.landingBounceVelocity <= 0
+      && maggot.verticalVelocity === 0
+  }))
 
-  const openingPositions = new Map(result.store.maggots.map((maggot) => [
-    maggot.id,
-    { ...maggot.position },
-  ]))
-  let replenishTick = -1
-  for (let tick = 5; tick <= 500 && replenishTick < 0; tick += 1) {
-    result = step(result.store, tick, FAR_PLAYERS)
-    if (result.events.some((event) => event.type === 'coffin-maggot-release')) {
-      replenishTick = tick
-    }
-  }
-  assert.ok(replenishTick > 4)
-  assert.equal(result.events.find((event) => event.type === 'coffin-maggot-release')?.count, 1)
-  assert.equal(result.store.maggots.filter((maggot) => maggot.lifeState === 'alive').length, 4)
-  assert.ok(result.store.maggots.some((maggot) => {
-    const initial = openingPositions.get(maggot.id)
-    return initial !== undefined
-      && (maggot.position.x !== initial.x || maggot.position.y !== initial.y)
-  }), 'opening helpers must traverse their emergence trajectories')
+  result = step(result.store, 5, FAR_PLAYERS)
+  assert.equal(result.events.find((event) => event.type === 'coffin-maggot-release')?.count, 3)
+  assert.equal(result.store.maggots.length, 6)
+  assert.equal(boneyardEnemyLiveCount(result.store), 1)
+  const opened = result.store.actors[0]!.brain
+  assert.equal(opened.family, 'coffin')
+  if (opened.family !== 'coffin') throw new Error('expected Coffin brain')
+  assert.equal(opened.maggotCharge, Math.fround(0.025))
 
-  for (let tick = replenishTick + 1; tick <= replenishTick + 200; tick += 1) {
-    result = step(result.store, tick, FAR_PLAYERS)
+  result = withCoffinCharge(result, 10)
+  const before = result.store.maggots.length
+  result = step(result.store, 6, FAR_PLAYERS)
+  assert.ok(result.store.maggots.length - before >= 0)
+  assert.ok(result.store.maggots.length - before <= 1)
+  const capped = result.store.actors[0]!.brain
+  assert.equal(capped.family, 'coffin')
+  if (capped.family !== 'coffin') throw new Error('expected Coffin brain')
+  assert.equal(capped.maggotCharge, 10)
+})
+
+test('Maggot landing owns 1-in-5 combat admission and a 30-inactive ceiling', () => {
+  let result = openedCoffin('maggot-admission', FAR_PLAYERS)
+  result = freezeOpenedCoffin(withCoffinMaximumMaggots(result, 1))
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      maggots: result.store.maggots.map((maggot) => ({
+        ...maggot,
+        landingBounceVelocity: -0.4,
+        verticalOffset: -0.01,
+        verticalVelocity: 1,
+      })),
+      rngState: boneyardIntegerState(5, 3),
+    },
   }
-  assert.equal(result.store.maggots.filter((maggot) => maggot.lifeState === 'alive').length, 4)
+  result = step(result.store, 5, FAR_PLAYERS)
+  assert.equal(result.store.maggots.filter(({ combatActive }) => combatActive).length, 1)
+  assert.equal(result.store.maggots.filter(({ combatActive }) => !combatActive).length, 2)
+  assert.equal(result.store.maggots.filter(({ combatActive }) => combatActive)[0]?.targetPlayerId, 'player')
+  assert.ok(result.store.maggots.filter(({ combatActive }) => !combatActive).every(
+    ({ targetPlayerId }) => targetPlayerId === null,
+  ))
+
+  result = openedCoffin('maggot-inactive-ceiling', FAR_PLAYERS)
+  result = freezeOpenedCoffin(withCoffinMaximumMaggots(result, 0))
+  const template = result.store.maggots[0]!
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      maggots: Array.from({ length: 31 }, (_, index) => ({
+        ...template,
+        id: 10_000 + index,
+        nativeCellBindingOrder: 10_000 + index,
+        nativeRegistrationOrder: 10_000 + index,
+        landingBounceVelocity: -0.4,
+        verticalOffset: -0.01,
+        verticalVelocity: 1,
+      })),
+    },
+  }
+  result = step(result.store, 5, FAR_PLAYERS)
+  assert.equal(result.store.maggots.length, 30)
+  assert.ok(result.store.maggots.every(({ combatActive }) => !combatActive))
+  assert.deepEqual(result.retired.map(({ actorId }) => actorId), [10_030])
+  assert.equal(boneyardEnemyLiveCount(result.store), 1)
 })
 
 test('a crawling Maggot bites once, enters death, and cannot damage again', () => {
-  let result = openedCoffin('one-bite-maggot', { player: livingTarget(10, 0) })
-  let tick = 5
-  while (result.store.maggots.some((maggot) => (
-    (maggot as unknown as { movementPhase?: string }).movementPhase !== 'crawl'
-  ))) {
-    result = step(result.store, tick, FAR_PLAYERS)
-    tick += 1
-    if (tick > 200) throw new Error('Maggots did not finish emergence')
-  }
+  let result = freezeOpenedCoffin(
+    openedCoffin('one-bite-maggot', { player: livingTarget(10, 0) }),
+  )
+  const tick = 5
   const source = result.store.maggots[0]!
   result = {
     ...result,
@@ -2748,8 +2810,11 @@ test('a crawling Maggot bites once, enters death, and cannot damage again', () =
       ...result.store,
       maggots: [{
         ...source,
+        combatActive: true,
+        movementPhase: 'crawl',
         nextAttackTick: tick,
         position: { x: 0, y: 0 },
+        verticalOffset: 0,
       }],
     },
   }
@@ -2774,6 +2839,7 @@ test('Maggots retire immediately when their Coffin ownership becomes invalid', (
 
   result = step(damaged.store, 5, FAR_PLAYERS)
 
+  assert.equal(result.store.actors.some(({ id }) => id === coffin.id), false)
   assert.equal(
     result.store.maggots.some(({ id }) => childIds.includes(id)),
     false,
@@ -2795,7 +2861,17 @@ test('player-killed Maggot retires once and hands off to independent effects', (
     result = withCoffinRemaining(result, 1)
     result = step(result.store, tick, FAR_PLAYERS)
   }
-  const maggot = result.store.maggots[0]!
+  result = freezeOpenedCoffin(result)
+  const maggot = {
+    ...result.store.maggots[0]!,
+    combatActive: true,
+    movementPhase: 'crawl' as const,
+    verticalOffset: 0,
+  }
+  result = {
+    ...result,
+    store: { ...result.store, maggots: [maggot] },
+  }
   assert.ok(maggot.deathOffsets.length <= 2)
   assert.ok(maggot.deathOffsets.every((offset) => Math.hypot(offset.x, offset.y) < 30))
   const damaged = damageBoneyardEnemy(result.store, {
@@ -3849,6 +3925,30 @@ function withCoffinRemaining(
   return withActorBrain(result, 0, { ...brain, phaseTicksRemaining })
 }
 
+function withCoffinCharge(
+  result: BoneyardEnemyStoreStepResult,
+  maggotCharge: number,
+): BoneyardEnemyStoreStepResult {
+  const actor = result.store.actors[0]!
+  const brain = actor.brain
+  if (brain.family !== 'coffin') throw new Error('expected Coffin brain')
+  return withActorBrain(result, 0, { ...brain, maggotCharge })
+}
+
+function freezeOpenedCoffin(
+  result: BoneyardEnemyStoreStepResult,
+): BoneyardEnemyStoreStepResult {
+  const actor = result.store.actors[0]!
+  const brain = actor.brain
+  if (brain.family !== 'coffin') throw new Error('expected Coffin brain')
+  return withActorBrain(result, 0, {
+    ...brain,
+    phase: 'holding',
+    phaseTick: 0,
+    phaseTicksRemaining: Number.MAX_SAFE_INTEGER,
+  })
+}
+
 function withCoffinMaximumMaggots(
   result: BoneyardEnemyStoreStepResult,
   maximumMaggots: number,
@@ -3880,6 +3980,29 @@ function openedCoffin(
     result = step(result.store, tick, players)
   }
   return result
+}
+
+function boneyardIntegerState(bound: number, winner: number): number {
+  for (let seed = 1; seed < 1_000_000; seed += 1) {
+    if (randomBoneyardWaveInteger(seed, bound).value === winner) return seed
+  }
+  throw new Error(`could not find Boneyard Integer(${bound}) winner ${winner}`)
+}
+
+function positiveDegrees(value: number): number {
+  return ((value % 360) + 360) % 360
+}
+
+function coffinLaunchPointForTest(
+  point: Readonly<{ x: number; y: number }>,
+  brain: Extract<BoneyardEnemyActor['brain'], { family: 'coffin' }>,
+): Readonly<{ x: number; y: number }> {
+  const radians = brain.launchRotationDeg * Math.PI / 180
+  const x = point.x * brain.launchScale
+  return {
+    x: x * Math.cos(radians) - point.y * Math.sin(radians),
+    y: x * Math.sin(radians) + point.y * Math.cos(radians),
+  }
 }
 
 function livingTarget(x: number, y: number) {

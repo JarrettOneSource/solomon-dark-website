@@ -71,8 +71,10 @@ try {
       enemyProjectionModule,
       enemyStoreModule,
       playerModule,
+      progressionModule,
       presentationModule,
       rendererModule,
+      rngModule,
       spellModule,
     ] = await Promise.all([
       import('/src/game/boneyard-enemy-ambient-audio.ts'),
@@ -84,8 +86,10 @@ try {
       import('/src/game/host/project-boneyard-enemies.ts'),
       import('/src/game/core-server/boneyard-enemy-store.ts'),
       import('/src/game/core-kernels/player-character.ts'),
+      import('/src/game/core-kernels/player-progression.ts'),
       import('/src/game/renderer/native-enemy-presentation.ts'),
       import('/src/game/renderer/boneyard-world-renderer.ts'),
+      import('/src/game/core-kernels/native-rng.ts'),
       import('/src/game/core-kernels/primary-spells.ts'),
     ])
     const viewport = { displayScale: 1, height: 900, width: 1600 }
@@ -111,6 +115,61 @@ try {
       },
     }
     const radians = (degrees) => degrees * Math.PI / 180
+    let fireBodyBook = progressionModule.createPlayerSkillBook({
+      discipline: 'body',
+      displayName: 'Pyrros',
+      element: 'fire',
+    })
+    let fireBodyProgression = {
+      ...progressionModule.createPlayerProgression(314_159),
+      level: 1,
+      maximumMana: 100,
+    }
+    let fireBodyRng = rngModule.createNativeRng(0x2468_ace0)
+    const fireBodyOfferSignatures = []
+    const fireBodyOfferSeeds = []
+    let illegalMoreMissiles = false
+    for (let level = 2; level <= 23; level += 1) {
+      fireBodyProgression = {
+        ...fireBodyProgression,
+        level,
+        pendingLevels: [level],
+        pendingOffer: null,
+      }
+      const built = progressionModule.buildPlayerSkillOffer(
+        fireBodyProgression,
+        fireBodyBook,
+        level,
+        fireBodyRng,
+      )
+      fireBodyProgression = { ...fireBodyProgression, pendingOffer: built.offer }
+      fireBodyRng = built.rng
+      fireBodyOfferSignatures.push(
+        built.offer.options.map(({ skillId }) => skillId).join(','),
+      )
+      illegalMoreMissiles ||= built.offer.options.some(({ skillId }) => skillId === 10)
+        && (fireBodyBook.permanentRanks[8] ?? 0) === 0
+      const chosen = built.offer.options[0]
+      if (!chosen) throw new Error(`Fire/Body level ${level} produced no choice`)
+      const applied = progressionModule.applyPlayerSkillChoice(
+        fireBodyProgression,
+        fireBodyBook,
+        { choiceIndex: 0, offerSequence: built.offer.sequence, skillId: chosen.skillId },
+        fireBodyRng,
+      )
+      if (!applied) throw new Error(`Fire/Body level ${level} rejected its first choice`)
+      fireBodyProgression = applied.progression
+      fireBodyBook = applied.skillBook
+      fireBodyRng = applied.rng
+      fireBodyOfferSeeds.push(applied.progression.offerSeed)
+    }
+    const skillOfferReceipt = {
+      illegalMoreMissiles,
+      offerSeeds: fireBodyOfferSeeds,
+      signatures: fireBodyOfferSignatures,
+      uniqueOfferSeeds: new Set(fireBodyOfferSeeds).size,
+      uniqueSignatures: new Set(fireBodyOfferSignatures).size,
+    }
     const makeAnimation = (overrides) => (
       animationModule.nativeEnemyIdleAnimationSample(overrides)
     )
@@ -242,11 +301,10 @@ try {
           zombieAngularOffsetDeg: advanced ? 16 : -12,
           zombieAttackSide: advanced ? 1 : 0,
           zombieBodyRotationRadians: advanced ? radians(-12) : radians(8),
-          zombieBodyType: 1,
-          zombieFlyblownSide: 0,
+          zombieBodyType: advanced ? 3 : 1,
           zombieFrontArmPose: advanced ? 1 : 0,
           zombieFrontArmRotationRadians: advanced ? radians(-48) : radians(14),
-          zombieHeadType: 2,
+          zombieHeadType: advanced ? 3 : 2,
           zombieHeadRotationRadians: advanced ? radians(22) : radians(-8),
           zombieRearArmPose: advanced ? 0 : 1,
           zombieRearArmRotationRadians: advanced ? radians(12) : radians(-42),
@@ -290,6 +348,8 @@ try {
         { x: 880, y: 455 },
         makeAnimation({
           coffinPose: advanced ? 9 : 4,
+          coffinRotationRadians: radians(-10),
+          coffinScaleX: -1,
           coffinSecondaryPose: advanced ? 7 : 2,
           coffinState: 'opening',
           state: 'action',
@@ -407,6 +467,7 @@ try {
     const snapshotAt = (tick, advanced) => ({
       hostPlayerId: 'local',
       levelUpBarrier: null,
+      materializingPlayerIds: [],
       modEffects: [],
       players: {
         local: {
@@ -500,10 +561,12 @@ try {
       },
       tick,
       world: {
+        arenaTransition: null,
         deathEffects: [],
         encounter: null,
         enemies: enemiesAt(advanced),
         enemyEvents: [],
+        enemyWorldFeedback: { accumulator: 0, magnitude: 0 },
         enemyProjectileEffects,
         enemyProjectiles: enemyProjectiles.map((source) => ({
           ...source,
@@ -514,6 +577,7 @@ try {
         })),
         gateLeaves: [],
         goodies: [],
+        hallOfFameRuns: {},
         kind: 'boneyard',
         lanternLightRegistration: null,
         loot: [],
@@ -524,12 +588,14 @@ try {
           currentHealth: 10,
           deathEpoch: 0,
           deathTick: 0,
+          emergencePhase: 0,
           emergenceOrientation: 0,
           emergenceTick: 0,
           headingDeg: 0,
           hitFlash: 0,
           id: 301,
           launchTrajectory: 'edge',
+          lightRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
           maximumHealth: 10,
           ownerCoffinActorId: 8,
           pose: advanced ? 1 : 0,
@@ -539,6 +605,7 @@ try {
           verticalOffset: 0,
         }],
         runId,
+        tutorial: null,
         waves: null,
       },
     })
@@ -592,15 +659,25 @@ try {
         enemy,
         121.75,
         (atlas, entry) => assetModule.nativeEnemySpriteRecord(atlas, entry).points,
-      ).layers.map(({ entry, role }) => ({ entry, role })),
+      ).layers.map(({ entry, role, rotationRadians, scaleX }) => ({
+        entry,
+        role,
+        rotationRadians,
+        scaleX: scaleX ?? 1,
+      })),
     ]))
     const ambientRequests = ambientAudioModule.nativeBoneyardEnemyAmbientRequests(
       snapshotAt(121.75, true),
       () => 1,
     )
-    await Promise.all(ambientAudioModule.BONEYARD_ENEMY_AMBIENT_CUES.map((cue) => (
-      audioBrowserModule.loadGameAudioAsset(audioAssetsModule.GAME_AUDIO_SOURCES.loops[cue])
-    )))
+    await Promise.all([
+      ...ambientAudioModule.BONEYARD_ENEMY_AMBIENT_CUES.map((cue) => (
+        audioBrowserModule.loadGameAudioAsset(audioAssetsModule.GAME_AUDIO_SOURCES.loops[cue])
+      )),
+      ...Object.values(audioAssetsModule.GAME_AUDIO_SOURCES.music).map((source) => (
+        audioBrowserModule.loadGameAudioAsset(source)
+      )),
+    ])
     const audioEventStart = window.__sdrAudioEvents.length
     const ambientDirector = audioBrowserModule.createBrowserGameAudioDirector()
     ambientDirector.unlock()
@@ -691,6 +768,48 @@ try {
         tick,
       })
     )
+    let coffinAuthority = stepImpAuthority(
+      enemyStoreModule.createBoneyardEnemyStore('coffin-browser-authority'),
+      0,
+      [{
+        enemyToken: 'COFFIN',
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: 1013,
+        position: { x: playerPosition.x + 100, y: playerPosition.y },
+        spawnTick: 0,
+        waveOrdinal: 10,
+      }],
+    )
+    const coffinActor = coffinAuthority.store.actors[0]
+    if (!coffinActor || coffinActor.brain.family !== 'coffin') {
+      throw new Error('controlled Coffin authority lost its actor')
+    }
+    coffinAuthority = stepImpAuthority({
+      ...coffinAuthority.store,
+      actors: [{
+        ...coffinActor,
+        brain: { ...coffinActor.brain, phase: 'opening', phaseTicksRemaining: 1 },
+      }],
+    }, 1)
+    const releasedMaggotIds = coffinAuthority.store.maggots.map(({ id }) => id)
+    const damagedCoffin = enemyStoreModule.damageBoneyardEnemy(coffinAuthority.store, {
+      actorId: coffinActor.id,
+      amount: coffinActor.currentHealth,
+      sourcePlayerId: 'local',
+      tick: 1,
+    })
+    coffinAuthority = stepImpAuthority(damagedCoffin.store, 2)
+    const coffinRetirementReceipt = {
+      bodyRetained: coffinAuthority.store.actors.some(({ id }) => id === coffinActor.id),
+      childIds: releasedMaggotIds,
+      childRetained: coffinAuthority.store.maggots.some(({ id }) => (
+        releasedMaggotIds.includes(id)
+      )),
+      liveCount: enemyStoreModule.boneyardEnemyLiveCount(coffinAuthority.store),
+      retiredIds: coffinAuthority.retired.map(({ actorId }) => actorId),
+    }
     let impAuthority = stepImpAuthority(
       enemyStoreModule.createBoneyardEnemyStore('imp-browser-authority'),
       0,
@@ -880,11 +999,13 @@ try {
       ambientAudioEvents,
       ambientRequests,
       auxiliaryPlans,
+      coffinRetirement: coffinRetirementReceipt,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
       impAuthority: impAuthorityReceipt,
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
+      skillOffers: skillOfferReceipt,
       skeletonAttackDifference: compare(
         skeletonEarlyPixels,
         skeletonLatePixels,
@@ -917,6 +1038,17 @@ try {
   assert.equal(receipt.renderer, 'pixi-webgl')
   assert.match(receipt.rendererName.toLowerCase(), /webgl/)
   assert.equal(receipt.context, 'webgl2')
+  assert.equal(receipt.skillOffers.illegalMoreMissiles, false)
+  assert.ok(receipt.skillOffers.uniqueOfferSeeds > 20)
+  assert.ok(receipt.skillOffers.uniqueSignatures > 8)
+  assert.equal(receipt.coffinRetirement.bodyRetained, false)
+  assert.equal(receipt.coffinRetirement.childRetained, false)
+  assert.equal(receipt.coffinRetirement.childIds.length, 3)
+  assert.equal(receipt.coffinRetirement.liveCount, 0)
+  assert.deepEqual(receipt.coffinRetirement.retiredIds, [
+    1,
+    ...receipt.coffinRetirement.childIds,
+  ])
   assert.equal(receipt.frame.enemyCount, 8)
   assert.equal(receipt.frame.enemyAuxiliaryEffectCount, 3)
   assert.deepEqual(receipt.frame.enemyAuxiliaryEffectLanes, [
@@ -994,6 +1126,30 @@ try {
   assert.ok(receipt.auxiliaryPlans.ZOMBIE.filter(({ role }) => (
     role.startsWith('zombie-fly:')
   )).length >= 5)
+  assert.deepEqual(
+    receipt.auxiliaryPlans.ZOMBIE.filter(({ role }) => (
+      role === 'zombie-body'
+      || role === 'zombie-body-overlay-rear'
+      || role === 'zombie-body-overlay-front'
+      || role === 'zombie-head'
+    )).map(({ entry, role }) => ({ entry, role })),
+    [
+      { entry: 2258, role: 'zombie-body' },
+      { entry: 2276, role: 'zombie-body-overlay-rear' },
+      { entry: 2276, role: 'zombie-body-overlay-front' },
+      { entry: 2348, role: 'zombie-head' },
+    ],
+  )
+  assert.deepEqual(
+    receipt.auxiliaryPlans.COFFIN.slice(0, 2).map(({ rotationRadians, scaleX }) => ({
+      rotationRadians,
+      scaleX,
+    })),
+    [
+      { rotationRadians: -10 * Math.PI / 180, scaleX: -1 },
+      { rotationRadians: -10 * Math.PI / 180, scaleX: -1 },
+    ],
+  )
   assert.ok(receipt.auxiliaryPlans.WRAITH.some(({ role }) => (
     role.startsWith('wraith-soul-wisp:')
   )))

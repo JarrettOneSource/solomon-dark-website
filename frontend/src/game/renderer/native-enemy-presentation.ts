@@ -462,7 +462,7 @@ function zombiePresentation(
   animation: NativeEnemyAnimationSample | undefined,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
-  const body = zombieLayers(enemy, facing, flags, animation, authoredPoints)
+  const body = zombieLayers(enemy, facing, animation, authoredPoints)
   const after = flags.has('ROTTEN') ? zombieFlyblownLayers(spawnAgeTicks) : []
   if (flags.has('ROTTEN')) {
     after.push(...zombieFadeParticleLayers(enemy, spawnAgeTicks))
@@ -668,58 +668,102 @@ function impLayers(
 function zombieLayers(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   animation: NativeEnemyAnimationSample | undefined,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemySpriteLayer[] {
   const bodyType = animation && animation.zombieBodyType >= 0
-    ? boundedPose(animation.zombieBodyType, 2)
+    ? boundedPose(animation.zombieBodyType, 3)
     : visualChoice(enemy, 3, 3)
   const headRoll = visualChoice(enemy, 4, 8)
   const headType = animation && animation.zombieHeadType >= 0
-    ? boundedPose(animation.zombieHeadType, 2)
+    ? boundedPose(animation.zombieHeadType, 3)
     : headRoll < 6 ? 0 : headRoll - 5
-  const flyblownSide = flags.has('ROTTEN')
-    ? animation && animation.zombieFlyblownSide >= 0
-      ? boundedPose(animation.zombieFlyblownSide, 1)
-      : visualChoice(enemy, 5, 2)
-    : -1
   const gaitPose = animation?.gaitPose ?? 0
   const rearArmPose = animation?.zombieRearArmPose ?? 0
   const frontArmPose = animation?.zombieFrontArmPose ?? 0
+  const bodyRotationRadians = animation?.zombieBodyRotationRadians ?? 0
+  const bodyScale = bodyType === 3 ? 1.15 : 1
+  const bodyRootOffset = bodyType === 3 ? { x: 0, y: -8 } : { x: 0, y: 0 }
   const bodyEntry = 2203 + bodyType * 18 + facing
   const bodyPoints = authoredPoints('BadGuys', bodyEntry)
-  const headPoint = requiredPoint(bodyPoints, 0, `Zombie body ${bodyEntry}`)
-  const rearArmPoint = requiredPoint(bodyPoints, 1, `Zombie body ${bodyEntry}`)
-  const frontArmPoint = requiredPoint(bodyPoints, 2, `Zombie body ${bodyEntry}`)
-  return [
+  const transformBodyPoint = (point: Readonly<{ x: number; y: number }>) => {
+    const scaled = { x: point.x * bodyScale, y: point.y * bodyScale }
+    const rotated = rotatePoint(scaled, bodyRotationRadians)
+    return {
+      x: rotated.x + bodyRootOffset.x,
+      y: rotated.y + bodyRootOffset.y,
+    }
+  }
+  const headPoint = transformBodyPoint(
+    requiredPoint(bodyPoints, 0, `Zombie body ${bodyEntry}`),
+  )
+  const rearArmPoint = transformBodyPoint(
+    requiredPoint(bodyPoints, 1, `Zombie body ${bodyEntry}`),
+  )
+  const frontArmPoint = transformBodyPoint(
+    requiredPoint(bodyPoints, 2, `Zombie body ${bodyEntry}`),
+  )
+  const bodyShift = rotatePoint({ x: 0, y: -5 }, bodyRotationRadians)
+  const bodyOffset = bodyType === 3
+    ? {
+        x: bodyRootOffset.x + bodyShift.x,
+        y: bodyRootOffset.y + bodyShift.y,
+      }
+    : bodyRootOffset
+  const layers = [
     layer('BadGuys', 2365 + boundedPose(gaitPose, 7) * 18 + facing, 'zombie-base'),
     layer('BadGuys', bodyEntry, 'zombie-body', {
-      rotationRadians: animation?.zombieBodyRotationRadians ?? 0,
+      offset: bodyOffset,
+      rotationRadians: bodyRotationRadians,
+      scale: bodyScale,
     }),
     layer(
       'BadGuys',
-      2095 + boundedPose(rearArmPose + (flyblownSide === 0 ? 1 : 0), 2) * 18 + facing,
+      2095 + boundedPose(rearArmPose, 2) * 18 + facing,
       'zombie-arm-rear',
       {
         offset: rearArmPoint,
         rotationRadians: animation?.zombieRearArmRotationRadians ?? 0,
+        scale: bodyScale,
       },
     ),
     layer(
       'BadGuys',
-      2149 + boundedPose(frontArmPose + (flyblownSide === 1 ? 1 : 0), 2) * 18 + facing,
+      2149 + boundedPose(frontArmPose, 2) * 18 + facing,
       'zombie-arm-front',
       {
         offset: frontArmPoint,
         rotationRadians: animation?.zombieFrontArmRotationRadians ?? 0,
+        scale: bodyScale,
       },
     ),
-    layer('BadGuys', 2293 + headType * 18 + facing, 'zombie-head', {
+  ]
+  if (bodyType === 3) {
+    const overlayShift = rotatePoint({ x: 0, y: -4 }, bodyRotationRadians)
+    layers.push(
+      layer('BadGuys', 2275 + facing, 'zombie-body-overlay-rear', {
+        offset: {
+          x: rearArmPoint.x + overlayShift.x,
+          y: rearArmPoint.y + overlayShift.y,
+        },
+        rotationRadians: animation?.zombieRearArmRotationRadians ?? 0,
+        scale: bodyScale,
+      }),
+      layer('BadGuys', 2275 + facing, 'zombie-body-overlay-front', {
+        offset: {
+          x: frontArmPoint.x + overlayShift.x,
+          y: frontArmPoint.y + overlayShift.y,
+        },
+        rotationRadians: animation?.zombieFrontArmRotationRadians ?? 0,
+        scale: bodyScale,
+      }),
+    )
+  }
+  layers.push(layer('BadGuys', 2293 + headType * 18 + facing, 'zombie-head', {
       offset: headPoint,
       rotationRadians: animation?.zombieHeadRotationRadians ?? 0,
-    }),
-  ]
+    }))
+  return layers
 }
 
 function demonLayers(
@@ -1033,6 +1077,18 @@ function midpoint(
   return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
 }
 
+function rotatePoint(
+  point: Readonly<{ x: number; y: number }>,
+  rotationRadians: number,
+): Readonly<{ x: number; y: number }> {
+  const cosine = Math.cos(rotationRadians)
+  const sine = Math.sin(rotationRadians)
+  return {
+    x: point.x * cosine - point.y * sine,
+    y: point.x * sine + point.y * cosine,
+  }
+}
+
 function segment(
   start: Readonly<{ x: number; y: number }>,
   end: Readonly<{ x: number; y: number }>,
@@ -1052,12 +1108,20 @@ function coffinSampleLayers(
     'BadGuys',
     175 + boundedPose(pose, 12),
     `coffin-${animation.coffinState}`,
+    {
+      rotationRadians: animation.coffinRotationRadians,
+      scaleX: animation.coffinScaleX,
+    },
   )]
   if (animation.coffinSecondaryPose !== null) {
     result.push(layer(
       'BadGuys',
       383 + boundedPose(animation.coffinSecondaryPose, 9),
       'coffin-secondary',
+      {
+        rotationRadians: animation.coffinRotationRadians,
+        scaleX: animation.coffinScaleX,
+      },
     ))
   }
   for (const maggot of animation.maggots) {

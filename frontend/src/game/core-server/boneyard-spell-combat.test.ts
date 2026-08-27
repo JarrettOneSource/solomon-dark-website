@@ -433,12 +433,14 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
 
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
+    combatActive: true,
     currentHealth: 100,
     damage: 2,
     deathOffsets: [],
     deathEpoch: null,
     deathStartedTick: null,
     deathTick: 0,
+    emergencePhase: 0,
     emergenceTick: 24,
     gaitPose: 0,
     headingDeg: 90,
@@ -446,6 +448,7 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     id: 1,
     launchTrajectory: 'edge',
     launchVelocity: { x: 0, y: 0 },
+    landingBounceVelocity: -0.4,
     lastAttackTick: null,
     lastDamagedByPlayerId: null,
     lastDamageTick: null,
@@ -469,6 +472,8 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     staffMovementFactor: 1,
     targetPlayerId: null,
     terminalEmitted: false,
+    verticalOffset: 0,
+    verticalVelocity: 0,
   }
   const maggotContact = resolveCombatWithAuthority({
     ...createBoneyardEnemyStore('hurricane-maggot'),

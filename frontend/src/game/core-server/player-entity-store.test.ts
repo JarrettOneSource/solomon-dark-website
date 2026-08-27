@@ -10,7 +10,7 @@ import {
   PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
 } from '../core-kernels/player-combat.ts'
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   playerLightDriveActive,
@@ -28,6 +28,7 @@ import {
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
   grantPlayerEntityBonusSkillChoice,
+  grantPlayerEntitySkillRanks,
   grantPlayerEntityWeldBuild,
   increaseRandomPlayerEntitySkill,
   insertPlayerEntityLootItem,
@@ -766,6 +767,23 @@ test('loot credits exactly one dense participant economy or skill row', () => {
   assert.strictEqual(playerSkillBookAt(store, 'second'), untouchedSkills)
 })
 
+test('direct rank grants reseed once per actually applied native rank', () => {
+  const store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  const sourceRng = createNativeRng(0x1234_5678)
+  const firstSeed = drawNativeInteger(sourceRng, 1_000_000)
+  const secondSeed = drawNativeInteger(firstSeed.state, 1_000_000)
+  const granted = grantPlayerEntitySkillRanks(store, 'first', 9, 2, sourceRng)
+  assert.equal(playerSkillBookAt(granted.store, 'first')?.permanentRanks[9], 2)
+  assert.equal(playerProgressionAt(granted.store, 'first')?.offerSeed, secondSeed.value)
+  assert.deepEqual(granted.rng, secondSeed.state)
+})
+
 test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias atomically', () => {
   let store = addPlayerEntity(
     createPlayerEntityStore(),
@@ -796,6 +814,7 @@ test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias a
   assert.notEqual(applied.weirdCasterSkillId, null)
   assert.equal(book.permanentRanks[applied.weirdCasterSkillId!], 2)
   assert.equal(playerProgressionAt(applied.store, 'first')?.disciplineOfferBias, true)
+  assert.notEqual(playerProgressionAt(applied.store, 'first')?.offerSeed, 10)
 })
 
 test('Drinker precedes Cheat Death and both clear until-hurt one-shots on real damage', () => {

@@ -705,11 +705,24 @@ test('player movement separates from a live owned Maggot and commits the displac
     ...world,
     enemies: {
       ...seeded.store,
+      actors: seeded.store.actors.map((actor) => actor.brain.family === 'coffin'
+        ? {
+            ...actor,
+            brain: {
+              ...actor.brain,
+              phase: 'holding' as const,
+              phaseTicksRemaining: Number.MAX_SAFE_INTEGER,
+            },
+          }
+        : actor),
       maggots: [{
         ...maggot,
+        combatActive: true,
+        movementPhase: 'crawl',
         nextAttackTick: 10_000,
         nextMovementTick: 10_000,
         position: { x: 133, y: 350 },
+        verticalOffset: 0,
       }],
     },
   }
@@ -1504,7 +1517,16 @@ test('primary spell targets use live authoritative enemy actors and owned Maggot
     sourcePlayerId: 'player',
     tick: 1,
   })
-  world = { ...world, enemies: killed.store }
+  world = {
+    ...world,
+    enemies: {
+      ...killed.store,
+      maggots: killed.store.maggots.map((maggot, index) => ({
+        ...maggot,
+        combatActive: index === 0,
+      })),
+    },
+  }
 
   const targets = boneyardPrimarySpellTargets(world)
   assert.deepEqual(targets.map(({ id }) => id), [
@@ -1512,7 +1534,7 @@ test('primary spell targets use live authoritative enemy actors and owned Maggot
     ...world.enemies.maggots.map(({ id }) => `enemy:${id}`),
   ])
   assert.equal(targets[0]?.active, false)
-  assert.ok(targets.slice(1).every(({ active }) => active))
+  assert.deepEqual(targets.slice(1).map(({ active }) => active), [true, false, false])
 })
 
 test('mod Boneyards retain opaque script ownership instead of receiving retail waves', () => {

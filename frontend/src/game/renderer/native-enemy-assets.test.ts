@@ -274,10 +274,9 @@ test('every live combat and Coffin child plan resolves through the runtime prelo
           action,
           actionProgress: action === 'zombie-beat' ? 100 : 4,
           state: 'action',
-          zombieBodyType: 2,
-          zombieFlyblownSide: 1,
+          zombieBodyType: action === 'zombie-beat' ? 3 : 2,
           zombieFrontArmPose: action === 'zombie-beat' ? 2 : 0,
-          zombieHeadType: 2,
+          zombieHeadType: action === 'zombie-beat' ? 3 : 2,
         }),
       }, 500))
     }

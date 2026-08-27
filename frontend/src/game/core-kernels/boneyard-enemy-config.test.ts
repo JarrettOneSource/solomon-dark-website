@@ -389,6 +389,13 @@ test('split, rotten, and Coffin child flags build their recovered payloads', () 
     poisonPunchDamage: 35 / 6,
     rotten: true,
   })
+  const bodyTypeZombie = evaluateBoneyardEnemyConfig('ZOMBIE', { zombieBodyType: 1 })
+  if (bodyTypeZombie.enemyToken !== 'ZOMBIE') throw new Error('expected Zombie config')
+  assert.equal(bodyTypeZombie.family.bodyType, 3)
+  assert.throws(
+    () => evaluateBoneyardEnemyConfig('COFFIN', { zombieBodyType: 1 }),
+    /only valid for ZOMBIE/,
+  )
 
   const coffin = evaluateBoneyardEnemyConfig('COFFIN', {
     flags: ['FLAG_MANYMAGGOTS', 'FLAG_STRONGMAGGOTS'],

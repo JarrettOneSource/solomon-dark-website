@@ -581,6 +581,7 @@ export interface BoneyardMaggotSnapshot {
   currentHealth: number
   deathEpoch: number
   deathTick: number
+  emergencePhase: number
   headingDeg: number
   hitFlash: number
   id: number
@@ -622,6 +623,8 @@ export interface BoneyardEnemyAnimationSnapshot {
   alpha: number
   bodyPose: number
   coffinPose: number
+  coffinRotationRadians: number
+  coffinScaleX: -1 | 1
   coffinSecondaryPose: number | null
   coffinState: BoneyardEnemyCoffinState
   deathEpoch: number
@@ -644,7 +647,6 @@ export interface BoneyardEnemyAnimationSnapshot {
   zombieAttackSide: 0 | 1
   zombieBodyRotationRadians: number
   zombieBodyType: number
-  zombieFlyblownSide: number
   zombieFrontArmPose: number
   zombieFrontArmRotationRadians: number
   zombieHeadType: number

@@ -202,26 +202,30 @@ export const NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS = Object.freeze({
 /** Retail Coffin opening calls its Maggot helper exactly three times. */
 export const NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS = 3
 
-/** Named web bounds until retail Coffin replenishment timing is closed. */
-export const BOUNDED_COFFIN_MAGGOT_PROGRAM = Object.freeze({
-  replenishmentEmissionCount: 1,
-  replenishmentIntervalTicks: 50,
-})
-
-/** Named web bounds until retail Maggot launch and crawl kinematics are closed. */
-export const BOUNDED_MAGGOT_PROGRAM = Object.freeze({
+/** Retail Maggot constants recovered from 0x0047E0F0/0x0048B2A0. */
+export const NATIVE_MAGGOT_PROGRAM = Object.freeze({
   attackDelayAfterEmergenceTicks: 10,
   attackReach: 18,
   bitePresentationTicks: 6,
   collisionRadius: 8,
   deathTicks: 12,
-  emergenceTicks: 24,
   gaitDistancePerPose: 2,
-  launchHeadingStepDeg: 137.5,
-  launchTrajectories: Object.freeze({
-    edge: Object.freeze({ horizontalStep: 1.75, originDistance: 12, verticalHeight: 12 }),
-    lid: Object.freeze({ horizontalStep: 1.25, originDistance: 8, verticalHeight: 20 }),
+  gravityPerTick: 0.075,
+  launchSegments: Object.freeze({
+    edge: Object.freeze({
+      end: Object.freeze({ x: 15.5, y: -29.5 }),
+      headingMaximumDeg: 200,
+      headingMinimumDeg: 140,
+      start: Object.freeze({ x: 5.5, y: 8.5 }),
+    }),
+    lid: Object.freeze({
+      end: Object.freeze({ x: 5.5, y: -41.5 }),
+      headingMaximumDeg: 330,
+      headingMinimumDeg: 270,
+      start: Object.freeze({ x: -9.5, y: -4.5 }),
+    }),
   }),
+  maximumInactiveChildren: 30,
   movementStep: 0.5,
   poisonDurationTicks: 10,
 })
@@ -230,10 +234,12 @@ const NATIVE_WRAITH_RETREAT_MINIMUM_TICKS = 200
 const NATIVE_WRAITH_RETREAT_RANDOM_COUNT = 601
 const NATIVE_COFFIN_HIDDEN_SHORT_TICKS = 180
 const NATIVE_COFFIN_HIDDEN_LONG_TICKS = 360
-const NATIVE_COFFIN_RISE_TICKS = 10
+const NATIVE_COFFIN_RISE_TICKS = 11
 const NATIVE_COFFIN_HOLD_MINIMUM_TICKS = 150
 const NATIVE_COFFIN_HOLD_RANDOM_COUNT = 150
-const NATIVE_COFFIN_OPEN_TICKS = 60
+const NATIVE_COFFIN_OPEN_TICKS = 46
+const NATIVE_COFFIN_MAGGOT_CHARGE_PER_TICK = Math.fround(0.025)
+const NATIVE_COFFIN_MAGGOT_CHARGE_MAXIMUM = 10
 const NATIVE_ENEMY_BURN_GLOW_PER_TICK = 0.05
 const NATIVE_ENEMY_CHARGE_PER_TICK = 0.02
 const NATIVE_IMP_GLOW_PER_TICK = 0.01
@@ -284,7 +290,6 @@ export interface BoneyardZombieBrain {
   readonly bodyType: number
   readonly contactTargetPlayerId: string | null
   readonly family: 'zombie'
-  readonly flyblownSide: 0 | 1
   readonly frontArmBaseRotationDeg: number
   readonly headBaseRotationDeg: number
   readonly headPhaseDeg: number
@@ -317,8 +322,9 @@ export interface BoneyardDemonBrain {
 
 export interface BoneyardCoffinBrain {
   readonly family: 'coffin'
-  readonly maggotsReleased: boolean
-  readonly nextMaggotReplenishmentTick: number
+  readonly launchRotationDeg: number
+  readonly launchScale: -1 | 1
+  readonly maggotCharge: number
   readonly phase: 'hidden' | 'rising' | 'holding' | 'opening' | 'open' | 'death'
   readonly phaseTick: number
   readonly phaseTicksRemaining: number
@@ -470,6 +476,7 @@ export interface BoneyardEnemyProjectileEffect {
 }
 
 export interface BoneyardMaggotActor {
+  readonly combatActive: boolean
   readonly collisionRadius: number
   readonly currentHealth: number
   readonly deathOffsets: readonly Readonly<BoneyardPoint>[]
@@ -482,8 +489,10 @@ export interface BoneyardMaggotActor {
   readonly hurricaneContactCooldown: number
   readonly id: BoneyardEnemyActorId
   readonly emergenceTick: number
+  readonly emergencePhase: number
   readonly launchTrajectory: 'edge' | 'lid'
   readonly launchVelocity: Readonly<BoneyardPoint>
+  readonly landingBounceVelocity: number
   readonly lastAttackTick: number | null
   readonly lastDamagedByPlayerId: string | null
   readonly lastDamageTick: number | null
@@ -507,6 +516,8 @@ export interface BoneyardMaggotActor {
   readonly staffMovementFactor: number
   readonly targetPlayerId: string | null
   readonly terminalEmitted: boolean
+  readonly verticalOffset: number
+  readonly verticalVelocity: number
 }
 
 export type BoneyardEnemyDeathEffectKind =
@@ -1074,7 +1085,7 @@ function enemyProjectileLightManagerLane(
 
 /** Includes every actor throughout its terminal presentation interval. */
 export function boneyardEnemyLiveCount(source: BoneyardEnemyStore): number {
-  return source.actors.length + source.maggots.length
+  return source.actors.length
 }
 
 export function damageBoneyardEnemy(
@@ -1349,7 +1360,7 @@ export function positionBoneyardEnemy(
   }
   const maggotIndex = source.maggots.findIndex((maggot) => maggot.id === actorId)
   const maggot = source.maggots[maggotIndex]
-  if (!maggot || maggot.lifeState !== 'alive') {
+  if (!maggot || maggot.lifeState !== 'alive' || !maggot.combatActive) {
     return { accepted: false, store: source }
   }
   const maggots = [...source.maggots]
@@ -1484,7 +1495,7 @@ function damageBoneyardMaggot(
 ): DamageBoneyardEnemyResult {
   const index = source.maggots.findIndex((maggot) => maggot.id === request.actorId)
   const maggot = source.maggots[index]
-  if (!maggot || maggot.lifeState !== 'alive') {
+  if (!maggot || maggot.lifeState !== 'alive' || !maggot.combatActive) {
     return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
   }
   const currentHealth = maggot.currentHealth - request.amount
@@ -1728,7 +1739,7 @@ export function stepBoneyardEnemyStore(
     return before ? withNativeCellRebindOrder(work, before, projectile) : projectile
   })
   const spawnIntents = context.resolveSpawnIntents(
-    work.actors.length + work.maggots.length,
+    work.actors.length,
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
   return finishBoneyardEnemyStoreStep(work, context.tick)
@@ -1777,7 +1788,7 @@ function stepPausedBoneyardEnemyStore(
     spawnedActorIds: [],
   }
   const spawnIntents = context.resolveSpawnIntents(
-    work.actors.length + work.maggots.length,
+    work.actors.length,
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
   work.events = []
@@ -1854,6 +1865,7 @@ function materializeSpawnIntents(
         splitUnit: split.value >= 0.5 ? 1 : 0,
       },
       waveOrdinal: intent.waveOrdinal,
+      zombieBodyType: intent.zombieBodyType,
     })
     const config = impSplitDepthOverride === null
       ? evaluatedConfig
@@ -2038,6 +2050,8 @@ function createBrain(
       const bodyType = drawInteger(work, 3)
       const headRoll = drawInteger(work, 4)
       const headType = headRoll === 3 ? drawInteger(work, 2) + 1 : 0
+      const configuredBodyType = config.family.bodyType === 3 ? 3 : bodyType
+      const configuredHeadType = config.family.bodyType === 3 ? 3 : headType
       return {
         actionProgress: 0,
         actionRate: 0,
@@ -2045,14 +2059,13 @@ function createBrain(
         angularOffsetDeg: 0,
         attackSide,
         bodyPhaseDeg,
-        bodyType,
+        bodyType: configuredBodyType,
         contactTargetPlayerId: null,
         family: 'zombie',
-        flyblownSide: drawInteger(work, 2) as 0 | 1,
         frontArmBaseRotationDeg,
         headBaseRotationDeg,
         headPhaseDeg,
-        headType,
+        headType: configuredHeadType,
         impactStateTicksRemaining: 0,
         markerEmitted: false,
         phase: 'approach',
@@ -2080,15 +2093,20 @@ function createBrain(
     case 'COFFIN': {
       const hidden = randomBoneyardWaveInteger(work.rngState, 2)
       work.rngState = hidden.state
+      const initialGate = randomBoneyardWaveInteger(work.rngState, 50)
+      work.rngState = initialGate.state
+      const launchScale = drawUnit(work) < 0.5 ? -1 : 1
+      const launchRotationDeg = signedUnit(drawUnit(work)) * 15
       return {
         family: 'coffin',
-        maggotsReleased: false,
-        nextMaggotReplenishmentTick: 0,
+        launchRotationDeg,
+        launchScale,
+        maggotCharge: 0,
         phase: 'hidden',
         phaseTick: 0,
         phaseTicksRemaining: hidden.value === 0
-          ? NATIVE_COFFIN_HIDDEN_SHORT_TICKS
-          : NATIVE_COFFIN_HIDDEN_LONG_TICKS,
+          ? NATIVE_COFFIN_HIDDEN_SHORT_TICKS + initialGate.value
+          : NATIVE_COFFIN_HIDDEN_LONG_TICKS + initialGate.value,
       }
     }
   }
@@ -3288,18 +3306,13 @@ function stepCoffin(
 ): BoneyardEnemyActor {
   const tick = context.tick
   if (brain.phase === 'open') {
-    const family = actor.config.enemyToken === 'COFFIN' ? actor.config.family : null
-    if (
-      family === null
-      || tick < brain.nextMaggotReplenishmentTick
-      || ownedLiveMaggotCount(work.maggots, actor.id) >= family.maximumMaggots
-    ) return actor
-    const count = spawnCoffinMaggots(
-      work,
-      actor,
-      context,
-      BOUNDED_COFFIN_MAGGOT_PROGRAM.replenishmentEmissionCount,
-    )
+    const speed = Math.fround(actor.config.baseSpeed * actor.staffMovementFactor)
+    if (!(speed > 0)) return actor
+    const ratio = Math.fround(brain.maggotCharge / speed)
+    const count = ratio < 1
+      ? 3
+      : drawUnit(work) * ratio < 1 ? 1 : 0
+    spawnCoffinMaggots(work, actor, context, count)
     if (count > 0) {
       emitEvent(work, tick, 'coffin-maggot-release', actor.id, { count })
     }
@@ -3307,8 +3320,10 @@ function stepCoffin(
       ...actor,
       brain: {
         ...brain,
-        nextMaggotReplenishmentTick: tick
-          + BOUNDED_COFFIN_MAGGOT_PROGRAM.replenishmentIntervalTicks,
+        maggotCharge: Math.min(
+          NATIVE_COFFIN_MAGGOT_CHARGE_MAXIMUM,
+          Math.fround(brain.maggotCharge + NATIVE_COFFIN_MAGGOT_CHARGE_PER_TICK),
+        ),
       },
     }
   }
@@ -3365,9 +3380,7 @@ function stepCoffin(
         ...actor,
         brain: {
           ...brain,
-          maggotsReleased: true,
-          nextMaggotReplenishmentTick: tick
-            + BOUNDED_COFFIN_MAGGOT_PROGRAM.replenishmentIntervalTicks,
+          maggotCharge: 0,
           phase: 'open',
           phaseTick: NATIVE_COFFIN_OPEN_TICKS,
           phaseTicksRemaining: 0,
@@ -3384,52 +3397,55 @@ function spawnCoffinMaggots(
   context: BoneyardEnemyStoreStepContext,
   requestedCount: number,
 ): number {
-  if (actor.config.enemyToken !== 'COFFIN') return 0
+  if (actor.config.enemyToken !== 'COFFIN' || actor.brain.family !== 'coffin') return 0
   const family = actor.config.family
-  const available = Math.max(
-    0,
-    family.maximumMaggots - ownedLiveMaggotCount(work.maggots, actor.id),
-  )
-  const count = Math.min(requestedCount, available)
+  const brain = actor.brain
+  const count = requestedCount
   for (let index = 0; index < count; index += 1) {
-    const launchTrajectory: BoneyardMaggotActor['launchTrajectory'] = (
-      work.nextActorId % 2 === 0 ? 'lid' : 'edge'
-    )
-    const trajectory = BOUNDED_MAGGOT_PROGRAM.launchTrajectories[launchTrajectory]
+    const launchTrajectory: BoneyardMaggotActor['launchTrajectory'] = drawInteger(work, 2) === 0
+      ? 'edge'
+      : 'lid'
+    const segment = NATIVE_MAGGOT_PROGRAM.launchSegments[launchTrajectory]
+    const segmentStart = transformCoffinLaunchPoint(segment.start, brain)
+    const segmentEnd = transformCoffinLaunchPoint(segment.end, brain)
+    const interpolation = drawUnit(work)
+    const localX = segmentStart.x + (segmentEnd.x - segmentStart.x) * interpolation
+    const localY = segmentStart.y + (segmentEnd.y - segmentStart.y) * interpolation
+    const sourceHeadingDeg = segment.headingMinimumDeg
+      + drawUnit(work) * (segment.headingMaximumDeg - segment.headingMinimumDeg)
     const headingDeg = positiveModulo(
-      actor.headingDeg
-        + (work.nextActorId - actor.id) * BOUNDED_MAGGOT_PROGRAM.launchHeadingStepDeg,
+      brain.launchScale < 0 ? 360 - sourceHeadingDeg : sourceHeadingDeg,
       360,
     )
-    const headingRadians = headingDeg * Math.PI / 180
-    const unitX = Math.sin(headingRadians)
-    const unitY = -Math.cos(headingRadians)
+    const launchVelocity = radialVector(headingDeg, 1)
+    const emergencePhase = drawUnit(work) * 5
+    const landingBounceVelocity = Math.fround(-drawUnit(work) * 0.5)
+    const verticalOffset = Math.fround(localY - segmentStart.y - drawUnit(work) * 8)
     const position = Object.freeze({
-      x: actor.position.x + unitX * trajectory.originDistance,
-      y: actor.position.y + unitY * trajectory.originDistance,
+      x: actor.position.x + localX,
+      y: actor.position.y + segmentStart.y - drawUnit(work) * 8,
     })
-    const targetPlayerId = nearestEligibleTarget(position, context.players)
     const hurricaneContactCooldown = drawInteger(work, 100)
     const path = createNativeEnemyPathState(work.steeringRngState)
     work.steeringRngState = path.rngState
     work.maggots.push(Object.freeze({
-      collisionRadius: BOUNDED_MAGGOT_PROGRAM.collisionRadius,
+      collisionRadius: NATIVE_MAGGOT_PROGRAM.collisionRadius,
+      combatActive: false,
       currentHealth: family.maggotHealth,
       deathOffsets: nativeMaggotDeathOffsets(work),
       damage: family.maggotDamage,
       deathEpoch: null,
       deathStartedTick: null,
       deathTick: 0,
+      emergencePhase,
       emergenceTick: 0,
       gaitPose: 0,
       headingDeg,
       hurricaneContactCooldown,
       id: work.nextActorId,
       launchTrajectory,
-      launchVelocity: Object.freeze({
-        x: unitX * trajectory.horizontalStep,
-        y: unitY * trajectory.horizontalStep,
-      }),
+      launchVelocity: Object.freeze(launchVelocity),
+      landingBounceVelocity,
       lastAttackTick: null,
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
@@ -3438,9 +3454,7 @@ function spawnCoffinMaggots(
       lightRegistration: work.registerLightProvider('actor'),
       maximumHealth: family.maggotHealth,
       movementPhase: 'emerging',
-      nextAttackTick: context.tick
-        + BOUNDED_MAGGOT_PROGRAM.emergenceTicks
-        + BOUNDED_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
+      nextAttackTick: context.tick + NATIVE_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
       nextMovementTick: context.tick + 1,
       nextTargetRefreshTick: context.tick + nativeEnemyTargetRefreshTicks(1),
       nativeCellBindingOrder: work.nextNativeCellBindingOrder,
@@ -3449,34 +3463,38 @@ function spawnCoffinMaggots(
       path: path.state,
       poisonDamage: family.maggotPoisonDamage,
       poisonDuration: family.maggotPoisonDamage > 0
-        ? BOUNDED_MAGGOT_PROGRAM.poisonDurationTicks
+        ? NATIVE_MAGGOT_PROGRAM.poisonDurationTicks
         : 0,
       position,
       spawnTick: context.tick,
       staffActionFactor: 1,
       staffMovementFactor: 1,
-      targetPlayerId,
+      targetPlayerId: null,
       terminalEmitted: false,
+      verticalOffset,
+      verticalVelocity: 0,
     }))
     work.nextNativeCellBindingOrder += 1
     work.nextNativeRegistrationOrder += 1
     work.spawnedActorIds.push(work.nextActorId)
     emitEvent(work, context.tick, 'enemy-spawned', work.nextActorId, {
-      targetPlayerId,
+      targetPlayerId: null,
     })
     work.nextActorId += 1
   }
   return count
 }
 
-function ownedLiveMaggotCount(
-  maggots: readonly BoneyardMaggotActor[],
-  ownerCoffinActorId: BoneyardEnemyActorId,
-): number {
-  return maggots.filter((maggot) => (
-    maggot.ownerCoffinActorId === ownerCoffinActorId
-    && maggot.lifeState === 'alive'
-  )).length
+function transformCoffinLaunchPoint(
+  point: Readonly<BoneyardPoint>,
+  brain: BoneyardCoffinBrain,
+): Readonly<BoneyardPoint> {
+  const radians = brain.launchRotationDeg * Math.PI / 180
+  const x = point.x * brain.launchScale
+  return {
+    x: x * Math.cos(radians) - point.y * Math.sin(radians),
+    y: x * Math.sin(radians) + point.y * Math.cos(radians),
+  }
 }
 
 function nativeMaggotDeathOffsets(
@@ -3490,14 +3508,75 @@ function nativeMaggotDeathOffsets(
   }))
 }
 
+interface NativeMaggotAdmissionCount {
+  active: number
+  inactive: number
+}
+
+function nativeMaggotAdmissionCounts(
+  maggots: readonly BoneyardMaggotActor[],
+): Map<BoneyardEnemyActorId, NativeMaggotAdmissionCount> {
+  const counts = new Map<BoneyardEnemyActorId, NativeMaggotAdmissionCount>()
+  for (const maggot of maggots) {
+    if (maggot.lifeState !== 'alive' || maggot.movementPhase !== 'crawl') continue
+    const count = counts.get(maggot.ownerCoffinActorId) ?? { active: 0, inactive: 0 }
+    if (maggot.combatActive) count.active += 1
+    else count.inactive += 1
+    counts.set(maggot.ownerCoffinActorId, count)
+  }
+  return counts
+}
+
+function admitNativeMaggot(
+  work: WorkingStep,
+  source: BoneyardMaggotActor,
+  context: BoneyardEnemyStoreStepContext,
+  admissionCounts: Map<BoneyardEnemyActorId, NativeMaggotAdmissionCount>,
+): BoneyardMaggotActor | null {
+  const owner = work.actors.find((actor) => (
+    actor.id === source.ownerCoffinActorId
+    && actor.lifeState === 'alive'
+    && actor.config.enemyToken === 'COFFIN'
+  ))
+  if (!owner || owner.config.enemyToken !== 'COFFIN') {
+    retireMaggot(work, source, context.tick)
+    return null
+  }
+  const counts = admissionCounts.get(owner.id) ?? { active: 0, inactive: 0 }
+  counts.inactive += 1
+  if (
+    counts.active < owner.config.family.maximumMaggots
+    && drawInteger(work, 5) === 3
+  ) {
+    counts.inactive -= 1
+    counts.active += 1
+    admissionCounts.set(owner.id, counts)
+    return {
+      ...source,
+      combatActive: true,
+      nextAttackTick: context.tick + NATIVE_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
+      targetPlayerId: nearestEligibleTarget(source.position, context.players),
+    }
+  }
+  if (counts.inactive > NATIVE_MAGGOT_PROGRAM.maximumInactiveChildren) {
+    counts.inactive -= 1
+    admissionCounts.set(owner.id, counts)
+    retireMaggot(work, source, context.tick)
+    return null
+  }
+  admissionCounts.set(owner.id, counts)
+  return { ...source, combatActive: false, targetPlayerId: null }
+}
+
 function stepMaggots(
   work: WorkingStep,
   context: BoneyardEnemyStoreStepContext,
   elapsedTicks: number,
 ): void {
   const retained: BoneyardMaggotActor[] = []
+  const admissionCounts = nativeMaggotAdmissionCounts(work.maggots)
   for (const stored of work.maggots) {
-    const source = stored.hurricaneContactCooldown <= 0
+    let source = stored.hurricaneContactCooldown <= 0
       ? stored
       : {
           ...stored,
@@ -3517,7 +3596,7 @@ function stepMaggots(
       const deathTick = Math.max(0, context.tick - deathStartedTick)
       if (
         source.lastAttackTick !== null
-        && deathTick < BOUNDED_MAGGOT_PROGRAM.bitePresentationTicks
+        && deathTick < NATIVE_MAGGOT_PROGRAM.bitePresentationTicks
       ) {
         retained.push({ ...source, deathTick })
         continue
@@ -3536,7 +3615,25 @@ function stepMaggots(
     }
 
     if (source.movementPhase === 'emerging') {
-      retained.push(stepEmergingMaggot(source, context))
+      const emerged = stepEmergingMaggot(source, context)
+      if (emerged.movementPhase === 'emerging') {
+        retained.push(emerged)
+        continue
+      }
+      const admitted = admitNativeMaggot(
+        work,
+        emerged,
+        context,
+        admissionCounts,
+      )
+      if (admitted === null) continue
+      source = admitted
+    }
+
+    if (!source.combatActive) {
+      retained.push(source.targetPlayerId === null
+        ? source
+        : { ...source, targetPlayerId: null })
       continue
     }
 
@@ -3566,7 +3663,7 @@ function stepMaggots(
         )
     const fleeing = (effect?.fleeTicks ?? 0) > 0
     if (target !== null && targetPlayerId !== null && !fleeing && distance <= Math.max(
-      BOUNDED_MAGGOT_PROGRAM.attackReach,
+      NATIVE_MAGGOT_PROGRAM.attackReach,
       source.collisionRadius + target.collisionRadius,
     )) {
       if (context.tick >= source.nextAttackTick) {
@@ -3586,6 +3683,8 @@ function stepMaggots(
           poisonDuration: source.poisonDuration,
         }))
         work.nextDeathEpoch += 1
+        const counts = admissionCounts.get(source.ownerCoffinActorId)
+        if (counts) counts.active = Math.max(0, counts.active - 1)
         retained.push({
           ...source,
           deathEpoch: work.nextDeathEpoch - 1,
@@ -3617,7 +3716,7 @@ function stepMaggots(
       actorHeadingDeg: source.headingDeg,
       actorPosition: source.position,
       cadenceTicks: NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
-      movementPerTick: BOUNDED_MAGGOT_PROGRAM.movementStep
+      movementPerTick: NATIVE_MAGGOT_PROGRAM.movementStep
         / NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
         * speedScale
         * source.staffMovementFactor
@@ -3663,7 +3762,7 @@ function stepMaggots(
       gaitPose: traveled === 0
         ? source.gaitPose
         : positiveModulo(
-            source.gaitPose + traveled / BOUNDED_MAGGOT_PROGRAM.gaitDistancePerPose,
+            source.gaitPose + traveled / NATIVE_MAGGOT_PROGRAM.gaitDistancePerPose,
             2,
           ),
       headingDeg: steering.headingDeg,
@@ -3701,12 +3800,12 @@ function spawnMaggotDeathEffects(
     )
     spawnSimpleDeathEffect(work, owner, tick, {
       alpha: 1,
-      alphaLossPerTick: 1 / BOUNDED_MAGGOT_PROGRAM.deathTicks,
+      alphaLossPerTick: 1 / NATIVE_MAGGOT_PROGRAM.deathTicks,
       atlas: 'DeadHawg',
       blendMode: 'normal',
       entry: 28,
       kind: 'fade',
-      lifetimeTicks: BOUNDED_MAGGOT_PROGRAM.deathTicks,
+      lifetimeTicks: NATIVE_MAGGOT_PROGRAM.deathTicks,
       role: 'maggot-perspective-fade',
       rotationDeg: drawUnit(work) * 360,
       scale: 0.75 + drawUnit(work) * 0.5,
@@ -3771,16 +3870,39 @@ function stepEmergingMaggot(
   source: BoneyardMaggotActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardMaggotActor {
-  const emergenceTick = Math.min(
-    BOUNDED_MAGGOT_PROGRAM.emergenceTicks,
-    Math.max(source.emergenceTick, context.tick - source.spawnTick),
-  )
-  const elapsedTicks = emergenceTick - source.emergenceTick
-  if (elapsedTicks === 0) return source
-  const delta = Object.freeze({
-    x: source.launchVelocity.x * elapsedTicks,
-    y: source.launchVelocity.y * elapsedTicks,
-  })
+  const requestedTicks = Math.max(0, context.tick - source.spawnTick - source.emergenceTick)
+  if (requestedTicks === 0) return source
+  let elapsedTicks = 0
+  let verticalOffset = source.verticalOffset
+  let verticalVelocity = source.verticalVelocity
+  let emergencePhase = source.emergencePhase
+  let launchVelocity = source.launchVelocity
+  let landingBounceVelocity = source.landingBounceVelocity
+  let settled = false
+  const delta = { x: 0, y: 0 }
+  while (elapsedTicks < requestedTicks) {
+    delta.x += launchVelocity.x
+    delta.y += launchVelocity.y
+    verticalOffset = Math.fround(verticalOffset + verticalVelocity)
+    verticalVelocity = Math.fround(
+      verticalVelocity + NATIVE_MAGGOT_PROGRAM.gravityPerTick,
+    )
+    emergencePhase = Math.fround(emergencePhase + 0.25)
+    if (emergencePhase >= 5) emergencePhase = Math.fround(emergencePhase - 5)
+    elapsedTicks += 1
+    if (verticalOffset <= 0) continue
+    verticalVelocity = landingBounceVelocity
+    launchVelocity = Object.freeze({
+      x: Math.fround(launchVelocity.x * 0.5),
+      y: Math.fround(launchVelocity.y * 0.5),
+    })
+    landingBounceVelocity = Math.fround(landingBounceVelocity * 0.5)
+    if (landingBounceVelocity > -0.25) {
+      settled = true
+      verticalOffset = 0
+      break
+    }
+  }
   const requestedPosition = Object.freeze({
     x: source.position.x + delta.x,
     y: source.position.y + delta.y,
@@ -3798,18 +3920,23 @@ function stepEmergingMaggot(
     position.x - source.position.x,
     position.y - source.position.y,
   )
-  const movementPhase = emergenceTick >= BOUNDED_MAGGOT_PROGRAM.emergenceTicks
+  const movementPhase = settled
     ? 'crawl' as const
     : 'emerging' as const
   return {
     ...source,
-    emergenceTick,
+    emergencePhase,
+    emergenceTick: source.emergenceTick + elapsedTicks,
+    landingBounceVelocity,
     lastMovementTick: traveled === 0 ? source.lastMovementTick : context.tick,
+    launchVelocity,
     movementPhase,
     nextMovementTick: context.tick + (
       movementPhase === 'crawl' ? NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS : 1
     ),
     position: Object.freeze({ ...position }),
+    verticalOffset,
+    verticalVelocity,
   }
 }
 

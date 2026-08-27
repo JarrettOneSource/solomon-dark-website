@@ -209,6 +209,8 @@ function enemy(
       alpha: 1,
       bodyPose: 0,
       coffinPose: 0,
+      coffinRotationRadians: 0,
+      coffinScaleX: 1,
       coffinSecondaryPose: null,
       coffinState: 'closed',
       deathEpoch: 0,

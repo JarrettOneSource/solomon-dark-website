@@ -32,6 +32,7 @@ import {
   tryDebitPlayerMana,
 } from '../core-kernels/player-combat.ts'
 import {
+  applyNativeSkillAcquisitionOfferSeeds,
   applyNativeRevelationToConcentrations,
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
@@ -854,6 +855,11 @@ export function applyPlayerEntityHagathaPurchaseEffects(
     rng = granted.rng
     skillBook = granted.skillBook
     weirdCasterSkillId = granted.skillId
+    if (weirdCasterSkillId !== null) {
+      const reseeded = applyNativeSkillAcquisitionOfferSeeds(progression, rng, 1)
+      progression = reseeded.progression
+      rng = reseeded.rng
+    }
   }
   const progressions = [...source.progressions]
   progressions[index] = progression
@@ -865,9 +871,12 @@ export function applyPlayerEntityHagathaPurchaseEffects(
     economy,
   )
   const autofilled = autofillPlayerEntitySkillSelections(refreshed, playerId, rng)
+  const offered = weirdCasterSkillId === null
+    ? autofilled
+    : refreshPendingPlayerSkillOffer(autofilled.store, index, autofilled.rng)
   return {
-    rng: autofilled.rng,
-    store: autofilled.store,
+    rng: offered.rng,
+    store: offered.store,
     weirdCasterSkillId,
   }
 }
@@ -1444,19 +1453,30 @@ export function grantPlayerEntitySkillRanks(
 ): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return { rng: sourceGameplayRng, store: source }
-  const skillBook = grantPlayerSkillRanks(source.skillBooks[index]!, skillId, ranks)
-  return skillBook === source.skillBooks[index]
+  const previousSkillBook = source.skillBooks[index]!
+  const skillBook = grantPlayerSkillRanks(previousSkillBook, skillId, ranks)
+  const acquisitionCount = Math.max(
+    0,
+    (skillBook.permanentRanks[skillId] ?? 0)
+      - (previousSkillBook.permanentRanks[skillId] ?? 0),
+  )
+  const reseeded = applyNativeSkillAcquisitionOfferSeeds(
+    source.progressions[index]!,
+    sourceGameplayRng,
+    acquisitionCount,
+  )
+  return skillBook === previousSkillBook
     ? { rng: sourceGameplayRng, store: source }
     : refreshPendingPlayerSkillOffer(
         replacePlayerSkillState(
-          source,
+          replacePlayerProgression(source, index, reseeded.progression),
           index,
           skillBook,
           source.skillRuntimes[index]!,
           source.economies[index]!,
         ),
         index,
-        sourceGameplayRng,
+        reseeded.rng,
       )
 }
 
@@ -1468,16 +1488,26 @@ export function grantPlayerEntityWeldBuild(
 ): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return { rng: sourceGameplayRng, store: source }
+  const previousSkillBook = source.skillBooks[index]!
+  const skillBook = grantPlayerWeldBuild(previousSkillBook, buildId)
+  const acquisitionCount = skillBook.permanentRanks.reduce((count, rank, skillId) => (
+    count + Math.max(0, rank - (previousSkillBook.permanentRanks[skillId] ?? 0))
+  ), 0)
+  const reseeded = applyNativeSkillAcquisitionOfferSeeds(
+    source.progressions[index]!,
+    sourceGameplayRng,
+    acquisitionCount,
+  )
   return refreshPendingPlayerSkillOffer(
     replacePlayerSkillState(
-      source,
+      replacePlayerProgression(source, index, reseeded.progression),
       index,
-      grantPlayerWeldBuild(source.skillBooks[index]!, buildId),
+      skillBook,
       source.skillRuntimes[index]!,
       source.economies[index]!,
     ),
     index,
-    sourceGameplayRng,
+    reseeded.rng,
   )
 }
 
@@ -1522,8 +1552,13 @@ export function increaseRandomPlayerEntitySkill(
   if (index < 0) return { rng, skillId: null, store: source }
   const increased = increaseRandomLearnedSkill(source.skillBooks[index]!, rng)
   if (increased.skillId === null) return { ...increased, store: source }
+  const reseeded = applyNativeSkillAcquisitionOfferSeeds(
+    source.progressions[index]!,
+    increased.rng,
+    1,
+  )
   const refreshed = replacePlayerSkillState(
-    source,
+    replacePlayerProgression(source, index, reseeded.progression),
     index,
     increased.skillBook,
     source.skillRuntimes[index]!,
@@ -1532,12 +1567,17 @@ export function increaseRandomPlayerEntitySkill(
   const autofilled = autofillPlayerEntitySkillSelections(
     refreshed,
     playerId,
-    increased.rng,
+    reseeded.rng,
+  )
+  const offered = refreshPendingPlayerSkillOffer(
+    autofilled.store,
+    index,
+    autofilled.rng,
   )
   return {
-    rng: autofilled.rng,
+    rng: offered.rng,
     skillId: increased.skillId,
-    store: autofilled.store,
+    store: offered.store,
   }
 }
 

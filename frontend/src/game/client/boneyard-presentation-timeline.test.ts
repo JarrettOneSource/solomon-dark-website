@@ -67,6 +67,8 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       alpha: 1,
       bodyPose: 0,
       coffinPose: 0,
+      coffinRotationRadians: 0,
+      coffinScaleX: 1,
       coffinSecondaryPose: null,
       coffinState: 'closed',
       deathEpoch: 0,
@@ -99,7 +101,6 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       zombieAttackSide: 0,
       zombieBodyRotationRadians: 0,
       zombieBodyType: -1,
-      zombieFlyblownSide: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
       zombieHeadType: -1,
@@ -157,6 +158,7 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,
+    emergencePhase: (x / 10) % 5,
     headingDeg: 90,
     hitFlash,
     id: 2,
@@ -387,6 +389,7 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(75).world.enemyProjectiles[0].visualPhaseDeg, 310)
   assert.equal(timeline.sample(75).world.enemyProjectiles[0].visualScale, 1.31)
   assert.equal(timeline.sample(75).world.maggots[0].position.x, 210)
+  assert.equal(timeline.sample(75).world.maggots[0].emergencePhase, 1)
   assert.equal(timeline.sample(75).world.maggots[0].emergenceTick, 21)
   assert.equal(timeline.sample(75).world.maggots[0].verticalOffset, -21)
   assert.equal(timeline.sample(75).world.maggots[0].hitFlash, 0.5)

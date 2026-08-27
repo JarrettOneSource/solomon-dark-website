@@ -72,7 +72,7 @@ export function observeMlBotPolicyEnemies(
       .filter(({ lifeState }) => lifeState === 'alive')
       .map((actor) => enemyRow(actor, options, previousPositions)),
     ...world.enemies.maggots
-      .filter(({ lifeState }) => lifeState === 'alive')
+      .filter(({ combatActive, lifeState }) => lifeState === 'alive' && combatActive)
       .map((actor) => maggotRow(actor, options, previousPositions)),
   ].sort((left, right) => (
     distanceSquared(left.position, options.selfPosition)

@@ -2161,7 +2161,8 @@ function primaryTargetRows(
     disintegratePhase,
     kind: 'enemy',
     target: {
-      active: actor.lifeState === 'alive',
+      active: actor.lifeState === 'alive'
+        && ('config' in actor || actor.combatActive),
       actorFlags: 'config' in actor && actor.config.enemyToken === 'COFFIN' ? 0 : 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,

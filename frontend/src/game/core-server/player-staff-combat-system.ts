@@ -505,7 +505,7 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
         : []
     )),
     ...enemies.maggots.flatMap((maggot): StaffCombatTarget[] => (
-      maggot.lifeState === 'alive'
+      maggot.lifeState === 'alive' && maggot.combatActive
         ? [{
             actorId: maggot.id,
             collisionRadius: maggot.collisionRadius,

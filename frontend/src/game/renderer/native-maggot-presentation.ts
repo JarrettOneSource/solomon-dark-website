@@ -49,9 +49,7 @@ function maggotRecord(maggot: BoneyardMaggotSnapshot): {
 } {
   if (maggot.state === 'death') return { atlas: 'DeadHawg', entry: 28 }
   if (maggot.state === 'emerging') {
-    const phase = Math.min(4, Math.floor(
-      Math.max(0, maggot.emergenceTick) * 5 / 24,
-    ))
+    const phase = Math.min(4, Math.max(0, Math.floor(maggot.emergencePhase)))
     const orientation = Math.min(9, Math.max(0, Math.floor(
       maggot.emergenceOrientation,
     )))

@@ -61,6 +61,8 @@ export interface BoneyardEnemySpawnIntent {
   positionPolicy?: BoneyardSpawnPositionPolicy
   spawnTick: number
   waveOrdinal: number
+  /** Custom MonsterSetup BODY TYPE lane; retail survival waves leave it zero. */
+  zombieBodyType?: 0 | 1
 }
 
 export interface BoneyardWaveDirectorState {

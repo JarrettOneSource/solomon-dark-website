@@ -368,7 +368,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 87
+export const GAME_PROTOCOL_VERSION = 88
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -10558,6 +10558,7 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     'currentHealth',
     'deathEpoch',
     'deathTick',
+    'emergencePhase',
     'emergenceTick',
     'emergenceOrientation',
     'headingDeg',
@@ -10586,11 +10587,9 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     throw new GameProtocolError(`${field}.launchTrajectory is not supported`)
   }
   const emergenceTick = nonnegativeInteger(source.emergenceTick, `${field}.emergenceTick`)
-  if (emergenceTick > 24) {
-    throw new GameProtocolError(`${field}.emergenceTick is out of range`)
-  }
-  if ((state === 'emerging') !== (emergenceTick < 24) && state !== 'death') {
-    throw new GameProtocolError(`${field}.emergenceTick does not match state`)
+  const emergencePhase = nonnegativeFinite(source.emergencePhase, `${field}.emergencePhase`)
+  if (emergencePhase >= 5) {
+    throw new GameProtocolError(`${field}.emergencePhase is out of range`)
   }
   const alpha = finite(source.alpha, `${field}.alpha`)
   if (alpha < 0 || alpha > 1) {
@@ -10618,6 +10617,7 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     currentHealth,
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
+    emergencePhase,
     emergenceTick,
     emergenceOrientation: integerWithin(
       source.emergenceOrientation,
@@ -10658,6 +10658,8 @@ function boneyardEnemyAnimation(
     'alpha',
     'bodyPose',
     'coffinPose',
+    'coffinRotationRadians',
+    'coffinScaleX',
     'coffinSecondaryPose',
     'coffinState',
     'deathEpoch',
@@ -10680,7 +10682,6 @@ function boneyardEnemyAnimation(
     'zombieAttackSide',
     'zombieBodyRotationRadians',
     'zombieBodyType',
-    'zombieFlyblownSide',
     'zombieFrontArmPose',
     'zombieFrontArmRotationRadians',
     'zombieHeadType',
@@ -10704,6 +10705,10 @@ function boneyardEnemyAnimation(
   const coffinState = limitedString(source.coffinState, `${field}.coffinState`, 32)
   if (!(BONEYARD_ENEMY_COFFIN_STATES as readonly string[]).includes(coffinState)) {
     throw new GameProtocolError(`${field}.coffinState is not supported`)
+  }
+  const coffinScaleX = integerWithin(source.coffinScaleX, `${field}.coffinScaleX`, -1, 1)
+  if (coffinScaleX === 0) {
+    throw new GameProtocolError(`${field}.coffinScaleX must be -1 or 1`)
   }
   const alpha = finite(source.alpha, `${field}.alpha`)
   const hitFlash = finite(source.hitFlash, `${field}.hitFlash`)
@@ -10740,6 +10745,11 @@ function boneyardEnemyAnimation(
     alpha,
     bodyPose: nonnegativeFinite(source.bodyPose, `${field}.bodyPose`),
     coffinPose: nonnegativeFinite(source.coffinPose, `${field}.coffinPose`),
+    coffinRotationRadians: finite(
+      source.coffinRotationRadians,
+      `${field}.coffinRotationRadians`,
+    ),
+    coffinScaleX: coffinScaleX as -1 | 1,
     coffinSecondaryPose: source.coffinSecondaryPose === null
       ? null
       : nonnegativeFinite(source.coffinSecondaryPose, `${field}.coffinSecondaryPose`),
@@ -10798,13 +10808,7 @@ function boneyardEnemyAnimation(
       source.zombieBodyType,
       `${field}.zombieBodyType`,
       -1,
-      2,
-    ),
-    zombieFlyblownSide: integerWithin(
-      source.zombieFlyblownSide,
-      `${field}.zombieFlyblownSide`,
-      -1,
-      1,
+      3,
     ),
     zombieFrontArmPose: nonnegativeFinite(
       source.zombieFrontArmPose,
@@ -10818,7 +10822,7 @@ function boneyardEnemyAnimation(
       source.zombieHeadType,
       `${field}.zombieHeadType`,
       -1,
-      2,
+      3,
     ),
     zombieHeadRotationRadians: finite(
       source.zombieHeadRotationRadians,

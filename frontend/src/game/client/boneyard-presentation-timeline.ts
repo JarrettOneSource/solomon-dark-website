@@ -685,6 +685,12 @@ function interpolateMaggots(
       alpha: lerp(olderMaggot.alpha, newerMaggot.alpha, blend),
       currentHealth: lerp(olderMaggot.currentHealth, newerMaggot.currentHealth, blend),
       deathTick: lerp(olderMaggot.deathTick, newerMaggot.deathTick, blend),
+      emergencePhase: lerpCycle(
+        olderMaggot.emergencePhase,
+        newerMaggot.emergencePhase,
+        blend,
+        5,
+      ),
       emergenceTick: lerp(olderMaggot.emergenceTick, newerMaggot.emergenceTick, blend),
       headingDeg: lerpCycle(olderMaggot.headingDeg, newerMaggot.headingDeg, blend, FULL_CIRCLE),
       hitFlash: lerp(olderMaggot.hitFlash, newerMaggot.hitFlash, blend),
@@ -973,6 +979,11 @@ function interpolateEnemyAnimation(
     alpha: lerp(first.alpha, second.alpha, blend),
     bodyPose: discrete.bodyPose,
     coffinPose: lerp(first.coffinPose, second.coffinPose, blend),
+    coffinRotationRadians: lerp(
+      first.coffinRotationRadians,
+      second.coffinRotationRadians,
+      blend,
+    ),
     deathTick: lerp(first.deathTick, second.deathTick, blend),
     demonFrontJointRotationRadians: lerp(
       first.demonFrontJointRotationRadians,

@@ -311,7 +311,7 @@ export function boneyardPrimarySpellTargets(
     }))
   const maggots = world.enemies.maggots
     .map((enemy) => ({
-      active: enemy.lifeState === 'alive',
+      active: enemy.lifeState === 'alive' && enemy.combatActive,
       actorFlags: 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.collisionRadius,
@@ -427,7 +427,9 @@ export function stepBoneyardWorldTick(
         : []
     )),
     ...world.enemies.maggots.flatMap((maggot) => (
-      maggot.lifeState === 'alive' ? [`enemy-${maggot.id}`] : []
+      maggot.lifeState === 'alive' && maggot.combatActive
+        ? [`enemy-${maggot.id}`]
+        : []
     )),
   ])
   const movementContactsByPlayerId: Record<string, BoneyardPlayerMovementContact[]> =
@@ -755,7 +757,6 @@ export function stepBoneyardWorldTick(
   const authorityId = Object.keys(nextPlayers)[0]
   const authorityCombat = authorityId === undefined ? undefined : playerCombat[authorityId]
   const badguyCountBeforeDeaths = collisionResolvedEnemies.actors.length
-    + collisionResolvedEnemies.maggots.length
   for (const [rewardIndex, reward] of enemyStep.rewards.entries()) {
     const materialized = materializeBoneyardEnemyLoot(loot, {
       actorSeed: reward.lootSource.actorSeed,

@@ -64,10 +64,11 @@ test('enemy observation sorts by distance while target identity persists by acto
   assert.equal(second.blockE[0], 1)
 })
 
-test('alive maggots join the target pool while every dying actor is excluded', () => {
+test('combat-active maggots join the target pool while inactive and dying actors are excluded', () => {
   const dying = { ...enemy(1, 150), lifeState: 'dying' } as BoneyardEnemyActor
   const maggot = {
     collisionRadius: 8,
+    combatActive: true,
     currentHealth: 5,
     headingDeg: 0,
     id: 4,
@@ -77,7 +78,10 @@ test('alive maggots join the target pool while every dying actor is excluded', (
     targetPlayerId: 'agent',
   } as BoneyardMaggotActor
   const observed = observeMlBotPolicyEnemies({
-    enemies: { actors: [dying], maggots: [maggot] } as unknown as BoneyardEnemyStore,
+    enemies: {
+      actors: [dying],
+      maggots: [maggot, { ...maggot, combatActive: false, id: 5 }],
+    } as unknown as BoneyardEnemyStore,
   }, {
     memory: createMlBotPolicyEnemyMemory(),
     ownMinionTargetIds: new Set(),

@@ -4,7 +4,7 @@ import test from 'node:test'
 
 import { parseBoneyard } from '../../editor/format/boneyard.ts'
 import {
-  BOUNDED_MAGGOT_PROGRAM,
+  NATIVE_MAGGOT_PROGRAM,
   createBoneyardEnemyStore,
   NATIVE_MAGE_ACTION_PROGRAMS,
   NATIVE_ENEMY_HIT_LATCH_TICKS,
@@ -153,12 +153,14 @@ function solomonSelectionScene(objects: BoneyardScene['objects']): BoneyardScene
 test('projects the native refreshed 20-tick hit latch for Maggots', () => {
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
+    combatActive: true,
     currentHealth: 1,
     damage: 2,
     deathOffsets: [],
     deathEpoch: null,
     deathStartedTick: null,
     deathTick: 0,
+    emergencePhase: 0,
     emergenceTick: 24,
     gaitPose: 0,
     headingDeg: 90,
@@ -167,6 +169,7 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     launchTrajectory: 'lid',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     launchVelocity: { x: 0, y: 0 },
+    landingBounceVelocity: -0.4,
     lastAttackTick: null,
     lastDamagedByPlayerId: 'player',
     lastDamageTick: 10,
@@ -189,6 +192,8 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     staffMovementFactor: 1,
     targetPlayerId: 'player',
     terminalEmitted: false,
+    verticalOffset: 0,
+    verticalVelocity: 0,
   }
   const store = {
     ...createBoneyardEnemyStore('maggot-hit-flash'),
@@ -260,10 +265,12 @@ test('projects the native refreshed 20-tick hit latch without changing enemy act
 
 test('projects Maggot emergence trajectory and vertical launch height', () => {
   const source = projectedMaggot({
+    emergencePhase: 2.5,
     emergenceTick: 12,
     launchTrajectory: 'lid',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     movementPhase: 'emerging',
+    verticalOffset: -20,
   })
 
   assert.equal(source.emergenceTick, 12)
@@ -278,7 +285,7 @@ test('projects a production Maggot bite before death at every default snapshot p
     const states: string[] = []
     for (
       let snapshotTick = Math.ceil(attackTick / 5) * 5;
-      snapshotTick < attackTick + BOUNDED_MAGGOT_PROGRAM.deathTicks;
+      snapshotTick < attackTick + NATIVE_MAGGOT_PROGRAM.deathTicks;
       snapshotTick += 5
     ) {
       states.push(projectedMaggot({
@@ -298,13 +305,13 @@ test('projects a production Maggot bite before death at every default snapshot p
     deathStartedTick: 100,
     lastAttackTick: 100,
     lifeState: 'dying',
-  }, 100 + BOUNDED_MAGGOT_PROGRAM.bitePresentationTicks - 1).state, 'bite')
+  }, 100 + NATIVE_MAGGOT_PROGRAM.bitePresentationTicks - 1).state, 'bite')
   assert.equal(projectedMaggot({
     deathEpoch: 1,
     deathStartedTick: 100,
     lastAttackTick: 100,
     lifeState: 'dying',
-  }, 100 + BOUNDED_MAGGOT_PROGRAM.bitePresentationTicks).state, 'death')
+  }, 100 + NATIVE_MAGGOT_PROGRAM.bitePresentationTicks).state, 'death')
 })
 
 test('projects the native Imp body, bounce, rotation, and upper-effect lifecycle', () => {
@@ -551,12 +558,14 @@ function projectedMaggot(
 ) {
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
+    combatActive: true,
     currentHealth: 2,
     damage: 2,
     deathOffsets: [],
     deathEpoch: null,
     deathStartedTick: null,
     deathTick: 0,
+    emergencePhase: 0,
     emergenceTick: 24,
     gaitPose: 0,
     headingDeg: 90,
@@ -565,6 +574,7 @@ function projectedMaggot(
     launchTrajectory: 'edge',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     launchVelocity: { x: 0, y: 0 },
+    landingBounceVelocity: -0.4,
     lastAttackTick: null,
     lastDamagedByPlayerId: null,
     lastDamageTick: null,
@@ -587,6 +597,8 @@ function projectedMaggot(
     staffMovementFactor: 1,
     targetPlayerId: 'player',
     terminalEmitted: false,
+    verticalOffset: 0,
+    verticalVelocity: 0,
     ...overrides,
   }
   return projectBoneyardMaggots({

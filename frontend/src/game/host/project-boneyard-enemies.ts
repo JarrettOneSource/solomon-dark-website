@@ -1,5 +1,5 @@
 import {
-  BOUNDED_MAGGOT_PROGRAM,
+  NATIVE_MAGGOT_PROGRAM,
   NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
   nativeEnemyHitOverlay,
   type BoneyardEnemyActor,
@@ -176,6 +176,7 @@ export function projectBoneyardMaggots(
       currentHealth: maggot.currentHealth,
       deathEpoch: maggot.deathEpoch ?? 0,
       deathTick: maggot.deathTick,
+      emergencePhase: maggot.emergencePhase,
       emergenceTick: maggot.emergenceTick,
       emergenceOrientation: maggotEmergenceOrientation(maggot),
       headingDeg: maggot.headingDeg,
@@ -189,7 +190,7 @@ export function projectBoneyardMaggots(
       position: { ...maggot.position },
       spawnTick: maggot.spawnTick,
       state: maggot.lastAttackTick !== null
-        && tick - maggot.lastAttackTick < BOUNDED_MAGGOT_PROGRAM.bitePresentationTicks
+        && tick - maggot.lastAttackTick < NATIVE_MAGGOT_PROGRAM.bitePresentationTicks
         ? 'bite'
         : maggot.lifeState === 'dying'
           ? 'death'
@@ -253,6 +254,10 @@ function projectAnimation(
         ? demonControllerPose
         : actor.bodyPose,
     coffinPose: coffin.pose,
+    coffinRotationRadians: actor.brain.family === 'coffin'
+      ? actor.brain.launchRotationDeg * Math.PI / 180
+      : 0,
+    coffinScaleX: actor.brain.family === 'coffin' ? actor.brain.launchScale : 1,
     coffinSecondaryPose: null,
     coffinState: coffin.state,
     deathEpoch: actor.deathEpoch ?? 0,
@@ -277,7 +282,6 @@ function projectAnimation(
     zombieAngularOffsetDeg: zombieBrain?.angularOffsetDeg ?? 0,
     zombieAttackSide: zombieBrain?.attackSide ?? 0,
     zombieBodyType: zombieBrain?.bodyType ?? -1,
-    zombieFlyblownSide: zombieBrain?.flyblownSide ?? -1,
     zombieFrontArmPose: zombieBeat?.frontArmPose ?? 0,
     zombieBodyRotationRadians: zombieArticulation?.bodyRotationRadians ?? 0,
     zombieFrontArmRotationRadians: zombieArticulation?.frontArmRotationRadians ?? 0,
@@ -312,14 +316,7 @@ function projectEnemyEffects(
 }
 
 function maggotVerticalOffset(maggot: BoneyardMaggotActor): number {
-  const progress = Math.min(
-    1,
-    Math.max(0, maggot.emergenceTick / BOUNDED_MAGGOT_PROGRAM.emergenceTicks),
-  )
-  const height = BOUNDED_MAGGOT_PROGRAM.launchTrajectories[
-    maggot.launchTrajectory
-  ].verticalHeight
-  return -4 * height * progress * (1 - progress)
+  return maggot.verticalOffset
 }
 
 function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
@@ -381,7 +378,11 @@ function coffinPresentation(brain: BoneyardEnemyBrain): {
       verticalOffset: 15 * brain.phaseTicksRemaining / 10,
     }
     case 'holding': return { pose: 3, state: 'closed', verticalOffset: 0 }
-    case 'opening': return { pose: 3, state: 'opening', verticalOffset: 0 }
+    case 'opening': return {
+      pose: Math.min(12, 3 + brain.phaseTick * 0.2),
+      state: 'opening',
+      verticalOffset: 0,
+    }
     case 'open': return { pose: 12, state: 'open', verticalOffset: 0 }
     case 'death': return { pose: 12, state: 'open', verticalOffset: 0 }
   }

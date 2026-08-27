@@ -108,6 +108,8 @@ export interface NativeEnemyAnimationSample {
   alpha: number
   bodyPose: number
   coffinPose: number
+  coffinRotationRadians: number
+  coffinScaleX: -1 | 1
   coffinSecondaryPose: number | null
   coffinState: NativeEnemyCoffinState
   deathEpoch: number
@@ -130,7 +132,6 @@ export interface NativeEnemyAnimationSample {
   zombieAttackSide: 0 | 1
   zombieBodyRotationRadians: number
   zombieBodyType: number
-  zombieFlyblownSide: number
   zombieFrontArmPose: number
   zombieFrontArmRotationRadians: number
   zombieHeadType: number
@@ -259,6 +260,8 @@ export function nativeEnemyIdleAnimationSample(
     alpha: 1,
     bodyPose: 0,
     coffinPose: 0,
+    coffinRotationRadians: 0,
+    coffinScaleX: 1,
     coffinSecondaryPose: null,
     coffinState: 'closed',
     deathEpoch: 0,
@@ -281,7 +284,6 @@ export function nativeEnemyIdleAnimationSample(
     zombieAttackSide: 0,
     zombieBodyRotationRadians: 0,
     zombieBodyType: -1,
-    zombieFlyblownSide: -1,
     zombieFrontArmPose: 0,
     zombieFrontArmRotationRadians: 0,
     zombieHeadType: -1,

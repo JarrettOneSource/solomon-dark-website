@@ -185,6 +185,7 @@ export function boneyardNativeSecondaryTargets(
     .filter((actor) => {
       if (actor.lifeState !== 'alive') return false
       if ('config' in actor && actor.config.enemyToken === 'COFFIN') return false
+      if (!('config' in actor) && !actor.combatActive) return false
       const bodyRadius = 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius
       return Math.hypot(actor.position.x - center.x, actor.position.y - center.y)
         <= radius + bodyRadius
@@ -209,6 +210,7 @@ export function boneyardNativeSecondaryTarget(
   const actor = [...enemies.actors, ...enemies.maggots].find(({ id }) => id === targetId)
   if (!actor || actor.lifeState !== 'alive') return null
   if ('config' in actor && actor.config.enemyToken === 'COFFIN') return null
+  if (!('config' in actor) && !actor.combatActive) return null
   return Object.freeze({
     family: 'config' in actor ? actor.config.enemyToken : 'MAGGOT',
     id: actor.id,

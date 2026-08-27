@@ -14,8 +14,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 8
-const SAMPLE_LENGTH = 15
-const EMERGENCE_TICKS = 24
+const SAMPLE_LENGTH = 16
 
 export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
   name: 'boneyard-maggot',
@@ -44,10 +43,8 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(sample[10])
       && nonnegativeInteger(sample[11])
       && nonnegativeInteger(sample[12])
-      && sample[12] <= EMERGENCE_TICKS
-      && maggotStateMatchesEmergence(sample[6], sample[12])
-      && sample[13] <= 0
       && arrayIndex(sample[14], 10)
+      && sample[15] >= 0 && sample[15] < 5 * VALUE_SCALE
   },
 }
 
@@ -89,6 +86,7 @@ export function boneyardMaggotSample(
     maggot.emergenceTick,
     quantize(maggot.verticalOffset, VALUE_SCALE),
     maggot.emergenceOrientation,
+    quantize(maggot.emergencePhase, VALUE_SCALE),
   ]
 }
 
@@ -110,6 +108,7 @@ export function materializeBoneyardMaggot(
     currentHealth: dequantize(sample[5], VALUE_SCALE),
     deathEpoch: sample[10],
     deathTick: sample[11],
+    emergencePhase: dequantize(sample[15], VALUE_SCALE),
     headingDeg: dequantize(sample[4], ANGLE_SCALE),
     hitFlash: dequantize(sample[9], VALUE_SCALE),
     id: descriptor[1],
@@ -137,12 +136,6 @@ function requiredIndex<T>(values: readonly T[], value: T, label: string): number
   const index = values.indexOf(value)
   if (index < 0) throw new Error(`unsupported Maggot ${label} ${String(value)}`)
   return index
-}
-
-function maggotStateMatchesEmergence(stateIndex: number, emergenceTick: number): boolean {
-  const state = BONEYARD_MAGGOT_STATES[stateIndex]
-  return state === 'death'
-    || (state === 'emerging') === (emergenceTick < EMERGENCE_TICKS)
 }
 
 function quantize(value: number, scale: number): number {

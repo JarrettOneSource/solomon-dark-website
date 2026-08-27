@@ -53,6 +53,7 @@ test('Maggot hit presentation appends the same native red redraw as enemies', ()
 
 test('Maggot emergence consumes its authoritative launch height and trajectory', () => {
   const plan = nativeMaggotPresentationPlan(maggot({
+    emergencePhase: 2.5,
     emergenceTick: 12,
     emergenceOrientation: 3,
     launchTrajectory: 'lid',
@@ -71,8 +72,8 @@ test('Maggot ballistic lane enumerates all five phases and ten orientations', ()
   for (let phase = 0; phase < 5; phase += 1) {
     for (let orientation = 0; orientation < 10; orientation += 1) {
       entries.add(nativeMaggotPresentationPlan(maggot({
+        emergencePhase: phase,
         emergenceOrientation: orientation,
-        emergenceTick: Math.ceil(phase * 24 / 5),
         state: 'emerging',
       })).layers[0]!.entry)
     }
@@ -94,6 +95,7 @@ function maggot(overrides: Partial<BoneyardMaggotSnapshot>): BoneyardMaggotSnaps
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,
+    emergencePhase: 0,
     headingDeg: 0,
     hitFlash: 0,
     id: 1,

@@ -96,6 +96,8 @@ export interface EvaluateBoneyardEnemyConfigOptions {
   pathfindingMode?: NativeEnemyPathfindingMode
   random?: Partial<BoneyardEnemyConfigRandom>
   waveOrdinal?: number
+  /** Native MonsterSetup BODY TYPE; value one selects Zombie body/head bank three. */
+  zombieBodyType?: 0 | 1
 }
 
 export interface AuthoredBoneyardEnemyRecipe {
@@ -309,7 +311,7 @@ export function evaluateBoneyardEnemyConfig(
     armor: false,
     arrowType: 'normal',
     attackSpeed: 1,
-    bodyType: 0,
+    bodyType: validatedZombieBodyType(enemyToken, options.zombieBodyType),
     burning: false,
     chaseSpeed: base.chaseSpeed,
     cloak: validatedMageCloak(enemyToken, options.mageCloak),
@@ -521,6 +523,18 @@ function validatedExtraArrows(
     )
   }
   return value
+}
+
+function validatedZombieBodyType(
+  enemyToken: BoneyardWaveEnemyToken,
+  value: 0 | 1 | undefined,
+): 0 | 3 {
+  if (value === undefined || value === 0) return 0
+  if (enemyToken !== 'ZOMBIE') {
+    throw new Error('zombieBodyType is only valid for ZOMBIE')
+  }
+  if (value !== 1) throw new RangeError('zombieBodyType must be zero or one')
+  return 3
 }
 
 function assertImplementedPayloads(config: MutableConfig): void {

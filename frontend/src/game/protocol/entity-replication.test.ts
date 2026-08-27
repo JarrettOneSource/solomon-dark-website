@@ -348,17 +348,28 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
-  assert.equal(frame.world.entities.spawned[0]!.length, 11)
-  assert.equal(frame.world.entities.samples[0]!.length, 54)
+  assert.equal(frame.world.entities.spawned[0]!.length, 13)
+  assert.equal(frame.world.entities.samples[0]!.length, 53)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
-  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0])
-  assert.equal(frame.world.entities.samples[0]![33], 25 * 1024)
-  assert.equal(frame.world.entities.samples[0]![34], 50 * 1024)
-  assert.equal(frame.world.entities.samples[0]![39], 1)
-  assert.equal(frame.world.entities.samples[0]![40], 0.375 * 1024)
-  assert.equal(frame.world.entities.samples[0]![41], 0)
+  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0])
+  assert.equal(frame.world.entities.samples[0]![32], 25 * 1024)
+  assert.equal(frame.world.entities.samples[0]![33], 50 * 1024)
+  assert.equal(frame.world.entities.samples[0]![38], 1)
+  assert.equal(frame.world.entities.samples[0]![39], 0.375 * 1024)
+  assert.equal(frame.world.entities.samples[0]![40], 0)
+  assert.equal(frame.world.entities.samples[0]![41], 1)
   assert.equal(frame.world.entities.samples[0]![42], 1)
-  assert.equal(frame.world.entities.samples[0]![43], 1)
+  const legacyFlyblownSideSample = [
+    ...frame.world.entities.samples[0]!.slice(0, 31),
+    -1,
+    ...frame.world.entities.samples[0]!.slice(31),
+  ] as [number, number, ...number[]]
+  assert.equal(
+    REPLICATED_ENTITY_TYPE_REGISTRY.get(
+      REPLICATED_ENTITY_TYPES.boneyardEnemy,
+    )!.sampleIsValid(legacyFlyblownSideSample),
+    false,
+  )
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(frame, 1)
@@ -466,39 +477,34 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 44),
+    ...sample.slice(0, 43),
     1,
-    ...sample.slice(45),
+    ...sample.slice(44),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
+    ...sample.slice(0, 39),
+    1025,
+    ...sample.slice(40),
+  ] as unknown as ReplicatedEntitySample
+  const invalidCharge = [
     ...sample.slice(0, 40),
     1025,
     ...sample.slice(41),
   ] as unknown as ReplicatedEntitySample
-  const invalidCharge = [
+  const invalidProviderCopies = [
     ...sample.slice(0, 41),
-    1025,
+    3,
     ...sample.slice(42),
   ] as unknown as ReplicatedEntitySample
-  const invalidProviderCopies = [
+  const invalidHeadFacing = [
     ...sample.slice(0, 42),
-    3,
+    2,
     ...sample.slice(43),
   ] as unknown as ReplicatedEntitySample
-  const invalidHeadFacing = [
-    ...sample.slice(0, 43),
-    2,
-    ...sample.slice(44),
-  ] as unknown as ReplicatedEntitySample
-  const invalidActorLane = [
-    ...descriptor.slice(0, 8),
-    1,
-    descriptor[9]!,
-  ] as unknown as ReplicatedEntityDescriptor
-  const invalidActorOrdinal = [
-    ...descriptor.slice(0, 9),
-    -1,
-  ] as unknown as ReplicatedEntityDescriptor
+  const invalidActorLane = [...descriptor] as [number, number, ...number[]]
+  invalidActorLane[8] = 1
+  const invalidActorOrdinal = [...descriptor] as [number, number, ...number[]]
+  invalidActorOrdinal[9] = -1
   const zombieDescriptor = [
     descriptor[0]!,
     descriptor[1]!,
@@ -510,6 +516,8 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     0,
     0,
     7,
+    0,
+    1,
     0,
   ] as ReplicatedEntityDescriptor
   const mageCloakDescriptor = [
@@ -524,6 +532,8 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     0,
     7,
     1,
+    1,
+    0,
   ] as ReplicatedEntityDescriptor
   assert.equal(registration.descriptorIsValid(invalidDescriptor), false)
   assert.equal(registration.descriptorIsValid(invalidActorLane), false)
@@ -531,8 +541,7 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
   assert.equal(registration.descriptorIsValid(zombieDescriptor), true)
   assert.equal(registration.descriptorIsValid(mageCloakDescriptor), true)
   assert.equal(registration.descriptorIsValid([
-    ...zombieDescriptor.slice(0, 10),
-    1,
+    ...zombieDescriptor.slice(0, 10), 1, ...zombieDescriptor.slice(11),
   ] as unknown as ReplicatedEntityDescriptor), false)
   assert.equal(registration.descriptorIsValid([
     ...zombieDescriptor.slice(0, 8),
@@ -834,11 +843,12 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
   assert.equal(descriptor[5], 1)
   assert.equal(descriptor[6], 0)
   assert.equal(descriptor[7], 1)
-  assert.equal(sample.length, 15)
+  assert.equal(sample.length, 16)
   assert.equal(sample[9], 768)
   assert.equal(sample[12], 12)
   assert.equal(sample[13], -20 * 1024)
   assert.equal(sample[14], 3)
+  assert.equal(sample[15], 2.5 * 1024)
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
     REPLICATED_ENTITY_TYPES.boneyardMaggot,
   )!
@@ -851,27 +861,29 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
     1025,
     ...sample.slice(10),
   ] as [number, number, ...number[]]
-  const invalidEmergenceState: ReplicatedEntitySample = [
-    ...sample.slice(0, 6),
-    1,
-    ...sample.slice(7),
-  ] as [number, number, ...number[]]
-  const invalidVerticalOffset: [number, number, ...number[]] = [
+  const longBallisticEmergence: [number, number, ...number[]] = [
     sample[0],
     sample[1],
     ...sample.slice(2),
   ]
-  invalidVerticalOffset[13] = 1
+  longBallisticEmergence[12] = 47
+  longBallisticEmergence[13] = 1
   const invalidEmergenceOrientation: [number, number, ...number[]] = [
     sample[0],
     sample[1],
     ...sample.slice(2),
   ]
   invalidEmergenceOrientation[14] = 10
+  const invalidEmergencePhase: [number, number, ...number[]] = [
+    sample[0],
+    sample[1],
+    ...sample.slice(2),
+  ]
+  invalidEmergencePhase[15] = 5 * 1024
   assert.equal(registration.sampleIsValid(invalidHitFlash), false)
-  assert.equal(registration.sampleIsValid(invalidEmergenceState), false)
-  assert.equal(registration.sampleIsValid(invalidVerticalOffset), false)
+  assert.equal(registration.sampleIsValid(longBallisticEmergence), true)
   assert.equal(registration.sampleIsValid(invalidEmergenceOrientation), false)
+  assert.equal(registration.sampleIsValid(invalidEmergencePhase), false)
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(keyframe, 1)
@@ -1180,6 +1192,8 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       alpha: 1,
       bodyPose: 2,
       coffinPose: 0,
+      coffinRotationRadians: 0,
+      coffinScaleX: 1,
       coffinSecondaryPose: null,
       coffinState: 'closed',
       deathEpoch: 0,
@@ -1212,7 +1226,6 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       zombieAttackSide: 0,
       zombieBodyRotationRadians: -0.2,
       zombieBodyType: -1,
-      zombieFlyblownSide: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
       zombieHeadType: -1,
@@ -1309,6 +1322,7 @@ function maggotSnapshot(): BoneyardMaggotSnapshot {
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,
+    emergencePhase: 2.5,
     headingDeg: 180,
     hitFlash: 0.75,
     id: 8,

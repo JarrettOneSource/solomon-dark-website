@@ -1065,6 +1065,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     currentHealth: 1,
     deathEpoch: 0,
     deathTick: 0,
+    emergencePhase: 0,
     emergenceOrientation: 0,
     headingDeg: 90,
     hitFlash: 0.6,
@@ -1123,6 +1124,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       alpha: 1,
       bodyPose: 0,
       coffinPose: 0,
+      coffinRotationRadians: 0,
+      coffinScaleX: 1,
       coffinSecondaryPose: null,
       coffinState: 'closed',
       deathEpoch: 0,
@@ -1155,7 +1158,6 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       zombieAttackSide: 0,
       zombieBodyRotationRadians: 0,
       zombieBodyType: -1,
-      zombieFlyblownSide: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
       zombieHeadType: -1,
@@ -1236,6 +1238,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     currentHealth: 2,
     deathEpoch: 0,
     deathTick: 0,
+    emergencePhase: 2.5,
     emergenceTick: 12,
     emergenceOrientation: 4,
     headingDeg: 90,
@@ -1306,7 +1309,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    54,
+    53,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -1317,7 +1320,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 54)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 53)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,
@@ -1328,7 +1331,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     decodeServerGameMessage(encodeGameMessage(replicatedMessage)),
     replicatedMessage,
   )
-  assert.equal(replicatedFrame.world.entities.samples[0]?.[43], -1)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.[42], -1)
   const oversizedReplicatedSample = JSON.parse(encodeGameMessage(replicatedMessage))
   oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(20).fill(0))
   assert.throws(
@@ -1500,8 +1503,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 
   const invalidEmergence = JSON.parse(encodeGameMessage(welcome))
-  invalidEmergence.snapshot.world.maggots[0].state = 'crawl'
-  assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidEmergence)), /emergenceTick/)
+  invalidEmergence.snapshot.world.maggots[0].emergencePhase = 5
+  assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidEmergence)), /emergencePhase/)
 
   const invalidDeathEffect = JSON.parse(encodeGameMessage(welcome))
   invalidDeathEffect.snapshot.world.deathEffects[0].alpha = 1.251
@@ -1585,8 +1588,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v87 carries mutual game-start readiness and complete retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 87)
+test('protocol v88 carries mutual game-start readiness and complete retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 88)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -4550,7 +4553,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /encounter\.digFrame/,
   )
 
-  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0]
+  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0, 1, 0]
   const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
   invalidType.frame.world.entities.spawned = [[...enemyDescriptor.slice(0, 3), 1004, ...enemyDescriptor.slice(4)]]
   assert.throws(

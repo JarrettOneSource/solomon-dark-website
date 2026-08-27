@@ -402,13 +402,13 @@ test('Imp contact burst keeps the separate -15 plant and 15-unit heading offset'
 })
 
 test('Zombie keeps its native constructor selectors independent', () => {
+  const animation = nativeEnemyIdleAnimationSample({
+    zombieBodyType: 0,
+    zombieHeadType: 0,
+  })
   const plan = nativeEnemyPresentationPlan({
     ...enemy('ZOMBIE'),
-    animation: nativeEnemyIdleAnimationSample({
-      zombieBodyType: 0,
-      zombieFlyblownSide: 1,
-      zombieHeadType: 0,
-    }),
+    animation,
   }, 100)
   const entries = plan.layers.map((layer) => layer.entry)
   const bodyType = (entries[1] - 2203) / 18
@@ -430,14 +430,48 @@ test('Zombie keeps its native constructor selectors independent', () => {
     { x: 0, y: -8.5 },
   ])
 
-  const rottenEntries = nativeEnemyPresentationPlan(
-    enemy('ZOMBIE', ['FLAG_ROTTEN']),
-    100,
-  ).layers.map((layer) => layer.entry)
-  assert.ok(
-    (rottenEntries[2] === 2113 && rottenEntries[3] === 2149)
-    || (rottenEntries[2] === 2095 && rottenEntries[3] === 2167),
+  const rottenComponents = nativeEnemyPresentationPlan({
+    ...enemy('ZOMBIE', ['FLAG_ROTTEN']),
+    animation,
+  }, 100).layers.filter(({ role }) => (
+    role === 'zombie-base'
+    || role === 'zombie-body'
+    || role === 'zombie-arm-rear'
+    || role === 'zombie-arm-front'
+    || role === 'zombie-head'
+  ))
+  assert.deepEqual(
+    rottenComponents.map(({ entry }) => entry),
+    entries,
   )
+})
+
+test('Zombie BODY TYPE 1 owns body/head bank three and both scaled overlays', () => {
+  for (let facing = 0; facing < 18; facing += 1) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy('ZOMBIE'),
+      headingDeg: facing * 20,
+      animation: nativeEnemyIdleAnimationSample({
+        zombieBodyType: 3,
+        zombieHeadType: 3,
+      }),
+    }, 100)
+    assert.equal(plan.facing, facing)
+    assert.deepEqual(plan.layers.map(({ entry }) => entry), [
+      2365 + facing,
+      2257 + facing,
+      2095 + facing,
+      2149 + facing,
+      2275 + facing,
+      2275 + facing,
+      2347 + facing,
+    ])
+    assert.deepEqual(
+      plan.layers.slice(1, 6).map(({ scale }) => scale),
+      [1.15, 1.15, 1.15, 1.15, 1.15],
+    )
+    assert.equal(plan.layers[6]!.scale, 1)
+  }
 })
 
 test('Wraith, Demon, and Coffin preserve their native spawn compositions', () => {
@@ -1099,7 +1133,6 @@ test('Wraith opacity and Zombie articulation are sampled rather than wall-clock 
       zombieAngularOffsetDeg: 20,
       zombieBodyRotationRadians: -0.15,
       zombieBodyType: 0,
-      zombieFlyblownSide: 1,
       zombieFrontArmPose: 2,
       zombieFrontArmRotationRadians: -0.4,
       zombieRearArmPose: 1,
@@ -1113,11 +1146,20 @@ test('Wraith opacity and Zombie articulation are sampled rather than wall-clock 
   assert.equal(zombie.layers[1].rotationRadians, -0.15)
   assert.equal(zombie.layers[2].entry, 2114)
   assert.equal(zombie.layers[2].rotationRadians, 0.25)
-  assert.deepEqual(zombie.layers[2].offset, { x: -13, y: -21 })
+  assert.deepEqual(zombie.layers[2].offset, {
+    x: -15.992224795114133,
+    y: -18.8214969145001,
+  })
   assert.equal(zombie.layers[3].entry, 2186)
   assert.equal(zombie.layers[3].rotationRadians, -0.4)
-  assert.deepEqual(zombie.layers[3].offset, { x: 8, y: -18 })
-  assert.deepEqual(zombie.layers[4].offset, { x: -1, y: -8.5 })
+  assert.deepEqual(zombie.layers[3].offset, {
+    x: 5.220282238963552,
+    y: -18.993384462637554,
+  })
+  assert.deepEqual(zombie.layers[4].offset, {
+    x: -2.2589952039616357,
+    y: -8.255116029982759,
+  })
   assert.equal(zombie.layers[4].rotationRadians, 0.35)
 })
 
@@ -1160,6 +1202,8 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
   const coffin = nativeEnemyPresentationPlan({
     ...enemy('COFFIN'),
     animation: nativeEnemyIdleAnimationSample({
+      coffinRotationRadians: 0.2,
+      coffinScaleX: -1,
       coffinSecondaryPose: 9,
       coffinState: 'open',
       maggots: [
@@ -1194,6 +1238,13 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
     ],
   )
   assert.deepEqual(coffin.layers[2].offset, { x: 12, y: -3 })
+  assert.deepEqual(coffin.layers.slice(0, 2).map((layer) => ({
+    rotationRadians: layer.rotationRadians,
+    scaleX: layer.scaleX,
+  })), [
+    { rotationRadians: 0.2, scaleX: -1 },
+    { rotationRadians: 0.2, scaleX: -1 },
+  ])
 })
 
 test('death-effect presentation keeps airborne art and enhanced shadow on the ground plane', () => {

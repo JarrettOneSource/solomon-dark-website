@@ -26,6 +26,7 @@ import {
   buildPlayerSkillOffer as buildPlayerSkillOfferWithGameplayRng,
   createPlayerProgression,
   createPlayerSkillBook,
+  drawNativePlayerCreationOfferSeed,
   deferPlayerSkillChoice as deferPlayerSkillChoiceWithGameplayRng,
   effectivePrimarySkillRankStats,
   evaluateBoneyardEnemyExperience,
@@ -64,6 +65,12 @@ const ETHER_ARCANE = {
   discipline: 'arcane',
   displayName: 'Helvidius',
   element: 'ether',
+} as const
+
+const FIRE_BODY = {
+  discipline: 'body',
+  displayName: 'Pyrros',
+  element: 'fire',
 } as const
 
 function offerGameplayRng(progression: Pick<PlayerProgressionComponent, 'offerSeed'>) {
@@ -157,6 +164,75 @@ function grantPlayerBonusSkillChoice(
     sorcerorsCharmOwned,
   ).progression
 }
+
+test('fresh player creation retains the thirteenth native acquisition seed', () => {
+  const source = createNativeRng(0x45ab_91ef)
+  let expectedRng = source
+  let expectedSeed = -1
+  for (let index = 0; index < 13; index += 1) {
+    const draw = drawNativeInteger(expectedRng, 1_000_000)
+    expectedRng = draw.state
+    expectedSeed = draw.value
+  }
+  assert.deepEqual(drawNativePlayerCreationOfferSeed(source), {
+    rng: expectedRng,
+    seed: expectedSeed,
+  })
+})
+
+test('ordinary and Insight acquisitions replace the offer seed before queued offers', () => {
+  const ordinaryBook = createPlayerSkillBook(ETHER_ARCANE)
+  const ordinaryProgression: PlayerProgressionComponent = {
+    ...createPlayerProgression(7),
+    pendingLevels: Object.freeze([2, 2]),
+    pendingOffer: Object.freeze({
+      level: 2,
+      options: Object.freeze([
+        Object.freeze({ skillId: 9, targetRank: 1 }),
+        Object.freeze({ skillId: 10, targetRank: 1 }),
+        Object.freeze({ skillId: 65, targetRank: 1 }),
+      ]),
+      sequence: 1,
+    }),
+  }
+  const source = createNativeRng(0x1357_9bdf)
+  const expectedOrdinary = drawNativeInteger(source, 1_000_000)
+  const ordinary = applyPlayerSkillChoiceWithGameplayRng(
+    ordinaryProgression,
+    ordinaryBook,
+    { choiceIndex: 0, offerSequence: 1, skillId: 9 },
+    source,
+  )
+  assert.ok(ordinary)
+  assert.equal(ordinary.progression.offerSeed, expectedOrdinary.value)
+  assert.ok(ordinary.progression.pendingOffer)
+
+  const insightBook = withLearnedSkills(createPlayerSkillBook(ETHER_ARCANE), [57])
+  const insightProgression: PlayerProgressionComponent = {
+    ...createPlayerProgression(11),
+    pendingLevels: Object.freeze([12]),
+    pendingOffer: Object.freeze({
+      level: 12,
+      options: Object.freeze([
+        Object.freeze({ insight: true as const, skillId: 57, targetRank: 2 }),
+        Object.freeze({ skillId: 48, targetRank: 1 }),
+        Object.freeze({ skillId: 56, targetRank: 1 }),
+      ]),
+      sequence: 2,
+    }),
+  }
+  const firstInsightSeed = drawNativeInteger(ordinary.rng, 1_000_000)
+  const secondInsightSeed = drawNativeInteger(firstInsightSeed.state, 1_000_000)
+  const insight = applyPlayerSkillChoiceWithGameplayRng(
+    insightProgression,
+    insightBook,
+    { choiceIndex: 0, offerSequence: 2, skillId: 57 },
+    ordinary.rng,
+  )
+  assert.ok(insight)
+  assert.equal(insight.progression.offerSeed, secondInsightSeed.value)
+  assert.deepEqual(insight.rng, secondInsightSeed.state)
+})
 
 test('all six native potion subtypes mutate and expire their authoritative progression fields', () => {
   const damaged = {
@@ -807,6 +883,53 @@ test('Creativity Insight applies the selected skill twice without duplicating lo
   assert.ok(applied)
   assert.equal(applied.skillBook.permanentRanks[57], 3)
   assert.equal(applied.skillBook.skillQuickbar, skillBook.skillQuickbar)
+})
+
+test('Fire Body acquisitions advance private seeds and vary only legal offers through wave-era levels', () => {
+  let skillBook = createPlayerSkillBook(FIRE_BODY)
+  let progression = offerProgression(314_159, 1)
+  let gameplayRng = createNativeRng(0x2468_ace0)
+  const offerSignatures: string[] = []
+  const offerSeeds: number[] = []
+  for (let level = 2; level <= 23; level += 1) {
+    progression = {
+      ...progression,
+      level,
+      pendingLevels: Object.freeze([level]),
+      pendingOffer: null,
+    }
+    const built = buildPlayerSkillOfferWithGameplayRng(
+      progression,
+      skillBook,
+      level,
+      gameplayRng,
+    )
+    progression = { ...progression, pendingOffer: built.offer }
+    gameplayRng = built.rng
+    offerSignatures.push(built.offer.options.map(({ skillId }) => skillId).join(','))
+    if (built.offer.options.some(({ skillId }) => skillId === 10)) {
+      assert.ok(
+        (skillBook.permanentRanks[8] ?? 0) > 0,
+        'More Missiles must remain gated by Magic Missile',
+      )
+    }
+    const chosen = built.offer.options[0]!
+    const acquisitionSeed = drawNativeInteger(gameplayRng, 1_000_000)
+    const applied = applyPlayerSkillChoiceWithGameplayRng(
+      progression,
+      skillBook,
+      { choiceIndex: 0, offerSequence: built.offer.sequence, skillId: chosen.skillId },
+      gameplayRng,
+    )
+    assert.ok(applied)
+    assert.equal(applied.progression.offerSeed, acquisitionSeed.value)
+    offerSeeds.push(applied.progression.offerSeed)
+    progression = applied.progression
+    skillBook = applied.skillBook
+    gameplayRng = applied.rng
+  }
+  assert.ok(new Set(offerSeeds).size > 20)
+  assert.ok(new Set(offerSignatures).size > 8)
 })
 
 test('offer fill preserves native exact-ID and category collision guards', () => {

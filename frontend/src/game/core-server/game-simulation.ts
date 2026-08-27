@@ -115,6 +115,7 @@ import {
 import {
   applyNativeUnforgeFullRejuvenation,
   boneyardEnemyExperienceAward,
+  drawNativePlayerCreationOfferSeed,
   grantNativeUnforgeMindDredge,
   NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
@@ -433,14 +434,14 @@ export function createGameSimulation(
   let playerEntities = createPlayerEntityStore()
   let gameRng = createNativeRng(options.gameRngSeed ?? 0)
   for (const [playerId, config] of Object.entries(characters)) {
-    const draw = drawNativeInteger(gameRng, 1_000_000)
-    gameRng = draw.state
+    const draw = drawNativePlayerCreationOfferSeed(gameRng)
+    gameRng = draw.rng
     playerEntities = addPlayerEntity(
       playerEntities,
       playerId,
       config,
       createPlayerCharacter(config, hubSpawnPoint()),
-      draw.value,
+      draw.seed,
       lightProviderOrder.register('actor'),
     )
   }
@@ -510,21 +511,21 @@ export function addPlayerCharacter(
           [playerId]: createNativeHallOfFameRun(state.hallOfFameClockStartedAtTick),
         },
       }
-  const draw = drawNativeInteger(state.gameRng, 1_000_000)
+  const draw = drawNativePlayerCreationOfferSeed(state.gameRng)
   const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
   const playerEntities = addPlayerEntity(
     state.playerEntities,
     playerId,
     config,
     spawnPlayerForWorld(state.world, config),
-    draw.value,
+    draw.seed,
     lightProviderOrder.register('actor'),
   )
   return {
     ...state,
     lightProviderOrder: lightProviderOrder.state(),
     playerEntities,
-    gameRng: draw.state,
+    gameRng: draw.rng,
     run: synchronizeGameRunParticipants(
       state.run,
       playerEntities.identities.map(({ playerId: id }) => id),
@@ -1200,15 +1201,15 @@ export function confirmGameSimulationLoadout(
   if (state.world.kind === 'hub') {
     const world = confirmHubCollegeIntroLoadout(state.world, playerId)
     if (world !== state.world) {
-      const offerSeed = drawNativeInteger(state.gameRng, 1_000_000)
+      const offerSeed = drawNativePlayerCreationOfferSeed(state.gameRng)
       return {
         ...state,
-        gameRng: offerSeed.state,
+        gameRng: offerSeed.rng,
         playerEntities: replacePlayerLoadout(
           state.playerEntities,
           playerId,
           createPlayerCharacter(config, player.position),
-          offerSeed.value,
+          offerSeed.seed,
         ),
         world,
       }
@@ -1216,15 +1217,15 @@ export function confirmGameSimulationLoadout(
   }
   const run = confirmPostRunLoadout(state.run, playerId)
   if (!run) return null
-  const offerSeed = drawNativeInteger(state.gameRng, 1_000_000)
+  const offerSeed = drawNativePlayerCreationOfferSeed(state.gameRng)
   return {
     ...state,
-    gameRng: offerSeed.state,
+    gameRng: offerSeed.rng,
     playerEntities: replacePlayerLoadout(
       state.playerEntities,
       playerId,
       createPlayerCharacter(config, player.position),
-      offerSeed.value,
+      offerSeed.seed,
       { starterAppearanceOwner: config.element },
     ),
     run,
@@ -2075,7 +2076,7 @@ export function stepGameSimulationTick(
             })),
           ]),
           currentHealth: tutorialProgression.currentHealth,
-          enemyCount: boneyardWorld.enemies.actors.length + boneyardWorld.enemies.maggots.length,
+          enemyCount: boneyardWorld.enemies.actors.length,
           groundSackCount: boneyardWorld.loot.actors.filter(({ nativeTypeId }) => (
             nativeTypeId === 2013
           )).length,

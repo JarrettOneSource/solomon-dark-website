@@ -711,6 +711,48 @@ export function createPlayerProgression(offerSeed: number): PlayerProgressionCom
   }
 }
 
+/**
+ * Native fresh-player construction draws one seed in `0x006594E0`, then the
+ * twelve non-disabled Create/loadout acquisitions in `0x005D0290` each replace
+ * it through `0x00660320`. The last acquisition owns the first offer seed.
+ */
+export function drawNativePlayerCreationOfferSeed(
+  sourceGameplayRng: NativeRngState,
+): Readonly<{ rng: NativeRngState; seed: number }> {
+  let rng = sourceGameplayRng
+  let seed = 0
+  for (let drawIndex = 0; drawIndex < 13; drawIndex += 1) {
+    const draw = drawNativeInteger(rng, 1_000_000)
+    rng = draw.state
+    seed = draw.value
+  }
+  return { rng, seed }
+}
+
+/** Every reached `Skills_Wizard::Acquire 0x00660320` replaces `+0x834`. */
+export function applyNativeSkillAcquisitionOfferSeeds(
+  progression: PlayerProgressionComponent,
+  sourceGameplayRng: NativeRngState,
+  acquisitionCount: number,
+): PlayerProgressionRngResult {
+  if (!Number.isSafeInteger(acquisitionCount) || acquisitionCount < 0) {
+    throw new RangeError('native skill acquisition count must be a non-negative safe integer')
+  }
+  let rng = sourceGameplayRng
+  let offerSeed = progression.offerSeed
+  for (let index = 0; index < acquisitionCount; index += 1) {
+    const draw = drawNativeInteger(rng, 1_000_000)
+    rng = draw.state
+    offerSeed = draw.value
+  }
+  return {
+    progression: offerSeed === progression.offerSeed
+      ? progression
+      : { ...progression, offerSeed },
+    rng,
+  }
+}
+
 export function applyPlayerPotionEffect(
   source: PlayerProgressionComponent,
   subtype: number,
@@ -1049,8 +1091,15 @@ export function applyPlayerSkillChoice(
       ? skillBook.weldComponentRanks
       : nativeWeldComponentRanksForBuild(effectiveRanks, weldBuild),
   }
+  let gameplayRng = sourceGameplayRng
+  const reseeded = applyNativeSkillAcquisitionOfferSeeds(
+    progression,
+    gameplayRng,
+    chosen.insight === true ? 2 : 1,
+  )
+  gameplayRng = reseeded.rng
   let nextProgression: PlayerProgressionComponent = {
-    ...progression,
+    ...reseeded.progression,
     forcedOfferSkillIds: Object.freeze([]),
     pendingLevels: Object.freeze(progression.pendingLevels.slice(1)),
     pendingOffer: null,
@@ -1058,7 +1107,6 @@ export function applyPlayerSkillChoice(
     sorcerorsCharmAvailable: false,
   }
   nextProgression = refreshWeldOfferMarker(nextProgression, nextBook)
-  let gameplayRng = sourceGameplayRng
   if (nextProgression.pendingLevels.length > 0) {
     const built = withNextSkillOffer(
       nextProgression,
