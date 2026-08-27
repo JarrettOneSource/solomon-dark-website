@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
 import { chromium } from 'playwright-core'
 
@@ -15,6 +15,7 @@ import {
 const baseUrl = process.env.SDR_NATIVE_SAVE_SMOKE_URL || 'http://127.0.0.1:4187'
 const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
 const screenshotRoot = process.env.SDR_NATIVE_SAVE_SMOKE_SCREENSHOT_ROOT || '/tmp'
+await mkdir(screenshotRoot, { recursive: true })
 const fixture = JSON.parse(await readFile(
   new URL('../public/game/native/portable-profile-template.json', import.meta.url),
   'utf8',
@@ -78,6 +79,8 @@ async function runAnonymousJourney(browser) {
 
     const exported = await exportFromTitleSettings(page)
     await assertStockExport(exported)
+    const archivePath = `${screenshotRoot}/solomon-dark-native-save-anonymous.zip`
+    await writeFile(archivePath, exported)
     await page.getByRole('button', { name: 'BACK', exact: true }).click()
     await page.getByRole('button', { name: 'DONE', exact: true }).click()
 
@@ -90,6 +93,7 @@ async function runAnonymousJourney(browser) {
     assertCleanDiagnostics(diagnostics)
     return {
       exportedBytes: exported.byteLength,
+      archivePath,
       importedRevision: imported.revision,
       resumedRevision: checkpointed.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
@@ -139,6 +143,8 @@ async function runCloudJourney(browser, token) {
       page.getByRole('button', { name: /export for stock/i }),
     )
     await assertStockExport(exported)
+    const archivePath = `${screenshotRoot}/solomon-dark-native-save-cloud.zip`
+    await writeFile(archivePath, exported)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.getByText(new RegExp(`revision ${checkpointed.revision}`)).waitFor({ timeout: 30_000 })
@@ -150,6 +156,7 @@ async function runCloudJourney(browser, token) {
     assertCleanDiagnostics(diagnostics)
     return {
       exportedBytes: exported.byteLength,
+      archivePath,
       importedRevision: imported.revision,
       resumedRevision: checkpointed.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-cloud.png`,
