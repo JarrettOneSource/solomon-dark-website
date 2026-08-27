@@ -213,6 +213,37 @@ test('stock null-Boast sentinel survives strict stock-to-web decoding', async ()
   assert.equal(portable.profile.boast.selected, null)
 })
 
+test('stock-rewritten zero root ranks reconstruct the complete class root book', async () => {
+  const base = await createPortableGameProfileFromNative(
+    darkdata,
+    withRetailNullBoastSentinel(gamestate),
+    fixture.expected.runName,
+  )
+  const permanentRanks = [...base.wizard.permanentRanks]
+  permanentRanks.fill(0, 0, 8)
+  const stockRewrite = patchNativeGamestate(
+    withRetailNullBoastSentinel(gamestate),
+    { ...base.wizard, permanentRanks },
+  )
+  assert.deepEqual(
+    decodeNativeGamestateWizard(stockRewrite).rows.slice(0, 8)
+      .map(row => row.permanentRank),
+    Array(8).fill(0),
+  )
+  const portable = await createPortableGameProfileFromNative(
+    darkdata,
+    stockRewrite,
+    fixture.expected.runName,
+  )
+  const restored = restoreGameSaveDocument(
+    createWebGameSaveFromPortableProfile(portable).document,
+  )
+  assert.deepEqual(
+    restored.state.playerEntities.skillBooks[0]?.permanentRanks.slice(0, 8),
+    Array(8).fill(1),
+  )
+})
+
 test('portable stock import builds one local-only authoritative Hub wizard and retains native bytes', async () => {
   const portable = await createPortableGameProfileFromNative(
     darkdata,
