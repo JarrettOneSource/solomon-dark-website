@@ -429,6 +429,7 @@ export function stepSharedGameWorlds(
   extensions: ReadonlyMap<string, GameSimulationExtensions> = new Map(),
   collegeIntroReadyPlayerIds: ReadonlySet<PlayerId> | null = null,
   memorialProfiles: ReadonlyMap<PlayerId, HubMemorialPlayerProfile> = new Map(),
+  memorialEligiblePlayerIds: ReadonlySet<PlayerId> | null = null,
   onMemorialStateChanged?: (state: HubMemorialState) => void,
 ): SharedGameWorldsState {
   if (state.hub.world.kind !== 'hub') {
@@ -467,6 +468,7 @@ export function stepSharedGameWorlds(
       if (completedPlayerIds.length > 0) {
         const snapshot = createGameSnapshot(next, null)
         for (const playerId of completedPlayerIds) {
+          if (memorialEligiblePlayerIds && !memorialEligiblePlayerIds.has(playerId)) continue
           if (snapshot.world.kind !== 'boneyard') break
           const player = snapshot.players[playerId]
           const completed = snapshot.world.hallOfFameRuns[playerId]

@@ -332,12 +332,16 @@ import {
   type PlayerSocialProfile,
 } from './party-state.ts'
 import {
+  GAME_CHAT_ACTIVITIES,
+  GAME_CHAT_MAX_TEXT_CODE_UNITS,
+  gameChatActivityText,
   normalizeGameChatText,
   type GameChatChannel,
   type GameChatMessage,
   type GameChatRejection,
   type GameChatRejectionReason,
   type GameChatSender,
+  type GameOnlinePreferences,
 } from './game-chat.ts'
 import {
   MAX_WEB_GAME_SAVE_BYTES,
@@ -357,10 +361,12 @@ export type {
 } from '../core-kernels/boneyard.ts'
 export type {
   GameChatChannel,
+  GameChatActivity,
   GameChatMessage,
   GameChatRejection,
   GameChatRejectionReason,
   GameChatSender,
+  GameOnlinePreferences,
 } from './game-chat.ts'
 export type {
   LocalPartyState,
@@ -370,12 +376,15 @@ export type {
   PlayerSocialProfile,
 } from './party-state.ts'
 export {
+  DEFAULT_GAME_ONLINE_PREFERENCES,
+  GAME_CHAT_ACTIVITIES,
   GAME_CHAT_MAX_TEXT_BYTES,
   GAME_CHAT_MAX_TEXT_CODE_UNITS,
+  gameChatActivityText,
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 91
+export const GAME_PROTOCOL_VERSION = 92
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -512,6 +521,7 @@ export interface ClientHelloMessage {
   beginCollegeIntro?: boolean
   cheatsEnabled: boolean
   declineTutorial?: boolean
+  onlinePreferences: GameOnlinePreferences
   type: 'client-hello'
   protocolVersion: number
   credential: string
@@ -578,6 +588,11 @@ export interface ClientHubActionMessage {
 export interface ClientHubActivityMessage {
   type: 'client-hub-activity'
   activity: HubPlayerActivity | null
+}
+
+export interface ClientOnlinePreferencesMessage {
+  readonly onlinePreferences: GameOnlinePreferences
+  readonly type: 'client-online-preferences'
 }
 
 export interface ClientChatMessage {
@@ -741,6 +756,7 @@ export type ClientGameMessage =
   | ClientLuaExecuteMessage
   | ClientModCastMessage
   | ClientModActionMessage
+  | ClientOnlinePreferencesMessage
   | ClientObserverHelloMessage
   | ClientPartyAcceptMessage
   | ClientPartyDenyMessage
@@ -1051,6 +1067,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       'beginCollegeIntro',
       'cheatsEnabled',
       'declineTutorial',
+      'onlinePreferences',
       'protocolVersion',
       'credential',
       'character',
@@ -1065,6 +1082,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return {
       type: 'client-hello',
       cheatsEnabled: boolean(value.cheatsEnabled, 'cheatsEnabled'),
+      onlinePreferences: gameOnlinePreferences(value.onlinePreferences, 'onlinePreferences'),
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       credential: limitedString(value.credential, 'credential', 512),
       character: playerCharacterConfig(value.character, 'character'),
@@ -1117,6 +1135,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       activity: value.activity === null
         ? null
         : hubPlayerActivity(value.activity, 'activity'),
+    }
+  }
+  if (value.type === 'client-online-preferences') {
+    onlyKeys(value, 'message', ['type', 'onlinePreferences'])
+    return {
+      type: 'client-online-preferences',
+      onlinePreferences: gameOnlinePreferences(value.onlinePreferences, 'onlinePreferences'),
     }
   }
   if (value.type === 'client-chat') {
@@ -1603,22 +1628,38 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     }
   }
   if (value.type === 'server-chat') {
-    onlyKeys(value, 'message', ['type', 'channel', 'recipient', 'sender', 'sequence', 'text'])
+    onlyKeys(value, 'message', [
+      'type', 'activity', 'channel', 'recipient', 'sender', 'sequence', 'text',
+    ])
     const channel = gameChatChannel(value.channel, 'channel')
     if ((channel === 'whisper') !== (value.recipient !== undefined)) {
       throw new GameProtocolError(
         'recipient is required exactly when the channel is whisper',
       )
     }
+    const sender = gameChatSender(value.sender, 'sender')
+    const activity = value.activity === undefined
+      ? undefined
+      : memberString(value.activity, 'activity', GAME_CHAT_ACTIVITIES)
+    if (activity !== undefined && channel !== 'global') {
+      throw new GameProtocolError('activity messages require the global channel')
+    }
+    const text = activity === undefined
+      ? gameChatText(value.text, 'text')
+      : limitedString(value.text, 'text', GAME_CHAT_MAX_TEXT_CODE_UNITS)
+    if (activity !== undefined && text !== gameChatActivityText(activity, sender.displayName)) {
+      throw new GameProtocolError('activity text does not match its host-authored event')
+    }
     return {
       type: 'server-chat',
+      ...(activity === undefined ? {} : { activity }),
       channel,
       ...(value.recipient === undefined
         ? {}
         : { recipient: gameChatSender(value.recipient, 'recipient') }),
-      sender: gameChatSender(value.sender, 'sender'),
+      sender,
       sequence: positiveInteger(value.sequence, 'sequence'),
-      text: gameChatText(value.text, 'text'),
+      text,
     }
   }
   if (value.type === 'server-chat-rejected') {
@@ -2020,7 +2061,22 @@ function playerSocialProfile(value: unknown, field: string): PlayerSocialProfile
 }
 
 function gameChatChannel(value: unknown, field: string): GameChatChannel {
-  return memberString(value, field, ['global', 'party', 'whisper'] as const)
+  return memberString(value, field, ['boneyard', 'global', 'party', 'whisper'] as const)
+}
+
+function gameOnlinePreferences(value: unknown, field: string): GameOnlinePreferences {
+  const source = record(value, field)
+  onlyKeys(source, field, ['activityMessages', 'globalChat', 'submitRuns'])
+  const globalChat = boolean(source.globalChat, `${field}.globalChat`)
+  const activityMessages = boolean(source.activityMessages, `${field}.activityMessages`)
+  if (activityMessages && !globalChat) {
+    throw new GameProtocolError(`${field}.activityMessages requires globalChat`)
+  }
+  return {
+    activityMessages,
+    globalChat,
+    submitRuns: boolean(source.submitRuns, `${field}.submitRuns`),
+  }
 }
 
 function gameChatText(value: unknown, field: string): string {

@@ -65,6 +65,11 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+const ONLINE_PREFERENCES = {
+  activityMessages: true,
+  globalChat: true,
+  submitRuns: true,
+} as const
 const ACTOR_LIGHT_REGISTRATION = {
   managerLane: 'actor' as const,
   registrationOrdinal: 1,
@@ -153,6 +158,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
     beginCollegeIntro: true,
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -162,6 +168,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), {
     type: 'client-hello',
     beginCollegeIntro: true,
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -175,6 +182,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     cheatsEnabled: false,
     credential: 'fresh-secret',
     declineTutorial: true,
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
   })), {
@@ -183,12 +191,28 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     cheatsEnabled: false,
     credential: 'fresh-secret',
     declineTutorial: true,
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-ready-college-intro',
   })), { type: 'client-ready-college-intro' })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-online-preferences',
+    onlinePreferences: {
+      activityMessages: false,
+      globalChat: false,
+      submitRuns: false,
+    },
+  })), {
+    type: 'client-online-preferences',
+    onlinePreferences: {
+      activityMessages: false,
+      globalChat: false,
+      submitRuns: false,
+    },
+  })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-input',
     input: {
@@ -1591,8 +1615,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v91 carries party-rejoin waiting, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 91)
+test('protocol v92 carries party-rejoin waiting, online preferences, match chat, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 92)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2375,6 +2399,23 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   assert.throws(() => decodeClientGameMessage('{'), GameProtocolError)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    character: CHARACTER,
+    cheatsEnabled: false,
+    credential: 'spawn-secret',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })), /onlinePreferences/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-online-preferences',
+    onlinePreferences: {
+      activityMessages: true,
+      globalChat: false,
+      submitRuns: true,
+    },
+  })), /activityMessages requires globalChat/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
@@ -2382,6 +2423,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /displayName|character/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -2391,12 +2433,14 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
     cheatsEnabled: false,
+    onlinePreferences: ONLINE_PREFERENCES,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: CHARACTER,
   })), /profile/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: 0, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -5488,6 +5532,15 @@ test('protocol strictly round-trips every welded projectile and persistent actor
 test('chat protocol strictly bounds client text and authoritative server events', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-chat',
+    channel: 'boneyard',
+    text: 'Hold this gate.',
+  })), {
+    type: 'client-chat',
+    channel: 'boneyard',
+    text: 'Hold this gate.',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-chat',
     channel: 'party',
     text: 'Meet by the fountain.',
   })), {
@@ -5508,6 +5561,37 @@ test('chat protocol strictly bounds client text and authoritative server events'
     sequence: 17,
     text: 'The Courtyard is busy today.',
   })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-chat',
+    activity: 'searching-solomon',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 18,
+    text: 'Aurelia is searching for Solomon.',
+  })), {
+    type: 'server-chat',
+    activity: 'searching-solomon',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 18,
+    text: 'Aurelia is searching for Solomon.',
+  })
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-chat',
+    activity: 'left-game',
+    channel: 'boneyard',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 19,
+    text: 'Aurelia has left the game.',
+  })), /activity messages require the global channel/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-chat',
+    activity: 'entered-college',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 20,
+    text: 'Aurelia entered.',
+  })), /activity text/)
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
     type: 'server-chat-rejected',
     channel: 'party',

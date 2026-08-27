@@ -1,3 +1,5 @@
+import type { GameOnlinePreferences } from './protocol/game-chat.ts'
+
 export const CAMERA_FOV_MIN_PERCENT = 75
 export const CAMERA_FOV_MAX_PERCENT = 125
 export const UI_SCALE_MIN_PERCENT = 75
@@ -35,11 +37,16 @@ export interface GameSettings {
   readonly complexLighting: boolean
   readonly complexShadows: boolean
   readonly controls: GameControlBindings
+  readonly enableActivityMessages: boolean
   readonly enableCheats: boolean
+  readonly enableGlobalChat: boolean
+  readonly enableOnlineFeatures: boolean
+  readonly enableSharedHub: boolean
   readonly lightQualityPercent: number
   readonly musicVolumePercent: number
   readonly multipleShadows: boolean
   readonly soundVolumePercent: number
+  readonly submitRunsToServer: boolean
   readonly uiScalePercent: number
   readonly zoomEffects: boolean
 }
@@ -76,11 +83,16 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = Object.freeze({
   complexLighting: true,
   complexShadows: true,
   controls: DEFAULT_GAME_CONTROL_BINDINGS,
+  enableActivityMessages: true,
   enableCheats: false,
+  enableGlobalChat: true,
+  enableOnlineFeatures: true,
+  enableSharedHub: true,
   lightQualityPercent: 100,
   musicVolumePercent: 100,
   multipleShadows: true,
   soundVolumePercent: 100,
+  submitRunsToServer: true,
   uiScalePercent: 100,
   zoomEffects: true,
 })
@@ -91,14 +103,27 @@ const GAME_SETTINGS_KEYS = Object.freeze([
   'complexLighting',
   'complexShadows',
   'controls',
+  'enableActivityMessages',
   'enableCheats',
+  'enableGlobalChat',
+  'enableOnlineFeatures',
+  'enableSharedHub',
   'lightQualityPercent',
   'musicVolumePercent',
   'multipleShadows',
   'soundVolumePercent',
+  'submitRunsToServer',
   'uiScalePercent',
   'zoomEffects',
 ] as const)
+
+const DEPLOYED_GAME_SETTINGS_KEYS = Object.freeze(GAME_SETTINGS_KEYS.filter((key) => ![
+  'enableActivityMessages',
+  'enableGlobalChat',
+  'enableOnlineFeatures',
+  'enableSharedHub',
+  'submitRunsToServer',
+].includes(key)))
 
 const listeners = new Set<(settings: GameSettings) => void>()
 
@@ -130,6 +155,29 @@ export function subscribeGameSettings(
 
 export function gameCheatsEnabled(): boolean {
   return readGameSettings().enableCheats
+}
+
+export function gameOnlinePreferences(
+  settings: Pick<
+    GameSettings,
+    | 'enableActivityMessages'
+    | 'enableGlobalChat'
+    | 'enableOnlineFeatures'
+    | 'submitRunsToServer'
+  >,
+): GameOnlinePreferences {
+  const globalChat = settings.enableOnlineFeatures && settings.enableGlobalChat
+  return Object.freeze({
+    activityMessages: globalChat && settings.enableActivityMessages,
+    globalChat,
+    submitRuns: settings.enableOnlineFeatures && settings.submitRunsToServer,
+  })
+}
+
+export function gameSharedHubEnabled(
+  settings: Pick<GameSettings, 'enableOnlineFeatures' | 'enableSharedHub'>,
+): boolean {
+  return settings.enableOnlineFeatures && settings.enableSharedHub
 }
 
 export function resetGameSettingsListenersForTests(): void {
@@ -216,22 +264,39 @@ function parseGameSettings(serialized: string | null): GameSettings {
         enableCheats: source.enableCheats === true,
       })
     }
-    if (!sameKeys(sourceKeys, GAME_SETTINGS_KEYS)) return DEFAULT_GAME_SETTINGS
+    const migrated = sameKeys(sourceKeys, DEPLOYED_GAME_SETTINGS_KEYS)
+      ? {
+          ...source,
+          enableActivityMessages: true,
+          enableGlobalChat: true,
+          enableOnlineFeatures: true,
+          enableSharedHub: true,
+          submitRunsToServer: true,
+        }
+      : source
+    if (!sameKeys(Object.keys(migrated).sort(), GAME_SETTINGS_KEYS)) {
+      return DEFAULT_GAME_SETTINGS
+    }
     if (
-      typeof source.castSecondariesAtMouse !== 'boolean'
-      || typeof source.complexLighting !== 'boolean'
-      || typeof source.complexShadows !== 'boolean'
-      || typeof source.enableCheats !== 'boolean'
-      || typeof source.multipleShadows !== 'boolean'
-      || typeof source.zoomEffects !== 'boolean'
-      || !integerInRange(source.cameraFovPercent, CAMERA_FOV_MIN_PERCENT, CAMERA_FOV_MAX_PERCENT)
-      || !integerInRange(source.lightQualityPercent, LIGHT_QUALITY_MIN_PERCENT, LIGHT_QUALITY_MAX_PERCENT)
-      || !integerInRange(source.musicVolumePercent, 0, 100)
-      || !integerInRange(source.soundVolumePercent, 0, 100)
-      || !integerInRange(source.uiScalePercent, UI_SCALE_MIN_PERCENT, UI_SCALE_MAX_PERCENT)
-      || !validControls(source.controls)
+      typeof migrated.castSecondariesAtMouse !== 'boolean'
+      || typeof migrated.complexLighting !== 'boolean'
+      || typeof migrated.complexShadows !== 'boolean'
+      || typeof migrated.enableActivityMessages !== 'boolean'
+      || typeof migrated.enableCheats !== 'boolean'
+      || typeof migrated.enableGlobalChat !== 'boolean'
+      || typeof migrated.enableOnlineFeatures !== 'boolean'
+      || typeof migrated.enableSharedHub !== 'boolean'
+      || typeof migrated.multipleShadows !== 'boolean'
+      || typeof migrated.submitRunsToServer !== 'boolean'
+      || typeof migrated.zoomEffects !== 'boolean'
+      || !integerInRange(migrated.cameraFovPercent, CAMERA_FOV_MIN_PERCENT, CAMERA_FOV_MAX_PERCENT)
+      || !integerInRange(migrated.lightQualityPercent, LIGHT_QUALITY_MIN_PERCENT, LIGHT_QUALITY_MAX_PERCENT)
+      || !integerInRange(migrated.musicVolumePercent, 0, 100)
+      || !integerInRange(migrated.soundVolumePercent, 0, 100)
+      || !integerInRange(migrated.uiScalePercent, UI_SCALE_MIN_PERCENT, UI_SCALE_MAX_PERCENT)
+      || !validControls(migrated.controls)
     ) return DEFAULT_GAME_SETTINGS
-    return normalizedGameSettings(source as unknown as GameSettings)
+    return normalizedGameSettings(migrated as unknown as GameSettings)
   } catch {
     return DEFAULT_GAME_SETTINGS
   }
@@ -248,7 +313,11 @@ function normalizedGameSettings(settings: GameSettings): GameSettings {
     complexLighting: settings.complexLighting === true,
     complexShadows: settings.complexShadows === true,
     controls: normalizedControls(settings.controls),
+    enableActivityMessages: settings.enableActivityMessages === true,
     enableCheats: settings.enableCheats === true,
+    enableGlobalChat: settings.enableGlobalChat === true,
+    enableOnlineFeatures: settings.enableOnlineFeatures === true,
+    enableSharedHub: settings.enableSharedHub === true,
     lightQualityPercent: boundedInteger(
       settings.lightQualityPercent,
       LIGHT_QUALITY_MIN_PERCENT,
@@ -257,6 +326,7 @@ function normalizedGameSettings(settings: GameSettings): GameSettings {
     musicVolumePercent: boundedInteger(settings.musicVolumePercent, 0, 100),
     multipleShadows: settings.multipleShadows === true,
     soundVolumePercent: boundedInteger(settings.soundVolumePercent, 0, 100),
+    submitRunsToServer: settings.submitRunsToServer === true,
     uiScalePercent: boundedInteger(
       settings.uiScalePercent,
       UI_SCALE_MIN_PERCENT,

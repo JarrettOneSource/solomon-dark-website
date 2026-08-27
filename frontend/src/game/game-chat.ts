@@ -1,4 +1,5 @@
 import type { LocalPartyState } from './protocol/party-state.ts'
+import type { GameSessionKind } from './protocol/game-protocol.ts'
 import type {
   GameChatChannel,
   GameChatMessage,
@@ -14,26 +15,32 @@ export type GameChatWorldKind = 'boneyard' | 'hub'
 const PARTY_CHANNELS = ['party'] as const
 const GLOBAL_CHANNELS = ['global'] as const
 const GROUPED_HUB_CHANNELS = ['party', 'global'] as const
+const BONEYARD_CHANNELS = ['boneyard'] as const
+const GLOBAL_BONEYARD_CHANNELS = ['boneyard', 'global'] as const
 
 export function availableGameChatChannels(
   worldKind: GameChatWorldKind,
   partyState: LocalPartyState | null,
+  sessionKind: GameSessionKind,
   hasWhisperThread = false,
 ): readonly GameChatChannel[] {
-  const base: readonly GameChatChannel[] =
-    worldKind === 'boneyard' || partyState === null
-      ? PARTY_CHANNELS
-      : partyState.party.memberPlayerIds.length > 1
-        ? GROUPED_HUB_CHANNELS
-        : GLOBAL_CHANNELS
+  const globalHost = sessionKind === 'global-hub'
+  const base: readonly GameChatChannel[] = worldKind === 'boneyard'
+    ? globalHost ? GLOBAL_BONEYARD_CHANNELS : BONEYARD_CHANNELS
+    : partyState?.party.memberPlayerIds.length
+      ? partyState.party.memberPlayerIds.length > 1
+        ? globalHost ? GROUPED_HUB_CHANNELS : PARTY_CHANNELS
+        : globalHost ? GLOBAL_CHANNELS : PARTY_CHANNELS
+      : globalHost ? GLOBAL_CHANNELS : PARTY_CHANNELS
   return hasWhisperThread ? [...base, 'whisper'] : base
 }
 
 export function defaultGameChatChannel(
   worldKind: GameChatWorldKind,
   partyState: LocalPartyState | null,
+  sessionKind: GameSessionKind,
 ): GameChatChannel {
-  return availableGameChatChannels(worldKind, partyState)[0]!
+  return availableGameChatChannels(worldKind, partyState, sessionKind)[0]!
 }
 
 export function reconcileGameChatChannel(
@@ -87,7 +94,10 @@ export function gameChatRejectionText(rejection: GameChatRejection): string {
   return `Slow down. Try again in ${Math.max(1, Math.ceil(rejection.retryAfterMs / 1_000))}s.`
 }
 
-export function channelLabel(channel: GameChatChannel): 'Global' | 'Party' | 'Whisper' {
+export function channelLabel(
+  channel: GameChatChannel,
+): 'Boneyard' | 'Global' | 'Party' | 'Whisper' {
+  if (channel === 'boneyard') return 'Boneyard'
   if (channel === 'party') return 'Party'
   if (channel === 'whisper') return 'Whisper'
   return 'Global'

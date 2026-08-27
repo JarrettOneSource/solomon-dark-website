@@ -37,7 +37,7 @@ import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import GameMenuSkull, { type GameMenuAvailability } from './GameMenuSkull.tsx'
-import GameChat, { type GameChatWhisperRequest } from './GameChat.tsx'
+import type { GameChatWhisperRequest } from './GameChat.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameSettingsDialog, { type GameSettingsContext } from './GameSettingsDialog.tsx'
 import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
@@ -55,6 +55,8 @@ import { installGameLuaConsole } from './game-lua-console.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
   gameCheatsEnabled,
+  gameOnlinePreferences,
+  gameSharedHubEnabled,
   gameUiScale,
   gameVolume,
   readGameSettings,
@@ -153,6 +155,7 @@ const DISCORD_INVITE_URL = 'https://discord.gg/HGHxZgyM2p'
 const BoneyardScene = lazy(() => import('./BoneyardScene.tsx'))
 const HubScene = lazy(() => import('./HubScene.tsx'))
 const DeveloperObserverScene = lazy(() => import('./DeveloperObserverScene.tsx'))
+const GameChat = lazy(() => import('./GameChat.tsx'))
 const loadSkillPicker = () => import('./SkillPicker.tsx')
 const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
@@ -513,6 +516,7 @@ export default function MainMenuScene({
     [cancelLoading],
   )
   const presentWorldSpeech = useCallback((message: GameChatMessage) => {
+    if (message.activity !== undefined) return
     const request = HUB_SOCIAL_SOUND_REQUESTS.chat
     audio.playSound(request.cue, {
       playbackRate: request.playbackRate,
@@ -546,6 +550,10 @@ export default function MainMenuScene({
   }, [cheatsEnabled, session])
 
   useEffect(() => {
+    session?.setOnlinePreferences(gameOnlinePreferences(gameSettings))
+  }, [gameSettings, session])
+
+  useEffect(() => {
     audio.setVolumes(
       gameVolume(gameSettings.soundVolumePercent),
       gameVolume(gameSettings.musicVolumePercent),
@@ -558,8 +566,10 @@ export default function MainMenuScene({
   }, [gameplayPause, gameplayResumeGrace, hubPauseMenuOpen])
 
   const updateGameSettings = useCallback((settings: GameSettings) => {
-    setLocalGameSettings(setGameSettings(settings))
-  }, [])
+    const updated = setGameSettings(settings)
+    session?.setOnlinePreferences(gameOnlinePreferences(updated))
+    setLocalGameSettings(updated)
+  }, [session])
 
   useEffect(() => {
     if (developerAccess && gameSettings.enableCheats) {
@@ -736,6 +746,7 @@ export default function MainMenuScene({
     const removeChatMessage = session.onChatMessage(presentWorldSpeech)
     const removeLeaderboardReceipt = session.onLeaderboardReceipt((receipt) => {
       if (!session.developerAccess && gameCheatsEnabled()) return
+      if (!gameOnlinePreferences(readGameSettings()).submitRuns) return
       void submitGlobalHallOfFame(receipt)
     })
     const removePartyAction = session.onPartyAction(result => {
@@ -962,7 +973,9 @@ export default function MainMenuScene({
       return
     }
     requestNewGameCreate({
-      kind: profileSave?.integrity === 'local-only' ? 'private-college' : 'global-hub',
+      kind: profileSave?.integrity === 'local-only' || !gameSharedHubEnabled(gameSettings)
+        ? 'private-college'
+        : 'global-hub',
     })
   }
 
@@ -1006,7 +1019,9 @@ export default function MainMenuScene({
         updateGameSettings({ ...gameSettings, enableCheats: false })
       }
       requestNewGameCreate({
-        kind: profileSave?.integrity === 'local-only' ? 'private-college' : 'global-hub',
+        kind: profileSave?.integrity === 'local-only' || !gameSharedHubEnabled(gameSettings)
+          ? 'private-college'
+          : 'global-hub',
       }, [])
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'Vanilla play could not be prepared.')
@@ -1054,6 +1069,10 @@ export default function MainMenuScene({
   }
 
   const resolveParty = (resolution: PartyJoinResolution) => {
+    if (resolution.target.kind === 'global-hub' && !gameSharedHubEnabled(gameSettings)) {
+      setConnectionError('The shared Hub is disabled in Game Settings.')
+      return
+    }
     if (
       resolution.target.kind === 'global-hub'
       && activeMods.length === 0
@@ -1101,6 +1120,11 @@ export default function MainMenuScene({
 
   const continueParty = async () => {
     if (!partyConsent || routingBusy) return
+    if (partyConsent.target.kind === 'global-hub' && !gameSharedHubEnabled(gameSettings)) {
+      setPartyConsent(null)
+      setConnectionError('The shared Hub is disabled in Game Settings.')
+      return
+    }
     setRoutingBusy(true)
     setContentProgress(null)
     try {
@@ -1176,10 +1200,14 @@ export default function MainMenuScene({
         fallback: resumeSave.integrity === 'local-only'
           || activeMods.length > 0
           || cheatsEnabled
+          || !gameSharedHubEnabled(gameSettings)
           ? 'private-college'
           : 'global-hub',
         kind: 'resume',
-        partyRejoinToken: resumeSave.summary.partyRejoinToken,
+        partyRejoinToken: resumeSave.integrity === 'global-clean'
+          && !gameSharedHubEnabled(gameSettings)
+          ? null
+          : resumeSave.summary.partyRejoinToken,
         saveDocument: resumeSave.document,
       })
       const nextSession = await connectSession(
@@ -1318,7 +1346,9 @@ export default function MainMenuScene({
         await refreshActiveMods()
       }
       if (cheatsEnabled) updateGameSettings({ ...gameSettings, enableCheats: false })
-      await prepareGame({ kind: 'global-hub' })
+      await prepareGame({
+        kind: gameSharedHubEnabled(gameSettings) ? 'global-hub' : 'private-college',
+      })
       const nextSession = await connectSession(
         {
           discipline: 'arcane',
@@ -1879,16 +1909,24 @@ export default function MainMenuScene({
         ) : null}
 
         {session && runtimeSnapshot && runtimeRunPhase !== 'game-over' && !tutorialSession ? (
-          <GameChat
-            disabled={chatDisabled}
-            onOpenChange={setChatOpen}
-            onWhisperRequestHandled={() => setWhisperRequest(null)}
-            openKeyCode={gameSettings.controls.openChat}
-            partyState={partyState}
-            session={session}
-            whisperRequest={whisperRequest}
-            worldKind={runtimeSnapshot.world.kind}
-          />
+          <Suspense fallback={null}>
+            <GameChat
+              disabled={chatDisabled}
+              globalChatEnabled={gameOnlinePreferences(gameSettings).globalChat}
+              onGlobalChatEnabledChange={(enableGlobalChat) => requestGameSettingsUpdate({
+                ...gameSettings,
+                ...(enableGlobalChat ? { enableOnlineFeatures: true } : {}),
+                enableGlobalChat,
+              })}
+              onOpenChange={setChatOpen}
+              onWhisperRequestHandled={() => setWhisperRequest(null)}
+              openKeyCode={gameSettings.controls.openChat}
+              partyState={partyState}
+              session={session}
+              whisperRequest={whisperRequest}
+              worldKind={runtimeSnapshot.world.kind}
+            />
+          </Suspense>
         ) : null}
 
         {session && skillBookOpen && runtimeProgression ? (

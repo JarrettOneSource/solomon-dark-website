@@ -32,7 +32,9 @@ the Website no longer owns a DLL loader, custom-protocol launcher hand-off,
 native-lobby directory, or native-save ZIP service.
 
 Browser play has no launcher lobby namespace or URL join. New Game first
-chooses global-Hub versus private-College intent. A participant whose durable
+chooses global-Hub versus private-College intent. The browser-local Shared Hub
+preference selects a private College when disabled; an explicit public-party
+join cannot bypass that choice. A participant whose durable
 first-story admission is pending enters the interactive Office before Create;
 all later generations enter Create directly. The accepted discipline starts the loading
 barrier; only behind it does the page request one single-use ticket. Mods,
@@ -95,15 +97,33 @@ same durable recovery path spins it up on demand.
 
 The same authenticated gameplay connection carries ephemeral text chat. A
 public-Hub singleton sees Global; a grouped Hub participant defaults to Party
-and may switch to Global; a Boneyard defaults to Party. Global reaches only
-clients currently resident in the shared Hub. Party reaches only current
-members of the sender's authoritative party, across the Hub-to-run transition.
-A Whisper is an explicit one-to-one request: the client supplies a target
-player id, while the host derives the sender, resolves one currently connected
-target on the same host, and echoes the authoritative event to exactly that
-pair. The Hub player projection is the only target-discovery surface; there is
-no cross-host directory, transcript service, offline delivery, or chat
+and may switch to Global. Entering a Boneyard exposes and initially selects a
+match-owned Boneyard channel; later manual channel choices survive chat
+close/reopen while that world remains active. Global reaches every opted-in
+authenticated participant on the process-wide shared-Hub host, whether that
+participant is in the Hub or any party run. Party reaches only current party
+members in the Hub. Boneyard reaches only participants in the sender's exact
+live run. A Whisper is an explicit one-to-one request: the client supplies a
+target player id, while the host derives the sender, resolves one currently
+connected target on the same host, and echoes the authoritative event to
+exactly that pair. Selecting Boneyard does not suspend Global or Whisper
+receipt; those events continue into their bounded channel histories and unread
+counts. The Hub player projection is the only target-discovery surface; there
+is no cross-host directory, transcript service, offline delivery, or chat
 persistence in saves.
+
+Browser-local Online Features settings own four subordinate choices. The
+master is an effective gate over Activity Messages, Global Chat, Shared Hub,
+and Submit Runs to Server while retaining the child choices for a later
+re-enable. Global Chat has the same persisted control beside its chat tab.
+Effective activity requires both Activity Messages and Global Chat: the actor
+then emits, and opted-in recipients receive, the exact host-authored College
+join, ordinary Boneyard-start, and disconnect lines. Effective Submit Runs is
+sent at authentication and on live settings changes; it gates only that
+player's future signed global receipt and shared Memoratorium portrait. Local
+Hall recording and every teammate's eligibility are independent. Shared Hub
+changes apply to the next admission rather than migrating a live wizard
+between authoritative hosts.
 
 The same authoritative chat event also feeds a client-local world-speech
 projection. It keeps at most the newest event per sender, joins the host-authored
@@ -325,6 +345,13 @@ checkpoint state.
 Protocol 91 adds the run-owned `party-rejoin-wait` resume-grace reason. It uses
 the existing sequence-qualified renderer-ready intent and nullable countdown;
 it adds no client pause vote and changes no save shape.
+Protocol 92 widens chat with the `boneyard` channel, host-authored semantic
+Global activity events, a required complete effective online-preference set in
+`client-hello`, and an authenticated runtime preference replacement message.
+Global membership is the opted-in client set of the process-wide shared-Hub
+host rather than Hub-world residency. Boneyard membership is exact live-run
+identity. Preferences remain connection sideband state and never enter world
+snapshots or saves.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
@@ -364,9 +391,11 @@ party-scoped Boneyard simulations. Each socket receives snapshots only for its
 current world instance, while party-control messages remain session-wide.
 The shared Hub world also owns one ten-slot Memoratorium archive. When any
 party run crosses the authoritative Hall archive edge, the world coordinator
-adds every completed participant in deterministic writer order, consumes the
-native marker draw, evicts the smallest persisted slot age, and publishes the
-  new portrait atomically. Party partition/merge, disconnect, and a client-held
+adds each completed participant whose current effective Submit Runs preference
+is enabled, in deterministic writer order. It consumes the native marker draw
+only for an admitted portrait, evicts the smallest persisted slot age, and
+publishes the new portrait atomically. One participant's opt-out does not
+suppress another's portrait. Party partition/merge, disconnect, and a client-held
   save cannot fork or erase that archive. Before the completed state is
   published, the global supervisor atomically replaces its protected state file
   and fsyncs the containing state directory. Supervisor restart hydrates that
@@ -589,7 +618,7 @@ again until an explicit operator reinstall or a different `main` commit.
   input, including primary, secondary, and staff-action families.
 - The shared-Hub Memoratorium is world-owned presentation history, not an
   account leaderboard. Its ten physical Painting slots start with the stock
-  residents and persisted age permutation. A completed run participant freezes
+  residents and persisted age permutation. An opted-in completed run participant freezes
   identity, nullable authenticated account username, equipment appearance,
   heading, scale, capture tick, and the final Hall-owned runtime, wave, level,
   kills, awesomeness, and awesomest-kill facts. Strict-min age eviction supplies
@@ -755,15 +784,16 @@ nonce ping that the host echoes immediately outside the simulation and snapshot
 clocks. The measurement is client-local diagnostics state and never enters an
 authoritative world snapshot.
 
-Protocol 49 adds the chat sideband. Client text is trimmed, nonempty,
+Protocol 49 adds the original chat sideband. Client text is trimmed, nonempty,
 control-character-free, and bounded to 180 UTF-16 code units and 512 UTF-8
 bytes. The host admits five messages per authenticated client in a rolling
 five-second window, returns a bounded rejection for a valid but unavailable or
-rate-limited request, and does not log message content. Global routing requires
-the sender and recipients to remain in the shared Hub; Party routing derives
-the current party membership at receipt time. Chat events are not snapshot
-deltas and gaps in their host-global sequence are expected when other parties
-receive intervening messages.
+rate-limited request, and does not log message content. Protocol 92 replaces
+the original Hub-resident Global and cross-transition Party-run policy with
+process-host Global, Hub Party, and exact-run Boneyard membership. Semantic
+activity shares the same bounded ordered transcript but never becomes world
+speech. Chat events are not snapshot deltas and gaps in their host-global
+sequence are expected when other recipient sets receive intervening messages.
 
 Protocol 50 adds the server-derived player movement multiplier to every player
 frame. It is not client input: the host remains the sole owner of passive,
@@ -998,6 +1028,12 @@ its signature and account id against the caller's JWT, revalidates every Hall
 bound, and persists the sealed values. The browser cannot choose score fields,
 and the client bundle receives neither the supervisor/signing secret nor an
 account-id override.
+
+The connection's current effective Submit Runs preference is a separate
+voluntary output gate. When disabled at that player's completion edge, the host
+does not sign or deliver a receipt for that player and the shared-world
+coordinator does not add that player's Memoratorium portrait. It does not
+change score-integrity taint, local Hall recording, or any teammate's receipt.
 
 Global eligibility starts only on a fresh account-bound global-Hub admission. Initial or
 live ordinary `Enable Cheats` state permanently revokes it for that connection;

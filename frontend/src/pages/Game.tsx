@@ -64,6 +64,7 @@ import {
   shouldOfferStockTutorial,
   type BrowserSaveDetection,
 } from '../game/tutorial-entry.ts'
+import { gameOnlinePreferences, readGameSettings } from '../game/game-settings.ts'
 
 type Readiness = 'loading' | 'ready'
 
@@ -323,6 +324,7 @@ export default function Game() {
         endpoint,
         onFatal: setFatal,
         onDeploymentRestart: saveForDeployment,
+        onlinePreferences: gameOnlinePreferences(readGameSettings()),
         onProgress,
         profile: {
           accountUsername,

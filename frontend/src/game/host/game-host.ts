@@ -82,8 +82,11 @@ import {
   GameProtocolError,
   decodeClientGameMessage,
   encodeGameMessage,
+  gameChatActivityText,
   type GameContentManifest,
+  type GameChatActivity,
   type GameChatChannel,
+  type GameOnlinePreferences,
   type GameSessionKind,
   type GameplayPauseState,
   type GameplayResumeGraceReason,
@@ -445,6 +448,7 @@ interface HostClient {
   hubActivity: HubPlayerActivity | null
   localOnly: boolean
   nativeSource: NativeGameSaveSource | null
+  onlinePreferences: GameOnlinePreferences
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
   leaderboardUserId: number | null
@@ -456,6 +460,7 @@ interface HostClient {
   resumeToken: string
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
+  tutorialEligible: boolean
 }
 
 interface HostObserver {
@@ -1658,6 +1663,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               || (authenticated.content?.manifest.mods.length ?? content.mods.length) > 0
             ),
           nativeSource,
+          onlinePreferences: { ...message.onlinePreferences },
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
           leaderboardUserId: partyRejoinSlot?.leaderboardUserId
@@ -1671,6 +1677,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           resumeToken,
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
+          tutorialEligible: message.save === undefined
+            && !clientCheatsEnabled
+            && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
         }
         clients.set(socket, joinedClient)
         if (!joinedClient.globalScoreEligible && !stagedPartyRejoin) taintActiveRun(joinedClient)
@@ -1783,6 +1792,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             boneyard: playerBoneyard,
           }))
         }
+        if (replacedClient === null && connectedState === sharedWorlds?.hub) {
+          publishPlayerActivity(joinedClient, 'entered-college')
+        }
         if (sharedWorlds || privateParties) broadcastPartyState()
         if (beganResumeGrace) {
           broadcastGameplayResumeGrace(
@@ -1837,6 +1849,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.partyRejoinSlot
         && message.type !== 'client-select-skill'
         && message.type !== 'client-level-up-action'
+        && message.type !== 'client-online-preferences'
         && message.type !== 'client-snapshot-ack'
         && message.type !== 'client-ping'
         && message.type !== 'client-resume-grace-ready'
@@ -1854,6 +1867,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
+        return
+      }
+
+      if (message.type === 'client-online-preferences') {
+        client.onlinePreferences = { ...message.onlinePreferences }
         return
       }
 
@@ -2674,6 +2692,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             return
           }
           if (client.developerAccess) return
+          client.tutorialEligible = false
           client.globalScoreEligible = false
           client.localOnly = true
           taintActiveRun(client)
@@ -2738,6 +2757,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         client.pendingLuaRequestIds.add(message.requestId)
         if (!client.developerAccess) {
+          client.tutorialEligible = false
           client.globalScoreEligible = false
           client.localOnly = true
           taintActiveRun(client)
@@ -2914,7 +2934,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             )
             return
           }
-        } else if (content.mods.length !== 0 || !client.globalScoreEligible) {
+        } else if (content.mods.length !== 0 || !client.tutorialEligible) {
           disconnect(
             socket,
             'invalid-message',
@@ -3225,6 +3245,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'A player disconnected from the game host.',
         disconnectedDetails,
       )
+      publishPlayerActivity(client, 'left-game')
       if (releasedGameplayPause) {
         releaseGameplayPause('owner-disconnected', client.playerId, disconnectedPauseScope)
       } else broadcastSnapshot()
@@ -3341,6 +3362,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ])),
             collegeIntroReadyPlayerIds,
             memorialPlayerProfiles(),
+            memorialEligiblePlayerIds(),
             options.onMemorialStateChanged,
           )
           state = sharedWorlds.hub
@@ -4082,6 +4104,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         playerId,
         { accountUsername: profile.accountUsername },
       ] as const),
+    ])
+  }
+
+  function memorialEligiblePlayerIds(): ReadonlySet<PlayerId> {
+    return new Set([
+      ...[...clients.values()]
+        .filter(client => client.onlinePreferences.submitRuns)
+        .map(client => client.playerId),
+      ...bots.keys(),
     ])
   }
 
@@ -5052,14 +5083,29 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     sender: HostClient,
     channel: GameChatChannel,
   ): readonly HostClient[] | null {
+    const senderState = stateForPlayer(sender.playerId)
     if (channel === 'global') {
-      if (!sharedWorlds || stateForPlayer(sender.playerId).world.kind !== 'hub') return null
+      if (
+        !sharedWorlds
+        || sessionKind !== 'global-hub'
+        || !sender.onlinePreferences.globalChat
+      ) return null
       return [...clients.values()].filter(client => (
-        !client.partyRejoinSlot && stateForPlayer(client.playerId).world.kind === 'hub'
+        !client.partyRejoinSlot
+        && client.onlinePreferences.globalChat
+        && client.socket.readyState === WebSocket.OPEN
       ))
     }
+    if (channel === 'boneyard') {
+      if (senderState.world.kind !== 'boneyard') return null
+      return [...clients.values()].filter(client => (
+        !client.partyRejoinSlot
+        && client.socket.readyState === WebSocket.OPEN
+        && stateForPlayer(client.playerId) === senderState
+      ))
+    }
+    if (senderState.world.kind !== 'hub') return null
     if (!sharedWorlds) {
-      const senderState = stateForPlayer(sender.playerId)
       return [...clients.values()].filter(client => (
         !client.partyRejoinSlot && stateForPlayer(client.playerId) === senderState
       ))
@@ -5067,7 +5113,41 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const party = partyForPlayer(sharedWorlds.parties, sender.playerId)
     if (!party) return null
     const memberPlayerIds = new Set(party.memberPlayerIds)
-    return [...clients.values()].filter(client => memberPlayerIds.has(client.playerId))
+    return [...clients.values()].filter(client => (
+      !client.partyRejoinSlot
+      && client.socket.readyState === WebSocket.OPEN
+      && memberPlayerIds.has(client.playerId)
+    ))
+  }
+
+  function publishPlayerActivity(sender: HostClient, activity: GameChatActivity): void {
+    if (
+      !sharedWorlds
+      || sessionKind !== 'global-hub'
+      || !sender.onlinePreferences.activityMessages
+    ) return
+    const encoded = encodeGameMessage({
+      type: 'server-chat',
+      activity,
+      channel: 'global',
+      sender: {
+        displayName: sender.displayName,
+        playerId: sender.playerId,
+      },
+      sequence: nextChatSequence,
+      text: gameChatActivityText(activity, sender.displayName),
+    })
+    nextChatSequence += 1
+    for (const recipient of clients.values()) {
+      if (
+        recipient.playerId === sender.playerId
+        || recipient.partyRejoinSlot
+        || !recipient.onlinePreferences.activityMessages
+        || !recipient.onlinePreferences.globalChat
+        || recipient.socket.readyState !== WebSocket.OPEN
+      ) continue
+      recipient.socket.send(encoded)
+    }
   }
 
   function chatRateRetryAfter(client: HostClient, nowMs: number): number {
@@ -6169,6 +6249,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const completedRun = completed.world.hallOfFameRuns[client.playerId]
       if (
         userId === null
+        || !client.onlinePreferences.submitRuns
         || !previousRun
         || !completedRun
         || previousRun.elapsedTicks !== null
@@ -6332,6 +6413,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       sharedWorlds = started.state
       state = sharedWorlds.hub
+      const leader = clients.get(socket)
+      if (leader && selected.choice.id !== 'stock-tutorial') {
+        publishPlayerActivity(leader, 'searching-solomon')
+      }
       const run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
       const beganLoadingGrace = beginRunLoadingResumeGrace(
         leaderPlayerId,

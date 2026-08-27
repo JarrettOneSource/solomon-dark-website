@@ -14,6 +14,7 @@ const publicWebSocketOrigin = process.env.SDR_SHARED_HUB_PUBLIC_ORIGIN?.trim()
 const pointerMode = process.env.SDR_SHARED_HUB_POINTER_MODE?.trim() || 'mobile'
 const evidenceRoot = process.env.SDR_SHARED_HUB_EVIDENCE_DIR?.trim()
 const chatLifecycleOnly = process.argv.includes('--chat-lifecycle-only')
+const chatRoutingOnly = process.argv.includes('--chat-routing-only')
 if (Boolean(gatewayUrl) !== Boolean(publicWebSocketOrigin)) {
   throw new Error('SDR_SHARED_HUB_GATEWAY_URL and SDR_SHARED_HUB_PUBLIC_ORIGIN must be set together')
 }
@@ -76,6 +77,21 @@ smokeFlow: try {
     await singletonChatInput.evaluate(node => document.activeElement === node),
     true,
   )
+  const globalToggle = chat.getByRole('checkbox', { name: 'Enable global chat' })
+  assert.equal(await globalToggle.isChecked(), true)
+  await globalToggle.click()
+  await chat.locator('xpath=self::*[@data-chat-global-enabled="false"]').waitFor()
+  assert.equal(await chat.getByRole('textbox', { name: 'Chat message' }).count(), 0)
+  host.sendChat('global', 'Disabled Global must stay hidden')
+  await first.page.waitForTimeout(100)
+  assert.equal(await chat.getByText('Disabled Global must stay hidden', { exact: true }).count(), 0)
+  await globalToggle.click()
+  await chat.locator('xpath=self::*[@data-chat-global-enabled="true"]').waitFor()
+  await first.page.waitForTimeout(50)
+  const restoredGlobal = 'Global returns after checkbox enable'
+  host.sendChat('global', restoredGlobal)
+  await chat.locator('[data-message-channel="global"]', { hasText: restoredGlobal }).waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
   const chatSingletonTabEvidencePath = evidenceRoot
     ? join(evidenceRoot, 'chat-hub-singleton-tab.png')
     : null
@@ -218,9 +234,13 @@ smokeFlow: try {
   ).split(',').includes(playerId), host.playerId)
 
   const memberJoinCountBefore = await socialSoundCount(first.page, 1.25)
+  const memberActivity = chat.locator('[data-message-activity="entered-college"]', {
+    hasText: 'Cassia has entered the college.',
+  })
   const member = await enterRawHub('Cassia', 'water')
   await waitForPlayers(first.page, 3)
   await waitForSocialSoundCount(first.page, 1.25, memberJoinCountBefore + 1)
+  await memberActivity.waitFor()
   host.invitePlayer(member.playerId)
   const memberInvitation = await member.next((message) => (
     message.type === 'server-party-state' && message.state.invitations.length === 1
@@ -240,13 +260,21 @@ smokeFlow: try {
   assert.equal(outsiderParty.state.party.leaderPlayerId, outsider.playerId)
 
   const visitorJoinCountBefore = await socialSoundCount(first.page, 1.25)
+  const visitorEntered = chat.locator('[data-message-activity="entered-college"]', {
+    hasText: 'Fausta has entered the college.',
+  })
   const visitor = await enterRawHub('Fausta', 'ether')
   await waitForPlayers(first.page, 5)
   await waitForSocialSoundCount(first.page, 1.25, visitorJoinCountBefore + 1)
+  await visitorEntered.waitFor()
   const visitorLeaveCountBefore = await socialSoundCount(first.page, 0.85)
+  const visitorLeft = chat.locator('[data-message-activity="left-game"]', {
+    hasText: 'Fausta has left the game.',
+  })
   await visitor.close()
   await waitForPlayers(first.page, 4)
   await waitForSocialSoundCount(first.page, 0.85, visitorLeaveCountBefore + 1)
+  await visitorLeft.waitFor()
 
   const hostMessageCountBeforeWhisper = host.chatMessages.length
   const memberMessageCountBeforeWhisper = member.chatMessages.length
@@ -471,9 +499,27 @@ smokeFlow: try {
     'member Boneyard materialization',
   )
   const observerDepartureSoundsBefore = await socialSoundCount(observer.page, 0.85)
+  const searchingActivity = chat.locator('[data-message-activity="searching-solomon"]', {
+    hasText: 'Basil is searching for Solomon.',
+  })
   host.startMatch('default-random')
   await firstBoneyard.waitFor({ timeout: 240_000 })
+  await searchingActivity.waitFor({ state: 'attached' })
   const [hostRun, memberRun] = await Promise.all([hostLoaded, memberLoaded])
+  const [hostResumeGrace, memberResumeGrace] = await Promise.all([
+    host.next((message) => (
+      message.type === 'server-gameplay-resume-grace'
+      && message.grace?.reason === 'game-started'
+      && message.grace.remainingMs === null
+    ), 'host Boneyard resume readiness'),
+    member.next((message) => (
+      message.type === 'server-gameplay-resume-grace'
+      && message.grace?.reason === 'game-started'
+      && message.grace.remainingMs === null
+    ), 'member Boneyard resume readiness'),
+  ])
+  host.readyResumeGrace(hostResumeGrace.grace.sequence)
+  member.readyResumeGrace(memberResumeGrace.grace.sequence)
   await waitForPlayers(observer.page, 2)
   await waitForSocialSoundCount(
     observer.page,
@@ -492,20 +538,22 @@ smokeFlow: try {
   ), 'member Boneyard snapshot')
   const hostRunX = hostBoneyard.frame.players[host.playerId].position.x
   const memberRunX = memberBoneyard.frame.players[member.playerId].position.x
-  host.sendInput(hostBoneyard.frame.tick + 1, 3, { x: -1, y: 0 })
-  member.sendInput(memberBoneyard.frame.tick + 1, 1, { x: 1, y: 0 })
-  const hostSeparated = await host.next((message) => (
-    message.type === 'server-snapshot'
-    && message.frame.world.kind === 'boneyard'
-    && message.frame.players[host.playerId]?.position.x < hostRunX - 60
-  ), 'host Boneyard separation')
-  const memberSeparated = await member.next((message) => (
-    message.type === 'server-snapshot'
-    && message.frame.world.kind === 'boneyard'
-    && message.frame.players[member.playerId]?.position.x > memberRunX + 60
-  ), 'member Boneyard separation')
-  host.sendInput(hostSeparated.frame.tick + 1, 4, { x: 0, y: 0 })
-  member.sendInput(memberSeparated.frame.tick + 1, 2, { x: 0, y: 0 })
+  if (!chatRoutingOnly) {
+    host.sendInput(hostBoneyard.frame.tick + 1, 3, { x: -1, y: 0 })
+    member.sendInput(memberBoneyard.frame.tick + 1, 1, { x: 1, y: 0 })
+    const hostSeparated = await host.next((message) => (
+      message.type === 'server-snapshot'
+      && message.frame.world.kind === 'boneyard'
+      && message.frame.players[host.playerId]?.position.x < hostRunX - 60
+    ), 'host Boneyard separation')
+    const memberSeparated = await member.next((message) => (
+      message.type === 'server-snapshot'
+      && message.frame.world.kind === 'boneyard'
+      && message.frame.players[member.playerId]?.position.x > memberRunX + 60
+    ), 'member Boneyard separation')
+    host.sendInput(hostSeparated.frame.tick + 1, 4, { x: 0, y: 0 })
+    member.sendInput(memberSeparated.frame.tick + 1, 2, { x: 0, y: 0 })
+  }
   await first.page.waitForTimeout(250)
   const boneyardLighting = await firstBoneyard.evaluate((scene) => {
     const canvas = scene.querySelector('.boneyard-environment-light')
@@ -533,7 +581,7 @@ smokeFlow: try {
     }
   })
   const boneyardEvidencePath = evidenceRoot ? join(evidenceRoot, 'boneyard-nameplates.png') : null
-  if (boneyardLighting.present) {
+  if (boneyardLighting.present && !chatRoutingOnly) {
     assert.ok(
       boneyardLighting.maximumAlpha <= 28,
       `overlapping direct player light reached alpha ${boneyardLighting.maximumAlpha}`,
@@ -553,29 +601,30 @@ smokeFlow: try {
     })
   }
 
+  await firstBoneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
   await first.page.keyboard.press('t')
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
-  assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
-  assert.equal(await chat.getAttribute('data-chat-channels'), 'party,whisper')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'boneyard')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'boneyard,global,whisper')
   await firstBoneyard.locator('xpath=self::*[@data-gameplay-input-blocked="true"]').waitFor({
     timeout: 5_000,
   })
   const runChatInput = chat.getByRole('textbox', { name: 'Chat message' })
   const hostRunChat = host.next((message) => (
-    message.type === 'server-chat' && message.text === 'Party run hello'
-  ), 'host run chat')
+    message.type === 'server-chat' && message.text === 'Boneyard run hello'
+  ), 'host Boneyard chat')
   const memberRunChat = member.next((message) => (
-    message.type === 'server-chat' && message.text === 'Party run hello'
-  ), 'member run chat')
+    message.type === 'server-chat' && message.text === 'Boneyard run hello'
+  ), 'member Boneyard chat')
   const outsiderMessageCountBeforeRunChat = outsider.chatMessages.length
   const ownRunChatSoundBefore = await socialSoundCount(first.page, 1.1)
   const ownRunChatUnreadBefore = await chatUnreadTotal(chat)
-  await runChatInput.fill('Party run hello')
+  await runChatInput.fill('Boneyard run hello')
   await runChatInput.press('Enter')
   await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
   await Promise.all([hostRunChat, memberRunChat])
-  const runChatEntry = chat.locator('[data-message-channel="party"]', {
-    hasText: 'Party run hello',
+  const runChatEntry = chat.locator('[data-message-channel="boneyard"]', {
+    hasText: 'Boneyard run hello',
   })
   await runChatEntry.waitFor()
   await waitForSocialSoundCount(first.page, 1.1, ownRunChatSoundBefore + 1)
@@ -593,11 +642,40 @@ smokeFlow: try {
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   const reopenedRunChatInput = chat.getByRole('textbox', { name: 'Chat message' })
   await reopenedRunChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  await reopenedRunChatInput.press('Escape')
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  outsider.sendChat('global', 'Daria reaches every Boneyard')
+  await chat.locator('[data-message-channel="global"]', {
+    hasText: 'Daria reaches every Boneyard',
+  }).waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  const persistedRunChatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await persistedRunChatInput.press('Tab')
   assert.equal(await chat.getAttribute('data-chat-channel'), 'whisper')
-  await reopenedRunChatInput.press('Tab')
-  assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
+  await persistedRunChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'boneyard')
+  const boneyardWhisperUnreadBefore = await chatUnreadTotal(chat)
+  outsider.sendChat('whisper', 'Private message during the run', first.playerId)
+  await first.page.waitForFunction((minimum) => (
+    Number(document.querySelector('.game-chat')?.getAttribute('data-chat-unread-total')) > minimum
+  ), boneyardWhisperUnreadBefore)
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'boneyard')
+  await persistedRunChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  await persistedRunChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'whisper')
+  await chat.locator('[data-message-channel="whisper"]', {
+    hasText: 'Private message during the run',
+  }).waitFor()
+  await persistedRunChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'boneyard')
+  await persistedRunChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
   const chatBoneyardEvidencePath = evidenceRoot
-    ? join(evidenceRoot, 'chat-boneyard-party.png')
+    ? join(evidenceRoot, 'chat-boneyard-global.png')
     : null
   if (chatBoneyardEvidencePath) await first.page.screenshot({ path: chatBoneyardEvidencePath })
   await reopenedRunChatInput.press('Escape')
@@ -637,6 +715,7 @@ smokeFlow: try {
   const finalHealth = await waitForEmptyHealth()
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
+    chatRoutingOnly,
     pointerMode,
     partyLeaderPlayerId: host.playerId,
     browserPartyMemberPlayerId: first.playerId,
@@ -773,7 +852,7 @@ async function activatePlayer(client, targetPlayerId) {
   assert.ok(target.position, `missing screen position for ${targetPlayerId}`)
   const bounds = await canvas.boundingBox()
   assert.ok(bounds)
-  const x = bounds.x + (target.position.x - 48) * bounds.width / target.logicalWidth
+  const x = bounds.x + target.position.x * bounds.width / target.logicalWidth
   const y = bounds.y + target.position.y * bounds.height / target.logicalHeight
   if (client.touch) await client.page.touchscreen.tap(x, y)
   else await client.page.mouse.click(x, y)
@@ -803,6 +882,7 @@ async function enterRawHub(displayName, element) {
   })
   socket.send(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -833,6 +913,9 @@ async function enterRawHub(displayName, element) {
     },
     next,
     playerId: welcome.playerId,
+    readyResumeGrace(sequence) {
+      socket.send(JSON.stringify({ type: 'client-resume-grace-ready', sequence }))
+    },
     sendInput(targetTick, sequence, movement) {
       socket.send(JSON.stringify({
         type: 'client-input',

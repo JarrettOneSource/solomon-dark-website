@@ -30,37 +30,51 @@ const hudSkillSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.m
 const pauseMenu = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
 const mainMenuCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 
-test('chat channels follow public Hub party membership and Boneyard scope', () => {
-  assert.deepEqual(availableGameChatChannels('hub', singleton), ['global'])
-  assert.equal(defaultGameChatChannel('hub', singleton), 'global')
-  assert.deepEqual(availableGameChatChannels('hub', grouped), ['party', 'global'])
-  assert.equal(defaultGameChatChannel('hub', grouped), 'party')
-  assert.deepEqual(availableGameChatChannels('boneyard', grouped), ['party'])
-  assert.deepEqual(availableGameChatChannels('hub', null), ['party'])
+test('chat channels follow host-wide Global, Hub Party, and exact Boneyard scope', () => {
+  assert.deepEqual(availableGameChatChannels('hub', singleton, 'global-hub'), ['global'])
+  assert.equal(defaultGameChatChannel('hub', singleton, 'global-hub'), 'global')
+  assert.deepEqual(
+    availableGameChatChannels('hub', grouped, 'global-hub'),
+    ['party', 'global'],
+  )
+  assert.equal(defaultGameChatChannel('hub', grouped, 'global-hub'), 'party')
+  assert.deepEqual(
+    availableGameChatChannels('boneyard', grouped, 'global-hub'),
+    ['boneyard', 'global'],
+  )
+  assert.equal(defaultGameChatChannel('boneyard', grouped, 'global-hub'), 'boneyard')
+  assert.deepEqual(
+    availableGameChatChannels('boneyard', grouped, 'private-college'),
+    ['boneyard'],
+  )
+  assert.deepEqual(availableGameChatChannels('hub', null, 'standalone'), ['party'])
 })
 
 test('whisper channel appears exactly while a whisper thread is open', () => {
   assert.deepEqual(
-    availableGameChatChannels('hub', singleton, true),
+    availableGameChatChannels('hub', singleton, 'global-hub', true),
     ['global', 'whisper'],
   )
   assert.deepEqual(
-    availableGameChatChannels('hub', grouped, true),
+    availableGameChatChannels('hub', grouped, 'global-hub', true),
     ['party', 'global', 'whisper'],
   )
   assert.deepEqual(
-    availableGameChatChannels('boneyard', grouped, true),
-    ['party', 'whisper'],
+    availableGameChatChannels('boneyard', grouped, 'global-hub', true),
+    ['boneyard', 'global', 'whisper'],
   )
-  assert.deepEqual(availableGameChatChannels('hub', grouped, false), ['party', 'global'])
-  const channels = availableGameChatChannels('hub', grouped, true)
+  assert.deepEqual(
+    availableGameChatChannels('hub', grouped, 'global-hub', false),
+    ['party', 'global'],
+  )
+  const channels = availableGameChatChannels('hub', grouped, 'global-hub', true)
   assert.equal(nextGameChatChannel('global', channels), 'whisper')
   assert.equal(nextGameChatChannel('whisper', channels), 'party')
   assert.equal(reconcileGameChatChannel('whisper', ['party', 'global']), 'party')
 })
 
 test('Tab cycling and channel reconciliation stay inside current membership', () => {
-  const channels = availableGameChatChannels('hub', grouped)
+  const channels = availableGameChatChannels('hub', grouped, 'global-hub')
   assert.equal(nextGameChatChannel('party', channels), 'global')
   assert.equal(nextGameChatChannel('global', channels), 'party')
   assert.equal(nextGameChatChannel('global', ['global']), 'global')
@@ -83,6 +97,20 @@ test('chat history is ordered, duplicate-safe, and bounded', () => {
   assert.equal(messages[0]!.sequence, 3)
   assert.equal(messages.at(-1)?.sequence, GAME_CHAT_HISTORY_LIMIT + 2)
   assert.equal(appendGameChatMessage(messages, messages.at(-1)!), messages)
+})
+
+test('host-authored activity shares Global history without becoming player speech', () => {
+  const activity = {
+    activity: 'entered-college',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 1,
+    text: 'Aurelia has entered the college.',
+  } as const
+  assert.deepEqual(appendGameChatMessage([], activity), [activity])
+  assert.equal(shouldIncrementGameChatUnread(activity, 'player-1', false, 'boneyard'), true)
+  assert.match(component, /message\.activity/)
+  assert.match(mainMenu, /if \(message\.activity !== undefined\) return/)
 })
 
 test('chat cue is owned by the deduplicated authoritative delivery, never draft submit', () => {
@@ -144,11 +172,12 @@ test('closed chat counts only remote messages as unread', () => {
 })
 
 test('chat UI owns its configured key, real text focus, Tab channels, fade, and local gameplay exclusion', () => {
+  assert.match(mainMenu, /const GameChat = lazy\(\(\) => import\('\.\/GameChat\.tsx'\)\)/)
   assert.match(component, /event\.code !== openKeyCode/)
   assert.match(component, /<input/)
   assert.match(
     component,
-    /if \(event\.key === 'Tab'\) \{\s*event\.preventDefault\(\)\s*event\.stopPropagation\(\)\s*chooseChannel/,
+    /if \(event\.key === 'Tab'\) \{\s*event\.preventDefault\(\)\s*event\.stopPropagation\(\)[\s\S]*?const enabledChannels[\s\S]*?chooseChannel/,
   )
   assert.match(component, /aria-live="polite"/)
   assert.match(component, /aria-label="Open chat"/)
@@ -247,6 +276,15 @@ test('whisper UX runs from the Player Card into a dedicated chat thread', () => 
   assert.match(hubScene, /onMessagePlayer\(/)
   assert.match(mainMenu, /whisperRequest=/)
   assert.match(mainMenu, /onWhisperRequestHandled=/)
+})
+
+test('Global has an adjacent persisted receive checkbox and Boneyard selection is session-owned', () => {
+  assert.match(component, /aria-label="Enable global chat"/)
+  assert.match(component, /onGlobalChatEnabledChange/)
+  assert.match(component, /data-chat-global-enabled=/)
+  assert.match(css, /game-chat-global-toggle/)
+  assert.match(component, /worldChanged[\s\S]*defaultGameChatChannel/)
+  assert.match(component, /chooseChannel[\s\S]*setChannel/)
 })
 
 function partyState(memberPlayerIds: readonly string[]): LocalPartyState {

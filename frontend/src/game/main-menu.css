@@ -533,6 +533,22 @@
   outline-offset: -1px;
 }
 
+.game-settings-native-toggle-row[data-settings-nested='true'] {
+  padding-left: 30px;
+  color: #c4b176;
+  font-size: 14px;
+}
+
+.game-settings-native-toggle-row:disabled {
+  color: #746c58;
+  cursor: default;
+  background: #070706;
+}
+
+.game-settings-native-toggle-row:disabled .game-settings-native-toggle {
+  opacity: 0.58;
+}
+
 .game-settings-native-toggle {
   display: block;
   width: 82px;

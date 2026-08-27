@@ -640,6 +640,7 @@ async function enterRawPlayer(displayName, element) {
   const next = messageQueue(socket, displayName)
   socket.send(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,

@@ -99,6 +99,29 @@ try {
   assert.equal(await dialog.getAttribute('data-settings-context'), 'title')
   assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
   assert.equal(await dialog.getByText('RESOLUTION', { exact: true }).count(), 0)
+  const onlineMaster = dialog.getByRole('button', { name: 'ENABLE ONLINE FEATURES' })
+  const onlineChildren = [
+    'ENABLE ACTIVITY MESSAGES',
+    'ENABLE GLOBAL CHAT',
+    'ENABLE SHARED HUB',
+    'SUBMIT RUNS TO SERVER',
+  ].map(name => dialog.getByRole('button', { name }))
+  assert.equal(await onlineMaster.getAttribute('aria-pressed'), 'true')
+  for (const child of onlineChildren) {
+    assert.equal(await child.getAttribute('aria-pressed'), 'true')
+    assert.equal(await child.isEnabled(), true)
+  }
+  await onlineMaster.click()
+  assert.equal(await onlineMaster.getAttribute('aria-pressed'), 'false')
+  for (const child of onlineChildren) {
+    assert.equal(await child.getAttribute('aria-pressed'), 'false')
+    assert.equal(await child.isDisabled(), true)
+  }
+  await onlineMaster.click()
+  for (const child of onlineChildren) {
+    assert.equal(await child.getAttribute('aria-pressed'), 'true')
+    assert.equal(await child.isEnabled(), true)
+  }
   await setRange(dialog.getByRole('slider', { name: 'SOUND VOL:' }), 65)
   await setRange(dialog.getByRole('slider', { name: 'MUSIC VOL:' }), 40)
   await setRange(dialog.getByRole('slider', { name: 'CAMERA FOV' }), 125)
@@ -160,6 +183,13 @@ try {
     openSkills: persistedTitle.controls.openSkills,
     moveRight: persistedTitle.controls.moveRight,
     musicVolumePercent: persistedTitle.musicVolumePercent,
+    online: {
+      activity: persistedTitle.enableActivityMessages,
+      globalChat: persistedTitle.enableGlobalChat,
+      master: persistedTitle.enableOnlineFeatures,
+      sharedHub: persistedTitle.enableSharedHub,
+      submitRuns: persistedTitle.submitRunsToServer,
+    },
     soundVolumePercent: persistedTitle.soundVolumePercent,
     uiScalePercent: persistedTitle.uiScalePercent,
   }, {
@@ -170,6 +200,13 @@ try {
     openSkills: 'KeyT',
     moveRight: 'KeyZ',
     musicVolumePercent: 40,
+    online: {
+      activity: true,
+      globalChat: true,
+      master: true,
+      sharedHub: true,
+      submitRuns: true,
+    },
     soundVolumePercent: 65,
     uiScalePercent: 150,
   })
@@ -250,7 +287,9 @@ try {
   }
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
-  const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  const boneyardScene = page.locator(
+    '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
+  )
   const boneyardPicker = page.locator('.hub-boneyard-picker')
   const firstBoneyardOption = page.locator('.hub-boneyard-option').first()
   await Promise.race([

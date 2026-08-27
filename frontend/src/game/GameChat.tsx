@@ -40,6 +40,8 @@ export interface GameChatWhisperRequest {
 
 interface GameChatProps {
   disabled: boolean
+  globalChatEnabled: boolean
+  onGlobalChatEnabledChange: (enabled: boolean) => void
   onOpenChange: (open: boolean) => void
   onWhisperRequestHandled: () => void
   openKeyCode: string
@@ -51,12 +53,14 @@ interface GameChatProps {
 
 type UnreadCounts = Record<GameChatChannel, number>
 
-const EMPTY_UNREAD: UnreadCounts = { global: 0, party: 0, whisper: 0 }
+const EMPTY_UNREAD: UnreadCounts = { boneyard: 0, global: 0, party: 0, whisper: 0 }
 const CLOSED_MESSAGE_LIMIT = 5
 const PINNED_SCROLL_SLACK_PX = 48
 
 export default function GameChat({
   disabled,
+  globalChatEnabled,
+  onGlobalChatEnabledChange,
   onOpenChange,
   onWhisperRequestHandled,
   openKeyCode,
@@ -67,11 +71,16 @@ export default function GameChat({
 }: GameChatProps) {
   const [whisperTarget, setWhisperTarget] = useState<GameChatSender | null>(null)
   const channels = useMemo(
-    () => availableGameChatChannels(worldKind, partyState, whisperTarget !== null),
-    [partyState, whisperTarget, worldKind],
+    () => availableGameChatChannels(
+      worldKind,
+      partyState,
+      session.sessionKind,
+      whisperTarget !== null,
+    ),
+    [partyState, session.sessionKind, whisperTarget, worldKind],
   )
   const [channel, setChannel] = useState<GameChatChannel>(() => (
-    defaultGameChatChannel(worldKind, partyState)
+    defaultGameChatChannel(worldKind, partyState, session.sessionKind)
   ))
   const [draft, setDraft] = useState('')
   const [lastActivityAtMs, setLastActivityAtMs] = useState(() => Date.now())
@@ -85,6 +94,7 @@ export default function GameChat({
   ))
   const channelRef = useRef(channel)
   const draftRef = useRef(draft)
+  const globalToggleRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const manuallySelectedChannelRef = useRef(false)
   const messageListRef = useRef<HTMLOListElement>(null)
@@ -111,12 +121,15 @@ export default function GameChat({
     })
   }, [markActivity])
 
-  const filteredMessages = messages.filter(message => message.channel === channel)
+  const enabledMessages = globalChatEnabled
+    ? messages
+    : messages.filter(message => message.channel !== 'global')
+  const filteredMessages = enabledMessages.filter(message => message.channel === channel)
   const visibleMessages = open
     ? filteredMessages
-    : messages.slice(-CLOSED_MESSAGE_LIMIT)
+    : enabledMessages.slice(-CLOSED_MESSAGE_LIMIT)
   const faded = isGameChatFaded(open, lastActivityAtMs, nowMs)
-  const totalUnread = unread.party + unread.global + unread.whisper
+  const totalUnread = unread.boneyard + unread.party + unread.global + unread.whisper
 
   useEffect(() => {
     setMessages(session.getChatMessages())
@@ -126,8 +139,13 @@ export default function GameChat({
     setOpen(false)
     setWhisperTarget(null)
     manuallySelectedChannelRef.current = false
-    setChannel('party')
-    channelRef.current = 'party'
+    const initialChannel = defaultGameChatChannel(
+      session.getSnapshot().world.kind,
+      session.getPartyState(),
+      session.sessionKind,
+    )
+    setChannel(initialChannel)
+    channelRef.current = initialChannel
     previousGroupedRef.current = false
     previousWorldRef.current = null
     markActivity()
@@ -184,7 +202,7 @@ export default function GameChat({
     const grouped = channels.length > 1
     const becameGrouped = grouped && !previousGroupedRef.current
     if (worldChanged || (becameGrouped && !manuallySelectedChannelRef.current)) {
-      const next = defaultGameChatChannel(worldKind, partyState)
+      const next = defaultGameChatChannel(worldKind, partyState, session.sessionKind)
       channelRef.current = next
       setChannel(next)
       manuallySelectedChannelRef.current = false
@@ -199,6 +217,16 @@ export default function GameChat({
     previousGroupedRef.current = grouped
     previousWorldRef.current = worldKind
   }, [channels, partyState, session, worldKind])
+
+  useEffect(() => {
+    if (globalChatEnabled) return
+    setUnread(current => current.global === 0 ? current : { ...current, global: 0 })
+    if (channelRef.current !== 'global') return
+    const fallback = channels.find(candidate => candidate !== 'global')
+    if (!fallback) return
+    channelRef.current = fallback
+    setChannel(fallback)
+  }, [channels, globalChatEnabled])
 
   useEffect(() => {
     if (!disabled || !open) return
@@ -235,7 +263,8 @@ export default function GameChat({
 
   useEffect(() => {
     if (open) {
-      inputRef.current?.focus({ preventScroll: true })
+      if (inputRef.current) inputRef.current.focus({ preventScroll: true })
+      else globalToggleRef.current?.focus({ preventScroll: true })
       return
     }
     const remainingMs = GAME_CHAT_INACTIVITY_HOLD_MS - (Date.now() - lastActivityAtMs)
@@ -245,7 +274,7 @@ export default function GameChat({
     }
     const timeout = window.setTimeout(() => setNowMs(Date.now()), remainingMs + 1)
     return () => window.clearTimeout(timeout)
-  }, [lastActivityAtMs, open])
+  }, [channel, globalChatEnabled, lastActivityAtMs, open])
 
   useEffect(() => {
     if (!open) return
@@ -327,7 +356,13 @@ export default function GameChat({
     if (event.key === 'Tab') {
       event.preventDefault()
       event.stopPropagation()
-      chooseChannel(nextGameChatChannel(channel, channels))
+      const enabledChannels = globalChatEnabled
+        ? channels
+        : channels.filter(candidate => candidate !== 'global')
+      chooseChannel(nextGameChatChannel(
+        channel,
+        enabledChannels.length > 0 ? enabledChannels : channels,
+      ))
       return
     }
     event.stopPropagation()
@@ -352,6 +387,7 @@ export default function GameChat({
       data-chat-channel={channel}
       data-chat-channels={channels.join(',')}
       data-chat-faded={faded}
+      data-chat-global-enabled={globalChatEnabled}
       data-chat-open={open}
       data-chat-unread-total={totalUnread}
       data-whisper-target={whisperTarget?.playerId}
@@ -372,23 +408,37 @@ export default function GameChat({
           <header className="game-chat-header">
             <div className="game-chat-tabs" role="tablist" aria-label="Chat channel">
               {channels.map(candidate => (
-                <button
-                  aria-selected={candidate === channel}
-                  className="game-chat-tab"
-                  data-channel={candidate}
-                  key={candidate}
-                  onClick={() => chooseChannel(candidate)}
-                  role="tab"
-                  tabIndex={open && candidate === channel ? 0 : -1}
-                  type="button"
-                >
-                  {channelLabel(candidate)}
-                  {unread[candidate] > 0 ? (
-                    <span className="game-chat-unread" aria-label={`${unread[candidate]} unread`}>
-                      {unread[candidate]}
-                    </span>
+                <span className="game-chat-tab-wrap" data-channel={candidate} key={candidate}>
+                  <button
+                    aria-selected={candidate === channel}
+                    className="game-chat-tab"
+                    data-channel={candidate}
+                    disabled={candidate === 'global' && !globalChatEnabled}
+                    onClick={() => chooseChannel(candidate)}
+                    role="tab"
+                    tabIndex={open && candidate === channel ? 0 : -1}
+                    type="button"
+                  >
+                    {channelLabel(candidate)}
+                    {unread[candidate] > 0 ? (
+                      <span className="game-chat-unread" aria-label={`${unread[candidate]} unread`}>
+                        {unread[candidate]}
+                      </span>
+                    ) : null}
+                  </button>
+                  {candidate === 'global' ? (
+                    <label className="game-chat-global-toggle">
+                      <input
+                        aria-label="Enable global chat"
+                        checked={globalChatEnabled}
+                        onChange={event => onGlobalChatEnabledChange(event.currentTarget.checked)}
+                        ref={globalToggleRef}
+                        type="checkbox"
+                      />
+                      <span aria-hidden="true" />
+                    </label>
                   ) : null}
-                </button>
+                </span>
               ))}
             </div>
             <button
@@ -415,26 +465,35 @@ export default function GameChat({
         >
           {visibleMessages.length === 0 && open ? (
             <li className="game-chat-empty">
-              {`No ${channelLabel(channel).toLowerCase()} messages yet.`}
+              {channel === 'global' && !globalChatEnabled
+                ? 'Global chat is disabled.'
+                : `No ${channelLabel(channel).toLowerCase()} messages yet.`}
             </li>
           ) : visibleMessages.map(message => (
             <li
               className="game-chat-message"
+              data-message-activity={message.activity}
               data-message-channel={message.channel}
               data-message-sequence={message.sequence}
               data-recipient-player-id={message.recipient?.playerId}
               data-sender-player-id={message.sender.playerId}
               key={message.sequence}
             >
-              <strong>{messageAuthorLabel(message, session.playerId)}</strong>
-              <span>{message.text}</span>
+              {message.activity ? (
+                <span className="game-chat-activity">{message.text}</span>
+              ) : (
+                <>
+                  <strong>{messageAuthorLabel(message, session.playerId)}</strong>
+                  <span>{message.text}</span>
+                </>
+              )}
             </li>
           ))}
         </ol>
 
         {status ? <p className="game-chat-status" role="status">{status}</p> : null}
 
-        {open ? (
+        {open && (channel !== 'global' || globalChatEnabled) ? (
           <form aria-label={`${channelLabel(channel)} chat message`} className="game-chat-form" onSubmit={submit}>
             <span aria-hidden="true" className="game-chat-rune" data-channel={channel} />
             <input
@@ -461,7 +520,11 @@ export default function GameChat({
         ) : null}
 
         {open ? (
-          <p className="game-chat-help">Enter send · Tab channel · Esc close</p>
+          <p className="game-chat-help">
+            {channel === 'global' && !globalChatEnabled
+              ? 'Check Global to enable · Esc close'
+              : 'Enter send · Tab channel · Esc close'}
+          </p>
         ) : null}
       </div>
 

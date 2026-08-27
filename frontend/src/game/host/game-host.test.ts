@@ -38,6 +38,7 @@ import {
   GAME_SESSION_REPLACED_CLOSE_CODE,
   decodeServerGameMessage,
   encodeGameMessage,
+  type GameOnlinePreferences,
   type ServerGameMessage,
   type ServerSnapshotMessage,
 } from '../protocol/game-protocol.ts'
@@ -92,6 +93,11 @@ const EMPTY_PLAYER_PROFILE = {
   highestWave: null,
   totalPlaytimeMs: null,
 } as const
+const ONLINE_PREFERENCES = {
+  activityMessages: true,
+  globalChat: true,
+  submitRuns: true,
+} as const satisfies GameOnlinePreferences
 const LEADERBOARD_RECEIPT_SECRET = 'leaderboard-receipt-test-secret-that-is-long-enough'
 const EMPTY_SHARED_CONTENT = {
   assets: [],
@@ -431,7 +437,7 @@ test('developer observer watches one private run without joining or mutating par
   ))
   leader.socket.send(encodeGameMessage({
     type: 'client-chat',
-    channel: 'party',
+    channel: 'boneyard',
     text: 'Hidden observer copy',
   }))
   const chat = await observedChat
@@ -623,6 +629,7 @@ test('global Hub rejects modded and cheats-on admissions before player ownership
     const denied = nextMessage(socket, message => message.type === 'server-disconnect')
     socket.send(encodeGameMessage({
       type: 'client-hello',
+      onlinePreferences: ONLINE_PREFERENCES,
       profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
       cheatsEnabled,
       protocolVersion: GAME_PROTOCOL_VERSION,
@@ -765,6 +772,7 @@ test('a fresh Tutorial decline enters the ordinary Hub and persists both consume
   ))
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     character: FIRST_CHARACTER,
     cheatsEnabled: false,
     credential: 'test-secret',
@@ -905,7 +913,7 @@ test('expired external join requests disappear from the leader projection', asyn
   assert.equal(host.partyJoinRequestStatus('request-token-expiring'), null)
 })
 
-test('shared Hub chat isolates parties, reaches Hub global, and becomes party-only in a run', async (context) => {
+test('shared-host Global crosses Hub and Boneyard while match chat stays run-scoped', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,
     sharedHub: true,
@@ -989,46 +997,255 @@ test('shared Hub chat isolates parties, reaches Hub global, and becomes party-on
     assert.ok(message.sequence > partyA.sequence)
   }
 
+  const searchingForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'searching-solomon'
+    && message.sender.playerId === first.welcome.playerId
+  ))
+  const searchingForOutsider = nextMessage(outsider.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'searching-solomon'
+    && message.sender.playerId === first.welcome.playerId
+  ))
   const loadedFirst = nextMessage(first.socket, message => message.type === 'server-boneyard-loaded')
   const loadedSecond = nextMessage(second.socket, message => message.type === 'server-boneyard-loaded')
   first.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
-  await Promise.all([loadedFirst, loadedSecond])
+  const [, , searchingSecond, searchingOutsider] = await Promise.all([
+    loadedFirst,
+    loadedSecond,
+    searchingForSecond,
+    searchingForOutsider,
+  ])
+  for (const message of [searchingSecond, searchingOutsider]) {
+    assert.equal(message.type, 'server-chat')
+    assert.equal(message.text, `${FIRST_CHARACTER.displayName} is searching for Solomon.`)
+  }
 
-  const unavailable = nextMessage(second.socket, message => (
-    message.type === 'server-chat-rejected' && message.reason === 'channel-unavailable'
+  const lateEnteredForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'entered-college'
+    && message.text === 'Daria has entered the college.'
+  ))
+  const lateEnteredForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'entered-college'
+    && message.text === 'Daria has entered the college.'
+  ))
+  const late = await join(host.address.url, 'ticket-late', {
+    ...FIRST_CHARACTER,
+    displayName: 'Daria',
+  })
+  await Promise.all([lateEnteredForFirst, lateEnteredForSecond])
+  await closeSocket(late.socket)
+
+  const runGlobalForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global from the run'
+  ))
+  const runGlobalForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global from the run'
+  ))
+  const runGlobalForOutsider = nextMessage(outsider.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global from the run'
   ))
   second.socket.send(encodeGameMessage({
     type: 'client-chat',
     channel: 'global',
-    text: 'Must not leave the run',
+    text: 'Global from the run',
   }))
-  assert.deepEqual(await unavailable, {
-    type: 'server-chat-rejected',
-    channel: 'global',
-    reason: 'channel-unavailable',
-    retryAfterMs: 0,
-  })
+  await Promise.all([runGlobalForFirst, runGlobalForSecond, runGlobalForOutsider])
 
-  const runPartyForFirst = nextMessage(first.socket, message => (
-    message.type === 'server-chat' && message.text === 'Run route'
+  const loadedOutsider = nextMessage(
+    outsider.socket,
+    message => message.type === 'server-boneyard-loaded',
+  )
+  const outsiderSearchingForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'searching-solomon'
+    && message.sender.playerId === outsider.welcome.playerId
   ))
-  const runPartyForSecond = nextMessage(second.socket, message => (
-    message.type === 'server-chat' && message.text === 'Run route'
+  const outsiderSearchingForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'searching-solomon'
+    && message.sender.playerId === outsider.welcome.playerId
+  ))
+  outsider.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await Promise.all([loadedOutsider, outsiderSearchingForFirst, outsiderSearchingForSecond])
+
+  const hubGlobalForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global from the second run'
+  ))
+  const hubGlobalForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global from the second run'
+  ))
+  const hubGlobalForOutsider = nextMessage(outsider.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global from the second run'
+  ))
+  outsider.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Global from the second run',
+  }))
+  await Promise.all([hubGlobalForFirst, hubGlobalForSecond, hubGlobalForOutsider])
+
+  const boneyardForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Boneyard route'
+  ))
+  const boneyardForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Boneyard route'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'boneyard',
+    text: 'Boneyard route',
+  }))
+  await Promise.all([boneyardForFirst, boneyardForSecond])
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(outsiderChat.messages.some(message => (
+    message.type === 'server-chat' && message.text === 'Boneyard route'
+  )), false)
+
+  const unavailableParty = nextMessage(second.socket, message => (
+    message.type === 'server-chat-rejected'
+    && message.channel === 'party'
+    && message.reason === 'channel-unavailable'
   ))
   second.socket.send(encodeGameMessage({
     type: 'client-chat',
     channel: 'party',
-    text: 'Run route',
+    text: 'Party is a Hub lane now',
   }))
-  await Promise.all([runPartyForFirst, runPartyForSecond])
+  assert.equal((await unavailableParty).type, 'server-chat-rejected')
+
+  const outsiderLeftForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'left-game'
+    && message.sender.playerId === outsider.welcome.playerId
+  ))
+  const outsiderLeftForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'left-game'
+    && message.sender.playerId === outsider.welcome.playerId
+  ))
+  await closeSocket(outsider.socket)
+  const leftMessages = await Promise.all([outsiderLeftForFirst, outsiderLeftForSecond])
+  assert.equal(leftMessages.every(message => (
+    message.type === 'server-chat'
+    && message.text === 'Cassia has left the game.'
+  )), true)
+})
+
+test('activity and Global preferences gate both emission and receipt across disconnects', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER)
+  context.after(() => first.socket.close())
+
+  const enteredSecond = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.activity === 'entered-college'
+  ))
+  const second = await join(host.address.url, 'ticket-second', SECOND_CHARACTER)
+  context.after(() => second.socket.close())
+  const entered = await enteredSecond
+  assert.equal(entered.type, 'server-chat')
+  assert.equal(entered.text, `${SECOND_CHARACTER.displayName} has entered the college.`)
+
+  const firstChat = collectChatMessages(first.socket)
+  context.after(firstChat.stop)
+  const quiet = await join(
+    host.address.url,
+    'ticket-quiet',
+    { ...FIRST_CHARACTER, displayName: 'Quietus' },
+    true,
+    EMPTY_PLAYER_PROFILE,
+    false,
+    false,
+    { activityMessages: false, globalChat: true, submitRuns: true },
+  )
   await new Promise(resolve => setTimeout(resolve, 60))
-  assert.equal(outsiderChat.messages.length, 1)
-  const outsiderOnlyMessage = outsiderChat.messages[0]!
-  if (outsiderOnlyMessage.type !== 'server-chat') throw new Error('expected global chat')
-  assert.equal(outsiderOnlyMessage.text, 'Hub route')
+  assert.equal(firstChat.messages.some(message => (
+    message.type === 'server-chat' && message.sender.playerId === quiet.welcome.playerId
+  )), false)
+  const quietGlobal = nextMessage(quiet.socket, message => (
+    message.type === 'server-chat' && message.text === 'Global without activity'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Global without activity',
+  }))
+  assert.equal((await quietGlobal).type, 'server-chat')
+  await closeSocket(quiet.socket)
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(firstChat.messages.some(message => (
+    message.type === 'server-chat'
+    && message.activity === 'left-game'
+    && message.sender.playerId === quiet.welcome.playerId
+  )), false)
+
+  first.socket.send(encodeGameMessage({
+    type: 'client-online-preferences',
+    onlinePreferences: { activityMessages: false, globalChat: false, submitRuns: true },
+  }))
+  await new Promise(resolve => setTimeout(resolve, 20))
+  const disabledSender = nextMessage(first.socket, message => (
+    message.type === 'server-chat-rejected'
+    && message.channel === 'global'
+    && message.reason === 'channel-unavailable'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Disabled sender must be rejected',
+  }))
+  assert.equal((await disabledSender).type, 'server-chat-rejected')
+  firstChat.messages.length = 0
+  const third = await join(host.address.url, 'ticket-third', {
+    ...FIRST_CHARACTER,
+    displayName: 'Cassia',
+  })
+  context.after(() => third.socket.close())
+  third.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Hidden while disabled',
+  }))
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(firstChat.messages.length, 0)
+
+  first.socket.send(encodeGameMessage({
+    type: 'client-online-preferences',
+    onlinePreferences: ONLINE_PREFERENCES,
+  }))
+  await new Promise(resolve => setTimeout(resolve, 20))
+  const visibleAgain = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Visible after enable'
+  ))
+  third.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Visible after enable',
+  }))
+  assert.equal((await visibleAgain).type, 'server-chat')
+
+  const leftSecond = nextMessage(first.socket, message => (
+    message.type === 'server-chat'
+    && message.activity === 'left-game'
+    && message.sender.playerId === second.welcome.playerId
+  ))
+  await closeSocket(second.socket)
+  const left = await leftSecond
+  assert.equal(left.type, 'server-chat')
+  assert.equal(left.text, `${SECOND_CHARACTER.displayName} has left the game.`)
 })
 
 test('whispers route to exactly the target pair and expose Hub social profiles', async (context) => {
@@ -1436,7 +1653,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   ))
   second.socket.send(encodeGameMessage({
     type: 'client-chat',
-    channel: 'party',
+    channel: 'boneyard',
     text: 'Chat remains live while paused',
   }))
   const [chatA, chatB] = await Promise.all([pausedChatA, pausedChatB])
@@ -2593,6 +2810,7 @@ test('game host rejects arbitrary origins and invalid bootstrap credentials', as
   context.after(() => socket.close())
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -2891,6 +3109,7 @@ test('solo active-run restart waits for renderer readiness before its countdown'
   context.after(() => socket.close())
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -2994,6 +3213,46 @@ test('shared Hub retires the stock Tutorial when its final actor disconnects', a
   assert.equal(logs.some(entry => entry.level === 'error'), false)
   assert.equal(logs.filter(entry => entry.event === 'run.retired_empty').length, 1)
   assert.equal(runtimeEvents.includes('run.retired_empty'), false)
+})
+
+test('the stock Tutorial is not announced as an ordinary Boneyard match', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const learner = await join(host.address.url, 'ticket-learner', FIRST_CHARACTER)
+  const watcher = await join(host.address.url, 'ticket-watcher', SECOND_CHARACTER)
+  context.after(() => learner.socket.close())
+  context.after(() => watcher.socket.close())
+  const watcherChat = collectChatMessages(watcher.socket)
+  context.after(watcherChat.stop)
+  const loaded = nextMessage(learner.socket, message => message.type === 'server-boneyard-loaded')
+  learner.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  const tutorial = await loaded
+  assert.equal(tutorial.type, 'server-boneyard-loaded')
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(watcherChat.messages.some(message => (
+    message.type === 'server-chat' && message.activity === 'searching-solomon'
+  )), false)
+})
+
+test('a fresh vanilla private College can start the Tutorial without global-score eligibility', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'private-college',
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'ticket-private-tutorial', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  const tutorial = await loaded
+  assert.equal(tutorial.type, 'server-boneyard-loaded')
+  assert.equal(tutorial.boneyard.choice.id, 'stock-tutorial')
 })
 
 test('host rejects a Tutorial start after the fresh-profile pending fact clears', async (context) => {
@@ -3129,6 +3388,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   )
   firstSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3151,6 +3411,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   ))
   secondSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3201,6 +3462,13 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   })
   const savedTick = savedState.tick
   await waitFor(() => (host.playerState(first.welcome.playerId)?.tick ?? 0) > savedTick)
+  const watcher = await join(host.address.url, 'ticket-watcher', {
+    ...SECOND_CHARACTER,
+    displayName: 'Watcher',
+  })
+  context.after(() => watcher.socket.close())
+  const watcherChat = collectChatMessages(watcher.socket)
+  context.after(watcherChat.stop)
 
   const rejectedSocket = await openSocket(host.address.url)
   context.after(() => rejectedSocket.close())
@@ -3209,6 +3477,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   ))
   rejectedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3222,7 +3491,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   assert.equal(rejected.type, 'server-disconnect')
   assert.match(rejected.reason, /already active in another browser/i)
   assert.equal(first.socket.readyState, WebSocket.OPEN)
-  assert.equal(host.capacityParticipantCount(), 1)
+  assert.equal(host.capacityParticipantCount(), 2)
 
   const firstClosed = socketClose(first.socket)
   const replacementSocket = await openSocket(host.address.url)
@@ -3232,6 +3501,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   ))
   replacementSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3255,8 +3525,13 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
     reason: 'wizard resumed in another browser',
   })
   await new Promise(resolve => setTimeout(resolve, 20))
-  assert.equal(host.capacityParticipantCount(), 1)
+  assert.equal(host.capacityParticipantCount(), 2)
   assert.equal(host.playerState(replacement.playerId)?.world.kind, 'boneyard')
+  assert.equal(watcherChat.messages.some(message => (
+    message.type === 'server-chat'
+    && message.activity === 'left-game'
+    && message.sender.playerId === replacement.playerId
+  )), false)
 })
 
 test('host starts a fresh character from the durable profile without reviving its old run', async (context) => {
@@ -3287,6 +3562,7 @@ test('host starts a fresh character from the durable profile without reviving it
   const welcomed = nextMessage(socket, message => message.type === 'server-welcome')
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3331,6 +3607,7 @@ test('new-game intent retires an active wizard and scavenges carried equipment',
   const welcomed = nextMessage(socket, message => message.type === 'server-welcome')
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3506,6 +3783,7 @@ test('saved party member catches up detached while the live party run continues'
   ))
   returningSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3648,6 +3926,7 @@ test('staged catch-up loses its capability when the final live peer disconnects'
   const returningWelcome = nextMessage(returningSocket, message => message.type === 'server-welcome')
   returningSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3815,6 +4094,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   rejectedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3837,6 +4117,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   continuedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     allowModMismatch: true,
     cheatsEnabled: false,
@@ -4077,6 +4358,93 @@ test('host signs an account-bound global score only for a fresh cheats-off run',
   assert.equal(payload.wizardName, FIRST_CHARACTER.displayName)
 })
 
+test('Submit Runs independently gates each party member receipt and Memoratorium portrait', async (context) => {
+  const tickets = new Map<string, GameHostAdmission>([
+    ['ticket-first', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }],
+    ['ticket-second', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 43 }],
+  ])
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => {
+        const admission = tickets.get(credential) ?? null
+        tickets.delete(credential)
+        return admission
+      },
+    },
+    leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'ticket-second', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const invited = nextMessage(second.socket, message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: second.welcome.playerId,
+  }))
+  const invitation = await invited
+  if (invitation.type !== 'server-party-state') assert.fail('expected party invitation')
+  const grouped = nextMessage(first.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  await grouped
+
+  const firstLoaded = nextMessage(first.socket, message => message.type === 'server-boneyard-loaded')
+  const secondLoaded = nextMessage(second.socket, message => message.type === 'server-boneyard-loaded')
+  const ready = completeInitialGameplayReadiness([first.socket, second.socket])
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await Promise.all([firstLoaded, secondLoaded, ready])
+  second.socket.send(encodeGameMessage({
+    type: 'client-online-preferences',
+    onlinePreferences: { ...ONLINE_PREFERENCES, submitRuns: false },
+  }))
+  await new Promise(resolve => setTimeout(resolve, 20))
+
+  let secondReceiptCount = 0
+  const countSecondReceipt = (payload: WebSocket.RawData) => {
+    if (decodeServerGameMessage(payload.toString()).type === 'server-leaderboard-receipt') {
+      secondReceiptCount += 1
+    }
+  }
+  second.socket.on('message', countSecondReceipt)
+  context.after(() => second.socket.off('message', countSecondReceipt))
+  const firstReceipt = nextMessage(first.socket, message => (
+    message.type === 'server-leaderboard-receipt'
+  ))
+  const archived = nextMessage(first.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'boneyard'
+    && message.snapshot.world.hallOfFameRuns[first.welcome.playerId]?.elapsedTicks !== null
+  ))
+  forceHallArchive(host, first.welcome.playerId)
+  assert.equal((await firstReceipt).type, 'server-leaderboard-receipt')
+  await archived
+  await new Promise(resolve => setTimeout(resolve, 50))
+  assert.equal(secondReceiptCount, 0)
+  const hub = host.state()
+  if (hub.world.kind !== 'hub') assert.fail('expected shared Hub owner state')
+  const memorialPlayerIds = hub.world.memorial.slots.flatMap(({ portrait }) => (
+    portrait ? [portrait.playerId] : []
+  ))
+  assert.equal(memorialPlayerIds.includes(first.welcome.playerId), true)
+  assert.equal(memorialPlayerIds.includes(second.welcome.playerId), false)
+})
+
 test('developer Lua keeps saves global-clean and preserves global score eligibility', async () => {
   const result = await completeLeaderboardScenario({
     cheatsEnabled: true,
@@ -4125,6 +4493,7 @@ test('host withholds global scores across every ineligible authority branch', as
   })
   const scenarios: readonly [string, LeaderboardScenario][] = [
     ['anonymous admission', { leaderboardUserId: null }],
+    ['Submit Runs opt-out', { submitRuns: false }],
     ['initial cheat mode in a private College', { cheatsEnabled: true, private: true }],
     ['forged global-clean local save resumed in the global Hub', {
       globalHub: true,
@@ -4208,6 +4577,7 @@ test('host exposes and authoritatively loads a selected mod Boneyard', async (co
   const lateLoaded = nextMessage(lateSocket, (message) => message.type === 'server-boneyard-loaded')
   lateSocket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -4448,12 +4818,14 @@ async function join(
   profile: PlayerSocialProfile = EMPTY_PLAYER_PROFILE,
   beginCollegeIntro = false,
   declineTutorial = false,
+  onlinePreferences: GameOnlinePreferences = ONLINE_PREFERENCES,
 ) {
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
     ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     ...(declineTutorial ? { declineTutorial: true } : {}),
+    onlinePreferences,
     profile,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -4497,6 +4869,7 @@ async function openSavedRunSocket(
   const socket = await openSocket(url)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
     profile: EMPTY_PLAYER_PROFILE,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -4535,6 +4908,7 @@ interface LeaderboardScenario {
   private?: boolean
   save?: string
   saveIntent?: GameSaveIntent
+  submitRuns?: boolean
 }
 
 async function completeLeaderboardScenario(
@@ -4580,6 +4954,10 @@ async function completeLeaderboardScenario(
     const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
     socket.send(encodeGameMessage({
       type: 'client-hello',
+      onlinePreferences: {
+        ...ONLINE_PREFERENCES,
+        submitRuns: scenario.submitRuns !== false,
+      },
       profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
       cheatsEnabled: scenario.cheatsEnabled === true,
       protocolVersion: GAME_PROTOCOL_VERSION,

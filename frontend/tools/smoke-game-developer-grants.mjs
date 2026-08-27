@@ -235,6 +235,7 @@ async function connectTrackedPlayer(url, credential, origin) {
     profile: { accountUsername: 'Target', highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
   }))
   const welcome = await welcomeMessage
   assert.equal(welcome.type, 'server-welcome')

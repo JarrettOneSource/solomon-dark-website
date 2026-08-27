@@ -268,11 +268,52 @@ function RootSettings({
   saveTransfer?: NativeSaveTransferController
   settings: GameSettings
 }) {
+  const onlineFeatures = settings.enableOnlineFeatures
+  const globalChat = onlineFeatures && settings.enableGlobalChat
   return (
     <>
+      <SettingsGroup title="ONLINE FEATURES">
+        <SettingsToggle
+          autoFocus
+          checked={onlineFeatures}
+          label="ENABLE ONLINE FEATURES"
+          onChange={(enableOnlineFeatures) => onChange({ ...settings, enableOnlineFeatures })}
+        />
+        <SettingsToggle
+          checked={globalChat && settings.enableActivityMessages}
+          disabled={!globalChat}
+          label="ENABLE ACTIVITY MESSAGES"
+          nested
+          onChange={(enableActivityMessages) => onChange({
+            ...settings,
+            enableActivityMessages,
+          })}
+        />
+        <SettingsToggle
+          checked={globalChat}
+          disabled={!onlineFeatures}
+          label="ENABLE GLOBAL CHAT"
+          nested
+          onChange={(enableGlobalChat) => onChange({ ...settings, enableGlobalChat })}
+        />
+        <SettingsToggle
+          checked={onlineFeatures && settings.enableSharedHub}
+          disabled={!onlineFeatures}
+          label="ENABLE SHARED HUB"
+          nested
+          onChange={(enableSharedHub) => onChange({ ...settings, enableSharedHub })}
+        />
+        <SettingsToggle
+          checked={onlineFeatures && settings.submitRunsToServer}
+          disabled={!onlineFeatures}
+          label="SUBMIT RUNS TO SERVER"
+          nested
+          onChange={(submitRunsToServer) => onChange({ ...settings, submitRunsToServer })}
+        />
+      </SettingsGroup>
+
       <SettingsGroup title="SOUND AND MUSIC">
         <SettingsRange
-          autoFocus
           label="SOUND VOL:"
           maximum={100}
           minimum={0}
@@ -479,18 +520,28 @@ function SettingsRange({
 }
 
 function SettingsToggle({
+  autoFocus = false,
   checked,
+  disabled = false,
   label,
+  nested = false,
   onChange,
 }: {
+  autoFocus?: boolean
   checked: boolean
+  disabled?: boolean
   label: string
+  nested?: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
     <button
+      autoFocus={autoFocus}
       aria-pressed={checked}
       className="game-settings-native-toggle-row"
+      data-game-default-focus={autoFocus ? 'true' : undefined}
+      data-settings-nested={nested || undefined}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       type="button"
     >

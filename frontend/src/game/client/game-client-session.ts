@@ -12,6 +12,7 @@ import {
 } from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
+  DEFAULT_GAME_ONLINE_PREFERENCES,
   MAX_LUA_CONSOLE_CODE_LENGTH,
   PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
@@ -39,6 +40,7 @@ import {
   type ServerDeploymentRestartMessage,
   type ServerWelcomeMessage,
   type GameModAsset,
+  type GameOnlinePreferences,
 } from '../protocol/game-protocol.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
@@ -95,6 +97,7 @@ export interface GameClientSessionOptions {
   now?: () => number
   onFatal?: (failure: GameConnectionFailure) => void
   onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
+  onlinePreferences?: GameOnlinePreferences
   profile: PlayerSocialProfile
   resumeToken?: string
   saveDocument?: string
@@ -176,6 +179,7 @@ export interface GameClientSession {
   sendTutorialAction(action: NativeTutorialSurfaceAction): void
   setCheatsEnabled(enabled: boolean): void
   setHubActivity(activity: HubPlayerActivity | null): void
+  setOnlinePreferences(preferences: GameOnlinePreferences): void
   inviteToParty(playerId: string): void
   kickPartyPlayer(playerId: string): void
   leaveParty(): void
@@ -254,6 +258,9 @@ export function connectGameClientSession(
     let loadedBoneyard: LoadedBoneyard | null = null
     let gameplayPause: GameplayPauseState | null = null
     let gameplayResumeGrace: GameplayResumeGraceState | null = null
+    let onlinePreferences = validatedOnlinePreferences(
+      options.onlinePreferences ?? DEFAULT_GAME_ONLINE_PREFERENCES,
+    )
     let requestedHubActivity: HubPlayerActivity | null = null
     let modCatalog: readonly ModConsumableCatalogEntry[] = []
     let modContent: ModContentProjection | null = null
@@ -427,6 +434,7 @@ export function connectGameClientSession(
         return
       }
       if (message.type === 'server-leaderboard-receipt') {
+        if (!onlinePreferences.submitRuns) return
         for (const listener of leaderboardReceiptListeners) listener(message.receipt)
         return
       }
@@ -463,7 +471,15 @@ export function connectGameClientSession(
       if (message.type === 'server-chat') {
         if (message.sequence <= lastChatSequence) return
         lastChatSequence = message.sequence
+        if (
+          message.channel === 'global'
+          && (
+            !onlinePreferences.globalChat
+            || (message.activity !== undefined && !onlinePreferences.activityMessages)
+          )
+        ) return
         const chatMessage: GameChatMessage = {
+          ...(message.activity === undefined ? {} : { activity: message.activity }),
           channel: message.channel,
           ...(message.recipient ? { recipient: message.recipient } : {}),
           sender: message.sender,
@@ -1038,6 +1054,16 @@ export function connectGameClientSession(
           activity,
         }))
       },
+      setOnlinePreferences(preferences) {
+        const next = validatedOnlinePreferences(preferences)
+        if (sameOnlinePreferences(onlinePreferences, next)) return
+        onlinePreferences = next
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-online-preferences',
+          onlinePreferences,
+        }))
+      },
       requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
         if (gameplayResumeGrace !== null) return
@@ -1181,6 +1207,9 @@ export function connectGameClientSession(
       },
       sendChatMessage(channel, text, targetPlayerId) {
         if (!welcome || destroyed) return
+        if (channel === 'global' && !onlinePreferences.globalChat) {
+          throw new Error('Global chat is disabled.')
+        }
         if ((channel === 'whisper') !== (targetPlayerId !== undefined)) {
           throw new Error('Whispers require a target wizard.')
         }
@@ -1269,6 +1298,7 @@ export function connectGameClientSession(
       beginCollegeIntro: options.beginCollegeIntro === true,
       cheatsEnabled: options.cheatsEnabled === true,
       ...(options.declineTutorial ? { declineTutorial: true } : {}),
+      onlinePreferences,
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,
       character: options.character,
@@ -1724,4 +1754,26 @@ function sameInput(first: PlayerCharacterInput, second: PlayerCharacterInput): b
 function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
   return first.cast.primary === second.cast.primary
     && first.cast.quickbar === second.cast.quickbar
+}
+
+function validatedOnlinePreferences(
+  preferences: GameOnlinePreferences,
+): GameOnlinePreferences {
+  if (preferences.activityMessages && !preferences.globalChat) {
+    throw new Error('Activity messages require Global chat.')
+  }
+  return Object.freeze({
+    activityMessages: preferences.activityMessages === true,
+    globalChat: preferences.globalChat === true,
+    submitRuns: preferences.submitRuns === true,
+  })
+}
+
+function sameOnlinePreferences(
+  first: GameOnlinePreferences,
+  second: GameOnlinePreferences,
+): boolean {
+  return first.activityMessages === second.activityMessages
+    && first.globalChat === second.globalChat
+    && first.submitRuns === second.submitRuns
 }

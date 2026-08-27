@@ -321,7 +321,7 @@ test('party pause can hold its Boneyard run but the shared Hub always ticks', ()
   assert.equal(worlds.runs[0]!.state.tick, runTick)
 })
 
-test('every completed party member enters the one live shared-Hub memorial', () => {
+test('only Submit-Runs participants enter the one live shared-Hub memorial', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
   worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
@@ -359,6 +359,7 @@ test('every completed party member enters the one live shared-Hub memorial', () 
       ['player-a', { accountUsername: 'AureliaAccount' }],
       ['player-b', { accountUsername: null }],
     ]),
+    new Set(['player-a']),
     memorial => { persistedNextAge = memorial.nextAge },
   )
   if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
@@ -367,16 +368,14 @@ test('every completed party member enters the one live shared-Hub memorial', () 
     .toSorted((left, right) => left.age - right.age)
   assert.deepEqual(
     completed.map(({ portrait }) => portrait?.config.displayName),
-    ['Aurelia', 'Basil'],
+    ['Aurelia'],
   )
-  assert.deepEqual(completed.map(({ portraitId }) => portraitId), [100, 101])
-  assert.equal(completed[1]?.portrait?.playerId, 'player-b')
+  assert.deepEqual(completed.map(({ portraitId }) => portraitId), [100])
   assert.equal(completed[0]?.portrait?.accountUsername, 'AureliaAccount')
-  assert.equal(completed[1]?.portrait?.accountUsername, null)
   assert.equal(completed[0]?.portrait?.elapsedTicks, 1)
   assert.equal(completed[0]?.portrait?.level, 1)
   assert.equal(completed[0]?.portrait?.wave, 0)
-  assert.equal(persistedNextAge, 1003)
+  assert.equal(persistedNextAge, 1002)
 
   worlds = addSharedHubPlayer(worlds, 'player-d', character('Daria'), partyIdentity('d'))
   if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
@@ -385,7 +384,7 @@ test('every completed party member enters the one live shared-Hub memorial', () 
       .filter(({ portrait }) => portrait !== null)
       .toSorted((left, right) => left.age - right.age)
       .map(({ portrait }) => portrait?.config.displayName),
-    ['Aurelia', 'Basil'],
+    ['Aurelia'],
   )
 })
 

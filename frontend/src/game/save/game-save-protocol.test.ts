@@ -17,7 +17,7 @@ const CHARACTER = {
 } as const
 
 test('protocol carries one bounded resume document and ordered host checkpoints', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 91)
+  assert.equal(GAME_PROTOCOL_VERSION, 92)
   assert.equal(
     GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
     MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024,
@@ -25,6 +25,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
   const document = JSON.stringify({ schemaVersion: 1 })
   assert.deepEqual(decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -34,6 +35,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
     saveIntent: 'resume',
   })), {
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -104,6 +106,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
 test('protocol rejects oversized and inconsistent save messages', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -126,6 +129,7 @@ test('protocol rejects oversized and inconsistent save messages', () => {
   })), /save/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -135,6 +139,7 @@ test('protocol rejects oversized and inconsistent save messages', () => {
   })), /saveIntent/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,

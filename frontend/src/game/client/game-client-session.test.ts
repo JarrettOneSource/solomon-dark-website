@@ -100,6 +100,11 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
     type: 'client-hello',
     beginCollegeIntro: false,
+    onlinePreferences: {
+      activityMessages: true,
+      globalChat: true,
+      submitRuns: true,
+    },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -255,6 +260,56 @@ test('client carries character config, publishes authority, and tears down', asy
     text: 'On my way.',
   }])
   assert.deepEqual(session.getChatMessages(), receivedChat)
+  session.setOnlinePreferences({
+    activityMessages: false,
+    globalChat: false,
+    submitRuns: false,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-online-preferences',
+    onlinePreferences: {
+      activityMessages: false,
+      globalChat: false,
+      submitRuns: false,
+    },
+  })
+  assert.throws(
+    () => session.sendChatMessage('global', 'This lane is disabled.'),
+    /Global chat is disabled/,
+  )
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 13,
+    text: 'Filtered Global text.',
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    activity: 'left-game',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 14,
+    text: 'Aurelia has left the game.',
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'boneyard',
+    sender: { displayName: 'Basil', playerId: 'player-3' },
+    sequence: 15,
+    text: 'Run lane remains live.',
+  }))
+  assert.deepEqual(receivedChat.map(({ channel, text }) => [channel, text]), [
+    ['party', 'On my way.'],
+    ['boneyard', 'Run lane remains live.'],
+  ])
+  let suppressedReceipt = false
+  session.onLeaderboardReceipt(() => { suppressedReceipt = true })
+  transport.receive(encodeGameMessage({
+    type: 'server-leaderboard-receipt',
+    receipt: 'suppressed.signature',
+  }))
+  assert.equal(suppressedReceipt, false)
   transport.receive(encodeGameMessage({
     type: 'server-chat-rejected',
     channel: 'party',
@@ -381,6 +436,7 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(session.samplePresentation().world.kind, 'hub')
   assert.equal(session.sampleBoneyardPresentation().world.kind, 'boneyard')
 
+  const chatCountBeforeDestroy = receivedChat.length
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
   assert.equal(transport.readyState, 'closed')
@@ -392,7 +448,7 @@ test('client carries character config, publishes authority, and tears down', asy
     sequence: 13,
     text: 'After teardown.',
   }))
-  assert.equal(receivedChat.length, 1)
+  assert.equal(receivedChat.length, chatCountBeforeDestroy)
 })
 
 test('client carries the fresh Tutorial-decline admission intent', async () => {
@@ -411,6 +467,11 @@ test('client carries the fresh Tutorial-decline admission intent', async () => {
     cheatsEnabled: false,
     credential: 'fresh-secret',
     declineTutorial: true,
+    onlinePreferences: {
+      activityMessages: true,
+      globalChat: true,
+      submitRuns: true,
+    },
     profile: NULL_PROFILE,
     protocolVersion: GAME_PROTOCOL_VERSION,
   })

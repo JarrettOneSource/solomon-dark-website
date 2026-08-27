@@ -1023,6 +1023,7 @@ async function enterRawHub(displayName, element) {
   const next = rawMessageQueue(socket)
   socket.send(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,

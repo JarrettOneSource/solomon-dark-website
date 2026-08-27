@@ -369,6 +369,7 @@ async function hello(socket: WebSocket, credential: string): Promise<ServerWelco
     profile: { accountUsername: 'Generic', highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
   }))
   return await welcome as ServerWelcomeMessage
 }

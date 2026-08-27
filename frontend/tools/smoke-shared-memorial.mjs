@@ -126,6 +126,7 @@ try {
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
   }))
   const welcome = await welcomePromise
   assert.equal(welcome.type, 'server-welcome')

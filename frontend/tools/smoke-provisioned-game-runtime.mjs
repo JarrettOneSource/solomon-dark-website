@@ -42,6 +42,7 @@ const socket = await openSocket(transportEndpoint, browserOrigin)
 try {
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     cheatsEnabled: false,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,

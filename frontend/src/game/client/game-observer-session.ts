@@ -143,6 +143,7 @@ export function connectGameObserverSession(
         if (message.sequence <= lastChatSequence) return
         lastChatSequence = message.sequence
         chatMessages = appendGameChatMessage(chatMessages, {
+          ...(message.activity === undefined ? {} : { activity: message.activity }),
           channel: message.channel,
           ...(message.recipient ? { recipient: message.recipient } : {}),
           sender: message.sender,

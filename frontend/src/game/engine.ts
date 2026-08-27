@@ -14,6 +14,10 @@ import type { PlayerSocialProfile } from './protocol/party-state.ts'
 import type { GameConnectionFailure } from './client/game-connection-failure.ts'
 import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
 import {
+  DEFAULT_GAME_ONLINE_PREFERENCES,
+  type GameOnlinePreferences,
+} from './protocol/game-chat.ts'
+import {
   connectGameObserverSession,
   type GameObserverSession,
 } from './client/game-observer-session.ts'
@@ -49,6 +53,7 @@ export interface SessionOptions {
   endpoint: GameEndpoint
   onFatal?: (failure: GameConnectionFailure) => void
   onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
+  onlinePreferences?: GameOnlinePreferences
   onProgress?: (stage: GameConnectionStage) => void
   profile: PlayerSocialProfile
   resumeToken?: string
@@ -108,6 +113,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     character: options.character,
     cheatsEnabled: options.cheatsEnabled === true,
     ...(options.declineTutorial ? { declineTutorial: true } : {}),
+    onlinePreferences: options.onlinePreferences ?? DEFAULT_GAME_ONLINE_PREFERENCES,
     profile: options.profile,
     ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
     transport,

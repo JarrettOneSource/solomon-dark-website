@@ -50,6 +50,11 @@ test('bootGame accepts a separate localhost server and routes through the shared
   assert.equal(connected?.saveDocument, '{"schemaVersion":1}')
   assert.equal(connected?.saveIntent, 'resume')
   assert.equal(connected?.resumeToken, 'same-tab-token')
+  assert.deepEqual(connected?.onlinePreferences, {
+    activityMessages: true,
+    globalChat: true,
+    submitRuns: true,
+  })
 })
 
 test('bootGame reports concrete transport and welcome milestones in order', async () => {
@@ -193,6 +198,7 @@ function inertSession() {
     sendInput() {},
     setCheatsEnabled() {},
     setHubActivity() {},
+    setOnlinePreferences() {},
     inviteToParty() {},
     kickPartyPlayer() {},
     leaveParty() {},

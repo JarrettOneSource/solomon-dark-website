@@ -18,6 +18,8 @@ import {
   cameraZoomForFov,
   gameBindingLabel,
   gameLightQuality,
+  gameOnlinePreferences,
+  gameSharedHubEnabled,
   gameUiScale,
   gameVolume,
   quickbarSlotForBinding,
@@ -48,7 +50,7 @@ class MemoryStorage implements GameSettingsStorage {
   setItem(key: string, value: string) { this.values.set(key, value) }
 }
 
-test('complete Settings defaults reproduce the shipped capable native profile', () => {
+test('complete Settings defaults retain native presentation and enable online extensions', () => {
   resetGameSettingsListenersForTests()
   const storage = new MemoryStorage()
   assert.deepEqual(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
@@ -58,11 +60,16 @@ test('complete Settings defaults reproduce the shipped capable native profile', 
     complexLighting: true,
     complexShadows: true,
     controls: DEFAULT_GAME_CONTROL_BINDINGS,
+    enableActivityMessages: true,
     enableCheats: false,
+    enableGlobalChat: true,
+    enableOnlineFeatures: true,
+    enableSharedHub: true,
     lightQualityPercent: 100,
     musicVolumePercent: 100,
     multipleShadows: true,
     soundVolumePercent: 100,
+    submitRunsToServer: true,
     uiScalePercent: 100,
     zoomEffects: true,
   })
@@ -73,7 +80,7 @@ test('complete Settings defaults reproduce the shipped capable native profile', 
   ])
 })
 
-test('complete Settings persist exactly and migrate the deployed Cheats-only record', () => {
+test('complete Settings persist exactly and migrate every deployed record shape', () => {
   const storage = new MemoryStorage()
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, '{"enableCheats":true}')
   assert.deepEqual(readGameSettings(storage), {
@@ -95,6 +102,16 @@ test('complete Settings persist exactly and migrate the deployed Cheats-only rec
   assert.deepEqual(setGameSettings(changed, storage), changed)
   assert.deepEqual(readGameSettings(storage), changed)
 
+  const deployedComplete = Object.fromEntries(Object.entries(changed).filter(([key]) => ![
+    'enableActivityMessages',
+    'enableGlobalChat',
+    'enableOnlineFeatures',
+    'enableSharedHub',
+    'submitRunsToServer',
+  ].includes(key)))
+  storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(deployedComplete))
+  assert.deepEqual(readGameSettings(storage), changed)
+
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, '{"enableCheats":true,"extra":1}')
   assert.deepEqual(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
@@ -102,6 +119,31 @@ test('complete Settings persist exactly and migrate the deployed Cheats-only rec
     cameraFovPercent: 126,
   }))
   assert.deepEqual(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
+})
+
+test('online-feature master and Global gate derive the exact live host preferences', () => {
+  assert.deepEqual(gameOnlinePreferences(DEFAULT_GAME_SETTINGS), {
+    activityMessages: true,
+    globalChat: true,
+    submitRuns: true,
+  })
+  assert.equal(gameSharedHubEnabled(DEFAULT_GAME_SETTINGS), true)
+
+  const noGlobal = { ...DEFAULT_GAME_SETTINGS, enableGlobalChat: false }
+  assert.deepEqual(gameOnlinePreferences(noGlobal), {
+    activityMessages: false,
+    globalChat: false,
+    submitRuns: true,
+  })
+  assert.equal(gameSharedHubEnabled(noGlobal), true)
+
+  const offline = { ...DEFAULT_GAME_SETTINGS, enableOnlineFeatures: false }
+  assert.deepEqual(gameOnlinePreferences(offline), {
+    activityMessages: false,
+    globalChat: false,
+    submitRuns: false,
+  })
+  assert.equal(gameSharedHubEnabled(offline), false)
 })
 
 test('FOV, UI scale, volume, and light quality preserve their exact boundaries', () => {
@@ -139,8 +181,13 @@ test('key rebinding swaps conflicts across fifteen native inputs and browser cha
   ], ['Right Mouse', 'W', '7', 'Left'])
 })
 
-test('Settings drains every ported root, Controls, Performance, and context member', () => {
+test('Settings covers every native root, requested online control, and context member', () => {
   for (const label of [
+    'ENABLE ONLINE FEATURES',
+    'ENABLE ACTIVITY MESSAGES',
+    'ENABLE GLOBAL CHAT',
+    'ENABLE SHARED HUB',
+    'SUBMIT RUNS TO SERVER',
     'SOUND VOL:',
     'MUSIC VOL:',
     'FULLSCREEN',
@@ -156,6 +203,9 @@ test('Settings drains every ported root, Controls, Performance, and context memb
     'CAST SECONDARY SPELLS AT MOUSE',
     'CAMERA SHAKE',
   ]) assert.match(settingsComponent, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.match(settingsComponent, /title="ONLINE FEATURES"[\s\S]*?disabled=\{!onlineFeatures\}[\s\S]*?nested/)
+  assert.match(mainMenuScene, /gameSharedHubEnabled\(gameSettings\)/)
+  assert.match(mainMenuScene, /session\?\.setOnlinePreferences\(gameOnlinePreferences\(gameSettings\)\)/)
   assert.doesNotMatch(settingsComponent, />ZOOM EFFECTS</)
   for (const label of [
     'MOVE UP', 'MOVE DOWN', 'MOVE LEFT', 'MOVE RIGHT',

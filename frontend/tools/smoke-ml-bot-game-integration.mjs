@@ -165,6 +165,7 @@ async function hello(socket) {
     profile: { accountUsername: 'Generic', highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
   }))
   return await welcome
 }

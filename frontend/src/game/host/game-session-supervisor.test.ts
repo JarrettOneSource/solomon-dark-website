@@ -547,6 +547,7 @@ test('shared Hub refuses a modded admission before it creates party membership',
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -771,6 +772,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const replayMessages = messageQueue(replay)
   replay.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -787,6 +789,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const lateMessages = messageQueue(late)
   late.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -1643,6 +1646,7 @@ async function join(
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -1664,6 +1668,7 @@ async function joinSaved(
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
