@@ -189,7 +189,6 @@ export interface NativeTutorialTickInput {
   readonly levelUpPending: boolean
   readonly maximumHealth: number
   readonly playerActionIdle: boolean
-  readonly playerMovementActive: boolean
   readonly playerPosition: Readonly<BoneyardPoint>
   readonly primaryCastSequence: number
   readonly solomonPhase: BoneyardSolomonPhase | null
@@ -558,9 +557,6 @@ export function stepNativeTutorial(
     })
   }
   let state = tickBaseState(safeSource, input)
-  if (state.stage === 0 && input.playerMovementActive) {
-    state = { ...state, movementInstructionAcknowledged: true }
-  }
   let grantExperience = 0
   let forceOfferSkillIds: readonly number[] | null = null
 
@@ -724,6 +720,27 @@ export function stepNativeTutorial(
     grantExperience,
     spawnIntents: scheduled.spawnIntents,
     state: Object.freeze(state),
+  })
+}
+
+export function acknowledgeNativeTutorialMovementInstruction(
+  source: NativeTutorialState,
+  input: Readonly<{
+    movementEpochActive: boolean
+    userMovementRequested: boolean
+  }>,
+): NativeTutorialState {
+  if (
+    !source.active
+    || source.introActive
+    || source.stage !== 0
+    || source.movementInstructionAcknowledged
+    || !input.movementEpochActive
+    || !input.userMovementRequested
+  ) return source
+  return Object.freeze({
+    ...source,
+    movementInstructionAcknowledged: true,
   })
 }
 

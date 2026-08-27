@@ -19,6 +19,7 @@ import {
   NATIVE_TUTORIAL_TRIGGER_IDS,
   NATIVE_TUTORIAL_UID_GROUPS,
   NATIVE_TUTORIAL_WAVE_BATCHES,
+  acknowledgeNativeTutorialMovementInstruction,
   applyNativeTutorialSurfaceAction,
   createNativeTutorialState,
   nativeTutorialCameraBounds,
@@ -52,7 +53,6 @@ const BASE_INPUT: NativeTutorialTickInput = {
   levelUpPending: false,
   maximumHealth: 100,
   playerActionIdle: true,
-  playerMovementActive: false,
   playerPosition: { x: 1025, y: 2070.0703125 },
   primaryCastSequence: 0,
   solomonPhase: null,
@@ -226,7 +226,7 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
   }, 'desktop').heading, null)
 })
 
-test('movement copy follows configured desktop keys or the mobile joystick and hides only on user input', () => {
+test('movement copy hides only after authenticated input produces a movement epoch', () => {
   const ready = afterIntro(createNativeTutorialState(
     BASE_INPUT.playerPosition,
     0,
@@ -254,21 +254,30 @@ test('movement copy follows configured desktop keys or the mobile joystick and h
   })
   const forcedMotion = stepNativeTutorial(ready, {
     ...BASE_INPUT,
-    playerMovementActive: false,
     playerPosition: { x: BASE_INPUT.playerPosition.x, y: BASE_INPUT.playerPosition.y - 50 },
   })
   assert.equal(forcedMotion.state.movementInstructionAcknowledged, false)
   assert.notEqual(nativeTutorialPresentation(forcedMotion.state, bindings, 'desktop').heading, null)
 
-  const moved = stepNativeTutorial(forcedMotion.state, {
-    ...BASE_INPUT,
-    playerMovementActive: true,
-    playerPosition: forcedMotion.state.movementAnchor,
-    tick: 2,
+  const sealedInput = acknowledgeNativeTutorialMovementInstruction(forcedMotion.state, {
+    movementEpochActive: false,
+    userMovementRequested: true,
   })
-  assert.equal(moved.state.stage, 0)
-  assert.equal(moved.state.movementInstructionAcknowledged, true)
-  assert.deepEqual(nativeTutorialPresentation(moved.state, bindings, 'desktop'), {
+  assert.equal(sealedInput.movementInstructionAcknowledged, false)
+
+  const forcedEpoch = acknowledgeNativeTutorialMovementInstruction(forcedMotion.state, {
+    movementEpochActive: true,
+    userMovementRequested: false,
+  })
+  assert.equal(forcedEpoch.movementInstructionAcknowledged, false)
+
+  const moved = acknowledgeNativeTutorialMovementInstruction(forcedMotion.state, {
+    movementEpochActive: true,
+    userMovementRequested: true,
+  })
+  assert.equal(moved.stage, 0)
+  assert.equal(moved.movementInstructionAcknowledged, true)
+  assert.deepEqual(nativeTutorialPresentation(moved, bindings, 'desktop'), {
     heading: null,
     hud: { combat: false, inventory: false, quickbar: false, skills: false, spell: false },
     subheading: null,

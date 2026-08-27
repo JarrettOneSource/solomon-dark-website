@@ -914,6 +914,7 @@ test('Tutorial stage 2 clears retained velocity and movement input until stage 3
   assert.equal(held.players.player.gaitDegrees, initial.gaitDegrees)
   assert.equal(held.players.player.walkCyclePrimary, initial.walkCyclePrimary)
   assert.deepEqual(held.movementContactsByPlayerId.player, [])
+  assert.equal(held.movementEpochActiveByPlayerId.player, false)
 
   const released = stepWorld(
     {
@@ -926,6 +927,7 @@ test('Tutorial stage 2 clears retained velocity and movement input until stage 3
   )
   assert.ok(released.players.player.position.x > initial.position.x)
   assert.ok(released.players.player.velocity.x > 0)
+  assert.equal(released.movementEpochActiveByPlayerId.player, true)
 })
 
 test('the retired entrance is a one-way authoritative movement boundary', () => {
@@ -1243,7 +1245,6 @@ test('every Tutorial opening enemy materializes on the combat side of the entran
       levelUpPending: false,
       maximumHealth: 100,
       playerActionIdle: true,
-      playerMovementActive: false,
       playerPosition,
       primaryCastSequence: 0,
       solomonPhase: 'escaping',

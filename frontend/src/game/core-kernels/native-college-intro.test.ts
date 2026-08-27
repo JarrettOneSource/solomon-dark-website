@@ -5,11 +5,13 @@ import {
   NATIVE_COLLEGE_COURTYARD_PATH,
   NATIVE_COLLEGE_OFFICE_PATH,
   NATIVE_COLLEGE_TITLE_CURSOR_STEP,
+  createNativeCollegeIntroState,
   nativeCollegeContactStep,
   nativeCollegeOfficeSpeed,
   nativeCollegePathHeadingIndex,
   nativeCollegePathTarget,
   nativeCollegeTitlePresentation,
+  stepNativeCollegeTitle,
 } from './native-college-intro.ts'
 import { createNativeRng } from './native-rng.ts'
 import {
@@ -107,6 +109,36 @@ test('switches the two title cards at cursor four and preserves the uncovered lo
   assert.equal(logo.record, 9)
   assert.equal(logo.y, 450)
   assert.ok(logo.alpha >= 0 && logo.alpha <= 0.5)
+})
+
+test('runs the complete stock College title timeline on authoritative ticks', () => {
+  let state = createNativeCollegeIntroState()
+  assert.deepEqual(nativeCollegeTitlePresentation(state.titleCursor, state.coverAlpha), {
+    alpha: 0,
+    record: 7,
+    y: 250,
+  })
+
+  for (let tick = 1; tick <= 769; tick += 1) state = stepNativeCollegeTitle(state)
+  assert.equal(state.titleCursor, 3.9988000108860433)
+  assert.equal(nativeCollegeTitlePresentation(state.titleCursor, state.coverAlpha).record, 7)
+
+  state = stepNativeCollegeTitle(state)
+  assert.equal(state.titleCursor, 4.004000010900199)
+  assert.equal(nativeCollegeTitlePresentation(state.titleCursor, state.coverAlpha).record, 9)
+
+  for (let tick = 771; tick <= 962; tick += 1) state = stepNativeCollegeTitle(state)
+  assert.equal(state.titleCursor, 5)
+  const terminal = nativeCollegeTitlePresentation(state.titleCursor, state.coverAlpha)
+  assert.equal(terminal.record, 9)
+  const alphaAtTerminalCursor = terminal.alpha
+
+  state = stepNativeCollegeTitle(state)
+  assert.equal(state.titleCursor, 5)
+  assert.ok(
+    nativeCollegeTitlePresentation(state.titleCursor, state.coverAlpha).alpha
+      > alphaAtTerminalCursor,
+  )
 })
 
 test('decays Office speed after cursor four and triggers automatic Chat on contact six', () => {

@@ -100,6 +100,56 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.equal(completedProfile.tutorialPending, false)
 })
 
+test('opening movement copy acknowledges only a user-requested movement epoch', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 29))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected Tutorial controller')
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      state.playerEntities,
+      'owner',
+      { ...getPlayerCharacter(state, 'owner'), velocity: { x: 100, y: 0 } },
+    ),
+    world: {
+      ...state.world,
+      tutorial: {
+        ...state.world.tutorial,
+        introActive: false,
+        introBlend: 1,
+        introDelayTicksRemaining: 0,
+        introFade: 0,
+        introMovementTicksRemaining: 0,
+        movementInstructionAcknowledged: false,
+        stage: 0,
+      },
+    },
+  }
+
+  state = stepGameSimulationTick(state, { owner: createIdlePlayerCharacterInput() })
+  assert.equal(
+    state.world.kind === 'boneyard'
+      ? state.world.tutorial?.movementInstructionAcknowledged
+      : null,
+    false,
+  )
+
+  state = stepGameSimulationTick(state, {
+    owner: {
+      ...createIdlePlayerCharacterInput(),
+      movement: { x: 1, y: 0 },
+    },
+  })
+  assert.equal(
+    state.world.kind === 'boneyard'
+      ? state.world.tutorial?.movementInstructionAcknowledged
+      : null,
+    true,
+  )
+})
+
 test('one authored Health Potion drink clears stage 18 and starts survival', () => {
   const loaded = materializeStockTutorial(Buffer.alloc(16, 41))
   let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)

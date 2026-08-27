@@ -43,6 +43,7 @@ import {
   createIdlePlayerPrimaryCast,
 } from '../src/game/core-kernels/player-character.ts'
 import {
+  NATIVE_COLLEGE_TITLE_SWITCH_CURSOR,
   nativeCollegePathHeadingIndex,
   nativeCollegePathTarget,
 } from '../src/game/core-kernels/native-college-intro.ts'
@@ -645,10 +646,15 @@ async function exerciseTutorialStaffMelee(host, page, screenshotPath) {
 
   const staged = staffApproachPlacement(state, actors)
   const character = getPlayerCharacter(state, playerId)
+  const actionIdsBefore = new Set(state.primarySpells.transients.map(({ id }) => id))
   Object.assign(state, {
     ...state,
     playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
       ...character,
+      headingIndex: actorHeadingIndex(actorHeadingFromVector(
+        staged.target.position.x - staged.playerPosition.x,
+        staged.target.position.y - staged.playerPosition.y,
+      )),
       position: staged.playerPosition,
       velocity: { x: 0, y: 0 },
     }),
@@ -677,13 +683,19 @@ async function exerciseTutorialStaffMelee(host, page, screenshotPath) {
     /WALK INTO ENEMIES TO CLUB THEM/,
   )
 
+  await page.waitForTimeout(500)
   state = host.state()
+  assert.equal(state.primarySpells.transients.some((transient) => (
+    transient.ownerId === playerId
+    && !actionIdsBefore.has(transient.id)
+    && (transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin')
+  )), false, 'stationary facing contact incorrectly created a Staff action')
+
   const initialHealth = state.world.kind === 'boneyard'
     ? state.world.enemies.actors.find(({ id }) => id === staged.target.id)?.currentHealth
     : null
   assert.equal(typeof initialHealth, 'number')
   const manaBefore = getPlayerProgression(state, playerId).currentMana
-  const actionIdsBefore = new Set(state.primarySpells.transients.map(({ id }) => id))
   const contactIdsBefore = new Set(state.primarySpells.transients
     .filter(({ kind }) => kind === 'player-staff-contact')
     .map(({ id }) => id))
@@ -774,7 +786,9 @@ function staffApproachPlacement(state, actors) {
   ]
   for (const target of actors) {
     for (const direction of directions) {
-      const distance = PLAYER_CHARACTER_RADIUS + target.config.collisionRadius + 12
+      const distance = PLAYER_CHARACTER_RADIUS
+        + target.config.collisionRadius
+        + NATIVE_ACTOR_SEPARATION_EPSILON
       const playerPosition = {
         x: target.position.x + direction.x * distance,
         y: target.position.y + direction.y * distance,
@@ -870,6 +884,13 @@ async function exerciseTutorialOpeningGuidance(host, page, scenario, screenshotP
   assert.ok(Object.values(pointerReceipt).every(Number.isFinite))
   const openingScreenshot = `${screenshotPath}-${scenario.name}-opening-guidance.png`
   await page.screenshot({ path: openingScreenshot })
+
+  const idleStartTick = host.state().tick
+  await waitForTutorialHostState(host, (state, simulation) => (
+    simulation.tick >= idleStartTick + 50
+      && state.movementInstructionAcknowledged === false
+  ), 'idle movement-copy dwell')
+  assert.equal(await openingOverlay.locator('.tutorial-instruction').count(), 1)
 
   if (scenario.coarse) {
     await holdTutorialJoystick(page, 'movement', { x: 0, y: -1 })
@@ -1222,11 +1243,13 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const academyMusic = await waitForCollegeAcademyMusic(page, collegeAudioEventIndex)
   await waitForVisibleCollegeTitle(page, 7)
   const title7 = await collegeTitleReceipt(page)
+  assert.ok(title7.cursor >= 0 && title7.cursor <= NATIVE_COLLEGE_TITLE_SWITCH_CURSOR)
   const title7Wizard = await collegeWizardReceipt(host, page)
   assertCollegeWizardReceipt(title7Wizard, 'Title 7')
   await page.screenshot({ path: `${screenshotPath}-raptisoft-presents.png` })
   await waitForVisibleCollegeTitle(page, 9)
   const title9 = await collegeTitleReceipt(page)
+  assert.ok(title9.cursor > NATIVE_COLLEGE_TITLE_SWITCH_CURSOR && title9.cursor <= 5)
   const title9Wizard = await collegeWizardReceipt(host, page)
   assertCollegeWizardReceipt(title9Wizard, 'Title 9')
   const blockerTraversal = collegeBlockerTraversalReceipt(host, playerId, collisionBlockers)

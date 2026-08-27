@@ -180,6 +180,7 @@ export interface BoneyardWorldTickResult {
   movementContactsByPlayerId: Readonly<
     Record<string, readonly BoneyardPlayerMovementContact[]>
   >
+  movementEpochActiveByPlayerId: Readonly<Record<string, boolean>>
   playerDamage: readonly BoneyardEnemyPlayerDamage[]
   players: Readonly<Record<string, PlayerCharacterState>>
   rewards: readonly BoneyardEnemyReward[]
@@ -867,6 +868,12 @@ export function stepBoneyardWorldTick(
       Object.entries(movementContactsByPlayerId).map(([playerId, contacts]) => [
         playerId,
         Object.freeze(contacts),
+      ]),
+    )),
+    movementEpochActiveByPlayerId: Object.freeze(Object.fromEntries(
+      plans.map(({ collisionEnabled, plan, playerId }) => [
+        playerId,
+        collisionEnabled && plan.movementActive,
       ]),
     )),
     playerDamage: enemyStep.playerDamage,

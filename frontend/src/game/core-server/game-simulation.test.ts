@@ -2518,9 +2518,14 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
     if (!state.primarySpells.transients.some(({ id }) => id === firstAction.id)) break
   }
   state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
-  assert.ok(state.primarySpells.transients.some((transient) => (
+  assert.equal(state.primarySpells.transients.some((transient) => (
     transient.kind === 'player-staff-melee' && transient.id !== firstAction.id
-  )))
+  )), false)
+
+  state = stepGameSimulationTick(state, { caster: gameplayInput(0, -1) })
+  assert.equal(state.primarySpells.transients.some((transient) => (
+    transient.kind === 'player-staff-melee' && transient.id !== firstAction.id
+  )), true)
 })
 
 test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {

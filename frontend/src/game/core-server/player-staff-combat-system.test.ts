@@ -55,6 +55,21 @@ test('the Solomon prelude gate suppresses only new automatic staff actions', () 
   assert.deepEqual([...admitted.actingPlayerIds], [PLAYER_ID])
 })
 
+test('stationary current contact cannot admit Staff melee until a movement epoch', () => {
+  const context = staffFixture()
+  const stationary = stepPlayerStaffCombatSystem({
+    ...context,
+    movementEpochActiveByPlayerId: { [PLAYER_ID]: false },
+  })
+  assert.deepEqual(stationary.spells.transients, [])
+  assert.deepEqual([...stationary.actingPlayerIds], [])
+  assert.deepEqual(stationary.rng, context.rng)
+
+  const moving = stepPlayerStaffCombatSystem(context)
+  assert.equal(moving.spells.transients[0]?.kind, 'player-staff-melee')
+  assert.deepEqual([...moving.actingPlayerIds], [PLAYER_ID])
+})
+
 test('movement-result hostile contact admits without facing while nonhostile contact suppresses fallback', () => {
   const context = staffFixture()
   const facingAway = {
@@ -265,6 +280,7 @@ function staffFixture(
     inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
     knockbackTargetVisible: () => true,
     movementContactsByPlayerId: {},
+    movementEpochActiveByPlayerId: { [PLAYER_ID]: true },
     playerEntities,
     players: { [PLAYER_ID]: player },
     rng: createNativeRng(0),

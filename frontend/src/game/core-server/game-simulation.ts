@@ -294,6 +294,7 @@ import {
   type PlayerEntityStore,
 } from './player-entity-store.ts'
 import {
+  acknowledgeNativeTutorialMovementInstruction,
   applyNativeTutorialSurfaceAction,
   NATIVE_TUTORIAL_FIRES,
   nativeTutorialCameraLockSafetyClear,
@@ -2156,8 +2157,6 @@ export function stepGameSimulationTick(
           maximumHealth: tutorialProgression.maximumHealth,
           playerActionIdle: !tutorialPlayer.primaryCast.held
             && (tutorialSecondary?.staffCastTicksRemaining ?? 0) === 0,
-          playerMovementActive: tutorialInput.movement.x !== 0
-            || tutorialInput.movement.y !== 0,
           playerPosition: tutorialPlayer.position,
           primaryCastSequence: tutorialPlayer.primaryCast.castSequence,
           solomonPhase: boneyardWorld.encounter?.phase ?? null,
@@ -2265,6 +2264,7 @@ function finishGameSimulationTick(
     movementContactsByPlayerId?: Readonly<
       Record<string, readonly BoneyardPlayerMovementContact[]>
     >
+    movementEpochActiveByPlayerId?: Readonly<Record<string, boolean>>
     playerDamage?: readonly Readonly<{
       actorId: number
       amount: number
@@ -2313,6 +2313,20 @@ function finishGameSimulationTick(
   }
   playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
   let world = result.world
+  if (world.kind === 'boneyard' && world.tutorial !== null) {
+    const tutorialPlayerId = playerEntities.identities[0]?.playerId
+    const movement = tutorialPlayerId === undefined
+      ? null
+      : inputs[tutorialPlayerId]?.movement ?? null
+    if (tutorialPlayerId !== undefined && movement !== null) {
+      const tutorial = acknowledgeNativeTutorialMovementInstruction(world.tutorial, {
+        movementEpochActive:
+          result.movementEpochActiveByPlayerId?.[tutorialPlayerId] === true,
+        userMovementRequested: movement.x !== 0 || movement.y !== 0,
+      })
+      if (tutorial !== world.tutorial) world = { ...world, tutorial }
+    }
+  }
   const combatAdmissionEnabled = world.kind !== 'boneyard'
     || isBoneyardPlayerCombatEnabled(world.encounter)
   const combatInputs = combatAdmissionEnabled
@@ -2774,6 +2788,7 @@ function finishGameSimulationTick(
       inputs: combatInputs,
       lethalObserver,
       movementContactsByPlayerId: result.movementContactsByPlayerId ?? {},
+      movementEpochActiveByPlayerId: result.movementEpochActiveByPlayerId ?? {},
       knockbackTargetVisible: (origin, target) => {
         const blocked = firstBoneyardPathBlockProgress(
           origin,

@@ -65,6 +65,7 @@ export interface PlayerStaffCombatSystemContext {
   readonly movementContactsByPlayerId: Readonly<
     Record<string, readonly BoneyardPlayerMovementContact[]>
   >
+  readonly movementEpochActiveByPlayerId: Readonly<Record<string, boolean>>
   readonly knockbackTargetVisible: (
     origin: Readonly<Vector2>,
     target: Readonly<Vector2>,
@@ -356,6 +357,7 @@ export function stepPlayerStaffCombatSystem(
       || input?.cast.primary === true
       || input?.cast.quickbar != null
     ) continue
+    if (context.movementEpochActiveByPlayerId[playerId] !== true) continue
     const movementContacts = context.movementContactsByPlayerId[playerId] ?? []
     if (movementContacts.length > 0) {
       if (!movementContacts.some(({ staffHostile }) => staffHostile)) continue

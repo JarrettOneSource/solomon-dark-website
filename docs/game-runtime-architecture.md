@@ -1890,9 +1890,20 @@ exists only after readiness and is presentation-only; it never owns expiry.
 ## Tutorial opening guidance and selective hostile hold
 
 Protocol 84 extends the strict Tutorial snapshot with one host-owned
-`movementInstructionAcknowledged` boolean. Only a nonzero authenticated player
-movement input can set it; the stock forced-intro velocity cannot. Save schema
-16 persists that fact, while schemas 1 through 15 normalize it false.
+`movementInstructionAcknowledged` boolean. The Boneyard movement owner now
+projects the same strict native movement-epoch result consumed by collision and
+automatic Staff admission. Only the conjunction of a nonzero authenticated
+player movement request and an admitted movement epoch can set the Tutorial
+boolean; raw or sealed input alone cannot, and the stock forced-intro velocity
+lacks the authenticated request. Save schema 16 persists that fact, while
+schemas 1 through 15 normalize it false.
+
+The per-player movement-epoch projection also encloses both native Staff
+contact sources. A nonempty ordered root-contact result retains priority and a
+zero-result epoch may use the facing-qualified current-contact fallback, but a
+stationary tick reaches neither branch. This fact is internal fixed-tick state;
+it is consumed before action creation and is not replicated as a protocol
+member.
 
 The Tutorial's requested first-combat hold is not gameplay pause or resume
 grace. While the active controller is at stage 2, the hostile store accepts the
