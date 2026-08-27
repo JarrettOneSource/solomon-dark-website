@@ -2124,8 +2124,6 @@ export function stepGameSimulationTick(
         const tutorialProgression = getPlayerProgression(state, tutorialPlayerId)
         const tutorialEconomy = getPlayerEconomy(state, tutorialPlayerId)
         const tutorialSecondary = state.secondaryAbilities.players[tutorialPlayerId]
-        const tutorialInput = activeInputs[tutorialPlayerId]
-          ?? createIdlePlayerCharacterInput()
         const tutorial = stepNativeTutorial(boneyardWorld.tutorial, {
           acidRainCastSequence: tutorialSecondary?.castSequence ?? 0,
           acidRainLastSkillId: tutorialSecondary?.lastSkillId ?? null,
