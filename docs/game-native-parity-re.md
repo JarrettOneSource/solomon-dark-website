@@ -50648,3 +50648,68 @@ trader preview; it is not a Tutorial controller fault. The inventory renderer
 must preload `elementVfx.special.aura` and every `elementVfx.special.steam`
 member before constructing the shared VFX texture bank. No fallback or
 Tutorial-only bypass is permitted.
+
+### Final rebased physical acceptance receipts
+
+- Exact candidate `ef771c4d506f6997372f0c50859723bd72ce2332`, based on current
+  `origin/main` `dd845ddc`, is served only by the isolated Mac route on protocol
+  83. Production and `origin/main` are unchanged. The production Game entry is
+  `468,811` raw / `130,921` gzip against `524,288` / `134,144`.
+- One clean physical Safari session covers the requested principal matrix with
+  empty browser-error arrays: Hub `60.00` FPS, empty Boneyard `60.36`, settled
+  SkillPicker `56.50`, Inventory `59.95`, Acid Rain with 174 actors / 221
+  primitives `53.05`, five-secondary overlap with 242 actors / 449 primitives
+  `54.19`, 89 enemies `52.45`, and movement/shooting with 87 enemies and 33
+  primary actors `43.13`. The original corresponding Acid/enemy/movement rows
+  were `47.46`, `32.66`, and `26.68` FPS. Result SHA-256 is
+  `286ece6b31db2d4f48372cd611539138df620f6b91c8ef62e1ed4c196657ca20`;
+  the file is deliberately labelled partial because a later cross-session
+  Create-driver click ended the composed run after all requested first-session
+  rows and one contaminated Fire session had already been recorded.
+- Each max-rank primary was therefore measured from a genuinely fresh
+  WebContent process. Idle/stress FPS are Fire `60.08/54.62`, Water
+  `60.12/55.43`, Ether `60.24/58.39`, Air `60.16/55.11`, and Earth
+  `60.00/55.09`; stress p95 frame times are `22/22/18/19/19 ms` with 41..43
+  enemies and complete actor families. Result SHA-256 values are
+  `9fca15845d2ec7dd8765c5eda4d61656f18bb6642d777a0851babbac69005590`,
+  `7e78bea940a23f46bbbfa2e671f28583ee1dc61b18ba3a1113073fbeb5b54bbb`,
+  `82fd977c748c68fdccec0c08dbd5fa65ecd2abc1c7c9b1c02b6a52df3e6eb48e`,
+  `5331b17443f8b38a1ace98e9757793856e1175007eeb21698e7f50df0c54e0c0`,
+  and `c438a325840bc55f0bb1175bd60b577f58b5c95f52fae99ac30fb75285875193`.
+- The exact stage-9 Tutorial fixture now opens Inventory, advances to stage 10,
+  closes to stage 11, resumes the fixed tick, and completes three more
+  open/close cycles. The first cold open is `41.54` FPS while its newly complete
+  VFX texture bank uploads; the three warmed reopens are `60.75..61.31` FPS.
+  Final state is `inputBlocked=false`, no Inventory, stage 11, tick `3262.7`,
+  with no browser errors. Result SHA-256 is
+  `344c115a88db505240bec069589e270b644c6544057e9d103c59290d09eea917`.
+- The installed `Solomon Darker` Home Screen clip was launched through iOS's
+  standalone `com.apple.webapp` / `com.apple.SafariViewService` host. Its normal
+  production URL was preserved; the same standalone process was temporarily
+  navigated to the isolated candidate. It holds Hub `59.67` and Boneyard
+  `60.14` FPS, then a fresh standalone host completes eight consecutive picker
+  cycles at `59.06..60.02` FPS. Every close returns to two canvases with an
+  advancing world frame and empty error array. Result SHA-256 values are
+  `a683f0e2af517f72e45bdbaaac668ada37c08a1396b3307cec57b50571e562b5`
+  and `c4a449ea40b9363bfba9971cb62da5408cacb93638b9936950f632e53ee3e36f`.
+  The installed host was finally relaunched at its ordinary production title.
+- Fresh single-session post-run WebContent footprints are `647..682 MB`; the
+  standalone eight-picker run ends at `538 MB`. Phone temperature stays
+  `31.7..35.6 C` through the final acceptance and ends at `32.8 C`. No crash
+  report newer than `JetsamEvent-2026-08-26-212415.ips` appears during the
+  final clean element or standalone runs. The `21:15:24` and `21:24:15`
+  reports kill small system processes (`Safari.History` for compressor
+  thrashing and `fileproviderd`/`audiomxd`), not Safari/WebContent.
+
+The earlier diagnostic sequence intentionally retained one WebContent process
+across several candidate builds and complete game sessions; it eventually hit
+the iOS `98,304`-page (`1.50 GiB`) high-water in
+`JetsamEvent-2026-08-26-203436.ips`, SHA-256
+`772eaa7db2a7d529664021ceafa6502cc766fc0ee257170bb4d1bb36e9b58855`.
+That receipt is not hidden: iOS does not promptly return WebKit allocator high
+water after several destroyed SPA game generations. It contaminated a later
+Fire row (`37.30` FPS at `1.155 GB`) and is why independent element acceptance
+uses fresh processes. In-session product behavior is separately proven by the
+eight-picker Safari and standalone runs; repeated complete game generations in
+one long-lived WebContent process remain a documented browser endurance limit,
+not a level-up leak or thermal failure.
