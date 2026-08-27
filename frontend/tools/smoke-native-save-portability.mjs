@@ -174,6 +174,11 @@ async function openGameTitle(page) {
 
 async function waitForTitle(page) {
   await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
+  const tutorial = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  if (await tutorial.isVisible()) {
+    await tutorial.getByRole('button', { name: 'NO', exact: true }).click()
+    await tutorial.waitFor({ state: 'detached' })
+  }
 }
 
 async function openTitleSaveTransfer(page) {
