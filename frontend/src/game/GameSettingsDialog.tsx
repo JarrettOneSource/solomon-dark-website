@@ -42,8 +42,11 @@ import {
   type MobileUiLayout,
   type MobileUiSize,
 } from './mobile-ui-layout.ts'
+import NativeSaveTransferSettings, {
+  type NativeSaveTransferController,
+} from './NativeSaveTransferSettings.tsx'
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
-type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root'
+type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
 
 const MobileUiEditor = lazy(() => import('./MobileUiEditor.tsx'))
 
@@ -51,6 +54,7 @@ interface GameSettingsDialogProps {
   context: GameSettingsContext
   onChange: (settings: GameSettings) => void
   onClose: () => void
+  saveTransfer?: NativeSaveTransferController
   settings: GameSettings
 }
 
@@ -85,6 +89,7 @@ export default function GameSettingsDialog({
   context,
   onChange,
   onClose,
+  saveTransfer,
   settings,
 }: GameSettingsDialogProps) {
   const [page, setPage] = useState<SettingsPage>('root')
@@ -201,6 +206,7 @@ export default function GameSettingsDialog({
                 if (nextPage === 'mobile-ui') openMobileUi()
                 else setPage(nextPage)
               }}
+              saveTransfer={saveTransfer}
               settings={settings}
             />
           ) : page === 'controls' ? (
@@ -230,9 +236,11 @@ export default function GameSettingsDialog({
                 uiScale={settings.uiScalePercent / 100}
               />
             </Suspense>
-          ) : (
+          ) : page === 'performance' ? (
             <PerformanceSettings onChange={onChange} settings={settings} />
-          )}
+          ) : saveTransfer ? (
+            <NativeSaveTransferSettings controller={saveTransfer} />
+          ) : null}
         </div>
         <button
           className="game-settings-close"
@@ -251,11 +259,13 @@ function RootSettings({
   context,
   onChange,
   onOpen,
+  saveTransfer,
   settings,
 }: {
   context: GameSettingsContext
   onChange: (settings: GameSettings) => void
   onOpen: (page: SettingsPage) => void
+  saveTransfer?: NativeSaveTransferController
   settings: GameSettings
 }) {
   return (
@@ -304,6 +314,12 @@ function RootSettings({
       <SettingsGroup title="PERFORMANCE">
         <SettingsAction label="TWEAK GAME" onClick={() => onOpen('performance')} />
       </SettingsGroup>
+
+      {context === 'title' && saveTransfer ? (
+        <SettingsGroup title="SAVE TRANSFER">
+          <SettingsAction label="STOCK / BROWSER SAVE" onClick={() => onOpen('save-transfer')} />
+        </SettingsGroup>
+      ) : null}
 
       <SettingsGroup title="DEVELOPER">
         <SettingsToggle
@@ -587,5 +603,6 @@ function pageTitle(page: SettingsPage): string {
   if (page === 'controls') return 'CUSTOMIZE KEYBOARD'
   if (page === 'mobile-ui') return 'MOBILE UI EDITOR'
   if (page === 'performance') return 'TWEAK PERFORMANCE'
+  if (page === 'save-transfer') return 'SAVE TRANSFER'
   return 'GAME SETTINGS'
 }

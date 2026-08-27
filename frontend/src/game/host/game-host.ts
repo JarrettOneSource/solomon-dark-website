@@ -148,6 +148,7 @@ import {
   parseGameSaveDocument,
   type GameSaveIntegrity,
 } from '../save/game-save-contract.ts'
+import type { NativeGameSaveSource } from '../save/portable-game-profile.ts'
 import {
   createPartySystem,
   decidePartyJoinRequest,
@@ -437,6 +438,7 @@ interface HostClient {
   globalScoreEligible: boolean
   hubActivity: HubPlayerActivity | null
   localOnly: boolean
+  nativeSource: NativeGameSaveSource | null
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
   leaderboardUserId: number | null
@@ -1137,6 +1139,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         let stagedPartyRejoin: PartyRejoinSlot | null = null
         let saveIntegrity: GameSaveIntegrity | null = null
         let savedProfile: RestoredGameSaveProfile | null = null
+        let nativeSource: NativeGameSaveSource | null = null
         let retainedSaveModIds: readonly string[] | null = null
         const playerPartyIdentity = createPartyIdentity()
         if (
@@ -1177,6 +1180,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             return
           }
           saveIntegrity = savedProfile.integrity
+          nativeSource = savedProfile.nativeSource
           if (partyRecoveryClaim !== null) {
             const verified = verifyPartyRecoveryClaim(
               partyRecoverySecret,
@@ -1643,6 +1647,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               || saveIntegrity === 'local-only'
               || (authenticated.content?.manifest.mods.length ?? content.mods.length) > 0
             ),
+          nativeSource,
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
           leaderboardUserId: partyRejoinSlot?.leaderboardUserId
@@ -3634,6 +3639,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         integrity,
         mods: sharedContent?.manifest.mods ?? content.mods,
         modState: preparedModSaveState(scope?.runtime ?? privateModHost),
+        nativeSource: client.nativeSource,
         partyRejoinToken: null,
         playerId: client.playerId,
         state: saveState,

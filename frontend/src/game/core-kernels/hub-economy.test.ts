@@ -44,6 +44,7 @@ import {
   hubEconomyInventoryIsValid,
   insertLootInventoryItem,
   moveInventoryItem,
+  nativeHagathaOutcomeStateIsValid,
   nativeDyeCommittedTint,
   nativeDyeMixedColor,
   nativeDyeMixedTint,
@@ -459,11 +460,34 @@ test('Hagatha bundle price is ceiling-half and Tonic raises capacity only twice'
   const firstTonic = buyHagathaPerk({ ...createHubEconomy(1), gold: 10_000 }, 27)
   assert.equal(firstTonic.accepted, true)
   assert.equal(firstTonic.state.charmCapacity, 6)
+  assert.deepEqual(firstTonic.state.ownedPerkSelectors, [27])
   assert.equal(hagathaOffers(firstTonic.state).find(({ selector }) => selector === 27)?.price, 1_000)
   const secondTonic = buyHagathaPerk(firstTonic.state, 27)
   assert.equal(secondTonic.accepted, true)
   assert.equal(secondTonic.state.charmCapacity, 9)
+  assert.deepEqual(secondTonic.state.ownedPerkSelectors, [27, 27])
   assert.equal(hagathaOffers(secondTonic.state).some(({ selector }) => selector === 27), false)
+})
+
+test('Hagatha retains native purchase order and only Tonic may repeat', () => {
+  let state = { ...createHubEconomy(1), gold: 20_000 }
+  state = buyHagathaPerk(state, 5).state
+  state = buyHagathaPerk(state, 27).state
+  state = buyHagathaPerk(state, 0).state
+  state = buyHagathaPerk(state, 27).state
+  assert.deepEqual(state.ownedPerkSelectors, [5, 27, 0, 27])
+  assert.equal(nativeHagathaOutcomeStateIsValid(
+    state.ownedPerkSelectors,
+    state.tonicPurchases,
+    state.charmCapacity,
+  ), true)
+  assert.equal(nativeHagathaOutcomeStateIsValid([5, 0, 5], 0, 3), false)
+  assert.equal(nativeHagathaOutcomeStateIsValid([27, 27, 27], 2, 9), false)
+  assert.equal(nativeHagathaOutcomeStateIsValid(
+    [0, 1, 2, 3, 4, 5, 6, 7, 9, 27, 27],
+    2,
+    9,
+  ), true)
 })
 
 test('Luthacus transfers one stable object both ways without touching gold or copying', () => {

@@ -8,8 +8,8 @@ public sealed record WebGameSaveInspection(int FormatVersion, long Size, string 
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 16;
-    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    public const int FormatVersion = 17;
+    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -59,12 +59,28 @@ public static class WebGameSaveInspector
                 RequireExactProperties(
                     root,
                     "browser game save",
-                    "continuation",
-                    "integrity",
-                    "mods",
-                    "modState",
-                    "profile",
-                    "schemaVersion");
+                    version >= 17
+                        ? [
+                            "continuation",
+                            "integrity",
+                            "mods",
+                            "modState",
+                            "nativeSource",
+                            "profile",
+                            "schemaVersion"
+                        ]
+                        : [
+                            "continuation",
+                            "integrity",
+                            "mods",
+                            "modState",
+                            "profile",
+                            "schemaVersion"
+                        ]);
+                if (version >= 17)
+                {
+                    ValidateNativeSource(root.GetProperty("nativeSource"));
+                }
                 RequireMember(root, "integrity", "global-clean", "local-only");
                 var profile = RequireObject(root.GetProperty("profile"), "browser game save profile");
                 RequireExactProperties(
@@ -213,6 +229,160 @@ public static class WebGameSaveInspector
             parts[1].All(IsBase64UrlCharacter) &&
             parts[2].All(IsBase64UrlCharacter);
     }
+
+    private static void ValidateNativeSource(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+        var source = RequireObject(value, "browser game save native source");
+        RequireExactProperties(
+            source,
+            "browser game save native source",
+            "darkdataBase64",
+            "darkdataSha256",
+            "gamestateBase64",
+            "gamestateSha256",
+            "retainedFiles",
+            "runName");
+        RequireString(source, "darkdataBase64", 11 * 1024 * 1024);
+        RequireString(source, "gamestateBase64", 11 * 1024 * 1024);
+        RequireString(source, "darkdataSha256", 64);
+        RequireString(source, "gamestateSha256", 64);
+        RequireString(source, "runName", 64);
+        var darkdata = source.GetProperty("darkdataBase64").GetString()!;
+        var gamestate = source.GetProperty("gamestateBase64").GetString()!;
+        var darkdataSha256 = source.GetProperty("darkdataSha256").GetString();
+        var gamestateSha256 = source.GetProperty("gamestateSha256").GetString();
+        if (darkdata.Length + gamestate.Length > 11 * 1024 * 1024 ||
+            !IsSafeRunName(source.GetProperty("runName").GetString()))
+        {
+            throw new InvalidDataException("The browser game save native source is invalid.");
+        }
+        var totalBytes = DecodeNativeSourceFile(darkdata, darkdataSha256, allowEmpty: false);
+        totalBytes += DecodeNativeSourceFile(gamestate, gamestateSha256, allowEmpty: false);
+        var retainedFiles = source.GetProperty("retainedFiles");
+        if (retainedFiles.ValueKind != JsonValueKind.Array || retainedFiles.GetArrayLength() > 253)
+        {
+            throw new InvalidDataException("The browser game save retained files are invalid.");
+        }
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in retainedFiles.EnumerateArray())
+        {
+            var file = RequireObject(value, "browser game save retained file");
+            RequireExactProperties(
+                file,
+                "browser game save retained file",
+                "base64",
+                "path",
+                "sha256");
+            var base64 = file.GetProperty("base64");
+            var path = file.GetProperty("path");
+            var sha256 = file.GetProperty("sha256");
+            if (base64.ValueKind != JsonValueKind.String ||
+                path.ValueKind != JsonValueKind.String ||
+                sha256.ValueKind != JsonValueKind.String ||
+                !IsSafeRetainedPath(path.GetString()) ||
+                !paths.Add(path.GetString()!))
+            {
+                throw new InvalidDataException("The browser game save retained file is invalid.");
+            }
+            totalBytes += DecodeNativeSourceFile(
+                base64.GetString()!,
+                sha256.GetString(),
+                allowEmpty: true);
+        }
+        if (totalBytes > 8 * 1024 * 1024)
+        {
+            throw new InvalidDataException("The browser game save native source is too large.");
+        }
+    }
+
+    private static int DecodeNativeSourceFile(
+        string base64,
+        string? expectedSha256,
+        bool allowEmpty)
+    {
+        if ((!allowEmpty && base64.Length == 0) ||
+            (base64.Length > 0 && !IsBase64(base64)) ||
+            !IsLowerSha256(expectedSha256))
+        {
+            throw new InvalidDataException("The browser game save native source is invalid.");
+        }
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(base64);
+        }
+        catch (FormatException error)
+        {
+            throw new InvalidDataException(
+                "The browser game save native source is invalid.",
+                error);
+        }
+        var actualSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        if (!string.Equals(Convert.ToBase64String(bytes), base64, StringComparison.Ordinal) ||
+            !string.Equals(actualSha256, expectedSha256, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("The browser game save native source hash is invalid.");
+        }
+        return bytes.Length;
+    }
+
+    private static bool IsSafeRetainedPath(string? value)
+    {
+        if (value is not { Length: > 0 and <= 512 } ||
+            value.Contains('\\') ||
+            value.Contains(':') ||
+            value.StartsWith('/') ||
+            value.EndsWith('/') ||
+            value.Any(char.IsControl))
+        {
+            return false;
+        }
+        var parts = value.Split('/');
+        if (parts.Any(part => part.Length == 0 || part is "." or "..") ||
+            !value.StartsWith("solomondark/", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("solomondark/darkdata.cfg", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("solomondark/settings.txt", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        return !(parts.Length >= 4 &&
+            parts[0].Equals("solomondark", StringComparison.OrdinalIgnoreCase) &&
+            parts[1].Equals("savegames", StringComparison.OrdinalIgnoreCase) &&
+            parts[^1].Equals("gamestate.sav", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsBase64(string value)
+    {
+        if (value.Length == 0 || value.Length % 4 != 0)
+        {
+            return false;
+        }
+        var padding = value.EndsWith("==", StringComparison.Ordinal)
+            ? 2
+            : value.EndsWith('=') ? 1 : 0;
+        return value[..(value.Length - padding)].All(character =>
+                character is >= 'A' and <= 'Z' or
+                >= 'a' and <= 'z' or
+                >= '0' and <= '9' or
+                '+' or '/') &&
+            value[(value.Length - padding)..].All(character => character == '=');
+    }
+
+    private static bool IsLowerSha256(string? value) =>
+        value is { Length: 64 } &&
+        value.All(character =>
+            character is >= '0' and <= '9' or
+            >= 'a' and <= 'f');
+
+    private static bool IsSafeRunName(string? value) =>
+        value is { Length: > 0 and <= 64 } &&
+        value.All(character =>
+            char.IsAsciiLetterOrDigit(character) ||
+            character is '.' or '_' or '-');
 
     private static bool IsBase64UrlCharacter(char character) =>
         character is >= 'A' and <= 'Z' or

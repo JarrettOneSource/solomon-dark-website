@@ -563,6 +563,63 @@
 
 .game-settings-console-help code { color: #fff0b7; font-family: var(--font-mono); }
 
+.native-save-transfer-settings {
+  color: #c8b988;
+  font-family: var(--font-display);
+}
+
+.native-save-transfer-intro,
+.native-save-transfer-note,
+.native-save-transfer-preview,
+.native-save-transfer-error,
+.native-save-transfer-status {
+  margin: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.native-save-transfer-settings .game-settings-action:disabled {
+  color: #746b51;
+  cursor: default;
+}
+
+.native-save-transfer-preview {
+  padding: 12px;
+  border: 1px solid rgb(205 177 105 / 0.42);
+  background: rgb(0 0 0 / 0.54);
+}
+
+.native-save-transfer-preview h3,
+.native-save-transfer-preview p { margin: 0 0 6px; }
+
+.native-save-transfer-preview h3 { color: #f0d996; font-size: 17px; }
+
+.native-save-transfer-preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.native-save-transfer-preview button {
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 2px ridge #665a38;
+  color: #f0d996;
+  background: #17130e;
+  font: 700 12px var(--font-display);
+  cursor: pointer;
+}
+
+.native-save-transfer-preview button:hover,
+.native-save-transfer-preview button:focus-visible {
+  color: #fff0b7;
+  outline: 1px solid #fff0b7;
+}
+
+.native-save-transfer-error { color: #f0b7aa; }
+.native-save-transfer-status { color: #b9d6ab; }
+
 .game-settings-close {
   position: relative;
   z-index: 3;

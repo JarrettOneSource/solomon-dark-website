@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import { ErrorNote, Spinner, TagBadge } from '../components/ui'
@@ -14,6 +14,8 @@ import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
 import { SCHOOLS } from '../fx/SchoolBursts'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
+import type { PortableImportResult } from '../game/save/game-save-portability.ts'
+import type { PortableGameProfile } from '../game/save/portable-game-profile.ts'
 
 const SCHOOL_LORE: Record<School, string> = {
   fire: 'Every click, a small act of arson.',
@@ -93,6 +95,12 @@ function BrowserGameSaveSlot({
   onChanged: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pendingImport, setPendingImport] = useState<Readonly<{
+    imported: PortableImportResult
+    portable: PortableGameProfile
+  }> | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
   const remove = async () => {
     if (!save || !window.confirm('Erase browser save I from the cloud?')) return
     setBusy(true)
@@ -101,6 +109,76 @@ function BrowserGameSaveSlot({
       onChanged()
     } catch (error) {
       alert(error instanceof ApiError ? error.message : 'Failed to erase')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const inspectNativeFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setBusy(true)
+    setError(null)
+    setPendingImport(null)
+    try {
+      const [{ readNativeSaveFileSelection }, { createWebGameSaveFromPortableProfile }] = await Promise.all([
+        import('../game/save/native-save-files.ts'),
+        import('../game/save/game-save-portability.ts'),
+      ])
+      const portable = await readNativeSaveFileSelection(files)
+      setPendingImport(Object.freeze({
+        imported: createWebGameSaveFromPortableProfile(portable),
+        portable,
+      }))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The native save could not be inspected.')
+    } finally {
+      if (fileInput.current) fileInput.current.value = ''
+      setBusy(false)
+    }
+  }
+
+  const applyNativeImport = async () => {
+    if (!pendingImport) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.gameSaves.put(0, {
+        document: pendingImport.imported.document,
+        expectedRevision: save?.revision ?? 0,
+      })
+      setPendingImport(null)
+      onChanged()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'The native save could not replace slot I.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportForStock = async () => {
+    if (!save) return
+    setBusy(true)
+    setError(null)
+    try {
+      const { exportWebGameSaveToNativeArchive } = await import(
+        '../game/save/game-save-portability.ts'
+      )
+      const exported = await exportWebGameSaveToNativeArchive(save.document)
+      if (
+        exported.warnings.length > 0
+        && !window.confirm(`${exported.warnings.join('\n\n')}\n\nExport anyway?`)
+      ) return
+      const url = URL.createObjectURL(new Blob(
+        [new Uint8Array(exported.archive)],
+        { type: 'application/zip' },
+      ))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `solomon-dark-stock-save-${Date.now()}.zip`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The stock save could not be exported.')
     } finally {
       setBusy(false)
     }
@@ -130,6 +208,69 @@ function BrowserGameSaveSlot({
           erase
         </button>
       ) : null}
+      <div className="mt-3 flex flex-wrap gap-3 border-t border-gold/15 pt-3">
+        <input
+          ref={fileInput}
+          className="sr-only"
+          type="file"
+          accept=".zip,.cfg,.sav"
+          multiple
+          onChange={event => { void inspectNativeFiles(event.currentTarget.files) }}
+        />
+        <button
+          type="button"
+          className="text-[11px] uppercase tracking-wider text-arcane hover:text-arcane-bright"
+          disabled={busy}
+          onClick={() => fileInput.current?.click()}
+        >
+          import stock save
+        </button>
+        <button
+          type="button"
+          className="text-[11px] uppercase tracking-wider text-gold/80 hover:text-gold"
+          disabled={busy || !save}
+          onClick={() => { void exportForStock() }}
+        >
+          export for stock
+        </button>
+      </div>
+      {pendingImport ? (
+        <div className="mt-3 rounded border border-arcane/30 bg-arcane/5 p-3 text-xs text-bone-dim">
+          <div className="font-display text-sm text-bone">
+            {pendingImport.imported.character.displayName}
+          </div>
+          <div className="mt-1">
+            Level {pendingImport.portable.wizard.level} · {pendingImport.imported.character.element}
+            {' / '}{pendingImport.imported.character.discipline} · {pendingImport.portable.profile.gold} gold
+          </div>
+          <div className="mt-1">
+            {pendingImport.portable.wizard.permanentRanks.filter(rank => rank > 0).length} learned rows
+            {' · '}{pendingImport.portable.wizard.perkSelectors.length} Hagatha perks
+          </div>
+          {pendingImport.imported.warnings.map(warning => (
+            <p key={warning} className="mt-2 text-amber-200/75">{warning}</p>
+          ))}
+          <div className="mt-3 flex gap-3">
+            <button
+              type="button"
+              className="text-[11px] uppercase tracking-wider text-arcane"
+              disabled={busy}
+              onClick={() => { void applyNativeImport() }}
+            >
+              {save ? 'replace slot I' : 'write slot I'}
+            </button>
+            <button
+              type="button"
+              className="text-[11px] uppercase tracking-wider text-bone-dim"
+              disabled={busy}
+              onClick={() => setPendingImport(null)}
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {error ? <div className="mt-3"><ErrorNote message={error} /></div> : null}
     </div>
   )
 }

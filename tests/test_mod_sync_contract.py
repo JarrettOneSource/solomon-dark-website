@@ -879,10 +879,24 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 16,
+                "schemaVersion": 17,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
+                "nativeSource": {
+                    "darkdataBase64": "AA==",
+                    "darkdataSha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+                    "gamestateBase64": "AA==",
+                    "gamestateSha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+                    "retainedFiles": [
+                        {
+                            "base64": "cG9ydHJhaXQ=",
+                            "path": "solomondark/Portraits/portrait100.raw",
+                            "sha256": "51c5a8296a032ce7b3014e66000c20d0d759d2e910873f28fa6107ab012bf887",
+                        }
+                    ],
+                    "runName": "_survival",
+                },
                 "profile": {
                     "economy": {},
                     "hagathaRuntime": {
@@ -934,6 +948,19 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 400, rejected)
 
+        bad_native_hash = json.loads(document)
+        bad_native_hash["nativeSource"]["darkdataSha256"] = "0" * 64
+        status, rejected = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={
+                "document": json.dumps(bad_native_hash, separators=(",", ":")),
+                "expectedRevision": 0,
+            },
+        )
+        self.assertEqual(status, 400, rejected)
+
         status, created = self.request(
             "PUT",
             "/api/game/saves/0",
@@ -942,7 +969,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 16)
+        self.assertEqual(created["formatVersion"], 17)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))
@@ -974,6 +1001,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         current = json.loads(next_document)
         schema_ten = {**current, "schemaVersion": 10}
+        del schema_ten["nativeSource"]
         schema_ten_document = json.dumps(schema_ten, separators=(",", ":"))
         status, schema_ten_saved = self.request(
             "PUT",
@@ -990,6 +1018,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         schema_nine = json.loads(json.dumps(current))
         schema_nine["schemaVersion"] = 9
+        del schema_nine["nativeSource"]
         del schema_nine["continuation"]["summary"]["partyRejoinToken"]
         schema_nine_document = json.dumps(schema_nine, separators=(",", ":"))
         status, schema_nine_saved = self.request(
@@ -1007,6 +1036,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         schema_eight = json.loads(json.dumps(current))
         schema_eight["schemaVersion"] = 8
+        del schema_eight["nativeSource"]
         del schema_eight["continuation"]["summary"]["partyRejoinToken"]
         schema_eight_document = json.dumps(schema_eight, separators=(",", ":"))
         status, schema_eight_saved = self.request(
@@ -1024,6 +1054,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         legacy_current = json.loads(json.dumps(current))
         legacy_current["schemaVersion"] = 6
+        del legacy_current["nativeSource"]
         del legacy_current["continuation"]["summary"]["partyRejoinToken"]
         legacy_current_document = json.dumps(legacy_current, separators=(",", ":"))
         status, legacy_current_saved = self.request(
@@ -1064,6 +1095,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         legacy_envelope = json.loads(next_document)
         legacy_envelope["schemaVersion"] = 5
+        del legacy_envelope["nativeSource"]
         del legacy_envelope["continuation"]["summary"]["activeRun"]
         del legacy_envelope["continuation"]["summary"]["partyRejoinToken"]
         legacy_envelope_document = json.dumps(legacy_envelope, separators=(",", ":"))

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   gameStartupStageLabel,
   initialGameStartupProgress,
@@ -30,6 +30,9 @@ import {
   type BrowserGameAdmission,
 } from '../game/game-bootstrap.ts'
 import MainMenuScene from '../game/MainMenuScene'
+import type {
+  NativeSaveTransferController,
+} from '../game/NativeSaveTransferSettings.tsx'
 import NativeLoader from '../game/NativeLoader'
 import GameRuntimeError from '../game/GameRuntimeError.tsx'
 import { useAuth } from '../lib/auth'
@@ -369,6 +372,54 @@ export default function Game() {
     await coordinator.replace(retireGameSaveWizard(current.document))
   }, [])
 
+  const inspectNativeSaveImport = useCallback(async (files: FileList) => {
+    const [{ readNativeSaveFileSelection }, { createWebGameSaveFromPortableProfile }] = await Promise.all([
+      import('../game/save/native-save-files.ts'),
+      import('../game/save/game-save-portability.ts'),
+    ])
+    const portable = await readNativeSaveFileSelection(files)
+    const imported = createWebGameSaveFromPortableProfile(portable)
+    return Object.freeze({
+      discipline: imported.character.discipline,
+      displayName: imported.character.displayName,
+      document: imported.document,
+      element: imported.character.element,
+      gold: portable.profile.gold,
+      hagathaPerks: portable.wizard.perkSelectors.length,
+      learnedRows: portable.wizard.permanentRanks.filter(rank => rank > 0).length,
+      level: portable.wizard.level,
+      warnings: imported.warnings,
+    })
+  }, [])
+
+  const replaceWithNativeSaveImport = useCallback(async (document: string) => {
+    const coordinator = saveCoordinator.current
+    if (!coordinator) throw new Error('The game save owner is unavailable.')
+    await coordinator.replace(document)
+  }, [])
+
+  const exportCurrentNativeSave = useCallback(async () => {
+    const current = saveCoordinator.current?.current()
+    if (!current) throw new Error('Create or import a wizard before exporting.')
+    const { exportWebGameSaveToNativeArchive } = await import(
+      '../game/save/game-save-portability.ts'
+    )
+    const exported = await exportWebGameSaveToNativeArchive(current.document)
+    return Object.freeze({ archive: exported.archive, warnings: exported.warnings })
+  }, [])
+
+  const nativeSaveTransfer = useMemo<NativeSaveTransferController>(() => Object.freeze({
+    canExport: profileSave !== null,
+    exportCurrent: exportCurrentNativeSave,
+    inspectImport: inspectNativeSaveImport,
+    replaceWithImport: replaceWithNativeSaveImport,
+  }), [
+    exportCurrentNativeSave,
+    inspectNativeSaveImport,
+    profileSave,
+    replaceWithNativeSaveImport,
+  ])
+
   const loadGlobalHallOfFame = useCallback(async (
     board: HallOfFameBoard,
   ): Promise<readonly HallOfFameEntry[]> => {
@@ -420,6 +471,7 @@ export default function Game() {
               profileSave={profileSave}
               refreshActiveMods={refreshActiveMods}
               resumeSave={resumeSave}
+              saveTransfer={nativeSaveTransfer}
               submitGlobalHallOfFame={submitGlobalHallOfFame}
               tutorialOfferEligible={shouldOfferStockTutorial(saveDetection)}
             />

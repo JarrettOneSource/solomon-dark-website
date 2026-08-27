@@ -161,6 +161,7 @@ import {
   HUB_ITEM_KINDS,
   HUB_SACK_CHILD_REPLICATION_LIMIT,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  nativeHagathaOutcomeStateIsValid,
   MAX_NATIVE_DYE_SELECTIONS,
   modItemInventoryIdentityIsValid,
   modWearableContentIsValid,
@@ -2567,7 +2568,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
   if (new Set(hagathaOffers.map(({ selector }) => selector)).size !== hagathaOffers.length) {
     throw new GameProtocolError(`${field}.hagathaOffers contains a duplicate selector`)
   }
-  const ownedPerkSelectors = selectorArray(
+  const ownedPerkSelectors = hagathaOutcomeArray(
     source.ownedPerkSelectors,
     `${field}.ownedPerkSelectors`,
   )
@@ -2579,8 +2580,12 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     source.tonicPurchases,
     `${field}.tonicPurchases`,
   )
-  if (tonicPurchases > 2 || charmCapacity !== 3 + tonicPurchases * 3) {
-    throw new GameProtocolError(`${field}.tonicPurchases does not match charmCapacity`)
+  if (!nativeHagathaOutcomeStateIsValid(
+    ownedPerkSelectors,
+    tonicPurchases,
+    charmCapacity,
+  )) {
+    throw new GameProtocolError(`${field}.Hagatha outcomes do not match Tonic capacity`)
   }
   return {
     actionFeedback: source.actionFeedback === null
@@ -2636,6 +2641,7 @@ function nativeHubNpcState(
     failureSequence > 1
     || failed !== (failureSequence === 1)
     || failed && succeeded
+    || selected === 3 && failed
     || selected === null && (failed || succeeded)
     || helpFlags.length !== 10
   ) throw new GameProtocolError(`${field}.boast state is inconsistent`)
@@ -3421,6 +3427,19 @@ function selectorArray(value: unknown, field: string): readonly number[] {
   if (selectors.some((selector, index) => (
     selector === 8 || (index > 0 && selector <= selectors[index - 1]!)
   ))) throw new GameProtocolError(`${field} must be sorted, unique, and available`)
+  return selectors
+}
+
+function hagathaOutcomeArray(value: unknown, field: string): readonly number[] {
+  const selectors = limitedArray(value, field, 11).map((selector, index) => (
+    boundedInteger(selector, `${field}[${index}]`, 0, 27)
+  ))
+  const ordinary = selectors.filter(selector => selector !== 27)
+  if (
+    selectors.includes(8)
+    || new Set(ordinary).size !== ordinary.length
+    || selectors.filter(selector => selector === 27).length > 2
+  ) throw new GameProtocolError(`${field} is not a native Hagatha outcome list`)
   return selectors
 }
 

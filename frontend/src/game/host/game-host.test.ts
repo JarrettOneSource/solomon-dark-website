@@ -3115,11 +3115,20 @@ test('host starts a fresh character from the durable profile without reviving it
 })
 
 test('new-game intent retires an active wizard and scavenges carried equipment', async (context) => {
+  const nativeSource = {
+    darkdataBase64: 'AA==',
+    darkdataSha256: '0'.repeat(64),
+    gamestateBase64: 'AA==',
+    gamestateSha256: '1'.repeat(64),
+    retainedFiles: [],
+    runName: '_survival',
+  }
   const active = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
     mods: [],
     modState: {},
+    nativeSource,
     playerId: 'saved-owner',
     state: createGameSimulation({ 'saved-owner': FIRST_CHARACTER }),
   })
@@ -3147,6 +3156,13 @@ test('new-game intent retires an active wizard and scavenges carried equipment',
   assert.deepEqual(
     economy?.storage.at(-1)?.contents?.map(({ name }) => name).sort(),
     ['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff'],
+  )
+  const leaving = leaveSaveMessages(socket, 91)
+  socket.send(encodeGameMessage({ type: 'client-save-before-leave', requestId: 91 }))
+  const checkpoint = await leaving
+  assert.deepEqual(
+    JSON.parse(checkpoint.checkpoint.save).nativeSource,
+    nativeSource,
   )
 })
 

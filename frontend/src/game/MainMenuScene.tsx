@@ -40,6 +40,7 @@ import GameMenuSkull, { type GameMenuAvailability } from './GameMenuSkull.tsx'
 import GameChat, { type GameChatWhisperRequest } from './GameChat.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameSettingsDialog, { type GameSettingsContext } from './GameSettingsDialog.tsx'
+import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
 import HallOfFameScene from './HallOfFameScene.tsx'
 import { HallOfFameRunRecorder } from './client/hall-of-fame-run-recorder.ts'
 import type {
@@ -357,6 +358,7 @@ interface MainMenuSceneProps {
   profileSave: GameProfileSave | null
   refreshActiveMods: () => Promise<readonly ActiveWebMod[]>
   resumeSave: ResumableGameSave | null
+  saveTransfer: NativeSaveTransferController
   submitGlobalHallOfFame: (receipt: string) => Promise<void>
   tutorialOfferEligible: boolean
 }
@@ -379,6 +381,7 @@ export default function MainMenuScene({
   profileSave,
   refreshActiveMods,
   resumeSave,
+  saveTransfer,
   submitGlobalHallOfFame,
   tutorialOfferEligible,
 }: MainMenuSceneProps) {
@@ -1977,6 +1980,7 @@ export default function MainMenuScene({
             context={settingsContext}
             onChange={requestGameSettingsUpdate}
             onClose={() => setSettingsContext(null)}
+            saveTransfer={settingsContext === 'title' ? saveTransfer : undefined}
             settings={gameSettings}
           />
         ) : null}

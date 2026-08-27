@@ -631,6 +631,35 @@ export const HAGATHA_PERKS: readonly HagathaPerkDefinition[] =
     selector,
   }))
 
+export function nativeHagathaOutcomeStateIsValid(
+  outcomes: readonly number[],
+  tonicPurchases: number,
+  charmCapacity: number,
+): boolean {
+  if (
+    !Array.isArray(outcomes)
+    || !Number.isSafeInteger(tonicPurchases)
+    || tonicPurchases < 0
+    || tonicPurchases > 2
+    || charmCapacity !== 3 + tonicPurchases * 3
+  ) return false
+  const ordinary = new Set<number>()
+  let tonics = 0
+  for (const selector of outcomes) {
+    if (!Number.isSafeInteger(selector) || selector < 0 || selector > 27 || selector === 8) {
+      return false
+    }
+    if (selector === 27) {
+      tonics += 1
+    } else if (ordinary.has(selector)) {
+      return false
+    } else {
+      ordinary.add(selector)
+    }
+  }
+  return tonics === tonicPurchases && ordinary.size <= charmCapacity
+}
+
 export const SORCERORS_CHARM_SELECTOR = 17
 
 export function createNativeUnforgeBonuses(): NativeUnforgeBonuses {
@@ -892,6 +921,7 @@ export function buyHagathaPerk(
   let charmCapacity = source.charmCapacity
   let tonicPurchases = source.tonicPurchases
   const owned = new Set(source.ownedPerkSelectors)
+  const outcomes = [...source.ownedPerkSelectors]
   const firstMixed = new Set(source.firstMixedSelectors)
   for (const member of offer.members) {
     firstMixed.add(member)
@@ -899,9 +929,13 @@ export function buyHagathaPerk(
       if (tonicPurchases < 2) {
         tonicPurchases += 1
         charmCapacity = Math.min(9, charmCapacity + 3)
+        outcomes.push(member)
       }
     } else {
-      owned.add(member)
+      if (!owned.has(member)) {
+        owned.add(member)
+        outcomes.push(member)
+      }
     }
   }
   return accepted({
@@ -910,7 +944,7 @@ export function buyHagathaPerk(
     firstMixedSelectors: [...firstMixed].sort((left, right) => left - right),
     gold: source.gold - offer.price,
     hagathaBundleSelectors: selector === -1 ? [] : source.hagathaBundleSelectors,
-    ownedPerkSelectors: [...owned].sort((left, right) => left - right),
+    ownedPerkSelectors: outcomes,
     tonicPurchases,
   })
 }
@@ -1947,7 +1981,7 @@ function individualPerkPrice(source: HubEconomyState, selector: number): number 
 function perksFitCapacity(source: HubEconomyState, selectors: readonly number[]): boolean {
   let capacity = source.charmCapacity
   let tonicPurchases = source.tonicPurchases
-  let ownedCount = source.ownedPerkSelectors.length
+  let ownedCount = source.ownedPerkSelectors.filter(selector => selector !== 27).length
   const owned = new Set(source.ownedPerkSelectors)
   for (const selector of selectors) {
     if (selector === 27) {

@@ -128,6 +128,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
 
   const schemaTwelve = JSON.parse(document)
   schemaTwelve.schemaVersion = 12
+  delete schemaTwelve.nativeSource
   delete schemaTwelve.profile.economy.collegeIntroPending
   delete schemaTwelve.continuation.simulation.playerEntities.economies[0]
     .collegeIntroPending
@@ -210,7 +211,7 @@ test('Hub resume reconstructs its authoritative Skorcha population with the othe
   assert.deepEqual(restored.state.gameRng, hubSeed.state)
 })
 
-test('schema 15 resumes every College admission phase and its exact player position', () => {
+test('schema 16 resumes every College admission phase and its exact player position', () => {
   const resume = (state: ReturnType<typeof createGameSimulation>) => restoreGameSaveDocument(
     createGameSaveDocument({
       integrity: 'global-clean',
@@ -333,6 +334,7 @@ test('native NPC help rows persist after acknowledgement and pre-v11 saves migra
 
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 10
+  delete legacy.nativeSource
   delete legacy.profile.economy.collegeIntroPending
   delete legacy.continuation.simulation.playerEntities.economies[0].collegeIntroPending
   delete legacy.continuation.simulation.world.participants.owner.collegeIntro
@@ -538,6 +540,7 @@ test('active-party capability is strict, active-run-only, and absent from old sc
   for (const schemaVersion of [11, 10]) {
     const previous = structuredClone(current)
     previous.schemaVersion = schemaVersion
+    delete previous.nativeSource
     previous.continuation.summary.partyRejoinToken = 'A'.repeat(43)
     assert.equal(
       readGameSaveSummary(JSON.stringify(previous))?.partyRejoinToken,
@@ -548,6 +551,7 @@ test('active-party capability is strict, active-run-only, and absent from old sc
   for (const schemaVersion of [9, 8, 7, 6]) {
     const previous = structuredClone(current)
     previous.schemaVersion = schemaVersion
+    delete previous.nativeSource
     delete previous.continuation.summary.partyRejoinToken
     assert.equal(
       readGameSaveSummary(JSON.stringify(previous))?.partyRejoinToken,
@@ -706,6 +710,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
 
   const legacy = structuredClone(encoded)
   legacy.schemaVersion = 8
+  delete legacy.nativeSource
   delete legacy.continuation.summary.partyRejoinToken
   delete legacy.continuation.simulation.world.tutorial.cameraLockAgeTicks
   legacy.continuation.simulation.world.tutorial.cameraLockTriggered = true
@@ -767,6 +772,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
 
   const priorSchemaSeven = structuredClone(encoded)
   priorSchemaSeven.schemaVersion = 7
+  delete priorSchemaSeven.nativeSource
   delete priorSchemaSeven.continuation.simulation.world.tutorial.cameraLockAgeTicks
   delete priorSchemaSeven.continuation.summary.partyRejoinToken
   delete priorSchemaSeven.continuation.simulation.world.tutorial
@@ -797,6 +803,7 @@ test('schema 7 and 6 saves migrate absent NPC state as acknowledged without arch
   for (const schemaVersion of [7, 6]) {
     const previous = JSON.parse(current)
     previous.schemaVersion = schemaVersion
+    delete previous.nativeSource
     delete previous.continuation.summary.partyRejoinToken
     delete previous.profile.economy.npc
     delete previous.profile.economy.collegeIntroPending
@@ -871,6 +878,50 @@ test('host save documents fail closed for unknown schema, extra fields, owner dr
   )
 })
 
+test('schema 17 carries bounded native provenance through resume, profile archival, and retirement', () => {
+  const nativeSource = {
+    darkdataBase64: 'AA==',
+    darkdataSha256: '0'.repeat(64),
+    gamestateBase64: 'AA==',
+    gamestateSha256: '1'.repeat(64),
+    retainedFiles: [{
+      base64: '',
+      path: 'solomondark/Portraits/empty.raw',
+      sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    }],
+    runName: '_survival',
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    nativeSource,
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  assert.deepEqual(restoreGameSaveDocument(document).nativeSource, nativeSource)
+  assert.deepEqual(restoreGameSaveProfile(document).nativeSource, nativeSource)
+  assert.deepEqual(restoreGameSaveProfile(retireGameSaveWizard(document)).nativeSource, nativeSource)
+
+  const malformed = JSON.parse(document)
+  malformed.nativeSource.runName = '../escape'
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /native source/,
+  )
+  malformed.nativeSource.runName = '_survival'
+  malformed.nativeSource.retainedFiles[0].path = 'solomondark/../escape.raw'
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /retained file/,
+  )
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 16
+  delete legacy.nativeSource
+  assert.equal(restoreGameSaveDocument(JSON.stringify(legacy)).nativeSource, null)
+})
+
 test('schema-3 saves migrate conservatively to local-only integrity', () => {
   const current = createGameSaveDocument({
     integrity: 'global-clean',
@@ -883,6 +934,47 @@ test('schema-3 saves migrate conservatively to local-only integrity', () => {
 
   const restored = restoreGameSaveDocument(legacyDocument(current, 3))
   assert.equal(restored.integrity, 'local-only')
+})
+
+test('schema-17 retains ordered Hagatha outcomes and schema 16 materializes Tonic rows', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      charmCapacity: 9,
+      ownedPerkSelectors: [5, 27, 0, 27],
+      tonicPurchases: 2,
+    }),
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  assert.deepEqual(
+    restoreGameSaveDocument(document).state.playerEntities.economies[0]?.ownedPerkSelectors,
+    [5, 27, 0, 27],
+  )
+
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 16
+  delete legacy.nativeSource
+  legacy.profile.economy.ownedPerkSelectors = [0, 5]
+  legacy.continuation.simulation.playerEntities.economies[0].ownedPerkSelectors = [0, 5]
+  assert.deepEqual(
+    restoreGameSaveDocument(JSON.stringify(legacy))
+      .state.playerEntities.economies[0]?.ownedPerkSelectors,
+    [0, 5, 27, 27],
+  )
+  assert.deepEqual(
+    restoreGameSaveProfile(JSON.stringify(legacy)).economy.ownedPerkSelectors,
+    [0, 5, 27, 27],
+  )
 })
 
 test('known schema 1 through 5 continuations migrate through current authority', () => {
@@ -1084,6 +1176,7 @@ function legacyDocument(document: string, schemaVersion: number): string {
 function legacySchema5Document(document: string): string {
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 5
+  delete legacy.nativeSource
   delete legacy.profile.economy.collegeIntroPending
   delete legacy.profile.economy.npc
   delete legacy.continuation.simulation.world.skorcha

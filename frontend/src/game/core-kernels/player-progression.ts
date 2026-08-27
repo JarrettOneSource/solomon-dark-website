@@ -542,8 +542,7 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
   const disciplineRoot = DISCIPLINE_ROOT[config.discipline]
   const [primarySkillId, secondarySkillId] = STARTING_SKILLS[config.element]
   const permanentRanks = new Array<number>(NATIVE_SKILL_ROW_COUNT).fill(0)
-  permanentRanks[elementRoot] = 1
-  permanentRanks[disciplineRoot] = 1
+  for (let root = 0; root < 8; root += 1) permanentRanks[root] = 1
   permanentRanks[primarySkillId] = 1
   permanentRanks[secondarySkillId] = 1
   return {

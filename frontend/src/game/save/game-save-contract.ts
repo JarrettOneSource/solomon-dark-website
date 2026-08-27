@@ -8,10 +8,11 @@ import type {
   GameContentIdentity,
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
+import type { NativeGameSaveSource } from './portable-game-profile.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 16
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 17
 export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
@@ -66,6 +67,7 @@ export interface ParsedGameSaveDocument {
   readonly integrity: GameSaveIntegrity
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly nativeSource: NativeGameSaveSource | null
   readonly profile: ParsedGameSaveProfile
   readonly sourceSchemaVersion: number
 }
@@ -112,6 +114,7 @@ function parseCurrentDocument(
     'integrity',
     'mods',
     'modState',
+    ...(schemaVersion >= 17 ? ['nativeSource'] : []),
     'profile',
     'schemaVersion',
   ])
@@ -128,6 +131,7 @@ function parseCurrentDocument(
     integrity: parseIntegrity(root.integrity),
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
+    nativeSource: schemaVersion >= 17 ? parseNativeSource(root.nativeSource) : null,
     profile,
     sourceSchemaVersion: schemaVersion,
   }
@@ -149,6 +153,7 @@ function parseLegacyEnvelope(root: Record<string, unknown>): ParsedGameSaveDocum
     integrity: parseIntegrity(root.integrity),
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
+    nativeSource: null,
     profile: parseProfile(root.profile),
     sourceSchemaVersion: 5,
   }
@@ -179,9 +184,89 @@ function parseLegacyDocument(
     integrity: schemaVersion === 4 ? parseIntegrity(root.integrity) : 'local-only',
     mods: schemaVersion >= 2 ? parseMods(root.mods) : [],
     modState: schemaVersion >= 2 ? parseModState(root.modState) : {},
+    nativeSource: null,
     profile: profileFromLegacySimulation(root.simulation, summary.playerId),
     sourceSchemaVersion: schemaVersion,
   }
+}
+
+function parseNativeSource(value: unknown): NativeGameSaveSource | null {
+  if (value === null) return null
+  const source = record(value, 'game save native source')
+  onlyKeys(source, 'game save native source', [
+    'darkdataBase64',
+    'darkdataSha256',
+    'gamestateBase64',
+    'gamestateSha256',
+    'retainedFiles',
+    'runName',
+  ])
+  const retainedValues = source.retainedFiles
+  if (!Array.isArray(retainedValues) || retainedValues.length > 253) {
+    throw new Error('game save native source retained files are invalid')
+  }
+  const retainedPaths = new Set<string>()
+  let retainedBase64Length = 0
+  const retainedFiles = retainedValues.map((value, index) => {
+    const file = record(value, `game save native retained file ${index}`)
+    onlyKeys(file, `game save native retained file ${index}`, ['base64', 'path', 'sha256'])
+    if (
+      typeof file.base64 !== 'string'
+      || (file.base64 !== '' && !boundedBase64(file.base64))
+      || typeof file.path !== 'string'
+      || !nativeRetainedPathIsSafe(file.path)
+      || typeof file.sha256 !== 'string'
+      || !/^[a-f0-9]{64}$/.test(file.sha256)
+      || retainedPaths.has(file.path.toLowerCase())
+    ) throw new Error(`game save native retained file ${index} is invalid`)
+    retainedBase64Length += file.base64.length
+    retainedPaths.add(file.path.toLowerCase())
+    return { base64: file.base64, path: file.path, sha256: file.sha256 }
+  })
+  if (
+    typeof source.darkdataBase64 !== 'string'
+    || !boundedBase64(source.darkdataBase64)
+    || typeof source.gamestateBase64 !== 'string'
+    || !boundedBase64(source.gamestateBase64)
+    || source.darkdataBase64.length + source.gamestateBase64.length
+      + retainedBase64Length > 11 * 1024 * 1024
+    || typeof source.darkdataSha256 !== 'string'
+    || !/^[a-f0-9]{64}$/.test(source.darkdataSha256)
+    || typeof source.gamestateSha256 !== 'string'
+    || !/^[a-f0-9]{64}$/.test(source.gamestateSha256)
+    || typeof source.runName !== 'string'
+    || !/^[A-Za-z0-9._-]{1,64}$/.test(source.runName)
+  ) throw new Error('game save native source is invalid')
+  return {
+    darkdataBase64: source.darkdataBase64,
+    darkdataSha256: source.darkdataSha256,
+    gamestateBase64: source.gamestateBase64,
+    gamestateSha256: source.gamestateSha256,
+    retainedFiles,
+    runName: source.runName,
+  }
+}
+
+function nativeRetainedPathIsSafe(path: string): boolean {
+  return path.length > 0
+    && path.length <= 512
+    && path.toLowerCase().startsWith('solomondark/')
+    && path.toLowerCase() !== 'solomondark/darkdata.cfg'
+    && path.toLowerCase() !== 'solomondark/settings.txt'
+    && !/^solomondark\/savegames\/.+\/gamestate\.sav$/i.test(path)
+    && !path.includes('\\')
+    && !path.includes(':')
+    && !path.startsWith('/')
+    && !path.endsWith('/')
+    && path.split('/').every(part => part.length > 0 && part !== '.' && part !== '..')
+    && !/[\u0000-\u001f\u007f-\u009f]/u.test(path)
+}
+
+function boundedBase64(value: string): boolean {
+  return value.length > 0
+    && value.length % 4 === 0
+    && value.length <= 11 * 1024 * 1024
+    && /^[A-Za-z0-9+/]*={0,2}$/.test(value)
 }
 
 function parseProfile(value: unknown): ParsedGameSaveProfile {

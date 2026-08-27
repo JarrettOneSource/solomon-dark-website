@@ -226,6 +226,30 @@ Courtyard sequence, while ordinary legacy Hub continuations remain settled.
 Save schema 16 adds the Tutorial's movement-instruction acknowledgement;
 schemas 1..15 normalize it false. It changes no Tutorial stage, player
 position, or forced-intro motion.
+Save schema 17 adds one nullable, bounded `nativeSource` attachment at the
+document root. It holds the hashed retail `darkdata.cfg`, one local-wizard
+`gamestate.sav`, its safe run name, and a bounded hashed table of opaque
+non-gamestate launcher-slot files such as Hall/portrait bytes; it is
+preservation/projection input,
+never simulation, account, party, Hall, or leaderboard authority. Account slot
+I and title Settings -> Save Transfer can strict-decode a copied stock source
+into the same cloud-or-IndexedDB `local-only` settled-Hub continuation and
+export the current wizard by patching only recovered fields in that preserved
+base (or the controlled Hub template). The semantic projection includes the
+ordered Hagatha/Tonic outcomes and the complete resumable Boast lifecycle;
+stock-only Serendipity/Reverie active flags reset because retail does not write
+them to disk. Retail also omits Unforge base HP/MP `+0x6C/+0x78`; stock import
+rebuilds maximum vitals and retains only each serialized current/max ratio,
+while stock export reports any web-only maximum-vital bonus. The host carries the
+attachment per participant through resume, checkpoints, Game Over profile
+archival, and wizard retirement without interpreting it. Schemas 1..16 migrate
+with `nativeSource = null`.
+Protocol 85 changes the existing Hagatha selector projection from a sorted
+unique set to the retail ordered outcome vector. Ordinary selectors remain
+unique; selector 27 may repeat twice, and its count must match
+`tonicPurchases` and capacity 3/6/9. This is a protocol break because an older
+client rejects the native order/Tonic membership even though no field name was
+added.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -338,6 +362,12 @@ Machinimbus unlock rows are read and mutated through the authenticated
 participant's economy/progression components. A newly admitted shared-Hub
 player receives fresh defaults and never inherits another resident's service
 state; actor visibility itself is not progression-gated.
+Hagatha ownership retains the native ordered outcome vector rather than a
+sorted set: ordinary charm/curse selectors occur once, while selector 27 Tonic
+may occur twice in purchase order. `tonicPurchases` and capacity 3/6/9 are
+validated against those entries. That same ordered vector feeds the Hall
+projection and schema-17 stock bridge, so Tonic membership is neither hidden
+during web play nor reconstructed heuristically during export.
 
 The host also owns the safe public-party projection. A bearer-protected
 supervisor control-plane read exposes that projection to the Website backend;
@@ -913,9 +943,9 @@ lineage. A replacement-process recovery may do the same only after the stable
 secret verifies the exact normalized document and target deployment revision;
 the original run ID keeps Hall submission idempotent. The run's independent
   taint remains authoritative. Local Hall history remains available. Save schemas
-12 through 16 carry durable `global-clean` or `local-only` integrity, explicit
+12 through 17 carry durable `global-clean` or `local-only` integrity, explicit
 active-run state, and the nullable active-party rejoin capability. Schemas 13
-through 16 also carry the one-shot College-admission pending bit; schemas 1 through 3
+through 17 also carry the one-shot College-admission pending bit; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
 integrity, schema 5 migrates its prior envelope, and schemas 6 through 9 preserve
 their authored integrity and active-run summary. Schema 9 additionally retains
@@ -925,7 +955,8 @@ schema 11 adds the native NPC help rows; schema 12 upgrades the capability to a
 revision-bound signed claim; schema 13 adds the College-admission bit; schema 14
 adds Web Lua wearable identity; schema 15 adds resumable College participant
 state and exact Hub continuation geometry; schema 16 adds the Tutorial
-movement-copy acknowledgement. Each
+movement-copy acknowledgement; schema 17 adds bounded native-source
+preservation and the stock/web wizard projection. Each
 participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
@@ -939,6 +970,13 @@ zero only in IndexedDB. Authenticated clients use only the JWT-owned cloud slot,
 whose read, write, and delete endpoints all require an account; a cloud failure
 never falls back to local storage. Cloud persistence is continuity, not save
 attestation, so it does not make a loaded lineage globally rankable.
+
+The normalized web continuation deliberately rebuilds disk-owned skill state
+at its save boundary. All eight native root rows are rank one. Permanent ranks,
+offer ownership, Hagatha state, and Firewalker survive; Mindstar, Regenerate,
+concentration selections, Mind Chug, and active cast/selector presentation are
+not retail disk members and reset before encoding/restoring a disk-style
+checkpoint. This disk projection never mutates the live authoritative state.
 
 ## Rendering boundary
 

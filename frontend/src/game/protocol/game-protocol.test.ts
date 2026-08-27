@@ -652,6 +652,35 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
   assert.equal(welcome.snapshot.players['player-1'].economy.gold, 500)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
+  const tonicWelcome = structuredClone(welcome)
+  Object.assign(tonicWelcome.snapshot.players['player-1'].economy, {
+    charmCapacity: 9,
+    ownedPerkSelectors: [5, 27, 0, 27],
+    tonicPurchases: 2,
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(tonicWelcome)), tonicWelcome)
+  const duplicateCharmWelcome = structuredClone(tonicWelcome)
+  duplicateCharmWelcome.snapshot.players['player-1'].economy.ownedPerkSelectors = [5, 27, 5, 27]
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(duplicateCharmWelcome)),
+    /Hagatha outcome list/,
+  )
+  const missingTonicWelcome = structuredClone(tonicWelcome)
+  missingTonicWelcome.snapshot.players['player-1'].economy.ownedPerkSelectors = [5, 0]
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(missingTonicWelcome)),
+    /Tonic capacity/,
+  )
+  const failedRandomBoast = structuredClone(welcome)
+  Object.assign(failedRandomBoast.snapshot.players['player-1'].economy.npc.boast, {
+    failed: true,
+    failureSequence: 1,
+    selected: 3,
+  })
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(failedRandomBoast)),
+    /Boast state/,
+  )
   const player = welcome.snapshot.players['player-1']
   const tutorialAmulet = { ...nativeTutorialAmuletItem(), id: 900_100 }
   const tutorialSack = {
@@ -1544,7 +1573,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v85 carries concentration quickbar bindings and retained gameplay state', () => {
+test('protocol v85 carries concentration quickbar bindings and complete retained gameplay state', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 85)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(

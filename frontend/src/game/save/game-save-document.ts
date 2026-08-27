@@ -10,6 +10,7 @@ import {
   archiveCompletedRunEconomy,
   createNativeUnforgeBonuses,
   hubEconomyInventoryIsValid,
+  nativeHagathaOutcomeStateIsValid,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
 import {
@@ -82,12 +83,14 @@ import {
   parseGameSaveDocument,
   record,
 } from './game-save-contract.ts'
+import type { NativeGameSaveSource } from './portable-game-profile.ts'
 
 export interface CreateGameSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
   readonly loadedBoneyard: LoadedBoneyard | null
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly nativeSource?: NativeGameSaveSource | null
   readonly partyRejoinToken?: string | null
   readonly playerId: string
   readonly state: GameSimulationState
@@ -97,6 +100,7 @@ export interface CreateGameProfileSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly nativeSource?: NativeGameSaveSource | null
   readonly playerId: string
   readonly state: GameSimulationState
 }
@@ -108,6 +112,7 @@ export interface RestoredGameSaveProfile {
   readonly integrity: GameSaveIntegrity
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly nativeSource: NativeGameSaveSource | null
 }
 
 export interface RestoredGameSaveDocument {
@@ -115,6 +120,7 @@ export interface RestoredGameSaveDocument {
   readonly loadedBoneyard: LoadedBoneyard | null
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly nativeSource: NativeGameSaveSource | null
   readonly playerId: string
   readonly state: GameSimulationState
 }
@@ -215,11 +221,14 @@ export function createGameSaveDocument(
     )
   ) throw new Error('game save party rejoin token requires an active Boneyard')
   const character = ownerState.playerEntities.configs[ownerIndex]!
+  const playerEntities = diskPlayerStoreProjection(ownerState.playerEntities)
   const simulation = {
     ...ownerState,
     accumulatorSeconds: 0,
     modEffects: [],
     nextModConsumableUseId: 1,
+    playerEntities,
+    secondaryAbilities: diskSecondaryProjection(ownerState.secondaryAbilities),
     world: ownerState.world.kind === 'hub'
       ? serializeHubWorld(ownerState.world)
       : ownerState.world,
@@ -241,6 +250,7 @@ export function createGameSaveDocument(
     integrity: options.integrity,
     mods: options.mods,
     modState: options.modState,
+    nativeSource: options.nativeSource ?? null,
     profile: {
       economy: gameSimulationRetiredWizardEconomy(ownerState, options.playerId),
       hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
@@ -257,6 +267,7 @@ export function createGameProfileSaveDocument(
     integrity: options.integrity,
     mods: options.mods,
     modState: options.modState,
+    nativeSource: options.nativeSource ?? null,
     profile: {
       economy: gameSimulationDurableProfileEconomy(ownerState, options.playerId),
       hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
@@ -279,6 +290,7 @@ export function retireGameSaveWizard(document: string): string {
     integrity: restored.integrity,
     mods: restored.mods,
     modState: restored.modState,
+    nativeSource: restored.nativeSource,
     profile: {
       economy: restored.state.world.kind === 'boneyard'
         && restored.state.world.tutorial !== null
@@ -317,6 +329,55 @@ function ownerProjection(
     throw new Error('game save owner inventory is invalid')
   }
   return { ownerIndex, ownerState }
+}
+
+function diskPlayerStoreProjection(
+  source: GameSimulationState['playerEntities'],
+): GameSimulationState['playerEntities'] {
+  const progressions = source.progressions.map(progression => Object.freeze({
+    ...progression,
+    damageX4TicksRemaining: 0,
+    mindChugTicksRemaining: 0,
+    pendingOffer: null,
+  }))
+  const skillBooks: PlayerSkillBookComponent[] = []
+  const skillRuntimes: PlayerSkillRuntimeComponent[] = []
+  for (let index = 0; index < source.skillBooks.length; index += 1) {
+    const refreshed = createPlayerSkillRuntime(
+      source.skillBooks[index]!,
+      source.statBooks[index]!,
+      source.economies[index]!,
+    )
+    skillBooks.push(refreshed.skillBook)
+    skillRuntimes.push(refreshed.runtime)
+  }
+  return {
+    ...source,
+    progressions: Object.freeze(progressions),
+    skillBooks: Object.freeze(skillBooks),
+    skillRuntimes: Object.freeze(skillRuntimes),
+  }
+}
+
+function diskSecondaryProjection(
+  source: GameSimulationState['secondaryAbilities'],
+): GameSimulationState['secondaryAbilities'] {
+  return {
+    ...source,
+    players: Object.freeze(Object.fromEntries(
+      Object.entries(source.players).map(([playerId, player]) => [playerId, Object.freeze({
+        ...player,
+        castSpinTicksRemaining: 0,
+        heldSlot: null,
+        lastSkillId: null,
+        mindstar: false,
+        planeOrbHeld: false,
+        regenerate: false,
+        reservedMana: player.firewalker ? 50 : 0,
+        staffCastTicksRemaining: 0,
+      })]),
+    )),
+  }
 }
 
 export function restoreGameSaveDocument(document: string): RestoredGameSaveDocument {
@@ -454,6 +515,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     loadedBoneyard,
     mods: parsed.mods,
     modState: parsed.modState,
+    nativeSource: parsed.nativeSource,
     playerId: continuation.summary.playerId,
     state,
   }
@@ -485,6 +547,7 @@ export function restoreGameSaveProfile(document: string): RestoredGameSaveProfil
     integrity: parsed.integrity,
     mods: parsed.mods,
     modState: parsed.modState,
+    nativeSource: parsed.nativeSource,
   }
 }
 
@@ -535,7 +598,7 @@ function normalizeSimulation(
     playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion),
     primarySpells: source.primarySpells,
     run: normalizeRun(source.run),
-    secondaryAbilities: source.secondaryAbilities,
+    secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities),
     tick: source.tick,
     world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
   }
@@ -577,7 +640,15 @@ function normalizePlayerStore(
     const economy = economies[index]!
     let runtime: PlayerSkillRuntimeComponent
     if (persistedRuntimes) {
-      runtime = persistedRuntimes[index] as PlayerSkillRuntimeComponent
+      runtime = {
+        ...(persistedRuntimes[index] as PlayerSkillRuntimeComponent),
+        concentrationSkillIdA: null,
+        concentrationSkillIdB: null,
+        meditationActivityRampTicks: 0,
+        meditationIdleElapsedTicks: 0,
+        mindstarActive: false,
+        nextConcentrationReplacementSlot: 'a',
+      }
     } else {
       const created = createPlayerSkillRuntime(skillBook, statBook, economy)
       skillBook = created.skillBook
@@ -606,6 +677,28 @@ function normalizePlayerStore(
   } as unknown as GameSimulationState['playerEntities']
 }
 
+function normalizeDiskSecondary(value: unknown): GameSimulationState['secondaryAbilities'] {
+  const source = record(value, 'game save secondary abilities')
+  const players = record(source.players, 'game save secondary players')
+  return {
+    ...source,
+    players: Object.fromEntries(Object.entries(players).map(([playerId, value]) => {
+      const player = record(value, `game save secondary player ${playerId}`)
+      return [playerId, {
+        ...player,
+        castSpinTicksRemaining: 0,
+        heldSlot: null,
+        lastSkillId: null,
+        mindstar: false,
+        planeOrbHeld: false,
+        regenerate: false,
+        reservedMana: player.firewalker === true ? 50 : 0,
+        staffCastTicksRemaining: 0,
+      }]
+    })),
+  } as unknown as GameSimulationState['secondaryAbilities']
+}
+
 function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEconomyState {
   const source = record(value, 'game save player economy')
   rejectUnexpectedKeys(source, 'game save player economy', ECONOMY_KEYS)
@@ -616,15 +709,33 @@ function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEcono
     && !('unforgeOutcome' in source.actionFeedback)
     ? { ...source.actionFeedback, unforgeOutcome: null }
     : source.actionFeedback
+  const tonicPurchases = Number(source.tonicPurchases)
+  const sourceOutcomes = Array.isArray(source.ownedPerkSelectors)
+    ? [...source.ownedPerkSelectors]
+    : []
+  const tonicEntries = sourceOutcomes.filter(selector => selector === 27).length
+  const ownedPerkSelectors = sourceSchemaVersion < 17
+    && Number.isSafeInteger(tonicPurchases)
+    && tonicPurchases > tonicEntries
+    ? [...sourceOutcomes, ...Array(tonicPurchases - tonicEntries).fill(27)]
+    : sourceOutcomes
   const restored = {
     ...source,
     actionFeedback: feedback,
     collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
     npc: normalizeNativeHubNpcState(source.npc, sourceSchemaVersion >= 11),
+    ownedPerkSelectors,
     tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
   } as unknown as HubEconomyState
-  if (!hubEconomyInventoryIsValid(restored)) {
+  if (
+    !hubEconomyInventoryIsValid(restored)
+    || !nativeHagathaOutcomeStateIsValid(
+      restored.ownedPerkSelectors,
+      restored.tonicPurchases,
+      restored.charmCapacity,
+    )
+  ) {
     throw new Error('game save player economy inventory is invalid')
   }
   return restored
@@ -1230,6 +1341,7 @@ function normalizeNativeHubNpcState(
     || typeof boast.succeeded !== 'boolean'
     || boast.failed !== (boast.failureSequence === 1)
     || (boast.failed === true && boast.succeeded === true)
+    || (selected === 3 && boast.failed === true)
     || (selected === null && (boast.failed === true || boast.succeeded === true))
     || helpFlags.length !== NATIVE_HUB_HELP_ROW_COUNT
     || helpFlags.some(value => typeof value !== 'boolean')
