@@ -53044,3 +53044,34 @@ Loader report or catalog update is required.
   real Chrome root-menu journey that checks the icon geometry and visible
   glyph, opens the exact invite in a popup/new tab, and records empty page,
   console, and failed-response arrays for the game page.
+
+### Implementation validation receipt
+
+- Candidate `ee36a83e` has tree
+  `18c139b329c80499fb32c380c200c7fe0fa05639`. The local and detached Mac
+  worktrees matched that exact tree before validation.
+- The Mac mini canonical gate passed all 26 backend contracts and 2,430
+  frontend/desktop tests, including `Discord is a root-screen corner icon,
+  not a native menu row`; lint, type checks, backend and frontend production
+  builds, game-host build, media policy, and CSP checks also passed. The game
+  entry measured 479,153 raw / 134,135 gzip bytes under the 524,288 / 134,144
+  limits. Gate-log SHA-256 is
+  `df7ea0e225f827052d2554e10552875a8e5986a6a8a569ed4a55d511561f0ec3`.
+- Mac Chrome `151.0.7922.174` used WebGL and passed desktop `1600 x 900` plus
+  coarse-pointer landscape `896 x 414` journeys. Both exposed exactly Play,
+  Explore the Dark Cloud, Settings, and Hall of Fame as native rows, with no
+  `discord` title action. The icon measured `(10,852,38,38)` on desktop and
+  `(10,360,44,44)` on touch; its external SVG glyph had nonzero bounds.
+- Pointer click and focused Enter activation each opened exactly
+  `https://discord.gg/HGHxZgyM2p`. The icon was absent under the tutorial
+  prompt and Play submenu, then returned on the unobstructed root. Page,
+  console, and failed-response arrays were empty in both contexts. Browser-log
+  SHA-256 is
+  `8a406a71912415866efc0d836f593a78c6d80e36c5ab49ec22c8854682124366`.
+- Reviewed desktop/mobile captures are retained at
+  `/home/user/.codex-evidence/discord-title-icon-20260827-desktop.png` and
+  `/home/user/.codex-evidence/discord-title-icon-20260827-mobile.png`, with
+  SHA-256 values `caef7fda5a05879fcf7e8c9e6f22bfa82080b22b4c168defafe8959c3c22e781`
+  and `77d006ca039c696466245838f28ab989471e648eabea59df8b8d70d0e82b50c1`.
+  The icon is legible and does not overlap the centered menu or bottom-right
+  Fullscreen/Quit controls. No deployment was performed.
