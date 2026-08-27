@@ -82,7 +82,7 @@ test('Hub renderer loads compact pages and releases derived frames before page o
   assert.match(hubVisualAtlas, /packedX \+ left - trimX/)
   assert.match(
     hubTextures,
-    /playerSources\.filter\(\(source\) => !boneyardCombatAtlasSourceIsPacked\(source\)\)/,
+    /requestedSources\.filter\(\(source\) => !boneyardCombatAtlasSourceIsPacked\(source\)\)/,
   )
   assert.match(hubTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(hubTextures, /createBoneyardCombatAtlas\(texture\)/)

@@ -86,17 +86,16 @@ export interface HubWorldTextures extends PlayerWorldTextures {
 }
 
 export function hubWorldAssetSources(): readonly string[] {
-  const playerSources = playerWorldAssetSources()
+  const requestedSources = hubRequestedAssetSources()
   return [...new Set([
     ...HUB_VISUAL_ATLAS_SOURCES,
-    ...playerSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
+    ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
-    boneyard.levelUpSparkle,
   ])]
 }
 
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
-  const packedSources = playerWorldAssetSources().filter(boneyardCombatAtlasSourceIsPacked)
+  const packedSources = hubRequestedAssetSources().filter(boneyardCombatAtlasSourceIsPacked)
   const sources = hubWorldAssetSources()
   const loaded = await loadGameTextureEntries(sources)
   const base = Object.fromEntries(loaded) as Record<string, Texture>
@@ -171,6 +170,10 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     },
     visualAtlas,
   }
+}
+
+function hubRequestedAssetSources(): readonly string[] {
+  return [...playerWorldAssetSources(), boneyard.levelUpSparkle]
 }
 
 /** Sources selected only by later ambient animation branches. */
