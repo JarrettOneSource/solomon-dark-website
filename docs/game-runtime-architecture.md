@@ -72,6 +72,27 @@ cannot admit a new wizard, reveal a private party, or bypass the run/content
 identity it names. Visibility remains authoritative throughout the run, so
 private parties stay absent rather than becoming observable in game.
 
+The frozen launch roster is also the durable continuation roster. Transport
+loss removes only the actor binding: it leaves the member, original leader,
+reserved capacity, last authoritative ally state, and recovery lineage attached
+to the run. Ordinary checkpoints are revision-bound recovery seeds, so an empty
+run or an unplanned same-revision host restart may spin up on the first former
+member's `Resume Game` request. That first returner restores the entire ordered
+party but does not wait for absent members; those rows are projected as
+disconnected and the run may progress. Every later former member's claim routes
+to that already-live authority and imports only that member, even if the run has
+advanced since its browser checkpoint. A coordinated cross-revision deployment
+still uses its explicit target-revision checkpoint.
+
+An active run freezes only when detaching a recoverable living member leaves at
+least one connected dead human and no materialized living actor. The remaining
+client sees `Waiting for players to rejoin`; all-dead arbitration cannot consume
+the run while that owner is pending. The returning living member must
+materialize and acknowledge renderer readiness before the existing three-second
+countdown releases the exact frozen tick. If everybody disconnects, no dead
+browser is kept as simulation authority: the live instance suspends and the
+same durable recovery path spins it up on demand.
+
 The same authenticated gameplay connection carries ephemeral text chat. A
 public-Hub singleton sees Global; a grouped Hub participant defaults to Party
 and may switch to Global; a Boneyard defaults to Party. Global reaches only
@@ -205,7 +226,11 @@ detached party-rejoin catch-up. Save schema 12 expands the nullable rejoin value
 to a bounded HMAC-signed recovery claim; schemas 1..11 retain their strict
 legacy parsing and are not restart-seedable.
 Protocol 77 adds the participant-local durable party-roster projection used by
-the Website's retained-membership extension.
+the Website's retained-membership extension. Current-schema claims bind the
+run, ordered roster, original leader, owner document, sealed content, scoring
+lineage, and admissible host revision. Connection and life state remain
+orthogonal: a disconnected row retains its last authoritative life/health state,
+then switches immediately to the live actor state when that member returns.
 Protocol 78 adds the participant-local first-College-admission state,
 the bounded client request that may start it only while the host-owned durable
 profile still marks it pending, and a renderer-ready acknowledgement that can
@@ -297,6 +322,9 @@ the separate toughness value. This is a clean protocol break because a
 protocol-89 client asserts the refuted toughness-derived ceiling. Save schema
 18 is unchanged because retained primary-spell actors are session state, not
 checkpoint state.
+Protocol 91 adds the run-owned `party-rejoin-wait` resume-grace reason. It uses
+the existing sequence-qualified renderer-ready intent and nullable countdown;
+it adds no client pause vote and changes no save shape.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or

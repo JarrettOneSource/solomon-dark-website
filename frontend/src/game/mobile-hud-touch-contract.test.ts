@@ -237,9 +237,13 @@ test('the ally roster continues the social column under the chip and yields whil
 test('party ally rows expose distinct dead and disconnected presentation states', () => {
   assert.match(allyHud, /data-ally-connected=\{row\.connected\}/)
   assert.match(allyHud, /data-ally-dead=\{row\.dead\}/)
+  assert.match(allyHud, /className="hub-hud-ally-status"/)
+  assert.match(allyHud, /DISCONNECTED/)
+  assert.match(allyHud, /DEAD/)
   assert.match(allyHud, /allyHudAccessibleStatus\(row\)/)
-  assert.match(hubCss, /\.hub-hud-ally-row\[data-ally-dead='true'\] \.hub-hud-ally-bar::after/)
-  assert.match(hubCss, /\.hub-hud-ally-row\[data-ally-connected='false'\] \.hub-hud-ally-bar::before/)
+  assert.match(hubCss, /\.hub-hud-ally-row\[data-ally-dead='true'\]::after/)
+  assert.match(hubCss, /\.hub-hud-ally-row\[data-ally-connected='false'\]::before/)
+  assert.doesNotMatch(hubCss, /data-ally-(?:dead|connected)[^\n]*\.hub-hud-ally-bar::/)
   assert.match(hubCss, /@media \(prefers-reduced-motion: reduce\)/)
 })
 

@@ -17,6 +17,7 @@ import {
 import { createGameSaveDocument } from '../save/game-save-document.ts'
 import { materializeStockTutorial } from './boneyard-catalog.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
+import { verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
 import {
   createRuntimeEventPublisher,
   type RuntimeEventEntry,
@@ -1029,12 +1030,22 @@ test('first returning nonleader recovers the updated party run under the origina
     ) countdownStartedBeforeLeader = true
   }
   recoveredMember.socket.on('message', observeEarlyCountdown)
+  const memberFirstResume = recoveredMember.next(message => (
+    message.type === 'server-gameplay-resume-grace' && message.grace === null
+  ))
   recoveredMember.socket.send(encodeGameMessage({
     type: 'client-resume-grace-ready',
     sequence: recoveredMember.welcome.gameplayResumeGrace!.sequence,
   }))
-  await new Promise(resolve => setTimeout(resolve, 100))
-  assert.equal(countdownStartedBeforeLeader, false)
+  await waitFor(() => countdownStartedBeforeLeader)
+  assert.equal(countdownStartedBeforeLeader, true)
+  await memberFirstResume
+  const firstReturnTick = recoveredMember.welcome.snapshot.tick
+  const progressedWithoutLeader = await recoveredMember.next(message => (
+    message.type === 'server-snapshot' && message.snapshot.tick > firstReturnTick
+  ))
+  assert.equal(progressedWithoutLeader.type, 'server-snapshot')
+  countdownStartedBeforeLeader = false
 
   const recoveredLeader = await joinSaved(
     replacement.address.url,
@@ -1091,6 +1102,79 @@ test('first returning nonleader recovers the updated party run under the origina
     member.welcome.playerId,
     leader.welcome.playerId,
   ]))
+})
+
+test('ordinary current-revision checkpoint resumes after every player and host leave', async (context) => {
+  const revision = '3'.repeat(40)
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    revision,
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const client = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url, EMPTY_CONTENT, 51),
+    BROWSER_ORIGIN,
+  )
+  const loaded = client.next(message => message.type === 'server-boneyard-loaded')
+  const checkpoint = client.next(message => (
+    message.type === 'server-save-checkpoint'
+    && message.reason === 'boneyard-entry'
+    && JSON.parse(message.save).continuation.summary.partyRejoinToken !== null
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [run, saved] = await Promise.all([loaded, checkpoint])
+  assert.equal(run.type, 'server-boneyard-loaded')
+  assert.equal(saved.type, 'server-save-checkpoint')
+  const token = JSON.parse(saved.save).continuation.summary.partyRejoinToken as string
+  assert.equal(
+    verifyPartyRecoveryClaim(ADMIN_SECRET, token, saved.save)?.targetRevision,
+    revision,
+  )
+
+  await closeSocket(client.socket)
+  await waitFor(async () => (await readHealth(supervisor.address.url)).runs === 0)
+  await supervisor.close()
+
+  const replacement = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    revision,
+    snapshotRate: 100,
+  })
+  context.after(() => replacement.close())
+  const response = await fetch(`${replacement.address.url}/admin/rejoin`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      content: EMPTY_CONTENT,
+      developerAccess: false,
+      leaderboardUserId: 51,
+      save: saved.save,
+      token,
+    }),
+  })
+  assert.equal(response.status, 201)
+  const endpoint = await response.json() as ProvisionedEndpoint
+  const resumed = await joinSaved(
+    replacement.address.url,
+    endpoint,
+    BROWSER_ORIGIN,
+    saved.save,
+  )
+  context.after(() => closeSocket(resumed.socket))
+  assert.equal(resumed.welcome.snapshot.world.kind, 'boneyard')
+  if (resumed.welcome.snapshot.world.kind !== 'boneyard') assert.fail('expected resumed run')
+  assert.equal(resumed.welcome.snapshot.world.runId, run.boneyard.runId)
+  assert.equal(resumed.welcome.gameplayResumeGrace?.reason, 'game-restarted')
 })
 
 test('deployment restart cannot be deferred by an unresponsive browser', async (context) => {

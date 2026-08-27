@@ -1591,8 +1591,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v90 carries mutual readiness, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 90)
+test('protocol v91 carries party-rejoin waiting, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 91)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -1602,6 +1602,7 @@ test('protocol v90 carries mutual readiness, heterogeneous belts, and retained g
     'skill-book-closed',
     'skill-picker-closed',
     'skill-selector-closed',
+    'party-rejoin-wait',
   ])
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(

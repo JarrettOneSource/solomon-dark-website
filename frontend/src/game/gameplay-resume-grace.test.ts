@@ -42,6 +42,7 @@ test('presents pending mutual readiness before the authoritative countdown', () 
     'utf8',
   )
   assert.match(component, /Waiting on players \.\.\./)
+  assert.match(component, /Waiting for players to rejoin/)
   assert.match(component, /data-gameplay-resume-grace-phase=/)
   assert.match(component, /seconds === null \? 'waiting' : 'countdown'/)
   assert.doesNotMatch(component, /if \(seconds === null\) return null/)

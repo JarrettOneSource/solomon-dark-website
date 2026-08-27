@@ -3674,6 +3674,55 @@ test('staged catch-up loses its capability when the final live peer disconnects'
   assert.equal(logs.some(entry => entry.level === 'error'), false)
 })
 
+test('last living disconnect holds a dead connected party before Game Over', async (context) => {
+  const { host, leader, member } = await startDetachedPartyRun(context)
+  const paused = nextMessage(member.socket, message => (
+    message.type === 'server-gameplay-pause' && message.pause !== null
+  ))
+  member.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-book',
+  }))
+  await paused
+
+  const memberState = host.playerState(member.welcome.playerId)
+  assert.ok(memberState)
+  const memberIndex = memberState.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === member.welcome.playerId
+  ))
+  assert.notEqual(memberIndex, -1)
+  Object.assign(memberState.playerEntities.progressions[memberIndex]!, {
+    currentHealth: 0,
+    lifeState: 'spectating',
+  })
+
+  const waiting = nextMessage(member.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.remainingMs === null
+    && String(message.grace.reason) === 'party-rejoin-wait'
+  ))
+  await closeSocket(leader.socket)
+  const hold = await waiting
+  assert.equal(hold.type, 'server-gameplay-resume-grace')
+  assert.equal(String(hold.grace?.reason), 'party-rejoin-wait')
+
+  const unpaused = nextMessage(member.socket, message => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  member.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: false,
+  }))
+  await unpaused
+  const heldTick = host.playerState(member.welcome.playerId)?.tick
+  assert.equal(typeof heldTick, 'number')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  const held = host.playerState(member.welcome.playerId)
+  assert.equal(held?.tick, heldTick)
+  assert.equal(held?.run.phase, 'active')
+})
+
 test('deployment restart checkpoints every connected private-session player before closing', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
