@@ -16,6 +16,7 @@ const hallStyles = readFileSync(new URL('./hall-of-fame.css', import.meta.url), 
 const stockPrompt = readFileSync(new URL('./StockPromptDialog.tsx', import.meta.url), 'utf8')
 const stockPromptContract = readFileSync(new URL('./title-menu-prompt.ts', import.meta.url), 'utf8')
 const stockPromptStyles = readFileSync(new URL('./stock-prompt-dialog.css', import.meta.url), 'utf8')
+const menuStyles = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 
 test('contains the Solomon Darker artwork inside the native GPU title slot', () => {
   const mainMenuManifest = assetManifest.match(/export const mainMenu = \{([\s\S]*?)\n\}/)
@@ -93,6 +94,18 @@ test('Hall of Fame is actionable and owns local plus four global boards', () => 
   assert.match(scene, /session\.onLeaderboardReceipt/)
   assert.match(scene, /if \(!session\.developerAccess && gameCheatsEnabled\(\)\) return/)
   assert.doesNotMatch(scene, /submitGlobalHallOfFame\(entry\)/)
+})
+
+test('the root menu links to the existing Discord channel in a new tab', () => {
+  assert.match(scene, /const DISCORD_INVITE_URL = 'https:\/\/discord\.gg\/HGHxZgyM2p'/)
+  assert.match(scene, /action="discord" accessibleLabel="Discord" href=\{DISCORD_INVITE_URL\}/)
+  assert.match(scene, /rel=\{href \? 'noreferrer' : undefined\}/)
+  assert.match(scene, /target=\{href \? '_blank' : undefined\}/)
+  assert.match(renderer, /createMainButton\(texture, 'discord', 4, \[\]\)/)
+  assert.match(
+    menuStyles,
+    /\.main-menu-button\[data-game-action='discord'\]::after[\s\S]*content: 'DISCORD'/,
+  )
 })
 
 test('runtime progression invalidates the Hub scene when Teacher unlock flags change', () => {

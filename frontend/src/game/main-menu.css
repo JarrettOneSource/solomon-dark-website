@@ -69,7 +69,8 @@
   animation: main-menu-actions-in 100ms linear both;
 }
 
-.main-menu-actions[inert] .main-menu-button[data-game-action='join-party']::after {
+.main-menu-actions[inert] .main-menu-button[data-game-action='join-party']::after,
+.main-menu-actions[inert] .main-menu-button[data-game-action='discord']::after {
   visibility: hidden;
 }
 
@@ -86,16 +87,23 @@
 
 .main-menu-button:disabled { cursor: default; }
 
-.main-menu-button[data-game-action='join-party']::after {
+.main-menu-button[data-game-action='join-party']::after,
+.main-menu-button[data-game-action='discord']::after {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   color: #d8d2c0;
-  content: 'JOIN PARTY';
   font: 700 1.08cqw Cinzel, Georgia, serif;
   letter-spacing: 0.08em;
   text-shadow: 0 0.12cqw 0.12cqw #000;
+}
+
+.main-menu-button[data-game-action='join-party']::after { content: 'JOIN PARTY'; }
+
+.main-menu-button[data-game-action='discord']::after {
+  color: #ddc58b;
+  content: 'DISCORD';
 }
 
 .main-menu-button:focus-visible {

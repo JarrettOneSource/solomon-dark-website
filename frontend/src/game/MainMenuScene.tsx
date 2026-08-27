@@ -146,6 +146,8 @@ import type { TitleMenuPromptKind } from './title-menu-prompt.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
 import './main-menu.css'
 
+const DISCORD_INVITE_URL = 'https://discord.gg/HGHxZgyM2p'
+
 const BoneyardScene = lazy(() => import('./BoneyardScene.tsx'))
 const HubScene = lazy(() => import('./HubScene.tsx'))
 const DeveloperObserverScene = lazy(() => import('./DeveloperObserverScene.tsx'))
@@ -181,6 +183,7 @@ interface MenuButtonProps {
   compact?: boolean
   defaultFocus?: boolean
   disabled?: boolean
+  href?: string
   isBack?: boolean
   onClick?: () => void
   onHighlight: (action: TitleMenuAction | null) => void
@@ -195,6 +198,7 @@ function MenuButton({
   compact = false,
   defaultFocus = false,
   disabled = false,
+  href,
   isBack = false,
   onClick,
   onHighlight,
@@ -206,13 +210,17 @@ function MenuButton({
     compact && 'main-menu-button-compact',
     className,
   ].filter(Boolean).join(' ')
+  const Element = href ? 'a' : 'button'
 
   return (
-    <button
-      type="button"
+    <Element
+      type={href ? undefined : 'button'}
       className={classes}
       aria-label={accessibleLabel}
-      disabled={disabled}
+      disabled={href ? undefined : disabled}
+      href={href}
+      rel={href ? 'noreferrer' : undefined}
+      target={href ? '_blank' : undefined}
       data-game-back={isBack || undefined}
       data-game-action={action}
       data-game-default-focus={defaultFocus || undefined}
@@ -242,14 +250,20 @@ function MenuButton({
         onPressState(null)
       }}
       onPointerUp={() => onPressState(null)}
-      onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement | HTMLAnchorElement>) => {
         if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+          if (href && event.key === ' ') event.preventDefault()
           onPressState(action)
           onPress?.()
         }
       }}
       onKeyUp={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') onPressState(null)
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        onPressState(null)
+        if (href && event.key === ' ') {
+          event.preventDefault()
+          event.currentTarget.click()
+        }
       }}
     />
   )
@@ -281,6 +295,7 @@ function RootActions({
       <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onClick={onExplore} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="settings" accessibleLabel="Settings" onClick={onSettings} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="hall" accessibleLabel="Hall of Fame" onClick={onHall} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="discord" accessibleLabel="Discord" href={DISCORD_INVITE_URL} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
 }
