@@ -50713,3 +50713,30 @@ uses fresh processes. In-session product behavior is separately proven by the
 eight-picker Safari and standalone runs; repeated complete game generations in
 one long-lived WebContent process remain a documented browser endurance limit,
 not a level-up leak or thermal failure.
+
+### Final preservation-rebase receipt
+
+- The detailed physical rows above belong to pre-rebase candidate
+  `ef771c4d506f6997372f0c50859723bd72ce2332`. Final code candidate
+  `ca4ca4f4d96f2ab92f0bd71e43a9a76b884edd01` preserves the same mobile
+  atlas, backing-store, Inventory-membership, SkillPicker curtain and frozen
+  clock changes while rebasing current-main Hub-wide run entry and spell
+  parity through `40f300c7`.
+- The only overlapping code conflict was the corrected native Acid/Storm
+  top-to-bottom filled-quad geometry versus shared gradient ownership. The
+  final plan retains exact new top/bottom colors, alpha, width and rectangle
+  geometry while allocating exactly two world-owned immutable fills. TypeScript
+  and the focused 74-row secondary/Boneyard set pass.
+- Exact final canonical Website validation exits zero; log SHA-256 is
+  `08cffd5ea4d336ea04d7b4f08996eebc59b0054bd5db914e77b4f59ea3028eea`.
+  The Game entry is `468,811` raw / `130,925` gzip against `524,288` /
+  `134,144`.
+- Exact-final Mac Safari combat smoke holds `60.03` FPS for the five-secondary
+  overlap with 408 actors / 663 primitives and `60.01` FPS with 36 enemies;
+  p95 is `18 ms` in both rows and browser errors are empty. Result SHA-256 is
+  `0dce5374fb8b767f45b2c29a4c7880373717983fead47d80e2effa0a2a3c4842`.
+- The phone had already been unplugged after the completed physical matrix, so
+  `ca4ca4f4` is Mac/focused/canonical-proven while `ef771c4d` is the exact
+  detailed iPhone and installed-web-app receipt. A later unrelated Tutorial
+  potion commit `33543be5` advanced the shared remote after the final gate; no
+  push, merge, or production deployment is claimed.
