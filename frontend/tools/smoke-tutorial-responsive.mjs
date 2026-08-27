@@ -841,6 +841,19 @@ async function exerciseTutorialOpeningGuidance(host, page, scenario, screenshotP
   )
   state = host.state()
   assert.equal(state.world.kind, 'boneyard')
+  const heldPlayerPosition = { ...getPlayerCharacter(state, playerId).position }
+  const movementAttemptTick = state.tick
+  if (scenario.coarse) {
+    await holdTutorialJoystick(page, 'movement', { x: 0, y: -1 })
+  } else {
+    await page.keyboard.down('w')
+    await page.waitForTimeout(100)
+    await page.keyboard.up('w')
+  }
+  await waitForHostTick(host, movementAttemptTick + 5)
+  state = host.state()
+  assert.deepEqual(getPlayerCharacter(state, playerId).position, heldPlayerPosition)
+  assert.deepEqual(getPlayerCharacter(state, playerId).velocity, { x: 0, y: 0 })
   const heldTick = state.tick
   const heldEnemies = tutorialHostileSnapshot(state.world.enemies)
   await waitForHostTick(host, heldTick + 25)
@@ -881,6 +894,7 @@ async function exerciseTutorialOpeningGuidance(host, page, scenario, screenshotP
     castSequenceBefore,
     castText,
     enemyCount: state.world.enemies.actors.length,
+    heldPlayerPosition,
     instructionText,
     openingScreenshot,
     pointerReceipt,

@@ -1723,8 +1723,11 @@ The Tutorial's requested first-combat hold is not gameplay pause or resume
 grace. While the active controller is at stage 2, the hostile store accepts the
 authored opening spawn intents and advances its `lastStepTick`, but preserves
 existing hostile actors, Maggots, projectiles, effects, death lanes, and RNG.
-Player movement, primary-cast simulation, Tutorial/narration clocks, UI, and
-the application pointer clock remain live. The first accepted primary cast
-advances the controller to stage 3 on the next 100-Hz tick; hostile simulation
-then resumes with no elapsed-time replay. This remains a solo Tutorial rule and
-adds no party-wide pause message or scheduler hold.
+The same stage-2 predicate holds the solo player's translation by feeding the
+Boneyard movement planner zero retained velocity, idle movement input, and
+movement scale zero. Aim and primary-cast simulation remain live, as do
+Tutorial/narration clocks, UI, and the application pointer clock. The first
+accepted primary cast advances the controller to stage 3 on the next 100-Hz
+tick; player and hostile movement then resume with no elapsed-time replay. This
+remains a solo Tutorial rule and adds no party-wide pause message or scheduler
+hold.

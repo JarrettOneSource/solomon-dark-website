@@ -325,8 +325,15 @@ test('holds the ten opening Skeletons without catch-up until the owner casts one
   if (state.world.kind !== 'boneyard' || !state.world.tutorial || !state.world.encounter) {
     throw new Error('expected Tutorial controller and Solomon encounter')
   }
+  const initialPlayer = getPlayerCharacter(state, 'owner')
+  const stagedPlayer = {
+    ...initialPlayer,
+    position: { x: 1_025, y: 1_350 },
+    velocity: { x: 100, y: -50 },
+  }
   state = {
     ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'owner', stagedPlayer),
     world: {
       ...state.world,
       encounter: {
@@ -352,6 +359,9 @@ test('holds the ten opening Skeletons without catch-up until the owner casts one
   }
   assert.equal(state.world.tutorial.stage, 2)
   assert.equal(state.world.enemies.actors.length, 10)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, stagedPlayer.position)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').velocity, { x: 0, y: 0 })
+  const frozenPlayerPosition = { ...getPlayerCharacter(state, 'owner').position }
   const frozen = {
     actors: structuredClone(state.world.enemies.actors),
     deathEffects: structuredClone(state.world.enemies.deathEffects),
@@ -365,13 +375,21 @@ test('holds the ten opening Skeletons without catch-up until the owner casts one
     steeringRngState: state.world.enemies.steeringRngState,
   }
   const firstHeldEnemyTick = state.world.enemies.lastStepTick
-  for (let tick = 0; tick < 50; tick += 1) state = stepGameSimulationTick(state, {})
+  const heldMovement = {
+    ...createIdlePlayerCharacterInput(),
+    movement: { x: 1, y: 0 },
+  }
+  for (let tick = 0; tick < 50; tick += 1) {
+    state = stepGameSimulationTick(state, { owner: heldMovement })
+  }
   assert.equal(state.world.kind, 'boneyard')
   if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
     throw new Error('expected held Tutorial stage 2')
   }
   assert.equal(state.world.tutorial.stage, 2)
   assert.equal(state.world.enemies.lastStepTick, firstHeldEnemyTick + 50)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, frozenPlayerPosition)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').velocity, { x: 0, y: 0 })
   assert.deepEqual({
     actors: state.world.enemies.actors,
     deathEffects: state.world.enemies.deathEffects,
@@ -389,6 +407,7 @@ test('holds the ten opening Skeletons without catch-up until the owner casts one
     ...createIdlePlayerCharacterInput(),
     aim: { x: 1_025, y: 1_170 },
     cast: { primary: true, quickbar: null },
+    movement: { x: 1, y: 0 },
   }
   state = stepGameSimulationTick(state, { owner: cast })
   assert.equal(state.world.kind, 'boneyard')
@@ -397,6 +416,7 @@ test('holds the ten opening Skeletons without catch-up until the owner casts one
   }
   assert.equal(state.world.tutorial.stage, 2)
   assert.ok(getPlayerCharacter(state, 'owner').primaryCast.castSequence > 0)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, frozenPlayerPosition)
   state = stepGameSimulationTick(state, {})
   assert.equal(state.world.kind, 'boneyard')
   if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
@@ -404,6 +424,8 @@ test('holds the ten opening Skeletons without catch-up until the owner casts one
   }
   assert.equal(state.world.tutorial.stage, 3)
   assert.notDeepEqual(state.world.enemies.actors, frozen.actors)
+  state = stepGameSimulationTick(state, { owner: heldMovement })
+  assert.ok(getPlayerCharacter(state, 'owner').position.x > frozenPlayerPosition.x)
 })
 
 test('authorizes only the solo Tutorial owner to acknowledge a selected-HUD selector', () => {

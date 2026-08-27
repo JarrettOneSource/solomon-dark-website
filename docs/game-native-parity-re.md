@@ -50740,3 +50740,68 @@ not a level-up leak or thermal failure.
   detailed iPhone and installed-web-app receipt. A later unrelated Tutorial
   potion commit `33543be5` advanced the shared remote after the final gate; no
   push, merge, or production deployment is claimed.
+### 2026-08-26 player-translation hold clarification
+
+- The owner clarified the requested stage-2 freeze after the first publication:
+  the player must stop translating with the ten Skeletons. The earlier policy
+  kept player movement live so the previous receipt remains an accurate record
+  of that pushed revision, but it is no longer the target contract.
+- No native fact changed. Retail still has no stage-2 pause branch; this remains
+  explicit browser policy. The relevant current web causal seam is
+  `stepBoneyardWorldTick`: its player movement plan consumes both retained
+  velocity and current movement input before hostile stepping. Zeroing only the
+  input would still allow native-style velocity retention to drift the wizard.
+- Complete clarified membership: existing hostile actors/effects/RNG remain
+  held; the sole Tutorial player position and velocity are held from the first
+  stage-2 tick; gate contact and footstep progression receive no movement;
+  aim, primary-cast admission, primary spell actors, Tutorial/narration/UI, and
+  the application pointer clock remain live; stage 3 releases player and
+  hostile movement together without catch-up. Ordinary pause/resume grace,
+  later Tutorial stages, multiplayer, and non-Tutorial Boneyards remain outside
+  this rule.
+- Correct owner: derive one stage-2 player-movement hold from the authoritative
+  Tutorial controller and compose it into the Boneyard movement planner by
+  supplying zero prior velocity, idle movement input, and movement scale zero.
+  Do not block the complete `PlayerCharacterInput`, because that would also
+  remove the primary cast required to release the lesson.
+- Validation must begin stage 2 with retained velocity and held desktop/mobile
+  movement, prove position and velocity stay exact while ten hostile actors
+  remain byte-stable, prove primary sequence still advances, then prove both
+  player and hostile translation resume after stage 3. The Mac desktop and
+  mobile browser journeys must perform a real movement attempt during the hold
+  and retain empty page/console/network error arrays.
+
+- `nativeTutorialPlayerMovementPaused` now derives from the same authoritative
+  stage-2 predicate as the hostile hold. `stepBoneyardWorldTick` composes it
+  with Solomon's existing movement lock and feeds `planPlayerCharacterTick`
+  zero prior velocity, idle movement input, and scale zero. Cast input never
+  enters that movement-only seal.
+- Focused Mac coverage begins stage 2 with velocity `(100,-50)` and held
+  movement, then proves exact player position, zero velocity, unchanged gait
+  and walk cycle, no movement contacts, ten byte-stable Skeletons, accepted
+  primary sequence, and resumed player/hostile movement at stage 3. The typed
+  Tutorial suite passes `58/58`.
+- The final Website candidate is based on current main `6d87972b`; its nine
+  changed files were blob-identical between the local and detached Mac trees.
+  The Mod Loader candidate is based on `18acf6b8`; its one changed report was
+  blob-identical. The complete Mac Loader static RE gate passes `509/509`.
+- `/opt/homebrew/bin/bash ./scripts/validate.sh` passes on the combined Mac
+  tree: backend Release build, 24 Website/backend contracts, lint/import/
+  generated checks, all `2,364/2,364` frontend and desktop tests, production
+  frontend/game-host builds, media policy, and bundle budget.
+  `Game-Bec09s5v.js` is `468,952` raw / `130,947` gzip bytes against
+  `524,288` / `134,144` limits.
+- Mac Chrome desktop and mobile journeys each attempt real stage-2 movement
+  and retain the player exactly at `(1025,1350)` with velocity `(0,0)` while
+  the ten-enemy snapshot remains unchanged. Mouse and right-joystick actions
+  still advance primary sequence `0 -> 1`, enter stage 3, hide the lesson, and
+  release movement. Page, console, failed-request, and failed-response arrays
+  are empty. Manual inspection confirms both cast lessons remain legible over
+  the held player/world.
+- Evidence SHA-256 values are `c910213f...b32d` (desktop held frame),
+  `b34073ec...1f7f` (mobile held frame), `a54b2fd5...73c6` (desktop receipt),
+  and `95117fe9...90be` (mobile receipt). Evidence is retained at Mac
+  `/Users/jarrett/codex-acceptance/tutorial-player-hold-20260826-r2/evidence`
+  and local `/home/user/.codex-evidence/tutorial-player-hold-20260826`.
+- No browser-platform exception or material unknown remains. Publication is
+  authorized and awaits the final immediately-before-push remote check.

@@ -28,6 +28,7 @@ import {
   nativeTutorialHostileScenePaused,
   nativeTutorialHudAccess,
   nativeTutorialInstructionBaselines,
+  nativeTutorialPlayerMovementPaused,
   nativeTutorialAmuletIdentityMatches,
   nativeTutorialAmuletItem,
   nativeTutorialPresentation,
@@ -193,6 +194,7 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
   })
   assert.equal(heldInstruction.state.stage, 2)
   assert.equal(nativeTutorialHostileScenePaused(heldInstruction.state), true)
+  assert.equal(nativeTutorialPlayerMovementPaused(heldInstruction.state), true)
   assert.equal(nativeTutorialPresentation(heldInstruction.state, {
     inventory: 'I', moveDown: 'S', moveLeft: 'A', moveRight: 'D', moveUp: 'W',
     potion: '1', secondary: 'Right Mouse', skills: 'K',
@@ -208,6 +210,7 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
   })
   assert.equal(released.state.stage, 3)
   assert.equal(nativeTutorialHostileScenePaused(released.state), false)
+  assert.equal(nativeTutorialPlayerMovementPaused(released.state), false)
   assert.equal(nativeTutorialPresentation(released.state, {
     inventory: 'I', moveDown: 'S', moveLeft: 'A', moveRight: 'D', moveUp: 'W',
     potion: '1', secondary: 'Right Mouse', skills: 'K',

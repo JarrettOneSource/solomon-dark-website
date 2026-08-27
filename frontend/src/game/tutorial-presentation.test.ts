@@ -89,6 +89,11 @@ test('guides the opening interaction and switches movement and casting copy by i
   assert.match(overlay, /!state\.introActive[\s\S]*?solomonPointer[\s\S]*?anchor="solomon-dig"/)
   assert.match(overlay, /anchor="solomon-dig"[\s\S]*?visible=\{pointerBlink\}/)
   assert.match(boneyard, /data-tutorial-scene-paused=\{tutorialScenePaused\}/)
+  const world = source('./core-server/boneyard-world.ts')
+  assert.match(
+    world,
+    /nativeTutorialPlayerMovementPaused\(world\.tutorial\)[\s\S]*?velocity: \{ x: 0, y: 0 \}[\s\S]*?createIdlePlayerCharacterInput\(\)/,
+  )
 })
 
 test('uses the stock MsgBox offer and common-gold teaching family', () => {

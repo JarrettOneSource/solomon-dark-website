@@ -863,6 +863,58 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
   )
 })
 
+test('Tutorial stage 2 clears retained velocity and movement input until stage 3', () => {
+  const created = createBoneyardWorld(materializeStockTutorial(Buffer.alloc(16, 61)))
+  assert.ok(created.tutorial)
+  const world = {
+    ...created,
+    encounter: null,
+    tutorial: {
+      ...created.tutorial,
+      introActive: false,
+      introBlend: 1,
+      introDelayTicksRemaining: 0,
+      introFade: 0,
+      introMovementTicksRemaining: 0,
+      stage: 2 as const,
+    },
+  }
+  const initial = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Held Caster',
+      element: 'ether',
+    }, world),
+    gaitDegrees: 45,
+    position: { x: 1_025, y: 1_350 },
+    velocity: { x: 80, y: -40 },
+    walkCyclePrimary: 2.5,
+  }
+  const held = stepWorld(
+    world,
+    { player: initial },
+    { player: movementInput(1, 0) },
+    1,
+  )
+  assert.deepEqual(held.players.player.position, initial.position)
+  assert.deepEqual(held.players.player.velocity, { x: 0, y: 0 })
+  assert.equal(held.players.player.gaitDegrees, initial.gaitDegrees)
+  assert.equal(held.players.player.walkCyclePrimary, initial.walkCyclePrimary)
+  assert.deepEqual(held.movementContactsByPlayerId.player, [])
+
+  const released = stepWorld(
+    {
+      ...held.world,
+      tutorial: { ...held.world.tutorial!, stage: 3 },
+    },
+    held.players,
+    { player: movementInput(1, 0) },
+    2,
+  )
+  assert.ok(released.players.player.position.x > initial.position.x)
+  assert.ok(released.players.player.velocity.x > 0)
+})
+
 test('the retired entrance is a one-way authoritative movement boundary', () => {
   let world = createBoneyardWorld(encounterBoneyard('default'))
   assert.ok(world.arenaTransition)

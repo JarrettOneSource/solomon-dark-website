@@ -770,6 +770,10 @@ export function nativeTutorialHostileScenePaused(state: NativeTutorialState): bo
   return state.active && !state.introActive && state.stage === 2
 }
 
+export function nativeTutorialPlayerMovementPaused(state: NativeTutorialState): boolean {
+  return nativeTutorialHostileScenePaused(state)
+}
+
 export function nativeTutorialInstructionBaselines(
   stage: NativeTutorialStage,
   viewportHeight = 900,
