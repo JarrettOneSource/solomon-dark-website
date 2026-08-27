@@ -326,8 +326,13 @@ async function runScenario(scenario) {
     const spawnDomain = scenario.name === 'stock'
       ? await exerciseTutorialSpawnDomain(host, page, screenshotRoot)
       : null
-    const staffMelee = scenario.name === 'stock'
-      ? await exerciseTutorialStaffMelee(host, page, screenshotRoot)
+    const staffMelee = scenario.name === 'stock' || scenario.name === 'mobile'
+      ? await exerciseTutorialStaffMelee(
+          host,
+          page,
+          scenario.coarse,
+          scenario.name === 'stock' ? screenshotRoot : `${screenshotRoot}-mobile`,
+        )
       : null
     const collegeAdmission = scenario.name === 'stock' || scenario.name === 'mobile'
       ? await exerciseTutorialCollegeAdmission(
@@ -623,7 +628,7 @@ async function captureTutorialAcidRain(host, page, screenshotPath) {
   return receipt
 }
 
-async function exerciseTutorialStaffMelee(host, page, screenshotPath) {
+async function exerciseTutorialStaffMelee(host, page, coarsePointer, screenshotPath) {
   const configuredTick = configureTutorialFixture(host, {
     combatEnabled: true,
     position: { x: 1025, y: 1350 },
@@ -699,8 +704,15 @@ async function exerciseTutorialStaffMelee(host, page, screenshotPath) {
   const contactIdsBefore = new Set(state.primarySpells.transients
     .filter(({ kind }) => kind === 'player-staff-contact')
     .map(({ id }) => id))
-  const keys = tutorialMovementKeys(staged.playerPosition, staged.target.position)
-  for (const key of keys) await page.keyboard.down(key)
+  const movementDirection = normalizedDirection(staged.playerPosition, staged.target.position)
+  const keys = coarsePointer
+    ? []
+    : tutorialMovementKeys(staged.playerPosition, staged.target.position)
+  if (coarsePointer) {
+    await holdTutorialJoystick(page, 'movement', movementDirection)
+  } else {
+    for (const key of keys) await page.keyboard.down(key)
+  }
   let action = null
   try {
     const deadline = Date.now() + 10_000
@@ -774,6 +786,14 @@ async function exerciseTutorialStaffMelee(host, page, screenshotPath) {
     stage: 11,
     targetId: staged.target.id,
   }
+}
+
+function normalizedDirection(start, target) {
+  const x = target.x - start.x
+  const y = target.y - start.y
+  const length = Math.hypot(x, y)
+  assert.ok(length > 0)
+  return { x: x / length, y: y / length }
 }
 
 function staffApproachPlacement(state, actors) {
