@@ -410,12 +410,12 @@ export async function createHubWorldRenderer(
     if (!player) return
     frameDiagnostics.playerX = player.position.x
     frameDiagnostics.playerY = player.position.y
-    frameDiagnostics.playerHeadingIndex = player.headingIndex
     frameDiagnostics.playerMoving = Math.hypot(player.velocity.x, player.velocity.y) > 0.01
     const playerView = participant?.region === 'courtyard'
       ? courtyardScene.player(options.playerId)
       : privateRoomScene.player(options.playerId)
     if (!playerView) return
+    frameDiagnostics.playerHeadingIndex = playerView.headingIndex
     frameDiagnostics.playerAttachmentPose = playerView.attachmentPose
     frameDiagnostics.playerElementEffectPrimaryId = playerView.elementEffectPrimaryId
     frameDiagnostics.playerElementEffectScale = playerView.elementEffectScale

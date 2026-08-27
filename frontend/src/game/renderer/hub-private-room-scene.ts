@@ -627,7 +627,8 @@ export class HubPrivateRoomScene {
     live.clear()
     const room = this.rooms[this.activeRegion]
     for (const [playerId, player] of Object.entries(snapshot.players)) {
-      if (snapshot.world.participants[playerId]?.region !== region) continue
+      const participant = snapshot.world.participants[playerId]
+      if (participant?.region !== region) continue
       live.add(playerId)
       let view = this.players.get(playerId)
       if (view && this.playerElements.get(playerId) !== player.config.element) {
@@ -655,6 +656,7 @@ export class HubPrivateRoomScene {
           `hub:${region}`,
         ),
         !(region === 'office' && player.economy.collegeIntroPending),
+        participant.transition !== null || participant.collegeIntro !== null,
       )
     }
     for (const [playerId, view] of this.players) {

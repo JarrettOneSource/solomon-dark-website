@@ -28,6 +28,7 @@ import {
   canPlaceBoneyardBody,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from '../src/game/core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
@@ -49,6 +50,7 @@ import {
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { playerLivingEquipmentAppearance } from '../src/game/player-character-presentation.ts'
 import {
   WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
@@ -1158,6 +1160,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   await courtyard.waitFor({ timeout: 90_000 })
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   assert.equal(await page.locator('.create-menu-scene').count(), 0)
+  await startCollegeFacingSampler(page)
   const academyMusic = await waitForCollegeAcademyMusic(page, collegeAudioEventIndex)
   await waitForVisibleCollegeTitle(page, 7)
   const title7 = await collegeTitleReceipt(page)
@@ -1174,6 +1177,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   await office.waitFor({ timeout: 90_000 })
   const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
   await dialog.waitFor({ timeout: 90_000 })
+  const facing = assertCollegeFacingSamples(await stopCollegeFacingSampler(page))
   assert.equal(await office.getAttribute('data-story-office'), 'true')
   assert.equal(await office.getAttribute('data-hub-ui-surface'), 'dialogue')
   assert.equal(await office.getAttribute('data-college-intro'), 'arch-dialogue')
@@ -1278,6 +1282,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     autoDialogue: true,
     automaticVoices,
     createAfterManualExit: true,
+    facing,
     officePlayerPosition: getPlayerCharacter(state, playerId).position,
     regionSequence: ['courtyard', 'office', 'create', 'courtyard'],
     resetReceipt,
@@ -1286,6 +1291,76 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     title7Wizard,
     title9,
     title9Wizard,
+  }
+}
+
+async function startCollegeFacingSampler(page) {
+  await page.evaluate(() => {
+    window.__sdrCollegeFacingSamples = []
+    window.__sdrCollegeFacingSamplerActive = true
+    const sample = () => {
+      if (!window.__sdrCollegeFacingSamplerActive) return
+      const canvas = document.querySelector('.hub-world-canvas')
+      const frame = canvas?.__sdrHubFrame
+      const region = canvas?.getAttribute('data-hub-region')
+      if (frame && (region === 'courtyard' || region === 'office')) {
+        window.__sdrCollegeFacingSamples.push({
+          frameCount: frame.frameCount,
+          headingIndex: frame.playerHeadingIndex,
+          orbSpriteCount: frame.orbSpriteCount,
+          pathCursor: frame.collegePathCursor,
+          region,
+          tick: frame.tick,
+          transitionPhase: frame.transitionPhase,
+          x: frame.playerX,
+          y: frame.playerY,
+        })
+      }
+      if (window.__sdrCollegeFacingSamples.length < 5_000) requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+}
+
+function stopCollegeFacingSampler(page) {
+  return page.evaluate(() => {
+    window.__sdrCollegeFacingSamplerActive = false
+    return structuredClone(window.__sdrCollegeFacingSamples ?? [])
+  })
+}
+
+function assertCollegeFacingSamples(samples) {
+  assert.ok(samples.length > 0, 'College facing sampler produced no frames')
+  const movingByRegion = { courtyard: 0, office: 0 }
+  const headings = new Set()
+  const previousByRegion = new Map()
+  for (const sample of samples) {
+    if (sample.pathCursor === null || sample.transitionPhase === 'outgoing') continue
+    const previous = previousByRegion.get(sample.region)
+    previousByRegion.set(sample.region, sample)
+    const dx = previous ? sample.x - previous.x : 0
+    const dy = previous ? sample.y - previous.y : 0
+    if (
+      !previous
+      || previous.pathCursor !== sample.pathCursor
+      || Math.hypot(dx, dy) <= 0.001
+    ) continue
+    const expected = actorHeadingIndex(actorHeadingFromVector(dx, dy))
+    assert.equal(
+      sample.headingIndex,
+      expected,
+      `College ${sample.region} frame ${sample.frameCount}: ${JSON.stringify(sample)}`,
+    )
+    assert.equal(sample.orbSpriteCount, 0, `${sample.region} pre-Create orb`)
+    movingByRegion[sample.region] += 1
+    headings.add(sample.headingIndex)
+  }
+  assert.ok(movingByRegion.courtyard > 10, JSON.stringify(movingByRegion))
+  assert.ok(movingByRegion.office > 10, JSON.stringify(movingByRegion))
+  return {
+    headings: [...headings].sort((left, right) => left - right),
+    movingByRegion,
+    sampledFrames: samples.length,
   }
 }
 
@@ -1340,6 +1415,8 @@ async function collegeWizardReceipt(host, page) {
   assert.equal(state.world.kind, 'hub')
   const participant = state.world.participants[playerId]
   const player = getPlayerCharacter(state, playerId)
+  const economy = getPlayerEconomy(state, playerId)
+  const equipment = playerLivingEquipmentAppearance(player.config.element, economy.equipment)
   assert.ok(participant?.collegeIntro?.phase === 'courtyard-walk')
   const expectedHeadingIndex = nativeCollegePathHeadingIndex(
     'courtyard-walk',
@@ -1367,8 +1444,10 @@ async function collegeWizardReceipt(host, page) {
     headingIndex: player.headingIndex,
     materialTint: frame.materialTint,
     orbSpriteCount: frame.orbSpriteCount,
-    primaryTint: getPlayerEconomy(state, playerId).equipment.hat?.iconTints?.[0] ?? null,
-    robeTint: getPlayerEconomy(state, playerId).equipment.robe?.iconTints?.[0] ?? null,
+    robeSelector: equipment.robe?.selector ?? null,
+    primaryTint: economy.equipment.hat?.iconTints?.[0] ?? null,
+    robeTint: economy.equipment.robe?.iconTints?.[0] ?? null,
+    weaponSelector: equipment.weapon?.selector ?? null,
   }
 }
 
@@ -1380,6 +1459,8 @@ function assertCollegeWizardReceipt(receipt, label) {
     `${label} presentation heading: ${JSON.stringify(receipt)}`,
   )
   assert.equal(receipt.orbSpriteCount, 0, `${label} selected-element effect`)
+  assert.equal(receipt.robeSelector, 0, `${label} scroll-bearing Robe selector`)
+  assert.equal(receipt.weaponSelector, 0, `${label} Staff selector`)
   assert.ok(receipt.primaryTint !== null, `${label} starter tint`)
   assert.equal(receipt.robeTint, receipt.primaryTint, `${label} shared garment tint`)
   assert.equal(receipt.materialTint, receipt.primaryTint, `${label} rendered garment tint`)

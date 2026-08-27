@@ -56,6 +56,8 @@ export interface PlayerCharacterState {
 
 export interface PlayerCharacterMovementPlan {
   delta: Vector2
+  /** Movement, rather than an action pose, owns heading for this plan. */
+  face?: true
   movementActive: boolean
   requestedVelocity: Vector2
   retainedVelocity: Vector2
@@ -216,8 +218,9 @@ export function commitPlayerCharacterTick(
       previous.gaitDegrees
       + requestedDistance * PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT
     ) % 360,
-    headingIndex: !playerPrimaryCastOwnsFacing(previous.primaryCast)
-      && plan.movementActive && requestedSpeed > 0.01
+    headingIndex: plan.movementActive
+      && requestedSpeed > 0.01
+      && (plan.face || !playerPrimaryCastOwnsFacing(previous.primaryCast))
       ? actorHeadingIndex(actorHeadingFromVector(
           plan.requestedVelocity.x,
           plan.requestedVelocity.y,

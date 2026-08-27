@@ -291,6 +291,7 @@ export function planHubScriptedMovement(
   const delta = hubScriptedDelta(player.position, target, speed)
   return {
     delta,
+    face: true,
     movementActive: delta.x !== 0 || delta.y !== 0,
     requestedVelocity: {
       x: delta.x / PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,

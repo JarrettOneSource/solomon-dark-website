@@ -364,6 +364,21 @@ test('wizard variants share compact atlas pages instead of decoded padded sheets
   }
 })
 
+test('selector-zero Robe keeps both dynamic and fixed color lanes beside the Staff', () => {
+  assert.match(playerTextures, /robes: PLAYER_CHARACTER_SHEETS\.robeStyles\.map/)
+  assert.match(playerTextures, /robeFixed: \{[\s\S]*?primary:[\s\S]*?secondary:/)
+  assert.match(playerTextures, /staffs: PLAYER_CHARACTER_SHEETS\.staffStyles\.map/)
+  assert.match(hubActors, /this\.robe\.texture = robeTextures\.primary/)
+  assert.match(hubActors, /this\.robeSecondary\.texture = robeTextures\.secondary/)
+  assert.match(hubActors, /this\.fixed\.texture = this\.textures\.equipment\.robeFixed\.primary/)
+  assert.match(
+    hubActors,
+    /this\.fixedSecondary\.texture = this\.textures\.equipment\.robeFixed\.secondary/,
+  )
+  assert.match(hubActors, /this\.staffBack\.texture = weaponTextures\.back/)
+  assert.match(hubActors, /this\.staffFront\.texture = weaponTextures\.front/)
+})
+
 test('Tree foreground stays per-object and shares native alpha and root tint', () => {
   assert.match(editorRenderer, /export function nativeBoneyardForegroundLayers/)
   assert.match(editorRenderer, /export function drawNativeBoneyardForegroundBand/)

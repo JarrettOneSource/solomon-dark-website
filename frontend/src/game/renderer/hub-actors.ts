@@ -34,6 +34,7 @@ import {
   nativePlayerMaterialTint,
 } from './native-secondary-presentation.ts'
 import type { ModPresentationTextures, ModWearableTextureFrames } from './mod-presentation-assets.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 
 const DEATH_HAT_PRIMARY = 7
 const DEATH_HAT_SECONDARY = 8
@@ -75,6 +76,8 @@ export class PlayerWorldView {
   private currentAttachmentPose = 0
   private currentElementEffectScale = 1
   private currentDeathFrame: number | null = null
+  private currentHeadingIndex = 0
+  private positioned = false
   private secondaryState: NativeSecondaryPlayerState | undefined
   private robePrimaryTint = 0xffffff
   private robeSecondaryTint = 0xffffff
@@ -177,6 +180,7 @@ export class PlayerWorldView {
     tick: number,
     staffActionPose: PlayerStaffAttachmentPose | null = null,
     elementEffectVisible = true,
+    movementFacing = false,
   ): void {
     const playerTextures = this.textures.players[player.config.element]
     const elementEffectPhase = player.lighting.overlayEffectPhase
@@ -188,7 +192,14 @@ export class PlayerWorldView {
         || (this.secondaryState?.castSpinTicksRemaining ?? 0) > 0,
       elementEffectPhase,
     )
-    const heading = spriteFrameIndex(Math.round(player.headingIndex), 24)
+    const dx = player.position.x - this.container.position.x
+    const dy = player.position.y - this.container.position.y
+    const heading = spriteFrameIndex(Math.round(
+      movementFacing && this.positioned && (dx || dy)
+        ? actorHeadingIndex(actorHeadingFromVector(dx, dy))
+        : player.headingIndex,
+    ), 24)
+    this.currentHeadingIndex = heading
     const pose = spriteFrameIndex(plan.robePose, 5)
     const attachmentPose = plan.attachmentPose
     this.currentAttachmentPose = attachmentPose
@@ -258,6 +269,7 @@ export class PlayerWorldView {
     this.currentDeathFrame = death.visible ? death.frame : null
 
     this.container.position.set(player.position.x, player.position.y)
+    this.positioned = true
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
     this.shadow.visible = !death.visible
     // The extracted native item banks already partition each pose into an
@@ -427,6 +439,10 @@ export class PlayerWorldView {
 
   get materialTint(): number {
     return this.robe.tint
+  }
+
+  get headingIndex(): number {
+    return this.currentHeadingIndex
   }
 
   get weaponScale(): number {

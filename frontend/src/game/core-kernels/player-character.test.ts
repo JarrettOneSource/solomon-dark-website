@@ -179,6 +179,35 @@ test('world resolution cannot rewrite character intent, facing, or gait ownershi
   assert.deepEqual(blocked.position, pushed.position)
 })
 
+test('scripted movement overrides cast facing while ordinary movement preserves it', () => {
+  const player = {
+    ...createPlayerCharacter(CHARACTER, { x: 0, y: 0 }),
+    headingIndex: 12,
+    primaryCast: {
+      ...createPlayerCharacter(CHARACTER, { x: 0, y: 0 }).primaryCast,
+      actionTick: 0,
+    },
+  }
+  const ordinary = {
+    delta: { x: 1, y: 0 },
+    movementActive: true,
+    requestedVelocity: { x: 100, y: 0 },
+    retainedVelocity: { x: 0, y: 0 },
+  }
+  assert.equal(
+    commitPlayerCharacterTick(player, ordinary, ordinary.delta).headingIndex,
+    12,
+  )
+  assert.equal(
+    commitPlayerCharacterTick(
+      player,
+      { ...ordinary, face: true },
+      ordinary.delta,
+    ).headingIndex,
+    6,
+  )
+})
+
 test('walk-cycle constants and wrap remain character-owned', () => {
   assert.equal(PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT, 5)
   assert.equal(PLAYER_CHARACTER_WALK_CYCLE_DISTANCE_PER_FRAME, 10)

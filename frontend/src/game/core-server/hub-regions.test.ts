@@ -19,12 +19,14 @@ import {
   isHubRegionPathTraversable,
   isHubRegionTraversable,
   moveWithHubRegionCollisionState,
+  planHubScriptedMovement,
   type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import {
   NATIVE_COLLEGE_COURTYARD_PATH,
   NATIVE_COLLEGE_TITLE_CURSOR_STEP,
+  nativeCollegePathHeadingIndex,
 } from '../core-kernels/native-college-intro.ts'
 import {
   HUB_PRIVATE_ROOM_IDS,
@@ -111,6 +113,13 @@ function step(
   }
   return { players: currentPlayers, world: currentWorld }
 }
+
+test('every shared Hub scripted plan declares movement-owned facing', () => {
+  const player = createPlayerCharacter(CHARACTER, { x: 10, y: 20 })
+  const plan = planHubScriptedMovement(player, { x: 40, y: 20 }, 1)
+  assert.equal(plan.face, true)
+  assert.equal(plan.movementActive, true)
+})
 
 test('encodes the recovered College room graph, bounds, and ordinary portal constants', () => {
   assert.deepEqual(Object.fromEntries(Object.entries(HUB_REGION_DEFINITIONS).map(
@@ -424,6 +433,56 @@ test('the first College admission walks through both authored splines before exi
   assert.equal(world.participants.local.transition?.phase, 'college-loadout')
   assert.equal(world.participants.local.transition?.alpha, 1)
   assert.deepEqual(players.local.position, { x: 952.5, y: 67.5 })
+})
+
+test('every forced College movement tick owns facing even while a cast retains ordinary facing', () => {
+  let world: HubWorldState = {
+    ...createHubWorld(['local']),
+    participants: { local: createHubCollegeIntroParticipantState() },
+  }
+  let players = {
+    local: {
+      ...createPlayerCharacter(CHARACTER, NATIVE_COLLEGE_COURTYARD_PATH[0]),
+      headingIndex: 12,
+      primaryCast: {
+        ...createPlayerCharacter(CHARACTER, NATIVE_COLLEGE_COURTYARD_PATH[0]).primaryCast,
+        actionTick: 0,
+      },
+    },
+  }
+  const observedPhases = new Set<string>()
+
+  for (let ticks = 0; ticks < 5_000; ticks += 1) {
+    const participant = world.participants.local
+    const phase = participant.collegeIntro?.phase
+    if (phase === 'arch-dialogue') break
+    const expectedHeading = participant.collegeIntro
+      && phase !== undefined
+      && phase !== 'arch-dialogue'
+      && participant.transition?.phase !== 'outgoing'
+      ? nativeCollegePathHeadingIndex(
+          phase,
+          participant.collegeIntro.pathCursor,
+          players.local.position,
+        )
+      : null
+    const previous = { ...players.local.position }
+    ;({ world, players } = step(world, players, 1, new Set(['local']), new Set(['local'])))
+    const delta = {
+      x: players.local.position.x - previous.x,
+      y: players.local.position.y - previous.y,
+    }
+    if (expectedHeading === null || Math.hypot(delta.x, delta.y) <= 0.001) continue
+    if (phase) observedPhases.add(phase)
+    assert.equal(
+      players.local.headingIndex,
+      expectedHeading,
+      `${phase} tick ${ticks}`,
+    )
+  }
+
+  assert.deepEqual([...observedPhases], ['courtyard-walk', 'office-walk'])
+  assert.equal(world.participants.local.collegeIntro?.phase, 'arch-dialogue')
 })
 
 test('the first College reveal stays at alpha one until its renderer is ready', () => {

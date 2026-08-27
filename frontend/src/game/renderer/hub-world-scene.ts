@@ -583,7 +583,8 @@ export class HubWorldScene {
     const live = this.livePlayerIds
     live.clear()
     for (const [playerId, player] of Object.entries(snapshot.players)) {
-      if (snapshot.world.participants[playerId]?.region !== 'courtyard') continue
+      const participant = snapshot.world.participants[playerId]
+      if (participant?.region !== 'courtyard') continue
       live.add(playerId)
       let view = this.players.get(playerId)
       if (view && this.playerElements.get(playerId) !== player.config.element) {
@@ -607,7 +608,8 @@ export class HubWorldScene {
           playerId,
           'hub:courtyard',
         ),
-        snapshot.world.participants[playerId]?.collegeIntro === null,
+        participant.collegeIntro === null,
+        participant.transition !== null || participant.collegeIntro !== null,
       )
     }
     for (const [playerId, view] of this.players) {

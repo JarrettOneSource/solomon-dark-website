@@ -16,6 +16,8 @@ import {
 } from './hub-render-contract.ts'
 
 const hubWorldScene = readFileSync(new URL('./hub-world-scene.ts', import.meta.url), 'utf8')
+const hubWorldRenderer = readFileSync(new URL('./hub-world-renderer.ts', import.meta.url), 'utf8')
+const hubActors = readFileSync(new URL('./hub-actors.ts', import.meta.url), 'utf8')
 const hubPrivateRoomScene = readFileSync(
   new URL('./hub-private-room-scene.ts', import.meta.url),
   'utf8',
@@ -90,6 +92,17 @@ test('Hub renderer loads compact pages and releases derived frames before page o
     hubTextures.indexOf('textures.combatAtlas.destroy()')
       < hubTextures.indexOf('for (const source of textures.assetSources)'),
   )
+})
+
+test('scripted Hub presentation locks rendered facing to visible travel', () => {
+  assert.match(hubActors, /movementFacing && this\.positioned && \(dx \|\| dy\)/)
+  assert.match(hubActors, /actorHeadingIndex\(actorHeadingFromVector\(dx, dy\)\)/)
+  assert.match(hubWorldScene, /participant\.transition !== null \|\| participant\.collegeIntro !== null/)
+  assert.match(
+    hubPrivateRoomScene,
+    /participant\.transition !== null \|\| participant\.collegeIntro !== null/,
+  )
+  assert.match(hubWorldRenderer, /playerHeadingIndex = playerView\.headingIndex/)
 })
 
 test('every Hub sheet and logical crop is owned by the compact atlas', () => {

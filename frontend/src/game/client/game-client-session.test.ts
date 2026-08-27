@@ -15,6 +15,7 @@ import {
   createPlayerCharacter,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
+import { createHubCollegeIntroParticipantState } from '../core-kernels/hub-regions.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
@@ -1399,6 +1400,24 @@ test('client follows the authority-owned College spline heading instead of prese
 
   assert.equal(session.samplePresentation().players['player-1'].headingIndex, 18)
   session.destroy()
+})
+
+test('client prediction gives forced College movement facing priority over a stale cast pose', () => {
+  const initial = createPlayerCharacter(CHARACTER, { x: 972, y: 1_044 })
+  const player = {
+    ...initial,
+    headingIndex: 12,
+    primaryCast: { ...initial.primaryCast, actionTick: 0 },
+  }
+  const predicted = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: 0, y: 0 }),
+    0,
+    1,
+    createHubCollegeIntroParticipantState(),
+  ).player
+  assert.equal(predicted.headingIndex, 2)
+  assert.ok(predicted.position.y < player.position.y)
 })
 
 test('client does not rewind a locally presented turn while acknowledgement is delayed', async () => {
