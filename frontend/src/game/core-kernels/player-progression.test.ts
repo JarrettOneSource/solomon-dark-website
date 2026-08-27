@@ -256,7 +256,7 @@ test('a fresh wizard owns independent 83-row skill bookkeeping and the stock roo
   assert.notEqual(first.permanentRanks, second.permanentRanks)
   assert.deepEqual(
     first.permanentRanks.flatMap((rank, id) => rank > 0 ? [id] : []),
-    [0, 7, 8, 11],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 11],
   )
   assert.deepEqual(first.permanentRanks, first.effectiveRanks)
   assert.equal(first.weldBuildId, null)
