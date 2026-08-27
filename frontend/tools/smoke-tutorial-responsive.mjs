@@ -9,6 +9,7 @@ import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import {
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerBelt,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
@@ -269,19 +270,21 @@ async function runScenario(scenario) {
     })
     await page.locator('.tutorial-overlay[data-stage="18"]').waitFor({ timeout: 15_000 })
     const potionBindings = await page.locator('.hub-hud').evaluate((hud) => ({
-      health: hud.querySelector('.hub-hud-potion-button-red')?.getAttribute('data-binding-label'),
+      health: hud.querySelector('.hub-hud-quickbar-slot[data-entry-kind="health-potion"]')
+        ?.getAttribute('data-binding-code'),
       healthPlaque: hud.querySelectorAll(
-        '.hub-hud-potion-button-red .hub-hud-quickbar-key-backing',
+        '.hub-hud-quickbar-slot[data-entry-kind="health-potion"] .hub-hud-quickbar-key-backing',
       ).length,
-      mana: hud.querySelector('.hub-hud-potion-button-blue')?.getAttribute('data-binding-label'),
+      mana: hud.querySelector('.hub-hud-quickbar-slot[data-entry-kind="mana-potion"]')
+        ?.getAttribute('data-binding-code'),
       manaPlaque: hud.querySelectorAll(
-        '.hub-hud-potion-button-blue .hub-hud-quickbar-key-backing',
+        '.hub-hud-quickbar-slot[data-entry-kind="mana-potion"] .hub-hud-quickbar-key-backing',
       ).length,
     }))
     assert.deepEqual(potionBindings, {
-      health: '3',
+      health: 'Digit3',
       healthPlaque: 1,
-      mana: '4',
+      mana: 'Digit4',
       manaPlaque: 1,
     })
     assert.match(
@@ -405,7 +408,7 @@ async function captureTutorialAcidRain(host, page, screenshotPath) {
   assert.ok(playerId)
   const skillBook = getPlayerSkillBook(state, playerId)
   assert.equal(skillBook.permanentRanks[72], 1)
-  assert.equal(skillBook.skillQuickbar[0], 72)
+  assert.deepEqual(getPlayerBelt(state, playerId)[0], { kind: 'skill', skillId: 72 })
   Object.assign(state, {
     playerEntities: replacePlayerCharacter(
       state.playerEntities,
@@ -1042,7 +1045,7 @@ async function exerciseTutorialHealthPotionGate(host, page, screenshotPath) {
     nativeTypeId === 7001 && nativeSubtype === 1
   )), false)
 
-  await page.locator('.hub-hud-potion-button-red').click()
+  await page.locator('.hub-hud-quickbar-slot[data-entry-kind="health-potion"]').click()
   const survive = page.locator('.tutorial-overlay[data-stage="19"]')
   await survive.waitFor({ timeout: 15_000 })
   assert.match(await survive.locator('.tutorial-instruction .sr-only').innerText(), /^SURVIVE\b/)
@@ -1177,7 +1180,10 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.equal(resetSkills.permanentRanks[72], 0)
   assert.equal(resetSkills.permanentRanks[24], 1)
   assert.equal(resetSkills.permanentRanks[27], 1)
-  assert.deepEqual(resetSkills.skillQuickbar, [27, null, null, null, null, null, null, null])
+  assert.deepEqual(getPlayerBelt(resetState, playerId), [
+    { kind: 'skill', skillId: 27 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+  ])
   assert.equal(resetEconomy.equipment.amulet, null)
   assert.deepEqual(resetEconomy.backpack.map(item => item.name), [
     'Health Potion',

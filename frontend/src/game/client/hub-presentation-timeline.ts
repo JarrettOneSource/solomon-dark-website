@@ -25,6 +25,7 @@ import {
   NATIVE_COLLEGE_TITLE_CURSOR_STEP,
 } from '../core-kernels/native-college-intro.ts'
 import { copyHubMemorialState } from '../core-kernels/hub-memorial.ts'
+import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 
 export type HubGameSnapshot = Omit<GameSnapshot, 'world'> & {
   world: HubWorldSnapshot
@@ -347,6 +348,7 @@ function interpolatePlayer(
 ): ProtocolPlayerState {
   const discrete = blend < 1 ? older : newer
   return {
+    belt: discrete.belt,
     config: { ...discrete.config },
     economy: discrete.economy,
     footstepTick: discrete.footstepTick,
@@ -560,6 +562,7 @@ function copyParticipant(
 function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   return {
     ...player,
+    belt: freezeNativeBelt(player.belt.map((entry) => entry && { ...entry })),
     config: { ...player.config },
     lighting: {
       ...player.lighting,
@@ -574,7 +577,6 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
       ...player.progression,
       hagathaRuntime: { ...player.progression.hagathaRuntime },
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
-      skillQuickbar: [...player.progression.skillQuickbar],
       weldComponentRanks: player.progression.weldComponentRanks === null
         ? null
         : [...player.progression.weldComponentRanks],

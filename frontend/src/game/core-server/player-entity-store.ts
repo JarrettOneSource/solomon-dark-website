@@ -36,7 +36,6 @@ import {
   applyNativeRevelationToConcentrations,
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
-  bindPlayerSkillQuickbar,
   buildPlayerSkillOffer,
   createPlayerProgression,
   createPlayerSkillBook,
@@ -60,6 +59,14 @@ import {
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import {
+  autofillNewlyLearnedNativeBeltSkills,
+  bindNativeBeltItem,
+  bindNativeBeltSkill,
+  createNativePlayerBelt,
+  refreshNativePlayerBelt,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
 import {
   consumeInventoryItem,
   consumeWizardKey,
@@ -110,6 +117,7 @@ export interface PlayerIdentityComponent {
 export type PlayerLocomotionComponent = Omit<PlayerCharacterState, 'config' | 'primaryCast'>
 
 export interface PlayerEntityStore {
+  readonly belts: readonly PlayerBeltComponent[]
   readonly configs: readonly PlayerCharacterConfig[]
   readonly economies: readonly HubEconomyState[]
   readonly entityIds: readonly PlayerEntityId[]
@@ -189,6 +197,7 @@ export interface PlayerEntityCreativityInsightResult {
 
 export function createPlayerEntityStore(): PlayerEntityStore {
   return {
+    belts: [],
     configs: [],
     economies: [],
     entityIds: [],
@@ -224,6 +233,7 @@ export function addPlayerEntity(
     economy,
   )
   return {
+    belts: [...source.belts, createNativePlayerBelt(skillState.skillBook)],
     configs: [...source.configs, Object.freeze({ ...config })],
     economies: [...source.economies, economy],
     entityIds: [...source.entityIds, source.nextEntityId],
@@ -246,6 +256,7 @@ export function removePlayerEntity(
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
   return {
+    belts: withoutIndex(source.belts, index),
     configs: withoutIndex(source.configs, index),
     economies: withoutIndex(source.economies, index),
     entityIds: withoutIndex(source.entityIds, index),
@@ -275,6 +286,7 @@ export function importPlayerEntity(
   const importedCharacter = character ?? playerCharacterProjection(source, index)
   const importedSkillBook = source.skillBooks[index]!
   return {
+    belts: [...target.belts, source.belts[index]!],
     configs: [...target.configs, source.configs[index]!],
     economies: [...target.economies, source.economies[index]!],
     entityIds: [...target.entityIds, target.nextEntityId],
@@ -327,6 +339,14 @@ export function playerEconomyAt(
 ): HubEconomyState | null {
   const index = playerEntityIndex(source, playerId)
   return index < 0 ? null : source.economies[index] ?? null
+}
+
+export function playerBeltAt(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerBeltComponent | null {
+  const index = playerEntityIndex(source, playerId)
+  return index < 0 ? null : source.belts[index] ?? null
 }
 
 export function replacePlayerEconomy(
@@ -516,10 +536,34 @@ export function bindPlayerEntitySkillQuickbar(
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
-  const skillBook = bindPlayerSkillQuickbar(source.skillBooks[index]!, skillId, slot)
-  const skillBooks = [...source.skillBooks]
-  skillBooks[index] = skillBook
-  return { ...source, skillBooks }
+  const belt = bindNativeBeltSkill(
+    source.belts[index]!,
+    source.skillBooks[index]!,
+    skillId,
+    slot,
+  )
+  const belts = [...source.belts]
+  belts[index] = belt
+  return { ...source, belts }
+}
+
+export function bindPlayerEntityBeltItem(
+  source: PlayerEntityStore,
+  playerId: string,
+  itemId: number,
+  slot: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const belt = bindNativeBeltItem(
+    source.belts[index]!,
+    source.economies[index]!,
+    itemId,
+    slot,
+  )
+  const belts = [...source.belts]
+  belts[index] = belt
+  return { ...source, belts }
 }
 
 export function preparePlayerEntityTutorialLoadout(
@@ -544,7 +588,6 @@ export function preparePlayerEntityTutorialLoadout(
     ]),
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId: 8,
-    skillQuickbar: Object.freeze([72, null, null, null, null, null, null, null]),
     weldBuildId: null,
     weldComponentRanks: null,
   }
@@ -558,13 +601,17 @@ export function preparePlayerEntityTutorialLoadout(
     }
     economy = discarded.state
   }
-  return replacePlayerSkillState(
+  const replaced = replacePlayerSkillState(
     source,
     index,
     skillBook,
     source.skillRuntimes[index]!,
     economy,
   )
+  const tutorialIndex = playerEntityIndex(replaced, playerId)
+  const belts = [...replaced.belts]
+  belts[tutorialIndex] = createNativePlayerBelt(skillBook)
+  return { ...replaced, belts }
 }
 
 export function forcePlayerEntitySkillOfferIds(
@@ -801,16 +848,19 @@ export function replacePlayerLoadout(
   const economies = [...source.economies]
   const progressions = [...source.progressions]
   const skillBooks = [...source.skillBooks]
+  const belts = [...source.belts]
   const skillRuntimes = [...source.skillRuntimes]
   const statBooks = [...source.statBooks]
   configs[index] = Object.freeze({ ...character.config })
   economies[index] = economy
   progressions[index] = progression
   skillBooks[index] = skillState.skillBook
+  belts[index] = createNativePlayerBelt(skillState.skillBook)
   skillRuntimes[index] = skillState.runtime
   statBooks[index] = statBook
   return {
     ...replacePlayerCharacter(source, playerId, character),
+    belts,
     configs,
     economies,
     progressions,
@@ -1886,10 +1936,20 @@ function replacePlayerSkillState(
     economy,
   )
   const economies = [...source.economies]
+  const belts = [...source.belts]
   const progressions = [...source.progressions]
   const skillBooks = [...source.skillBooks]
   const skillRuntimes = [...source.skillRuntimes]
   economies[index] = economy
+  belts[index] = refreshNativePlayerBelt(
+    autofillNewlyLearnedNativeBeltSkills(
+      source.belts[index]!,
+      previousSkillBook,
+      refreshed.skillBook,
+    ),
+    refreshed.skillBook,
+    economy,
+  )
   const currentProgression = source.progressions[index]!
   const weldingOfferBias = nativeEquipmentHasFeature(
     refreshed.runtime.equipmentModifiers,
@@ -1909,7 +1969,7 @@ function replacePlayerSkillState(
   )
   skillBooks[index] = refreshed.skillBook
   skillRuntimes[index] = refreshed.runtime
-  const replaced = { ...source, economies, progressions, skillBooks, skillRuntimes }
+  const replaced = { ...source, belts, economies, progressions, skillBooks, skillRuntimes }
   const primarySelectionChanged = refreshed.skillBook.primarySkillId
       !== previousSkillBook.primarySkillId
     || (

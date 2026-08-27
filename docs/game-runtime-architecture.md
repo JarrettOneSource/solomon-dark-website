@@ -279,7 +279,7 @@ categories 1/2 to categories 1/2/3.
 Category 3 consumes a rising slot edge through the existing general
 concentration owner; it does not become a secondary cast or change automatic
 category-1/2 hotbar population.
-Protocol 86 replaces that incomplete skill-only snapshot member with the
+Protocol 89 replaces that incomplete skill-only snapshot member with the
 separate eight-entry belt component. Stock categories 1/2 and the disclosed
 category-3 Website extension use skill entries; subtype-0/1 potions normalize
 to recursive Health/Mana aliases; every other stock-bindable item retains its
@@ -287,8 +287,8 @@ native type and exact participant-owned item ID. One addressed bind replaces
 one entry, refresh clears a disappeared exact item or unlearned skill, and all
 keyboard/mouse/touch/controller producers resolve the same current entry.
 Inventory Sack browse paths remain client-local UI state and therefore do not
-cross protocol 86. Save schema 17 persists the belt separately from the skill
-book. Schema 16 and earlier nullable skill arrays migrate to skill entries and
+cross protocol 89. Save schema 18 persists the belt separately from the skill
+book. Schema 17 and earlier nullable skill arrays migrate to skill entries and
 seed the two potion aliases only where historical slots 3/4 are empty.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the

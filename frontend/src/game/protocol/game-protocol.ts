@@ -184,6 +184,11 @@ import {
   type NativeUnforgeOutcome,
 } from '../core-kernels/hub-economy.ts'
 import {
+  NATIVE_BELT_ITEM_TYPE_IDS,
+  nativeInventoryItemCanBindToBelt,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
+import {
   NATIVE_PLAYER_MAX_LIGHT_OVERLAY,
   playerLightDriveActive,
 } from '../core-kernels/player-lighting.ts'
@@ -226,7 +231,7 @@ import {
   type NativeSecondaryAbilityId,
 } from '../core-kernels/native-secondary-ability-contract.ts'
 import {
-  isNativeSkillQuickbarSkill,
+  isNativeBeltSkill,
   nativeSkillCategory,
 } from '../core-kernels/player-progression.ts'
 import {
@@ -368,7 +373,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 88
+export const GAME_PROTOCOL_VERSION = 89
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -1204,7 +1209,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       ? null
       : nonnegativeInteger(value.skillId, 'skillId')
     const slot = nonnegativeInteger(value.slot, 'slot')
-    if (skillId !== null && !isNativeSkillQuickbarSkill(skillId)) {
+    if (skillId !== null && !isNativeBeltSkill(skillId)) {
       throw new GameProtocolError('skillId is not a native quickbar skill')
     }
     if (slot > 7) throw new GameProtocolError('slot is out of range')
@@ -2360,6 +2365,18 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type', 'skillId'])
     return { type, skillId: integerWithin(source.skillId, 'action.skillId', 72, 79) }
   }
+  if (type === 'activate-belt-slot') {
+    onlyKeys(source, 'action', ['type', 'slot'])
+    return { type, slot: integerWithin(source.slot, 'action.slot', 0, 7) }
+  }
+  if (type === 'bind-belt-item') {
+    onlyKeys(source, 'action', ['type', 'itemId', 'slot'])
+    return {
+      type,
+      itemId: positiveInteger(source.itemId, 'action.itemId'),
+      slot: integerWithin(source.slot, 'action.slot', 0, 7),
+    }
+  }
   if (type === 'read-librarian-book') {
     onlyKeys(source, 'action', ['type', 'bookId'])
     return { type, bookId: integerWithin(source.bookId, 'action.bookId', 0, 25) }
@@ -2464,6 +2481,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
 function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnapshotFrame {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'belt',
     'config',
     'economy',
     'footstepTick',
@@ -2482,6 +2500,7 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     ? undefined
     : playerEconomy(source.economy, `${field}.economy`)
   const progression = playerProgression(source.progression, `${field}.progression`)
+  const belt = playerBelt(source.belt, `${field}.belt`, progression, economy)
   const primaryCast = playerPrimaryCastState(
     source.primaryCast,
     `${field}.primaryCast`,
@@ -2494,6 +2513,7 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     throw new GameProtocolError(`${field}.lighting.driveActive is inconsistent with player state`)
   }
   return {
+    belt,
     config,
     ...(economy ? { economy } : {}),
     footstepTick: nonnegativeInteger(source.footstepTick, `${field}.footstepTick`),
@@ -2507,6 +2527,56 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
   }
+}
+
+function playerBelt(
+  value: unknown,
+  field: string,
+  progression: ProtocolPlayerProgression,
+  economy: ProtocolPlayerEconomy | undefined,
+): PlayerBeltComponent {
+  const entries = limitedArray(value, field, 8).map((value, index) => {
+    if (value === null) return null
+    const entryField = `${field}[${index}]`
+    const source = record(value, entryField)
+    const kind = limitedString(source.kind, `${entryField}.kind`, 32)
+    if (kind === 'skill') {
+      onlyKeys(source, entryField, ['kind', 'skillId'])
+      const skillId = nonnegativeInteger(source.skillId, `${entryField}.skillId`)
+      if (!isNativeBeltSkill(skillId)) {
+        throw new GameProtocolError(`${entryField}.skillId is not belt-eligible`)
+      }
+      const permanentRank = progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0
+      if (permanentRank < 1) throw new GameProtocolError(`${entryField}.skillId is not learned`)
+      return Object.freeze({ kind, skillId })
+    }
+    if (kind === 'health-potion' || kind === 'mana-potion') {
+      onlyKeys(source, entryField, ['kind'])
+      return Object.freeze({ kind })
+    }
+    if (kind === 'item') {
+      onlyKeys(source, entryField, ['itemId', 'kind', 'nativeTypeId'])
+      const itemId = positiveInteger(source.itemId, `${entryField}.itemId`)
+      const nativeTypeId = nonnegativeInteger(source.nativeTypeId, `${entryField}.nativeTypeId`)
+      if (!(NATIVE_BELT_ITEM_TYPE_IDS as readonly number[]).includes(nativeTypeId)) {
+        throw new GameProtocolError(`${entryField}.nativeTypeId is not belt-eligible`)
+      }
+      if (economy) {
+        const owned = [
+          ...economy.backpack.flatMap(flattenInventoryItem),
+          ...equippedItems(economy.equipment),
+        ].find((item) => item.id === itemId)
+        if (!owned || owned.nativeTypeId !== nativeTypeId
+          || !nativeInventoryItemCanBindToBelt(owned)) {
+          throw new GameProtocolError(`${entryField} does not identify an owned belt item`)
+        }
+      }
+      return Object.freeze({ itemId, kind, nativeTypeId })
+    }
+    throw new GameProtocolError(`${entryField}.kind is not supported`)
+  })
+  if (entries.length !== 8) throw new GameProtocolError(`${field} must contain exactly eight slots`)
+  return Object.freeze(entries) as PlayerBeltComponent
 }
 
 function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
@@ -2699,6 +2769,8 @@ function hubActionFeedback(
   ])
   const action = limitedString(source.action, `${field}.action`, 32)
   if (![
+    'activate-belt-slot',
+    'bind-belt-item',
     'buy-dowsing',
     'buy-fomentius',
     'buy-hagatha',
@@ -3658,7 +3730,6 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'revision',
     'selectedPrimarySkillId',
     'sorcerorsCharmAvailable',
-    'skillQuickbar',
     'splitMind',
   ])
   const advancedUnlocks = limitedArray(
@@ -3793,21 +3864,6 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   if (!splitMind && concentrationSkillIds[1] !== null) {
     throw new GameProtocolError(`${field}.concentrationSkillIds B requires Split Mind`)
   }
-  const skillQuickbar = limitedArray(source.skillQuickbar, `${field}.skillQuickbar`, 8)
-    .map((entry, index) => {
-      if (entry === null) return null
-      const skillId = nonnegativeInteger(entry, `${field}.skillQuickbar[${index}]`)
-      if (!isNativeSkillQuickbarSkill(skillId)) {
-        throw new GameProtocolError(`${field}.skillQuickbar[${index}] is not a quickbar skill`)
-      }
-      if ((learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1) {
-        throw new GameProtocolError(`${field}.skillQuickbar[${index}] is not learned`)
-      }
-      return skillId
-    })
-  if (skillQuickbar.length !== 8) {
-    throw new GameProtocolError(`${field}.skillQuickbar must contain exactly eight slots`)
-  }
   const weldBuildId = source.weldBuildId === null
     ? null
     : integer(source.weldBuildId, `${field}.weldBuildId`)
@@ -3894,7 +3950,6 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       source.sorcerorsCharmAvailable,
       `${field}.sorcerorsCharmAvailable`,
     ),
-    skillQuickbar,
     splitMind,
     weldBuildId,
     weldComponentRanks: weldComponentRanks as [number, number, number, number, number, number] | null,

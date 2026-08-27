@@ -43,10 +43,7 @@
   .hub-hud-diagnostics,
   .hub-hud-meters
 ),
-.hub-hud[data-tutorial-combat='false'] :is(
-  .hub-hud-potion-button,
-  .hub-hud-xp
-),
+.hub-hud[data-tutorial-combat='false'] .hub-hud-xp,
 .hub-hud[data-tutorial-spell='false'] > .hub-hud-selected-skills,
 .hub-hud[data-tutorial-quickbar='false'] > .hub-hud-skill-quickbar,
 .hub-hud[data-tutorial-inventory='false'] .hub-hud-backpack-button,
@@ -359,6 +356,48 @@
   transform: translate(-50%, -50%);
 }
 
+.hub-hud-belt-item-icon,
+.hub-hud-belt-potion-fallback {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  max-width: none;
+  transform: translate(-50%, -50%);
+}
+
+.hub-hud-belt-item-icon {
+  inset: 0;
+  width: 53px;
+  height: 53px;
+  transform: none;
+}
+
+.hub-hud-belt-item-layer {
+  position: absolute !important;
+  top: 50%;
+  left: 50%;
+  transform:
+    translate(-50%, -50%)
+    translate(var(--native-item-x), var(--native-item-y))
+    rotate(var(--native-item-rotation));
+  transform-origin: center;
+}
+
+.hub-hud-belt-item-count {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  color: #f4e5b4;
+  font-size: 12px;
+  line-height: 1;
+  text-shadow: 1px 1px #000;
+}
+
+.hub-hud-belt-potion-fallback {
+  width: 53px;
+}
+
 .hub-hud-skill-quickbar[data-mode='hub'] .hub-hud-quickbar-skill-icon {
   filter: brightness(0.25);
 }
@@ -448,34 +487,6 @@
   inset: 0;
 }
 
-.hub-hud-potion-button {
-  position: absolute;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.hub-hud-potion-button:disabled { cursor: default; }
-
-.hub-hud-potion {
-  display: block;
-  max-width: none;
-}
-
-.hub-hud-potion-button-red {
-  bottom: 17px;
-  left: calc(50% - 149px);
-  width: 53px;
-  height: 50px;
-}
-
-.hub-hud-potion-red {
-  width: 53px;
-  height: 50px;
-}
-
 .hub-hud-backpack-button {
   position: absolute;
   bottom: 14px;
@@ -518,18 +529,6 @@
   width: 58px;
   height: 62px;
   max-width: none;
-}
-
-.hub-hud-potion-button-blue {
-  bottom: 18px;
-  left: calc(50% + 103px);
-  width: 50px;
-  height: 49px;
-}
-
-.hub-hud-potion-blue {
-  width: 50px;
-  height: 49px;
 }
 
 .hub-hud-xp {
@@ -1239,6 +1238,22 @@
     left: auto;
   }
 
+  .hub-hud-quickbar-slot[data-entry-kind='health-potion'] {
+    right: auto;
+    bottom: 8px;
+    left: calc(50% - 230px);
+    width: 100px;
+    height: 100px;
+  }
+
+  .hub-hud-quickbar-slot[data-entry-kind='mana-potion'] {
+    right: auto;
+    bottom: 8px;
+    left: calc(50% + 130px);
+    width: 100px;
+    height: 100px;
+  }
+
   .hub-hud-quickbar-slot:disabled {
     border-color: rgb(226 216 181 / 0.18);
     background: rgb(9 13 18 / 0.32);
@@ -1257,43 +1272,13 @@
     display: none;
   }
 
-  /* Dock, HUD-root px (owner pick B, 2026-08-23). Potion hit boxes stay 100; backpack /
-     tome hit boxes are 130 with the 58 x 62 stock art at 2x (116 x 124), so on an iPhone
-     XR (display scale 0.46) the two buttons read at 59.8 px with 53 x 57 px art instead
-     of 27 x 29 px. Order from the centre: red potion -230..-130, backpack -130..0, tome
-     0..130, blue potion 130..230; MOBILE_DOCK_HALF_WIDTH (230) in
-     mobile-quickbar-layout.ts follows. */
-  .hub-hud-potion-button {
-    width: 100px;
-    height: 100px;
-  }
-
+  /* Dock, HUD-root px (owner pick B, 2026-08-23). Belt potion aliases own the two
+     outer 100 px hit boxes; backpack / tome own the two inner 130 px hit boxes.
+     MOBILE_DOCK_HALF_WIDTH (230) in mobile-quickbar-layout.ts follows. */
   .hub-hud-backpack-button,
   .hub-hud-tome-button {
     width: 130px;
     height: 130px;
-  }
-
-  .hub-hud-potion-button-red {
-    bottom: 8px;
-    left: calc(50% - 230px);
-  }
-
-  .hub-hud-potion-button-blue {
-    bottom: 8px;
-    left: calc(50% + 130px);
-  }
-
-  .hub-hud-potion-red {
-    position: absolute;
-    bottom: 9px;
-    left: 23.5px;
-  }
-
-  .hub-hud-potion-blue {
-    position: absolute;
-    bottom: 10px;
-    left: 25px;
   }
 
   .hub-hud-backpack-button {
@@ -1621,7 +1606,6 @@
   }
 
   .hub-hud-quickbar-slot[data-mobile-ui-custom='true'],
-  .hub-hud-potion-button[data-mobile-ui-custom='true'],
   .hub-hud-backpack-button[data-mobile-ui-custom='true'],
   .hub-hud-tome-button[data-mobile-ui-custom='true'],
   .hub-hud-xp[data-mobile-ui-custom='true'] {

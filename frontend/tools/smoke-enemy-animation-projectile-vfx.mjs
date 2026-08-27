@@ -471,6 +471,7 @@ try {
       modEffects: [],
       players: {
         local: {
+          belt: [null, null, null, null, null, null, null, null],
           config: {
             discipline: 'arcane',
             displayName: 'Parity Probe',
@@ -509,7 +510,6 @@ try {
             previousThreshold: 0,
             revision: 0,
             sorcerorsCharmAvailable: false,
-            skillQuickbar: [null, null, null, null, null, null, null, null],
           },
           velocity: { x: 0, y: 0 },
           walkCyclePrimary: 0,

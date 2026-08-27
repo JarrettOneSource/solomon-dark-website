@@ -3,13 +3,18 @@ import {
   Graphics,
   MeshSimple,
   NineSliceSprite,
-  Rectangle,
   Sprite,
-  Texture,
   TilingSprite,
 } from 'pixi.js'
 
 import { hub, skillPicker } from '../../lib/assets.ts'
+import { DOWSING_EQUIPMENT_RECIPES } from '../core-kernels/hub-economy.ts'
+import {
+  nativeBeltEntryItem,
+  nativeBeltPotionProjection,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
+import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
   NATIVE_SKILL_CATALOG,
   nativeSkillRoot,
@@ -65,15 +70,21 @@ import {
   nativeSkillScreenTick,
 } from './skill-book-render-contract.ts'
 import {
+  HUB_ITEM_ICON_TRANSFORMS,
+  HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
+} from './hub-inventory-render-contract.ts'
+import {
   addBitmapText,
   spriteFor,
   textureFor,
 } from './skill-picker-renderer.ts'
 
 export interface SkillBookRendererPresentation {
+  readonly belt: PlayerBeltComponent
   readonly dragPosition: Readonly<NativeHudPoint> | null
   readonly draggedSkillId: number | null
   readonly economy: ProtocolPlayerEconomy
+  readonly element: WizardElement
   readonly hoveredSkillId: number | null
   readonly openProgress: number
   readonly placements: readonly NativeSkillBookPagePlacement[]
@@ -103,12 +114,10 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       }),
       loadGameTextureMap([
         hub.hud.backpack,
-        hub.hud.inventoryDigits,
-        hub.hud.potionBlue,
-        hub.hud.potionRed,
         hub.hud.tome,
         hub.hud.xpFill,
         hub.hud.xpFrame,
+        hub.trader.inventoryAtlas,
         skillPicker.fontsAtlas,
         skillPicker.skillsAtlas,
         skillPicker.uiAtlas,
@@ -203,7 +212,6 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       drawInventoryHud(
         hud,
         resources,
-        presentation.economy,
         presentation.progression,
         hudLayout,
       )
@@ -742,9 +750,10 @@ function drawSkillQuickbar(
   presentation: SkillBookRendererPresentation,
   hudLayout: NativeHudControlLayout,
 ): void {
-  presentation.progression.skillQuickbar.forEach((skillId, slot) => {
+  presentation.belt.forEach((entry, slot) => {
     const rect = hudLayout.belt[slot]!
     const { height, width, x, y } = rect
+    const skillId = entry?.kind === 'skill' ? entry.skillId : null
     const selectedPrimary = skillId === presentation.progression.selectedPrimarySkillId
     layer.addChild(new Graphics()
       .rect(x, y, width, height)
@@ -769,6 +778,22 @@ function drawSkillQuickbar(
         icon.alpha = 0.375
         layer.addChild(icon)
       }
+    } else if (entry !== null) {
+      const potion = entry.kind === 'health-potion'
+        ? nativeBeltPotionProjection(presentation.economy.backpack, 0)
+        : entry.kind === 'mana-potion'
+          ? nativeBeltPotionProjection(presentation.economy.backpack, 1)
+          : null
+      const item = potion?.item ?? nativeBeltEntryItem(entry, presentation.economy)
+      if (item) drawBeltItem(
+        layer,
+        textures,
+        item,
+        presentation.element,
+        x + width / 2,
+        y + height / 2,
+        potion?.count ?? item.quantity,
+      )
     }
     if (presentation.draggedSkillId !== null && slot === presentation.targetQuickbarSlot) {
       layer.addChild(new Graphics()
@@ -778,10 +803,45 @@ function drawSkillQuickbar(
   })
 }
 
+function drawBeltItem(
+  layer: Container,
+  textures: GameTextureMap,
+  item: NonNullable<ReturnType<typeof nativeBeltEntryItem>>,
+  element: WizardElement,
+  centerX: number,
+  centerY: number,
+  quantity: number,
+): void {
+  const transform = item.equipmentType === null
+    ? null
+    : HUB_ITEM_ICON_TRANSFORMS[item.equipmentType]
+  const recipe = item.recipeIndex === null ? null : DOWSING_EQUIPMENT_RECIPES[item.recipeIndex]
+  const iconTints = item.equipmentType === 'hat' || item.equipmentType === 'robe'
+    ? item.iconTints
+      ?? recipe?.iconTints
+      ?? [HUB_STARTER_EQUIPMENT_PRIMARY_TINT[element], 0xffffff]
+    : [null, null]
+  item.iconRecords.forEach((record, index) => {
+    const icon = spriteFor(textures, 'Inventory', record)
+    icon.anchor.set(0.5)
+    icon.position.set(
+      centerX + (transform?.translation[0] ?? 0),
+      centerY + (transform?.translation[1] ?? 0),
+    )
+    icon.rotation = (transform?.rotationDegrees ?? 0) * Math.PI / 180
+    icon.tint = iconTints[index] ?? 0xffffff
+    layer.addChild(icon)
+  })
+  if (quantity > 1) {
+    addBitmapText(layer, textures, `${quantity}`, 'medium', centerX + 20, centerY + 22, {
+      tint: 0xf4e5b4,
+    })
+  }
+}
+
 function drawInventoryHud(
   layer: Container,
   textures: GameTextureMap,
-  economy: ProtocolPlayerEconomy,
   progression: ProtocolPlayerProgression,
   hudLayout: NativeHudControlLayout,
 ): void {
@@ -793,10 +853,7 @@ function drawInventoryHud(
     layer.addChild(sprite)
     return sprite
   }
-  const { backpack, belt, tome } = hudLayout
-  const redSlot = belt[3]!
-  const blueSlot = belt[4]!
-  image(hub.hud.potionRed, redSlot.x + 3, redSlot.y + 0.5, 53, 50)
+  const { backpack, tome } = hudLayout
   image(hub.hud.backpack, backpack.x, backpack.y, backpack.width, backpack.height)
   const xpFillX = backpack.x + 67.5
   const xpFillY = backpack.y + 8
@@ -809,27 +866,6 @@ function drawInventoryHud(
   xpFill.mask = xpMask
   image(hub.hud.xpFrame, backpack.x + 64, backpack.y + 4, 12, 56)
   image(hub.hud.tome, tome.x, tome.y, tome.width, tome.height)
-  image(hub.hud.potionBlue, blueSlot.x + 5, blueSlot.y + 0.5, 50, 49)
-  const counts = [
-    { count: inventoryQuantity(economy, 'health-potion'), x: redSlot.x + 24, y: redSlot.y + 52.5 },
-    { count: inventoryQuantity(economy, 'mana-potion'), x: blueSlot.x + 25, y: blueSlot.y + 52.5 },
-  ]
-  const digitTexture = textureFrom(textures.textures, hub.hud.inventoryDigits)
-  for (const { count, x, y } of counts) {
-    const frame = new Rectangle(Math.min(9, Math.max(0, count)) * 8, 0, 8, 14)
-    const digit = new Sprite(new Texture({ source: digitTexture.source, frame }))
-    digit.position.set(x, y)
-    layer.addChild(digit)
-  }
-}
-
-function inventoryQuantity(
-  economy: ProtocolPlayerEconomy,
-  kind: 'health-potion' | 'mana-potion',
-): number {
-  return economy.backpack.reduce((total, item) => (
-    item.kind === kind ? total + item.quantity : total
-  ), 0)
 }
 
 function addShadowedText(

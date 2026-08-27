@@ -159,9 +159,50 @@ try {
   ))
   await page.screenshot({ path: `${screenshotRoot}-inventory-equip-interactions.png` })
 
+  await dragToStagePoint(page, inventory, backpackItem(IDS.clickRingTwo), {
+    x: 614.5,
+    y: 874.5,
+  })
+  await waitForHostBelt(gameHost, 2, (entry) => (
+    entry?.kind === 'item' && entry.itemId === IDS.clickRingTwo
+  ))
+  assert.ok(findHostBackpackItem(gameHost, IDS.clickRingTwo))
+  await page.keyboard.press('KeyI')
+  await inventory.waitFor({ state: 'detached' })
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+  await page.locator('.hub-hud-quickbar-slot[data-slot="2"]').click()
+  await waitForHostEconomy(gameHost, (economy) => (
+    economy.equipment.rings[0]?.id === IDS.clickRingTwo
+  ))
+  await waitForHostBelt(gameHost, 2, (entry) => (
+    entry?.kind === 'item' && entry.itemId === IDS.clickRingTwo
+  ))
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  await inventory.waitFor()
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const beltActionCount = await inventory.locator('[data-native-belt-slot]').count()
+  const beltSlotTwoCount = await inventory.locator('[data-native-belt-slot="2"]').count()
+  if (beltSlotTwoCount === 0) {
+    throw new Error(`inventory belt actions missing: ${JSON.stringify({
+      belt: hostBelt(gameHost),
+      beltActionCount,
+      beltActions: await inventory.locator('[data-native-belt-slot]').evaluateAll((actions) => (
+        actions.map((action) => action.getAttribute('data-native-belt-slot'))
+      )),
+      hud: await page.locator('.hub-hud-quickbar-slot').evaluateAll((slots) => slots.map((slot) => ({
+        kind: slot.getAttribute('data-entry-kind'),
+        slot: slot.getAttribute('data-slot'),
+      }))),
+    })}`)
+  }
+  const pullOffAudioStart = await audioCueCount(page, 'poof.wav')
+  await pullBeltOff(page, inventory, 2)
+  await waitForHostBelt(gameHost, 2, (entry) => entry === null)
+  assert.equal(await audioCueCount(page, 'poof.wav'), pullOffAudioStart + 1)
+  await page.screenshot({ path: `${screenshotRoot}-item-belt-bind-activate-pull-off.png` })
+
   assert.equal(await item(IDS.rootKey).getAttribute('data-parent-sack-id'), '')
   assert.equal(await item(IDS.movableKey).count(), 0)
-
   await openSack(page, inventory, item(IDS.destinationSack), IDS.destinationSack)
   assert.equal(await inventory.locator('[data-inventory-owner="backpack"]').count(), 0)
   await returnFromSack(inventory, '')
@@ -170,6 +211,7 @@ try {
   await item(IDS.rootKey).waitFor({ state: 'detached' })
 
   await openSack(page, inventory, item(IDS.sourceSack), IDS.sourceSack)
+  await page.screenshot({ path: `${screenshotRoot}-sack-inside.png` })
   await waitForParent(item(IDS.movableKey), IDS.sourceSack)
   await dragToStagePoint(page, inventory, item(IDS.movableKey), { x: 1_200, y: 750 })
   await item(IDS.movableKey).waitFor({ state: 'detached' })
@@ -204,6 +246,23 @@ try {
     .waitFor()
   await page.screenshot({ path: `${screenshotRoot}-sack-movement.png` })
   await returnFromSack(inventory, '')
+
+  await dragToStagePoint(page, inventory, item(IDS.sourceSack), { x: 984.5, y: 874.5 })
+  await waitForHostBelt(gameHost, 5, (entry) => (
+    entry?.kind === 'item' && entry.itemId === IDS.sourceSack
+  ))
+  await page.keyboard.press('KeyI')
+  await inventory.waitFor({ state: 'detached' })
+  const sackAudioStart = await audioCueCount(page, 'backpack-open.wav')
+  await page.locator('.hub-hud-quickbar-slot[data-slot="5"]').click()
+  await waitForHostFeedback(gameHost, 'activate-belt-slot')
+  await waitForAudioCueCount(page, 'backpack-open.wav', sackAudioStart + 1)
+  assert.ok(findHostBackpackItem(gameHost, IDS.sourceSack))
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  await inventory.waitFor()
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  await pullBeltOff(page, inventory, 5)
+  await waitForHostBelt(gameHost, 5, (entry) => entry === null)
 
   await openSack(page, inventory, item(IDS.dyeCarrier), IDS.dyeCarrier)
   await openSack(page, inventory, item(IDS.dyeInnerSack), IDS.dyeInnerSack, [IDS.dyeCarrier])
@@ -289,6 +348,22 @@ try {
   await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
   await page.screenshot({ path: `${screenshotRoot}-dyed-robe-character.png` })
 
+  for (const trader of ['hagatha', 'luthacus', 'fomentius', 'shlorio']) {
+    await page.locator(`[data-hub-shortcut="${trader}"]`).click()
+    const companion = page.locator(
+      '.hub-native-ui-overlay[data-surface-kind="service"] .hub-native-ui-stage',
+    )
+    await companion.waitFor()
+    await companion.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+    await openSack(page, companion, companion.locator(
+      `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.sourceSack}"]`,
+    ), IDS.sourceSack)
+    await page.screenshot({ path: `${screenshotRoot}-${trader}-sack-inside.png` })
+    await returnFromSack(companion, '')
+    await page.keyboard.press('Escape')
+    await companion.waitFor({ state: 'detached' })
+  }
+
   const luthacusPrompt = page.locator('.game-interact-prompt[data-interaction-target="hub:luthacus"]')
   await luthacusPrompt.waitFor({ timeout: 10_000 })
   await luthacusPrompt.click()
@@ -335,7 +410,34 @@ try {
     close: await inventorySoundCount(page, 'backpack-close.wav') - sackAudioBefore.close,
     open: await inventorySoundCount(page, 'backpack-open.wav') - sackAudioBefore.open,
   }
-  assert.deepEqual(sackAudio, { close: 8, open: 8 })
+  assert.deepEqual(sackAudio, { close: 12, open: 18 })
+
+  await returnFromSack(storage, '')
+  await page.keyboard.press('Escape')
+  await storage.waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  await page.locator(
+    '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  const runInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await runInventory.waitFor()
+  await runInventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  await openSack(page, runInventory, runInventory.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.sourceSack}"]`,
+  ), IDS.sourceSack)
+  await returnFromSack(runInventory, '')
+  await dragTo(
+    page,
+    runInventory.locator(`[data-inventory-item-id="${IDS.sourceSack}"]`),
+    runInventory.locator('[data-native-belt-slot="3"]'),
+  )
+  await waitForHostBelt(gameHost, 3, (entry) => (
+    entry?.kind === 'item' && entry.itemId === IDS.sourceSack
+  ))
+  await pullBeltOff(page, runInventory, 3)
+  await waitForHostBelt(gameHost, 3, (entry) => entry === null)
+  await page.screenshot({ path: `${screenshotRoot}-boneyard-sack-item-belt.png` })
 
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
@@ -349,14 +451,21 @@ try {
     sackAudio,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
+      `${screenshotRoot}-item-belt-bind-activate-pull-off.png`,
+      `${screenshotRoot}-sack-inside.png`,
       `${screenshotRoot}-sack-movement.png`,
       `${screenshotRoot}-dye-all-swatches.png`,
       `${screenshotRoot}-dye-cloth-choice.png`,
       `${screenshotRoot}-dye-trim-choice.png`,
       `${screenshotRoot}-dyed-robe-inventory.png`,
       `${screenshotRoot}-dyed-robe-character.png`,
+      `${screenshotRoot}-hagatha-sack-inside.png`,
+      `${screenshotRoot}-luthacus-sack-inside.png`,
+      `${screenshotRoot}-fomentius-sack-inside.png`,
+      `${screenshotRoot}-shlorio-sack-inside.png`,
       `${screenshotRoot}-take-click-again.png`,
       `${screenshotRoot}-luthacus-recursive-storage.png`,
+      `${screenshotRoot}-boneyard-sack-item-belt.png`,
     ],
     status: 'ok',
     swatches: ALL_SWATCH_ROWS,
@@ -434,6 +543,7 @@ function createSeededSave() {
     collegeIntroPending: false,
     nextItemId: 50_000,
     storage: [storageSack],
+    tutorialPending: false,
   }
   const playerEntities = replacePlayerEconomy(
     initial.playerEntities,
@@ -605,6 +715,78 @@ async function returnFromSack(inventory, path) {
 
 async function waitForParent(target, parentSackId) {
   await target.locator(`xpath=self::*[@data-parent-sack-id="${parentSackId ?? ''}"]`).waitFor()
+}
+
+async function pullBeltOff(targetPage, inventory, slot) {
+  const target = inventory.locator(`[data-native-belt-slot="${slot}"]`)
+  const box = await target.boundingBox()
+  assert.ok(box, `belt slot ${slot} has no browser geometry`)
+  await targetPage.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await targetPage.mouse.down()
+  await targetPage.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2, {
+    steps: 12,
+  })
+  await targetPage.mouse.up()
+}
+
+async function waitForHostBelt(host, slot, predicate) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const state = host.state()
+    const playerId = host.hostPlayerId()
+    const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+    const entry = index < 0 ? null : state.playerEntities.belts[index]?.[slot] ?? null
+    if (predicate(entry)) return entry
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(`timed out waiting for host belt slot ${slot}`)
+}
+
+async function waitForHostEconomy(host, predicate) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const state = host.state()
+    const playerId = host.hostPlayerId()
+    const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+    const economy = index < 0 ? null : state.playerEntities.economies[index]
+    if (economy && predicate(economy)) return economy
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('timed out waiting for host economy')
+}
+
+async function waitForHostFeedback(host, action) {
+  return waitForHostEconomy(host, (economy) => economy.actionFeedback?.action === action)
+}
+
+function findHostBackpackItem(host, itemId) {
+  const state = host.state()
+  const playerId = host.hostPlayerId()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  return index < 0
+    ? null
+    : flatten(state.playerEntities.economies[index].backpack).find(({ id }) => id === itemId) ?? null
+}
+
+function hostBelt(host) {
+  const state = host.state()
+  const playerId = host.hostPlayerId()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  return index < 0 ? null : state.playerEntities.belts[index]
+}
+
+async function audioCueCount(targetPage, filename) {
+  return targetPage.evaluate((cue) => window.__sdrAudioEvents.filter((event) => (
+    (event.type === 'buffer-start' || event.type === 'play')
+    && window.__sdrAudioSourceMatches(event.src, cue)
+  )).length, filename)
+}
+
+async function waitForAudioCueCount(targetPage, filename, expected) {
+  await targetPage.waitForFunction(({ cue, count }) => window.__sdrAudioEvents.filter((event) => (
+    (event.type === 'buffer-start' || event.type === 'play')
+    && window.__sdrAudioSourceMatches(event.src, cue)
+  )).length >= count, { cue: filename, count: expected }, { timeout: 10_000 })
 }
 
 async function waitForDyePhase(inventory, phase) {

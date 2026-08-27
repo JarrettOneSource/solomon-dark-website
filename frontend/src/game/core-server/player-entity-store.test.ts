@@ -12,6 +12,7 @@ import {
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import { bindNativeBeltSkill } from '../core-kernels/native-belt.ts'
 import {
   playerLightDriveActive,
 } from '../core-kernels/player-lighting.ts'
@@ -76,6 +77,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(store.locomotions.length, store.progressions.length)
   assert.equal(store.primaryCasts.length, store.progressions.length)
   assert.equal(store.progressions.length, store.skillBooks.length)
+  assert.equal(store.belts.length, store.skillBooks.length)
   assert.equal(store.skillBooks.length, store.skillRuntimes.length)
   assert.equal(store.skillBooks.length, store.statBooks.length)
   assert.equal(playerEntityId(store, 'second'), 2)
@@ -115,8 +117,15 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
     reverieActive: true,
     serendipityActive: true,
   } as const
+  const modifiedBook = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder: [...sourceBook.learnedSkillOrder, 51],
+    permanentRanks,
+  }
   store = {
     ...store,
+    belts: [bindNativeBeltSkill(store.belts[0]!, modifiedBook, 51, 0)],
     progressions: [{
       ...store.progressions[0]!,
       experience: 450,
@@ -124,13 +133,7 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
       level: 4,
       revision: 19,
     }],
-    skillBooks: [{
-      ...sourceBook,
-      effectiveRanks,
-      learnedSkillOrder: [...sourceBook.learnedSkillOrder, 51],
-      permanentRanks,
-      skillQuickbar: [51, null, null, null, null, null, null, null],
-    }],
+    skillBooks: [modifiedBook],
   }
   const sourceEconomy = store.economies[0]!
   const oldTints = [0x123456, 0x654321] as const
@@ -184,8 +187,11 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
   assert.equal(replaced.skillBooks[0]!.permanentRanks[24], 1)
   assert.equal(replaced.skillBooks[0]!.permanentRanks[27], 1)
   assert.deepEqual(
-    replaced.skillBooks[0]!.skillQuickbar,
-    [27, null, null, null, null, null, null, null],
+    replaced.belts[0],
+    [
+      { kind: 'skill', skillId: 27 }, null, null,
+      { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ],
   )
   assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdA, null)
   assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdB, null)
@@ -221,7 +227,7 @@ test('College Create confirmation preserves its one-shot pre-Create clothing col
   assert.deepEqual(replaced.economies[0]!.equipment.hat?.iconTints, collegeTints)
   assert.deepEqual(replaced.economies[0]!.equipment.robe?.iconTints, collegeTints)
   assert.equal(replaced.skillBooks[0]!.primarySkillId, 32)
-  assert.equal(replaced.skillBooks[0]!.skillQuickbar[0], 35)
+  assert.deepEqual(replaced.belts[0]![0], { kind: 'skill', skillId: 35 })
 })
 
 test('all fifteen post-Game-Over Create choices build a fresh complete generation', () => {
@@ -281,8 +287,9 @@ test('all fifteen post-Game-Over Create choices build a fresh complete generatio
       assert.equal(book.elementRoot, elementRoot)
       assert.equal(book.disciplineRoot, disciplineRoot)
       assert.equal(book.primarySkillId, primarySkillId)
-      assert.deepEqual(book.skillQuickbar, [
-        secondarySkillId, null, null, null, null, null, null, null,
+      assert.deepEqual(store.belts[0], [
+        { kind: 'skill', skillId: secondarySkillId }, null, null,
+        { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
       ])
       assert.equal(book.advancedUnlocks.some(Boolean), false)
       assert.equal(progression.level, 1)

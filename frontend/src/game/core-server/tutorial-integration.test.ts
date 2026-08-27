@@ -16,6 +16,7 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationDurableProfileEconomy,
+  getPlayerBelt,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
@@ -71,7 +72,10 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   ])
   const skills = getPlayerSkillBook(state, 'owner')
   assert.equal(skills.primarySkillId, 8)
-  assert.deepEqual(skills.skillQuickbar, [72, null, null, null, null, null, null, null])
+  assert.deepEqual(getPlayerBelt(state, 'owner'), [
+    { kind: 'skill', skillId: 72 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+  ])
   assert.equal(skills.permanentRanks[11], 0)
   assert.equal(skills.permanentRanks[72], 1)
   const completedProfile = gameSimulationDurableProfileEconomy({
@@ -266,7 +270,10 @@ test('Tutorial death discards its items and skills when Create confirms the new 
   assert.equal(skills.permanentRanks[72], 0)
   assert.equal(skills.permanentRanks[24], 1)
   assert.equal(skills.permanentRanks[27], 1)
-  assert.deepEqual(skills.skillQuickbar, [27, null, null, null, null, null, null, null])
+  assert.deepEqual(getPlayerBelt(confirmed, 'owner'), [
+    { kind: 'skill', skillId: 27 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+  ])
   assert.equal(economy.equipment.amulet, null)
   assert.deepEqual(economy.backpack.map(item => item.name), [
     'Health Potion',

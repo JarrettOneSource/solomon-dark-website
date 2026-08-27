@@ -10,7 +10,11 @@ import {
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
-import { NATIVE_WELD_BUILDS } from '../core-kernels/player-progression.ts'
+import {
+  NATIVE_WELD_BUILDS,
+  type NativeBeltSkillId,
+} from '../core-kernels/player-progression.ts'
+import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
@@ -61,6 +65,7 @@ import {
   DEFAULT_PLAYER_CHARACTER_CONFIG,
   enterBoneyardWorld,
   GAME_TICK_RATE,
+  getPlayerBelt,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
@@ -536,10 +541,13 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
     viewportWidth: 1_600,
   }
   const weldIds = NATIVE_WELD_BUILDS.map(({ id }) => id)
+  const belt = (skillId: NativeBeltSkillId) => freezeNativeBelt([
+    { kind: 'skill', skillId }, null, null, null, null, null, null, null,
+  ])
   assert.deepEqual(weldIds, [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009])
-  for (const skillId of [8, 16, 24, 32, 40, 52]) {
+  for (const skillId of [8, 16, 24, 32, 40, 52] as const) {
     assert.deepEqual(
-      sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      sealPlayerCombatInput(source, belt(skillId)),
       {
         aim: null,
         cast: { primary: false, quickbar: 0 },
@@ -551,14 +559,14 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
   }
   for (const buildId of weldIds) {
     assert.equal(
-      sealPlayerCombatInput(source, [52, null, null, null, null, null, null, null]).cast.primary,
+      sealPlayerCombatInput(source, belt(52)).cast.primary,
       false,
       `weld ${buildId} crossed the Hub combat seal`,
     )
   }
-  for (const skillId of [57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71]) {
+  for (const skillId of [57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71] as const) {
     assert.deepEqual(
-      sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      sealPlayerCombatInput(source, belt(skillId)),
       {
         aim: null,
         cast: { primary: false, quickbar: 0 },
@@ -570,7 +578,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
   }
   for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
     assert.deepEqual(
-      sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      sealPlayerCombatInput(source, belt(skillId)),
       {
         aim: null,
         cast: { primary: false, quickbar: null },
@@ -1124,6 +1132,120 @@ test('inventory double activation consumes one potion and applies its participan
       : null,
     0,
   )
+})
+
+test('native item belt binds shortcuts without moving ownership and activates exact item families', () => {
+  let state = createGameSimulation()
+  const economy = getPlayerEconomy(state)
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!
+  const ring = createEquipmentInventoryItem(ringRecipe, economy.nextItemId)
+  const hat = createEquipmentInventoryItem(hatRecipe, economy.nextItemId + 1)
+  const sack: HubInventoryItem = {
+    contents: [ring, hat],
+    equipmentType: null,
+    iconRecords: [70],
+    id: economy.nextItemId + 2,
+    kind: 'sack',
+    name: 'Belt action Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const chug: HubInventoryItem = {
+    ...economy.backpack[0]!,
+    id: economy.nextItemId + 3,
+    kind: 'wizard-chug',
+    name: 'Wizard Chug',
+    nativeSubtype: 2,
+  }
+  const misc: HubInventoryItem = {
+    equipmentType: null,
+    iconRecords: [43],
+    id: economy.nextItemId + 4,
+    kind: 'key',
+    name: 'Wizard Key',
+    nativeSubtype: 1,
+    nativeTypeId: 7012,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'local-player', {
+      ...economy,
+      backpack: [...economy.backpack, sack, chug, misc],
+      nextItemId: economy.nextItemId + 5,
+    }),
+  }
+
+  const boundRing = applyGameSimulationHubAction(state, 'local-player', {
+    itemId: ring.id,
+    slot: 2,
+    type: 'bind-belt-item',
+  })
+  assert.equal(boundRing.accepted, true)
+  assert.deepEqual(getPlayerBelt(boundRing.state)[2], {
+    itemId: ring.id,
+    kind: 'item',
+    nativeTypeId: 7002,
+  })
+  assert.strictEqual(findInventoryItem(getPlayerEconomy(boundRing.state).backpack, ring.id), ring)
+  const equippedRing = applyGameSimulationHubAction(boundRing.state, 'local-player', {
+    slot: 2,
+    type: 'activate-belt-slot',
+  })
+  assert.equal(equippedRing.accepted, true)
+  assert.strictEqual(getPlayerEconomy(equippedRing.state).equipment.rings[0], ring)
+  assert.deepEqual(getPlayerBelt(equippedRing.state)[2], {
+    itemId: ring.id,
+    kind: 'item',
+    nativeTypeId: 7002,
+  })
+
+  const boundChug = applyGameSimulationHubAction(equippedRing.state, 'local-player', {
+    itemId: chug.id,
+    slot: 5,
+    type: 'bind-belt-item',
+  })
+  assert.equal(boundChug.accepted, true)
+  const consumed = applyGameSimulationHubAction(boundChug.state, 'local-player', {
+    slot: 5,
+    type: 'activate-belt-slot',
+  })
+  assert.equal(consumed.accepted, true)
+  assert.equal(findInventoryItem(getPlayerEconomy(consumed.state).backpack, chug.id), null)
+  assert.equal(getPlayerBelt(consumed.state)[5], null)
+
+  const boundSack = applyGameSimulationHubAction(consumed.state, 'local-player', {
+    itemId: sack.id,
+    slot: 6,
+    type: 'bind-belt-item',
+  })
+  assert.equal(boundSack.accepted, true)
+  const activatedSack = applyGameSimulationHubAction(boundSack.state, 'local-player', {
+    slot: 6,
+    type: 'activate-belt-slot',
+  })
+  assert.equal(activatedSack.accepted, true)
+  assert.strictEqual(getPlayerEconomy(activatedSack.state).equipment.hat, hat)
+  assert.ok(findInventoryItem(getPlayerEconomy(activatedSack.state).backpack, sack.id))
+  assert.deepEqual(getPlayerBelt(activatedSack.state)[6], {
+    itemId: sack.id,
+    kind: 'item',
+    nativeTypeId: 7008,
+  })
+
+  const rejected = applyGameSimulationHubAction(activatedSack.state, 'local-player', {
+    itemId: misc.id,
+    slot: 7,
+    type: 'bind-belt-item',
+  })
+  assert.equal(rejected.accepted, false)
+  assert.equal(getPlayerBelt(rejected.state)[7], null)
 })
 
 test('simulation owns recursive sack moves, Fabric Dye commits, and nested potion effects', () => {
@@ -3521,10 +3643,10 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(getPlayerCharacter(hub, 'second').config.element, 'water')
   assert.equal(getPlayerCharacter(hub, 'second').config.discipline, 'mind')
   assert.equal(getPlayerSkillBook(hub, 'first').primarySkillId, 24)
-  assert.equal(getPlayerSkillBook(hub, 'first').skillQuickbar[0], 27)
+  assert.deepEqual(getPlayerBelt(hub, 'first')[0], { kind: 'skill', skillId: 27 })
   assert.equal(getPlayerSkillBook(hub, 'first').permanentRanks[51], 0)
   assert.equal(getPlayerSkillBook(hub, 'second').primarySkillId, 32)
-  assert.equal(getPlayerSkillBook(hub, 'second').skillQuickbar[0], 35)
+  assert.deepEqual(getPlayerBelt(hub, 'second')[0], { kind: 'skill', skillId: 35 })
   assert.equal(getPlayerSkillBook(hub, 'second').permanentRanks[63], 0)
   assert.equal(getPlayerProgression(hub, 'first').level, 1)
   assert.equal(getPlayerProgression(hub, 'first').experience, 0)
@@ -3585,8 +3707,47 @@ test('a primary quickbar edge selects the learned primary before cast authority 
     },
   })
   assert.equal(getPlayerSkillBook(state).primarySkillId, 16)
-  assert.equal(getPlayerSkillBook(state).skillQuickbar[7], 16)
+  assert.deepEqual(getPlayerBelt(state)[7], { kind: 'skill', skillId: 16 })
   assert.equal(getPlayerCharacter(state).primaryCast.selectedPrimaryId, 16)
+})
+
+test('Teleport reaches the active-run kernel through a real belt slot and remains gated in College', () => {
+  const input = {
+    aim: { x: 400, y: 250 },
+    cast: { primary: false, quickbar: 7 },
+    movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
+  }
+  let college = withPlayerSkillRank(createGameSimulation(), 'local-player', 48, 1)
+  const bound = bindGameSimulationPlayerSkillQuickbar(college, 'local-player', 48, 7)
+  assert.ok(bound)
+  college = bound
+  const collegePosition = getPlayerCharacter(college).position
+  const collegeMana = getPlayerProgression(college).currentMana
+  const collegeTick = stepGameSimulationTick(college, { 'local-player': input })
+  assert.deepEqual(getPlayerCharacter(collegeTick).position, collegePosition)
+  const collegeManaAfter = getPlayerProgression(collegeTick).currentMana
+  assert.ok(collegeManaAfter >= collegeMana && collegeManaAfter <= collegeMana + 0.11)
+  assert.equal(collegeTick.secondaryAbilities.actors.some(({ kind }) => kind === 'teleport-burst'), false)
+
+  let active = enterBoneyardWorld(college, emptyBoneyard())
+  const source = getPlayerCharacter(active).position
+  const mana = getPlayerProgression(active).currentMana
+  active = stepGameSimulationTick(active, { 'local-player': input })
+  assert.notDeepEqual(getPlayerCharacter(active).position, source)
+  const manaSpent = mana - getPlayerProgression(active).currentMana
+  assert.ok(manaSpent >= 9.8 && manaSpent <= 10)
+  assert.equal(active.secondaryAbilities.players['local-player']?.cooldownTicksBySkill[48], 6_000)
+  assert.equal(active.secondaryAbilities.players['local-player']?.globalCooldownTicks, 150)
+  assert.equal(
+    active.secondaryAbilities.actors.filter(({ kind }) => kind === 'teleport-burst').length,
+    2,
+  )
+  assert.deepEqual(
+    active.secondaryAbilities.events.filter(({ cue }) => cue === 'teleport')
+      .map(({ position }) => position),
+    [source, getPlayerCharacter(active).position],
+  )
 })
 
 test('concentration quickbar edges fill and alternate the authoritative A/B selection', () => {

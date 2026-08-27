@@ -36,6 +36,10 @@ import {
 } from './core-kernels/hub-economy.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import {
+  nativeInventoryItemCanBindToBelt,
+  type PlayerBeltComponent,
+} from './core-kernels/native-belt.ts'
+import {
   NATIVE_HUB_NPC_CATALOG,
   NATIVE_SELECTOR_ACCEPT_TICKS,
   nativeBoastFailureText,
@@ -48,6 +52,7 @@ import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.
 import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
+  type NativeHudRect,
 } from './native-hud-layout.ts'
 import {
   initialNativeModalSlideProgressSnapshot,
@@ -85,6 +90,11 @@ import {
 } from './hub-npc-dialogue.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { GameModAsset } from './protocol/game-protocol.ts'
+import {
+  nativeBeltPullOffStarted,
+  nativeSkillQuickbarDropSlot,
+} from './skill-book-model.ts'
+import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
@@ -207,6 +217,7 @@ export type HubUiSurface =
 
 interface HubInventoryUiProps {
   audio: GameAudioDirector
+  belt: PlayerBeltComponent
   config: PlayerCharacterConfig
   disabled: boolean
   economy: ProtocolPlayerEconomy
@@ -216,6 +227,7 @@ interface HubInventoryUiProps {
   nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
   onBlockingOverlayChange?: (open: boolean) => void
+  onUnassignBeltEntry?: (slot: number) => void
   modAssets: readonly GameModAsset[]
   onSurfaceChange: (surface: HubUiSurface) => void
   overlayRoot: RefObject<HTMLDivElement | null>
@@ -232,6 +244,7 @@ interface HubInventoryUiProps {
 
 export default function HubInventoryUi({
   audio,
+  belt,
   config,
   disabled,
   economy,
@@ -241,6 +254,7 @@ export default function HubInventoryUi({
   nativeUiStageStyle,
   onAction,
   onBlockingOverlayChange,
+  onUnassignBeltEntry,
   modAssets,
   onSurfaceChange,
   overlayRoot,
@@ -451,6 +465,7 @@ export default function HubInventoryUi({
         ? `${surface.kind}-${surface.interaction}`
         : `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`}
       audio={audio}
+      belt={belt}
       config={config}
       economy={economy}
       modAssets={modAssets}
@@ -462,6 +477,7 @@ export default function HubInventoryUi({
       onOpenSack={openInventorySack}
       onNotebox={setNpcNotebox}
       onSurfaceChange={onSurfaceChange}
+      onUnassignBeltEntry={onUnassignBeltEntry}
       progression={progression}
       sackPath={inventorySackPath}
       sackTransition={inventorySackTransition}
@@ -489,6 +505,7 @@ export default function HubInventoryUi({
 
 function NativeHubSurface({
   audio,
+  belt,
   config,
   economy,
   modAssets,
@@ -500,6 +517,7 @@ function NativeHubSurface({
   onNotebox,
   onOpenSack,
   onSurfaceChange,
+  onUnassignBeltEntry,
   progression,
   sackPath,
   sackTransition,
@@ -509,6 +527,7 @@ function NativeHubSurface({
   storyOffice,
 }: {
   audio: GameAudioDirector
+  belt: PlayerBeltComponent
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
   modAssets: readonly GameModAsset[]
@@ -520,6 +539,7 @@ function NativeHubSurface({
   onNotebox: (text: string) => void
   onOpenSack: (sackId: number) => void
   onSurfaceChange: (surface: HubUiSurface) => void
+  onUnassignBeltEntry?: (slot: number) => void
   progression: ProtocolPlayerProgression
   sackPath: readonly number[]
   sackTransition: HubInventorySackTransitionModel | null
@@ -588,6 +608,11 @@ function NativeHubSurface({
     inventoryResumeControl.width,
     inventoryResumeControl.height,
   ] as const
+  const inventoryBeltRects = nativeHudModalSlideLayout(
+    NATIVE_HUD_BACKBUFFER.width,
+    NATIVE_HUD_BACKBUFFER.height,
+    surface.kind === 'inventory' ? modalSlides.inventory : 1,
+  ).belt
 
   useLayoutEffect(() => {
     if (surface.kind !== 'inventory') return
@@ -818,6 +843,7 @@ function NativeHubSurface({
 
   const model = useMemo((): HubInventoryRendererModel => {
     if (surface.kind === 'inventory') return {
+      belt,
       config,
       dragging: inventoryDrag,
       dyeModal,
@@ -842,6 +868,7 @@ function NativeHubSurface({
       storyOffice,
     }
     return {
+      belt,
       config,
       dragging: inventoryDrag,
       dyeModal,
@@ -859,6 +886,7 @@ function NativeHubSurface({
       trader: surface.trader,
     }
   }, [
+    belt,
     chat,
     config,
     economy,
@@ -944,13 +972,15 @@ function NativeHubSurface({
               startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
             })
           } else setInventorySelection(null)
-        }
+        } else if (!inventoryItemsAtSackPath(economy.backpack, sackPath)
+          ?.some(({ id }) => id === inventorySelection.id)) setInventorySelection(null)
       } else {
         const equipped = inventorySelection.equipmentSlot === null
           ? null
           : itemAtEquipmentSlot(economy, inventorySelection.equipmentSlot)
         if (equipped?.id !== inventorySelection.id) {
-          if (findInventoryItem(economy.backpack, inventorySelection.id)) {
+          if (inventoryItemsAtSackPath(economy.backpack, sackPath)
+            ?.some(({ id }) => id === inventorySelection.id)) {
             setInventorySelection({
               equipmentSlot: null,
               id: inventorySelection.id,
@@ -972,7 +1002,7 @@ function NativeHubSurface({
           ? economy.hagathaOffers.some(({ selector }) => selector === serviceSelection.id)
           : economy.dowsingOffers.some(({ id }) => id === serviceSelection.id)
     if (!present) setServiceSelection(null)
-  }, [economy, inventorySelection, serviceSelection, surface])
+  }, [economy, inventorySelection, sackPath, serviceSelection, surface])
 
   const click = (action: () => void) => {
     audio.playSound('click')
@@ -986,6 +1016,7 @@ function NativeHubSurface({
       closingAtMs: null,
       dyeItemId,
       openedAtMs: performance.now(),
+      path: sackPath,
       pending: false,
       selectedAtMs: null,
       selectedRow: null,
@@ -1177,6 +1208,7 @@ function NativeHubSurface({
             />
           ) : surface.kind === 'service' ? (
             <ServiceActions
+              beltRects={inventoryBeltRects}
               economy={economy}
               inventorySelection={inventorySelection}
               selection={serviceSelection}
@@ -1187,8 +1219,12 @@ function NativeHubSurface({
               }}
               onInventoryAction={(action) => {
                 if (action.type !== 'consume' && action.type !== 'transfer'
-                  && action.type !== 'unforge') audio.playSound('click')
+                  && action.type !== 'unforge' && action.type !== 'equip') audio.playSound('click')
                 onAction(action)
+              }}
+              onBeltBind={(itemId, slot) => {
+                audio.playSound('pick-skill')
+                onAction({ itemId, slot, type: 'bind-belt-item' })
               }}
               onOpenSack={onOpenSack}
               onClose={() => {
@@ -1216,11 +1252,19 @@ function NativeHubSurface({
             />
           ) : (
             <InventoryActions
+              beltRects={inventoryBeltRects}
               economy={economy}
               selection={inventorySelection}
               onAction={(action) => {
-                if (action.type !== 'consume' && action.type !== 'unforge') audio.playSound('click')
+                if (action.type !== 'consume' && action.type !== 'unforge'
+                  && action.type !== 'bind-belt-item' && action.type !== 'equip') {
+                  audio.playSound('click')
+                }
                 onAction(action)
+              }}
+              onBeltBind={(itemId, slot) => {
+                audio.playSound('pick-skill')
+                onAction({ itemId, slot, type: 'bind-belt-item' })
               }}
               onDragChange={setInventoryDrag}
               onDragMove={(point) => rendererRef.current?.moveDrag(point)}
@@ -1235,10 +1279,22 @@ function NativeHubSurface({
               transitionLocked={sackTransition !== null}
             />
           )}
+          {(surface.kind === 'inventory' || surface.kind === 'service')
+            && !notice && !dyeModal ? (
+              <InventoryBeltActions
+                audio={audio}
+                belt={belt}
+                disabled={sackTransition !== null || !onUnassignBeltEntry}
+                onPullOff={(slot) => onUnassignBeltEntry?.(slot)}
+                rects={inventoryBeltRects}
+              />
+            ) : null}
           {semanticTooltip ? (
             <span className="hub-native-ui-semantic" role="tooltip">{semanticTooltip}</span>
           ) : null}
-          {surface.kind === 'inventory' && !notice && !dyeModal ? (
+          {(surface.kind === 'inventory'
+            || (surface.kind === 'service' && sackPath.length > 0))
+            && !notice && !dyeModal ? (
             <NativeAction
               data={{ 'data-inventory-resume': 'true' }}
               gameBack
@@ -1424,9 +1480,11 @@ function DialogueActions({
 }
 
 function ServiceActions({
+  beltRects,
   economy,
   inventorySelection,
   onAction,
+  onBeltBind,
   onClose,
   onDragChange,
   onDragMove,
@@ -1446,9 +1504,11 @@ function ServiceActions({
   trader,
   transitionLocked,
 }: {
+  beltRects: readonly NativeHudRect[]
   economy: ProtocolPlayerEconomy
   inventorySelection: HubInventorySelectionModel | null
   onAction: (action: HubInventoryAction) => void
+  onBeltBind: (itemId: number, slot: number) => void
   onClose: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
@@ -1476,11 +1536,13 @@ function ServiceActions({
   ] as const
   const companionInventory = (
     <InventoryActions
+      beltRects={beltRects}
       companion
       economy={economy}
       selection={inventorySelection}
       storageDropRect={trader === 'luthacus' ? storageDropRect : null}
       onAction={onInventoryAction}
+      onBeltBind={onBeltBind}
       onDragChange={onDragChange}
       onDragMove={onDragMove}
       onNotice={onNotice}
@@ -1913,8 +1975,9 @@ function DyeClothingActions({
   onSelectSwatch: (row: number) => void
   onSelectTarget: (targetItemId: number) => void
 }) {
-  const projected = projectInventoryItems(economy.backpack)
+  const projected = (inventoryItemsAtSackPath(economy.backpack, modal.path) ?? [])
     .slice(0, HUB_INVENTORY_GRID.capacity)
+    .map((item) => ({ depth: modal.path.length, item, parentSackId: modal.path.at(-1) ?? null }))
   const eligibleIds = new Set(
     inventoryDyeableClothingItems(economy.backpack).map(({ item }) => item.id),
   )
@@ -2011,10 +2074,97 @@ function DyeClothingActions({
   )
 }
 
+function InventoryBeltActions({
+  audio,
+  belt,
+  disabled,
+  onPullOff,
+  rects,
+}: {
+  audio: GameAudioDirector
+  belt: PlayerBeltComponent
+  disabled: boolean
+  onPullOff: (slot: number) => void
+  rects: readonly NativeHudRect[]
+}) {
+  const pressRef = useRef<{
+    readonly origin: { readonly x: number; readonly y: number }
+    readonly pointerId: number
+    readonly slot: number
+  } | null>(null)
+  const [burst, setBurst] = useState<{ readonly sequence: number; readonly slot: number } | null>(null)
+  const finish = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pressRef.current?.pointerId !== event.pointerId) return
+    pressRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+  return (
+    <>
+      {belt.flatMap((entry, slot) => entry === null ? [] : [(
+        <NativeAction
+          data={{ 'data-native-belt-slot': slot, 'data-native-belt-populated': 'true' }}
+          disabled={disabled}
+          key={slot}
+          label={`Remove belt slot ${slot + 1}`}
+          rect={[
+            rects[slot]!.x,
+            rects[slot]!.y,
+            rects[slot]!.width,
+            rects[slot]!.height,
+          ]}
+          onLostPointerCapture={finish}
+          onPointerCancel={finish}
+          onPointerDown={(event) => {
+            if (event.button !== 0 || disabled) return
+            event.preventDefault()
+            event.stopPropagation()
+            event.currentTarget.setPointerCapture(event.pointerId)
+            pressRef.current = {
+              origin: pointerStagePosition(event),
+              pointerId: event.pointerId,
+              slot,
+            }
+          }}
+          onPointerMove={(event) => {
+            const press = pressRef.current
+            if (!press || press.pointerId !== event.pointerId || disabled) return
+            if (!nativeBeltPullOffStarted(press.origin, pointerStagePosition(event))) return
+            pressRef.current = null
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }
+            audio.playSound('poof')
+            setBurst((current) => ({ sequence: (current?.sequence ?? 0) + 1, slot }))
+            onPullOff(slot)
+          }}
+          onPointerUp={finish}
+        />
+      )])}
+      {burst ? (
+        <NativeBeltPullOffBurst
+          className="hub-inventory-belt-pull-off-burst"
+          key={`${burst.slot}:${burst.sequence}`}
+          onComplete={() => setBurst((current) => (
+            current?.sequence === burst.sequence && current.slot === burst.slot ? null : current
+          ))}
+          style={{
+            left: rects[burst.slot]!.x + rects[burst.slot]!.width / 2,
+            top: rects[burst.slot]!.y + rects[burst.slot]!.height / 2,
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
 function InventoryActions({
+  beltRects,
   companion = false,
   economy,
   onAction,
+  onBeltBind,
   onDragChange,
   onDragMove,
   onNotice,
@@ -2026,9 +2176,11 @@ function InventoryActions({
   storageDropRect = null,
   transitionLocked,
 }: {
+  beltRects: readonly NativeHudRect[]
   companion?: boolean
   economy: ProtocolPlayerEconomy
   onAction: (action: HubInventoryAction) => void
+  onBeltBind: (itemId: number, slot: number) => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onNotice: (notice: HubInventoryUiNotice) => void
@@ -2235,9 +2387,11 @@ function InventoryActions({
         economy,
         thirdRingUnlocked,
         onAction,
+        onBeltBind,
         onNotice,
         companion,
         sackPath,
+        beltRects,
         storageDropRect,
       )
       return
@@ -2435,9 +2589,11 @@ function dropInventorySource(
   economy: ProtocolPlayerEconomy,
   thirdRingUnlocked: boolean,
   onAction: (action: HubInventoryAction) => void,
+  onBeltBind: (itemId: number, slot: number) => void,
   onNotice: (notice: HubInventoryUiNotice) => void,
   companion: boolean,
   sackPath: readonly number[],
+  beltRects: readonly NativeHudRect[],
   storageDropRect: readonly [number, number, number, number] | null,
 ): void {
   if (source.owner === 'backpack') {
@@ -2455,6 +2611,13 @@ function dropInventorySource(
       }
       onNotice({ ...HUB_UNFORGE_CONFIRMATION_NOTICE, unforgeItemId: item.id })
       return
+    }
+    if (nativeInventoryItemCanBindToBelt(item)) {
+      const beltSlot = nativeSkillQuickbarDropSlot(point, beltRects)
+      if (beltSlot !== null) {
+        onBeltBind(item.id, beltSlot)
+        return
+      }
     }
     if (storageDropRect && pointInRect(point, storageDropRect)) {
       onAction({ type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: item.id })
@@ -2496,11 +2659,21 @@ function dropInventorySource(
     if (sourceEntry && sourceEntry.parentSackId !== null && pointInRect(point, backpackRect)) {
       onAction({
         type: 'move-inventory-item',
-        destinationSackId: null,
+        destinationSackId: sackPath.length > 1 ? sackPath[sackPath.length - 2]! : null,
         itemId: item.id,
       })
     }
     return
+  }
+  if (source.equipmentSlot !== null) {
+    const item = itemAtEquipmentSlot(economy, source.equipmentSlot)
+    if (item && nativeInventoryItemCanBindToBelt(item)) {
+      const beltSlot = nativeSkillQuickbarDropSlot(point, beltRects)
+      if (beltSlot !== null) {
+        onBeltBind(item.id, beltSlot)
+        return
+      }
+    }
   }
   if (source.equipmentSlot === null || !pointInRect(point, [0, 490, 1600, 310])) return
   if (source.equipmentSlot === 'hat') {
@@ -2617,6 +2790,7 @@ function NativeAction({
   onClick,
   onFocus,
   onKeyDown,
+  onLostPointerCapture,
   onPointerCancel,
   onPointerDown,
   onPointerEnter,
@@ -2636,6 +2810,7 @@ function NativeAction({
   onClick?: () => void
   onFocus?: () => void
   onKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
+  onLostPointerCapture?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerEnter?: () => void
@@ -2668,6 +2843,7 @@ function NativeAction({
       onKeyUp={(event) => {
         if (event.key === 'Enter' || event.key === ' ') onPressedChange?.(false)
       }}
+      onLostPointerCapture={onLostPointerCapture}
       onPointerCancel={(event) => {
         onPressedChange?.(false)
         onPointerCancel?.(event)

@@ -24,12 +24,14 @@ import {
   PRIMARY_SPELL_WATER_REACH,
 } from '../../core-kernels/primary-spells.ts'
 import {
+  getPlayerBelt,
   getPlayerCharacter,
   getPlayerProgression,
   getPlayerSkillBook,
   getPlayerStatBook,
   type GameSimulationState,
 } from '../game-simulation.ts'
+import { nativeBeltSkillProjection } from '../../core-kernels/native-belt.ts'
 import {
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
@@ -153,9 +155,10 @@ export function observeMlBotPolicyPlayerState(
 
   const blockC = new Float32Array(8 * 15)
   const secondarySlots: MlBotPolicySecondarySlot[] = []
+  const quickbar = nativeBeltSkillProjection(getPlayerBelt(state, playerId))
   for (let slot = 0; slot < 8; slot += 1) {
     const start = slot * 15
-    const skillId = skillBook.skillQuickbar[slot]
+    const skillId = quickbar[slot]
     const occupied = skillId !== null
       && (NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)
     const isPrimaryBinding = skillId !== null && PRIMARY_SKILL_IDS.has(skillId)

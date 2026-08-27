@@ -10,7 +10,13 @@ import {
 } from 'react'
 
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
+import {
+  nativeBeltEntryItem,
+  type NativeBeltEntry,
+  type PlayerBeltComponent,
+} from './core-kernels/native-belt.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import {
   NATIVE_HUD_BACKBUFFER,
@@ -42,7 +48,9 @@ import './skill-book.css'
 
 interface SkillBookProps {
   audio: GameAudioDirector
+  belt: PlayerBeltComponent
   economy: ProtocolPlayerEconomy
+  element: WizardElement
   onAssignQuickbarSkill: (skillId: number, slot: number) => void
   onUnassignQuickbarSkill: (slot: number) => void
   onClose: () => void
@@ -69,7 +77,9 @@ interface SkillBookPullOffBurstState {
 
 export default function SkillBook({
   audio,
+  belt: initialBelt,
   economy: initialEconomy,
+  element,
   onAssignQuickbarSkill,
   onClose,
   onCloseStart,
@@ -83,7 +93,8 @@ export default function SkillBook({
   subscribeSnapshot,
   topMost,
 }: SkillBookProps) {
-  const [{ economy, progression }, setModel] = useState(() => ({
+  const [{ beltEntries, economy, progression }, setModel] = useState(() => ({
+    beltEntries: initialBelt,
     economy: initialEconomy,
     progression: initialProgression,
   }))
@@ -105,9 +116,11 @@ export default function SkillBook({
   const closeStartedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
   const presentationRef = useRef<SkillBookRendererPresentation>({
+    belt: beltEntries,
     dragPosition: drag?.position ?? null,
     draggedSkillId: drag?.skillId ?? null,
     economy,
+    element,
     hoveredSkillId,
     openProgress,
     placements,
@@ -115,9 +128,11 @@ export default function SkillBook({
     targetQuickbarSlot,
   })
   presentationRef.current = {
+    belt: beltEntries,
     dragPosition: drag?.position ?? null,
     draggedSkillId: drag?.skillId ?? null,
     economy,
+    element,
     hoveredSkillId,
     openProgress,
     placements,
@@ -133,11 +148,14 @@ export default function SkillBook({
     const player = snapshot.players[playerId]
     if (!player) return
     setModel((current) => sameSkillBookModel(
+      current.beltEntries,
       current.economy,
       current.progression,
+      player.belt,
       player.economy,
       player.progression,
     ) ? current : {
+      beltEntries: player.belt,
       economy: player.economy,
       progression: player.progression,
     })
@@ -350,8 +368,10 @@ export default function SkillBook({
         Skills with a gold or green border can be dragged into your belt.
       </span>
       <SkillQuickbarEditor
-        belt={belt}
+        beltEntries={beltEntries}
+        beltRects={belt}
         draggedSkillId={drag?.skillId ?? null}
+        economy={economy}
         nativePointForClient={nativePointForClient}
         onPullOff={(slot) => {
           onUnassignQuickbarSkill(slot)
@@ -360,7 +380,6 @@ export default function SkillBook({
           setTargetQuickbarSlot(null)
         }}
         onTarget={setTargetQuickbarSlot}
-        progression={progression}
         targetSlot={targetQuickbarSlot}
       />
       {pullOffBurst ? (
@@ -384,23 +403,33 @@ export default function SkillBook({
 }
 
 function sameSkillBookModel(
+  currentBelt: PlayerBeltComponent,
   currentEconomy: ProtocolPlayerEconomy,
   currentProgression: ProtocolPlayerProgression,
+  nextBelt: PlayerBeltComponent,
   nextEconomy: ProtocolPlayerEconomy,
   nextProgression: ProtocolPlayerProgression,
 ): boolean {
   return currentEconomy.revision === nextEconomy.revision
+    && currentBelt.every((entry, index) => beltEntriesEqual(entry, nextBelt[index] ?? null))
     && currentProgression.revision === nextProgression.revision
     && currentProgression.selectedPrimarySkillId === nextProgression.selectedPrimarySkillId
     && currentProgression.weldBuildId === nextProgression.weldBuildId
     && currentProgression.mindChugTicksRemaining === nextProgression.mindChugTicksRemaining
     && currentProgression.splitMind === nextProgression.splitMind
-    && currentProgression.skillQuickbar.every((skillId, index) => (
-      skillId === nextProgression.skillQuickbar[index]
-    ))
     && currentProgression.concentrationSkillIds.every((skillId, index) => (
       skillId === nextProgression.concentrationSkillIds[index]
     ))
+}
+
+function beltEntriesEqual(left: NativeBeltEntry | null, right: NativeBeltEntry | null): boolean {
+  if (left === null || right === null) return left === right
+  if (left.kind !== right.kind) return false
+  if (left.kind === 'skill' && right.kind === 'skill') return left.skillId === right.skillId
+  if (left.kind === 'item' && right.kind === 'item') {
+    return left.itemId === right.itemId && left.nativeTypeId === right.nativeTypeId
+  }
+  return true
 }
 
 function SkillBookEntry({
@@ -462,7 +491,7 @@ function SkillBookEntry({
       className="skill-book-entry-action"
       data-game-default-focus={index === 0 || undefined}
       style={{ left: index === 0 ? 56.5 : 236.5 + 160 * (index - 1) }}
-      aria-label={`${row.name}, rank ${row.effectiveRank}${draggable ? ', assign to selected quickbar slot' : ''}`}
+      aria-label={`${row.name}, rank ${row.effectiveRank}${draggable ? ', assign to selected belt slot' : ''}`}
       aria-disabled={!draggable && !selectable}
       aria-pressed={selected}
       data-category={row.category}
@@ -514,37 +543,45 @@ function SkillBookEntry({
 }
 
 function SkillQuickbarEditor({
-  belt,
+  beltEntries,
+  beltRects,
   draggedSkillId,
+  economy,
   nativePointForClient,
   onPullOff,
   onTarget,
-  progression,
   targetSlot,
 }: {
-  belt: readonly NativeHudRect[]
+  beltEntries: PlayerBeltComponent
+  beltRects: readonly NativeHudRect[]
   draggedSkillId: number | null
+  economy: ProtocolPlayerEconomy
   nativePointForClient: (clientX: number, clientY: number) => NativeHudPoint | null
   onPullOff: (slot: number) => void
   onTarget: (slot: number) => void
-  progression: ProtocolPlayerProgression
   targetSlot: number | null
 }) {
   return (
-    <div className="skill-book-quickbar-actions" aria-label="Eight slot skill quickbar">
-      {progression.skillQuickbar.map((skillId, slot) => {
-        const skill = skillId === null ? null : NATIVE_SKILL_CATALOG[skillId]
+    <div className="skill-book-quickbar-actions" aria-label="Eight slot item belt">
+      {beltEntries.map((entry, slot) => {
+        const skill = entry?.kind === 'skill' ? NATIVE_SKILL_CATALOG[entry.skillId] : null
+        const item = entry && entry.kind !== 'skill' ? nativeBeltEntryItem(entry, economy) : null
+        const label = skill?.name
+          ?? (entry?.kind === 'health-potion' ? 'Health Potion' : null)
+          ?? (entry?.kind === 'mana-potion' ? 'Mana Potion' : null)
+          ?? item?.name
+          ?? 'Unavailable item'
         return (
           <SkillQuickbarSlot
             key={slot}
-            ariaLabel={skill
-              ? `Quickbar ${slot + 1}, ${skill.name}${slot === 0 ? ', right mouse button' : `, key ${slot}`}`
-              : `Quickbar ${slot + 1}, empty${slot === 0 ? ', right mouse button' : `, key ${slot}`}`}
-            belt={belt[slot]!}
+            ariaLabel={entry !== null
+              ? `Belt ${slot + 1}, ${label}${slot === 0 ? ', right mouse button' : `, key ${slot}`}`
+              : `Belt ${slot + 1}, empty${slot === 0 ? ', right mouse button' : `, key ${slot}`}`}
+            belt={beltRects[slot]!}
             nativePointForClient={nativePointForClient}
             onPullOff={onPullOff}
             onTarget={onTarget}
-            populated={skillId !== null}
+            populated={entry !== null}
             showDropTarget={draggedSkillId !== null && slot === targetSlot}
             slot={slot}
             target={slot === targetSlot}

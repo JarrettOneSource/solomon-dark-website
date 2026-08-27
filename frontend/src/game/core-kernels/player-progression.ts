@@ -90,21 +90,10 @@ export interface NativePrimarySkillRankStats {
 
 export type NativePlayerPrimarySkillId = 8 | 16 | 24 | 32 | 40 | 52
 export type NativeConcentrationSkillId = typeof NATIVE_CONCENTRATION_SKILL_IDS[number]
-export type NativeSkillQuickbarId =
+export type NativeBeltSkillId =
   | NativePlayerPrimarySkillId
   | NativeSecondaryAbilityId
   | NativeConcentrationSkillId
-
-export type PlayerSkillQuickbar = readonly [
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-  NativeSkillQuickbarId | null,
-]
 
 export interface NativeSecondaryAbilityRankStats {
   readonly rank: number
@@ -120,7 +109,6 @@ export interface PlayerSkillBookComponent {
   readonly learnedSkillOrder: readonly number[]
   readonly permanentRanks: readonly number[]
   readonly primarySkillId: NativePlayerPrimarySkillId
-  readonly skillQuickbar: PlayerSkillQuickbar
   readonly weldBuildId: number | null
   readonly weldComponentRanks: NativeWeldComponentRanks | null
 }
@@ -348,7 +336,7 @@ export function nativeSkillCategory(skillId: number): number | null {
   return RULES[skillId]?.category ?? null
 }
 
-export function isNativeSkillQuickbarSkill(skillId: number): skillId is NativeSkillQuickbarId {
+export function isNativeBeltSkill(skillId: number): skillId is NativeBeltSkillId {
   const category = nativeSkillCategory(skillId)
   return category === 1 || category === 2 || category === 3
 }
@@ -410,28 +398,6 @@ export function effectiveSecondaryAbilityRankStats(
     skillId: skillId as NativeSecondaryAbilityId,
     values: Object.freeze(values),
   })
-}
-
-export function bindPlayerSkillQuickbar(
-  skillBook: PlayerSkillBookComponent,
-  skillId: number | null,
-  slot: number,
-): PlayerSkillBookComponent {
-  if (!Number.isInteger(slot) || slot < 0 || slot >= 8) {
-    throw new RangeError(`skill quickbar slot ${slot} is outside 0..7`)
-  }
-  if (skillId !== null && !isNativeSkillQuickbarSkill(skillId)) {
-    throw new RangeError(`skill ${skillId} is not a native quickbar skill`)
-  }
-  if (skillId !== null && (skillBook.permanentRanks[skillId] ?? 0) < 1) {
-    throw new Error(`quickbar skill ${skillId} is not learned`)
-  }
-  const quickbar = [...skillBook.skillQuickbar]
-  quickbar[slot] = skillId as NativeSkillQuickbarId | null
-  return {
-    ...skillBook,
-    skillQuickbar: freezeSkillQuickbar(quickbar),
-  }
 }
 
 export function selectPlayerPrimarySkill(
@@ -553,16 +519,6 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
     learnedSkillOrder: Object.freeze([primarySkillId, secondarySkillId]),
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId,
-    skillQuickbar: freezeSkillQuickbar([
-      secondarySkillId as NativeSecondaryAbilityId,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]),
     weldBuildId: null,
     weldComponentRanks: null,
   }
@@ -583,8 +539,6 @@ export function reselectPlayerLoadout(
   for (const skillId of selected.learnedSkillOrder) {
     if (!learnedSkillOrder.includes(skillId)) learnedSkillOrder.push(skillId)
   }
-  const skillQuickbar = [...source.skillQuickbar]
-  skillQuickbar[0] = selected.skillQuickbar[0]
   return {
     ...source,
     disciplineRoot: selected.disciplineRoot,
@@ -593,7 +547,6 @@ export function reselectPlayerLoadout(
     learnedSkillOrder: Object.freeze(learnedSkillOrder),
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId: selected.primarySkillId,
-    skillQuickbar: freezeSkillQuickbar(skillQuickbar),
     weldBuildId: null,
     weldComponentRanks: null,
   }
@@ -645,10 +598,6 @@ export function grantPlayerSkillRanks(
       ? Object.freeze([...source.learnedSkillOrder, skillId])
       : source.learnedSkillOrder,
     permanentRanks: Object.freeze(permanentRanks),
-    skillQuickbar: currentRank === 0
-      && (nativeSkillCategory(skillId) === 1 || nativeSkillCategory(skillId) === 2)
-      ? autofillSkillQuickbar(source.skillQuickbar, skillId)
-      : source.skillQuickbar,
   }
 }
 
@@ -1081,11 +1030,6 @@ export function applyPlayerSkillChoice(
       ? skillBook.primarySkillId
       : SPELL_WELDING_SKILL_ID,
     effectiveRanks: Object.freeze(effectiveRanks),
-    skillQuickbar: rank === 0
-      && (nativeSkillCategory(chosen.skillId) === 1
-        || nativeSkillCategory(chosen.skillId) === 2)
-      ? autofillSkillQuickbar(skillBook.skillQuickbar, chosen.skillId)
-      : skillBook.skillQuickbar,
     weldBuildId: weldBuild?.id ?? skillBook.weldBuildId,
     weldComponentRanks: weldBuild === null
       ? skillBook.weldComponentRanks
@@ -1254,7 +1198,6 @@ export function grantNativeWeirdCasterSkill(
       effectiveRanks: Object.freeze(effectiveRanks),
       learnedSkillOrder: Object.freeze([...skillBook.learnedSkillOrder, skillId]),
       permanentRanks: Object.freeze(permanentRanks),
-      skillQuickbar: autofillSkillQuickbar(skillBook.skillQuickbar, skillId),
     },
     skillId,
   }
@@ -1632,30 +1575,12 @@ function hasDependenciesAndUnlock(id: number, book: PlayerSkillBookComponent): b
     id >= 72
     && id <= 79
     && !book.advancedUnlocks[id - 72]
-    && !(id === 72 && book.skillQuickbar.includes(72))
+    && !(id === 72 && (book.permanentRanks[72] ?? 0) > 0)
   ) return false
   if (rule.all?.some((required) => !learned(book, required))) return false
   if (rule.any && !rule.any.some((required) => learned(book, required))) return false
   if (rule.forbidden?.some((required) => learned(book, required))) return false
   return true
-}
-
-function autofillSkillQuickbar(
-  source: PlayerSkillQuickbar,
-  skillId: number,
-): PlayerSkillQuickbar {
-  const slot = source.indexOf(null)
-  if (slot < 0) return source
-  const quickbar = [...source]
-  quickbar[slot] = skillId as NativeSkillQuickbarId
-  return freezeSkillQuickbar(quickbar)
-}
-
-function freezeSkillQuickbar(
-  entries: readonly (NativeSkillQuickbarId | null)[],
-): PlayerSkillQuickbar {
-  if (entries.length !== 8) throw new RangeError('skill quickbar requires exactly eight slots')
-  return Object.freeze([...entries]) as PlayerSkillQuickbar
 }
 
 function isSpellWeldingEligible(level: number, book: PlayerSkillBookComponent): boolean {

@@ -312,6 +312,18 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
   assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
   assert.equal(HUB_ROBE_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS ROBE!')
   assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
+  assert.match(
+    inventoryComponent,
+    /inventoryItemsAtSackPath\(economy\.backpack, inventorySackPath\)/,
+  )
+  assert.match(
+    inventoryComponent,
+    /surface\.kind === 'service' && sackPath\.length > 0/,
+  )
+  assert.match(inventoryComponent, /nativeSkillQuickbarDropSlot\(point, beltRects\)/)
+  assert.match(inventoryComponent, /nativeBeltPullOffStarted\(press\.origin, pointerStagePosition\(event\)\)/)
+  assert.match(inventoryComponent, /data-native-belt-slot/)
+  assert.match(inventoryComponent, /audio\.playSound\('poof'\)/)
 })
 
 test("Sorceror's Amulet ItemInfo carries the exact authored description and effect", () => {

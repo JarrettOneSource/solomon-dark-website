@@ -23,6 +23,10 @@ import {
 } from './core-kernels/hub-math.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
+import {
+  nativePlayerBeltsEqual,
+  type PlayerBeltComponent,
+} from './core-kernels/native-belt.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   cameraZoomForFov,
@@ -45,7 +49,6 @@ import {
   hubInteractionAtPoint,
   hubInteractionWithinRange,
   hubNpcHintAcknowledgementAction,
-  hubPotionBeltShortcut,
   nearestHubInteraction,
 } from './hub-inventory-presentation.ts'
 import TouchJoystick from './input/TouchJoystick.tsx'
@@ -97,6 +100,7 @@ import './hub.css'
 interface HubSceneProps {
   accountUsername: string | null
   audio: GameAudioDirector
+  belt: PlayerBeltComponent
   boneyards: readonly BoneyardChoice[]
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
@@ -153,6 +157,7 @@ const HUB_REGION_ACCESSIBILITY: Readonly<Record<HubRegionId, string>> = {
 export default function HubScene({
   accountUsername,
   audio,
+  belt,
   boneyards,
   getPingMs,
   initialSnapshot,
@@ -253,6 +258,7 @@ export default function HubScene({
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     hubInitialSnapshot.players[playerId]!.economy
   ))
+  const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
   const economyRef = useRef(economy)
   economyRef.current = economy
   const [playerPosition, setPlayerPosition] = useState(() => ({
@@ -465,6 +471,9 @@ export default function HubScene({
       }
       const player = snapshot.players[playerId]
       if (player) {
+        setLiveBelt((current) => nativePlayerBeltsEqual(current, player.belt)
+          ? current
+          : player.belt)
         setPlayerPosition((position) => (
           position.x === player.position.x && position.y === player.position.y
             ? position
@@ -500,9 +509,9 @@ export default function HubScene({
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
     const input = createBrowserGameplayInput({
       claimQuickbarPress: (slot) => {
-        const potion = hubPotionBeltShortcut(economyRef.current.backpack, slot)
-        if (potion === null) return false
-        if (potion.itemId !== null) onHubAction({ type: 'consume', itemId: potion.itemId })
+        const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
+        if (entry === null || entry.kind === 'skill') return false
+        onHubAction({ slot, type: 'activate-belt-slot' })
         return true
       },
       controls: settingsRef.current.controls,
@@ -800,6 +809,7 @@ export default function HubScene({
 
         <GameHud
           accountUsername={accountUsername}
+          audio={audio}
           allyRosterHidden={coarsePointer && partyColumnOpen}
           controls={settings.controls}
           controllerQuickbarSlot={controllerQuickbarSlot}
@@ -824,14 +834,16 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
-          onPotionClick={(itemId) => {
-            if (!inputBlocked && !pickerOpen && !transitionActive) {
-              onHubAction({ type: 'consume', itemId })
-            }
-          }}
           onQuickbarInput={(slot, pressed) => {
             const input = inputRef.current
             if (!input) return
+            const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
+            if (pressed && entry !== null && entry.kind !== 'skill') {
+              if (!inputBlocked && !pickerOpen && !transitionActive) {
+                onHubAction({ slot, type: 'activate-belt-slot' })
+              }
+              return
+            }
             if (!pressed) {
               input.setTouchQuickbar(slot, false)
               return
@@ -870,6 +882,7 @@ export default function HubScene({
 
         <HubInventoryUi
           audio={audio}
+          belt={liveBelt}
           config={hubInitialSnapshot.players[playerId]!.config}
           disabled={inputBlocked || pickerOpen}
           economy={economy}
@@ -881,6 +894,7 @@ export default function HubScene({
           onAction={onHubAction}
           onBlockingOverlayChange={setNpcNoteboxOpen}
           onSurfaceChange={setHubUiSurface}
+          onUnassignBeltEntry={onUnassignQuickbarSkill}
           overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}

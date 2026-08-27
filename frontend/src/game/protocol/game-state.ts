@@ -38,6 +38,7 @@ import type {
   PlayerLevelUpBarrierState,
 } from '../core-kernels/player-progression.ts'
 import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
+import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
@@ -60,6 +61,7 @@ export interface ProtocolAmbientState {
 }
 
 export interface ProtocolPlayerState extends PlayerCharacterState {
+  belt: PlayerBeltComponent
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
   lighting: ProtocolPlayerLighting
@@ -139,7 +141,6 @@ export interface ProtocolPlayerProgression {
   selectedPrimarySkillId: number
   sorcerorsCharmAvailable: boolean
   splitMind: boolean
-  skillQuickbar: readonly (number | null)[]
   weldBuildId: number | null
   weldComponentRanks: NativeWeldComponentRanks | null
 }

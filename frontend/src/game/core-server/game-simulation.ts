@@ -49,6 +49,11 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import {
+  nativeBeltEntryItem,
+  nativeBeltEquipmentSlots,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
+import {
   acknowledgeNativeHubNpcHint,
   failNativeBoast,
   nativeBoastScore,
@@ -88,10 +93,12 @@ import {
   reconcileHubEconomyModPackages,
   selectHubBoast,
   transferInventoryItem,
+  equipEligibleInventorySackContents,
   unforgeInventoryItem,
   unequipInventorySlot,
   type HubEconomyRejection,
   type HubEconomyState,
+  type EquipmentSlot,
   type HubInventoryItem,
   type HubInventoryAction,
   type ModConsumableContent,
@@ -230,6 +237,7 @@ import {
   applyPlayerEntityPotionEffect,
   autofillPlayerEntitySkillSelections,
   applyPlayerEntitySkillChoice,
+  bindPlayerEntityBeltItem,
   bindPlayerEntitySkillQuickbar,
   coldSlowPlayerEntity,
   consumePlayerEntityWizardKey,
@@ -241,6 +249,7 @@ import {
   grantPlayerEntityBonusSkillChoice,
   grantSharedPlayerEntityExperience,
   playerCharacterAt,
+  playerBeltAt,
   playerEconomyAt,
   playerCharacterRecords,
   playerEntityCanAcceptInput,
@@ -1322,6 +1331,20 @@ export function applyGameSimulationHubAction(
   if (action.type === 'interact-goodie') {
     return interactWithBoneyardGoodie(state, playerId, player)
   }
+  if (action.type === 'bind-belt-item') {
+    const bound = bindGameSimulationPlayerBeltItem(
+      state,
+      playerId,
+      action.itemId,
+      action.slot,
+    )
+    return bound === null
+      ? { accepted: false, modConsumption: null, reason: 'ineligible-item', state }
+      : { accepted: true, modConsumption: null, reason: null, state: bound }
+  }
+  if (action.type === 'activate-belt-slot') {
+    return activateGameSimulationBeltSlot(state, playerId, action.slot, extensions)
+  }
   if (action.type === 'acknowledge-college-intro-dialogue') {
     if (state.world.kind !== 'hub') {
       return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
@@ -1630,6 +1653,15 @@ export function getPlayerSkillBook(
   return skillBook
 }
 
+export function getPlayerBelt(
+  state: GameSimulationState,
+  playerId = DEFAULT_PLAYER_ID,
+): PlayerBeltComponent {
+  const belt = playerBeltAt(state.playerEntities, playerId)
+  if (!belt) throw new Error(`game simulation has no player belt ${playerId}`)
+  return belt
+}
+
 export function bindGameSimulationPlayerSkillQuickbar(
   state: GameSimulationState,
   playerId: PlayerId,
@@ -1644,6 +1676,28 @@ export function bindGameSimulationPlayerSkillQuickbar(
         state.playerEntities,
         playerId,
         skillId,
+        slot,
+      ),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function bindGameSimulationPlayerBeltItem(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  itemId: number,
+  slot: number,
+): GameSimulationState | null {
+  if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
+  try {
+    return {
+      ...state,
+      playerEntities: bindPlayerEntityBeltItem(
+        state.playerEntities,
+        playerId,
+        itemId,
         slot,
       ),
     }
@@ -1995,7 +2049,7 @@ export function stepGameSimulationTick(
     const input = state.world.kind === 'hub'
       ? sealPlayerCombatInput(
           admittedInput,
-          playerSkillBookAt(state.playerEntities, playerId)?.skillQuickbar ?? [],
+          playerBeltAt(state.playerEntities, playerId)!,
         )
       : admittedInput
     const tutorial = state.world.kind === 'boneyard' ? state.world.tutorial : null
@@ -2254,7 +2308,7 @@ function finishGameSimulationTick(
         playerId,
         sealPlayerCombatInput(
           input,
-          playerSkillBookAt(playerEntities, playerId)?.skillQuickbar ?? [],
+          playerBeltAt(playerEntities, playerId)!,
         ),
       ]))
   let gameRng = previous.gameRng
@@ -2802,7 +2856,8 @@ function finishGameSimulationTick(
     const slot = input.cast.quickbar
     if (slot === null) continue
     const skillBook = playerSkillBookAt(playerEntities, playerId)
-    const skillId = skillBook?.skillQuickbar[slot] ?? null
+    const entry = playerBeltAt(playerEntities, playerId)?.[slot] ?? null
+    const skillId = entry?.kind === 'skill' ? entry.skillId : null
     const category = skillId === null ? null : nativeSkillCategory(skillId)
     if (skillId !== null && category === 1) {
       playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
@@ -2973,6 +3028,7 @@ function finishGameSimulationTick(
         manaCost: derived.offensiveManaCostFactor,
       }
       return [playerId, {
+        belt: playerEntities.belts[index]!,
         character,
         coldSlowFactor: Math.fround(Math.max(0, 0.5 / (
           1 + effectiveSkillNumericValue(skillBook, statBook, 39, 'mSlowdown') / 100
@@ -3864,6 +3920,96 @@ function rankedSkillNumericValue(
   return value
 }
 
+function activateGameSimulationBeltSlot(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  slot: number,
+  extensions?: GameSimulationExtensions,
+): GameSimulationInventoryActionResult {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= 8
+    || !gameSimulationPlayerCanEditBooks(state, playerId)) {
+    return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+  }
+  const belt = playerBeltAt(state.playerEntities, playerId)
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  const entry = belt?.[slot] ?? null
+  if (!belt || !economy || entry === null || entry.kind === 'skill') {
+    return { accepted: false, modConsumption: null, reason: 'ineligible-item', state }
+  }
+  const item = nativeBeltEntryItem(entry, economy)
+  if (!item) return { accepted: false, modConsumption: null, reason: 'item-not-found', state }
+  if (item.nativeTypeId === 7001) {
+    return applyGameSimulationHubAction(
+      state,
+      playerId,
+      { itemId: item.id, type: 'consume' },
+      extensions,
+    )
+  }
+  if (item.nativeTypeId === 7008) {
+    const result = equipEligibleInventorySackContents(
+      economy,
+      item.id,
+      getPlayerProgression(state, playerId).level,
+    )
+    const actionFeedback = {
+      accepted: result.accepted,
+      action: 'activate-belt-slot',
+      dowsingPitch: null,
+      reason: result.reason,
+      sequence: (economy.actionFeedback?.sequence ?? 0) + 1,
+      transferDirection: null,
+      transferGesture: null,
+      unforgeOutcome: null,
+    } as const
+    return {
+      accepted: result.accepted,
+      modConsumption: null,
+      reason: result.reason,
+      state: {
+        ...state,
+        playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+          ...result.state,
+          actionFeedback,
+          revision: Math.max(result.state.revision, economy.revision + 1),
+        }),
+      },
+    }
+  }
+  if (item.equipmentType !== null) {
+    if (findInventoryItem(economy.backpack, item.id)) {
+      const slots = nativeBeltEquipmentSlots(
+        item,
+        economy.ownedPerkSelectors.includes(19),
+      )
+      const target = slots.find((candidate) => equipmentAt(economy, candidate) === null)
+        ?? slots[0]
+      if (target) {
+        return applyGameSimulationHubAction(
+          state,
+          playerId,
+          { itemId: item.id, slot: target, type: 'equip' },
+          extensions,
+        )
+      }
+    }
+    return { accepted: true, modConsumption: null, reason: null, state }
+  }
+  return { accepted: false, modConsumption: null, reason: 'ineligible-item', state }
+}
+
+function equipmentAt(economy: HubEconomyState, slot: EquipmentSlot): HubInventoryItem | null {
+  switch (slot) {
+    case 'amulet': return economy.equipment.amulet
+    case 'hat': return economy.equipment.hat
+    case 'ring-0': return economy.equipment.rings[0]
+    case 'ring-1': return economy.equipment.rings[1]
+    case 'ring-2': return economy.equipment.rings[2]
+    case 'robe': return economy.equipment.robe
+    case 'weapon': return economy.equipment.weapon
+  }
+}
+
 function interactWithBoneyardGoodie(
   state: GameSimulationState,
   playerId: PlayerId,
@@ -3921,8 +4067,10 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'transfer': return 'luthacus'
     case 'buy-dowsing':
     case 'dowse': return 'shlorio'
+    case 'activate-belt-slot':
     case 'acknowledge-college-intro-dialogue':
     case 'acknowledge-npc-hint':
+    case 'bind-belt-item':
     case 'buy-teacher-spell':
     case 'close-dowsing':
     case 'consume':

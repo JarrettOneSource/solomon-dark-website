@@ -7,6 +7,14 @@ import {
 
 import nativeAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import { hub } from '../lib/assets.ts'
+import type { HubEconomyState } from './core-kernels/hub-economy.ts'
+import {
+  nativeBeltEntryItem,
+  nativeBeltPotionProjection,
+  type NativeBeltEntry,
+  type PlayerBeltComponent,
+} from './core-kernels/native-belt.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
 import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
 import {
   gameBindingLabel,
@@ -31,6 +39,7 @@ import {
   type MobileUiLayoutState,
 } from './mobile-ui-layout.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
+import NativeBeltItemIcon from './NativeBeltItemIcon.tsx'
 import { nativeBeltPullOffStarted } from './skill-book-model.ts'
 
 interface AtlasRecord {
@@ -52,16 +61,18 @@ const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
 
 interface SkillQuickbarProps {
+  belt: PlayerBeltComponent
   concentrationSkillIds: readonly [number | null, number | null]
   controls: GameControlBindings
   controllerQuickbarSlot?: number
   displayScale: number
+  economy: Pick<HubEconomyState, 'backpack' | 'equipment'>
+  element: WizardElement
   mode: 'hub' | 'run'
   mobileUi: MobileUiLayoutState
   onInput?: (slot: number, pressed: boolean) => void
   onUnassign?: (slot: number) => void
   playerState: NativeSecondaryPlayerState | undefined
-  quickbar: readonly (number | null)[]
   selectedPrimarySkillId: number
   /** Settings UI scale; coarse-pointer bank placement is computed in HUD-root pixels. */
   uiScale: number
@@ -70,16 +81,18 @@ interface SkillQuickbarProps {
 }
 
 export default function SkillQuickbar({
+  belt,
   concentrationSkillIds,
   controls,
   controllerQuickbarSlot,
   displayScale,
+  economy,
+  element,
   mode,
   mobileUi,
   onInput,
   onUnassign,
   playerState,
-  quickbar,
   selectedPrimarySkillId,
   uiScale,
   viewportWidth,
@@ -89,11 +102,14 @@ export default function SkillQuickbar({
     <div
       className="hub-hud-skill-quickbar"
       data-mode={mode}
-      aria-label="Skill quickbar"
+      aria-label="Item belt"
     >
       {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => (
         <SkillQuickbarSlot
           bindingCode={controls[`belt${slot + 1}` as GameBindingAction]}
+          economy={economy}
+          element={element}
+          entry={belt[slot] ?? null}
           concentrationSkillIds={concentrationSkillIds}
           controllerSelected={controllerQuickbarSlot === slot}
           inputScale={displayScale * uiScale}
@@ -106,7 +122,6 @@ export default function SkillQuickbar({
           onUnassign={onUnassign}
           playerState={playerState}
           selectedPrimarySkillId={selectedPrimarySkillId}
-          skillId={quickbar[slot] ?? null}
           slot={slot}
         />
       ))}
@@ -118,6 +133,9 @@ function SkillQuickbarSlot({
   bindingCode,
   concentrationSkillIds,
   controllerSelected,
+  economy,
+  element,
+  entry,
   inputScale,
   mobilePlacement,
   mode,
@@ -127,12 +145,14 @@ function SkillQuickbarSlot({
   onUnassign,
   playerState,
   selectedPrimarySkillId,
-  skillId,
   slot,
 }: {
   bindingCode: string
   concentrationSkillIds: SkillQuickbarProps['concentrationSkillIds']
   controllerSelected: boolean
+  economy: Pick<HubEconomyState, 'backpack' | 'equipment'>
+  element: WizardElement
+  entry: NativeBeltEntry | null
   inputScale: number
   mobilePlacement: ReturnType<typeof mobileQuickbarSlotPlacement>
   mode: SkillQuickbarProps['mode']
@@ -142,10 +162,13 @@ function SkillQuickbarSlot({
   onUnassign: SkillQuickbarProps['onUnassign']
   playerState: SkillQuickbarProps['playerState']
   selectedPrimarySkillId: number
-  skillId: number | null
   slot: number
 }) {
-  const mobileUiId = `slot${slot + 1}` as MobileUiElementId
+  const mobileUiId: MobileUiElementId = entry?.kind === 'health-potion'
+    ? 'healthPotion'
+    : entry?.kind === 'mana-potion'
+      ? 'manaPotion'
+      : `slot${slot + 1}` as MobileUiElementId
   const pressRef = useRef<{
     castEligible: boolean
     originX: number
@@ -153,7 +176,16 @@ function SkillQuickbarSlot({
     pointerId: number
   } | null>(null)
   const [burstSequence, setBurstSequence] = useState<number | null>(null)
+  const skillId = entry?.kind === 'skill' ? entry.skillId : null
   const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
+  const potion = entry?.kind === 'health-potion'
+    ? nativeBeltPotionProjection(economy.backpack, 0)
+    : entry?.kind === 'mana-potion'
+      ? nativeBeltPotionProjection(economy.backpack, 1)
+      : null
+  const item = entry === null || entry.kind === 'skill'
+    ? null
+    : potion?.item ?? nativeBeltEntryItem(entry, economy)
   const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
   const concentration = skillId !== null && nativeSkillCategory(skillId) === 3
   const combatDisabled = mode === 'hub' && secondary
@@ -173,9 +205,16 @@ function SkillQuickbarSlot({
     || (concentration && concentrationSkillIds.includes(skillId))
     || secondaryAbilityActive(skillId, playerState)
   )
-  const label = skill === undefined
-    ? `Empty quickbar slot ${slot + 1}, ${input}`
-    : `${skill.name}, ${input}${remaining > 0
+  const entryName = entry === null
+    ? null
+    : skill?.name
+      ?? (entry.kind === 'health-potion' ? 'Health Potion' : null)
+      ?? (entry.kind === 'mana-potion' ? 'Mana Potion' : null)
+      ?? item?.name
+      ?? 'Unavailable item'
+  const label = entryName === null
+    ? `Empty belt slot ${slot + 1}, ${input}`
+    : `${entryName}, ${input}${potion ? `, ${potion.count} available` : ''}${remaining > 0
       ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
       : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}`
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>, activate: boolean) => {
@@ -195,15 +234,20 @@ function SkillQuickbarSlot({
       type="button"
       className="hub-hud-quickbar-slot"
       data-slot={slot}
-      data-populated={skill !== undefined}
+      data-entry-kind={entry?.kind ?? 'empty'}
+      data-populated={entry !== null}
       data-quickbar-bank={mobilePlacement.bank}
-      data-tutorial-anchor={slot === 0 ? 'secondary-slot' : undefined}
+      data-tutorial-anchor={entry?.kind === 'health-potion'
+        ? 'health-potion'
+        : slot === 0
+          ? 'secondary-slot'
+          : undefined}
       data-binding-code={bindingCode}
       data-active={active}
       data-controller-selected={controllerSelected || undefined}
       data-mobile-ui-custom={mobileUi.customized || undefined}
       data-mobile-ui-element={mobileUiId}
-      disabled={skill === undefined || ((!onInput || combatDisabled) && !onUnassign)}
+      disabled={entry === null || ((!onInput || combatDisabled) && !onUnassign)}
       style={{
         ...(mobileUiElementStyle(mobileUi, mobileUiId) ?? {}),
         '--mobile-quickbar-slot-bottom': `${mobilePlacement.bottom}px`,
@@ -216,7 +260,7 @@ function SkillQuickbarSlot({
       onPointerDown={(event) => {
         const unsupportedMouseButton = event.pointerType === 'mouse' && event.button !== 0
         const canCast = Boolean(onInput) && !combatDisabled
-        if (unsupportedMouseButton || skill === undefined || (!canCast && !onUnassign)) return
+        if (unsupportedMouseButton || entry === null || (!canCast && !onUnassign)) return
         event.preventDefault()
         pressRef.current = {
           castEligible: canCast,
@@ -261,14 +305,26 @@ function SkillQuickbarSlot({
           record={skill.skills_atlas_icon_record}
         />
       )}
-      {bindingCode === 'Mouse2' && skill !== undefined ? (
+      {item ? (
+        <NativeBeltItemIcon
+          element={element}
+          item={potion ? { ...item, quantity: potion.count } : item}
+        />
+      ) : entry?.kind === 'health-potion' || entry?.kind === 'mana-potion' ? (
+        <img
+          className="hub-hud-belt-potion-fallback"
+          src={entry.kind === 'health-potion' ? hub.hud.potionRed : hub.hud.potionBlue}
+          alt=""
+        />
+      ) : null}
+      {bindingCode === 'Mouse2' && entry !== null ? (
         <img
           className="hub-hud-quickbar-input-mouse"
           src={hub.hud.mouseRight}
           alt=""
         />
       ) : null}
-      {bindingCode !== 'Mouse2' && skill !== undefined ? (
+      {bindingCode !== 'Mouse2' && entry !== null ? (
         <NativeQuickbarBinding text={bindingLabel.toUpperCase()} />
       ) : null}
       {burstSequence !== null ? (

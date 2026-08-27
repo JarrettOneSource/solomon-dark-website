@@ -60,6 +60,7 @@ import {
   tryDebitPlayerMana,
 } from './player-combat.ts'
 import { advanceNativeRngWords, createNativeRng, drawNativeInteger } from './native-rng.ts'
+import { createNativePlayerBelt } from './native-belt.ts'
 
 const ETHER_ARCANE = {
   discipline: 'arcane',
@@ -338,7 +339,6 @@ test('a fresh wizard owns independent 83-row skill bookkeeping and the stock roo
   assert.deepEqual(first.permanentRanks, first.effectiveRanks)
   assert.equal(first.weldBuildId, null)
   assert.equal(first.primarySkillId, 8)
-  assert.deepEqual(first.skillQuickbar, [11, null, null, null, null, null, null, null])
   const progression = createPlayerProgression(0)
   assert.equal(progression.offerCycle, 0)
   assert.equal(progression.weldOfferMarker, 9_999)
@@ -744,12 +744,6 @@ test('every offered row applies only its addressed player-book entry', () => {
       applied.skillBook.primarySkillId,
       skillId === SPELL_WELDING_SKILL_ID ? SPELL_WELDING_SKILL_ID : skillBook.primarySkillId,
     )
-    if (
-      (nativeSkillCategory(skillId) !== 1 && nativeSkillCategory(skillId) !== 2)
-      || beforeRanks[skillId]! > 0
-    ) {
-      assert.equal(applied.skillBook.skillQuickbar, skillBook.skillQuickbar)
-    }
     assert.equal(applied.skillBook.advancedUnlocks, skillBook.advancedUnlocks)
     assert.equal(
       applied.skillBook.permanentRanks.filter((rank, id) => rank !== beforeRanks[id]).length,
@@ -882,7 +876,6 @@ test('Creativity Insight applies the selected skill twice without duplicating lo
   })
   assert.ok(applied)
   assert.equal(applied.skillBook.permanentRanks[57], 3)
-  assert.equal(applied.skillBook.skillQuickbar, skillBook.skillQuickbar)
 })
 
 test('Fire Body acquisitions advance private seeds and vary only legal offers through wave-era levels', () => {
@@ -1000,7 +993,10 @@ test('100 paired stock level-two rolls match ordered membership and gameplay RNG
   assert.equal(fixture.rolls.length, 100)
   const base = createPlayerSkillBook(ETHER_ARCANE)
   assert.equal(base.primarySkillId, fixture.loadout.primarySkillId)
-  assert.equal(base.skillQuickbar[0], fixture.loadout.secondarySkillId)
+  assert.deepEqual(createNativePlayerBelt(base)[0], {
+    kind: 'skill',
+    skillId: fixture.loadout.secondarySkillId,
+  })
   const skillBook: PlayerSkillBookComponent = {
     ...base,
     advancedUnlocks: Object.freeze([...fixture.loadout.advancedUnlocks]),
@@ -1185,7 +1181,6 @@ test('a second primary arms Spell Welding and choosing a synthetic build only bo
   assert.equal(welded.skillBook.effectiveRanks[SPELL_WELDING_SKILL_ID], 1)
   assert.equal(welded.skillBook.weldBuildId, 1000)
   assert.equal(welded.skillBook.primarySkillId, SPELL_WELDING_SKILL_ID)
-  assert.equal(welded.skillBook.skillQuickbar[2], SPELL_WELDING_SKILL_ID)
   assert.deepEqual(welded.skillBook.learnedSkillOrder, [8, 11, 16, SPELL_WELDING_SKILL_ID])
   assert.deepEqual(
     welded.skillBook.permanentRanks.flatMap((rank, id) => rank !== beforeRanks[id] ? [id] : []),

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 
 import { hub } from '../lib/assets'
 import AllyHud from './AllyHud.tsx'
@@ -16,17 +16,14 @@ import { hubRunEntryPresentation } from './hub-presentation.ts'
 import GameAccountName from './GameAccountName.tsx'
 import {
   HUB_HUD_SHORTCUTS,
-  hubPotionShortcut,
   type HubHudShortcutDefinition,
 } from './hub-inventory-presentation.ts'
-import SkillQuickbar, {
-  NativeQuickbarBinding,
-  NativeSkillIcon,
-} from './SkillQuickbar.tsx'
+import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
-import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
+import type { GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
 import { mobileUiElementStyle } from './mobile-ui-layout.ts'
 import type { GameViewportLayout } from './renderer/game-viewport.ts'
 import { useMobileUiLayout } from './use-mobile-ui-layout.ts'
@@ -46,6 +43,7 @@ interface GameHudProps {
   additionalAllyRows?: readonly AllyHudRow[]
   /** Touch: hide the ally roster while the Hub party column is open under the chip. */
   allyRosterHidden?: boolean
+  audio: GameAudioDirector
   controls: GameControlBindings
   controllerQuickbarSlot?: number
   getPingMs: () => number | null
@@ -56,7 +54,6 @@ interface GameHudProps {
   onInventoryClick?: () => void
   onHubShortcutClick?: (interaction: HubHudShortcutDefinition['interaction']) => void
   onMapClick?: () => void
-  onPotionClick?: (itemId: number) => void
   onQuickbarInput?: (slot: number, pressed: boolean) => void
   onQuickbarUnassign?: (slot: number) => void
   onSkillBindingClick?: (binding: NativeHudSkillBinding) => void
@@ -128,6 +125,7 @@ export default function GameHud({
   accountUsername,
   additionalAllyRows,
   allyRosterHidden,
+  audio,
   controls,
   controllerQuickbarSlot,
   getPingMs,
@@ -138,7 +136,6 @@ export default function GameHud({
   onInventoryClick,
   onHubShortcutClick,
   onMapClick,
-  onPotionClick,
   onQuickbarInput,
   onQuickbarUnassign,
   onSkillBindingClick,
@@ -156,14 +153,29 @@ export default function GameHud({
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     initialSnapshot.players[playerId]!.economy
   ))
+  const actionFeedbackSequenceRef = useRef(
+    initialSnapshot.players[playerId]!.economy.actionFeedback?.sequence ?? 0,
+  )
   useEffect(() => subscribeSnapshot((snapshot) => {
     const next = snapshot.players[playerId]?.economy
-    if (next) setEconomy((current) => current.revision === next.revision ? current : next)
-  }), [playerId, subscribeSnapshot])
+    if (!next) return
+    setEconomy((current) => current.revision === next.revision ? current : next)
+    const feedback = next.actionFeedback
+    if (!feedback) {
+      actionFeedbackSequenceRef.current = 0
+      return
+    }
+    if (feedback.sequence === actionFeedbackSequenceRef.current) return
+    actionFeedbackSequenceRef.current = feedback.sequence
+    if (!feedback.accepted) return
+    if (feedback.action === 'consume') audio.playSound('drink')
+    else if (feedback.action === 'equip') audio.playSound('backpack-open')
+    else if (feedback.action === 'activate-belt-slot') audio.playSound('backpack-open')
+  }), [audio, playerId, subscribeSnapshot])
   const [quickbarHud, setQuickbarHud] = useState(() => ({
+    belt: initialSnapshot.players[playerId]!.belt,
     concentrationSkillIds: initialSnapshot.players[playerId]!.progression.concentrationSkillIds,
     playerState: initialSnapshot.secondaryAbilities.players[playerId],
-    quickbar: initialSnapshot.players[playerId]!.progression.skillQuickbar,
     selectedPrimarySkillId: initialSnapshot.players[playerId]!.progression.selectedPrimarySkillId,
     tick: initialSnapshot.tick,
     weldBuildId: initialSnapshot.players[playerId]!.progression.weldBuildId,
@@ -172,9 +184,9 @@ export default function GameHud({
     const player = snapshot.players[playerId]
     if (!player) return
     setQuickbarHud({
+      belt: player.belt,
       concentrationSkillIds: player.progression.concentrationSkillIds,
       playerState: snapshot.secondaryAbilities.players[playerId],
-      quickbar: player.progression.skillQuickbar,
       selectedPrimarySkillId: player.progression.selectedPrimarySkillId,
       tick: snapshot.tick,
       weldBuildId: player.progression.weldBuildId,
@@ -204,11 +216,7 @@ export default function GameHud({
     selectedPrimarySkillId: quickbarHud.selectedPrimarySkillId,
     weldBuildId: quickbarHud.weldBuildId,
   })
-  const healthPotions = hubPotionShortcut(economy.backpack, 'health-potion')
-  const manaPotions = hubPotionShortcut(economy.backpack, 'mana-potion')
   const runEntry = hubRunEntryPresentation(quickbarHud.tick, mapTransitionActive)
-  const healthPotionKey = gameBindingLabel(controls.belt4)
-  const manaPotionKey = gameBindingLabel(controls.belt5)
   const shortcutAssets: Readonly<Record<HubHudShortcutDefinition['interaction'], string>> = {
     annalist: hub.hud.npcs.annalist,
     fomentius: hub.hud.npcs.potion,
@@ -371,16 +379,18 @@ export default function GameHud({
       ) : null}
 
       <SkillQuickbar
+        belt={quickbarHud.belt}
         concentrationSkillIds={quickbarHud.concentrationSkillIds}
         controls={controls}
         controllerQuickbarSlot={controllerQuickbarSlot}
         displayScale={viewport.displayScale}
+        economy={economy}
+        element={initialSnapshot.players[playerId]!.config.element}
         mode={mode}
         mobileUi={mobileUi}
         onInput={onQuickbarInput}
         onUnassign={onQuickbarUnassign}
         playerState={quickbarHud.playerState}
-        quickbar={quickbarHud.quickbar}
         selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
         uiScale={uiScale}
         viewportWidth={viewport.width}
@@ -406,28 +416,6 @@ export default function GameHud({
       ) : null}
 
       <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
-        <button
-          type="button"
-          className="hub-hud-potion-button hub-hud-potion-button-red"
-          data-mobile-ui-custom={mobileUi.customized || undefined}
-          data-mobile-ui-element="healthPotion"
-          data-binding-label={healthPotionKey}
-          aria-label={`Use health potion, key ${healthPotionKey}, ${healthPotions.count} available`}
-          disabled={healthPotions.itemId === null || !onPotionClick}
-          onClick={() => {
-            if (healthPotions.itemId !== null) onPotionClick?.(healthPotions.itemId)
-          }}
-          style={mobileUiElementStyle(mobileUi, 'healthPotion')}
-          title={`Health Potion (${healthPotionKey})`}
-        >
-          <img
-            className="hub-hud-potion hub-hud-potion-red"
-            data-tutorial-anchor="health-potion"
-            src={hub.hud.potionRed}
-            alt=""
-          />
-          <NativeQuickbarBinding text={healthPotionKey.toUpperCase()} />
-        </button>
         <button
           type="button"
           className="hub-hud-backpack-button"
@@ -481,23 +469,6 @@ export default function GameHud({
             src={hub.hud.tome}
             alt=""
           />
-        </button>
-        <button
-          type="button"
-          className="hub-hud-potion-button hub-hud-potion-button-blue"
-          data-mobile-ui-custom={mobileUi.customized || undefined}
-          data-mobile-ui-element="manaPotion"
-          data-binding-label={manaPotionKey}
-          aria-label={`Use mana potion, key ${manaPotionKey}, ${manaPotions.count} available`}
-          disabled={manaPotions.itemId === null || !onPotionClick}
-          onClick={() => {
-            if (manaPotions.itemId !== null) onPotionClick?.(manaPotions.itemId)
-          }}
-          style={mobileUiElementStyle(mobileUi, 'manaPotion')}
-          title={`Mana Potion (${manaPotionKey})`}
-        >
-          <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />
-          <NativeQuickbarBinding text={manaPotionKey.toUpperCase()} />
         </button>
       </div>
 

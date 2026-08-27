@@ -9,8 +9,12 @@ import {
   playerStatBook,
   type NativePlayerPrimarySkillId,
   type PlayerSkillBookComponent,
-  type PlayerSkillQuickbar,
 } from '../core-kernels/player-progression.ts'
+import {
+  migrateSkillQuickbarToNativeBelt,
+  nativeBeltSkillProjection,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
 import {
   createPlayerSkillRuntime,
   playerSkillDerivedStats,
@@ -125,14 +129,6 @@ function importedSkillBook(
   ) && (permanentRanks[selectedPrimary] ?? 0) > 0
     ? selectedPrimary
     : base.primarySkillId
-  const skillQuickbar = Object.freeze(profile.wizard.skillQuickbar.map(skillId => (
-    skillId !== null
-    && skillId !== 52
-    && (permanentRanks[skillId] ?? 0) > 0
-    && (nativeSkillCategory(skillId) === 1 || nativeSkillCategory(skillId) === 2)
-      ? skillId
-      : null
-  ))) as PlayerSkillQuickbar
   return Object.freeze({
     ...base,
     advancedUnlocks: Object.freeze(advancedUnlocks),
@@ -142,10 +138,23 @@ function importedSkillBook(
     learnedSkillOrder: Object.freeze(learnedOrder),
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId: primarySkillId as NativePlayerPrimarySkillId,
-    skillQuickbar,
     weldBuildId: null,
     weldComponentRanks: null,
   })
+}
+
+function importedBelt(
+  profile: PortableGameProfile,
+  skillBook: PlayerSkillBookComponent,
+): PlayerBeltComponent {
+  return migrateSkillQuickbarToNativeBelt(profile.wizard.skillQuickbar.map(skillId => (
+    skillId !== null
+    && skillId !== 52
+    && (skillBook.permanentRanks[skillId] ?? 0) > 0
+    && (nativeSkillCategory(skillId) === 1 || nativeSkillCategory(skillId) === 2)
+      ? skillId
+      : null
+  )))
 }
 
 function importPortableState(
@@ -295,6 +304,7 @@ function importPortableState(
     nextLevelUpBarrierId: pendingChoiceCount === 0 ? 1 : 2,
     playerEntities: {
       ...state.playerEntities,
+      belts: Object.freeze([importedBelt(profile, skillState.skillBook)]),
       economies: Object.freeze([importedEconomy]),
       progressions: Object.freeze([progression]),
       skillBooks: Object.freeze([skillState.skillBook]),
@@ -316,6 +326,7 @@ export function createWebGameSaveFromPortableProfile(
   const playerId = `native-${profile.nativeSource.gamestateSha256.slice(0, 24)}`
   const state = importPortableState(profile, playerId, character)
   const importedBook = state.playerEntities.skillBooks[0]!
+  const importedBeltSkills = nativeBeltSkillProjection(state.playerEntities.belts[0]!)
   const importedRuntime = state.playerEntities.skillRuntimes[0]!
   const warnings = [
     ...profile.warnings,
@@ -332,7 +343,7 @@ export function createWebGameSaveFromPortableProfile(
       ? ['Stock selected a transient Plane Orb or a Weld whose build identity is not on disk; web play starts on the creation-element primary.']
       : []),
     ...(profile.wizard.skillQuickbar.some((skillId, slot) => (
-      skillId !== importedBook.skillQuickbar[slot]
+      skillId !== importedBeltSkills[slot]
     ))
       ? ['Native Belt entries that depend on an unpersisted Weld build or non-durable effective rank remain in the native attachment but are unavailable in web play.']
       : []),
@@ -392,9 +403,10 @@ export async function createPortableGameProfileFromWebSave(
   const character = restored.state.playerEntities.configs[index]
   const progression = restored.state.playerEntities.progressions[index]
   const skillBook = restored.state.playerEntities.skillBooks[index]
+  const belt = restored.state.playerEntities.belts[index]
   const skillRuntime = restored.state.playerEntities.skillRuntimes[index]
   const wizardEconomy = restored.state.playerEntities.economies[index]
-  if (!character || !progression || !skillBook || !skillRuntime || !wizardEconomy) {
+  if (!character || !progression || !skillBook || !belt || !skillRuntime || !wizardEconomy) {
     throw new NativeSaveFormatError('web save portable wizard components are incomplete')
   }
   const [startingPrimary, startingSecondary] = STARTING_SKILLS[character.element]
@@ -418,6 +430,7 @@ export async function createPortableGameProfileFromWebSave(
         ? profile.economy.tonicPurchases > 0
         : profile.economy.ownedPerkSelectors.includes(selector),
   )
+  const beltSkills = nativeBeltSkillProjection(belt)
   const warnings = [
     ...base.warnings,
     ...(profile.economy.storage.length > 0
@@ -438,7 +451,7 @@ export async function createPortableGameProfileFromWebSave(
       || profile.economy.unforgeBonuses.maximumMana !== 0
       ? ['Web Unforge maximum-health/maximum-mana base bonuses have no retail disk fields and reset after stock reload.']
       : []),
-    ...(skillBook.primarySkillId === 52 || skillBook.skillQuickbar.includes(52)
+    ...(skillBook.primarySkillId === 52 || beltSkills.includes(52)
       ? ['Retail does not serialize the active synthetic Weld build ID; selected or belted Spell Welding resets to the creation-element primary on stock export.']
       : []),
   ]
@@ -501,7 +514,7 @@ export async function createPortableGameProfileFromWebSave(
       selectedPrimarySkillId: skillBook.primarySkillId === 52
         ? startingPrimary
         : skillBook.primarySkillId,
-      skillQuickbar: Object.freeze(skillBook.skillQuickbar.map(skillId => (
+      skillQuickbar: Object.freeze(beltSkills.map(skillId => (
         skillId === 52 ? null : skillId
       ))),
       startingPrimary,

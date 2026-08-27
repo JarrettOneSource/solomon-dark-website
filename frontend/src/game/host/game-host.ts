@@ -2020,7 +2020,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           activePause !== null
           && (
             activePause.ownerPlayerId !== client.playerId
-            || activePause.source !== 'skill-book'
+            || (
+              activePause.source !== 'skill-book'
+              && (activePause.source !== 'inventory' || message.skillId !== null)
+            )
           )
         ) return
         const activeState = stateForPlayer(client.playerId)
@@ -6966,6 +6969,7 @@ function pauseAllowsInventoryAction(
     && pause.source === 'inventory'
     && (
       action.type === 'consume'
+      || action.type === 'bind-belt-item'
       || action.type === 'dye'
       || action.type === 'equip'
       || action.type === 'move-inventory-item'

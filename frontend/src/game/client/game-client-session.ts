@@ -41,6 +41,7 @@ import {
   type GameModAsset,
 } from '../protocol/game-protocol.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
+import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import type { GameSaveCheckpoint, GameSaveIntent } from '../save/game-save-contract.ts'
 import type {
   ProtocolHubParticipantState,
@@ -53,7 +54,7 @@ import type {
   PlayerSocialProfile,
 } from '../protocol/party-state.ts'
 import {
-  isNativeSkillQuickbarSkill,
+  isNativeBeltSkill,
   nativeSkillCategory,
 } from '../core-kernels/player-progression.ts'
 import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
@@ -635,7 +636,7 @@ export function connectGameClientSession(
           !Number.isInteger(slot)
           || slot < 0
           || slot > 7
-          || (skillId !== null && !isNativeSkillQuickbarSkill(skillId))
+          || (skillId !== null && !isNativeBeltSkill(skillId))
           || (skillId !== null
             && (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1)
         ) throw new Error('The quickbar skill is unavailable.')
@@ -1465,6 +1466,7 @@ export function connectGameClientSession(
         )
         state.player = {
           ...predicted.player,
+          belt: state.player.belt,
           config: { ...state.player.config },
           economy: state.player.economy,
           lighting: state.player.lighting,
@@ -1652,6 +1654,7 @@ function displayedLocalPlayer(
 function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   return {
     ...player,
+    belt: freezeNativeBelt(player.belt.map((entry) => entry && { ...entry })),
     config: { ...player.config },
     lighting: { ...player.lighting },
     position: { ...player.position },
@@ -1659,7 +1662,6 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
       ...player.progression,
       hagathaRuntime: { ...player.progression.hagathaRuntime },
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
-      skillQuickbar: [...player.progression.skillQuickbar],
       weldComponentRanks: player.progression.weldComponentRanks === null
         ? null
         : [...player.progression.weldComponentRanks],

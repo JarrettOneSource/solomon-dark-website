@@ -4,9 +4,10 @@ import {
 } from '../../core-kernels/player-character.ts'
 import {
   gameSimulationPlayerRecords,
-  getPlayerSkillBook,
+  getPlayerBelt,
   type GameSimulationState,
 } from '../game-simulation.ts'
+import { nativeBeltSkillProjection } from '../../core-kernels/native-belt.ts'
 import {
   createMlBotPolicyEnemyMemory,
   observeMlBotPolicyEnemies,
@@ -81,17 +82,17 @@ export class MlBotPolicyObserver {
     const players = gameSimulationPlayerRecords(state)
     const self = players[this.playerId]
     if (!self) throw new Error(`ML bot policy has no player ${this.playerId}`)
-    const skillBook = getPlayerSkillBook(state, this.playerId)
+    const quickbar = nativeBeltSkillProjection(getPlayerBelt(state, this.playerId))
     const minions = observeMlBotPolicyMinions(state.secondaryAbilities, {
       playerId: this.playerId,
       position: self.position,
-      quickbar: skillBook.skillQuickbar,
+      quickbar,
       worldKey: state.world.runId,
     })
     const ownEffects = observeMlBotPolicyOwnEffects(state, {
       playerId: this.playerId,
       position: self.position,
-      quickbar: skillBook.skillQuickbar,
+      quickbar,
       worldKey: state.world.runId,
     })
     const player = observeMlBotPolicyPlayerState(state, this.playerId, {

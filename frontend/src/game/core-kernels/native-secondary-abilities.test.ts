@@ -38,6 +38,10 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import {
+  bindNativeBeltSkill,
+  createNativePlayerBelt,
+} from './native-belt.ts'
+import {
   nativeLeviathanCurrentScale,
   nativeLeviathanHeadingVector,
 } from './native-secondary-leviathan.ts'
@@ -89,9 +93,6 @@ function book(
     ...source,
     effectiveRanks: Object.freeze(effectiveRanks),
     permanentRanks: Object.freeze(permanentRanks),
-    skillQuickbar: Object.freeze([
-      skillId, null, null, null, null, null, null, null,
-    ]),
   }
 }
 
@@ -135,6 +136,7 @@ function context(
   learnedSkillIds: readonly number[] = [],
   rank = 1,
 ): NativeSecondaryTickContext {
+  const skillBook = book(skillId, learnedSkillIds, rank)
   return {
     dampenCandidates: () => ({
       casterTargetIds: [7],
@@ -149,6 +151,12 @@ function context(
     phasingDestination: () => ({ x: 20, y: 0 }),
     players: {
       player: {
+        belt: bindNativeBeltSkill(
+          createNativePlayerBelt(skillBook),
+          skillBook,
+          skillId,
+          0,
+        ),
         character: createPlayerCharacter(CONFIG, { x: 0, y: 0 }),
         coldSlowFactor: 0.5,
         currentMana,
@@ -175,7 +183,7 @@ function context(
         manaRecoveryPerTick: 0.1,
         offensiveFactors: { damage: 1, manaCost: 1 },
         secondaryRechargeFactor: learnedSkillIds.includes(60) ? 2 : 1,
-        skillBook: book(skillId, learnedSkillIds, rank),
+        skillBook,
         worldKey: 'boneyard:test',
       },
     },
@@ -1880,9 +1888,6 @@ test('Plane Orb damage sums only the seven native Ether-line ranks', () => {
     ...sourceBook,
     effectiveRanks: Object.freeze(effectiveRanks),
     permanentRanks: Object.freeze(permanentRanks),
-    skillQuickbar: Object.freeze([
-      12, null, null, null, null, null, null, null,
-    ]),
   }
   assert.equal(nativePlaneOrbDamage(skillBook), 0.56)
 

@@ -33,6 +33,7 @@ import {
   dyeInventoryClothing,
   dowse,
   economyHasWizardKey,
+  equipEligibleInventorySackContents,
   equipInventoryItem,
   findInventoryItem,
   hagathaOffers,
@@ -611,6 +612,74 @@ test('equipping into an occupied compatible sink returns the exact displaced ite
   assert.equal(swap.state.backpack.some(({ id }) => id === second.id), false)
 })
 
+test('equipping a direct Sack child returns displaced gear to that same native root', () => {
+  const base = createHubEconomy(1)
+  const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!
+  const hat = createEquipmentInventoryItem(hatRecipe, base.nextItemId)
+  const sack = nativeTestSack(base.nextItemId + 1, [hat])
+  const source = { ...base, backpack: [...base.backpack, sack], nextItemId: base.nextItemId + 2 }
+  const equipped = equipInventoryItem(source, hat.id, 'hat')
+  assert.equal(equipped.accepted, true)
+  assert.strictEqual(equipped.state.equipment.hat, hat)
+  assert.equal(equipped.state.backpack.some(({ id }) => id === base.equipment.hat!.id), false)
+  assert.strictEqual(
+    findInventoryItem(equipped.state.backpack, sack.id)?.contents?.[0],
+    base.equipment.hat,
+  )
+})
+
+test('Sack item action equips eligible direct children and returns displaced gear to that Sack', () => {
+  const base = createHubEconomy(1)
+  const recipe = (type: Exclude<HubInventoryItem['equipmentType'], null>) => (
+    DOWSING_EQUIPMENT_RECIPES.find((candidate) => candidate.type === type)!
+  )
+  let nextId = base.nextItemId
+  const equipment = (type: Exclude<HubInventoryItem['equipmentType'], null>) => (
+    createEquipmentInventoryItem(recipe(type), nextId++)
+  )
+  const hat = equipment('hat')
+  const robe = equipment('robe')
+  const staff = equipment('staff')
+  const wand = equipment('wand')
+  const amulet = equipment('amulet')
+  const highRing = { ...equipment('ring'), generatedLevel: 9 }
+  const ringA = equipment('ring')
+  const ringB = equipment('ring')
+  const ringC = equipment('ring')
+  const nestedHat = equipment('hat')
+  const nested = nativeTestSack(nextId++, [nestedHat])
+  const potion = { ...base.backpack[0]!, id: nextId++ }
+  const actionSack = nativeTestSack(nextId++, [
+    hat, robe, staff, wand, amulet, highRing, ringA, ringB, ringC, nested, potion,
+  ])
+  const carrier = nativeTestSack(nextId++, [actionSack])
+  const source = { ...base, backpack: [...base.backpack, carrier], nextItemId: nextId }
+
+  const result = equipEligibleInventorySackContents(source, actionSack.id, 5)
+  assert.equal(result.accepted, true)
+  assert.strictEqual(result.state.equipment.hat, hat)
+  assert.strictEqual(result.state.equipment.robe, robe)
+  assert.strictEqual(result.state.equipment.weapon, wand)
+  assert.strictEqual(result.state.equipment.amulet, amulet)
+  assert.deepEqual(result.state.equipment.rings.slice(0, 2), [ringA, ringB])
+  assert.equal(result.state.equipment.rings[2], null)
+
+  const retained = findInventoryItem(result.state.backpack, actionSack.id)
+  assert.ok(retained)
+  const retainedIds = new Set(retained.contents?.map(({ id }) => id))
+  assert.equal(retainedIds.has(actionSack.id), false)
+  assert.equal(retainedIds.has(highRing.id), true)
+  assert.equal(retainedIds.has(ringC.id), true)
+  assert.equal(retainedIds.has(nested.id), true)
+  assert.equal(retainedIds.has(potion.id), true)
+  assert.equal(retainedIds.has(base.equipment.hat!.id), true)
+  assert.equal(retainedIds.has(base.equipment.robe!.id), true)
+  assert.equal(retainedIds.has(base.equipment.weapon!.id), true)
+  assert.equal(retainedIds.has(staff.id), true)
+  assert.strictEqual(findInventoryItem(retained.contents ?? [], nestedHat.id), nestedHat)
+  assert.equal(hubEconomyInventoryIsValid(result.state), true)
+})
+
 test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct native capacities', () => {
   const base = createHubEconomy(1)
   const health = base.backpack[0]!
@@ -1144,7 +1213,12 @@ test('consume, equip, and unforge resolve recursively owned inventory nodes', ()
   assert.equal(equipped.accepted, true)
   assert.equal(equipped.state.equipment.robe?.id, robe.id)
   assert.equal(findInventoryItem(equipped.state.backpack, robe.id), null)
-  assert.equal(equipped.state.backpack.some(({ id }) => id === base.equipment.robe?.id), true)
+  assert.equal(equipped.state.backpack.some(({ id }) => id === base.equipment.robe?.id), false)
+  assert.equal(
+    findInventoryItem(equipped.state.backpack, carrier.id)?.contents
+      ?.some(({ id }) => id === base.equipment.robe?.id),
+    true,
+  )
 
   const rejectedNonempty = unforgeInventoryItem(equipped.state, nonemptySack.id, {
     currentHealth: 50,

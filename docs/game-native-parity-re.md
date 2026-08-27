@@ -52734,7 +52734,7 @@ No member is `blocked-by-platform`.
 - Retain Teleport's recovered kernel. Add a regression from a real belt slot
   through active-Boneyard relocation and a College negative control instead of
   a Teleport-only fallback or scene exception.
-- Bump strict game protocol to 88 and save schema to 18 for the new
+- Bump strict game protocol to 89 and save schema to 18 for the new
   authoritative belt shape; migrate schema-17 skill bindings and seed aliases
   only into empty historical slots.
 
@@ -52751,7 +52751,7 @@ No member is `blocked-by-platform`.
 - Focused action tests: all six potion subtypes, every equipment sink family,
   Sack item action, invalid Map/Perk/Misc/mod rows, accepted/rejected item drop,
   all-slot pull-off, and item retention across nested/equipped ownership.
-- Protocol/save tests: protocol-88 strict belt decoding, authority ownership,
+- Protocol/save tests: protocol-89 strict belt decoding, authority ownership,
   host/guest snapshots, late join/reconnect, schema-18 round trip, schema-17
   migration, malformed/cross-owner UID rejection, and revision/checkpoint flow.
 - Teleport and category siblings: all 23 category-2 rows remain addressable;

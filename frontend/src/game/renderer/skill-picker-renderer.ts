@@ -394,7 +394,7 @@ function skillTextTint(family: string): number {
 
 export function spriteFor(
   textures: GameTextureMap,
-  atlas: 'Fonts' | 'Skills' | 'UI',
+  atlas: 'Fonts' | 'Inventory' | 'Skills' | 'UI',
   record: number,
 ): Sprite {
   return nativeUiPixiFor(textures).sprite({ atlas, kind: 'sprite', record, x: 0, y: 0 })

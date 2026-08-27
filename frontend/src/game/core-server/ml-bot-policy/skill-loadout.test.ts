@@ -6,8 +6,8 @@ import {
   NATIVE_SKILL_CATALOG,
   NATIVE_WELD_BUILDS,
   type PlayerSkillBookComponent,
-  type PlayerSkillQuickbar,
 } from '../../core-kernels/player-progression.ts'
+import { bindNativeBeltSkill } from '../../core-kernels/native-belt.ts'
 import {
   createGameSimulation,
   getPlayerProgression,
@@ -251,7 +251,9 @@ function stateWithSecondarySlots(
   skillIds: readonly number[],
   rank = 1,
 ): GameSimulationState {
-  return withSkillBook(baseState(), source => {
+  const state = baseState()
+  const skillBook = (() => {
+    const source = getPlayerSkillBook(state, PLAYER_ID)
     const permanentRanks = [...source.permanentRanks]
     const effectiveRanks = [...source.effectiveRanks]
     for (const skillId of skillIds) {
@@ -262,9 +264,20 @@ function stateWithSecondarySlots(
       ...source,
       effectiveRanks: Object.freeze(effectiveRanks),
       permanentRanks: Object.freeze(permanentRanks),
-      skillQuickbar: quickbar(skillIds),
     }
-  })
+  })()
+  let belt = state.playerEntities.belts[0]!
+  for (let slot = 0; slot < 8; slot += 1) {
+    belt = bindNativeBeltSkill(belt, skillBook, skillIds[slot] ?? null, slot)
+  }
+  return {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      belts: [belt],
+      skillBooks: [skillBook],
+    },
+  }
 }
 
 function withSkillBook(
@@ -278,12 +291,6 @@ function withSkillBook(
       skillBooks: [update(getPlayerSkillBook(state, PLAYER_ID))],
     },
   }
-}
-
-function quickbar(skillIds: readonly number[]): PlayerSkillQuickbar {
-  return Object.freeze(Array.from({ length: 8 }, (_, index) => (
-    (skillIds[index] ?? null) as PlayerSkillQuickbar[number]
-  ))) as PlayerSkillQuickbar
 }
 
 function equippedRow(state: GameSimulationState, row: number): Float32Array {

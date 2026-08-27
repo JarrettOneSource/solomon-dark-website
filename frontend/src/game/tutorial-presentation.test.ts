@@ -120,9 +120,13 @@ test('owns responsive Tutorial targets at the HUD controls instead of fixed coor
   const hud = source('./GameHud.tsx')
   const overlay = source('./TutorialOverlay.tsx')
   const quickbar = source('./SkillQuickbar.tsx')
-  for (const anchor of ['health-meter', 'health-potion', 'inventory', 'skills']) {
+  for (const anchor of ['health-meter', 'inventory', 'skills']) {
     assert.match(hud, new RegExp(`data-tutorial-anchor=[^\\n]*['"]${anchor}['"]`))
   }
+  assert.match(
+    quickbar,
+    /data-tutorial-anchor=\{entry\?\.kind === 'health-potion'[\s\S]*?'health-potion'/,
+  )
   assert.match(
     hud,
     /data-tutorial-anchor=\{binding === 12[\s\S]*?'primary-skill'[\s\S]*?binding === 16[\s\S]*?'concentration-a'/,
@@ -130,7 +134,7 @@ test('owns responsive Tutorial targets at the HUD controls instead of fixed coor
   assert.match(hud, /className="hub-hud-backpack"[\s\S]*?data-tutorial-anchor="inventory"/)
   assert.match(hud, /className="hub-hud-tome"[\s\S]*?data-tutorial-anchor="skills"/)
   assert.doesNotMatch(hud, /className="hub-hud-backpack-button"[\s\S]{0,120}data-tutorial-anchor/)
-  assert.match(quickbar, /data-tutorial-anchor=\{slot === 0 \? 'secondary-slot' : undefined\}/)
+  assert.match(quickbar, /slot === 0[\s\S]*?\? 'secondary-slot'/)
   assert.doesNotMatch(overlay, /state\.stage === 5 \? <TutorialPointer x=\{468\}/)
   assert.doesNotMatch(overlay, /state\.stage === 9 \? <TutorialPointer x=\{763\}/)
   assert.doesNotMatch(overlay, /state\.stage === 12 \? <TutorialPointer x=\{843\}/)
@@ -139,10 +143,12 @@ test('owns responsive Tutorial targets at the HUD controls instead of fixed coor
 test('uses the same live potion bindings in the HUD and Tutorial without painting stack counts as keys', () => {
   const hud = source('./GameHud.tsx')
   const overlay = source('./TutorialOverlay.tsx')
-  assert.match(hud, /healthPotionKey = gameBindingLabel\(controls\.belt4\)/)
-  assert.match(hud, /manaPotionKey = gameBindingLabel\(controls\.belt5\)/)
-  assert.match(hud, /NativeQuickbarBinding[^]*healthPotionKey/)
-  assert.match(hud, /NativeQuickbarBinding[^]*manaPotionKey/)
+  const quickbar = source('./SkillQuickbar.tsx')
+  assert.match(quickbar, /bindingCode=\{controls\[`belt\$\{slot \+ 1\}` as GameBindingAction\]\}/)
+  assert.match(quickbar, /const bindingLabel = gameBindingLabel\(bindingCode\)/)
+  assert.match(quickbar, /entry\?\.kind === 'health-potion'/)
+  assert.match(quickbar, /entry\?\.kind === 'mana-potion'/)
+  assert.match(quickbar, /<NativeQuickbarBinding text=\{bindingLabel\.toUpperCase\(\)\} \/>/)
   assert.doesNotMatch(hud, /function InventoryCount/)
   assert.match(overlay, /potion: gameBindingLabel\(controls\.belt4\)/)
 })

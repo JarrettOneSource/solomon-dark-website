@@ -237,7 +237,7 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
     component,
     /const draggable = row\.category === 1 \|\| row\.category === 2\s*\|\| row\.category === 3/,
   )
-  assert.match(component, /progression\.skillQuickbar/)
+  assert.match(component, /player\.belt/)
   assert.match(component, /onSelectConcentration/)
   assert.match(component, /style=\{\{[\s\S]*?left: belt\.x[\s\S]*?top: belt\.y/)
   assert.match(hud, /SkillQuickbar/)
@@ -249,6 +249,8 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(scene, /current\.maximumMana === next\.maximumMana/)
   assert.doesNotMatch(hud, /SecondaryAbilityBelt/)
   assert.match(scene, /onAssignQuickbarSkill=\{session\.bindSkillQuickbar\}/)
+  assert.match(hubScene, /entry\.kind !== 'skill'[\s\S]*?activate-belt-slot/)
+  assert.match(boneyardScene, /entry\.kind !== 'skill'[\s\S]*?activate-belt-slot/)
   assert.match(hubScene, /event\.code !== settings\.controls\.openSkills/)
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
 })

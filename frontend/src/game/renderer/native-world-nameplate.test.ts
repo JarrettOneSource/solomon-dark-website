@@ -21,6 +21,7 @@ const DEFAULT_PLAYER = createGameSnapshot(createGameSimulation(), null)
 
 function player(displayName: string, x = 100, y = 200): ProtocolPlayerState {
   return {
+    belt: DEFAULT_PLAYER.belt,
     config: {
       discipline: 'arcane',
       displayName,

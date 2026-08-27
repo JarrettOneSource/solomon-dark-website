@@ -1449,6 +1449,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
     )
     authoritativePlayer = {
       ...predicted.player,
+      belt: authoritativePlayer.belt,
       economy: authoritativePlayer.economy,
       lighting: authoritativePlayer.lighting,
       movementScale: authoritativePlayer.movementScale,

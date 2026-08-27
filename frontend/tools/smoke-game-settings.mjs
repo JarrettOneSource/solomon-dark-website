@@ -224,8 +224,8 @@ try {
   assert.equal(await hubScene.getAttribute('data-camera-zoom'), '0.96')
   assert.equal(await hubScene.getAttribute('data-ui-scale'), '1.5')
   assert.equal(await page.locator('.hub-hud').getAttribute('data-ui-scale'), '1.5')
-  await page.locator('.hub-hud-potion-button-red[data-binding-label="H"]').waitFor()
-  await page.locator('.hub-hud-potion-button-blue[data-binding-label="J"]').waitFor()
+  await page.locator('.hub-hud-quickbar-slot[data-entry-kind="health-potion"][data-binding-code="KeyH"]').waitFor()
+  await page.locator('.hub-hud-quickbar-slot[data-entry-kind="mana-potion"][data-binding-code="KeyJ"]').waitFor()
 
   const hubCanvas = page.locator('.hub-world-canvas')
   const beforeMove = await hubCanvas.evaluate((canvas) => canvas.__sdrHubFrame.playerX)

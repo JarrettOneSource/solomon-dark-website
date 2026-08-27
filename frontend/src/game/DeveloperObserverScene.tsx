@@ -69,6 +69,7 @@ export default function DeveloperObserverScene({
         key={`${observerState.boneyard.runId}:${selectedPlayerId}`}
         accountUsername={accountUsername}
         audio={audio}
+        belt={selectedPlayer.belt}
         boneyard={observerState.boneyard}
         getPingMs={() => observerState.pingMs}
         initialSnapshot={observerState.snapshot}

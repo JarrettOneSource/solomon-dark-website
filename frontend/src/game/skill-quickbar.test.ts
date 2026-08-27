@@ -12,7 +12,7 @@ import {
 
 const component = readFileSync(new URL('./SkillQuickbar.tsx', import.meta.url), 'utf8')
 
-test('skill quickbar keeps the exact eight 53 px slots and 60 px pitch', () => {
+test('item belt keeps the exact eight 53 px slots and 60 px pitch', () => {
   assert.deepEqual(NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS, [
     -332, -272, -212, -152, 98, 158, 218, 278,
   ])
@@ -42,7 +42,7 @@ test('live populated BeltButtons use the same scaled strict pull-off owner', () 
   assert.match(component, /if \(activate && press\.castEligible\) \{\s*onInput\?\.\(slot, true\)\s*onInput\?\.\(slot, false\)/)
   assert.doesNotMatch(component, /setPointerCapture\(event\.pointerId\)\s*onInput/)
   assert.match(component, /onPointerCancel=\{\(event\) => finishPointer\(event, false\)\}/)
-  assert.match(component, /data-populated=\{skill !== undefined\}/)
+  assert.match(component, /data-populated=\{entry !== null\}/)
 })
 
 test('cooldown presentation selects the stock common or longer row timer', () => {
@@ -68,7 +68,7 @@ test('cooldown presentation selects the stock common or longer row timer', () =>
   })
 })
 
-test('skill quickbar lays out native group-8 key labels over 13 px plaques', () => {
+test('item belt lays out native group-8 key labels over 13 px plaques', () => {
   assert.equal(NATIVE_SKILL_QUICKBAR_FONT.group, 8)
   assert.deepEqual(NATIVE_SKILL_QUICKBAR_FONT.header, [10, 3, 28])
   assert.equal(NATIVE_SKILL_QUICKBAR_FONT.glyphCount, 92)

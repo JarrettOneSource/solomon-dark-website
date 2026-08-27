@@ -42,16 +42,6 @@ const skillBook = {
   learnedSkillOrder,
   permanentRanks,
   primarySkillId: frozen.primary_skill,
-  skillQuickbar: Object.freeze([
-    frozen.secondary_skill,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]),
   weldBuildId: null,
   weldComponentRanks: null,
 }

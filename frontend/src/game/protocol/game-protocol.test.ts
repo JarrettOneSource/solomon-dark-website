@@ -990,6 +990,10 @@ test('server welcome round-trips content, kernel, character, and world ownership
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     overlayEffectPhase: 0,
   })
+  assert.deepEqual(welcome.snapshot.players['player-1'].belt, [
+    { kind: 'skill', skillId: 11 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+  ])
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
     advancedUnlocks: Array<boolean>(8).fill(false),
     weldBuildId: null,
@@ -1036,7 +1040,6 @@ test('server welcome round-trips content, kernel, character, and world ownership
     selectedPrimarySkillId: 8,
     sorcerorsCharmAvailable: false,
     splitMind: false,
-    skillQuickbar: [11, null, null, null, null, null, null, null],
   })
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
@@ -1588,8 +1591,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v88 carries mutual game-start readiness and complete retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 88)
+test('protocol v89 carries mutual readiness, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 89)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2286,10 +2289,10 @@ test('protocol validates active primary and concentration selections against eff
     const quickbar = JSON.parse(JSON.stringify(baseFrame))
     quickbar.players['player-1'].progression.learnedSkills.push([skillId, 1, 1])
     quickbar.players['player-1'].progression.learnedSkillOrder.push(skillId)
-    quickbar.players['player-1'].progression.skillQuickbar[7] = skillId
+    quickbar.players['player-1'].belt[7] = { kind: 'skill', skillId }
     const decoded = decodeServerGameMessage(JSON.stringify(message(quickbar)))
     assert.equal(decoded.type, 'server-snapshot')
-    assert.equal(decoded.frame.players['player-1']!.progression.skillQuickbar[7], skillId)
+    assert.deepEqual(decoded.frame.players['player-1']!.belt[7], { kind: 'skill', skillId })
   }
 
   for (const skillId of [8, 16, 24, 32, 40]) {
@@ -2333,10 +2336,37 @@ test('protocol validates active primary and concentration selections against eff
 
   const effectiveOnlyQuickbar = JSON.parse(JSON.stringify(baseFrame))
   effectiveOnlyQuickbar.players['player-1'].progression.learnedSkills.push([15, 0, 1])
-  effectiveOnlyQuickbar.players['player-1'].progression.skillQuickbar[0] = 15
+  effectiveOnlyQuickbar.players['player-1'].belt[0] = { kind: 'skill', skillId: 15 }
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(message(effectiveOnlyQuickbar))),
-    /skillQuickbar\[0\] is not learned/,
+    /belt\[0\]\.skillId is not learned/,
+  )
+
+  const exactOwnedItem = JSON.parse(JSON.stringify(baseFrame))
+  const healthPotion = exactOwnedItem.players['player-1'].economy.backpack.find(
+    (item: { nativeSubtype: number | null, nativeTypeId: number }) => (
+      item.nativeTypeId === 7001 && item.nativeSubtype === 0
+    ),
+  )
+  assert.ok(healthPotion)
+  exactOwnedItem.players['player-1'].belt[2] = {
+    itemId: healthPotion.id,
+    kind: 'item',
+    nativeTypeId: healthPotion.nativeTypeId,
+  }
+  const decodedItem = decodeServerGameMessage(JSON.stringify(message(exactOwnedItem)))
+  assert.equal(decodedItem.type, 'server-snapshot')
+  assert.deepEqual(decodedItem.frame.players['player-1']!.belt[2], {
+    itemId: healthPotion.id,
+    kind: 'item',
+    nativeTypeId: 7001,
+  })
+
+  const missingItem = structuredClone(exactOwnedItem)
+  missingItem.players['player-1'].belt[2].itemId += 100_000
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(message(missingItem))),
+    /belt\[2\] does not identify an owned belt item/,
   )
 })
 

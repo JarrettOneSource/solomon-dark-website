@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { nativeBeltSkillProjection } from '../core-kernels/native-belt.ts'
 import { deflateRawSync } from 'node:zlib'
 
 import { createPlayerSkillBook } from '../core-kernels/player-progression.ts'
@@ -401,9 +402,10 @@ test('selected primary, concentrations, replacement cursor, and skill Belt survi
   const imported = createWebGameSaveFromPortableProfile(portable)
   const restored = restoreGameSaveDocument(imported.document)
   const book = restored.state.playerEntities.skillBooks[0]!
+  const belt = restored.state.playerEntities.belts[0]!
   const runtime = restored.state.playerEntities.skillRuntimes[0]!
   assert.equal(book.primarySkillId, 8)
-  assert.deepEqual(book.skillQuickbar, [21, 8, null, null, null, null, null, null])
+  assert.deepEqual(nativeBeltSkillProjection(belt), [21, 8, null, null, null, null, null, null])
   assert.equal(runtime.concentrationSkillIdA, 57)
   assert.equal(runtime.nextConcentrationReplacementSlot, 'b')
 

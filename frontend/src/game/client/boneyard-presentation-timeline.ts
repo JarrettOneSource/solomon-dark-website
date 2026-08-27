@@ -1,6 +1,7 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
+import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import {
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
@@ -264,6 +265,7 @@ function interpolatePlayer(
 ): ProtocolPlayerState {
   const discrete = blend < 1 ? older : newer
   return {
+    belt: discrete.belt,
     config: { ...discrete.config },
     economy: discrete.economy,
     footstepTick: discrete.footstepTick,
@@ -719,6 +721,7 @@ function interpolateMaggots(
 function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   return {
     ...player,
+    belt: freezeNativeBelt(player.belt.map((entry) => entry && { ...entry })),
     config: { ...player.config },
     lighting: {
       ...player.lighting,
@@ -733,7 +736,6 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
       ...player.progression,
       hagathaRuntime: { ...player.progression.hagathaRuntime },
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
-      skillQuickbar: [...player.progression.skillQuickbar],
       weldComponentRanks: player.progression.weldComponentRanks === null
         ? null
         : [...player.progression.weldComponentRanks],

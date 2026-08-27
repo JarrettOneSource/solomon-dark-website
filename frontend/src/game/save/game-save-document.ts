@@ -30,9 +30,19 @@ import {
 import {
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
+  isNativeBeltSkill,
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import {
+  freezeNativeBelt,
+  migrateSkillQuickbarToNativeBelt,
+  nativeBeltOwnedItem,
+  nativeInventoryItemCanBindToBelt,
+  type NativeBeltEntry,
+  type NativeBeltItemTypeId,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
 import {
   createPlayerSkillRuntime,
   refreshPlayerSkillRuntime,
@@ -143,6 +153,7 @@ const SIMULATION_KEYS = [
   'world',
 ] as const
 const PLAYER_STORE_KEYS = [
+  'belts',
   'configs',
   'economies',
   'entityIds',
@@ -157,7 +168,18 @@ const PLAYER_STORE_KEYS = [
   'statBooks',
 ] as const
 const LEGACY_PLAYER_STORE_KEYS = [
-  ...PLAYER_STORE_KEYS,
+  'configs',
+  'economies',
+  'entityIds',
+  'identities',
+  'lightings',
+  'locomotions',
+  'nextEntityId',
+  'primaryCasts',
+  'progressions',
+  'skillBooks',
+  'skillRuntimes',
+  'statBooks',
 ] as const
 const ECONOMY_KEYS = [
   'actionFeedback',
@@ -615,13 +637,18 @@ function normalizePlayerStore(
   sourceSchemaVersion: number,
 ): GameSimulationState['playerEntities'] {
   const source = record(value, 'game save players')
-  rejectUnexpectedKeys(source, 'game save players', LEGACY_PLAYER_STORE_KEYS)
+  rejectUnexpectedKeys(
+    source,
+    'game save players',
+    sourceSchemaVersion >= 18 ? PLAYER_STORE_KEYS : LEGACY_PLAYER_STORE_KEYS,
+  )
   if (
     !Array.isArray(source.configs)
     || !Array.isArray(source.economies)
     || !Array.isArray(source.primaryCasts)
     || !Array.isArray(source.skillBooks)
     || !Array.isArray(source.statBooks)
+    || (sourceSchemaVersion >= 18 && !Array.isArray(source.belts))
   ) throw new Error('game save player components are invalid')
   const count = source.configs.length
   if (
@@ -629,10 +656,12 @@ function normalizePlayerStore(
     || source.primaryCasts.length !== count
     || source.skillBooks.length !== count
     || source.statBooks.length !== count
+    || (sourceSchemaVersion >= 18 && (source.belts as unknown[]).length !== count)
   ) throw new Error('game save player component cardinality drifted')
 
   const economies = source.economies.map(value => normalizeEconomy(value, sourceSchemaVersion))
   const primaryCasts: PlayerPrimaryCastState[] = []
+  const belts: PlayerBeltComponent[] = []
   const skillBooks: PlayerSkillBookComponent[] = []
   const skillRuntimes: PlayerSkillRuntimeComponent[] = []
   const persistedRuntimes = Array.isArray(source.skillRuntimes) ? source.skillRuntimes : null
@@ -641,6 +670,11 @@ function normalizePlayerStore(
   }
   for (let index = 0; index < count; index += 1) {
     const legacyBook = record(source.skillBooks[index], `game save skill book ${index}`)
+    const legacyQuickbar = sourceSchemaVersion >= 18
+      ? null
+      : Array.isArray(legacyBook.skillQuickbar)
+        ? legacyBook.skillQuickbar
+        : array(legacyBook.secondaryBelt, 'game save secondary belt')
     let skillBook = normalizeSkillBook(legacyBook, index)
     const statBook = source.statBooks[index] as PlayerStatBookComponent
     const economy = economies[index]!
@@ -666,6 +700,16 @@ function normalizePlayerStore(
       }
     }
     const refreshed = refreshPlayerSkillRuntime(runtime, skillBook, statBook, economy)
+    belts.push(sourceSchemaVersion >= 18
+      ? normalizeSavedBelt(
+          (source.belts as unknown[])[index],
+          index,
+          refreshed.skillBook,
+          economy,
+        )
+      : migrateSkillQuickbarToNativeBelt(legacyQuickbar!.map((entry) => (
+          entry === null ? null : finiteNumber(entry, 'game save skill quickbar entry')
+        ))))
     primaryCasts.push(normalizePrimaryCast(source.primaryCasts[index], refreshed.skillBook))
     skillBooks.push(refreshed.skillBook)
     skillRuntimes.push(refreshed.runtime)
@@ -673,6 +717,7 @@ function normalizePlayerStore(
 
   return {
     ...source,
+    belts,
     economies,
     primaryCasts,
     skillBooks,
@@ -755,10 +800,6 @@ function normalizeSkillBook(
     : permanentRanks.flatMap((rank, skillId) => (
         Number(rank) > 0 && skillId >= 8 && skillId <= 79 ? [skillId] : []
       ))
-  const skillQuickbar = Array.isArray(source.skillQuickbar)
-    ? source.skillQuickbar
-    : array(source.secondaryBelt, 'game save secondary belt')
-  if (skillQuickbar.length !== 8) throw new Error('game save skill quickbar is invalid')
   const weldBuildId = numericOrNull(source.weldBuildId ?? source.activeWeldBuildId)
   const build = weldBuildId === null ? null : nativeWeldBuild(weldBuildId)
   const weldComponentRanks = source.weldComponentRanks === undefined
@@ -788,10 +829,51 @@ function normalizeSkillBook(
       source.primarySkillId,
       'game save primary skill',
     ) as PlayerSkillBookComponent['primarySkillId'],
-    skillQuickbar: skillQuickbar as unknown as PlayerSkillBookComponent['skillQuickbar'],
     weldBuildId,
     weldComponentRanks,
   }
+}
+
+function normalizeSavedBelt(
+  value: unknown,
+  playerIndex: number,
+  skillBook: PlayerSkillBookComponent,
+  economy: HubEconomyState,
+): PlayerBeltComponent {
+  const entries = array(value, `game save player belt ${playerIndex}`)
+  if (entries.length !== 8) throw new Error(`game save player belt ${playerIndex} is invalid`)
+  return freezeNativeBelt(entries.map((value, slot): NativeBeltEntry | null => {
+    if (value === null) return null
+    const field = `game save player belt ${playerIndex} slot ${slot}`
+    const source = record(value, field)
+    if (source.kind === 'skill') {
+      rejectUnexpectedKeys(source, field, ['kind', 'skillId'])
+      const skillId = finiteNumber(source.skillId, `${field} skill`)
+      if (!isNativeBeltSkill(skillId) || (skillBook.permanentRanks[skillId] ?? 0) < 1) {
+        throw new Error(`${field} skill is invalid`)
+      }
+      return Object.freeze({ kind: 'skill', skillId })
+    }
+    if (source.kind === 'health-potion' || source.kind === 'mana-potion') {
+      rejectUnexpectedKeys(source, field, ['kind'])
+      return Object.freeze({ kind: source.kind })
+    }
+    if (source.kind === 'item') {
+      rejectUnexpectedKeys(source, field, ['itemId', 'kind', 'nativeTypeId'])
+      const itemId = finiteNumber(source.itemId, `${field} item id`)
+      const nativeTypeId = finiteNumber(
+        source.nativeTypeId,
+        `${field} item type`,
+      ) as NativeBeltItemTypeId
+      const item = nativeBeltOwnedItem(economy, itemId)
+      if (!item || item.nativeTypeId !== nativeTypeId
+        || !nativeInventoryItemCanBindToBelt(item)) {
+        throw new Error(`${field} item is invalid`)
+      }
+      return Object.freeze({ itemId, kind: 'item', nativeTypeId })
+    }
+    throw new Error(`${field} kind is invalid`)
+  }))
 }
 
 function normalizePrimaryCast(
@@ -1294,8 +1376,15 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
         : null,
     }
   })
+  const belts = (store.belts as unknown[]).map((value, index) => normalizeSavedBelt(
+    value,
+    index,
+    skillBooks[index] as unknown as PlayerSkillBookComponent,
+    economies[index]!,
+  ))
   return {
     ...store,
+    belts,
     economies,
     progressions,
     skillBooks,

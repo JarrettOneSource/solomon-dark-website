@@ -21,6 +21,15 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
 import {
+  NATIVE_SKILL_CATALOG,
+  nativeWeldBuild,
+} from '../core-kernels/player-progression.ts'
+import {
+  nativeBeltEntryItem,
+  nativeBeltPotionProjection,
+  type PlayerBeltComponent,
+} from '../core-kernels/native-belt.ts'
+import {
   HUB_TRADER_DIALOGUES,
   equipmentSlotsForItem,
   hubInteractionDialogue,
@@ -169,6 +178,7 @@ export interface HubInventoryDyeModalModel {
   readonly closingAtMs: number | null
   readonly dyeItemId: number
   readonly openedAtMs: number
+  readonly path: readonly number[]
   readonly pending: boolean
   readonly selectedAtMs: number | null
   readonly selectedRow: number | null
@@ -190,6 +200,7 @@ export type HubServiceInspectionModel =
 
 export type HubInventoryRendererModel =
   | {
+      readonly belt: PlayerBeltComponent
       readonly config: PlayerCharacterConfig
       readonly dragging: HubInventoryDragModel | null
       readonly dyeModal: HubInventoryDyeModalModel | null
@@ -214,6 +225,7 @@ export type HubInventoryRendererModel =
       readonly storyOffice: boolean
     }
   | {
+      readonly belt: PlayerBeltComponent
       readonly config: PlayerCharacterConfig
       readonly dragging: HubInventoryDragModel | null
       readonly dyeModal: HubInventoryDyeModalModel | null
@@ -573,6 +585,7 @@ function buildInventory(
   context: RenderContext,
   layer: Container,
   model: {
+    readonly belt: PlayerBeltComponent
     readonly config: PlayerCharacterConfig
     readonly economy: ProtocolPlayerEconomy
     readonly companion?: boolean
@@ -649,7 +662,9 @@ function buildInventory(
   const modalHud = addBelt(
     context,
     layer,
-    projectInventoryItems(economy.backpack).map(({ item }) => item),
+    model.belt,
+    economy,
+    progression,
     model.config.element,
   )
   const unforgeTarget = addCenteredAtlasSprite(
@@ -1007,10 +1022,11 @@ function addEquipment(
 function addBelt(
   context: RenderContext,
   layer: Container,
-  backpack: readonly HubInventoryItem[],
+  belt: PlayerBeltComponent,
+  economy: ProtocolPlayerEconomy,
+  progression: ProtocolPlayerProgression,
   element: WizardElement,
 ): Container {
-  const potions = backpack.filter((item) => item.kind.includes('potion')).slice(0, 2)
   const hudLayer = new Container()
   hudLayer.label = 'native-modal-hud'
   layer.addChild(hudLayer)
@@ -1022,8 +1038,29 @@ function addBelt(
   hud.belt.forEach((slot, index) => {
     const { x, y } = nativeHudRectCenter(slot)
     addCenteredAtlasSprite(context, hudLayer, 'UI', 2, x, y)
-    const item = index === 3 ? potions[0] : index === 4 ? potions[1] : null
-    if (item) addItemIcon(context, hudLayer, item, x, y, element)
+    const entry = belt[index]
+    if (entry?.kind === 'skill') {
+      const row = NATIVE_SKILL_CATALOG[entry.skillId]
+      const weld = entry.skillId === 52
+        ? nativeWeldBuild(progression.weldBuildId ?? Number.NaN)
+        : null
+      const record = weld?.skillsAtlasIconRecord ?? row?.skills_atlas_icon_record
+      if (record !== undefined) addCenteredAtlasSprite(context, hudLayer, 'Skills', record, x, y)
+      return
+    }
+    if (!entry) return
+    const potion = entry.kind === 'health-potion'
+      ? nativeBeltPotionProjection(economy.backpack, 0)
+      : entry.kind === 'mana-potion'
+        ? nativeBeltPotionProjection(economy.backpack, 1)
+        : null
+    const item = potion?.item ?? nativeBeltEntryItem(entry, economy)
+    if (!item) return
+    addItemIcon(context, hudLayer, item, x, y, element)
+    const quantity = potion?.count ?? item.quantity
+    if (quantity > 1) addBitmapText(context, hudLayer, `${quantity}`, 'medium', x + 20, y + 22, {
+      tint: 0xf4e5b4,
+    })
   })
   addCenteredAtlasSprite(context, layer, 'UI', 82, 800.5, 872)
   const backpackCenter = nativeHudRectCenter(hud.backpack)
@@ -1171,6 +1208,7 @@ function buildService(
   readonly sackPages: InventorySackPages | null
 } {
   const inventory = buildInventory(context, layer, {
+    belt: model.belt,
     companion: true,
     config: model.config,
     economy: model.economy,
@@ -1318,7 +1356,9 @@ function buildDyeClothing(
     tint: 0xe4c56d,
   })
 
-  const projected = projectInventoryItems(economy.backpack).slice(0, HUB_INVENTORY_GRID.capacity)
+  const projected = (inventoryItemsAtSackPath(economy.backpack, model.path) ?? [])
+    .slice(0, HUB_INVENTORY_GRID.capacity)
+    .map((item) => ({ item }))
   const eligibleIds = new Set(inventoryDyeableClothingItems(economy.backpack).map(({ item }) => item.id))
   projected.forEach(({ item }, index) => {
     if (!eligibleIds.has(item.id)) return

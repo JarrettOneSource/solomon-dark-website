@@ -42,17 +42,19 @@ test('the silver authoring page separates member transforms from page pan and de
 })
 
 test('all requested runtime owners consume their transform without replacing semantic actions', () => {
-  for (const id of ['diagnostics', 'healthPotion', 'inventory', 'xp', 'skillbook', 'manaPotion']) {
+  for (const id of ['diagnostics', 'inventory', 'xp', 'skillbook']) {
     assert.match(gameHud, new RegExp(`data-mobile-ui-element="${id}"`), id)
     assert.match(gameHud, new RegExp(`mobileUiElementStyle\\(mobileUi, '${id}'\\)`), id)
   }
-  assert.match(quickbar, /const mobileUiId = `slot\$\{slot \+ 1\}`/)
+  assert.match(quickbar, /entry\?\.kind === 'health-potion'\s*\? 'healthPotion'/)
+  assert.match(quickbar, /entry\?\.kind === 'mana-potion'\s*\? 'manaPotion'/)
+  assert.match(quickbar, /`slot\$\{slot \+ 1\}` as MobileUiElementId/)
   assert.match(quickbar, /data-mobile-ui-element=\{mobileUiId\}/)
+  assert.match(quickbar, /mobileUiElementStyle\(mobileUi, mobileUiId\)/)
   assert.match(skull, /data-mobile-ui-element="pause"/)
   assert.match(joystick, /lane === 'movement' \? 'leftJoystick' : 'rightJoystick'/)
   assert.match(joystick, /data-mobile-ui-element=\{mobileUiId\}/)
 
-  assert.match(gameHud, /if \(healthPotions\.itemId !== null\) onPotionClick\?\.\(healthPotions\.itemId\)/)
   assert.match(gameHud, /onClick=\{onInventoryClick\}/)
   assert.match(gameHud, /onClick=\{onSkillsClick\}/)
   assert.match(quickbar, /onInput\?\.\(slot, true\)[\s\S]*onInput\?\.\(slot, false\)/)

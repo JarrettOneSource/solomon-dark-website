@@ -102,6 +102,8 @@ export type HubInventoryAction =
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }
   | { readonly type: 'buy-teacher-spell'; readonly skillId: number }
+  | { readonly type: 'bind-belt-item'; readonly itemId: number; readonly slot: number }
+  | { readonly type: 'activate-belt-slot'; readonly slot: number }
   | { readonly type: 'close-dowsing' }
   | { readonly type: 'consume'; readonly itemId: number }
   | {
@@ -1209,6 +1211,58 @@ export function moveInventoryItem(
     : rejected(source, 'invalid-target')
 }
 
+export function equipEligibleInventorySackContents(
+  source: HubEconomyState,
+  itemId: number,
+  playerLevel: number,
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  if (!Number.isSafeInteger(playerLevel) || playerLevel < 1) {
+    return rejected(source, 'ineligible-item')
+  }
+  const sack = findInventoryItem(source.backpack, itemId)
+  if (!sack || sack.nativeTypeId !== 7008) {
+    return rejected(source, 'item-not-found')
+  }
+  const eligible = (item: HubInventoryItem, nativeTypeId: number) => (
+    item.nativeTypeId === nativeTypeId
+    && (item.generatedLevel === undefined || item.generatedLevel <= playerLevel)
+  )
+  let state = source
+  for (const { nativeTypeId, slot } of [
+    { nativeTypeId: 7005, slot: 'hat' },
+    { nativeTypeId: 7006, slot: 'robe' },
+    { nativeTypeId: 7004, slot: 'weapon' },
+    { nativeTypeId: 7011, slot: 'weapon' },
+    { nativeTypeId: 7003, slot: 'amulet' },
+  ] as const) {
+    const current = findInventoryItem(state.backpack, itemId)
+    const candidate = current?.contents?.find((item) => eligible(item, nativeTypeId))
+    if (!candidate) continue
+    const equipped = equipDirectSackChild(state, itemId, candidate.id, slot)
+    if (!equipped) return rejected(source, 'invalid-inventory')
+    state = equipped
+  }
+
+  const ringIds = (findInventoryItem(state.backpack, itemId)?.contents ?? [])
+    .filter((item) => eligible(item, 7002))
+    .map(({ id }) => id)
+  const ringSlots: EquipmentSlot[] = state.ownedPerkSelectors.includes(19)
+    ? ['ring-0', 'ring-1', 'ring-2']
+    : ['ring-0', 'ring-1']
+  for (const ringId of ringIds.slice(0, ringSlots.length)) {
+    const slotIndex = ringSlots.findIndex((slot) => equippedAt(state.equipment, slot) === null)
+    const [slot] = ringSlots.splice(slotIndex < 0 ? 0 : slotIndex, 1)
+    if (!slot) break
+    const equipped = equipDirectSackChild(state, itemId, ringId, slot)
+    if (!equipped) return rejected(source, 'invalid-inventory')
+    state = equipped
+  }
+  return hubEconomyInventoryIsValid(state)
+    ? accepted(state)
+    : rejected(source, 'invalid-inventory')
+}
+
 export function transferInventoryItem(
   source: HubEconomyState,
   itemId: number,
@@ -1794,9 +1848,23 @@ export function equipInventoryItem(
   if (!removed) return rejected(source, 'item-not-found')
   let backpack: readonly HubInventoryItem[] = removed.items
   if (previous) {
-    const inserted = insertItem(backpack, previous, HUB_INVENTORY_SLOT_CAPACITY)
-    if (!inserted) return rejected(source, 'capacity-full')
-    backpack = inserted
+    if (removed.parentSackId === null) {
+      const inserted = insertItem(backpack, previous, HUB_INVENTORY_SLOT_CAPACITY)
+      if (!inserted) return rejected(source, 'capacity-full')
+      backpack = inserted
+    } else {
+      const owner = findInventoryItem(backpack, removed.parentSackId)
+      if (!owner || owner.nativeTypeId !== 7008) return rejected(source, 'invalid-inventory')
+      const contents = insertItem(
+        owner.contents ?? [],
+        previous,
+        HUB_SACK_CHILD_REPLICATION_LIMIT,
+      )
+      if (!contents) return rejected(source, 'capacity-full')
+      const replaced = replaceInventoryTreeItem(backpack, owner.id, { ...owner, contents })
+      if (!replaced) return rejected(source, 'invalid-inventory')
+      backpack = replaced
+    }
   }
   return accepted({
     ...source,
@@ -2284,6 +2352,40 @@ function withEquippedItem(
     return { ...source, rings }
   }
   return { ...source, [slot]: item }
+}
+
+function equipDirectSackChild(
+  source: HubEconomyState,
+  sackId: number,
+  itemId: number,
+  slot: EquipmentSlot,
+): HubEconomyState | null {
+  const sack = findInventoryItem(source.backpack, sackId)
+  const contents = sack?.contents ?? []
+  const index = contents.findIndex(({ id }) => id === itemId)
+  if (!sack || sack.nativeTypeId !== 7008 || index < 0) return null
+  const item = contents[index]!
+  if (item.equipmentType === null || !slotAccepts(slot, item.equipmentType)) return null
+  const previous = equippedAt(source.equipment, slot)
+  let nextContents: readonly HubInventoryItem[] = contents.filter(
+    (_, candidateIndex) => candidateIndex !== index,
+  )
+  if (previous) {
+    const inserted = insertItem(nextContents, previous, HUB_SACK_CHILD_REPLICATION_LIMIT)
+    if (!inserted) return null
+    nextContents = inserted
+  }
+  const backpack = replaceInventoryTreeItem(source.backpack, sackId, {
+    ...sack,
+    contents: nextContents,
+  })
+  return backpack === null
+    ? null
+    : {
+        ...source,
+        backpack,
+        equipment: withEquippedItem(source.equipment, slot, item),
+      }
 }
 
 function accepted(

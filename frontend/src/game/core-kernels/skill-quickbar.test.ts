@@ -4,8 +4,26 @@ import test from 'node:test'
 import type { PlayerCharacterConfig } from './player-character.ts'
 import { createNativeRng } from './native-rng.ts'
 import {
+  autofillNewlyLearnedNativeBeltSkills,
+  bindNativeBeltItem,
+  bindNativeBeltSkill,
+  createNativePlayerBelt,
+  freezeNativeBelt,
+  migrateSkillQuickbarToNativeBelt,
+  nativeBeltEntryItem,
+  nativeBeltPotionProjection,
+  nativeInventoryItemCanBindToBelt,
+  nativePlayerBeltsEqual,
+  refreshNativePlayerBelt,
+} from './native-belt.ts'
+import {
+  DOWSING_EQUIPMENT_RECIPES,
+  createEquipmentInventoryItem,
+  createHubEconomy,
+  type HubInventoryItem,
+} from './hub-economy.ts'
+import {
   applyPlayerSkillChoice,
-  bindPlayerSkillQuickbar,
   createPlayerProgression,
   createPlayerSkillBook,
   effectiveSecondaryAbilityRankStats,
@@ -21,60 +39,159 @@ const ETHER_ARCANE: PlayerCharacterConfig = {
 }
 
 test('a native player starts with one element secondary in right-mouse slot zero', () => {
-  assert.deepEqual(createPlayerSkillBook(ETHER_ARCANE).skillQuickbar, [
-    11, null, null, null, null, null, null, null,
+  assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook(ETHER_ARCANE)), [
+    { kind: 'skill', skillId: 11 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'fire' }).skillQuickbar, [
-    21, null, null, null, null, null, null, null,
+  assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'fire' })), [
+    { kind: 'skill', skillId: 21 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'air' }).skillQuickbar, [
-    27, null, null, null, null, null, null, null,
+  assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'air' })), [
+    { kind: 'skill', skillId: 27 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'water' }).skillQuickbar, [
-    35, null, null, null, null, null, null, null,
+  assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'water' })), [
+    { kind: 'skill', skillId: 35 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'earth' }).skillQuickbar, [
-    45, null, null, null, null, null, null, null,
+  assert.deepEqual(createNativePlayerBelt(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'earth' })), [
+    { kind: 'skill', skillId: 45 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
 })
 
 test('learning a secondary fills one empty slot while rank-ups never duplicate it', () => {
   const initial = createPlayerSkillBook(ETHER_ARCANE)
   const learned = choose(initial, 48, 1)
-  assert.deepEqual(learned.skillQuickbar, [11, 48, null, null, null, null, null, null])
+  const belt = autofillNewlyLearnedNativeBeltSkills(
+    createNativePlayerBelt(initial),
+    initial,
+    learned,
+  )
+  assert.deepEqual(belt, [
+    { kind: 'skill', skillId: 11 }, { kind: 'skill', skillId: 48 }, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+  ])
 
   const ranked = choose(learned, 48, 2)
-  assert.deepEqual(ranked.skillQuickbar, learned.skillQuickbar)
-  assert.equal(ranked.skillQuickbar.filter((skillId) => skillId === 48).length, 1)
+  assert.strictEqual(autofillNewlyLearnedNativeBeltSkills(belt, learned, ranked), belt)
+  assert.equal(belt.filter((entry) => entry?.kind === 'skill' && entry.skillId === 48).length, 1)
 })
 
 test('binding overwrites only the destination and preserves native duplicates', () => {
   const learned = choose(choose(createPlayerSkillBook(ETHER_ARCANE), 48, 1), 49, 1)
-  const duplicated = bindPlayerSkillQuickbar(learned, 48, 7)
-  assert.deepEqual(duplicated.skillQuickbar, [11, 48, 49, null, null, null, null, 48])
-  const overwritten = bindPlayerSkillQuickbar(duplicated, 49, 0)
-  assert.deepEqual(overwritten.skillQuickbar, [49, 48, 49, null, null, null, null, 48])
-  const cleared = bindPlayerSkillQuickbar(overwritten, null, 2)
-  assert.deepEqual(cleared.skillQuickbar, [49, 48, null, null, null, null, null, 48])
+  let belt = migrateSkillQuickbarToNativeBelt([11, 48, 49, null, null, null, null, null])
+  belt = bindNativeBeltSkill(belt, learned, 48, 7)
+  assert.deepEqual(belt[7], { kind: 'skill', skillId: 48 })
+  belt = bindNativeBeltSkill(belt, learned, 49, 0)
+  assert.deepEqual(belt[0], { kind: 'skill', skillId: 49 })
+  belt = bindNativeBeltSkill(belt, learned, null, 2)
+  assert.equal(belt[2], null)
 
-  assert.throws(() => bindPlayerSkillQuickbar(learned, 50, 4), /not learned/)
-  assert.throws(() => bindPlayerSkillQuickbar(learned, 48, 8), /slot/)
+  assert.throws(() => bindNativeBeltSkill(belt, learned, 50, 4), /not learned/)
+  assert.throws(() => bindNativeBeltSkill(belt, learned, 48, 8), /slot/)
+})
+
+test('belt snapshot equality distinguishes exact item identity without rerendering stable aliases', () => {
+  const belt = createNativePlayerBelt(createPlayerSkillBook(ETHER_ARCANE))
+  assert.equal(nativePlayerBeltsEqual(belt, belt), true)
+  assert.equal(nativePlayerBeltsEqual(belt, migrateSkillQuickbarToNativeBelt([
+    11, null, null, null, null, null, null, null,
+  ])), true)
+  const itemA = freezeNativeBelt([
+    ...belt.slice(0, 2),
+    { itemId: 10, kind: 'item' as const, nativeTypeId: 7002 as const },
+    ...belt.slice(3),
+  ])
+  const itemB = freezeNativeBelt([
+    ...itemA.slice(0, 2),
+    { itemId: 11, kind: 'item' as const, nativeTypeId: 7002 as const },
+    ...itemA.slice(3),
+  ])
+  assert.equal(nativePlayerBeltsEqual(itemA, itemB), false)
 })
 
 test('quickbar accepts learned primaries and concentrations while rejecting passives', () => {
   const initial = createPlayerSkillBook(ETHER_ARCANE)
-  const bound = bindPlayerSkillQuickbar(initial, 8, 1)
-  assert.deepEqual(bound.skillQuickbar, [11, 8, null, null, null, null, null, null])
-  assert.throws(() => bindPlayerSkillQuickbar(initial, 16, 1), /not learned/)
+  let belt = createNativePlayerBelt(initial)
+  belt = bindNativeBeltSkill(belt, initial, 8, 1)
+  assert.deepEqual(belt[1], { kind: 'skill', skillId: 8 })
+  assert.throws(() => bindNativeBeltSkill(belt, initial, 16, 1), /not learned/)
 
   const concentration = withLearnedRank(initial, 57, 1)
-  const concentrated = bindPlayerSkillQuickbar(concentration, 57, 1)
-  assert.deepEqual(concentrated.skillQuickbar, [11, 57, null, null, null, null, null, null])
-  assert.deepEqual(
-    bindPlayerSkillQuickbar(concentrated, 57, 7).skillQuickbar,
-    [11, 57, null, null, null, null, null, 57],
+  belt = bindNativeBeltSkill(belt, concentration, 57, 1)
+  belt = bindNativeBeltSkill(belt, concentration, 57, 7)
+  assert.deepEqual(belt[1], { kind: 'skill', skillId: 57 })
+  assert.deepEqual(belt[7], { kind: 'skill', skillId: 57 })
+  assert.throws(() => bindNativeBeltSkill(belt, initial, 0, 1), /belt skill/)
+})
+
+test('item drops produce aliases or exact native identities and refresh across nested/equipped ownership', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const base = createHubEconomy(1)
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const ring = createEquipmentInventoryItem(ringRecipe, base.nextItemId)
+  const sack: HubInventoryItem = {
+    contents: [ring],
+    equipmentType: null,
+    iconRecords: [70],
+    id: base.nextItemId + 1,
+    kind: 'sack',
+    name: 'Belt Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  let economy = { ...base, backpack: [base.backpack[0]!, base.backpack[1]!, sack] }
+  let belt = bindNativeBeltItem(createNativePlayerBelt(skillBook), economy, base.backpack[0]!.id, 2)
+  assert.deepEqual(belt[2], { kind: 'health-potion' })
+  belt = bindNativeBeltItem(belt, economy, ring.id, 5)
+  assert.deepEqual(belt[5], { itemId: ring.id, kind: 'item', nativeTypeId: 7002 })
+  assert.equal(nativeBeltEntryItem(belt[5]!, economy)?.id, ring.id)
+
+  const projected = nativeBeltPotionProjection(economy.backpack, 0)
+  assert.equal(projected.count, 1)
+  assert.equal(projected.item?.nativeSubtype, 0)
+
+  economy = { ...economy, backpack: economy.backpack.filter(({ id }) => id !== sack.id) }
+  const refreshed = refreshNativePlayerBelt(belt, skillBook, economy)
+  assert.equal(refreshed[2]?.kind, 'health-potion')
+  assert.equal(refreshed[5], null)
+})
+
+test('Misc and browser-only item classes cannot enter the native belt', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const base = createHubEconomy(1)
+  const misc: HubInventoryItem = {
+    equipmentType: null,
+    iconRecords: [43],
+    id: base.nextItemId,
+    kind: 'key',
+    name: 'Key',
+    nativeSubtype: 1,
+    nativeTypeId: 7012,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const economy = { ...base, backpack: [...base.backpack, misc] }
+  assert.throws(
+    () => bindNativeBeltItem(createNativePlayerBelt(skillBook), economy, misc.id, 2),
+    /cannot bind/,
   )
-  assert.throws(() => bindPlayerSkillQuickbar(initial, 0, 1), /quickbar skill/)
+  assert.equal(nativeInventoryItemCanBindToBelt({
+    kind: 'mod-potion',
+    nativeSubtype: 0,
+    nativeTypeId: 7001,
+  }), false)
+  assert.equal(nativeInventoryItemCanBindToBelt({
+    kind: 'mod-item',
+    nativeSubtype: null,
+    nativeTypeId: 7009,
+  }), false)
 })
 
 test('primary selection is independent of a learned weld', () => {

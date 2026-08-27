@@ -12,6 +12,10 @@ import {
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import {
+  DOWSING_EQUIPMENT_RECIPES,
+  createEquipmentInventoryItem,
+} from '../core-kernels/hub-economy.ts'
+import {
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationPlayerRecords,
@@ -190,6 +194,18 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
   const legacyUnsigned = structuredClone(final)
   legacyUnsigned.schemaVersion = 12
   delete legacyUnsigned.nativeSource
+  const legacyPlayerStore = legacyUnsigned.continuation.simulation.playerEntities
+  legacyPlayerStore.skillBooks.forEach((
+    skillBook: { skillQuickbar?: Array<number | null> },
+    index: number,
+  ) => {
+    skillBook.skillQuickbar = legacyPlayerStore.belts[index].map((
+      entry: { kind?: string, skillId?: number } | null,
+    ) => (
+      entry?.kind === 'skill' && typeof entry.skillId === 'number' ? entry.skillId : null
+    ))
+  })
+  delete legacyPlayerStore.belts
   legacyUnsigned.continuation.summary.partyRejoinToken = null
   delete legacyUnsigned.profile.economy.collegeIntroPending
   delete legacyUnsigned.continuation.simulation.playerEntities.economies[0]
@@ -1457,7 +1473,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   assert.ok(host.state().tick - heldTick <= 10, 'grace expiry must not replay held wall time')
 })
 
-test('solo gameplay menu release resumes immediately without grace', async (context) => {
+test('solo Inventory admits item belt bind and pull-off before immediate resume', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
     snapshotRate: 100,
@@ -1486,6 +1502,49 @@ test('solo gameplay menu release resumes immediately without grace', async (cont
   }))
   await paused
   const heldTick = host.state().tick
+  const playerId = client.welcome.playerId
+  const economy = getPlayerEconomy(host.state(), playerId)
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const ring = createEquipmentInventoryItem(ringRecipe, economy.nextItemId)
+  Object.assign(host.state(), {
+    playerEntities: replacePlayerEconomy(host.state().playerEntities, playerId, {
+      ...economy,
+      backpack: [...economy.backpack, ring],
+      nextItemId: economy.nextItemId + 1,
+    }),
+  })
+  const bound = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].belt[2]?.kind === 'item'
+  ))
+  client.socket.send(encodeGameMessage({
+    action: { itemId: ring.id, slot: 2, type: 'bind-belt-item' },
+    type: 'client-hub-action',
+  }))
+  const boundSnapshot = await bound
+  assert.equal(boundSnapshot.type, 'server-snapshot')
+  assert.deepEqual(boundSnapshot.snapshot.players[playerId].belt[2], {
+    itemId: ring.id,
+    kind: 'item',
+    nativeTypeId: 7002,
+  })
+  const cleared = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].belt[2] === null
+  ))
+  client.socket.send(encodeGameMessage({
+    skillId: null,
+    slot: 2,
+    type: 'client-skill-quickbar-bind',
+  }))
+  await cleared
+  client.socket.send(encodeGameMessage({
+    skillId: 11,
+    slot: 2,
+    type: 'client-skill-quickbar-bind',
+  }))
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(host.state().playerEntities.belts[0]?.[2], null)
   let graceMessages = 0
   const observeGrace = (data: WebSocket.RawData) => {
     if (decodeServerGameMessage(data.toString()).type === 'server-gameplay-resume-grace') {
@@ -1669,7 +1728,7 @@ test('game host replicates and checkpoints native NPC hint acknowledgement', asy
   const [snapshotMessage, checkpointMessage] = await Promise.all([snapshot, checkpoint])
   assert.equal(snapshotMessage.type, 'server-snapshot')
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
-  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 17)
+  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 18)
 })
 
 test('shared Hub NPC actions and late-join defaults stay bound to the authenticated player', async (context) => {
@@ -1748,7 +1807,7 @@ test('shared Hub NPC actions and late-join defaults stay bound to the authentica
   )
 })
 
-test('game host authoritatively binds and replicates a native primary quickbar entry', async (context) => {
+test('game host authoritatively binds and replicates a native primary belt entry', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
     snapshotRate: 100,
@@ -1759,7 +1818,9 @@ test('game host authoritatively binds and replicates a native primary quickbar e
   const playerId = client.welcome.playerId
   const bound = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].progression.skillQuickbar[7] === 8
+    && ((entry) => entry?.kind === 'skill' && entry.skillId === 8)(
+      message.snapshot.players[playerId].belt[7],
+    )
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-skill-quickbar-bind',
@@ -1768,13 +1829,15 @@ test('game host authoritatively binds and replicates a native primary quickbar e
   }))
   const snapshot = await bound
   assert.equal(snapshot.type, 'server-snapshot')
-  assert.deepEqual(snapshot.snapshot.players[playerId].progression.skillQuickbar, [
-    11, null, null, null, null, null, null, 8,
+  assert.deepEqual(snapshot.snapshot.players[playerId].belt, [
+    { kind: 'skill', skillId: 11 }, null, null,
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null,
+    { kind: 'skill', skillId: 8 },
   ])
 
   const unbound = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].progression.skillQuickbar[7] === null
+    && message.snapshot.players[playerId].belt[7] === null
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-skill-quickbar-bind',
@@ -2024,7 +2087,7 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   assert.equal(saved.snapshot.players[playerId].progression.sorcerorsCharmAvailable, true)
 })
 
-test('game host authoritatively projects each player quickbar and rejects unlearned selections', async (context) => {
+test('game host authoritatively projects each player belt and rejects unlearned selections', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -2034,7 +2097,9 @@ test('game host authoritatively projects each player quickbar and rejects unlear
 
   const assigned = nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[first.welcome.playerId].progression.skillQuickbar[7] === 11
+    && ((entry) => entry?.kind === 'skill' && entry.skillId === 11)(
+      message.snapshot.players[first.welcome.playerId].belt[7],
+    )
   ))
   first.socket.send(encodeGameMessage({
     type: 'client-skill-quickbar-bind',
@@ -2044,12 +2109,19 @@ test('game host authoritatively projects each player quickbar and rejects unlear
   const assignedSnapshot = await assigned
   assert.equal(assignedSnapshot.type, 'server-snapshot')
   assert.deepEqual(
-    assignedSnapshot.snapshot.players[first.welcome.playerId].progression.skillQuickbar,
-    [11, null, null, null, null, null, null, 11],
+    assignedSnapshot.snapshot.players[first.welcome.playerId].belt,
+    [
+      { kind: 'skill', skillId: 11 }, null, null,
+      { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null,
+      { kind: 'skill', skillId: 11 },
+    ],
   )
   assert.deepEqual(
-    assignedSnapshot.snapshot.players[second.welcome.playerId].progression.skillQuickbar,
-    [35, null, null, null, null, null, null, null],
+    assignedSnapshot.snapshot.players[second.welcome.playerId].belt,
+    [
+      { kind: 'skill', skillId: 35 }, null, null,
+      { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ],
   )
 
   const rejected = nextMessage(second.socket, (message) => message.type === 'server-disconnect')
@@ -2122,7 +2194,9 @@ test('Boneyard host authorizes HUD concentration replacement only for the addres
   await skillBookPause
   const concentrationBound = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].progression.skillQuickbar[7] === 57
+    && ((entry) => entry?.kind === 'skill' && entry.skillId === 57)(
+      message.snapshot.players[playerId].belt[7],
+    )
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-skill-quickbar-bind',
@@ -2691,7 +2765,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 17)
+  assert.equal(saved.schemaVersion, 18)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.summary.partyRejoinToken, null)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)

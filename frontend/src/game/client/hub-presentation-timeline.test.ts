@@ -59,6 +59,7 @@ const primarySpellTime = (targetTick: number) => ({
 
 function playerAt(x: number, headingIndex = 0): ProtocolPlayerState {
   return {
+    belt: DEFAULT_PLAYER.belt,
     config: { ...CHARACTER },
     economy: DEFAULT_PLAYER.economy,
     footstepTick: 0,

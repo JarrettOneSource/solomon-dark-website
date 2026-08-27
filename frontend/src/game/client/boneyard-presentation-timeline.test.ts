@@ -44,6 +44,7 @@ const LIGHTING = DEFAULT_PLAYER.lighting
 
 function playerAt(x: number): ProtocolPlayerState {
   return {
+    belt: DEFAULT_PLAYER.belt,
     config: { ...CHARACTER },
     economy: DEFAULT_PLAYER.economy,
     footstepTick: x,

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
   NATIVE_SECONDARY_ABILITY_CONTRACTS,
@@ -18,6 +19,7 @@ import {
   nativeSecondaryCooldownCapacityTicks,
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
+import { freezeNativeBelt } from '../src/game/core-kernels/native-belt.ts'
 import { createPrimarySpellSimulation } from '../src/game/core-kernels/primary-spells.ts'
 import {
   canPlaceBoneyardBody,
@@ -25,6 +27,7 @@ import {
   withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
 import {
+  getPlayerCharacter,
   getPlayerSkillBook,
 } from '../src/game/core-server/game-simulation.ts'
 import {
@@ -36,12 +39,15 @@ import { startGameHost } from '../src/game/host/game-host.ts'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotRoot = process.env.SDR_SECONDARY_ABILITY_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-secondary-abilities-20260816'
-const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
+const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : '/usr/bin/google-chrome')
 const requestedSkillIds = (process.env.SDR_SECONDARY_ABILITY_ID || '')
   .split(',')
   .filter(Boolean)
   .map(Number)
 const requestedScene = process.env.SDR_SECONDARY_ABILITY_SCENE || 'hub'
+const expectBlocked = process.env.SDR_SECONDARY_EXPECT_BLOCKED === '1'
 const comparisonCapture = process.env.SDR_SECONDARY_ABILITY_COMPARISON_CAPTURE === '1'
 const retainNativeViewport = process.env.SDR_SECONDARY_ABILITY_NATIVE_VIEWPORT === '1'
 const cooldownOnly = process.env.SDR_SECONDARY_COOLDOWN_ONLY === '1'
@@ -51,6 +57,7 @@ const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (comparisonCapture) assert.equal(retainNativeViewport, true)
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
+if (expectBlocked) assert.equal(requestedScene, 'hub')
 
 const PROOFS = Object.freeze({
   11: { audio: 'leviathan-roar', flash: true, kinds: ['leviathan', 'leviathan-appendage'] },
@@ -96,9 +103,16 @@ assert.deepEqual(
 await mkdir(screenshotRoot, { recursive: true })
 const credential = 'secondary-ability-browser-parity'
 const externalBaseUrl = process.env.SDR_SECONDARY_ABILITY_BASE_URL?.replace(/\/$/, '')
+const productionBuild = process.env.SDR_SECONDARY_ABILITY_PRODUCTION === '1'
 let vite = null
+let staticServer = null
 let baseUrl = externalBaseUrl
-if (!baseUrl) {
+if (!baseUrl && productionBuild) {
+  staticServer = await startStaticClientServer({
+    root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+  })
+  baseUrl = staticServer.origin
+} else if (!baseUrl) {
   vite = await createViteServer({
     configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
     logLevel: 'error',
@@ -210,7 +224,9 @@ try {
   let boneyardEnemyBaseline = null
   if (requestedScene === 'boneyard') {
     await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
-    await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+    await page.locator(
+      '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
+    ).waitFor({
       timeout: 90_000,
     })
     canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
@@ -242,8 +258,21 @@ try {
   if (selectedContracts.length === 0) {
     throw new Error(`Unknown SDR_SECONDARY_ABILITY_ID ${requestedSkillIds.join(',')}`)
   }
+  if (expectBlocked) assert.equal(selectedContracts.length, 1)
   const receipts = []
   for (const contract of selectedContracts) {
+    if (expectBlocked) {
+      armQuickbar(host, playerId, baseSkillBook, [contract.skillId])
+      await waitForBeltSkill(page, contract.name)
+      receipts.push(await blockedSecondaryReceipt(
+        page,
+        canvas,
+        host,
+        playerId,
+        contract,
+      ))
+      break
+    }
     if (boneyardEnemyBaseline) restoreBoneyardEnemies(host, boneyardEnemyBaseline)
     const proof = PROOFS[contract.skillId]
     await waitForFlashClear(page)
@@ -269,6 +298,7 @@ try {
     const castRequestedAtMs = performance.now()
     const castRequestedAtTick = host.state().tick
     const manaBeforeCast = playerProgression(host, playerId).currentMana
+    const positionBeforeCast = structuredClone(getPlayerCharacter(host.state(), playerId).position)
     let target
     let combatBaseline = null
     try {
@@ -323,6 +353,7 @@ try {
     const castCommittedAtTick = committedState.tick
     const manaAfterCast = committedState.playerEntities
       .progressions[committedPlayerIndex].currentMana
+    const positionAfterCast = structuredClone(getPlayerCharacter(committedState, playerId).position)
     positionCombatTargetForAbility(host, contract.skillId, combatBaseline)
     await waitUntil(() => host.state().secondaryAbilities.events.some((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
@@ -330,6 +361,9 @@ try {
     const events = structuredClone(host.state().secondaryAbilities.events.filter((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
     )))
+    const teleport = contract.skillId === 48
+      ? teleportReceipt(host.state(), playerId, events, positionBeforeCast, positionAfterCast)
+      : null
     const authoritativeCastTick = Math.min(...events.map(({ tick }) => tick))
     const expectedCooldownCapacity = nativeSecondaryCooldownCapacityTicks(
       getPlayerSkillBook(committedState, playerId),
@@ -580,6 +614,9 @@ try {
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
     await page.screenshot({ path: screenshotPath })
     await waitForAudio(page, audioStart, proof.audio)
+    if (contract.skillId === 48) {
+      await waitForAudioCount(page, audioStart, proof.audio, 2)
+    }
     await page.waitForTimeout(90)
     const samples = await page.evaluate(
       (start) => window.__secondaryRenderSamples.slice(start),
@@ -650,6 +687,7 @@ try {
       playerPresentation,
       reportedPresentation,
       screenshotPath,
+      teleport,
       ticksObserved: new Set(samples.map(({ tick }) => tick).filter(Number.isFinite)).size,
     })
     await resetSecondaryWorld(host)
@@ -695,6 +733,7 @@ try {
   await host.close()
   await browser.close()
   await vite?.close()
+  await staticServer?.close()
 }
 
 async function capturePrimaryStatusEffectExpiry(
@@ -852,10 +891,12 @@ function armPrimaryStatusSkill(host, playerId, baseSkillBook, testCase) {
     effectiveRanks: Object.freeze(effectiveRanks),
     learnedSkillOrder: Object.freeze(learnedSkillOrder),
     permanentRanks: Object.freeze(permanentRanks),
-    skillQuickbar: Object.freeze([
-      testCase.primarySkillId, null, null, null, null, null, null, null,
-    ]),
   }
+  const belts = [...state.playerEntities.belts]
+  belts[index] = freezeNativeBelt([
+    { kind: 'skill', skillId: testCase.primarySkillId },
+    null, null, null, null, null, null, null,
+  ])
   const progressions = [...state.playerEntities.progressions]
   progressions[index] = {
     ...progressions[index],
@@ -871,6 +912,7 @@ function armPrimaryStatusSkill(host, playerId, baseSkillBook, testCase) {
   }
   let playerEntities = {
     ...state.playerEntities,
+    belts: Object.freeze(belts),
     progressions: Object.freeze(progressions),
     skillBooks: Object.freeze(skillBooks),
   }
@@ -1050,18 +1092,20 @@ function armQuickbar(host, playerId, baseSkillBook, skillIds, rank = 1) {
     permanentRanks[skillId] = rank
     effectiveRanks[skillId] = rank
   }
-  const skillQuickbar = Object.freeze(Array.from(
-    { length: 8 },
-    (_, slot) => skillIds[slot] ?? null,
-  ))
   const skillBooks = [...state.playerEntities.skillBooks]
   skillBooks[index] = {
     ...baseSkillBook,
     effectiveRanks: Object.freeze(effectiveRanks),
     learnedSkillOrder: Object.freeze(learnedSkillOrder),
     permanentRanks: Object.freeze(permanentRanks),
-    skillQuickbar,
   }
+  const belts = [...state.playerEntities.belts]
+  belts[index] = freezeNativeBelt(Array.from(
+    { length: 8 },
+    (_, slot) => skillIds[slot] === undefined
+      ? null
+      : { kind: 'skill', skillId: skillIds[slot] },
+  ))
   const progressions = [...state.playerEntities.progressions]
   progressions[index] = {
     ...progressions[index],
@@ -1077,6 +1121,7 @@ function armQuickbar(host, playerId, baseSkillBook, skillIds, rank = 1) {
   }
   const playerEntities = replacePlayerEconomy({
     ...state.playerEntities,
+    belts: Object.freeze(belts),
     progressions: Object.freeze(progressions),
     skillBooks: Object.freeze(skillBooks),
   }, playerId, state.playerEntities.economies[index])
@@ -1759,6 +1804,26 @@ function halfMaterialTint(tint) {
   return (half(16) << 16) | (half(8) << 8) | half(0)
 }
 
+function teleportReceipt(state, playerId, events, source, destination) {
+  assert.notDeepEqual(destination, source)
+  const teleportEvents = events.filter(({ cue }) => cue === 'teleport')
+  assert.deepEqual(teleportEvents.map(({ position }) => position), [source, destination])
+  const bursts = state.secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+    kind === 'teleport-burst' && ownerId === playerId
+  ))
+  assert.equal(bursts.length, 2)
+  assert.deepEqual(bursts.map(({ position }) => position), [
+    { x: source.x, y: source.y - 15 },
+    { x: destination.x, y: destination.y - 15 },
+  ])
+  return {
+    burstCount: bursts.length,
+    destination,
+    eventCount: teleportEvents.length,
+    source,
+  }
+}
+
 async function waitForAudio(page, start, stem) {
   await page.waitForFunction(({ eventStart, expectedStem }) => (
     window.__sdrAudioEvents.slice(eventStart).some((event) => (
@@ -1766,6 +1831,19 @@ async function waitForAudio(page, start, stem) {
       && window.__sdrAudioSourceMatches(event.src, `/game/audio/sfx/${expectedStem}.wav`)
     ))
   ), { eventStart: start, expectedStem: stem }, { timeout: 10_000 })
+}
+
+async function waitForAudioCount(page, start, stem, count) {
+  await page.waitForFunction(({ eventStart, expectedCount, expectedStem }) => (
+    window.__sdrAudioEvents.slice(eventStart).filter((event) => (
+      (event.type === 'buffer-start' || event.type === 'play')
+      && window.__sdrAudioSourceMatches(event.src, `/game/audio/sfx/${expectedStem}.wav`)
+    )).length >= expectedCount
+  ), {
+    eventStart: start,
+    expectedCount: count,
+    expectedStem: stem,
+  }, { timeout: 10_000 })
 }
 
 async function waitForFlashClear(page) {
@@ -1827,6 +1905,52 @@ async function waitForStablePresentationCadence(page) {
         && sample.observedAtMs - previous.observedAtMs <= 100
     })
   }, undefined, { timeout: 30_000 })
+}
+
+async function blockedSecondaryReceipt(page, canvas, host, playerId, contract) {
+  const before = host.state()
+  const playerBefore = before.secondaryAbilities.players[playerId]
+  const position = structuredClone(getPlayerCharacter(before, playerId).position)
+  const mana = playerProgression(host, playerId).currentMana
+  const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  const target = (await abilityCastTarget(
+    canvas,
+    host,
+    playerId,
+    contract.skillId,
+    'hub',
+  )).pointer
+  await castSecondaryPointer(page, target)
+  await page.waitForTimeout(250)
+  const after = host.state()
+  const playerAfter = after.secondaryAbilities.players[playerId]
+  assert.deepEqual(getPlayerCharacter(after, playerId).position, position)
+  assert.equal(playerProgression(host, playerId).currentMana, mana)
+  assert.equal(playerAfter?.castSequence, playerBefore?.castSequence)
+  assert.equal(playerAfter?.cooldownTicksBySkill[contract.skillId], 0)
+  assert.equal(after.secondaryAbilities.nextActorId, before.secondaryAbilities.nextActorId)
+  assert.equal(after.secondaryAbilities.nextEventId, before.secondaryAbilities.nextEventId)
+  assert.match(
+    await page.locator('.hub-hud-quickbar-slot[data-slot="0"]').getAttribute('aria-label') ?? '',
+    /unavailable in the Hub/,
+  )
+  const audioCount = await page.evaluate(({ eventStart, stem }) => (
+    window.__sdrAudioEvents.slice(eventStart).filter((event) => (
+      (event.type === 'buffer-start' || event.type === 'play')
+      && window.__sdrAudioSourceMatches(event.src, `/game/audio/sfx/${stem}.wav`)
+    )).length
+  ), { eventStart: audioStart, stem: PROOFS[contract.skillId].audio })
+  assert.equal(audioCount, 0)
+  const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}-hub-blocked.png`
+  await page.screenshot({ path: screenshotPath })
+  return {
+    blocked: true,
+    id: contract.skillId,
+    mana,
+    name: contract.name,
+    position,
+    screenshotPath,
+  }
 }
 
 function slug(value) {

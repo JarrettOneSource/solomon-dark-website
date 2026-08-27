@@ -7,6 +7,7 @@ import {
   createNativeRng,
   type NativeRngState,
 } from './native-rng.ts'
+import type { PlayerBeltComponent } from './native-belt.ts'
 import {
   playerPrimaryCastOwnsFacing,
   type PlayerCharacterInput,
@@ -333,6 +334,7 @@ export interface NativeSecondarySceneryTarget {
 }
 
 export interface NativeSecondaryPlayerAuthority {
+  readonly belt: PlayerBeltComponent
   readonly character: PlayerCharacterState
   readonly coldSlowFactor: number
   readonly currentMana: number
@@ -3707,7 +3709,8 @@ export function stepNativeSecondaryAbilities(
     const slot = authority.input.cast.quickbar
     const pressed = slot !== null && slot !== player.heldSlot
     if (pressed) {
-      const quickbarSkillId = authority.skillBook.skillQuickbar[slot]
+      const entry = authority.belt[slot]
+      const quickbarSkillId = entry?.kind === 'skill' ? entry.skillId : null
       if (quickbarSkillId !== null && nativeSkillCategory(quickbarSkillId) === 2) {
         const skillId = quickbarSkillId as NativeSecondaryAbilityId
         const cast = castAbility(state, player, playerId, skillId, authority, context)

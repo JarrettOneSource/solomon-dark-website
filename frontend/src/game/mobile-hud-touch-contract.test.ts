@@ -189,14 +189,14 @@ test('gameplay scenes refuse page pinch and pan on touch while the game surface 
 
 test('the touch dock (owner pick B) and the quickbar half width describe the same dock', () => {
   const coarse = coarseBlock(hubCss)
-  assert.match(coarse, /\.hub-hud-potion-button-red \{[^}]*left: calc\(50% - 230px\);/)
-  assert.match(coarse, /\.hub-hud-potion-button-blue \{[^}]*left: calc\(50% \+ 130px\);/)
+  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-entry-kind='health-potion'\] \{[^}]*left: calc\(50% - 230px\);/)
+  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-entry-kind='mana-potion'\] \{[^}]*left: calc\(50% \+ 130px\);/)
   assert.match(coarse, /\.hub-hud-backpack-button \{[^}]*left: calc\(50% - 130px\);/)
   assert.match(coarse, /\.hub-hud-tome-button \{[^}]*left: 50%;/)
   assert.match(coarse, /\.hub-hud-backpack-button,\s*\.hub-hud-tome-button \{\s*width: 130px;\s*height: 130px;/)
   assert.match(coarse, /\.hub-hud-backpack,\s*\.hub-hud-tome \{[^}]*bottom: 3px;\s*left: 7px;\s*width: 116px;\s*height: 124px;/)
   assert.doesNotMatch(gameHud, /function InventoryCount/)
-  assert.match(gameHud, /NativeQuickbarBinding/)
+  assert.match(read('./SkillQuickbar.tsx'), /NativeQuickbarBinding/)
   assert.equal(MOBILE_DOCK_HALF_WIDTH, 230)
   // The slot floor is bounded by the 230 dock at 1600 logical / 125 % (layout test).
   assert.equal(MOBILE_QUICKBAR_SLOT_MIN_SIZE, 52)

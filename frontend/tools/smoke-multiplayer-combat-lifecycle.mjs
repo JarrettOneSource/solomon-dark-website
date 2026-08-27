@@ -26,6 +26,7 @@ import {
   playerSkillRuntimeAt,
 } from '../src/game/core-server/player-entity-store.ts'
 import {
+  getPlayerBelt,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
@@ -529,8 +530,10 @@ function postGameOverResetReceipt(state, playerId) {
     )),
     level: progression.level,
     primarySkillId: skillBook.primarySkillId,
-    quickbar: skillBook.skillQuickbar,
-    secondarySkillId: skillBook.skillQuickbar[0],
+    belt: getPlayerBelt(state, playerId),
+    secondarySkillId: getPlayerBelt(state, playerId)[0]?.kind === 'skill'
+      ? getPlayerBelt(state, playerId)[0].skillId
+      : null,
     storageCount: economy.storage.length,
   }
 }

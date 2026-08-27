@@ -1,4 +1,4 @@
-import type { PlayerSkillQuickbar } from '../../core-kernels/player-progression.ts'
+import type { NativeBeltSkillId } from '../../core-kernels/player-progression.ts'
 import type { Vector2 } from '../../core-kernels/vector.ts'
 import type { NativeSecondarySimulationState } from '../../core-kernels/native-secondary-abilities.ts'
 import type {
@@ -17,7 +17,7 @@ export interface MlBotPolicyOwnEffectState {
 export interface MlBotPolicyOwnEffectOptions {
   readonly playerId: string
   readonly position: Readonly<Vector2>
-  readonly quickbar: PlayerSkillQuickbar
+  readonly quickbar: readonly (NativeBeltSkillId | null)[]
   readonly worldKey: string
 }
 

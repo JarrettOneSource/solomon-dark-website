@@ -157,10 +157,10 @@ try {
   await book.locator('xpath=self::*[@data-hovered-skill-id="11"]').waitFor()
   assert.equal(await book.locator('.skill-book-canvas').getAttribute('data-native-hover-skill-id'), '11')
   await page.screenshot({ path: `${screenshotRoot}-tooltip.png` })
-  const quickbarTwo = book.getByRole('button', { name: /Quickbar 2, empty/ })
+  const quickbarTwo = book.getByRole('button', { name: /Belt 2, empty/ })
   await leviathan.dragTo(quickbarTwo)
   try {
-    await book.getByRole('button', { name: /Quickbar 2, Call Leviathan/ }).waitFor({
+    await book.getByRole('button', { name: /Belt 2, Call Leviathan/ }).waitFor({
       timeout: 5_000,
     })
   } catch (error) {
@@ -168,20 +168,20 @@ try {
     process.stderr.write(`${JSON.stringify({
       consoleErrors,
       pageErrors,
-      quickbar: playerId
-        ? host.state().playerEntities.skillBooks[
+      belt: playerId
+        ? host.state().playerEntities.belts[
           host.state().playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
-        ]?.skillQuickbar
+        ]
         : null,
     })}\n`)
     throw error
   }
-  assert.equal(await book.getByRole('button', { name: /Quickbar [12], Call Leviathan/ }).count(), 2)
+  assert.equal(await book.getByRole('button', { name: /Belt [12], Call Leviathan/ }).count(), 2)
   const pullOffAudioStart = await audioEventCount(page)
   const pullOff = await pullSkillOffBelt(page, book, book.getByRole('button', {
-    name: /Quickbar 2, Call Leviathan/,
+    name: /Belt 2, Call Leviathan/,
   }))
-  await book.getByRole('button', { name: /Quickbar 2, empty/ }).waitFor({ timeout: 5_000 })
+  await book.getByRole('button', { name: /Belt 2, empty/ }).waitFor({ timeout: 5_000 })
   const pullOffAudio = await waitForSelectorAudio(page, pullOffAudioStart, ['poof'], 1)
   await waitForSavedQuickbar(page, host.hostPlayerId(), 1, null)
 
@@ -194,7 +194,7 @@ try {
     2,
     `${screenshotRoot}-painted-drag.png`,
   )
-  await book.getByRole('button', { name: /Quickbar 3, Magic Missile/ }).waitFor()
+  await book.getByRole('button', { name: /Belt 3, Magic Missile/ }).waitFor()
   assert.equal(paintedDrag.draggedSkillId, '8')
   const dragAudio = await waitForSelectorAudio(page, dragAudioStart, ['pickskill'], 1)
 
@@ -274,7 +274,7 @@ try {
       `${screenshotRoot}-concentration-${skillId}-drag.png`,
     ))
     await book.getByRole('button', {
-      name: new RegExp(`Quickbar ${slot + 1}, ${label}`),
+      name: new RegExp(`Belt ${slot + 1}, ${label}`),
     }).waitFor({ timeout: 10_000 })
     await waitForSavedQuickbar(page, playerId, slot, skillId)
   }
@@ -285,7 +285,7 @@ try {
     7,
     `${screenshotRoot}-fireball-drag.png`,
   )
-  await book.getByRole('button', { name: /Quickbar 8, Fireball/ }).waitFor({ timeout: 10_000 })
+  await book.getByRole('button', { name: /Belt 8, Fireball/ }).waitFor({ timeout: 10_000 })
   await waitForSavedQuickbar(page, playerId, 7, 16)
   await fireball.click()
   await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
@@ -749,8 +749,8 @@ async function waitForSavedQuickbar(page, playerId, slot, expectedSkillId) {
         const index = restored.state.playerEntities.identities.findIndex(
           ({ playerId: id }) => id === playerId,
         )
-        if (restored.state.playerEntities.skillBooks[index]?.skillQuickbar[slot]
-          === expectedSkillId) return
+        const entry = restored.state.playerEntities.belts[index]?.[slot] ?? null
+        if ((entry?.kind === 'skill' ? entry.skillId : null) === expectedSkillId) return
       } catch {
         // Wait for the addressed quickbar checkpoint to replace an earlier save.
       }

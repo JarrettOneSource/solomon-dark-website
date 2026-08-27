@@ -13,6 +13,7 @@ import {
   applyGameSimulationHubAction,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerBelt,
   getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
@@ -193,8 +194,8 @@ test('Potion and magical-equipment producers fail their selected Boasts once in 
 
 test('entering the secondary dispatcher fails the secondary-free Boast before spell admission', () => {
   let state = selectBoast(createGameSimulation({ [PLAYER_ID]: CHARACTER }), 2)
-  const skillId = getPlayerSkillBook(state, PLAYER_ID).skillQuickbar[0]
-  assert.ok(skillId !== null && nativeSkillCategory(skillId) === 2)
+  const beltEntry = getPlayerBelt(state, PLAYER_ID)[0]
+  assert.ok(beltEntry?.kind === 'skill' && nativeSkillCategory(beltEntry.skillId) === 2)
   state = enterBoneyardWorld(state, boneyard())
   state = stepGameSimulationTick(state, idle(false, 0))
   assert.equal(getPlayerEconomy(state, PLAYER_ID).npc.boast.failed, true)

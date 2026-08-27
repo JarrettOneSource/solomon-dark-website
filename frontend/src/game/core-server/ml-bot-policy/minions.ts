@@ -1,4 +1,4 @@
-import type { PlayerSkillQuickbar } from '../../core-kernels/player-progression.ts'
+import type { NativeBeltSkillId } from '../../core-kernels/player-progression.ts'
 import type {
   NativeSecondaryActorState,
   NativeSecondarySimulationState,
@@ -9,7 +9,7 @@ import { ML_BOT_POLICY_SCALES } from './spec.ts'
 export interface MlBotPolicyMinionOptions {
   readonly playerId: string
   readonly position: Readonly<Vector2>
-  readonly quickbar: PlayerSkillQuickbar
+  readonly quickbar: readonly (NativeBeltSkillId | null)[]
   readonly worldKey: string
 }
 

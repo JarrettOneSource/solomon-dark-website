@@ -1739,6 +1739,7 @@ export default function MainMenuScene({
             <BoneyardScene
               accountUsername={accountUsername}
               audio={audio}
+              belt={runtimeSnapshot.players[session.playerId]!.belt}
               boneyard={loadedBoneyard}
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
@@ -1777,6 +1778,7 @@ export default function MainMenuScene({
             <HubScene
               accountUsername={accountUsername}
               audio={audio}
+              belt={runtimeSnapshot.players[session.playerId]!.belt}
               boneyards={session.boneyards}
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
@@ -1855,7 +1857,9 @@ export default function MainMenuScene({
           <Suspense fallback={null}>
             <SkillBook
               audio={audio}
+              belt={runtimeSnapshot!.players[session.playerId]!.belt}
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
+              element={runtimeSnapshot!.players[session.playerId]!.config.element}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => {
                 setSkillBookOpen(false)
@@ -2254,7 +2258,6 @@ function sameRuntimeProgression(
     && current.advancedUnlocks.every((unlocked, index) => (
       unlocked === next.advancedUnlocks[index]
     ))
-    && current.skillQuickbar.every((skillId, index) => skillId === next.skillQuickbar[index])
     && current.concentrationSkillIds.every((skillId, index) => (
       skillId === next.concentrationSkillIds[index]
     ))

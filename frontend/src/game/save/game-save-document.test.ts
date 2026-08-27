@@ -9,12 +9,15 @@ import {
   armGameSimulationCollegeIntro,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerBelt,
   getPlayerEconomy,
   stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
+  DOWSING_EQUIPMENT_RECIPES,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  createEquipmentInventoryItem,
   insertLootInventoryItem,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
@@ -86,7 +89,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 17)
+  assert.equal(encoded.schemaVersion, 18)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -126,9 +129,22 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state.playerEntities.economies[0],
   )
 
+  const schemaSeventeen = JSON.parse(document)
+  schemaSeventeen.schemaVersion = 17
+  downgradePlayerBeltsToLegacyQuickbar(
+    schemaSeventeen.continuation.simulation.playerEntities,
+  )
+  assert.deepEqual(
+    restoreGameSaveDocument(JSON.stringify(schemaSeventeen)).state.playerEntities.belts[0],
+    state.playerEntities.belts[0],
+  )
+
   const schemaTwelve = JSON.parse(document)
   schemaTwelve.schemaVersion = 12
   delete schemaTwelve.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    schemaTwelve.continuation.simulation.playerEntities,
+  )
   delete schemaTwelve.profile.economy.collegeIntroPending
   delete schemaTwelve.continuation.simulation.playerEntities.economies[0]
     .collegeIntroPending
@@ -335,6 +351,9 @@ test('native NPC help rows persist after acknowledgement and pre-v11 saves migra
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 10
   delete legacy.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
   delete legacy.profile.economy.collegeIntroPending
   delete legacy.continuation.simulation.playerEntities.economies[0].collegeIntroPending
   delete legacy.continuation.simulation.world.participants.owner.collegeIntro
@@ -416,6 +435,67 @@ test('save documents admit the complete Sack wire depth and reject one level bey
   assert.throws(
     () => restoreGameSaveDocument(JSON.stringify(malformed)),
     /inventory is invalid/,
+  )
+})
+
+test('current saves retain exact nested and equipped belt identities and reject owner drift', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(state, 'owner')
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const ring = createEquipmentInventoryItem(ringRecipe, economy.nextItemId)
+  const sack: HubInventoryItem = {
+    contents: [ring],
+    equipmentType: null,
+    iconRecords: [70],
+    id: economy.nextItemId + 1,
+    kind: 'sack',
+    name: 'Saved belt Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      backpack: [...economy.backpack, sack],
+      nextItemId: economy.nextItemId + 2,
+    }),
+  }
+  const bound = applyGameSimulationHubAction(state, 'owner', {
+    itemId: ring.id,
+    slot: 2,
+    type: 'bind-belt-item',
+  })
+  assert.equal(bound.accepted, true)
+  const equipped = applyGameSimulationHubAction(bound.state, 'owner', {
+    slot: 2,
+    type: 'activate-belt-slot',
+  })
+  assert.equal(equipped.accepted, true)
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: equipped.state,
+  })
+  const restored = restoreGameSaveDocument(document)
+  assert.deepEqual(getPlayerBelt(restored.state, 'owner')[2], {
+    itemId: ring.id,
+    kind: 'item',
+    nativeTypeId: 7002,
+  })
+  assert.equal(getPlayerEconomy(restored.state, 'owner').equipment.rings[0]?.id, ring.id)
+
+  const drifted = JSON.parse(document)
+  drifted.continuation.simulation.playerEntities.belts[0][2].itemId += 100_000
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(drifted)),
+    /player belt 0 slot 2 item is invalid/,
   )
 })
 
@@ -649,7 +729,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 17)
+  assert.equal(encoded.schemaVersion, 18)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,
@@ -711,6 +791,9 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   const legacy = structuredClone(encoded)
   legacy.schemaVersion = 8
   delete legacy.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
   delete legacy.continuation.summary.partyRejoinToken
   delete legacy.continuation.simulation.world.tutorial.cameraLockAgeTicks
   legacy.continuation.simulation.world.tutorial.cameraLockTriggered = true
@@ -761,6 +844,9 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   const priorSchemaFifteen = structuredClone(encoded)
   priorSchemaFifteen.schemaVersion = 15
   delete priorSchemaFifteen.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    priorSchemaFifteen.continuation.simulation.playerEntities,
+  )
   delete priorSchemaFifteen.continuation.simulation.world.tutorial
     .movementInstructionAcknowledged
   const migratedMovement = restoreGameSaveDocument(JSON.stringify(priorSchemaFifteen))
@@ -774,6 +860,9 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   const priorSchemaSeven = structuredClone(encoded)
   priorSchemaSeven.schemaVersion = 7
   delete priorSchemaSeven.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    priorSchemaSeven.continuation.simulation.playerEntities,
+  )
   delete priorSchemaSeven.continuation.simulation.world.tutorial.cameraLockAgeTicks
   delete priorSchemaSeven.continuation.summary.partyRejoinToken
   delete priorSchemaSeven.continuation.simulation.world.tutorial
@@ -805,6 +894,9 @@ test('schema 7 and 6 saves migrate absent NPC state as acknowledged without arch
     const previous = JSON.parse(current)
     previous.schemaVersion = schemaVersion
     delete previous.nativeSource
+    downgradePlayerBeltsToLegacyQuickbar(
+      previous.continuation.simulation.playerEntities,
+    )
     delete previous.continuation.summary.partyRejoinToken
     delete previous.profile.economy.npc
     delete previous.profile.economy.collegeIntroPending
@@ -919,6 +1011,9 @@ test('schema 17 carries bounded native provenance through resume, profile archiv
   )
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 16
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
   delete legacy.nativeSource
   assert.equal(restoreGameSaveDocument(JSON.stringify(legacy)).nativeSource, null)
 })
@@ -937,7 +1032,7 @@ test('schema-3 saves migrate conservatively to local-only integrity', () => {
   assert.equal(restored.integrity, 'local-only')
 })
 
-test('schema-17 retains ordered Hagatha outcomes and schema 16 materializes Tonic rows', () => {
+test('schema-18 retains ordered Hagatha outcomes and schema 16 materializes Tonic rows', () => {
   let state = createGameSimulation({ owner: OWNER })
   const economy = getPlayerEconomy(state, 'owner')
   state = {
@@ -964,6 +1059,9 @@ test('schema-17 retains ordered Hagatha outcomes and schema 16 materializes Toni
 
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 16
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
   delete legacy.nativeSource
   legacy.profile.economy.ownedPerkSelectors = [0, 5]
   legacy.continuation.simulation.playerEntities.economies[0].ownedPerkSelectors = [0, 5]
@@ -1125,6 +1223,8 @@ function legacyDocument(document: string, schemaVersion: number): string {
   const playerStore = simulation.playerEntities
   const run = simulation.run
 
+  downgradePlayerBeltsToLegacyQuickbar(playerStore)
+
   delete simulation.world.skorcha
   delete continuation.summary.activeRun
   delete continuation.summary.partyRejoinToken
@@ -1178,6 +1278,9 @@ function legacySchema5Document(document: string): string {
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 5
   delete legacy.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
   delete legacy.profile.economy.collegeIntroPending
   delete legacy.profile.economy.npc
   delete legacy.continuation.simulation.world.skorcha
@@ -1192,4 +1295,20 @@ function legacySchema5Document(document: string): string {
     legacy.continuation.simulation.world.participants ?? {},
   ) as Record<string, unknown>[]) delete participant.collegeIntro
   return JSON.stringify(legacy)
+}
+
+function downgradePlayerBeltsToLegacyQuickbar(playerStore: {
+  belts?: Array<Array<{ kind?: string, skillId?: number } | null>>
+  skillBooks: Array<{ skillQuickbar?: Array<number | null> }>
+}): void {
+  if (!Array.isArray(playerStore.belts)) return
+  for (let index = 0; index < playerStore.skillBooks.length; index += 1) {
+    const belt = playerStore.belts[index] ?? []
+    playerStore.skillBooks[index]!.skillQuickbar = belt.map((entry) => (
+      entry?.kind === 'skill' && typeof entry.skillId === 'number'
+        ? entry.skillId
+        : null
+    ))
+  }
+  delete playerStore.belts
 }

@@ -1,8 +1,10 @@
 import {
+  getPlayerBelt,
   getPlayerSkillBook,
   getPlayerStatBook,
   type GameSimulationState,
 } from '../game-simulation.ts'
+import { nativeBeltSkillProjection } from '../../core-kernels/native-belt.ts'
 import { describeMlBotPolicySkill } from './skill-descriptors.ts'
 import { ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES } from './spec.ts'
 
@@ -13,6 +15,7 @@ export function observeMlBotPolicySkillLoadout(
   playerId: string,
 ): Float32Array {
   const skillBook = getPlayerSkillBook(state, playerId)
+  const quickbar = nativeBeltSkillProjection(getPlayerBelt(state, playerId))
   const statBook = getPlayerStatBook(state, playerId)
   const width = ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES.length
   const values = new Float32Array(EQUIPPED_ROW_COUNT * width)
@@ -25,8 +28,8 @@ export function observeMlBotPolicySkillLoadout(
       ? { weldBuildId: skillBook.weldBuildId }
       : {}),
   }))
-  for (let slot = 0; slot < skillBook.skillQuickbar.length; slot += 1) {
-    const skillId = skillBook.skillQuickbar[slot]
+  for (let slot = 0; slot < quickbar.length; slot += 1) {
+    const skillId = quickbar[slot]
     if (skillId === null) continue
     values.set(describeMlBotPolicySkill(skillBook, statBook, {
       applyCount: 0,

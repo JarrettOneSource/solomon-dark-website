@@ -1,5 +1,6 @@
 import {
   gameSimulationPlayerRecords,
+  getPlayerBelt,
   getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
@@ -40,6 +41,7 @@ import {
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
 import { hubSkorchaHatFrame } from '../core-server/hub-skorcha.ts'
+import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 
 export function createGameSnapshot(
   state: GameSimulationState,
@@ -246,7 +248,7 @@ function protocolBoneyardEnemyEvent(
 function protocolPlayerState(
   state: GameSimulationState,
   playerId: string,
-  player: Omit<ProtocolPlayerState, 'economy' | 'lighting' | 'movementScale' | 'progression'>,
+  player: Omit<ProtocolPlayerState, 'belt' | 'economy' | 'lighting' | 'movementScale' | 'progression'>,
 ): ProtocolPlayerState {
   const progression = getPlayerProgression(state, playerId)
   const economy = getPlayerEconomy(state, playerId)
@@ -265,6 +267,9 @@ function protocolPlayerState(
   }
   return {
     ...player,
+    belt: freezeNativeBelt(getPlayerBelt(state, playerId).map((entry) => (
+      entry && { ...entry }
+    ))),
     economy: {
       actionFeedback: economy.actionFeedback && { ...economy.actionFeedback },
       backpack: economy.backpack.map(protocolInventoryItem),
@@ -345,7 +350,6 @@ function protocolPlayerState(
       selectedPrimarySkillId: skillBook.primarySkillId,
       sorcerorsCharmAvailable: progression.sorcerorsCharmAvailable,
       splitMind: economy.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
-      skillQuickbar: [...skillBook.skillQuickbar],
       weldBuildId: skillBook.weldBuildId,
       weldComponentRanks: skillBook.weldComponentRanks === null
         ? null

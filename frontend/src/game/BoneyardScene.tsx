@@ -29,6 +29,10 @@ import {
   type NativeTutorialState,
 } from './core-kernels/native-tutorial.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
+import {
+  nativePlayerBeltsEqual,
+  type PlayerBeltComponent,
+} from './core-kernels/native-belt.ts'
 import { nearestBoneyardGoodie } from './core-kernels/boneyard-goodie-interaction.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
@@ -59,7 +63,6 @@ import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
-import { hubPotionBeltShortcut } from './hub-inventory-presentation.ts'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import NativeLootBitmapText from './NativeLootBitmapText.tsx'
@@ -116,6 +119,7 @@ import './boneyard.css'
 interface BoneyardSceneProps {
   accountUsername: string | null
   audio: GameAudioDirector
+  belt: PlayerBeltComponent
   boneyard: LoadedBoneyard
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
@@ -174,6 +178,7 @@ type RendererState = 'loading' | 'ready'
 export default function BoneyardScene({
   accountUsername,
   audio,
+  belt,
   boneyard: loaded,
   getPingMs,
   initialSnapshot,
@@ -235,6 +240,7 @@ export default function BoneyardScene({
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(
     boneyardInitialSnapshot.players[playerId]!.economy,
   )
+  const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
   const economyRef = useRef(economy)
   economyRef.current = economy
   const [playerPosition, setPlayerPosition] = useState(
@@ -441,6 +447,9 @@ export default function BoneyardScene({
       synchronizer.update(snapshot)
       const player = snapshot.players[playerId]
       if (player) {
+        setLiveBelt((current) => nativePlayerBeltsEqual(current, player.belt)
+          ? current
+          : player.belt)
         setEconomy((current) => current.revision === player.economy.revision
           ? current
           : player.economy)
@@ -594,9 +603,9 @@ export default function BoneyardScene({
     const weatherAudio = new BoneyardWeatherAudioSynchronizer(audio)
     const input = createBrowserGameplayInput({
       claimQuickbarPress: (slot) => {
-        const potion = hubPotionBeltShortcut(economyRef.current.backpack, slot)
-        if (potion === null) return false
-        if (potion.itemId !== null) onHubAction({ type: 'consume', itemId: potion.itemId })
+        const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
+        if (entry === null || entry.kind === 'skill') return false
+        onHubAction({ slot, type: 'activate-belt-slot' })
         return true
       },
       claimMouseCastStart: () => {
@@ -1055,6 +1064,7 @@ export default function BoneyardScene({
 
             <GameHud
               accountUsername={accountUsername}
+              audio={audio}
               controls={settings.controls}
               controllerQuickbarSlot={controllerQuickbarSlot}
               getPingMs={getPingMs}
@@ -1065,14 +1075,16 @@ export default function BoneyardScene({
                   setInventorySurface({ kind: 'inventory' })
                 }
               }}
-              onPotionClick={(itemId) => {
-                if (!inputBlocked && run.phase === 'active') {
-                  onHubAction({ type: 'consume', itemId })
-                }
-              }}
               onQuickbarInput={(slot, pressed) => {
                 const input = inputRef.current
                 if (!input) return
+                const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
+                if (pressed && entry !== null && entry.kind !== 'skill') {
+                  if (!inputBlocked && run.phase === 'active') {
+                    onHubAction({ slot, type: 'activate-belt-slot' })
+                  }
+                  return
+                }
                 if (!pressed) {
                   input.setTouchQuickbar(slot, false)
                   return
@@ -1111,6 +1123,7 @@ export default function BoneyardScene({
             />
             <HubInventoryUi
               audio={audio}
+              belt={liveBelt}
               config={boneyardInitialSnapshot.players[playerId]!.config}
               disabled={inputBlocked || tutorialAccess?.inventory === false || run.phase !== 'active'}
               economy={economy}
@@ -1121,6 +1134,7 @@ export default function BoneyardScene({
               onAction={onHubAction}
               onBlockingOverlayChange={setNpcNoteboxOpen}
               onSurfaceChange={setInventorySurface}
+              onUnassignBeltEntry={onUnassignQuickbarSkill}
               overlayRoot={sceneRef}
               playerPosition={playerPosition}
               progression={progression}
