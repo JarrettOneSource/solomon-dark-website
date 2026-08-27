@@ -12,6 +12,7 @@ import {
   encodeNativeSyncBuffer,
   nativeBytesEqual,
   parseNativeSyncBuffer,
+  replaceNativeNodeChild,
 } from './native-save-codec.ts'
 import {
   decodeNativeDarkdataProfile,
@@ -69,6 +70,40 @@ const fixture = JSON.parse(readFileSync(
 
 function bytes(value: string): Uint8Array {
   return Uint8Array.from(atob(value), character => character.charCodeAt(0))
+}
+
+function withRetailNullBoastSentinel(source: Uint8Array): Uint8Array {
+  const buffer = parseNativeSyncBuffer(source)
+  const game = buffer.root.children[5]!
+  const canonicalVariants = [
+    Uint8Array.of(0xff, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+    Uint8Array.of(0xff, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
+  ] as const
+  const replacement = Uint8Array.of(0xff, 2, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0)
+  const matches: Array<{ bytes: Uint8Array; offset: number }> = []
+  for (const bytes of canonicalVariants) {
+    for (let offset = 0; offset <= game.payload.byteLength - bytes.byteLength; offset += 1) {
+      if (bytes.every((value, index) => game.payload[offset + index] === value)) {
+        matches.push({ bytes, offset })
+      }
+    }
+  }
+  assert.equal(matches.length, 1)
+  const match = matches[0]!
+  const payload = new Uint8Array(
+    game.payload.byteLength + replacement.byteLength - match.bytes.byteLength,
+  )
+  const selectedOffset = match.offset
+  payload.set(game.payload.subarray(0, selectedOffset), 0)
+  payload.set(replacement, selectedOffset)
+  payload.set(
+    game.payload.subarray(selectedOffset + match.bytes.byteLength),
+    selectedOffset + replacement.byteLength,
+  )
+  return encodeNativeSyncBuffer({
+    ...buffer,
+    root: replaceNativeNodeChild(buffer.root, 5, { ...game, payload }),
+  })
 }
 
 function deflatedZipWithDeclaredSize(
@@ -156,6 +191,26 @@ test('native local-wizard decoder closes all 83 rows and the exact disk toggle m
   assert.equal(wizard.startingPrimary, fixture.expected.startingPrimary)
   assert.equal(wizard.startingSecondary, fixture.expected.startingSecondary)
   assert.equal(wizard.firewalkerActive, false)
+})
+
+test('stock null-Boast sentinel survives strict stock-to-web decoding', async () => {
+  const retailRewrite = withRetailNullBoastSentinel(gamestate)
+  assert.deepEqual(decodeNativeGamestateBoast(retailRewrite), {
+    failed: false,
+    selected: null,
+    succeeded: false,
+  })
+  assert.equal(
+    nativeBytesEqual(encodeNativeSyncBuffer(parseNativeSyncBuffer(retailRewrite)), retailRewrite),
+    true,
+  )
+  const portable = await createPortableGameProfileFromNative(
+    darkdata,
+    retailRewrite,
+    fixture.expected.runName,
+  )
+  assert.equal(portable.wizard.name, fixture.expected.wizardName)
+  assert.equal(portable.profile.boast.selected, null)
 })
 
 test('portable stock import builds one local-only authoritative Hub wizard and retains native bytes', async () => {

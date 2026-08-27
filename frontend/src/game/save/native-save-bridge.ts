@@ -808,6 +808,10 @@ function nativeBoastStatement(selected: NativeBoastId | null): string {
   return statement
 }
 
+function nativeBoastStatementMatches(selected: NativeBoastId | null, value: string): boolean {
+  return selected === null ? value === '' || value === '\u0001' : value === nativeBoastStatement(selected)
+}
+
 function nativeGameStateLayout(node: NativeChunkNode): NativeGameStateLayout {
   const path = nativeBoneyardPath(node)
   const candidates: Array<Pick<
@@ -820,7 +824,7 @@ function nativeGameStateLayout(node: NativeChunkNode): NativeGameStateLayout {
     if (rawSelected !== 0xff && rawSelected > 4) continue
     const selected = rawSelected === 0xff ? null : rawSelected as NativeBoastId
     const boastText = nativeStringSpan(node.payload, selectedOffset + 1)
-    if (!boastText || boastText.value !== nativeBoastStatement(selected)) continue
+    if (!boastText || !nativeBoastStatementMatches(selected, boastText.value)) continue
     const bridgeText = nativeStringSpan(node.payload, boastText.end)
     if (!bridgeText || bridgeText.end !== path.lengthOffset) continue
     candidates.push({ boastText, bridgeText, selectedOffset })
