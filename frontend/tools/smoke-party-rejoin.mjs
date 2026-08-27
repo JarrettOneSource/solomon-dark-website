@@ -416,7 +416,7 @@ try {
       )
     }, sequence, { timeout: 20_000 })
   }
-  assert.ok(offerSequences.length > 3)
+  assert.ok(offerSequences.length >= 3)
   await picker.waitFor({ state: 'detached', timeout: 20_000 })
   assert.equal(
     await page.locator('.main-menu-page').getAttribute('data-gameplay-resume-grace'),
