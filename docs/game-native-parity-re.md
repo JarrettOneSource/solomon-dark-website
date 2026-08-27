@@ -51916,24 +51916,24 @@ Native system: Goodie reward construction through forced child insertion,
 ground-Sack pickup, and client-local `InventoryScreen` child-root navigation,
 including every authored Goodie row and every root transition branch.
 
-| Member | Native source | Pre-implementation disposition | Required proof |
+| Member | Native source | Final disposition | Required proof |
 | --- | --- | --- | --- |
-| Goodie selectors 0..3 | `0x0061FA60..0x0061FABF` | reopened for exact port | one subtype-0 Potion node, quantity 5, while all five UIDs are consumed |
-| Goodie selectors 4..7 | `0x0061FAC7..0x0061FB30` | reopened for exact port | one subtype-1 Potion node, quantity 6, while all six UIDs are consumed |
+| Goodie selectors 0..3 | `0x0061FA60..0x0061FABF` | exact-ported | one subtype-0 Potion node, quantity 5, while all five UIDs are consumed |
+| Goodie selectors 4..7 | `0x0061FAC7..0x0061FB30` | exact-ported | one subtype-1 Potion node, quantity 6, while all six UIDs are consumed |
 | selectors 8..10 equipment | `0x0061FB3E..0x0061FBBA` | verified-already-at-parity | two/three generated items or one definition item remain distinct |
 | selectors 11..12 books | `0x0061FBCC..0x0061FC25` | verified-already-at-parity | three independently rolled subtype-2/3 books remain distinct |
 | selectors 13..16 Gold | `0x0061FC3B` branch | verified-already-at-parity | 500/800/1100 Gold path creates no Item_Sack |
-| selector 17 mixed Potions | `0x0061FC81..0x0061FEA2` | reopened for exact port | subtype order `5,0,1,4,2`, quantities `1,1,1,1,2`; leaked first three allocations remain absent |
+| selector 17 mixed Potions | `0x0061FC81..0x0061FEA2` | exact-ported | subtype order `5,0,1,4,2`, quantities `1,1,1,1,2`; leaked first three allocations remain absent |
 | nonempty/empty carrier decision | `0x0061FEF3..0x0062000F` | verified-already-at-parity | nonempty root creates actor 2013; empty root is destroyed |
 | ground pickup and exact tree identity | `0x005E6B50 -> 0x0055FF20` | verified-already-at-parity | collected Goodie Sack retains the same represented child tree with fresh authoritative web IDs |
-| outer Hub InventoryScreen | `0x005C6F10`, `0x0056D920` | reopened for exact port | only the current root's direct children are visible; Sack activation always enters child root |
-| active Boneyard InventoryScreen | shared gameplay control and same handler | reopened for exact port | identical local root transition while the owner-held inventory pause remains active |
-| companion InventoryScreen beside services | constructor parameterized root/equipment sinks | reopened for exact port | player backpack Sack navigation remains available without changing StoreGrid ownership |
-| empty and nested Item_Sacks | type 7008 branch has no content gate | reopened for exact port | empty page opens; nested roots push/pop one level each |
-| open transition | screen `+0x168/+0x16C/+0x170`, update `0x00551A10` | reopened for exact port | right-to-left 160-tick page traversal at 10 logical pixels/tick; input locked during traversal |
-| parent return and outer close | game-back branch in `0x0056D920` | reopened for exact port | parent returns left-to-right with `backpack_close`; outer root closes with `openpanel` |
-| root-open audio | registry 5 / offset `0xF4` | reopened for exact port | exact `backpack_open.wav`, gain 1, default pitch |
-| authoritative item tree / local page path | item serializers versus InventoryScreen fields | reopened for exact port | contents remain authoritative and replicated; active path/transition never enters the protocol |
+| outer Hub InventoryScreen | `0x005C6F10`, `0x0056D920` | exact-ported | only the current root's direct children are visible; Sack activation always enters child root |
+| active Boneyard InventoryScreen | shared gameplay control and same handler | exact-ported | identical local root transition while the owner-held inventory pause remains active |
+| companion InventoryScreen beside services | constructor parameterized root/equipment sinks | exact-ported | player backpack Sack navigation remains available without changing StoreGrid ownership |
+| empty and nested Item_Sacks | type 7008 branch has no content gate | exact-ported | empty page opens; nested roots push/pop one level each |
+| open transition | screen `+0x168/+0x16C/+0x170`, update `0x00551A10` | exact-ported | right-to-left 160-tick page traversal at 10 logical pixels/tick; input locked during traversal |
+| parent return and outer close | game-back branch in `0x0056D920` | exact-ported | parent returns left-to-right with `backpack_close`; outer root closes with `openpanel` |
+| root-open audio | registry 5 / offset `0xF4` | exact-ported | exact `backpack_open.wav`, gain 1, default pitch |
+| authoritative item tree / local page path | item serializers versus InventoryScreen fields | exact-ported | contents remain authoritative and replicated; active path/transition never enters the protocol |
 | Luthacus StoreGrid goods | separate Shop/StoreGrid owner | out-of-system: transfers top-level stored goods; it is not the player InventoryScreen root stack | service regression retains its independent transaction contract |
 | `Inventory_EquipAllEligible` Sack use | `0x0056B090`, dispatcher `0x0056D1B0` | out-of-system: separate arbitrary-item belt/compatible drag action, not InventoryScreen child-root opening | native report retains its equipment order, level gate, swaps, and pitch-0.8 sound |
 
@@ -52039,4 +52039,45 @@ No member is blocked by the browser platform.
 
 ### Implementation validation receipt
 
-Pending implementation and exact-tree Mac validation.
+- Goodie resolution now runs every authored child through the recovered common
+  insertion rule. Equal Potion subtypes merge into the first live node while
+  every attempted allocation still consumes its UID. Selectors 0..3 therefore
+  retain one quantity-5 health stack, selectors 4..7 one quantity-6 mana
+  stack, and selector 17 the exact five-node order and quantities above.
+- `HubInventoryUi` owns a local Sack path and reconciles it to the nearest live
+  ancestor. The grid resolves only the active root's direct children. Sack
+  activation, game-back, teardown reset, and input lock share that owner in
+  Hub, active Boneyard, and companion inventory. The authoritative item tree,
+  save/protocol representation, and host action surface are unchanged.
+- The Pixi inventory renderer retains outgoing and incoming pages and advances
+  them in discrete ten-pixel steps through the exact 160-tick traversal. Empty
+  and nested Sacks use the same branch. Luthacus StoreGrid remains a separate
+  top-level storage projection, while a Sack transferred back to the player
+  can be opened normally.
+- The exact stock `backpack_open.wav` is registered at gain 1/default pitch.
+  Parent return uses the existing `backpack_close` cue and outer close keeps
+  `openpanel`; no host feedback or protocol action was added.
+- The Mac red gate first failed the three newly asserted Goodie insertion
+  contracts (`43/46` passing) against five/six separate Potion nodes. The
+  independent root-navigation red fixture failed at `250/251` because
+  `inventoryItemsAtSackPath` did not exist. Both failures disappeared only
+  after the production insertion and root-navigation owners were added.
+- A byte-identical Mac candidate based on Website main
+  `a8a0b7d7ad78e40be5d6120f54694ecb9e295961` passed the canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate. Its production game
+  entry was `Game-CPmO3mD5.js`, 476,425 raw bytes and 133,249 gzip bytes,
+  within the 524,288/134,144-byte limits. The byte-identical Mod Loader tree
+  based on `fdd38df28eebb2fbfa0f456b5666c043b6afa503` passed `510/510`
+  portable static RE contracts.
+- Mac Chrome 151/WebGL2 Hub acceptance opened filled, empty, and nested Sacks,
+  returned through every parent, moved items, exercised all dye swatches, and
+  opened a Sack after companion storage transfer. It reported status `ok`,
+  exactly eight `backpack_open` and eight `backpack_close` events, and empty
+  page/console/failed-response arrays. The reviewed Sack movement frame SHA-256
+  is `ec9630c92ac9614e01dbcc548385d0c271c6d8fae0df39d49af4b1882c38c34f`.
+- A separate real-host Boneyard journey naturally materialized reward-0
+  Goodie, collected its ground Sack, observed one quantity-5 Potion child,
+  and completed five settled open/back cycles during the run. Chrome reported
+  WebGL2 and empty page/console/failed-response arrays; the smoke process also
+  exited zero after browser and host teardown. The reviewed open-Sack frame
+  SHA-256 is `d7df7877be8b053c1ab14756498d8ed1cad4f86c1320db825b257ec06d46a29b`.
