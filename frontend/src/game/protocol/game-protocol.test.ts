@@ -1591,8 +1591,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v89 carries mutual readiness, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 89)
+test('protocol v90 carries mutual readiness, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 90)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -5401,8 +5401,8 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     scale: Math.fround(0.18),
     shellScale: Math.fround(0.18),
     speedFactor: 1,
-    toughness: 1,
-    vector: [12, 2, 1, 1, 1, 1],
+    toughness: 0,
+    vector: [12, 2, 1, 1, 0, 1],
     velocity: { x: 0, y: 0 },
   }, {
     ...common,
@@ -5436,8 +5436,8 @@ test('protocol strictly round-trips every welded projectile and persistent actor
       visualScale: 0.2,
     }],
     scale: Math.fround(0.18),
-    toughness: 1,
-    vector: [7, 2, 1, 1, 0.2, 0.5],
+    toughness: 0,
+    vector: [7, 2, 1, 0, 0.2, 0.5],
     widen: 0.5,
   }]
 
@@ -5453,8 +5453,22 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     assert.equal(decoded.type, 'server-snapshot')
     assert.deepEqual(decoded.frame.primarySpells.transients, [actor])
   }
+  const etherealActor = actors.find((actor) => (
+    actor.kind === 'weld-persistent' && actor.buildId === 1006
+  ))
+  if (!etherealActor) throw new Error('expected Ethereal Boulder fixture')
   const hailActor = actors.find((actor) => 'rocks' in actor)
   if (!hailActor || !('rocks' in hailActor)) throw new Error('expected Hailstones fixture')
+  assert.throws(() => decodeFrame({
+    nextId: 2,
+    projectiles: [],
+    transients: [{ ...etherealActor, maximumScale: 1 }],
+  }), /maximumScale is not the native cap/)
+  assert.throws(() => decodeFrame({
+    nextId: 2,
+    projectiles: [],
+    transients: [{ ...hailActor, maximumScale: Math.fround(0.75) }],
+  }), /maximumScale is not the native cap/)
   assert.throws(() => decodeFrame({
     nextId: 2,
     projectiles: [{ ...projectile, vector: projectile.vector.slice(1) }],

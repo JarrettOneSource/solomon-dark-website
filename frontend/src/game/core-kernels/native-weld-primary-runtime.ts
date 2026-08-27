@@ -363,6 +363,8 @@ export const NATIVE_WELD_METEOR_CADENCE_TICKS = 25
 export const NATIVE_WELD_METEOR_FALL_STEP = Math.fround(0.02)
 export const NATIVE_WELD_METEOR_IMPACT_TICKS = 200
 export const NATIVE_WELD_METEOR_PULSE_TICKS = 10
+export const NATIVE_WELD_ETHEREAL_BOULDER_HELD_SCALE_CEILING = Math.fround(0.75)
+export const NATIVE_WELD_HAILSTONES_SCALE_CEILING = 1
 export const NATIVE_WELD_PERSISTENT_INITIAL_SCALE = Math.fround(0.18)
 export const NATIVE_WELD_HAILSTONES_SPEED = NATIVE_WELD_HAIL_SUBSTEP_DISTANCE
 export const NATIVE_WELD_HAILSTONES_LOOKAHEAD = NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE
@@ -788,7 +790,7 @@ export function createNativeWeldPersistentActor(input: {
       hitTargetIds: Object.freeze([]),
       lifetimeTicksRemaining: Math.floor(input.vector[3]! * 1_000 + 250),
       lightRegistration: weldActorLightRegistration(input),
-      maximumScale: Math.fround(input.vector[4]! * 0.75),
+      maximumScale: NATIVE_WELD_ETHEREAL_BOULDER_HELD_SCALE_CEILING,
       orientation: Object.freeze([
         ...EARTH_BOULDER_IDENTITY_ORIENTATION,
       ]) as EarthBoulderOrientation,
@@ -809,7 +811,7 @@ export function createNativeWeldPersistentActor(input: {
       collisionRadius: 40,
       damage: input.vector[0]!,
       lightRegistration: weldActorLightRegistration(input),
-      maximumScale: input.vector[3]!,
+      maximumScale: NATIVE_WELD_HAILSTONES_SCALE_CEILING,
       phase: 'held',
       pushback: input.vector[4]!,
       releaseAgeTicks: null,

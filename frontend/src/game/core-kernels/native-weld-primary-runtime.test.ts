@@ -436,7 +436,8 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.equal(source.assemblyScale, Math.fround(0.18))
   assert.equal(source.shellScale, Math.fround(0.18))
   assert.equal(source.flightTicks, 0)
-  assert.equal(source.maximumScale, Math.fround(1.5 * 0.75))
+  assert.equal(source.maximumScale, Math.fround(0.75))
+  assert.equal(source.toughness, Math.fround(1.5))
   const updated = updateNativeWeldPersistentActor(
     source,
     source.origin,
@@ -507,6 +508,51 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.ok(blocked.terrainContact)
   assert.deepEqual(blocked.terrainContact.origin, capsule!.from)
   assert.notDeepEqual(blocked.terrainContact.orientation, first.orientation)
+})
+
+test('retained Earth welds keep native scale ceilings when Bind is absent', () => {
+  const ethereal = createNativeWeldPersistentActor({
+    buildId: 1006,
+    direction: { x: 1, y: 0 },
+    id: 1,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    tick: 0,
+    vector: [5.5, 15, 1, 1, 0, 1],
+    worldKey: 'boneyard:1',
+  })
+  const hailstones = createNativeWeldPersistentActor({
+    buildId: 1008,
+    direction: { x: 1, y: 0 },
+    id: 2,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    tick: 0,
+    vector: [1.3125, 14.75, 1, 0, 0, 0],
+    worldKey: 'boneyard:1',
+  })
+
+  assert.equal(ethereal.toughness, 0)
+  assert.equal(ethereal.maximumScale, Math.fround(0.75))
+  assert.equal(hailstones.toughness, 0)
+  assert.equal(hailstones.maximumScale, 1)
+
+  const grownEthereal = updateNativeWeldPersistentActor(
+    ethereal,
+    ethereal.origin,
+    ethereal.direction,
+    createNativeRng(1),
+  ).actor
+  const grownHailstones = updateNativeWeldPersistentActor(
+    hailstones,
+    hailstones.origin,
+    hailstones.direction,
+    createNativeRng(2),
+  ).actor
+  assert.ok(grownEthereal.scale > ethereal.scale)
+  assert.ok(grownEthereal.scale <= ethereal.maximumScale)
+  assert.ok(grownHailstones.scale > hailstones.scale)
+  assert.ok(grownHailstones.scale <= hailstones.maximumScale)
 })
 
 test('Hailstones bucket rebuild consumes native rock RNG in exact field order', () => {
@@ -606,6 +652,8 @@ test('weak retained welds suppress native payloads and obey their distinct relea
   })
   assert.equal(ethereal.buildId, 1006)
   if (ethereal.buildId !== 1006) throw new Error('expected Ethereal Boulder')
+  assert.equal(ethereal.maximumScale, Math.fround(0.75))
+  assert.equal(ethereal.toughness, Math.fround(1.5))
   const weakEthereal = updateNativeWeldPersistentActor(
     { ...ethereal, remainingDamage: 8, scale: Math.fround(0.31) },
     ethereal.origin,
@@ -635,6 +683,8 @@ test('weak retained welds suppress native payloads and obey their distinct relea
   })
   assert.equal(hail.buildId, 1008)
   if (hail.buildId !== 1008) throw new Error('expected Hailstones')
+  assert.equal(hail.maximumScale, 1)
+  assert.equal(hail.toughness, Math.fround(1.5))
   const weakHail = updateNativeWeldPersistentActor(
     { ...hail, scale: Math.fround(0.31) },
     hail.origin,

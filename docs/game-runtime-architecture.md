@@ -290,6 +290,13 @@ Inventory Sack browse paths remain client-local UI state and therefore do not
 cross protocol 89. Save schema 18 persists the belt separately from the skill
 book. Schema 17 and earlier nullable skill arrays migrate to skill entries and
 seed the two potion aliases only where historical slots 3/4 are empty.
+Protocol 90 retains that shape but corrects the strict retained Earth-weld
+contract: Ethereal Boulder and Hailstones carry independent native scale
+ceilings of `.75` and `1`, while their optional Bind Rocks vector lane remains
+the separate toughness value. This is a clean protocol break because a
+protocol-89 client asserts the refuted toughness-derived ceiling. Save schema
+18 is unchanged because retained primary-spell actors are session state, not
+checkpoint state.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or

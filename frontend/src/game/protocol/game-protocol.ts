@@ -87,8 +87,10 @@ import {
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   NATIVE_WELD_CHANNEL_VISIBLE_TICKS,
+  NATIVE_WELD_ETHEREAL_BOULDER_HELD_SCALE_CEILING,
   NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS,
   NATIVE_WELD_HAIL_ROCK_FADE_LIFETIME_TICKS,
+  NATIVE_WELD_HAILSTONES_SCALE_CEILING,
   NATIVE_WELD_IMPACT_VISIBLE_TICKS,
   NATIVE_WELD_METEOR_IMPACT_TICKS,
   NATIVE_WELD_METEOR_PULSE_TICKS,
@@ -373,7 +375,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 89
+export const GAME_PROTOCOL_VERSION = 90
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -7131,7 +7133,8 @@ function primarySpellWeldEtherealBoulder(
     throw new GameProtocolError(`${field}.phase is not an Ethereal Boulder phase`)
   }
   const maximumScale = positiveFinite(source.maximumScale, `${field}.maximumScale`)
-  if (source.phase === 'held' && maximumScale !== Math.fround(common.vector[4]! * 0.75)) {
+  if (source.phase === 'held'
+    && maximumScale !== NATIVE_WELD_ETHEREAL_BOULDER_HELD_SCALE_CEILING) {
     throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
   }
   const scale = positiveFinite(source.scale, `${field}.scale`)
@@ -7317,7 +7320,7 @@ function primarySpellWeldHailstones(
   }
   const phase = source.phase
   const maximumScale = positiveFinite(source.maximumScale, `${field}.maximumScale`)
-  if (maximumScale !== common.vector[3]) {
+  if (maximumScale !== NATIVE_WELD_HAILSTONES_SCALE_CEILING) {
     throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
   }
   const scale = positiveFinite(source.scale, `${field}.scale`)
