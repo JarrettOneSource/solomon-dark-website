@@ -23,6 +23,7 @@ interface GameWebGlApplicationOptions {
   backgroundAlpha?: number
   className: string
   height: number
+  preserveDrawingBuffer?: boolean
   resolution: number
   width: number
 }
@@ -31,6 +32,7 @@ export async function createGameWebGlApplication({
   backgroundAlpha = 1,
   className,
   height,
+  preserveDrawingBuffer = false,
   resolution,
   width,
 }: GameWebGlApplicationOptions): Promise<GameWebGlApplication> {
@@ -46,6 +48,7 @@ export async function createGameWebGlApplication({
       powerPreference: 'high-performance',
       preference: 'webgl',
       preferWebGLVersion: 2,
+      preserveDrawingBuffer,
       resolution,
       roundPixels: false,
       width,

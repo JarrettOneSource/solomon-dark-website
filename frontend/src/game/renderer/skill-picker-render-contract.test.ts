@@ -21,6 +21,7 @@ const ASSET_ROOT = new URL('../../assets/game/', import.meta.url)
 const skillPickerCss = readFileSync(new URL('../skill-picker.css', import.meta.url), 'utf8')
 const skillPickerComponent = readFileSync(new URL('../SkillPicker.tsx', import.meta.url), 'utf8')
 const skillPickerRenderer = readFileSync(new URL('./skill-picker-renderer.ts', import.meta.url), 'utf8')
+const gameWebGl = readFileSync(new URL('./game-webgl.ts', import.meta.url), 'utf8')
 
 test('the picker keeps the sealed 1600x900 stock card geometry and records', () => {
   assert.deepEqual(SKILL_PICKER_SIZE, { height: 900, width: 1600 })
@@ -95,6 +96,27 @@ test('the picker owns one full-viewport curtain above its fixed native stage', (
   assert.match(skillPickerComponent, /className="skill-picker-overlay"/)
   assert.match(skillPickerComponent, /className="main-menu-native-stage skill-picker-stage"/)
   assert.doesNotMatch(skillPickerRenderer, /dimmer|new Graphics/)
+})
+
+test('the manually painted picker alone retains a complete Safari framebuffer', () => {
+  assert.match(skillPickerRenderer, /preserveDrawingBuffer: true/)
+  assert.match(gameWebGl, /preserveDrawingBuffer = false/)
+  assert.match(gameWebGl, /preserveDrawingBuffer,\s*resolution,/)
+  for (const consumer of [
+    'create-menu-renderer.ts',
+    'gameplay-pause-renderer.ts',
+    'hub-inventory-renderer.ts',
+    'hud-skill-selector-renderer.ts',
+    'loader-renderer.ts',
+    'skill-book-renderer.ts',
+    'title-menu-renderer.ts',
+  ]) {
+    assert.doesNotMatch(
+      readFileSync(new URL(consumer, import.meta.url), 'utf8'),
+      /preserveDrawingBuffer/,
+      consumer,
+    )
+  }
 })
 
 function pngDimensions(name: string): readonly [number, number] {

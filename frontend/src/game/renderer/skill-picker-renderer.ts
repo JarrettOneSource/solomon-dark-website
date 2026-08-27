@@ -72,6 +72,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         backgroundAlpha: 0,
         className: 'skill-picker-canvas',
         height: SKILL_PICKER_SIZE.height,
+        preserveDrawingBuffer: true,
         resolution: 1,
         width: SKILL_PICKER_SIZE.width,
       }),

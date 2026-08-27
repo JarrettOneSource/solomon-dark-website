@@ -50567,12 +50567,54 @@ and teardown.
 | Runtime brightness | the current Canvas2D `brightness(1.12)` result is applied once per shared page, not approximated with tint or a device-specific shader |
 | Dynamic consumers | enemy bodies, deaths, projectiles, loot, player Fire/Weld actors and secondary/primary VFX keep complete existing membership and frame selection |
 | DeadHawg/editor painter | remains on its current source path because the static painter requires the independently decoded source images; no duplicate atlas page is introduced for that family |
-| Loading and teardown | original BadGuys/Demon URLs remain logical lookup keys but are not decoded individually; derived frames die before their shared page sources |
+| Loading and teardown | stable atlas/record keys replace individual BadGuys/Demon URLs; derived frames die before their shared page sources |
 | Responsive SkillPicker | full-viewport curtain and frozen-world clock remain; incomplete device captures must be retested after memory pressure is bounded rather than hidden by removing world/UI members |
 
 Implementation contract: build deterministic, checked BadGuys/Demon pages from
 the extracted PNG oracle; preserve transparent logical padding through Pixi
 `orig`/`trim`; deduplicate identical crops; load and brightness-lift only the
-bounded page sources; map every requested original URL to a derived shared-page
+bounded page sources; map every requested atlas/record key to a derived shared-page
 texture; and prove reconstruction, source exclusion, destruction order,
 browser errors, physical memory, repeated level-ups, and all stress rows.
+
+### First combat-atlas physical receipt and remaining Safari framebuffer edge
+
+- Candidate `59f4764976ba4593cf026e38ee77070c71ad84a6` replaces the `2,202`
+  selected BadGuys/Demon image requests with two exact pages. The pages decode
+  to `17,776,640` bytes, reconstruct all `2,625` extracted source records
+  byte-for-byte, and preserve logical origin/trim. The Boneyard scene chunk
+  falls from `5,648.43 kB` to `205.95 kB`; the build transforms `2,541`
+  modules instead of `7,422`. Hub and Boneyard both use the pages, with the
+  Boneyard alone applying the pre-existing browser `brightness(1.12)` lane.
+- A fresh unlocked iPhone SkillPicker sample holds `58.44` FPS with p95/p99
+  `22/38 ms`; an earlier colder sample holds `56.25` with p95/p99 `24/46 ms`.
+  The first settled process is `923,994,568` bytes, about `237 MB` below the
+  prior candidate. A later two-minute unlocked sample reaches
+  `1,018,497,600` bytes, so physical pressure is materially lower but the
+  complete repeated-picker/stress gate remains required. Temperatures remain
+  `34.09..37.09 C` rather than immediately climbing past the earlier
+  `37.69 C` sample.
+- `JetsamEvent-2026-08-26-201100.ips` (SHA-256
+  `aa10afb652af81f5233f3d6a139b7a797b6cb06d5bd3c9b892dbfffd873302f1`)
+  does not kill Safari or WebContent. It kills the `192`-page
+  `containermanagerd` process for `vm-compressor-thrashing`; the largest
+  suspended WebContent row is `15,456` pages. It is a new device pressure
+  event and must remain in the ledger, but it is not an application crash or
+  a recurrence of the prior `98,529`-page WebContent high-water kill.
+- Unlocked one-second captures at the settled picker have SHA-256 values
+  `75ef9eb4b7ad39b3b78c08f5209fc014ecd754a9eafb41d7a99feae2dd895def`,
+  `b24dec0fd83107238238914ed09352006bcc642be5c87f0fb5f42f9fd92fb1ac`,
+  and `0cc2282f1e18987d1bf19c3c287b528c6654f9ffe4d29fbee0e4c1905b4f9508`.
+  The frozen world and full DOM curtain stay stable, but the middle capture,
+  taken while Safari retracts its browser chrome and changes the visual
+  viewport, observes a partially invalidated SkillPicker canvas. The renderer
+  is manually painted every presentation frame into a default WebGL context
+  whose `preserveDrawingBuffer` remains false. This is a browser transport
+  edge, not a native screen membership or lighting-clock branch.
+
+The SkillPicker alone must preserve its default framebuffer between explicit
+manual paints. Other continuously rendered game canvases keep the ordinary
+discardable buffer. Regression coverage must pin this modal-only context
+attribute, and physical acceptance must reproduce three complete captures
+across Safari chrome expansion/retraction without increasing the world or
+picker membership.
