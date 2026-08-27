@@ -222,6 +222,79 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
   assert.equal(worlds.runs[0]!.state.tick, runTick + 1)
 })
 
+test('party launch freezes members from different stable Hub rooms and still rejects a room fade', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
+  worlds = acceptSharedPartyInvitation(
+    worlds,
+    'player-b',
+    worlds.parties.invitations[0]!.id,
+    4,
+  ).state
+  if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
+  worlds = {
+    ...worlds,
+    hub: {
+      ...worlds.hub,
+      world: {
+        ...worlds.hub.world,
+        participants: {
+          ...worlds.hub.world.participants,
+          'player-a': {
+            ...worlds.hub.world.participants['player-a']!,
+            region: 'library',
+          },
+          'player-b': {
+            ...worlds.hub.world.participants['player-b']!,
+            region: 'mortuary',
+            transition: {
+              alpha: 0.25,
+              destination: 'courtyard',
+              phase: 'outgoing',
+              scriptedSpeed: 1,
+              scriptedTarget: { x: 512, y: 2_024 },
+              sourceRegion: 'mortuary',
+            },
+          },
+        },
+      },
+    },
+  }
+
+  assert.equal(
+    startSharedPartyRun(worlds, 'player-a', loadedBoneyardFixture('blocked')).reason,
+    'run-unavailable',
+  )
+  if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
+  worlds = {
+    ...worlds,
+    hub: {
+      ...worlds.hub,
+      world: {
+        ...worlds.hub.world,
+        participants: {
+          ...worlds.hub.world.participants,
+          'player-b': {
+            ...worlds.hub.world.participants['player-b']!,
+            transition: null,
+          },
+        },
+      },
+    },
+  }
+
+  const started = startSharedPartyRun(
+    worlds,
+    'player-a',
+    loadedBoneyardFixture('different-rooms'),
+  )
+  assert.equal(started.accepted, true)
+  assert.equal(sharedGameStateForPlayer(started.state, 'player-a')?.world.kind, 'boneyard')
+  assert.equal(sharedGameStateForPlayer(started.state, 'player-b')?.world.kind, 'boneyard')
+})
+
 test('party pause can hold its Boneyard run but the shared Hub always ticks', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
@@ -316,7 +389,7 @@ test('every completed party member enters the one live shared-Hub memorial', () 
   )
 })
 
-test('only a Courtyard party leader can launch and a running member cannot be invited', () => {
+test('only a stable Hub party leader can launch and a running member cannot be invited', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
   worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))

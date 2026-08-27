@@ -49,6 +49,7 @@ import {
   hubPotionTraderActorFrameAt,
   hubPotionTraderBalloonFrameAt,
   hubPotionTraderBalloonOffsetYAt,
+  hubRunEntryPresentation,
   hubSealColors,
   hubStatueOffsets,
   hubStudentHeadOffset,
@@ -133,6 +134,38 @@ test('adjustable Hub FOV changes only the camera view extent', () => {
   const closer = hubRegionCameraOrigin('library', { x: 512, y: 512 }, viewport, 1.6)
   closeTo(closer.x, 12)
   closeTo(closer.y, 230.75)
+})
+
+test('Hub run entry crossfades the exact compass and play layers on the native fixed tick', () => {
+  const zero = hubRunEntryPresentation(0, false)
+  assert.deepEqual(zero, { compassAlpha: 0.5, playAlpha: 0.5 })
+
+  const quarter = hubRunEntryPresentation(90, false)
+  closeTo(quarter.compassAlpha, 1, 0.000001)
+  closeTo(quarter.playAlpha, 0, 0.000001)
+
+  const half = hubRunEntryPresentation(180, false)
+  closeTo(half.compassAlpha, 0.5, 0.000001)
+  closeTo(half.playAlpha, 0.5, 0.000001)
+
+  const threeQuarter = hubRunEntryPresentation(270, false)
+  closeTo(threeQuarter.compassAlpha, 0, 0.000001)
+  closeTo(threeQuarter.playAlpha, 1, 0.000001)
+
+  const nominalCycle = hubRunEntryPresentation(360, false)
+  closeTo(nominalCycle.compassAlpha, 0.5, 0.000001)
+  closeTo(nominalCycle.playAlpha, 0.5, 0.000001)
+  assert.notDeepEqual(nominalCycle, zero, 'native float32 phase does not reset at 360')
+
+  for (const tick of [0, 37, 90, 180, 270, 359, 360]) {
+    const frame = hubRunEntryPresentation(tick, false)
+    assert.equal(frame.playAlpha, Math.fround(1 - frame.compassAlpha))
+  }
+
+  assert.deepEqual(
+    hubRunEntryPresentation(270, true),
+    { compassAlpha: 1, playAlpha: 0 },
+  )
 })
 
 test('sorts each Useful Thyngs painter around PotionGuy', () => {

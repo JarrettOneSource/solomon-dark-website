@@ -61,7 +61,6 @@ export interface SharedGameWorldsState {
 
 export type SharedWorldActionRejection = PartyActionRejection
   | 'already-running'
-  | 'not-in-courtyard'
   | 'not-in-hub'
   | 'not-leader'
   | 'run-unavailable'
@@ -354,9 +353,8 @@ export function startSharedPartyRun(
   }
   if (party.memberPlayerIds.some((playerId) => (
     state.hub.world.kind !== 'hub'
-    || state.hub.world.participants[playerId]?.region !== 'courtyard'
     || state.hub.world.participants[playerId]?.transition !== null
-  ))) return rejected(state, 'not-in-courtyard')
+  ))) return rejected(state, 'run-unavailable')
 
   const partition = partitionGameSimulationPlayers(state.hub, party.memberPlayerIds)
   if (partition.selected.levelUpBarrier !== null) return rejected(state, 'run-unavailable')

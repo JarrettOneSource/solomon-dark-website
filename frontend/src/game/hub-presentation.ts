@@ -37,6 +37,11 @@ export interface HubPolisherClock {
   advanceTo(tick: number): number
 }
 
+export interface HubRunEntryPresentation {
+  compassAlpha: number
+  playAlpha: number
+}
+
 export interface HubHagathaFrame {
   bodyFrame: number
   particles: readonly HubHagathaParticle[]
@@ -55,6 +60,8 @@ export interface HubHagathaClock {
 }
 
 const FOUNTAIN_ALPHA_LIMIT = 0.25
+const HUB_RUN_ENTRY_DEGREE_DIVISOR = 180
+const HUB_RUN_ENTRY_PI = Math.fround(Math.PI)
 const POTION_TRADER_ACTOR_CHECKPOINT_TICKS = 512
 const POTION_TRADER_ACTOR_RNG_SEED = 0x50b110
 const POTION_TRADER_ACTOR_TRIGGER_RANGE = 200
@@ -445,6 +452,22 @@ export function hubSealColors(state: ProtocolAmbientState): {
   return {
     core: interpolateColor(SEAL_CORE_TRACK, state.sealCorePhase),
     glyphs: saturate(interpolateColor(SEAL_GLYPH_TRACK, state.sealGlyphPhase), 0.5),
+  }
+}
+
+export function hubRunEntryPresentation(
+  tick: number,
+  transitioning: boolean,
+): HubRunEntryPresentation {
+  if (transitioning) return { compassAlpha: 1, playAlpha: 0 }
+  const radians = Math.fround(
+    Math.fround(tick) * HUB_RUN_ENTRY_PI / HUB_RUN_ENTRY_DEGREE_DIVISOR,
+  )
+  const sine = Math.fround(Math.sin(radians))
+  const compassAlpha = Math.fround(0.5 + sine * 0.5)
+  return {
+    compassAlpha,
+    playAlpha: Math.fround(1 - compassAlpha),
   }
 }
 

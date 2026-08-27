@@ -40,10 +40,10 @@ cheats, and local-only saves choose a private College. The global Hub rejects
 modded, cheats-on, and local-only handshakes at authoritative seams.
 Players discover one another in the Courtyard itself, inspect a name-only
 profile, and exchange party invitations over the gameplay protocol. The
-current party leader alone can launch; that transition freezes the current
-party roster and moves exactly those player entities into a party-scoped
-Boneyard instance while unrelated Hub residents keep ticking in the shared Hub
-instance.
+current party leader alone can launch from any stable Hub room; that
+transition freezes the current party roster across all stable Hub rooms and
+moves exactly those player entities into a party-scoped Boneyard instance
+while unrelated Hub residents keep ticking in the shared Hub instance.
 
 Each live Hub participant may also publish one ephemeral activity value:
 `paused`, `occupied`, or clear. Pause/Settings maps to `paused`; every other

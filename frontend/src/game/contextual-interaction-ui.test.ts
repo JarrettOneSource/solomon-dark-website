@@ -16,6 +16,22 @@ test('the Hub rail exposes five semantic native-record buttons in stock order', 
   assert.match(hubScene, /source: 'shortcut'/)
 })
 
+test('the persistent Hub run-entry control keeps both stock layers and no current-room gate', () => {
+  assert.match(gameHud, /hubRunEntryPresentation/)
+  assert.match(gameHud, /src=\{hub\.hud\.mapCompass\}/)
+  assert.match(gameHud, /src=\{hub\.hud\.mapPlay\}/)
+  assert.match(
+    gameHud,
+    /hub-hud-map-compass[\s\S]*hub-hud-map-play/,
+  )
+  assert.match(hubScene, /mapTransitionActive=\{transitionActive\}/)
+  assert.doesNotMatch(hubScene, /!isHost \|\| currentRegion !== 'courtyard'/)
+  assert.doesNotMatch(
+    hubScene,
+    /snapshot\.hostPlayerId !== playerId \|\| participant\.region !== 'courtyard'/,
+  )
+})
+
 test('contextual interaction is a visible labelled button in Hub and Boneyard', () => {
   assert.match(interaction, /className="game-interact-prompt"/)
   assert.match(interaction, /game-interact-key/)

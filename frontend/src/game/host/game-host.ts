@@ -2807,7 +2807,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           || activeState.levelUpBarrier !== null
           || activeState.run.phase !== 'hub'
           || activeState.world.kind !== 'hub'
-          || activeState.world.participants[client.playerId]?.region !== 'courtyard'
           || activeState.world.participants[client.playerId]?.transition !== null
         ) return
         const selected = materializeBoneyard(

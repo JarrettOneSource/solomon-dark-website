@@ -12,6 +12,7 @@ import {
   playerExperienceProgress,
 } from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import { hubRunEntryPresentation } from './hub-presentation.ts'
 import GameAccountName from './GameAccountName.tsx'
 import {
   HUB_HUD_SHORTCUTS,
@@ -48,6 +49,7 @@ interface GameHudProps {
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   mapLabel?: string
+  mapTransitionActive?: boolean
   mode?: 'hub' | 'run'
   onInventoryClick?: () => void
   onHubShortcutClick?: (interaction: HubHudShortcutDefinition['interaction']) => void
@@ -129,6 +131,7 @@ export default function GameHud({
   getPingMs,
   initialSnapshot,
   mapLabel = 'Map',
+  mapTransitionActive = false,
   mode = 'hub',
   onInventoryClick,
   onHubShortcutClick,
@@ -159,6 +162,7 @@ export default function GameHud({
     playerState: initialSnapshot.secondaryAbilities.players[playerId],
     quickbar: initialSnapshot.players[playerId]!.progression.skillQuickbar,
     selectedPrimarySkillId: initialSnapshot.players[playerId]!.progression.selectedPrimarySkillId,
+    tick: initialSnapshot.tick,
     weldBuildId: initialSnapshot.players[playerId]!.progression.weldBuildId,
   }))
   useEffect(() => subscribeSnapshot((snapshot) => {
@@ -169,6 +173,7 @@ export default function GameHud({
       playerState: snapshot.secondaryAbilities.players[playerId],
       quickbar: player.progression.skillQuickbar,
       selectedPrimarySkillId: player.progression.selectedPrimarySkillId,
+      tick: snapshot.tick,
       weldBuildId: player.progression.weldBuildId,
     })
   }), [playerId, subscribeSnapshot])
@@ -198,6 +203,7 @@ export default function GameHud({
   })
   const healthPotions = hubPotionShortcut(economy.backpack, 'health-potion')
   const manaPotions = hubPotionShortcut(economy.backpack, 'mana-potion')
+  const runEntry = hubRunEntryPresentation(quickbarHud.tick, mapTransitionActive)
   const healthPotionKey = gameBindingLabel(controls.belt4)
   const manaPotionKey = gameBindingLabel(controls.belt5)
   const shortcutAssets: Readonly<Record<HubHudShortcutDefinition['interaction'], string>> = {
@@ -478,8 +484,15 @@ export default function GameHud({
         >
           <img className="hub-hud-map-parchment" src={hub.hud.parchment} alt="" />
           <img
-            className="hub-hud-map-state"
+            className="hub-hud-map-state hub-hud-map-compass"
             src={hub.hud.mapCompass}
+            style={{ opacity: runEntry.compassAlpha }}
+            alt=""
+          />
+          <img
+            className="hub-hud-map-state hub-hud-map-play"
+            src={hub.hud.mapPlay}
+            style={{ opacity: runEntry.playAlpha }}
             alt=""
           />
         </button>

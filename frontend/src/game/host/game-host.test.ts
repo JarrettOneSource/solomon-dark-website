@@ -1426,6 +1426,44 @@ test('solo gameplay menu release resumes immediately without grace', async (cont
   assert.equal(graceMessages, 0)
 })
 
+test('the authority can start a Boneyard from a stable private Hub room', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+
+  const playerId = client.welcome.playerId
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
+  if (state.world.kind !== 'hub') assert.fail('expected Hub world')
+  Object.assign(state, {
+    playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+      ...getPlayerCharacter(state, playerId),
+      position: { x: 512, y: 512 },
+      velocity: { x: 0, y: 0 },
+    }),
+    world: {
+      ...state.world,
+      participants: {
+        ...state.world.participants,
+        [playerId]: {
+          ...state.world.participants[playerId]!,
+          region: 'library',
+          transition: null,
+        },
+      },
+    },
+  })
+
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await loaded
+  assert.equal(host.state().world.kind, 'boneyard')
+})
+
 test('shared Hub activity is replicated while every resident and the Hub clock stay live', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,

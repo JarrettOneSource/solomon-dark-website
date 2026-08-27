@@ -545,7 +545,7 @@ export default function HubScene({
           setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
           return
         }
-        if (snapshot.hostPlayerId !== playerId || participant.region !== 'courtyard') return
+        if (snapshot.hostPlayerId !== playerId) return
         if (callbacks.boneyards.length === 1) {
           callbacks.onStartMatch(callbacks.boneyards[0]!.id)
         } else {
@@ -676,7 +676,7 @@ export default function HubScene({
 
   const isHost = hostPlayerId === playerId
   const beginMatch = () => {
-    if (!isHost || currentRegion !== 'courtyard') return
+    if (!isHost || inputBlocked || pickerOpen || transitionActive) return
     if (boneyards.length === 1) {
       onStartMatch(boneyards[0].id)
       return
@@ -806,6 +806,7 @@ export default function HubScene({
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}
           mapLabel="Enter the Boneyard"
+          mapTransitionActive={transitionActive}
           onInventoryClick={() => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface({ kind: 'inventory' })
