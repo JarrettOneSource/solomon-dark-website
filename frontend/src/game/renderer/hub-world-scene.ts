@@ -162,7 +162,7 @@ export class HubWorldScene {
     this.potion = new HubPotionTraderView(textures)
     this.world.addChild(this.potion.actor, this.potion.balloons)
 
-    this.teacher = new HubTeacherView(textures, 576.5, 710.5)
+    this.teacher = new HubTeacherView(textures, 576.5, 710.5, traderAnimationSeed ^ 5008)
     this.world.addChild(this.teacher.container)
 
     this.skorcha = new HubSkorchaView(textures)
@@ -956,10 +956,12 @@ class HubTeacherView {
   private readonly core: Sprite
   private readonly frames: Sprite
   private readonly textures: HubWorldTextures
+  private readonly seed: number
   private currentFrame = 0
 
-  constructor(textures: HubWorldTextures, x: number, y: number) {
+  constructor(textures: HubWorldTextures, x: number, y: number, seed: number) {
     this.textures = textures
+    this.seed = seed
     this.container.sortableChildren = true
     this.container.position.set(x, y)
     this.container.zIndex = hubWorldDepthForActor(y)
@@ -973,29 +975,34 @@ class HubTeacherView {
     this.burst = new Container({ label: 'teacher-cast-release' })
     this.burst.position.set(HUB_TEACHER_CAST_ORIGIN.x, HUB_TEACHER_CAST_ORIGIN.y)
     this.burst.zIndex = 3
-    this.burst.blendMode = 'screen'
     this.column = centered(textures.base[hub.npcs.teacher.burst.column])
     this.flare = centered(textures.base[hub.npcs.teacher.burst.flare])
     this.core = centered(textures.base[hub.npcs.teacher.burst.core])
     this.frames = centered(textures.teacher.burst[0])
+    this.frames.blendMode = 'add'
     this.burst.addChild(this.column, this.flare, this.core, this.frames)
     this.container.addChild(this.rune, shadow, this.actor, this.burst)
   }
 
   update(elapsedSeconds: number): void {
-    this.currentFrame = hubTeacherFrameAt(elapsedSeconds)
+    this.currentFrame = hubTeacherFrameAt(elapsedSeconds, this.seed)
     this.actor.texture = this.textures.teacher.actor[this.currentFrame]
-    const burst = hubTeacherBurstAt(elapsedSeconds)
+    const burst = hubTeacherBurstAt(elapsedSeconds, this.seed)
     this.burst.visible = burst.visible
     if (!burst.visible) return
+    this.column.visible = burst.column.visible
     this.column.alpha = burst.column.alpha
     this.column.scale.set(burst.column.scaleX, burst.column.scaleY)
+    this.flare.visible = burst.flare.visible
     this.flare.alpha = burst.flare.alpha
-    this.flare.scale.set(burst.flare.scale)
+    this.flare.scale.set(burst.flare.scaleX, burst.flare.scaleY)
+    this.core.visible = burst.core.visible
     this.core.alpha = burst.core.alpha
-    this.core.scale.set(burst.core.scale)
-    this.frames.texture = this.textures.teacher.burst[spriteFrameIndex(burst.frame, 11)]
-    this.frames.alpha = 1 - burst.frame / 11
+    this.core.scale.set(burst.core.scaleX, burst.core.scaleY)
+    this.frames.visible = burst.frames.visible
+    this.frames.texture = this.textures.teacher.burst[spriteFrameIndex(burst.frames.frame, 11)]
+    this.frames.alpha = burst.frames.alpha
+    this.frames.scale.set(burst.frames.scaleX, burst.frames.scaleY)
   }
 
   get frame(): number {

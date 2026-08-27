@@ -1,16 +1,20 @@
-// The phase counter crosses 20 after 267 fixed 60 Hz ticks; retain that
-// discretisation instead of replacing the native cycle with continuous math.
-export const HUB_TEACHER_CAST_SECONDS = 267 / 60
-export const HUB_TEACHER_RELEASE_SECONDS = 80 / 60
-export const HUB_TEACHER_IDLE_SECONDS = 500 / 60
+export const HUB_TEACHER_TICKS_PER_SECOND = 100
+export const HUB_TEACHER_CAST_TICKS = 268
+export const HUB_TEACHER_IDLE_START_TICK = 347
+export const HUB_TEACHER_CYCLE_TICKS = 847
+export const HUB_TEACHER_CAST_SECONDS = (
+  HUB_TEACHER_CAST_TICKS / HUB_TEACHER_TICKS_PER_SECOND
+)
+export const HUB_TEACHER_RELEASE_SECONDS = (
+  (HUB_TEACHER_IDLE_START_TICK - HUB_TEACHER_CAST_TICKS)
+  / HUB_TEACHER_TICKS_PER_SECOND
+)
 export const HUB_TEACHER_CYCLE_SECONDS = (
-  HUB_TEACHER_CAST_SECONDS
-  + HUB_TEACHER_RELEASE_SECONDS
-  + HUB_TEACHER_IDLE_SECONDS
+  HUB_TEACHER_CYCLE_TICKS / HUB_TEACHER_TICKS_PER_SECOND
 )
 
-// Teacher::Cast spawns its core at actor + (-38, 40 - 25). Teacher's auxiliary
-// vtable pass separately paints College[13] beneath the actor.
+// Teacher::Cast spawns its children at actor + (-38, 40 - 25). Teacher's
+// auxiliary vtable pass separately paints College[13] beneath the actor.
 export const HUB_TEACHER_CAST_ORIGIN = { x: -38, y: 15 } as const
 
 // Auxiliary Teacher painter 0x00505480 centers College[13] at this actor-local
@@ -20,111 +24,148 @@ export const HUB_TEACHER_RUNE_ALPHA = 0.25
 
 export type HubTeacherPhase = 'cast' | 'idle' | 'release'
 
-export interface HubTeacherBurstPresentation {
-  column: { alpha: number; scaleX: number; scaleY: number }
-  core: { alpha: number; scale: number }
-  flare: { alpha: number; scale: number }
-  frame: number
-  visible: boolean
+interface HubTeacherBurstMember {
+  readonly alpha: number
+  readonly scaleX: number
+  readonly scaleY: number
+  readonly visible: boolean
 }
 
-const HUB_TEACHER_CAST_TIMER_PER_TICK = 0.075
+interface HubTeacherBurstFrames extends HubTeacherBurstMember {
+  readonly frame: number
+}
+
+export interface HubTeacherBurstPresentation {
+  readonly ageTicks: number
+  readonly column: HubTeacherBurstMember
+  readonly core: HubTeacherBurstMember
+  readonly flare: HubTeacherBurstMember
+  readonly frames: HubTeacherBurstFrames
+  readonly releaseIndex: number
+  readonly visible: boolean
+}
 
 export function hubTeacherPhaseAt(elapsedSeconds: number): HubTeacherPhase {
-  const time = (
-    (elapsedSeconds % HUB_TEACHER_CYCLE_SECONDS)
-    + HUB_TEACHER_CYCLE_SECONDS
-  ) % HUB_TEACHER_CYCLE_SECONDS
-  if (time < HUB_TEACHER_CAST_SECONDS) return 'cast'
-  if (time < HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS) return 'release'
+  const tick = teacherCycleTick(elapsedSeconds)
+  if (tick < HUB_TEACHER_CAST_TICKS) return 'cast'
+  if (tick < HUB_TEACHER_IDLE_START_TICK) return 'release'
   return 'idle'
 }
 
-export function hubTeacherFrameAt(elapsedSeconds: number): number {
-  const time = (
-    (elapsedSeconds % HUB_TEACHER_CYCLE_SECONDS)
-    + HUB_TEACHER_CYCLE_SECONDS
-  ) % HUB_TEACHER_CYCLE_SECONDS
-  if (time < HUB_TEACHER_CAST_SECONDS) {
-    const fixedTicks = Math.floor(time * 60 + 1e-6)
-    const nativeTimer = Math.fround(fixedTicks * HUB_TEACHER_CAST_TIMER_PER_TICK)
-    return Math.trunc(nativeTimer) % 2
+export function hubTeacherFrameAt(elapsedSeconds: number, seed = 0): number {
+  const absoluteTick = teacherAbsoluteTick(elapsedSeconds)
+  const tick = absoluteTick % HUB_TEACHER_CYCLE_TICKS
+  if (tick === 0) return 0
+  if (tick < HUB_TEACHER_CAST_TICKS) {
+    return teacherWord(seed, absoluteTick, 0) & 1
   }
-  if (time < HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS) return 2
-  return 3
+  return tick < HUB_TEACHER_IDLE_START_TICK ? 2 : 3
 }
 
-/** Preserve the previously verified native-asset release burst keyframes. */
-export function hubTeacherBurstAt(elapsedSeconds: number): HubTeacherBurstPresentation {
-  const phase = wrappedCycle(elapsedSeconds) / HUB_TEACHER_CYCLE_SECONDS
-  const start = 0.3153
-  const end = 0.3543
-  if (phase < start || phase > end) return hiddenBurst()
-  const progress = (phase - start) / (end - start)
-  const columnPeak = (0.321 - start) / (end - start)
-  const flarePeak = (0.324 - start) / (end - start)
-  const corePeak = (0.32 - start) / (end - start)
-  return {
-    visible: true,
-    frame: Math.min(10, Math.floor(progress * 11)),
-    column: piecewiseVector(progress, columnPeak, 0.35, 0.2, 0.9, 1.08, 1.25, 1.3),
-    flare: piecewiseScalar(progress, flarePeak, 0.2, 1.25, 1.7),
-    core: piecewiseScalar(progress, corePeak, 0.35, 1.35, 0.7),
-  }
+export function hubTeacherBurstAt(
+  elapsedSeconds: number,
+  seed = 0,
+): HubTeacherBurstPresentation {
+  const absoluteTick = teacherAbsoluteTick(elapsedSeconds)
+  const cycleTick = absoluteTick % HUB_TEACHER_CYCLE_TICKS
+  const releaseIndex = Math.floor(absoluteTick / HUB_TEACHER_CYCLE_TICKS)
+  if (cycleTick < HUB_TEACHER_CAST_TICKS) return hiddenBurst(releaseIndex)
+
+  const ageTicks = cycleTick - HUB_TEACHER_CAST_TICKS
+  const flareScale = Math.fround(
+    1 + teacherFloat(seed, releaseIndex, 1, 0.1),
+  )
+  const frameScale = Math.fround(
+    2 - teacherFloat(seed, releaseIndex, 2, 0.5),
+  )
+  const frameFactor = Math.fround(
+    1 + teacherFloat(seed, releaseIndex, 3, 0.2),
+  )
+  const frameStep = Math.fround(0.75 * frameFactor)
+  const frameAlphaLoss = Math.fround(0.02 * frameFactor)
+  const frame = Math.trunc(Math.fround(frameStep * ageTicks))
+  const mirror = (teacherWord(seed, releaseIndex, 4) & 1) === 1
+
+  const core = member(nativeDecay(1, 0.1, ageTicks), 6, 4)
+  const flare = member(nativeDecay(1, 0.0075, ageTicks), flareScale, flareScale)
+  const column = member(nativeDecay(2, 0.04, ageTicks), 1, 1)
+  const frames = Object.freeze({
+    alpha: nativeDecay(1, frameAlphaLoss, ageTicks),
+    frame: Math.min(10, Math.max(0, frame)),
+    scaleX: mirror ? -frameScale : frameScale,
+    scaleY: frameScale,
+    visible: frame >= 0 && frame < 11,
+  })
+  const visible = core.visible || flare.visible || column.visible || frames.visible
+  return Object.freeze({
+    ageTicks,
+    column,
+    core,
+    flare,
+    frames,
+    releaseIndex,
+    visible,
+  })
 }
 
-function wrappedCycle(elapsedSeconds: number): number {
-  return ((elapsedSeconds % HUB_TEACHER_CYCLE_SECONDS) + HUB_TEACHER_CYCLE_SECONDS)
-    % HUB_TEACHER_CYCLE_SECONDS
+function teacherAbsoluteTick(elapsedSeconds: number): number {
+  return Math.max(0, Math.floor(elapsedSeconds * HUB_TEACHER_TICKS_PER_SECOND + 1e-6))
 }
 
-function hiddenBurst(): HubTeacherBurstPresentation {
-  return {
+function teacherCycleTick(elapsedSeconds: number): number {
+  return teacherAbsoluteTick(elapsedSeconds) % HUB_TEACHER_CYCLE_TICKS
+}
+
+function member(
+  rawAlpha: number,
+  scaleX: number,
+  scaleY: number,
+): HubTeacherBurstMember {
+  return Object.freeze({
+    alpha: Math.min(1, Math.max(0, rawAlpha)),
+    scaleX,
+    scaleY,
+    visible: rawAlpha > 0,
+  })
+}
+
+function hiddenBurst(releaseIndex: number): HubTeacherBurstPresentation {
+  const hidden = Object.freeze({ alpha: 0, scaleX: 1, scaleY: 1, visible: false })
+  return Object.freeze({
+    ageTicks: -1,
+    column: hidden,
+    core: hidden,
+    flare: hidden,
+    frames: Object.freeze({ ...hidden, frame: 0 }),
+    releaseIndex,
     visible: false,
-    frame: 0,
-    column: { alpha: 0, scaleX: 0.35, scaleY: 0.2 },
-    flare: { alpha: 0, scale: 0.2 },
-    core: { alpha: 0, scale: 0.35 },
-  }
+  })
 }
 
-function piecewiseScalar(
-  progress: number,
-  peak: number,
-  start: number,
-  middle: number,
-  end: number,
-): { alpha: number; scale: number } {
-  if (progress <= peak) {
-    const amount = progress / peak
-    return { alpha: amount, scale: start + (middle - start) * amount }
+function nativeDecay(initial: number, loss: number, ageTicks: number): number {
+  let value = Math.fround(initial)
+  const nativeLoss = Math.fround(loss)
+  for (let tick = 0; tick < ageTicks && value > 0; tick += 1) {
+    value = Math.fround(value - nativeLoss)
   }
-  const amount = (progress - peak) / (1 - peak)
-  return { alpha: 1 - amount, scale: middle + (end - middle) * amount }
+  return value
 }
 
-function piecewiseVector(
-  progress: number,
-  peak: number,
-  startX: number,
-  startY: number,
-  middleX: number,
-  middleY: number,
-  endX: number,
-  endY: number,
-): { alpha: number; scaleX: number; scaleY: number } {
-  if (progress <= peak) {
-    const amount = progress / peak
-    return {
-      alpha: amount * 0.95,
-      scaleX: startX + (middleX - startX) * amount,
-      scaleY: startY + (middleY - startY) * amount,
-    }
-  }
-  const amount = (progress - peak) / (1 - peak)
-  return {
-    alpha: 0.95 * (1 - amount),
-    scaleX: middleX + (endX - middleX) * amount,
-    scaleY: middleY + (endY - middleY) * amount,
-  }
+function teacherFloat(
+  seed: number,
+  releaseIndex: number,
+  channel: number,
+  magnitude: number,
+): number {
+  const word = teacherWord(seed, releaseIndex, channel) & 0x7fff
+  return Math.fround(Math.fround(word / 0x7fff) * magnitude)
+}
+
+function teacherWord(seed: number, tick: number, channel: number): number {
+  let value = (seed ^ Math.imul(tick + 1, 0x9e3779b1) ^ Math.imul(channel + 1, 0x85ebca6b)) >>> 0
+  value ^= value >>> 16
+  value = Math.imul(value, 0x7feb352d) >>> 0
+  value ^= value >>> 15
+  value = Math.imul(value, 0x846ca68b) >>> 0
+  return (value ^ value >>> 16) >>> 0
 }

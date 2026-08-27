@@ -139,6 +139,14 @@ test('Courtyard fountain transients keep the shared additive FadeScale painter',
   )
 })
 
+test('Teacher release keeps native 100 Hz child programs and per-child blend ownership', () => {
+  assert.doesNotMatch(hubWorldScene, /this\.burst\.blendMode = 'screen'/)
+  assert.match(hubWorldScene, /this\.frames\.blendMode = 'add'/)
+  assert.match(hubWorldScene, /this\.column\.visible = burst\.column\.visible/)
+  assert.match(hubWorldScene, /this\.core\.scale\.set\(burst\.core\.scaleX, burst\.core\.scaleY\)/)
+  assert.match(hubWorldScene, /this\.frames\.scale\.set\(burst\.frames\.scaleX, burst\.frames\.scaleY\)/)
+})
+
 test('world overlays submit only their authored alpha bounds', () => {
   const fullArea = 2000 * 1024
   for (const [name, bounds] of Object.entries(HUB_WORLD_LAYER_BOUNDS)) {

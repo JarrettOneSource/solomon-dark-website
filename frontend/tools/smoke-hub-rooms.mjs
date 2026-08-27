@@ -152,6 +152,10 @@ async function provisionProductionRuntime() {
 async function enterHub(page) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  await tutorialPrompt.waitFor({ state: 'visible', timeout: 30_000 })
+  await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
+  await tutorialPrompt.waitFor({ state: 'hidden', timeout: 30_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -162,7 +166,16 @@ async function enterHub(page) {
     timeout: 15_000,
   })
   await page.locator('.create-menu-discipline-arcane').click()
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+  const hubScene = page.locator('.hub-scene[data-renderer-state="ready"]')
+  try {
+    await hubScene.waitFor({ timeout: 90_000 })
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      body: (await page.locator('body').innerText()).slice(0, 2_000),
+      url: page.url(),
+    })}\n`)
+    throw error
+  }
   await page.locator('.hub-world-canvas[data-hub-region="courtyard"]').waitFor({ timeout: 30_000 })
 }
 

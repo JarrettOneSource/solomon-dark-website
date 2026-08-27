@@ -59,7 +59,7 @@ test('Staff proc VFX map every proven layer without inventing a light', () => {
   }]
   assert.deepEqual(rows.map(nativePlayerStaffVfxRenderPlan), [{
     alpha: 1,
-    blendMode: 'normal',
+    blendMode: 'add',
     entry: 15,
     light: null,
     position: { x: 10, y: 20 },

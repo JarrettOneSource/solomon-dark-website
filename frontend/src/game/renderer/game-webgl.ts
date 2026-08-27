@@ -7,6 +7,10 @@ import {
   releaseGameImages,
 } from '../game-assets.ts'
 import { mapAssetSources } from '../game-asset-readiness.ts'
+import {
+  installNativeFixedFunctionRenderPipeline,
+  nativeStockTextureFromImage,
+} from './native-fixed-function-render-pipeline.ts'
 
 export interface GameWebGlApplication {
   application: Application
@@ -53,6 +57,7 @@ export async function createGameWebGlApplication({
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
     }
+    installNativeFixedFunctionRenderPipeline(application.renderer)
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     throw error
@@ -92,7 +97,7 @@ export async function loadGameTextureEntries(
   createTexture: (source: string, image: HTMLImageElement) => Texture = (
     _source,
     image,
-  ) => Texture.from(image, true),
+  ) => nativeStockTextureFromImage(image),
 ): Promise<Array<readonly [string, Texture]>> {
   const sources = [...new Set(requestedSources)]
   const entries: Array<readonly [string, Texture]> = []

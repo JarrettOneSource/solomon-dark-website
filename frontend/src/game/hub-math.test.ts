@@ -85,7 +85,10 @@ import { HubStudentNeighborGrid } from './core-server/hub-student-grid.ts'
 import {
   HUB_TEACHER_CAST_ORIGIN,
   HUB_TEACHER_CAST_SECONDS,
+  HUB_TEACHER_CAST_TICKS,
+  HUB_TEACHER_CYCLE_TICKS,
   HUB_TEACHER_CYCLE_SECONDS,
+  HUB_TEACHER_IDLE_START_TICK,
   HUB_TEACHER_RELEASE_SECONDS,
   HUB_TEACHER_RUNE_ALPHA,
   HUB_TEACHER_RUNE_CENTER,
@@ -752,27 +755,44 @@ test('Student final head pass keeps native gait and small-scale registration', (
 })
 
 test('Teacher presentation follows the recovered fixed-tick cast, release, and idle cycle', () => {
-  closeTo(HUB_TEACHER_CAST_SECONDS, 4.45)
-  closeTo(HUB_TEACHER_RELEASE_SECONDS, 1.333333)
-  closeTo(HUB_TEACHER_CYCLE_SECONDS, 14.116667)
+  assert.equal(HUB_TEACHER_CAST_TICKS, 268)
+  assert.equal(HUB_TEACHER_IDLE_START_TICK, 347)
+  assert.equal(HUB_TEACHER_CYCLE_TICKS, 847)
+  closeTo(HUB_TEACHER_CAST_SECONDS, 2.68)
+  closeTo(HUB_TEACHER_RELEASE_SECONDS, 0.79)
+  closeTo(HUB_TEACHER_CYCLE_SECONDS, 8.47)
   assert.equal(hubTeacherPhaseAt(0), 'cast')
-  assert.equal(hubTeacherPhaseAt(HUB_TEACHER_CAST_SECONDS + 0.01), 'release')
+  assert.equal(hubTeacherPhaseAt(HUB_TEACHER_CAST_SECONDS), 'release')
   assert.equal(
-    hubTeacherPhaseAt(HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS + 0.01),
+    hubTeacherPhaseAt(HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS),
     'idle',
   )
   assert.equal(hubTeacherPhaseAt(HUB_TEACHER_CYCLE_SECONDS), 'cast')
   assert.equal(hubTeacherFrameAt(0), 0)
-  assert.equal(hubTeacherFrameAt(14 / 60), 1)
-  assert.equal(hubTeacherFrameAt(27 / 60), 0)
-  assert.equal(hubTeacherFrameAt(HUB_TEACHER_CAST_SECONDS + 0.01), 2)
+  assert.ok([0, 1].includes(hubTeacherFrameAt(0.14, 41)))
+  assert.equal(hubTeacherFrameAt(0.14, 41), hubTeacherFrameAt(0.14, 41))
+  assert.equal(hubTeacherFrameAt(HUB_TEACHER_CAST_SECONDS), 2)
   assert.equal(
-    hubTeacherFrameAt(HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS + 0.01),
+    hubTeacherFrameAt(HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS),
     3,
   )
   assert.equal(hubTeacherBurstAt(0).visible, false)
-  const burst = hubTeacherBurstAt(HUB_TEACHER_CYCLE_SECONDS * 0.33)
-  assert.equal(burst.visible, true)
-  assert.ok(burst.frame >= 0 && burst.frame <= 10)
-  assert.equal(hubTeacherBurstAt(HUB_TEACHER_CYCLE_SECONDS * 0.5).visible, false)
+  const birth = hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS, 41)
+  assert.equal(birth.ageTicks, 0)
+  assert.deepEqual(birth.core, { alpha: 1, scaleX: 6, scaleY: 4, visible: true })
+  assert.equal(birth.column.alpha, 1)
+  assert.equal(birth.column.visible, true)
+  assert.ok(birth.flare.scaleX >= 1 && birth.flare.scaleX <= 1.1)
+  assert.equal(birth.flare.scaleX, birth.flare.scaleY)
+  assert.equal(birth.frames.frame, 0)
+  assert.equal(birth.frames.alpha, 1)
+  assert.ok(Math.abs(birth.frames.scaleX) >= 1.5)
+  assert.ok(Math.abs(birth.frames.scaleX) <= 2)
+  assert.equal(Math.abs(birth.frames.scaleX), birth.frames.scaleY)
+
+  const coreLast = hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 0.09, 41)
+  assert.ok(coreLast.core.alpha > 0)
+  assert.equal(hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 0.1, 41).core.visible, false)
+  assert.equal(hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 0.51, 41).column.visible, false)
+  assert.equal(hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 1.34, 41).visible, false)
 })

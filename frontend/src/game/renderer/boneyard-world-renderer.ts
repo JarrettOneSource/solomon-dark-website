@@ -222,6 +222,7 @@ import {
   nativeLevelUpPresentationFrame,
   skillPickerWorldPresentationFrame,
 } from './level-up-presentation.ts'
+import { installNativeFixedFunctionRenderPipeline } from './native-fixed-function-render-pipeline.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import {
   NativeWorldNameplateLayer,
@@ -585,6 +586,7 @@ export async function createBoneyardWorldRenderer(
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
     }
+    installNativeFixedFunctionRenderPipeline(application.renderer)
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)

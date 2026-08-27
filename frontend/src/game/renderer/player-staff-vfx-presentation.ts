@@ -24,7 +24,7 @@ export function nativePlayerStaffVfxRenderPlan(
 ): PlayerStaffVfxRenderPlan {
   return Object.freeze({
     alpha: state.alpha,
-    blendMode: state.kind === 'player-staff-smoke' ? 'normal' : 'add',
+    blendMode: 'add',
     entry: state.entry,
     light: null,
     position: Object.freeze({ ...state.position }),

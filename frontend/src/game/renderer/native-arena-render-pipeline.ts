@@ -2,7 +2,6 @@ import {
   BatchGeometry,
   DefaultBatcher,
   GlProgram,
-  ImageSource,
   Matrix,
   Shader,
   Texture,
@@ -17,6 +16,7 @@ import {
   textureBitGl,
   type Renderer,
 } from 'pixi.js'
+import { nativeStockTextureFromImage } from './native-fixed-function-render-pipeline.ts'
 
 export const NATIVE_ARENA_SATURATION = 0.65
 
@@ -362,14 +362,7 @@ export function nativeArenaTextureFromImage(
   image: HTMLImageElement,
   addressMode: 'clamp-to-edge' | 'repeat' = 'clamp-to-edge',
 ): Texture {
-  return new Texture({
-    source: new ImageSource({
-      addressMode,
-      alphaMode: 'no-premultiply-alpha',
-      resource: image,
-      scaleMode: 'linear',
-    }),
-  })
+  return nativeStockTextureFromImage(image, addressMode)
 }
 
 export function nativeArenaSaturateSample(
