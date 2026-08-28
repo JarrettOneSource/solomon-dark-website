@@ -1044,6 +1044,8 @@ function normalizeWorld(
           digEventId: encounter.digEventId ?? legacyDigEventId ?? 0,
           digEvents: encounter.digEvents ?? [],
           dialogueMode: encounter.dialogueMode ?? 'ordinary',
+          escapeCollisionSourceIds: encounter.escapeCollisionSourceIds ?? [],
+          escapeTarget: encounter.escapeTarget ?? null,
           tutorialDialogueTicks: encounter.tutorialDialogueTicks ?? 0,
         }
       })()

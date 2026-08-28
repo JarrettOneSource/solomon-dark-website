@@ -3303,6 +3303,11 @@ function finishGameSimulationTick(
       ? { ...input, cast: { ...input.cast, primary: false } }
       : input,
   ]))
+  const boulderGravestoneSourceIds = result.world.kind === 'boneyard'
+    ? new Set(result.world.scenerySpellTargets
+        .filter(({ kind }) => kind === 'gravestone')
+        .map(({ id }) => id))
+    : undefined
   const cast = stepPrimarySpells({
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
@@ -3318,6 +3323,10 @@ function finishGameSimulationTick(
     },
     canTraverseProjectile: (spell, from, to, radius = 0, nativeExclusionMask = 0) => {
       if (result.world.kind === 'boneyard') {
+        const ignoredSourceIds = spell.kind === 'earth'
+          || (spell.kind === 'weld-persistent' && spell.buildId === 1006)
+          ? boulderGravestoneSourceIds
+          : undefined
         return radius > 0
           ? firstBoneyardPathBlockProgress(
               from,
@@ -3325,6 +3334,7 @@ function finishGameSimulationTick(
               boneyardSpellBounds!,
               boneyardCollision!,
               radius,
+              ignoredSourceIds,
             ) === null
           : firstBoneyardLineObstruction(
               from,

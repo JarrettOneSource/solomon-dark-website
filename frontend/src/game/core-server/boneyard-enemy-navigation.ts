@@ -22,6 +22,7 @@ export interface FindBoneyardEnemyRouteRequest {
   readonly bounds: Readonly<BoneyardBounds>
   readonly clearance: number
   readonly end: Readonly<BoneyardPoint>
+  readonly ignoredSourceIds?: ReadonlySet<string>
   readonly start: Readonly<BoneyardPoint>
   readonly world: BoneyardCollisionWorld
 }
@@ -76,8 +77,16 @@ export function findBoneyardEnemyRoute(
   request: FindBoneyardEnemyRouteRequest,
 ): readonly Readonly<BoneyardPoint>[] | null {
   validateRouteRequest(request)
-  const { bodyRadius, bounds, clearance, end, start, world } = request
-  if (pathIsClear(start, end, bounds, world, clearance)) {
+  const {
+    bodyRadius,
+    bounds,
+    clearance,
+    end,
+    ignoredSourceIds,
+    start,
+    world,
+  } = request
+  if (pathIsClear(start, end, bounds, world, clearance, ignoredSourceIds)) {
     return Object.freeze([
       Object.freeze({ ...start }),
       Object.freeze({ ...end }),
@@ -85,8 +94,22 @@ export function findBoneyardEnemyRoute(
   }
 
   const mesh = nativeNavMesh(bounds, world, clearance)
-  const startTriangle = resolveEndpointTriangle(mesh, start, bounds, world, bodyRadius)
-  const endTriangle = resolveEndpointTriangle(mesh, end, bounds, world, bodyRadius)
+  const startTriangle = resolveEndpointTriangle(
+    mesh,
+    start,
+    bounds,
+    world,
+    bodyRadius,
+    ignoredSourceIds,
+  )
+  const endTriangle = resolveEndpointTriangle(
+    mesh,
+    end,
+    bounds,
+    world,
+    bodyRadius,
+    ignoredSourceIds,
+  )
   if (startTriangle === null || endTriangle === null) return null
   const trianglePath = findTrianglePath(mesh, startTriangle, endTriangle)
   if (trianglePath === null) return null
@@ -112,7 +135,13 @@ export function findBoneyardEnemyRoute(
     appendDistinctRoutePoint(route, next.center)
   }
   route.push(Object.freeze({ ...end }))
-  return Object.freeze(simplifyNativeRoutePrefix(route, bounds, world, bodyRadius))
+  return Object.freeze(simplifyNativeRoutePrefix(
+    route,
+    bounds,
+    world,
+    bodyRadius,
+    ignoredSourceIds,
+  ))
 }
 
 function nativeNavMesh(
@@ -633,6 +662,7 @@ function resolveEndpointTriangle(
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): number | null {
   const ranked = mesh.triangles.map((triangle) => {
     const vertices = triangle.vertices.map((vertex) => mesh.points[vertex]!)
@@ -652,6 +682,7 @@ function resolveEndpointTriangle(
     bounds,
     world,
     radius,
+    ignoredSourceIds,
   ))?.id ?? null
 }
 
@@ -746,13 +777,21 @@ function simplifyNativeRoutePrefix(
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   bodyRadius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): readonly Readonly<BoneyardPoint>[] {
   if (route.length < 3) return route
   let firstIndex = 1
   let secondIndex = 2
   let clearance = bodyRadius
   for (let index = 2; index < route.length - 1; index += 1) {
-    if (!pathIsClear(route[0]!, route[index]!, bounds, world, clearance)) break
+    if (!pathIsClear(
+      route[0]!,
+      route[index]!,
+      bounds,
+      world,
+      clearance,
+      ignoredSourceIds,
+    )) break
     firstIndex = index
     secondIndex = index + 1
     clearance *= NATIVE_NAVMESH_SIMPLIFICATION_CLEARANCE_FACTOR
@@ -770,10 +809,12 @@ function pathIsClear(
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): boolean {
   if (!pointInsideNavigationBounds(start, bounds, radius)) return false
   if (!pointInsideNavigationBounds(end, bounds, radius)) return false
   for (const polygon of world.polygons) {
+    if (polygon.sourceId !== undefined && ignoredSourceIds?.has(polygon.sourceId)) continue
     if (pointInNavigationPolygon(start, polygon.points)) return false
     if (pointInNavigationPolygon(end, polygon.points)) return false
     for (let index = 0; index < polygon.points.length; index += 1) {
@@ -787,6 +828,7 @@ function pathIsClear(
     }
   }
   for (const circle of world.circles) {
+    if (circle.sourceId !== undefined && ignoredSourceIds?.has(circle.sourceId)) continue
     const required = radius + circle.radius
     if (navigationSeparationBlocks(
       pointSegmentDistanceSquared(circle.center, start, end),
@@ -794,6 +836,7 @@ function pathIsClear(
     )) return false
   }
   for (const segment of world.segments) {
+    if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
     const required = radius + segment.radius
     if (navigationSeparationBlocks(
       segmentDistanceSquared(start, end, segment.start, segment.end),

@@ -210,6 +210,7 @@ export function canPlaceBoneyardBody(
   bounds: BoneyardBounds,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): boolean {
   if (
     position.x < bounds.x + radius
@@ -217,7 +218,7 @@ export function canPlaceBoneyardBody(
     || position.y < bounds.y + radius
     || position.y > bounds.y + bounds.h - radius
   ) return false
-  return firstContact(position, world, radius, position) === null
+  return firstContact(position, world, radius, position, ignoredSourceIds) === null
 }
 
 /**
@@ -228,8 +229,43 @@ export function boneyardBodyCollides(
   position: BoneyardPoint,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): boolean {
-  return firstContact(position, world, radius, position) !== null
+  return firstContact(position, world, radius, position, ignoredSourceIds) !== null
+}
+
+export function boneyardBodyCollisionSourceIds(
+  position: BoneyardPoint,
+  world: BoneyardCollisionWorld,
+  radius: number,
+): readonly string[] {
+  const sourceIds = new Set<string>()
+  for (const polygon of world.polygons) {
+    if (
+      polygon.sourceId !== undefined
+      && polygonContact(position, radius, polygon.points, position) !== null
+    ) sourceIds.add(polygon.sourceId)
+  }
+  for (const segment of world.segments) {
+    if (
+      segment.sourceId !== undefined
+      && segmentContact(
+        position,
+        radius + segment.radius,
+        segment.start,
+        segment.end,
+        position,
+      ) !== null
+    ) sourceIds.add(segment.sourceId)
+  }
+  for (const circle of world.circles) {
+    if (circle.sourceId === undefined) continue
+    const dx = position.x - circle.center.x
+    const dy = position.y - circle.center.y
+    const required = radius + circle.radius
+    if (dx * dx + dy * dy < required * required) sourceIds.add(circle.sourceId)
+  }
+  return Object.freeze([...sourceIds].sort())
 }
 
 export function resolveBoneyardSpawnPosition(
@@ -363,10 +399,12 @@ export function firstBoneyardLineObstruction(
   world: BoneyardCollisionWorld,
   excludedSourceId?: string,
   nativeExclusionMask = 0,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): BoneyardPoint | null {
   let nearest: LineObstruction | null = lineBoundsExitObstruction(start, end, bounds)
   for (const polygon of world.polygons) {
     if (excludedSourceId !== undefined && polygon.sourceId === excludedSourceId) continue
+    if (polygon.sourceId !== undefined && ignoredSourceIds?.has(polygon.sourceId)) continue
     if (((polygon.nativeLineMask ?? 0) & nativeExclusionMask) !== 0) continue
     for (let index = 0; index < polygon.points.length; index += 1) {
       nearest = nearerLineObstruction(nearest, lineSegmentObstruction(
@@ -379,6 +417,7 @@ export function firstBoneyardLineObstruction(
   }
   for (const circle of world.circles) {
     if (excludedSourceId !== undefined && circle.sourceId === excludedSourceId) continue
+    if (circle.sourceId !== undefined && ignoredSourceIds?.has(circle.sourceId)) continue
     if (((circle.nativeLineMask ?? 0) & nativeExclusionMask) !== 0) continue
     nearest = nearerLineObstruction(
       nearest,
@@ -387,6 +426,7 @@ export function firstBoneyardLineObstruction(
   }
   for (const segment of world.segments) {
     if (excludedSourceId !== undefined && segment.sourceId === excludedSourceId) continue
+    if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
     if (((segment.nativeLineMask ?? 0) & nativeExclusionMask) !== 0) continue
     nearest = nearerLineObstruction(nearest, lineCapsuleObstruction(
       start,
@@ -426,18 +466,25 @@ export function firstBoneyardPathBlockProgress(
   bounds: BoneyardBounds,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): number | null {
-  if (!canPlaceBoneyardBody(start, bounds, world, radius)) return 0
+  if (!canPlaceBoneyardBody(start, bounds, world, radius, ignoredSourceIds)) return 0
   const distance = Math.hypot(end.x - start.x, end.y - start.y)
   if (distance === 0) {
-    return canPlaceBoneyardBody(end, bounds, world, radius) ? null : 0
+    return canPlaceBoneyardBody(end, bounds, world, radius, ignoredSourceIds) ? null : 0
   }
 
   const sampleCount = Math.max(1, Math.ceil(distance))
   let lastClearProgress = 0
   for (let index = 1; index <= sampleCount; index += 1) {
     const progress = index / sampleCount
-    if (canPlaceBoneyardBody(mix(start, end, progress), bounds, world, radius)) {
+    if (canPlaceBoneyardBody(
+      mix(start, end, progress),
+      bounds,
+      world,
+      radius,
+      ignoredSourceIds,
+    )) {
       lastClearProgress = progress
       continue
     }
@@ -445,7 +492,13 @@ export function firstBoneyardPathBlockProgress(
     let blocked = progress
     for (let iteration = 0; iteration < 10; iteration += 1) {
       const candidate = (clear + blocked) / 2
-      if (canPlaceBoneyardBody(mix(start, end, candidate), bounds, world, radius)) {
+      if (canPlaceBoneyardBody(
+        mix(start, end, candidate),
+        bounds,
+        world,
+        radius,
+        ignoredSourceIds,
+      )) {
         clear = candidate
       } else {
         blocked = candidate
@@ -462,17 +515,19 @@ export function resolveBoneyardMovement(
   bounds: BoneyardBounds,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): BoneyardPoint {
   const desired = clampToBounds(requested, bounds, radius)
-  if (!firstContact(desired, world, radius, start)) return desired
+  if (!firstContact(desired, world, radius, start, ignoredSourceIds)) return desired
 
-  const swept = sweepToLastClear(start, desired, world, radius)
+  const swept = sweepToLastClear(start, desired, world, radius, ignoredSourceIds)
   const contact = firstContact(
     mix(swept, desired, 1 / 64),
     world,
     radius,
     start,
-  ) ?? firstContact(desired, world, radius, start)
+    ignoredSourceIds,
+  ) ?? firstContact(desired, world, radius, start, ignoredSourceIds)
   if (!contact) return swept
 
   const remaining = { x: desired.x - swept.x, y: desired.y - swept.y }
@@ -488,8 +543,8 @@ export function resolveBoneyardMovement(
     bounds,
     radius,
   )
-  return firstContact(slideTarget, world, radius, swept)
-    ? sweepToLastClear(swept, slideTarget, world, radius)
+  return firstContact(slideTarget, world, radius, swept, ignoredSourceIds)
+    ? sweepToLastClear(swept, slideTarget, world, radius, ignoredSourceIds)
     : slideTarget
 }
 
@@ -652,12 +707,15 @@ function firstContact(
   world: BoneyardCollisionWorld,
   radius: number,
   previous: BoneyardPoint,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): CollisionContact | null {
   for (const polygon of world.polygons) {
+    if (polygon.sourceId !== undefined && ignoredSourceIds?.has(polygon.sourceId)) continue
     const contact = polygonContact(center, radius, polygon.points, previous)
     if (contact) return contact
   }
   for (const segment of world.segments) {
+    if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
     const contact = segmentContact(
       center,
       radius + segment.radius,
@@ -668,6 +726,7 @@ function firstContact(
     if (contact) return contact
   }
   for (const circle of world.circles) {
+    if (circle.sourceId !== undefined && ignoredSourceIds?.has(circle.sourceId)) continue
     const dx = center.x - circle.center.x
     const dy = center.y - circle.center.y
     const required = radius + circle.radius
@@ -725,12 +784,13 @@ function sweepToLastClear(
   end: BoneyardPoint,
   world: BoneyardCollisionWorld,
   radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
 ): BoneyardPoint {
   let clear = { ...start }
   let blocked = { ...end }
   for (let iteration = 0; iteration < 8; iteration += 1) {
     const candidate = mix(clear, blocked, 0.5)
-    if (firstContact(candidate, world, radius, clear)) blocked = candidate
+    if (firstContact(candidate, world, radius, clear, ignoredSourceIds)) blocked = candidate
     else clear = candidate
   }
   return clear

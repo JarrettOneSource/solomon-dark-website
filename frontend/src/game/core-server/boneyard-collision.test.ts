@@ -133,6 +133,58 @@ test('solid-spell capsules retain every authored blocker including both Gravesto
   assert.ok(graveRootContact !== null && graveRootContact > 0 && graveRootContact < 1)
 })
 
+test('source-filtered solid traversal ignores only selected Gravestone primitives', () => {
+  const scene = makeScene()
+  scene.objects = [
+    {
+      eid: 'tree', typeId: 2001, pos: { x: 100, y: 100 },
+      variant: 1, secondaryVariant: 0, secondaryVisible: false,
+    },
+    { eid: 'grave-root', typeId: 2029, pos: { x: 300, y: 100 }, variant: 0 },
+    {
+      eid: 'grave-promoted', typeId: 2029, pos: { x: 500, y: 100 },
+      overlayVariant: 8, variant: 1,
+    },
+    { eid: 'building', typeId: 2040, pos: { x: 700, y: 100 }, variant: 3 },
+  ]
+  const bounds = { x: 0, y: 0, w: 900, h: 300 }
+  const world = createBoneyardCollisionWorld(scene)
+  const ignored = new Set(['scenery:grave-root', 'scenery:grave-promoted'])
+
+  assert.equal(firstBoneyardPathBlockProgress(
+    { x: 260, y: 100 },
+    { x: 340, y: 100 },
+    bounds,
+    world,
+    20,
+    ignored,
+  ), null)
+  assert.equal(firstBoneyardPathBlockProgress(
+    { x: 450, y: 150 },
+    { x: 550, y: 150 },
+    bounds,
+    world,
+    20,
+    ignored,
+  ), null)
+  assert.notEqual(firstBoneyardPathBlockProgress(
+    { x: 50, y: 100 },
+    { x: 150, y: 100 },
+    bounds,
+    world,
+    20,
+    ignored,
+  ), null)
+  assert.notEqual(firstBoneyardPathBlockProgress(
+    { x: 650, y: 100 },
+    { x: 750, y: 100 },
+    bounds,
+    world,
+    20,
+    ignored,
+  ), null)
+})
+
 test('Fireball terrain lookahead ignores grave, fence, post, tree, and Goodie masks', () => {
   assert.equal(NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK, 0x700)
   const bounds = { x: 0, y: 0, w: 500, h: 200 }

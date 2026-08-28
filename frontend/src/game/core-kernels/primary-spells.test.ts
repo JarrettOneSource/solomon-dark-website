@@ -84,6 +84,7 @@ import {
 import type { LoadedBoneyard } from './boneyard.ts'
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 import {
+  createNativeWeldHailRockFadeActor,
   createNativeWeldMeteor,
   createNativeWeldPersistentActor,
   releaseNativeWeldPersistentActor,
@@ -2628,6 +2629,55 @@ test('all welded sustained families use one latch and run their native release v
       assert.equal(persistent.length, 0)
     }
   }
+})
+
+test('Hail release removes only its own retained rock-birth fades', () => {
+  const profile = weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5])
+  let state = { ...directSpellHarness('earth'), primarySkill: profile }
+  for (let tick = 0; tick < 100; tick += 1) {
+    state = stepSpellKernel(state, true, 100, true, () => true, profile).state
+    if (state.spells.transients.some((effect) => (
+      effect.kind === 'weld-hail-rock-fade'
+    ))) break
+  }
+  const held = state.spells.transients.find((effect) => (
+    effect.kind === 'weld-persistent' && effect.buildId === 1008
+  ))
+  assert.ok(held?.kind === 'weld-persistent' && held.buildId === 1008)
+  const ownFades = state.spells.transients.filter((effect) => (
+    effect.kind === 'weld-hail-rock-fade'
+  ))
+  assert.ok(ownFades.length > 0)
+  const olderFade = createNativeWeldHailRockFadeActor({
+    direction: held.direction,
+    id: state.spells.nextId,
+    origin: held.origin,
+    ownerId: held.ownerId,
+    position: held.origin,
+    rotationDegrees: 0,
+    tick: held.birthTick - 1,
+    vector: held.vector,
+    worldKey: held.worldKey,
+  })
+  state = {
+    ...state,
+    spells: {
+      ...state.spells,
+      nextId: olderFade.id + 1,
+      transients: [...state.spells.transients, olderFade],
+    },
+  }
+
+  state = stepSpellKernel(state, false, 100, true, () => true, profile).state
+
+  assert.equal(state.spells.transients.some((effect) => (
+    effect.kind === 'weld-hail-rock-fade'
+    && effect.birthTick >= held.birthTick
+  )), false)
+  assert.ok(state.spells.transients.some((effect) => effect.id === olderFade.id))
+  assert.ok(state.spells.transients.some((effect) => (
+    effect.kind === 'weld-frost-fade' && effect.buildId === 1008
+  )))
 })
 
 test('Ethereal Boulder solid contact uses its advanced capsule and full terminal family', () => {

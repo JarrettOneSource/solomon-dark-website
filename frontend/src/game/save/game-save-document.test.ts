@@ -811,10 +811,24 @@ test('host save documents retain the active Boneyard and its authoritative run i
     Buffer.alloc(16, 7),
   )
   assert.ok(loadedBoneyard)
-  const state = enterBoneyardWorld(
+  let state = enterBoneyardWorld(
     createGameSimulation({ owner: OWNER }),
     loadedBoneyard,
   )
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) {
+    throw new Error('expected active Boneyard encounter')
+  }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      encounter: {
+        ...state.world.encounter,
+        escapeCollisionSourceIds: ['scenery:grave-4'],
+        escapeTarget: { x: 980, y: 3000 },
+      },
+    },
+  }
   const document = createGameSaveDocument({
     integrity: 'local-only',
     loadedBoneyard,
@@ -848,6 +862,10 @@ test('host save documents retain the active Boneyard and its authoritative run i
   assert.ok(restored.state.world.encounter?.digBodyBobAmplitude < 10)
   assert.equal(restored.state.world.encounter?.digBodyOffsetY, 0)
   assert.deepEqual(restored.state.world.encounter?.digEvents, [])
+  assert.deepEqual(restored.state.world.encounter?.escapeCollisionSourceIds, [
+    'scenery:grave-4',
+  ])
+  assert.deepEqual(restored.state.world.encounter?.escapeTarget, { x: 980, y: 3000 })
   assert.deepEqual(restored.state.world.hallOfFameRuns, state.world.kind === 'boneyard'
     ? state.world.hallOfFameRuns
     : {})
@@ -948,6 +966,8 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   delete encounter.digBodyOffsetY
   delete encounter.digEventId
   delete encounter.digEvents
+  delete encounter.escapeCollisionSourceIds
+  delete encounter.escapeTarget
   encounter.digAudioEventId = 12
   encounter.digAudioEvents = [{ cue: 'throw-dirt-1', id: 12 }]
 
@@ -960,6 +980,8 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   assert.equal('digAudioEvents' in restored.state.world.encounter!, false)
   assert.ok(restored.state.world.encounter!.digBodyBobAmplitude >= 5)
   assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
+  assert.deepEqual(restored.state.world.encounter!.escapeCollisionSourceIds, [])
+  assert.equal(restored.state.world.encounter!.escapeTarget, null)
 })
 
 test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 19', () => {

@@ -7,6 +7,8 @@ import {
   SOLOMON_VOICE_DURATION_TICKS,
   createSolomonEncounter,
   isBoneyardPlayerCombatEnabled,
+  nativeSolomonEscapePathTarget,
+  nativeSolomonEscapeTarget,
   nativeSolomonDigBodyOffsetY,
   isSolomonPlayerLocked,
   solomonContactContains,
@@ -473,6 +475,22 @@ test('escape movement uses current speed while gait uses the incremented speed',
   assert.ok(Math.abs(encounter.walkCycle - 2.05 / 30) < 1e-12)
 })
 
+test('escape target and path clips use the native Arena margins', () => {
+  const bounds = { x: 0, y: 0, w: 2_000, h: 1_600 }
+  const position = { x: 1_000, y: 1_000 }
+  const escapeTarget = nativeSolomonEscapeTarget(position, 90, bounds)
+
+  assert.deepEqual(escapeTarget, { x: 2_100, y: 1_000 })
+  assert.deepEqual(
+    nativeSolomonEscapePathTarget(position, escapeTarget, bounds),
+    { x: 2_050, y: 1_000 },
+  )
+  assert.deepEqual(nativeSolomonEscapeTarget(position, 0, bounds), {
+    x: 1_000,
+    y: -100,
+  })
+})
+
 test('escape hop lands at zero and resets to the native repeating acceleration', () => {
   const encounter = stepSolomonEncounter({
     ...createSolomonEncounter(DIG, 'escape-hop-seed'),
@@ -491,7 +509,9 @@ test('the final escape lifetime tick moves before Solomon is retired', () => {
   const encounter = stepSolomonEncounter({
     ...createSolomonEncounter(DIG, 'escape-retirement-seed'),
     acceleration: -3,
+    escapeCollisionSourceIds: ['scenery:grave'],
     escapeSpeed: 2,
+    escapeTarget: { x: 2000, y: 1000 },
     headingDeg: 90,
     lifetimeTicksRemaining: 1,
     phase: 'escaping',
@@ -502,5 +522,7 @@ test('the final escape lifetime tick moves before Solomon is retired', () => {
   assert.equal(encounter.lifetimeTicksRemaining, 0)
   assert.equal(encounter.position.x, DIG.position.x + 2)
   assert.equal(encounter.escapeSpeed, 2.05)
+  assert.deepEqual(encounter.escapeCollisionSourceIds, [])
+  assert.equal(encounter.escapeTarget, null)
   assert.ok(Math.abs(encounter.walkCycle - 2.05 / 30) < 1e-12)
 })

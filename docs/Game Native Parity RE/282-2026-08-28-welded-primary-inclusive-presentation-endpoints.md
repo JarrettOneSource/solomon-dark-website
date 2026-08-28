@@ -71,7 +71,7 @@ and teardown.
 | Build 1007 Meteor impact disc | impact `Float(360)` and weak signed `Float(.2)` pitch around one | `exact-ported` decoder correction | retained impact rotation accepts `360` and weak pitch accepts `Math.fround(1.2)`; fall heading remains separately bounded |
 | Build 1007 Meteor debris | five `Float(360)` child rotations plus retained spin | `verified-already-at-parity` | debris decoder already accepts finite rotations beyond one revolution |
 | Build 1008 Hail accepted-rock line | `.25+Float(.25)` terminal alpha | `exact-ported` decoder correction | line endpoint alpha accepts `.5`, rejects above, and keeps its 14-tick lifetime |
-| Build 1008 Hail enhanced rock birth fade | rock-rebuild `Float(20)` | `exact-ported` decoder correction | FadeFrost accepts `20`, rejects above, and keeps its 20-tick lifetime |
+| Build 1008 Hail enhanced rock birth fade | rock-rebuild `Float(20)` | `exact-ported` decoder correction | record-18 `Anim_Fade` rotation accepts `20`, rejects above, and keeps its native 400-tick lifetime; the separate release FadeFrost remains 20 ticks |
 | Build 1008 terrain particles/bouncers | accumulated sector angle or `Float(360)` plus retained spin | `verified-already-at-parity` | both decoder branches already accept finite rotations |
 | Build 1009 GroundSpark record-71/fork fades | per-update `Float(360)` | `exact-ported` decoder correction | both fade records accept `360`, reject above, and retain alpha/scale bounds |
 | Build 1009 GroundSpark impact | contact `Float(360)` plus `1+Float(.1)` pitch | `exact-ported` decoder correction | impact accepts `360` and pitch `Math.fround(1.1)` while retaining the native variant contract |

@@ -2413,7 +2413,24 @@ function releaseOwnedNativeWeldPersistentActors(
   let nextId = sourceNextId
   let rng = sourceRng
   const transients: PrimarySpellTransientState[] = []
-  for (const effect of source) {
+  const releasingHail = source.filter((effect): effect is Extract<
+    NativeWeldWorldActor,
+    { buildId: 1008; kind: 'weld-persistent' }
+  > => (
+    effect.kind === 'weld-persistent'
+    && effect.buildId === 1008
+    && effect.ownerId === ownerId
+    && effect.phase === 'held'
+  ))
+  const retainedSource = source.filter((effect) => (
+    effect.kind !== 'weld-hail-rock-fade'
+    || !releasingHail.some((actor) => (
+      effect.ownerId === actor.ownerId
+      && effect.worldKey === actor.worldKey
+      && effect.birthTick >= actor.birthTick
+    ))
+  ))
+  for (const effect of retainedSource) {
     if (
       effect.kind !== 'weld-persistent'
       || effect.ownerId !== ownerId

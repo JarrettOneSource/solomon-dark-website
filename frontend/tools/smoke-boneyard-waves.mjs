@@ -230,6 +230,7 @@ try {
   let opening
   let runEdge
   let runEdgeGraveMarkPassCount
+  let solomonEscape
   try {
     await page.waitForFunction(() => (
       Number(document.querySelector('.boneyard-scene')
@@ -240,6 +241,17 @@ try {
     runEdgeGraveMarkPassCount = (await boneyardFrame(page)).solomonGraveMarkPassCount
     assert.equal(runEdgeGraveMarkPassCount, 0)
     assert.equal(runEdge.combatEnabled, true)
+    await page.waitForFunction(({ x, y }) => {
+      const scene = document.querySelector('.boneyard-scene')
+      const currentX = Number(scene?.getAttribute('data-solomon-x'))
+      const currentY = Number(scene?.getAttribute('data-solomon-y'))
+      return Math.hypot(currentX - x, currentY - y) > 20
+    }, { x: runEdge.solomonX, y: runEdge.solomonY }, { timeout: 5_000 })
+    solomonEscape = await encounterReceipt(scene)
+    assert.ok(Math.hypot(
+      solomonEscape.solomonX - runEdge.solomonX,
+      solomonEscape.solomonY - runEdge.solomonY,
+    ) > 20)
     await page.screenshot({ path: screenshotPath })
     await page.waitForFunction((requiredLiveEnemies) => {
       const scene = document.querySelector('.boneyard-scene')
@@ -335,6 +347,7 @@ try {
       chillArrowScreenshotPath,
       retiredEntryScreenshotPath,
       runCombatAdmission,
+      solomonEscape,
       initialGraveMarkPassCount: initialFrame.solomonGraveMarkPassCount,
       speakingGraveMarkPassCount,
       runEdgeGraveMarkPassCount,
@@ -505,6 +518,7 @@ try {
       runId: secondLoadedBoneyard.runId,
       seed: secondLoadedBoneyard.seed,
     },
+    solomonEscape,
     speakingCombatAdmission,
     speakingScreenshotPath,
     status: 'ok',
@@ -3292,6 +3306,8 @@ async function encounterReceipt(scene) {
     renderFrame: Number(document.querySelector('.boneyard-dig-anchor')
       ?.getAttribute('data-frame')),
     runEventId: Number(node.getAttribute('data-solomon-run-event-id')),
+    solomonX: Number(node.getAttribute('data-solomon-x')),
+    solomonY: Number(node.getAttribute('data-solomon-y')),
     voiceCue: node.getAttribute('data-solomon-voice-cue'),
     voiceEventId: Number(node.getAttribute('data-solomon-voice-event-id')),
     waveOrdinal: Number(node.getAttribute('data-wave-ordinal')),

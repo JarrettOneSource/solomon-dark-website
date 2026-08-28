@@ -1,4 +1,4 @@
-import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import {
   resolveActorMotion,
   type ActorPhysicsBody,
@@ -19,6 +19,12 @@ import {
 import {
   createSolomonEncounter,
   isSolomonPlayerLocked,
+  nativeSolomonEscapePathTarget,
+  nativeSolomonEscapeTarget,
+  NATIVE_SOLOMON_COLLISION_RADIUS,
+  NATIVE_SOLOMON_ESCAPE_PATH_MARGIN,
+  NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED,
+  NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
   stepSolomonEncounter,
   type BoneyardSolomonEncounterState,
 } from '../core-kernels/boneyard-encounter.ts'
@@ -97,9 +103,11 @@ import {
 } from '../core-kernels/native-enemy-world-feedback.ts'
 import {
   boneyardSpawnPositionIsOffscreen,
+  boneyardBodyCollisionSourceIds,
   canPlaceBoneyardBody,
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
+  firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
   resolveNativeBoneyardSpawnPosition,
   resolveBoneyardMovement,
@@ -522,20 +530,24 @@ export function stepBoneyardWorldTick(
     tick,
   })
   let loot = lootStep.store
-  let encounter = world.encounter === null
-    ? null
-    : stepSolomonEncounter(world.encounter, livingPlayers, tick)
-  if (world.encounter?.phase === 'escaping' && encounter !== null) {
-    encounter = {
-      ...encounter,
-      position: resolveBoneyardMovement(
-        world.encounter.position,
-        encounter.position,
-        activeBounds,
+  const encounterSource = world.encounter?.phase === 'escaping'
+    ? prepareSolomonEscapeNavigation(
+        world.encounter,
+        world.bounds,
         collision,
-        PLAYER_CHARACTER_RADIUS,
-      ),
-    }
+        world.collision,
+      )
+    : world.encounter
+  let encounter = encounterSource === null
+    ? null
+    : stepSolomonEncounter(encounterSource, livingPlayers, tick)
+  if (encounterSource?.phase === 'escaping' && encounter !== null) {
+    encounter = resolveSolomonEscapeMovement(
+      encounterSource,
+      encounter,
+      world.bounds,
+      collision,
+    )
   }
   let waves = world.waves
   let tutorial = world.tutorial
@@ -916,6 +928,159 @@ export function stepBoneyardWorldTick(
       waves,
     },
   }
+}
+
+function prepareSolomonEscapeNavigation(
+  source: BoneyardSolomonEncounterState,
+  bounds: Readonly<BoneyardBounds>,
+  collision: BoneyardCollisionWorld,
+  navigationCollision: BoneyardCollisionWorld,
+): BoneyardSolomonEncounterState {
+  const escapeTarget = source.escapeTarget ?? nativeSolomonEscapeTarget(
+    source.position,
+    source.headingDeg,
+    bounds,
+  )
+  const escapeCollisionSourceIds = source.escapeTarget === null
+    ? boneyardBodyCollisionSourceIds(
+        source.position,
+        collision,
+        NATIVE_SOLOMON_COLLISION_RADIUS,
+      )
+    : source.escapeCollisionSourceIds
+  const pathTarget = nativeSolomonEscapePathTarget(
+    source.position,
+    escapeTarget,
+    bounds,
+  )
+  const traversalBounds = solomonEscapeTraversalBounds(bounds)
+  const ignoredSourceIds = new Set(escapeCollisionSourceIds)
+  const directPathBlockProgress = firstBoneyardPathBlockProgress(
+    source.position,
+    pathTarget,
+    traversalBounds,
+    collision,
+    NATIVE_SOLOMON_COLLISION_RADIUS,
+    ignoredSourceIds,
+  )
+  const route = directPathBlockProgress === null
+    ? null
+    : findBoneyardEnemyRoute({
+        bodyRadius: NATIVE_SOLOMON_COLLISION_RADIUS,
+        bounds: traversalBounds,
+        clearance: NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
+        end: pathTarget,
+        ignoredSourceIds,
+        start: source.position,
+        world: navigationCollision,
+      })
+  const goal = solomonEscapeRouteGoal(
+    source.position,
+    pathTarget,
+    route,
+    traversalBounds,
+    collision,
+    ignoredSourceIds,
+  )
+  return {
+    ...source,
+    escapeCollisionSourceIds,
+    escapeTarget,
+    headingDeg: actorHeadingFromVector(
+      goal.x - source.position.x,
+      goal.y - source.position.y,
+    ),
+  }
+}
+
+function resolveSolomonEscapeMovement(
+  source: BoneyardSolomonEncounterState,
+  next: BoneyardSolomonEncounterState,
+  bounds: Readonly<BoneyardBounds>,
+  collision: BoneyardCollisionWorld,
+): BoneyardSolomonEncounterState {
+  const ignoredSourceIds = source.escapeCollisionSourceIds.length === 0
+    ? undefined
+    : new Set(source.escapeCollisionSourceIds)
+  const pathTarget = source.escapeTarget === null
+    ? null
+    : nativeSolomonEscapePathTarget(source.position, source.escapeTarget, bounds)
+  const pathTargetReached = pathTarget !== null
+    && squaredDistance(source.position, pathTarget)
+      <= NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED
+  const position = pathTargetReached
+    ? source.position
+    : resolveBoneyardMovement(
+        source.position,
+        next.position,
+        solomonEscapeTraversalBounds(bounds),
+        collision,
+        NATIVE_SOLOMON_COLLISION_RADIUS,
+        ignoredSourceIds,
+      )
+  if (next.phase === 'gone') return { ...next, position }
+  const activeCollisionSourceIds = new Set(boneyardBodyCollisionSourceIds(
+    position,
+    collision,
+    NATIVE_SOLOMON_COLLISION_RADIUS,
+  ))
+  const escapeCollisionSourceIds = source.escapeCollisionSourceIds.filter((sourceId) => (
+    activeCollisionSourceIds.has(sourceId)
+  ))
+  return {
+    ...next,
+    escapeCollisionSourceIds,
+    position,
+  }
+}
+
+function solomonEscapeRouteGoal(
+  position: Readonly<BoneyardPoint>,
+  pathTarget: Readonly<BoneyardPoint>,
+  route: readonly Readonly<BoneyardPoint>[] | null,
+  bounds: Readonly<BoneyardBounds>,
+  collision: BoneyardCollisionWorld,
+  ignoredSourceIds: ReadonlySet<string>,
+): Readonly<BoneyardPoint> {
+  if (route === null || route.length < 2) return pathTarget
+  let goal = route[1]!
+  for (let index = 2; index < route.length; index += 1) {
+    const candidate = route[index]!
+    if (firstBoneyardLineObstruction(
+      position,
+      candidate,
+      bounds,
+      collision,
+      undefined,
+      0,
+      ignoredSourceIds,
+    ) !== null) break
+    goal = candidate
+  }
+  return goal
+}
+
+function solomonEscapeTraversalBounds(
+  bounds: Readonly<BoneyardBounds>,
+): BoneyardBounds {
+  // The shared resolver insets by body radius; compensate so Solomon's center
+  // can reach the native state-4 rectangle expanded by 50.
+  const padding = NATIVE_SOLOMON_ESCAPE_PATH_MARGIN + NATIVE_SOLOMON_COLLISION_RADIUS
+  return {
+    h: bounds.h + padding * 2,
+    w: bounds.w + padding * 2,
+    x: bounds.x - padding,
+    y: bounds.y - padding,
+  }
+}
+
+function squaredDistance(
+  left: Readonly<BoneyardPoint>,
+  right: Readonly<BoneyardPoint>,
+): number {
+  const dx = right.x - left.x
+  const dy = right.y - left.y
+  return dx * dx + dy * dy
 }
 
 function pointInsideBounds(

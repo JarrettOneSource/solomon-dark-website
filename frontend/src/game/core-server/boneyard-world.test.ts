@@ -29,6 +29,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
+import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import {
   boneyardPrimarySpellTargets,
   createBoneyardWorld,
@@ -1630,7 +1631,7 @@ test('retains every native group-four scene-object family for Earthquake wobble 
   ])
 })
 
-test('Solomon escape intent is clipped by authoritative Boneyard collision', () => {
+test('Solomon escape routes around authoritative Boneyard collision', () => {
   const loaded = encounterBoneyard('default')
   const world = createBoneyardWorld({
     ...loaded,
@@ -1642,26 +1643,125 @@ test('Solomon escape intent is clipped by authoritative Boneyard collision', () 
         segmentCode: 0,
         typeId: 3005,
       }],
+      objects: [{
+        eid: 'escape-root-grave',
+        overlayVariant: 8,
+        pos: { x: 980, y: 1000 },
+        typeId: 2029,
+        variant: 0,
+      }],
     },
   })
   assert.ok(world.encounter)
-  const escaping = {
+  let escaping: Parameters<typeof stepBoneyardWorldTick>[0] = {
     ...world,
+    arenaTransition: null,
     encounter: {
       ...world.encounter,
       acceleration: -3,
       escapeSpeed: 10,
       headingDeg: 90,
-      lifetimeTicksRemaining: 100,
+      lifetimeTicksRemaining: 515,
       phase: 'escaping' as const,
-      position: { x: 1000, y: 1000 },
+      position: { x: 980, y: 1000 },
     },
+    waves: null,
   }
 
-  const result = stepWorld(escaping, {}, {}, 1)
+  for (let tick = 1; tick <= 150; tick += 1) {
+    escaping = stepWorld(escaping, {}, {}, tick).world
+  }
 
-  assert.ok(result.world.encounter)
-  assert.ok(result.world.encounter.position.x < 1007.01)
+  assert.ok(escaping.encounter)
+  assert.deepEqual(escaping.encounter.escapeCollisionSourceIds, [])
+  assert.ok(escaping.encounter.position.x > 1055, JSON.stringify({
+    headingDeg: escaping.encounter.headingDeg,
+    position: escaping.encounter.position,
+  }))
+  assert.notEqual(escaping.encounter.position.y, 1000)
+})
+
+test('Solomon holds the native expanded path edge until retirement', () => {
+  let world = createBoneyardWorld(encounterBoneyard('default'))
+  assert.ok(world.encounter)
+  world = {
+    ...world,
+    arenaTransition: null,
+    encounter: {
+      ...world.encounter,
+      acceleration: -3,
+      escapeSpeed: 20,
+      headingDeg: 90,
+      lifetimeTicksRemaining: 515,
+      phase: 'escaping',
+      position: { x: 1000, y: 1000 },
+    },
+    waves: null,
+  }
+
+  for (let tick = 1; tick <= 80; tick += 1) {
+    world = stepWorld(world, {}, {}, tick).world
+    assert.ok(world.encounter)
+    if (world.encounter.position.x < 2050) continue
+    const reached = world.encounter
+    world = stepWorld(world, {}, {}, tick + 1).world
+    assert.ok(world.encounter)
+    assert.deepEqual(world.encounter.position, reached.position)
+    assert.equal(
+      world.encounter.lifetimeTicksRemaining,
+      reached.lifetimeTicksRemaining - 1,
+    )
+    return
+  }
+  assert.fail('Solomon did not reach the expanded state-4 path edge')
+})
+
+test('every generated Solomon escape leaves its grave cluster for all native headings', () => {
+  for (const [templateIndex, template] of NATIVE_GENERATED_BONEYARDS.entries()) {
+    for (const headingDeg of [30, 60, 300, 330]) {
+      let world = createBoneyardWorld({
+        choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+        geometrySha256: template.geometrySha256,
+        runId: `solomon-escape-${templateIndex}-${headingDeg}`,
+        scene: template.scene,
+        seed: '00112233445566778899aabbccddeeff',
+        sourceSha256: template.sourceSha256,
+      })
+      assert.ok(world.encounter)
+      const initial = { ...world.encounter.position }
+      world = {
+        ...world,
+        arenaTransition: null,
+        encounter: {
+          ...world.encounter,
+          acceleration: -3,
+          escapeSpeed: 2,
+          headingDeg,
+          lifetimeTicksRemaining: 515,
+          motion: 0,
+          phase: 'escaping',
+          runEventId: 1,
+          walkCycle: 0,
+        },
+        waves: null,
+      }
+      const poses = new Set<number>()
+      for (let tick = 1; tick <= 100; tick += 1) {
+        world = stepWorld(world, {}, {}, tick).world
+        assert.ok(world.encounter)
+        poses.add(Math.trunc(world.encounter.walkCycle) % 6)
+      }
+      assert.ok(world.encounter)
+      assert.ok(
+        Math.hypot(
+          world.encounter.position.x - initial.x,
+          world.encounter.position.y - initial.y,
+        ) > 10,
+        `template ${templateIndex} heading ${headingDeg} left Solomon at his grave`,
+      )
+      assert.deepEqual([...poses].sort(), [0, 1, 2, 3, 4, 5])
+    }
+  }
 })
 
 function gatedBoneyard(): LoadedBoneyard {

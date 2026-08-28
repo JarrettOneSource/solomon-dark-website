@@ -219,3 +219,131 @@ runtime was not initialized. The process was not restarted or mutated. This
 does not weaken the static actor trace, exact PCM evidence, retail schedule,
 or serialized 594-event oracle; it only means no fresh live field sample was
 added during this pass.
+
+## 2026-08-28 — Solomon state-4 NavMesh and embedded-grave escape reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: after `SOLOMON RUNS`, Solomon remains rooted against
+  the grave while all six running poses cycle. Waves still begin and the actor
+  eventually disappears, making the failure presentation-only to players.
+- Stock behavior to recover: state 4 must retain its clipped 4096-unit escape
+  target, blocked-path NavMesh route, collision-resolved movement, increasing
+  speed, hop, gait, and 515-tick lifetime as one authoritative owner.
+- Reproduction: all twelve stock-generated Boneyards and the four reachable
+  post-deflection headings `30/60/300/330`; owning-grave-only and all-graves
+  collision falsifiers; first 100 ticks and terminal tick 515.
+
+This is a secondary report against the earlier entry. That pass documented the
+native waypoint query but shipped the named per-step collision projection as
+an approximation even though the browser can represent the already recovered
+Arena NavMesh. It also reused the player radius `25` without extracting the
+Solomon constructor's body radius. Both shortcuts are reopened here.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Current Mac authority/presentation matrix | Website `0c510ce3`; all 12 generated templates x headings `30/60/300/330` | All 48 full-collision runs kept exactly one position through tick 100 while exposing all six walk poses, then retired as `gone` at tick 515. Removing all Gravestones released all 48; removing only the owning grave released 36 because three templates begin inside more than one grave footprint. | high |
+| Fresh constructor instructions | retail 0.72.5 SHA-256 `03a834...f1e3`; `Solomon_Dig::Ctor 0x00481C20` | Constructor writes type `0x1391`, static/dynamic masks `0x400/0x810`, collision radius `30` from `0x00784ED8`, resistance `90` from `0x00785D98`, and inherits the shared Badguy route/movement base. | high |
+| Fresh transition/state-4 instructions | `0x0047D570`, `0x004857B0`; Arena vtable `0x00785934 + 0x10C -> 0x0063ED40`; rectangle expand `0x0042D1B0`; segment clip `0x00410FF0`; route wrapper `0x005DFF20`; LOS/movement `0x00524180/0x00524D70/0x00525800` | Transition builds a 4096-unit target along the signed-deflected heading, reads the Arena rectangle, expands it uniformly by 100, and clips the ray. State 4 reads the same Arena rectangle, expands it by 50, clips the active path again, tests direct clearance, and calls the persistent Arena NavMesh when blocked. `0x005DFF20` clears and rebuilds its NavMesh-owned scratch route on every call; state 4 tests later returned points with the point-width, mask-zero LOS call at `0x00485A1C`, selects the farthest visible waypoint for that tick, faces it, and submits movement before speed/gait/hop/lifetime updates. | high |
+| Current web causal trace | `boneyard-encounter.ts`, `boneyard-world.ts` | Kernel advances a straight heading and gait; the world then resolves that delta with player radius 25 against every static collider. Solomon starts at grave `(gx+10,gy+113)`, already intersecting the promoted grave footprint, so the generic resolver returns the same root forever while clocks continue. | high |
+
+Ghidra provenance: canonical `SolomonDark` project through the read-only replica
+wrapper, preferred image base `0x00400000`; Mod Loader tool revision
+`08bfba9ef367f7b863848030d0a289dc31e33192` was read-only and unchanged.
+
+### System boundary and membership inventory
+
+Native system: **Solomon direct-goal/NavMesh escape**, from state-3 target
+construction through embedded-start admission, route selection, waypoint
+advance, facing, collision, gait/hop, replication, save/restore, and teardown.
+
+| Member / branch | Native source | Disposition required | Proof |
+| --- | --- | --- | --- |
+| state-3 target and signed heading | `0x0047D570` | `exact-ported` | target/heading goldens and all four headings |
+| clipped 4096-unit target | `0x0047D862..0x0047D9AC` | `exact-ported` | durable target ends on the Arena rectangle expanded by 100 and survives restore |
+| state-4 active path clip | `0x004857B0..0x0048587A` | `exact-ported` | route endpoint ends on the Arena rectangle expanded by 50 |
+| direct clear route | `0x00524180` | `exact-ported` | clear template reaches target direction without NavMesh waypoint |
+| blocked route and waypoint selection | `0x005DFF20`, `0x004857B0` | `exact-ported` through existing Arena NavMesh | every blocked tick rebuilds the scratch route and selects its farthest visible returned waypoint |
+| embedded starting grave set | constructor geometry and `MoveStep` | `exact-ported` | only initially overlapping source ids are ignored until exited; later contact is restored |
+| collision body | ctor `+0x30 = 30` | `exact-ported` | no player-radius reuse |
+| speed, gait, hop, lifetime | state 4 `0x00485C48..0x00485D85` | `verified-already-at-parity` | existing clocks retained while resolved travel becomes nonzero |
+| run trigger/wave admission | state-3 `FUN_0068B6D0(...,15)` | `verified-already-at-parity` | exactly one run event independent of route length |
+| local/observer presentation | encounter snapshot and renderer | `verified-already-at-parity` | shared position/heading/pose route; no client pathfinding |
+| save/restore during state 4 | Website continuation owner | `exact-ported` | durable target and initial-overlap set resume; ephemeral NavMesh scratch is rebuilt next tick |
+| Tutorial and twelve generated default Arenas | shared Solomon_Dig class | `exact-ported` | per-template/scene coverage |
+| mod Arenas | Website constructs no retail Solomon encounter for mod source | `out-of-system` | existing source gate remains explicit |
+| Solomon_Riff, DriveBy, Memorator, GameNpc | other direct native solver callers | `out-of-system` — not constructed by Website survival factory | caller census remains documented in entry 273 |
+| pause, Game Over, world replacement, disconnect | world lifecycle | `verified-already-at-parity` | no route state survives encounter/world teardown |
+
+No member is `blocked-by-platform`.
+
+### Native ownership and implementation consequence
+
+- Keep timing, RNG, voice, wave start, gait, hop, renderer, and protocol-facing
+  fields in the existing encounter kernel. Add only the internal authoritative
+  escape target and embedded-source state. The NavMesh owns its ephemeral route;
+  clients continue consuming only semantic position, heading, phase, and walk
+  cycle.
+- Use the existing persistent `findBoneyardEnemyRoute` service with native
+  ordinary clearance 25 and Solomon body radius 30. The durable ray uses the
+  full Arena rectangle expanded by 100; route selection and movement use that
+  full rectangle expanded by 50, independent of the entrance/combat-boundary
+  transition. Do not add a Solomon-only steering approximation or stop the
+  running animation when blocked.
+- At route birth, record every sourced collision primitive intersecting the
+  intentional set-piece root. Ignore only those exact sources while the body
+  exits them, then restore normal collision. Apply the exemption to direct,
+  NavMesh endpoint/simplification, point-width waypoint-visibility, and final
+  movement queries while retaining the one authored Arena NavMesh itself. This
+  handles layouts where two graves overlap the root without rebuilding the
+  mesh or granting permanent grave noclip.
+- Remove the old straight-delta/player-radius collision projection once the
+  route owner replaces it. No fallback path remains.
+
+### Validation contract
+
+- Red/green matrix: twelve generated templates x four headings must move from
+  the first 100-tick root, visit all six poses, keep one run event, and retire
+  on tick 515; the former implementation fails all 48 displacement rows.
+- Geometry goldens must distinguish the 100-unit durable target clip from the
+  50-unit per-state path clip and retain the final movement tick before route
+  teardown.
+- Route membership: direct-clear, blocked per-tick rebuild/farthest-visible
+  selection, embedded one- and multi-grave starts, restored later grave
+  collision, route failure, and durable target/overlap save/restore each
+  receive focused assertions.
+- Mac Chrome: enter the authentic Boneyard, trigger the dialogue/run edge, and
+  record nonzero Solomon displacement through the same live action while waves,
+  audio, camera, and renderer stay healthy with empty error arrays.
+- Complete gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact Mac
+  candidate.
+
+### Implemented result and browser acceptance
+
+- The Website now retains the native +100 durable ray and +50 state-4 path
+  clip, uses Solomon's radius 30, rebuilds the NavMesh scratch route on blocked
+  ticks, applies the stock point-width/mask-zero later-waypoint visibility
+  query, and resolves the selected direction through normal body collision.
+- Only collision sources intersecting Solomon's intentional set-piece root are
+  exempt during endpoint, visibility, and movement queries. Each exemption is
+  discarded as soon as his radius-30 body leaves that source; the authored
+  Arena NavMesh remains stable and later collision is normal.
+- Mac typecheck plus the focused Hail/collision/navigation/Solomon/Boulder/save
+  set passed `229/229`. The Solomon matrix covers all twelve generated Arenas
+  at headings `30/60/300/330`, a sourced embedded grave plus blocking wall,
+  the +50 path-edge hold, final-tick teardown, and continuation migration.
+- Chrome `151.0.7922.174` production acceptance completed the authentic
+  dialogue/run/opening journey in 97 seconds. The live run-edge assertion saw
+  more than 20 units of immediate displacement; the escaping sample reached
+  `(803.4416164459224,2508.9257586672406)` and the terminal +50-edge sample
+  reached `(675.9001350277774,2793.6415342579367)`. Waves admitted eleven
+  opening enemies, the renderer stayed at 60 FPS, and page, wire, and failed-
+  response arrays were empty. Visual receipt:
+  `.tmp-solomon-final/solomon-escape.png` (temporary acceptance capture).
+- The exact Mac candidate passed `/opt/homebrew/bin/bash ./scripts/validate.sh`:
+  backend build with zero warnings/errors, all backend/contracts, prerequisite
+  and broad Boneyard/runtime tests, every auxiliary frontend and desktop suite,
+  production frontend/game-host builds, CSP media policy, and bundle budget.
+  The raw Game entry remains below both bundle limits.

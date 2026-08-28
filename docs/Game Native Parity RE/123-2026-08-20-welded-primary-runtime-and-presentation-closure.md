@@ -690,3 +690,76 @@ Browser logs are under `/Users/jarrett/codex-acceptance/` with the
 tested code cutoff. The final membership rescan found no unresolved skill row,
 effect owner, VFX/light/audio branch, cast gate, protocol member, or
 platform-blocked implementation.
+
+## 2026-08-28 — User-authorized Hail release cleanup QoL
+
+### Reported smell and recovered cause
+
+- Reported behavior: Hailstones now casts successfully, but stationary rock
+  artifacts remain around the cast root after the carrier releases and its
+  impact presentation finishes.
+- Mac Chrome isolated eleven held rocks and eleven matching
+  `weld-hail-rock-fade` actors. Terrain particles/bouncers retired first; all
+  eleven fades remained visible before naturally reaching zero.
+- Fresh retail instructions confirm this is not a Pixi leak. Hail rebuild
+  `0x005F3090` constructs a separately registered `Anim_Fade 0x00452E20`,
+  writes alpha `4.0` at `0x005F33E8` and loss `0.01` at `0x005F33F2`, and
+  `Anim_Fade::Tick 0x00454000` subtracts until zero: 400 fixed ticks. The Hail
+  release `Anim_FadeFrost` is the distinct 20-tick actor.
+
+The user explicitly authorized visual cleanup after this native behavior was
+identified. The Website therefore adopts a narrow QoL divergence: rock-birth
+fades remain exact while the Hail carrier is held, then fades born by that cast
+retire on its release. Gameplay, RNG, carrier/rock state, contact children,
+terrain impact, audio, light, and all other welded builds stay native.
+
+### System boundary and membership inventory
+
+Native/QoL system: **Hail rock-birth child lifetime at the held-to-flight
+boundary**.
+
+| Member / branch | Source | Disposition | Proof |
+| --- | --- | --- | --- |
+| enhanced rock rebuild and `Float(20)` rotation | `0x005F3090` | `verified-already-at-parity` | every new rock still consumes the exact RNG and creates its held fade |
+| record-18 fade alpha/loss | `0x005F33E8/0x005F33F2`, `0x00454000` | `verified native behavior; explicit user-authorized QoL at release` | held ages remain exact; release removes only same-cast children |
+| release FadeFrost | `0x005FAC70` | `verified-already-at-parity` | independent 20-tick Water compositor remains |
+| held normal/underpowered Hail | build 1008 owner | `exact-ported` | both retain visible birth fades until release |
+| same-owner earlier Hail cast | actor birth ticks | `exact-ported QoL scoping` | older-cast children are not confused with the releasing carrier |
+| terrain particles/bouncers and target line/flash | `0x005FBDE0` | `verified-already-at-parity` | no cleanup widening to impact actors |
+| builds 1000..1007/1009 | separate welded actor families | `out-of-system` | no Hail rock-birth child |
+| owner death/disconnect/world replacement | existing teardown | `verified-already-at-parity` | complete cleanup remains broader than release QoL |
+| host, observer, late join | shared transient list | `exact-ported by authoritative removal` | no renderer-local suppression or protocol fork |
+
+No member is `blocked-by-platform`.
+
+### Implementation and validation contract
+
+- In the persistent-weld release owner, associate a Hail rock fade with the
+  releasing cast by world, owner, build, and birth interval. Remove those
+  children atomically with the held carrier-to-flight transition. Do not add a
+  timer, renderer filter, setting, or compatibility branch.
+- Red/green coverage must retain held fade creation/RNG, release FadeFrost,
+  Hail flight/impact children, earlier-cast independence, owner/world teardown,
+  protocol round-trip, and audio loop balance.
+- Mac Chrome must hold build 1008 until multiple rock births, release, observe
+  the carrier/impact family, and prove zero rock-birth fades immediately after
+  the release frame while all intended children render and error arrays remain
+  empty.
+
+### Implemented result and browser acceptance
+
+- Release ownership now removes only `weld-hail-rock-fade` children matching
+  the releasing Hail actor's owner, world, and birth interval. Earlier same-
+  owner Hail children remain independent; the release carrier and native
+  `weld-frost-fade:1008` actor are unchanged.
+- Mac focused validation retained held fade creation, an earlier-cast fade,
+  same-cast cleanup, and the distinct release fade.
+- Chrome `151.0.7922.174` held until three current-cast rock-birth fades were
+  both authoritative and rendered. The release frame reported
+  `heldFadeCount=3`, `releasedFadeCount=0`, and retained kinds
+  `weld-persistent:1008` plus `weld-frost-fade:1008`; page, console, and failed-
+  response arrays were empty. Visual receipt:
+  `.tmp-hail-final/hail-release-no-rock-fades.png` (temporary acceptance
+  capture).
+- The same exact candidate passed the complete Mac gate recorded in entry 051,
+  including the broad Boneyard/runtime suite and production bundle budget.

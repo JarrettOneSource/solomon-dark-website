@@ -82,6 +82,10 @@ try {
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -97,32 +101,45 @@ try {
   await canvas.waitFor({ timeout: 90_000 })
 
   const fixture = injectGravestoneContact(host)
-  const wireHandle = await page.waitForFunction(id => (
+  const wireHandle = await page.waitForFunction(({ advanced, direction, id }) => (
     window.__sdrEarthGeometryFrames.toReversed().find(frame => (
-      frame.primarySpells.transients.some(effect => (
-        effect.kind === 'earth-impact' && effect.id === id
+      frame.primarySpells.projectiles.some(effect => (
+        effect.kind === 'earth'
+        && effect.id === id
+        && (effect.position.x - advanced.x) * direction.x
+          + (effect.position.y - advanced.y) * direction.y >= 60
       ))
     )) ?? null
-  ), fixture.impactId, { timeout: 15_000 })
+  ), {
+    advanced: fixture.advanced,
+    direction: fixture.direction,
+    id: fixture.projectileId,
+  }, { timeout: 15_000 })
   const wire = await wireHandle.jsonValue()
   await wireHandle.dispose()
   const renderHandle = await page.waitForFunction(() => {
     const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-    return frame?.primarySpellKinds?.includes('earth-impact')
+    return frame?.primarySpellKinds?.includes('earth')
       ? structuredClone(frame)
       : null
   }, null, { timeout: 15_000 })
   const rendered = await renderHandle.jsonValue()
   await renderHandle.dispose()
-  const screenshotPath = `${screenshotRoot}/solomon-earth-gravestone-impact.png`
+  const screenshotPath = `${screenshotRoot}/solomon-earth-gravestone-passage.png`
   await page.screenshot({ path: screenshotPath })
 
-  const impact = wire.primarySpells.transients.find(effect => (
-    effect.kind === 'earth-impact' && effect.id === fixture.impactId
+  const projectile = wire.primarySpells.projectiles.find(effect => (
+    effect.kind === 'earth' && effect.id === fixture.projectileId
   ))
-  assert.ok(impact)
-  assert.deepEqual(impact.origin, fixture.advanced)
-  assert.equal(rendered.primarySpellKinds.includes('earth-impact'), true)
+  assert.ok(projectile)
+  assert.ok(
+    (projectile.position.x - fixture.advanced.x) * fixture.direction.x
+      + (projectile.position.y - fixture.advanced.y) * fixture.direction.y >= 60,
+  )
+  assert.equal(wire.primarySpells.transients.some(effect => (
+    effect.kind === 'earth-impact'
+  )), false)
+  assert.equal(rendered.primarySpellKinds.includes('earth'), true)
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -131,7 +148,7 @@ try {
     consoleErrors,
     failedResponses,
     fixture,
-    impact,
+    projectile,
     pageErrors,
     rendered: {
       painterBandCount: rendered.painterBandCount,
@@ -177,6 +194,10 @@ function injectGravestoneContact(host) {
         x: Math.fround(advanced.x + velocity.x),
         y: Math.fround(advanced.y + velocity.y),
       }
+      const longLookahead = {
+        x: Math.fround(advanced.x + velocity.x * 20),
+        y: Math.fround(advanced.y + velocity.y * 20),
+      }
       if (!canPlaceBoneyardBody(position, world.bounds, collision, radius)) continue
       if (!canPlaceBoneyardBody(advanced, world.bounds, collision, radius)) continue
       if (firstBoneyardPathBlockProgress(
@@ -188,7 +209,7 @@ function injectGravestoneContact(host) {
       ) === null) continue
       if (firstBoneyardPathBlockProgress(
         advanced,
-        lookahead,
+        longLookahead,
         world.bounds,
         withoutTarget,
         radius,
@@ -255,11 +276,12 @@ function injectGravestoneContact(host) {
   })
   return {
     advanced: fixture.advanced,
-    impactId,
+    direction: fixture.direction,
     lookahead: {
       x: Math.fround(fixture.advanced.x + fixture.velocity.x),
       y: Math.fround(fixture.advanced.y + fixture.velocity.y),
     },
+    position: fixture.position,
     projectileId,
     radius,
     sourceId: fixture.sourceId,

@@ -1,5 +1,5 @@
 import { actorHeadingFromVector } from './actor-heading.ts'
-import type { BoneyardPoint, SolomonDigState } from './boneyard.ts'
+import type { BoneyardBounds, BoneyardPoint, SolomonDigState } from './boneyard.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -79,7 +79,9 @@ export interface BoneyardSolomonEncounterState {
   digTicksPerFrame: number
   digThrowDirtArmed: boolean
   dialogueMode: BoneyardSolomonDialogueMode
+  escapeCollisionSourceIds: readonly string[]
   escapeSpeed: number
+  escapeTarget: BoneyardPoint | null
   headingDeg: number
   lifetimeTicksRemaining: number
   mouthPose: number
@@ -119,6 +121,12 @@ const SOLOMON_ESCAPE_INITIAL_ACCELERATION = -3
 const SOLOMON_ESCAPE_ACCELERATION_STEP = 0.25
 const SOLOMON_ESCAPE_LANDING_ACCELERATION = -2
 const SOLOMON_ESCAPE_LIFETIME_TICKS = 515
+export const NATIVE_SOLOMON_COLLISION_RADIUS = 30
+export const NATIVE_SOLOMON_ESCAPE_ROUTE_ARRIVAL_DISTANCE_SQUARED = 100
+export const NATIVE_SOLOMON_ESCAPE_TARGET_DISTANCE = 4_096
+export const NATIVE_SOLOMON_NAVIGATION_CLEARANCE = 25
+export const NATIVE_SOLOMON_ESCAPE_PATH_MARGIN = 50
+export const NATIVE_SOLOMON_ESCAPE_TARGET_MARGIN = 100
 const SOLOMON_MAX_TURN_RATE = 10
 const SOLOMON_MOUTH_POSE_COUNT = 3
 const SOLOMON_MOUTH_INITIAL_TICKS = 25
@@ -169,7 +177,9 @@ export function createSolomonEncounter(
     digTicksPerFrame: dig.ticksPerFrame,
     digThrowDirtArmed: true,
     dialogueMode,
+    escapeCollisionSourceIds: [],
     escapeSpeed: 0,
+    escapeTarget: null,
     headingDeg: 180,
     lifetimeTicksRemaining: 0,
     mouthPose: 0,
@@ -214,6 +224,35 @@ export function isBoneyardPlayerCombatEnabled(
   encounter: Pick<BoneyardSolomonEncounterState, 'runEventId'> | null,
 ): boolean {
   return encounter === null || encounter.runEventId > 0
+}
+
+export function nativeSolomonEscapeTarget(
+  position: Readonly<BoneyardPoint>,
+  headingDeg: number,
+  bounds: Readonly<BoneyardBounds>,
+): BoneyardPoint {
+  const radians = headingDeg * Math.PI / 180
+  const direction = {
+    x: Math.sin(radians),
+    y: -Math.cos(radians),
+  }
+  return clipSolomonEscapeSegment(position, {
+    x: Math.fround(position.x + direction.x * NATIVE_SOLOMON_ESCAPE_TARGET_DISTANCE),
+    y: Math.fround(position.y + direction.y * NATIVE_SOLOMON_ESCAPE_TARGET_DISTANCE),
+  }, bounds, NATIVE_SOLOMON_ESCAPE_TARGET_MARGIN)
+}
+
+export function nativeSolomonEscapePathTarget(
+  position: Readonly<BoneyardPoint>,
+  escapeTarget: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+): BoneyardPoint {
+  return clipSolomonEscapeSegment(
+    position,
+    escapeTarget,
+    bounds,
+    NATIVE_SOLOMON_ESCAPE_PATH_MARGIN,
+  )
 }
 
 export function stepSolomonEncounter(
@@ -555,7 +594,9 @@ function applySolomonRetreatAcceleration(
   return {
     ...next,
     acceleration: SOLOMON_ESCAPE_INITIAL_ACCELERATION,
+    escapeCollisionSourceIds: [],
     escapeSpeed: SOLOMON_ESCAPE_INITIAL_SPEED,
+    escapeTarget: null,
     headingDeg: normalizeDegrees(
       next.headingDeg
       + (headingSample.value === 0 ? -1 : 1)
@@ -577,6 +618,8 @@ function stepSolomonEscape(
   if (voiced.lifetimeTicksRemaining <= 0) {
     return {
       ...voiced,
+      escapeCollisionSourceIds: [],
+      escapeTarget: null,
       lifetimeTicksRemaining: 0,
       phase: 'gone',
     }
@@ -592,6 +635,12 @@ function stepSolomonEscape(
   return {
     ...voiced,
     acceleration,
+    ...(lifetimeTicksRemaining === 0
+      ? {
+          escapeCollisionSourceIds: [],
+          escapeTarget: null,
+        }
+      : {}),
     escapeSpeed,
     lifetimeTicksRemaining,
     motion,
@@ -624,6 +673,31 @@ function stepSolomonVoiceQueue(
   return source.voiceTicksRemaining === 0
     ? source
     : { ...source, voiceTicksRemaining: 0 }
+}
+
+function clipSolomonEscapeSegment(
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  margin: number,
+): BoneyardPoint {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  let progress = 1
+  if (dx > 0) {
+    progress = Math.min(progress, (bounds.x + bounds.w + margin - start.x) / dx)
+  } else if (dx < 0) {
+    progress = Math.min(progress, (bounds.x - margin - start.x) / dx)
+  }
+  if (dy > 0) {
+    progress = Math.min(progress, (bounds.y + bounds.h + margin - start.y) / dy)
+  } else if (dy < 0) {
+    progress = Math.min(progress, (bounds.y - margin - start.y) / dy)
+  }
+  return {
+    x: Math.fround(start.x + dx * progress),
+    y: Math.fround(start.y + dy * progress),
+  }
 }
 
 function appendVoiceEvent(

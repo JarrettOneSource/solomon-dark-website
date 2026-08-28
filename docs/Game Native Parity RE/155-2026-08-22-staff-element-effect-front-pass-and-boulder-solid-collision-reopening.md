@@ -231,3 +231,89 @@ The reusable facts are also recorded in Mod Loader
   `/tmp/solomon-earth-boulder-geometry-20260822/solomon-earth-gravestone-impact.png`.
 - No browser approximation or remaining native unknown exists in either
   reopened boundary. Publication is recorded separately after rebase and push.
+
+## 2026-08-28 — User-authorized Boulder-family Gravestone traversal QoL
+
+### Reported smell and parity decision
+
+- Reported behavior, also present in the original release: large Boulders are
+  consumed by scenery before reaching enemies, often forcing Earth players to
+  remain on the widest Roads. The user requested that Boulders ignore
+  Gravestones and suggested considering a game-wide projectile exemption.
+- Current/stock cause remains proven: ordinary Boulder and every released
+  Ethereal Boulder child sweep `[advanced, advanced+velocity]` with radius
+  `75*releasedScale` and exclusion mask zero. Terrain wins before the later
+  enemy root query, so a grave terminal produces breakup with no enemy damage.
+- Mac Chrome reproduced a minimum-release scale `0.3` / radius
+  `22.50000089406967` capsule terminating on one isolated Gravestone with an
+  `earth-impact` and unchanged enemy health.
+
+The user authorized the QoL after this stock behavior was identified. The
+Website adopts the narrow shared-family rule: ordinary Boulder and Ethereal
+Boulder ignore Gravestone collision primitives during solid-world traversal.
+Every other authored blocker remains solid. A blanket projectile change is
+rejected because Fire/Ether/MagicMissile-derived welds intentionally consume
+flags-4 scenery, Air uses Gravestones as priority-1000 fallback targets, and
+Hail owns a distinct per-rock/static-line system.
+
+### System boundary and membership inventory
+
+Native/QoL system: **released Boulder-family solid traversal filtered by
+semantic Gravestone source identity**.
+
+| Member / branch | Source | Disposition | Proof |
+| --- | --- | --- | --- |
+| ordinary Boulder normal/low-mana release | `0x00620B60` | `explicit user-authorized QoL` | isolated grave passes; enemy contact/pool remains |
+| Hasten, Bind, Rock Surge, Gargantuan | shared ordinary owner | `explicit QoL through shared path` | every released scale uses the same grave exemption |
+| EBoulder quantities 1..4 and every split child | `0x00621450 -> 0x00620B60` | `explicit QoL through shared path` | each child passes graves independently and retains terminal/pool state |
+| Gravestone root and overlay `>=7` polygon | type 2029 source ids | `ignored by Boulder family only` | both primitives excluded by exact source identity |
+| Trees, Monuments, Buildings, Goodies | authored collision census | `verified-already-at-parity` | still terminate Boulder/EBoulder |
+| Fence, Fencepost, Gate, Rail, Wall, bounds | shared collision world | `verified-already-at-parity` | still terminate Boulder/EBoulder |
+| Fireball, Ether, builds 1000..1002, Air | separate contact/target owners | `out-of-system` | existing scenery membership unchanged |
+| Hailstones build 1008 | per-rock/static-line owner | `out-of-system` | no shared Boulder capsule |
+| Hub combat | authoritative combat seal | `out-of-system` | no live Boulder release admitted |
+| host/observer/late join and teardown | authoritative projectile state | `verified-already-at-parity` | collision decision remains host-only; no wire change |
+
+No member is `blocked-by-platform`.
+
+### Implementation and validation contract
+
+- Extend the radius-aware Boneyard traversal seam with exact ignored source
+  identities. Select all type-2029 source ids once for Boulder/EBoulder calls;
+  do not remove collision rows, mutate the shared world, or infer from sprite
+  shape.
+- Red/green tests must cover grave root/promoted polygon pass-through for pure
+  Earth and all four EBoulder children, plus retained termination on every
+  other blocker family and normal enemy contact after the passed grave.
+- Mac Chrome must carry Earth completely through an isolated grave with no
+  impact and retain its renderer. A separate staged-hostile browser journey
+  must prove enemy damage and the unchanged residual/terminal family; focused
+  authority tests retain every non-grave blocker with no collision-world edit.
+
+### Implemented result and browser acceptance
+
+- The shared radius-aware traversal seam accepts exact ignored source ids.
+  Game authority supplies only semantic Gravestone ids for ordinary Boulder
+  and released Ethereal Boulder build 1006; no other primary family receives
+  the exemption and no collision row is removed from the world.
+- Focused regressions pass both Gravestone shapes, retained Tree/Building
+  blocking, ordinary Earth, and all four released Ethereal Boulder children.
+- Chrome `151.0.7922.174` placed a minimum-release radius-22.5 Earth carrier at
+  `(630.4136352539062,500.2079772949219)` against Gravestone
+  `scenery:object-28`, centered at `(657.9136352539062,500.2079772949219)`.
+  It remained authoritative and rendered at `(696.4136352539062,
+  500.2079772949219)` with no `earth-impact`; page, console, and failed-response
+  arrays were empty. Visual receipt:
+  `.tmp-earth-final/solomon-earth-gravestone-passage.png` (temporary acceptance
+  capture).
+- A separate real-browser staged-hostile journey then retained the downstream
+  contract: enemy `enemy:1` entered `hitTargetIds`, the live residual carrier
+  kept positive damage and emitted `earth-boulder-bit`, Rock Hit/Stone Break
+  audio and renderer bands were present, and terminal `earth-impact` followed.
+  Host authority independently recorded residual tick `1492` and terminal tick
+  `2029`; browser errors were empty. Visual receipt:
+  `.tmp-earth-contact-diagnostic-frames/solomon-primary-earth-boneyard-contact.png`
+  (temporary acceptance capture).
+- The same exact candidate passed the complete Mac gate recorded in entry 051,
+  including the broad Boneyard/runtime suite, production builds, and bundle
+  budget.

@@ -30,6 +30,11 @@ import {
   playerDeathFrame,
 } from '../core-kernels/player-combat.ts'
 import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
+import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
+import {
+  createNativeWeldPersistentActor,
+  releaseNativeWeldPersistentActor,
+} from '../core-kernels/native-weld-primary-runtime.ts'
 import {
   createEquipmentInventoryItem,
   DOWSING_EQUIPMENT_RECIPES,
@@ -2992,6 +2997,103 @@ test('Boneyard Fire uses kernel terrain lookahead then post-move point contact',
     state.primarySpells.transients.filter(({ kind }) => kind === 'fire-impact').length,
     1,
   )
+})
+
+test('ordinary and Ethereal Boulders traverse Gravestone solid geometry', () => {
+  for (const kind of ['earth', 'ethereal'] as const) {
+    const loaded = combatBoneyard(`boulder-grave-${kind}`)
+    loaded.scene.objects = [{
+      eid: 'boulder-pass-grave',
+      overlayVariant: 8,
+      pos: { x: 120, y: 250 },
+      typeId: 2029,
+      variant: 0,
+    }]
+    let state = enterBoneyardWorld(createGameSimulation({ caster: {
+      discipline: 'arcane',
+      displayName: `${kind} caster`,
+      element: 'earth',
+    } }), loaded)
+    const worldKey = `boneyard:${loaded.runId}`
+    if (kind === 'earth') {
+      state = {
+        ...state,
+        primarySpells: {
+          nextId: 2,
+          projectiles: [{
+            ageTicks: 1,
+            assemblyCharge: Math.fround(0.3),
+            charge: Math.fround(0.3),
+            damage: 10,
+            direction: { x: 1, y: 0 },
+            flightTicks: 1,
+            hitTargetIds: [],
+            id: 1,
+            kind: 'earth',
+            lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+            maximumCharge: Math.fround(0.3),
+            orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
+            ownerId: 'caster',
+            phase: 'flight',
+            position: { x: 80, y: 250 },
+            remainingDamage: 10,
+            shellCharge: Math.fround(0.3),
+            toughness: 1,
+            velocity: { x: 3, y: 0 },
+            worldKey,
+          }],
+          transients: [],
+        },
+      }
+    } else {
+      const held = createNativeWeldPersistentActor({
+        buildId: 1006,
+        direction: { x: 1, y: 0 },
+        id: 1,
+        origin: { x: 80, y: 250 },
+        ownerId: 'caster',
+        tick: state.tick,
+        vector: [10, 10, 4, 1, 1, 1],
+        worldKey,
+      })
+      assert.equal(held.buildId, 1006)
+      const released = releaseNativeWeldPersistentActor({
+        actor: held,
+        firstChildId: 2,
+        rng: state.combatRng,
+        tick: state.tick,
+      })
+      state = {
+        ...state,
+        combatRng: released.rng,
+        primarySpells: {
+          nextId: released.nextId,
+          projectiles: [],
+          transients: [...released.actors],
+        },
+      }
+    }
+
+    for (let tick = 0; tick < 50; tick += 1) {
+      state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+    }
+
+    if (kind === 'earth') {
+      const boulder = state.primarySpells.projectiles.find((spell) => spell.kind === 'earth')
+      assert.ok(boulder?.kind === 'earth')
+      assert.ok(boulder.position.x > 150)
+    } else {
+      const boulders = state.primarySpells.transients.filter((effect) => (
+        effect.kind === 'weld-persistent' && effect.buildId === 1006
+      ))
+      assert.equal(boulders.length, 4)
+      assert.ok(boulders.every((boulder) => boulder.origin.x > 150))
+    }
+    assert.equal(state.primarySpells.transients.some((effect) => (
+      effect.kind === 'earth-impact'
+      || (effect.kind === 'weld-impact' && effect.boulderTerminalCharge !== null)
+    )), false)
+  }
 })
 
 test('Boneyard semantic events survive the slowest snapshot cadence and remain bounded', () => {
