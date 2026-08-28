@@ -328,6 +328,7 @@ try {
           cooldown: false,
           unavailable: true,
         })
+        assert.ok(insufficientManaReceipt.manaCost > 0)
         if (selectedContracts.length === 1) {
           const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-insufficient-mana.png`
           await page.screenshot({ path: screenshotPath })
@@ -1909,7 +1910,8 @@ async function captureBeltReceipt(page) {
     assert.equal(slot.iconOpacity, '0.375')
     assert.equal(slot.iconAlpha, '0.375')
     assert.equal(slot.unavailable, true)
-    assert.ok(Number(slot.manaCost) > 0)
+    assert.notEqual(slot.manaCost, null)
+    assert.ok(Number(slot.manaCost) >= 0)
     if (slot.slot === 0) {
       assert.equal(slot.mouseOpacity, '0.6')
       assert.equal(slot.keyBackingWidth, null)
