@@ -2006,6 +2006,66 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   assert.ok(host.state().tick - heldTick <= 10, 'grace expiry must not replay held wall time')
 })
 
+test('multiplayer compact skill selector resumes directly after teardown', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const loadedFirst = nextMessage(
+    first.socket,
+    message => message.type === 'server-boneyard-loaded',
+  )
+  const loadedSecond = nextMessage(
+    second.socket,
+    message => message.type === 'server-boneyard-loaded',
+  )
+  const initialReady = completeInitialGameplayReadiness([first.socket, second.socket])
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await Promise.all([loadedFirst, loadedSecond])
+  await initialReady
+
+  const paused = nextMessage(first.socket, message => (
+    message.type === 'server-gameplay-pause'
+    && message.pause?.source === 'skill-selector'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-selector',
+  }))
+  await paused
+  const heldTick = host.state().tick
+  let graceMessages = 0
+  const observeGrace = (data: WebSocket.RawData) => {
+    if (decodeServerGameMessage(data.toString()).type === 'server-gameplay-resume-grace') {
+      graceMessages += 1
+    }
+  }
+  first.socket.on('message', observeGrace)
+  context.after(() => first.socket.off('message', observeGrace))
+  const released = nextMessage(first.socket, message => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: false,
+  }))
+  await released
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(graceMessages, 0)
+  assert.ok(host.state().tick > heldTick)
+  assert.ok(host.state().tick - heldTick <= 15, 'selector release must not replay held wall time')
+})
+
 test('solo Inventory admits item belt bind and pull-off before immediate resume', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
@@ -2471,7 +2531,7 @@ test('game host pauses a leveling player and authoritatively books the offered s
   )
 })
 
-test('multiplayer SkillPicker starts one grace only after the final choice', async (context) => {
+test('multiplayer SkillPicker holds through final close then resumes without a timer', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
     snapshotRate: 100,
@@ -2539,6 +2599,7 @@ test('multiplayer SkillPicker starts one grace only after the final choice', asy
   }
   const finalOffer = secondProgression.pendingOffer
   assert.ok(finalOffer)
+  const heldTick = host.state().tick
   const graceStarted = nextMessage(first.socket, message => (
     message.type === 'server-gameplay-resume-grace' && message.grace !== null
   ))
@@ -2552,18 +2613,91 @@ test('multiplayer SkillPicker starts one grace only after the final choice', asy
   assert.equal(pendingGrace.type, 'server-gameplay-resume-grace')
   assert.equal(pendingGrace.grace?.reason, 'skill-picker-closed')
   assert.equal(pendingGrace.grace?.remainingMs, null)
-  const counting = nextMessage(first.socket, message => (
+  const released = nextMessage(first.socket, message => (
     message.type === 'server-gameplay-resume-grace'
-    && message.grace?.remainingMs !== null
   ))
   second.socket.send(encodeGameMessage({
     type: 'client-resume-grace-ready',
     sequence: pendingGrace.grace!.sequence,
   }))
-  const grace = await counting
-  assert.equal(grace.type, 'server-gameplay-resume-grace')
-  assert.ok((grace.grace?.remainingMs ?? 0) > 1_900)
-  assert.ok((grace.grace?.remainingMs ?? Infinity) <= 2_000)
+  const release = await released
+  assert.equal(release.type, 'server-gameplay-resume-grace')
+  assert.equal(release.grace, null)
+  await waitFor(() => host.state().tick > heldTick)
+  assert.ok(host.state().tick - heldTick <= 10, 'picker close must not replay held wall time')
+})
+
+test('multiplayer Sorceror save uses the same no-timer picker close hold', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+  const loadedFirst = nextMessage(
+    first.socket,
+    message => message.type === 'server-boneyard-loaded',
+  )
+  const loadedSecond = nextMessage(
+    second.socket,
+    message => message.type === 'server-boneyard-loaded',
+  )
+  const initialReady = completeInitialGameplayReadiness([first.socket, second.socket])
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await Promise.all([loadedFirst, loadedSecond])
+  await initialReady
+
+  const active = host.state()
+  const playerId = second.welcome.playerId
+  const withCharm = {
+    ...active,
+    playerEntities: replacePlayerEconomy(active.playerEntities, playerId, {
+      ...getPlayerEconomy(active, playerId),
+      ownedPerkSelectors: [17],
+    }),
+  }
+  Object.assign(active, grantGameSimulationPlayerExperience(withCharm, playerId, 100))
+  await resolveEveryHostSkillOffer(host, first.socket, first.welcome.playerId)
+  const finalChooserState = host.state()
+  assert.deepEqual(finalChooserState.levelUpBarrier?.pendingPlayerIds, [playerId])
+  const offer = getPlayerProgression(finalChooserState, playerId).pendingOffer
+  assert.ok(offer)
+  const pendingHold = nextMessage(first.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.reason === 'skill-picker-closed'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-level-up-action',
+    action: 'save',
+    offerSequence: offer.sequence,
+  }))
+  const pending = await pendingHold
+  assert.equal(pending.type, 'server-gameplay-resume-grace')
+  assert.equal(pending.grace?.remainingMs, null)
+  assert.equal(host.state().levelUpBarrier, null)
+  assert.equal(getPlayerProgression(host.state(), playerId).deferredSkillChoices, 1)
+  const heldTick = host.state().tick
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(host.state().tick, heldTick)
+
+  const released = nextMessage(first.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: pending.grace!.sequence,
+  }))
+  const release = await released
+  assert.equal(release.type, 'server-gameplay-resume-grace')
+  assert.equal(release.grace, null)
+  await waitFor(() => host.state().tick > heldTick)
+  assert.ok(host.state().tick - heldTick <= 10, 'saved picker close must not replay held time')
 })
 
 test('game host validates and broadcasts the complete Sorceror action sequence', async (context) => {

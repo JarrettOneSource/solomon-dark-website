@@ -686,7 +686,7 @@ try {
   const boneyardSelectorHeldTick = host.state().tick
   await page.keyboard.press('Escape')
   await boneyardSelector.waitFor({ state: 'detached' })
-  await assertResumeProgress(
+  await assertDirectResume(
     page,
     boneyardSelectorHeldTick,
     'skill-selector-closed',
@@ -1226,6 +1226,24 @@ async function assertResumeProgress(page, heldTick, reason, screenshotPath = nul
   await waitForHost(() => host.state().tick > resumedTick, `${reason} grace expiry`)
   await new Promise(resolve => setTimeout(resolve, 60))
   assertNoCatchUp(resumedTick, resumedAtMs, `${reason} post-grace tick rate`)
+}
+
+async function assertDirectResume(page, heldTick, excludedReason) {
+  await waitForHost(() => host.state().tick > heldTick, `${excludedReason} direct resume`, 1_000)
+  await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor({
+    timeout: 1_000,
+  })
+  assert.equal(await page.locator(
+    `.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="${excludedReason}"]`,
+  ).count(), 0)
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-gameplay-resume-grace'),
+    'none',
+  )
+  assert.ok(
+    host.state().tick - heldTick <= 20,
+    `${excludedReason} replayed held wall time`,
+  )
 }
 
 async function waitForHost(predicate, label, timeoutMs = 10_000) {

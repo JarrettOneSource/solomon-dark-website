@@ -5766,7 +5766,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             replaceStateForPlayer(bot.playerId, selected)
             if (barrierBefore !== null && selected.levelUpBarrier === null) {
               stopWorldClientInputs(bot.playerId)
-              beginMultiplayerResumeGrace(bot.playerId, 'skill-picker-closed')
+              maybeStartGameplayResumeGrace(bot.playerId)
             }
             lifecycleChanged = true
           }
@@ -6292,6 +6292,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       && [...clients.values()].some(client => (
         client.playerId === playerId && client.partyRejoinSlot === null
       ))
+    if (reason === 'skill-picker-closed' && !waitsForPickerClose) return false
     const grace: HostGameplayResumeGrace = {
       deadlineMs: waitsForPickerClose
         ? null
@@ -6413,11 +6414,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
       ))
     ) return false
-    if (grace.reason === 'game-started') {
+    if (grace.reason === 'game-started' || grace.reason === 'skill-picker-closed') {
       setGameplayResumeGrace(scope, null)
       stopResumeGraceInputs(scope)
       if (!sharedWorlds) resetNextTickDeadline()
       broadcastGameplayResumeGrace(playerId, scope)
+      if (grace.reason === 'skill-picker-closed') {
+        logGameplayResumeGrace('completed', grace, scope)
+      }
       return true
     }
     grace.deadlineMs = performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS
@@ -6561,14 +6565,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     grace: HostGameplayResumeGrace,
     scope: SharedGameplayPauseScope | null,
   ): void {
+    const pickerCloseCompleted = phase === 'completed'
+      && grace.reason === 'skill-picker-closed'
     logGameServerEvent(
       options.log,
       'game-host',
       'info',
-      `gameplay.resume_grace_${phase}`,
-      phase === 'started'
-        ? 'The authoritative resume grace countdown started.'
-        : 'The authoritative resume grace countdown completed.',
+      pickerCloseCompleted
+        ? 'gameplay.picker_close_completed'
+        : `gameplay.resume_grace_${phase}`,
+      pickerCloseCompleted
+        ? 'The authoritative level-up picker close hold completed.'
+        : phase === 'started'
+          ? 'The authoritative resume grace countdown started.'
+          : 'The authoritative resume grace countdown completed.',
       logDetails({
         partyId: scope?.partyId ?? null,
         reason: grace.reason,
@@ -6581,7 +6591,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'game-host',
         'info',
         'gameplay.resumed',
-        'The authoritative gameplay world resumed after its grace countdown.',
+        pickerCloseCompleted
+          ? 'The authoritative gameplay world resumed after the level-up picker closed.'
+          : 'The authoritative gameplay world resumed after its grace countdown.',
         logDetails({
           partyId: scope?.partyId ?? null,
           reason: grace.reason,
@@ -6647,10 +6659,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     broadcastGameplayPause(playerId, scope)
     if (source === 'owner-resumed') {
-      beginMultiplayerResumeGrace(
-        released.ownerPlayerId,
-        gameplayResumeGraceReasonForPauseSource(released.source),
-      )
+      const reason = gameplayResumeGraceReasonForPauseSource(released.source)
+      if (reason === null) {
+        maybeStartGameplayResumeGrace(released.ownerPlayerId, scope)
+      } else {
+        beginMultiplayerResumeGrace(released.ownerPlayerId, reason)
+      }
     } else {
       maybeStartGameplayResumeGrace(released.ownerPlayerId, scope)
     }

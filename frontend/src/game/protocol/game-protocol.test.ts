@@ -417,19 +417,38 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
       type: 'server-gameplay-resume-grace',
       grace: {
-        reason: 'skill-picker-closed',
+        reason: 'pause-menu-closed',
         remainingMs,
         sequence: 7,
       },
     })), {
       type: 'server-gameplay-resume-grace',
       grace: {
-        reason: 'skill-picker-closed',
+        reason: 'pause-menu-closed',
         remainingMs,
         sequence: 7,
       },
     })
   }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: {
+      reason: 'skill-picker-closed',
+      remainingMs: null,
+      sequence: 8,
+    },
+  })), {
+    type: 'server-gameplay-resume-grace',
+    grace: {
+      reason: 'skill-picker-closed',
+      remainingMs: null,
+      sequence: 8,
+    },
+  })
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'skill-picker-closed', remainingMs: 1, sequence: 8 },
+  })), /skill-picker-closed.*pending/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
     grace: { reason: 'skill-picker-closed', remainingMs: 2_001, sequence: 7 },
@@ -448,6 +467,10 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
     grace: { reason: 'unknown', remainingMs: 2_000, sequence: 7 },
+  })), /reason/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'skill-selector-closed', remainingMs: 2_000, sequence: 7 },
   })), /reason/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-pause',
@@ -1661,8 +1684,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v103 carries addressed inventory slots, effective secondary costs, Web Lua readiness, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 103)
+test('protocol v104 carries addressed inventory slots, effective secondary costs, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 104)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -1671,7 +1694,6 @@ test('protocol v103 carries addressed inventory slots, effective secondary costs
     'pause-menu-closed',
     'skill-book-closed',
     'skill-picker-closed',
-    'skill-selector-closed',
     'party-rejoin-wait',
   ])
   const loaded = loadedBoneyardFixture('run-v16')

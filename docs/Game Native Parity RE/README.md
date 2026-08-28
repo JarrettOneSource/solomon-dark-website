@@ -321,3 +321,4 @@ entry only when the evidence belongs to a genuinely separate system.
 - [2026-08-28 — Continuous held-primary facing across every input producer](<291-2026-08-28-continuous-held-primary-facing-across-every-input-producer.md>)
 - [2026-08-28 — Standalone stock gamestate import and dynamic Game bindings](<292-2026-08-28-standalone-stock-gamestate-import-and-dynamic-game-bindings.md>)
 - [2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation](<293-2026-08-28-reopened-inventorygrid-addressed-slots-and-beltbutton-readiness-presentation.md>)
+- [2026-08-28 — Resume grace after orienting surfaces only](<294-2026-08-28-resume-grace-after-orienting-surfaces-only.md>)

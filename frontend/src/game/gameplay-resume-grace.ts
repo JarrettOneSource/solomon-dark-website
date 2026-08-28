@@ -9,12 +9,15 @@ const PAUSE_SOURCE_GRACE_REASON = {
   inventory: 'inventory-closed',
   'pause-menu': 'pause-menu-closed',
   'skill-book': 'skill-book-closed',
-  'skill-selector': 'skill-selector-closed',
-} as const satisfies Readonly<Record<GameplayPauseSource, GameplayResumeGraceReason>>
+  'skill-selector': null,
+} as const satisfies Readonly<Record<
+  GameplayPauseSource,
+  GameplayResumeGraceReason | null
+>>
 
 export function gameplayResumeGraceReasonForPauseSource(
   source: GameplayPauseSource,
-): GameplayResumeGraceReason {
+): GameplayResumeGraceReason | null {
   return PAUSE_SOURCE_GRACE_REASON[source]
 }
 

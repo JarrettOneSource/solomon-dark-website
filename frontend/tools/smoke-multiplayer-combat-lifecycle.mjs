@@ -1117,17 +1117,18 @@ async function proveSharedLevelUpAndEnemyEffects({
     guestPicker.waitFor({ state: 'detached', timeout: 15_000 }),
   ])
   assert.equal(host.state().levelUpBarrier, null)
-  for (const threshold of [0.1, 0.5, 0.9]) {
-    await Promise.all([hostPage, guestPage].map(page => page.waitForFunction(minimum => (
-      Number(document.querySelector(
-        '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
-      )?.getAttribute('data-gameplay-resume-grace-progress')) >= minimum
-    ), threshold, { timeout: 15_000 })))
-    assert.equal(host.state().tick, frozenTick)
-  }
   await Promise.all([hostPage, guestPage].map(page => page.locator(
-    '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
-  ).waitFor({ state: 'detached', timeout: 15_000 })))
+    '.main-menu-page[data-gameplay-resume-grace="none"]',
+  ).waitFor({ timeout: 1_000 })))
+  for (const page of [hostPage, guestPage]) {
+    assert.equal(await page.locator(
+      '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
+    ).count(), 0)
+    assert.equal(
+      await page.locator('.main-menu-page').getAttribute('data-gameplay-resume-grace'),
+      'none',
+    )
+  }
   await Promise.all([hostPage, guestPage].map((page) => page.waitForFunction(() => (
     document.querySelector('.boneyard-world-canvas')?.dataset.levelUpDynamicSuppressed
       === 'false'

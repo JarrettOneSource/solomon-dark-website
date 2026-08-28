@@ -2195,7 +2195,8 @@ export default function MainMenuScene({
             </div>
           ) : null}
 
-        {gameplayResumeGrace ? (
+        {gameplayResumeGrace
+          && gameplayResumeGrace.reason !== 'skill-picker-closed' ? (
           <Suspense fallback={null}>
             <GameplayResumeProgress
               grace={gameplayResumeGrace}

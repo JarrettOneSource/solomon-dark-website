@@ -8,7 +8,7 @@ import {
 } from './gameplay-resume-grace.ts'
 import { GAMEPLAY_RESUME_GRACE_DURATION_MS } from './protocol/game-protocol.ts'
 
-test('projects every gameplay surface into its complete grace reason family', () => {
+test('projects grace only for gameplay surfaces that need reorientation', () => {
   assert.deepEqual([
     gameplayResumeGraceReasonForPauseSource('pause-menu'),
     gameplayResumeGraceReasonForPauseSource('inventory'),
@@ -18,7 +18,7 @@ test('projects every gameplay surface into its complete grace reason family', ()
     'pause-menu-closed',
     'inventory-closed',
     'skill-book-closed',
-    'skill-selector-closed',
+    null,
   ])
 })
 
@@ -53,4 +53,28 @@ test('presents pending mutual readiness before the authoritative progress bar', 
   assert.match(component, /aria-valuenow=\{Math\.round\(progress \* 100\)\}/)
   assert.match(component, /RESUMING\.\.\./)
   assert.doesNotMatch(component, /RESUMING IN|gameplay-resume-countdown|seconds/)
+
+  const mainMenu = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
+  assert.match(
+    mainMenu,
+    /gameplayResumeGrace\s*&&\s*gameplayResumeGrace\.reason !== 'skill-picker-closed'/,
+  )
+})
+
+test('bot level-up completion can unblock an older hold but never creates a picker hold', () => {
+  const host = readFileSync(new URL('./host/game-host.ts', import.meta.url), 'utf8')
+  const branch = host.match(
+    /if \(intent\.kind === 'select-skill'\) \{([\s\S]*?)\n\s*continue\n\s*\}/,
+  )?.[1]
+  assert.ok(branch)
+  assert.match(branch, /maybeStartGameplayResumeGrace\(bot\.playerId\)/)
+  assert.doesNotMatch(branch, /beginMultiplayerResumeGrace/)
+})
+
+test('mod replacement offers release through the same picker close hold', () => {
+  const host = readFileSync(new URL('./host/game-host.ts', import.meta.url), 'utf8')
+  assert.match(
+    host,
+    /if \(closedSkillBarrier\) \{[\s\S]*?beginMultiplayerResumeGrace\(client\.playerId, 'skill-picker-closed'\)/,
+  )
 })

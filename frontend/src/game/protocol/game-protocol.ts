@@ -397,7 +397,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 103
+export const GAME_PROTOCOL_VERSION = 104
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -519,7 +519,6 @@ export const GAMEPLAY_RESUME_GRACE_REASONS = [
   'pause-menu-closed',
   'skill-book-closed',
   'skill-picker-closed',
-  'skill-selector-closed',
   'party-rejoin-wait',
 ] as const
 export type GameplayResumeGraceReason = typeof GAMEPLAY_RESUME_GRACE_REASONS[number]
@@ -2625,6 +2624,11 @@ function gameplayResumeGraceState(
   if (reason === 'game-started' && remainingMs !== null) {
     throw new GameProtocolError(
       `${field}.remainingMs must be null while game-started readiness is pending`,
+    )
+  }
+  if (reason === 'skill-picker-closed' && remainingMs !== null) {
+    throw new GameProtocolError(
+      `${field}.reason skill-picker-closed must remain pending`,
     )
   }
   return {
