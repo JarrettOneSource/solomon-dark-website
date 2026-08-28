@@ -35,7 +35,12 @@ test('compiler resolves local references and canonicalizes definition ordering',
     description: 'Three minutes of invincibility.',
     duration: '3m',
     name: 'Invincibility Potion',
-    on_use: { kind: 'rule-definition', operation: 'effect.status', fields: {}, source: SOURCE },
+    on_use: {
+      fields: { status: reference('status', 'invincible'), target: 'user' },
+      kind: 'rule-definition',
+      operation: 'effect.status',
+      source: SOURCE,
+    },
     status: reference('status', 'invincible'),
   })
   const first = compileWebLuaDefinition(IDENTITY, definition([potion, status]))
@@ -60,7 +65,7 @@ test('compiler resolves local references and canonicalizes definition ordering',
     modId: IDENTITY.id,
     targetKind: 'status',
   })
-  assert.deepEqual(first.capabilities, ['content.potion', 'content.status'])
+  assert.deepEqual(first.capabilities, ['content.potion', 'content.status', 'effect.status'])
 })
 
 test('compiler reports unresolved and cross-kind duplicate content together', () => {
@@ -125,6 +130,56 @@ test('compiler enforces graph budgets', () => {
     (error: unknown) => {
       assert.ok(error instanceof WebLuaDefinitionError)
       assert.ok(error.issues.some(({ code, path }) => code === 'E_BUDGET' && path === 'content'))
+      return true
+    },
+  )
+})
+
+test('compiler rejects inactive 1.0 fields, aliases, and malformed predicates', () => {
+  const when = {
+    fields: {
+      predicate: { contest: 'participant_id' },
+      yes: {
+        fields: { key: 'ready', value: true },
+        kind: 'rule-definition' as const,
+        operation: 'effect.state',
+        source: SOURCE,
+      },
+    },
+    kind: 'rule-definition' as const,
+    operation: 'rules.when',
+    source: SOURCE,
+  }
+  const unknownEvent = {
+    fields: {
+      event: 'run.start',
+      node: {
+        fields: { key: 'ready', value: true },
+        kind: 'rule-definition' as const,
+        operation: 'effect.state',
+        source: SOURCE,
+      },
+    },
+    kind: 'rule-definition' as const,
+    operation: 'rules.on',
+    source: SOURCE,
+  }
+  assert.throws(
+    () => compileWebLuaDefinition(IDENTITY, {
+      ...definition([
+        content('status', 'stale_status', { scope: 'participant-run', tags: ['old'] }),
+        content('skill', 'stale_skill', { max_rank: 1, name: 'Stale', ranks: [{}] }),
+      ]),
+      rules: [when, unknownEvent],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof WebLuaDefinitionError)
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.scope')))
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.tags')))
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.max_rank')))
+      assert.ok(error.issues.some(({ message }) => message.includes('exactly one of event or context')))
+      assert.ok(error.issues.some(({ message }) => message.includes('unknown event')))
+      assert.doesNotMatch(error.message, /scripts\/main\.lua:0/)
       return true
     },
   )

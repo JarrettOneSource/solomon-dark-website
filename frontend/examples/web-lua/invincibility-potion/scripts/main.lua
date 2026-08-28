@@ -15,7 +15,6 @@ return sd.mod({
       name = "Invincibility Potion",
       description = "Grants invincibility and unlimited mana for 3 minutes.",
       duration = "3m",
-      stacking = "refresh",
       status = sd.ref("status", "invincible"),
       on_use = sd.rules.all({
         sd.effect.resource({target = "user", mana = "full"}),

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import {
@@ -13,6 +14,9 @@ import { promisify } from 'node:util'
 import test from 'node:test'
 
 import { runSdmod } from './cli.mjs'
+import { fetchAssetSource } from './assets.mjs'
+import { writeDeterministicZip } from './zip.mjs'
+import { readZipEntries } from './zip-reader.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -26,9 +30,9 @@ test('sdmod creates, checks, tests, packs, and generates one deterministic v1 mo
   const messages = []
   const io = { log: value => messages.push(String(value)) }
 
-  await runSdmod(['new', 'item', mod], io)
+  await runSdmod(['new', mod], io)
   await mkdir(join(mod, 'tests'))
-  await writeFile(join(mod, 'tests/basic.lua'), 'assert(2 + 2 == 4)\nreturn true\n')
+  await writeFile(join(mod, 'tests/basic.lua'), 'assert(mod.content[1].key == "starter_item")\nreturn true\n')
   const checked = await runSdmod(['check', mod], io)
   await runSdmod(['test', mod], io)
   await runSdmod(['pack', mod, output], io)
@@ -40,10 +44,12 @@ test('sdmod creates, checks, tests, packs, and generates one deterministic v1 mo
   assert.deepEqual(await readFile(output), await readFile(secondOutput))
   const { stdout } = await execFileAsync('unzip', ['-Z1', output])
   assert.deepEqual(stdout.trim().split('\n'), [
+    'art/icon.png',
     'compiled/graph.json',
     'compiled/graph.sha256',
     'manifest.json',
     'scripts/main.lua',
+    'THIRD_PARTY_ASSETS.md',
   ])
   assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /---@field potion/)
   assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /wearable fun\(path: string\)/)
@@ -99,4 +105,43 @@ test('sdmod rejects targets and packages outside the v1 contract', async (contex
 
   await assert.rejects(() => runSdmod(['check', mod]), /canonical lowercase package id/)
   await assert.rejects(() => runSdmod(['new', 'unknown-kind', join(root, 'new')]), /usage:/)
+})
+
+test('asset tooling verifies downloads and reads only requested ZIP entries', async (context) => {
+  const root = await mkdtemp(join(tmpdir(), 'sdmod-assets-'))
+  context.after(() => rm(root, { force: true, recursive: true }))
+  const archive = join(root, 'sample.zip')
+  await writeDeterministicZip(archive, new Map([
+    ['keep.txt', Buffer.from('kept')],
+    ['skip.txt', Buffer.from('skipped')],
+  ]))
+  assert.deepEqual(
+    Object.fromEntries(readZipEntries(await readFile(archive), ['keep.txt'])),
+    { 'keep.txt': Buffer.from('kept') },
+  )
+
+  const sourceBytes = Buffer.from('blend-source')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(sourceBytes)
+  context.after(() => { globalThis.fetch = originalFetch })
+  const previousCache = process.env.SDR_MOD_ASSET_CACHE
+  process.env.SDR_MOD_ASSET_CACHE = join(root, 'cache')
+  context.after(() => {
+    if (previousCache === undefined) delete process.env.SDR_MOD_ASSET_CACHE
+    else process.env.SDR_MOD_ASSET_CACHE = previousCache
+  })
+  await fetchAssetSource({
+    archiveUrl: 'https://assets.example/model.blend',
+    downloadKind: 'file',
+    fileName: 'model.blend',
+    id: 'example-model-1.0',
+    license: 'CC0-1.0',
+    licenseFile: null,
+    selectedFiles: ['model.blend'],
+    sha256: createHash('sha256').update(sourceBytes).digest('hex'),
+  })
+  assert.deepEqual(
+    await readFile(join(root, 'cache/example-model-1.0/model.blend')),
+    sourceBytes,
+  )
 })

@@ -1,0 +1,11 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "showcase.monument-crypt",
+  "name": "Monument Crypt",
+  "version": "1.0.0",
+  "runtime": {
+    "apiVersion": "1.0.0",
+    "entryScript": "scripts/main.lua"
+  },
+  "requiredMods": []
+}

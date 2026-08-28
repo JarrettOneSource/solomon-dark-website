@@ -1075,6 +1075,28 @@ export function applyPlayerSkillChoice(
   return { progression: nextProgression, rng: gameplayRng, skillBook: nextBook }
 }
 
+export function replacePlayerSkillChoiceWithMod(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  offerSequence: number,
+  sourceGameplayRng: NativeRngState,
+  sorcerorsCharmOwned = false,
+): PlayerProgressionRngResult | null {
+  if (progression.pendingOffer?.sequence !== offerSequence) return null
+  let next: PlayerProgressionComponent = {
+    ...progression,
+    forcedOfferSkillIds: Object.freeze([]),
+    pendingLevels: Object.freeze(progression.pendingLevels.slice(1)),
+    pendingOffer: null,
+    revision: progression.revision + 1,
+    sorcerorsCharmAvailable: false,
+  }
+  if (next.pendingLevels.length > 0) {
+    return withNextSkillOffer(next, skillBook, sourceGameplayRng, sorcerorsCharmOwned)
+  }
+  return { progression: next, rng: sourceGameplayRng }
+}
+
 export function rerollPlayerSkillOffer(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,

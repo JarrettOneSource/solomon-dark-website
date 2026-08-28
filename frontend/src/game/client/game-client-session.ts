@@ -175,6 +175,7 @@ export interface GameClientSession {
   rerollSkill(offerSequence: number): void
   requestGameplayPause(source: GameplayPauseSource | null): void
   resolvePlayerCard(playerReference: string): Promise<GamePlayerCardProfile>
+  readyBoneyard(runId: string): void
   readyCollegeIntro(): void
   readyResumeGrace(): void
   saveBeforeLeave(): Promise<GameSaveCheckpoint>
@@ -1393,6 +1394,10 @@ export function connectGameClientSession(
       readyCollegeIntro() {
         if (!welcome || destroyed) return
         options.transport.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+      },
+      readyBoneyard(runId) {
+        if (!welcome || destroyed || !runId) return
+        options.transport.send(encodeGameMessage({ type: 'client-ready-boneyard', runId }))
       },
       readyResumeGrace() {
         const grace = gameplayResumeGrace

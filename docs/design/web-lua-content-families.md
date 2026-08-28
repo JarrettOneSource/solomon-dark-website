@@ -1,6 +1,11 @@
 # Web Lua 1.0 content-family contracts
 
-Status: **implemented in the Website; API 1.0.0**
+Status: **historical candidate inventory**
+
+The generated reference and
+[completion matrix](../web-lua-1-api-completion-matrix.md) define the accepted
+1.0 interface. Examples below preserve explored fields and are not copyable
+unless the current generated reference lists those fields.
 
 This inventory closes the requested framework membership as one design problem.
 Every family compiles into the same definition graph, uses `sd.content.v1`

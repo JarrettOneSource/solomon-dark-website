@@ -27,7 +27,25 @@ const MAXIMUM_DESCRIPTION_BYTES = 1_024
 const MAXIMUM_DURATION_MS = 24 * 60 * 60 * 1_000
 const MAXIMUM_LOOT_ROWS = 1_024
 const STACKING = new Set<ModStatusStacking>(['ignore', 'refresh', 'replace', 'stack'])
+const EQUIPMENT_TYPES = new Set(['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'])
 const textEncoder = new TextEncoder()
+const CONTENT_ART_SLOTS: Readonly<Record<WebLuaContentKind, readonly string[]>> = Object.freeze({
+  affix: Object.freeze([]),
+  'affix-pool': Object.freeze([]),
+  boneyard: Object.freeze(['ambience', 'layout', 'loop', 'music']),
+  enemy: Object.freeze(['atlas', 'attack_sound', 'death_sound', 'sound']),
+  item: Object.freeze(['icon', 'icon_trim', 'worn', 'worn_trim']),
+  potion: Object.freeze(['icon']),
+  powerup: Object.freeze(['sound', 'world']),
+  room: Object.freeze(['ambience', 'loop', 'music']),
+  scene: Object.freeze(['ambience', 'layout', 'loop', 'music']),
+  'scene-extension': Object.freeze([]),
+  shop: Object.freeze(['npc']),
+  skill: Object.freeze(['icon']),
+  spell: Object.freeze(['effect', 'icon', 'sound']),
+  status: Object.freeze([]),
+  ui: Object.freeze([]),
+})
 
 export type ModStatusStacking = 'ignore' | 'refresh' | 'replace' | 'stack'
 
@@ -53,7 +71,6 @@ export interface PreparedModStatusDefinition extends PreparedModContentEntry {
   readonly contentKind: 'status'
   readonly durationMs: number
   readonly modifiers: Readonly<Record<string, WebLuaDefinitionValue>>
-  readonly scope: string
   readonly stacking: ModStatusStacking
 }
 
@@ -74,11 +91,8 @@ export interface PreparedModItemDefinition extends PreparedModContentEntry {
 
 export interface PreparedModPowerupDefinition extends PreparedModContentEntry {
   readonly contentKind: 'powerup'
-  readonly durationMs: number
   readonly effect: WebLuaRuleDefinition
   readonly pickupRadius: number
-  readonly scope: string
-  readonly stacking: ModStatusStacking
 }
 
 export interface PreparedModAffixDefinition extends PreparedModContentEntry {
@@ -100,11 +114,13 @@ export interface PreparedModAffixPoolDefinition extends PreparedModContentEntry 
 
 export interface PreparedModSkillDefinition extends PreparedModContentEntry {
   readonly contentKind: 'skill'
+  readonly grants: readonly ResolvedWebLuaContentReference[]
   readonly maximumRank: number
   readonly minimumLevel: number
   readonly offerWeight: number
   readonly parent: ResolvedWebLuaContentReference | null
   readonly prerequisites: readonly ResolvedWebLuaContentReference[]
+  readonly rankGrants: readonly (readonly ResolvedWebLuaContentReference[])[]
   readonly ranks: readonly Readonly<Record<string, WebLuaDefinitionValue>>[]
 }
 
@@ -114,29 +130,37 @@ export interface PreparedModSpellDefinition extends PreparedModContentEntry {
   readonly cooldownMs: number
   readonly mana: number
   readonly slot: 'primary' | 'secondary'
-  readonly subskills: Readonly<Record<string, Readonly<Record<string, WebLuaDefinitionValue>>>>
-  readonly targeting: Readonly<Record<string, WebLuaDefinitionValue>>
 }
 
 export interface PreparedModEnemyDefinition extends PreparedModContentEntry {
-  readonly attacks: readonly ResolvedWebLuaContentReference[]
-  readonly base: string
-  readonly behavior: WebLuaRuleDefinition | null
+  readonly attackCooldownMs: number
+  readonly attackDamage: number
+  readonly attackRange: number
   readonly contentKind: 'enemy'
   readonly health: number
+  readonly collisionRadius: number
+  readonly goldMaximum: number
+  readonly goldMinimum: number
+  readonly experience: number
   readonly scale: number
   readonly speed: number
 }
 
 export interface PreparedModBoneyardDefinition extends PreparedModContentEntry {
+  readonly anchors: Readonly<Record<string, WebLuaDefinitionValue>>
   readonly contentKind: 'boneyard'
+  readonly environment: Readonly<Record<string, WebLuaDefinitionValue>>
+  readonly roster: readonly WebLuaDefinitionValue[]
   readonly source: string
+  readonly triggers: readonly WebLuaRuleDefinition[]
+  readonly waves: readonly Readonly<Record<string, WebLuaDefinitionValue>>[]
 }
 
 export interface PreparedModShopDefinition extends PreparedModContentEntry {
   readonly contentKind: 'shop'
-  readonly currency: string
   readonly mount: Readonly<Record<string, WebLuaDefinitionValue>> | null
+  readonly npc: Readonly<Record<string, WebLuaDefinitionValue>> | null
+  readonly restockMs: number
   readonly services: readonly Readonly<{
     pool: ResolvedWebLuaContentReference
     price: number
@@ -147,24 +171,26 @@ export interface PreparedModShopDefinition extends PreparedModContentEntry {
     price: number
     quantity: number
   }>[]
+  readonly stockScope: 'party' | 'player' | 'session'
 }
 
 export interface PreparedModUiDefinition extends PreparedModContentEntry {
+  readonly accessibleName: string
   readonly actions: readonly string[]
+  readonly bindings: Readonly<Record<string, WebLuaDefinitionValue>>
   readonly contentKind: 'ui'
   readonly mount: string
+  readonly visible: Readonly<Record<string, WebLuaDefinitionValue>>
   readonly view: WebLuaRuleDefinition
 }
 
 export interface PreparedModRoomDefinition extends PreparedModContentEntry {
-  readonly anchors: Readonly<Record<string, WebLuaDefinitionValue>>
   readonly contentKind: 'room'
   readonly geometry: Readonly<Record<string, WebLuaDefinitionValue>>
 }
 
 export interface PreparedModSceneDefinition extends PreparedModContentEntry {
   readonly contentKind: 'scene'
-  readonly instance: 'party' | 'player' | 'session'
   readonly rooms: readonly ResolvedWebLuaContentReference[]
 }
 
@@ -327,6 +353,7 @@ export class PreparedModContentCatalog {
   sceneExtensions() { return this.#sceneExtensions }
   shop(contentId: string) { return this.#shops.get(contentId) ?? null }
   ui(contentId: string) { return this.#ui.get(contentId) ?? null }
+  uis() { return Object.freeze([...this.#ui.values()].sort(compareContent)) }
 }
 
 export function compileModContentCatalog(
@@ -405,10 +432,14 @@ export function compileModContentCatalog(
     compileAffixPool(common, affixIds)
   ))
   const skillIds = new Set(skillCandidates.map(skill => skill.contentId))
-  const skills = skillCandidates.sort(compareContent).map(common => compileSkill(common, skillIds))
+  const declaredIds = new Set(mods.flatMap(mod => mod.content.map(entry => entry.contentId)))
+  const skills = skillCandidates.sort(compareContent).map(common => compileSkill(
+    common,
+    skillIds,
+    declaredIds,
+  ))
   const spells = spellCandidates.sort(compareContent).map(common => compileSpell(common))
-  const spellIds = new Set(spells.map(spell => spell.contentId))
-  const enemies = enemyCandidates.sort(compareContent).map(common => compileEnemy(common, spellIds))
+  const enemies = enemyCandidates.sort(compareContent).map(common => compileEnemy(common))
   const boneyards = boneyardCandidates.sort(compareContent).map(compileBoneyard)
   const rooms = roomCandidates.sort(compareContent).map(compileRoom)
   const roomIds = new Set(rooms.map(room => room.contentId))
@@ -514,8 +545,21 @@ function compileCommon(
   definition: CompiledWebLuaContent,
   assets: PreparedModAssetCatalog,
 ): PreparedModContentEntry {
+  if (definition.fields.art !== undefined) {
+    exactObjectKeys(
+      object(definition.fields.art, `${mod.identity.id}:${definition.key}.art`),
+      CONTENT_ART_SLOTS[definition.contentKind],
+      `${mod.identity.id}:${definition.key}.art`,
+    )
+  }
+  const art = compileArt(mod.identity.id, definition.fields.art, assets, `${mod.identity.id}:${definition.key}.art`)
+  for (const slot of ['ambience', 'loop', 'music'] as const) {
+    if (art[slot] && art[slot]!.assetKind !== 'music' && art[slot]!.assetKind !== 'sound') {
+      throw new Error(`${mod.identity.id}:${definition.key} art.${slot} must be audio`)
+    }
+  }
   return Object.freeze({
-    art: compileArt(mod.identity.id, definition.fields.art, assets, `${mod.identity.id}:${definition.key}.art`),
+    art,
     contentId: definition.contentId,
     contentKind: definition.contentKind,
     description: optionalText(definition.fields.description, '', MAXIMUM_DESCRIPTION_BYTES, `${definition.key}.description`),
@@ -527,12 +571,14 @@ function compileCommon(
 }
 
 function compileStatus(common: PreparedModContentEntry): PreparedModStatusDefinition {
+  const modifiers = optionalObject(common.fields.modifiers, `${common.key}.modifiers`)
+  exactObjectKeys(modifiers, ['incoming_damage', 'mana_spend'], `${common.key}.modifiers`)
+  validateModifierMap(modifiers, `${common.key}.modifiers`)
   return Object.freeze({
     ...common,
     contentKind: 'status' as const,
     durationMs: durationMs(common.fields.duration ?? 0, `${common.key}.duration`),
-    modifiers: optionalObject(common.fields.modifiers, `${common.key}.modifiers`),
-    scope: optionalText(common.fields.scope, 'participant-run', 64, `${common.key}.scope`),
+    modifiers,
     stacking: stacking(common.fields.stacking, `${common.key}.stacking`),
   })
 }
@@ -547,6 +593,7 @@ function compileItem(
   const stack = common.fields.stack === undefined
     ? {}
     : object(common.fields.stack, `${common.key}.stack`)
+  exactObjectKeys(stack, ['maximum'], `${common.key}.stack`)
   const stackMaximum = stack.maximum === undefined
     ? 1
     : integer(stack.maximum, 1, 9_999, `${common.key}.stack.maximum`)
@@ -698,34 +745,41 @@ function sameIconFrame(left: ModItemIcon['frame'], right: ModItemIcon['frame']):
 }
 
 function compilePowerup(common: PreparedModContentEntry): PreparedModPowerupDefinition {
-  if (!common.art.world) throw new Error(`${common.modId}:${common.key} powerup requires art.world`)
+  if (!common.art.world || (common.art.world.assetKind !== 'sprite' && common.art.world.assetKind !== 'sheet')) {
+    throw new Error(`${common.modId}:${common.key} powerup requires image art.world`)
+  }
+  if (common.art.sound && common.art.sound.assetKind !== 'sound') {
+    throw new Error(`${common.modId}:${common.key} powerup art.sound must be a sound`)
+  }
   const effect = common.fields.effect
   if (!isRule(effect)) throw new Error(`${common.modId}:${common.key} powerup requires an effect rule`)
   const pickup = common.fields.pickup === undefined
     ? {}
     : object(common.fields.pickup, `${common.key}.pickup`)
+  exactObjectKeys(pickup, ['radius'], `${common.key}.pickup`)
   return Object.freeze({
     ...common,
     contentKind: 'powerup' as const,
-    durationMs: durationMs(common.fields.duration ?? 0, `${common.key}.duration`),
     effect,
     pickupRadius: pickup.radius === undefined
       ? 32
       : number(pickup.radius, 1, 256, `${common.key}.pickup.radius`),
-    scope: optionalText(common.fields.scope, 'participant-run', 64, `${common.key}.scope`),
-    stacking: stacking(common.fields.stacking, `${common.key}.stacking`),
   })
 }
 
 function compileAffix(common: PreparedModContentEntry): PreparedModAffixDefinition {
+  const modifiers = optionalObject(common.fields.modifiers, `${common.key}.modifiers`)
+  exactObjectKeys(modifiers, ['incoming_damage', 'mana_spend'], `${common.key}.modifiers`)
+  validateModifierMap(modifiers, `${common.key}.modifiers`)
+  const appliesTo = textArray(common.fields.applies_to ?? [], `${common.key}.applies_to`)
+  if (appliesTo.some(type => !EQUIPMENT_TYPES.has(type))) {
+    throw new Error(`${common.modId}:${common.key} affix applies_to contains an unknown equipment type`)
+  }
   return Object.freeze({
     ...common,
-    appliesTo: textArray(
-      common.fields.applies_to ?? common.fields.equipment ?? [],
-      `${common.key}.applies_to`,
-    ),
+    appliesTo,
     contentKind: 'affix' as const,
-    modifiers: optionalObject(common.fields.modifiers, `${common.key}.modifiers`),
+    modifiers,
   })
 }
 
@@ -739,6 +793,7 @@ function compileAffixPool(
   }
   const entries = common.fields.entries.map((value, index) => {
     const entry = object(value, `${common.key}.entries[${index}]`)
+    exactObjectKeys(entry, ['affix', 'weight'], `${common.key}.entries[${index}]`)
     const affix = optionalReference(entry.affix, 'affix', `${common.key}.entries[${index}].affix`)
     if (!affix || !affixIds.has(affix.contentId)) {
       throw new Error(`${common.modId}:${common.key} affix pool entry is unavailable`)
@@ -750,9 +805,13 @@ function compileAffixPool(
         : number(entry.weight, Number.EPSILON, 1_000_000, `${common.key}.entries[${index}].weight`),
     })
   })
+  const appliesTo = textArray(common.fields.applies_to ?? [], `${common.key}.applies_to`)
+  if (appliesTo.some(type => !EQUIPMENT_TYPES.has(type))) {
+    throw new Error(`${common.modId}:${common.key} affix pool applies_to contains an unknown equipment type`)
+  }
   return Object.freeze({
     ...common,
-    appliesTo: textArray(common.fields.applies_to ?? [], `${common.key}.applies_to`),
+    appliesTo,
     contentKind: 'affix-pool' as const,
     entries: Object.freeze(entries),
     rngDomain: optionalText(common.fields.rng_domain, common.key, 128, `${common.key}.rng_domain`),
@@ -765,8 +824,11 @@ function compileAffixPool(
 function compileSkill(
   common: PreparedModContentEntry,
   skillIds: ReadonlySet<string>,
+  declaredIds: ReadonlySet<string>,
 ): PreparedModSkillDefinition {
-  if (!common.art.icon) throw new Error(`${common.modId}:${common.key} skill requires art.icon`)
+  if (!common.art.icon || (common.art.icon.assetKind !== 'sprite' && common.art.icon.assetKind !== 'sheet')) {
+    throw new Error(`${common.modId}:${common.key} skill requires image art.icon`)
+  }
   if (!Array.isArray(common.fields.ranks) || common.fields.ranks.length === 0 ||
       common.fields.ranks.length > 99) {
     throw new Error(`${common.modId}:${common.key} skill requires 1..99 rank definitions`)
@@ -775,11 +837,23 @@ function compileSkill(
     rank,
     `${common.key}.ranks[${index}]`,
   )))
-  const maximumRank = common.fields.maximum_rank ?? common.fields.max_rank ?? ranks.length
+  ranks.forEach((rank, index) => exactObjectKeys(
+    rank,
+    ['grant', 'grants', 'modify'],
+    `${common.key}.ranks[${index}]`,
+  ))
+  ranks.forEach((rank, index) => {
+    if (rank.modify !== undefined) validateModifierMap(
+      object(rank.modify, `${common.key}.ranks[${index}].modify`),
+      `${common.key}.ranks[${index}].modify`,
+    )
+  })
+  const maximumRank = common.fields.maximum_rank ?? ranks.length
   const maximum = integer(maximumRank, 1, ranks.length, `${common.key}.maximum_rank`)
   const offer = common.fields.offer === undefined
     ? {}
     : object(common.fields.offer, `${common.key}.offer`)
+  exactObjectKeys(offer, ['minimum_level', 'weight'], `${common.key}.offer`)
   const parent = optionalReference(common.fields.parent, 'skill', `${common.key}.parent`)
   const prerequisites = common.fields.prerequisites === undefined
     ? []
@@ -787,9 +861,16 @@ function compileSkill(
   if ((parent && !skillIds.has(parent.contentId)) || prerequisites.some(ref => !skillIds.has(ref.contentId))) {
     throw new Error(`${common.modId}:${common.key} skill dependency is unavailable`)
   }
+  const grants = skillGrants(common.fields.grants, declaredIds, `${common.key}.grants`)
+  const rankGrants = ranks.slice(0, maximum).map((rank, index) => skillGrants(
+    rank.grants ?? rank.grant,
+    declaredIds,
+    `${common.key}.ranks[${index}].grant`,
+  ))
   return Object.freeze({
     ...common,
     contentKind: 'skill' as const,
+    grants,
     maximumRank: maximum,
     minimumLevel: offer.minimum_level === undefined
       ? 1
@@ -799,21 +880,44 @@ function compileSkill(
       : number(offer.weight, Number.EPSILON, 1_000_000, `${common.key}.offer.weight`),
     parent,
     prerequisites,
+    rankGrants: Object.freeze(rankGrants),
     ranks: Object.freeze(ranks.slice(0, maximum)),
   })
 }
 
+function skillGrants(
+  value: WebLuaDefinitionValue | undefined,
+  declaredIds: ReadonlySet<string>,
+  field: string,
+): readonly ResolvedWebLuaContentReference[] {
+  if (value === undefined || value === null) return Object.freeze([])
+  const values = Array.isArray(value) ? value : [value]
+  if (values.length > 32 || values.some(entry => !isResolvedReference(entry))) {
+    throw new Error(`${field} must contain resolved content references`)
+  }
+  const grants = values as ResolvedWebLuaContentReference[]
+  if (grants.some(grant => !declaredIds.has(grant.contentId) || (
+    grant.targetKind !== 'spell' && grant.targetKind !== 'ui'
+  ))) throw new Error(`${field} may grant only declared spells or UI`)
+  return Object.freeze([...grants])
+}
+
 function compileSpell(common: PreparedModContentEntry): PreparedModSpellDefinition {
-  if (!common.art.icon) throw new Error(`${common.modId}:${common.key} spell requires art.icon`)
+  if (!common.art.icon || (common.art.icon.assetKind !== 'sprite' && common.art.icon.assetKind !== 'sheet')) {
+    throw new Error(`${common.modId}:${common.key} spell requires image art.icon`)
+  }
+  if (common.art.effect && common.art.effect.assetKind !== 'sprite' && common.art.effect.assetKind !== 'sheet') {
+    throw new Error(`${common.modId}:${common.key} spell art.effect must be an image`)
+  }
+  if (common.art.sound && common.art.sound.assetKind !== 'sound') {
+    throw new Error(`${common.modId}:${common.key} spell art.sound must be a sound`)
+  }
   const behavior = common.fields.behavior
   if (!isRule(behavior)) throw new Error(`${common.modId}:${common.key} spell requires a behavior prefab`)
   const slot = common.fields.slot
   if (slot !== 'primary' && slot !== 'secondary') {
     throw new Error(`${common.modId}:${common.key} spell slot must be primary or secondary`)
   }
-  const subskills = common.fields.subskills === undefined
-    ? {}
-    : object(common.fields.subskills, `${common.key}.subskills`)
   return Object.freeze({
     ...common,
     behavior,
@@ -823,41 +927,63 @@ function compileSpell(common: PreparedModContentEntry): PreparedModSpellDefiniti
       ? 0
       : number(common.fields.mana, 0, 1_000_000, `${common.key}.mana`),
     slot,
-    subskills: Object.freeze(Object.fromEntries(Object.entries(subskills).map(([key, value]) => [
-      key,
-      Object.freeze(object(value, `${common.key}.subskills.${key}`)),
-    ]))),
-    targeting: optionalObject(common.fields.targeting, `${common.key}.targeting`),
   })
 }
 
-function compileEnemy(
-  common: PreparedModContentEntry,
-  spellIds: ReadonlySet<string>,
-): PreparedModEnemyDefinition {
-  if (!common.art.atlas) throw new Error(`${common.modId}:${common.key} enemy requires art.atlas`)
-  if (typeof common.fields.base !== 'string' || common.fields.base.length === 0) {
-    throw new Error(`${common.modId}:${common.key} enemy requires a verified base`)
+function compileEnemy(common: PreparedModContentEntry): PreparedModEnemyDefinition {
+  if (!common.art.atlas || (common.art.atlas.assetKind !== 'sprite' && common.art.atlas.assetKind !== 'sheet')) {
+    throw new Error(`${common.modId}:${common.key} enemy requires image art.atlas`)
+  }
+  for (const slot of ['attack_sound', 'death_sound', 'sound'] as const) {
+    if (common.art[slot] && common.art[slot]!.assetKind !== 'sound') {
+      throw new Error(`${common.modId}:${common.key} enemy art.${slot} must be a sound`)
+    }
   }
   const stats = common.fields.stats === undefined
     ? {}
     : object(common.fields.stats, `${common.key}.stats`)
-  const attacks = common.fields.attacks === undefined
-    ? []
-    : referenceArray(common.fields.attacks, 'spell', `${common.key}.attacks`)
-  if (attacks.some(attack => !spellIds.has(attack.contentId))) {
-    throw new Error(`${common.modId}:${common.key} enemy attack is unavailable`)
-  }
-  const behavior = common.fields.behavior
-  if (behavior !== undefined && !isRule(behavior)) {
-    throw new Error(`${common.modId}:${common.key} enemy behavior must be a prefab`)
-  }
+  exactObjectKeys(stats, [
+    'attack_cooldown',
+    'attack_range',
+    'collision_radius',
+    'damage',
+    'health',
+    'scale',
+    'speed',
+  ], `${common.key}.stats`)
+  const loot = common.fields.loot === undefined
+    ? {}
+    : object(common.fields.loot, `${common.key}.loot`)
+  exactObjectKeys(loot, ['experience', 'gold'], `${common.key}.loot`)
+  const gold = loot.gold === undefined
+    ? {}
+    : object(loot.gold, `${common.key}.loot.gold`)
+  exactObjectKeys(gold, ['maximum', 'minimum'], `${common.key}.loot.gold`)
+  const goldMinimum = gold.minimum === undefined
+    ? 0
+    : integer(gold.minimum, 0, 1_000_000, `${common.key}.loot.gold.minimum`)
+  const goldMaximum = gold.maximum === undefined
+    ? goldMinimum
+    : integer(gold.maximum, goldMinimum, 1_000_000, `${common.key}.loot.gold.maximum`)
+  const experience = loot.experience === undefined
+    ? 0
+    : number(loot.experience, 0, 1_000_000, `${common.key}.loot.experience`)
   return Object.freeze({
     ...common,
-    attacks,
-    base: common.fields.base,
-    behavior: behavior ?? null,
+    attackCooldownMs: durationMs(stats.attack_cooldown ?? '1s', `${common.key}.stats.attack_cooldown`),
+    attackDamage: stats.damage === undefined
+      ? 10
+      : number(stats.damage, 0, 1_000_000, `${common.key}.stats.damage`),
+    attackRange: stats.attack_range === undefined
+      ? 36
+      : number(stats.attack_range, 1, 2_048, `${common.key}.stats.attack_range`),
+    collisionRadius: stats.collision_radius === undefined
+      ? 24
+      : number(stats.collision_radius, 4, 128, `${common.key}.stats.collision_radius`),
     contentKind: 'enemy' as const,
+    experience,
+    goldMaximum,
+    goldMinimum,
     health: stats.health === undefined
       ? 100
       : number(stats.health, 1, 1_000_000_000, `${common.key}.stats.health`),
@@ -875,15 +1001,88 @@ function compileBoneyard(common: PreparedModContentEntry): PreparedModBoneyardDe
   if (typeof source !== 'string' || !/^levels\/.+\.boneyard$/.test(source)) {
     throw new Error(`${common.modId}:${common.key} Boneyard source is invalid`)
   }
-  return Object.freeze({ ...common, contentKind: 'boneyard' as const, source })
+  if (common.art.layout?.assetKind !== 'boneyard' || common.art.layout.path !== source) {
+    throw new Error(`${common.modId}:${common.key} Boneyard art.layout must declare its source file`)
+  }
+  const roster = common.fields.roster === undefined ? [] : common.fields.roster
+  const waves = common.fields.waves === undefined ? [] : common.fields.waves
+  const triggers = common.fields.triggers === undefined ? [] : common.fields.triggers
+  if (!Array.isArray(roster) || roster.length > 64 || roster.some(entry => (
+    typeof entry !== 'string' && !isResolvedReference(entry)
+  ))) throw new Error(`${common.modId}:${common.key} Boneyard roster is invalid`)
+  if (!Array.isArray(waves) || waves.length > 256 || waves.some(entry => (
+    !entry || typeof entry !== 'object' || Array.isArray(entry)
+  ))) throw new Error(`${common.modId}:${common.key} Boneyard waves are invalid`)
+  if (!Array.isArray(triggers) || triggers.length > 64 || !triggers.every(isRule)) {
+    throw new Error(`${common.modId}:${common.key} Boneyard triggers are invalid`)
+  }
+  const environment = optionalObject(common.fields.environment, `${common.key}.environment`)
+  exactObjectKeys(environment, ['mode'], `${common.key}.environment`)
+  if (environment.mode !== undefined) integer(environment.mode, 0, 2, `${common.key}.environment.mode`)
+  const anchors = optionalObject(common.fields.anchors, `${common.key}.anchors`)
+  exactObjectKeys(anchors, ['entry'], `${common.key}.anchors`)
+  if (anchors.entry !== undefined) point(anchors.entry, `${common.key}.anchors.entry`)
+  const preparedWaves = waves.map((entry, index) => {
+    const wave = object(entry, `${common.key}.waves[${index}]`)
+    exactObjectKeys(wave, ['ordinal', 'roster', 'wave'], `${common.key}.waves[${index}]`)
+    if (wave.wave === undefined && wave.ordinal === undefined) {
+      throw new Error(`${common.modId}:${common.key} wave requires wave or ordinal`)
+    }
+    const roster = wave.roster
+    if (!Array.isArray(roster) || roster.length > 64 || roster.some(candidate => (
+      typeof candidate !== 'string' && !isResolvedReference(candidate)
+    ))) throw new Error(`${common.modId}:${common.key} wave roster is invalid`)
+    return Object.freeze(wave)
+  })
+  return Object.freeze({
+    ...common,
+    anchors,
+    contentKind: 'boneyard' as const,
+    environment,
+    roster: Object.freeze([...roster]),
+    source,
+    triggers: Object.freeze([...triggers]),
+    waves: Object.freeze(preparedWaves),
+  })
 }
 
 function compileRoom(common: PreparedModContentEntry): PreparedModRoomDefinition {
+  const geometry = optionalObject(common.fields.geometry, `${common.key}.geometry`)
+  exactObjectKeys(geometry, ['floor', 'height', 'kind', 'walls', 'width'], `${common.key}.geometry`)
+  if (geometry.kind !== 'inline') throw new Error(`${common.modId}:${common.key} room geometry kind must be inline`)
+  number(geometry.width, 64, 4_096, `${common.key}.geometry.width`)
+  number(geometry.height, 64, 4_096, `${common.key}.geometry.height`)
+  if (typeof geometry.floor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(geometry.floor)) {
+    throw new Error(`${common.modId}:${common.key} room floor must be a six-digit hex color`)
+  }
+  const walls = geometry.walls
+  if (walls !== undefined && (!Array.isArray(walls) || walls.some((entry, index) => {
+    const wall = object(entry, `${common.key}.geometry.walls[${index}]`)
+    exactObjectKeys(wall, ['color', 'height', 'width', 'x', 'y'], `${common.key}.geometry.walls[${index}]`)
+    for (const field of ['height', 'width', 'x', 'y']) number(
+      wall[field],
+      field === 'height' || field === 'width' ? 1 : -4_096,
+      4_096,
+      `${common.key}.geometry.walls[${index}].${field}`,
+    )
+    return false
+  }))) throw new Error(`${common.modId}:${common.key} room walls are invalid`)
+  const props = common.fields.props
+  if (props !== undefined && (!Array.isArray(props) || props.some((entry, index) => {
+    const prop = object(entry, `${common.key}.props[${index}]`)
+    exactObjectKeys(prop, ['color', 'kind', 'label', 'radius', 'x', 'y'], `${common.key}.props[${index}]`)
+    for (const field of ['radius', 'x', 'y']) number(
+      prop[field],
+      field === 'radius' ? 1 : -4_096,
+      4_096,
+      `${common.key}.props[${index}].${field}`,
+    )
+    return false
+  }))) throw new Error(`${common.modId}:${common.key} room props are invalid`)
   return Object.freeze({
     ...common,
-    anchors: optionalObject(common.fields.anchors, `${common.key}.anchors`),
     contentKind: 'room' as const,
-    geometry: optionalObject(common.fields.geometry, `${common.key}.geometry`),
+    geometry,
   })
 }
 
@@ -895,15 +1094,14 @@ function compileScene(
   if (rooms.length === 0 || rooms.some(room => !roomIds.has(room.contentId))) {
     throw new Error(`${common.modId}:${common.key} scene rooms are unavailable`)
   }
-  const instance = common.fields.instance
-  if (instance !== 'party' && instance !== 'player' && instance !== 'session') {
-    throw new Error(`${common.modId}:${common.key} scene instance is invalid`)
+  if (common.art.layout?.assetKind !== 'scene') {
+    throw new Error(`${common.modId}:${common.key} scene requires art.layout`)
   }
-  return Object.freeze({ ...common, contentKind: 'scene' as const, instance, rooms })
+  return Object.freeze({ ...common, contentKind: 'scene' as const, rooms })
 }
 
 function compileSceneExtension(common: PreparedModContentEntry): PreparedModSceneExtensionDefinition {
-  if (typeof common.fields.scene !== 'string' || common.fields.scene.length === 0 ||
+  if (common.fields.scene !== 'stock.boneyard' ||
       !Array.isArray(common.fields.features) || !common.fields.features.every(isRule)) {
     throw new Error(`${common.modId}:${common.key} scene extension is invalid`)
   }
@@ -926,6 +1124,7 @@ function compileShop(
   }
   const stock = common.fields.stock.map((value, index) => {
     const row = object(value, `${common.key}.stock[${index}]`)
+    exactObjectKeys(row, ['item', 'price', 'quantity'], `${common.key}.stock[${index}]`)
     const item = resolvedReference(row.item, `${common.key}.stock[${index}].item`)
     if (!itemIds.has(item.contentId) || (item.targetKind !== 'item' && item.targetKind !== 'potion')) {
       throw new Error(`${common.modId}:${common.key} shop item is unavailable`)
@@ -950,8 +1149,9 @@ function compileShop(
         }
         return common.fields.services.map((value, index) => {
           const service = object(value, `${common.key}.services[${index}]`)
+          exactObjectKeys(service, ['pool', 'price', 'type'], `${common.key}.services[${index}]`)
           const pool = resolvedReference(service.pool, `${common.key}.services[${index}].pool`)
-          if ((service.type ?? service.kind) !== 'reforge' || pool.targetKind !== 'affix-pool' ||
+          if (service.type !== 'reforge' || pool.targetKind !== 'affix-pool' ||
               !affixPoolIds.has(pool.contentId)) {
             throw new Error(`${common.modId}:${common.key} reforge service is invalid`)
           }
@@ -962,25 +1162,80 @@ function compileShop(
           })
         })
       })()
+  const mount = common.fields.mount === undefined ? null : optionalObject(common.fields.mount, `${common.key}.mount`)
+  if (mount) {
+    exactObjectKeys(mount, ['radius', 'scene', 'x', 'y'], `${common.key}.mount`)
+    if (mount.scene !== 'hub.courtyard' && mount.scene !== 'boneyard') {
+      throw new Error(`${common.modId}:${common.key} shop mount scene is invalid`)
+    }
+    number(mount.x, -100_000, 100_000, `${common.key}.mount.x`)
+    number(mount.y, -100_000, 100_000, `${common.key}.mount.y`)
+    if (mount.radius !== undefined) number(mount.radius, 1, 2_048, `${common.key}.mount.radius`)
+  }
+  const npc = common.fields.npc === undefined ? null : optionalObject(common.fields.npc, `${common.key}.npc`)
+  if (npc) {
+    exactObjectKeys(npc, ['name'], `${common.key}.npc`)
+    optionalText(npc.name, common.name, 128, `${common.key}.npc.name`)
+  }
   return Object.freeze({
     ...common,
     contentKind: 'shop' as const,
-    currency: optionalText(common.fields.currency, 'gold', 64, `${common.key}.currency`),
-    mount: common.fields.mount === undefined ? null : optionalObject(common.fields.mount, `${common.key}.mount`),
+    mount,
+    npc,
+    restockMs: durationMs(common.fields.restock ?? 0, `${common.key}.restock`),
     services: Object.freeze(services),
     stock: Object.freeze(stock),
+    stockScope: (() => {
+      const scope = common.fields.stock_scope ?? 'player'
+      if (scope !== 'player' && scope !== 'party' && scope !== 'session') {
+        throw new Error(`${common.modId}:${common.key} shop stock scope is invalid`)
+      }
+      return scope
+    })(),
   })
 }
 
 function compileUi(common: PreparedModContentEntry): PreparedModUiDefinition {
-  if (typeof common.fields.mount !== 'string' || !isRule(common.fields.view)) {
+  const mounts = new Set(['hud.bottom_left', 'hud.bottom_right', 'hud.overlay', 'hud.top_left', 'hud.top_right'])
+  if (typeof common.fields.mount !== 'string' || !mounts.has(common.fields.mount) ||
+      !isRule(common.fields.view) || common.fields.view.operation !== 'prefab.minimap') {
     throw new Error(`${common.modId}:${common.key} UI mount or view is invalid`)
+  }
+  const bindings = optionalObject(common.fields.bindings, `${common.key}.bindings`)
+  for (const [name, binding] of Object.entries(bindings)) {
+    const row = object(binding, `${common.key}.bindings.${name}`)
+    exactObjectKeys(row, ['state'], `${common.key}.bindings.${name}`)
+    if (typeof row.state !== 'string' || row.state.length === 0) {
+      throw new Error(`${common.modId}:${common.key} UI binding ${name} requires state`)
+    }
+  }
+  const visible = optionalObject(common.fields.visible, `${common.key}.visible`)
+  exactObjectKeys(visible, ['scenes', 'state'], `${common.key}.visible`)
+  if (visible.scenes !== undefined && (
+    !Array.isArray(visible.scenes) || visible.scenes.length === 0 || visible.scenes.some(scene => (
+      scene !== 'hub' && scene !== 'boneyard' && scene !== 'room'
+    ))
+  )) throw new Error(`${common.modId}:${common.key} UI visible.scenes is invalid`)
+  if (visible.state !== undefined) {
+    const condition = object(visible.state, `${common.key}.visible.state`)
+    exactObjectKeys(condition, ['equals', 'state'], `${common.key}.visible.state`)
+    if (typeof condition.state !== 'string' || condition.state.length === 0) {
+      throw new Error(`${common.modId}:${common.key} UI visible.state requires state`)
+    }
   }
   return Object.freeze({
     ...common,
+    accessibleName: optionalText(
+      common.fields.accessible_name,
+      common.name,
+      128,
+      `${common.key}.accessible_name`,
+    ),
     actions: common.fields.actions === undefined ? Object.freeze([]) : textArray(common.fields.actions, `${common.key}.actions`),
+    bindings,
     contentKind: 'ui' as const,
     mount: common.fields.mount,
+    visible,
     view: common.fields.view,
   })
 }
@@ -1196,6 +1451,29 @@ function integer(value: unknown, minimum: number, maximum: number, field: string
 function object(value: unknown, field: string): Record<string, WebLuaDefinitionValue> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field} must be an object`)
   return value as Record<string, WebLuaDefinitionValue>
+}
+
+function point(value: unknown, field: string): void {
+  const source = object(value, field)
+  exactObjectKeys(source, ['x', 'y'], field)
+  number(source.x, -100_000, 100_000, `${field}.x`)
+  number(source.y, -100_000, 100_000, `${field}.y`)
+}
+
+function validateModifierMap(
+  source: Readonly<Record<string, WebLuaDefinitionValue>>,
+  field: string,
+): void {
+  for (const [lane, value] of Object.entries(source)) {
+    if (typeof value === 'number' && Number.isFinite(value)) continue
+    const modifier = object(value, `${field}.${lane}`)
+    exactObjectKeys(modifier, ['add', 'multiply', 'set'], `${field}.${lane}`)
+    if (Object.keys(modifier).length !== 1) throw new Error(`${field}.${lane} requires one modifier operation`)
+    const amount = Object.values(modifier)[0]
+    if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+      throw new Error(`${field}.${lane} modifier must be finite`)
+    }
+  }
 }
 
 function exactObjectKeys(

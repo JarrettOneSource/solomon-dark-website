@@ -9,6 +9,7 @@ import {
   WEB_LUA_ASSET_KINDS,
   WEB_LUA_CONTENT_KINDS,
   WEB_LUA_DEFINITION_API_VERSION,
+  WEB_LUA_RULE_EVENT_NAMES,
   WEB_LUA_SCOPE_KINDS,
   type WebLuaAssetDefinition,
   type WebLuaAssetKind,
@@ -31,6 +32,7 @@ import {
 } from './web-lua-definition-error.ts'
 
 const contentKinds = new Set<string>(WEB_LUA_CONTENT_KINDS)
+const eventNames = new Set<string>(WEB_LUA_RULE_EVENT_NAMES)
 const scopeKinds = new Set<string>(WEB_LUA_SCOPE_KINDS)
 
 export interface WebLuaDefinitionRuntimeOptions {
@@ -150,6 +152,21 @@ export class WebLuaDefinitionRuntime {
     }
   }
 
+  invokeMigration(key: string, version: number, value: unknown): unknown {
+    this.#requireOpen()
+    if (this.#reducerRunning) throw new Error('advanced reducer callbacks may not run recursively')
+    const migration = this.#reducers.get(key)?.migrations[version]
+    if (!migration) throw new Error(`advanced reducer ${key} has no migration from version ${version}`)
+    this.#reducerRunning = true
+    try {
+      const returned = migration(luaPayload(value))
+      if (returned instanceof Promise) throw new Error('advanced reducer migration may not yield')
+      return cloneRuntimeValue(returned, `${key} migration ${version}`)
+    } finally {
+      this.#reducerRunning = false
+    }
+  }
+
   get memoryBytes(): number {
     return this.#closed ? 0 : this.#engine.global.getMemoryUsed()
   }
@@ -189,51 +206,34 @@ export class WebLuaDefinitionRuntime {
     const prefab = {
       area: (value: unknown) => this.#rule('prefab.area', value),
       channel: (value: unknown) => this.#rule('prefab.channel', value),
-      enemy: (base: unknown, overrides?: unknown) => typeof base === 'string'
-        ? this.#rule('prefab.enemy', { ...optionalRecord(overrides, 'enemy prefab overrides'), base })
-        : this.#rule('prefab.enemy', base),
       minimap: (value: unknown) => this.#rule('prefab.minimap', value),
       portal: (value: unknown) => this.#rule('prefab.portal', value),
       projectile: (value: unknown) => this.#rule('prefab.projectile', value),
     }
     const rules = {
-      after: (duration: unknown, node?: unknown) => node === undefined
-        ? this.#rule('rules.after', duration)
-        : this.#rule('rules.after', { duration, node }),
+      after: (duration: unknown, node: unknown) => this.#rule('rules.after', { duration, node }),
       all: (nodes: unknown) => this.#rule('rules.all', { nodes: array(nodes, 'rules.all nodes') }),
-      every: (interval: unknown, node?: unknown, options?: unknown) => node === undefined
-        ? this.#rule('rules.every', interval)
-        : this.#rule('rules.every', {
-            ...optionalRecord(options, 'rules.every options'),
-            interval,
-            node,
-          }),
+      every: (interval: unknown, node: unknown, options: unknown) => this.#rule('rules.every', {
+        ...optionalRecord(options, 'rules.every options'),
+        interval,
+        node,
+      }),
       first: (nodes: unknown) => this.#rule('rules.first', { nodes: array(nodes, 'rules.first nodes') }),
-      on: (event: unknown, node?: unknown, options?: unknown) => node === undefined
-        ? this.#rule('rules.on', event)
-        : this.#rule('rules.on', {
-            ...optionalRecord(options, 'rules.on options'),
-            event,
-            node,
-          }),
-      when: (predicate: unknown, yes?: unknown, no?: unknown) => yes === undefined
-        ? this.#rule('rules.when', predicate)
-        : this.#rule('rules.when', {
-            ...(no === undefined || no === null ? {} : { no }),
-            predicate,
-            yes,
-          }),
+      on: (event: unknown, node: unknown) => this.#rule('rules.on', { event, node }),
+      when: (predicate: unknown, yes: unknown, no?: unknown) => this.#rule('rules.when', {
+        ...(no === undefined || no === null ? {} : { no }),
+        predicate,
+        yes,
+      }),
     }
     const effect = constructorTable('effect', [
       'damage',
-      'emit',
       'grant',
       'present',
       'resource',
       'spawn',
       'state',
       'status',
-      'transition',
     ], (operation, fields) => this.#rule(operation, fields))
     const schema = {
       array: (value: unknown) => this.#schema('array', value),
@@ -246,14 +246,12 @@ export class WebLuaDefinitionRuntime {
     }
     const intent = constructorTable('intent', [
       'damage',
-      'emit',
       'grant',
       'present',
       'resource',
       'spawn',
       'state',
       'status',
-      'transition',
     ], (intentKind, fields) => this.#intent(intentKind, fields))
     this.#engine.global.set('print', (...values: unknown[]) => {
       this.#log(values.map(value => typeof value === 'string' ? value : String(value)).join('\t'))
@@ -364,6 +362,7 @@ export class WebLuaDefinitionRuntime {
     const source = record(value, 'advanced reducer')
     exactKeys(source, [
       'key',
+      'migrations',
       'on',
       'reduce',
       'schema_version',
@@ -379,6 +378,8 @@ export class WebLuaDefinitionRuntime {
     }
     const on = source.on.map((event, index) => text(event, `advanced reducer on[${index}]`))
     if (new Set(on).size !== on.length) throw new Error('advanced reducer on contains duplicates')
+    const unknownEvent = on.find(event => !eventNames.has(event))
+    if (unknownEvent) throw new Error(`unknown advanced reducer event: ${unknownEvent}`)
     if (!Number.isSafeInteger(source.schema_version) || Number(source.schema_version) < 1) {
       throw new Error('advanced reducer schema_version must be a positive safe integer')
     }
@@ -386,9 +387,24 @@ export class WebLuaDefinitionRuntime {
       throw new Error('advanced reducer state must be an sd.schema definition')
     }
     if (typeof source.reduce !== 'function') throw new Error('advanced reducer reduce must be a function')
+    const migrationSource = source.migrations === undefined ? {} : source.migrations
+    if (!Array.isArray(migrationSource) && (!migrationSource || typeof migrationSource !== 'object')) {
+      throw new Error('advanced reducer migrations must be a table')
+    }
+    const migrations: Record<number, (...args: unknown[]) => unknown> = {}
+    for (let version = 1; version < Number(source.schema_version); version += 1) {
+      const migration = Array.isArray(migrationSource)
+        ? migrationSource[version - 1]
+        : (migrationSource as Record<string, unknown>)[version]
+      if (typeof migration !== 'function') {
+        throw new Error(`advanced reducer is missing migration from version ${version}`)
+      }
+      migrations[version] = migration as (...args: unknown[]) => unknown
+    }
     const registration: WebLuaReducerRegistration = Object.freeze({
       callback: source.reduce as (...args: unknown[]) => unknown,
       key,
+      migrations: Object.freeze(migrations),
       on: Object.freeze(on),
       schemaVersion: Number(source.schema_version),
       scope: scope as WebLuaScopeKind,

@@ -76,6 +76,10 @@ import {
   createPartyRecoveryClaim,
   verifyPartyRecoveryClaim,
 } from './party-recovery-claim.ts'
+import {
+  compileWebSessionContentDefinitions,
+  materializeWebSessionContent,
+} from './web-mod-content.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -1780,6 +1784,69 @@ test('initial multiplayer Boneyard waits for every renderer before starting grac
   assert.ok((startedFirst.grace?.remainingMs ?? Infinity) <= 2_000)
   await new Promise(resolve => setTimeout(resolve, 80))
   assert.equal(host.state().tick, heldTick)
+})
+
+test('modded Boneyard accepts renderer readiness while start grace is pending', async (context) => {
+  const modContent = await compileWebSessionContentDefinitions(materializeWebSessionContent({
+    manifestSha256: 'f'.repeat(64),
+    mods: [{
+      boneyards: [],
+      contentSha256: 'e'.repeat(64),
+      entryScript: 'return sd.mod({api = "1.0.0"})',
+      files: [],
+      id: 'tests.renderer-readiness',
+      name: 'Renderer Readiness',
+      priority: 0,
+      slug: 'renderer-readiness',
+      version: '1.0.0',
+    }],
+  }), luaWasmPath)
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    content: modContent.manifest,
+    luaWasmPath,
+    modAssets: modContent.assets,
+    modContent,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const loaded = [first, second].map(({ socket }) => nextMessage(socket, message => (
+    message.type === 'server-boneyard-loaded'
+  )))
+  const pending = [first, second].map(({ socket }) => nextMessage(socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.reason === 'game-started'
+    && message.grace.remainingMs === null
+  )))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [firstLoaded, secondLoaded] = await Promise.all(loaded)
+  const graces = await Promise.all(pending)
+  assert.equal(firstLoaded.type, 'server-boneyard-loaded')
+  assert.equal(secondLoaded.type, 'server-boneyard-loaded')
+  assert.equal(firstLoaded.boneyard.runId, secondLoaded.boneyard.runId)
+
+  const heldTick = host.state().tick
+  for (const { socket } of [first, second]) socket.send(encodeGameMessage({
+    type: 'client-ready-boneyard',
+    runId: firstLoaded.boneyard.runId,
+  }))
+  for (const [index, message] of graces.entries()) {
+    assert.equal(message.type, 'server-gameplay-resume-grace')
+    assert.ok(message.grace)
+    ;[first, second][index]!.socket.send(encodeGameMessage({
+      type: 'client-resume-grace-ready',
+      sequence: message.grace.sequence,
+    }))
+  }
+  await waitFor(() => host.state().tick > heldTick)
 })
 
 test('Boneyard pause holds the complete world and only its owner can resume', async (context) => {

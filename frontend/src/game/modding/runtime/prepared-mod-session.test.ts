@@ -27,10 +27,10 @@ local reducer = sd.advanced.reducer({
   scope = "party-run",
   schema_version = 1,
   state = state,
-  on = {"enemy.death", "action.reward"},
+  on = {"enemy.death", "action.shop.purchase"},
   reduce = function(current, event, context)
     return {count = current.count + 1}, {
-      sd.intent.grant({item = "stock.health_potion"}),
+      sd.intent.state({key = "rewarded", value = true}),
     }
   end,
 })
@@ -53,15 +53,14 @@ test('prepared session commits one atomic intent transaction and projects state'
     })
     assert.equal(result.accepted, true)
     assert.equal(committed.length, 1)
-    assert.equal(committed[0]?.[0]?.kind, 'grant')
+    assert.equal(committed[0]?.[0]?.kind, 'state')
     assert.deepEqual(session.project('player-1').state.cells[0]?.value, { count: 1 })
     assert.equal(session.catalog()[0]?.graphSha256, prepared.compiled.graphSha256)
     assert.deepEqual(session.checkpoint().graphSha256, [prepared.compiled.graphSha256])
 
     const action = session.act({
-      action: 'reward',
+      action: 'shop.purchase',
       context: {},
-      event: 'ignored',
       payload: {},
       requestId: 7,
       scope,
@@ -144,7 +143,6 @@ return sd.mod({api = "1.0.0", content = {status, potion}})
     const result = session.act({
       action: 'content.use',
       context: { participant_id: 'player-1' },
-      event: 'ignored',
       payload: { content_id: potion.contentId },
       requestId: 8,
       scope: { id: 'player-1:run-1', kind: 'participant-run' },
@@ -156,6 +154,110 @@ return sd.mod({api = "1.0.0", content = {status, potion}})
   } finally {
     session.close()
   }
+})
+
+test('content actions also dispatch a stable generic event for reducers', async () => {
+  const prepared = await definitionSource(`
+local state = sd.schema.object({
+  casts = sd.schema.integer({default = 0, min = 0, max = 9}),
+})
+local focus = sd.kit.status({key = "focus", duration = "1s"})
+local counter = sd.advanced.reducer({
+  key = "cast_counter",
+  scope = "participant-run",
+  schema_version = 1,
+  state = state,
+  on = {"action.content.cast"},
+  reduce = function(current)
+    return {casts = current.casts + 1}, {
+      sd.intent.state({key = "cast.counted", value = current.casts + 1}),
+      sd.intent.status({target = "caster", status = sd.ref("status", "focus")}),
+    }
+  end,
+})
+local spell = sd.kit.spell({
+  key = "lesson",
+  name = "Lesson",
+  slot = "secondary",
+  behavior = sd.prefab.area({
+    radius = 20,
+    duration = "1s",
+    every = "250ms",
+    effects = {sd.effect.damage({target = "hostiles_in_area", amount = 1})},
+  }),
+  art = {icon = sd.art.ref("icon")},
+})
+local icon = sd.art.sprite("art/icon.png")
+return sd.mod({api = "1.0.0", assets = {icon = icon}, content = {focus, spell}, systems = {counter}})
+`)
+  const committed: ModIntent[][] = []
+  const session = await prepareModSession({
+    adapter: adapter({ commit: intents => committed.push([...intents]) }),
+    mods: [prepared],
+    wasmPath,
+  })
+  try {
+    const spell = prepared.compiled.content.find(content => content.contentKind === 'spell')!
+    const result = session.act({
+      action: 'content.cast',
+      context: { participant_id: 'player-1' },
+      payload: { content_id: spell.contentId },
+      requestId: 1,
+      scope: { id: 'player-1:run-1', kind: 'participant-run' },
+      tick: 1,
+    })
+    assert.equal(result.accepted, true, result.errors.join('; '))
+    assert.deepEqual(result.intents.map(intent => intent.kind), ['spell-effect', 'state', 'status'])
+    assert.deepEqual(result.intents[2]?.fields.status, {
+      contentId: prepared.compiled.content.find(content => content.key === 'focus')?.contentId,
+      key: 'focus',
+      kind: 'resolved-content-reference',
+      modId: identity.id,
+      targetKind: 'status',
+    })
+    assert.deepEqual(session.checkpoint().state.cells[0]?.value, { casts: 1 })
+    assert.equal(committed.length, 1)
+  } finally {
+    session.close()
+  }
+})
+
+test('prepared session executes and restores scheduled rules without requiring a new event', async () => {
+  const prepared = await definitionSource(`
+return sd.mod({
+  api = "1.0.0",
+  rules = {
+    sd.rules.on("run.started", sd.rules.after(
+      "10ms",
+      sd.effect.state({key = "ready", value = true})
+    )),
+  },
+})
+`)
+  const committed: ModIntent[][] = []
+  const session = await prepareModSession({
+    adapter: adapter({ commit: intents => committed.push([...intents]) }),
+    mods: [prepared],
+    wasmPath,
+  })
+  const scope = { id: 'run-1', kind: 'party-run' } as const
+  try {
+    session.step({
+      events: [{ context: {}, event: 'run.started', payload: {}, scope }],
+      tick: 1,
+    })
+    const scheduled = session.checkpoint()
+    assert.equal(scheduled.timers.length, 1)
+    const fired = session.step({ events: [], tick: 2 })
+    assert.equal(fired.accepted, true)
+    assert.deepEqual(fired.intents.map(intent => intent.fields.key), ['ready'])
+    session.restore(scheduled)
+    const repeated = session.step({ events: [], tick: 2 })
+    assert.deepEqual(repeated.intents.map(intent => intent.fields.key), ['ready'])
+  } finally {
+    session.close()
+  }
+  assert.equal(committed.length, 2)
 })
 
 function adapter(options: Readonly<{

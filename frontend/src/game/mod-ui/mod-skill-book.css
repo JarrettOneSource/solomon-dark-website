@@ -1,0 +1,49 @@
+.mod-skill-book {
+  position: fixed;
+  z-index: 10004;
+  top: 12%;
+  right: max(1rem, env(safe-area-inset-right));
+  display: grid;
+  gap: .35rem;
+  width: min(18rem, 42vw);
+  max-height: 72vh;
+  padding: .75rem;
+  overflow: auto;
+  border: 1px solid rgb(202 181 126 / 78%);
+  background: rgb(9 10 14 / 94%);
+  color: #e8dcb9;
+  font: 600 .7rem/1.25 Cinzel, serif;
+}
+
+.mod-skill-book h2,
+.mod-skill-book h3,
+.mod-skill-book p { margin: 0; }
+
+.mod-skill-book h3 {
+  margin-top: .4rem;
+  color: #c9b6dd;
+  font-size: .68rem;
+  text-transform: uppercase;
+}
+
+.mod-skill-book article,
+.mod-skill-book button {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: .1rem .45rem;
+  align-items: center;
+  padding: .4rem;
+  border: 1px solid rgb(139 119 160 / 62%);
+  background: rgb(27 22 34 / 90%);
+  color: inherit;
+  text-align: left;
+}
+
+.mod-skill-book article[data-subskill='true'] { margin-left: 1rem; }
+.mod-skill-book img { grid-row: 1 / 4; width: 2rem; height: 2rem; object-fit: contain; }
+.mod-skill-book small { color: #b8aec3; font: 500 .62rem/1.2 sans-serif; }
+.mod-skill-book button:hover:not(:disabled) { border-color: #e5ccff; }
+
+@media (max-width: 700px) {
+  .mod-skill-book { top: auto; bottom: 8rem; width: min(18rem, calc(100vw - 2rem)); max-height: 42vh; }
+}

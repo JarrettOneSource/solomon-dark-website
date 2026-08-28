@@ -394,7 +394,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 100
+export const GAME_PROTOCOL_VERSION = 101
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -712,6 +712,11 @@ export interface ClientReadyCollegeIntroMessage {
   type: 'client-ready-college-intro'
 }
 
+export interface ClientReadyBoneyardMessage {
+  readonly runId: string
+  readonly type: 'client-ready-boneyard'
+}
+
 export interface ClientTutorialActionMessage {
   action: NativeTutorialSurfaceAction
   type: 'client-tutorial-action'
@@ -758,7 +763,16 @@ export interface ClientModCastMessage {
   readonly type: 'client-mod-cast'
 }
 
-export const MOD_ACTIONS = ['portal-enter', 'reforge', 'scene-return', 'shop-buy', 'skill-choose'] as const
+export const MOD_ACTIONS = [
+  'portal-enter',
+  'quickbar-bind',
+  'reforge',
+  'scene-room',
+  'scene-return',
+  'shop-buy',
+  'skill-choose',
+  'ui-action',
+] as const
 export type ModAction = typeof MOD_ACTIONS[number]
 export interface ClientModActionMessage {
   readonly action: ModAction
@@ -803,6 +817,7 @@ export type ClientGameMessage =
   | ClientSelectSkillMessage
   | ClientSkillQuickbarBindMessage
   | ClientPingMessage
+  | ClientReadyBoneyardMessage
   | ClientReadyCollegeIntroMessage
   | ClientResumeGraceReadyMessage
   | ClientSaveBeforeLeaveMessage
@@ -1385,6 +1400,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
   if (value.type === 'client-ready-college-intro') {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-ready-college-intro' }
+  }
+  if (value.type === 'client-ready-boneyard') {
+    onlyKeys(value, 'message', ['type', 'runId'])
+    return {
+      type: 'client-ready-boneyard',
+      runId: limitedString(value.runId, 'runId', 128),
+    }
   }
   if (value.type === 'client-resume-grace-ready') {
     onlyKeys(value, 'message', ['type', 'sequence'])

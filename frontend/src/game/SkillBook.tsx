@@ -31,6 +31,8 @@ import type {
 } from './protocol/game-state.ts'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
+import type { GameClientSession } from './client/game-client-session.ts'
+import ModSkillBook from './mod-ui/ModSkillBook.tsx'
 import {
   createSkillBookRenderer,
   type SkillBookRenderer,
@@ -61,6 +63,7 @@ interface SkillBookProps {
   onSelectPrimarySkill: (skillId: number) => void
   playerId: string
   progression: ProtocolPlayerProgression
+  session: GameClientSession
   style: CSSProperties
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   topMost: boolean
@@ -91,6 +94,7 @@ export default function SkillBook({
   onUnassignQuickbarSkill,
   playerId,
   progression: initialProgression,
+  session,
   style,
   subscribeSnapshot,
   topMost,
@@ -386,6 +390,7 @@ export default function SkillBook({
         onTarget={setTargetQuickbarSlot}
         targetSlot={targetQuickbarSlot}
       />
+      <ModSkillBook session={session} />
       {pullOffBurst ? (
         <NativeBeltPullOffBurst
           key={pullOffBurst.sequence}

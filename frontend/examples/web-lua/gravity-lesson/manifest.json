@@ -1,0 +1,11 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "showcase.gravity-lesson",
+  "name": "Gravity Lesson",
+  "version": "1.0.0",
+  "runtime": {
+    "apiVersion": "1.0.0",
+    "entryScript": "scripts/main.lua"
+  },
+  "requiredMods": []
+}

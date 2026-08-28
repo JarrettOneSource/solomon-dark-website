@@ -4,6 +4,13 @@ import type {
 } from './mod-content-catalog.ts'
 
 const MAXIMUM_SKILL_CELLS = 4_096
+const MOD_QUICKBAR_SLOTS = 8
+
+export interface ModSkillBinding {
+  readonly contentId: string
+  readonly playerId: string
+  readonly slot: number
+}
 
 export interface ModSkillRank {
   readonly contentId: string
@@ -12,6 +19,7 @@ export interface ModSkillRank {
 }
 
 export interface ModSkillCheckpoint {
+  readonly bindings: readonly ModSkillBinding[]
   readonly offers: readonly ModSkillOffer[]
   readonly ranks: readonly ModSkillRank[]
   readonly revision: number
@@ -25,6 +33,7 @@ export interface ModSkillOffer {
 
 export class ModSkillEngine {
   readonly #catalog: PreparedModContentCatalog
+  readonly #bindings = new Map<string, string>()
   readonly #ranks = new Map<string, number>()
   readonly #offers = new Map<string, ModSkillOffer>()
   #revision = 0
@@ -39,16 +48,18 @@ export class ModSkillEngine {
 
   checkpoint(): ModSkillCheckpoint {
     return Object.freeze({
+      bindings: this.projectBindings(),
       offers: Object.freeze([...this.#offers.values()]),
       ranks: this.project(),
       revision: this.#revision,
     })
   }
 
-  choose(playerId: string, contentId: string): ModSkillRank {
+  choose(playerId: string, contentId: string, offerSequence: number): ModSkillRank {
     const definition = this.#catalog.skill(contentId)
     if (!definition) throw new Error(`mod skill is unavailable: ${contentId}`)
-    if (!this.#offers.get(playerId)?.contentIds.includes(contentId)) {
+    const offer = this.#offers.get(playerId)
+    if (offer?.sequence !== offerSequence || !offer.contentIds.includes(contentId)) {
       throw new Error(`mod skill was not offered: ${contentId}`)
     }
     if (!this.#eligible(playerId, definition)) throw new Error(`mod skill is not eligible: ${contentId}`)
@@ -90,7 +101,7 @@ export class ModSkillEngine {
     this.#offers.set(playerId, Object.freeze({
       contentIds: Object.freeze(result.map(skill => skill.contentId)),
       playerId,
-      sequence: (this.#offers.get(playerId)?.sequence ?? 0) + 1,
+      sequence: this.#revision + 1,
     }))
     this.#revision += 1
     return result
@@ -108,6 +119,67 @@ export class ModSkillEngine {
     }).sort((left, right) => left.playerId.localeCompare(right.playerId) || (
       BigInt(left.contentId) < BigInt(right.contentId) ? -1 : 1
     )))
+  }
+
+  bind(playerId: string, slot: number, contentId: string | null): void {
+    if (!Number.isSafeInteger(slot) || slot < 0 || slot >= MOD_QUICKBAR_SLOTS) {
+      throw new Error('mod quickbar slot is invalid')
+    }
+    const key = bindingKey(playerId, slot)
+    if (contentId === null) {
+      if (this.#bindings.delete(key)) this.#revision += 1
+      return
+    }
+    if (!this.#catalog.spell(contentId) || !this.spellUnlocked(playerId, contentId)) {
+      throw new Error('mod quickbar spell is unavailable')
+    }
+    if (this.#bindings.get(key) === contentId) return
+    this.#bindings.set(key, contentId)
+    this.#revision += 1
+  }
+
+  filter(playerId: string, key: string, source: number): number {
+    let value = source
+    for (const skill of this.#catalog.skills()) {
+      const rank = this.rank(playerId, skill.contentId)
+      for (const row of skill.ranks.slice(0, rank)) {
+        const modifiers = record(row.modify ?? row.modifiers)
+        const modifier = modifiers ? modifiers[key] : undefined
+        if (typeof modifier === 'number' && Number.isFinite(modifier)) value = modifier
+        else {
+          const operations = record(modifier)
+          if (typeof operations?.add === 'number') value += operations.add
+          if (typeof operations?.multiply === 'number') value *= operations.multiply
+          if (typeof operations?.set === 'number') value = operations.set
+        }
+      }
+    }
+    return Number.isFinite(value) ? Math.max(0, value) : source
+  }
+
+  projectBindings(playerId?: string): readonly ModSkillBinding[] {
+    return Object.freeze([...this.#bindings.entries()].flatMap(([key, contentId]) => {
+      const split = key.lastIndexOf('\0')
+      const owner = key.slice(0, split)
+      return playerId !== undefined && owner !== playerId ? [] : [Object.freeze({
+        contentId,
+        playerId: owner,
+        slot: Number(key.slice(split + 1)),
+      })]
+    }).sort((left, right) => left.playerId.localeCompare(right.playerId) || left.slot - right.slot))
+  }
+
+  spellUnlocked(playerId: string, contentId: string): boolean {
+    const owners = this.#catalog.skills().filter(skill => [
+      ...skill.grants,
+      ...skill.rankGrants.flat(),
+    ].some(grant => grant.targetKind === 'spell' && grant.contentId === contentId))
+    if (owners.length === 0) return true
+    return owners.some(skill => {
+      const rank = this.rank(playerId, skill.contentId)
+      return skill.grants.some(grant => grant.contentId === contentId) && rank > 0
+        || skill.rankGrants.slice(0, rank).flat().some(grant => grant.contentId === contentId)
+    })
   }
 
   offers(playerId?: string): readonly ModSkillOffer[] {
@@ -135,6 +207,7 @@ export class ModSkillEngine {
     }
     this.#ranks.clear()
     this.#offers.clear()
+    this.#bindings.clear()
     for (const [key, rank] of candidate) this.#ranks.set(key, rank)
     for (const offer of checkpoint.offers) {
       if (this.#offers.has(offer.playerId) || !Number.isSafeInteger(offer.sequence) || offer.sequence < 1 ||
@@ -147,18 +220,38 @@ export class ModSkillEngine {
         sequence: offer.sequence,
       }))
     }
+    for (const binding of checkpoint.bindings) {
+      const key = bindingKey(binding.playerId, binding.slot)
+      if (this.#bindings.has(key) || !this.#catalog.spell(binding.contentId) ||
+          !this.spellUnlocked(binding.playerId, binding.contentId)) {
+        throw new Error('mod skill checkpoint contains an invalid quickbar binding')
+      }
+      this.#bindings.set(key, binding.contentId)
+    }
     this.#revision = checkpoint.revision
   }
 
   #eligible(playerId: string, skill: PreparedModSkillDefinition): boolean {
     if (this.rank(playerId, skill.contentId) >= skill.maximumRank) return false
-    return skill.prerequisites.every(required => this.rank(playerId, required.contentId) > 0)
+    return (!skill.parent || this.rank(playerId, skill.parent.contentId) > 0)
+      && skill.prerequisites.every(required => this.rank(playerId, required.contentId) > 0)
   }
 }
 
 function cellKey(playerId: string, contentId: string): string {
   if (!playerId || playerId.length > 128) throw new Error('mod skill player is invalid')
   return `${playerId}\0${contentId}`
+}
+
+function bindingKey(playerId: string, slot: number): string {
+  if (!playerId || playerId.length > 128) throw new Error('mod skill player is invalid')
+  return `${playerId}\0${slot}`
+}
+
+function record(value: unknown): Readonly<Record<string, unknown>> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : null
 }
 
 function unitRoll(seed: number, ordinal: number): number {

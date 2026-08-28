@@ -41,6 +41,12 @@ The manifest selects Web Lua API 1.0.0:
 The package version and API version are separate. A package may advance its own
 version while continuing to target API `1.0.0`.
 
+`sdmod check` runs the complete local admission path: manifest and Lua graph,
+owned paths and hashes, decoded PNG/audio/document assets, prepared content
+catalog, and Boneyard parsing. A package that passes this command has crossed
+the same format boundary used by the game host; play tests still verify the
+behavior you authored.
+
 ## Entry script
 
 Every entry script must call and return exactly one `sd.mod` definition:
@@ -71,7 +77,6 @@ return sd.mod({
       name = "Invincibility Potion",
       description = "Grants invincibility and unlimited mana for 3 minutes.",
       duration = "3m",
-      stacking = "refresh",
       status = sd.ref("status", "invincible"),
 
       on_use = sd.rules.all({
@@ -100,6 +105,21 @@ return sd.mod({
 
 The canonical working version is in
 [`frontend/examples/web-lua/invincibility-potion`](../frontend/examples/web-lua/invincibility-potion/).
+
+Three larger copyable examples live beside it:
+
+- [Apprentice Apothecary](../frontend/examples/web-lua/apprentice-apothecary/README.md)
+  covers items, potions, status, pickups, affixes, shops, UI, and audio;
+- [Gravity Lesson](../frontend/examples/web-lua/gravity-lesson/README.md) covers
+  offered parent/child skills, all three spell prefabs, timers, migrations, and
+  participant/session reducers;
+- [Monument Crypt](../frontend/examples/web-lua/monument-crypt/README.md) covers
+  custom Boneyards, enemies, monument portals, rooms, scene stacks, music, and
+  entity/party/scene reducers.
+
+[`coverage.json`](../frontend/examples/web-lua/coverage.json) is the checked
+constructor-to-example ledger. Deterministic package digests are recorded in
+[`package-receipts.json`](../frontend/examples/web-lua/package-receipts.json).
 
 ## Lua syntax used by mods
 
@@ -187,12 +207,16 @@ package filesystem paths.
 
 ## Supported mod families
 
+The constructors below are the 1.0 public contract. The
+[completion matrix](web-lua-1-api-completion-matrix.md) maps each surface to its
+admission, headless, and browser evidence.
+
 Web Lua 1.0 exposes 15 content kinds:
 
 | Area | Constructors | Examples |
 | --- | --- | --- |
 | Items and effects | `item`, `potion`, `powerup`, `status` | Materials, equipment, consumables, loot drops, timed buffs |
-| Progression | `skill` | Ranked skills, prerequisites, level-up offers, subskills, passive modifiers |
+| Progression | `skill` | Ranked skills, prerequisites, parent/child offers, passive modifiers |
 | Equipment | `affix`, `affix_pool` | Equipment modifiers and deterministic reforge pools |
 | Combat | `spell`, `enemy` | Area, projectile, or channel spells and custom enemy archetypes |
 | Economy | `shop` | NPC stores, prices, limited stock, restocking, and reforge services |
@@ -305,7 +329,7 @@ and affixes owned by packages that no longer match are removed. Removing an
 equipped mod hat or robe exposes the built-in base clothing; it does not leave a
 missing texture in the saved wizard.
 
-### Skills and subskills
+### Skills and child skills
 
 Skills can declare ranks, maximum rank, prerequisites, offer eligibility,
 grants, modifiers, picker art, and Skill Book placement. A subskill is an
@@ -322,24 +346,24 @@ replication.
 
 ### Spells
 
-Spells declare their slot, mana cost, cooldown, targeting, Website-owned
-behavior prefab, art, audio, and optional subskills. The framework owns cast
-authentication, collision and target policy, hit ledgers, damage attribution,
-snapshots, VFX, saves, and teardown.
+Spells declare their slot, mana cost, cooldown, one Website-owned area,
+projectile, or channel behavior, art, and audio. Ordinary parent/child skills
+grant spells and modify named damage lanes. The framework owns cast
+authentication, target selection, hit ledgers, damage attribution, snapshots,
+VFX, saves, and teardown.
 
 ### Enemies
 
-Enemy archetypes derive from a verified Website behavior base and add authored
-stats, attacks, loot, tags, and presentation. Mods can replace art and compose
-supported behavior and attack prefabs, but Lua does not implement a separate
-physics, pathfinding, collision, or per-frame renderer.
+Enemy archetypes declare authored stats, loot, directional art, and audio. The
+Website owns nearest-player movement, collision, attack cadence, damage, death,
+and rendering. Enemy-authored spell AI is not part of 1.0.
 
 ### Boneyards, rooms, scenes, and portals
 
-A Boneyard definition wraps a validated `.boneyard` asset and may add named
-anchors, enemy rosters, wave changes, environment assets, triggers, and scene
-policy. Rooms provide geometry and anchors. Scenes provide instancing,
-entry/exit policy, parent suspension, return behavior, saving, and teardown.
+A Boneyard definition wraps a validated `.boneyard` asset and may add an entry
+anchor, enemy rosters, wave changes, environment mode, triggers, and music.
+Rooms provide trusted visual map geometry. Party scenes provide ordered rooms,
+parent suspension, return behavior, saving, and teardown.
 
 A scene extension can attach a semantic portal to a stock object. For example,
 a Monument portal can transition the whole party into a mod dungeon, suspend
@@ -347,7 +371,7 @@ the parent Boneyard, and restore the parent checkpoint when the party returns.
 
 ### Shops and UI
 
-A shop declares its currency, stock, prices, limits, restock scope, services,
+A shop uses gold and declares stock, prices, limits, restock scope, services,
 mount, and optional NPC presentation. Purchase and reforge operations are
 revalidated and committed atomically by the host.
 
@@ -355,26 +379,40 @@ UI is declarative. A UI definition selects a trusted view, mount, visibility,
 bindings, and allowed actions. It can produce supported surfaces such as a
 Minimap or mod action panel, but cannot ship arbitrary browser code.
 
+Bindings map a label to scoped semantic state:
+
+```lua
+bindings = {
+  first_purchase = {state = "tutorial.first_purchase"},
+}
+
+visible = {
+  scenes = {"boneyard", "room"},
+  state = {state = "tutorial.first_purchase", equals = true},
+}
+```
+
+The supported scene tokens are `hub`, `boneyard`, and `room`. `room` means a
+trusted mod scene is active.
+
 ## Rules and effects
 
 Common behavior uses finite, serializable rules rather than retained callbacks:
 
 ```lua
-sd.rules.on(event, node, options)
+sd.rules.on(event, node)
 sd.rules.all(nodes)
 sd.rules.first(nodes)
 sd.rules.when(predicate, yes, no)
 sd.rules.after(duration, node)
-sd.rules.every(interval, node, options)
+sd.rules.every(interval, node, {times = count})
 
 sd.effect.damage(spec)
 sd.effect.resource(spec)
 sd.effect.status(spec)
 sd.effect.spawn(spec)
 sd.effect.grant(spec)
-sd.effect.transition(spec)
 sd.effect.state(spec)
-sd.effect.emit(spec)
 sd.effect.present(spec)
 ```
 
@@ -384,10 +422,37 @@ Reusable Website-owned behaviors include:
 sd.prefab.projectile(spec)
 sd.prefab.area(spec)
 sd.prefab.channel(spec)
-sd.prefab.enemy(base, overrides)
 sd.prefab.minimap(spec)
 sd.prefab.portal(spec)
 ```
+
+### Event names
+
+Event names are closed and typo-checked by `sdmod check`:
+
+| Events | When they fire |
+| --- | --- |
+| `session.started` | The prepared package session opens |
+| `run.started`, `run.ended` | A Boneyard run starts or returns to the Hub |
+| `wave.started`, `wave.completed` | The stock wave director crosses its boundaries |
+| `enemy.spawned`, `enemy.death` | A stock Boneyard enemy event occurs |
+| `mod.enemy.damaged`, `mod.enemy.died` | A custom enemy loses health or dies |
+| `gold.changed`, `level.up` | Authoritative player economy/progression changes |
+| `action.content.use`, `action.content.cast`, `action.content.pickup` | A mod item, spell, or powerup action commits |
+| `action.shop.purchase`, `action.ui.action` | A mod shop purchase or declared UI action commits |
+| `action.portal.enter`, `action.scene.room` | A party portal or room change commits |
+
+Rules can distinguish declared UI actions through context:
+
+```lua
+sd.rules.on("action.ui.action", sd.rules.when(
+  {context = "action", equals = "ping"},
+  sd.effect.present({sound = sd.art.ref("page_sound")})
+))
+```
+
+The `action_kind` context field contains the framework family such as
+`"ui.action"`; `action` contains the mod's declared action such as `"ping"`.
 
 ## Advanced reducers
 
@@ -396,53 +461,31 @@ immutable semantic state, an event, and a context, then returns a complete next
 state plus typed intents:
 
 ```lua
-local boss_system = sd.advanced.reducer({
-  key = "boss_phases",
-  scope = "entity",
+local cast_streak = sd.advanced.reducer({
+  key = "cast_streak",
+  scope = "participant-run",
   schema_version = 1,
 
   state = sd.schema.object({
-    phase = sd.schema.enum({ "normal", "enraged" }),
-    kills = sd.schema.integer({
-      default = 0,
-      min = 0,
-      max = 999,
-    }),
+    casts = sd.schema.integer({default = 0, min = 0, max = 999}),
+    rhythm = sd.schema.number({default = 0, min = 0, max = 1}),
   }),
 
-  on = {
-    "enemy.death",
-    "entity.health_changed",
-  },
+  on = {"action.content.cast"},
 
-  reduce = function(state, event, context)
-    local next = {
-      phase = state.phase,
-      kills = state.kills,
+  reduce = function(current, event, context)
+    return {
+      casts = current.casts + 1,
+      rhythm = context.random("cast-rhythm"),
+    }, {
+      sd.intent.resource({target = "caster", mana = 1}),
     }
-
-    local intents = {}
-
-    if event.kind == "enemy.death" then
-      next.kills = next.kills + 1
-    end
-
-    if next.phase == "normal"
-        and context.entity.health_ratio < 0.35 then
-      next.phase = "enraged"
-      intents[1] = sd.intent.status({
-        target = context.entity,
-        status = sd.ref("status", "enraged"),
-      })
-    end
-
-    return next, intents
   end,
 })
 
 return sd.mod({
   api = "1.0.0",
-  systems = { boss_system },
+  systems = { cast_streak },
 })
 ```
 
@@ -464,13 +507,13 @@ partial state behind.
 
 The supported families can be combined into projects such as:
 
-- a spell pack with custom art, mana costs, cooldowns, VFX, and subskills;
+- a spell pack with custom art, mana costs, cooldowns, VFX, and child skills;
 - a Boneyard expansion with custom maps, waves, enemy variants, loot, and
   ambience;
-- a class expansion with a ranked skill tree and passive modifiers;
+- a ranked skill tree that grants spells and passive modifiers;
 - an equipment overhaul with affixes, deterministic pools, and reforge shops;
 - a custom NPC merchant selling modded items and potions;
-- a boss with phases, deterministic behavior changes, and custom attacks;
+- a custom enemy pack with authored stats, loot, animation, and phase state;
 - a party dungeon entered through a Boneyard Monument portal;
 - a Minimap or supported HUD panel driven by authoritative viewer-specific
   state; or
@@ -491,6 +534,9 @@ Web Lua does not permit:
 - a second physics, collision, or pathfinding implementation; or
 - dynamic content registration after session admission.
 
+Mods also cannot add equipment slots or player classes. Wearables target the
+existing Hat, Robe, and Staff slots.
+
 Definitions are immutable after admission. Gameplay rules run only on the game
 host, browser presentation is read-only, and all mutations cross a typed,
 authenticated transaction boundary. Exact enabled package, content, and art
@@ -504,7 +550,7 @@ arbitrary engine replacement or unrestricted total conversion.
 Run the authoring tools from `frontend/`:
 
 ```sh
-npm run sdmod -- new potion path/to/my-mod
+npm run sdmod -- new path/to/my-mod
 npm run sdmod -- check path/to/my-mod
 npm run sdmod -- test path/to/my-mod
 npm run sdmod -- pack path/to/my-mod my-mod.zip
@@ -514,9 +560,10 @@ npm run sdmod -- pack path/to/my-mod my-mod.zip
 validation, reference resolution, dependency and cycle checks, graph budgets,
 save-schema checks, and capability inference without launching the game.
 
-`test` runs package tests under the bounded Lua environment. `pack` validates
-the package and emits a deterministic ZIP containing the canonical compiled
-graph and graph digest.
+`new` creates a valid item package with a CC0 starter icon. `test` runs package
+tests under the bounded Lua environment and exposes the actual compiled graph
+as the global `mod` table. `pack` validates the package and emits a deterministic
+ZIP containing the canonical compiled graph and graph digest.
 
 The migration command is currently specialized for the retained 0.2
 Invincibility Potion package:
@@ -529,7 +576,9 @@ npm run sdmod -- migrate path/to/0.2-mod path/to/1.0-mod
 
 - [Generated field reference](../frontend/public/web-lua/REFERENCE.md)
 - [Generated LuaLS stub](../frontend/public/web-lua/sd.lua)
+- [Starter Lua file](../frontend/public/web-lua/STARTER.lua)
+- [Diagnostic code guide](../frontend/public/web-lua/DIAGNOSTICS.md)
 - [Canonical Invincibility Potion](../frontend/examples/web-lua/invincibility-potion/)
-- [Framework architecture](design/web-lua-framework-1.0.md)
-- [Content-family contracts](design/web-lua-content-families.md)
+- [Framework design history](design/web-lua-framework-1.0.md)
+- [Content-family design inventory](design/web-lua-content-families.md)
 - [Progressive definition graph ADR](adr/0001-web-lua-progressive-definition-graph.md)

@@ -186,6 +186,7 @@ function inertSession() {
     onPartyAction: () => () => {},
     onSaveCheckpoint: () => () => {},
     onSnapshot: () => () => {},
+    readyBoneyard() {},
     readyCollegeIntro() {},
     readyResumeGrace() {},
     rerollSkill() {},

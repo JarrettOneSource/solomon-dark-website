@@ -1,8 +1,10 @@
 # Web Lua 1.0 framework wargames
 
-Status: **design stress tests; not implementations**
+Status: **historical design stress tests**
 
-Status: **implemented acceptance examples for API 1.0.0**
+These scenarios explain why the modules exist. Their candidate Lua snippets are
+not the accepted field reference; use the generated reference and completion
+matrix for copyable 1.0 syntax.
 
 These examples test whether the framework stays simple while carrying
 real authority, multiplayer, presentation, save, and teardown requirements. A

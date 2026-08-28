@@ -172,8 +172,15 @@ const GameplayResumeProgress = lazy(loadGameplayResumeProgress)
 const loadGameplayPauseMenu = () => import('./GameplayPauseMenu.tsx')
 const GameplayPauseMenu = lazy(loadGameplayPauseMenu)
 const ModMinimap = lazy(() => import('./mod-ui/ModMinimap.tsx'))
+const ModEnemies = lazy(() => import('./mod-ui/ModEnemies.tsx'))
+const ModAudio = lazy(() => import('./mod-ui/ModAudio.tsx'))
 const ModPanels = lazy(() => import('./mod-ui/ModPanels.tsx'))
+const ModPowerups = lazy(() => import('./mod-ui/ModPowerups.tsx'))
 const ModSceneOverlay = lazy(() => import('./mod-ui/ModSceneOverlay.tsx'))
+const ModShopNpcs = lazy(() => import('./mod-ui/ModShopNpcs.tsx'))
+const ModSkillPicker = lazy(() => import('./mod-ui/ModSkillPicker.tsx'))
+const ModSkillQuickbar = lazy(() => import('./mod-ui/ModSkillQuickbar.tsx'))
+const ModSpellEffects = lazy(() => import('./mod-ui/ModSpellEffects.tsx'))
 
 /** The Dark Cloud's Esc menu is the native simple menu with the local viewer as its owner. */
 const DARK_CLOUD_PAUSE_OWNER_ID = 'dark-cloud'
@@ -1924,7 +1931,10 @@ export default function MainMenuScene({
               onOpenSkills={openSkillBook}
               onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
               onPauseRequest={requestGameplayPause}
-              onReady={() => finishBoneyardLoading(loadedBoneyard.runId)}
+              onReady={() => {
+                session.readyBoneyard(loadedBoneyard.runId)
+                finishBoneyardLoading(loadedBoneyard.runId)
+              }}
               partyRoster={partyState?.partyRoster}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               presentationPaused={gameplayPause !== null || gameplayResumeGrace !== null}
@@ -2004,8 +2014,14 @@ export default function MainMenuScene({
         {session && runtimeSnapshot ? (
           <Suspense fallback={null}>
             <ModMinimap session={session} />
+            <ModAudio audio={audio} session={session} />
+            <ModEnemies audio={audio} session={session} />
             <ModPanels session={session} />
+            <ModPowerups audio={audio} session={session} />
             <ModSceneOverlay session={session} />
+            <ModShopNpcs session={session} />
+            <ModSkillQuickbar session={session} />
+            <ModSpellEffects audio={audio} session={session} />
           </Suspense>
         ) : null}
 
@@ -2107,6 +2123,7 @@ export default function MainMenuScene({
               onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
               playerId={session.playerId}
               progression={runtimeProgression}
+              session={session}
               style={nativeStageStyle}
               subscribeSnapshot={session.onSnapshot}
               topMost
@@ -2149,6 +2166,15 @@ export default function MainMenuScene({
                 runtimeProgression?.sorcerorsCharmAvailable,
               )}
               style={nativeStageStyle}
+            />
+          </Suspense>
+        ) : null}
+
+        {session && runtimeProgression?.pendingOffer ? (
+          <Suspense fallback={null}>
+            <ModSkillPicker
+              nativeOfferSequence={runtimeProgression.pendingOffer.sequence}
+              session={session}
             />
           </Suspense>
         ) : null}

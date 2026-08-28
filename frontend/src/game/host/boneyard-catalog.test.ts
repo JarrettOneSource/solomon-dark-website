@@ -121,6 +121,30 @@ test('opening Solomon placement does not consume a second seed word', () => {
   assert.deepEqual(loadedA.scene.solomonDig, loadedB.scene.solomonDig)
 })
 
+test('Web Lua catalog metadata never leaks into the loaded Boneyard protocol', () => {
+  const template = NATIVE_GENERATED_BONEYARDS[0]!
+  const catalog = createBoneyardCatalog([{
+    ...template,
+    choice: {
+      id: 'mod:example:crypt:123456789abc',
+      modId: 'example.crypt',
+      modName: 'Example Crypt',
+      name: 'Crypt',
+      source: 'mod',
+    },
+    webLuaContentId: '123456789',
+  }])
+  const loaded = materializeBoneyard(
+    catalog,
+    'mod:example:crypt:123456789abc',
+    Buffer.alloc(16),
+  )
+
+  assert.ok(loaded)
+  assert.equal(loaded.choice.name, 'Crypt')
+  assert.equal('webLuaContentId' in loaded, false)
+})
+
 
 function squaredDistance(
   left: { x: number, y: number },

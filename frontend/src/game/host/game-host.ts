@@ -93,6 +93,7 @@ import {
   type GameplayResumeGraceReason,
   type GameplayResumeGraceState,
   type HubPlayerActivity,
+  type LuaConsoleObject,
   type PartyAction,
   type PartyActionRejection as ProtocolPartyActionRejection,
   type PartyJoinRequester,
@@ -460,6 +461,7 @@ interface HostClient {
   nativeSource: NativeGameSaveSource | null
   onlinePreferences: GameOnlinePreferences
   lastReceivedSequence: number
+  lastModRequestId: number
   lastSentSnapshotSequence: number
   leaderboardUserId: number | null
   partyRejoinSlot: PartyRejoinSlot | null
@@ -716,6 +718,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const pendingRestoredModState = new Map<PlayerId, PreparedModSaveState>()
   const partyModRuntimeInitializations = new Map<string, Promise<PartyModRuntimeScope>>()
   const partyModRuntimes = new Map<string, PartyModRuntimeScope>()
+  const boneyardRendererReadiness = new Map<string, {
+    ready: Set<PlayerId>
+    required: Set<PlayerId>
+  }>()
   const startingPartyIds = new Set<string>()
   let closed = false
   let deploymentRestart: DeploymentRestartState | null = null
@@ -1507,6 +1513,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             else privateModHost?.restoreSaveState(savedProfile.modState)
           }
         }
+        if (!sharedHub && loadedBoneyard) {
+          privateModHost?.activateBoneyard(
+            webLuaBoneyardContentId(playerId, loadedBoneyard),
+            true,
+          )
+        }
         if (sharedHub) {
           if (!authenticated.content) throw new Error('validated shared Hub content is absent')
           playerContents.set(playerId, authenticated.content)
@@ -1538,7 +1550,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               restoredParty.id,
               authenticated.content,
               stateForPlayer(playerId),
-            ).catch((error) => {
+            ).then((scope) => {
+              const current = loadedBoneyardForPlayer(playerId)
+              scope.runtime.activateBoneyard(current
+                ? webLuaBoneyardContentId(playerId, current)
+                : null, true)
+            }).catch((error) => {
               logGameServerEvent(
                 options.log,
                 'game-host',
@@ -1707,6 +1724,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           nativeSource,
           onlinePreferences: { ...message.onlinePreferences },
           lastReceivedSequence: 0,
+          lastModRequestId: 0,
           lastSentSnapshotSequence: snapshotSequence,
           leaderboardUserId: partyRejoinSlot?.leaderboardUserId
             ?? partyRecoveryClaim?.leaderboardUserId
@@ -1908,6 +1926,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             source: 'deployment-restart',
           })
           socket.close(1000, 'client disconnect')
+        }
+        return
+      }
+
+      if (message.type === 'client-ready-boneyard') {
+        const activeState = stateForPlayer(client.playerId)
+        if (
+          activeState.world.kind === 'boneyard'
+          && activeState.run.runId === message.runId
+        ) {
+          markBoneyardRendererReady(client.playerId, message.runId)
         }
         return
       }
@@ -2220,6 +2249,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-mod-cast') {
+        if (message.requestId <= client.lastModRequestId) return
+        client.lastModRequestId = message.requestId
         const modHost = modRuntimeScopeForPlayer(client.playerId)?.runtime ?? privateModHost
         if (!modHost) return
         try {
@@ -2246,14 +2277,51 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-mod-action') {
+        if (message.requestId <= client.lastModRequestId) return
+        client.lastModRequestId = message.requestId
         const modHost = modRuntimeScopeForPlayer(client.playerId)?.runtime ?? privateModHost
         if (!modHost) return
         try {
+          let closedSkillBarrier = false
           if (message.action === 'skill-choose') {
             const definition = modHost.content.skill(message.target)
-            const level = getPlayerProgression(stateForPlayer(client.playerId), client.playerId).level
+            const activeState = stateForPlayer(client.playerId)
+            const level = getPlayerProgression(activeState, client.playerId).level
             if (!definition || level < definition.minimumLevel) throw new Error('mod skill is not eligible')
-            modHost.chooseSkill(client.playerId, message.target)
+            const modOfferSequence = message.arguments.mod_offer_sequence
+            const nativeOfferSequence = message.arguments.native_offer_sequence
+            if (!Number.isSafeInteger(modOfferSequence) || !Number.isSafeInteger(nativeOfferSequence)) {
+              throw new Error('mod skill offer is invalid')
+            }
+            modHost.chooseSkill(
+              client.playerId,
+              message.target,
+              Number(modOfferSequence),
+              Number(nativeOfferSequence),
+            )
+            closedSkillBarrier = activeState.levelUpBarrier !== null
+              && stateForPlayer(client.playerId).levelUpBarrier === null
+          } else if (message.action === 'ui-action') {
+            const action = message.arguments.action
+            const args = message.arguments.arguments
+            if (typeof action !== 'string' || !args || typeof args !== 'object' || Array.isArray(args)) {
+              throw new Error('mod UI action is invalid')
+            }
+            modHost.uiAction({
+              action,
+              arguments: args as LuaConsoleObject,
+              contentId: message.target,
+              playerId: client.playerId,
+              requestId: message.requestId,
+            })
+          } else if (message.action === 'quickbar-bind') {
+            const slot = message.arguments.slot
+            if (!Number.isSafeInteger(slot)) throw new Error('mod quickbar slot is invalid')
+            modHost.bindModQuickbar(
+              client.playerId,
+              Number(slot),
+              message.arguments.clear === true ? null : message.target,
+            )
           } else if (message.action === 'shop-buy') {
             const row = message.arguments.row
             if (!Number.isSafeInteger(row) || Number(row) < 0) throw new Error('mod shop row is invalid')
@@ -2281,13 +2349,32 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               actorKind: 'monument',
               confirmedByLeader: authorityForPlayer(client.playerId) === client.playerId,
               ownerId: activeState.run.runId ?? client.playerId,
+              playerId: client.playerId,
               portalId: message.target,
               scene: 'stock.boneyard',
             })
             stopWorldClientInputs(client.playerId)
-          } else {
+          } else if (message.action === 'scene-room') {
             const activeState = stateForPlayer(client.playerId)
+            if (authorityForPlayer(client.playerId) !== client.playerId) {
+              throw new Error('only the party leader can change rooms')
+            }
+            const room = message.arguments.room
+            if (!Number.isSafeInteger(room)) throw new Error('mod scene room is invalid')
+            modHost.selectSceneRoom(
+              activeState.run.runId ?? client.playerId,
+              Number(room),
+            )
+          } else if (message.action === 'scene-return') {
+            const activeState = stateForPlayer(client.playerId)
+            if (authorityForPlayer(client.playerId) !== client.playerId) {
+              throw new Error('only the party leader can return the party')
+            }
             modHost.returnScene(activeState.run.runId ?? client.playerId)
+          }
+          if (closedSkillBarrier) {
+            stopWorldClientInputs(client.playerId)
+            beginMultiplayerResumeGrace(client.playerId, 'skill-picker-closed')
           }
           broadcastPreparedModProjection(client.playerId, modHost)
           broadcastSnapshot()
@@ -3075,6 +3162,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           null,
           false,
         )
+        privateModHost?.activateBoneyard(webLuaBoneyardContentId(client.playerId, selected))
+        if (privateModHost) armBoneyardRendererReadiness(state)
         armPartyRejoinSlotsForState(privatePartyId, state)
         logGameActivity(previousState, state, selected, null)
         taintIneligibleClientRuns()
@@ -3491,6 +3580,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
       return
     }
+    if (
+      !sharedWorlds
+      && privateModHost
+      && state.run.runId
+      && !boneyardRenderersReady(state.run.runId)
+    ) {
+      resetNextTickDeadline()
+      return
+    }
     if (!sharedWorlds && state.run.runId && privateModHost?.activeScene(state.run.runId)) {
       resetNextTickDeadline()
       return
@@ -3540,11 +3638,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           const statesBeforeMods = new Map(
             sharedWorlds.runs.map(run => [run.partyId, run.state]),
           )
+          const rendererWaitingPartyIds = new Set(sharedWorlds.runs.flatMap(run => (
+            partyModRuntimes.has(run.partyId)
+            && run.state.run.runId
+            && !boneyardRenderersReady(run.state.run.runId)
+              ? [run.partyId]
+              : []
+          )))
           for (const [partyId, scope] of partyModRuntimes) {
             const run: SharedPartyRun | undefined = sharedWorlds.runs.find(
               candidate => candidate.partyId === partyId,
             )
             if (!run) continue
+            if (rendererWaitingPartyIds.has(partyId)) continue
+            if (run.state.run.runId && scope.runtime.activeScene(run.state.run.runId)) continue
             if (scope.runtime.tick(run.state.tick + 1)) {
               const viewer = run.state.playerEntities.identities[0]?.playerId
               if (viewer) broadcastPreparedModProjection(viewer, scope.runtime)
@@ -3567,6 +3674,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               ...sharedGameplayResumeGraces.keys(),
               ...startingPartyIds,
               ...modScenePartyIds,
+              ...rendererWaitingPartyIds,
             ]),
             enemySpawnIntents,
             new Map([...partyModRuntimes].map(([partyId, scope]) => [
@@ -6006,6 +6114,39 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   }
 
+  function armBoneyardRendererReadiness(active: GameSimulationState): void {
+    if (active.world.kind !== 'boneyard' || !active.run.runId) return
+    const connected = new Set([...clients.values()].flatMap(client => (
+      client.partyRejoinSlot ? [] : [client.playerId]
+    )))
+    const required = new Set(active.playerEntities.identities.flatMap(({ playerId }) => (
+      connected.has(playerId) ? [playerId] : []
+    )))
+    if (required.size === 0) return
+    boneyardRendererReadiness.set(active.run.runId, {
+      ready: new Set(),
+      required,
+    })
+  }
+
+  function markBoneyardRendererReady(playerId: PlayerId, runId: string): void {
+    const readiness = boneyardRendererReadiness.get(runId)
+    if (readiness?.required.has(playerId)) readiness.ready.add(playerId)
+  }
+
+  function boneyardRenderersReady(runId: string): boolean {
+    const readiness = boneyardRendererReadiness.get(runId)
+    if (!readiness) return true
+    const connected = new Set([...clients.values()].flatMap(client => (
+      client.partyRejoinSlot ? [] : [client.playerId]
+    )))
+    const ready = [...readiness.required].every(playerId => (
+      !connected.has(playerId) || readiness.ready.has(playerId)
+    ))
+    if (ready) boneyardRendererReadiness.delete(runId)
+    return ready
+  }
+
   function gameplayPauseForPlayer(playerId: string): GameplayPauseState | null {
     if (!sharedWorlds) return gameplayPause
     const scope = sharedGameplayPauseScope(playerId)
@@ -6632,6 +6773,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     ])
   }
 
+  function webLuaBoneyardContentId(
+    playerId: PlayerId,
+    selected: LoadedBoneyard,
+  ): string | null {
+    return boneyardCatalogForPlayer(playerId).modEntries
+      .get(selected.choice.id)?.webLuaContentId ?? null
+  }
+
   function contentForParty(partyId: string): MaterializedWebSessionContent | null {
     if (!sharedWorlds) return null
     const party = sharedWorlds.parties.parties.find(candidate => candidate.id === partyId)
@@ -6743,6 +6892,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         party.id,
         false,
       )
+      scope.runtime.activateBoneyard(webLuaBoneyardContentId(leaderPlayerId, selected))
+      if (scope.content.modSources.length > 0) armBoneyardRendererReadiness(run.state)
       armPartyRejoinSlotsForState(party.id, run.state)
       logGameActivity(before, run.state, selected, party.id)
       scope.pendingEvents.push(...deriveWebLuaEvents(
@@ -6946,6 +7097,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetLuaRuntime()
       privateModHost?.close()
       privateModHost = null
+      boneyardRendererReadiness.clear()
       for (const partyId of [...partyModRuntimes.keys()]) closePartyModRuntimes(partyId)
       const socialOwner = clients.values().next().value as HostClient | undefined
       for (const party of activePartySystem()?.parties ?? []) {

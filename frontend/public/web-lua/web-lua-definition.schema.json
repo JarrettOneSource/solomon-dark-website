@@ -5,96 +5,84 @@
   "content": {
     "affix": {
       "allowed": [
+        "key",
         "applies_to",
-        "art",
         "description",
-        "equipment",
         "modifiers",
-        "name",
-        "outcome",
-        "persistence",
-        "presentation",
-        "tags"
+        "name"
       ],
       "required": [
+        "key",
         "modifiers",
         "name"
       ]
     },
     "affix-pool": {
       "allowed": [
+        "key",
         "applies_to",
-        "art",
         "description",
         "entries",
-        "exclude_equipment_types",
-        "include",
         "name",
-        "presentation",
         "rng_domain",
-        "rolls",
-        "tags"
+        "rolls"
       ],
       "required": [
+        "key",
         "entries"
       ]
     },
     "boneyard": {
       "allowed": [
-        "ambience",
+        "key",
         "anchors",
         "art",
         "description",
         "environment",
         "name",
-        "presentation",
         "roster",
         "source",
-        "tags",
         "triggers",
         "waves"
       ],
       "required": [
+        "key",
         "name",
         "source"
       ]
     },
     "enemy": {
       "allowed": [
+        "key",
         "art",
-        "attacks",
-        "base",
-        "behavior",
-        "brain",
         "description",
         "loot",
         "name",
-        "presentation",
-        "stats",
-        "tags"
+        "stats"
       ],
       "required": [
-        "base",
+        "key",
         "name"
       ]
     },
     "item": {
       "allowed": [
+        "key",
         "art",
         "description",
         "equipment",
         "name",
-        "presentation",
         "stack",
-        "tags",
         "use"
       ],
       "required": [
+        "key",
         "name"
       ]
     },
     "potion": {
       "allowed": [
+        "key",
         "art",
         "description",
         "duration",
@@ -102,11 +90,10 @@
         "name",
         "on_use",
         "presentation",
-        "stacking",
-        "status",
-        "tags"
+        "status"
       ],
       "required": [
+        "key",
         "duration",
         "name",
         "on_use"
@@ -114,134 +101,111 @@
     },
     "powerup": {
       "allowed": [
+        "key",
         "art",
         "description",
-        "duration",
         "effect",
         "name",
-        "pickup",
-        "presentation",
-        "scope",
-        "stacking",
-        "tags"
+        "pickup"
       ],
       "required": [
+        "key",
         "effect",
         "name"
       ]
     },
     "room": {
       "allowed": [
-        "ambience",
-        "anchors",
+        "key",
         "art",
         "description",
-        "encounter",
         "geometry",
         "name",
-        "presentation",
-        "props",
-        "tags"
+        "props"
       ],
       "required": [
+        "key",
         "geometry"
       ]
     },
     "scene": {
       "allowed": [
+        "key",
         "art",
         "description",
-        "entry",
-        "form",
-        "instance",
         "name",
-        "presentation",
-        "return_policy",
-        "return_to",
-        "rooms",
-        "tags",
-        "world"
+        "rooms"
       ],
       "required": [
-        "instance",
+        "key",
         "rooms"
       ]
     },
     "scene-extension": {
       "allowed": [
-        "art",
+        "key",
         "description",
-        "extend",
         "features",
         "name",
-        "presentation",
-        "scene",
-        "tags"
+        "scene"
       ],
       "required": [
+        "key",
         "features",
         "scene"
       ]
     },
     "shop": {
       "allowed": [
+        "key",
         "art",
-        "currency",
         "description",
         "mount",
         "name",
         "npc",
-        "presentation",
         "restock",
         "services",
         "stock",
-        "stock_scope",
-        "tags"
+        "stock_scope"
       ],
       "required": [
+        "key",
         "name",
         "stock"
       ]
     },
     "skill": {
       "allowed": [
+        "key",
         "art",
         "description",
         "grants",
-        "max_rank",
         "maximum_rank",
         "name",
         "offer",
         "parent",
         "prerequisites",
-        "presentation",
-        "ranks",
-        "tags"
+        "ranks"
       ],
       "required": [
+        "key",
         "name",
         "ranks"
       ]
     },
     "spell": {
       "allowed": [
+        "key",
         "art",
         "behavior",
-        "cast",
-        "casters",
         "cooldown",
         "description",
         "mana",
         "name",
-        "presentation",
-        "program",
-        "school",
-        "slot",
-        "subskills",
-        "tags",
-        "targeting"
+        "slot"
       ],
       "required": [
+        "key",
         "behavior",
         "name",
         "slot"
@@ -249,36 +213,119 @@
     },
     "status": {
       "allowed": [
-        "art",
+        "key",
         "description",
         "duration",
         "modifiers",
         "name",
-        "presentation",
-        "scope",
-        "stacking",
-        "tags"
+        "stacking"
       ],
-      "required": []
+      "required": [
+        "key"
+      ]
     },
     "ui": {
       "allowed": [
+        "key",
         "accessible_name",
         "actions",
-        "art",
         "bindings",
         "description",
         "mount",
         "name",
-        "presentation",
-        "tags",
         "view",
         "visible"
       ],
       "required": [
+        "key",
         "mount",
         "view"
       ]
     }
-  }
+  },
+  "constructors": {
+    "effects": [
+      "damage",
+      "resource",
+      "status",
+      "spawn",
+      "grant",
+      "state",
+      "present"
+    ],
+    "events": [
+      "action.content.cast",
+      "action.content.pickup",
+      "action.content.use",
+      "action.portal.enter",
+      "action.scene.room",
+      "action.shop.purchase",
+      "action.ui.action",
+      "enemy.death",
+      "enemy.spawned",
+      "gold.changed",
+      "level.up",
+      "mod.enemy.damaged",
+      "mod.enemy.died",
+      "run.ended",
+      "run.started",
+      "session.started",
+      "wave.completed",
+      "wave.started"
+    ],
+    "intents": [
+      "damage",
+      "resource",
+      "status",
+      "spawn",
+      "grant",
+      "state",
+      "present"
+    ],
+    "prefabs": [
+      "projectile",
+      "area",
+      "channel",
+      "minimap",
+      "portal"
+    ],
+    "rules": [
+      "on",
+      "all",
+      "first",
+      "when",
+      "after",
+      "every"
+    ],
+    "schemas": [
+      "boolean",
+      "integer",
+      "number",
+      "string",
+      "enum",
+      "array",
+      "object"
+    ]
+  },
+  "diagnostics": [
+    "E_API_VERSION",
+    "E_ASSET",
+    "E_BUDGET",
+    "E_CONTENT_KEY",
+    "E_CYCLE",
+    "E_DUPLICATE",
+    "E_GRAPH",
+    "E_MOUNT_CONFLICT",
+    "E_REFERENCE",
+    "E_SCHEMA",
+    "E_UNKNOWN_FIELD"
+  ],
+  "scopes": [
+    "entity",
+    "participant-profile",
+    "participant-run",
+    "party-run",
+    "scene",
+    "session"
+  ]
 }

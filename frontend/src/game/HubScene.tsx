@@ -655,6 +655,12 @@ export default function HubScene({
       gameplayHudHidden: gameplayHudHiddenRef.current,
       initialSnapshot: hubInitialSnapshot,
       modAssets,
+      onDiagnostics: (diagnostics) => {
+        const scene = sceneRef.current
+        if (!scene) return
+        scene.dataset.localPlayerScreenX = `${diagnostics.localPlayerScreenX}`
+        scene.dataset.localPlayerScreenY = `${diagnostics.localPlayerScreenY}`
+      },
       playerId,
       settings: settingsRef.current,
       viewport: viewportRef.current,

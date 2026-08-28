@@ -1,0 +1,56 @@
+{
+  "source": "quaternius-ultimate-animated-character-2019-zombie-male",
+  "blend": "Zombie_Male.blend",
+  "output": "grave-keeper.png",
+  "frameSize": 192,
+  "headings": 16,
+  "camera": {
+    "azimuthOffset": 0,
+    "elevation": 58,
+    "orthographicScale": 4.4
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "action": "Idle",
+      "frames": [
+        0,
+        25,
+        50,
+        75
+      ]
+    },
+    {
+      "name": "move",
+      "action": "Run",
+      "frames": [
+        0,
+        4,
+        8,
+        12,
+        16,
+        20
+      ]
+    },
+    {
+      "name": "attack",
+      "action": "Punch",
+      "frames": [
+        0,
+        6,
+        12,
+        18
+      ]
+    },
+    {
+      "name": "death",
+      "action": "Death",
+      "frames": [
+        0,
+        18,
+        36,
+        55
+      ]
+    }
+  ]
+}

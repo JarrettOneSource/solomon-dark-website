@@ -42,6 +42,29 @@ export const WEB_LUA_SCOPE_KINDS = [
 
 export type WebLuaScopeKind = typeof WEB_LUA_SCOPE_KINDS[number]
 
+export const WEB_LUA_RULE_EVENT_NAMES = [
+  'action.content.cast',
+  'action.content.pickup',
+  'action.content.use',
+  'action.portal.enter',
+  'action.scene.room',
+  'action.shop.purchase',
+  'action.ui.action',
+  'enemy.death',
+  'enemy.spawned',
+  'gold.changed',
+  'level.up',
+  'mod.enemy.damaged',
+  'mod.enemy.died',
+  'run.ended',
+  'run.started',
+  'session.started',
+  'wave.completed',
+  'wave.started',
+] as const
+
+export type WebLuaRuleEventName = typeof WEB_LUA_RULE_EVENT_NAMES[number]
+
 export interface WebLuaModIdentity {
   readonly id: string
   readonly name: string
@@ -136,6 +159,7 @@ export type WebLuaDefinitionValue =
 export interface WebLuaReducerRegistration {
   readonly callback: (...args: unknown[]) => unknown
   readonly key: string
+  readonly migrations: Readonly<Record<number, (...args: unknown[]) => unknown>>
   readonly on: readonly string[]
   readonly schemaVersion: number
   readonly scope: WebLuaScopeKind

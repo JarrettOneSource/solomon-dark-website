@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "name": "Monument Crypt",
+  "rooms": [
+    "sealed_vestibule",
+    "keeper_vault"
+  ]
+}

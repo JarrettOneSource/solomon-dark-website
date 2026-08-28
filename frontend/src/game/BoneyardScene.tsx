@@ -1307,6 +1307,10 @@ function publishSceneDiagnostics(
   scene.dataset.gateLeafCount = `${snapshot.world.gateLeaves.length}`
   scene.dataset.gateState = gateState(snapshot.world.gateLeaves)
   if (diagnostics) scene.dataset.painterBandCount = `${diagnostics.painterBandCount}`
+  if (diagnostics) {
+    scene.dataset.localPlayerScreenX = `${diagnostics.playerScreenX}`
+    scene.dataset.localPlayerScreenY = `${diagnostics.playerScreenY}`
+  }
   if (player) {
     scene.dataset.localPlayerX = `${player.position.x}`
     scene.dataset.localPlayerY = `${player.position.y}`

@@ -49,6 +49,7 @@ import {
   increaseRandomLearnedSkill,
   playerStatBook,
   rerollPlayerSkillOffer,
+  replacePlayerSkillChoiceWithMod,
   resetPlayerPotionEffects,
   setAutomaticPlayerSkillChoice,
   stepPlayerPotionEffects,
@@ -1834,6 +1835,27 @@ export function applyPlayerEntitySkillChoice(
       source.skillRuntimes[index]!,
       source.economies[index]!,
     ),
+  }
+}
+
+export function replacePlayerEntitySkillChoiceWithMod(
+  source: PlayerEntityStore,
+  playerId: string,
+  offerSequence: number,
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult | null {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return null
+  const progression = replacePlayerSkillChoiceWithMod(
+    source.progressions[index]!,
+    source.skillBooks[index]!,
+    offerSequence,
+    sourceGameplayRng,
+    ownsSorcerorsCharm(source, index),
+  )
+  return progression === null ? null : {
+    rng: progression.rng,
+    store: replacePlayerProgression(source, index, progression.progression),
   }
 }
 

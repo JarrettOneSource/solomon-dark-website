@@ -1,0 +1,6 @@
+.mod-shop-npcs { position: fixed; z-index: 18; inset: 0; overflow: hidden; pointer-events: none; }
+.mod-shop-npcs > div { position: absolute; display: grid; justify-items: center; transform: translate(-50%, -100%); }
+.mod-shop-npcs img,
+.mod-shop-npcs i { display: block; width: 54px; height: 54px; object-fit: contain; border-radius: 50%; image-rendering: pixelated; }
+.mod-shop-npcs i { border: 2px solid #d5c08e; background: radial-gradient(circle, #8568a1, #251c30); }
+.mod-shop-npcs span { color: #f0e4c4; font: 600 11px sans-serif; text-shadow: 0 1px 3px #000; white-space: nowrap; }

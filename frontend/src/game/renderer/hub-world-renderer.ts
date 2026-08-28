@@ -59,6 +59,8 @@ import { loadModPresentationTextures } from './mod-presentation-assets.ts'
 export interface HubRendererDiagnostics {
   averageFrameMs: number
   frameCount: number
+  localPlayerScreenX: number
+  localPlayerScreenY: number
   region: HubRegionId
   renderer: string
   resolution: number
@@ -358,6 +360,8 @@ export async function createHubWorldRenderer(
     options.onDiagnostics?.({
       averageFrameMs,
       frameCount,
+      localPlayerScreenX: frameDiagnostics.playerScreenPositions[options.playerId]?.x ?? 0,
+      localPlayerScreenY: frameDiagnostics.playerScreenPositions[options.playerId]?.y ?? 0,
       region: snapshot.world.participants[options.playerId]?.region ?? 'courtyard',
       renderer: application.renderer.name,
       resolution,

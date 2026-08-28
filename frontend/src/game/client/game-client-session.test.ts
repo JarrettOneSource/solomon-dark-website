@@ -151,6 +151,11 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-ready-college-intro',
   })
+  session.readyBoneyard('run-ready')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    runId: 'run-ready',
+    type: 'client-ready-boneyard',
+  })
   session.setCheatsEnabled(true)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-cheat-mode',

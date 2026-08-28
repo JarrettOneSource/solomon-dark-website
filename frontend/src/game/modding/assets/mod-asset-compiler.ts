@@ -26,6 +26,7 @@ export interface PreparedModSpriteAsset {
   readonly assetKind: 'sheet' | 'sprite'
   readonly frames: readonly ModSpriteFrame[]
   readonly height: number
+  readonly headingCount: number | null
   readonly id: string
   readonly key: string
   readonly kind: 'image'
@@ -135,14 +136,18 @@ function compileAsset(
       const frames = definition.assetKind === 'sheet'
         ? sheetFrames(definition.fields, dimensions, common.id)
         : spriteFrames(definition.fields, dimensions, common.id)
+      const headingCount = definition.assetKind === 'sheet'
+        ? sheetHeadingCount(definition.fields, dimensions, common.id)
+        : null
       return Object.freeze({
         ...common,
         assetKind: definition.assetKind,
         animations: definition.assetKind === 'sheet'
-          ? sheetAnimations(definition.fields.animations, frames.length, common.id)
+          ? sheetAnimations(definition.fields.animations, frames.length, common.id, headingCount)
           : Object.freeze({}),
         frames,
         height: dimensions.height,
+        headingCount,
         kind: 'image' as const,
         width: dimensions.width,
       })
@@ -153,7 +158,7 @@ function compileAsset(
       return Object.freeze({
         ...common,
         assetKind: definition.assetKind,
-        bus: optionalText(definition.fields.bus, definition.assetKind === 'music' ? 'music' : 'effects', `${common.id}.bus`),
+        bus: audioBus(definition.fields.bus, definition.assetKind, `${common.id}.bus`),
         contentType: file.metadata.contentType,
         kind: 'audio' as const,
         loop: definition.assetKind === 'music'
@@ -226,10 +231,9 @@ function packageFile(
 }
 
 function assetPath(definition: CompiledWebLuaAsset): string {
-  const value = definition.fields.path
-    ?? definition.fields.file
-    ?? definition.fields.image
-    ?? definition.fields.source
+  const value = definition.assetKind === 'sheet'
+    ? definition.fields.image
+    : definition.fields.path
   if (typeof value !== 'string' || value.includes('\0') || !PACKAGE_PATH.test(value)) {
     throw new Error(`${definition.assetKind} asset ${definition.key} has an invalid package path`)
   }
@@ -306,6 +310,7 @@ function sheetFrames(
   field: string,
 ): readonly ModSpriteFrame[] {
   const spec = object(fields.frame, `${field}.frame`)
+  exactKeys(spec, ['height', 'width'], `${field}.frame`)
   const width = integer(spec.width, 1, dimensions.width, `${field}.frame.width`)
   const height = integer(spec.height, 1, dimensions.height, `${field}.frame.height`)
   if (dimensions.width % width !== 0 || dimensions.height % height !== 0) {
@@ -326,6 +331,7 @@ function sheetAnimations(
   value: WebLuaDefinitionValue | undefined,
   frameCount: number,
   field: string,
+  headingCount: number | null,
 ): Readonly<Record<string, readonly number[]>> {
   const source = object(value, `${field}.animations`)
   const result: Record<string, readonly number[]> = {}
@@ -333,12 +339,28 @@ function sheetAnimations(
     if (!/^[a-z][a-z0-9_-]{0,63}$/.test(name) || !Array.isArray(frames) || frames.length === 0) {
       throw new Error(`${field}.animations.${name} is invalid`)
     }
+    const maximum = headingCount === null ? frameCount : frameCount / headingCount
     result[name] = Object.freeze(frames.map((candidate, index) => (
-      integer(candidate, 1, frameCount, `${field}.animations.${name}[${index}]`) - 1
+      (integer(candidate, 1, maximum, `${field}.animations.${name}[${index}]`) - 1)
+        * (headingCount ?? 1)
     )))
   }
   if (Object.keys(result).length === 0) throw new Error(`${field} sheet requires at least one animation`)
   return Object.freeze(result)
+}
+
+function sheetHeadingCount(
+  fields: Readonly<Record<string, WebLuaDefinitionValue>>,
+  dimensions: Readonly<{ height: number; width: number }>,
+  field: string,
+): number | null {
+  if (fields.headings === undefined) return null
+  const frame = object(fields.frame, `${field}.frame`)
+  const width = integer(frame.width, 1, dimensions.width, `${field}.frame.width`)
+  const columns = dimensions.width / width
+  const headings = integer(fields.headings, 1, 24, `${field}.headings`)
+  if (headings !== columns) throw new Error(`${field}.headings must match its sheet columns`)
+  return headings
 }
 
 function frame(
@@ -347,6 +369,18 @@ function frame(
   field: string,
 ): ModSpriteFrame {
   const source = object(value, field)
+  exactKeys(source, [
+    'center_x',
+    'center_y',
+    'content_height',
+    'content_width',
+    'height',
+    'logical_height',
+    'logical_width',
+    'width',
+    'x',
+    'y',
+  ], field)
   const x = integer(source.x ?? 0, 0, dimensions.width - 1, `${field}.x`)
   const y = integer(source.y ?? 0, 0, dimensions.height - 1, `${field}.y`)
   const width = integer(source.width, 1, dimensions.width, `${field}.width`)
@@ -400,7 +434,20 @@ function validateJsonDocument(bytes: Uint8Array, field: string): void {
     else if (candidate && typeof candidate === 'object') Object.values(candidate).forEach(entry => visit(entry, depth + 1))
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field} scene document must be an object`)
+  const document = value as Record<string, unknown>
+  exactKeys(document, ['name', 'rooms', 'schemaVersion'], field)
+  if (document.schemaVersion !== 1 || typeof document.name !== 'string' || document.name.length === 0 ||
+      !Array.isArray(document.rooms) || document.rooms.length === 0 ||
+      document.rooms.some(room => typeof room !== 'string' || room.length === 0)) {
+    throw new Error(`${field} scene document requires schemaVersion 1, name, and room keys`)
+  }
   visit(value, 0)
+}
+
+function exactKeys(source: Readonly<Record<string, unknown>>, allowed: readonly string[], field: string): void {
+  const accepted = new Set(allowed)
+  const unknown = Object.keys(source).filter(key => !accepted.has(key))
+  if (unknown.length > 0) throw new Error(`${field} contains unknown fields: ${unknown.join(', ')}`)
 }
 
 function object(value: unknown, field: string): Record<string, WebLuaDefinitionValue> {
@@ -419,6 +466,13 @@ function optionalText(value: unknown, fallback: string, field: string): string {
   if (value === undefined) return fallback
   if (typeof value !== 'string' || value.length < 1 || value.length > 64) throw new Error(`${field} is invalid`)
   return value
+}
+
+function audioBus(value: unknown, kind: 'music' | 'sound', field: string): string {
+  const expected = kind === 'music' ? 'music' : 'effects'
+  const result = optionalText(value, expected, field)
+  if (result !== expected) throw new Error(`${field} must be ${expected}`)
+  return result
 }
 
 function optionalBoolean(value: unknown, fallback: boolean, field: string): boolean {

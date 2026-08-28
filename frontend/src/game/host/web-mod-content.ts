@@ -11,6 +11,7 @@ import {
   projectModBoneyard,
   type ModBoneyardEntry,
 } from './boneyard-catalog.ts'
+import { boneyardGeometrySha256 } from './project-boneyard.ts'
 
 const SHA256 = /^[a-f0-9]{64}$/
 const PACKAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -202,8 +203,46 @@ export async function compileWebSessionContentDefinitions(
     }
   }
   const graphByMod = new Map(compiledMods.map(mod => [mod.identity.id, mod.graphSha256]))
+  const sourceByMod = new Map(content.modSources.map(source => [source.identity.id, source]))
+  const luaBoneyards = compiledMods.flatMap(mod => mod.content.flatMap((definition) => {
+    if (definition.contentKind !== 'boneyard') return []
+    const path = definition.fields.source
+    const source = sourceByMod.get(mod.identity.id)
+    const bytes = typeof path === 'string' ? source?.files[path] : undefined
+    if (!bytes || typeof path !== 'string') {
+      throw new Error(`${mod.identity.id}:${definition.key} Boneyard source is not packaged`)
+    }
+    const projected = projectModBoneyard(
+      mod.identity.id,
+      mod.identity.name,
+      path,
+      bytes,
+    )
+    const environment = definition.fields.environment
+    const mode = environment && typeof environment === 'object' && !Array.isArray(environment)
+      ? (environment as Record<string, unknown>).mode
+      : undefined
+    const scene = Number.isSafeInteger(mode)
+      ? { ...projected.scene, environmentMode: Number(mode) }
+      : projected.scene
+    return [Object.freeze({
+      ...projected,
+      choice: Object.freeze({
+        ...projected.choice,
+        name: typeof definition.fields.name === 'string'
+          ? definition.fields.name
+          : projected.choice.name,
+      }),
+      geometrySha256: scene === projected.scene
+        ? projected.geometrySha256
+        : boneyardGeometrySha256(scene),
+      scene: Object.freeze(scene),
+      webLuaContentId: definition.contentId,
+    })]
+  }))
   return Object.freeze({
     ...content,
+    boneyards: Object.freeze([...content.boneyards, ...luaBoneyards]),
     compiledMods: Object.freeze(compiledMods),
     summary: Object.freeze({
       ...content.summary,

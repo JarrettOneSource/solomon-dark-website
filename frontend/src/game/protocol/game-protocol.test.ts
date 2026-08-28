@@ -1645,8 +1645,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v100 carries cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 100)
+test('protocol v101 carries Web Lua readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 101)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -5161,6 +5161,14 @@ test('mod spell cast protocol carries only stable content, request, and target v
     requestId: 4,
     targetX: 120,
     targetY: 140,
+  }
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage(message)), message)
+})
+
+test('Boneyard renderer readiness is scoped to one authoritative run', () => {
+  const message = {
+    type: 'client-ready-boneyard' as const,
+    runId: 'run-web-lua',
   }
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage(message)), message)
 })

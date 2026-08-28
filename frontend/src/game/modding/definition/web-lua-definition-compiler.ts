@@ -31,6 +31,7 @@ import {
 import {
   validateWebLuaAssetSchema,
   validateWebLuaContentSchema,
+  validateWebLuaDefinitionNodes,
 } from './web-lua-definition-schemas.ts'
 
 export interface WebLuaDefinitionDependency {
@@ -108,6 +109,7 @@ export function compileWebLuaDefinition(
 
   definition.assets.forEach((asset, index) => validateWebLuaAssetSchema(asset, index, issues))
   definition.content.forEach((entry, index) => validateWebLuaContentSchema(entry, index, issues))
+  validateWebLuaDefinitionNodes(definition, issues)
   validateDefinitionBudgets(definition, context)
   validateContentCycles(definition.content, context)
   validateExclusiveMounts(definition.content, context)
@@ -504,8 +506,37 @@ function inferCapabilities(definition: WebLuaModDefinition): string[] {
   const values = new Set<string>()
   for (const asset of definition.assets) values.add(`assets.${asset.assetKind}`)
   for (const content of definition.content) values.add(`content.${content.contentKind}`)
-  for (const rule of definition.rules) values.add(`rules.${rule.operation}`)
   if (definition.reducers.length > 0) values.add('reducers.authority')
+  const seen = new Set<object>()
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return
+    seen.add(value)
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+    const token = value as Readonly<{
+      intentKind?: unknown
+      kind?: unknown
+      operation?: unknown
+      schemaKind?: unknown
+    }>
+    if (token.kind === 'rule-definition' && typeof token.operation === 'string') {
+      values.add(token.operation)
+    }
+    if (token.kind === 'intent-definition' && typeof token.intentKind === 'string') {
+      values.add(`intent.${token.intentKind}`)
+    }
+    if (token.kind === 'schema-definition' && typeof token.schemaKind === 'string') {
+      values.add(`schema.${token.schemaKind}`)
+    }
+    Object.values(value).forEach(child => {
+      if (typeof child !== 'function') visit(child)
+    })
+  }
+  definition.content.forEach(visit)
+  definition.rules.forEach(visit)
+  definition.reducers.forEach(reducer => visit(reducer.state))
   return [...values].sort()
 }
 

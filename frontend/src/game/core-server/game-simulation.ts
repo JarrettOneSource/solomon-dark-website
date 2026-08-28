@@ -243,6 +243,7 @@ import {
   autofillPlayerEntitySkillSelections,
   applyPlayerEntitySkillChoice,
   bindPlayerEntityBeltItem,
+  replacePlayerEntitySkillChoiceWithMod,
   bindPlayerEntitySkillQuickbar,
   coldSlowPlayerEntity,
   consumePlayerEntityWizardKey,
@@ -1876,6 +1877,32 @@ export function selectGameSimulationPlayerSkill(
       : Object.freeze({ ...barrier, pendingPlayerIds }),
     playerEntities: insights.store,
     secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
+  }
+}
+
+export function replaceGameSimulationPlayerSkillWithMod(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  offerSequence: number,
+): GameSimulationState | null {
+  const applied = replacePlayerEntitySkillChoiceWithMod(
+    state.playerEntities,
+    playerId,
+    offerSequence,
+    state.gameRng,
+  )
+  if (!applied) return null
+  const barrier = state.levelUpBarrier
+  const pendingPlayerIds = barrier === null
+    ? []
+    : pendingOfferPlayerIds(applied.store, barrier.participantIds)
+  return {
+    ...state,
+    gameRng: applied.rng,
+    levelUpBarrier: barrier === null || pendingPlayerIds.length === 0
+      ? null
+      : Object.freeze({ ...barrier, pendingPlayerIds }),
+    playerEntities: applied.store,
   }
 }
 

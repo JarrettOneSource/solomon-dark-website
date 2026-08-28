@@ -32,6 +32,7 @@ export interface ModBoneyardEntry {
   geometrySha256: string
   scene: BoneyardScene
   sourceSha256: string
+  webLuaContentId?: string
 }
 
 export interface BoneyardCatalog {
@@ -112,9 +113,12 @@ export function materializeBoneyard(
   const entry = catalog.modEntries.get(boneyardId)
   if (!entry) return null
   return {
-    ...entry,
+    choice: entry.choice,
+    geometrySha256: entry.geometrySha256,
     runId,
+    scene: entry.scene,
     seed,
+    sourceSha256: entry.sourceSha256,
   }
 }
 

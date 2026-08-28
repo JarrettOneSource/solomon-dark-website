@@ -1,9 +1,10 @@
 # Web Lua 1.0 delivery plan
 
-Status: **executed; retained as the delivery and acceptance ledger**
+Status: **historical delivery sequence**
 
-Phase descriptions below preserve the sequence and pre-cutover conditions; all
-exit gates now refer to the implemented 1.0 runtime.
+Phase descriptions below preserve the sequence and pre-cutover conditions. The
+current release state and contracted public interface are recorded in
+[the completion matrix](../web-lua-1-api-completion-matrix.md).
 
 The work should proceed as vertical slices, each ending in a usable mod. Building
 eleven registries horizontally would create a large unproven interface and leave

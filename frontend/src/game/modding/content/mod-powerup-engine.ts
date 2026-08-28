@@ -1,6 +1,8 @@
 import type { PreparedModContentCatalog } from './mod-content-catalog.ts'
 
 const MAXIMUM_POWERUPS = 1_024
+const MAXIMUM_COLLECTION_EVENTS = 256
+const COLLECTION_EVENT_TICKS = 50
 
 export interface ActiveModPowerup {
   readonly contentId: string
@@ -17,9 +19,19 @@ export interface ModPowerupCheckpoint {
   readonly revision: number
 }
 
+export interface ModPowerupCollectionEvent {
+  readonly contentId: string
+  readonly id: number
+  readonly playerId: string
+  readonly tick: number
+  readonly x: number
+  readonly y: number
+}
+
 export class ModPowerupEngine {
   readonly #catalog: PreparedModContentCatalog
   #instances: ActiveModPowerup[] = []
+  #collections: ModPowerupCollectionEvent[] = []
   #nextId = 1
   #revision = 0
 
@@ -39,15 +51,33 @@ export class ModPowerupEngine {
     })
   }
 
-  collect(id: number, playerId: string): Readonly<{
+  collect(id: number, playerId: string, tick = 0): Readonly<{
     contentId: string
     playerId: string
-  }> | null {
+  } & ModPowerupCollectionEvent> | null {
+    if (!Number.isSafeInteger(tick) || tick < 0) throw new Error('mod powerup collection tick is invalid')
     const index = this.#instances.findIndex(instance => instance.id === id)
     if (index < 0) return null
     const [instance] = this.#instances.splice(index, 1)
+    const event = Object.freeze({
+      contentId: instance!.contentId,
+      id: instance!.id,
+      playerId,
+      tick,
+      x: instance!.x,
+      y: instance!.y,
+    })
+    this.#collections.push(event)
+    if (this.#collections.length > MAXIMUM_COLLECTION_EVENTS) this.#collections.shift()
     this.#revision += 1
-    return Object.freeze({ contentId: instance!.contentId, playerId })
+    return event
+  }
+
+  clear(): void {
+    if (this.#instances.length + this.#collections.length === 0) return
+    this.#instances = []
+    this.#collections = []
+    this.#revision += 1
   }
 
   candidates(
@@ -69,6 +99,10 @@ export class ModPowerupEngine {
     return Object.freeze(this.#instances.map(instance => Object.freeze({ ...instance })))
   }
 
+  projectCollections(): readonly ModPowerupCollectionEvent[] {
+    return Object.freeze(this.#collections.map(event => Object.freeze({ ...event })))
+  }
+
   restore(checkpoint: ModPowerupCheckpoint): void {
     if (!Number.isSafeInteger(checkpoint.nextId) || checkpoint.nextId < 1 ||
         !Number.isSafeInteger(checkpoint.revision) || checkpoint.revision < 0 ||
@@ -87,6 +121,7 @@ export class ModPowerupEngine {
     })
     this.#nextId = checkpoint.nextId
     this.#revision = checkpoint.revision
+    this.#collections = []
   }
 
   spawn(contentId: string, x: number, y: number, tick: number): ActiveModPowerup {
@@ -107,5 +142,14 @@ export class ModPowerupEngine {
     this.#instances.push(instance)
     this.#revision += 1
     return instance
+  }
+
+  tick(tick: number): boolean {
+    if (!Number.isSafeInteger(tick) || tick < 0) throw new Error('mod powerup tick is invalid')
+    const retained = this.#collections.filter(event => tick - event.tick < COLLECTION_EVENT_TICKS)
+    if (retained.length === this.#collections.length) return false
+    this.#collections = retained
+    this.#revision += 1
+    return true
   }
 }

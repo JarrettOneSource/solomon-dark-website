@@ -34,6 +34,29 @@ test('asset compiler verifies package identity and compiles sprite and sheet fra
   assert.equal(catalog.image(identity.id, 'icon').frames[0]?.width, 53)
   assert.equal(catalog.image(identity.id, 'mage').frames.length, 2)
   assert.deepEqual(catalog.image(identity.id, 'mage').animations.move, [0, 1])
+  assert.equal(catalog.image(identity.id, 'mage').headingCount, null)
+})
+
+test('directional sheets map animation rows to heading-zero frame indices', () => {
+  const sheet = png(32, 32)
+  const files = { 'art/keeper.png': sheet }
+  const catalog = compileModAssets({
+    assets: [metadata('art/keeper.png', sheet)],
+    mods: [mod([{
+      assetKind: 'sheet',
+      fields: {
+        animations: { idle: [1], move: [2] },
+        frame: { height: 16, width: 16 },
+        headings: 2,
+        image: 'art/keeper.png',
+      },
+      key: 'keeper',
+    }])],
+    sources: [{ files, identity }],
+  })
+  const keeper = catalog.image(identity.id, 'keeper')
+  assert.equal(keeper.headingCount, 2)
+  assert.deepEqual(keeper.animations, { idle: [0], move: [2] })
 })
 
 test('asset compiler rejects mismatched bytes, MIME, and invalid sheet geometry', () => {
@@ -46,7 +69,7 @@ test('asset compiler rejects mismatched bytes, MIME, and invalid sheet geometry'
     ...base,
     mods: [mod([{
       assetKind: 'sheet',
-      fields: { animations: { idle: [1] }, frame: { height: 16, width: 16 }, path: 'art/mage.png' },
+      fields: { animations: { idle: [1] }, frame: { height: 16, width: 16 }, image: 'art/mage.png' },
       key: 'mage',
     }])],
   }), /exact multiples/)

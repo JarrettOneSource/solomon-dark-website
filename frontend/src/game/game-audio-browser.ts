@@ -30,13 +30,16 @@ export function loadGameAudioAsset(
   return Promise.reject(new Error(`unknown game audio asset: ${source}`))
 }
 
+export function loadModGameAudioAsset(source: string): Promise<AudioBuffer> {
+  return loadAudioBuffer(source)
+}
+
 export function createBrowserGameAudioDirector(): GameAudioDirector {
   const context = residentAudioContext()
   return new GameAudioDirector(GAME_AUDIO_SOURCES, {
     createMusicChannel: (source) => {
       const channel = musicChannels.get(source)
-      if (!channel) throw new Error(`game music was not loaded: ${source}`)
-      return channel
+      return channel ?? new Audio(source)
     },
     playback: createWebAudioPlayback(context, buffers),
   })

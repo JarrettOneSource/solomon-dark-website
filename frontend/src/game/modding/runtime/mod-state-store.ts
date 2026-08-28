@@ -122,7 +122,7 @@ export class ModStateStore {
       `${definition.modId}\0${definition.key}\0${definition.scope}`,
       definition,
     ]))
-    const candidate = new Map(this.#cells)
+    const candidate = new Map<string, StoredCell>()
     for (const snapshot of checkpoint.cells) {
       validateScope(snapshot.scope)
       const definition = byDefinition.get(
@@ -196,6 +196,18 @@ export class ModStateStore {
     let removed = 0
     for (const [id, cell] of this.#cells) {
       if (scopeKey(cell.scope) !== target) continue
+      this.#cells.delete(id)
+      removed += 1
+    }
+    if (removed > 0) this.#revision += 1
+    return removed
+  }
+
+  closeScopes(predicate: (scope: ModStateScope) => boolean): number {
+    this.#requireOpen()
+    let removed = 0
+    for (const [id, cell] of this.#cells) {
+      if (!predicate(cell.scope)) continue
       this.#cells.delete(id)
       removed += 1
     }

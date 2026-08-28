@@ -35,22 +35,25 @@ export class ModSpellEngine {
     contentId: string,
     tick: number,
     currentMana: number,
+    manaCost?: number,
   ): Readonly<{ manaCost: number; readyTick: number; spell: PreparedModSpellDefinition }> {
     const spell = this.#catalog.spell(contentId)
     if (!spell) throw new Error(`mod spell is unavailable: ${contentId}`)
-    if (!Number.isSafeInteger(tick) || tick < 0 || !Number.isFinite(currentMana) || currentMana < 0) {
+    const cost = manaCost ?? spell.mana
+    if (!Number.isSafeInteger(tick) || tick < 0 || !Number.isFinite(currentMana) || currentMana < 0 ||
+        !Number.isFinite(cost) || cost < 0 || cost > 1_000_000) {
       throw new Error('mod spell admission input is invalid')
     }
     const key = cellKey(playerId, contentId)
     if ((this.#cooldowns.get(key) ?? 0) > tick) throw new Error('mod spell is cooling down')
-    if (currentMana < spell.mana) throw new Error('mod spell has insufficient mana')
+    if (currentMana < cost) throw new Error('mod spell has insufficient mana')
     if (!this.#cooldowns.has(key) && this.#cooldowns.size >= MAXIMUM_COOLDOWNS) {
       throw new Error('mod spell cooldown limit reached')
     }
     const readyTick = tick + Math.ceil(spell.cooldownMs * this.#ticksPerSecond / 1_000)
     this.#cooldowns.set(key, readyTick)
     this.#revision += 1
-    return Object.freeze({ manaCost: spell.mana, readyTick, spell })
+    return Object.freeze({ manaCost: cost, readyTick, spell })
   }
 
   checkpoint(): ModSpellCheckpoint {

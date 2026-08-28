@@ -25,7 +25,16 @@ test('session content materializes exact Lua identities and final Boneyard overl
       {
         boneyards: [],
         contentSha256: 'a'.repeat(64),
-        entryScript: "return sd.mod({api = '1.0.0'})",
+        entryScript: `
+local map = sd.art.boneyard('levels/lua-contract.boneyard')
+local crypt = sd.kit.boneyard({
+  key = 'lua_contract',
+  name = 'Lua Contract',
+  source = 'levels/lua-contract.boneyard',
+  environment = {mode = 2},
+})
+return sd.mod({api = '1.0.0', assets = {map = map}, content = {crypt}})
+`,
         files: [
           {
             byteLength: png.length,
@@ -42,6 +51,14 @@ test('session content materializes exact Lua identities and final Boneyard overl
             kind: 'audio',
             path: 'audio/chime.ogg',
             sha256: createHash('sha256').update(audio).digest('hex'),
+          },
+          {
+            byteLength: fixture.length,
+            bytesBase64: fixture.toString('base64'),
+            contentType: 'application/vnd.solomon-dark.boneyard',
+            kind: 'boneyard',
+            path: 'levels/lua-contract.boneyard',
+            sha256: createHash('sha256').update(fixture).digest('hex'),
           },
         ],
         id: 'tests.first',
@@ -77,9 +94,13 @@ test('session content materializes exact Lua identities and final Boneyard overl
   assert.equal(content.compiledMods.length, 1)
   assert.equal(content.modSources[0]?.identity.id, 'tests.first')
   assert.equal(content.summary.mods[0]?.graphSha256, content.compiledMods[0]?.graphSha256)
-  assert.equal(content.boneyards.length, 1)
+  assert.equal(content.boneyards.length, 2)
   assert.equal(content.boneyards[0]?.choice.modId, 'tests.second')
   assert.equal(content.boneyards[0]?.choice.name, 'Contract')
+  const luaBoneyard = content.boneyards.find(entry => entry.choice.modId === 'tests.first')!
+  assert.equal(luaBoneyard.choice.name, 'Lua Contract')
+  assert.equal(luaBoneyard.scene.environmentMode, 2)
+  assert.equal(luaBoneyard.webLuaContentId, content.compiledMods[0]?.content[0]?.contentId)
   assert.deepEqual(content.assets, [
     {
       byteLength: png.length,
@@ -96,6 +117,14 @@ test('session content materializes exact Lua identities and final Boneyard overl
       modId: 'tests.first',
       path: 'audio/chime.ogg',
       sha256: createHash('sha256').update(audio).digest('hex'),
+    },
+    {
+      byteLength: fixture.length,
+      contentType: 'application/vnd.solomon-dark.boneyard',
+      kind: 'boneyard',
+      modId: 'tests.first',
+      path: 'levels/lua-contract.boneyard',
+      sha256: createHash('sha256').update(fixture).digest('hex'),
     },
   ])
   assert.deepEqual(content.summary.mods[0]?.assets, content.assets)

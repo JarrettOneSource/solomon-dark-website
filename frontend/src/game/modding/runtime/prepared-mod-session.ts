@@ -9,7 +9,13 @@ import {
   ModIntentExecutor,
   type ModIntentAdapter,
 } from './mod-intent-executor.ts'
-import { ModRuleEngine, type ModIntent } from './mod-rule-engine.ts'
+import {
+  ModRuleEngine,
+  type ModIntent,
+  type ModReducerHealthCheckpoint,
+  type ModReducerTrace,
+  type ModRuleEngineCheckpoint,
+} from './mod-rule-engine.ts'
 import type {
   ModStateCheckpoint,
   ModStateScope,
@@ -42,7 +48,7 @@ export interface PreparedModStepResult {
   readonly invocations: number
 }
 
-export interface PreparedModActionInput extends PreparedModEvent {
+export interface PreparedModActionInput extends Omit<PreparedModEvent, 'event'> {
   readonly action: string
   readonly requestId: number
   readonly tick: number
@@ -54,18 +60,20 @@ export interface PreparedModProjection {
   readonly viewerId: string
 }
 
-export interface PreparedModCheckpoint {
+export interface PreparedModCheckpoint extends ModRuleEngineCheckpoint {
   readonly graphSha256: readonly string[]
-  readonly state: ModStateCheckpoint
 }
 
 export interface PreparedModSession {
   act(input: PreparedModActionInput): PreparedModStepResult
   catalog(): readonly CompiledWebLuaMod[]
   checkpoint(): PreparedModCheckpoint
+  closeRun(runId: string): void
   close(): void
   project(viewerId: string): PreparedModProjection
   restore(checkpoint: PreparedModCheckpoint): void
+  reducerDiagnostics(): readonly ModReducerHealthCheckpoint[]
+  reducerTraces(): readonly ModReducerTrace[]
   step(input: PreparedModStepInput): PreparedModStepResult
 }
 
@@ -102,31 +110,58 @@ export async function prepareModSession(options: Readonly<{
     const step = (input: PreparedModStepInput): PreparedModStepResult => {
       requireOpen()
       if (!Number.isSafeInteger(input.tick) || input.tick < 0) throw new Error('mod session tick is invalid')
-      const checkpoint = rules.state.snapshot()
       const intents: ModIntent[] = []
       const errors: string[] = []
       let budgetExceeded = false
       let invocations = 0
+      let accepted = true
+      for (const timerId of rules.dueTimerIds(input.tick)) {
+        const checkpoint = rules.checkpoint()
+        const scheduled = rules.fireTimer(timerId, input.tick)
+        intents.push(...scheduled.result.intents)
+        errors.push(...scheduled.result.errors)
+        invocations += scheduled.result.invocations
+        budgetExceeded ||= scheduled.result.budgetExceeded
+        const execution = scheduled.result.intents.length === 0
+          ? { accepted: true, error: null }
+          : executor.execute(scheduled.result.intents, {
+              context: scheduled.context,
+              scope: scheduled.scope,
+              tick: input.tick,
+            })
+        if (!execution.accepted) {
+          rules.rollback(checkpoint)
+          rules.cancelTimer(timerId)
+          errors.push(execution.error ?? 'scheduled mod intent transaction failed')
+          accepted = false
+        }
+      }
+      const eventCheckpoint = rules.checkpoint()
+      const eventIntents: ModIntent[] = []
       for (const event of input.events) {
         const result = rules.dispatch({ ...event, tick: input.tick })
-        intents.push(...result.intents)
+        eventIntents.push(...result.intents)
         errors.push(...result.errors)
         invocations += result.invocations
         budgetExceeded ||= result.budgetExceeded
         if (result.budgetExceeded) break
       }
       const scope = commonScope(input.events)
-      const execution = executor.execute(intents, {
-        context: input.events[0]?.context ?? {},
-        scope,
-        tick: input.tick,
-      })
+      const execution = eventIntents.length === 0
+        ? { accepted: true, error: null }
+        : executor.execute(eventIntents, {
+            context: input.events[0]?.context ?? {},
+            scope,
+            tick: input.tick,
+          })
       if (!execution.accepted) {
-        rules.state.rollback(checkpoint)
+        rules.rollback(eventCheckpoint)
         errors.push(execution.error ?? 'mod intent transaction failed')
+        accepted = false
       }
+      intents.push(...eventIntents)
       return Object.freeze({
-        accepted: execution.accepted,
+        accepted,
         budgetExceeded,
         errors: Object.freeze(errors),
         intents: Object.freeze(intents),
@@ -136,13 +171,15 @@ export async function prepareModSession(options: Readonly<{
     const session: PreparedModSession = {
       act(input) {
         const event = contentActionEvent(input.action, input.payload, verified)
+        const genericEvent = `action.${input.action}`
+        const events = [event, ...(event === genericEvent ? [] : [genericEvent])]
         return step({
-          events: [{
-            context: { ...input.context, action: input.action, request_id: input.requestId },
-            event,
+          events: events.map(eventName => ({
+            context: { ...input.context, action_kind: input.action, request_id: input.requestId },
+            event: eventName,
             payload: input.payload,
             scope: input.scope,
-          }],
+          })),
           tick: input.tick,
         })
       },
@@ -154,13 +191,17 @@ export async function prepareModSession(options: Readonly<{
         requireOpen()
         return Object.freeze({
           graphSha256: Object.freeze(verified.map(mod => mod.graphSha256)),
-          state: rules.state.snapshot(),
+          ...rules.checkpoint(),
         })
       },
       close() {
         if (closed) return
         closed = true
         rules.close()
+      },
+      closeRun(runId) {
+        requireOpen()
+        rules.closeRun(runId)
       },
       project(viewerId) {
         requireOpen()
@@ -175,7 +216,15 @@ export async function prepareModSession(options: Readonly<{
         if (checkpoint.graphSha256.length !== verified.length || checkpoint.graphSha256.some((hash, index) => (
           hash !== verified[index]!.graphSha256
         ))) throw new Error('mod checkpoint graph does not match the prepared session')
-        rules.restore(checkpoint.state)
+        rules.restore(checkpoint)
+      },
+      reducerDiagnostics() {
+        requireOpen()
+        return rules.reducerDiagnostics()
+      },
+      reducerTraces() {
+        requireOpen()
+        return rules.traces()
       },
       step,
     }

@@ -1,8 +1,13 @@
 # Web Lua framework 1.0
 
-Status: **implemented in the Website; API 1.0.0**
+Status: **architecture and design-history record**
 
-This document records the implemented shape of Lua modding for the Solomon Dark
+The generated reference and
+[completion matrix](../web-lua-1-api-completion-matrix.md) are the authoritative
+1.0 interface. Candidate fields and constructors retained below for design
+history are not accepted unless they appear in those two documents.
+
+This document records the design of Lua modding for the Solomon Dark
 web port. The Website is the only target. Native Mod Loader documents are useful
 evidence about semantic game seams, but the Loader is being retired and does not
 constrain the public contract.

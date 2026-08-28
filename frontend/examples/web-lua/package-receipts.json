@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "directory": "apprentice-apothecary",
+      "fileName": "apprentice-apothecary.sdmod",
+      "graphSha256": "a24d19aa71cebf09603f54e09cf2b4e67c3368d1631ebba15a288a5b89a4d123",
+      "id": "showcase.apprentice-apothecary",
+      "packageBytes": 126215,
+      "packageSha256": "b203004d9e13f093cde2a7edfbd7055981ea7e5a81f24b57e8393b3c88f16eb4",
+      "version": "1.0.0"
+    },
+    {
+      "directory": "gravity-lesson",
+      "fileName": "gravity-lesson.sdmod",
+      "graphSha256": "fba860670a02b35290578e42188b133da1bcb2d518ffa54a924a5c235aec0d78",
+      "id": "showcase.gravity-lesson",
+      "packageBytes": 85131,
+      "packageSha256": "ae105efad00859d56d535eaa5d5144d4060dc00f84677784cae544d462608522",
+      "version": "1.0.0"
+    },
+    {
+      "directory": "monument-crypt",
+      "fileName": "monument-crypt.sdmod",
+      "graphSha256": "1246610554470a1f4314f387c54b492b17ecb7e73cc17182506f90fbaf24352a",
+      "id": "showcase.monument-crypt",
+      "packageBytes": 4948543,
+      "packageSha256": "8bf47098a9b4ec80ca2160d3fdd6ec395ea98726c762e01aa9b89e4c1310bd46",
+      "version": "1.0.0"
+    }
+  ]
+}

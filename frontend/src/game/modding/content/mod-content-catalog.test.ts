@@ -73,7 +73,7 @@ test('content catalog projects every family and builds deterministic consumables
     }),
     content('affix', 'gravebound', '5000000000000000005', {
       applies_to: ['robe'],
-      modifiers: { reflected_damage: { multiply: 0.2 } },
+      modifiers: { incoming_damage: { multiply: 0.8 } },
       name: 'Gravebound',
     }),
     content('affix-pool', 'crypt_affixes', '5000000000000000006', {
@@ -94,7 +94,7 @@ test('content catalog projects every family and builds deterministic consumables
       maximum_rank: 2,
       name: 'Arcane Cartography',
       offer: { minimum_level: 2, weight: 1 },
-      ranks: [{ grant: 'minimap' }, { modify: { minimap_range: 1.25 } }],
+      ranks: [{}, { modify: { minimap_range: 1.25 } }],
     }),
     content('spell', 'gravity_well', '5000000000000000008', {
       art: { icon: { key: 'icon', kind: 'asset-reference' } },
@@ -103,21 +103,20 @@ test('content catalog projects every family and builds deterministic consumables
       mana: 30,
       name: 'Gravity Well',
       slot: 'secondary',
-      subskills: { event_horizon: { name: 'Event Horizon' } },
     }),
     content('enemy', 'grave_tyrant', '5000000000000000009', {
       art: { atlas: { key: 'icon', kind: 'asset-reference' } },
-      base: 'stock.skeleton_mage',
-      behavior: area,
+      loot: { experience: 100 },
       name: 'Grave Tyrant',
       stats: { health: 250, scale: 1.2, speed: 2.5 },
     }),
     content('boneyard', 'obsidian_depths', '5000000000000000010', {
+      art: { layout: { key: 'map', kind: 'asset-reference' } },
       name: 'Obsidian Depths',
       source: 'levels/obsidian-depths.boneyard',
     }),
     content('shop', 'apothecary', '5000000000000000011', {
-      mount: { anchor: 'east', scene: 'hub.courtyard' },
+      mount: { scene: 'hub.courtyard', x: 10, y: 20 },
       name: 'Field Apothecary',
       services: [{
         pool: {
@@ -143,11 +142,13 @@ test('content catalog projects every family and builds deterministic consumables
     }),
     content('ui', 'field_minimap', '5000000000000000012', {
       mount: 'hud.top_right',
-      view: area,
+      view: { ...area, operation: 'prefab.minimap' },
     }),
-    content('room', 'crypt_entry', '5000000000000000013', { geometry: { width: 20 } }),
+    content('room', 'crypt_entry', '5000000000000000013', {
+      geometry: { floor: '#111111', height: 720, kind: 'inline', width: 1_120 },
+    }),
     content('scene', 'monument_crypt', '5000000000000000014', {
-      instance: 'party',
+      art: { layout: { key: 'scene', kind: 'asset-reference' } },
       rooms: [{
         contentId: '5000000000000000013',
         key: 'crypt_entry',
@@ -173,6 +174,7 @@ test('content catalog projects every family and builds deterministic consumables
   assert.equal(catalog.skill('5000000000000000007')?.maximumRank, 2)
   assert.equal(catalog.spell('5000000000000000008')?.mana, 30)
   assert.equal(catalog.enemy('5000000000000000009')?.health, 250)
+  assert.equal(catalog.enemy('5000000000000000009')?.experience, 100)
   assert.equal(catalog.boneyard('5000000000000000010')?.source, 'levels/obsidian-depths.boneyard')
   assert.equal(catalog.shop('5000000000000000011')?.stock[0]?.price, 10)
   assert.equal(catalog.shop('5000000000000000011')?.services[0]?.price, 50)
@@ -280,10 +282,15 @@ test('powerup engine owns spawn identity, strict pickup range, checkpoint, and c
   assert.equal(engine.candidates([{ id: 'far', x: 140, y: 100 }]).length, 0)
   assert.equal(engine.candidates([{ id: 'near', x: 139, y: 100 }])[0]?.playerId, 'near')
   const checkpoint = engine.checkpoint()
-  assert.deepEqual(engine.collect(spawned.id, 'near'), {
+  assert.deepEqual(engine.collect(spawned.id, 'near', 9), {
     contentId: '5000000000000000004',
+    id: spawned.id,
     playerId: 'near',
+    tick: 9,
+    x: 100,
+    y: 100,
   })
+  assert.equal(engine.projectCollections()[0]?.tick, 9)
   assert.equal(engine.project().length, 0)
   engine.restore(checkpoint)
   assert.equal(engine.project()[0]?.id, spawned.id)
@@ -293,7 +300,7 @@ test('affix engine rolls applicable weighted pools deterministically without dup
   const catalog = compileModContentCatalog([compiled([
     content('affix', 'gravebound', '5000000000000000005', {
       applies_to: ['robe'],
-      modifiers: { reflected_damage: { multiply: 0.2 } },
+      modifiers: { incoming_damage: { multiply: 0.8 } },
       name: 'Gravebound',
     }),
     content('affix-pool', 'crypt_affixes', '5000000000000000006', {
@@ -324,25 +331,54 @@ test('affix engine rolls applicable weighted pools deterministically without dup
 })
 
 test('skill engine builds deterministic eligible offers and persists bounded ranks', () => {
+  const spellId = '5000000000000000008'
   const catalog = compileModContentCatalog([compiled([
     content('skill', 'cartography', '5000000000000000007', {
       art: { icon: { key: 'icon', kind: 'asset-reference' } },
       maximum_rank: 2,
       name: 'Arcane Cartography',
       offer: { minimum_level: 2, weight: 1 },
-      ranks: [{ grant: 'minimap' }, { modify: { minimap_range: 1.25 } }],
+      ranks: [{
+        grant: {
+          contentId: spellId,
+          key: 'gravity_well',
+          kind: 'resolved-content-reference',
+          modId: identity.id,
+          targetKind: 'spell',
+        },
+        modify: { incoming_damage: { multiply: 0.5 } },
+      }, { modify: { minimap_range: 1.25 } }],
+    }),
+    content('spell', 'gravity_well', spellId, {
+      art: { icon: { key: 'icon', kind: 'asset-reference' } },
+      behavior: area,
+      name: 'Gravity Well',
+      slot: 'secondary',
     }),
   ])], assets())
   const engine = new ModSkillEngine(catalog)
+  assert.equal(engine.spellUnlocked('player-1', spellId), false)
   assert.equal(engine.offer('player-1', 1, 7).length, 0)
   assert.equal(engine.offer('player-1', 2, 7)[0]?.contentId, '5000000000000000007')
-  assert.equal(engine.choose('player-1', '5000000000000000007').rank, 1)
+  assert.equal(engine.choose(
+    'player-1',
+    '5000000000000000007',
+    engine.offers('player-1')[0]!.sequence,
+  ).rank, 1)
+  assert.equal(engine.filter('player-1', 'incoming_damage', 20), 10)
+  assert.equal(engine.spellUnlocked('player-1', spellId), true)
+  engine.bind('player-1', 0, spellId)
   engine.offer('player-1', 2, 8)
   const checkpoint = engine.checkpoint()
-  assert.equal(engine.choose('player-1', '5000000000000000007').rank, 2)
-  assert.throws(() => engine.choose('player-1', '5000000000000000007'), /not offered/)
+  assert.equal(engine.choose(
+    'player-1',
+    '5000000000000000007',
+    engine.offers('player-1')[0]!.sequence,
+  ).rank, 2)
+  assert.throws(() => engine.choose('player-1', '5000000000000000007', 999), /not offered/)
   engine.restore(checkpoint)
   assert.equal(engine.rank('player-1', '5000000000000000007'), 1)
+  assert.equal(engine.projectBindings('player-1')[0]?.contentId, spellId)
 })
 
 test('spell engine admits mana and cooldown atomically and restores cooldown state', () => {
@@ -370,19 +406,27 @@ test('enemy engine owns stable spawn, nearest-player movement, damage, and check
   const catalog = compileModContentCatalog([compiled([
     content('enemy', 'grave_tyrant', '5000000000000000009', {
       art: { atlas: { key: 'icon', kind: 'asset-reference' } },
-      base: 'stock.skeleton_mage',
-      behavior: area,
+      loot: { gold: { maximum: 12, minimum: 8 } },
       name: 'Grave Tyrant',
-      stats: { health: 250, speed: 2.5 },
+      stats: { attack_cooldown: '10ms', attack_range: 6, damage: 7, health: 250, speed: 2.5 },
     }),
   ])], assets())
   const engine = new ModEnemyEngine(catalog)
   const enemy = engine.spawn('5000000000000000009', 0, 0, 3)
-  engine.tick([{ id: 'far', x: 100, y: 0 }, { id: 'near', x: 0, y: 10 }])
+  const move = (_start: { x: number; y: number }, requested: { x: number; y: number }) => requested
+  engine.tick({ move, players: [{ id: 'far', x: 100, y: 0 }, { id: 'near', x: 0, y: 10 }], tick: 4 })
   assert.equal(engine.project()[0]?.targetPlayerId, 'near')
   assert.equal(engine.project()[0]?.y, 2.5)
+  engine.tick({ move, players: [{ id: 'near', x: 0, y: 10 }], tick: 5 })
+  assert.deepEqual(engine.tick({ move, players: [{ id: 'near', x: 0, y: 10 }], tick: 6 }), [{
+    amount: 7,
+    enemyId: enemy.id,
+    playerId: 'near',
+  }])
   const checkpoint = engine.checkpoint()
-  assert.equal(engine.damage(enemy.id, 250)?.currentHealth, 0)
+  assert.equal(engine.damage(enemy.id, 250, 7, 'player-1')?.lifeState, 'dying')
+  assert.equal(engine.project()[0]?.lastDamagedByPlayerId, 'player-1')
+  engine.tick({ move, players: [], tick: 57 })
   assert.equal(engine.project().length, 0)
   engine.restore(checkpoint)
   assert.equal(engine.project()[0]?.currentHealth, 250)
@@ -449,6 +493,7 @@ test('shop engine validates currency and decrements player-scoped stock', () => 
     }),
     content('shop', 'apothecary', '5000000000000000011', {
       name: 'Field Apothecary',
+      restock: '100ms',
       stock: [{
         item: {
           contentId: '5000000000000000003',
@@ -466,8 +511,10 @@ test('shop engine validates currency and decrements player-scoped stock', () => 
   assert.throws(() => engine.purchase('player-1', '5000000000000000011', 0, 9), /insufficient/)
   assert.equal(engine.purchase('player-1', '5000000000000000011', 0, 10).price, 10)
   assert.equal(engine.remaining('player-1', '5000000000000000011', 0), 1)
-  engine.purchase('player-1', '5000000000000000011', 0, 10)
-  assert.throws(() => engine.purchase('player-1', '5000000000000000011', 0, 10), /exhausted/)
+  engine.purchase('player-1', '5000000000000000011', 0, 10, 1)
+  assert.throws(() => engine.purchase('player-1', '5000000000000000011', 0, 10, 9), /exhausted/)
+  engine.tick(11)
+  assert.equal(engine.remaining('player-1', '5000000000000000011', 0, 11), 2)
 })
 
 function content(
@@ -517,6 +564,24 @@ function assets(): PreparedModAssetCatalog {
     path: 'art/icon.png',
     sha256: '1'.repeat(64),
     width: 53,
+  }, {
+    assetKind: 'boneyard',
+    contentType: 'application/vnd.solomon-dark.boneyard',
+    id: `${identity.id}:map`,
+    key: 'map',
+    kind: 'document',
+    modId: identity.id,
+    path: 'levels/obsidian-depths.boneyard',
+    sha256: '2'.repeat(64),
+  }, {
+    assetKind: 'scene',
+    contentType: 'application/json',
+    id: `${identity.id}:scene`,
+    key: 'scene',
+    kind: 'document',
+    modId: identity.id,
+    path: 'scenes/crypt.json',
+    sha256: '3'.repeat(64),
   }])
 }
 
@@ -559,9 +624,11 @@ function wearableAsset(key: string, path: string, rows: number) {
 
 function sceneCatalog(extra: readonly CompiledWebLuaContent[] = []) {
   return compileModContentCatalog([compiled([
-    content('room', 'crypt_entry', '5000000000000000013', { geometry: { width: 20 } }),
+    content('room', 'crypt_entry', '5000000000000000013', {
+      geometry: { floor: '#111111', height: 720, kind: 'inline', width: 1_120 },
+    }),
     content('scene', 'monument_crypt', '5000000000000000014', {
-      instance: 'party',
+      art: { layout: { key: 'scene', kind: 'asset-reference' } },
       rooms: [{
         contentId: '5000000000000000013',
         key: 'crypt_entry',
@@ -571,5 +638,5 @@ function sceneCatalog(extra: readonly CompiledWebLuaContent[] = []) {
       }],
     }),
     ...extra,
-  ])], new PreparedModAssetCatalog([]))
+  ])], assets())
 }

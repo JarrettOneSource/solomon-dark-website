@@ -55,48 +55,52 @@ test('definition VM builds and compiles the complete family census without runti
             key = "potion",
             name = "Potion",
             duration = "3m",
-            on_use = sd.effect.status({status = sd.ref("status", "status")}),
+            on_use = sd.effect.status({target = "user", status = sd.ref("status", "status")}),
           }),
-          sd.kit.powerup({key = "powerup", name = "Powerup", effect = sd.effect.resource({mana = "full"})}),
-          sd.kit.affix({key = "affix", name = "Affix", modifiers = {damage = 1}}),
+          sd.kit.powerup({key = "powerup", name = "Powerup", effect = sd.effect.resource({target = "collector", mana = "full"})}),
+          sd.kit.affix({key = "affix", name = "Affix", modifiers = {mana_spend = 1}}),
           sd.kit.affix_pool({key = "affix_pool", entries = {{affix = sd.ref("affix", "affix"), weight = 1}}}),
           sd.kit.skill({key = "skill", name = "Skill", ranks = {{}}}),
           sd.kit.spell({
             key = "spell",
             name = "Spell",
             slot = "secondary",
-            behavior = sd.prefab.area({radius = 100}),
+            behavior = sd.prefab.area({
+              radius = 100,
+              duration = "1s",
+              every = "250ms",
+              effects = {sd.effect.resource({target = "caster", mana = 1})},
+            }),
           }),
           sd.kit.enemy({
             key = "enemy",
             name = "Enemy",
-            base = "stock.skeleton",
-            behavior = sd.prefab.enemy("ranged", {leash = 480}),
           }),
           sd.kit.boneyard({key = "boneyard", name = "Boneyard", source = "levels/test.boneyard"}),
           sd.kit.shop({key = "shop", name = "Shop", stock = {}}),
           sd.kit.ui({
             key = "ui",
             mount = "hud.top_right",
-            view = sd.prefab.minimap({size = 220}),
+            view = sd.prefab.minimap({size = 220, range = 500}),
           }),
           sd.kit.room({key = "room", geometry = sd.ref("boneyard", "boneyard")}),
           sd.kit.scene({
             key = "scene",
-            instance = "party",
             rooms = {sd.ref("room", "room")},
           }),
           sd.kit.scene_extension({
             key = "scene_extension",
             scene = "stock.boneyard",
-            features = {sd.prefab.portal({destination = sd.ref("scene", "scene")})},
+            features = {sd.prefab.portal({
+              selector = {object_kind = "monument"},
+              destination = sd.ref("scene", "scene"),
+            })},
           }),
         },
         rules = {
           sd.rules.on(
             "enemy.death",
-            sd.rules.all({sd.effect.grant({item = sd.ref("item", "item")})}),
-            {priority = 10}),
+            sd.rules.all({sd.effect.grant({target = "user", item = sd.ref("item", "item")})})),
         },
         systems = {reducer},
       })
@@ -166,6 +170,17 @@ test('definition VM rejects unknown root and reducer fields before retaining a g
       return sd.mod({api = "1.0.0", systems = {reducer}})
     `), /unknown fields: surprise/)
     assert.equal(runtime.reducer('bad'), null)
+    assert.throws(() => runtime.run(`
+      local reducer = sd.advanced.reducer({
+        key = "bad_event",
+        scope = "party-run",
+        schema_version = 1,
+        state = sd.schema.object({count = sd.schema.integer({default = 0})}),
+        on = {"run.start"},
+        reduce = function(state) return state, {} end,
+      })
+      return sd.mod({api = "1.0.0", systems = {reducer}})
+    `), /unknown advanced reducer event: run\.start/)
   } finally {
     runtime.close()
   }

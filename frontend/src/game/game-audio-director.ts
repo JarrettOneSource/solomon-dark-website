@@ -67,6 +67,7 @@ export class GameAudioDirector {
   private generation = 0
   private musicScene: GameAudioScene | null = null
   private readonly musicChannels = new Map<string, GameMusicChannel>()
+  private readonly assetMusic = new Map<string, Readonly<{ channel: GameMusicChannel; volume: number }>>()
   private loops = new Map<GameLoopCue, Map<string, ActiveLoopOptions>>()
   private readonly musicEnvelopes = new Map<GameMusicChannel, number>()
   private musicVolume = 1
@@ -99,6 +100,7 @@ export class GameAudioDirector {
     for (const channel of [this.currentMusic, this.outgoingMusic]) {
       if (channel) this.applyMusicEnvelope(channel)
     }
+    for (const entry of this.assetMusic.values()) entry.channel.volume = entry.volume * this.musicVolume
   }
 
   setSoundMuted(muted: boolean): void {
@@ -181,6 +183,43 @@ export class GameAudioDirector {
     })
   }
 
+  playAsset(source: string, options: PlaySoundOptions = {}): void {
+    this.playback.play(source, {
+      playbackRate: options.playbackRate ?? 1,
+      volume: clampUnit(options.volume ?? 1),
+    })
+  }
+
+  startAssetLoop(owner: string, source: string, options: PlaySoundOptions = {}): void {
+    this.playback.restart(`asset-loop:${owner}`, source, {
+      loop: true,
+      playbackRate: options.playbackRate ?? 1,
+      volume: clampUnit(options.volume ?? 1),
+    })
+  }
+
+  stopAssetLoop(owner: string): void {
+    this.playback.stop(`asset-loop:${owner}`)
+  }
+
+  startAssetMusic(owner: string, source: string, volume = 1): void {
+    this.stopAssetMusic(owner)
+    const channel = this.makeMusicChannel(source)
+    const boundedVolume = clampUnit(volume)
+    channel.currentTime = 0
+    channel.loop = true
+    channel.volume = boundedVolume * this.musicVolume
+    this.assetMusic.set(owner, Object.freeze({ channel, volume: boundedVolume }))
+    void channel.play().catch(() => undefined)
+  }
+
+  stopAssetMusic(owner: string): void {
+    const entry = this.assetMusic.get(owner)
+    if (!entry) return
+    this.assetMusic.delete(owner)
+    this.stopAndReset(entry.channel)
+  }
+
   playStream(cue: GameStreamCue, options: PlaySoundOptions = {}): void {
     this.playback.restart(streamKey(cue), this.sources.streams[cue], {
       ...(options.offsetSeconds === undefined
@@ -211,6 +250,7 @@ export class GameAudioDirector {
     this.outgoingMusic = null
     this.musicScene = null
     this.musicChannels.clear()
+    for (const owner of [...this.assetMusic.keys()]) this.stopAssetMusic(owner)
     this.loops.clear()
     this.musicEnvelopes.clear()
     this.primedMusic.clear()

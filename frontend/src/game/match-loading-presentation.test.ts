@@ -93,7 +93,7 @@ test('owns both requested transitions through destination renderer readiness', (
   )
   assert.match(
     mainScene,
-    /onReady=\{\(\) => finishBoneyardLoading\(loadedBoneyard\.runId\)\}/,
+    /onReady=\{\(\) => \{\s*session\.readyBoneyard\(loadedBoneyard\.runId\)\s*finishBoneyardLoading\(loadedBoneyard\.runId\)\s*\}\}/,
   )
   assert.match(
     mainScene,

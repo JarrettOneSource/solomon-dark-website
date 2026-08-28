@@ -4,16 +4,12 @@ export const WEB_LUA_DEFINITION_ERROR_CODES = [
   'E_API_VERSION',
   'E_ASSET',
   'E_BUDGET',
-  'E_CAPABILITY',
   'E_CONTENT_KEY',
   'E_CYCLE',
   'E_DUPLICATE',
   'E_GRAPH',
-  'E_INTENT',
   'E_MOUNT_CONFLICT',
-  'E_REDUCER',
   'E_REFERENCE',
-  'E_RULE',
   'E_SCHEMA',
   'E_UNKNOWN_FIELD',
 ] as const
@@ -22,7 +18,6 @@ export type WebLuaDefinitionErrorCode = typeof WEB_LUA_DEFINITION_ERROR_CODES[nu
 
 export interface WebLuaDefinitionIssue {
   readonly code: WebLuaDefinitionErrorCode
-  readonly hint: string | null
   readonly message: string
   readonly path: string
   readonly source: WebLuaDefinitionSource | null
@@ -44,10 +39,10 @@ export function formatWebLuaDefinitionIssues(
 ): string {
   return issues.map((issue) => {
     const location = issue.source
-      ? `${issue.source.file}${issue.source.line === null ? '' : `:${issue.source.line}`}`
+      ? `${issue.source.file}${(issue.source.line ?? 0) > 0 ? `:${issue.source.line}` : ''}`
       : null
     const heading = [issue.code, issue.path, location].filter(Boolean).join(' ')
-    return `${heading}: ${issue.message}${issue.hint ? `\n${issue.hint}` : ''}`
+    return `${heading}: ${issue.message}`
   }).join('\n')
 }
 
@@ -56,13 +51,11 @@ export function webLuaDefinitionIssue(
   path: string,
   message: string,
   options: Readonly<{
-    hint?: string
     source?: WebLuaDefinitionSource
   }> = {},
 ): WebLuaDefinitionIssue {
   return Object.freeze({
     code,
-    hint: options.hint ?? null,
     message,
     path,
     source: options.source ?? null,
