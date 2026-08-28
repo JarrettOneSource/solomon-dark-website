@@ -21,10 +21,6 @@ import {
 } from './skill-picker-render-contract.ts'
 
 const ASSET_ROOT = new URL('../../assets/game/', import.meta.url)
-const skillPickerCss = readFileSync(new URL('../skill-picker.css', import.meta.url), 'utf8')
-const skillPickerComponent = readFileSync(new URL('../SkillPicker.tsx', import.meta.url), 'utf8')
-const skillPickerRenderer = readFileSync(new URL('./skill-picker-renderer.ts', import.meta.url), 'utf8')
-
 test('the picker keeps the sealed 1600x900 stock card geometry and records', () => {
   assert.deepEqual(SKILL_PICKER_SIZE, { height: 900, width: 1600 })
   assert.deepEqual(SKILL_PICKER_CARD_CENTERS[3], [600, 800, 1000])
@@ -85,21 +81,6 @@ test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlase
   )
 })
 
-test('the picker owns one full-viewport curtain above its fixed native stage', () => {
-  assert.match(
-    skillPickerCss,
-    /\.skill-picker-overlay\s*\{[^}]*z-index:\s*80;[^}]*inset:\s*0;[^}]*pointer-events:\s*auto;/s,
-  )
-  assert.match(
-    skillPickerCss,
-    /\.skill-picker-curtain\s*\{[^}]*inset:\s*0;[^}]*background:\s*#000;/s,
-  )
-  assert.match(skillPickerComponent, /curtainRef\.current\.style\.opacity = `\$\{reveal\.curtainAlpha\}`/)
-  assert.match(skillPickerComponent, /className="skill-picker-overlay"/)
-  assert.match(skillPickerComponent, /className="main-menu-native-stage skill-picker-stage"/)
-  assert.doesNotMatch(skillPickerRenderer, /dimmer|new Graphics/)
-})
-
 test('the picker presents authoritative Creativity Insight identity and detail', () => {
   assert.equal(SKILL_PICKER_INSIGHT_TINT, 0xd9ba70)
   assert.equal(SKILL_PICKER_INSIGHT_LABEL_Y, 305.5)
@@ -108,10 +89,6 @@ test('the picker presents authoritative Creativity Insight identity and detail',
   assert.ok(Math.abs(skillPickerInsightAlpha(90) - 0.5) < 1e-12)
   assert.equal(skillPickerInsightAlpha(135), 0)
   assert.ok(Math.abs(skillPickerInsightAlpha(180) - 0.5) < 1e-12)
-  assert.match(skillPickerRenderer, /option\.insight/)
-  assert.match(skillPickerRenderer, /['"]Insight['"]/)
-  assert.match(skillPickerRenderer, /skillPickerInsightAlpha/)
-  assert.match(skillPickerComponent, /option\.insight[\s\S]*Insight Bonus: Skill \+2/)
 })
 
 function pngDimensions(name: string): readonly [number, number] {

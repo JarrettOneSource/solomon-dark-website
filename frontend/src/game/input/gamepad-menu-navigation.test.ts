@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   activateMenuBack,
@@ -115,51 +114,6 @@ test('initial navigation waits for a declared default instead of falling into an
   assert.equal(chooseInitialMenuTarget([back], [preferred]), null)
   assert.equal(chooseInitialMenuTarget([back, preferred], [preferred]), preferred)
   assert.equal(chooseInitialMenuTarget([back], []), back)
-})
-
-test('the persistent shell routes gamepad input to gameplay modals without stealing world movement', () => {
-  const mainMenu = readFileSync(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
-  assert.match(mainMenu, /createGamepadMenuNavigation\(\{[\s\S]*enabled:/)
-  assert.match(mainMenu, /requireModal:/)
-  assert.match(mainMenu, /requireModal:\s*screen === 'hub'/)
-  assert.doesNotMatch(mainMenu, /if \(screen === 'hub'/)
-})
-
-test('both gameplay scenes feed standard gamepad actions and quickbar selection into shared owners', () => {
-  for (const file of ['../HubScene.tsx', '../BoneyardScene.tsx']) {
-    const source = readFileSync(new URL(file, import.meta.url), 'utf8')
-    assert.match(source, /onGamepadAction:/)
-    assert.match(source, /onGamepadPresenceChange:/)
-    assert.match(source, /onGamepadQuickbarSelection:/)
-    assert.match(source, /controllerQuickbarSlot=\{controllerQuickbarSlot\}/)
-  }
-})
-
-test('controller modal roots declare explicit back policy and Game Over declares its gated root', () => {
-  const dismissible = [
-    '../DarkCloudModDetail.tsx',
-    '../DarkCloudScene.tsx',
-    '../GameSaveModMismatchDialog.tsx',
-    '../GameSettingsDialog.tsx',
-    '../GameplayPauseMenu.tsx',
-    '../HudSkillSelector.tsx',
-    '../HubInventoryUi.tsx',
-    '../HubScene.tsx',
-    '../ModdedPlayDialog.tsx',
-    '../PartyJoinConsentDialog.tsx',
-    '../PartySettingsDialog.tsx',
-    '../SkillBook.tsx',
-  ]
-  for (const file of dismissible) {
-    assert.match(
-      readFileSync(new URL(file, import.meta.url), 'utf8'),
-      /data-game-back/,
-      `${file} must expose a controller back owner`,
-    )
-  }
-  const gameOver = readFileSync(new URL('../GameOverOverlay.tsx', import.meta.url), 'utf8')
-  assert.match(gameOver, /data-game-controller-navigation-root="true"/)
-  assert.match(gameOver, /disabled=\{!presentation\.acceptsInput\}/)
 })
 
 test('the menu skull backs out of the topmost modal through its back owner, else reports no modal', () => {

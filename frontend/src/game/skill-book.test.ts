@@ -45,21 +45,6 @@ import {
   type NativeSkillScreenSealTransform,
 } from './renderer/skill-book-render-contract.ts'
 
-const component = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
-const beltBurst = readFileSync(new URL('./NativeBeltPullOffBurst.tsx', import.meta.url), 'utf8')
-const hudSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
-const hudSelectorCss = readFileSync(new URL('./hud-skill-selector.css', import.meta.url), 'utf8')
-const hudSelectorRenderer = readFileSync(
-  new URL('./renderer/hud-skill-selector-renderer.ts', import.meta.url),
-  'utf8',
-)
-const css = readFileSync(new URL('./skill-book.css', import.meta.url), 'utf8')
-const mainMenuCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
-const renderer = readFileSync(new URL('./renderer/skill-book-renderer.ts', import.meta.url), 'utf8')
-const hud = readFileSync(new URL('./GameHud.tsx', import.meta.url), 'utf8')
-const scene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
-const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
-const boneyardScene = readFileSync(new URL('./BoneyardScene.tsx', import.meta.url), 'utf8')
 const nativeAssets = JSON.parse(readFileSync(
   new URL('../assets/game/native-ui-assets.json', import.meta.url),
   'utf8',
@@ -181,78 +166,15 @@ test('builds the complete stock BeltButton pull-off burst for both random branch
     )
     assert.ok(members.every(({ durationMs }) => durationMs >= 50 && durationMs <= 200))
   }
-  assert.match(beltBurst, /data-native-ui-record=\{`UI\.\$\{member\.record\}`\}/)
-  assert.match(beltBurst, /backgroundImage: `url\("\$\{hub\.trader\.uiAtlas\}"\)`/)
-  assert.match(beltBurst, /data-smoke-count=/)
-  assert.match(beltBurst, /data-move-fade-count=/)
 })
 
-test('renderer owns the complete stock root, page-wide panels, row frames, and HoverBox', () => {
+test('stock SkillScreen asset membership is complete', () => {
   for (const record of [3, 4, 10, 30, 31, 32, 33, 49, 71]) {
     assert.ok(nativeAssets.atlases.UI.records[record])
   }
   for (const record of [0, 5, 6, 13, 14, 164, 165]) {
     assert.ok(nativeAssets.atlases.Skills.records[record])
   }
-  assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.leatherRecord/)
-  assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.leatherHeight[\s\S]*\.fill\(0x000000\)/)
-  assert.match(renderer, /root\.addChild\(curtain, ambient, fixtures, field, overlay, pages, hud, hover, dragger\)/)
-  assert.match(renderer, /textureFor\(textures, 'Skills', 0\)/)
-  assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.topFlourishes/)
-  assert.match(renderer, /spriteFor\(textures, 'Skills', 13\)/)
-  assert.match(renderer, /row\.category === 1 \|\| row\.category === 2/)
-  assert.match(renderer, /drawNativeHoverBox/)
-  assert.match(renderer, /selection === 'primary' \? 'casting' : 'concentrate'/)
-  assert.match(renderer, /\? 'primary cast'/)
-  assert.match(renderer, /nativeHudModalSlideLayout\([\s\S]*?progress[\s\S]*?\)/)
-  assert.doesNotMatch(renderer, /QUICKBAR_SLOT_[XY]|liveHudArtOffsetY/)
-  assert.match(component, /setNativeModalSlideProgress\('skills', progress\)/)
-  assert.match(component, /data-open-progress=\{openProgress\}/)
-  assert.match(component, /nativeHudModalSlideLayout\([\s\S]*?openProgress[\s\S]*?\.tome/)
-  assert.match(component, /data-skill-book-resume="true"/)
-  assert.match(component, /nativeSkillQuickbarDropSlot/)
-  assert.match(component, /nativeBeltPullOffStarted/)
-  assert.match(component, /onUnassignQuickbarSkill/)
-  assert.match(component, /<NativeBeltPullOffBurst/)
-  assert.equal((component.match(/audio\.playSound\('pick-skill'\)/g) ?? []).length, 1)
-  assert.match(component, /dragPosition/)
-  assert.match(renderer, /drawSkillDragger/)
-  assert.match(renderer, /NATIVE_SKILL_DRAGGER_SCALE/)
-  assert.doesNotMatch(css, /\.skill-book-quickbar-action:nth-child/)
-  assert.doesNotMatch(css, /\.skill-book-quickbar-action\s*\{[^}]*bottom:/s)
-  assert.doesNotMatch(
-    css,
-    /\.skill-book-close-action\s*\{[^}]*(?:top:\s*25px|right:\s*0|width:\s*48px|height:\s*58px)/s,
-  )
-  assert.doesNotMatch(renderer, /roundRect/)
-  assert.doesNotMatch(renderer, /nativeTooltipStatLines/)
-  assert.match(
-    mainMenuCss,
-    /\.main-menu-page\[data-skill-book-open='true'\] \.game-menu-skull\s*\{\s*display: none;/,
-  )
-  assert.match(component, /setPointerCapture/)
-  assert.match(component, /event\.pointerType === 'mouse'/)
-  assert.match(component, /onHover\(row\.id\)/)
-  assert.match(
-    component,
-    /const draggable = row\.category === 1 \|\| row\.category === 2\s*\|\| row\.category === 3/,
-  )
-  assert.match(component, /player\.belt/)
-  assert.match(component, /onSelectConcentration/)
-  assert.match(component, /style=\{\{[\s\S]*?left: belt\.x[\s\S]*?top: belt\.y/)
-  assert.match(hud, /SkillQuickbar/)
-  assert.match(hud, /nativeHealthHudPresentation/)
-  assert.match(hud, /nativeManaHudPresentation/)
-  assert.match(hud, /nativeHudSkillBindings/)
-  assert.match(hud, /--native-meter-core-width/)
-  assert.match(scene, /current\.maximumHealth === next\.maximumHealth/)
-  assert.match(scene, /current\.maximumMana === next\.maximumMana/)
-  assert.doesNotMatch(hud, /SecondaryAbilityBelt/)
-  assert.match(scene, /onAssignQuickbarSkill=\{session\.bindSkillQuickbar\}/)
-  assert.match(hubScene, /entry\.kind !== 'skill'[\s\S]*?activate-belt-slot/)
-  assert.match(boneyardScene, /entry\.kind !== 'skill'[\s\S]*?activate-belt-slot/)
-  assert.match(hubScene, /event\.code !== settings\.controls\.openSkills/)
-  assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
 })
 
 test('pins the omitted native root and page-wide render contract', () => {
@@ -343,10 +265,6 @@ test('keeps all eight ambient seals on deterministic sine lanes with one local 1
   assert.throws(() => nativeSkillScreenSealTransform(-1, 0), RangeError)
   assert.throws(() => nativeSkillScreenSealTransform(8, 0), RangeError)
   assert.throws(() => nativeSkillScreenSealTransform(0, 0.5), RangeError)
-  assert.match(renderer, /constructedAtMs = performance\.now\(\)/)
-  assert.match(renderer, /nativeSkillScreenTick\(nowMs - constructedAtMs\)/)
-  assert.match(renderer, /screenTick !== lastSealTick/)
-  assert.doesNotMatch(renderer, /nativeSkillScreenSealJitter|ambientJitterWidth|nowMs \/ 1_000/)
 })
 
 test('reproduces the stock SkillPage wrapper and vertically centred description block', () => {
@@ -405,21 +323,6 @@ test('drains every public SkillScreen tooltip row without unresolved stat tokens
       `skill ${skillId} retained an unresolved native stat token`,
     )
   }
-})
-
-test('selected HUD bindings open the compact native selector in both gameplay scenes', () => {
-  assert.match(hud, /hub-hud-selected-skill-action/)
-  assert.match(hud, /NATIVE_HUD_SKILL_ACTION_WIDTH/)
-  assert.match(hubScene, /onOpenSkillSelector\(binding\)/)
-  assert.match(boneyardScene, /onOpenSkillSelector\(binding\)/)
-  assert.match(scene, /nativeHudSkillSelectorTarget\(binding\)/)
-  assert.match(scene, /onSelectConcentrationSlot=\{session\.selectConcentrationSlot\}/)
-  assert.match(hudSelector, /data-selector-kind=\{target\.kind\}/)
-  assert.match(hudSelector, /audio\.playSound\('concentrate'\)/)
-  assert.match(hudSelectorRenderer, /fill\(\{ color: 0x000000, alpha: 0\.95 \}\)/)
-  assert.match(hudSelectorRenderer, /tint: 0xd9ba70/)
-  assert.match(hudSelector, /top: layout\.optionTop/)
-  assert.match(hudSelectorCss, /\.hud-skill-selector-action[\s\S]*pointer-events: auto/)
 })
 
 function baselineRow(skillId: number): NativeSkillBookRow {

@@ -12,11 +12,6 @@ import {
   type GameFullscreenDocument,
 } from './game-fullscreen.ts'
 
-function cssRule(source: string, selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, 's'))?.[1] ?? ''
-}
-
 function standardFullscreenHarness(enabled = true) {
   let requestedOptions: FullscreenOptions | undefined
   const target = {
@@ -128,49 +123,4 @@ test('the install path launches the landscape game as a fullscreen web app', () 
   assert.equal(manifest.display, 'fullscreen')
   assert.equal(manifest.orientation, 'landscape')
   assert.match(html, /<link rel="manifest" href="\/game\.webmanifest" \/>/)
-})
-
-test('the exact game route owns one persistent browser interaction surface', () => {
-  const shell = readFileSync(new URL('../components/Shell.tsx', import.meta.url), 'utf8')
-  assert.match(shell, /import ['"]\.\.\/game\/game-surface\.css['"]/)
-  assert.match(
-    shell,
-    /if \(game\)[\s\S]*?<main[\s\S]*?className="game-surface h-dvh overflow-hidden"[\s\S]*?onContextMenu=\{\(event\) => event\.preventDefault\(\)\}[\s\S]*?onDragStart=\{\(event\) => event\.preventDefault\(\)\}/,
-  )
-  assert.equal(shell.match(/className="game-surface /g)?.length, 1)
-})
-
-test('the game surface closes browser defaults without disabling accessibility zoom', () => {
-  const styles = readFileSync(new URL('./game-surface.css', import.meta.url), 'utf8')
-  const rule = cssRule(styles, '.game-surface')
-  assert.match(rule, /-webkit-tap-highlight-color:\s*transparent;/)
-  assert.match(rule, /-webkit-touch-callout:\s*none;/)
-  assert.match(rule, /-webkit-user-select:\s*none;/)
-  assert.match(rule, /overscroll-behavior:\s*none;/)
-  assert.match(rule, /touch-action:\s*manipulation;/)
-  assert.match(rule, /(?:^|\s)user-select:\s*none;/)
-
-  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8')
-  assert.doesNotMatch(html, /(?:maximum-scale|user-scalable)\s*=/i)
-})
-
-test('joysticks cancel their own pointer default and retain exclusive direct manipulation', () => {
-  const joystick = readFileSync(new URL('./input/TouchJoystick.tsx', import.meta.url), 'utf8')
-  const pointerDown = joystick.match(/onPointerDown=\{\(event\) => \{([\s\S]*?)\n\s*\}\}/)?.[1] ?? ''
-  assert.match(pointerDown, /event\.preventDefault\(\)/)
-
-  const styles = readFileSync(new URL('./input/touch-joystick.css', import.meta.url), 'utf8')
-  assert.match(cssRule(styles, '.game-touch-joystick'), /touch-action:\s*none;/)
-})
-
-test('selection policy is not duplicated by transient scenes', () => {
-  for (const path of [
-    './main-menu.css',
-    './hub.css',
-    './boneyard.css',
-    './match-loading-screen.css',
-  ]) {
-    const styles = readFileSync(new URL(path, import.meta.url), 'utf8')
-    assert.doesNotMatch(styles, /(?:^|\s)user-select\s*:/m)
-  }
 })

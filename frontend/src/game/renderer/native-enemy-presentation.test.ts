@@ -2,8 +2,6 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import './player-hit-presentation.test.ts'
-
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,

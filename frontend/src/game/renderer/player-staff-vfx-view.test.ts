@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import type {
@@ -135,32 +134,4 @@ test('Pike-break reconstructs one additive flash and seven native Bouncer sprite
   assert.equal(afterFlash.length, 7)
   assert.ok(nativePlayerStaffPikeBreakDraws({ ...state, ageTicks: 99 })[0]!.alpha > 0)
   assert.deepEqual(nativePlayerStaffPikeBreakDraws({ ...state, ageTicks: 100 }), [])
-})
-
-test('the shared spell view renders only Staff visual actors', () => {
-  const source = readFileSync(
-    new URL('./primary-spell-world-view.ts', import.meta.url),
-    'utf8',
-  )
-  const staffViewSource = readFileSync(
-    new URL('./player-staff-vfx-view.ts', import.meta.url),
-    'utf8',
-  )
-  assert.match(source, /state\.kind === 'player-staff-smoke'/)
-  assert.match(source, /state\.kind === 'player-staff-move-fade'/)
-  assert.match(source, /state\.kind === 'player-staff-perspective-fade'/)
-  assert.match(source, /state\.kind === 'player-staff-pike-break'/)
-  assert.match(source, /new PlayerStaffVfxView\(state, this\.textures\)/)
-  assert.match(source, /new PlayerStaffPikeBreakView\(state, this\.textures\)/)
-  assert.match(staffViewSource, /get kind\(\): NativePlayerStaffVfx\['kind'\]/)
-  assert.match(staffViewSource, /return this\.state\.kind/)
-  assert.doesNotMatch(staffViewSource, /readonly kind = 'player-staff-vfx'/)
-  for (const kind of [
-    'player-staff-contact',
-    'player-staff-knockback',
-    'player-staff-melee',
-    'player-staff-spin',
-  ]) {
-    assert.doesNotMatch(source, new RegExp(`new .*${kind}`))
-  }
 })

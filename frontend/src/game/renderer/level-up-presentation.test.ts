@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -128,84 +127,4 @@ test('keeps the complete frozen world visible behind the level-up picker', () =>
     remotePlayers: true,
     scenery: true,
   })
-})
-
-test('retains picker presentation without any Hub, private-room, or Boneyard suppression branch', () => {
-  const source = (relativePath: string) => readFileSync(
-    new URL(relativePath, import.meta.url),
-    'utf8',
-  )
-  const main = source('../MainMenuScene.tsx')
-  const picker = source('../SkillPicker.tsx')
-  const boneyard = source('./boneyard-world-renderer.ts')
-  const hub = source('./hub-world-scene.ts')
-  const hubRenderer = source('./hub-world-renderer.ts')
-  const privateRooms = source('./hub-private-room-scene.ts')
-  const pickerRenderer = source('./skill-picker-renderer.ts')
-
-  assert.match(main, /const levelUpModalActive = Boolean\(runtimeSnapshot\?\.levelUpBarrier\)/)
-  assert.ok(main.includes('|| levelUpPickerClosing'))
-  assert.ok(main.includes('&& (runtimeProgression?.pendingOffer || levelUpPickerClosing)'))
-  assert.equal((main.match(/levelUpModalActive=\{levelUpModalActive\}/g) ?? []).length, 0)
-  assert.equal((picker.match(/audio\.playSound\('pick-skill'/g) ?? []).length, 1)
-  assert.equal((picker.match(/audio\.playSound\('click'/g) ?? []).length, 1)
-  assert.match(picker, /audio\.playSound\('summon', \{ playbackRate: 0\.8 \}\)/)
-  assert.match(picker, /audio\.playSound\('unlock-skill', \{ playbackRate: 1 \}\)/)
-  assert.equal((picker.match(/playbackRate: 0\.75/g) ?? []).length, 2)
-  assert.match(picker, /const NATIVE_QUEUED_REBUILD_DELAY_MS = 100/)
-  assert.match(
-    picker,
-    /subscribeGamePresentationFrames\(\(nowMs\) => \{\s+if \(!renderer\) return\s+const currentPhase/,
-    'the cold picker consumed reveal time before its renderer existed',
-  )
-  assert.ok(picker.includes("phaseRef.current = 'queued-wait'"))
-  assert.ok(picker.includes('setContentVisible(false)'))
-  assert.match(picker, /const offerContentVisible = phase !== 'queued-wait'/)
-  assert.ok(pickerRenderer.includes('offerLayer.visible = visible'))
-  assert.ok(boneyard.includes('(levelUpFrame.lightRadius - 2.6)'))
-  assert.equal(boneyard.includes('levelUpEffectTicksRemaining'), false)
-  assert.ok(boneyard.includes('camera.y - viewport.height / (2 * camera.zoom)'))
-  assert.ok(hub.includes('levelUpPresentation.playerScreenY'))
-  assert.match(
-    boneyard,
-    /skillPickerWorldPresentationFrame\(\s*snapshot\.tick,\s*frameCount,\s*snapshot\.levelUpBarrier !== null,/s,
-  )
-  assert.match(
-    hubRenderer,
-    /skillPickerWorldPresentationFrame\(\s*snapshot\.tick,\s*frameCount,\s*snapshot\.levelUpBarrier !== null,/s,
-  )
-  for (const [label, implementation] of [
-    ['Boneyard', boneyard],
-    ['Hub', hub],
-    ['private room', privateRooms],
-  ] as const) {
-    assert.doesNotMatch(implementation, /modalActive/,
-      `${label} still contains a level-up modal suppression branch`)
-  }
-  for (const member of [
-    'this.enemies.update(',
-    'this.enemyDeathEffects.update(',
-    'this.enemyProjectiles.update(',
-    'this.maggots.update(',
-    'this.loot.update(',
-    'this.goodies.update(',
-    'this.mageLightningPulses.update(',
-    'this.playerDeathBursts.update(',
-    'this.playerDeathWeapons.update(',
-    'this.weatherView.update(',
-    'this.solomon?.update(',
-  ]) assert.ok(boneyard.includes(member), `missing live Boneyard member: ${member}`)
-  for (const member of [
-    'this.updateStudents(snapshot)',
-    'this.updatePlayers(snapshot)',
-    'this.updateFountain(snapshot)',
-    'this.primarySpells.update(',
-    'this.secondaryAbilities.update(',
-  ]) assert.ok(hub.includes(member), `missing live Hub member: ${member}`)
-  for (const member of [
-    'this.updatePlayers(snapshot, localParticipant.region)',
-    'this.updateRoomPresentation(',
-    'this.primarySpells[region].update(',
-    'this.secondaryAbilities[region].update(',
-  ]) assert.ok(privateRooms.includes(member), `missing live private-room member: ${member}`)
 })

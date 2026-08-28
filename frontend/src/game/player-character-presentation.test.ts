@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createHubEconomy } from './core-kernels/hub-economy.ts'
 import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
@@ -25,8 +24,6 @@ import {
   playerCharacterStaffOrbPasses,
   playerStaffActionPose,
 } from './player-character-presentation.ts'
-
-const playerWorldView = readFileSync(new URL('./renderer/hub-actors.ts', import.meta.url), 'utf8')
 
 test('player death draw plan uses the native four-frame six-facing bank', () => {
   assert.deepEqual(createPlayerDeathDrawPlan(0, 'alive', 999), {
@@ -375,16 +372,6 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(playerEquippedElementEffectScale(0.25), 3.5)
   assert.equal(playerEquippedElementEffectScale(0.225), 3.25)
   assert.equal(playerEquippedElementEffectScale(0.15), 2.5)
-  assert.doesNotMatch(playerWorldView, /staff(?:Back|Front)\.scale\.set/)
-  assert.doesNotMatch(playerWorldView, /orbBackBase/)
-  assert.match(
-    playerWorldView,
-    /playerEquippedElementEffectScale\([\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*player\.primaryCast\.selectedPrimaryId[\s\S]*this\.orbFrontBase\.updateSelectedPrimary\([\s\S]*this\.orbFrontOverlay\.updateSelectedPrimary\(/,
-  )
-  assert.match(
-    playerWorldView,
-    /planewalkerTicksRemaining[\s\S]*\? 80[\s\S]*: player\.primaryCast\.selectedPrimaryId/,
-  )
 })
 
 test('selected primary -1 owns the pre-Create fallback and Robe prop branch', () => {

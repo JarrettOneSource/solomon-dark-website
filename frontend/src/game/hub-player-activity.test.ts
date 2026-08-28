@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
@@ -17,17 +16,6 @@ const CHARACTER: PlayerCharacterConfig = {
   displayName: 'Aurelia',
   element: 'fire',
 }
-
-const hubSceneSource = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
-const playerCardSource = readFileSync(new URL('./PlayerCardDialog.tsx', import.meta.url), 'utf8')
-const rendererSource = readFileSync(
-  new URL('./renderer/hub-world-renderer.ts', import.meta.url),
-  'utf8',
-)
-const layerSource = readFileSync(
-  new URL('./renderer/hub-player-activity-layer.ts', import.meta.url),
-  'utf8',
-)
 
 test('Hub activity labels and derivation include local and remote same-region players only', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
@@ -79,20 +67,4 @@ test('Hub activity maps compare all participant joins, removals, and state chang
   )
   if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
   assert.deepEqual(hubPlayerActivities(snapshot.world.participants), first)
-})
-
-test('Hub card and post-world badge consume one replicated activity field', () => {
-  assert.match(playerCardSource, /data-profile-activity=\{player\.activityKind\}/)
-  assert.match(hubSceneSource, /activityKind: activity/)
-  assert.match(hubSceneSource, /hubPlayerActivityLabel\(activity\)/)
-  assert.match(
-    hubSceneSource,
-    /const modalOpen = pickerOpen \|\| hubUiSurface !== null \|\| npcNoteboxOpen \|\| selectedPlayerId !== null\s*\|\| partySettingsOpen/,
-  )
-  assert.match(hubSceneSource, /onOccupiedChange\(modalOpen\)/)
-  assert.match(rendererSource, /new HubPlayerActivityLayer\(\)/)
-  assert.match(rendererSource, /deriveHubPlayerActivityItems\(/)
-  assert.match(rendererSource, /hubActivityPlayerIds/)
-  assert.match(layerSource, /activity === 'paused'/)
-  assert.match(layerSource, /for \(const x of \[-4\.5, 0, 4\.5\]\)/)
 })

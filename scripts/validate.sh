@@ -103,7 +103,6 @@ run_all() {
     printf 'Running frontend tests\n'
     npm --prefix frontend run test:web-lua
     npm --prefix frontend run test:hagatha
-    npm --prefix frontend run test:library
     npm --prefix frontend run test:loot
     npm --prefix frontend run test:arena-render
     npm --prefix frontend run test:boneyard

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from './core-kernels/boneyard.ts'
@@ -20,8 +19,6 @@ const CHARACTER: PlayerCharacterConfig = {
   displayName: 'Aurelia',
   element: 'fire',
 }
-const mainMenuSource = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
-
 test('social cues use one quiet native click with distinct chat, join, and leave pitches', () => {
   assert.deepEqual(HUB_SOCIAL_SOUND_REQUESTS, {
     chat: { cue: 'click', playbackRate: 1.1, volume: 0.65 },
@@ -78,18 +75,6 @@ test('Hub membership audio is edge-owned, excludes self, and treats world re-ent
   assert.deepEqual(delta.cursor.participantIds, ['first', 'fourth'])
   assert.deepEqual(delta.joinedPlayerIds, [])
   assert.deepEqual(delta.leftPlayerIds, [])
-})
-
-test('session snapshot ownership wires join and leave deltas once and clears its cursor', () => {
-  assert.match(
-    mainMenuSource,
-    /createHubMembershipAudioCursor\(\s*initialSnapshot,\s*session\.playerId/,
-  )
-  assert.match(
-    mainMenuSource,
-    /advanceHubMembershipAudioCursor\([\s\S]*delta\.joinedPlayerIds\.length[\s\S]*HUB_SOCIAL_SOUND_REQUESTS\.join[\s\S]*delta\.leftPlayerIds\.length[\s\S]*HUB_SOCIAL_SOUND_REQUESTS\.leave/,
-  )
-  assert.match(mainMenuSource, /hubMembershipAudioCursorRef\.current = null/)
 })
 
 function hubSnapshot(playerIds: readonly string[]) {

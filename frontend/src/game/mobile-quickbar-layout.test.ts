@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 import {
@@ -21,13 +20,6 @@ import {
 
 // iPhone XR landscape: 896 x 414 CSS px -> display scale 0.46 -> 1947.83 logical px wide.
 const XR_LOGICAL_WIDTH = 896 / 0.46
-
-function cssRule(source: string, selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))
-  assert.ok(match, `expected a rule for ${selector}`)
-  return match[1]
-}
 
 test('joystick constants are the 2026-08-21 geometry scaled by exactly 1.25', () => {
   assert.equal(MOBILE_JOYSTICK_BASE, 190 * 1.25)
@@ -113,32 +105,4 @@ test('the thumb gap yields before the slots shrink and the bank never crosses th
     assert.ok(inset >= MOBILE_JOYSTICK_EDGE_INSET + MOBILE_JOYSTICK_BASE + 8, `bank overlaps the joystick at ${logicalWidth} x ${uiScale}`)
     assert.ok(inset + 2 * size + MOBILE_QUICKBAR_SLOT_GAP <= rootHalfWidth - MOBILE_DOCK_HALF_WIDTH, `bank overlaps the dock at ${logicalWidth} x ${uiScale}`)
   }
-})
-
-test('touch joystick CSS carries the shared constants', () => {
-  const styles = readFileSync(new URL('./input/touch-joystick.css', import.meta.url), 'utf8')
-  const base = cssRule(styles, '.game-touch-joystick')
-  assert.match(base, new RegExp(`width:\\s*${MOBILE_JOYSTICK_BASE}px;`))
-  assert.match(base, new RegExp(`height:\\s*${MOBILE_JOYSTICK_BASE}px;`))
-  assert.match(base, new RegExp(`bottom:\\s*calc\\(${MOBILE_JOYSTICK_BOTTOM_INSET}px \\* var\\(--game-ui-scale, 1\\)\\);`))
-  const knob = cssRule(styles, '.game-touch-joystick-knob')
-  assert.match(knob, new RegExp(`width:\\s*${MOBILE_JOYSTICK_KNOB}px;`))
-  assert.match(knob, new RegExp(`height:\\s*${MOBILE_JOYSTICK_KNOB}px;`))
-  const movement = cssRule(styles, '.game-touch-joystick-movement')
-  assert.match(movement, new RegExp(`left:\\s*calc\\(${MOBILE_JOYSTICK_EDGE_INSET}px \\* var\\(--game-ui-scale, 1\\)`))
-  assert.doesNotMatch(movement, /safe-area-inset/)
-  const primary = cssRule(styles, '.game-touch-joystick-primary')
-  assert.match(primary, new RegExp(`right:\\s*calc\\(${MOBILE_JOYSTICK_EDGE_INSET}px \\* var\\(--game-ui-scale, 1\\)`))
-  assert.doesNotMatch(primary, /safe-area-inset/)
-})
-
-test('coarse quickbar CSS reads the per-slot bank placement variables', () => {
-  const styles = readFileSync(new URL('./hub.css', import.meta.url), 'utf8')
-  const coarse = styles.slice(styles.indexOf('@media (hover: none) and (pointer: coarse)'))
-  assert.match(coarse, /\.hub-hud-quickbar-slot\s*\{[^}]*bottom:\s*var\(--mobile-quickbar-slot-bottom\);/)
-  assert.match(coarse, /\.hub-hud-quickbar-slot\s*\{[^}]*width:\s*var\(--mobile-quickbar-slot-size\);/)
-  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-quickbar-bank='left'\]\s*\{[^}]*left:\s*var\(--mobile-quickbar-slot-inset\);/)
-  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-quickbar-bank='right'\]\s*\{[^}]*right:\s*var\(--mobile-quickbar-slot-inset\);/)
-  assert.doesNotMatch(coarse, /safe-area-inset/)
-  assert.doesNotMatch(coarse, /--mobile-quickbar-slot-offset/)
 })

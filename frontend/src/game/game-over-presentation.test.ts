@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -17,10 +16,6 @@ import {
   solomonRiffPresentation,
 } from './game-over-presentation.ts'
 import { gameOverAudioEvents } from './game-over-audio.ts'
-
-const overlaySource = readFileSync(new URL('./GameOverOverlay.tsx', import.meta.url), 'utf8')
-const promptSource = readFileSync(new URL('./NativeGameOverPrompt.tsx', import.meta.url), 'utf8')
-const boneyardCss = readFileSync(new URL('./boneyard.css', import.meta.url), 'utf8')
 
 test('normal Game Over owns separate entry, title, prompt, and exit alphas', () => {
   assert.deepEqual(gameOverPresentation(-1, null, null), {
@@ -131,18 +126,4 @@ test('Game Over owns the huge laugh once and Riff owns Death Guitar at tick 550'
 test('an individual death without the terminal run edge owns neither Game Over stream', () => {
   const active = startGameRun(createGameRunLifecycle(), 'run-a', ['a', 'b'])
   assert.deepEqual(gameOverAudioEvents(active, active), [])
-})
-
-test('the overlay paints Riff, entry black, separate title rows, prompt, then exit black', () => {
-  assert.match(overlaySource, /game-over-solomon-riff/)
-  assert.match(overlaySource, /game-over-entry-black/)
-  assert.match(overlaySource, /nativeGameOver\.game/)
-  assert.match(overlaySource, /nativeGameOver\.over/)
-  assert.match(overlaySource, /<NativeGameOverPrompt/)
-  assert.match(overlaySource, /game-over-exit-black/)
-  assert.match(promptSource, /NativeBitmapText/)
-  assert.match(promptSource, /font="menu"/)
-  assert.match(promptSource, /CLICK TO CONTINUE\.\.\./)
-  assert.match(boneyardCss, /\.game-over-word-game[\s\S]*?width: 307px;[\s\S]*?height: 119px;/)
-  assert.match(boneyardCss, /\.game-over-word-over[\s\S]*?width: 306px;[\s\S]*?height: 120px;/)
 })

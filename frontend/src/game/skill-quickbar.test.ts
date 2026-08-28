@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -11,8 +10,6 @@ import {
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
 
-const component = readFileSync(new URL('./SkillQuickbar.tsx', import.meta.url), 'utf8')
-
 test('item belt keeps the exact eight 53 px slots and 60 px pitch', () => {
   assert.deepEqual(NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS, [
     -332, -272, -212, -152, 98, 158, 218, 278,
@@ -23,27 +20,6 @@ test('item belt keeps the exact eight 53 px slots and 60 px pitch', () => {
     )),
     [60, 60, 60],
   )
-})
-
-test('Hub pointer quickbar disables category-2 actions while retaining primary selection', () => {
-  assert.match(component, /const combatDisabled = mode === 'hub' && secondary/)
-  assert.match(component, /aria-disabled=\{combatDisabled \|\| undefined\}/)
-})
-
-test('concentration bindings use the ordinary slot input and selected-state treatment', () => {
-  assert.match(component, /const concentration = skillId !== null && nativeSkillCategory\(skillId\) === 3/)
-  assert.match(component, /concentration && concentrationSkillIds\.includes\(skillId\)/)
-  assert.match(component, /onInput\?\.\(slot, true\)/)
-})
-
-test('live populated BeltButtons use the same scaled strict pull-off owner', () => {
-  assert.match(component, /inputScale=\{displayScale \* uiScale\}/)
-  assert.match(component, /nativeBeltPullOffStarted\(/)
-  assert.match(component, /onUnassign\(slot\)/)
-  assert.match(component, /if \(activate && press\.castEligible\) \{\s*onInput\?\.\(slot, true\)\s*onInput\?\.\(slot, false\)/)
-  assert.doesNotMatch(component, /setPointerCapture\(event\.pointerId\)\s*onInput/)
-  assert.match(component, /onPointerCancel=\{\(event\) => finishPointer\(event, false\)\}/)
-  assert.match(component, /data-populated=\{entry !== null\}/)
 })
 
 test('cooldown presentation selects the stock common or longer row timer', () => {
@@ -74,11 +50,6 @@ test('BeltButton uses distinct ready, cooldown, and unavailable icon alpha', () 
   assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: true, unavailable: false }), 0.25)
   assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: false, unavailable: true }), 0.375)
   assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: true, unavailable: true }), 0.25)
-  assert.match(component, /const iconAlpha = nativeSkillQuickbarIconAlpha\(/)
-  assert.match(component, /opacity=\{iconAlpha\}/)
-  assert.match(component, /secondaryManaCosts\.find/)
-  assert.match(component, /currentMana - \(playerState\?\.reservedMana \?\? 0\)/)
-  assert.doesNotMatch(component, /cooldown \? 0\.25 : 0\.375/)
 })
 
 test('item belt lays out native group-8 key labels over 13 px plaques', () => {

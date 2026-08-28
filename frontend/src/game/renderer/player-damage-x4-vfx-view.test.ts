@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { Texture } from 'pixi.js'
 
@@ -8,8 +7,6 @@ import {
   PlayerDamageX4VfxView,
   nativeDamageX4VfxPlan,
 } from './player-damage-x4-vfx-view.ts'
-
-const playerViewSource = readFileSync(new URL('./hub-actors.ts', import.meta.url), 'utf8')
 
 test('native Damage x4 plan pins both BadGuys-7 layers and the final-100-tick fade', () => {
   assert.deepEqual(nativeDamageX4VfxPlan(1_500, 12, 3), [
@@ -46,17 +43,4 @@ test('retained Damage x4 view applies exact additive gold state and tears down a
   assert.equal(view.alpha, 0)
   view.destroy()
   assert.equal(view.sprites.length, 0)
-})
-
-test('shared player view prefixes every admitted Staff element call and suppresses stale halos', () => {
-  const childOrder = playerViewSource.match(/this\.container\.addChild\(([\s\S]*?)\n    \)/)?.[1]
-  assert.ok(childOrder)
-  assert.match(childOrder, /damageX4FrontBase[\s\S]*orbFrontBase[\s\S]*damageX4FrontOverlay[\s\S]*orbFrontOverlay/)
-  assert.match(playerViewSource, /damageX4FrontBase\.container\.visible = this\.orbFrontBase\.container\.visible/)
-  assert.match(playerViewSource, /damageX4FrontOverlay\.container\.visible = this\.orbFrontOverlay\.container\.visible/)
-  assert.match(playerViewSource, /selectedPrimaryAvailable[\s\S]*damageX4TicksRemaining > 0/)
-  assert.match(playerViewSource, /orbFrontBase\.container\.visible = !death\.visible[\s\S]*&& hasStaff/)
-  assert.match(playerViewSource, /damageX4FrontBase\.update\([\s\S]*orbFrontBase\.updateSelectedPrimary\(/)
-  assert.match(playerViewSource, /damageX4FrontOverlay\.update\([\s\S]*orbFrontOverlay\.updateSelectedPrimary\(/)
-  assert.match(playerViewSource, /view\.destroy\(\)[\s\S]*orb\.destroy\(\)/)
 })

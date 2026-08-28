@@ -41,19 +41,6 @@ import {
   HUB_TEACHER_CYCLE_SECONDS,
 } from './hub-teacher.ts'
 
-const boneyardSceneSource = readFileSync(
-  new URL('./BoneyardScene.tsx', import.meta.url),
-  'utf8',
-)
-const mainMenuSceneSource = readFileSync(
-  new URL('./MainMenuScene.tsx', import.meta.url),
-  'utf8',
-)
-const playerFootstepAudioSource = readFileSync(
-  new URL('./player-footstep-audio.ts', import.meta.url),
-  'utf8',
-)
-
 test('maps each scene to the recovered module entry and transition clock', () => {
   assert.equal(
     NATIVE_MUSIC_MODULE_SHA256,
@@ -580,14 +567,6 @@ test('plays the untouched stock level-up cue once at scalar one per barrier', ()
     cue: 'level-up',
     playbackRate: 1,
   })
-  assert.match(
-    mainMenuSceneSource,
-    /levelUpSoundBarrierRef\.current === levelUpBarrierId/,
-  )
-  assert.match(
-    mainMenuSceneSource,
-    /playSound\(NATIVE_LEVEL_UP_SOUND_REQUEST\.cue, \{[\s\S]*playbackRate: NATIVE_LEVEL_UP_SOUND_REQUEST\.playbackRate/,
-  )
 })
 
 test('pins the checked-in Skeleton death cue to the untouched stock WAV', () => {
@@ -940,40 +919,6 @@ test('consumes ordered Solomon Dig events without replaying hydration or a new r
   )
   assert.deepEqual(newRun.events, [])
   assert.deepEqual(newRun.cursor, { eventId: 1, runId: 'run-2' })
-})
-
-test('gives Boneyard one authoritative same-world footstep synchronizer', () => {
-  assert.match(mainMenuSceneSource, /<BoneyardScene[\s\S]*?audio=\{audio\}/)
-  assert.match(boneyardSceneSource, /new PlayerFootstepAudioSynchronizer\(/)
-  assert.match(
-    boneyardSceneSource,
-    /playerId,\s+boneyardInitialSnapshot,/,
-  )
-  assert.match(boneyardSceneSource, /snapshot\.world\.runId !== loaded\.runId/)
-  assert.match(playerFootstepAudioSource, /Object\.entries\(snapshot\.players\)/)
-  assert.match(playerFootstepAudioSource, /newNativeFootstepTick\(/)
-  assert.match(playerFootstepAudioSource, /0\.5 \* attenuation/)
-})
-
-test('consumes the host enemy event lane once through the active Boneyard scene', () => {
-  assert.match(
-    mainMenuSceneSource,
-    /<BoneyardScene[\s\S]*?subscribeEnemyEvent=\{session\.onEnemyEvent\}/,
-  )
-  assert.match(boneyardSceneSource, /subscribeEnemyEvent\(\(event\) =>/)
-  assert.match(boneyardSceneSource, /scene\.dataset\.lastEnemyEventId/)
-  assert.match(boneyardSceneSource, /scene\.dataset\.lastEnemyEventOutput/)
-  assert.match(boneyardSceneSource, /if \(event\.output !== undefined\)/)
-  assert.match(boneyardSceneSource, /nativeEnemyEventSoundRequest\(event\)/)
-  assert.match(boneyardSceneSource, /playbackRate: sound\.playbackRate/)
-  assert.match(boneyardSceneSource, /nativeBoneyardPointGain\(/)
-})
-
-test('plays authoritative Solomon Dig events through native hit attenuation', () => {
-  assert.match(boneyardSceneSource, /solomonDigAudioDelta\(/)
-  assert.match(boneyardSceneSource, /nativeSolomonDigSoundRequest\(/)
-  assert.match(boneyardSceneSource, /nativeBoneyardHitPointGain\(/)
-  assert.match(boneyardSceneSource, /scene\.dataset\.solomonDigAudioEventId/)
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

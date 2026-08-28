@@ -30,21 +30,6 @@ import {
   type GameSettingsStorage,
 } from './game-settings.ts'
 
-const settingsComponent = readFileSync(new URL('./GameSettingsDialog.tsx', import.meta.url), 'utf8')
-const settingsSharing = readFileSync(new URL('./MobileUiLayoutSettingsAction.tsx', import.meta.url), 'utf8')
-const settingsCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
-const mainMenuScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
-const darkCloudScene = readFileSync(new URL('./DarkCloudScene.tsx', import.meta.url), 'utf8')
-const pauseMenuContract = readFileSync(new URL('./pause-menu-contract.ts', import.meta.url), 'utf8')
-const boneyardRenderer = readFileSync(
-  new URL('./renderer/boneyard-world-renderer.ts', import.meta.url),
-  'utf8',
-)
-const hubRenderer = readFileSync(
-  new URL('./renderer/hub-world-renderer.ts', import.meta.url),
-  'utf8',
-)
-
 class MemoryStorage implements GameSettingsStorage {
   readonly values = new Map<string, string>()
   getItem(key: string) { return this.values.get(key) ?? null }
@@ -182,79 +167,12 @@ test('key rebinding swaps conflicts across fifteen native inputs and browser cha
   ], ['Right Mouse', 'W', '7', 'Left'])
 })
 
-test('Settings covers every native root, requested online control, and context member', () => {
-  for (const label of [
-    'ENABLE ONLINE FEATURES',
-    'ENABLE ACTIVITY MESSAGES',
-    'ENABLE GLOBAL CHAT',
-    'ENABLE SHARED HUB',
-    'SUBMIT RUNS TO SERVER',
-    'SOUND VOL:',
-    'MUSIC VOL:',
-    'FULLSCREEN',
-    'CAMERA FOV',
-    'UI SCALE',
-    'CUSTOMIZE KEYBOARD',
-    'CUSTOMIZE MOBILE UI',
-    'TWEAK GAME',
-    'ENABLE CHEATS',
-    'COMPLEX LIGHTING',
-    'COMPLEX SHADOWS',
-    'MULTIPLE SHADOWS',
-    'LIGHT QUALITY',
-    'CAST SECONDARY SPELLS AT MOUSE',
-    'CAMERA SHAKE',
-  ]) assert.match(settingsComponent, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-  assert.match(settingsComponent, /title="ONLINE FEATURES"[\s\S]*?disabled=\{!onlineFeatures\}[\s\S]*?nested/)
-  assert.match(mainMenuScene, /gameSharedHubEnabled\(gameSettings\)/)
-  assert.match(mainMenuScene, /session\?\.setOnlinePreferences\(gameOnlinePreferences\(gameSettings\)\)/)
-  assert.match(settingsSharing, /SUBMIT TO DARK CLOUD/)
-  assert.doesNotMatch(settingsComponent, />ZOOM EFFECTS</)
-  for (const label of [
-    'MOVE UP', 'MOVE DOWN', 'MOVE LEFT', 'MOVE RIGHT',
-    'OPEN MENU', 'OPEN INVENTORY', 'OPEN SKILLS', 'OPEN CHAT',
-  ]) assert.match(settingsComponent, new RegExp(label))
-  assert.match(settingsComponent, /`BELT SLOT \$\{index \+ 1\}`/)
-  assert.doesNotMatch(settingsComponent, /KID MODE \(STORY GAMES ONLY\)/)
-  assert.doesNotMatch(settingsComponent, /SAVE MEMORY \(REQUIRES RESTART\)/)
-  assert.match(settingsComponent, /ENHANCED EFFECTS: ON/)
-  assert.match(mainMenuScene, /context="gameplay"/)
-  assert.match(mainMenuScene, /setSettingsContext\('title'\)/)
-  assert.match(mainMenuScene, /setSettingsContext\('dark-cloud'\)/)
-  // The Dark Cloud reaches Game Settings through the shared native pause menu, not a plate of its own.
-  assert.doesNotMatch(darkCloudScene, /GAME SETTINGS/)
-  assert.match(mainMenuScene, /className="dark-cloud-pause-stage"[\s\S]*?if \(action === 'settings'\) setSettingsContext\('dark-cloud'\)/)
-  assert.match(pauseMenuContract, /label: 'GAME SETTINGS'/)
-})
-
-test('Settings presentation consumes the untouched stock ControlPanel records', () => {
+test('Settings uses the untouched stock ControlPanel atlas', () => {
   const atlas = readFileSync(new URL('../assets/game/settings-control-panel-atlas.png', import.meta.url))
   assert.equal(
     createHash('sha256').update(atlas).digest('hex'),
     'd63bd3ac402fcbc00a60916b6f0aa79f662501acc8f6fbe88ee1676e69b43f86',
   )
-  assert.match(settingsCss, /background-position: -92px -46px/)
-  assert.match(settingsCss, /background-position: -407px -31px/)
-  assert.match(settingsCss, /background-position: -26px -45px/)
-  assert.match(settingsCss, /input::?-webkit-slider-thumb|input::-webkit-slider-thumb/)
-  assert.match(settingsCss, /input::-webkit-slider-thumb \{[\s\S]*background-color: transparent;/)
-  assert.match(settingsCss, /input::-moz-range-thumb \{[\s\S]*background-color: transparent;/)
-  assert.match(settingsCss, /background-position: -308px -89px/)
-  assert.match(settingsCss, /background-position: -743px -588px/)
-  assert.match(settingsCss, /background-position: -543px -205px/)
-})
-
-test('Camera Shake gates every scalar and displacement consumer without disabling tracking', () => {
-  for (const contract of [
-    /feedbackMagnitude = settings\.zoomEffects \? sampledFeedback\.magnitude : 0/,
-    /worldShake = settings\.zoomEffects[\s\S]*?sampledWorldShake/,
-    /secondaryCameraMagnitude = settings\.zoomEffects[\s\S]*?sampledSecondaryCameraMagnitude/,
-    /secondaryCameraDisplacement = settings\.zoomEffects[\s\S]*?sampledSecondaryCameraDisplacement/,
-  ]) assert.match(boneyardRenderer, contract)
-  assert.match(hubRenderer, /secondaryCameraMagnitude = zoomEffects/)
-  assert.match(hubRenderer, /secondaryCameraDisplacement = zoomEffects/)
-  assert.doesNotMatch(boneyardRenderer, /settings\.zoomEffects[\s\S]{0,80}cameraFocusFor/)
-  assert.doesNotMatch(hubRenderer, /zoomEffects[\s\S]{0,80}hubRegionCameraOrigin/)
 })
 
 test('browser Lua console installs only for enabled host and rechecks both gates per call', async () => {

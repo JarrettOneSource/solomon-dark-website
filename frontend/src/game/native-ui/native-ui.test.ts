@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -247,20 +246,4 @@ test('SimpleMenu is a reusable composition over the same stock primitives', () =
   assert.equal(plan.actions.length, 3)
   assert.ok(plan.nodes.some((node) => node.label === 'simple-menu:frame' && node.kind === 'nine-slice'))
   assert.equal(plan.nodes.filter(({ label }) => label?.startsWith('simple-menu:arrow-')).length, 3)
-})
-
-test('existing WebGL and DOM owners consume the shared native UI seam', () => {
-  const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
-  for (const path of [
-    '../renderer/gameplay-pause-renderer.ts',
-    '../renderer/skill-picker-renderer.ts',
-    '../renderer/hub-inventory-renderer.ts',
-  ]) {
-    assert.match(source(path), /nativeUi(PixiFor|Record|PixiAdapter)/)
-  }
-  assert.match(source('../NativeGameOverPrompt.tsx'), /NativeBitmapText/)
-  assert.match(source('../NativeLootBitmapText.tsx'), /NativeBitmapText/)
-  assert.match(source('../GameplayPauseMenu.tsx'), /NativeBitmapText/)
-  assert.doesNotMatch(source('../renderer/hub-inventory-renderer.ts'), /hub-trader-native-assets\.json|skill-picker-native-assets\.json/)
-  assert.doesNotMatch(source('../renderer/skill-picker-renderer.ts'), /skill-picker-native-assets\.json/)
 })

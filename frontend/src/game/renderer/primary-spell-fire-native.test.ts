@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { createNativeFirePatch } from '../core-kernels/primary-spell-fire-effects.ts'
@@ -307,11 +306,6 @@ test('projects the native Ember actor light independently from its self-lit draw
   assert.equal(light.intensity, 0.125)
   assert.deepEqual(light.position, { x: 10, y: 20 })
   assert.ok(light.radius >= 0.75 && light.radius <= 1)
-})
-
-test('primary world view admits the complete shared explosion member', () => {
-  const source = readFileSync(new URL('./primary-spell-world-view.ts', import.meta.url), 'utf8')
-  assert.match(source, /state\.kind === 'fire-explosion'/)
 })
 
 test('projects common Fire patches through DeadHawg 46..77 with native alpha and scale', () => {

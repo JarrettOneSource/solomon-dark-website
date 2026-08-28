@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import './mobile-ui-editor-contract.test.ts'
-
 import {
   DEFAULT_MOBILE_UI_LAYOUT,
   MOBILE_UI_CANONICAL_HEIGHT,

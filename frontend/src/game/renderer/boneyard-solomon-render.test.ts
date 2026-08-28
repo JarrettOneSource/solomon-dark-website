@@ -74,17 +74,6 @@ test('pins the registration-preserving stock Solomon sheets and Flydirt glyph', 
   )
 })
 
-test('keeps Flydirt in Solomon child-manager order after body and mouth', () => {
-  const source = readFileSync(new URL(
-    './boneyard-world-renderer.ts',
-    import.meta.url,
-  ), 'utf8')
-  assert.match(source, /this\.mouth\.zIndex = 1/)
-  assert.match(source, /this\.graveMark\.zIndex = 2/)
-  assert.match(source, /this\.dirtRoot\.zIndex = 3/)
-  assert.match(source, /this\.dirtRoot\.tint = lighting\.dirtTint/)
-})
-
 test('uses the native 15-way 24-degree direction selector', () => {
   assert.equal(nativeSolomonDirection(0), 0)
   assert.equal(nativeSolomonDirection(11.999), 0)

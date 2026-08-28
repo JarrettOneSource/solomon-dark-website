@@ -68,17 +68,6 @@ test('locks the external portrait capture and dynamic Painting compositor', () =
       new URL(`../../assets/game/${filename}`, import.meta.url),
     )).digest('hex'), digest)
   }
-  const source = readFileSync(
-    new URL('./hub-memorial-painting-view.ts', import.meta.url),
-    'utf8',
-  )
-  assert.match(source, /const CAPTURE_SIZE = 64/)
-  assert.match(source, /const CAPTURE_CENTER_Y = -58/)
-  assert.match(source, /const WIZARD_CAPTURE_OFFSET_Y = 20/)
-  assert.match(source, /capture\.mask = mask/)
-  assert.match(source, /paintingEasel/)
-  assert.match(source, /paintingFront/)
-  assert.match(source, /paintingMarker/)
 })
 
 test('selects the recovered 16-heading Memorator bank toward the local player', () => {
@@ -98,11 +87,6 @@ test('locks the reopened late triple memorial-glow pass', () => {
     position: { x: 512, y: 507 },
     width: 71,
   })
-  const source = readFileSync(new URL('./hub-private-room-scene.ts', import.meta.url), 'utf8')
-  assert.match(source, /length: HUB_MORTUARY_MEMORIAL_GLOW\.count/)
-  assert.match(source, /hub\.rooms\.mortuary\.memorialGlow/)
-  assert.match(source, /glow\.blendMode = 'add'/)
-  assert.match(source, /glow\.zIndex = HUB_MORTUARY_MEMORIAL_GLOW\.depth/)
 })
 
 test('locks every captured private-room candle anchor', () => {

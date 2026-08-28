@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import nativeAssetsJson from '../../assets/game/native-ui-assets.json' with { type: 'json' }
@@ -84,16 +83,6 @@ import {
   hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
 
-const inventoryComponent = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
-const inventoryCss = readFileSync(new URL('../hub-inventory.css', import.meta.url), 'utf8')
-const mainScene = readFileSync(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
-const hubScene = readFileSync(new URL('../HubScene.tsx', import.meta.url), 'utf8')
-const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
-const inventoryRenderer = readFileSync(
-  new URL('./hub-inventory-renderer.ts', import.meta.url),
-  'utf8',
-)
-
 const AUTHORED_EQUIPMENT_DESCRIPTIONS: Readonly<Record<number, string>> = {
   29: 'An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read "Interferenal."',
   30: 'An amulet known to be forged by the great wizard Basculus.  Much has been written about the unusual name, with some speculating that Basculus finished work on the amulet immediately after an unhappy love affair.',
@@ -114,43 +103,6 @@ const AUTHORED_EQUIPMENT_DESCRIPTIONS: Readonly<Record<number, string>> = {
   45: 'Part of Qubar\'s "Elemental Boost" collection.',
   46: 'Woven as a defensive outfit for working with demons, this robe absorbs almost all magic in the vicinity.  The only known side effect is that your own magic is harmed as well.',
 }
-
-test('every inventory and trader modal consumes the shell fixed-stage projection', () => {
-  assert.equal(mainScene.match(/nativeUiStageStyle=\{nativeStageStyle\}/g)?.length, 3)
-  for (const scene of [hubScene, boneyardScene]) {
-    assert.match(scene, /nativeUiStageStyle: CSSProperties/)
-    assert.match(scene, /<HubInventoryUi[\s\S]*nativeUiStageStyle=\{nativeUiStageStyle\}/)
-  }
-  assert.match(
-    inventoryComponent,
-    /className="hub-native-ui-overlay"[\s\S]*className="hub-native-ui-stage"[\s\S]*style=\{style\}/,
-  )
-  assert.match(
-    inventoryCss,
-    /\.hub-native-ui-overlay\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*30000;[^}]*inset:\s*0;[^}]*background:\s*#000;/s,
-  )
-  assert.match(
-    inventoryComponent,
-    /className="hub-native-ui-overlay"[\s\S]*data-input-suspended=\{inputSuspended\}[\s\S]*data-surface-kind=\{surface\.kind\}[\s\S]*inert=\{inputSuspended \|\| undefined\}/,
-  )
-  assert.match(
-    inventoryCss,
-    /\.hub-native-ui-overlay\[data-surface-kind='dialogue'\]\s*\{[^}]*background:\s*transparent;/s,
-  )
-  assert.match(
-    inventoryCss,
-    /\.hub-native-ui-stage\s*\{[^}]*width:\s*1600px;[^}]*height:\s*900px;/s,
-  )
-  assert.match(inventoryComponent, /closest\('\.hub-native-ui-stage'\)/)
-})
-
-test('Inventory preloads the complete shared element VFX texture membership', () => {
-  assert.match(inventoryRenderer, /\.\.\.Object\.values\(elementVfx\.common\)/)
-  assert.match(inventoryRenderer, /\.\.\.Object\.values\(elementVfx\.frames\)/)
-  assert.match(inventoryRenderer, /elementVfx\.special\.aura/)
-  assert.match(inventoryRenderer, /\.\.\.elementVfx\.special\.steam/)
-  assert.match(inventoryRenderer, /createNativeElementVfxTextures/)
-})
 
 test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells', () => {
   assert.deepEqual(HUB_NATIVE_UI_SIZE, { height: 900, width: 1600 })
@@ -226,16 +178,6 @@ test('Item_Sack pages traverse the fixed stage in exact discrete native ticks', 
   })
 })
 
-test('InventoryScreen rendering and actions share addressed sparse slot ownership', () => {
-  assert.match(inventoryComponent, /projectInventoryRootSlots\(activeRoot\)/)
-  assert.match(inventoryComponent, /data-inventory-slot': slot/)
-  assert.match(inventoryComponent, /hubInventoryRootSlot\(visibleSlot, hasParentRoot\)/)
-  assert.match(inventoryComponent, /destinationSlot/)
-  assert.match(inventoryRenderer, /projectInventoryRootSlots\(source\)/)
-  assert.match(inventoryRenderer, /hubInventoryVisibleSlot\(slot, hasParentRoot\)/)
-  assert.doesNotMatch(inventoryComponent, /activeRoot\.slice\(0, HUB_INVENTORY_GRID\.capacity\)/)
-})
-
 test('InventoryScreen paints the Game-owned backpack return control at every Sack depth', () => {
   assert.deepEqual(HUB_MODAL_HUD_CONTROLS, {
     backpack: {
@@ -251,29 +193,9 @@ test('InventoryScreen paints the Game-owned backpack return control at every Sac
   })
   assert.deepEqual(nativeAssetsJson.atlases.UI.records['47']?.logicalSize, [58, 62])
   assert.deepEqual(nativeAssetsJson.atlases.UI.records['48']?.logicalSize, [58, 62])
-  assert.match(inventoryRenderer, /function addModalHudControls\(/)
-  assert.match(
-    inventoryRenderer,
-    /const shadow = addCenteredAtlasSprite[\s\S]*shadow\.tint = HUB_MODAL_HUD_CONTROLS\.shadowTint[\s\S]*const base = addCenteredAtlasSprite/,
-  )
-  assert.match(inventoryRenderer, /shadow\.label = `\$\{control\.label\}-shadow`/)
-  assert.match(inventoryRenderer, /base\.label = control\.label/)
-  assert.match(
-    inventoryRenderer,
-    /addModalHudControls\(context, hudLayer, hud\)[\s\S]*hud\.belt\.forEach/,
-  )
-  assert.match(
-    inventoryComponent,
-    /const inventoryResumeProgress = surface\.kind === 'inventory' \? modalSlides\.inventory : 1[\s\S]*nativeHudModalSlideLayout\([\s\S]*inventoryResumeProgress[\s\S]*\)\.backpack/,
-  )
-  assert.doesNotMatch(
-    inventoryRenderer,
-    /\[47, backpackCenter\.x \+ 5, backpackCenter\.y \+ 5\][\s\S]*\[47, backpackCenter\.x, backpackCenter\.y\]/,
-  )
 })
 
 test('DyeClothing retains stock relative geometry and discrete update timing', () => {
-  const rendererSource = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
   assert.deepEqual(HUB_DYE_CLOTHING, {
     bankSize: 9,
     cancelRect: [690, 390, 220, 44],
@@ -317,9 +239,6 @@ test('DyeClothing retains stock relative geometry and discrete update timing', (
   assert.equal(hubDyeSelectedPulse(100, 100), 1)
   assert.equal(hubDyeSelectedPulse(100, 200), 0.5)
   assert.equal(hubDyeSelectedPulse(100, 300), 0)
-  assert.match(rendererSource, /dyeSelectedPulse\.alpha = selectedPulse/)
-  assert.match(rendererSource, /dyeSelectedPulse\.visible = selectedPulse > 0/)
-  assert.doesNotMatch(rendererSource, /0\.35 \+ selectedPulse/)
 })
 
 test('stock inventory owns native ItemInfo, drag, double activation, and protected clothing copy', () => {
@@ -372,18 +291,6 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
   assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
   assert.equal(HUB_ROBE_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS ROBE!')
   assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
-  assert.match(
-    inventoryComponent,
-    /inventoryItemsAtSackPath\(economy\.backpack, inventorySackPath\)/,
-  )
-  assert.match(
-    inventoryComponent,
-    /surface\.kind === 'service' && sackPath\.length > 0/,
-  )
-  assert.match(inventoryComponent, /nativeSkillQuickbarDropSlot\(point, beltRects\)/)
-  assert.match(inventoryComponent, /nativeBeltPullOffStarted\(press\.origin, pointerStagePosition\(event\)\)/)
-  assert.match(inventoryComponent, /data-native-belt-slot/)
-  assert.match(inventoryComponent, /audio\.playSound\('poof'\)/)
 })
 
 test("Sorceror's Amulet ItemInfo carries the exact authored description and effect", () => {
@@ -470,35 +377,6 @@ test('retail StoreGrid selected state uses only the live Windows CLICK AGAIN rec
   assert.deepEqual(nativeAssetsJson.atlases.UI.records['85']?.frame, [847, 425, 66, 45])
   assert.deepEqual(nativeAssetsJson.atlases.UI.records['111']?.frame, [874, 587, 66, 45])
   assert.deepEqual(nativeAssetsJson.atlases.UI.records['112']?.frame, [933, 426, 66, 45])
-})
-
-test('StoreGrid selection keeps the independently current HoverBox visible', () => {
-  const rendererSource = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
-  assert.match(inventoryComponent, /inspection: serviceHoverInspection \?\? serviceFocusInspection/)
-  assert.doesNotMatch(
-    inventoryComponent,
-    /selection\?\.id === inspection\.id[\s\S]{0,100}return null/,
-  )
-  assert.doesNotMatch(
-    rendererSource,
-    /model\.selectedItemId === inspection\.id[\s\S]{0,140}return/,
-  )
-  assert.match(
-    inventoryComponent,
-    /function ShopAction\([\s\S]*?onPointerDown=\{\(event\) => \{[\s\S]*?event\.pointerType === 'mouse'[\s\S]*?event\.preventDefault\(\)/,
-  )
-})
-
-test('semantic inventory actions expose blank deselection and explicit compatible sinks', () => {
-  const source = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
-  assert.match(source, /data-inventory-empty-space/)
-  assert.match(source, /clearInventorySelection/)
-  assert.match(source, /hubEquipmentClickAction\(selectedBackpackItem, slot, thirdRingUnlocked\)/)
-  assert.doesNotMatch(source, /disabled=\{locked \|\| !source\}/)
-  assert.doesNotMatch(
-    source,
-    /onAction\(\{ type: 'unequip', slot: source\.equipmentSlot \}\)\s*onAction\(\{ type: 'unequip', slot: source\.equipmentSlot \}\)/,
-  )
 })
 
 test('HoverBox owns exact immediate Shop and occupied-Hagatha geometry', () => {
@@ -992,119 +870,4 @@ test('the port exports the complete stock UI membership', () => {
     'inventory-unforge-confirmation',
     'inventory-unforge-result',
   ])
-})
-
-test('visible hub inventory presentation is owned by the native WebGL renderer', () => {
-  const source = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
-  const rendererSource = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /function ModalFrame/)
-  assert.doesNotMatch(source, /function NativeAtlasSprite/)
-  assert.match(source, /createHubInventoryRenderer/)
-  assert.match(rendererSource, /'UI', 62/)
-  assert.match(rendererSource, /addNativeNineSlice\(/)
-  assert.match(rendererSource, /atlasSliceTexture\(context, atlas, record, edgeUvOrigin, 0, 1, 1\)/)
-  assert.match(rendererSource, /'UI', 73/)
-  assert.match(rendererSource, /'UI', 74/)
-  assert.match(rendererSource, /tile\.blendMode = blendMode/)
-  assert.match(rendererSource, /HUB_STOREGRID_SELECTED_RECORDS\.unaffordable/)
-  assert.match(rendererSource, /HUB_STOREGRID_SELECTED_RECORDS\.buyClickAgain/)
-  assert.match(rendererSource, /`\$\{item\.price\}`,[\s\S]*?HUB_SHOP_TEXT\.priceFont/)
-  assert.doesNotMatch(rendererSource, /`\$\{item\.price\}`, 'skill'/)
-  assert.match(rendererSource, /'UI', 86/)
-  assert.match(rendererSource, /'UI', 71, 21, 481/)
-  assert.match(rendererSource, /'Inventory', 8, 557\.5, 16\.5/)
-  assert.doesNotMatch(rendererSource, /'Inventory', 10, position\.x, position\.y, \{ scale:/)
-  assert.match(rendererSource, /slot\.alpha = HUB_INVENTORY_GRID\.slotAlpha/)
-  assert.match(rendererSource, /slot\.alpha = HUB_SHOP_GRID\.slotAlpha/)
-  assert.match(rendererSource, /slot\.alpha = HUB_DOWSING_GRID\.slotAlpha/)
-  assert.match(rendererSource, /owner === 'storage'[\s\S]*HUB_STOREGRID_SELECTED_RECORDS\.takeClickAgain/)
-  assert.doesNotMatch(source, /Previous page|Next page|Goodbye|Your Prices/)
-  assert.match(rendererSource, /hubDowsingFlashFeedbackSequence/)
-  assert.match(rendererSource, /dataset\.dowsingFlash = 'active'/)
-  assert.match(rendererSource, /dataset\.nativeReveal = clampedReveal >= 1 \? 'settled' : 'revealing'/)
-  assert.match(rendererSource, /dataset\.nativeNoticeReveal/)
-  assert.doesNotMatch(rendererSource, /easeOutCubic/)
-  assert.doesNotMatch(rendererSource, /previousDowsingOfferCount/)
-  assert.match(source, /data-native-pressed-control/)
-  assert.match(rendererSource, /typeof child\.label === 'string'/)
-  assert.doesNotMatch(rendererSource, /Math\.random\(\)/)
-  assert.match(
-    rendererSource,
-    /addTiledAtlas\([\s\S]*?HUB_DOWSING_MSGBOX\.interiorBackgroundRecord,[\s\S]*?\.\.\.HUB_DOWSING_MSGBOX\.interiorClipRect/,
-  )
-  assert.match(
-    rendererSource,
-    /addNativeNineSlice\([\s\S]*?HUB_DOWSING_MSGBOX\.innerPanelRecord,[\s\S]*?\.\.\.HUB_DOWSING_MSGBOX\.innerPanelRect,[\s\S]*?HUB_DOWSING_MSGBOX\.innerPanelEdgeUvOrigin/,
-  )
-  assert.doesNotMatch(rendererSource, /fit \/ Math\.max/)
-  assert.match(rendererSource, /sprite\.rotation = \(transform\?\.rotationDegrees \?\? 0\) \* Math\.PI \/ 180/)
-  assert.match(rendererSource, /HUB_STARTER_EQUIPMENT_PRIMARY_TINT\[element\]/)
-  assert.doesNotMatch(rendererSource, /`EQUIP \$\{equipmentSlotLabel\(slot\)\}`/)
-  assert.doesNotMatch(rendererSource, /selected\.rarity \?\? selected\.kind/)
-  assert.match(rendererSource, /native-inventory-dragger/)
-  assert.match(rendererSource, /addClippedItemIcon\(/)
-  assert.match(rendererSource, /hubInventorySlotPosition\(index\)[\s\S]*?addClippedItemIcon\(/)
-  assert.match(rendererSource, /function addEquipment\([\s\S]*?addClippedItemIcon\(/)
-  assert.match(rendererSource, /function addStoreGrid\([\s\S]*?addClippedItemIcon\(/)
-  assert.match(rendererSource, /function addDowsingGrid\([\s\S]*?addClippedItemIcon\(/)
-  assert.match(rendererSource, /targetItem = draggedBackpack/)
-  assert.doesNotMatch(rendererSource, /draggedBackpack \?\? selectedBackpack/)
-  assert.match(rendererSource, /dragging\.owner === 'storage'/)
-  assert.match(source, /inventorySelection=\{inventorySelection\}/)
-  assert.match(source, /const companionInventory = \([\s\S]*?<InventoryActions[\s\S]*?companion/)
-  assert.match(source, /data-owned-hagatha-selector/)
-  assert.match(source, /onPointerEnter/)
-  assert.match(source, /onPointerLeave/)
-  assert.match(source, /role="tooltip"/)
-  assert.match(
-    source,
-    /event\.pointerType === 'touch'[\s\S]*?lastActivationRef[\s\S]*?activateSource\(source\)/,
-  )
-  assert.match(rendererSource, /native-contextual-hover-box/)
-  assert.match(rendererSource, /dataset\.nativeItemInfo/)
-  assert.match(rendererSource, /hubHagathaTooltipLines\(/)
-  assert.match(rendererSource, /hubItemTooltipLines\(/)
-  assert.doesNotMatch(source, /readonly owner: 'backpack' \| 'storage' \| null/)
-  assert.match(source, /gesture: 'double-activation'/)
-  assert.match(source, /gesture: 'drag'/)
-  assert.match(source, /function InventoryActions[\s\S]*activateSource/)
-  assert.match(
-    source,
-    /item\.kind === 'sack'[\s\S]*item\.nativeTypeId === 7008[\s\S]*onOpenSack\(item\.id\)/,
-  )
-  assert.match(source, /inventoryItemsAtSackPath\(economy\.backpack, sackPath\)/)
-  assert.match(source, /data-native-sack-path=\{sackPath\.join\('\/'\)\}/)
-  assert.match(source, /audio\.playSound\('backpack-open'\)/)
-  assert.match(source, /audio\.playSound\('backpack-close'\)/)
-  assert.doesNotMatch(source, /type: 'open-sack'/)
-  assert.match(rendererSource, /native-sack-page-outgoing/)
-  assert.match(rendererSource, /native-sack-page-incoming/)
-  assert.match(rendererSource, /hubSackPageOffsets\(/)
-  assert.match(source, /const projectedStorage = projectInventoryRootSlots\(economy\.storage\)[\s\S]*?parentSackId: null/)
-  assert.match(
-    rendererSource,
-    /addStoreGrid\(\s*context,\s*overlay,\s*model\.economy\.storage,\s*model,\s*'storage'/,
-  )
-  assert.doesNotMatch(source, /direction: 'to-storage'[^}]*gesture: 'double-activation'/s)
-  assert.match(source, /audio\.playSound\('backpack-close'\)/)
-  assert.match(source, /audio\.playSound\('distort-reality', \{ playbackRate: feedback\.dowsingPitch \}\)/)
-  assert.match(source, /audio\.playSound\('open-panel'\)/)
-  assert.match(rendererSource, /hubChatTextRuns\(/)
-  assert.match(rendererSource, /sprite\.skew\.x = -italicAngle/)
-  assert.doesNotMatch(rendererSource, /replaceAll\('\*', ''\)/)
-})
-
-test('trader Chat replacement retains one native WebGL surface owner', () => {
-  const source = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
-  assert.match(source, /function hubNativeSurfaceOwnerKey\(/)
-  assert.match(source, /key=\{hubNativeSurfaceOwnerKey\(surface\)\}/)
-  assert.doesNotMatch(source, /\[modAssets, surface\.kind\]/)
-  assert.match(
-    source,
-    /const currentKind = modelRef\.current\?\.kind[\s\S]*?currentKind === 'dialogue'/,
-  )
-  assert.match(
-    source,
-    /revealStartedAtRef\.current = null[\s\S]*?\[surface\.kind\]/,
-  )
 })

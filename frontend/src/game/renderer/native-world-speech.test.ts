@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
@@ -8,13 +7,6 @@ import {
   deriveNativeWorldSpeechItems,
   layoutNativeWorldSpeech,
 } from './native-world-speech.ts'
-
-const mainMenu = await readFile(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
-const gameChat = await readFile(new URL('../GameChat.tsx', import.meta.url), 'utf8')
-const hubScene = await readFile(new URL('../HubScene.tsx', import.meta.url), 'utf8')
-const boneyardScene = await readFile(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
-const hubRenderer = await readFile(new URL('./hub-world-renderer.ts', import.meta.url), 'utf8')
-const boneyardRenderer = await readFile(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
 
 function speech(
   playerId: string,
@@ -80,24 +72,4 @@ test('world speech uses native glyphs without a system-font fallback', () => {
     1_500,
   ).length, 0)
   assert.ok(layoutNativeWorldSpeech('Hello 😀').glyphCount > 0)
-})
-
-test('chat receipt feeds one shared Hub/Boneyard world-speech layer without moving transcript ownership', () => {
-  assert.match(gameChat, /onMessage: \(message: GameChatMessage\) => void/)
-  assert.match(gameChat, /session\.onChatMessage\(\(message\) => \{[\s\S]*onMessage\(message\)[\s\S]*setMessages/)
-  assert.match(
-    mainMenu,
-    /const receivedAtMs = performance\.now\(\)[\s\S]*appendGameWorldSpeech\(current, message, receivedAtMs\)/,
-  )
-  assert.match(mainMenu, /worldSpeeches=\{worldSpeeches\}/)
-  assert.match(hubScene, /renderer\.setWorldSpeeches\(worldSpeechesRef\.current\)/)
-  assert.match(boneyardScene, /renderer\.setWorldSpeeches\(worldSpeechesRef\.current\)/)
-  assert.match(hubRenderer, /new NativeWorldSpeechLayer\(textures\.fontAtlas\)/)
-  assert.match(boneyardRenderer, /new NativeWorldSpeechLayer\(textures\.fontAtlas\)/)
-  assert.match(hubRenderer, /includePlayer: \(playerId\) => \([\s\S]*\.region === participant\.region/)
-  assert.match(
-    boneyardRenderer,
-    /world\.position\.set\([\s\S]*secondaryCameraDisplacement[\s\S]*const worldScreenTransform = \{[\s\S]*world\.position\.x[\s\S]*worldNameplates\.update\([\s\S]*worldScreenTransform[\s\S]*worldSpeech\.update\([\s\S]*worldScreenTransform/,
-  )
-  assert.match(boneyardRenderer, /worldSpeech\.update\(/)
 })

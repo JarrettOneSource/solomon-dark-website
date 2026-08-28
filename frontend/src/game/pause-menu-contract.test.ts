@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import nativeUiAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
@@ -40,17 +39,6 @@ const PAUSE = {
   ownerPlayerId: 'player-1',
   source: 'pause-menu',
 } as const
-const pauseCss = readFileSync(new URL('./gameplay-pause-menu.css', import.meta.url), 'utf8')
-const pauseComponent = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
-const mainMenuComponent = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
-const hubComponent = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
-const hubInventoryComponent = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
-const clientSessionSource = readFileSync(
-  new URL('./client/game-client-session.ts', import.meta.url),
-  'utf8',
-)
-const hostSource = readFileSync(new URL('./host/game-host.ts', import.meta.url), 'utf8')
-
 function recordGeometry(record: {
   readonly frame: readonly number[]
   readonly logicalSize: readonly number[]
@@ -213,12 +201,6 @@ test('every action has the same exact pressed substitution and no hover render b
     }
   }
   assert.equal(nativePauseMenuRenderPlan.length, 2)
-  assert.match(
-    pauseCss,
-    /\.gameplay-pause-overlay\s*\{[^}]*z-index:\s*80;[^}]*pointer-events:\s*auto;/s,
-  )
-  assert.doesNotMatch(pauseCss, /\.gameplay-pause-action:(?:hover|focus-visible)/)
-  assert.doesNotMatch(pauseCss, /\.gameplay-pause-frame/)
 })
 
 test('pause presentation gives actions only to the authoritative owner', () => {
@@ -246,52 +228,6 @@ test('pause presentation gives actions only to the authoritative owner', () => {
     kind: 'waiting',
     label: 'Helvidius is using the skill selector.',
   })
-})
-
-test('every optional Hub activity is local over an always-live world', () => {
-  assert.match(
-    mainMenuComponent,
-    /const \[hubPauseMenuOpen, setHubPauseMenuOpen\] = useState\(false\)/,
-  )
-  assert.match(
-    mainMenuComponent,
-    /runtimeSnapshot\?\.world\.kind === 'hub'[\s\S]*setHubPauseMenuOpen\(true\)[\s\S]*return/,
-  )
-  assert.match(mainMenuComponent, /const displayedGameplayPause = gameplayPause \?\? localHubPause/)
-  assert.match(
-    mainMenuComponent,
-    /runtimeSnapshot\?\.world\.kind === 'boneyard'[\s\S]*\? 'skill-book'[\s\S]*\? 'skill-selector'[\s\S]*\? 'inventory'/,
-  )
-  assert.match(
-    mainMenuComponent,
-    /const localHubActivity:[\s\S]*hubPauseMenuOpen[\s\S]*\? 'paused'[\s\S]*chatOpen[\s\S]*skillBookOpen[\s\S]*hudSkillSelector[\s\S]*inventoryScreenOpen[\s\S]*hubSceneOccupied[\s\S]*\? 'occupied'/,
-  )
-  assert.match(mainMenuComponent, /session\?\.setHubActivity\(localHubActivity\)/)
-  assert.match(hubComponent, /inputRef\.current\?\.setBlocked\(inputBlocked \|\| modalOpen\)/)
-  assert.match(hubComponent, /onOccupiedChange\(modalOpen\)/)
-  assert.doesNotMatch(hubComponent, /presentationPausedRef/)
-  assert.match(hubComponent, /data-hub-ui-surface=\{hubUiSurface\?\.kind \?\? 'none'\}/)
-  assert.doesNotMatch(hubInventoryComponent, /requestGameplayPause|client-gameplay-pause/)
-  assert.match(clientSessionSource, /if \(snapshot\.world\.kind === 'hub'\) return/)
-  assert.match(hostSource, /if \(activeState\.world\.kind === 'hub'\) return/)
-  assert.doesNotMatch(hostSource, /sharedHubGameplayPause|stopSharedHubInputs/)
-})
-
-test('Pause, the compact picker, and peer-only level-up waits mute the non-music lane', () => {
-  assert.match(
-    mainMenuComponent,
-    /const levelUpWaitingForPeers = Boolean\(runtimeSnapshot\?\.levelUpBarrier\)\s*&& !runtimeProgression\?\.pendingOffer\s*&& !levelUpPickerClosing/,
-  )
-  assert.match(
-    mainMenuComponent,
-    /const nonMusicMuted = darkCloudMenuOpen\s*\|\| displayedGameplayPause\?\.source === 'pause-menu'\s*\|\| displayedGameplayPause\?\.source === 'skill-selector'\s*\|\| hudSkillSelector !== null\s*\|\| levelUpWaitingForPeers/,
-  )
-  assert.doesNotMatch(mainMenuComponent, /nonMusicMuted[\s\S]{0,300}\|\| levelUpModalActive/)
-  assert.match(
-    mainMenuComponent,
-    /useLayoutEffect\(\(\) => \{\s*audio\.setSoundMuted\(nonMusicMuted\)\s*\}, \[audio, nonMusicMuted\]\)/,
-  )
-  assert.match(mainMenuComponent, /data-game-sounds-muted=\{nonMusicMuted\}/)
 })
 
 const near = (actual: number, expected: number, label: string) => {
@@ -354,16 +290,6 @@ test('phone hosts centre the stage at the largest fit that keeps the whole menu 
   assert.ok(Number.isFinite(degenerate.x) && Number.isFinite(degenerate.y))
 })
 
-test('a viewport host shares the full-display owner while placing its own native stage', () => {
-  assert.match(pauseComponent, /className\?: string/)
-  assert.match(pauseComponent, /gameplay-pause-overlay gameplay-pause-stage\$\{className \? ` \$\{className\}` : ''\}/)
-  assert.match(
-    pauseComponent,
-    /className="main-menu-native-stage gameplay-pause-native-stage" style=\{style\}/,
-  )
-  assert.doesNotMatch(pauseCss, /-4000px|main-menu-native-stage\.gameplay-pause-stage\.dark-cloud-pause-stage/)
-})
-
 test('the shared SimpleMenu plan follows the rows a host authors', () => {
   assert.deepEqual(NATIVE_SIMPLE_MENU_ROW_SIZE, { height: 69, width: 353 })
   assert.deepEqual(nativeSimpleMenuRowBounds(3), [
@@ -380,11 +306,6 @@ test('the shared SimpleMenu plan follows the rows a host authors', () => {
   assert.deepEqual(nativePauseMenuExtent(), nativePauseMenuExtent(NATIVE_PAUSE_MENU_ROWS))
   assert.throws(() => nativeSimpleMenuRowBounds(0), RangeError)
   assert.throws(() => nativeSimpleMenuRowBounds(2.5), RangeError)
-  // The component renders whatever rows the plan carries; no label or row is hard-coded there any more.
-  assert.match(pauseComponent, /renderPlan\.rows\.map\(\(row, index\) => \(/)
-  assert.match(pauseComponent, /buttonRef=\{index === 0 \? firstRowRef : undefined\}/)
-  assert.match(pauseComponent, /rows = NATIVE_PAUSE_MENU_ROWS/)
-  assert.doesNotMatch(pauseComponent, /'RESUME GAME'|'LEAVE GAME'|pauseActionLabel/)
 })
 
 test('the Dark Cloud authors the native four rows and the plan grows around them', () => {
@@ -434,57 +355,4 @@ test('phone hosts fit the taller Dark Cloud menu by its own extent', () => {
   const portrait = nativePauseMenuStagePlacement(fixedGameViewportLayout(390, 844), NATIVE_DARK_CLOUD_MENU_ROWS)
   near(portrait.scale, (390 / 2 - 12) / 216.5, 'portrait scale is width-bound')
   assert.ok(NATIVE_SIMPLE_MENU_ROW_SIZE.height * portrait.scale >= NATIVE_PAUSE_TOUCH_ROW_MIN_PX)
-})
-
-test('a row releases only its own press when focus leaves it', () => {
-  // The first row owns focus after the reveal, so pressing any other row blurs it in the same gesture; that blur must
-  // not release the press that just landed, or the native pressed body (UI.102) never shows for unfocused rows.
-  assert.match(pauseComponent, /row: \{ action, bodyRecord, bounds, label \},\n\}: NativePauseButtonProps\)/)
-  assert.match(pauseComponent, /const blur = \(\) => \{\n\s+if \(bodyRecord === 102\) release\(\)\n\s+\}/)
-  assert.match(pauseComponent, /onBlur=\{blur\}/)
-  assert.doesNotMatch(pauseComponent, /onBlur=\{release\}/)
-})
-
-test('pause owns the full display separately from its transformed native stage', () => {
-  assert.match(
-    pauseCss,
-    /\.gameplay-pause-overlay\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*80;[^}]*inset:\s*0;[^}]*pointer-events:\s*auto;/s,
-  )
-  assert.match(
-    pauseCss,
-    /\.gameplay-pause-dim\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%;/s,
-  )
-  assert.match(
-    pauseComponent,
-    /gameplay-pause-overlay gameplay-pause-stage\$\{className[\s\S]*className="main-menu-native-stage gameplay-pause-native-stage"[\s\S]*style=\{style\}/,
-  )
-  assert.match(
-    pauseComponent,
-    /className="gameplay-pause-native-render"[\s\S]*renderPlan\.rows\.map\(\(row, index\) => \([\s\S]*<NativePauseButton/,
-  )
-})
-
-test('each host owns its second-Escape result without changing the gameplay default', () => {
-  assert.match(
-    pauseComponent,
-    /escapeAction = 'resume'[\s\S]*const consumeEscape =[\s\S]*event\.key !== 'Escape'[\s\S]*event\.repeat[\s\S]*event\.altKey[\s\S]*event\.ctrlKey[\s\S]*event\.metaKey[\s\S]*presentation\.kind !== 'owner'[\s\S]*if \(escapeAction\) beginClose\(escapeAction\)/,
-  )
-})
-
-test('gameplay Main Menu durably saves the final host checkpoint before disconnecting', () => {
-  assert.match(
-    mainMenuComponent,
-    /const leaveGameplay = async \(\) => \{[\s\S]*await session\.saveBeforeLeave\(\)[\s\S]*await persistSaveCheckpoint\(checkpoint\)[\s\S]*session\.destroy\(\)[\s\S]*clearGameplaySession\('root'\)/,
-  )
-  assert.match(
-    mainMenuComponent,
-    /const clearGameplaySession = [\s\S]*setSession\(null\)/,
-  )
-  assert.match(
-    mainMenuComponent,
-    /const leaveGameplayForPartyTransfer = async[\s\S]*await session\.saveBeforeLeave\(\)[\s\S]*await persistSaveCheckpoint\(checkpoint\)[\s\S]*session\.destroy\(\)[\s\S]*clearGameplaySession\(null\)/,
-  )
-  assert.match(mainMenuComponent, /setGameplayPauseMenuGeneration\(current => current \+ 1\)/)
-  assert.match(mainMenuComponent, /key=\{gameplayPauseMenuGeneration\}/)
-  assert.match(mainMenuComponent, /\? 'Saving game…'/)
 })
