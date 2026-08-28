@@ -67,7 +67,12 @@ export interface PlayerStaffOrbPasses {
 
 export const NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD =
   0.10000000149011612
+export const NATIVE_PLAYER_ROBE_FIXED_POSE_COUNT = 17
 export const NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE = 4
+export const NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE = 13
+
+export type PlayerRobeFixedPose = PlayerStaffAttachmentPose
+  | 10 | 11 | 12 | 13 | 14 | 15 | 16
 
 export interface PlayerDeathDrawPlan {
   facing: number
@@ -220,6 +225,16 @@ export function playerCharacterStaffIsFront(
 
 export function playerCharacterRobePose(walkCyclePrimary: number): number {
   return Math.trunc(walkCyclePrimary)
+}
+
+export function playerCharacterRobeFixedPose(
+  attachmentPose: PlayerStaffAttachmentPose,
+  unselectedPrimaryAttachment: boolean,
+  nativeRobe: boolean,
+): PlayerRobeFixedPose {
+  return unselectedPrimaryAttachment && nativeRobe
+    ? NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE
+    : attachmentPose
 }
 
 export function playerCharacterFixedRobeOffset(

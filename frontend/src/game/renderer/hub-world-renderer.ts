@@ -97,6 +97,7 @@ interface HubFrameDiagnostics {
   playerMoving: boolean
   playerOrdinaryWeaponVisible: boolean
   playerPositions: Record<string, { x: number; y: number }>
+  playerRobeFixedPose: number
   playerScreenPositions: Record<string, { x: number; y: number }>
   playerSelectedPrimaryId: number
   playerWalkPose: number
@@ -329,6 +330,7 @@ export async function createHubWorldRenderer(
     playerMoving: false,
     playerOrdinaryWeaponVisible: false,
     playerPositions: {},
+    playerRobeFixedPose: 0,
     playerScreenPositions: {},
     playerSelectedPrimaryId: -1,
     playerWalkPose: 0,
@@ -483,6 +485,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
     frameDiagnostics.playerMaterialTint = playerView.materialTint
     frameDiagnostics.playerOrdinaryWeaponVisible = playerView.ordinaryWeaponVisible
+    frameDiagnostics.playerRobeFixedPose = playerView.robeFixedPose
     frameDiagnostics.playerSelectedPrimaryId = player.primaryCast.selectedPrimaryId
     frameDiagnostics.playerWalkPose = playerView.walkPose
     frameDiagnostics.playerUnselectedPrimaryAttachment = playerView.unselectedPrimaryAttachment

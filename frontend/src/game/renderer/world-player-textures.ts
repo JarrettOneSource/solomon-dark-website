@@ -39,7 +39,8 @@ import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
 
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
-const ACTOR_ATTACHMENT_POSES = 10
+const ACTOR_ROBE_FIXED_POSES = 17
+const ACTOR_STAFF_ATTACHMENT_POSES = 10
 const ACTOR_DEATH_FACINGS = 6
 const ACTOR_DEATH_FRAMES = 4
 const NATIVE_FIRE_ACTOR_BADGUYS_RECORDS = Object.freeze([
@@ -218,7 +219,7 @@ export function createPlayerWorldTextures(
     ),
     fixed: playerCharacterAtlas.grid(
       PLAYER_CHARACTER_SHEETS.robeFixed[element],
-      ACTOR_ATTACHMENT_POSES,
+      ACTOR_STAFF_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
     ),
     head: playerCharacterAtlas.strip(
@@ -232,12 +233,12 @@ export function createPlayerWorldTextures(
     ),
     staffBack: playerCharacterAtlas.grid(
       PLAYER_CHARACTER_SHEETS.staffBack,
-      ACTOR_ATTACHMENT_POSES,
+      ACTOR_STAFF_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
     ),
     staffFront: playerCharacterAtlas.grid(
       PLAYER_CHARACTER_SHEETS.staffFront,
-      ACTOR_ATTACHMENT_POSES,
+      ACTOR_STAFF_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
     ),
   })
@@ -266,12 +267,12 @@ export function createPlayerWorldTextures(
     robeFixed: {
       primary: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.robeFixedLayers.primary,
-        ACTOR_ATTACHMENT_POSES,
+        ACTOR_ROBE_FIXED_POSES,
         ACTOR_HEADINGS,
       ),
       secondary: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.robeFixedLayers.secondary,
-        ACTOR_ATTACHMENT_POSES,
+        ACTOR_ROBE_FIXED_POSES,
         ACTOR_HEADINGS,
       ),
     },
@@ -280,8 +281,16 @@ export function createPlayerWorldTextures(
       secondary: playerCharacterAtlas.grid(style.secondary, ACTOR_WALK_FRAMES, ACTOR_HEADINGS),
     })),
     staffs: PLAYER_CHARACTER_SHEETS.staffStyles.map((style) => ({
-      back: playerCharacterAtlas.grid(style.back, ACTOR_ATTACHMENT_POSES, ACTOR_HEADINGS),
-      front: playerCharacterAtlas.grid(style.front, ACTOR_ATTACHMENT_POSES, ACTOR_HEADINGS),
+      back: playerCharacterAtlas.grid(
+        style.back,
+        ACTOR_STAFF_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
+      front: playerCharacterAtlas.grid(
+        style.front,
+        ACTOR_STAFF_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
     })),
     unselectedAttachment: {
       back: playerCharacterAtlas.grid(
@@ -302,12 +311,12 @@ export function createPlayerWorldTextures(
     wand: {
       back: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.wand.back,
-        ACTOR_ATTACHMENT_POSES,
+        ACTOR_STAFF_ATTACHMENT_POSES,
         ACTOR_HEADINGS,
       ),
       front: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.wand.front,
-        ACTOR_ATTACHMENT_POSES,
+        ACTOR_STAFF_ATTACHMENT_POSES,
         ACTOR_HEADINGS,
       ),
     },

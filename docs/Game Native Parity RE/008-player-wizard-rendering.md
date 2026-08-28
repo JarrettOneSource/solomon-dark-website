@@ -36,9 +36,10 @@ more clearly than the generic `0x0061AF10` decompile.
 7. hat/head tables (`+0x6b0`, `+0x6bc`).
 
 The exact Clothes builder map confirms the four fixed banks are
-`1612..2019`, `2428..2835`, `2020..2427`, and `2836..3243`. The dynamic robe
-banks are selected separately; default style zero maps to records `868..987`
-and `1228..1347`.
+`1612..2019`, `2428..2835`, `2020..2427`, and `2836..3243`: each bank is
+`17 poses x 24 headings`, not the ten poses owned by the separate Staff/Wand
+attachment tables. The dynamic robe banks are selected separately; default
+style zero maps to records `868..987` and `1228..1347`.
 
 This generic renderer is not the authority for the equipped local-player
 robe. The actual local route is
@@ -197,8 +198,8 @@ follows:
   `0x0054BB27..0x0054BB7C` and the final head/hat bob at
   `0x0054C35D..0x0054C50B`;
 - `+0x224` is not read anywhere in this local renderer;
-- `+0x238` remains zero during ordinary Hub walking, so the four large fixed
-  robe banks remain on pose zero;
+- `+0x238` remains zero during ordinary Hub walking with a nonnegative primary,
+  so the four large fixed robe banks remain on pose zero in that branch;
 - both calls to the equipped attachment compositor, at `0x0054BC2E` and
   `0x0054C071`, receive the quantized heading in `EBP`, not `+0x220`. The staff
   shaft and its two item-owned hand records therefore remain on pose zero and
@@ -206,10 +207,13 @@ follows:
 
 The two style-selected Clothes arrays at records `868..987` and `1228..1347`
 are exactly five poses by 24 headings and contain the ordinary robe/body walk
-cycle. The four fixed arrays at `1612`, `2428`, `2020`, and `2836` are instead
-indexed by `+0x238`, which stays zero in the clean Hub walk trace. The staff
-item, shaft, and its two hand sprites also stay on pose zero; they move with
-their owning painter transforms instead of swapping walk frames.
+cycle. The four fixed arrays at `1612`, `2428`, `2020`, and `2836` contain 17
+poses by 24 headings. Ordinary Staff rendering indexes poses `0..9`; the
+empty-hand wrapper maps into `9..12`; selected primary `-1` forces pose `13`;
+and Wand rendering clamps into `14..16`. The clean ordinary Hub walk trace
+selects fixed pose zero. The staff item, shaft, and its two hand sprites also
+stay on pose zero there; they move with their owning painter transforms instead
+of swapping walk frames.
 
 Implementation consequence: retain the two native-owned authoritative phases
 rather than inventing a client animation clock. The existing `gaitDegrees`
@@ -217,9 +221,12 @@ models `+0x228`; retain `walkCyclePrimary` for `+0x220`, advance it by requested
 distance divided by `10`, and wrap it at `5`. This separate field is necessary
 because `gaitDegrees` is bounded modulo `360`, while the two native phases have
 different periods and cannot be reconstructed from that bounded value after a
-wrap. Emit five columns for the style-selected robe/body sheet and keep the
-four fixed robe arrays, head sheet, staff shaft, and both staff-hand banks
-heading-only. Keep the continuous renderer-local transforms already recovered.
+wrap. Emit five columns for the style-selected robe/body sheet, all 17 columns
+for the four common compiled-Robe fixed arrays, ten columns for Staff/Wand
+attachment sheets and the legacy generic fixed-body view, and heading-only
+head/special sheets. Never reuse the ten-pose Staff selector as the compiled
+Robe fixed selector. Keep the continuous renderer-local transforms already
+recovered.
 
 Evidence: fresh no-analysis Ghidra instruction dumps of
 `0x0054BFC7..0x0054BFF1` and decompilation of `Robe_RenderAttachment`
@@ -238,5 +245,5 @@ right-walk capture is visually consistent with this ownership, but the binary
 evidence is decisive without relying on subjective frame matching.
 
 Unknowns: `+0x224` may feed another presentation or gameplay subsystem outside
-`0x0054BA80`, and non-walk action states can still select other Clothes poses.
-Neither affects ordinary local-player Hub locomotion.
+`0x0054BA80`. The fixed-bank selector membership is no longer unknown: raw
+instructions and the Hand/Wand action arrays account for every pose `0..16`.

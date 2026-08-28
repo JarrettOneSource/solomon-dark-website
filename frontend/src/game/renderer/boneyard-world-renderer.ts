@@ -372,6 +372,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
   playerOrdinaryWeaponVisible: boolean
+  playerRobeFixedPose: number
   playerSamples: readonly Readonly<{
     displayName: string
     id: string
@@ -820,6 +821,7 @@ export async function createBoneyardWorldRenderer(
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
     playerOrdinaryWeaponVisible: false,
+    playerRobeFixedPose: 0,
     playerSamples: [],
     primarySpellCount: 0,
     primarySpellKinds: [],
@@ -1321,6 +1323,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerMaterialTint = playerView?.materialTint ?? 0xffffff
       frameDiagnostics.playerOrdinaryWeaponVisible =
         playerView?.ordinaryWeaponVisible ?? false
+      frameDiagnostics.playerRobeFixedPose = playerView?.robeFixedPose ?? 0
       frameDiagnostics.playerUnselectedPrimaryAttachment =
         playerView?.unselectedPrimaryAttachment ?? false
       frameDiagnostics.playerUnselectedRobeAttachmentVisible =

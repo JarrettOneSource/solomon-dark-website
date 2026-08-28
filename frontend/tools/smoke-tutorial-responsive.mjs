@@ -63,7 +63,10 @@ import {
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
-import { playerLivingEquipmentAppearance } from '../src/game/player-character-presentation.ts'
+import {
+  NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE,
+  playerLivingEquipmentAppearance,
+} from '../src/game/player-character-presentation.ts'
 import {
   WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
@@ -1564,6 +1567,7 @@ async function startCollegeFacingSampler(page) {
           orbSpriteCount: frame.orbSpriteCount,
           pathCursor: frame.collegePathCursor,
           region,
+          robeFixedPose: frame.playerRobeFixedPose,
           tick: frame.tick,
           transitionPhase: frame.transitionPhase,
           x: frame.playerX,
@@ -1626,6 +1630,11 @@ function assertCollegeFacingSamples(samples) {
       `College ${sample.region} frame ${sample.frameCount} faces ${sample.headingIndex}, travel ${expected}: ${JSON.stringify(sample)}`,
     )
     assert.equal(sample.orbSpriteCount, 0, `${sample.region} pre-Create orb`)
+    assert.equal(
+      sample.robeFixedPose,
+      NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE,
+      `${sample.region} pre-Create fixed Robe pose`,
+    )
     movingByRegion[sample.region] += 1
     headings.add(sample.headingIndex)
   }
@@ -1838,6 +1847,7 @@ async function collegeWizardReceipt(host, page) {
     materialTint: node.__sdrHubFrame.playerMaterialTint,
     ordinaryWeaponVisible: node.__sdrHubFrame.playerOrdinaryWeaponVisible,
     orbSpriteCount: node.__sdrHubFrame.orbSpriteCount,
+    robeFixedPose: node.__sdrHubFrame.playerRobeFixedPose,
     selectedPrimaryId: node.__sdrHubFrame.playerSelectedPrimaryId,
     unselectedPrimaryAttachment: node.__sdrHubFrame.playerUnselectedPrimaryAttachment,
     unselectedRobeAttachmentVisible:
@@ -1861,6 +1871,7 @@ async function collegeWizardReceipt(host, page) {
     orbSpriteCount: frame.orbSpriteCount,
     robeSelector: equipment.robe?.selector ?? null,
     primaryTint: economy.equipment.hat?.iconTints?.[0] ?? null,
+    robeFixedPose: frame.robeFixedPose,
     robeTint: economy.equipment.robe?.iconTints?.[0] ?? null,
     selectedPrimaryId: player.primaryCast.selectedPrimaryId,
     selectedPrimaryIdInFrame: frame.selectedPrimaryId,
@@ -1890,6 +1901,11 @@ function assertCollegeWizardReceipt(receipt, label) {
     `${label} selected-primary -1 branch: ${JSON.stringify(receipt)}`,
   )
   assert.equal(receipt.unselectedRobeAttachmentVisible, true, `${label} scroll/plain-Staff pixels`)
+  assert.equal(
+    receipt.robeFixedPose,
+    NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE,
+    `${label} fixed Robe grip pose`,
+  )
   assert.equal(receipt.ordinaryWeaponVisible, false, `${label} ordinary equipped weapon`)
   assert.equal(receipt.robeSelector, 0, `${label} scroll-bearing Robe selector`)
   assert.equal(receipt.weaponSelector, 0, `${label} Staff selector`)

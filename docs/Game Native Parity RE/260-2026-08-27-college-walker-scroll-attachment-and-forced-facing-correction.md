@@ -436,3 +436,156 @@ no facing is synthesized from rotation or reflection.
   `main` matched. Deployment and production restart were not requested or
   performed. Website task worktrees and transient evidence were removed after
   the verified push.
+
+## 2026-08-28 — Reopened fixed-Robe pose ownership for the pre-Create walker
+
+### Reported smell and parity question
+
+- Reported web behavior: the Tutorial/College intro walker is missing the
+  hands/sleeves that join the actor to the scroll and long plain Staff, and the
+  remaining arm/scroll pixels do not align.
+- Stock behavior to recover: selected primary `-1` still forces generic
+  attachment pose `4`, but independently forces the equipped Robe's four fixed
+  color banks to pose `13`. Pose `13` supplies the articulated sleeves/cuffs
+  authored around the heading-only scroll and long-Staff pair.
+- This reopens the preceding closure. That pass followed the special prop,
+  shaft, and generic fallback branch but stopped before the selected-primary
+  override of the Robe renderer's second frame argument. It also reused the
+  ten-pose Staff count for four fixed Robe banks that each contain 17 poses,
+  and browser acceptance asserted layer booleans instead of the selected fixed
+  pose or composed arm/hand pixels.
+- Falsifiers: `0x0054BFC1` does not replace the fixed-bank frame; `0x138` is
+  not `13 * 24`; the four fixed banks do not contain 408 rows each; or fixed
+  pose `13` does not visually supply the missing articulated members.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified Beta 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | canonical image for every preferred address below | high |
+| User-visible web witness | user report plus retained Mac Title-9/Office receipts from the preceding closure | long Staff/scroll pixels survive, while the white cuff is detached and the full gripping sleeves/hands are absent | high-visible |
+| Clean stock witness | `native-title-walk-probe.mp4`, SHA-256 `fb4f8863456261facdfe1189ff78b337f17e1a8996059485a8cc2fb9efd8d589`, sampled 9.5..11.9 seconds | the northward walker retains a complete left scroll grip and right Staff grip while moving | high-visible |
+| Selected-primary fixed-frame override | canonical Ghidra 12.0.3 replica; `PlayerWizard::Render 0x0054BA80`, raw `0x0054BF82..0x0054BFF1` | after building the ordinary fixed frame in `EDI`, selected primary `-1` executes `LEA EDI,[EBP+0x138]`; `EBP` is the 24-way heading and `0x138 = 312 = 13 * 24`; that value is pushed as `Item_Robe::RenderAttachment` argument 2 | high |
+| Robe consumer | `Item_Robe::RenderAttachment 0x00577DA0` | argument 2 indexes all four fixed banks after the selected-`-1` prop/shaft and before transform teardown | high |
+| Complete fixed-bank content | Clothes `1612..2019`, `2020..2427`, `2428..2835`, `2836..3243` | four banks x 408 records = four complete `17 x 24` tables; the web extractor emitted only the first `10 x 24` rows | high |
+| Sibling pose dispatch | raw `0x0054BE66..0x0054BF7E`; action constructors/ticks `0x0044B170/0x0044B400/0x0044DF60`, `0x0044B7E0/0x0044B5E0/0x0044E0D0`, `0x0044C600/0x0044C750/0x0044E260`, and `0x0044B370/0x0044B580/0x0044B770/0x0044C810` | Staff consumes `0..9`; empty-hand phases map to `9..12`; selected `-1` forces `13`; Wand clamps/animates through `14..16`. Every authored fixed pose is owned. | high |
+| Static pixel reconstruction | retail `Clothes.png` / `Clothes.bundle`; pose-13 reconstruction at headings 2 and 18 | pose 13 adds the missing full sleeve/cuff members at the Staff and scroll sockets; pose 0 reproduces the reported detached-cuff web result | high |
+
+Read-only RE tooling revision: Mod Loader `08bfba9ef367f7b863848030d0a289dc31e33192`.
+Its dirty networking documentation was not read as parity evidence and was not
+modified.
+
+### System boundary and membership inventory
+
+Native system: the living compiled-Robe fixed-bank selector and all authored
+rows it can submit, with selected-primary `-1` as the reported consumer.
+
+| Member / branch | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| four fixed Robe banks, poses `0..16`, all 24 headings | Clothes `1612..3243` in four 408-record banks | `exact-ported` | common extraction emits every one of the 1,632 records; packed reconstruction is byte-identical |
+| equipped Staff fixed poses `0..9` | ordinary `+0x238` branch | `verified-already-at-parity` | existing Staff action pose tests remain unchanged; the separate ten-pose Staff sheets remain ten poses |
+| empty-hand fixed poses `9..12` | no-item branch and Hand action arrays | `out-of-system` for this selected-`-1` correction; exact rows are nevertheless extracted | the existing documented Hand-action wire residual remains explicit; no guessed active Hand progress is introduced |
+| selected-primary `-1` fixed pose `13` | `0x0054BFC1`, any compiled Robe selector | `exact-ported` | native Robes 0/1/2 select 13 across Staff 0..5, Wand, and empty weapon; mod/no-Robe branches do not inherit it |
+| Wand fixed poses `14..16` | Wand clamp plus Wand action arrays | `out-of-system` for this selected-`-1` correction; exact rows are nevertheless extracted | positive-primary Wand action timing remains owned by the separate action-renderer system; no mapping is guessed here |
+| fallback hands pose `4` | `0x00539749..0x00539AEC`, banks `484..603` / `676..795` | `verified-already-at-parity` | unchanged complete sheets and depth duplication |
+| heading prop and long plain Staff | `0x00577DA0`, Clothes `1588..1611`, `460..483`, material 5 | `verified-already-at-parity` | unchanged exact 24-way sheet and endpoint quads |
+| Robe selectors 0/1/2 | shared compiled `Item_Robe` renderer | `exact-ported` | selector does not gate pose 13; all use the common fixed banks |
+| no native Robe and mod-authored Robe | no compiled `Item_Robe::RenderAttachment` call / browser extension | `out-of-system` | neither receives the stock pose-13 override or special prop |
+| Courtyard, Office, Hub/Boneyard living scenes, hit redraw | shared `PlayerWorldView` lifetime | `exact-ported` | scene-independent state rule; hit copy mirrors the same pose; death/memorial remain separate |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- `PlayerWizard::Render` first derives the Robe fixed frame from the equipped
+  weapon/action branch. Staff uses the actor phase directly; no weapon remaps
+  Hand phases; Wand clamps into its dedicated three rows.
+- Selected primary `-1` is a later override: it replaces only the Robe fixed
+  frame with `heading + 13 * 24`. The generic attachment compositor still uses
+  its separately recovered forced pose 4, and the Robe special prop/shaft still
+  chooses one heading-only row. These three selectors must never be collapsed.
+- `Item_Robe::RenderAttachment` paints dynamic primary/secondary, then the
+  selected-`-1` prop and shaft, then fixed pose-13 primary A/B and secondary
+  A/B. The existing fixed-lane transform and hit redraw apply to the complete
+  group.
+- The four fixed banks are 17 poses, while Staff/Wand material attachment
+  sheets are ten poses. A shared `attachmentPose` count is structurally wrong
+  even when ordinary Staff pose zero happens to render correctly.
+
+### Web implementation consequence
+
+- Split the extractor/runtime counts into ten Staff attachment poses and 17
+  fixed Robe poses. Drain all seven previously omitted fixed rows from every
+  common primary/secondary bank and regenerate the packed atlas.
+- Give `PlayerWorldView` a distinct resolved fixed-Robe pose. A living compiled
+  native Robe with selected primary `-1` uses exact pose 13; normal Staff,
+  mod-Robe, and no-Robe branches retain their existing independent owners.
+- Apply the same resolved pose to primary, secondary, and living hit-copy
+  fixed layers. Do not move the already-correct prop/shaft or fallback sheets.
+- Expose the resolved pose in renderer diagnostics so browser acceptance proves
+  the owning branch instead of only proving that some sprite node is visible.
+
+### Validation contract
+
+- Focused presentation tests must fail on pose zero and require fixed Robe pose
+  13 for selected primary `-1` with each native Robe selector and Staff, Wand,
+  and empty-weapon sinks; positive-primary and mod/no-Robe controls must not
+  inherit 13.
+- Extraction/packing must assert four `17 x 24` common fixed sheets, all 1,632
+  source records, exact source hashes, and byte-identical packed reconstruction,
+  while Staff/Wand attachment sheets remain `10 x 24`.
+- Mac Chrome must traverse the natural Tutorial -> Courtyard -> Office path.
+  Title 7, Title 9, Office, and every moving heading must report fixed pose 13,
+  fallback/special visible, ordinary weapon hidden, and zero orb sprites.
+- Matching stock/web crops at headings 2 and 18 must show both complete grips:
+  no detached cuff, no missing sleeve/hand, and scroll/Staff sockets inside the
+  corresponding pose-13 arm bounds. Page, console, and failed-response arrays
+  must be empty.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact byte-identical
+  Mac candidate before publication. Publication and deployment remain separate
+  receipts.
+
+### Implementation validation receipt
+
+- Implementation: the stock extractor now distinguishes 17 compiled-Robe
+  fixed poses from ten Staff attachment poses and drains the seven omitted rows
+  from both common fixed-color sheets. `PlayerWorldView` resolves one separate
+  fixed-Robe pose and selects 13 only for a living compiled native Robe under
+  selected primary `-1`; primary/secondary fixed layers and their hit copies
+  share it. Staff/fallback, special prop/shaft, mod/no-Robe, death, and memorial
+  ownership remain unchanged.
+- Packed assets: the common fixed sheets are now `2890 x 4080`; the player atlas
+  contains 8,563 frames and 6,059 packed rectangles across pages
+  `2048 x 2048`, `2048 x 2048`, and `2048 x 163`. Actual shelf-height trimming
+  limits decoded bytes to `34,889,728`, an increase of `1,335,296` rather than
+  one padded 16 MiB page. Packed source reconstruction passed before emission.
+- Exact pre-receipt runtime candidate: local commit `c5eb3920`, Mac applied
+  commit `a84f9020`, identical tree `a097600878573160413f107e9687a07b92c26055`,
+  and 18-file manifest SHA-256
+  `fca293f557849f71294d511366cdb4881e0caa52e6148fd5e8f7eebf5ba462b1`.
+- Mac canonical validation: `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  exited zero on arm64 macOS 26.6.2. Backend build/contracts, formatting,
+  frontend lint/generated checks, every registered frontend/runtime/Tutorial/
+  desktop suite, production builds, bundle budget, and media policy passed.
+  The production Game entry is 262,337 raw / 79,551 gzip bytes; validation log
+  SHA-256 is `e6d2d73a41cdb787ceaf654c86f1bc3c4633581676c66ab168100c1aeee06ae3`.
+- Mac Chrome acceptance: the natural Tutorial -> Courtyard -> Office -> Create
+  -> Courtyard journey returned `status: ok`. It sampled 892 College frames,
+  including 204 moving Courtyard and 103 moving Office frames across headings
+  `0,1,2,3,4,5,17,18,19,20,21,22,23`; every sampled moving frame used fixed
+  Robe pose 13. Title 7 heading 2 and Title 9 heading 18 reported selected
+  primary `-1`, fallback/special visible, ordinary weapon hidden, zero orb
+  sprites, and fixed pose 13. Page, console, and failed-response arrays were
+  empty. Browser log SHA-256 is
+  `d3cfc4db9b35916d2ac638f931000c98eab271084c77b52e5ed4cff5a0055413`.
+- Visual comparison: the prior heading-18 receipt showed one detached white
+  cuff beside the horizontal Staff and no complete grips. The new heading-18
+  frame shows both full sleeves/hands enclosing the scroll/Staff pair; the
+  Office frame independently shows both articulated arms joined to their
+  props. New Title 9 and Office SHA-256 values are
+  `d3b3a1ee08ca0d3afc538a12c356d7ead1a2331863c05825d60dfe8ae5c36748`
+  and `23afdfbc79041cee85195b2ff4b3e4820dfca64de20a14d3210987e2740c0d72`.
+- No platform-blocked member or material unknown remains in the selected-`-1`
+  branch. The separately documented active Hand/Wand action-timing residual is
+  unchanged and no guessed mapping was added. Publication is pending the final
+  fetch/rebase and exact-tree validation receipt.

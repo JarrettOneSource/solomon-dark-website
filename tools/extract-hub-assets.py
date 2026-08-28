@@ -48,7 +48,8 @@ PLAYER_CELL_SIZE = 170
 STUDENT_POSES = 5
 PLAYER_HEADINGS = 24
 PLAYER_WALK_POSES = 5
-PLAYER_ATTACHMENT_POSES = 10
+PLAYER_ROBE_FIXED_POSES = 17
+PLAYER_STAFF_ATTACHMENT_POSES = 10
 PLAYER_ATTACHMENT_DEPTH_BASELINE = 0.5
 PRE_CREATE_STAFF_SOCKET_SCALE = 1.100000023841858
 PLAYER_DEATH_FACINGS = 6
@@ -844,7 +845,10 @@ def build_player_colored_layers(
     """Preserve Wizard_Render's independently selected and transformed passes."""
     layers = {
         "robe-dynamic": empty_player_sheet(PLAYER_WALK_POSES),
-        "robe-fixed": empty_player_sheet(PLAYER_ATTACHMENT_POSES),
+        # These legacy element-colored sheets serve the ordinary generic body
+        # path, whose supported selectors remain the Staff-range 0..9. The
+        # complete 17-pose compiled-Robe tables are emitted separately below.
+        "robe-fixed": empty_player_sheet(PLAYER_STAFF_ATTACHMENT_POSES),
         "head": empty_player_sheet(),
     }
 
@@ -863,10 +867,7 @@ def build_player_colored_layers(
                 (pose * PLAYER_CELL_SIZE, row[1]),
             )
 
-        # The second robe argument selects these four ten-pose banks from
-        # actor +0x238. Cast actions use poses 1, 7, and 8 in addition to the
-        # ordinary locomotion pose zero.
-        for pose in range(PLAYER_ATTACHMENT_POSES):
+        for pose in range(PLAYER_STAFF_ATTACHMENT_POSES):
             fixed = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
             fixed_offset = pose * PLAYER_HEADINGS + heading
             paste_player_layer(fixed, atlas, records[1612 + fixed_offset], primary)
@@ -893,9 +894,9 @@ def build_player_staff_sheet(
     front: bool,
     selector: int = 0,
 ) -> Image.Image:
-    sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
+    sheet = empty_player_sheet(PLAYER_STAFF_ATTACHMENT_POSES)
     for heading in range(PLAYER_HEADINGS):
-        for pose in range(PLAYER_ATTACHMENT_POSES):
+        for pose in range(PLAYER_STAFF_ATTACHMENT_POSES):
             cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
             draw_player_staff_pass(
                 cell,
@@ -1034,9 +1035,9 @@ def build_player_fixed_color_sheet(
     secondary: bool,
 ) -> Image.Image:
     bases = (2020, 2836) if secondary else (1612, 2428)
-    sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
+    sheet = empty_player_sheet(PLAYER_ROBE_FIXED_POSES)
     for heading in range(PLAYER_HEADINGS):
-        for pose in range(PLAYER_ATTACHMENT_POSES):
+        for pose in range(PLAYER_ROBE_FIXED_POSES):
             cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
             offset = pose * PLAYER_HEADINGS + heading
             for base in bases:
@@ -1053,9 +1054,9 @@ def build_player_wand_sheet(
     records: list[SpriteRecord],
     front: bool,
 ) -> Image.Image:
-    sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
+    sheet = empty_player_sheet(PLAYER_STAFF_ATTACHMENT_POSES)
     for heading in range(PLAYER_HEADINGS):
-        for pose in range(PLAYER_ATTACHMENT_POSES):
+        for pose in range(PLAYER_STAFF_ATTACHMENT_POSES):
             frame = pose * PLAYER_HEADINGS + heading
             if attachment_is_front(records, 3244 + frame) != front:
                 continue

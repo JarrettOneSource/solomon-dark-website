@@ -8,7 +8,9 @@ import {
 } from './renderer/player-death-weapon-presentation.ts'
 
 import {
+  NATIVE_PLAYER_ROBE_FIXED_POSE_COUNT,
   NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE,
+  NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE,
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   playerEquippedElementEffectScale,
@@ -19,6 +21,7 @@ import {
   playerCharacterFrontAttachmentOffset,
   playerCharacterHeadOffset,
   playerCharacterRobePose,
+  playerCharacterRobeFixedPose,
   playerCharacterStaffIsFront,
   playerCharacterStaffOrbOffset,
   playerCharacterStaffOrbPasses,
@@ -387,6 +390,24 @@ test('selected primary -1 owns the pre-Create fallback and Robe prop branch', ()
   assert.equal(unselected.attachmentPose, 0)
   assert.equal(unselected.bareAttachmentPose, null)
   assert.equal(NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE, 4)
+  assert.equal(NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE, 13)
+  assert.equal(NATIVE_PLAYER_ROBE_FIXED_POSE_COUNT, 17)
+  assert.equal(playerCharacterRobeFixedPose(
+    unselected.attachmentPose,
+    unselected.unselectedPrimaryAttachment,
+    true,
+  ), 13)
+  assert.equal(playerCharacterRobeFixedPose(
+    unselected.attachmentPose,
+    unselected.unselectedPrimaryAttachment,
+    false,
+  ), 0)
+  for (let attachmentPose = 0; attachmentPose < 10; attachmentPose += 1) {
+    const pose = attachmentPose as Parameters<typeof playerCharacterRobeFixedPose>[0]
+    assert.equal(playerCharacterRobeFixedPose(pose, true, true), 13, `${attachmentPose}`)
+    assert.equal(playerCharacterRobeFixedPose(pose, true, false), pose, `${attachmentPose}`)
+    assert.equal(playerCharacterRobeFixedPose(pose, false, true), pose, `${attachmentPose}`)
+  }
   assert.equal(unselected.robePose, 3)
 
   for (const selectedPrimaryId of [8, 16, 24, 32, 40, 52, 80, 1000]) {
@@ -400,6 +421,11 @@ test('selected primary -1 owns the pre-Create fallback and Robe prop branch', ()
     })
     assert.equal(selected.unselectedPrimaryAttachment, false, `${selectedPrimaryId}`)
     assert.equal(selected.bareAttachmentPose, 0, `${selectedPrimaryId}`)
+    assert.equal(playerCharacterRobeFixedPose(
+      selected.attachmentPose,
+      selected.unselectedPrimaryAttachment,
+      true,
+    ), selected.attachmentPose, `${selectedPrimaryId}`)
   }
 })
 

@@ -20,6 +20,7 @@ import {
   playerEquippedElementEffectScale,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
+  playerCharacterRobeFixedPose,
   playerCharacterStaffIsFront,
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
@@ -88,6 +89,7 @@ export class PlayerWorldView {
   private currentDeathFrame: number | null = null
   private currentHeadingIndex = 0
   private currentOrdinaryWeaponVisible = false
+  private currentRobeFixedPose = 0
   private currentUnselectedPrimaryAttachment = false
   private movementFacingState: ActorMovementFacingState | null = null
   private secondaryState: NativeSecondaryPlayerState | undefined
@@ -288,6 +290,8 @@ export class PlayerWorldView {
     }
     const hasWeapon = weaponTextures !== null || modWeaponTextures !== null
     const hasStaff = livingAppearance.weapon?.kind === 'staff'
+    const nativeRobe = livingAppearance.robe !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.robe)
     const bareAttachmentVisible = !plan.unselectedPrimaryAttachment
       && !hasWeapon
       && plan.bareAttachmentPose !== null
@@ -296,8 +300,12 @@ export class PlayerWorldView {
     const ordinaryWeaponVisible = !plan.unselectedPrimaryAttachment && hasWeapon
     const ordinaryStaffVisible = !plan.unselectedPrimaryAttachment && hasStaff
     const unselectedRobeAttachmentVisible = plan.unselectedPrimaryAttachment
-      && livingAppearance.robe !== null
-      && !isPlayerModEquipmentAppearance(livingAppearance.robe)
+      && nativeRobe
+    const robeFixedPose = playerCharacterRobeFixedPose(
+      attachmentPose,
+      plan.unselectedPrimaryAttachment,
+      nativeRobe,
+    )
     const selectedPrimaryAvailable = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       || player.primaryCast.selectedPrimaryId >= 0
     const modStaffFront = modWeaponTextures
@@ -309,6 +317,7 @@ export class PlayerWorldView {
       && (modHatTextures ? modHatTextures.secondary !== null : true)
     this.currentDeathFrame = death.visible ? death.frame : null
     this.currentOrdinaryWeaponVisible = ordinaryWeaponVisible
+    this.currentRobeFixedPose = robeFixedPose
     this.currentUnselectedPrimaryAttachment = plan.unselectedPrimaryAttachment
 
     this.container.position.set(player.position.x, player.position.y)
@@ -403,7 +412,7 @@ export class PlayerWorldView {
     this.unselectedRobeAttachment.position.set(fixedOffset.x, fixedOffset.y)
     if (livingAppearance.robe === null) {
       this.robe.texture = playerTextures.robe[heading]![pose]!
-      this.fixed.texture = playerTextures.fixed[heading]![attachmentPose]!
+      this.fixed.texture = playerTextures.fixed[heading]![robeFixedPose]!
       this.robePrimaryTint = 0xffffff
       this.robeSecondaryTint = 0xffffff
     } else if (modRobeTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
@@ -411,8 +420,8 @@ export class PlayerWorldView {
       if (modRobeTextures.secondary) {
         this.robeSecondary.texture = wearableFrame(modRobeTextures, 'secondary', heading, pose)
       }
-      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![attachmentPose]!
-      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![attachmentPose]!
+      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![robeFixedPose]!
+      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![robeFixedPose]!
       this.robePrimaryTint = livingAppearance.robe.primaryTint
       this.robeSecondaryTint = livingAppearance.robe.secondaryTint
     } else {
@@ -425,8 +434,8 @@ export class PlayerWorldView {
       }
       this.robe.texture = robeTextures.primary[heading]![pose]!
       this.robeSecondary.texture = robeTextures.secondary[heading]![pose]!
-      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![attachmentPose]!
-      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![attachmentPose]!
+      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![robeFixedPose]!
+      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![robeFixedPose]!
       this.robePrimaryTint = livingAppearance.robe.primaryTint
       this.robeSecondaryTint = livingAppearance.robe.secondaryTint
     }
@@ -577,6 +586,10 @@ export class PlayerWorldView {
 
   get ordinaryWeaponVisible(): boolean {
     return this.currentOrdinaryWeaponVisible
+  }
+
+  get robeFixedPose(): number {
+    return this.currentRobeFixedPose
   }
 
   get unselectedPrimaryAttachment(): boolean {
