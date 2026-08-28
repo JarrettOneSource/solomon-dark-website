@@ -69,7 +69,7 @@ test('projects the complete pre-Create College chrome gate from authoritative li
     assert.match(chrome, new RegExp(`<${member}`), member)
   }
   assert.match(menu, /!collegeAdmissionHudHidden[\s\S]{0,300}<GameMenuSkull/)
-  assert.match(menu, /!collegeAdmissionHudHidden && <GameFullscreenButton \/>/)
+  assert.match(menu, /!collegeAdmissionHudHidden && \([\s\S]*<GameFullscreenButton \/>/)
   assert.match(hub, /data-gameplay-hud=\{gameplayHudHidden \? 'hidden' : 'visible'\}/)
   assert.match(hub, /gameplayHudHidden \? 'modal' : hubUiSurface\?\.kind/)
   assert.match(hub, /gameplayHudHidden[\s\S]*?onMenuAvailabilityChange\?\.\('hidden'\)/)

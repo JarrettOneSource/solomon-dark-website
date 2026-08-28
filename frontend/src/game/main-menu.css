@@ -105,15 +105,11 @@
 }
 
 .main-menu-discord-link {
-  position: absolute;
-  z-index: 1000;
-  bottom: 10px;
-  left: 10px;
   display: grid;
   box-sizing: border-box;
-  width: 38px;
-  height: 38px;
-  padding: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 6px;
   border: 1px solid rgb(195 200 255 / 0.9);
   border-radius: 8px;
   color: #fff;
@@ -139,16 +135,6 @@
 }
 
 .main-menu-discord-link:active { background: #4752c4; }
-
-.main-menu-quit {
-  position: absolute;
-  right: 1.1875%;
-  bottom: 1.555556%;
-  width: 6.25%;
-  pointer-events: auto;
-}
-
-.main-menu-button-compact { aspect-ratio: 100 / 52; }
 
 /* The fade covers everything on the stage — scene, chat, settings, the menu skull — so no
    stage-level control floats on the black while a screen changes. */
@@ -234,48 +220,57 @@
   outline-offset: 2px;
 }
 
-.game-fullscreen-control {
+.game-edge-controls {
   position: absolute;
   z-index: 1000;
   top: 8px;
   right: 49px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.game-fullscreen-control {
+  position: relative;
+  pointer-events: auto;
 }
 
 .main-menu-page[data-chat-open='true'] .game-menu-skull,
-.main-menu-page[data-chat-open='true'] .game-fullscreen-control {
+.main-menu-page[data-chat-open='true'] .game-edge-controls {
   visibility: hidden;
   pointer-events: none;
 }
 
-.main-menu-page[data-game-scene='root'] .game-fullscreen-control,
-.main-menu-page[data-game-scene='play'] .game-fullscreen-control {
-  top: auto;
-  right: calc(7px + min(7.4375cqw, 13.222222cqh));
-  bottom: min(0.875cqw, 1.555556cqh);
-}
-
-.main-menu-page[data-game-scene='hall'] .game-fullscreen-control {
+.main-menu-page[data-game-scene='root'] .game-edge-controls,
+.main-menu-page[data-game-scene='play'] .game-edge-controls {
   top: auto;
   right: 8px;
   bottom: 8px;
 }
 
-.main-menu-page[data-game-scene='dark-cloud'] .game-fullscreen-control {
+.main-menu-page[data-game-scene='hall'] .game-edge-controls {
+  top: auto;
+  right: 8px;
+  bottom: 8px;
+}
+
+.main-menu-page[data-game-scene='dark-cloud'] .game-edge-controls {
   top: 8px;
   right: 8px;
 }
 
-.main-menu-page:has(.dark-cloud-modal-backdrop) .game-fullscreen-control,
-.main-menu-page:has(.dark-cloud-detail-backdrop) .game-fullscreen-control {
+.main-menu-page:has(.dark-cloud-modal-backdrop) .game-edge-controls,
+.main-menu-page:has(.dark-cloud-detail-backdrop) .game-edge-controls {
   display: none;
 }
 
-.main-menu-page[data-game-scene='create'] .game-fullscreen-control {
+.main-menu-page[data-game-scene='create'] .game-edge-controls {
   top: min(0.625cqw, 1.111111cqh);
   right: calc(8px + min(5cqw, 8.888889cqh));
 }
 
-.main-menu-page[data-skill-book-open='true'] .game-fullscreen-control {
+.main-menu-page[data-skill-book-open='true'] .game-edge-controls {
   display: none;
 }
 
@@ -1006,7 +1001,7 @@
   .main-menu-page[data-game-scene='dark-cloud'] .main-menu-stage { visibility: visible; }
   .main-menu-page[data-game-scene='dark-cloud'] .game-orientation-hint { display: none; }
 
-  .game-fullscreen-control { z-index: 100001; }
+  .game-edge-controls { z-index: 100001; }
 
   .game-orientation-hint {
     position: fixed;

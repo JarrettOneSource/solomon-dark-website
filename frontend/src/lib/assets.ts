@@ -46,15 +46,12 @@ import mainMenuGrave7 from '../assets/game/main-menu-grave-7.png'
 import mainMenuGrave8 from '../assets/game/main-menu-grave-8.png'
 import mainMenuHorizon from '../assets/game/main-menu-horizon.png'
 import mainMenuMoon from '../assets/game/main-menu-moon.png'
-import mainMenuQuitCorner from '../assets/game/main-menu-quit-corner.png'
-import mainMenuQuitRail from '../assets/game/main-menu-quit-rail.png'
 import mainMenuTextDarkCloud from '../assets/game/main-menu-text-dark-cloud.png'
 import mainMenuTextExplore from '../assets/game/main-menu-text-explore.png'
 import mainMenuTextHall from '../assets/game/main-menu-text-hall.png'
 import mainMenuTextLastGame from '../assets/game/main-menu-text-last-game.png'
 import mainMenuTextNewGame from '../assets/game/main-menu-text-new-game.png'
 import mainMenuTextPlay from '../assets/game/main-menu-text-play.png'
-import mainMenuTextQuit from '../assets/game/main-menu-text-quit.png'
 import mainMenuTextResume from '../assets/game/main-menu-text-resume.png'
 import mainMenuTextSettings from '../assets/game/main-menu-text-settings.png'
 import mainMenuTextBack from '../assets/game/main-menu-text-back.png'
@@ -444,8 +441,6 @@ export const mainMenu = {
   hallOfFameBackground,
   logo: logoSolomonDark,
   moon: mainMenuMoon,
-  quitCorner: mainMenuQuitCorner,
-  quitRail: mainMenuQuitRail,
   text: {
     play: mainMenuTextPlay,
     explore: mainMenuTextExplore,
@@ -456,7 +451,6 @@ export const mainMenu = {
     lastGame: mainMenuTextLastGame,
     newGame: mainMenuTextNewGame,
     back: mainMenuTextBack,
-    quit: mainMenuTextQuit,
   },
 }
 

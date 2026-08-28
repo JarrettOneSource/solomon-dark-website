@@ -293,7 +293,7 @@ test('chat remains admitted over every gameplay modal while exclusive applicatio
   assert.equal(mainMenu.match(/inputSuspended=\{chatOpen \|\| socialModalOpen\}/g)?.length, 4)
   assert.match(
     mainMenuCss,
-    /\.main-menu-page\[data-chat-open='true'\] \.game-menu-skull,[\s\S]*\.main-menu-page\[data-chat-open='true'\] \.game-fullscreen-control\s*\{[\s\S]*pointer-events:\s*none/,
+    /\.main-menu-page\[data-chat-open='true'\] \.game-menu-skull,[\s\S]*\.main-menu-page\[data-chat-open='true'\] \.game-edge-controls\s*\{[\s\S]*pointer-events:\s*none/,
   )
 })
 

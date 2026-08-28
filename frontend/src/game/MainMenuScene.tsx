@@ -190,7 +190,6 @@ interface MenuButtonProps {
   accessibleLabel: string
   action: TitleMenuAction
   className?: string
-  compact?: boolean
   defaultFocus?: boolean
   disabled?: boolean
   isBack?: boolean
@@ -204,7 +203,6 @@ function MenuButton({
   accessibleLabel,
   action,
   className,
-  compact = false,
   defaultFocus = false,
   disabled = false,
   isBack = false,
@@ -215,7 +213,6 @@ function MenuButton({
 }: MenuButtonProps) {
   const classes = [
     'main-menu-button',
-    compact && 'main-menu-button-compact',
     className,
   ].filter(Boolean).join(' ')
 
@@ -973,10 +970,6 @@ export default function MainMenuScene({
   const nativeStageBounds = fixedGameStageBounds(fixedViewport, 'center', 'center')
   const nativeStageCssBounds = fixedGameStageCssBounds(fixedViewport, nativeStageBounds)
   const nativeStageStyle = fixedStageStyle(fixedViewport, nativeStageBounds)
-  const quitStageStyle = fixedStageStyle(
-    fixedViewport,
-    fixedGameStageBounds(fixedViewport, 'right', 'bottom'),
-  )
   const accountStageStyle = fixedStageStyle(
     fixedViewport,
     fixedGameStageBounds(fixedViewport, 'left', 'top'),
@@ -1783,22 +1776,6 @@ export default function MainMenuScene({
               viewport={fixedViewport}
             />
 
-            {screen === 'root' && titlePrompt === null ? (
-              <a
-                className="main-menu-discord-link"
-                aria-label="Join the Solomon Darker Discord server"
-                href={DISCORD_INVITE_URL}
-                onClick={() => audio.playSound('click')}
-                rel="noreferrer"
-                target="_blank"
-                title="Join Discord"
-              >
-                <svg viewBox="0 0 20 19" aria-hidden focusable="false">
-                  <use href="/icons.svg#discord-icon" />
-                </svg>
-              </a>
-            ) : null}
-
             <div
               className="main-menu-native-stage main-menu-account-stage"
               hidden={titlePrompt !== null}
@@ -1839,22 +1816,6 @@ export default function MainMenuScene({
               </nav>
             </div>
 
-            <div
-              className="main-menu-native-stage main-menu-quit-stage"
-              inert={titlePrompt !== null || undefined}
-              style={quitStageStyle}
-            >
-              <div className="main-menu-quit">
-                <MenuButton
-                  action="quit"
-                  accessibleLabel="Quit"
-                  compact
-                  onHighlight={setHoveredTitleAction}
-                  onPress={() => audio.playSound('click')}
-                  onPressState={setPressedTitleAction}
-                />
-              </div>
-            </div>
           </>
         ) : screen === 'tutorial-prelude' ? (
           <div className="main-menu-native-stage" style={nativeStageStyle}>
@@ -2422,7 +2383,26 @@ export default function MainMenuScene({
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>
-      {!collegeAdmissionHudHidden && <GameFullscreenButton />}
+      {!collegeAdmissionHudHidden && (
+        <div className="game-edge-controls">
+          {screen === 'root' && titlePrompt === null ? (
+            <a
+              className="main-menu-discord-link"
+              aria-label="Join the Solomon Darker Discord server"
+              href={DISCORD_INVITE_URL}
+              onClick={() => audio.playSound('click')}
+              rel="noreferrer"
+              target="_blank"
+              title="Join Discord"
+            >
+              <svg viewBox="0 0 20 19" aria-hidden focusable="false">
+                <use href="/icons.svg#discord-icon" />
+              </svg>
+            </a>
+          ) : null}
+          <GameFullscreenButton />
+        </div>
+      )}
     </div>
   )
 }

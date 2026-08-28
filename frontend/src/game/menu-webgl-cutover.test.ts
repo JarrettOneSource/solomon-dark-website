@@ -94,7 +94,8 @@ test('Hub and Boneyard renderer code follows the existing transition loading bar
 test('edge chrome and the loader consume their recovered screen ownership', () => {
   assert.match(titleRenderer, /title-menu-solomon-stage/)
   assert.match(titleRenderer, /title-menu-version-stage/)
-  assert.match(titleRenderer, /title-menu-quit-stage/)
+  assert.doesNotMatch(titleRenderer, /title-menu-quit-stage/)
+  assert.match(mainScene, /className="game-edge-controls"/)
   assert.match(createScene, /fixedGameStageBounds\(viewport, 'left', 'top'\)/)
   assert.match(loaderScene, /fixedGameViewportLayout/)
   assert.match(loaderRenderer, /LOADER_FRAME_BOUNDS/)

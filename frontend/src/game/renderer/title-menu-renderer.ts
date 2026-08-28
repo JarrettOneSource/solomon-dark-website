@@ -53,7 +53,6 @@ export type TitleMenuAction =
   | 'join-party'
   | 'new-game'
   | 'play'
-  | 'quit'
   | 'settings'
   | 'unavailable'
   | TitleMenuPromptAction
@@ -134,7 +133,6 @@ export async function createTitleMenuRenderer(
   const solomonStage = titleStage('title-menu-solomon-stage', 20)
   const centerStage = titleStage('title-menu-center-stage', 21)
   const versionStage = titleStage('title-menu-version-stage', 22)
-  const quitStage = titleStage('title-menu-quit-stage', 24)
   const promptCurtain = new Graphics()
   promptCurtain.alpha = 0.75
   promptCurtain.zIndex = 29
@@ -144,7 +142,6 @@ export async function createTitleMenuRenderer(
     solomonStage,
     centerStage,
     versionStage,
-    quitStage,
     promptCurtain,
     promptStage,
   )
@@ -234,10 +231,7 @@ export async function createTitleMenuRenderer(
   rootButtons.addChild(...rootButtonViews.map((button) => button.container))
   playButtons.addChild(...playButtonViews.map((button) => button.container))
   centerStage.addChild(rootButtons, playButtons)
-  const quitButton = createQuitButton(texture)
-  quitButton.container.zIndex = 24
-  quitStage.addChild(quitButton.container)
-  const allButtons = [...rootButtonViews, ...playButtonViews, quitButton]
+  const allButtons = [...rootButtonViews, ...playButtonViews]
 
   let destroyed = false
   let simulatedTicks = 0
@@ -381,7 +375,6 @@ export async function createTitleMenuRenderer(
         solomonStage,
         centerStage,
         versionStage,
-        quitStage,
         promptCurtain,
         promptStage,
         viewport,
@@ -410,7 +403,6 @@ export async function createTitleMenuRenderer(
     solomonStage,
     centerStage,
     versionStage,
-    quitStage,
     promptCurtain,
     promptStage,
     options.viewport,
@@ -435,7 +427,6 @@ function applyTitleViewport(
   solomonStage: Container,
   centerStage: Container,
   versionStage: Container,
-  quitStage: Container,
   promptCurtain: Graphics,
   promptStage: Container,
   viewport: FixedGameViewportLayout,
@@ -454,18 +445,15 @@ function applyTitleViewport(
   const solomonBounds = fixedGameStageBounds(viewport, 'left', 'bottom')
   const centerBounds = fixedGameStageBounds(viewport, 'center', 'center')
   const versionBounds = fixedGameStageBounds(viewport, 'right', 'top')
-  const quitBounds = fixedGameStageBounds(viewport, 'right', 'bottom')
   solomonStage.position.set(solomonBounds.x, solomonBounds.y)
   centerStage.position.set(centerBounds.x, centerBounds.y)
   versionStage.position.set(versionBounds.x, versionBounds.y)
-  quitStage.position.set(quitBounds.x, quitBounds.y)
   promptStage.position.set(centerBounds.x, centerBounds.y)
   promptCurtain.clear()
     .rect(0, 0, viewport.width, viewport.height)
     .fill(0x000000)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.dataset.centerStage = `${centerBounds.x},${centerBounds.y}`
-  canvas.dataset.quitStage = `${quitBounds.x},${quitBounds.y}`
   canvas.dataset.solomonStage = `${solomonBounds.x},${solomonBounds.y}`
   canvas.dataset.versionStage = `${versionBounds.x},${versionBounds.y}`
   canvas.dataset.viewportHeight = `${viewport.height}`
@@ -647,7 +635,7 @@ function createMainButton(
   labels: readonly (readonly [string, string])[],
   labelAlpha = 1,
 ): ButtonView {
-  const view = createButtonChrome(texture, action, 353, 69, false)
+  const view = createButtonChrome(texture, action, 353, 69)
   view.container.position.set(
     MAIN_BUTTON_X,
     MAIN_BUTTON_Y + row * (MAIN_BUTTON_HEIGHT + MAIN_BUTTON_GAP),
@@ -656,32 +644,24 @@ function createMainButton(
   return view
 }
 
-function createQuitButton(texture: (source: string) => Texture): ButtonView {
-  const view = createButtonChrome(texture, 'quit', 100, 52, true)
-  view.container.position.set(1481, 834)
-  addLabels(view.label, texture, [['quit', mainMenu.text.quit]], 100, 52, 1)
-  return view
-}
-
 function createButtonChrome(
   texture: (source: string) => Texture,
   action: TitleMenuAction,
   width: number,
   height: number,
-  compact: boolean,
 ): ButtonView {
   const container = new Container({ label: `title-button-${action}` })
   const stone = stageSprite(texture(mainMenu.button), 0, 0, width, height, 0)
   const hover = stageSprite(texture(mainMenu.buttonHover), 0, 0, width, height, 1)
   hover.alpha = 0
-  const cornerTexture = texture(compact ? mainMenu.quitCorner : mainMenu.buttonCorner)
-  const railTexture = texture(compact ? mainMenu.quitRail : mainMenu.buttonRail)
-  const cornerWidth = compact ? 27 : 70
-  const chromeHeight = compact ? 62 : 85
+  const cornerTexture = texture(mainMenu.buttonCorner)
+  const railTexture = texture(mainMenu.buttonRail)
+  const cornerWidth = 70
+  const chromeHeight = 85
   const chromeTop = -6
-  const cornerOffset = compact ? -6 : -6
-  const railX = compact ? 21 : 64
-  const railWidth = compact ? 58 : 225
+  const cornerOffset = -6
+  const railX = 64
+  const railWidth = 225
   const left = stageSprite(cornerTexture, cornerOffset, chromeTop, cornerWidth, chromeHeight, 2)
   const right = stageSprite(
     cornerTexture,

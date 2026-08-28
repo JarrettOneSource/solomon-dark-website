@@ -97,12 +97,15 @@ test('Hall of Fame is actionable and owns local plus four global boards', () => 
   assert.doesNotMatch(scene, /submitGlobalHallOfFame\(entry\)/)
 })
 
-test('Discord is a root-screen corner icon, not a native menu row', () => {
+test('browser title removes Quit and groups Discord beside Fullscreen', () => {
   const rootButtonViews = renderer.match(/const rootButtonViews = \[([\s\S]*?)\n  \]/)
   assert.ok(rootButtonViews, 'missing root title-button collection')
   assert.equal(rootButtonViews[1].match(/createMainButton/g)?.length, 4)
+  const playButtonViews = renderer.match(/const playButtonViews = \[([\s\S]*?)\n  \]/)
+  assert.ok(playButtonViews, 'missing Play title-button collection')
+  assert.equal(playButtonViews[1].match(/createMainButton/g)?.length, 4)
   assert.match(scene, /const DISCORD_INVITE_URL = 'https:\/\/discord\.gg\/HGHxZgyM2p'/)
-  assert.match(scene, /screen === 'root' && titlePrompt === null \? \([\s\S]*className="main-menu-discord-link"/)
+  assert.match(scene, /className="game-edge-controls"[\s\S]*screen === 'root' && titlePrompt === null \? \([\s\S]*className="main-menu-discord-link"[\s\S]*<GameFullscreenButton \/>/)
   assert.match(scene, /aria-label="Join the Solomon Darker Discord server"/)
   assert.match(scene, /href=\{DISCORD_INVITE_URL\}/)
   assert.match(scene, /rel="noreferrer"/)
@@ -110,10 +113,15 @@ test('Discord is a root-screen corner icon, not a native menu row', () => {
   assert.match(scene, /<use href="\/icons\.svg#discord-icon" \/>/)
   assert.doesNotMatch(scene, /action="discord"/)
   assert.doesNotMatch(renderer, /\| 'discord'|createMainButton\(texture, 'discord'/)
+  assert.doesNotMatch(scene, /action="quit"|main-menu-quit|quitStageStyle/)
+  assert.doesNotMatch(renderer, /\| 'quit'|createQuitButton|title-menu-quit-stage|quitStage|mainMenu\.quit/)
+  assert.doesNotMatch(assetManifest, /mainMenuQuit|mainMenuTextQuit|quitCorner|quitRail/)
   assert.match(
     menuStyles,
-    /\.main-menu-discord-link \{[\s\S]*bottom:\s*10px;[\s\S]*left:\s*10px;/,
+    /\.game-edge-controls \{[\s\S]*display:\s*flex;[\s\S]*gap:\s*8px;/,
   )
+  assert.match(menuStyles, /\.main-menu-page\[data-game-scene='root'\] \.game-edge-controls,[\s\S]*right:\s*8px;[\s\S]*bottom:\s*8px;/)
+  assert.match(menuStyles, /\.main-menu-discord-link \{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/)
   assert.doesNotMatch(menuStyles, /data-game-action='discord'|content:\s*'DISCORD'/)
   assert.match(menuStyles, /@media \(hover: none\) and \(pointer: coarse\) \{[\s\S]*\.main-menu-discord-link \{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/)
   assert.match(publicIcons, /<symbol id="discord-icon"[\s\S]*<path fill="currentColor"/)
