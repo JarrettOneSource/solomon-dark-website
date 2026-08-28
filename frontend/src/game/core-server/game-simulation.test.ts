@@ -1198,13 +1198,20 @@ test('native item belt binds shortcuts without moving ownership and activates ex
   const economy = getPlayerEconomy(state)
   const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
   const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!
-  const ring = createEquipmentInventoryItem(ringRecipe, economy.nextItemId)
-  const hat = createEquipmentInventoryItem(hatRecipe, economy.nextItemId + 1)
+  const ring = {
+    ...createEquipmentInventoryItem(ringRecipe, economy.nextItemId),
+    inventorySlot: 0,
+  }
+  const hat = {
+    ...createEquipmentInventoryItem(hatRecipe, economy.nextItemId + 1),
+    inventorySlot: 1,
+  }
   const sack: HubInventoryItem = {
     contents: [ring, hat],
     equipmentType: null,
     iconRecords: [70],
     id: economy.nextItemId + 2,
+    inventorySlot: 2,
     kind: 'sack',
     name: 'Belt action Sack',
     nativeSubtype: 0,
@@ -1216,6 +1223,7 @@ test('native item belt binds shortcuts without moving ownership and activates ex
   const chug: HubInventoryItem = {
     ...economy.backpack[0]!,
     id: economy.nextItemId + 3,
+    inventorySlot: 3,
     kind: 'wizard-chug',
     name: 'Wizard Chug',
     nativeSubtype: 2,
@@ -1224,6 +1232,7 @@ test('native item belt binds shortcuts without moving ownership and activates ex
     equipmentType: null,
     iconRecords: [43],
     id: economy.nextItemId + 4,
+    inventorySlot: 4,
     kind: 'key',
     name: 'Wizard Key',
     nativeSubtype: 1,

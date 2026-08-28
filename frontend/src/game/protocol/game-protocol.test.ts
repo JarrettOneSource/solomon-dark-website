@@ -2431,6 +2431,7 @@ test('protocol validates active primary and concentration selections against eff
 
   const effectiveOnlyQuickbar = JSON.parse(JSON.stringify(baseFrame))
   effectiveOnlyQuickbar.players['player-1'].progression.learnedSkills.push([15, 0, 1])
+  effectiveOnlyQuickbar.players['player-1'].progression.secondaryManaCosts.push([15, 0])
   effectiveOnlyQuickbar.players['player-1'].belt[0] = { kind: 'skill', skillId: 15 }
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(message(effectiveOnlyQuickbar))),
