@@ -27,9 +27,12 @@ import {
 import {
   SKILL_PICKER_CARD_FRAME,
   SKILL_PICKER_ICON_ANCHOR_OFFSET,
+  SKILL_PICKER_INSIGHT_LABEL_Y,
+  SKILL_PICKER_INSIGHT_TINT,
   SKILL_PICKER_PANEL,
   SKILL_PICKER_SIZE,
   skillPickerCardCenters,
+  skillPickerInsightAlpha,
   skillPickerPanelBounds,
   skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
@@ -47,6 +50,11 @@ interface AnimatedCorner {
   readonly directionX: -1 | 1
   readonly directionY: -1 | 1
   readonly sprite: Sprite
+}
+
+interface InsightCardTreatment {
+  readonly cardIndex: number
+  readonly container: Container
 }
 
 export interface SkillPickerRenderer {
@@ -130,7 +138,10 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   chromeLayer.addChild(instruction)
 
   let animatedCorners: AnimatedCorner[] = []
+  let insightCardTreatments: InsightCardTreatment[] = []
+  let insightPanels: NineSliceSprite[] = []
   let selectionPanels: NineSliceSprite[] = []
+  const nativeScreenStartedAtMs = performance.now()
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let destroyed = false
 
@@ -170,16 +181,28 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
           : 0.78
         selectionPanels[index]!.tint = selected ? 0xd9f5f6 : 0xffffff
       }
+      const insightAlpha = reducedMotion
+        ? 0.5
+        : skillPickerInsightAlpha(Math.floor((nowMs - nativeScreenStartedAtMs) / 10))
+      for (const treatment of insightCardTreatments) {
+        treatment.container.alpha = insightAlpha
+        insightPanels[treatment.cardIndex]!.alpha = insightAlpha
+      }
       application.renderer.render(application.stage)
     },
     setContentVisible(visible) {
       offerLayer.visible = visible
+      for (const treatment of insightCardTreatments) {
+        insightPanels[treatment.cardIndex]!.visible = visible
+      }
       application.renderer.render(application.stage)
     },
     setOffer(offer, specialActionsAvailable) {
       const panel = rebuildPanel(panelLayer, resources, offer.options.length)
       animatedCorners = panel.corners
+      insightPanels = panel.insightCards
       selectionPanels = panel.cards
+      insightCardTreatments = []
       offerLayer.removeChildren().forEach((child) => child.destroy({ children: true }))
       const levelLine = `Y O U   A R E   N O W   L E V E L   ${offer.level}`
       for (let degrees = 0; degrees < 360; degrees += 45) {
@@ -207,7 +230,11 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       offer.options.forEach((option, index) => {
         const skill = NATIVE_SKILL_CATALOG[option.skillId]
         if (!skill) throw new Error(`skill picker has no catalog row ${option.skillId}`)
-        addSkillCard(offerLayer, resources, skill, option, centers[index]!)
+        const insight = addSkillCard(offerLayer, resources, skill, option, centers[index]!)
+        insightPanels[index]!.visible = insight !== null
+        if (insight !== null) {
+          insightCardTreatments.push({ cardIndex: index, container: insight })
+        }
       })
       if (specialActionsAvailable) {
         const bounds = skillPickerSpecialActionBounds(offer.options.length)
@@ -235,7 +262,7 @@ function addSkillCard(
   skill: NativeSkillCatalogEntry,
   option: ProtocolPlayerSkillOfferOption,
   centerX: number,
-): void {
+): Container | null {
   const aura = spriteFor(textures, 'Skills', 13)
   aura.anchor.set(0.5)
   aura.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
@@ -277,6 +304,41 @@ function addSkillCard(
   icon.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
   layer.addChild(icon)
 
+  let insightTreatment: Container | null = null
+  if (option.insight === true) {
+    insightTreatment = new Container()
+    insightTreatment.alpha = 0
+    const insightAura = spriteFor(textures, 'Skills', 13)
+    insightAura.anchor.set(0.5)
+    insightAura.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+    insightAura.scale.set(1.15)
+    insightAura.tint = SKILL_PICKER_INSIGHT_TINT
+    const insightGlow = spriteFor(textures, 'Skills', 164)
+    insightGlow.anchor.set(0.5)
+    insightGlow.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+    insightGlow.scale.set(1.15)
+    insightGlow.tint = SKILL_PICKER_INSIGHT_TINT
+    const insightFrame = spriteFor(textures, 'Skills', 5)
+    insightFrame.anchor.set(0.5)
+    insightFrame.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+    insightFrame.tint = SKILL_PICKER_INSIGHT_TINT
+    const insightIcon = spriteFor(textures, 'Skills', iconRecord)
+    insightIcon.anchor.set(0.5)
+    insightIcon.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+    insightIcon.tint = SKILL_PICKER_INSIGHT_TINT
+    insightTreatment.addChild(insightAura, insightGlow, insightFrame, insightIcon)
+    addBitmapText(
+      insightTreatment,
+      textures,
+      'Insight',
+      'body',
+      centerX,
+      SKILL_PICKER_INSIGHT_LABEL_Y,
+      { align: 'center', tint: SKILL_PICKER_INSIGHT_TINT },
+    )
+    layer.addChild(insightTreatment)
+  }
+
   const name = `${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}`.toUpperCase()
   const tint = skillTextTint(skill.family)
   addBitmapText(layer, textures, name, 'medium', centerX, 449, {
@@ -296,13 +358,18 @@ function addSkillCard(
     maxWidth: 110,
     tint: 0xffffff,
   })
+  return insightTreatment
 }
 
 function rebuildPanel(
   layer: Container,
   textures: GameTextureMap,
   optionCount: number,
-): { cards: NineSliceSprite[]; corners: AnimatedCorner[] } {
+): {
+  cards: NineSliceSprite[]
+  corners: AnimatedCorner[]
+  insightCards: NineSliceSprite[]
+} {
   layer.removeChildren().forEach((child) => child.destroy({ children: true }))
   const bounds = skillPickerPanelBounds(optionCount)
   const backgroundRecord = nativeUiRecord('UI', 49)
@@ -362,7 +429,9 @@ function rebuildPanel(
     return { ...definition, sprite }
   })
 
-  const cards = skillPickerCardCenters(optionCount).map((centerX) => {
+  const cards: NineSliceSprite[] = []
+  const insightCards: NineSliceSprite[] = []
+  for (const centerX of skillPickerCardCenters(optionCount)) {
     const card = new NineSliceSprite({
       bottomHeight: 30,
       height: SKILL_PICKER_PANEL.cardHeight,
@@ -373,10 +442,27 @@ function rebuildPanel(
       width: SKILL_PICKER_PANEL.cardWidth,
     })
     card.position.set(centerX - SKILL_PICKER_PANEL.cardWidth / 2, SKILL_PICKER_PANEL.cardTop)
-    layer.addChild(card)
-    return card
-  })
-  return { cards, corners }
+    const insightCard = new NineSliceSprite({
+      bottomHeight: 30,
+      height: SKILL_PICKER_PANEL.cardHeight,
+      leftWidth: 30,
+      rightWidth: 30,
+      texture: textureFor(textures, 'Skills', 0),
+      topHeight: 30,
+      width: SKILL_PICKER_PANEL.cardWidth,
+    })
+    insightCard.alpha = 0
+    insightCard.position.set(
+      centerX - SKILL_PICKER_PANEL.cardWidth / 2,
+      SKILL_PICKER_PANEL.cardTop,
+    )
+    insightCard.tint = SKILL_PICKER_INSIGHT_TINT
+    insightCard.visible = false
+    layer.addChild(card, insightCard)
+    cards.push(card)
+    insightCards.push(insightCard)
+  }
+  return { cards, corners, insightCards }
 }
 
 function skillTextTint(family: string): number {

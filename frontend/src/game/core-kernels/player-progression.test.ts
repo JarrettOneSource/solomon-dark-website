@@ -112,7 +112,6 @@ function applyPlayerSkillChoice(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   selection: Parameters<typeof applyPlayerSkillChoiceWithGameplayRng>[2],
-  sorcerorsCharmOwned = false,
   ownedHagathaSelectors: readonly number[] = [],
 ) {
   return applyPlayerSkillChoiceWithGameplayRng(
@@ -120,7 +119,6 @@ function applyPlayerSkillChoice(
     skillBook,
     selection,
     offerGameplayRng(progression),
-    sorcerorsCharmOwned,
     ownedHagathaSelectors,
   )
 }
@@ -208,7 +206,7 @@ test('ordinary and Insight acquisitions replace the offer seed before queued off
   )
   assert.ok(ordinary)
   assert.equal(ordinary.progression.offerSeed, expectedOrdinary.value)
-  assert.ok(ordinary.progression.pendingOffer)
+  assert.equal(ordinary.progression.pendingOffer, null)
 
   const insightBook = withLearnedSkills(createPlayerSkillBook(ETHER_ARCANE), [57])
   const insightProgression: PlayerProgressionComponent = {

@@ -999,7 +999,6 @@ export function applyPlayerSkillChoice(
   skillBook: PlayerSkillBookComponent,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
   sourceGameplayRng: NativeRngState,
-  sorcerorsCharmOwned = false,
   ownedHagathaSelectors: readonly number[] = [],
 ): PlayerSkillChoiceApplyResult | null {
   const offer = progression.pendingOffer
@@ -1062,16 +1061,6 @@ export function applyPlayerSkillChoice(
     sorcerorsCharmAvailable: false,
   }
   nextProgression = refreshWeldOfferMarker(nextProgression, nextBook)
-  if (nextProgression.pendingLevels.length > 0) {
-    const built = withNextSkillOffer(
-      nextProgression,
-      nextBook,
-      gameplayRng,
-      sorcerorsCharmOwned,
-    )
-    nextProgression = built.progression
-    gameplayRng = built.rng
-  }
   return { progression: nextProgression, rng: gameplayRng, skillBook: nextBook }
 }
 
@@ -1095,6 +1084,23 @@ export function replacePlayerSkillChoiceWithMod(
     return withNextSkillOffer(next, skillBook, sourceGameplayRng, sorcerorsCharmOwned)
   }
   return { progression: next, rng: sourceGameplayRng }
+}
+
+export function openNextPlayerSkillOffer(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  sourceGameplayRng: NativeRngState,
+  sorcerorsCharmAvailable = false,
+): PlayerProgressionRngResult {
+  if (progression.pendingOffer !== null) {
+    return { progression, rng: sourceGameplayRng }
+  }
+  return withNextSkillOffer(
+    progression,
+    skillBook,
+    sourceGameplayRng,
+    sorcerorsCharmAvailable,
+  )
 }
 
 export function rerollPlayerSkillOffer(

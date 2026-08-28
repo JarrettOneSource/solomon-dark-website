@@ -28,6 +28,9 @@ export const SKILL_PICKER_PANEL = {
   top: 272.5,
   widthPadding: 60,
 } as const
+export const SKILL_PICKER_INSIGHT_TINT = 0xd9ba70
+export const SKILL_PICKER_INSIGHT_LABEL_Y = SKILL_PICKER_PANEL.top + 33
+export const SKILL_PICKER_INSIGHT_PULSE_DEGREES_PER_TICK = 2
 
 export interface SkillPickerPanelBounds {
   readonly height: number
@@ -51,6 +54,12 @@ export function skillPickerRootTint(root: number | null): number {
     throw new RangeError(`unknown native skill root ${String(root)}`)
   }
   return SKILL_PICKER_ROOT_TINTS[root]
+}
+
+export function skillPickerInsightAlpha(ageTicks: number): number {
+  return 0.5 + 0.5 * Math.sin(
+    ageTicks * SKILL_PICKER_INSIGHT_PULSE_DEGREES_PER_TICK * Math.PI / 180,
+  )
 }
 
 export function skillPickerPanelBounds(optionCount: number): SkillPickerPanelBounds {

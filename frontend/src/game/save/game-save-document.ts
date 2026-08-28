@@ -523,19 +523,19 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     tick: Number(rawState.tick),
     world,
   } as unknown as GameSimulationState
-  let concentrationRng = state.secondaryAbilities.rng
+  let selectionRng = state.gameRng
   for (const { playerId } of state.playerEntities.identities) {
     const autofilled = autofillPlayerEntitySkillSelections(
       state.playerEntities,
       playerId,
-      concentrationRng,
+      selectionRng,
     )
     state = { ...state, playerEntities: autofilled.store }
-    concentrationRng = autofilled.rng
+    selectionRng = autofilled.rng
   }
   state = {
     ...state,
-    secondaryAbilities: { ...state.secondaryAbilities, rng: concentrationRng },
+    gameRng: selectionRng,
   }
   const config = state.playerEntities.configs[0]
   if (!sameCharacter(config, continuation.summary.character)) {

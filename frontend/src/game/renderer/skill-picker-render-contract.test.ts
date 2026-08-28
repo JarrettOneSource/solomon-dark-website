@@ -10,9 +10,12 @@ import {
   SKILL_PICKER_CARD_RECORDS,
   SKILL_PICKER_ICON_ANCHOR_OFFSET,
   SKILL_PICKER_ICON_INTER_DRAW_OFFSET,
+  SKILL_PICKER_INSIGHT_LABEL_Y,
+  SKILL_PICKER_INSIGHT_TINT,
   SKILL_PICKER_NATIVE_UI_RECORDS,
   SKILL_PICKER_PANEL,
   SKILL_PICKER_SIZE,
+  skillPickerInsightAlpha,
   skillPickerPanelBounds,
   skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
@@ -98,10 +101,16 @@ test('the picker owns one full-viewport curtain above its fixed native stage', (
 })
 
 test('the picker presents authoritative Creativity Insight identity and detail', () => {
+  assert.equal(SKILL_PICKER_INSIGHT_TINT, 0xd9ba70)
+  assert.equal(SKILL_PICKER_INSIGHT_LABEL_Y, 305.5)
+  assert.equal(skillPickerInsightAlpha(0), 0.5)
+  assert.equal(skillPickerInsightAlpha(45), 1)
+  assert.ok(Math.abs(skillPickerInsightAlpha(90) - 0.5) < 1e-12)
+  assert.equal(skillPickerInsightAlpha(135), 0)
+  assert.ok(Math.abs(skillPickerInsightAlpha(180) - 0.5) < 1e-12)
   assert.match(skillPickerRenderer, /option\.insight/)
   assert.match(skillPickerRenderer, /['"]Insight['"]/)
-  assert.match(skillPickerRenderer, /0xd9ba70/i)
-  assert.match(skillPickerRenderer, /Math\.sin\([^\n]*Math\.PI\s*\/\s*180\)/)
+  assert.match(skillPickerRenderer, /skillPickerInsightAlpha/)
   assert.match(skillPickerComponent, /option\.insight[\s\S]*Insight Bonus: Skill \+2/)
 })
 

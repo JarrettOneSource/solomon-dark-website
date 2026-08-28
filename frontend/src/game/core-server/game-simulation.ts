@@ -240,7 +240,6 @@ import {
   applyPlayerEntityDamageX4Bonus,
   applyPlayerEntityHagathaPurchaseEffects,
   applyPlayerEntityPotionEffect,
-  autofillPlayerEntitySkillSelections,
   applyPlayerEntitySkillChoice,
   bindPlayerEntityBeltItem,
   replacePlayerEntitySkillChoiceWithMod,
@@ -262,7 +261,6 @@ import {
   playerEntityCanCast,
   playerEntityIndex,
   playerEntityMovementScale,
-  markPlayerEntityCreativityInsight,
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
@@ -738,7 +736,6 @@ export function rejoinGameSimulationPlayer(
     lightProviderOrder.register('actor'),
     spawnPlayerCharacterInBoneyard(config, target.world),
   )
-  const importedPlayerEntities = playerEntities
   let gameRng = target.gameRng
   if (milestone !== null && milestone.crossedLevels.length > 0) {
     const synchronized = synchronizePlayerEntityLevelMilestone(
@@ -750,13 +747,7 @@ export function rejoinGameSimulationPlayer(
     playerEntities = synchronized.store
     gameRng = synchronized.rng
   }
-  const insights = markNewCreativityInsights(
-    importedPlayerEntities,
-    playerEntities,
-    [playerId],
-    target.secondaryAbilities.rng,
-  )
-  const automatic = assignAutomaticSkillChoices(insights.store, [playerId], gameRng)
+  const automatic = assignAutomaticSkillChoices(playerEntities, [playerId], gameRng)
   playerEntities = automatic.store
 
   const participantIds = stableExistingPlayerIds(
@@ -806,7 +797,6 @@ export function rejoinGameSimulationPlayer(
       target.run,
       playerEntities.identities.map(({ playerId: id }) => id),
     ),
-    secondaryAbilities: { ...target.secondaryAbilities, rng: insights.rng },
     world: {
       ...target.world,
       hallOfFameRuns: {
@@ -1580,18 +1570,9 @@ export function applyGameSimulationHubAction(
   }
   if (result.accepted && action.type === 'read-skill-book') {
     if (skillBookItem?.nativeSubtype === 2) {
-      const beforeInsight = playerEntities
       const granted = grantPlayerEntityBonusSkillChoice(playerEntities, playerId, gameRng)
       playerEntities = granted.store
       gameRng = granted.rng
-      const insight = markNewCreativityInsights(
-        beforeInsight,
-        playerEntities,
-        [playerId],
-        secondaryAbilities.rng,
-      )
-      playerEntities = insight.store
-      secondaryAbilities = { ...secondaryAbilities, rng: insight.rng }
       const automatic = assignAutomaticSkillChoices(playerEntities, [playerId], gameRng)
       playerEntities = automatic.store
       gameRng = automatic.rng
@@ -1848,35 +1829,22 @@ export function selectGameSimulationPlayerSkill(
     state.gameRng,
   )
   if (!applied) return null
-  const autofilled = autofillPlayerEntitySkillSelections(
-    applied.store,
-    playerId,
-    state.secondaryAbilities.rng,
-  )
-  const insights = markNewCreativityInsights(
-    state.playerEntities,
-    autofilled.store,
-    [playerId],
-    autofilled.rng,
-  )
   const barrier = state.levelUpBarrier
   if (barrier === null || !barrier.participantIds.includes(playerId)) {
     return {
       ...state,
       gameRng: applied.rng,
-      playerEntities: insights.store,
-      secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
+      playerEntities: applied.store,
     }
   }
-  const pendingPlayerIds = pendingOfferPlayerIds(insights.store, barrier.participantIds)
+  const pendingPlayerIds = pendingOfferPlayerIds(applied.store, barrier.participantIds)
   return {
     ...state,
     gameRng: applied.rng,
     levelUpBarrier: pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities: insights.store,
-    secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
+    playerEntities: applied.store,
   }
 }
 
@@ -1922,17 +1890,10 @@ export function rerollGameSimulationPlayerSkill(
     draw.state,
   )
   if (!playerEntities) return null
-  const insights = markNewCreativityInsights(
-    state.playerEntities,
-    playerEntities.store,
-    [playerId],
-    state.secondaryAbilities.rng,
-  )
   return {
     ...state,
-    playerEntities: insights.store,
+    playerEntities: playerEntities.store,
     gameRng: playerEntities.rng,
-    secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
   }
 }
 
@@ -1950,21 +1911,17 @@ export function saveGameSimulationPlayerSkill(
     state.gameRng,
   )
   if (!playerEntities) return null
-  const insights = markNewCreativityInsights(
-    state.playerEntities,
+  const pendingPlayerIds = pendingOfferPlayerIds(
     playerEntities.store,
-    [playerId],
-    state.secondaryAbilities.rng,
+    barrier.participantIds,
   )
-  const pendingPlayerIds = pendingOfferPlayerIds(insights.store, barrier.participantIds)
   return {
     ...state,
     gameRng: playerEntities.rng,
     levelUpBarrier: pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities: insights.store,
-    secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
+    playerEntities: playerEntities.store,
   }
 }
 
@@ -2715,7 +2672,6 @@ function finishGameSimulationTick(
         break
       case 'bonus':
         if (pickup.bonusKind === 0) {
-          const beforeInsight = playerEntities
           const granted = grantPlayerEntityBonusSkillChoice(
             playerEntities,
             pickup.playerId,
@@ -2723,14 +2679,6 @@ function finishGameSimulationTick(
           )
           playerEntities = granted.store
           gameRng = granted.rng
-          const insight = markNewCreativityInsights(
-            beforeInsight,
-            playerEntities,
-            [pickup.playerId],
-            secondaryAbilities.rng,
-          )
-          playerEntities = insight.store
-          secondaryAbilities = { ...secondaryAbilities, rng: insight.rng }
           const automatic = assignAutomaticSkillChoices(
             playerEntities,
             [pickup.playerId],
@@ -4515,18 +4463,12 @@ function grantSharedGameSimulationExperience(
   if (granted.milestone === null) {
     return { ...state, gameRng: granted.rng, playerEntities: granted.store }
   }
-  const insights = markNewCreativityInsights(
-    state.playerEntities,
-    granted.store,
-    participantIds,
-    state.secondaryAbilities.rng,
-  )
   const automatic = assignAutomaticSkillChoices(
-    insights.store,
+    granted.store,
     participantIds,
     granted.rng,
   )
-  const pendingPlayerIds = pendingOfferPlayerIds(insights.store, participantIds)
+  const pendingPlayerIds = pendingOfferPlayerIds(automatic.store, participantIds)
   if (pendingPlayerIds.length === 0) {
     throw new Error('shared level milestone did not create a player offer')
   }
@@ -4556,30 +4498,7 @@ function grantSharedGameSimulationExperience(
       : state.nextLevelUpBarrierId,
     gameRng: automatic.rng,
     playerEntities: automatic.store,
-    secondaryAbilities: {
-      ...state.secondaryAbilities,
-      rng: insights.rng,
-    },
   }
-}
-
-function markNewCreativityInsights(
-  previous: PlayerEntityStore,
-  next: PlayerEntityStore,
-  playerIds: readonly string[],
-  sourceRng: NativeRngState,
-): Readonly<{ rng: NativeRngState; store: PlayerEntityStore }> {
-  let rng = sourceRng
-  let store = next
-  for (const playerId of playerIds) {
-    const before = playerProgressionAt(previous, playerId)?.pendingOffer
-    const after = playerProgressionAt(store, playerId)?.pendingOffer
-    if (after === null || after === undefined || after.sequence === before?.sequence) continue
-    const insight = markPlayerEntityCreativityInsight(store, playerId, rng)
-    rng = insight.rng
-    store = insight.store
-  }
-  return Object.freeze({ rng, store })
 }
 
 function assignAutomaticSkillChoices(

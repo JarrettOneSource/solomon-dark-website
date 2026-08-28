@@ -47,6 +47,7 @@ import {
   grantPlayerSkillRanks,
   grantPlayerWeldBuild,
   increaseRandomLearnedSkill,
+  openNextPlayerSkillOffer,
   playerStatBook,
   rerollPlayerSkillOffer,
   replacePlayerSkillChoiceWithMod,
@@ -192,11 +193,6 @@ export interface PlayerEntityLootItemResult {
 export interface PlayerEntityRandomSkillIncreaseResult {
   readonly rng: NativeRngState
   readonly skillId: number | null
-  readonly store: PlayerEntityStore
-}
-
-export interface PlayerEntityCreativityInsightResult {
-  readonly rng: NativeRngState
   readonly store: PlayerEntityStore
 }
 
@@ -727,31 +723,6 @@ export function selectPlayerEntityConcentrationSkill(
     throw new Error(`player ${playerId} is absent`)
   }
   return selectPlayerEntityConcentration(source, playerId, skillId)
-}
-
-export function markPlayerEntityCreativityInsight(
-  source: PlayerEntityStore,
-  playerId: string,
-  rng: NativeRngState,
-): PlayerEntityCreativityInsightResult {
-  const index = playerEntityIndex(source, playerId)
-  const offer = index < 0 ? null : source.progressions[index]!.pendingOffer
-  if (index < 0 || offer === null) return { rng, store: source }
-  const insight = markPlayerCreativityInsight(
-    source.skillRuntimes[index]!,
-    offer,
-    source.skillBooks[index]!,
-    source.statBooks[index]!,
-    rng,
-  )
-  if (insight.offer === offer) return { rng: insight.rng, store: source }
-  return {
-    rng: insight.rng,
-    store: replacePlayerProgression(source, index, {
-      ...source.progressions[index]!,
-      pendingOffer: insight.offer,
-    }),
-  }
 }
 
 export function playerStatBookAt(
@@ -1528,7 +1499,12 @@ export function grantPlayerEntityExperience(
     ownsSorcerorsCharm(source, index),
   )
   progressions[index] = granted.progression
-  return { rng: granted.rng, store: { ...source, progressions } }
+  return finalizeNewPlayerEntitySkillOffer(
+    { ...source, progressions },
+    index,
+    previous.pendingOffer?.sequence,
+    granted.rng,
+  )
 }
 
 export function creditPlayerEntityLootGold(
@@ -1674,10 +1650,12 @@ export function grantPlayerEntityBonusSkillChoice(
     sourceGameplayRng,
     ownsSorcerorsCharm(source, index),
   )
-  return {
-    rng: granted.rng,
-    store: replacePlayerProgression(source, index, granted.progression),
-  }
+  return finalizeNewPlayerEntitySkillOffer(
+    replacePlayerProgression(source, index, granted.progression),
+    index,
+    source.progressions[index]!.pendingOffer?.sequence,
+    granted.rng,
+  )
 }
 
 export function increaseRandomPlayerEntitySkill(
@@ -1745,11 +1723,16 @@ export function grantSharedPlayerEntityExperience(
     gameplayRng,
     ownsSorcerorsCharm(source, sourceIndex),
   )
-  gameplayRng = awarded.rng
-  const progressions = [...source.progressions]
-  progressions[sourceIndex] = awarded.progression
+  let finalized = finalizeNewPlayerEntitySkillOffer(
+    replacePlayerProgression(source, sourceIndex, awarded.progression),
+    sourceIndex,
+    previous.pendingOffer?.sequence,
+    awarded.rng,
+  )
+  gameplayRng = finalized.rng
+  let store = finalized.store
   if (awarded.progression.level === previous.level) {
-    return { milestone: null, rng: gameplayRng, store: { ...source, progressions } }
+    return { milestone: null, rng: gameplayRng, store }
   }
   const crossedLevels = Object.freeze(Array.from(
     { length: awarded.progression.level - previous.level },
@@ -1761,20 +1744,26 @@ export function grantSharedPlayerEntityExperience(
     level: awarded.progression.level,
   })
   for (const participantId of stableParticipantIds) {
-    const index = playerEntityIndex(source, participantId)
+    const index = playerEntityIndex(store, participantId)
     if (index === sourceIndex) continue
-    const previousProgression = source.progressions[index]!
+    const previousProgression = store.progressions[index]!
     const synchronized = synchronizePlayerLevelMilestone(
       previousProgression,
-      source.skillBooks[index]!,
+      store.skillBooks[index]!,
       milestone,
       gameplayRng,
-      ownsSorcerorsCharm(source, index),
+      ownsSorcerorsCharm(store, index),
     )
-    progressions[index] = synchronized.progression
-    gameplayRng = synchronized.rng
+    finalized = finalizeNewPlayerEntitySkillOffer(
+      replacePlayerProgression(store, index, synchronized.progression),
+      index,
+      previousProgression.pendingOffer?.sequence,
+      synchronized.rng,
+    )
+    store = finalized.store
+    gameplayRng = finalized.rng
   }
-  return { milestone, rng: gameplayRng, store: { ...source, progressions } }
+  return { milestone, rng: gameplayRng, store }
 }
 
 export function synchronizePlayerEntityLevelMilestone(
@@ -1801,10 +1790,12 @@ export function synchronizePlayerEntityLevelMilestone(
       currentMana: progression.maximumMana,
     }
   }
-  return {
-    rng: synchronized.rng,
-    store: replacePlayerProgression(source, index, progression),
-  }
+  return finalizeNewPlayerEntitySkillOffer(
+    replacePlayerProgression(source, index, progression),
+    index,
+    previous.pendingOffer?.sequence,
+    synchronized.rng,
+  )
 }
 
 export function applyPlayerEntitySkillChoice(
@@ -1820,22 +1811,35 @@ export function applyPlayerEntitySkillChoice(
     source.skillBooks[index]!,
     selection,
     sourceGameplayRng,
-    ownsSorcerorsCharm(source, index),
     source.economies[index]!.ownedPerkSelectors,
   )
   if (!applied) return null
   const progressions = [...source.progressions]
   progressions[index] = applied.progression
-  return {
-    rng: applied.rng,
-    store: replacePlayerSkillState(
-      { ...source, progressions },
-      index,
-      applied.skillBook,
-      source.skillRuntimes[index]!,
-      source.economies[index]!,
-    ),
-  }
+  const refreshed = replacePlayerSkillState(
+    { ...source, progressions },
+    index,
+    applied.skillBook,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
+  const autofilled = autofillPlayerEntitySkillSelections(
+    refreshed,
+    playerId,
+    applied.rng,
+  )
+  const opened = openNextPlayerSkillOffer(
+    autofilled.store.progressions[index]!,
+    autofilled.store.skillBooks[index]!,
+    autofilled.rng,
+    ownsSorcerorsCharm(autofilled.store, index),
+  )
+  return finalizeNewPlayerEntitySkillOffer(
+    replacePlayerProgression(autofilled.store, index, opened.progression),
+    index,
+    source.progressions[index]!.pendingOffer?.sequence,
+    opened.rng,
+  )
 }
 
 export function replacePlayerEntitySkillChoiceWithMod(
@@ -1875,10 +1879,14 @@ export function rerollPlayerEntitySkillOffer(
     nextOfferSeed,
     sourceGameplayRng,
   )
-  return progression === null ? null : {
-    rng: progression.rng,
-    store: replacePlayerProgression(source, index, progression.progression),
-  }
+  return progression === null
+    ? null
+    : finalizeNewPlayerEntitySkillOffer(
+        replacePlayerProgression(source, index, progression.progression),
+        index,
+        source.progressions[index]!.pendingOffer?.sequence,
+        progression.rng,
+      )
 }
 
 export function deferPlayerEntitySkillChoice(
@@ -1896,10 +1904,14 @@ export function deferPlayerEntitySkillChoice(
     sourceGameplayRng,
     ownsSorcerorsCharm(source, index),
   )
-  return progression === null ? null : {
-    rng: progression.rng,
-    store: replacePlayerProgression(source, index, progression.progression),
-  }
+  return progression === null
+    ? null
+    : finalizeNewPlayerEntitySkillOffer(
+        replacePlayerProgression(source, index, progression.progression),
+        index,
+        source.progressions[index]!.pendingOffer?.sequence,
+        progression.rng,
+      )
 }
 
 function resolveNativeHagathaDamage(
@@ -2019,7 +2031,50 @@ function refreshPendingPlayerSkillOffer(
     pendingOffer: built.offer,
     revision: progression.revision + 1,
   }
-  return { rng: built.rng, store: { ...source, progressions } }
+  return markCurrentPlayerEntityCreativityInsight(
+    { ...source, progressions },
+    index,
+    built.rng,
+  )
+}
+
+function finalizeNewPlayerEntitySkillOffer(
+  source: PlayerEntityStore,
+  index: number,
+  previousOfferSequence: number | undefined,
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
+  const offer = source.progressions[index]!.pendingOffer
+  if (offer === null || offer.sequence === previousOfferSequence) {
+    return { rng: sourceGameplayRng, store: source }
+  }
+  return markCurrentPlayerEntityCreativityInsight(source, index, sourceGameplayRng)
+}
+
+function markCurrentPlayerEntityCreativityInsight(
+  source: PlayerEntityStore,
+  index: number,
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
+  const progression = source.progressions[index]!
+  const offer = progression.pendingOffer
+  if (offer === null) return { rng: sourceGameplayRng, store: source }
+  const insight = markPlayerCreativityInsight(
+    source.skillRuntimes[index]!,
+    offer,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    sourceGameplayRng,
+  )
+  return {
+    rng: insight.rng,
+    store: insight.offer === offer
+      ? source
+      : replacePlayerProgression(source, index, {
+          ...progression,
+          pendingOffer: insight.offer,
+        }),
+  }
 }
 
 function replacePlayerSkillState(

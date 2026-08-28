@@ -424,6 +424,9 @@ export default function SkillPicker({
                   .map((skillId) => NATIVE_SKILL_CATALOG[skillId]!.name)
                   .join(' and ')}.`
               : skill.config?.mQDescription ?? skill.config?.mDescription ?? ''
+            const insightDetail = option.insight === true
+              ? ' Insight Bonus: Skill +2.'
+              : ''
             return (
               <button
                 key={`${index}-${option.skillId}-${option.weldBuildId ?? 0}`}
@@ -431,9 +434,10 @@ export default function SkillPicker({
                 type="button"
                 className="skill-picker-action"
                 style={{ left: centers[index] }}
-                aria-label={`${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}, ${skill.family}. ${description}`}
+                aria-label={`${option.insight === true ? 'Insight. ' : ''}${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}, ${skill.family}. ${description}${insightDetail}`}
                 aria-pressed={selectedIndex === index}
                 data-choice-index={index}
+                data-insight={option.insight === true}
                 data-skill-id={option.skillId}
                 disabled={disabled}
                 onClick={() => choose(index)}
