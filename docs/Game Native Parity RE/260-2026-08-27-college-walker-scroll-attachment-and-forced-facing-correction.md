@@ -89,9 +89,9 @@ No member is blocked by the browser platform.
   heading through Courtyard and Office. Every stable-cursor moving frame must
   face its visible displacement; title frames must report Robe 0, Staff 0,
   shared green tint, and no orb. Browser error arrays must be empty.
-- Run the complete Mod Loader static-RE registry and Website
-  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact byte-identical Mac
-  candidate. Publication and deployment remain separate and unrequested.
+- Run the Website's supported `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  gate and Mac browser acceptance on the exact byte-identical candidate.
+  Publication and deployment remain separate operations.
 
 ## Implementation validation receipt
 
@@ -112,12 +112,10 @@ No member is blocked by the browser platform.
   found stable-cursor visible displacement `22` while the painted bank remained
   `21`. Both exact failures are now regression-covered.
 - Exact candidate: Website local, remote, and detached Mac bases are
-  `58ded923596cad83748ba2b471daee8dfa945842`; Mod Loader local, remote, and
-  detached Mac bases are `445d6f97565856220bad17ff959cd53cb888c121`.
-  All 13 changed Website files and the one native report were manifest-
-  identical before final validation.
-- Mac validation: the current Mod Loader registry passes `517/517`. The
-  Website canonical gate passes backend Release build/contracts, lint/type and
+  `58ded923596cad83748ba2b471daee8dfa945842`. All 13 changed Website files
+  were manifest-identical before final validation.
+- Mac validation: the Website canonical gate passes backend Release
+  build/contracts, lint/type and
   generated checks, every frontend/desktop suite, production builds, media
   policy, and the unchanged bundle budget. `Game-C4STzngx.js` is 479,117 raw /
   134,105 gzip bytes against 524,288 / 134,144 limits.
@@ -138,9 +136,7 @@ No member is blocked by the browser platform.
   Office frame
   `67f69527736eaa173fab2131e04258f7ae3893b59f235bc9764a6346a3ed0e26`;
   reviewed walker crop
-  `778a414b6ea07938a07e9972ca8711cd1aa4dbce7246b1b4b42936fad9663485`;
-  static-RE log
-  `95e753350f89c1dd9337edc6d6aa20be9f232ce86f94854cf642037fc455a253`.
+  `778a414b6ea07938a07e9972ca8711cd1aa4dbce7246b1b4b42936fad9663485`.
 - No platform-blocked member or material unknown remains. The focused changes
   are uncommitted, unpushed, and undeployed; publication was not requested.
 
@@ -182,9 +178,9 @@ No member is blocked by the browser platform.
 | Complete static content | retail `images/Clothes.png`, SHA-256 `eaa1feb70362cf6dbc2068036f9cc9f77001d888e26cbd218c6144ebe63d6ac1`; `Clothes.bundle`, SHA-256 `69595c233b6dd61d2273bf60d13e0e2bf7f2dde5db8036ee8fd86e9aae30624` | all 24 special prop rows, all 24 two-point socket rows, Staff material 5, and both five-pose fallback families are extractable without approximation | high |
 | Injected runtime support | loader-injected retail process PID 7000; loaded Clothes object `0x0140E2F4`; `+0x640` array `0x19767484`, count 24; parallel socket array `0x19764E74`, count 24 | facing 18 resolves prop record slot `0x1976824C`; the runtime socket row at `0x19765C3C` has exactly two points `(-41,-37.5)` and `(30,-17)`, matching Clothes record 478. This supports loaded-table identity only; the clean capture and instructions own parity truth. | high-supporting |
 
-The reusable native correction is recorded first in Mod Loader
-`docs/reverse-engineering/native-session-flow.md` and
-`native-items-equipment-and-loot.md`.
+This Website system file is the authoritative durable record for the recovered
+attachment program, finite authored rows, implementation consequence, and
+validation receipt. Read-only RE tooling supplied provenance only.
 
 ### System boundary and membership inventory
 
@@ -283,12 +279,39 @@ No member is blocked by the browser platform.
 
 ### Complete heading/socket table
 
-The finite authored row is drained in Mod Loader
-`native-items-equipment-and-loot.md`: facings `0..23` map one-to-one to
-Clothes prop records `1588..1611` and socket records `460..483`, including both
-raw points and the exact `1.1` shaft endpoints. The web source sheet is a
-pixel-preserving extraction of that full table; no facing is synthesized from
-rotation or reflection.
+Facings `0..23` map one-to-one to Clothes prop records `1588..1611` and
+socket records `460..483`. The exact authored points and `1.1` shaft endpoints
+are:
+
+| Facing | Prop record | Socket record | Point 0 | Point 1 | Scaled shaft endpoints |
+| ---: | ---: | ---: | --- | --- | --- |
+| 0 | 1588 | 460 | `(17.5, -57)` | `(15.5, 22)` | `(19.25, -62.7)` -> `(17.05, 24.2)` |
+| 1 | 1589 | 461 | `(27.5, -52)` | `(7, 24.5)` | `(30.25, -57.2)` -> `(7.7, 26.95)` |
+| 2 | 1590 | 462 | `(36, -45)` | `(-1.5, 25)` | `(39.6, -49.5)` -> `(-1.65, 27.5)` |
+| 3 | 1591 | 463 | `(41.5, -36.5)` | `(-10.5, 24)` | `(45.65, -40.15)` -> `(-11.55, 26.4)` |
+| 4 | 1592 | 464 | `(44, -27)` | `(-18.5, 20.5)` | `(48.4, -29.7)` -> `(-20.35, 22.55)` |
+| 5 | 1593 | 465 | `(44, -17)` | `(-25, 16)` | `(48.4, -18.7)` -> `(-27.5, 17.6)` |
+| 6 | 1594 | 466 | `(41, -7.5)` | `(-30, 9.5)` | `(45.1, -8.25)` -> `(-33, 10.45)` |
+| 7 | 1595 | 467 | `(35, 1)` | `(-33, 2.5)` | `(38.5, 1.1)` -> `(-36.3, 2.75)` |
+| 8 | 1596 | 468 | `(27, 8)` | `(-34, -5)` | `(29.7, 8.8)` -> `(-37.4, -5.5)` |
+| 9 | 1597 | 469 | `(16.5, 12.5)` | `(-32.5, -12.5)` | `(18.15, 13.75)` -> `(-35.75, -13.75)` |
+| 10 | 1598 | 470 | `(5, 15)` | `(-28.5, -19)` | `(5.5, 16.5)` -> `(-31.35, -20.9)` |
+| 11 | 1599 | 471 | `(-6.5, 15)` | `(-23, -25)` | `(-7.15, 16.5)` -> `(-25.3, -27.5)` |
+| 12 | 1600 | 472 | `(-17.5, 12)` | `(-15.5, -29)` | `(-19.25, 13.2)` -> `(-17.05, -31.9)` |
+| 13 | 1601 | 473 | `(-27.5, 7)` | `(-7, -32)` | `(-30.25, 7.7)` -> `(-7.7, -35.2)` |
+| 14 | 1602 | 474 | `(-36, 0)` | `(1.5, -32.5)` | `(-39.6, 0)` -> `(1.65, -35.75)` |
+| 15 | 1603 | 475 | `(-41.5, -8.5)` | `(10.5, -31)` | `(-45.65, -9.35)` -> `(11.55, -34.1)` |
+| 16 | 1604 | 476 | `(-44, -18)` | `(18.5, -28)` | `(-48.4, -19.8)` -> `(20.35, -30.8)` |
+| 17 | 1605 | 477 | `(-44, -28)` | `(25, -23)` | `(-48.4, -30.8)` -> `(27.5, -25.3)` |
+| 18 | 1606 | 478 | `(-41, -37.5)` | `(30, -17)` | `(-45.1, -41.25)` -> `(33, -18.7)` |
+| 19 | 1607 | 479 | `(-35, -46)` | `(33, -10)` | `(-38.5, -50.6)` -> `(36.3, -11)` |
+| 20 | 1608 | 480 | `(-27, -53)` | `(34, -2)` | `(-29.7, -58.3)` -> `(37.4, -2.2)` |
+| 21 | 1609 | 481 | `(-16.5, -58)` | `(32.5, 5)` | `(-18.15, -63.8)` -> `(35.75, 5.5)` |
+| 22 | 1610 | 482 | `(-5, -60)` | `(28.5, 12)` | `(-5.5, -66)` -> `(31.35, 13.2)` |
+| 23 | 1611 | 483 | `(6.5, -60)` | `(23, 18)` | `(7.15, -66)` -> `(25.3, 19.8)` |
+
+The web source sheet is a pixel-preserving extraction of this complete table;
+no facing is synthesized from rotation or reflection.
 
 ### Web implementation consequence
 
@@ -378,11 +401,6 @@ rotation or reflection.
   files matched the detached Mac worktree byte-for-byte. The 26 non-ledger
   runtime/source files are retained in manifest SHA-256
   `f53bb0d0320a61fcc0be0108722be9036cda625d954eaab97810c2d089666f48`.
-  Mod Loader was rebased on `a369115d`; all four task files matched its
-  detached Mac worktree.
-- Native validation: the exact Mod Loader candidate passed `532/532` static-RE
-  contracts. Log SHA-256 is
-  `0225acf068661c1fc1f0998f9a0257ae406429824a6d0d8a5c8776aabc5194f6`.
 - Website validation: `/opt/homebrew/bin/bash ./scripts/validate.sh` exited zero
   across backend build/contracts, lint/type/generated checks, every registered
   frontend/runtime/Tutorial/desktop suite, production builds, bundle budget,
@@ -412,5 +430,9 @@ rotation or reflection.
   active Hand pixels are intentionally absent until native action mode,
   progress, and Cast1 RNG variant become authoritative. This receipt does not
   call the complete generic fallback-bank system closed.
-- Push, deployment, and production restart were not requested and were not
-  performed. Task worktrees and evidence remain retained.
+- Publication: implementation commit `fa7d5c4978b60fce8ebe804d3e31312d9f07998f`
+  was fast-forwarded to Website `main` after rebasing over the shared Tutorial
+  College save-resume correction; local `HEAD`, `origin/main`, and GitHub
+  `main` matched. Deployment and production restart were not requested or
+  performed. Website task worktrees and transient evidence were removed after
+  the verified push.
