@@ -1924,17 +1924,27 @@ async function captureBeltReceipt(page) {
 }
 
 async function waitForQuickbarPresentation(page, expected) {
-  await page.waitForFunction(({ alpha, cooldown, unavailable }) => {
-    const slot = document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
-    const icon = slot?.querySelector('.hub-hud-quickbar-skill-icon')
-    const path = slot?.querySelector('.hub-hud-quickbar-cooldown path')
-    return slot
-      && icon
-      && Number(slot.getAttribute('data-icon-alpha')) === alpha
-      && Number(getComputedStyle(icon).opacity) === alpha
-      && (slot.getAttribute('data-unavailable') === 'true') === unavailable
-      && Boolean(path) === cooldown
-  }, expected, { timeout: 10_000 })
+  try {
+    await page.waitForFunction(({ alpha, cooldown, unavailable }) => {
+      const slot = document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
+      const icon = slot?.querySelector('.hub-hud-quickbar-skill-icon')
+      const path = slot?.querySelector('.hub-hud-quickbar-cooldown path')
+      return slot
+        && icon
+        && Number(slot.getAttribute('data-icon-alpha')) === alpha
+        && Number(getComputedStyle(icon).opacity) === alpha
+        && (slot.getAttribute('data-unavailable') === 'true') === unavailable
+        && Boolean(path) === cooldown
+    }, expected, { timeout: 10_000 })
+  } catch (error) {
+    throw new Error(`quickbar presentation did not reach ${JSON.stringify(expected)}; actual ${JSON.stringify(
+      await captureQuickbarPresentation(page),
+    )}`, { cause: error })
+  }
+  return captureQuickbarPresentation(page)
+}
+
+async function captureQuickbarPresentation(page) {
   return page.locator('.hub-hud-quickbar-slot[data-slot="0"]').evaluate((slot) => {
     const icon = slot.querySelector('.hub-hud-quickbar-skill-icon')
     const path = slot.querySelector('.hub-hud-quickbar-cooldown path')
