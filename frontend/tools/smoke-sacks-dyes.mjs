@@ -315,9 +315,9 @@ try {
     rootSlot: Number(await item(IDS.movableKey).getAttribute('data-inventory-slot')),
     visibleSlot: nestedVisibleDestinationSlot,
   }
-  await dragToStagePoint(page, inventory, item(IDS.movableKey), { x: 1_200, y: 750 })
+  await dragToInventorySlot(page, inventory, item(IDS.movableKey), 0)
   await item(IDS.movableKey).waitFor({ state: 'detached' })
-  await dragToStagePoint(page, inventory, item(IDS.movableSack), { x: 1_200, y: 750 })
+  await dragToInventorySlot(page, inventory, item(IDS.movableSack), 0)
   await item(IDS.movableSack).waitFor({ state: 'detached' })
   await returnFromSack(inventory, '')
 
@@ -335,7 +335,7 @@ try {
     String(IDS.movableSack),
   )
   await returnFromSack(inventory, String(IDS.destinationSack))
-  await dragToStagePoint(page, inventory, item(IDS.movableKey), { x: 1_200, y: 750 })
+  await dragToInventorySlot(page, inventory, item(IDS.movableKey), 0)
   await item(IDS.movableKey).waitFor({ state: 'detached' })
   await returnFromSack(inventory, '')
   await waitForParent(item(IDS.movableKey), null)
