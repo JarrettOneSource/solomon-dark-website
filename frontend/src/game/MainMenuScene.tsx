@@ -970,10 +970,9 @@ export default function MainMenuScene({
   const gameScene = screen === 'hub' && runtimeSnapshot?.world.kind === 'boneyard'
     ? 'boneyard'
     : screen
-  const nativeStageStyle = fixedStageStyle(
-    fixedViewport,
-    fixedGameStageBounds(fixedViewport, 'center', 'center'),
-  )
+  const nativeStageBounds = fixedGameStageBounds(fixedViewport, 'center', 'center')
+  const nativeStageCssBounds = fixedGameStageCssBounds(fixedViewport, nativeStageBounds)
+  const nativeStageStyle = fixedStageStyle(fixedViewport, nativeStageBounds)
   const quitStageStyle = fixedStageStyle(
     fixedViewport,
     fixedGameStageBounds(fixedViewport, 'right', 'bottom'),
@@ -2054,6 +2053,9 @@ export default function MainMenuScene({
             <GameChat
               disabled={chatDisabled}
               globalChatEnabled={gameOnlinePreferences(gameSettings).globalChat}
+              gold={runtimeSnapshot.players[session.playerId]!.economy.gold}
+              nativeStageLeftPx={nativeStageCssBounds.x}
+              nativeStageScale={fixedViewport.displayScale}
               onGlobalChatEnabledChange={(enableGlobalChat) => requestGameSettingsUpdate({
                 ...gameSettings,
                 ...(enableGlobalChat ? { enableOnlineFeatures: true } : {}),

@@ -19,6 +19,14 @@
 
 .game-chat-scrim { display: none; }
 
+@media (hover: hover) and (pointer: fine) {
+  .main-menu-page:has(
+    .hub-native-ui-overlay:is([data-surface-kind='inventory'], [data-surface-kind='service'])
+  ) .game-chat {
+    left: max(clamp(14px, 2.2vw, 34px), var(--game-chat-gold-clear-left));
+  }
+}
+
 /* ---- transcript / panel ------------------------------------------------ */
 
 .game-chat-panel {

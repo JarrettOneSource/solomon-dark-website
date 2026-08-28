@@ -209,6 +209,7 @@ try {
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
+  await assertChatClearsNativeGold(page)
   await assertNonMusicMuted(page, false)
   await peerSawInventoryActivity
   assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
@@ -608,6 +609,7 @@ try {
   await largeBoneyardInventory.locator(
     '.hub-inventory-native-canvas[data-native-reveal="settled"]',
   ).waitFor()
+  await assertChatClearsNativeGold(page)
   await assertFixedUiGeometry(
     page,
     page.locator('.hub-native-ui-overlay'),
@@ -908,6 +910,20 @@ async function assertNonMusicMuted(page, expected) {
     document.querySelector('.main-menu-page')?.getAttribute('data-game-sounds-muted')
       === `${muted}`
   ), expected, { timeout: 5_000 })
+}
+
+async function assertChatClearsNativeGold(page) {
+  const receipt = await page.getByLabel('Game chat').evaluate((chat) => ({
+    clearLeft: Number(chat.getAttribute('data-native-gold-clear-left')),
+    left: chat.getBoundingClientRect().left,
+    surfaceKind: document.querySelector('.hub-native-ui-overlay')?.getAttribute('data-surface-kind'),
+  }))
+  assert.equal(receipt.surfaceKind, 'inventory')
+  assert.ok(Number.isFinite(receipt.clearLeft))
+  assert.ok(
+    receipt.left + 0.5 >= receipt.clearLeft,
+    `Chat left ${receipt.left} does not clear native gold edge ${receipt.clearLeft}`,
+  )
 }
 
 async function enterHub(page, element) {

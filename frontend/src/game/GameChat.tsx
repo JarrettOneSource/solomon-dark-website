@@ -30,6 +30,7 @@ import {
 } from './protocol/game-protocol.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
 import { gameBindingLabel } from './game-settings.ts'
+import { nativeInventoryGoldLedgerRight } from './native-inventory-gold-layout.ts'
 import './game-chat.css'
 
 export interface GameChatWhisperRequest {
@@ -42,6 +43,9 @@ export interface GameChatWhisperRequest {
 interface GameChatProps {
   disabled: boolean
   globalChatEnabled: boolean
+  gold: number
+  nativeStageLeftPx: number
+  nativeStageScale: number
   onGlobalChatEnabledChange: (enabled: boolean) => void
   onOpenChange: (open: boolean) => void
   onPlayerCardRequest: (playerReference: string) => void
@@ -58,10 +62,14 @@ type UnreadCounts = Record<GameChatChannel, number>
 const EMPTY_UNREAD: UnreadCounts = { boneyard: 0, global: 0, party: 0, whisper: 0 }
 const CLOSED_MESSAGE_LIMIT = 5
 const PINNED_SCROLL_SLACK_PX = 48
+const NATIVE_GOLD_LEDGER_GAP_PX = 8
 
 export default function GameChat({
   disabled,
   globalChatEnabled,
+  gold,
+  nativeStageLeftPx,
+  nativeStageScale,
   onGlobalChatEnabledChange,
   onOpenChange,
   onPlayerCardRequest,
@@ -133,6 +141,9 @@ export default function GameChat({
     : enabledMessages.slice(-CLOSED_MESSAGE_LIMIT)
   const faded = isGameChatFaded(open, lastActivityAtMs, nowMs)
   const totalUnread = unread.boneyard + unread.party + unread.global + unread.whisper
+  const nativeGoldClearLeftPx = nativeStageLeftPx + (
+    nativeInventoryGoldLedgerRight(gold) + NATIVE_GOLD_LEDGER_GAP_PX
+  ) * nativeStageScale
 
   useEffect(() => {
     setMessages(session.getChatMessages())
@@ -394,10 +405,14 @@ export default function GameChat({
       data-chat-global-enabled={globalChatEnabled}
       data-chat-open={open}
       data-chat-unread-total={totalUnread}
+      data-native-gold-clear-left={nativeGoldClearLeftPx}
       data-whisper-target={whisperTarget?.playerId}
       hidden={disabled}
       onPointerDown={event => event.stopPropagation()}
-      style={{ '--game-chat-vvh': `${Math.round(viewportHeightPx)}px` } as CSSProperties}
+      style={{
+        '--game-chat-gold-clear-left': `${nativeGoldClearLeftPx}px`,
+        '--game-chat-vvh': `${Math.round(viewportHeightPx)}px`,
+      } as CSSProperties}
     >
       {open ? (
         <div

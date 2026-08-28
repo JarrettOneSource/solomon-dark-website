@@ -15,6 +15,7 @@ import {
   reconcileGameChatChannel,
   shouldIncrementGameChatUnread,
 } from './game-chat.ts'
+import { nativeInventoryGoldLedgerRight } from './native-inventory-gold-layout.ts'
 
 const singleton = partyState(['player-1'])
 const grouped = partyState(['player-1', 'player-2'])
@@ -25,6 +26,10 @@ const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8'
 const playerCard = readFileSync(new URL('./PlayerCardDialog.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('./BoneyardScene.tsx', import.meta.url), 'utf8')
 const inventory = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
+const inventoryRenderer = readFileSync(
+  new URL('./renderer/hub-inventory-renderer.ts', import.meta.url),
+  'utf8',
+)
 const skillBook = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
 const skillPicker = readFileSync(new URL('./SkillPicker.tsx', import.meta.url), 'utf8')
 const hudSkillSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
@@ -216,6 +221,32 @@ test('chat UI owns its configured key, real text focus, Tab channels, fade, and 
   assert.match(mainMenu, /openKeyCode=\{gameSettings\.controls\.openChat\}/)
   assert.match(hubScene, /event\.code !== settings\.controls\.openSkills/)
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
+})
+
+test('chat clears the exact scaled gold ledger on Inventory and companion service surfaces', () => {
+  assert.equal(nativeInventoryGoldLedgerRight(500), 75)
+  assert.equal(nativeInventoryGoldLedgerRight(10_000), 96)
+  assert.equal(nativeInventoryGoldLedgerRight(Number.MAX_SAFE_INTEGER), 207)
+  assert.match(inventoryRenderer, /NATIVE_INVENTORY_GOLD_LEDGER\.iconRecord/)
+  assert.match(inventoryRenderer, /NATIVE_INVENTORY_GOLD_LEDGER\.iconCenter/)
+
+  assert.ok(mainMenu.includes('gold={runtimeSnapshot.players[session.playerId]!.economy.gold}'))
+  assert.ok(mainMenu.includes('nativeStageLeftPx={nativeStageCssBounds.x}'))
+  assert.ok(mainMenu.includes('nativeStageScale={fixedViewport.displayScale}'))
+  assert.match(component, /nativeInventoryGoldLedgerRight\(gold\)/)
+  assert.match(component, /data-native-gold-clear-left=\{nativeGoldClearLeftPx\}/)
+  assert.match(component, /--game-chat-gold-clear-left/)
+
+  const finePointerRule = css.slice(
+    css.indexOf('@media (hover: hover) and (pointer: fine)'),
+    css.indexOf('/* ---- transcript / panel'),
+  )
+  assert.match(finePointerRule, /data-surface-kind='inventory'/)
+  assert.match(finePointerRule, /data-surface-kind='service'/)
+  assert.match(
+    finePointerRule,
+    /left: max\(clamp\(14px, 2\.2vw, 34px\), var\(--game-chat-gold-clear-left\)\)/,
+  )
 })
 
 test('the open chat window owns Escape independent of focus and closes on accepted submit', () => {

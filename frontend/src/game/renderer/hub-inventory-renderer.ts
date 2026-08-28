@@ -48,6 +48,7 @@ import {
   nativeHudRectCenter,
   type NativeHudControlLayout,
 } from '../native-hud-layout.ts'
+import { NATIVE_INVENTORY_GOLD_LEDGER } from '../native-inventory-gold-layout.ts'
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
@@ -2135,8 +2136,22 @@ function addPrimitiveFrame(layer: Container, x: number, y: number, width: number
 }
 
 function addGold(context: RenderContext, layer: Container, gold: number): void {
-  addCenteredAtlasSprite(context, layer, 'UI', 21, 38, 868)
-  addBitmapText(context, layer, gold.toLocaleString(), 'body', 48, 870, { align: 'left', tint: 0xffffff })
+  addCenteredAtlasSprite(
+    context,
+    layer,
+    'UI',
+    NATIVE_INVENTORY_GOLD_LEDGER.iconRecord,
+    ...NATIVE_INVENTORY_GOLD_LEDGER.iconCenter,
+  )
+  addBitmapText(
+    context,
+    layer,
+    gold.toLocaleString(),
+    'body',
+    NATIVE_INVENTORY_GOLD_LEDGER.textLeft,
+    NATIVE_INVENTORY_GOLD_LEDGER.textBaselineY,
+    { align: 'left', tint: 0xffffff },
+  )
 }
 
 function addInventorySelection(
