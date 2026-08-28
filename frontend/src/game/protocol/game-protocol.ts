@@ -236,6 +236,7 @@ import {
 import {
   isNativeBeltSkill,
   nativeSkillCategory,
+  SPELL_WELDING_SKILL_ID,
 } from '../core-kernels/player-progression.ts'
 import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
@@ -3643,7 +3644,7 @@ function playerPrimaryCastState(
   ])
   const actionTick = finite(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
-  const castElement = selectedPrimaryElement(selectedPrimarySkillId, element)
+  const castElement = primaryCastClockElement(selectedPrimarySkillId, element)
   if (channelActive && (actionTick < 0 || actionTick > 1)) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Constant program`)
   }
@@ -3758,10 +3759,11 @@ function playerPrimaryCastState(
   }
 }
 
-function selectedPrimaryElement(
+function primaryCastClockElement(
   skillId: number,
   fallback: PlayerCharacterConfig['element'],
 ): PlayerCharacterConfig['element'] {
+  if (skillId === SPELL_WELDING_SKILL_ID) return 'fire'
   if (skillId === 8) return 'ether'
   if (skillId === 16) return 'fire'
   if (skillId === 24) return 'air'

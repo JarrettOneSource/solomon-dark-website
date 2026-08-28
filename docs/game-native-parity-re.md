@@ -56571,7 +56571,7 @@ finite Cast 1 clock.
 
 ### Validation contract
 
-- Focused red/green: protocol 95 round-trips action tick 72 for each welded
+- Focused red/green: the current protocol round-trips action tick 72 for each welded
   one-shot on Ether/Air/Earth/Fire/Water configurations, rejects 73, retains
   pure Ether's 55 rejection, and retains channel `>1` rejection.
 - Host/browser: select Frost Missile on an Ether wizard, hold through at least
@@ -56583,4 +56583,58 @@ finite Cast 1 clock.
 
 ### Implementation validation receipt
 
-- Pending implementation and Mac validation.
+- `game-protocol.ts` now names the owning selector
+  `primaryCastClockElement` and maps selected Spell Welding row `52` to the
+  same Fire clock used by `stepPrimarySpells`. Pure element clocks, Constant
+  validation, fail-closed decoding, host projection, simulation, presentation,
+  audio, input, and saves are unchanged.
+- The protocol regression drains all four one-shot builds
+  `1000/1001/1002/1009` across Ether/Air/Earth/Fire/Water configurations. Each
+  accepts legal action tick 72 and rejects 73; pure Ether still rejects 55 and
+  the existing Constant test still rejects channel tick 2.
+- The exact red Mac candidate over Website `4c608b42` failed only the new
+  welded-clock test at `game-protocol.ts:3651` with the production error while
+  the other `1691/1692` Boneyard/host tests passed. Red gate-log SHA-256 is
+  `67a2e86b7feeed14d5aff316a61f25f7a4c3354ea4337592ae1d158a98bddf24`.
+- The byte-identical corrected candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: 27 backend/contracts, strict
+  formatting/lint/import/generated checks, every registered frontend and
+  desktop suite, the corrected `1692/1692` Boneyard/host group, `77/77` ML
+  tests, production builds, media policy, and the Game bundle budget
+  (`251319` raw / `76428` gzip). Green gate-log SHA-256 is
+  `1b681da7a2c0cedf758017a5fe2f2ba2bc5a8e076566fef74d56b8b849e6345d`.
+- Mac Chrome `151.0.7922.174` created an Ether/Arcane wizard, granted and
+  selected Frost Missile `1001`, entered a real generated Boneyard, crossed
+  the authored Gate/Solomon combat admission, and held through three complete
+  emissions. The browser decoded 504 welded frame samples, observed legal
+  action tick 71 beyond the old 55 boundary, stayed in the ready Boneyard, and
+  reported empty page, console, failed-request, and host-error arrays. Browser
+  log SHA-256 is
+  `ad79b410d5d4e843d122dfce83c58f7323b4911371f4af685ff2b971d5b75c61`;
+  the reviewed frame SHA-256 is
+  `160ef6f82b71e2b9b92d68aced6398b092280a7988c5bdf19e02fbde21bb4f7f`.
+- Publication rebase preserved concurrent enemy-targeting/navigation commit
+  `c59c27af2b526722c77f135f7f63526cd543fefd`. Exact pre-receipt candidate
+  `1de3051d903d59d51fb75af05ac0653ce9d02aa9`, tree
+  `a46428ffbce96a3b00bf456d9741a99193b3c533`, and its detached Mac worktree
+  had byte-identical protocol/test bytes (SHA-256
+  `63d3a50462ebab8b1e2d3a47baa3e291c368816c832a7fd34372f30f1af5f34b`
+  and
+  `50d4248b57ec4c918e82297f0ad1a070f6932d9ef9bed9ac454a5fd130a4875e`).
+- The complete rebased Mac gate passed 27 backend/contracts, strict checks,
+  the expanded `1712/1712` Boneyard/host group, `77/77` ML tests, every other
+  registered suite, production builds/media policy, and the Game budget
+  (`251319` raw / `76432` gzip). Final gate-log SHA-256 is
+  `73b37911bf7ab0289d986e1a1899ac1e17409a5e10c8cee54432c1659c7f68ea`.
+- Final Mac Chrome `151.0.7922.174` repeated the real Gate/Solomon/Frost
+  Missile journey on protocol 96. It decoded 375 welded samples, reached legal
+  action tick 71 across three emissions, remained ready, and again produced
+  empty page, console, request-failure, and host-error arrays. Final browser
+  log SHA-256 is
+  `1f78f1deaab1ed278e9fa370456212a254b844749c905065a22d7cc763b1c4df`;
+  final reviewed frame SHA-256 is
+  `20ba73c618d8dced1b04ed2da32478e06059b81fc1e8d4974bcfd00b331921ec`.
+- Temporary browser instrumentation was removed after both journeys. This
+  receipt is the sole post-validation documentation write; no runtime, test,
+  build, asset, or protocol byte changed afterward. Push verification and
+  production deployment remain separate receipts.
