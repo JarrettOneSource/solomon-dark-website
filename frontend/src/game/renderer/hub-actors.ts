@@ -35,7 +35,11 @@ import {
   nativePlayerMaterialTint,
 } from './native-secondary-presentation.ts'
 import type { ModPresentationTextures, ModWearableTextureFrames } from './mod-presentation-assets.ts'
-import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import {
+  advanceActorMovementFacing,
+  createActorMovementFacingState,
+  type ActorMovementFacingState,
+} from '../core-kernels/actor-heading.ts'
 
 const DEATH_HAT_PRIMARY = 7
 const DEATH_HAT_SECONDARY = 8
@@ -80,7 +84,7 @@ export class PlayerWorldView {
   private currentElementEffectScale = 1
   private currentDeathFrame: number | null = null
   private currentHeadingIndex = 0
-  private positioned = false
+  private movementFacingState: ActorMovementFacingState | null = null
   private secondaryState: NativeSecondaryPlayerState | undefined
   private robePrimaryTint = 0xffffff
   private robeSecondaryTint = 0xffffff
@@ -204,13 +208,10 @@ export class PlayerWorldView {
         || (this.secondaryState?.castSpinTicksRemaining ?? 0) > 0,
       elementEffectPhase,
     )
-    const dx = player.position.x - this.container.position.x
-    const dy = player.position.y - this.container.position.y
-    const heading = spriteFrameIndex(Math.round(
-      movementFacing && this.positioned && (dx || dy)
-        ? actorHeadingIndex(actorHeadingFromVector(dx, dy))
-        : player.headingIndex,
-    ), 24)
+    const heading = spriteFrameIndex(
+      Math.round(this.resolveHeadingIndex(player, movementFacing)),
+      24,
+    )
     this.currentHeadingIndex = heading
     const pose = spriteFrameIndex(plan.robePose, 5)
     const attachmentPose = plan.attachmentPose
@@ -283,7 +284,6 @@ export class PlayerWorldView {
     this.currentDeathFrame = death.visible ? death.frame : null
 
     this.container.position.set(player.position.x, player.position.y)
-    this.positioned = true
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
     this.shadow.visible = !death.visible
     // The extracted native item banks already partition each pose into an
@@ -474,6 +474,29 @@ export class PlayerWorldView {
 
   get materialTint(): number {
     return this.robe.tint
+  }
+
+  /**
+   * Scripted Hub travel (College intro, portal transitions) faces the visible
+   * displacement of the presented sprite rather than the replicated heading,
+   * so correction smoothing cannot move one direction while painting another.
+   * The facing is anchored to the last point the sprite turned at and only
+   * turns again after ACTOR_MOVEMENT_FACING_DISTANCE of travel, which keeps a
+   * sub-tick reconciliation ripple from flipping the sprite for a frame.
+   */
+  private resolveHeadingIndex(player: ProtocolPlayerState, movementFacing: boolean): number {
+    if (!movementFacing) {
+      this.movementFacingState = null
+      return player.headingIndex
+    }
+    const facing = advanceActorMovementFacing(
+      this.movementFacingState
+        ?? createActorMovementFacingState(player.position.x, player.position.y),
+      player.position.x,
+      player.position.y,
+    )
+    this.movementFacingState = facing
+    return facing.headingIndex ?? player.headingIndex
   }
 
   get headingIndex(): number {

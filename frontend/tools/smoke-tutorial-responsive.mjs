@@ -29,7 +29,12 @@ import {
   canPlaceBoneyardBody,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
-import { actorHeadingFromVector, actorHeadingIndex } from '../src/game/core-kernels/actor-heading.ts'
+import {
+  actorHeadingFromVector,
+  actorHeadingIndex,
+  advanceActorMovementFacing,
+  createActorMovementFacingState,
+} from '../src/game/core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
@@ -1578,27 +1583,47 @@ function stopCollegeFacingSampler(page) {
   })
 }
 
+function headingBinDistance(left, right) {
+  const difference = Math.abs(left - right) % 24
+  return Math.min(difference, 24 - difference)
+}
+
+// The College walker faces its visible travel: the presented sprite anchors
+// its facing to the last point it turned at and turns again once it has
+// travelled ACTOR_MOVEMENT_FACING_DISTANCE from that anchor. Replaying the
+// anchor rule over the sampled positions reproduces the expected facing, and
+// consecutive frames of one region may never turn more than three bins: a
+// reconciliation ripple that flips the sprite fails here.
 function assertCollegeFacingSamples(samples) {
   assert.ok(samples.length > 0, 'College facing sampler produced no frames')
   const movingByRegion = { courtyard: 0, office: 0 }
   const headings = new Set()
+  const facingByRegion = new Map()
   const previousByRegion = new Map()
   for (const sample of samples) {
     if (sample.pathCursor === null || sample.transitionPhase === 'outgoing') continue
     const previous = previousByRegion.get(sample.region)
     previousByRegion.set(sample.region, sample)
-    const dx = previous ? sample.x - previous.x : 0
-    const dy = previous ? sample.y - previous.y : 0
-    if (
-      !previous
-      || previous.pathCursor !== sample.pathCursor
-      || Math.hypot(dx, dy) <= 0.001
-    ) continue
-    const expected = actorHeadingIndex(actorHeadingFromVector(dx, dy))
-    assert.equal(
-      sample.headingIndex,
-      expected,
-      `College ${sample.region} frame ${sample.frameCount}: ${JSON.stringify(sample)}`,
+    const anchored = facingByRegion.get(sample.region)
+      ?? createActorMovementFacingState(sample.x, sample.y)
+    const facing = advanceActorMovementFacing(anchored, sample.x, sample.y)
+    facingByRegion.set(sample.region, facing)
+    if (previous) {
+      const turned = headingBinDistance(sample.headingIndex, previous.headingIndex)
+      assert.ok(
+        turned <= 3,
+        `College ${sample.region} frame ${sample.frameCount} turned ${turned} bins: ${JSON.stringify(sample)}`,
+      )
+    }
+    if (facing === anchored || facing.headingIndex === null) continue
+    const expected = actorHeadingIndex(actorHeadingFromVector(
+      facing.anchorX - anchored.anchorX,
+      facing.anchorY - anchored.anchorY,
+    ))
+    assert.equal(expected, facing.headingIndex)
+    assert.ok(
+      headingBinDistance(sample.headingIndex, expected) <= 1,
+      `College ${sample.region} frame ${sample.frameCount} faces ${sample.headingIndex}, travel ${expected}: ${JSON.stringify(sample)}`,
     )
     assert.equal(sample.orbSpriteCount, 0, `${sample.region} pre-Create orb`)
     movingByRegion[sample.region] += 1

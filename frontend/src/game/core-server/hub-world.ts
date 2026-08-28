@@ -1,38 +1,26 @@
-import { resolveActorMotion, type ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
+import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
 import { DynamicActorGrid } from '../core-kernels/dynamic-actor-grid.ts'
-import {
-  HUB_PRIVATE_ROOM_IDS,
-  HUB_PRIVATE_ROOM_LAYOUTS,
-  type HubPrivateRoomLayoutDefinition,
-} from '../core-kernels/hub-private-room-layout.ts'
 import {
   createHubMemorialState,
   type HubMemorialState,
 } from '../core-kernels/hub-memorial.ts'
 import {
-  HUB_COLLEGE_INTRO_FADE_RATE,
-  HUB_INCOMING_FADE_RATES,
-  HUB_OUTGOING_FADE_RATE,
-  beginHubTransition,
+  HUB_FIXED_ACTOR_COLLISION_LAYOUT,
+  HUB_STORY_OFFICE_POLISHER_ACTOR,
+  hubFixedActor,
+  planHubParticipantMovement,
+  stepHubParticipantMovement,
+  type HubCollegePathTarget,
+  type HubRegionPhysicsBody,
+} from '../core-kernels/hub-participant-movement.ts'
+import {
   createHubCollegeIntroParticipantState,
   createHubParticipantState,
-  hubIncomingPlacement,
-  hubPortalAt,
   isHubRegionTraversable,
   moveWithHubRegionCollisionState,
-  planHubScriptedMovement,
   type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
-import {
-  enterNativeCollegeDialogue,
-  enterNativeCollegeOffice,
-  nativeCollegeContactStep,
-  nativeCollegeOfficeSpeed,
-  nativeCollegePathTarget,
-  stepNativeCollegeTitle,
-} from '../core-kernels/native-college-intro.ts'
-import { NATIVE_HUB_NPC_CATALOG } from '../core-kernels/native-hub-npc.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import {
   PLAYER_CHARACTER_PHYSICS,
@@ -67,6 +55,8 @@ import {
   type HubSkorchaState,
 } from './hub-skorcha.ts'
 
+export { HUB_FIXED_ACTOR_COLLISION_LAYOUT }
+
 export interface HubWorldState {
   ambient: HubAmbientState
   collisionRngState: number
@@ -85,7 +75,7 @@ export interface HubWorldState {
 
 export class HubWorldRuntime {
   readonly actorGrid = new DynamicActorGrid(128)
-  readonly bodies: RegionPhysicsBody[] = []
+  readonly bodies: HubRegionPhysicsBody[] = []
   readonly bodyRegions = new Map<string, HubRegionId>()
   readonly playerPlans = new Map<string, PlayerCharacterMovementPlan>()
   readonly positions = new Map<string, Vector2>()
@@ -110,10 +100,6 @@ export interface HubWorldOptions {
 }
 
 export const DEFAULT_HUB_TRADER_ANIMATION_SEED = 0x5eedc0de
-
-interface RegionPhysicsBody extends ActorPhysicsBody {
-  region: HubRegionId
-}
 
 interface HubActorPairMember {
   readonly id: string
@@ -157,51 +143,6 @@ export function hubDynamicActorPairCollides(
   }
   return true
 }
-
-function fixedActor(
-  id: string,
-  region: HubRegionId,
-  x: number,
-  y: number,
-  radius: number,
-): RegionPhysicsBody {
-  return {
-    delta: { x: 0, y: 0 },
-    driven: false,
-    id,
-    position: { x, y },
-    pushEnabled: false,
-    pushResistance: 90,
-    pushStrength: 0,
-    radius,
-    region,
-  }
-}
-
-function privateRoomFixedActors(): readonly RegionPhysicsBody[] {
-  const bodies: RegionPhysicsBody[] = []
-  for (const region of HUB_PRIVATE_ROOM_IDS) {
-    const layout: HubPrivateRoomLayoutDefinition = HUB_PRIVATE_ROOM_LAYOUTS[region]
-    for (const [id, actor] of Object.entries(layout.actors)) {
-      const { position, radius } = actor.collider
-      bodies.push(fixedActor(id, region, position.x, position.y, radius))
-    }
-    for (const prop of layout.props) {
-      const { position, radius } = prop.collider
-      bodies.push(fixedActor(prop.id, region, position.x, position.y, radius))
-    }
-  }
-  return bodies
-}
-
-export const HUB_FIXED_ACTOR_COLLISION_LAYOUT: readonly RegionPhysicsBody[] = [
-  fixedActor('perk-witch', 'courtyard', 1340, 280, 15),
-  fixedActor('potion-trader', 'courtyard', 1397, 664, 30),
-  fixedActor('annalist', 'courtyard', 895.5, 455.5, 8),
-  fixedActor('items-trader', 'courtyard', 1700.5, 449.5, 25),
-  fixedActor('teacher', 'courtyard', 576.5, 710.5, 25),
-  ...privateRoomFixedActors(),
-]
 
 export function createHubWorld(
   playerIds: readonly string[] = [],
@@ -331,45 +272,22 @@ export function stepHubWorldTick(
   const runtime = world.runtime
   const playerPlans = runtime.playerPlans
   playerPlans.clear()
-  const collegePathTargets = new Map<string, ReturnType<typeof nativeCollegePathTarget>>()
+  const collegePathTargets = new Map<string, HubCollegePathTarget>()
   const playerEntries = Object.entries(players)
   for (const [playerId, player] of playerEntries) {
     const participant = participants[playerId]
-    const transition = participant.transition
-    const collegeIntro = participant.collegeIntro
-    const collegeIntroWaiting = collegeIntro !== null
+    const collegeIntroWaiting = participant.collegeIntro !== null
       && collegeIntroReadyPlayerIds !== null
       && !collegeIntroReadyPlayerIds.has(playerId)
-    const collegeLoadoutWaiting = transition?.phase === 'college-loadout'
-    const collegeDialogueWaiting = collegeIntro?.phase === 'arch-dialogue'
-    const collegeWalk = collegeIntro !== null
-      && collegeIntro.phase !== 'arch-dialogue'
-      && transition?.phase !== 'outgoing'
-    const collegeTarget = collegeWalk
-      ? nativeCollegePathTarget(collegeIntro.phase, collegeIntro.pathCursor, player.position)
-      : null
-    if (collegeTarget) collegePathTargets.set(playerId, collegeTarget)
+    const movement = planHubParticipantMovement(player, participant, collegeIntroWaiting)
+    if (movement.collegeTarget) collegePathTargets.set(playerId, movement.collegeTarget)
     playerPlans.set(
       playerId,
-      collegeIntroWaiting || collegeLoadoutWaiting || collegeDialogueWaiting
-        ? planHubScriptedMovement(player, player.position, 1)
-        : collegeTarget
-        ? planHubScriptedMovement(
-            player,
-            collegeTarget.target,
-            collegeIntro?.phase === 'office-walk' ? collegeIntro.officeSpeed : 1,
-          )
-        : transition
-        ? planHubScriptedMovement(
-            player,
-            transition.scriptedTarget,
-            transition.scriptedSpeed,
-          )
-        : planPlayerCharacterTick(
-            player,
-            inputs[playerId] ?? { movement: { x: 0, y: 0 } },
-            movementScales[playerId] ?? 1,
-          ),
+      movement.plan ?? planPlayerCharacterTick(
+        player,
+        inputs[playerId] ?? { movement: { x: 0, y: 0 } },
+        movementScales[playerId] ?? 1,
+      ),
     )
   }
 
@@ -428,10 +346,10 @@ export function stepHubWorldTick(
   if (collegeIntroPendingPlayerIds && [...collegeIntroPendingPlayerIds].some((playerId) => (
     participants[playerId]?.region === 'office'
   ))) {
-    bodies.push(fixedActor('story-office-polisher', 'office', 566, 735, 15))
+    bodies.push(HUB_STORY_OFFICE_POLISHER_ACTOR)
   }
   if (skorchaSchedule.skorcha !== null) {
-    bodies.push(fixedActor(
+    bodies.push(hubFixedActor(
       'skorcha',
       'courtyard',
       skorchaSchedule.skorcha.position.x,
@@ -512,50 +430,17 @@ export function stepHubWorldTick(
   for (const [playerId, participant] of Object.entries(participants)) {
     const player = nextPlayers[playerId]
     if (!player) continue
-    const collegeIntroWaiting = participant.collegeIntro !== null
-      && collegeIntroReadyPlayerIds !== null
-      && !collegeIntroReadyPlayerIds.has(playerId)
-    let stepped = collegeIntroWaiting
-      ? { participant, player }
-      : stepParticipantTransition(
-          participant,
-          player,
-          collegeIntroPendingPlayerIds?.has(playerId) === true,
-        )
-    if (!collegeIntroWaiting && stepped.participant.collegeIntro !== null) {
-      let collegeIntro = stepped.participant.collegeIntro
-      const target = collegePathTargets.get(playerId)
-      if (target && collegeIntro.phase !== 'arch-dialogue') {
-        collegeIntro = {
-          ...collegeIntro,
-          officeSpeed: collegeIntro.phase === 'office-walk'
-            ? nativeCollegeOfficeSpeed(target.pathCursor, collegeIntro.officeSpeed)
-            : collegeIntro.officeSpeed,
-          pathCursor: target.pathCursor,
-        }
-      }
-      if (collegeIntro.phase === 'courtyard-walk') {
-        collegeIntro = stepNativeCollegeTitle(collegeIntro)
-      }
-      if (participant.region === 'courtyard' && stepped.participant.region === 'office') {
-        collegeIntro = enterNativeCollegeOffice(collegeIntro)
-      }
-      if (collegeIntro.phase === 'office-walk') {
-        const targetPoint = target?.target ?? player.position
-        const eligible = nativeCollegeArchContactEligible(
-          stepped.player.position,
-          targetPoint,
-        )
-        const contact = nativeCollegeContactStep(collegeIntro.contactCounter, eligible)
-        collegeIntro = contact.activate
-          ? enterNativeCollegeDialogue(collegeIntro)
-          : { ...collegeIntro, contactCounter: contact.counter }
-      }
-      stepped = {
-        ...stepped,
-        participant: { ...stepped.participant, collegeIntro },
-      }
-    }
+    const stepped = stepHubParticipantMovement(
+      participant,
+      player,
+      collegePathTargets.get(playerId) ?? null,
+      {
+        collegeIntroPending: collegeIntroPendingPlayerIds?.has(playerId) === true,
+        collegeIntroWaiting: participant.collegeIntro !== null
+          && collegeIntroReadyPlayerIds !== null
+          && !collegeIntroReadyPlayerIds.has(playerId),
+      },
+    )
     nextParticipants[playerId] = stepped.participant
     nextPlayers[playerId] = stepped.player
   }
@@ -589,117 +474,6 @@ export function stepHubWorldTick(
   }
 }
 
-function stepParticipantTransition(
-  participant: HubParticipantState,
-  player: PlayerCharacterState,
-  collegeIntroPending: boolean,
-): { participant: HubParticipantState; player: PlayerCharacterState } {
-  if (!participant.transition) {
-    const portal = hubPortalAt(participant.region, player.position)
-    return {
-      participant: portal
-        ? beginHubTransition(participant, portal, player.position)
-        : participant,
-      player,
-    }
-  }
-
-  const transition = participant.transition
-  if (transition.phase === 'college-intro') {
-    const alpha = transition.alpha <= HUB_COLLEGE_INTRO_FADE_RATE
-      ? 0
-      : transition.alpha - HUB_COLLEGE_INTRO_FADE_RATE
-    if (alpha > 0) {
-      return {
-        participant: {
-          ...participant,
-          transition: { ...transition, alpha },
-        },
-        player,
-      }
-    }
-    return {
-      participant: { ...participant, transition: null },
-      player,
-    }
-  }
-  if (transition.phase === 'college-loadout') return { participant, player }
-  if (transition.phase === 'outgoing') {
-    if (transition.alpha < 1) {
-      const alpha = Math.min(1, transition.alpha + HUB_OUTGOING_FADE_RATE)
-      return {
-        participant: {
-          ...participant,
-          transition: { ...transition, alpha },
-        },
-        player,
-      }
-    }
-    const incoming = hubIncomingPlacement(
-      transition.sourceRegion,
-      transition.destination,
-    )
-    return {
-      participant: {
-        collegeIntro: participant.collegeIntro,
-        region: transition.destination,
-        transition: {
-          alpha: 1,
-          destination: transition.destination,
-          phase: collegeIntroPending
-            && transition.sourceRegion === 'office'
-            && transition.destination === 'courtyard'
-            ? 'college-loadout'
-            : 'incoming',
-          scriptedSpeed: incoming.scriptedSpeed,
-          scriptedTarget: incoming.scriptedTarget,
-          sourceRegion: transition.sourceRegion,
-        },
-      },
-      player: {
-        ...player,
-        position: incoming.position,
-        velocity: { x: 0, y: 0 },
-      },
-    }
-  }
-
-  const fadeRate = HUB_INCOMING_FADE_RATES[participant.region]
-  const targetReached = distanceSquared(player.position, transition.scriptedTarget) < 0.01
-  const collegeOfficeWalk = participant.collegeIntro?.phase === 'office-walk'
-  if (transition.alpha === 0 && (targetReached || collegeOfficeWalk)) {
-    return {
-      participant: { ...participant, transition: null },
-      player,
-    }
-  }
-  const alpha = Math.max(0, transition.alpha - fadeRate)
-  return {
-    participant: {
-      ...participant,
-      transition: { ...transition, alpha },
-    },
-    player,
-  }
-}
-
-function nativeCollegeArchContactEligible(
-  position: Readonly<Vector2>,
-  pathTarget: Readonly<Vector2>,
-): boolean {
-  const arch = NATIVE_HUB_NPC_CATALOG.storyOffice.interactions['arch-chancellor'].geometry
-  const dx = arch.position.x - position.x
-  const dy = arch.position.y - position.y
-  const maximum = PLAYER_CHARACTER_PHYSICS.radius + arch.radius + 1
-  if (dx * dx + dy * dy > maximum * maximum) return false
-  const moveX = pathTarget.x - position.x
-  const moveY = pathTarget.y - position.y
-  const moveLength = Math.hypot(moveX, moveY)
-  const targetLength = Math.hypot(dx, dy)
-  if (moveLength === 0 || targetLength === 0) return false
-  return (moveX * dx + moveY * dy) / (moveLength * targetLength) >= 0.7
-}
-
 function reconcileParticipants(
   source: Readonly<Record<string, HubParticipantState>>,
   players: Readonly<Record<string, PlayerCharacterState>>,
@@ -710,10 +484,4 @@ function reconcileParticipants(
       source[playerId] ?? createHubParticipantState(),
     ]),
   )
-}
-
-function distanceSquared(first: Vector2, second: Vector2): number {
-  const dx = first.x - second.x
-  const dy = first.y - second.y
-  return dx * dx + dy * dy
 }

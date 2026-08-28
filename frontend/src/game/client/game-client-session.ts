@@ -81,6 +81,8 @@ import {
   type HubPresentationFrame,
   type HubPresentationTimeline,
 } from './hub-presentation-timeline.ts'
+import { hubCollegeIntroUnstarted } from '../core-kernels/hub-participant-movement.ts'
+import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 import {
   EntityReplicationGapError,
@@ -229,6 +231,8 @@ interface LocalHubPresentationState {
   lastAdvancedAtMs: number
   participant: ProtocolHubParticipantState
   player: ProtocolPlayerState
+  /** Participant state advanced tick by tick with the predicted player. */
+  predictedParticipant: HubParticipantState
   predictedTicks: number
   remainderMs: number
 }
@@ -1549,6 +1553,7 @@ export function connectGameClientSession(
         correctionStartedAtMs: receivedAtMs,
         lastAdvancedAtMs: receivedAtMs,
         participant: copyParticipant(participant),
+        predictedParticipant: copyParticipant(participant),
         player: copyPlayer(player),
         predictedTicks: 0,
         remainderMs: 0,
@@ -1587,6 +1592,7 @@ export function connectGameClientSession(
         correctionStartedAtMs: receivedAtMs,
         lastAdvancedAtMs: receivedAtMs,
         participant: copyParticipant(participant),
+        predictedParticipant: copyParticipant(participant),
         player: {
           ...copyPlayer(authoritative),
           gaitDegrees: previous.player.gaitDegrees,
@@ -1624,8 +1630,13 @@ export function connectGameClientSession(
           currentInput,
           state.collisionRngState,
           state.player.movementScale,
-          state.participant,
+          state.predictedParticipant,
+          {
+            collegeIntroPending: state.player.economy.collegeIntroPending,
+            collegeIntroWaiting: hubCollegeIntroUnstarted(state.predictedParticipant),
+          },
         )
+        state.predictedParticipant = predicted.participant
         state.player = {
           ...predicted.player,
           belt: state.player.belt,

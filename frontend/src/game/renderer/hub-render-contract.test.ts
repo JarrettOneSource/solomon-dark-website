@@ -95,8 +95,13 @@ test('Hub renderer loads compact pages and releases derived frames before page o
 })
 
 test('scripted Hub presentation locks rendered facing to visible travel', () => {
-  assert.match(hubActors, /movementFacing && this\.positioned && \(dx \|\| dy\)/)
-  assert.match(hubActors, /actorHeadingIndex\(actorHeadingFromVector\(dx, dy\)\)/)
+  assert.match(hubActors, /this\.resolveHeadingIndex\(player, movementFacing\)/)
+  assert.match(hubActors, /advanceActorMovementFacing\(/)
+  assert.match(
+    hubActors,
+    /createActorMovementFacingState\(player\.position\.x, player\.position\.y\)/,
+  )
+  assert.match(hubActors, /facing\.headingIndex \?\? player\.headingIndex/)
   assert.match(hubWorldScene, /participant\.transition !== null \|\| participant\.collegeIntro !== null/)
   assert.match(
     hubPrivateRoomScene,
