@@ -22,6 +22,7 @@ test('desktop static server is loopback-only, SPA-aware, and hardened', async (c
   const contentSecurityPolicy = game.headers.get('content-security-policy') ?? ''
   assert.match(contentSecurityPolicy, /object-src 'none'/)
   assert.match(contentSecurityPolicy, /font-src 'self' data:/)
+  assert.match(contentSecurityPolicy, /img-src 'self' data: blob:/)
   assert.doesNotMatch(contentSecurityPolicy, /unsafe-eval/)
   assert.equal(game.headers.get('cache-control'), 'no-store')
 

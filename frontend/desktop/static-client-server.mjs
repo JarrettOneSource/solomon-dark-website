@@ -104,7 +104,7 @@ export async function startStaticClientServer({ root, host = '127.0.0.1', port =
 
 function securityHeaders() {
   return {
-    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src 'self'; connect-src 'self' ws://127.0.0.1:* wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self'; connect-src 'self' ws://127.0.0.1:* wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
     'cross-origin-opener-policy': 'same-origin',
     'referrer-policy': 'no-referrer',
     'x-content-type-options': 'nosniff',

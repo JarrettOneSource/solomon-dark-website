@@ -168,6 +168,7 @@ class ValidationContractTests(unittest.TestCase):
         website_fallback = caddy.index("\n\thandle {", private_sessions)
         self.assertLess(shared_hub, private_sessions)
         self.assertLess(private_sessions, website_fallback)
+        self.assertIn("img-src 'self' data: blob:", caddy)
 
         deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
         required_ownership = [
