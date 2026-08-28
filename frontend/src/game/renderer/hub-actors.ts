@@ -22,6 +22,7 @@ import {
   playerCharacterStaffIsFront,
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
+import { PlayerDamageX4VfxView } from './player-damage-x4-vfx-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import {
@@ -44,6 +45,8 @@ export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
   private readonly staffBack: Sprite
+  private readonly damageX4FrontBase: PlayerDamageX4VfxView
+  private readonly damageX4FrontOverlay: PlayerDamageX4VfxView
   private readonly orbFrontBase: NativeElementVfxView
   private readonly orbFrontOverlay: NativeElementVfxView
   private readonly robe: Sprite
@@ -103,6 +106,13 @@ export class PlayerWorldView {
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
+    const damageX4Texture = textures.secondary[nativeSecondarySpriteKey('BadGuys', 7)]
+    this.damageX4FrontBase = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4FrontBase.container.label = 'player-damage-x4-vfx-front-base'
+    this.damageX4FrontBase.container.zIndex = 6
+    this.damageX4FrontOverlay = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4FrontOverlay.container.label = 'player-damage-x4-vfx-front-overlay'
+    this.damageX4FrontOverlay.container.zIndex = 6
     this.orbFrontBase = new NativeElementVfxView(null, textures.elementVfx)
     this.orbFrontBase.container.label = 'native-element-vfx-front-base'
     this.orbFrontBase.container.zIndex = 6
@@ -164,7 +174,9 @@ export class PlayerWorldView {
       this.fixed,
       this.fixedSecondary,
       this.staffFront,
+      this.damageX4FrontBase.container,
       this.orbFrontBase.container,
+      this.damageX4FrontOverlay.container,
       this.orbFrontOverlay.container,
       this.head,
       this.headSecondary,
@@ -259,6 +271,8 @@ export class PlayerWorldView {
     }
     const hasWeapon = weaponTextures !== null || modWeaponTextures !== null
     const hasStaff = livingAppearance.weapon?.kind === 'staff'
+    const selectedPrimaryAvailable = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
+      || player.primaryCast.selectedPrimaryId >= 0
     const modStaffFront = modWeaponTextures
       ? playerCharacterStaffIsFront(heading, attachmentPose)
       : null
@@ -284,6 +298,12 @@ export class PlayerWorldView {
       && elementEffectVisible
       && hasStaff
       && plan.orbPasses.frontOverlay
+    this.damageX4FrontBase.container.visible = this.orbFrontBase.container.visible
+      && selectedPrimaryAvailable
+      && player.progression.damageX4TicksRemaining > 0
+    this.damageX4FrontOverlay.container.visible = this.orbFrontOverlay.container.visible
+      && selectedPrimaryAvailable
+      && player.progression.damageX4TicksRemaining > 0
     this.robe.visible = !death.visible
     this.robeSecondary.visible = !death.visible && robeHasSecondary
     this.fixed.visible = !death.visible
@@ -384,8 +404,13 @@ export class PlayerWorldView {
     this.hitHeadSecondary.texture = this.headSecondary.texture
     this.hitHead.position.set(headOffset.x, headOffset.y)
     this.hitHeadSecondary.position.set(headOffset.x, headOffset.y)
-    for (const orb of [this.orbFrontBase, this.orbFrontOverlay]) {
-      orb.container.position.set(
+    for (const view of [
+      this.damageX4FrontBase,
+      this.orbFrontBase,
+      this.damageX4FrontOverlay,
+      this.orbFrontOverlay,
+    ]) {
+      view.container.position.set(
         orbOffset.x + attachmentOffset.x,
         orbOffset.y + attachmentOffset.y,
       )
@@ -396,6 +421,16 @@ export class PlayerWorldView {
     const selectedPrimaryId = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       ? 80
       : player.primaryCast.selectedPrimaryId
+    this.damageX4FrontBase.update(
+      player.progression.damageX4TicksRemaining,
+      tick,
+      this.currentElementEffectScale,
+    )
+    this.damageX4FrontOverlay.update(
+      player.progression.damageX4TicksRemaining,
+      tick,
+      this.currentElementEffectScale,
+    )
     this.orbFrontBase.updateSelectedPrimary(
       selectedPrimaryId,
       tick,
@@ -457,6 +492,15 @@ export class PlayerWorldView {
     return this.magicShield.visible
   }
 
+  get damageX4Alpha(): number {
+    return Math.max(this.damageX4FrontBase.alpha, this.damageX4FrontOverlay.alpha)
+  }
+
+  get damageX4SpriteCount(): number {
+    return this.damageX4FrontBase.visibleSpriteCount
+      + this.damageX4FrontOverlay.visibleSpriteCount
+  }
+
   setDepth(depth: number): void {
     this.container.zIndex = depth
   }
@@ -500,6 +544,10 @@ export class PlayerWorldView {
   }
 
   destroy(): void {
+    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay]) {
+      this.container.removeChild(view.container)
+      view.destroy()
+    }
     for (const orb of [this.orbFrontBase, this.orbFrontOverlay]) {
       this.container.removeChild(orb.container)
       orb.destroy()

@@ -347,6 +347,18 @@ function interpolatePlayer(
   blend: number,
 ): ProtocolPlayerState {
   const discrete = blend < 1 ? older : newer
+  const damageX4Delta = older.progression.damageX4TicksRemaining
+    - newer.progression.damageX4TicksRemaining
+  const damageX4TicksRemaining = older.progression.damageX4TicksRemaining > 0
+    && newer.progression.damageX4TicksRemaining > 0
+    && damageX4Delta >= 0
+    && damageX4Delta <= 10
+    ? lerp(
+        older.progression.damageX4TicksRemaining,
+        newer.progression.damageX4TicksRemaining,
+        blend,
+      )
+    : discrete.progression.damageX4TicksRemaining
   return {
     belt: discrete.belt,
     config: { ...discrete.config },
@@ -387,7 +399,10 @@ function interpolatePlayer(
         blend,
       ),
     },
-    progression: discrete.progression,
+    progression: {
+      ...discrete.progression,
+      damageX4TicksRemaining,
+    },
     velocity: {
       x: lerp(older.velocity.x, newer.velocity.x, blend),
       y: lerp(older.velocity.y, newer.velocity.y, blend),

@@ -13,6 +13,7 @@ import {
   MAX_PLAYER_EXPERIENCE,
   MAX_PLAYER_LEVEL,
   NATIVE_ANTIDOTE_IMMUNITY_TICKS,
+  NATIVE_DAMAGE_X4_BONUS_TICKS,
   NATIVE_DAMAGE_X4_POTION_TICKS,
   NATIVE_LEVEL_THRESHOLDS,
   NATIVE_SKILL_CATALOG,
@@ -21,6 +22,7 @@ import {
   NATIVE_WELD_BUILDS,
   SPELL_WELDING_SKILL_ID,
   applyPlayerSkillChoice as applyPlayerSkillChoiceWithGameplayRng,
+  applyPlayerDamageX4Bonus,
   applyPlayerPotionEffect,
   boneyardEnemyExperienceAward,
   buildPlayerSkillOffer as buildPlayerSkillOfferWithGameplayRng,
@@ -279,6 +281,27 @@ test('all six native potion subtypes mutate and expire their authoritative progr
     poisonImmunityTicksRemaining: 0,
   })
   assert.throws(() => applyPlayerPotionEffect(damaged, 6), /within \[0, 5\]/)
+})
+
+test('Damage x4 Bonus and Wizard Chug replace the shared timer with their distinct native clocks', () => {
+  const source = createPlayerProgression(1)
+  const bonus = applyPlayerDamageX4Bonus(source)
+  assert.equal(bonus.damageX4TicksRemaining, NATIVE_DAMAGE_X4_BONUS_TICKS)
+  assert.equal(bonus.revision, source.revision + 1)
+
+  const potionAfterBonus = applyPlayerPotionEffect(bonus, 2)
+  assert.equal(potionAfterBonus.damageX4TicksRemaining, NATIVE_DAMAGE_X4_POTION_TICKS)
+  const bonusAfterPotion = applyPlayerDamageX4Bonus(potionAfterBonus)
+  assert.equal(bonusAfterPotion.damageX4TicksRemaining, NATIVE_DAMAGE_X4_BONUS_TICKS)
+
+  let expiring = { ...source, damageX4TicksRemaining: 101 }
+  expiring = stepPlayerPotionEffects(expiring)
+  assert.equal(expiring.damageX4TicksRemaining, 100)
+  for (let remaining = 99; remaining >= 0; remaining -= 1) {
+    expiring = stepPlayerPotionEffects(expiring)
+    assert.equal(expiring.damageX4TicksRemaining, remaining)
+  }
+  assert.strictEqual(stepPlayerPotionEffects(expiring), expiring)
 })
 
 function offerProgression(

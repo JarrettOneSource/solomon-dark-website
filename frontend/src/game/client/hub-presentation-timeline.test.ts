@@ -162,6 +162,14 @@ test('interpolates the shared player effect phase while keeping light ownership 
     lightRegistration: actorLightRegistration(9),
     overlayEffectPhase: 0.225,
   }
+  older.players.remote.progression = {
+    ...older.players.remote.progression,
+    damageX4TicksRemaining: 100,
+  }
+  newer.players.remote.progression = {
+    ...newer.players.remote.progression,
+    damageX4TicksRemaining: 95,
+  }
   const presentation = timeline(older)
   presentation.push(newer, 50)
   assert.deepEqual(presentation.sample(75).players.remote.lighting, {
@@ -169,10 +177,34 @@ test('interpolates the shared player effect phase while keeping light ownership 
     overlayEffectPhase: 0.18,
   })
   assert.deepEqual(presentation.sample(100).players.remote.lighting, newer.players.remote.lighting)
+  assert.equal(presentation.sample(75).players.remote.progression.damageX4TicksRemaining, 97.5)
   assert.notEqual(
     presentation.sample(100).players.remote.lighting.lightRegistration,
     newer.players.remote.lighting.lightRegistration,
   )
+})
+
+test('keeps Damage x4 activation and expiry edges discrete in Hub', () => {
+  const inactive = snapshotAt(100, 10, 20)
+  const active = snapshotAt(105, 20, 30)
+  active.players.remote.progression = {
+    ...active.players.remote.progression,
+    damageX4TicksRemaining: 1_500,
+  }
+  const activation = timeline(inactive)
+  activation.push(active, 50)
+  assert.equal(activation.sample(75).players.remote.progression.damageX4TicksRemaining, 0)
+  assert.equal(activation.sample(100).players.remote.progression.damageX4TicksRemaining, 1_500)
+
+  const expired = snapshotAt(110, 30, 40)
+  active.players.remote.progression = {
+    ...active.players.remote.progression,
+    damageX4TicksRemaining: 5,
+  }
+  const expiry = timeline(active)
+  expiry.push(expired, 50)
+  assert.equal(expiry.sample(75).players.remote.progression.damageX4TicksRemaining, 5)
+  assert.equal(expiry.sample(100).players.remote.progression.damageX4TicksRemaining, 0)
 })
 
 test('keeps the held one-shot attack pose discrete across Hub presentation samples', () => {

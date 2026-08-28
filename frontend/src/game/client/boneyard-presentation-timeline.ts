@@ -329,12 +329,20 @@ function interpolatePlayerProgression(
   const sameDeathEpoch = first.deathEpoch === second.deathEpoch
     && (first.lifeState === 'dying' || first.lifeState === 'spectating')
     && (second.lifeState === 'dying' || second.lifeState === 'spectating')
-  return sameDeathEpoch
-    ? {
-        ...discrete,
-        deathTick: Math.floor(lerp(first.deathTick, second.deathTick, blend)),
-      }
-    : discrete
+  const damageX4Delta = first.damageX4TicksRemaining - second.damageX4TicksRemaining
+  const damageX4TicksRemaining = first.damageX4TicksRemaining > 0
+    && second.damageX4TicksRemaining > 0
+    && damageX4Delta >= 0
+    && damageX4Delta <= 10
+    ? lerp(first.damageX4TicksRemaining, second.damageX4TicksRemaining, blend)
+    : discrete.damageX4TicksRemaining
+  return {
+    ...discrete,
+    damageX4TicksRemaining,
+    ...(sameDeathEpoch
+      ? { deathTick: Math.floor(lerp(first.deathTick, second.deathTick, blend)) }
+      : {}),
+  }
 }
 
 function interpolateGateLeaves(

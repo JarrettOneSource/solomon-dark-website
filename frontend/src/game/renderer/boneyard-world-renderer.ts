@@ -344,6 +344,11 @@ interface BoneyardRendererFrameDiagnostics {
   painterBandCount: number
   playerAttachmentPose: number
   playerCount: number
+  playerDamageX4Alpha: number
+  playerDamageX4Alphas: Record<string, number>
+  playerDamageX4SpriteCount: number
+  playerDamageX4SpriteCounts: Record<string, number>
+  playerDamageX4TicksRemaining: number
   playerDeathColorLayerCount: number
   playerDeathFrame: number | null
   playerDeathFrameSamples: readonly Readonly<{
@@ -788,6 +793,11 @@ export async function createBoneyardWorldRenderer(
     painterBandCount: 0,
     playerAttachmentPose: 0,
     playerCount: 0,
+    playerDamageX4Alpha: 0,
+    playerDamageX4Alphas: {},
+    playerDamageX4SpriteCount: 0,
+    playerDamageX4SpriteCounts: {},
+    playerDamageX4TicksRemaining: 0,
     playerDeathColorLayerCount: 0,
     playerDeathFrame: null,
     playerDeathFrameSamples: [],
@@ -1257,8 +1267,23 @@ export async function createBoneyardWorldRenderer(
           scene.player(playerId)?.elementEffectPrimaryId ?? null,
         ]),
       )
+      frameDiagnostics.playerDamageX4Alphas = Object.fromEntries(
+        Object.keys(snapshot.players).map((playerId) => [
+          playerId,
+          scene.player(playerId)?.damageX4Alpha ?? 0,
+        ]),
+      )
+      frameDiagnostics.playerDamageX4SpriteCounts = Object.fromEntries(
+        Object.keys(snapshot.players).map((playerId) => [
+          playerId,
+          scene.player(playerId)?.damageX4SpriteCount ?? 0,
+        ]),
+      )
       const playerView = scene.player(options.playerId)
       frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0
+      frameDiagnostics.playerDamageX4Alpha = playerView?.damageX4Alpha ?? 0
+      frameDiagnostics.playerDamageX4SpriteCount = playerView?.damageX4SpriteCount ?? 0
+      frameDiagnostics.playerDamageX4TicksRemaining = player.progression.damageX4TicksRemaining
       frameDiagnostics.playerElementEffectPrimaryId = playerView?.elementEffectPrimaryId ?? null
       frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
       frameDiagnostics.seekerSegmentCount = scene.seekerSegmentCount

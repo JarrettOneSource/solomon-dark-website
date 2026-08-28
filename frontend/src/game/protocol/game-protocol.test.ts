@@ -649,6 +649,18 @@ test('server welcome round-trips content, kernel, character, and world ownership
     snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const excessiveDamageX4 = JSON.parse(encodeGameMessage(welcome))
+  excessiveDamageX4.snapshot.players['player-1'].progression.damageX4TicksRemaining = 6_001
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessiveDamageX4)),
+    /damageX4TicksRemaining is out of range/,
+  )
+  const absentDamageX4 = JSON.parse(encodeGameMessage(welcome))
+  delete absentDamageX4.snapshot.players['player-1'].progression.damageX4TicksRemaining
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(absentDamageX4)),
+    /damageX4TicksRemaining/,
+  )
   const absentLeaderWelcome = structuredClone(welcome)
   absentLeaderWelcome.snapshot.hostPlayerId = 'disconnected-party-leader'
   assert.deepEqual(
@@ -1028,6 +1040,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     currentHealth: 50,
     currentMana: 100,
     coldSlowTicksRemaining: 0,
+    damageX4TicksRemaining: 0,
     deferredSkillChoices: 0,
     dazzleTicksRemaining: 0,
     deathEpoch: 0,
@@ -1617,8 +1630,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v96 carries online state, enemy routes, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 96)
+test('protocol v97 carries Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 97)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

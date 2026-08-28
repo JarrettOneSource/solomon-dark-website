@@ -12,6 +12,7 @@ import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
 import {
+  NATIVE_DAMAGE_X4_BONUS_TICKS,
   NATIVE_WELD_BUILDS,
   type NativeBeltSkillId,
 } from '../core-kernels/player-progression.ts'
@@ -2985,7 +2986,10 @@ test('all three Bonus pickups apply once through authoritative progression and f
       assert.notStrictEqual(state.world.loot.sharedRng, lootRngBefore)
     } else {
       assert.equal(pickup?.text, 'DAMAGE x4')
-      assert.ok(getPlayerProgression(state).damageX4TicksRemaining > 0)
+      assert.equal(
+        getPlayerProgression(state).damageX4TicksRemaining,
+        NATIVE_DAMAGE_X4_BONUS_TICKS - 1,
+      )
     }
   }
 })

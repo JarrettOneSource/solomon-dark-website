@@ -27,6 +27,7 @@ export const SPELL_WELDING_SKILL_ID = 52
 export const INITIAL_WELD_OFFER_MARKER = 9_999
 export const SPELL_WELDING_QUICK_DESCRIPTION = 'TWO ATTACK SPELLS TO COMBINE'
 export const RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR = 0.425
+export const NATIVE_DAMAGE_X4_BONUS_TICKS = 1_500
 export const NATIVE_DAMAGE_X4_POTION_TICKS = 6_000
 export const NATIVE_MIND_CHUG_TICKS = 6_000
 export const NATIVE_ANTIDOTE_IMMUNITY_TICKS = 1_000
@@ -740,6 +741,16 @@ export function applyPlayerPotionEffect(
       }
     default:
       throw new RangeError('native potion subtype must be within [0, 5]')
+  }
+}
+
+export function applyPlayerDamageX4Bonus(
+  source: PlayerProgressionComponent,
+): PlayerProgressionComponent {
+  return {
+    ...source,
+    damageX4TicksRemaining: NATIVE_DAMAGE_X4_BONUS_TICKS,
+    revision: source.revision + 1,
   }
 }
 

@@ -118,6 +118,7 @@ export interface ProtocolPlayerProgression {
   concentrationSkillIds: readonly [number | null, number | null]
   currentHealth: number
   currentMana: number
+  damageX4TicksRemaining: number
   deferredSkillChoices: number
   deathEpoch: number
   deathTick: number

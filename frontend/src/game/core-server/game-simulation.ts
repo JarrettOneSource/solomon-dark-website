@@ -237,6 +237,7 @@ import {
 import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
+  applyPlayerEntityDamageX4Bonus,
   applyPlayerEntityHagathaPurchaseEffects,
   applyPlayerEntityPotionEffect,
   autofillPlayerEntitySkillSelections,
@@ -2727,7 +2728,7 @@ function finishGameSimulationTick(
             )
           }
         } else if (pickup.bonusKind === 2) {
-          playerEntities = applyPlayerEntityPotionEffect(playerEntities, pickup.playerId, 2)
+          playerEntities = applyPlayerEntityDamageX4Bonus(playerEntities, pickup.playerId)
         }
         break
     }

@@ -327,6 +327,7 @@ function protocolPlayerState(
       ],
       currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
       currentMana: progression.currentMana,
+      damageX4TicksRemaining: progression.damageX4TicksRemaining,
       deferredSkillChoices: progression.deferredSkillChoices,
       dazzleTicksRemaining: progression.dazzleTicksRemaining,
       deathEpoch: progression.deathEpoch,

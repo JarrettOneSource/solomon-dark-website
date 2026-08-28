@@ -32,6 +32,7 @@ import {
 } from '../src/game/core-server/game-simulation.ts'
 import {
   damagePlayerEntity,
+  playerSkillDerivedStatsAt,
   replacePlayerCharacter,
   setPlayerEntityMana,
 } from '../src/game/core-server/player-entity-store.ts'
@@ -270,6 +271,27 @@ try {
   await waitUntil(() => (
     getPlayerProgression(host.state(), playerId).damageX4TicksRemaining > 0
   ), 'Damage x4 Powerup did not update authoritative progression')
+  const powerupActivatedAtTick = host.state().tick
+  const powerupInitialTicks = getPlayerProgression(host.state(), playerId)
+    .damageX4TicksRemaining
+  assert.ok(powerupInitialTicks > 1_400 && powerupInitialTicks <= 1_500)
+  assert.equal(
+    playerSkillDerivedStatsAt(host.state().playerEntities, playerId)?.offensiveDamageFactor,
+    4,
+  )
+  await waitForDamageX4Frame(page, (frame) => (
+    frame.playerDamageX4TicksRemaining > 1_400
+      && frame.playerDamageX4SpriteCount >= 2
+      && frame.playerDamageX4SpriteCount % 2 === 0
+      && frame.playerDamageX4Alpha === 1
+  ), 'Damage x4 active Staff halo did not become fully visible')
+  await waitForDamageX4PlayerFrame(guestPage, playerId, (frame) => (
+    frame.spriteCount >= 2 && frame.alpha === 1
+  ), 'remote Damage x4 Staff halo did not become fully visible')
+  const powerupActive = await damageX4Frame(page)
+  const powerupActivePath = join(screenshotRoot, 'damage-x4-active.png')
+  const powerupActiveScreenshot = await page.screenshot({ path: powerupActivePath })
+  assert.ok(powerupActiveScreenshot.byteLength > 20_000)
   const powerupMessage = await waitForBitmapMessage(page, 'DAMAGE x4')
 
   await waitForLootCount(page, 0)
@@ -290,6 +312,42 @@ try {
     hostPlayerId: playerId,
     position: point(center, 0, 250),
   })
+  await waitUntil(() => {
+    const remaining = getPlayerProgression(host.state(), playerId).damageX4TicksRemaining
+    return remaining > 0 && remaining <= 100
+  }, 'Damage x4 did not enter its final native fade', 10_000)
+  await waitForDamageX4Frame(page, (frame) => (
+    frame.playerDamageX4TicksRemaining > 0
+      && frame.playerDamageX4TicksRemaining <= 100
+      && frame.playerDamageX4SpriteCount >= 2
+      && frame.playerDamageX4Alpha > 0
+      && frame.playerDamageX4Alpha < 1
+  ), 'Damage x4 Staff halo did not enter its final alpha fade')
+  const powerupFading = await damageX4Frame(page)
+  const powerupFadingPath = join(screenshotRoot, 'damage-x4-fading.png')
+  const powerupFadingScreenshot = await page.screenshot({ path: powerupFadingPath })
+  assert.ok(powerupFadingScreenshot.byteLength > 20_000)
+  await waitUntil(() => (
+    getPlayerProgression(host.state(), playerId).damageX4TicksRemaining === 0
+  ), 'Damage x4 did not expire at zero', 10_000)
+  const powerupExpiredAtTick = host.state().tick
+  assert.equal(powerupExpiredAtTick - powerupActivatedAtTick, powerupInitialTicks)
+  assert.equal(
+    playerSkillDerivedStatsAt(host.state().playerEntities, playerId)?.offensiveDamageFactor,
+    1,
+  )
+  await waitForDamageX4Frame(page, (frame) => (
+    frame.playerDamageX4TicksRemaining === 0
+      && frame.playerDamageX4SpriteCount === 0
+      && frame.playerDamageX4Alpha === 0
+  ), 'Damage x4 Staff halo survived authoritative expiry')
+  await waitForDamageX4PlayerFrame(guestPage, playerId, (frame) => (
+    frame.spriteCount === 0 && frame.alpha === 0
+  ), 'remote Damage x4 Staff halo survived authoritative expiry')
+  const powerupExpired = await damageX4Frame(page)
+  const powerupExpiredPath = join(screenshotRoot, 'damage-x4-expired.png')
+  const powerupExpiredScreenshot = await page.screenshot({ path: powerupExpiredPath })
+  assert.ok(powerupExpiredScreenshot.byteLength > 20_000)
 
   const after = {
     backpack: getPlayerEconomy(host.state(), playerId).backpack
@@ -355,6 +413,14 @@ try {
       robe: robeMessage,
     },
     pageErrors,
+    powerupVfx: {
+      activatedAtTick: powerupActivatedAtTick,
+      active: powerupActive,
+      expired: powerupExpired,
+      expiredAtTick: powerupExpiredAtTick,
+      fading: powerupFading,
+      initialTicks: powerupInitialTicks,
+    },
     proof: spawned.actors.map((actor) => ({
       bonusKind: actor.bonusKind,
       equipmentType: actor.item?.equipmentType ?? null,
@@ -365,7 +431,14 @@ try {
       position: actor.position,
       source: actor.source,
     })),
-    screenshots: [visualPath, collectedPath, goodieSack.screenshot],
+    screenshots: [
+      visualPath,
+      collectedPath,
+      powerupActivePath,
+      powerupFadingPath,
+      powerupExpiredPath,
+      goodieSack.screenshot,
+    ],
     terminalFade,
     useBuiltFrontend,
   }, null, 2)}\n`)
@@ -945,6 +1018,31 @@ async function waitForLootCount(page, count) {
   ), count, { timeout: 30_000 })
 }
 
+async function damageX4Frame(page) {
+  return page.locator('.boneyard-world-canvas').evaluate((node) => ({
+    alpha: node.__sdrBoneyardFrame.playerDamageX4Alpha,
+    playerDamageX4Alpha: node.__sdrBoneyardFrame.playerDamageX4Alpha,
+    playerDamageX4SpriteCount: node.__sdrBoneyardFrame.playerDamageX4SpriteCount,
+    playerDamageX4TicksRemaining: node.__sdrBoneyardFrame.playerDamageX4TicksRemaining,
+    spriteCount: node.__sdrBoneyardFrame.playerDamageX4SpriteCount,
+    ticksRemaining: node.__sdrBoneyardFrame.playerDamageX4TicksRemaining,
+  }))
+}
+
+async function waitForDamageX4Frame(page, predicate, message) {
+  await waitUntil(async () => predicate(await damageX4Frame(page)), message, 10_000)
+}
+
+async function waitForDamageX4PlayerFrame(page, playerId, predicate, message) {
+  await waitUntil(async () => predicate(await page.locator('.boneyard-world-canvas').evaluate(
+    (node, remotePlayerId) => ({
+      alpha: node.__sdrBoneyardFrame.playerDamageX4Alphas[remotePlayerId] ?? 0,
+      spriteCount: node.__sdrBoneyardFrame.playerDamageX4SpriteCounts[remotePlayerId] ?? 0,
+    }),
+    playerId,
+  )), message, 10_000)
+}
+
 function backpackKindQuantity(host, playerId, kind) {
   return getPlayerEconomy(host.state(), playerId).backpack
     .filter((item) => item.kind === kind)
@@ -1020,7 +1118,7 @@ async function lootAudioReceipt(page) {
 async function waitUntil(predicate, message, timeoutMs = 10_000) {
   const deadline = performance.now() + timeoutMs
   while (performance.now() < deadline) {
-    if (predicate()) return
+    if (await predicate()) return
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
   throw new Error(message)

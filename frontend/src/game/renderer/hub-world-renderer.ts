@@ -79,6 +79,11 @@ interface HubFrameDiagnostics {
   orbSpriteCount: number
   playerCount: number
   playerAttachmentPose: number
+  playerDamageX4Alpha: number
+  playerDamageX4Alphas: Record<string, number>
+  playerDamageX4SpriteCount: number
+  playerDamageX4SpriteCounts: Record<string, number>
+  playerDamageX4TicksRemaining: number
   playerElementEffectPrimaryId: number | null
   playerElementEffectPrimaryIds: Record<string, number | null>
   playerElementEffectScale: number
@@ -292,6 +297,11 @@ export async function createHubWorldRenderer(
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
+    playerDamageX4Alpha: 0,
+    playerDamageX4Alphas: {},
+    playerDamageX4SpriteCount: 0,
+    playerDamageX4SpriteCounts: {},
+    playerDamageX4TicksRemaining: 0,
     playerElementEffectPrimaryId: null,
     playerElementEffectPrimaryIds: {},
     playerElementEffectScale: 1,
@@ -411,6 +421,24 @@ export async function createHubWorldRenderer(
         return [playerId, view?.elementEffectPrimaryId ?? null]
       }),
     )
+    frameDiagnostics.playerDamageX4Alphas = Object.fromEntries(
+      Object.keys(snapshot.players).map((playerId) => {
+        const region = snapshot.world.participants[playerId]?.region
+        const view = region === 'courtyard'
+          ? courtyardScene.player(playerId)
+          : privateRoomScene.player(playerId)
+        return [playerId, view?.damageX4Alpha ?? 0]
+      }),
+    )
+    frameDiagnostics.playerDamageX4SpriteCounts = Object.fromEntries(
+      Object.keys(snapshot.players).map((playerId) => {
+        const region = snapshot.world.participants[playerId]?.region
+        const view = region === 'courtyard'
+          ? courtyardScene.player(playerId)
+          : privateRoomScene.player(playerId)
+        return [playerId, view?.damageX4SpriteCount ?? 0]
+      }),
+    )
     if (!player) return
     frameDiagnostics.playerX = player.position.x
     frameDiagnostics.playerY = player.position.y
@@ -421,6 +449,9 @@ export async function createHubWorldRenderer(
     if (!playerView) return
     frameDiagnostics.playerHeadingIndex = playerView.headingIndex
     frameDiagnostics.playerAttachmentPose = playerView.attachmentPose
+    frameDiagnostics.playerDamageX4Alpha = playerView.damageX4Alpha
+    frameDiagnostics.playerDamageX4SpriteCount = playerView.damageX4SpriteCount
+    frameDiagnostics.playerDamageX4TicksRemaining = player.progression.damageX4TicksRemaining
     frameDiagnostics.playerElementEffectPrimaryId = playerView.elementEffectPrimaryId
     frameDiagnostics.playerElementEffectScale = playerView.elementEffectScale
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale

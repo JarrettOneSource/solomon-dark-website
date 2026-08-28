@@ -340,6 +340,10 @@ function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnap
 test('interpolates Boneyard actors and gate leaves at display time', () => {
   const older = snapshotAt(100, 10, 100)
   const newerBase = snapshotAt(105, 20, 120)
+  older.players.local.progression = {
+    ...older.players.local.progression,
+    damageX4TicksRemaining: 100,
+  }
   const newer = {
     ...newerBase,
     players: {
@@ -349,6 +353,7 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
         progression: {
           ...newerBase.players.local.progression,
           currentHealth: 40,
+          damageX4TicksRemaining: 95,
           lastDamageTick: 103,
         },
       },
@@ -370,6 +375,7 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(75).players.local.position.x, 15)
   assert.equal(timeline.sample(75).players.local.footstepTick, 10)
   assert.equal(timeline.sample(75).players.local.progression.currentHealth, 50)
+  assert.equal(timeline.sample(75).players.local.progression.damageX4TicksRemaining, 97.5)
   assert.equal(timeline.sample(75).players.local.progression.lastDamageTick, null)
   assert.equal(timeline.sample(75).world.gateLeaves[0].tip.x, 110)
   assert.equal(timeline.sample(75).world.encounter?.position.x, 315)
@@ -416,6 +422,39 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
     managerLane: 'actor',
     registrationOrdinal: 7,
   })
+})
+
+test('keeps Damage x4 activation and expiry edges discrete in Boneyard', () => {
+  const inactive = snapshotAt(100, 10, 100)
+  const active = snapshotAt(105, 20, 120)
+  active.players.local.progression = {
+    ...active.players.local.progression,
+    damageX4TicksRemaining: 1_500,
+  }
+  const activation = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: inactive,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  activation.push(active, 50)
+  assert.equal(activation.sample(75).players.local.progression.damageX4TicksRemaining, 0)
+  assert.equal(activation.sample(100).players.local.progression.damageX4TicksRemaining, 1_500)
+
+  const expired = snapshotAt(110, 30, 140)
+  active.players.local.progression = {
+    ...active.players.local.progression,
+    damageX4TicksRemaining: 5,
+  }
+  const expiry = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: active,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  expiry.push(expired, 50)
+  assert.equal(expiry.sample(75).players.local.progression.damageX4TicksRemaining, 5)
+  assert.equal(expiry.sample(100).players.local.progression.damageX4TicksRemaining, 0)
 })
 
 test('interpolates the native camera lock while retaining owned combat bounds', () => {

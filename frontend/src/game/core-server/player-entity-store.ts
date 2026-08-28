@@ -34,6 +34,7 @@ import {
 import {
   applyNativeSkillAcquisitionOfferSeeds,
   applyNativeRevelationToConcentrations,
+  applyPlayerDamageX4Bonus,
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
   buildPlayerSkillOffer,
@@ -1017,6 +1018,19 @@ export function applyPlayerEntityPotionEffect(
     source,
     index,
     applyPlayerPotionEffect(source.progressions[index]!, subtype),
+  )
+}
+
+export function applyPlayerEntityDamageX4Bonus(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  return replacePlayerProgression(
+    source,
+    index,
+    applyPlayerDamageX4Bonus(source.progressions[index]!),
   )
 }
 

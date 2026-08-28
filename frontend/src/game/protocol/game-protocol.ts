@@ -234,6 +234,7 @@ import {
   type NativeSecondaryAbilityId,
 } from '../core-kernels/native-secondary-ability-contract.ts'
 import {
+  NATIVE_DAMAGE_X4_POTION_TICKS,
   isNativeBeltSkill,
   nativeSkillCategory,
   SPELL_WELDING_SKILL_ID,
@@ -386,7 +387,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 96
+export const GAME_PROTOCOL_VERSION = 97
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -3782,6 +3783,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'concentrationSkillIds',
     'currentHealth',
     'currentMana',
+    'damageX4TicksRemaining',
     'deferredSkillChoices',
     'dazzleTicksRemaining',
     'deathEpoch',
@@ -3844,6 +3846,13 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   )
   if (dazzleTicksRemaining > NATIVE_WRAITH_DAZZLE_TICKS) {
     throw new GameProtocolError(`${field}.dazzleTicksRemaining is out of range`)
+  }
+  const damageX4TicksRemaining = nonnegativeInteger(
+    source.damageX4TicksRemaining,
+    `${field}.damageX4TicksRemaining`,
+  )
+  if (damageX4TicksRemaining > NATIVE_DAMAGE_X4_POTION_TICKS) {
+    throw new GameProtocolError(`${field}.damageX4TicksRemaining is out of range`)
   }
   const level = positiveInteger(source.level, `${field}.level`)
   if (level > 75) throw new GameProtocolError(`${field}.level is out of range`)
@@ -3983,6 +3992,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     concentrationSkillIds: concentrationSkillIds as [number | null, number | null],
     currentHealth,
     currentMana,
+    damageX4TicksRemaining,
     deferredSkillChoices: nonnegativeInteger(
       source.deferredSkillChoices,
       `${field}.deferredSkillChoices`,
