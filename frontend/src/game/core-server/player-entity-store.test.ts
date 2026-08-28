@@ -11,7 +11,7 @@ import {
 } from '../core-kernels/player-combat.ts'
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
-import { selectedElementStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import { bindNativeBeltSkill } from '../core-kernels/native-belt.ts'
 import {
   playerLightDriveActive,
@@ -33,6 +33,7 @@ import {
   grantPlayerEntityWeldBuild,
   increaseRandomPlayerEntitySkill,
   insertPlayerEntityLootItem,
+  migratePlayerStarterEquipmentAppearance,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
   playerEntityDisplayHealth,
@@ -159,7 +160,7 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
     123_456,
     { starterAppearanceOwner: 'air' },
   )
-  const appearance = selectedElementStarterEquipmentAppearance('air')
+  const appearance = rollNativeStarterEquipmentAppearance(createNativeRng(123_456), 'air')
   assert.deepEqual(replaced.configs[0], nextConfig)
   assert.notStrictEqual(replaced.economies[0], economy)
   assert.equal(replaced.economies[0]!.revision, 12)
@@ -230,6 +231,63 @@ test('College Create confirmation preserves its one-shot pre-Create clothing col
   assert.deepEqual(replaced.belts[0]![0], { kind: 'skill', skillId: 35 })
 })
 
+test('starter repair replaces only an exact superseded vivid Hat and Robe pair', () => {
+  const source = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 10, y: 20 }),
+    10,
+  )
+  const economy = source.economies[0]!
+  const vividTints = [0xff19ff, 0xffffff] as const
+  const vividEconomy = {
+    ...economy,
+    collegeIntroPending: false,
+    equipment: {
+      ...economy.equipment,
+      hat: { ...economy.equipment.hat!, iconTints: vividTints },
+      robe: { ...economy.equipment.robe!, iconTints: vividTints },
+    },
+    revision: 4,
+    tutorialPending: false,
+  }
+  const vividStore = { ...source, economies: [vividEconomy] }
+  const repaired = migratePlayerStarterEquipmentAppearance(vividStore, 'first')
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(source.progressions[0]!.offerSeed),
+    'ether',
+  )
+  assert.deepEqual(repaired.economies[0]!.equipment.hat?.iconTints, [
+    appearance.primaryTint,
+    appearance.secondaryTint,
+  ])
+  assert.deepEqual(
+    repaired.economies[0]!.equipment.robe?.iconTints,
+    repaired.economies[0]!.equipment.hat?.iconTints,
+  )
+  assert.equal(repaired.economies[0]!.revision, 5)
+
+  const customTints = [0x123456, 0xffffff] as const
+  for (const equipment of [{
+    ...vividEconomy.equipment,
+    robe: { ...vividEconomy.equipment.robe!, iconTints: customTints },
+  }, {
+    ...vividEconomy.equipment,
+    hat: { ...vividEconomy.equipment.hat!, iconTints: customTints },
+    robe: { ...vividEconomy.equipment.robe!, iconTints: customTints },
+  }]) {
+    const preserved = {
+      ...source,
+      economies: [{ ...vividEconomy, equipment }],
+    }
+    assert.strictEqual(
+      migratePlayerStarterEquipmentAppearance(preserved, 'first'),
+      preserved,
+    )
+  }
+})
+
 test('all fifteen post-Game-Over Create choices build a fresh complete generation', () => {
   const elementRows = {
     air: [2, 24, 27],
@@ -272,7 +330,7 @@ test('all fifteen post-Game-Over Create choices build a fresh complete generatio
       const book = store.skillBooks[0]!
       const progression = store.progressions[0]!
       const runtime = store.skillRuntimes[0]!
-      const appearance = selectedElementStarterEquipmentAppearance(element)
+      const appearance = rollNativeStarterEquipmentAppearance(createNativeRng(offerSeed), element)
       const learnedRanks = book.permanentRanks.flatMap((rank, skillId) => (
         rank === 0 ? [] : [[skillId, rank] as const]
       ))

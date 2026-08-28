@@ -1,5 +1,4 @@
 import type { HubEquipmentState, HubInventoryItem, ModItemContent } from './hub-economy.ts'
-import { WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS } from './native-starter-equipment.ts'
 import type { WizardElement } from './player-character.ts'
 
 export interface PlayerEquipmentTintedSelector {
@@ -51,11 +50,11 @@ export function isPlayerModEquipmentAppearance(
 }
 
 const ELEMENT_DEATH_PALETTES: Readonly<Record<WizardElement, readonly [number, number]>> = {
-  air: [WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS.air, 0xffffff],
-  earth: [WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS.earth, 0xffffff],
-  ether: [WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS.ether, 0xffffff],
-  fire: [WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS.fire, 0xffffff],
-  water: [WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS.water, 0xffffff],
+  air: [0xa0c3c3, 0xffffff],
+  earth: [0x90b390, 0xffffff],
+  ether: [0x886688, 0xffffff],
+  fire: [0x998077, 0xffffff],
+  water: [0x5e6e81, 0xffffff],
 }
 
 const ROBE_DEATH_APPEARANCES: Readonly<Record<number, PlayerEquipmentTintedSelector>> = {

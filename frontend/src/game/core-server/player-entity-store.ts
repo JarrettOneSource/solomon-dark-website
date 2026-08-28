@@ -12,7 +12,7 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
-import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   coldSlowPlayer,
   dazzlePlayer,
@@ -85,7 +85,7 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
-  selectedElementStarterEquipmentAppearance,
+  rollNativeStarterEquipmentAppearance,
 } from '../core-kernels/native-starter-equipment.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
@@ -377,9 +377,18 @@ export function migratePlayerStarterEquipmentAppearance(
   if (index < 0) return source
   const economy = source.economies[index]!
   if (economy.tutorialPending || economy.collegeIntroPending) return source
+  const element = source.configs[index]!.element
+  const vividTint = SUPERSEDED_WEB_STARTER_PRIMARY_TINTS[element]
+  if (
+    !isSupersededWebStarterWearable(economy.equipment.hat, 'hat', vividTint)
+    || !isSupersededWebStarterWearable(economy.equipment.robe, 'robe', vividTint)
+  ) return source
   const migrated = applyNativeStarterEquipmentAppearance(
     economy,
-    selectedElementStarterEquipmentAppearance(source.configs[index]!.element),
+    rollNativeStarterEquipmentAppearance(
+      createNativeRng(source.progressions[index]!.offerSeed),
+      element,
+    ),
   )
   return migrated === economy
     ? source
@@ -833,7 +842,8 @@ export function replacePlayerLoadout(
     : {
         ...applyNativeStarterEquipmentAppearance(
           previousEconomy,
-          selectedElementStarterEquipmentAppearance(
+          rollNativeStarterEquipmentAppearance(
+            createNativeRng(offerSeed),
             options.starterAppearanceOwner,
           ),
         ),
@@ -895,6 +905,42 @@ export function replacePlayerLoadout(
     skillRuntimes,
     statBooks,
   }
+}
+
+const SUPERSEDED_WEB_STARTER_PRIMARY_TINTS = Object.freeze({
+  air: 0x19ffff,
+  earth: 0x00bf00,
+  ether: 0xff19ff,
+  fire: 0xff1919,
+  water: 0x1980ff,
+} as const satisfies Readonly<Record<WizardElement, number>>)
+
+function isSupersededWebStarterWearable(
+  item: HubInventoryItem | null,
+  equipmentType: 'hat' | 'robe',
+  primaryTint: number,
+): boolean {
+  const expected = equipmentType === 'hat'
+    ? { iconRecords: [34, 38], name: 'Hat', nativeTypeId: 7005 }
+    : { iconRecords: [64, 67], name: 'Robe', nativeTypeId: 7006 }
+  return item !== null
+    && item.equipmentType === equipmentType
+    && item.generatedLevel === undefined
+    && item.iconRecords.length === expected.iconRecords.length
+    && item.iconRecords.every((record, index) => record === expected.iconRecords[index])
+    && item.iconTints?.[0] === primaryTint
+    && item.iconTints?.[1] === 0xffffff
+    && item.kind === 'equipment'
+    && item.modAffixes === undefined
+    && item.modItemContent === undefined
+    && item.name === expected.name
+    && item.nativeEffects === undefined
+    && item.nativeSelector === undefined
+    && item.nativeSubtype === null
+    && item.nativeTypeId === expected.nativeTypeId
+    && item.quantity === 1
+    && item.rarity === null
+    && item.recipeIndex === null
 }
 
 export function applyPlayerEntityHagathaPurchaseEffects(

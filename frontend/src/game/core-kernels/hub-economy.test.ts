@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createNativeRng } from './native-rng.ts'
+import { rollNativeStarterEquipmentAppearance } from './native-starter-equipment.ts'
 
 import {
   DOWSING_EQUIPMENT_RECIPES,
@@ -106,19 +107,40 @@ test('a fresh participant owns the retail 500-gold profile and complete native s
   assert.ok(state.fomentiusStock.every(({ id }) => id >= 6))
 })
 
-test('selected-element starter garments keep the exact web element palette', () => {
-  const expected = {
+test('selected-element starter garments use Stock jitter and luminance mixing', () => {
+  const expectedPrimaryTints = {
+    air: 0x9cc8c8,
+    earth: 0x69916c,
+    ether: 0x966b96,
+    fire: 0x885d5f,
+    water: 0x657a91,
+  } as const
+  const rawElementTints = {
     air: 0x19ffff,
     earth: 0x00bf00,
     ether: 0xff19ff,
     fire: 0xff1919,
     water: 0x1980ff,
   } as const
-  for (const [element, primaryTint] of Object.entries(expected)) {
+  for (const [element, rawElementTint] of Object.entries(rawElementTints)) {
+    const appearance = rollNativeStarterEquipmentAppearance(
+      createNativeRng(1),
+      element as keyof typeof rawElementTints,
+    )
     const equipment = createHubEconomy(1, {
-      starterElement: element as keyof typeof expected,
+      starterElement: element as keyof typeof rawElementTints,
     }).equipment
-    assert.deepEqual(equipment.hat?.iconTints, [primaryTint, 0xffffff])
+    assert.equal(
+      appearance.primaryTint,
+      expectedPrimaryTints[element as keyof typeof expectedPrimaryTints],
+    )
+    assert.notEqual(appearance.primaryTint, rawElementTint)
+    assert.equal(appearance.rng.indexA, 3)
+    assert.equal(appearance.rng.indexB, 34)
+    assert.deepEqual(equipment.hat?.iconTints, [
+      appearance.primaryTint,
+      appearance.secondaryTint,
+    ])
     assert.deepEqual(equipment.robe?.iconTints, equipment.hat?.iconTints)
   }
 })

@@ -653,11 +653,11 @@ test('stock equipment icons retain class-owned natural transforms and starter ap
     wand: { rotationDegrees: 45, translation: [0, 0] },
   })
   assert.deepEqual(HUB_STARTER_EQUIPMENT_PRIMARY_TINT, {
-    air: 0x19ffff,
-    earth: 0x00bf00,
-    ether: 0xff19ff,
-    fire: 0xff1919,
-    water: 0x1980ff,
+    air: 0xa0c3c3,
+    earth: 0x90b390,
+    ether: 0x886688,
+    fire: 0x998077,
+    water: 0x5e6e81,
   })
   assert.deepEqual(HUB_EQUIPMENT_SINK_RENDER, {
     interiorTint: 0x191916,

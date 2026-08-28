@@ -10,7 +10,8 @@ import { solomonContactContains } from '../src/game/core-kernels/boneyard-encoun
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../src/game/core-kernels/player-combat.ts'
-import { selectedElementStarterEquipmentAppearance } from '../src/game/core-kernels/native-starter-equipment.ts'
+import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import { rollNativeStarterEquipmentAppearance } from '../src/game/core-kernels/native-starter-equipment.ts'
 import {
   PRIMARY_CAST_ACTION_END_TICK,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
@@ -507,7 +508,10 @@ function postGameOverResetReceipt(state, playerId) {
   const skillBook = getPlayerSkillBook(state, playerId)
   const runtime = playerSkillRuntimeAt(state.playerEntities, playerId)
   assert.ok(runtime)
-  const appearance = selectedElementStarterEquipmentAppearance(character.config.element)
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(progression.offerSeed),
+    character.config.element,
+  )
   const expectedTints = [appearance.primaryTint, appearance.secondaryTint]
   assert.deepEqual(economy.equipment.hat?.iconTints, expectedTints)
   assert.deepEqual(economy.equipment.robe?.iconTints, expectedTints)

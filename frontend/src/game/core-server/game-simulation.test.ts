@@ -53,7 +53,7 @@ import {
   drawNativeFloat,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
-import { selectedElementStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   createNativeSecondaryPlayerState,
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
@@ -285,19 +285,14 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
-  const selectedAppearance = selectedElementStarterEquipmentAppearance('air')
-  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, [
-    selectedAppearance.primaryTint,
-    selectedAppearance.secondaryTint,
-  ])
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
   assert.deepEqual(
     getPlayerEconomy(state, 'owner').equipment.robe?.iconTints,
-    getPlayerEconomy(state, 'owner').equipment.hat?.iconTints,
+    collegeStarterTint,
   )
-  assert.notDeepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
   assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
-  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 2)
+  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 1)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
   assert.equal(hubCollegeAdmissionPreLoadout(
     ownerParticipant(),
@@ -310,7 +305,7 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(ownerParticipant()?.transition, null)
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 952.5, y: 157.5 })
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
-  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 2)
+  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 1)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
   assert.equal(hubCollegeAdmissionPreLoadout(
     ownerParticipant(),
@@ -3841,7 +3836,10 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     ['second', 'water'],
   ] as const) {
     const economy = getPlayerEconomy(hub, playerId)
-    const appearance = selectedElementStarterEquipmentAppearance(element)
+    const appearance = rollNativeStarterEquipmentAppearance(
+      createNativeRng(getPlayerProgression(hub, playerId).offerSeed),
+      element,
+    )
     assert.ok(economy.revision > loadoutEconomyRevisions[playerId]!)
     assert.deepEqual(economy.equipment.hat?.iconTints, [
       appearance.primaryTint,

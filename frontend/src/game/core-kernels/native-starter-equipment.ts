@@ -12,14 +12,6 @@ export const NATIVE_STARTER_EQUIPMENT_BASE_COLORS = Object.freeze({
   water: [0.1, 0.5, 1],
 } as const satisfies Readonly<Record<NativeStarterEquipmentColorOwner, readonly [number, number, number]>>)
 
-export const WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS = Object.freeze({
-  air: 0x19ffff,
-  earth: 0x00bf00,
-  ether: 0xff19ff,
-  fire: 0xff1919,
-  water: 0x1980ff,
-} as const satisfies Readonly<Record<WizardElement, number>>)
-
 export interface NativeStarterEquipmentAppearance {
   readonly primaryTint: number
   readonly rng: NativeRngState
@@ -30,15 +22,6 @@ export const NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE = Object.freeze({
   primaryTint: 0xc4915e,
   secondaryTint: 0xffffff,
 })
-
-export function selectedElementStarterEquipmentAppearance(
-  element: WizardElement,
-): Pick<NativeStarterEquipmentAppearance, 'primaryTint' | 'secondaryTint'> {
-  return Object.freeze({
-    primaryTint: WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS[element],
-    secondaryTint: 0xffffff,
-  })
-}
 
 const NATIVE_STARTER_JITTER_MAXIMUM = Math.fround(0.1)
 const NATIVE_STARTER_LUMINANCE_MIX = Math.fround(0.800000011920929)

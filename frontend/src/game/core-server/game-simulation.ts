@@ -1223,7 +1223,6 @@ export function confirmGameSimulationLoadout(
         playerId,
         createPlayerCharacter(config, player.position),
         offerSeed.seed,
-        { starterAppearanceOwner: config.element },
       )
       const selectedEconomy = playerEconomyAt(selectedEntities, playerId)
       if (!selectedEconomy) throw new Error(`College loadout lost profile owner ${playerId}`)

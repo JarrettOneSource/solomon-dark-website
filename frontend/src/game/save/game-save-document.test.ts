@@ -11,6 +11,7 @@ import {
   enterBoneyardWorld,
   getPlayerBelt,
   getPlayerEconomy,
+  getPlayerProgression,
   stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
@@ -24,6 +25,7 @@ import {
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   nativeTutorialAmuletItem,
@@ -182,18 +184,23 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.equal(restored.state.world.participants.owner?.transition, null)
 })
 
-test('save restore migrates completed starter garments but preserves pending College colors', () => {
+test('save restore repairs only the superseded vivid starter pair to the Stock roll', () => {
   const character = { ...OWNER, element: 'fire' as const }
   let state = createGameSimulation({ owner: character })
   const economy = getPlayerEconomy(state, 'owner')
-  const staleTints = [0x895e5d, 0xffffff] as const
+  const vividTints = [0xff1919, 0xffffff] as const
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(getPlayerProgression(state, 'owner').offerSeed),
+    'fire',
+  )
+  const stockTints = [appearance.primaryTint, appearance.secondaryTint] as const
   const staleEconomy = {
     ...economy,
     collegeIntroPending: false,
     equipment: {
       ...economy.equipment,
-      hat: { ...economy.equipment.hat!, iconTints: staleTints },
-      robe: { ...economy.equipment.robe!, iconTints: staleTints },
+      hat: { ...economy.equipment.hat!, iconTints: vividTints },
+      robe: { ...economy.equipment.robe!, iconTints: vividTints },
     },
     revision: 7,
     tutorialPending: false,
@@ -212,8 +219,8 @@ test('save restore migrates completed starter garments but preserves pending Col
   })
   const restored = restoreGameSaveDocument(continuation).state
   const restoredEconomy = getPlayerEconomy(restored, 'owner')
-  assert.deepEqual(restoredEconomy.equipment.hat?.iconTints, [0xff1919, 0xffffff])
-  assert.deepEqual(restoredEconomy.equipment.robe?.iconTints, [0xff1919, 0xffffff])
+  assert.deepEqual(restoredEconomy.equipment.hat?.iconTints, stockTints)
+  assert.deepEqual(restoredEconomy.equipment.robe?.iconTints, stockTints)
   assert.equal(restoredEconomy.revision, 8)
 
   const profile = restoreGameSaveProfile(createGameProfileSaveDocument({
@@ -223,14 +230,15 @@ test('save restore migrates completed starter garments but preserves pending Col
     playerId: 'owner',
     state,
   }))
-  const hydrated = hydrateGameSaveProfile(
-    createGameSimulation({ owner: character }),
-    'owner',
-    profile,
-  )
+  const profileTints = profile.economy.equipment.hat?.iconTints
+  assert.ok(profileTints)
+  assert.notDeepEqual(profileTints, vividTints)
+  assert.deepEqual(profile.economy.equipment.robe?.iconTints, profileTints)
+  const fresh = createGameSimulation({ owner: character })
+  const hydrated = hydrateGameSaveProfile(fresh, 'owner', profile)
   const hydratedEconomy = getPlayerEconomy(hydrated, 'owner')
-  assert.deepEqual(hydratedEconomy.equipment.hat?.iconTints, [0xff1919, 0xffffff])
-  assert.deepEqual(hydratedEconomy.equipment.robe?.iconTints, [0xff1919, 0xffffff])
+  assert.deepEqual(hydratedEconomy.equipment.hat?.iconTints, profileTints)
+  assert.deepEqual(hydratedEconomy.equipment.robe?.iconTints, profileTints)
   assert.equal(hydratedEconomy.revision, 8)
 
   const collegeTints = [0x6f7e72, 0xffffff] as const

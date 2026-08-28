@@ -4,7 +4,6 @@ import test from 'node:test'
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
-  selectedElementStarterEquipmentAppearance,
 } from '../core-kernels/native-starter-equipment.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
@@ -318,6 +317,9 @@ test('Tutorial death discards its items and skills when Create confirms the new 
       : null,
     'college-loadout',
   )
+  const collegeAppearance = getPlayerEconomy(state, 'owner').equipment.hat?.iconTints
+  assert.ok(collegeAppearance)
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.robe?.iconTints, collegeAppearance)
   const confirmed = confirmGameSimulationLoadout(state, 'owner', {
     discipline: 'body',
     displayName: 'Reborn',
@@ -327,7 +329,6 @@ test('Tutorial death discards its items and skills when Create confirms the new 
   const progression = getPlayerProgression(confirmed, 'owner')
   const skills = getPlayerSkillBook(confirmed, 'owner')
   const economy = getPlayerEconomy(confirmed, 'owner')
-  const appearance = selectedElementStarterEquipmentAppearance('air')
   assert.equal(progression.level, 1)
   assert.equal(progression.experience, 0)
   assert.equal(progression.pendingOffer, null)
@@ -343,11 +344,8 @@ test('Tutorial death discards its items and skills when Create confirms the new 
     'Health Potion',
     'Mana Potion',
   ])
-  assert.deepEqual(economy.equipment.hat?.iconTints, [
-    appearance.primaryTint,
-    appearance.secondaryTint,
-  ])
-  assert.deepEqual(economy.equipment.robe?.iconTints, economy.equipment.hat?.iconTints)
+  assert.deepEqual(economy.equipment.hat?.iconTints, collegeAppearance)
+  assert.deepEqual(economy.equipment.robe?.iconTints, collegeAppearance)
   assert.equal(economy.collegeIntroPending, false)
   assert.equal(economy.tutorialPending, false)
   assert.deepEqual(economy.storage, [])

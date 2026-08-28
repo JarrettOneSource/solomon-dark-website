@@ -35,7 +35,6 @@ import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/ga
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
-  selectedElementStarterEquipmentAppearance,
 } from '../src/game/core-kernels/native-starter-equipment.ts'
 import { resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import {
@@ -1383,7 +1382,10 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const resetEconomy = getPlayerEconomy(resetState, playerId)
   const resetProgression = getPlayerProgression(resetState, playerId)
   const resetSkills = getPlayerSkillBook(resetState, playerId)
-  const resetAppearance = selectedElementStarterEquipmentAppearance(selectedLoadout.element)
+  const resetAppearance = {
+    primaryTint: title9Wizard.primaryTint,
+    secondaryTint: 0xffffff,
+  }
   assert.equal(resetProgression.level, 1)
   assert.equal(resetProgression.experience, 0)
   assert.equal(resetSkills.permanentRanks[72], 0)
@@ -1403,7 +1405,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     resetAppearance.secondaryTint,
   ])
   assert.deepEqual(resetEconomy.equipment.robe?.iconTints, resetEconomy.equipment.hat?.iconTints)
-  assert.notEqual(resetAppearance.primaryTint, title9Wizard.primaryTint)
+  assert.equal(resetAppearance.primaryTint, title9Wizard.primaryTint)
   assert.deepEqual(resetEconomy.storage, [])
   assert.equal(
     getPlayerCharacter(resetState, playerId).config.element,

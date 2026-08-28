@@ -69,8 +69,8 @@ test('death equipment uses element defaults and every native recipe selector/col
     robe: null,
     weapon: null,
   }), {
-    hat: { primaryTint: 0x19ffff, secondaryTint: 0xffffff, selector: 0 },
-    robe: { primaryTint: 0x19ffff, secondaryTint: 0xffffff, selector: 0 },
+    hat: { primaryTint: 0xa0c3c3, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0xa0c3c3, secondaryTint: 0xffffff, selector: 0 },
     weapon: { kind: 'staff', selector: 0 },
   })
 
@@ -119,13 +119,13 @@ test('death equipment uses element defaults and every native recipe selector/col
   }).weapon, { kind: 'wand', selector: 4 })
 })
 
-test('web starter equipment uses its persisted exact element appearance', () => {
+test('native starter equipment uses its persisted randomized element appearance', () => {
   assert.deepEqual(playerDeathEquipmentAppearance(
     'air',
     createHubEconomy(1, { starterElement: 'air' }).equipment,
   ), {
-    hat: { primaryTint: 0x19ffff, secondaryTint: 0xffffff, selector: 0 },
-    robe: { primaryTint: 0x19ffff, secondaryTint: 0xffffff, selector: 0 },
+    hat: { primaryTint: 0x9cc8c8, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0x9cc8c8, secondaryTint: 0xffffff, selector: 0 },
     weapon: { kind: 'staff', selector: 0 },
   })
 })
@@ -200,8 +200,8 @@ test('living equipment distinguishes required starter clothes from an empty weap
     'water',
     createHubEconomy(1, { starterElement: 'water' }).equipment,
   ), {
-    hat: { primaryTint: 0x1980ff, secondaryTint: 0xffffff, selector: 0 },
-    robe: { primaryTint: 0x1980ff, secondaryTint: 0xffffff, selector: 0 },
+    hat: { primaryTint: 0x657a91, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0x657a91, secondaryTint: 0xffffff, selector: 0 },
     weapon: { kind: 'staff', selector: 0 },
   })
   assert.deepEqual(playerLivingEquipmentAppearance('water', {
