@@ -321,7 +321,7 @@ try {
         cooldown: false,
         unavailable: false,
       })
-      if (insufficientManaReceipt === null) {
+      if (insufficientManaReceipt === null && readyQuickbar.manaCost > 0) {
         setHostMana(host, playerId, 0)
         insufficientManaReceipt = await waitForQuickbarPresentation(page, {
           alpha: 0.375,
