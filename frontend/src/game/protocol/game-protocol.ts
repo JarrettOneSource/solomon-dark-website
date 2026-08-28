@@ -394,7 +394,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 99
+export const GAME_PROTOCOL_VERSION = 100
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -6442,7 +6442,7 @@ function primarySpellWeldProjectile(
   if ((buildId !== 1001 && secondaryPresentationPhaseDegrees !== null)
     || (buildId === 1001 && (secondaryPresentationPhaseDegrees === null
       || secondaryPresentationPhaseDegrees < 0
-      || secondaryPresentationPhaseDegrees >= 360))) {
+      || secondaryPresentationPhaseDegrees > 360))) {
     throw new GameProtocolError(
       `${field}.secondaryPresentationPhaseDegrees does not match its welded build`,
     )
@@ -6502,7 +6502,7 @@ function primarySpellWeldProjectile(
           lane.scale,
           `${field}.frostPresentationLanes[${index}].scale`,
         )
-        if (aspect > 0.75 || rotationDegrees >= 45 || scale >= 1.25) {
+        if (aspect > 0.75 || rotationDegrees > 45 || scale > 1.25) {
           throw new GameProtocolError(
             `${field}.frostPresentationLanes[${index}] exceeds the native lane`,
           )
@@ -6672,8 +6672,8 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.growthFactor is not a native marker branch`)
     }
     const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
-    if (rotationDegrees < 0 || rotationDegrees >= 360) {
-      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+    if (rotationDegrees < 0 || rotationDegrees > 360) {
+      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360]`)
     }
     return {
       ...common,
@@ -6767,7 +6767,7 @@ function primarySpellWeldActor(
       || (buildId === 1002 && (impactSoundPitch !== Math.fround(1.5)
         || impactSoundVariant !== 0 || presentationRotationDegrees === null))
       || (buildId === 1009 && (impactSoundPitch === null
-        || impactSoundPitch < 1 || impactSoundPitch > 1.1
+        || impactSoundPitch < 1 || impactSoundPitch > Math.fround(1.1)
         || impactSoundVariant === null || impactSoundVariant > 2
         || presentationRotationDegrees === null))
       || ((buildId !== 1001 && buildId !== 1002 && buildId !== 1009)
@@ -6776,8 +6776,8 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field} impact presentation does not match its build`)
     }
     if (presentationRotationDegrees !== null
-      && (presentationRotationDegrees < 0 || presentationRotationDegrees >= 360)) {
-      throw new GameProtocolError(`${field}.presentationRotationDegrees is outside [0,360)`)
+      && (presentationRotationDegrees < 0 || presentationRotationDegrees > 360)) {
+      throw new GameProtocolError(`${field}.presentationRotationDegrees is outside [0,360]`)
     }
     return {
       ...common,
@@ -6836,7 +6836,7 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.scale`)
     }
     const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
-    if (rotationDegrees < 0 || rotationDegrees >= 360) {
+    if (rotationDegrees < 0 || rotationDegrees > 360) {
       throw new GameProtocolError(`${field}.rotationDegrees`)
     }
     return {
@@ -6880,8 +6880,11 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.variant is not a Flame Lash fade branch`)
     }
     const baseScale = positiveFinite(source.baseScale, `${field}.baseScale`)
-    if ((variant === 'endpoint' && (baseScale < 0.5 || baseScale >= 1))
-      || (variant === 'chain' && (baseScale < 0.05 || baseScale >= 0.1))) {
+    if ((variant === 'endpoint' && (baseScale < 0.5 || baseScale > 1))
+      || (variant === 'chain' && (
+        baseScale < Math.fround(0.05)
+        || baseScale > Math.fround(0.1)
+      ))) {
       throw new GameProtocolError(`${field}.baseScale exceeds its Flame Lash branch`)
     }
     const colorGreen = unitInterval(source.colorGreen, `${field}.colorGreen`)
@@ -6890,7 +6893,7 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.colorGreen exceeds its Flame Lash branch`)
     }
     const wrapperScalar = positiveFinite(source.wrapperScalar, `${field}.wrapperScalar`)
-    if (wrapperScalar < 0.75 || wrapperScalar >= 1.5) {
+    if (wrapperScalar < 0.75 || wrapperScalar > 1.5) {
       throw new GameProtocolError(`${field}.wrapperScalar exceeds the native range`)
     }
     if (source.record !== 35) throw new GameProtocolError(`${field}.record is not BadGuys 35`)
@@ -6921,7 +6924,7 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field} does not match the native Hail line lifetime`)
     }
     const endAlpha = positiveFinite(source.endAlpha, `${field}.endAlpha`)
-    if (endAlpha < 0.25 || endAlpha >= 0.5) {
+    if (endAlpha < 0.25 || endAlpha > 0.5) {
       throw new GameProtocolError(`${field}.endAlpha exceeds the native line range`)
     }
     const width = positiveFinite(source.width, `${field}.width`)
@@ -7047,7 +7050,7 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.ageTicks exceeds the Hail rock-fade lifetime`)
     }
     const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
-    if (rotationDegrees < 0 || rotationDegrees >= 20) {
+    if (rotationDegrees < 0 || rotationDegrees > 20) {
       throw new GameProtocolError(`${field}.rotationDegrees exceeds the native range`)
     }
     return {
@@ -7103,8 +7106,8 @@ function primarySpellWeldActor(
       nativeRecord < 1836 || nativeRecord > 1839
     )) throw new GameProtocolError(`${field}.record is not GroundSpark art`)
     const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
-    if (rotationDegrees < 0 || rotationDegrees >= 360) {
-      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+    if (rotationDegrees < 0 || rotationDegrees > 360) {
+      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360]`)
     }
     const scale = positiveFinite(source.scale, `${field}.scale`)
     if (scale < Math.fround(0.25) || scale > 1) {
@@ -7296,13 +7299,16 @@ function primarySpellWeldActor(
       source.impactRotationDegrees,
       `${field}.impactRotationDegrees`,
     )
-    if (impactRotationDegrees < 0 || impactRotationDegrees >= 360) {
-      throw new GameProtocolError(`${field}.impactRotationDegrees is outside [0,360)`)
+    if (impactRotationDegrees < 0 || impactRotationDegrees > 360) {
+      throw new GameProtocolError(`${field}.impactRotationDegrees is outside [0,360]`)
     }
     const impactSoundPitch = source.impactSoundPitch === null
       ? null
       : positiveFinite(source.impactSoundPitch, `${field}.impactSoundPitch`)
-    if (impactSoundPitch !== null && (impactSoundPitch < 0.8 || impactSoundPitch > 1.2)) {
+    if (
+      impactSoundPitch !== null
+      && (impactSoundPitch < 0.8 || impactSoundPitch > Math.fround(1.2))
+    ) {
       throw new GameProtocolError(`${field}.impactSoundPitch is outside the native lane`)
     }
     const impactThrowFirePitch = source.impactThrowFirePitch === null

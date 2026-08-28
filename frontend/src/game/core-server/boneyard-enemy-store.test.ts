@@ -2919,6 +2919,14 @@ test('Coffin opening and open charge emit independently of the active Maggot cap
   assert.equal(capped.maggotCharge, 10)
 })
 
+test('Coffin construction retains the native Float(5) Maggot phase endpoint', () => {
+  const result = openedCoffin('maggot-replication-endpoint-6253', FAR_PLAYERS)
+  const maggot = result.store.maggots.find(({ id }) => id === 4)
+  assert.ok(maggot)
+  assert.equal(maggot.emergencePhase, 4.9995659198611975)
+  assert.equal(Math.round(maggot.emergencePhase * 1024), 5 * 1024)
+})
+
 test('Maggot landing owns 1-in-5 combat admission and a 30-inactive ceiling', () => {
   let result = openedCoffin('maggot-admission', FAR_PLAYERS)
   result = freezeOpenedCoffin(withCoffinMaximumMaggots(result, 1))

@@ -395,6 +395,17 @@ its authoritative contact polygon and replicated beam. Blizzard push
 accumulator/timestamp state belongs to each hostile actor; the spell computes
 only the requested impulse and the active world remains the sole static/dynamic
 collision and cell-rebind owner.
+Protocol 100 retains protocol 99's Frost Jet speed/ordinal authority, Chill
+impulse state, and the protocol-98 cross-College social shape. It corrects the
+strict welded-primary presentation ranges to match native inclusive
+`RandomFloat`: reachable rotation `360`, Frost compositor rotation `45`/scale
+`1.25`, Flame fade scale/wrapper ceilings, Hail line/fade ceilings, and the
+float32 GroundSpark/Meteor pitch ceilings are accepted exactly. Values above
+those field-specific maxima still fail closed, while normalized gameplay
+headings remain half-open `[0,360)`. Protocol 100 additionally accepts
+Coffin-owned Maggot emergence component `5120`, the quantized closed endpoint
+of native private `Float(5)`, while rejecting `5121`. Save schema 19 is
+unchanged because these are live authoritative actor fields.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or

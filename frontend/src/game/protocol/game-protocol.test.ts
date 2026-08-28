@@ -28,6 +28,7 @@ import {
   triggerNativePlayerMindblast,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeWeldBlizzardContactGlow } from '../core-kernels/native-weld-blizzard.ts'
 import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
@@ -1644,8 +1645,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v98 carries cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 99)
+test('protocol v100 carries cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 100)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -5700,6 +5701,273 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     const decoded = decodeFrame({ nextId: 2, projectiles: [], transients: [actor] })
     assert.equal(decoded.type, 'server-snapshot')
     assert.deepEqual(decoded.frame.primarySpells.transients, [actor])
+  }
+
+  const frostEndpointProjectile = {
+    ...projectile,
+    basePresentationPhaseDegrees: 360,
+    buildId: 1001,
+    frostPresentationLanes: [{
+      aspect: 0.75,
+      rotationDegrees: 45,
+      scale: 1.25,
+    }, {
+      aspect: 0.75,
+      rotationDegrees: 45,
+      scale: 1.25,
+    }],
+    frostPulseAspect: 0.75,
+    frostTurnDegrees: 0,
+    presentationSeed: null,
+    secondaryPresentationPhaseDegrees: 360,
+    vector: [4, 8, 10, 1, 1, 0, 0],
+  }
+  const decodedFrostEndpoint = decodeFrame({
+    nextId: 2,
+    projectiles: [frostEndpointProjectile],
+    transients: [],
+  })
+  assert.equal(decodedFrostEndpoint.type, 'server-snapshot')
+  assert.deepEqual(
+    decodedFrostEndpoint.frame.primarySpells.projectiles,
+    [frostEndpointProjectile],
+  )
+  for (const invalid of [{
+    ...frostEndpointProjectile,
+    secondaryPresentationPhaseDegrees: 360.001,
+  }, {
+    ...frostEndpointProjectile,
+    frostPresentationLanes: frostEndpointProjectile.frostPresentationLanes.map((lane, index) => (
+      index === 0 ? { ...lane, rotationDegrees: 45.001 } : lane
+    )),
+  }, {
+    ...frostEndpointProjectile,
+    frostPresentationLanes: frostEndpointProjectile.frostPresentationLanes.map((lane, index) => (
+      index === 0 ? { ...lane, scale: 1.251 } : lane
+    )),
+  }]) {
+    assert.throws(() => decodeFrame({
+      nextId: 2,
+      projectiles: [invalid],
+      transients: [],
+    }), /secondaryPresentationPhaseDegrees|frostPresentationLanes/)
+  }
+
+  const blizzardConstructorEndpoint = createNativeWeldBlizzardContactGlow({
+    direction: { x: 0, y: -1 },
+    id: 1,
+    ownerId: 'player-1',
+    position: { x: 800, y: 400 },
+    rng: createNativeRng(18827),
+    tick: 100,
+    vector: [8, 2, 1, 0.8, 0, 0, 0],
+    worldKey: 'hub:courtyard',
+  }).actor
+  assert.equal(blizzardConstructorEndpoint.rotationDegrees, 360)
+  const decodedBlizzardConstructorEndpoint = decodeFrame({
+    nextId: 2,
+    projectiles: [],
+    transients: [blizzardConstructorEndpoint],
+  })
+  assert.equal(decodedBlizzardConstructorEndpoint.type, 'server-snapshot')
+  assert.deepEqual(
+    decodedBlizzardConstructorEndpoint.frame.primarySpells.transients,
+    [blizzardConstructorEndpoint],
+  )
+
+  const actorByKind = (kind: string) => {
+    const actor = actors.find(candidate => candidate.kind === kind)
+    if (!actor) throw new Error(`expected ${kind} fixture`)
+    return actor
+  }
+  const baseImpact = actorByKind('weld-impact')
+  const meteor = actorByKind('weld-meteor')
+  const endpointActors = [{
+    field: 'presentationRotationDegrees',
+    invalid: {
+      ...baseImpact,
+      alpha: 2,
+      buildId: 1002,
+      impactSoundPitch: Math.fround(1.5),
+      impactSoundVariant: 0,
+      presentationRotationDegrees: 360.001,
+      presentationScale: Math.fround(1.5),
+      vector: [4, 8, 10, 1, 1, 0, 0],
+    },
+    valid: {
+      ...baseImpact,
+      alpha: 2,
+      buildId: 1002,
+      impactSoundPitch: Math.fround(1.5),
+      impactSoundVariant: 0,
+      presentationRotationDegrees: 360,
+      presentationScale: Math.fround(1.5),
+      vector: [4, 8, 10, 1, 1, 0, 0],
+    },
+  }, {
+    field: 'impact presentation',
+    invalid: {
+      ...baseImpact,
+      alpha: 2,
+      buildId: 1009,
+      impactSoundPitch: Math.fround(1.1) + 0.001,
+      impactSoundVariant: 2,
+      presentationRotationDegrees: 360,
+      presentationScale: Math.fround(1.5),
+      vector: [7, 2, 1, 1, 0, 0],
+    },
+    valid: {
+      ...baseImpact,
+      alpha: 2,
+      buildId: 1009,
+      impactSoundPitch: Math.fround(1.1),
+      impactSoundVariant: 2,
+      presentationRotationDegrees: 360,
+      presentationScale: Math.fround(1.5),
+      vector: [7, 2, 1, 1, 0, 0],
+    },
+  }, ...actors.filter(actor => actor.kind === 'weld-blizzard-glow').map(actor => ({
+    field: 'rotationDegrees',
+    invalid: { ...actor, rotationDegrees: 360.001 },
+    valid: { ...actor, rotationDegrees: 360 },
+  })), {
+    field: 'baseScale',
+    invalid: {
+      ...actorByKind('weld-flame-lash-fade'),
+      baseScale: 1.001,
+      wrapperScalar: 1.5,
+    },
+    valid: {
+      ...actorByKind('weld-flame-lash-fade'),
+      baseScale: 1,
+      wrapperScalar: 1.5,
+    },
+  }, {
+    field: 'baseScale',
+    invalid: {
+      ...actorByKind('weld-flame-lash-fade'),
+      baseScale: Math.fround(0.1) + 0.001,
+      colorGreen: Math.fround(0.75),
+      variant: 'chain',
+      wrapperScalar: 1.5,
+    },
+    valid: {
+      ...actorByKind('weld-flame-lash-fade'),
+      baseScale: Math.fround(0.1),
+      colorGreen: Math.fround(0.75),
+      variant: 'chain',
+      wrapperScalar: 1.5,
+    },
+  }, {
+    field: 'wrapperScalar',
+    invalid: {
+      ...actorByKind('weld-flame-lash-fade'),
+      wrapperScalar: 1.501,
+    },
+    valid: {
+      ...actorByKind('weld-flame-lash-fade'),
+      wrapperScalar: 1.5,
+    },
+  }, {
+    field: 'rotationDegrees',
+    invalid: { ...actorByKind('weld-meteor-marker'), rotationDegrees: 360.001 },
+    valid: { ...actorByKind('weld-meteor-marker'), rotationDegrees: 360 },
+  }, {
+    field: 'impactRotationDegrees',
+    invalid: {
+      ...meteor,
+      cameraDisplacement: { x: 0, y: 0 },
+      fallHeight: 0,
+      impactRadiusScalar: 1.5,
+      impactRotationDegrees: 360.001,
+      impactSoundPitch: 1,
+      phase: 'impact',
+      privateSeed: 0,
+      underpowered: true,
+    },
+    valid: {
+      ...meteor,
+      cameraDisplacement: { x: 0, y: 0 },
+      fallHeight: 0,
+      impactRadiusScalar: 1.5,
+      impactRotationDegrees: 360,
+      impactSoundPitch: 1,
+      phase: 'impact',
+      privateSeed: 0,
+      underpowered: true,
+    },
+  }, {
+    field: 'impactSoundPitch',
+    invalid: {
+      ...meteor,
+      cameraDisplacement: { x: 0, y: 0 },
+      fallHeight: 0,
+      impactRadiusScalar: 1.5,
+      impactRotationDegrees: 360,
+      impactSoundPitch: Math.fround(1.2) + 0.001,
+      phase: 'impact',
+      privateSeed: 0,
+      underpowered: true,
+    },
+    valid: {
+      ...meteor,
+      cameraDisplacement: { x: 0, y: 0 },
+      fallHeight: 0,
+      impactRadiusScalar: 1.5,
+      impactRotationDegrees: 360,
+      impactSoundPitch: Math.fround(1.2),
+      phase: 'impact',
+      privateSeed: 0,
+      underpowered: true,
+    },
+  }, {
+    field: 'rotationDegrees',
+    invalid: { ...actorByKind('weld-hail-rock-fade'), rotationDegrees: 20.001 },
+    valid: { ...actorByKind('weld-hail-rock-fade'), rotationDegrees: 20 },
+  }, {
+    field: 'endAlpha',
+    invalid: { ...actorByKind('weld-hail-line'), endAlpha: 0.501 },
+    valid: { ...actorByKind('weld-hail-line'), endAlpha: 0.5 },
+  }, {
+    field: 'rotationDegrees',
+    invalid: { ...actorByKind('weld-ground-spark-fade'), rotationDegrees: 360.001 },
+    valid: { ...actorByKind('weld-ground-spark-fade'), rotationDegrees: 360 },
+  }, {
+    field: 'presentationRotationDegrees',
+    invalid: {
+      ...baseImpact,
+      alpha: 2,
+      buildId: 1009,
+      impactSoundPitch: 1,
+      impactSoundVariant: 2,
+      presentationRotationDegrees: 360.001,
+      presentationScale: Math.fround(1.5),
+      vector: [7, 2, 1, 1, 0, 0],
+    },
+    valid: {
+      ...baseImpact,
+      alpha: 2,
+      buildId: 1009,
+      impactSoundPitch: 1,
+      impactSoundVariant: 2,
+      presentationRotationDegrees: 360,
+      presentationScale: Math.fround(1.5),
+      vector: [7, 2, 1, 1, 0, 0],
+    },
+  }]
+  for (const endpoint of endpointActors) {
+    const decoded = decodeFrame({
+      nextId: 2,
+      projectiles: [],
+      transients: [endpoint.valid],
+    })
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.deepEqual(decoded.frame.primarySpells.transients, [endpoint.valid])
+    assert.throws(() => decodeFrame({
+      nextId: 2,
+      projectiles: [],
+      transients: [endpoint.invalid],
+    }), new RegExp(endpoint.field))
   }
   const etherealActor = actors.find((actor) => (
     actor.kind === 'weld-persistent' && actor.buildId === 1006

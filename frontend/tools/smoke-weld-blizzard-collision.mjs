@@ -17,6 +17,7 @@ import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { grantPlayerEntityWeldBuild } from '../src/game/core-server/player-entity-store.ts'
 
@@ -24,6 +25,7 @@ const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotRoot = process.env.SDR_WELD_BLIZZARD_SCREENSHOT_ROOT
   || join(tmpdir(), 'solomon-weld-blizzard-collision')
 const credential = randomBytes(32).toString('base64url')
+const maggotReplicationAcceptance = process.env.SDR_MAGGOT_REPLICATION_ACCEPTANCE === '1'
 
 await mkdir(screenshotRoot, { recursive: true })
 const frontend = await createViteServer({
@@ -56,12 +58,16 @@ try {
     SDR_PRIMARY_SPELL_BONEYARD_ONLY: '1',
     SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD: '1',
     SDR_PRIMARY_SPELL_KIND: 'blizzard',
+    SDR_PRIMARY_SPELL_REPLICATION_ACCEPTANCE: '1',
     SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
   })
-  const fixture = await prepareBlizzardRun(host)
-  const [receipt, combat] = await Promise.all([
+  const fixture = await prepareBlizzardRun(host, maggotReplicationAcceptance)
+  const [receipt, combat, maggot] = await Promise.all([
     browserReceipt,
     observeBlizzardContact(host, fixture),
+    fixture.maggot === null
+      ? Promise.resolve(null)
+      : observeMaggotEndpoint(host, fixture.maggot),
   ])
   assert.equal(receipt.status, 'ok')
   assert.equal(receipt.boneyard.wire.state.buildId, 1004)
@@ -75,13 +81,32 @@ try {
   assert.notEqual(combat.direct.blizzardPushLastTick, null)
   assert.ok(combat.transientKinds.includes('weld-frost-fade'))
   assert.ok(combat.transientKinds.includes('weld-blizzard-glow'))
+  assert.equal(combat.inclusiveRotationObserved, true)
+  assert.ok(combat.inclusiveRotationTicks >= 10)
+  assert.equal(receipt.boneyard.replication?.buildId, 1004)
+  assert.equal(
+    receipt.boneyard.replication?.ownerId,
+    receipt.boneyard.wire.state.ownerId,
+  )
+  if (fixture.maggot) {
+    assert.ok(maggot)
+    assert.equal(maggot.id, fixture.maggot.id)
+    assert.equal(maggot.endpointComponent, 5 * 1024)
+    assert.ok(maggot.wrappedComponent < 5 * 1024)
+    assert.equal(receipt.boneyard.maggotReplication?.owner.endpoint.id, fixture.maggot.id)
+    assert.equal(receipt.boneyard.maggotReplication?.owner.endpoint.phase, 5 * 1024)
+    assert.ok(receipt.boneyard.maggotReplication.owner.wrapped.phase < 5 * 1024)
+    assert.equal(receipt.boneyard.maggotReplication?.observer.endpoint.id, fixture.maggot.id)
+    assert.equal(receipt.boneyard.maggotReplication?.observer.endpoint.phase, 5 * 1024)
+    assert.ok(receipt.boneyard.maggotReplication.observer.wrapped.phase < 5 * 1024)
+  }
   assert.deepEqual(receipt.errors, [])
-  process.stdout.write(`${JSON.stringify({ combat, receipt, screenshotRoot, status: 'ok' })}\n`)
+  process.stdout.write(`${JSON.stringify({ combat, maggot, receipt, screenshotRoot, status: 'ok' })}\n`)
 } finally {
   await Promise.all([host.close(), frontend.close()])
 }
 
-async function prepareBlizzardRun(host) {
+async function prepareBlizzardRun(host, includeMaggotEndpoint) {
   const deadline = Date.now() + 120_000
   while (Date.now() < deadline) {
     const state = host.state()
@@ -121,15 +146,22 @@ async function prepareBlizzardRun(host) {
       if (actors.length !== fixture.positions.length) {
         throw new Error('Blizzard browser journey did not materialize its hostile fixture')
       }
+      const endpointPosition = farthestArenaCorner(
+        state.world.arenaTransition?.combatBounds ?? state.world.bounds,
+        player.position,
+      )
+      const endpoint = includeMaggotEndpoint
+        ? attachMaggotEndpoint(spawned.store, state.tick, endpointPosition)
+        : { maggot: null, store: spawned.store }
       Object.assign(state, {
-        combatRng: granted.rng,
+        combatRng: createNativeRng(18827),
         playerEntities: granted.store,
         secondaryAbilities: { ...state.secondaryAbilities, targetEffects: [] },
         world: {
           ...state.world,
           arenaTransition: null,
           encounter: null,
-          enemies: spawned.store,
+          enemies: endpoint.store,
           enemyEvents: [],
           tutorial: null,
           waves: null,
@@ -139,12 +171,204 @@ async function prepareBlizzardRun(host) {
         chain: { id: actors[1].id, initialHealth: actors[1].currentHealth },
         direct: { id: actors[0].id, initialHealth: actors[0].currentHealth },
         outside: { id: actors[2].id, initialHealth: actors[2].currentHealth },
+        maggot: endpoint.maggot,
         positions: fixture.positions,
       }
     }
     await new Promise(resolve => setTimeout(resolve, 10))
   }
   throw new Error('Blizzard browser journey did not enter the Boneyard')
+}
+
+function farthestArenaCorner(bounds, source) {
+  const margin = 100
+  return [
+    { x: bounds.x + margin, y: bounds.y + margin },
+    { x: bounds.x + bounds.w - margin, y: bounds.y + margin },
+    { x: bounds.x + margin, y: bounds.y + bounds.h - margin },
+    { x: bounds.x + bounds.w - margin, y: bounds.y + bounds.h - margin },
+  ].toSorted((left, right) => (
+    Math.hypot(right.x - source.x, right.y - source.y)
+      - Math.hypot(left.x - source.x, left.y - source.y)
+  ))[0]
+}
+
+function attachMaggotEndpoint(store, tick, position) {
+  const source = endpointMaggotStore()
+  const sourceCoffin = source.actors[0]
+  const sourceMaggot = source.maggots.find(({ id }) => id === 4)
+  if (!sourceCoffin || sourceCoffin.brain.family !== 'coffin' || !sourceMaggot) {
+    throw new Error('Maggot endpoint constructor did not produce its Coffin witness')
+  }
+  assert.equal(sourceMaggot.emergencePhase, 4.9995659198611975)
+  assert.equal(Math.round(sourceMaggot.emergencePhase * 1024), 5 * 1024)
+  const coffinId = store.nextActorId
+  const maggotId = coffinId + 1
+  const registration = store.nextNativeRegistrationOrder
+  const shift = {
+    x: position.x - sourceCoffin.position.x,
+    y: position.y - sourceCoffin.position.y,
+  }
+  const coffin = {
+    ...sourceCoffin,
+    brain: {
+      ...sourceCoffin.brain,
+      phase: 'holding',
+      phaseTick: 0,
+      phaseTicksRemaining: Number.MAX_SAFE_INTEGER,
+    },
+    id: coffinId,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: registration },
+    nativeCellBindingOrder: store.nextNativeCellBindingOrder,
+    nativeRegistrationOrder: registration,
+    position: { x: position.x, y: position.y },
+    sourceSpawnIntentId: coffinId,
+    spawnTick: tick,
+  }
+  const maggot = {
+    ...sourceMaggot,
+    emergenceTick: 10_000,
+    id: maggotId,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: registration + 1 },
+    nativeCellBindingOrder: store.nextNativeCellBindingOrder + 1,
+    nativeRegistrationOrder: registration + 1,
+    nextAttackTick: tick + 10,
+    nextMovementTick: Number.MAX_SAFE_INTEGER,
+    ownerCoffinActorId: coffinId,
+    position: {
+      x: sourceMaggot.position.x + shift.x,
+      y: sourceMaggot.position.y + shift.y,
+    },
+    spawnTick: tick,
+  }
+  return {
+    maggot: { id: maggotId, sourcePhase: maggot.emergencePhase },
+    store: {
+      ...store,
+      actors: [...store.actors, coffin],
+      maggots: [...store.maggots, maggot],
+      nextActorId: maggotId + 1,
+      nextNativeCellBindingOrder: store.nextNativeCellBindingOrder + 2,
+      nextNativeRegistrationOrder: registration + 2,
+    },
+  }
+}
+
+function endpointMaggotStore() {
+  let result = stepBoneyardEnemyStore(
+    createBoneyardEnemyStore('maggot-replication-endpoint-6253'),
+    endpointMaggotContext(0, true),
+  )
+  for (let tick = 1; tick <= 4; tick += 1) {
+    const coffin = result.store.actors[0]
+    if (!coffin || coffin.brain.family !== 'coffin') throw new Error('expected Coffin')
+    result = stepBoneyardEnemyStore({
+      ...result.store,
+      actors: [{
+        ...coffin,
+        brain: { ...coffin.brain, phaseTicksRemaining: 1 },
+      }],
+    }, endpointMaggotContext(tick, false))
+  }
+  return result.store
+}
+
+function endpointMaggotContext(tick, spawnCoffin) {
+  return {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => spawnCoffin ? [{
+      enemyToken: 'COFFIN',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+      position: { x: 0, y: 0 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }] : [],
+    tick,
+  }
+}
+
+async function observeMaggotEndpoint(host, fixture) {
+  const deadline = Date.now() + 120_000
+  let endpointTicks = 0
+  let lastEndpointTick = -1
+  let released = false
+  while (Date.now() < deadline) {
+    const state = host.state()
+    if (state.world.kind === 'boneyard') {
+      const maggot = state.world.enemies.maggots.find(({ id }) => id === fixture.id)
+      if (maggot) {
+        const component = Math.round(maggot.emergencePhase * 1024)
+        if (!released && component === 5 * 1024 && state.tick !== lastEndpointTick) {
+          lastEndpointTick = state.tick
+          endpointTicks += 1
+        }
+        if (
+          !released
+          && state.playerEntities.identities.length >= 2
+          && endpointTicks >= 100
+        ) {
+          Object.assign(state, {
+            world: {
+              ...state.world,
+              enemies: {
+                ...state.world.enemies,
+                maggots: state.world.enemies.maggots.map((entry) => (
+                  entry.id === fixture.id
+                    ? {
+                        ...entry,
+                        emergenceTick: Math.max(0, state.tick - entry.spawnTick),
+                        nextMovementTick: state.tick + 1,
+                      }
+                    : entry
+                )),
+              },
+            },
+          })
+          released = true
+        } else if (!released && component === 5 * 1024) {
+          Object.assign(state, {
+            world: {
+              ...state.world,
+              enemies: {
+                ...state.world.enemies,
+                maggots: state.world.enemies.maggots.map((entry) => (
+                  entry.id === fixture.id
+                    ? {
+                        ...entry,
+                        emergenceTick: Math.max(
+                          entry.emergenceTick,
+                          state.tick - entry.spawnTick + 1,
+                        ),
+                      }
+                    : entry
+                )),
+              },
+            },
+          })
+        } else if (released && component < 5 * 1024) {
+          return {
+            endpointComponent: 5 * 1024,
+            endpointTicks,
+            id: fixture.id,
+            sourcePhase: fixture.sourcePhase,
+            wrappedComponent: component,
+            wrappedPhase: maggot.emergencePhase,
+          }
+        }
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  throw new Error(`Maggot endpoint lifecycle was not observed: ${JSON.stringify({
+    endpointTicks,
+    id: fixture.id,
+    released,
+  })}`)
 }
 
 function blizzardFixture(world, source) {
@@ -191,9 +415,12 @@ async function observeBlizzardContact(host, fixture) {
     chain: contactReceipt(fixture.chain),
     direct: contactReceipt(fixture.direct),
     outside: contactReceipt(fixture.outside),
+    inclusiveRotationObserved: false,
+    inclusiveRotationTicks: 0,
     positions: fixture.positions,
     transientKinds: [],
   }
+  let lastInclusiveRotationTick = -1
   while (Date.now() < deadline) {
     const state = host.state()
     if (state.world.kind === 'boneyard') {
@@ -206,7 +433,23 @@ async function observeBlizzardContact(host, fixture) {
       const outsideActor = actor(fixture.outside)
       const directEffect = effect(fixture.direct)
       const chainEffect = effect(fixture.chain)
-      for (const { kind } of state.primarySpells.transients) transientKinds.add(kind)
+      const blizzardHeld = state.primarySpells.transients.some((transient) => (
+        transient.kind === 'weld-channel' && transient.buildId === 1004
+      ))
+      for (const transient of state.primarySpells.transients) {
+        transientKinds.add(transient.kind)
+        if (
+          transient.kind === 'weld-blizzard-glow'
+          && transient.rotationDegrees === 360
+        ) {
+          observed.inclusiveRotationObserved = true
+          if (state.tick !== lastInclusiveRotationTick) {
+            lastInclusiveRotationTick = state.tick
+            observed.inclusiveRotationTicks += 1
+          }
+        }
+      }
+      if (blizzardHeld) state.combatRng = createNativeRng(18827)
       mergeContactReceipt(observed.chain, contactReceipt(fixture.chain, chainActor, chainEffect))
       mergeContactReceipt(observed.direct, contactReceipt(fixture.direct, directActor, directEffect))
       mergeContactReceipt(
@@ -223,6 +466,8 @@ async function observeBlizzardContact(host, fixture) {
         && observed.chain.coldSlowTicks > 0
         && observed.chain.stunTicks > 0
         && observed.direct.blizzardPushLastTick !== null
+        && observed.inclusiveRotationObserved
+        && observed.inclusiveRotationTicks >= 10
         && transientKinds.has('weld-frost-fade')
         && transientKinds.has('weld-blizzard-glow')
       ) return observed

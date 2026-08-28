@@ -130,4 +130,17 @@ test('Blizzard terrain and root glows are independent variant-three one-frame ac
   let expected = drawNativeFloat(sourceRng, Math.fround(0.5)).state
   expected = drawNativeFloat(expected, 360).state
   assert.deepEqual(result.rng, expected)
+
+  const inclusiveEndpoint = createNativeWeldBlizzardContactGlow({
+    direction: { x: 1, y: 0 },
+    id: 42,
+    ownerId: 'wizard',
+    position: { x: 100, y: 30 },
+    rng: createNativeRng(18827),
+    tick: 8,
+    vector: [8, 2, 1, 0.8, 0, 0, 0],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(inclusiveEndpoint.actor.rotationDegrees, 360)
+  assert.equal(inclusiveEndpoint.actor.scale, 1.3633599281311035)
 })

@@ -44,7 +44,7 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(sample[11])
       && nonnegativeInteger(sample[12])
       && arrayIndex(sample[14], 10)
-      && sample[15] >= 0 && sample[15] < 5 * VALUE_SCALE
+      && sample[15] >= 0 && sample[15] <= 5 * VALUE_SCALE
   },
 }
 

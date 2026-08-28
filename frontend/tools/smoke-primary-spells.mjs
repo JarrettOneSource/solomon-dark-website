@@ -73,6 +73,8 @@ const heldPoseAcceptance = process.env.SDR_PRIMARY_HELD_POSE === '1'
 const performanceAcceptance = process.env.SDR_PRIMARY_PERFORMANCE === '1'
 const nativePhaseExpectation = process.env.SDR_PRIMARY_EXPECT_NATIVE_PHASE === '1'
 const combatAdmissionAcceptance = process.env.SDR_PRIMARY_SPELL_COMBAT_ADMISSION === '1'
+const replicationAcceptance = process.env.SDR_PRIMARY_SPELL_REPLICATION_ACCEPTANCE === '1'
+const maggotReplicationAcceptance = process.env.SDR_MAGGOT_REPLICATION_ACCEPTANCE === '1'
 const selectedSpells = requestedSpellKind
   ? requestedSpellKind === BLIZZARD_SPELL.kind
     ? [BLIZZARD_SPELL]
@@ -113,6 +115,16 @@ if (nativePhaseExpectation && !performanceAcceptance) {
 if (boneyardOnlyAcceptance && selectedSpells.length !== 1) {
   throw new Error('Boneyard-only acceptance requires one SDR_PRIMARY_SPELL_KIND')
 }
+if (replicationAcceptance && (
+  !boneyardOnlyAcceptance
+  || selectedSpells.length !== 1
+  || selectedSpells[0].kind !== 'blizzard'
+)) {
+  throw new Error('Replication acceptance requires Boneyard-only Blizzard')
+}
+if (maggotReplicationAcceptance && !replicationAcceptance) {
+  throw new Error('Maggot replication acceptance requires two-peer Blizzard replication')
+}
 if (combatAdmissionAcceptance && (
   selectedSpells.length !== 1
   || (selectedSpells[0].kind !== 'ether' && selectedSpells[0].kind !== 'air')
@@ -126,113 +138,17 @@ const browser = await chromium.launch({
   headless: true,
 })
 let context = null
+let observerContext = null
 
 try {
   context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
-  await context.route('**/deployment.json*', (route) => {
-    const current = new URL(route.request().url()).searchParams.get('current')
-    route.fulfill({
-      body: JSON.stringify({ revision: current }),
-      contentType: 'application/json',
-      headers: { 'cache-control': 'no-store' },
-      status: 200,
-    })
-  })
-  if (gameEndpointUrl && gameEndpointCredential) {
-    await context.addInitScript((runtime) => {
-      window.solomonDarkRuntime = runtime
-    }, {
-      gameEndpoint: {
-        credential: gameEndpointCredential,
-        kind: 'localhost',
-        url: gameEndpointUrl,
-      },
-    })
-  }
-  await context.addInitScript(installGameAudioSmokeProbe, {
-    eventsGlobal: '__primarySpellAudioEvents',
-    sourceMatcherGlobal: '__primarySpellAudioSourceMatches',
-  })
-  await context.addInitScript((measurePerformance) => {
-    // This is a visual/state acceptance run, not a frame-rate benchmark. Pace
-    // headless SwiftShader so full-resolution Water particles cannot starve I/O.
-    if (!measurePerformance) {
-      window.requestAnimationFrame = (callback) => window.setTimeout(
-        () => callback(performance.now()),
-        1_000 / 30,
-      )
-      window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
-    }
-    const poseEvents = []
-    const poseSamples = []
-    const wireFrames = []
-    let loadedBoneyard = null
-    let localPlayerId = null
-    let previousPose = null
-    const nativeJsonParse = JSON.parse
-    Object.defineProperties(window, {
-      __primarySpellPoseEvents: { value: poseEvents },
-      __primarySpellPoseSamples: { value: poseSamples },
-      __primarySpellBoneyard: { get: () => loadedBoneyard },
-      __primarySpellLocalPlayerId: { get: () => localPlayerId },
-      __primarySpellWireFrames: { value: wireFrames },
-    })
-    JSON.parse = function (...args) {
-      const value = nativeJsonParse.apply(this, args)
-      if (value?.type === 'server-boneyard-loaded') loadedBoneyard = value.boneyard
-      const frame = value?.type === 'server-welcome'
-        ? value.snapshot
-        : value?.type === 'server-snapshot'
-          ? value.frame
-          : null
-      if (frame?.primarySpells) {
-        wireFrames.push({
-          players: frame.players,
-          primarySpells: frame.primarySpells,
-          tick: frame.tick,
-        })
-        if (wireFrames.length > 2_000) wireFrames.shift()
-      }
-      return value
-    }
-    const observePose = () => {
-      const node = document.querySelector('.boneyard-world-canvas')
-        ?? document.querySelector('.hub-world-canvas')
-      const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
-      if (frame) {
-        if (typeof frame.localPlayerId === 'string') localPlayerId = frame.localPlayerId
-        const cast = localPlayerId
-          ? wireFrames.at(-1)?.players[localPlayerId]?.primaryCast
-          : null
-        poseSamples.push({
-          actionTick: cast?.actionTick ?? null,
-          at: performance.now(),
-          emissionSequence: cast?.emissionSequence ?? null,
-          orbSpriteCount: frame.orbSpriteCount,
-          playerAttachmentPose: frame.playerAttachmentPose,
-          playerElementEffectScale: frame.playerElementEffectScale,
-          playerLightRadius: frame.playerLightRadius,
-          tick: frame.tick,
-        })
-        if (poseSamples.length > 10_000) poseSamples.shift()
-      }
-      if (frame && frame.playerAttachmentPose !== previousPose) {
-        previousPose = frame.playerAttachmentPose
-        poseEvents.push({
-          at: performance.now(),
-          playerAttachmentPose: frame.playerAttachmentPose,
-          tick: frame.tick,
-        })
-      }
-      requestAnimationFrame(observePose)
-    }
-    requestAnimationFrame(observePose)
-  }, performanceAcceptance)
+  await configurePrimarySpellContext(context, true)
 
   const receipts = []
   const errors = []
   let airPage = null
   let blizzardPage = null
+  let blizzardObserverPage = null
   let earthPage = null
   let etherPage = null
   let firePage = null
@@ -257,6 +173,15 @@ try {
     assert.equal(initial.playerAttachmentPose, 0)
     assert.equal(initial.primarySpellCount, 0)
     if (boneyardOnlyAcceptance) {
+      if (spell.kind === 'blizzard' && replicationAcceptance) {
+        observerContext = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+        await configurePrimarySpellContext(observerContext, false)
+        observerPage = await observerContext.newPage()
+        watchErrors(observerPage, errors, `${spell.kind}-observer`)
+        await enterHub(observerPage, spell.element)
+        await page.bringToFront()
+        blizzardObserverPage = observerPage
+      }
       receipts.push({
         element: spell.element,
         hubPrimarySpellCount: initial.primarySpellCount,
@@ -527,7 +452,7 @@ try {
         : waterPage
           ? await castWaterInBoneyard(waterPage)
           : blizzardPage
-            ? await castBlizzardInBoneyard(blizzardPage)
+            ? await castBlizzardInBoneyard(blizzardPage, blizzardObserverPage)
           : null
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
@@ -537,6 +462,10 @@ try {
     status: 'ok',
   })}\n`)
 } finally {
+  await Promise.race([
+    observerContext ? observerContext.close() : Promise.resolve(),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ])
   await Promise.race([
     context ? context.close() : Promise.resolve(),
     new Promise((resolve) => setTimeout(resolve, 5_000)),
@@ -548,6 +477,134 @@ try {
 }
 await new Promise((resolve) => process.stdout.write('', resolve))
 process.exit(0)
+
+async function configurePrimarySpellContext(browserContext, includeAudio) {
+  await browserContext.route('**/deployment.json*', (route) => {
+    const current = new URL(route.request().url()).searchParams.get('current')
+    route.fulfill({
+      body: JSON.stringify({ revision: current }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    })
+  })
+  if (gameEndpointUrl && gameEndpointCredential) {
+    await browserContext.addInitScript((runtime) => {
+      window.solomonDarkRuntime = runtime
+    }, {
+      gameEndpoint: {
+        credential: gameEndpointCredential,
+        kind: 'localhost',
+        url: gameEndpointUrl,
+      },
+    })
+  }
+  if (includeAudio) {
+    await browserContext.addInitScript(installGameAudioSmokeProbe, {
+      eventsGlobal: '__primarySpellAudioEvents',
+      sourceMatcherGlobal: '__primarySpellAudioSourceMatches',
+    })
+  }
+  await browserContext.addInitScript(installPrimarySpellStateProbe, performanceAcceptance)
+  if (maggotReplicationAcceptance) {
+    await browserContext.addInitScript(installMaggotEndpointProbe)
+  }
+}
+
+function installPrimarySpellStateProbe(measurePerformance) {
+  // This is a visual/state acceptance run, not a frame-rate benchmark. Pace
+  // headless SwiftShader so full-resolution Water particles cannot starve I/O.
+  if (!measurePerformance) {
+    window.requestAnimationFrame = (callback) => window.setTimeout(
+      () => callback(performance.now()),
+      1_000 / 30,
+    )
+    window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
+  }
+  const poseEvents = []
+  const poseSamples = []
+  const wireFrames = []
+  let loadedBoneyard = null
+  let localPlayerId = null
+  let previousPose = null
+  const nativeJsonParse = JSON.parse
+  Object.defineProperties(window, {
+    __primarySpellPoseEvents: { value: poseEvents },
+    __primarySpellPoseSamples: { value: poseSamples },
+    __primarySpellBoneyard: { get: () => loadedBoneyard },
+    __primarySpellLocalPlayerId: { get: () => localPlayerId },
+    __primarySpellWireFrames: { value: wireFrames },
+  })
+  JSON.parse = function (...args) {
+    const value = nativeJsonParse.apply(this, args)
+    if (value?.type === 'server-boneyard-loaded') loadedBoneyard = value.boneyard
+    const frame = value?.type === 'server-welcome'
+      ? value.snapshot
+      : value?.type === 'server-snapshot'
+        ? value.frame
+        : null
+    if (frame?.primarySpells) {
+      wireFrames.push({
+        players: frame.players,
+        primarySpells: frame.primarySpells,
+        tick: frame.tick,
+      })
+      if (wireFrames.length > 2_000) wireFrames.shift()
+    }
+    return value
+  }
+  const observePose = () => {
+    const node = document.querySelector('.boneyard-world-canvas')
+      ?? document.querySelector('.hub-world-canvas')
+    const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
+    if (frame) {
+      if (typeof frame.localPlayerId === 'string') localPlayerId = frame.localPlayerId
+      const cast = localPlayerId
+        ? wireFrames.at(-1)?.players[localPlayerId]?.primaryCast
+        : null
+      poseSamples.push({
+        actionTick: cast?.actionTick ?? null,
+        at: performance.now(),
+        emissionSequence: cast?.emissionSequence ?? null,
+        orbSpriteCount: frame.orbSpriteCount,
+        playerAttachmentPose: frame.playerAttachmentPose,
+        playerElementEffectScale: frame.playerElementEffectScale,
+        playerLightRadius: frame.playerLightRadius,
+        tick: frame.tick,
+      })
+      if (poseSamples.length > 10_000) poseSamples.shift()
+    }
+    if (frame && frame.playerAttachmentPose !== previousPose) {
+      previousPose = frame.playerAttachmentPose
+      poseEvents.push({
+        at: performance.now(),
+        playerAttachmentPose: frame.playerAttachmentPose,
+        tick: frame.tick,
+      })
+    }
+    requestAnimationFrame(observePose)
+  }
+  requestAnimationFrame(observePose)
+}
+
+function installMaggotEndpointProbe() {
+  const samples = []
+  const nativeJsonParse = JSON.parse
+  Object.defineProperty(window, '__maggotEndpointSamples', { value: samples })
+  JSON.parse = function (...args) {
+    const value = nativeJsonParse.apply(this, args)
+    const frame = value?.type === 'server-snapshot' ? value.frame : null
+    const entities = frame?.world?.kind === 'boneyard' ? frame.world.entities : null
+    if (Array.isArray(entities?.samples)) {
+      for (const sample of entities.samples) {
+        if (!Array.isArray(sample) || sample[0] !== 4 || sample.length !== 16) continue
+        samples.push({ id: sample[1], phase: sample[15], tick: frame.tick })
+        if (samples.length > 2_000) samples.shift()
+      }
+    }
+    return value
+  }
+}
 
 async function enterHub(page, element) {
   await page.goto(`${baseUrl}/game`, {
@@ -891,8 +948,25 @@ async function castAirInBoneyard(page) {
   return receipt
 }
 
-async function castBlizzardInBoneyard(page) {
+async function castBlizzardInBoneyard(page, observerPage = null) {
   const canvas = await enterBoneyard(page)
+  if (observerPage) {
+    const renderTimeout = hostOpenedBoneyard ? 180_000 : BONEYARD_RENDER_TIMEOUT_MS
+    await observerPage.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+      timeout: renderTimeout,
+    })
+    await observerPage.locator(
+      '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
+    ).waitFor({ timeout: renderTimeout })
+    await page.bringToFront()
+    await page.waitForTimeout(2_500)
+  }
+  const maggotReplication = maggotReplicationAcceptance
+    ? {
+        observer: await waitForMaggotEndpointLifecycle(observerPage),
+        owner: await waitForMaggotEndpointLifecycle(page),
+      }
+    : null
   const target = await visibleBoneyardEnemy(page, true)
   assert.ok(target, 'expected one visible enemy for Blizzard acceptance')
   const bounds = await canvas.boundingBox()
@@ -902,6 +976,9 @@ async function castBlizzardInBoneyard(page) {
     ? blizzardCollisionAim(target)
     : target.enemy
   const aim = worldScreenPoint(bounds, target.frame, aimWorld)
+  const observerFramePromise = observerPage
+    ? waitForBoneyardSpell(observerPage, 'weld-blizzard-glow:1004')
+    : null
   await page.mouse.move(aim.x, aim.y)
   await page.mouse.down({ button: 'left' })
   try {
@@ -916,6 +993,14 @@ async function castBlizzardInBoneyard(page) {
     )).length
     assert.ok(channelCount >= 1 && channelCount <= 2)
     assert.ok(glowCount >= 2)
+    const observerFrame = await observerFramePromise
+    const observerWire = observerPage
+      ? await latestWireSpell(observerPage, 'weld-channel')
+      : null
+    if (observerWire) {
+      assert.equal(observerWire.state.buildId, 1004)
+      assert.equal(observerWire.state.ownerId, wire.state.ownerId)
+    }
     const screenshotPath = `${screenshotRoot}/solomon-primary-blizzard-boneyard.png`
     await page.screenshot({ path: screenshotPath })
     return {
@@ -923,6 +1008,17 @@ async function castBlizzardInBoneyard(page) {
       frame,
       glowCount,
       aimWorld,
+      maggotReplication,
+      replication: observerFrame && observerWire
+        ? {
+            buildId: observerWire.state.buildId,
+            glowCount: observerFrame.primarySpellKinds.filter((kind) => (
+              kind === 'weld-blizzard-glow:1004'
+            )).length,
+            ownerId: observerWire.state.ownerId,
+            tick: observerWire.tick,
+          }
+        : null,
       screenshotPath,
       target: target.enemy,
       wire,
@@ -930,6 +1026,25 @@ async function castBlizzardInBoneyard(page) {
   } finally {
     await page.mouse.up({ button: 'left' })
   }
+}
+
+async function waitForMaggotEndpointLifecycle(page) {
+  if (!page) throw new Error('Maggot endpoint acceptance requires an observer page')
+  await page.waitForFunction(() => {
+    const samples = window.__maggotEndpointSamples ?? []
+    const endpoint = samples.find(({ phase }) => phase === 5 * 1024)
+    return endpoint && samples.some(({ id, phase, tick }) => (
+      id === endpoint.id && tick > endpoint.tick && phase < 5 * 1024
+    ))
+  }, undefined, { timeout: 30_000 })
+  return page.evaluate(() => {
+    const samples = window.__maggotEndpointSamples
+    const endpoint = samples.find(({ phase }) => phase === 5 * 1024)
+    const wrapped = samples.find(({ id, phase, tick }) => (
+      id === endpoint.id && tick > endpoint.tick && phase < 5 * 1024
+    ))
+    return { endpoint, wrapped }
+  })
 }
 
 function blizzardCollisionAim(target) {

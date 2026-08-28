@@ -874,16 +874,35 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
     ...sample.slice(2),
   ]
   invalidEmergenceOrientation[14] = 10
-  const invalidEmergencePhase: [number, number, ...number[]] = [
+  const endpointEmergencePhase: [number, number, ...number[]] = [
     sample[0],
     sample[1],
     ...sample.slice(2),
   ]
-  invalidEmergencePhase[15] = 5 * 1024
+  endpointEmergencePhase[15] = 5 * 1024
+  const aboveEmergencePhase: [number, number, ...number[]] = [
+    sample[0],
+    sample[1],
+    ...sample.slice(2),
+  ]
+  aboveEmergencePhase[15] = 5 * 1024 + 1
   assert.equal(registration.sampleIsValid(invalidHitFlash), false)
   assert.equal(registration.sampleIsValid(longBallisticEmergence), true)
   assert.equal(registration.sampleIsValid(invalidEmergenceOrientation), false)
-  assert.equal(registration.sampleIsValid(invalidEmergencePhase), false)
+  assert.equal(registration.sampleIsValid(endpointEmergencePhase), true)
+  assert.equal(registration.sampleIsValid(aboveEmergencePhase), false)
+
+  const endpointFrame = cloneSnapshotFrame(keyframe)
+  if (endpointFrame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  const endpointSample = endpointFrame.world.entities.samples.find((entry) => (
+    entry[0] === REPLICATED_ENTITY_TYPES.boneyardMaggot && entry[1] === 8
+  ))!
+  Reflect.set(endpointSample, 15, 5 * 1024)
+  const endpointReconstructed = new EntityReplicationReconstructor().apply(endpointFrame, 1)
+  if (endpointReconstructed.world.kind !== 'boneyard') {
+    throw new Error('expected Boneyard snapshot')
+  }
+  assert.equal(endpointReconstructed.world.maggots[0]?.emergencePhase, 5)
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(keyframe, 1)

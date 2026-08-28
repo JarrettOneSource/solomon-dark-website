@@ -65,10 +65,14 @@ Status: implemented contract, 2026-08-28.
 - Shared-Hub admission rejects nonempty content and cheats at both Website and
   host seams. Private sessions use ticket authentication and are destroyed when
   their final authenticated player and proxy leave.
-- Protocol 98 carries session kind, party access state/actions, request views,
-  cross-host player references, Player Card request/results, College invitation
-  snapshots, authoritative room cheat mode, and content-addressed assets. Host
-  and client deploy together.
+- Protocol 100 retains protocol 99 in full, including protocol 98's session
+  kind, party access state/actions,
+  request views, cross-host player references, Player Card request/results,
+  College invitation snapshots, authoritative room cheat mode, and
+  content-addressed assets. Host
+  and client deploy together; protocol 100 additionally accepts the exact inclusive
+  native endpoints in replicated welded-primary presentation state and accepts
+  the quantized closed endpoint of Coffin-owned Maggot emergence phase.
 
 ## Content and saves
 
