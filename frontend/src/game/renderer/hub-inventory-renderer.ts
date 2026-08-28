@@ -90,7 +90,9 @@ import {
   HUB_HAGATHA_PERK_PANE,
   HUB_HOVER_BOX,
   HUB_INVENTORY_GRID,
+  HUB_INVENTORY_ATTRIBUTES_PAGE,
   HUB_INVENTORY_INTERACTION,
+  HUB_INVENTORY_STATS_PAGES,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_MODAL_HUD_CONTROLS,
   HUB_NATIVE_UI_TIMING,
@@ -209,6 +211,7 @@ export type HubInventoryRendererModel =
       readonly dragging: HubInventoryDragModel | null
       readonly dyeModal: HubInventoryDyeModalModel | null
       readonly economy: ProtocolPlayerEconomy
+      readonly inspection: HubServiceInspectionModel | null
       readonly kind: 'inventory'
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl
@@ -216,6 +219,7 @@ export type HubInventoryRendererModel =
       readonly sackPath: readonly number[]
       readonly sackTransition: HubInventorySackTransitionModel | null
       readonly selection: HubInventorySelectionModel | null
+      readonly statsPage: number
     }
   | {
       readonly acceleratedAtMs: number | null
@@ -244,6 +248,7 @@ export type HubInventoryRendererModel =
       readonly inspection: HubServiceInspectionModel | null
       readonly selectedItemId: number | null
       readonly selectedOwner: 'storage' | null
+      readonly statsPage: number
       readonly trader: HubTraderId
     }
 
@@ -595,10 +600,12 @@ function buildInventory(
     readonly companion?: boolean
     readonly dragging?: HubInventoryDragModel | null
     readonly leftPane?: 'hagatha' | 'stats'
+    readonly inspection?: HubServiceInspectionModel | null
     readonly progression: ProtocolPlayerProgression
     readonly sackPath: readonly number[]
     readonly sackTransition: HubInventorySackTransitionModel | null
     readonly selection?: HubInventorySelectionModel | null
+    readonly statsPage: number
   },
 ): InventoryBuildState {
   const { economy, progression } = model
@@ -607,14 +614,17 @@ function buildInventory(
   const selection = model.selection ?? null
   const visibleBackpack = inventoryItemsAtSackPath(economy.backpack, model.sackPath)
     ?? economy.backpack
-  const leftShift = companion ? 53 : 0
   const background = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
   layer.addChild(background)
 
   addInventorySidePanel(context, layer, 'left', companion)
   addInventorySidePanel(context, layer, 'right', companion)
   if (model.leftPane === 'hagatha') addHagathaInventoryPane(context, layer, economy)
-  else addStats(context, layer, model, companion)
+  else addStats(context, layer, model, companion, model.statsPage)
+  if (!companion && model.leftPane !== 'hagatha' && model.statsPage === 2
+      && model.inspection?.kind === 'owned-perk') {
+    addOwnedPerkInspection(context, layer, economy, model.inspection, companion)
+  }
   const playerPreview = companion ? null : addPlayerPreview(context, layer, model.config.element)
   addEquipment(context, layer, economy, selection, dragging, companion, model.config.element)
 
@@ -682,40 +692,6 @@ function buildInventory(
     ...HUB_UNFORGE_TARGET.center,
   )
   unforgeTarget.label = 'native-unforge-target'
-
-  if (model.leftPane !== 'hagatha') {
-    const primarySpellLines = hubInventoryPrimarySpellLines(model.config.element, progression.learnedSkills)
-    const textLeft = HUB_PRIMARY_SPELL_PANE.textLeft + leftShift
-    addBitmapText(
-      context,
-      layer,
-      'PRIMARY SPELL',
-      HUB_PRIMARY_SPELL_PANE.headingFont,
-      textLeft,
-      HUB_PRIMARY_SPELL_PANE.headingTextBaselineY,
-      { align: 'left', tint: 0xe4c56d },
-    )
-    primarySpellLines.forEach((line, index) => addBitmapTextRuns(
-      context,
-      layer,
-      [
-        { advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale, text: line.text },
-        ...(line.unit ? [{
-          advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale
-            * HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
-          italic: HUB_PRIMARY_SPELL_PANE.inlineUnit.italic,
-          offsetX: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[0],
-          offsetY: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[1],
-          scale: HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
-          text: line.unit,
-        }] : []),
-      ],
-      HUB_PRIMARY_SPELL_PANE.contentFont,
-      textLeft,
-      HUB_PRIMARY_SPELL_PANE.contentTextBaselines[index]!,
-      HUB_PRIMARY_SPELL_PANE.textTint,
-    ))
-  }
 
   const selected = selection ? inventoryItemForSelection(economy, selection) : null
   const selectedCenter = selection
@@ -881,45 +857,157 @@ function addStats(
   layer: Container,
   model: {
     readonly config: PlayerCharacterConfig
+    readonly economy: ProtocolPlayerEconomy
     readonly progression: ProtocolPlayerProgression
   },
   companion: boolean,
+  page: number,
 ): void {
+  if (!Number.isInteger(page) || page < 0 || page >= HUB_INVENTORY_STATS_PAGES.pageCount) {
+    throw new RangeError('native InventoryScreen stats page must be within [0,2]')
+  }
+  const clipRect = companion
+    ? HUB_INVENTORY_STATS_PAGES.companionClipRect
+    : HUB_INVENTORY_STATS_PAGES.standaloneClipRect
+  const viewport = new Container({ label: 'native-inventory-stats-viewport' })
+  const content = new Container({ label: 'native-inventory-stats-content' })
+  const mask = new Graphics()
+    .rect(clipRect[0], clipRect[1], clipRect[2], clipRect[3])
+    .fill({ color: 0xffffff })
+  content.mask = mask
+  content.y = -page * HUB_INVENTORY_STATS_PAGES.pageHeight
+  viewport.addChild(content, mask)
+  layer.addChild(viewport)
+
   const decorationShift = companion ? 0 : -53
   const contentShift = companion ? 53 : 0
-  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 119 + decorationShift, 151)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 309 + decorationShift, 151)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 164 + decorationShift, 233.5)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 169 + decorationShift, 284.5)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 319 + decorationShift, 256.5)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 119 + decorationShift, 367.5)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 13, 391 + decorationShift, 379)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 13, 391 + decorationShift, 439, 1, -1)
-  addInset(layer, 86 + contentShift, 112, 227, 29)
-  addInset(layer, 86 + contentShift, 143, 227, 43)
+  addCenteredAtlasSprite(context, content, 'Inventory', 16, 119 + decorationShift, 151)
+  addCenteredAtlasSprite(context, content, 'Inventory', 16, 309 + decorationShift, 151)
+  addCenteredAtlasSprite(context, content, 'Inventory', 16, 164 + decorationShift, 233.5)
+  addCenteredAtlasSprite(context, content, 'Inventory', 16, 169 + decorationShift, 284.5)
+  addCenteredAtlasSprite(context, content, 'Inventory', 16, 319 + decorationShift, 256.5)
+  addCenteredAtlasSprite(context, content, 'Inventory', 16, 119 + decorationShift, 367.5)
+  const indicatorX = companion
+    ? HUB_INVENTORY_STATS_PAGES.companionIndicatorX
+    : HUB_INVENTORY_STATS_PAGES.standaloneIndicatorX
+  for (const y of [379, 699]) {
+    addCenteredAtlasSprite(context, content, 'Inventory', HUB_INVENTORY_STATS_PAGES.indicatorRecord, indicatorX, y)
+  }
+  for (const y of [439, 759]) {
+    addCenteredAtlasSprite(
+      context,
+      content,
+      'Inventory',
+      HUB_INVENTORY_STATS_PAGES.indicatorRecord,
+      indicatorX,
+      y,
+      1,
+      -1,
+    )
+  }
+  addInset(content, 86 + contentShift, 112, 227, 29)
+  addInset(content, 86 + contentShift, 143, 227, 43)
   addInset(
-    layer,
+    content,
     HUB_PRIMARY_SPELL_PANE.headingRect[0] + contentShift,
     HUB_PRIMARY_SPELL_PANE.headingRect[1],
     HUB_PRIMARY_SPELL_PANE.headingRect[2],
     HUB_PRIMARY_SPELL_PANE.headingRect[3],
   )
   addInset(
-    layer,
+    content,
     HUB_PRIMARY_SPELL_PANE.bodyRect[0] + contentShift,
     HUB_PRIMARY_SPELL_PANE.bodyRect[1],
     HUB_PRIMARY_SPELL_PANE.bodyRect[2],
     HUB_PRIMARY_SPELL_PANE.bodyRect[3],
   )
-  addInset(layer, 86 + contentShift, 330, 227, 54)
-  addBitmapText(context, layer, model.config.displayName.toUpperCase(), 'menu', 96 + contentShift, 136, { align: 'left', tint: 0xffffff })
-  addBitmapText(context, layer, `LEVEL ${model.progression.level}`, 'medium', 96 + contentShift, 159, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, layer, `${model.config.element.toUpperCase()} ${model.config.discipline.toUpperCase()}`, 'medium', 96 + contentShift, 175, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, layer, 'MELEE DAMAGE', 'medium', 96 + contentShift, 348, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, layer, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, {
+  addInset(content, 86 + contentShift, 330, 227, 54)
+  addBitmapText(context, content, model.config.displayName.toUpperCase(), 'menu', 96 + contentShift, 136, { align: 'left', tint: 0xffffff })
+  addBitmapText(context, content, `LEVEL ${model.progression.level}`, 'medium', 96 + contentShift, 159, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(context, content, `${model.config.element.toUpperCase()} ${model.config.discipline.toUpperCase()}`, 'medium', 96 + contentShift, 175, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(context, content, 'MELEE DAMAGE', 'medium', 96 + contentShift, 348, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(context, content, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, {
     align: 'left',
     tint: HUB_PRIMARY_SPELL_PANE.textTint,
   })
+
+  const primarySpellLines = hubInventoryPrimarySpellLines(
+    model.config.element,
+    model.progression.learnedSkills,
+  )
+  const primaryTextLeft = HUB_PRIMARY_SPELL_PANE.textLeft + contentShift
+  addBitmapText(
+    context,
+    content,
+    'PRIMARY SPELL',
+    HUB_PRIMARY_SPELL_PANE.headingFont,
+    primaryTextLeft,
+    HUB_PRIMARY_SPELL_PANE.headingTextBaselineY,
+    { align: 'left', tint: 0xe4c56d },
+  )
+  primarySpellLines.forEach((line, index) => addBitmapTextRuns(
+    context,
+    content,
+    [
+      { advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale, text: line.text },
+      ...(line.unit ? [{
+        advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale
+          * HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
+        italic: HUB_PRIMARY_SPELL_PANE.inlineUnit.italic,
+        offsetX: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[0],
+        offsetY: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[1],
+        scale: HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
+        text: line.unit,
+      }] : []),
+    ],
+    HUB_PRIMARY_SPELL_PANE.contentFont,
+    primaryTextLeft,
+    HUB_PRIMARY_SPELL_PANE.contentTextBaselines[index]!,
+    HUB_PRIMARY_SPELL_PANE.textTint,
+  ))
+
+  addInventoryAttributePage(context, content, model.progression, contentShift)
+  addHagathaInventoryPane(context, content, model.economy, decorationShift, 640)
+}
+
+function addInventoryAttributePage(
+  context: RenderContext,
+  layer: Container,
+  progression: ProtocolPlayerProgression,
+  shiftX: number,
+): void {
+  const page = HUB_INVENTORY_ATTRIBUTES_PAGE
+  addInset(layer, page.attributesHeadingRect[0] + shiftX, page.attributesHeadingRect[1], page.attributesHeadingRect[2], page.attributesHeadingRect[3])
+  addInset(layer, page.attributesBodyRect[0] + shiftX, page.attributesBodyRect[1], page.attributesBodyRect[2], page.attributesBodyRect[3])
+  addInset(layer, page.resistancesHeadingRect[0] + shiftX, page.resistancesHeadingRect[1], page.resistancesHeadingRect[2], page.resistancesHeadingRect[3])
+  addInset(layer, page.resistancesBodyRect[0] + shiftX, page.resistancesBodyRect[1], page.resistancesBodyRect[2], page.resistancesBodyRect[3])
+  addBitmapText(context, layer, 'ATTRIBUTES', 'body', page.titleCenterX + shiftX, page.attributesHeadingTextBaselineY, { tint: 0xe4c56d })
+  addBitmapText(context, layer, 'RESISTANCES', 'body', page.titleCenterX + shiftX, page.resistancesHeadingTextBaselineY, { tint: 0xe4c56d })
+  const attributeRows = [
+    ['HEALTH:', `${nativeRoundedStat(progression.currentHealth)}/${nativeRoundedStat(progression.maximumHealth)}`],
+    ['MANA:', `${nativeRoundedStat(progression.currentMana)}/${nativeRoundedStat(progression.maximumMana)}`],
+    ['CAST SPEED:', `${nativeRoundedStat(progression.inventoryStats.castSpeedPercent)}%`],
+    ['WALK SPEED:', `${nativeRoundedStat(progression.inventoryStats.walkSpeedPercent)}%`],
+  ] as const
+  attributeRows.forEach(([label, value], index) => {
+    const y = page.attributesRows[index]!
+    addBitmapText(context, layer, label, 'medium', page.labelRight + shiftX, y, { align: 'right', tint: 0xffffff })
+    addBitmapText(context, layer, value, 'medium', page.valueLeft + shiftX, y, { align: 'left', tint: 0xffffff })
+  })
+  const resistanceRows = [
+    ['PAIN:', progression.inventoryStats.painResistancePercent],
+    ['MAGIC:', progression.inventoryStats.magicResistancePercent],
+    ['POISON:', progression.inventoryStats.poisonResistancePercent],
+  ] as const
+  resistanceRows.forEach(([label, value], index) => {
+    const y = page.resistanceRows[index]!
+    addBitmapText(context, layer, label, 'medium', page.labelRight + shiftX, y, { align: 'right', tint: 0xffffff })
+    addBitmapText(context, layer, `${nativeRoundedStat(value)}%`, 'medium', page.valueLeft + shiftX, y, { align: 'left', tint: 0xffffff })
+  })
+}
+
+function nativeRoundedStat(value: number): string {
+  return `${Math.round(value)}`
 }
 
 function addPlayerPreview(context: RenderContext, layer: Container, element: WizardElement): NativeElementVfxView {
@@ -1239,11 +1327,13 @@ function buildService(
     config: model.config,
     economy: model.economy,
     dragging: model.dragging,
+    inspection: model.inspection,
     leftPane: model.trader === 'hagatha' ? 'hagatha' : 'stats',
     progression: model.progression,
     sackPath: model.sackPath,
     sackTransition: model.sackTransition,
     selection: model.inventorySelection,
+    statsPage: model.statsPage,
   })
   const overlay = new Container()
   overlay.label = 'native-service-overlay'
@@ -1848,23 +1938,10 @@ function addServiceInspection(
   if (!inspection || model.notice) return
   if (inspection.kind === 'owned-perk') {
     if (
-      model.trader !== 'hagatha'
+      (model.trader !== 'hagatha' && model.statsPage !== 2)
       || model.economy.ownedPerkSelectors[inspection.index] !== inspection.selector
     ) return
-    const [left, top, width, height] = hubOwnedPerkSlotRect(inspection.index)
-    addNativeContextualHoverBox(
-      context,
-      layer,
-      hubHagathaTooltipLines({
-        cheatDeathCharges: inspection.selector === 7 ? 1 : null,
-        firstMixed: true,
-        price: null,
-        selector: inspection.selector,
-      }),
-      left + width / 2,
-      top + height / 2,
-      HUB_HOVER_BOX.ownedPerkSourceGap,
-    )
+    addOwnedPerkInspection(context, layer, model.economy, inspection, true)
     return
   }
   if (model.trader === 'hagatha') {
@@ -1919,6 +1996,31 @@ function addServiceInspection(
     position.x + cellSize / 2,
     position.y + cellSize / 2,
     HUB_HOVER_BOX.shopSourceGap,
+  )
+}
+
+function addOwnedPerkInspection(
+  context: RenderContext,
+  layer: Container,
+  economy: ProtocolPlayerEconomy,
+  inspection: Extract<HubServiceInspectionModel, { kind: 'owned-perk' }>,
+  companion: boolean,
+): void {
+  if (economy.ownedPerkSelectors[inspection.index] !== inspection.selector) return
+  const [baseLeft, top, width, height] = hubOwnedPerkSlotRect(inspection.index)
+  const left = baseLeft - (companion ? 0 : 53)
+  addNativeContextualHoverBox(
+    context,
+    layer,
+    hubHagathaTooltipLines({
+      cheatDeathCharges: inspection.selector === 7 ? 1 : null,
+      firstMixed: true,
+      price: null,
+      selector: inspection.selector,
+    }),
+    left + width / 2,
+    top + height / 2,
+    HUB_HOVER_BOX.ownedPerkSourceGap,
   )
 }
 
@@ -2009,12 +2111,15 @@ function addHagathaInventoryPane(
   context: RenderContext,
   layer: Container,
   economy: ProtocolPlayerEconomy,
+  offsetX = 0,
+  offsetY = 0,
 ): void {
-  const { left, top } = HUB_HAGATHA_PERK_PANE
+  const left = HUB_HAGATHA_PERK_PANE.left + offsetX
+  const top = HUB_HAGATHA_PERK_PANE.top + offsetY
   for (const [x, y] of [[323, 227], [166, 247], [166, 312], [166, 182], [111, 125]] as const) {
-    addCenteredAtlasSprite(context, layer, 'Inventory', 16, x, y)
+    addCenteredAtlasSprite(context, layer, 'Inventory', 16, x + offsetX, y + offsetY)
   }
-  addAtlasSprite(context, layer, 'Inventory', 3, 362, 218)
+  addAtlasSprite(context, layer, 'Inventory', 3, 362 + offsetX, 218 + offsetY)
   layer.addChild(new Graphics()
     .rect(left, top, HUB_HAGATHA_PERK_PANE.innerWidth, HUB_HAGATHA_PERK_PANE.innerHeight)
     .fill({ color: HUB_HAGATHA_PERK_PANE.innerPanelTint })
@@ -2024,14 +2129,14 @@ function addHagathaInventoryPane(
     layer,
     'CHARMS/CURSES',
     'medium',
-    HUB_HAGATHA_PERK_PANE.titleCenterX,
-    HUB_HAGATHA_PERK_PANE.titleTextBaselineY,
+    HUB_HAGATHA_PERK_PANE.titleCenterX + offsetX,
+    HUB_HAGATHA_PERK_PANE.titleTextBaselineY + offsetY,
     { tint: HUB_HAGATHA_PERK_PANE.titleTint },
   )
   for (let index = 0; index < HUB_HAGATHA_PERK_PANE.columns * HUB_HAGATHA_PERK_PANE.rows; index += 1) {
-    const centerX = HUB_HAGATHA_PERK_PANE.slotCenterOrigin[0]
+    const centerX = HUB_HAGATHA_PERK_PANE.slotCenterOrigin[0] + offsetX
       + (index % HUB_HAGATHA_PERK_PANE.columns) * HUB_HAGATHA_PERK_PANE.slotPitch
-    const centerY = HUB_HAGATHA_PERK_PANE.slotCenterOrigin[1]
+    const centerY = HUB_HAGATHA_PERK_PANE.slotCenterOrigin[1] + offsetY
       + Math.floor(index / HUB_HAGATHA_PERK_PANE.columns) * HUB_HAGATHA_PERK_PANE.slotPitch
     const selector = economy.ownedPerkSelectors[index]
     const slot = addCenteredAtlasSprite(
@@ -2054,7 +2159,14 @@ function addHagathaInventoryPane(
       HUB_HAGATHA_PERK_PANE.slotScale,
     )
   }
-  addCenteredAtlasSprite(context, layer, 'Inventory', 5, ...HUB_HAGATHA_PERK_PANE.bundleCenter)
+  addCenteredAtlasSprite(
+    context,
+    layer,
+    'Inventory',
+    5,
+    HUB_HAGATHA_PERK_PANE.bundleCenter[0] + offsetX,
+    HUB_HAGATHA_PERK_PANE.bundleCenter[1] + offsetY,
+  )
 }
 
 function addDoneControl(context: RenderContext, layer: Container): void {

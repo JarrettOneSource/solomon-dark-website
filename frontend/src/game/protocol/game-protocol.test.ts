@@ -594,6 +594,7 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
     { type: 'buy-hagatha', selector: -1 },
+    { type: 'remove-hagatha', selector: 8 },
     { type: 'buy-teacher-spell', skillId: 72 },
     { type: 'close-dowsing' },
     { type: 'consume', itemId: 5 },
@@ -628,6 +629,8 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'equip', itemId: 1, slot: 'boots' },
     { type: 'move-inventory-item', destinationSackId: 0, destinationSlot: -1, itemId: 1 },
     { type: 'read-librarian-book', bookId: 26 },
+    { type: 'remove-hagatha', selector: 27 },
+    { type: 'remove-hagatha', selector: -1 },
     { type: 'select-boast', boastId: 5 },
     { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
     { type: 'transfer', direction: 'to-storage', gesture: 'double-activation', itemId: 1 },
@@ -1102,6 +1105,13 @@ test('server welcome round-trips content, kernel, character, and world ownership
       cheatDeathCharges: 0,
       reverieActive: false,
       serendipityActive: false,
+    },
+    inventoryStats: {
+      castSpeedPercent: 100,
+      magicResistancePercent: 0,
+      painResistancePercent: 0,
+      poisonResistancePercent: 0,
+      walkSpeedPercent: 100,
     },
     learnedSkills: [
       [0, 1, 1],
@@ -1684,8 +1694,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v104 carries addressed inventory slots, effective secondary costs, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 104)
+test('protocol v105 carries addressed inventory slots, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 105)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

@@ -101,6 +101,7 @@ export type HubInventoryAction =
   | { readonly type: 'buy-dowsing'; readonly offerId: number }
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }
+  | { readonly type: 'remove-hagatha'; readonly selector: number }
   | { readonly type: 'buy-teacher-spell'; readonly skillId: number }
   | { readonly type: 'bind-belt-item'; readonly itemId: number; readonly slot: number }
   | { readonly type: 'activate-belt-slot'; readonly slot: number }
@@ -972,6 +973,21 @@ export function buyHagathaPerk(
     hagathaBundleSelectors: selector === -1 ? [] : source.hagathaBundleSelectors,
     ownedPerkSelectors: outcomes,
     tonicPurchases,
+  })
+}
+
+export function removeHagathaPerk(
+  source: HubEconomyState,
+  selector: number,
+): HubEconomyResult {
+  if (!Number.isSafeInteger(selector) || selector < 0 || selector > 26) {
+    return rejected(source, 'invalid-offer')
+  }
+  const index = source.ownedPerkSelectors.indexOf(selector)
+  if (index < 0) return rejected(source, 'invalid-offer')
+  return accepted({
+    ...source,
+    ownedPerkSelectors: source.ownedPerkSelectors.filter((_, candidate) => candidate !== index),
   })
 }
 

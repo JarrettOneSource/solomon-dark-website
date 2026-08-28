@@ -143,6 +143,26 @@ export function applyNativeHagathaPurchaseRuntime(
     : Object.freeze({ cheatDeathCharges, reverieActive, serendipityActive })
 }
 
+export function removeNativeHagathaRuntime(
+  source: NativeHagathaRuntimeState,
+  selector: number,
+): NativeHagathaRuntimeState {
+  const cheatDeathCharges = selector === NATIVE_HAGATHA_SELECTORS.cheatDeath
+    ? 0
+    : source.cheatDeathCharges
+  const serendipityActive = selector === NATIVE_HAGATHA_SELECTORS.serendipity
+    ? false
+    : source.serendipityActive
+  const reverieActive = selector === NATIVE_HAGATHA_SELECTORS.reverie
+    ? false
+    : source.reverieActive
+  return cheatDeathCharges === source.cheatDeathCharges
+      && serendipityActive === source.serendipityActive
+      && reverieActive === source.reverieActive
+    ? source
+    : Object.freeze({ cheatDeathCharges, reverieActive, serendipityActive })
+}
+
 export function clearNativeHagathaUntilHurt(
   source: NativeHagathaRuntimeState,
   remainingDamage: number,

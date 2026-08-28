@@ -36,6 +36,8 @@ import {
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
+  HUB_INVENTORY_ATTRIBUTES_PAGE,
+  HUB_INVENTORY_STATS_PAGES,
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_MODAL_HUD_CONTROLS,
@@ -64,6 +66,8 @@ import {
   hubDyeSwatchRect,
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
+  hubInventoryStatsArrowRect,
+  hubInventoryStatsPage,
   hubInventoryItemInfoText,
   hubHagathaTooltipLines,
   hubItemTooltipLines,
@@ -609,6 +613,30 @@ test('stock inventory derives every elemental primary stat pane from native skil
     { text: 'MANA COST: 12', unit: ' / SEC' },
     { text: 'MANA HEAL: 10', unit: ' / SEC' },
   ])
+})
+
+test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow actions', () => {
+  assert.deepEqual(HUB_INVENTORY_STATS_PAGES, {
+    actionSize: 36,
+    companionClipRect: [103, 89, 320, 320],
+    companionIndicatorX: 391,
+    contentHeight: 960,
+    dragThresholdPixels: 10,
+    indicatorRecord: 13,
+    pageCount: 3,
+    pageHeight: 320,
+    standaloneClipRect: [50, 89, 320, 320],
+    standaloneIndicatorX: 338,
+  })
+  assert.deepEqual(HUB_INVENTORY_ATTRIBUTES_PAGE.attributesRows, [500, 516, 548, 564])
+  assert.deepEqual(HUB_INVENTORY_ATTRIBUTES_PAGE.resistanceRows, [670, 686, 702])
+  assert.equal(hubInventoryStatsPage(2), 2)
+  assert.throws(() => hubInventoryStatsPage(3), /within \[0,2\]/)
+  assert.equal(hubInventoryStatsArrowRect(0, 'up', false), null)
+  assert.deepEqual(hubInventoryStatsArrowRect(0, 'down', false), [320, 361, 36, 36])
+  assert.deepEqual(hubInventoryStatsArrowRect(1, 'up', true), [373, 101, 36, 36])
+  assert.deepEqual(hubInventoryStatsArrowRect(1, 'down', true), [373, 361, 36, 36])
+  assert.equal(hubInventoryStatsArrowRect(2, 'down', false), null)
 })
 
 test('shop and dowsing screens use the recovered stock grids without invented pages', () => {

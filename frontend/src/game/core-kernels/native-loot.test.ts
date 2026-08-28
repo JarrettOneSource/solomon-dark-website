@@ -367,6 +367,40 @@ test('gold tiers and chunking preserve the exact total', () => {
   assert.ok(result.drops.every((drop) => (drop.amount ?? 0) >= 1 && (drop.amount ?? 0) <= 25))
 })
 
+test('Gold Charm exceeds eight from wave four while all amounts eight and above retain tier-three art', () => {
+  const charmed = nativeLootModifiers([4])
+  const totals = [
+    [2, 4],
+    [3, 4],
+    [4, 6],
+  ].map(([level, seed]) => {
+    const result = rollNativeEnemyLoot(input({
+      arena: {
+        disableMask: 0,
+        itemLevelMaximum: 100,
+        itemLevelMinimum: 0,
+        lastSuccessfulItemLevel: -1,
+        level: level!,
+        mode: 0,
+        specialSuppression: false,
+      },
+      participant: {
+        advancedUnlocks: new Array<boolean>(8).fill(false),
+        level: 12,
+        modifiers: charmed,
+        ownedRecipeIndexes: [],
+        slot: 0,
+      },
+      policies: { ...ALL_DISABLED, gold: 3 },
+      sharedRng: createNativeRng(seed!),
+    }))
+    assert.equal(result.selectedCategory, 'gold')
+    assert.ok(result.drops.every(({ tier }) => tier === 3))
+    return result.drops.reduce((sum, drop) => sum + (drop.amount ?? 0), 0)
+  })
+  assert.deepEqual(totals, [8, 8, 10])
+})
+
 test('explicit Gold replays constructor, dummy, stable-sort, and cumulative-delay draws', () => {
   const itemIds = createNativeLootItemIds(1)
   const result = materializeNativeLootScriptAction(input({

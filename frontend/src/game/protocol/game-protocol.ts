@@ -397,7 +397,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 104
+export const GAME_PROTOCOL_VERSION = 105
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2681,6 +2681,13 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     }
     return { type, selector }
   }
+  if (type === 'remove-hagatha') {
+    onlyKeys(source, 'action', ['type', 'selector'])
+    return {
+      type,
+      selector: integerWithin(source.selector, 'action.selector', 0, 26),
+    }
+  }
   if (type === 'buy-teacher-spell') {
     onlyKeys(source, 'action', ['type', 'skillId'])
     return { type, skillId: integerWithin(source.skillId, 'action.skillId', 72, 79) }
@@ -3120,6 +3127,7 @@ function hubActionFeedback(
     'move-inventory-item',
     'read-librarian-book',
     'read-skill-book',
+    'remove-hagatha',
     'select-boast',
     'transfer',
     'unforge',
@@ -4070,6 +4078,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'deathTick',
     'experience',
     'hagathaRuntime',
+    'inventoryStats',
     'learnedSkills',
     'learnedSkillOrder',
     'level',
@@ -4165,6 +4174,10 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       `${field}.hagathaRuntime.serendipityActive`,
     ),
   }
+  const inventoryStats = playerInventoryStats(
+    source.inventoryStats,
+    `${field}.inventoryStats`,
+  )
   const learnedSkills = limitedArray(
     source.learnedSkills,
     `${field}.learnedSkills`,
@@ -4316,6 +4329,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
     hagathaRuntime,
+    inventoryStats,
     learnedSkills,
     learnedSkillOrder,
     level,
@@ -4352,6 +4366,32 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     splitMind,
     weldBuildId,
     weldComponentRanks: weldComponentRanks as [number, number, number, number, number, number] | null,
+  }
+}
+
+function playerInventoryStats(
+  value: unknown,
+  field: string,
+): ProtocolPlayerProgression['inventoryStats'] {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'castSpeedPercent',
+    'magicResistancePercent',
+    'painResistancePercent',
+    'poisonResistancePercent',
+    'walkSpeedPercent',
+  ])
+  const resistance = (name: 'magicResistancePercent' | 'painResistancePercent' | 'poisonResistancePercent') => {
+    const value = nonnegativeFinite(source[name], `${field}.${name}`)
+    if (value > 100) throw new GameProtocolError(`${field}.${name} is out of range`)
+    return value
+  }
+  return {
+    castSpeedPercent: nonnegativeFinite(source.castSpeedPercent, `${field}.castSpeedPercent`),
+    magicResistancePercent: resistance('magicResistancePercent'),
+    painResistancePercent: resistance('painResistancePercent'),
+    poisonResistancePercent: resistance('poisonResistancePercent'),
+    walkSpeedPercent: nonnegativeFinite(source.walkSpeedPercent, `${field}.walkSpeedPercent`),
   }
 }
 

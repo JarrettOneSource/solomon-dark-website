@@ -1,5 +1,9 @@
 # 2026-08-28 — Luthacus multi-run Scavenged Goods menu reopening
 
+> **Partial supersession, 2026-08-28:** entry 295 restores ordinary completed-run
+> carried-item archival. The storage-grid, transfer, Sack navigation, and
+> multi-run ownership recovered here remain current.
+
 ## Reported smell and parity question
 
 - Reported production behavior: Spookmiser cannot open the Scavenger NPC's
@@ -69,12 +73,10 @@ No native member is blocked by the browser platform.
 - The StoreGrid retains 28 objects, column-major. Luthacus clears the price
   flag, leaves gold unchanged, and uses the exact TAKE-selected and no-price
   HoverBox branches. Empty membership is a valid open surface.
-- Retail game-over archival builds at most one nonempty retained Sack per
-  completed wizard and inserts it into profile storage. The Website separately
-  keeps its already-documented product decision not to archive ordinary
-  carried items on terminal Game Over, while explicit Kill/New Game retirement
-  still scavenges carried equipment/backpack. That divergence does not permit
-  dropping older profile roots or flattening their descendants.
+- Retail and Website game-over archival build at most one nonempty retained
+  Sack per completed wizard and insert it into profile storage. Terminal Game
+  Over and explicit Kill/New Game retirement both scavenge eligible carried
+  equipment/backpack; older profile roots and nested descendants remain intact.
 - Dialogue/UI focus is local to the initiating browser; economy, storage, save
   hydration, and transfer mutation are authoritative and participant-private.
   Close, range loss, Region replacement, and scene teardown destroy the local

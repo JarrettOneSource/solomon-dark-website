@@ -19,6 +19,7 @@ import {
   nativeHagathaDrinkerShouldUseManaPotion,
   nativeHagathaRevelationRank,
   nativeHagathaSeekerSegments,
+  removeNativeHagathaRuntime,
 } from './native-hagatha-effects.ts'
 
 test('pins all 28 native selector rows and recovered constants', () => {
@@ -55,6 +56,28 @@ test('purchase-time one-shots clear only after positive health damage and Cheat 
   assert.equal(cheat.triggered, true)
   assert.equal(cheat.currentHealth, 25)
   assert.equal(cheat.runtime.cheatDeathCharges, 0)
+})
+
+test('requested ownership removal clears only the matching retained Hagatha runtime lane', () => {
+  const active = applyNativeHagathaPurchaseRuntime(createNativeHagathaRuntimeState(), [7, 24, 25])
+  const noCheat = removeNativeHagathaRuntime(active, 7)
+  assert.deepEqual(noCheat, {
+    cheatDeathCharges: 0,
+    reverieActive: true,
+    serendipityActive: true,
+  })
+  const noSerendipity = removeNativeHagathaRuntime(noCheat, 24)
+  assert.deepEqual(noSerendipity, {
+    cheatDeathCharges: 0,
+    reverieActive: true,
+    serendipityActive: false,
+  })
+  assert.deepEqual(removeNativeHagathaRuntime(noSerendipity, 25), {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+  assert.strictEqual(removeNativeHagathaRuntime(active, 4), active)
 })
 
 test('derived charms and curses compose in their exact offensive and defensive lanes', () => {

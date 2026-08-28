@@ -9,7 +9,6 @@ import {
 } from './native-rng.ts'
 import type { PlayerBeltComponent } from './native-belt.ts'
 import {
-  playerPrimaryCastOwnsFacing,
   type PlayerCharacterInput,
   type PlayerCharacterState,
   type WizardElement,
@@ -3860,7 +3859,6 @@ function castAbility(
   if (
     player.staffCastTicksRemaining > 0
     || player.castSpinTicksRemaining > 0
-    || playerPrimaryCastOwnsFacing(authority.character.primaryCast)
     || player.globalCooldownTicks > 0
   ) return none()
   if ((player.cooldownTicksBySkill[skillId] ?? 0) > 0) {

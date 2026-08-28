@@ -113,6 +113,14 @@ export interface ProtocolPlayerSkillOffer {
   sequence: number
 }
 
+export interface ProtocolPlayerInventoryStats {
+  castSpeedPercent: number
+  magicResistancePercent: number
+  painResistancePercent: number
+  poisonResistancePercent: number
+  walkSpeedPercent: number
+}
+
 export interface ProtocolPlayerProgression {
   advancedUnlocks: readonly boolean[]
   coldSlowTicksRemaining: number
@@ -126,6 +134,7 @@ export interface ProtocolPlayerProgression {
   dazzleTicksRemaining: number
   experience: number
   hagathaRuntime: NativeHagathaRuntimeState
+  inventoryStats: ProtocolPlayerInventoryStats
   learnedSkills: readonly (readonly [number, number, number])[]
   learnedSkillOrder: readonly number[]
   level: number

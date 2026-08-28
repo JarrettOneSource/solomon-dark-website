@@ -38,6 +38,8 @@ const screenshotRoot = process.env.SDR_SACKS_DYES_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-sacks-dyes'
 const hasTouch = booleanEnvironment('SDR_SACKS_DYES_HAS_TOUCH', false)
 const returnControlOnly = booleanEnvironment('SDR_SACKS_DYES_RETURN_ONLY', false)
+const reportedParityOnly = booleanEnvironment('SDR_SACKS_DYES_REPORTED_PARITY_ONLY', false)
+assert.equal(returnControlOnly && reportedParityOnly, false)
 const viewport = Object.freeze({
   height: positiveIntegerEnvironment('SDR_SACKS_DYES_VIEWPORT_HEIGHT', 900),
   width: positiveIntegerEnvironment('SDR_SACKS_DYES_VIEWPORT_WIDTH', 1_600),
@@ -117,7 +119,67 @@ try {
   await inventory.waitFor({ timeout: 10_000 })
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
   resumeControlReceipts.push(await inventoryResumeControlReceipt(inventory, ''))
-  if (returnControlOnly) {
+  if (reportedParityOnly) {
+    assert.equal(await inventory.getAttribute('data-native-stats-page'), '0')
+    await inventory.getByRole('button', { name: 'Next player stats page' }).click()
+    await inventory.locator('xpath=self::*[@data-native-stats-page="1"]').waitFor()
+    const attributesScreenshot = `${screenshotRoot}-reported-stats-attributes.png`
+    await page.screenshot({ path: attributesScreenshot })
+
+    await inventory.getByRole('button', { name: 'Next player stats page' }).click()
+    await inventory.locator('xpath=self::*[@data-native-stats-page="2"]').waitFor()
+    const perksScreenshot = `${screenshotRoot}-reported-stats-perks.png`
+    await page.screenshot({ path: perksScreenshot })
+
+    const ownedLifeCharm = inventory.getByRole('button', { name: 'Remove LIFE CHARM' })
+    await ownedLifeCharm.hover()
+    const tooltip = inventory.getByRole('tooltip')
+    await tooltip.waitFor()
+    assert.match(await tooltip.innerText(), /LIFE CHARM/)
+    const beforeRemoval = await savedEconomy(page)
+    assert.ok(beforeRemoval.ownedPerkSelectors.includes(0))
+    await ownedLifeCharm.click()
+    await ownedLifeCharm.waitFor({ state: 'detached' })
+    const afterRemoval = await waitForSavedEconomy(page, (economy) => (
+      !economy.ownedPerkSelectors.includes(0)
+    ))
+    assert.equal(afterRemoval.gold, beforeRemoval.gold)
+    assert.ok(afterRemoval.firstMixedSelectors.includes(0))
+    assert.equal(await inventory.getAttribute('data-native-stats-page'), '2')
+    const removedScreenshot = `${screenshotRoot}-reported-charm-removed.png`
+    await page.screenshot({ path: removedScreenshot })
+
+    await inventory.getByRole('button', { name: 'Previous player stats page' }).click()
+    await inventory.locator('xpath=self::*[@data-native-stats-page="1"]').waitFor()
+    await inventory.getByRole('button', { name: 'Previous player stats page' }).click()
+    await inventory.locator('xpath=self::*[@data-native-stats-page="0"]').waitFor()
+    await inventory.getByRole('button', { name: 'Close inventory' }).click()
+    await inventory.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: /Open inventory/ }).click()
+    await inventory.waitFor()
+    await inventory.locator('xpath=self::*[@data-native-stats-page="0"]').waitFor()
+    await inventory.getByRole('button', { name: 'Close inventory' }).click()
+    await inventory.waitFor({ state: 'detached' })
+
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({
+      charmRemoval: {
+        firstMixedPreserved: true,
+        goldAfter: afterRemoval.gold,
+        goldBefore: beforeRemoval.gold,
+        selector: 0,
+      },
+      consoleErrors,
+      failedResponses,
+      pageErrors,
+      screenshots: [attributesScreenshot, perksScreenshot, removedScreenshot],
+      statsPages: [0, 1, 2, 1, 0, 'closed', 0],
+      status: 'ok',
+      viewport,
+    }, null, 2)}\n`)
+  } else if (returnControlOnly) {
     const item = (id) => inventory.locator(`[data-inventory-item-id="${id}"]`)
     await openSack(page, inventory, item(IDS.destinationSack), IDS.destinationSack)
     await page.screenshot({ path: `${screenshotRoot}-empty-sack.png` })
@@ -675,7 +737,9 @@ function createSeededSave() {
       clickRingTwo,
     ],
     collegeIntroPending: false,
+    firstMixedSelectors: reportedParityOnly ? [0] : economy.firstMixedSelectors,
     nextItemId: 50_000,
+    ownedPerkSelectors: reportedParityOnly ? [0] : economy.ownedPerkSelectors,
     storage: [storageSack, ...archivedStorage],
     tutorialPending: false,
   }

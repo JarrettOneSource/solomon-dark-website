@@ -4691,7 +4691,13 @@ test('host retains the profile and removes only the continuation on Game Over', 
   const profile = restoreGameSaveProfile(checkpoint.save)
   assert.equal(profile.continuation, null)
   assert.equal(profile.economy.gold, 500)
-  assert.deepEqual(profile.economy.storage, [])
+  assert.deepEqual(profile.economy.storage.at(-1)?.contents?.map(({ name }) => name).sort(), [
+    'Hat',
+    'Health Potion',
+    'Mana Potion',
+    'Robe',
+    'Staff',
+  ])
   assert.equal(host.state().run.phase, 'game-over')
 
   let laterProgress = 0

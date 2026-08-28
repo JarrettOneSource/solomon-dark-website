@@ -20,6 +20,7 @@ import {
   addPlayerEntity,
   applyPlayerEntitySkillChoice,
   applyPlayerEntityHagathaPurchaseEffects,
+  applyPlayerEntityHagathaRemovalEffects,
   autofillPlayerEntitySkillSelections,
   coldSlowPlayerEntity,
   createPlayerEntityStore,
@@ -52,6 +53,7 @@ import {
   replacePlayerEconomy,
   replacePlayerCharacter,
   replacePlayerLoadout,
+  selectPlayerEntityConcentration,
   respawnPlayerEntityAt,
   restorePlayerEntityHealth,
   resetPlayerEntitiesForNewRun,
@@ -877,6 +879,66 @@ test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias a
   assert.equal(book.permanentRanks[applied.weirdCasterSkillId!], 2)
   assert.equal(playerProgressionAt(applied.store, 'first')?.disciplineOfferBias, true)
   assert.notEqual(playerProgressionAt(applied.store, 'first')?.offerSeed, 10)
+})
+
+test('Hagatha removal refreshes derived state and clears retained one-shot runtime', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [0, 7, 24, 25],
+  })
+  store = applyPlayerEntityHagathaPurchaseEffects(
+    store,
+    'first',
+    [7, 24, 25],
+    createNativeRng(1),
+  ).store
+  assert.equal(playerProgressionAt(store, 'first')?.maximumHealth, 62.5)
+
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [7, 24, 25],
+  })
+  store = applyPlayerEntityHagathaRemovalEffects(store, 'first', 0)
+  assert.equal(playerProgressionAt(store, 'first')?.maximumHealth, 50)
+
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [],
+  })
+  for (const selector of [7, 24, 25]) {
+    store = applyPlayerEntityHagathaRemovalEffects(store, 'first', selector)
+  }
+  assert.deepEqual(playerProgressionAt(store, 'first')?.hagathaRuntime, {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+
+  let granted = grantPlayerEntitySkillRanks(store, 'first', 57, 1, createNativeRng(2))
+  granted = grantPlayerEntitySkillRanks(granted.store, 'first', 58, 1, granted.rng)
+  store = replacePlayerEconomy(granted.store, 'first', {
+    ...playerEconomyAt(granted.store, 'first')!,
+    ownedPerkSelectors: [21],
+  })
+  store = selectPlayerEntityConcentration(store, 'first', 57)
+  store = selectPlayerEntityConcentration(store, 'first', 58)
+  assert.equal(playerSkillRuntimeAt(store, 'first')?.concentrationSkillIdB, 58)
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [],
+  })
+  store = applyPlayerEntityHagathaRemovalEffects(store, 'first', 21)
+  assert.deepEqual([
+    playerSkillRuntimeAt(store, 'first')?.concentrationSkillIdA,
+    playerSkillRuntimeAt(store, 'first')?.concentrationSkillIdB,
+  ], [57, null])
 })
 
 test('Drinker precedes Cheat Death and both clear until-hurt one-shots on real damage', () => {

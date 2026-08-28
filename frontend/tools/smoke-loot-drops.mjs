@@ -16,6 +16,7 @@ import {
   NATIVE_LOOT_OPEN_PLACEMENT,
   createNativeLootItemIds,
   materializeNativeLootScriptAction,
+  nativeLootModifiers,
   rollNativeEnemyLoot,
 } from '../src/game/core-kernels/native-loot.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
@@ -422,6 +423,7 @@ try {
       initialTicks: powerupInitialTicks,
     },
     proof: spawned.actors.map((actor) => ({
+      amount: actor.amount,
       bonusKind: actor.bonusKind,
       equipmentType: actor.item?.equipmentType ?? null,
       id: actor.id,
@@ -430,6 +432,7 @@ try {
       orbKind: actor.orbKind,
       position: actor.position,
       source: actor.source,
+      tier: actor.tier,
     })),
     screenshots: [
       visualPath,
@@ -684,10 +687,17 @@ function materializeProofDrops(host, center) {
     worldHasHealthPotionSack: false,
   })
 
-  const gold = accept(materializeNativeLootScriptAction(
-    input(positions.gold),
-    { amount: 10, kind: 'drop-gold' },
-  ))
+  const goldInput = input(positions.gold)
+  const gold = accept(rollNativeEnemyLoot({
+    ...goldInput,
+    arena: { ...goldInput.arena, level: 4 },
+    participant: {
+      ...goldInput.participant,
+      modifiers: nativeLootModifiers([4]),
+    },
+    policies: { ...ALL_DISABLED, gold: 3 },
+    sharedRng: createNativeRng(6),
+  }))
   const potion = accept(materializeNativeLootScriptAction(
     input(positions.potion),
     { kind: 'drop-potion', subtype: 0 },
@@ -713,6 +723,8 @@ function materializeProofDrops(host, center) {
     (drop) => drop.bonusKind === 2,
   ))
   assert.equal(gold.drops.length, 1)
+  assert.equal(gold.drops[0]?.amount, 10)
+  assert.equal(gold.drops[0]?.tier, 3)
   assert.equal(potion.drops.length, 1)
   assert.equal(ring.drops.length, 1)
   assert.equal(robe.drops.length, 1)

@@ -243,6 +243,57 @@ export const HUB_PRIMARY_SPELL_PANE = {
   textTint: 0xc8f3f3,
 } as const
 
+export const HUB_INVENTORY_STATS_PAGES = {
+  actionSize: 36,
+  companionClipRect: [103, 89, 320, 320] as const,
+  companionIndicatorX: 391,
+  contentHeight: 960,
+  dragThresholdPixels: 10,
+  indicatorRecord: 13,
+  pageCount: 3,
+  pageHeight: 320,
+  standaloneClipRect: [50, 89, 320, 320] as const,
+  standaloneIndicatorX: 338,
+} as const
+
+export const HUB_INVENTORY_ATTRIBUTES_PAGE = {
+  attributesBodyRect: [86, 475, 227, 109] as const,
+  attributesHeadingRect: [86, 452, 227, 24] as const,
+  attributesHeadingTextBaselineY: 471,
+  attributesRows: [500, 516, 548, 564] as const,
+  labelRight: 207,
+  resistancesBodyRect: [86, 649, 227, 63] as const,
+  resistancesHeadingRect: [86, 626, 227, 24] as const,
+  resistancesHeadingTextBaselineY: 645,
+  resistanceRows: [670, 686, 702] as const,
+  titleCenterX: 199.5,
+  valueLeft: 218,
+} as const
+
+export function hubInventoryStatsPage(value: number): 0 | 1 | 2 {
+  if (!Number.isInteger(value) || value < 0 || value >= HUB_INVENTORY_STATS_PAGES.pageCount) {
+    throw new RangeError('native InventoryScreen stats page must be within [0,2]')
+  }
+  return value as 0 | 1 | 2
+}
+
+export function hubInventoryStatsArrowRect(
+  page: number,
+  direction: 'down' | 'up',
+  companion: boolean,
+): readonly [number, number, number, number] | null {
+  const current = hubInventoryStatsPage(page)
+  if ((direction === 'up' && current === 0) || (direction === 'down' && current === 2)) {
+    return null
+  }
+  const size = HUB_INVENTORY_STATS_PAGES.actionSize
+  const centerX = companion
+    ? HUB_INVENTORY_STATS_PAGES.companionIndicatorX
+    : HUB_INVENTORY_STATS_PAGES.standaloneIndicatorX
+  const centerY = direction === 'up' ? 119 : 379
+  return [centerX - size / 2, centerY - size / 2, size, size]
+}
+
 export const HUB_SHOP_GRID = {
   cellSize: 72,
   columns: 7,

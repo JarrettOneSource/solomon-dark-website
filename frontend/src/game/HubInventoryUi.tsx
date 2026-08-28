@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
+  type WheelEvent as ReactWheelEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -118,6 +119,7 @@ import {
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
+  HUB_INVENTORY_STATS_PAGES,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_TIMING,
   HUB_NPC_SELECTOR,
@@ -135,6 +137,7 @@ import {
   hubHagathaTooltipLines,
   hubInventoryEquipmentSlotRects,
   hubInventoryRootSlot,
+  hubInventoryStatsArrowRect,
   hubItemTooltipLines,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
@@ -500,6 +503,7 @@ export default function HubInventoryUi({
       onNotebox={setNpcNotebox}
       onSurfaceChange={onSurfaceChange}
       onUnassignBeltEntry={onUnassignBeltEntry}
+      perkRemovalEnabled={interactionsEnabled}
       progression={progression}
       sackPath={inventorySackPath}
       sackTransition={inventorySackTransition}
@@ -542,6 +546,7 @@ function NativeHubSurface({
   onOpenSack,
   onSurfaceChange,
   onUnassignBeltEntry,
+  perkRemovalEnabled,
   progression,
   sackPath,
   sackTransition,
@@ -565,6 +570,7 @@ function NativeHubSurface({
   onOpenSack: (sackId: number) => void
   onSurfaceChange: (surface: HubUiSurface) => void
   onUnassignBeltEntry?: (slot: number) => void
+  perkRemovalEnabled: boolean
   progression: ProtocolPlayerProgression
   sackPath: readonly number[]
   sackTransition: HubInventorySackTransitionModel | null
@@ -615,6 +621,7 @@ function NativeHubSurface({
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
+  const [statsPage, setStatsPage] = useState(0)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
   const modalSlides = useSyncExternalStore(
@@ -875,6 +882,7 @@ function NativeHubSurface({
       dragging: inventoryDrag,
       dyeModal,
       economy,
+      inspection: serviceHoverInspection ?? serviceFocusInspection,
       kind: 'inventory',
       notice,
       pressedControl,
@@ -882,6 +890,7 @@ function NativeHubSurface({
       sackPath,
       sackTransition,
       selection: inventorySelection,
+      statsPage,
     }
     if (surface.kind === 'dialogue') return {
       acceleratedAtMs: chat.acceleratedAtMs,
@@ -910,6 +919,7 @@ function NativeHubSurface({
       sackTransition,
       selectedItemId: serviceSelection?.id ?? null,
       selectedOwner: serviceSelection?.owner ?? null,
+      statsPage,
       trader: surface.trader,
     }
   }, [
@@ -929,6 +939,7 @@ function NativeHubSurface({
     serviceFocusInspection,
     serviceHoverInspection,
     serviceSelection,
+    statsPage,
     selectorRows,
     storyOffice,
     surface,
@@ -1070,12 +1081,12 @@ function NativeHubSurface({
       ? `Talking to ${hubInteractionDialogue(surface.interaction, storyOffice).name}`
       : HUB_INTERACTION_DIALOGUES[surface.trader].title
   const activeServiceInspection = serviceHoverInspection ?? serviceFocusInspection
-  const semanticTooltip = surface.kind === 'service' && activeServiceInspection
+  const semanticTooltip = surface.kind !== 'dialogue' && activeServiceInspection
     ? serviceInspectionTooltipText(
         activeServiceInspection,
         economy,
         progression,
-        surface.trader,
+        surface.kind === 'service' ? surface.trader : 'hagatha',
       )
     : null
 
@@ -1109,6 +1120,7 @@ function NativeHubSurface({
           : ''}
         data-native-sack-path={sackPath.join('/')}
         data-native-sack-transition={sackTransition?.direction ?? ''}
+        data-native-stats-page={statsPage}
         data-native-dye-modal={dyeModal
           ? `${dyeModal.targetItemId === null ? 'mix' : 'layer'}:${dyeModal.closingAtMs === null ? 'open' : 'closing'}`
           : ''}
@@ -1317,6 +1329,28 @@ function NativeHubSurface({
               transitionLocked={sackTransition !== null}
             />
           )}
+          {(surface.kind === 'inventory'
+            || (surface.kind === 'service' && surface.trader !== 'hagatha'))
+            && !notice && !dyeModal ? (
+              <InventoryStatsActions
+                companion={surface.kind === 'service'}
+                economy={economy}
+                page={statsPage}
+                onInspectionFocus={setServiceFocusInspection}
+                onInspectionHover={setServiceHoverInspection}
+                onPage={(nextPage) => {
+                  setServiceFocusInspection(null)
+                  setServiceHoverInspection(null)
+                  setStatsPage(nextPage)
+                }}
+                onRemove={perkRemovalEnabled
+                  ? (selector) => {
+                      audio.playSound('click')
+                      onAction({ type: 'remove-hagatha', selector })
+                    }
+                  : null}
+              />
+            ) : null}
           {(surface.kind === 'inventory' || surface.kind === 'service')
             && !notice && !dyeModal ? (
               <InventoryBeltActions
@@ -1521,6 +1555,123 @@ function DialogueActions({
       ))}
       <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onDone} />
     </div>
+  )
+}
+
+interface StatsPointerPress {
+  readonly pointerId: number
+  readonly start: { readonly x: number; readonly y: number }
+}
+
+function InventoryStatsActions({
+  companion,
+  economy,
+  onInspectionFocus,
+  onInspectionHover,
+  onPage,
+  onRemove,
+  page,
+}: {
+  companion: boolean
+  economy: ProtocolPlayerEconomy
+  onInspectionFocus: (inspection: HubServiceInspectionModel | null) => void
+  onInspectionHover: (inspection: HubServiceInspectionModel | null) => void
+  onPage: (page: number) => void
+  onRemove: ((selector: number) => void) | null
+  page: number
+}) {
+  const pressRef = useRef<StatsPointerPress | null>(null)
+  const clipRect = companion
+    ? HUB_INVENTORY_STATS_PAGES.companionClipRect
+    : HUB_INVENTORY_STATS_PAGES.standaloneClipRect
+  const step = (delta: -1 | 1) => {
+    const next = Math.max(0, Math.min(HUB_INVENTORY_STATS_PAGES.pageCount - 1, page + delta))
+    if (next !== page) onPage(next)
+  }
+  const clearPress = (event?: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || (event && event.pointerId !== press.pointerId)) return
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    pressRef.current = null
+  }
+  const finish = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    const point = pointerStagePosition(event)
+    const deltaY = point.y - press.start.y
+    clearPress(event)
+    if (Math.abs(deltaY) <= HUB_INVENTORY_STATS_PAGES.dragThresholdPixels) return
+    step(deltaY < 0 ? 1 : -1)
+  }
+  return (
+    <section aria-label="Player Stats Pages" data-native-stats-page={page}>
+      <NativeAction
+        data={{ 'data-native-stats-swipe': 'true' }}
+        label="Scroll player stats"
+        rect={clipRect}
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.repeat) return
+          if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+            event.preventDefault()
+            step(-1)
+          } else if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+            event.preventDefault()
+            step(1)
+          }
+        }}
+        onLostPointerCapture={() => { pressRef.current = null }}
+        onPointerCancel={clearPress}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          pressRef.current = {
+            pointerId: event.pointerId,
+            start: pointerStagePosition(event),
+          }
+        }}
+        onPointerUp={finish}
+        onWheel={(event) => {
+          if (event.deltaY === 0) return
+          event.preventDefault()
+          step(event.deltaY > 0 ? 1 : -1)
+        }}
+      />
+      {(['up', 'down'] as const).map((direction) => {
+        const rect = hubInventoryStatsArrowRect(page, direction, companion)
+        return rect ? (
+          <NativeAction
+            key={direction}
+            data={{ 'data-native-stats-arrow': direction }}
+            label={`${direction === 'up' ? 'Previous' : 'Next'} player stats page`}
+            rect={rect}
+            onClick={() => step(direction === 'up' ? -1 : 1)}
+          />
+        ) : null
+      })}
+      {page === 2 ? economy.ownedPerkSelectors.slice(0, 9).map((selector, index) => {
+        const [left, top, width, height] = hubOwnedPerkSlotRect(index)
+        const inspection = { index, kind: 'owned-perk' as const, selector }
+        return (
+          <NativeAction
+            key={`${selector}-${index}`}
+            data={{ 'data-owned-hagatha-selector': selector }}
+            label={selector === 27 || onRemove === null
+              ? `Inspect ${HAGATHA_PERKS[selector]!.name}`
+              : `Remove ${HAGATHA_PERKS[selector]!.name}`}
+            rect={[left - (companion ? 0 : 53), top, width, height]}
+            onBlur={() => onInspectionFocus(null)}
+            onClick={selector === 27 || onRemove === null ? undefined : () => onRemove(selector)}
+            onFocus={() => onInspectionFocus(inspection)}
+            onPointerEnter={() => onInspectionHover(inspection)}
+            onPointerLeave={() => onInspectionHover(null)}
+          />
+        )
+      }) : null}
+    </section>
   )
 }
 
@@ -1734,7 +1885,9 @@ function ServiceActions({
             <NativeAction
               key={`${selector}-${index}`}
               data={{ 'data-owned-hagatha-selector': selector }}
-              label={`Inspect ${HAGATHA_PERKS[selector]!.name}`}
+              label={selector === 27
+                ? `Inspect ${HAGATHA_PERKS[selector]!.name}`
+                : `Remove ${HAGATHA_PERKS[selector]!.name}`}
               rect={hubOwnedPerkSlotRect(index)}
               onBlur={() => onFocusInspection(null)}
               onFocus={() => onFocusInspection({
@@ -1748,6 +1901,10 @@ function ServiceActions({
                 selector,
               })}
               onPointerLeave={() => onHoverInspection(null)}
+              onClick={selector === 27 ? undefined : () => {
+                onInteractionSound('shop-activation')
+                onAction({ type: 'remove-hagatha', selector })
+              }}
             />
           ))}
         </section>
@@ -2893,6 +3050,7 @@ function NativeAction({
   onPointerMove,
   onPointerUp,
   onPressedChange,
+  onWheel,
   rect,
   tabIndex,
 }: {
@@ -2913,6 +3071,7 @@ function NativeAction({
   onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPressedChange?: (pressed: boolean) => void
+  onWheel?: (event: ReactWheelEvent<HTMLButtonElement>) => void
   rect: readonly [number, number, number, number]
   tabIndex?: number
 }) {
@@ -2957,6 +3116,7 @@ function NativeAction({
         onPressedChange?.(false)
         onPointerUp?.(event)
       }}
+      onWheel={onWheel}
       {...data}
     >
       <span className="hub-native-ui-semantic">{label}</span>
@@ -3008,8 +3168,7 @@ function serviceInspectionTooltipText(
 ): string | null {
   if (inspection.kind === 'owned-perk') {
     if (
-      trader !== 'hagatha'
-      || economy.ownedPerkSelectors[inspection.index] !== inspection.selector
+      economy.ownedPerkSelectors[inspection.index] !== inspection.selector
     ) return null
     return tooltipSemanticText(hubHagathaTooltipLines({
       cheatDeathCharges: inspection.selector === 7 ? 1 : null,

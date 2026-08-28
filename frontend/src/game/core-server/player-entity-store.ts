@@ -98,6 +98,7 @@ import {
   nativeHagathaDrinkerShouldUseHealthPotion,
   nativeHagathaDrinkerShouldUseManaPotion,
   ownsNativeHagathaSelector,
+  removeNativeHagathaRuntime,
 } from '../core-kernels/native-hagatha-effects.ts'
 import {
   autofillPlayerSkillSelections,
@@ -978,6 +979,34 @@ export function applyPlayerEntityHagathaPurchaseEffects(
     store: offered.store,
     weirdCasterSkillId,
   }
+}
+
+export function applyPlayerEntityHagathaRemovalEffects(
+  source: PlayerEntityStore,
+  playerId: string,
+  selector: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = source.progressions[index]!
+  const hagathaRuntime = removeNativeHagathaRuntime(
+    progression.hagathaRuntime,
+    selector,
+  )
+  const progressions = hagathaRuntime === progression.hagathaRuntime
+    ? source.progressions
+    : source.progressions.map((candidate, candidateIndex) => (
+        candidateIndex === index
+          ? { ...candidate, hagathaRuntime, revision: candidate.revision + 1 }
+          : candidate
+      ))
+  return replacePlayerSkillState(
+    progressions === source.progressions ? source : { ...source, progressions },
+    index,
+    source.skillBooks[index]!,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
 }
 
 export function damagePlayerEntity(

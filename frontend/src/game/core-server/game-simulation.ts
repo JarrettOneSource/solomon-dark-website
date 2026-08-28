@@ -95,6 +95,7 @@ import {
   moveInventoryItem,
   readLibrarianBook,
   readInventorySkillBook,
+  removeHagathaPerk,
   reconcileHubEconomyModPackages,
   selectHubBoast,
   transferInventoryItem,
@@ -241,6 +242,7 @@ import {
   addPlayerEntity,
   applyPlayerEntityDamageX4Bonus,
   applyPlayerEntityHagathaPurchaseEffects,
+  applyPlayerEntityHagathaRemovalEffects,
   applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
   bindPlayerEntityBeltItem,
@@ -1179,7 +1181,7 @@ export function gameSimulationDurableProfileEconomy(
         ))
       : [],
     starterElement: player.config.element,
-    transferCarriedItems: false,
+    transferCarriedItems: completedRun,
   })
 }
 
@@ -1440,6 +1442,7 @@ export function applyGameSimulationHubAction(
       case 'buy-dowsing': return buyDowsingOffer(economy, action.offerId)
       case 'buy-fomentius': return buyFomentiusItem(economy, action.itemId)
       case 'buy-hagatha': return buyHagathaPerk(economy, action.selector)
+      case 'remove-hagatha': return removeHagathaPerk(economy, action.selector)
       case 'buy-teacher-spell': return buyTeacherSpell(
         economy,
         action.skillId,
@@ -1505,14 +1508,25 @@ export function applyGameSimulationHubAction(
   let secondaryAbilities = state.secondaryAbilities
   let world = state.world
   if (result.accepted && action.type === 'buy-hagatha') {
+    const effectSelectors = purchasedHagathaSelectors.filter((selector) => (
+      (selector !== 6 && selector !== 14)
+      || !economy.firstMixedSelectors.includes(selector)
+    ))
     const applied = applyPlayerEntityHagathaPurchaseEffects(
       playerEntities,
       playerId,
-      purchasedHagathaSelectors,
+      effectSelectors,
       gameRng,
     )
     playerEntities = applied.store
     gameRng = applied.rng
+  }
+  if (result.accepted && action.type === 'remove-hagatha') {
+    playerEntities = applyPlayerEntityHagathaRemovalEffects(
+      playerEntities,
+      playerId,
+      action.selector,
+    )
   }
   if (result.accepted && action.type === 'buy-teacher-spell') {
     const unlocked = unlockPlayerEntityAdvancedSkill(playerEntities, playerId, action.skillId)
@@ -4144,6 +4158,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
   switch (action.type) {
     case 'buy-fomentius': return 'fomentius'
     case 'buy-hagatha': return 'hagatha'
+    case 'remove-hagatha': return 'hagatha'
     case 'transfer': return 'luthacus'
     case 'buy-dowsing':
     case 'dowse': return 'shlorio'

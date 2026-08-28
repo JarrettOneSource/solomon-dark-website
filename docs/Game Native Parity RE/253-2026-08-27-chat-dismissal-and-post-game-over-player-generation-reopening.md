@@ -1,5 +1,9 @@
 # 2026-08-27 — Chat dismissal and post-Game-Over player-generation reopening
 
+> **Partial supersession, 2026-08-28:** entry 295 restores ordinary carried
+> equipment/backpack archival into Luthacus storage. Fresh active equipment and
+> spell state still reset exactly as documented here.
+
 ## Reported smells and parity questions
 
 - Chat remains open when `Escape` is pressed while its window is open but the
@@ -119,19 +123,19 @@ identity; they do not authorize any old character-owned component to survive.
 | Earth/Mind | rows `4/40/45`, discipline root `6` | `exact-ported` | same fresh Earth pair/color with Mind offer family |
 | level/XP, learned order/ranks, advanced unlocks, selected primary/concentrations, quickbar, offers, stat/runtime caches | fresh `Skills 0x006594E0`, `Skills_Wizard 0x00674EE0`, finalizer `0x005D0290` | `verified-already-at-parity`, strengthened here | none can survive confirmation; replacement revision is newer than the dead generation |
 | primary cast, locomotion, life/status/potion effects, lighting, mindstar, primary/secondary/world spell actors | Game/player/world teardown owners | `verified-already-at-parity` | idle living character at Hub spawn; no old action/effect or renderer cursor |
-| active backpack/equipment | starter `0x005CFA80` plus Website no-carried-items policy | `verified-already-at-parity`, color handoff corrected here | only Hat, Robe, Staff, Health Potion, and Mana Potion; no dyed or run-looted active item |
+| active backpack/equipment | starter `0x005CFA80`, separate from Luthacus archival | `verified-already-at-parity`, color handoff corrected here | only Hat, Robe, Staff, Health Potion, and Mana Potion; archived dyed or run-looted items remain storage-only |
 | ordinary post-run Hat/Robe primary and white trim | selected-primary branch in `0x005CFA80` | `exact-ported` by this reopening | fresh generation seed and newly confirmed element own both identical starter tints; economy revision advances |
 | post-Tutorial College-green Hat/Robe | `DAT_00B3BCA0` override plus `Game+0x86` one-shot guard | `verified-already-at-parity` | preserve the authored College colors through that first Create; do not apply the ordinary post-run reroll |
 | gold, Luthacus storage, owned Hagatha selectors/runtime, unforge bonuses, Tutorial/College flags, NPC/profile state | durable participant/profile owner | `verified-already-at-parity` | survive without becoming old active inventory or learned spell state |
-| Last Word ground Sack/Gold recovery | selector 12 and archive scan | `verified-already-at-parity` | durable explicit recovery remains; it does not restore carried gear or spells |
+| Last Word ground Sack/Gold recovery | selector 12 and archive scan | `verified-already-at-parity` | durable ground recovery composes with the ordinary carried archive; neither restores old gear or spells to the active wizard |
 | completed Hall/Memorial portrait | death-tick-300 immutable archive before run retirement | `verified-already-at-parity` | keep the dead generation's frozen equipment colors/config/score in its portrait; later active-wizard replacement cannot recolor history |
 | solo, multiplayer per-member confirmation, disconnect during loadout | host run/loadout barrier | `verified-already-at-parity` | replace each accepted participant exactly once; final current member releases Hub |
 | resumable-run slot deletion and profile checkpointing | browser save owner | `out-of-system` for character lifetime | no save-schema/protocol change; character teardown must not be implemented as a save-file patch |
 | voluntary retirement, explicit Kill Wizard, active-run rejoin/respawn | separate lifecycle owners | `out-of-system` | unchanged; they are not completed all-dead Game Over |
 
-No generation member is browser-blocked. The Website's direct Create route,
-stable authenticated identity, and stricter no-carried-items policy remain
-named product differences from retail's front-end/profile lineage.
+No generation member is browser-blocked. The Website's direct Create route and
+stable authenticated identity remain named product differences from retail's
+front-end/profile lineage; carried-item archival now follows retail.
 
 ## System B recovered contract and implementation consequence
 

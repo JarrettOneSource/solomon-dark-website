@@ -56,10 +56,12 @@ const cooldownOnly = process.env.SDR_SECONDARY_COOLDOWN_ONLY === '1'
 const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
 const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === '1'
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
+const primaryOverlap = process.env.SDR_SECONDARY_PRIMARY_OVERLAP === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (comparisonCapture) assert.equal(retainNativeViewport, true)
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
 if (expectBlocked) assert.equal(requestedScene, 'hub')
+if (primaryOverlap) assert.equal(requestedScene, 'boneyard')
 
 const PROOFS = Object.freeze({
   11: { audio: 'leviathan-roar', flash: true, kinds: ['leviathan', 'leviathan-appendage'] },
@@ -379,7 +381,17 @@ try {
       }, null, 2)}\n`)
       throw error
     }
-    await castSecondaryPointer(page, target)
+    const primaryOverlapReceipt = primaryOverlap
+      ? await castSecondaryDuringHeldPrimary(
+          page,
+          target,
+          host,
+          playerId,
+          contract.skillId,
+          castSequence,
+        )
+      : null
+    if (!primaryOverlap) await castSecondaryPointer(page, target)
 
     try {
       await waitUntil(() => {
@@ -782,6 +794,7 @@ try {
         cooldown: cooldownQuickbar,
         ready: readyQuickbar,
       },
+      primaryOverlap: primaryOverlapReceipt,
       reportedPresentation,
       screenshotPath,
       teleport,
@@ -1987,6 +2000,50 @@ async function castSecondaryPointer(page, target) {
       clientY: y,
     }))
   }, target)
+}
+
+async function castSecondaryDuringHeldPrimary(
+  page,
+  target,
+  host,
+  playerId,
+  skillId,
+  priorSecondarySequence,
+) {
+  const before = structuredClone(getPlayerCharacter(host.state(), playerId).primaryCast)
+  await pressPrimaryPointer(page, target)
+  try {
+    await waitUntil(() => {
+      const cast = getPlayerCharacter(host.state(), playerId).primaryCast
+      return cast.castSequence > before.castSequence
+        && cast.held
+        && cast.oneShotAttackPoseHeld
+    }, 'primary cast did not enter its held one-shot action before secondary input')
+    const primaryAtRequest = structuredClone(
+      getPlayerCharacter(host.state(), playerId).primaryCast,
+    )
+    await castSecondaryPointer(page, target)
+    await waitUntil(() => {
+      const player = host.state().secondaryAbilities.players[playerId]
+      return (player?.castSequence ?? 0) > priorSecondarySequence
+        && player?.lastSkillId === skillId
+    }, 'secondary input was not admitted while primary remained held')
+    const primaryAtCommit = structuredClone(
+      getPlayerCharacter(host.state(), playerId).primaryCast,
+    )
+    assert.equal(primaryAtRequest.held, true)
+    assert.equal(primaryAtRequest.oneShotAttackPoseHeld, true)
+    return {
+      primaryCastSequenceAtCommit: primaryAtCommit.castSequence,
+      primaryCastSequenceAtRequest: primaryAtRequest.castSequence,
+      primaryHeldAtCommit: primaryAtCommit.held,
+      primaryHeldAtRequest: primaryAtRequest.held,
+      primaryOneShotPoseAtRequest: primaryAtRequest.oneShotAttackPoseHeld,
+      secondarySkillId: skillId,
+    }
+  } finally {
+    await releasePrimaryPointer(page)
+  }
 }
 
 async function castPrimaryPointer(page, target) {

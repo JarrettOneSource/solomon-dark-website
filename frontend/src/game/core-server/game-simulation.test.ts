@@ -10,7 +10,10 @@ import {
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
-import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
+import {
+  NATIVE_SECONDARY_ABILITY_IDS,
+  type NativeSecondaryAbilityId,
+} from '../core-kernels/native-secondary-ability-contract.ts'
 import {
   NATIVE_DAMAGE_X4_BONUS_TICKS,
   NATIVE_WELD_BUILDS,
@@ -843,6 +846,35 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
   )
 })
 
+test('a secondary edge is admitted while primary remains held, then the native action hands control back', () => {
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Overlapping Caster',
+    element: 'ether',
+  } }), combatBoneyard('overlapping-primary-secondary'))
+  const player = getPlayerCharacter(state, 'caster')
+  const held = {
+    aim: { x: player.position.x + 100, y: player.position.y },
+    cast: { primary: true, quickbar: 0 },
+    movement: { x: 0, y: 0 },
+    viewportHeight: 900,
+    viewportWidth: 1_600,
+  }
+  state = stepGameSimulationTick(state, { caster: held })
+  assert.equal(state.secondaryAbilities.players.caster?.castSequence, 1)
+  assert.ok((state.secondaryAbilities.players.caster?.staffCastTicksRemaining ?? 0) > 0)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.castSequence, 0)
+
+  for (let tick = 0; tick < 80
+    && getPlayerCharacter(state, 'caster').primaryCast.castSequence === 0; tick += 1) {
+    state = stepGameSimulationTick(state, {
+      caster: { ...held, cast: { primary: true, quickbar: null } },
+    })
+  }
+  assert.equal(state.secondaryAbilities.players.caster?.staffCastTicksRemaining, 0)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.castSequence, 1)
+})
+
 test('Hub shortcut services are participant-private, global inside a settled Hub, and blocked in transition', () => {
   const first = {
     discipline: 'arcane',
@@ -961,6 +993,7 @@ test('every stateful NPC and trader keeps authenticated player state isolated in
   }
 
   applyFirst({ selector: 0, type: 'buy-hagatha' })
+  applyFirst({ selector: 0, type: 'remove-hagatha' })
   applyFirst({
     itemId: getPlayerEconomy(state, 'first').fomentiusStock[0]!.id,
     type: 'buy-fomentius',
@@ -978,7 +1011,8 @@ test('every stateful NPC and trader keeps authenticated player state isolated in
   applyFirst({ type: 'dowse' })
 
   const mutatedFirst = getPlayerEconomy(state, 'first')
-  assert.ok(mutatedFirst.ownedPerkSelectors.includes(0))
+  assert.equal(mutatedFirst.ownedPerkSelectors.includes(0), false)
+  assert.equal(mutatedFirst.firstMixedSelectors.includes(0), true)
   assert.ok(mutatedFirst.storage.some(({ id }) => id === storedItemId))
   assert.equal(mutatedFirst.npc.boast.selected, 0)
   assert.equal(mutatedFirst.npc.librarianLaceRead, true)
@@ -1134,6 +1168,59 @@ test('Hagatha purchase actions arm and consume their authoritative until-hurt ef
     playerEntities: damagePlayerEntity(purchased.state.playerEntities, 'owner', 1, 1),
   }
   assert.equal(playerSkillDerivedStatsAt(hurt.playerEntities, 'owner')?.offensiveDamageFactor, 1)
+})
+
+test('requested Hagatha removal deactivates runtime and reactivation does not repeat Weird Caster grants', () => {
+  let state = createGameSimulation({
+    owner: {
+      discipline: 'arcane',
+      displayName: 'Hagatha Removal',
+      element: 'ether',
+    },
+  })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      replacePlayerEconomy(state.playerEntities, 'owner', { ...economy, gold: 20_000 }),
+      'owner',
+      { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
+    ),
+  }
+  state = applyGameSimulationHubAction(state, 'owner', {
+    type: 'buy-hagatha',
+    selector: 24,
+  }).state
+  assert.equal(playerSkillDerivedStatsAt(state.playerEntities, 'owner')?.offensiveDamageFactor, 3)
+  const goldBeforeRemoval = getPlayerEconomy(state, 'owner').gold
+  state = applyGameSimulationHubAction(state, 'owner', {
+    type: 'remove-hagatha',
+    selector: 24,
+  }).state
+  assert.equal(getPlayerEconomy(state, 'owner').gold, goldBeforeRemoval)
+  assert.equal(playerSkillDerivedStatsAt(state.playerEntities, 'owner')?.offensiveDamageFactor, 1)
+  assert.equal(getPlayerProgression(state, 'owner').hagathaRuntime.serendipityActive, false)
+
+  state = applyGameSimulationHubAction(state, 'owner', {
+    type: 'buy-hagatha',
+    selector: 14,
+  }).state
+  const secondaryCount = getPlayerSkillBook(state, 'owner').permanentRanks.filter(
+    (rank, skillId) => rank > 0
+      && NATIVE_SECONDARY_ABILITY_IDS.includes(skillId as NativeSecondaryAbilityId),
+  ).length
+  state = applyGameSimulationHubAction(state, 'owner', {
+    type: 'remove-hagatha',
+    selector: 14,
+  }).state
+  state = applyGameSimulationHubAction(state, 'owner', {
+    type: 'buy-hagatha',
+    selector: 14,
+  }).state
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks.filter(
+    (rank, skillId) => rank > 0
+      && NATIVE_SECONDARY_ABILITY_IDS.includes(skillId as NativeSecondaryAbilityId),
+  ).length, secondaryCount)
 })
 
 test('unforge is participant-owned and applies full rejuvenation plus Mind Dredge authoritatively', () => {
@@ -3739,8 +3826,13 @@ test('Last Word adds ground Gold and Sack contents to the durable terminal profi
   assert.equal(profile.gold, economy.gold + 9)
   assert.equal(profile.storage[0]?.name, 'Previously Stored Mana Potion')
   assert.equal(profile.storage.at(-1)?.kind, 'sack')
-  assert.deepEqual(profile.storage.at(-1)?.contents?.map(item => item.name), [
+  assert.deepEqual(profile.storage.at(-1)?.contents?.map(item => item.name).sort(), [
+    'Hat',
     'Health Potion',
+    'Health Potion',
+    'Mana Potion',
+    'Robe',
+    'Staff',
   ])
 
   const withoutLastWord = gameSimulationDurableProfileEconomy({
@@ -3751,7 +3843,14 @@ test('Last Word adds ground Gold and Sack contents to the durable terminal profi
     }),
   }, 'owner')
   assert.equal(withoutLastWord.gold, economy.gold)
-  assert.deepEqual(withoutLastWord.storage, [preexistingStorageItem])
+  assert.equal(withoutLastWord.storage[0], preexistingStorageItem)
+  assert.deepEqual(withoutLastWord.storage.at(-1)?.contents?.map(item => item.name).sort(), [
+    'Hat',
+    'Health Potion',
+    'Mana Potion',
+    'Robe',
+    'Staff',
+  ])
 })
 
 test('one dead player spectates until all-dead Game Over returns the session through loadout', () => {
@@ -3946,7 +4045,13 @@ test('one dead player spectates until all-dead Game Over returns the session thr
       'health-potion',
       'mana-potion',
     ])
-    assert.deepEqual(economy.storage, [])
+    assert.deepEqual(economy.storage.at(-1)?.contents?.map(({ name }) => name).sort(), [
+      'Hat',
+      'Health Potion',
+      'Mana Potion',
+      'Robe',
+      'Staff',
+    ])
   }
   const loadoutEconomyRevisions = Object.fromEntries(['first', 'second'].map(playerId => [
     playerId,

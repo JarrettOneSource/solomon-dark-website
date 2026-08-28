@@ -1,5 +1,10 @@
 # 2026-08-26 — Post-Game-Over player-generation and carried-state reset correction
 
+> **Partial supersession, 2026-08-28:** entry 295 restores retail ordinary
+> carried-item archival at completed Game Over. This entry remains authoritative
+> for fresh active-player generation; its former Website-only no-archive policy
+> and the historical zero-storage receipts below are no longer current.
+
 ## Reported smell and parity question
 
 - Reported web behavior: after Game Over and Hub return, a wizard can retain items
@@ -33,16 +38,16 @@ construction of the next participant generation.
 | Tutorial Acid Rain, granted choices, level/XP, pending offers, and quickbar | fresh `Skills`/`Skills_Wizard` constructors and `0x005D0290` | `exact-ported` | none cross College/Create confirmation into the new wizard |
 | normal Boneyard learned ranks/order, level/XP, pending/deferred offers, selected primary/concentrations, advanced unlocks, and quickbar | same new generation | `exact-ported` | rebuild from the newly confirmed element/discipline at native fresh defaults |
 | active equipment/backpack after Game Over | `0x005CFA80` | `verified-already-at-parity` | fresh Hat/Robe/Staff and two starter potions only |
-| ordinary carried-item Luthacus Sack | `0x005C9670 -> 0x005BE320` ordinary-transfer branch | `out-of-system` by explicit Website product direction | do not retain the completed run's carried equipment/backpack in web storage |
-| Last Word ground Sack/Gold sweep | progression `+0x7D8`, Arena actor scan | `verified-already-at-parity` | retain this explicit purchased recovery perk; it does not preserve carried inventory |
+| ordinary carried-item Luthacus Sack | `0x005C9670 -> 0x005BE320` ordinary-transfer branch | `exact-ported` by entry 295 | retain one nonempty named Sack containing the completed wizard's eligible equipment and backpack roots |
+| Last Word ground Sack/Gold sweep | progression `+0x7D8`, Arena actor scan | `verified-already-at-parity` | compose eligible ground recovery with the ordinary carried archive |
 | pre-existing Luthacus storage, Gold, Hagatha perks/runtime, Unforge bonuses, tutorial/College flags | durable profile owner | `verified-already-at-parity` | survive the generation reset without becoming active run loadout |
 | retained element/discipline focus and wizard display name | Create owner fields and participant config | `exact-ported` | preselect the prior pair/name; confirmation may choose a different pair |
 | solo, multiplayer all-ready barrier, disconnect during loadout | participant-owned host lifecycle | `exact-ported` | reset each confirmed participant once; final confirmation alone merges the party into Hub |
-| Game Over profile checkpoint and later restore | profile-only save owner | `exact-ported` | no completed-run carried items or skill continuation can reappear after reload |
+| Game Over profile checkpoint and later restore | profile-only save owner | `exact-ported` | archived carried items remain storage-only after reload; no skill continuation or old active loadout can reappear |
 | voluntary run retirement, explicit Kill Wizard, active-run rejoin | separate lifecycle owners | `out-of-system` | unchanged; this correction is terminal Game Over only |
 
-There are no browser-platform blocks. The one deliberate stock difference is
-the user-directed removal of retail's ordinary carried-item Luthacus archive.
+There are no browser-platform blocks or remaining carried-archive difference
+from retail. Entry 295 supersedes the former Website-only exception.
 
 ## Corrected ownership and implementation consequence
 
@@ -58,12 +63,12 @@ death is not this boundary: a dying or spectating multiplayer participant keeps
 the same progression, skills, active inventory, and equipment while another
 eligible participant keeps the run alive.
 
-Completed-run economy archival must set ordinary carried transfer false. It
-still creates the fresh active starter inventory, preserves existing durable
-storage/profile fields, and includes only Last Word's independently eligible
-ground items/Gold. Tutorial baseline restoration likewise advances from the
-live Tutorial economy revision so entity replication cannot reuse an older
-inventory baseline.
+Completed-run economy archival sets ordinary carried transfer only for the
+completed Boneyard boundary. It creates a separate fresh active starter
+inventory, preserves existing durable storage/profile fields, and composes
+Last Word's independently eligible ground items/Gold. Tutorial baseline
+restoration likewise advances from the live Tutorial economy revision so
+entity replication cannot reuse an older inventory baseline.
 
 No protocol or save-schema shape changes: the current protocol and save schema
 15 already carry the required components. Regression coverage must exercise
@@ -73,16 +78,16 @@ complete College/Create, open Inventory and Skill Book in Hub, and show no
 Tutorial amulet/Acid Rain or learned run rank while retaining only fresh
 starter inventory and the selected starting skills.
 
-## Implementation validation receipt
+## Historical implementation validation receipt (archival policy superseded)
 
 - `player-entity-store.ts` now replaces the accepted post-Game-Over participant
   with a fresh selected skill/stat/progression/runtime generation and a new
   host RNG offer seed while preserving durable Hagatha runtime. The previous
   progression revision is advanced, not reset or reconstructed by a client.
-- `game-simulation.ts` disables ordinary carried-item transfer only for
-  terminal Game Over, retains Last Word ground recovery and pre-existing
-  storage/profile state, and gives completed Tutorial economy restoration a
-  revision strictly newer than both the baseline and disposable live economy.
+- At the historical `37f63f1b` candidate, `game-simulation.ts` disabled
+  ordinary carried-item transfer at terminal Game Over. Entry 295 supersedes
+  that policy and restores the transfer while retaining Last Word composition,
+  pre-existing storage/profile state, and the newer Tutorial economy revision.
   Explicit Kill Wizard retirement keeps its separate archival policy.
 - Focused macOS type and authority coverage passed `149/149` across the player
   store, Tutorial integration, complete simulation, save checkpoint, and host

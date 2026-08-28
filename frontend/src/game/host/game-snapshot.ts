@@ -378,6 +378,13 @@ function protocolPlayerState(
       deathTick: progression.deathTick,
       experience: progression.experience,
       hagathaRuntime: { ...progression.hagathaRuntime },
+      inventoryStats: {
+        castSpeedPercent: Math.fround(derived.castProgressFactor * 100),
+        magicResistancePercent: Math.fround(derived.magicResistance * 100),
+        painResistancePercent: Math.fround(derived.damageResistance * 100),
+        poisonResistancePercent: Math.fround(derived.poisonResistance * 100),
+        walkSpeedPercent: Math.fround(derived.movementFactor * 100),
+      },
       learnedSkills,
       learnedSkillOrder: [...skillBook.learnedSkillOrder],
       level: progression.level,

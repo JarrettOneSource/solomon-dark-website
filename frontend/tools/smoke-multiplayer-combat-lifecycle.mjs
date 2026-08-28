@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
@@ -77,6 +79,7 @@ const levelUpWaitingScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer
 const pointerTrackingScreenshotPath = `${screenshotRoot}/solomon-dark-player-report-pointer-tracking.png`
 const loadoutScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-loadout.png`
 const returnedHubScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-returned-hub.png`
+const luthacusBottlesScreenshotPath = `${screenshotRoot}/solomon-dark-luthacus-carried-bottles.png`
 const browserOptions = {
   args: [
     '--autoplay-policy=no-user-gesture-required',
@@ -84,23 +87,36 @@ const browserOptions = {
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
   ],
-  executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
+  executablePath: process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    : '/usr/bin/google-chrome'),
   headless: true,
 }
 const viewport = { width: 800, height: 450 }
-const vite = await createViteServer({
-  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
-  logLevel: 'error',
-  root: frontendRoot,
-  server: { host: '127.0.0.1', port: 0 },
-})
-await vite.listen()
-const viteAddress = vite.httpServer?.address()
-if (!viteAddress || typeof viteAddress === 'string') {
-  await vite.close()
-  throw new Error('Vite did not expose its local smoke-test port')
+const productionBuild = process.env.SDR_GAME_MULTIPLAYER_COMBAT_PRODUCTION === '1'
+let vite = null
+let staticServer = null
+let baseUrl
+if (productionBuild) {
+  staticServer = await startStaticClientServer({
+    root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+  })
+  baseUrl = staticServer.origin
+} else {
+  vite = await createViteServer({
+    configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+    logLevel: 'error',
+    root: frontendRoot,
+    server: { host: '127.0.0.1', port: 0 },
+  })
+  await vite.listen()
+  const viteAddress = vite.httpServer?.address()
+  if (!viteAddress || typeof viteAddress === 'string') {
+    await vite.close()
+    throw new Error('Vite did not expose its local smoke-test port')
+  }
+  baseUrl = `http://127.0.0.1:${viteAddress.port}`
 }
-const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
@@ -408,9 +424,13 @@ try {
     learnedSkillIds: [0, 1, 2, 3, 4, 5, 6, 7, 32, 35],
     level: 1,
     primarySkillId: 32,
-    quickbar: [35, null, null, null, null, null, null, null],
+    belt: [
+      { kind: 'skill', skillId: 35 }, null, null,
+      { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ],
     secondarySkillId: 35,
-    storageCount: 0,
+    storageContents: [['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff']],
+    storageCount: 1,
   })
   assert.deepEqual(returnedResets.guest, {
     backpack: ['Health Potion', 'Mana Potion'],
@@ -421,10 +441,16 @@ try {
     learnedSkillIds: [0, 1, 2, 3, 4, 5, 6, 7, 40, 45],
     level: 1,
     primarySkillId: 40,
-    quickbar: [45, null, null, null, null, null, null, null],
+    belt: [
+      { kind: 'skill', skillId: 45 }, null, null,
+      { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
+    ],
     secondarySkillId: 45,
-    storageCount: 0,
+    storageContents: [['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff']],
+    storageCount: 1,
   })
+
+  const luthacusArchive = await proveLuthacusCompletedRunBottles(hostPage)
 
   assert.deepEqual(errors, {
     guest: { console: [], page: [] },
@@ -458,6 +484,7 @@ try {
     levelUpScreenshotPath,
     levelUpWaitingScreenshotPath,
     loadoutScreenshotPath,
+    luthacusArchive,
     participants: {
       guestPlayerId: guestHub.localPlayerId,
       hostPlayerId: hostHub.localPlayerId,
@@ -497,7 +524,8 @@ try {
   ])
   await Promise.all([
     host.close(),
-    vite.close(),
+    vite?.close(),
+    staticServer?.close(),
   ])
   await browser.close()
 }
@@ -536,6 +564,56 @@ function postGameOverResetReceipt(state, playerId) {
       ? getPlayerBelt(state, playerId)[0].skillId
       : null,
     storageCount: economy.storage.length,
+    storageContents: economy.storage.map(({ contents }) => (
+      (contents ?? []).map(item => item.name).sort()
+    )),
+  }
+}
+
+async function proveLuthacusCompletedRunBottles(page) {
+  await page.locator('[data-hub-shortcut="luthacus"]').click()
+  const storage = page.getByRole('dialog', { name: "LUTHACUS' SCAVENGED GOODS" })
+  await storage.waitFor({ timeout: 10_000 })
+  await storage.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const backpack = storage.getByLabel('Backpack')
+  await backpack.getByRole('button', { exact: true, name: 'Health Potion, quantity 1' }).waitFor()
+  await backpack.getByRole('button', { exact: true, name: 'Mana Potion, quantity 1' }).waitFor()
+
+  const archivedRoot = storage.getByLabel('Scavenged Goods')
+    .locator('[data-inventory-owner="storage"]')
+  assert.equal(await archivedRoot.count(), 1)
+  const archivedRootId = await archivedRoot.getAttribute('data-inventory-item-id')
+  assert.ok(archivedRootId)
+  const archivedRootLabel = await archivedRoot.getAttribute('aria-label')
+  assert.match(archivedRootLabel ?? '', /, quantity 1$/)
+
+  await archivedRoot.dblclick()
+  await archivedRoot.waitFor({ state: 'detached' })
+  const backpackArchive = backpack.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${archivedRootId}"]`,
+  )
+  await backpackArchive.waitFor()
+  await backpackArchive.dblclick()
+  await storage.locator(`xpath=self::*[@data-native-sack-path="${archivedRootId}"]`).waitFor()
+  await storage.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor()
+
+  const archivedNames = await backpack.locator('[data-inventory-owner="backpack"]')
+    .evaluateAll((nodes) => nodes.map(node => (
+      node.getAttribute('aria-label')?.replace(/, quantity \d+$/, '') ?? ''
+    )).sort())
+  assert.deepEqual(archivedNames, ['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff'])
+  await page.screenshot({ path: luthacusBottlesScreenshotPath })
+  await page.keyboard.press('Escape')
+  await storage.locator('xpath=self::*[@data-native-sack-path=""]').waitFor()
+  await storage.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor()
+  await page.keyboard.press('Escape')
+  await storage.waitFor({ state: 'detached' })
+  return {
+    archivedNames,
+    archivedRootId: Number(archivedRootId),
+    archivedRootLabel,
+    freshBackpackBottles: ['Health Potion', 'Mana Potion'],
+    screenshotPath: luthacusBottlesScreenshotPath,
   }
 }
 

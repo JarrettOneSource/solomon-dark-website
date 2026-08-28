@@ -492,6 +492,44 @@ test('every one of the closed 23 right-click abilities enters its native runtime
   }
 })
 
+test('all 23 category-2 rows admit their edge while one-shot or sustained primary state is active', () => {
+  for (const channelActive of [false, true]) {
+    for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+      const source = context(skillId, 1, 0)
+      const character = source.players.player!.character
+      const result = stepNativeSecondaryAbilities(
+        createNativeSecondarySimulation(123),
+        {
+          ...source,
+          players: {
+            player: {
+              ...source.players.player!,
+              character: {
+                ...character,
+                primaryCast: {
+                  ...character.primaryCast,
+                  actionTick: 5,
+                  channelActive,
+                  held: true,
+                },
+              },
+              input: {
+                ...source.players.player!.input,
+                cast: { primary: true, quickbar: 0 },
+              },
+            },
+          },
+        },
+      )
+      assert.equal(
+        result.state.players.player?.castSequence,
+        1,
+        `skill ${skillId} channel=${channelActive}`,
+      )
+    }
+  }
+})
+
 test('every Cast 2 owner writes one player phase pulse and actionless siblings write none', () => {
   for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
     const accepted = cast(skillId)

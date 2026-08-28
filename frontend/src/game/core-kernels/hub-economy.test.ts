@@ -60,6 +60,7 @@ import {
   reconcileInventorySackPath,
   reconcileHubEconomyModPackages,
   reforgeModEquipment,
+  removeHagathaPerk,
   transferInventoryItem,
   unforgeInventoryItem,
   unequipInventorySlot,
@@ -486,6 +487,23 @@ test('Hagatha exposes all authored rows, hides selector 8, and preserves price h
 
   const remixed: HubEconomyState = { ...first.state, ownedPerkSelectors: [] }
   assert.equal(hagathaOffers(remixed).find(({ selector }) => selector === 0)?.price, 200)
+})
+
+test('requested Hagatha removal drops one ordinary outcome without refunding or resetting mix history', () => {
+  const initial = { ...createHubEconomy(1), gold: 10_000 }
+  const bought = buyHagathaPerk(initial, 4)
+  assert.equal(bought.accepted, true)
+  const removed = removeHagathaPerk(bought.state, 4)
+  assert.equal(removed.accepted, true)
+  assert.equal(removed.state.gold, bought.state.gold)
+  assert.deepEqual(removed.state.ownedPerkSelectors, [])
+  assert.deepEqual(removed.state.firstMixedSelectors, [4])
+  assert.equal(hagathaOffers(removed.state).find(({ selector }) => selector === 4)?.price, 500)
+  assert.equal(removeHagathaPerk(removed.state, 4).reason, 'invalid-offer')
+
+  const tonic = buyHagathaPerk(initial, 27)
+  assert.equal(removeHagathaPerk(tonic.state, 27).reason, 'invalid-offer')
+  assert.equal(removeHagathaPerk(tonic.state, -1).reason, 'invalid-offer')
 })
 
 test('Hagatha bundle price is ceiling-half and Tonic raises capacity only twice', () => {
