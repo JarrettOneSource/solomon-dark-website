@@ -35,6 +35,10 @@ test('the stock right-click atlas membership is complete and every row is regist
     ])
     assert.equal(membership.BadGuys.includes(343), true)
     assert.equal(membership.BadGuys.includes(400), true)
+    assert.deepEqual(
+      membership.BadGuys.filter((entry) => entry >= 401 && entry <= 433),
+      Array.from({ length: 33 }, (_, index) => 401 + index),
+    )
     assert.equal(membership.BadGuys.includes(2008), true)
     assert.deepEqual(membership.Clothes, [2])
     for (const entry of [15, 40, 45, 55, 88]) {

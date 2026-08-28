@@ -16,7 +16,6 @@ import {
   textureBitGl,
   type Renderer,
 } from 'pixi.js'
-import { nativeStockTextureFromImage } from './native-fixed-function-render-pipeline.ts'
 
 export const NATIVE_ARENA_SATURATION = 0.65
 
@@ -356,13 +355,6 @@ export function createNativeArenaUnpremultipliedParticleShader(): Shader {
       },
     },
   })
-}
-
-export function nativeArenaTextureFromImage(
-  image: HTMLImageElement,
-  addressMode: 'clamp-to-edge' | 'repeat' = 'clamp-to-edge',
-): Texture {
-  return nativeStockTextureFromImage(image, addressMode)
 }
 
 export function nativeArenaSaturateSample(

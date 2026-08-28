@@ -9,10 +9,27 @@ import {
 } from '../src/game/core-kernels/hub-regions.ts'
 import { HUB_SPAWN } from '../src/game/core-kernels/hub-math.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4187'
 const screenshotRoot = process.env.SDR_GAME_HUB_ROOM_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-room'
-const runtime = await provisionProductionRuntime()
+const localCredential = 'hub-room-browser-parity'
+const localHost = new URL(baseUrl).protocol === 'https:'
+  ? null
+  : await startGameHost({
+      allowedOrigins: [new URL(baseUrl).origin],
+      authentication: { credential: localCredential, kind: 'shared' },
+      snapshotRate: 100,
+    })
+const runtime = localHost
+  ? {
+      gameEndpoint: {
+        credential: localCredential,
+        kind: 'localhost',
+        url: localHost.address.url,
+      },
+    }
+  : await provisionProductionRuntime()
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -66,6 +83,17 @@ try {
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   const initialCanvas = await canvas.elementHandle()
   assert.ok(initialCanvas, 'expected the mounted Hub canvas')
+  // Stand between Teacher Y 710.5 and the independently queued release Y
+  // 725.5 so one frame proves the pre/world/post painter split by occlusion.
+  const teacherOcclusionTarget = { x: 520, y: 718 }
+  await navigateCourtyard(page, canvas, teacherOcclusionTarget)
+  assert.equal(
+    await moveTo(page, canvas, teacherOcclusionTarget, 6),
+    true,
+    JSON.stringify(await playerPosition(canvas)),
+  )
+  const teacherScreenshotPath = `${screenshotRoot}-teacher-release.png`
+  const teacher = await captureTeacherRelease(page, canvas, teacherScreenshotPath)
   const receipts = []
 
   for (const room of roomRuns) {
@@ -128,9 +156,13 @@ try {
     pageErrors,
     receipts,
     status: 'ok',
+    teacher,
   })}\n`)
 } finally {
-  await browser.close()
+  await Promise.all([
+    browser.close(),
+    localHost?.close(),
+  ])
 }
 
 async function provisionProductionRuntime() {
@@ -184,6 +216,26 @@ async function playerPosition(canvas) {
     x: node.__sdrHubFrame.playerX,
     y: node.__sdrHubFrame.playerY,
   }))
+}
+
+async function captureTeacherRelease(page, canvas, screenshotPath) {
+  await page.waitForFunction(() => {
+    const burst = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.teacherBurst
+    return burst?.visible === true && burst.coreAlpha > 0
+  }, undefined, { timeout: 15_000 })
+  const diagnostic = await canvas.evaluate((node) => (
+    structuredClone(node.__sdrHubFrame.teacherBurst)
+  ))
+  assert.ok(diagnostic.ageTicks >= 0 && diagnostic.ageTicks < 10)
+  assert.ok(diagnostic.columnAlpha > 0)
+  assert.ok(diagnostic.coreAlpha > 0)
+  assert.ok(diagnostic.flareAlpha > 0)
+  assert.ok(diagnostic.frame >= 0 && diagnostic.frame <= 10)
+  assert.ok(diagnostic.frameAlpha > 0)
+  const player = await playerPosition(canvas)
+  assert.ok(player.y > 710.5 && player.y < 725.5, JSON.stringify(player))
+  await page.screenshot({ path: screenshotPath })
+  return { diagnostic, player, screenshotPath }
 }
 
 async function verifyOfficeInnerContour(page, canvas) {
@@ -417,7 +469,7 @@ async function sidestep(page, canvas, target, attempt) {
   await page.waitForTimeout(300)
 }
 
-async function moveTo(page, canvas, target) {
+async function moveTo(page, canvas, target, arrivalTolerance = 60) {
   const pressed = new Set()
   const deadline = Date.now() + 6_000
   let last = await playerPosition(canvas)
@@ -428,10 +480,10 @@ async function moveTo(page, canvas, target) {
     while (Date.now() < deadline) {
       const current = await playerPosition(canvas)
       const remaining = distance(current, target)
-      if (remaining <= 45) {
+      if (remaining <= Math.min(45, arrivalTolerance)) {
         await syncKeys(page, pressed, [])
         await page.waitForTimeout(350)
-        if (distance(await playerPosition(canvas), target) <= 60) return true
+        if (distance(await playerPosition(canvas), target) <= arrivalTolerance) return true
       }
       if (remaining < bestRemaining - 2) {
         bestRemaining = remaining
@@ -444,12 +496,15 @@ async function moveTo(page, canvas, target) {
         return false
       }
       const keys = []
-      if (target.x - current.x > 6) keys.push('d')
-      if (target.x - current.x < -6) keys.push('a')
-      if (target.y - current.y > 6) keys.push('s')
-      if (target.y - current.y < -6) keys.push('w')
+      const axisTolerance = Math.min(6, Math.max(1, arrivalTolerance / 2))
+      if (target.x - current.x > axisTolerance) keys.push('d')
+      if (target.x - current.x < -axisTolerance) keys.push('a')
+      if (target.y - current.y > axisTolerance) keys.push('s')
+      if (target.y - current.y < -axisTolerance) keys.push('w')
       await syncKeys(page, pressed, keys)
-      await page.waitForTimeout(remaining < 60 ? 25 : 50)
+      let sampleDelay = 50
+      if (remaining < 60) sampleDelay = arrivalTolerance < 45 ? 10 : 25
+      await page.waitForTimeout(sampleDelay)
     }
     return false
   } finally {

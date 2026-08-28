@@ -130,6 +130,9 @@ test('native painter boundaries sort actors around Courtyard props and tent face
   assert.ok(hubWorldDepthForActor(699) < HUB_WORLD_DEPTH.usefulThyngsFront)
   assert.ok(hubWorldDepthForActor(701) > HUB_WORLD_DEPTH.usefulThyngsFront)
   assert.ok(HUB_WORLD_DEPTH.usefulThyngsShadow < HUB_WORLD_DEPTH.courtyard + 1000)
+  assert.ok(HUB_WORLD_DEPTH.teacherPreWorld < hubWorldDepthForActor(0))
+  assert.ok(HUB_WORLD_DEPTH.teacherPostWorld > hubWorldDepthForActor(1024))
+  assert.ok(HUB_WORLD_DEPTH.teacherPostWorld < HUB_WORLD_DEPTH.courtyardForeground)
 })
 
 test('Courtyard fountain transients keep the shared additive FadeScale painter', () => {
@@ -142,6 +145,16 @@ test('Courtyard fountain transients keep the shared additive FadeScale painter',
 test('Teacher release keeps native 100 Hz child programs and per-child blend ownership', () => {
   assert.doesNotMatch(hubWorldScene, /this\.burst\.blendMode = 'screen'/)
   assert.match(hubWorldScene, /this\.frames\.blendMode = 'add'/)
+  assert.match(hubWorldScene, /this\.preWorld\.addChild\(this\.flare\)/)
+  assert.match(hubWorldScene, /this\.worldRelease\.addChild\(this\.column, this\.frames\)/)
+  assert.match(hubWorldScene, /this\.postWorld\.addChild\(this\.core\)/)
+  assert.match(
+    hubWorldScene,
+    /this\.world\.addChild\(\s*this\.teacher\.preWorld,\s*this\.teacher\.container,\s*this\.teacher\.worldRelease,\s*this\.teacher\.postWorld,?\s*\)/,
+  )
+  assert.match(hubWorldScene, /this\.preWorld\.zIndex = HUB_WORLD_DEPTH\.teacherPreWorld/)
+  assert.match(hubWorldScene, /this\.worldRelease\.zIndex = hubWorldDepthForActor\(releaseY\)/)
+  assert.match(hubWorldScene, /this\.postWorld\.zIndex = HUB_WORLD_DEPTH\.teacherPostWorld/)
   assert.match(hubWorldScene, /this\.column\.visible = burst\.column\.visible/)
   assert.match(hubWorldScene, /this\.core\.scale\.set\(burst\.core\.scaleX, burst\.core\.scaleY\)/)
   assert.match(hubWorldScene, /this\.frames\.scale\.set\(burst\.frames\.scaleX, burst\.frames\.scaleY\)/)

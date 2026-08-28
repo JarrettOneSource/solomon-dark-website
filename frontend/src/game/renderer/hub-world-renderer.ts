@@ -126,6 +126,15 @@ interface HubFrameDiagnostics {
   studentViewCreationCount: number
   studentViewReuseCount: number
   studentVisibleCandidateCount: number
+  teacherBurst: {
+    ageTicks: number
+    columnAlpha: number
+    coreAlpha: number
+    flareAlpha: number
+    frame: number
+    frameAlpha: number
+    visible: boolean
+  }
   teacherFrame: number
   tick: number
   transitionPhase: HubTransitionPhase | null
@@ -345,6 +354,7 @@ export async function createHubWorldRenderer(
     studentViewCreationCount: 0,
     studentViewReuseCount: 0,
     studentVisibleCandidateCount: 0,
+    teacherBurst: teacherBurstDiagnostics(courtyardScene),
     teacherFrame: 0,
     tick: options.initialSnapshot.tick,
     transitionPhase: null,
@@ -407,6 +417,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.studentCount = courtyardScene.studentCount
     frameDiagnostics.studentViewCreationCount = courtyardScene.studentViewCreationCount
     frameDiagnostics.studentViewReuseCount = courtyardScene.studentViewReuseCount
+    frameDiagnostics.teacherBurst = teacherBurstDiagnostics(courtyardScene)
     frameDiagnostics.teacherFrame = courtyardScene.teacherFrame
     frameDiagnostics.tick = snapshot.tick
     frameDiagnostics.transitionPhase = participant?.transition?.phase ?? null
@@ -885,6 +896,19 @@ export async function createHubWorldRenderer(
   renderer.render(options.initialSnapshot)
   publishDiagnostics(options.initialSnapshot, 0)
   return renderer
+}
+
+function teacherBurstDiagnostics(scene: HubWorldScene): HubFrameDiagnostics['teacherBurst'] {
+  const burst = scene.teacherBurst
+  return {
+    ageTicks: burst.ageTicks,
+    columnAlpha: burst.column.alpha,
+    coreAlpha: burst.core.alpha,
+    flareAlpha: burst.flare.alpha,
+    frame: burst.frames.frame,
+    frameAlpha: burst.frames.alpha,
+    visible: burst.visible,
+  }
 }
 
 function drawSecondaryScreenFlash(

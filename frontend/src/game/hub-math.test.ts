@@ -794,5 +794,7 @@ test('Teacher presentation follows the recovered fixed-tick cast, release, and i
   assert.ok(coreLast.core.alpha > 0)
   assert.equal(hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 0.1, 41).core.visible, false)
   assert.equal(hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 0.51, 41).column.visible, false)
-  assert.equal(hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 1.34, 41).visible, false)
+  const retired = hubTeacherBurstAt(HUB_TEACHER_CAST_SECONDS + 1.34, 41)
+  assert.equal(retired.visible, false)
+  assert.equal(retired.frames.alpha, 0)
 })

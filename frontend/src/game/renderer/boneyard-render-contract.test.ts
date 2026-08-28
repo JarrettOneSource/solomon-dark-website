@@ -222,7 +222,7 @@ test('static Boneyard residents keep native unpremultiplied linear pixels', () =
   assert.doesNotMatch(boneyardRenderer, /documentNodeCanvas\(bounds\.w, bounds\.h\)/)
   assert.doesNotMatch(editorRenderer, /filterLift|brightness\(1\.12\)/)
   assert.match(editorRenderer, /ctx\.imageSmoothingEnabled = true/)
-  assert.match(boneyardTextures, /nativeArenaTextureFromImage/)
+  assert.match(boneyardTextures, /loadGameTextureEntries\(sources\)/)
   assert.doesNotMatch(boneyardTextures, /createElement\('canvas'\)|BufferImageSource/)
 })
 
@@ -292,8 +292,9 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(boneyardTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(
     boneyardTextures,
-    /combatPageSources\.has\(source\) \? 'repeat' : 'clamp-to-edge'/,
+    /const loaded = await loadGameTextureEntries\(sources\)/,
   )
+  assert.doesNotMatch(boneyardTextures, /clamp-to-edge|combatPageSources/)
   assert.match(boneyardTextures, /createBoneyardCombatAtlas\(texture\)/)
   assert.match(
     boneyardTextures,

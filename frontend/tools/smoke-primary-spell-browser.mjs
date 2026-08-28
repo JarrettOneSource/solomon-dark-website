@@ -50,20 +50,23 @@ const host = await startGameHost({
 })
 
 try {
-  const [receipt, performanceFixture] = await Promise.all([
+  const [receipt, supportFixture] = await Promise.all([
     runBrowserSmoke({
       ...process.env,
       SDR_GAME_SMOKE_CREDENTIAL: credential,
       SDR_GAME_SMOKE_ENDPOINT: host.address.url,
       SDR_GAME_SMOKE_URL: baseUrl,
-      SDR_PRIMARY_SPELL_BONEYARD_ONLY: kind === 'ether' || kind === 'air' ? '1' : '',
+      SDR_PRIMARY_SPELL_BONEYARD_ONLY: '1',
       SDR_PRIMARY_SPELL_COMBAT_ADMISSION: kind === 'ether' || kind === 'air' ? '1' : '',
+      SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD: kind === 'water' ? '1' : '',
       SDR_PRIMARY_SPELL_KIND: kind,
       SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
     }),
-    process.env.SDR_PRIMARY_PERFORMANCE === '1'
-      ? stabilizePerformanceCombat(host)
-      : Promise.resolve(null),
+    kind === 'water'
+      ? openWaterCombat(host)
+      : process.env.SDR_PRIMARY_PERFORMANCE === '1'
+        ? stabilizePerformanceCombat(host)
+        : Promise.resolve(null),
   ])
   assert.equal(receipt.status, 'ok')
   assert.deepEqual(receipt.errors, [])
@@ -74,14 +77,84 @@ try {
     assert.ok(receipt.boneyard.performance, 'the Ether journey must include performance phases')
   }
   process.stdout.write(`${JSON.stringify({
+    hostFixture: kind === 'water' ? supportFixture : null,
     kind,
-    performanceFixture,
+    performanceFixture: process.env.SDR_PRIMARY_PERFORMANCE === '1'
+      ? supportFixture
+      : null,
     receipt,
     screenshotRoot,
     status: 'ok',
   })}\n`)
 } finally {
   await Promise.all([host.close(), frontend.close()])
+}
+
+async function openWaterCombat(host) {
+  await waitUntil(() => (
+    host.state().world.kind === 'boneyard' && host.hostPlayerId() !== null
+  ), 'Water browser did not enter the Boneyard', 120_000)
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
+    id === playerId
+  ))
+  assert.notEqual(playerIndex, -1)
+  const solomon = state.world.encounter?.position
+  assert.ok(solomon, 'Water acceptance requires the authentic Solomon encounter')
+  setHostPlayerPosition(host, playerIndex, solomon)
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard' && world.encounter?.phase === 'speaking'
+  }, 'Solomon did not enter the speaking phase', 10_000)
+  setHostPlayerPosition(host, playerIndex, { x: solomon.x, y: solomon.y + 250 })
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard'
+      && (world.encounter?.runEventId ?? 0) > 0
+      && world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')
+  }, 'Solomon did not release the Water combat wave', 30_000)
+
+  const combat = host.state()
+  assert.equal(combat.world.kind, 'boneyard')
+  const progressions = [...combat.playerEntities.progressions]
+  progressions[playerIndex] = {
+    ...progressions[playerIndex],
+    currentHealth: 1_000_000,
+    currentMana: 10_000,
+    maximumHealth: 1_000_000,
+    maximumMana: 10_000,
+    revision: progressions[playerIndex].revision + 1,
+  }
+  Object.assign(combat, {
+    playerEntities: {
+      ...combat.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+  })
+  return {
+    playerId,
+    runId: combat.world.runId,
+    tick: combat.tick,
+  }
+}
+
+function setHostPlayerPosition(host, index, position) {
+  const state = host.state()
+  const locomotions = [...state.playerEntities.locomotions]
+  locomotions[index] = {
+    ...locomotions[index],
+    position: { ...position },
+    velocity: { x: 0, y: 0 },
+  }
+  Object.assign(state, {
+    playerEntities: {
+      ...state.playerEntities,
+      locomotions: Object.freeze(locomotions),
+    },
+  })
 }
 
 async function stabilizePerformanceCombat(host) {

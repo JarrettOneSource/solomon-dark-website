@@ -10,7 +10,7 @@ import {
 
 export interface PlayerStaffVfxRenderPlan {
   readonly alpha: number
-  readonly blendMode: 'add' | 'normal'
+  readonly blendMode: 'add'
   readonly entry: 15 | 40 | 45 | 88
   readonly light: null
   readonly position: Readonly<{ x: number; y: number }>

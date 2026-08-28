@@ -63,7 +63,11 @@ try {
     }),
     (async () => {
       const fixture = await openBoneyardCombat(host)
-      return { fixture, ...(await captureEtherFan(host)) }
+      try {
+        return { fixture: fixture.receipt, ...(await captureEtherFan(host)) }
+      } finally {
+        fixture.stopMaintainingTargets()
+      }
     })(),
   ])
   assert.equal(browser.status, 'ok')
@@ -152,13 +156,16 @@ async function openBoneyardCombat(host) {
   setHostPlayerPosition(host, playerIndex, playerPosition)
   arrangeFanTargets(host, combatBounds, targetPosition)
   return {
-    corridorHeadingDegrees: headingDegrees,
-    enemyCount: combatState.world.enemies.actors.filter(({ lifeState }) => (
-      lifeState === 'alive'
-    )).length,
-    playerId,
-    ranks: { moreMissiles: 3, smartMissiles: 1 },
-    runId: combatState.world.runId,
+    receipt: {
+      corridorHeadingDegrees: headingDegrees,
+      enemyCount: combatState.world.enemies.actors.filter(({ lifeState }) => (
+        lifeState === 'alive'
+      )).length,
+      playerId,
+      ranks: { moreMissiles: 3, smartMissiles: 1 },
+      runId: combatState.world.runId,
+    },
+    stopMaintainingTargets: maintainFanTargets(host, combatBounds, targetPosition),
   }
 }
 
@@ -468,6 +475,16 @@ function arrangeFanTargets(host, bounds, targetPosition) {
       enemies: { ...state.world.enemies, actors: Object.freeze(actors) },
     },
   })
+}
+
+function maintainFanTargets(host, bounds, targetPosition) {
+  const interval = setInterval(() => {
+    if (host.state().world.kind === 'boneyard') {
+      arrangeFanTargets(host, bounds, targetPosition)
+    }
+  }, 25)
+  interval.unref()
+  return () => clearInterval(interval)
 }
 
 async function waitUntil(predicate, message, timeoutMs) {

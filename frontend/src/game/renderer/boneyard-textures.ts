@@ -26,7 +26,6 @@ import {
   type BoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
 import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
-import { nativeArenaTextureFromImage } from './native-arena-render-pipeline.ts'
 
 export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
@@ -85,13 +84,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
   ]
-  const combatPageSources = new Set<string>(BONEYARD_COMBAT_ATLAS_SOURCES)
-  const loaded = await loadGameTextureEntries(sources, (source, image) => (
-    nativeArenaTextureFromImage(
-      image,
-      combatPageSources.has(source) ? 'repeat' : 'clamp-to-edge',
-    )
-  ))
+  const loaded = await loadGameTextureEntries(sources)
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {
     const result = base[boneyardCombatAssetSource(source)]

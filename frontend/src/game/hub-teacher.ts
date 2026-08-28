@@ -1,3 +1,8 @@
+import {
+  nativeRandomFloatFromSemanticWord,
+  nativeRandomIntFromSemanticWord,
+} from './core-kernels/native-random-domain.ts'
+
 export const HUB_TEACHER_TICKS_PER_SECOND = 100
 export const HUB_TEACHER_CAST_TICKS = 268
 export const HUB_TEACHER_IDLE_START_TICK = 347
@@ -57,7 +62,10 @@ export function hubTeacherFrameAt(elapsedSeconds: number, seed = 0): number {
   const tick = absoluteTick % HUB_TEACHER_CYCLE_TICKS
   if (tick === 0) return 0
   if (tick < HUB_TEACHER_CAST_TICKS) {
-    return teacherWord(seed, absoluteTick, 0) & 1
+    return nativeRandomIntFromSemanticWord(
+      teacherWord(seed, absoluteTick, 0),
+      2,
+    )
   }
   return tick < HUB_TEACHER_IDLE_START_TICK ? 2 : 3
 }
@@ -73,24 +81,37 @@ export function hubTeacherBurstAt(
 
   const ageTicks = cycleTick - HUB_TEACHER_CAST_TICKS
   const flareScale = Math.fround(
-    1 + teacherFloat(seed, releaseIndex, 1, 0.1),
+    1 + nativeRandomFloatFromSemanticWord(
+      teacherWord(seed, releaseIndex, 1),
+      0.1,
+    ),
   )
   const frameScale = Math.fround(
-    2 - teacherFloat(seed, releaseIndex, 2, 0.5),
+    2 - nativeRandomFloatFromSemanticWord(
+      teacherWord(seed, releaseIndex, 2),
+      0.5,
+    ),
   )
   const frameFactor = Math.fround(
-    1 + teacherFloat(seed, releaseIndex, 3, 0.2),
+    1 + nativeRandomFloatFromSemanticWord(
+      teacherWord(seed, releaseIndex, 3),
+      0.2,
+    ),
   )
   const frameStep = Math.fround(0.75 * frameFactor)
   const frameAlphaLoss = Math.fround(0.02 * frameFactor)
   const frame = Math.trunc(Math.fround(frameStep * ageTicks))
-  const mirror = (teacherWord(seed, releaseIndex, 4) & 1) === 1
+  const frameAlpha = nativeDecay(1, frameAlphaLoss, ageTicks)
+  const mirror = nativeRandomIntFromSemanticWord(
+    teacherWord(seed, releaseIndex, 4),
+    2,
+  ) === 1
 
   const core = member(nativeDecay(1, 0.1, ageTicks), 6, 4)
   const flare = member(nativeDecay(1, 0.0075, ageTicks), flareScale, flareScale)
   const column = member(nativeDecay(2, 0.04, ageTicks), 1, 1)
   const frames = Object.freeze({
-    alpha: nativeDecay(1, frameAlphaLoss, ageTicks),
+    alpha: Math.min(1, Math.max(0, frameAlpha)),
     frame: Math.min(10, Math.max(0, frame)),
     scaleX: mirror ? -frameScale : frameScale,
     scaleY: frameScale,
@@ -151,18 +172,12 @@ function nativeDecay(initial: number, loss: number, ageTicks: number): number {
   return value
 }
 
-function teacherFloat(
-  seed: number,
-  releaseIndex: number,
-  channel: number,
-  magnitude: number,
-): number {
-  const word = teacherWord(seed, releaseIndex, channel) & 0x7fff
-  return Math.fround(Math.fround(word / 0x7fff) * magnitude)
-}
-
 function teacherWord(seed: number, tick: number, channel: number): number {
-  let value = (seed ^ Math.imul(tick + 1, 0x9e3779b1) ^ Math.imul(channel + 1, 0x85ebca6b)) >>> 0
+  let value = (
+    seed
+    ^ Math.imul(tick + 1, 0x9e3779b1)
+    ^ Math.imul(channel + 1, 0x85ebca6b)
+  ) >>> 0
   value ^= value >>> 16
   value = Math.imul(value, 0x7feb352d) >>> 0
   value ^= value >>> 15

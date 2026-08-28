@@ -142,12 +142,19 @@ test('the shared spell view renders only Staff visual actors', () => {
     new URL('./primary-spell-world-view.ts', import.meta.url),
     'utf8',
   )
+  const staffViewSource = readFileSync(
+    new URL('./player-staff-vfx-view.ts', import.meta.url),
+    'utf8',
+  )
   assert.match(source, /state\.kind === 'player-staff-smoke'/)
   assert.match(source, /state\.kind === 'player-staff-move-fade'/)
   assert.match(source, /state\.kind === 'player-staff-perspective-fade'/)
   assert.match(source, /state\.kind === 'player-staff-pike-break'/)
   assert.match(source, /new PlayerStaffVfxView\(state, this\.textures\)/)
   assert.match(source, /new PlayerStaffPikeBreakView\(state, this\.textures\)/)
+  assert.match(staffViewSource, /get kind\(\): NativePlayerStaffVfx\['kind'\]/)
+  assert.match(staffViewSource, /return this\.state\.kind/)
+  assert.doesNotMatch(staffViewSource, /readonly kind = 'player-staff-vfx'/)
   for (const kind of [
     'player-staff-contact',
     'player-staff-knockback',

@@ -334,11 +334,12 @@ function installFireProbe() {
 async function enterHub(page, baseUrl) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).dispatchEvent('click')
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'New Game' }).dispatchEvent('click')
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-    timeout: 30_000,
-  })
+  await enterCreateAfterCollegeOffice(page)
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Fire' }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
     timeout: 15_000,
@@ -347,6 +348,74 @@ async function enterHub(page, baseUrl) {
   await page.locator(
     '.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
   ).waitFor({ timeout: 90_000 })
+}
+
+async function declineTutorialOffer(page) {
+  const offer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (!await offer.isVisible()) return
+  await offer.getByRole('button', { exact: true, name: 'NO' }).click()
+  await offer.waitFor({ state: 'hidden', timeout: 15_000 })
+}
+
+async function enterCreateAfterCollegeOffice(page) {
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"][data-story-office="true"]')
+  const first = await Promise.race([
+    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+    office.waitFor({ timeout: 90_000 }).then(() => 'office'),
+  ])
+  if (first === 'create') return
+
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, undefined, { timeout: 30_000 })
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await completeCollegeIntroDialogue(page)
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
+}
+
+async function completeCollegeIntroDialogue(page) {
+  const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+  if (!await dialog.isVisible()) {
+    await page.keyboard.press('e')
+    await dialog.waitFor({ timeout: 15_000 })
+  }
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  for (const label of ['Solomon Dark?', 'Collateral Damage?', 'Assistance?']) {
+    await dialog.getByRole('button', { exact: true, name: label }).click()
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+  }
+  await dialog.getByRole('button', { exact: true, name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis, direction, target }) => {
+      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[axis]
+      return typeof value === 'number'
+        && (direction === 'at-least' ? value >= target : value <= target)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
 }
 
 async function enterBoneyard(page) {

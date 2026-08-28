@@ -88,6 +88,7 @@ export default function NativeBitmapText({
             style={{
               backgroundColor: color,
               height: renderedHeight,
+              imageRendering: 'pixelated',
               left: glyph.centerX - renderedWidth / 2,
               maskImage: `url("${source}")`,
               maskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,

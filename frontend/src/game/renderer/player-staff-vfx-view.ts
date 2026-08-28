@@ -16,7 +16,6 @@ import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export class PlayerStaffVfxView {
   readonly containers: readonly Container[]
-  readonly kind = 'player-staff-vfx'
   private readonly root = new Container({ label: 'player-staff-vfx' })
   private readonly sprite: Sprite
   private state: NativePlayerStaffVfx
@@ -32,6 +31,10 @@ export class PlayerStaffVfxView {
     this.root.addChild(this.sprite)
     this.containers = [this.root]
     this.updateState(state)
+  }
+
+  get kind(): NativePlayerStaffVfx['kind'] {
+    return this.state.kind
   }
 
   update(

@@ -2,6 +2,7 @@
 import 'pixi.js/unsafe-eval'
 import { Application, Texture } from 'pixi.js'
 
+import { hub } from '../../lib/assets.ts'
 import {
   loadGameImage,
   releaseGameImages,
@@ -9,6 +10,7 @@ import {
 import { mapAssetSources } from '../game-asset-readiness.ts'
 import {
   installNativeFixedFunctionRenderPipeline,
+  nativeStockPointTextureFromImage,
   nativeStockTextureFromImage,
 } from './native-fixed-function-render-pipeline.ts'
 
@@ -57,7 +59,9 @@ export async function createGameWebGlApplication({
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
     }
-    installNativeFixedFunctionRenderPipeline(application.renderer)
+    installNativeFixedFunctionRenderPipeline(application.renderer, {
+      preserveBrowserCompositingAlpha: backgroundAlpha === 0,
+    })
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     throw error
@@ -95,9 +99,11 @@ export async function loadGameTextureMap(
 export async function loadGameTextureEntries(
   requestedSources: readonly string[],
   createTexture: (source: string, image: HTMLImageElement) => Texture = (
-    _source,
+    source,
     image,
-  ) => nativeStockTextureFromImage(image),
+  ) => source === hub.hud.fontAtlas
+    ? nativeStockPointTextureFromImage(image)
+    : nativeStockTextureFromImage(image),
 ): Promise<Array<readonly [string, Texture]>> {
   const sources = [...new Set(requestedSources)]
   const entries: Array<readonly [string, Texture]> = []

@@ -430,6 +430,7 @@ export function NativeQuickbarBinding({ text }: { text: string }) {
           className="hub-hud-quickbar-key-glyph"
           style={{
             height: glyph.height,
+            imageRendering: 'pixelated',
             left: glyph.left,
             maskImage,
             maskPosition: `${-glyph.atlasX}px ${-glyph.atlasY}px`,

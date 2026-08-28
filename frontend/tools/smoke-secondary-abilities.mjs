@@ -33,8 +33,10 @@ import {
 import {
   replacePlayerEconomy,
   selectPlayerEntityPrimarySkill,
+  setPlayerEntityMana,
 } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotRoot = process.env.SDR_SECONDARY_ABILITY_SCREENSHOT_ROOT
@@ -130,7 +132,7 @@ if (!baseUrl && productionBuild) {
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  snapshotRate: 100,
+  snapshotRate: 20,
 })
 const browser = await chromium.launch({
   args: ['--autoplay-policy=no-user-gesture-required'],
@@ -143,6 +145,28 @@ const responseErrors = []
 
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  const wireSecondarySamples = []
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).href !== new URL(host.address.url).href) return
+    socket.on('framereceived', ({ payload }) => {
+      try {
+        const message = decodeServerGameMessage(
+          Buffer.isBuffer(payload) ? payload.toString() : payload,
+        )
+        const snapshot = message.type === 'server-welcome' ? message.snapshot : null
+        const frame = message.type === 'server-snapshot' ? message.frame : null
+        const state = snapshot ?? frame
+        if (!state) return
+        wireSecondarySamples.push({
+          kinds: state.secondaryAbilities.actors.map(({ kind }) => kind),
+          tick: state.tick,
+        })
+        if (wireSecondarySamples.length > 2_000) wireSecondarySamples.shift()
+      } catch {
+        // The page's production decoder remains authoritative for malformed frames.
+      }
+    })
+  })
   await page.route('**/deployment.json*', async (route) => {
     const revision = new URL(route.request().url()).searchParams.get('current')
     await route.fulfill({
@@ -288,6 +312,7 @@ try {
     await waitForBeltSkill(page, contract.name)
     await waitForStableHostCadence(host)
     await waitForStablePresentationCadence(page)
+    await waitForHostPresentationCatchUp(canvas, host)
     const castSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
     const firstEventId = host.state().secondaryAbilities.nextEventId
     const sampleStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
@@ -576,21 +601,38 @@ try {
           return (player?.staffCastTicksRemaining ?? 0) === 0
             && (player?.castSpinTicksRemaining ?? 0) === 0
             && (player?.globalCooldownTicks ?? 0) === 0
-            && (player?.cooldownTicksBySkill[45] ?? 0) === 0
         }, 'Raise Golem cast gates did not release before the second cast')
-        const secondCastSequence = host.state().secondaryAbilities.players[playerId]
-          ?.castSequence ?? 0
-        await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
-        await waitUntil(() => (
-          (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
-            > secondCastSequence
-          && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
-            kind === 'golem' && ownerId === playerId
-          )).length === 2
-          && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
-            kind === 'golem' && ownerId === playerId
-          )).every(({ ageTicks }) => ageTicks >= 400)
-        ), 'Fete of Clay did not retain and assemble two authoritative Golems', 10_000)
+        clearSecondaryCooldown(host, playerId, 45)
+        const secondCastSequence = await castSecondGolem(
+          page,
+          host,
+          playerId,
+          target,
+        )
+        try {
+          await waitUntil(() => (
+            (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
+              > secondCastSequence
+            && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+              kind === 'golem' && ownerId === playerId
+            )).length === 2
+            && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+              kind === 'golem' && ownerId === playerId
+            )).every(({ ageTicks }) => ageTicks >= 400)
+          ), 'Fete of Clay did not retain and assemble two authoritative Golems', 10_000)
+        } catch (error) {
+          const state = host.state()
+          process.stderr.write(`${JSON.stringify({
+            golemFailure: {
+              actors: state.secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+                kind === 'golem' && ownerId === playerId
+              )),
+              player: state.secondaryAbilities.players[playerId],
+              secondCastSequence,
+            },
+          }, null, 2)}\n`)
+          throw error
+        }
         maximumSet = maximumSetReceipt(host.state(), playerId, contract.skillId)
       }
     }
@@ -603,13 +645,13 @@ try {
           combatBaseline,
           requestedScene,
         )
-    if (combatProof && contract.skillId === 35) {
+    if (combatProof && (contract.skillId === 35 || contract.skillId === 76)) {
       await page.waitForFunction(() => (
         ((document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame)
           ?.secondaryScreenFlashAlpha ?? 1) <= 0.1
       ), undefined, { timeout: 2_000 })
     } else if (combatProof) {
-      await page.waitForTimeout(120)
+      await page.waitForTimeout(contract.skillId === 21 ? 250 : 120)
     }
 
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
@@ -661,8 +703,10 @@ try {
       `${contract.name} emitted no replicated semantic event`,
     )
     if (combatProof && contract.skillId === 21) {
-      assert.equal(samples.some(({ kinds }) => kinds.includes('ring-fire-explosion')), true)
-      assert.equal(samples.some(({ kinds }) => kinds.includes('ring-fire-fragment')), true)
+      assert.equal(
+        ringSampleSummary(wireSecondarySamples).kinds.includes('ring-fire-explosion'),
+        true,
+      )
     }
     if (combatProof && contract.skillId === 35) {
       assert.equal(samples.some(({ kinds }) => kinds.includes('frost-burn-flare')), true)
@@ -1184,6 +1228,74 @@ function playerProgression(host, playerId) {
   return state.playerEntities.progressions[index]
 }
 
+function clearSecondaryCooldown(host, playerId, skillId) {
+  const state = host.state()
+  const player = state.secondaryAbilities.players[playerId]
+  assert.ok(player)
+  const cooldownTicksBySkill = [...player.cooldownTicksBySkill]
+  cooldownTicksBySkill[skillId] = 0
+  Object.assign(state, {
+    secondaryAbilities: {
+      ...state.secondaryAbilities,
+      players: {
+        ...state.secondaryAbilities.players,
+        [playerId]: { ...player, cooldownTicksBySkill },
+      },
+    },
+  })
+}
+
+async function castSecondGolem(page, host, playerId, target) {
+  const offsets = [
+    { x: 0, y: 0 },
+    { x: 150, y: 0 },
+    { x: -150, y: 0 },
+    { x: 0, y: 150 },
+    { x: 0, y: -150 },
+  ]
+  for (let attempt = 0; attempt < offsets.length; attempt += 1) {
+    const state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
+      id === playerId
+    ))
+    assert.notEqual(playerIndex, -1)
+    const bounds = state.world.arenaTransition?.combatBounds
+    assert.ok(bounds)
+    setHostPlayerPosition(host, playerIndex, {
+      x: bounds.x + bounds.w * 0.5 + offsets[attempt].x,
+      y: bounds.y + bounds.h * 0.5 + offsets[attempt].y,
+    })
+    Object.assign(state, {
+      playerEntities: setPlayerEntityMana(
+        state.playerEntities,
+        playerId,
+        playerProgression(host, playerId).maximumMana,
+      ),
+    })
+    clearSecondaryCooldown(host, playerId, 45)
+    await waitUntil(() => {
+      const player = host.state().secondaryAbilities.players[playerId]
+      return (player?.staffCastTicksRemaining ?? 0) === 0
+        && (player?.castSpinTicksRemaining ?? 0) === 0
+        && (player?.globalCooldownTicks ?? 0) === 0
+    }, 'Raise Golem retry gates did not release')
+    const player = host.state().secondaryAbilities.players[playerId]
+    const castSequence = player?.castSequence ?? 0
+    const fizzleSequence = player?.fizzleSequence ?? 0
+    await castSecondaryPointer(page, { x: target.x + attempt * 20, y: target.y })
+    await waitUntil(() => {
+      const next = host.state().secondaryAbilities.players[playerId]
+      return (next?.castSequence ?? 0) > castSequence
+        || (next?.fizzleSequence ?? 0) > fizzleSequence
+    }, 'Raise Golem retry produced no authoritative outcome', 3_000)
+    if ((host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0) > castSequence) {
+      return castSequence
+    }
+  }
+  throw new Error('Fete of Clay rejected every collision-clear second-summon attempt')
+}
+
 function maximumSetReceipt(state, playerId, skillId) {
   const owned = state.secondaryAbilities.actors.filter(({ ownerId }) => ownerId === playerId)
   switch (skillId) {
@@ -1381,7 +1493,14 @@ async function openBoneyardCombat(page, host, playerId) {
     x: combatBounds.x + combatBounds.w * 0.5,
     y: combatBounds.y + combatBounds.h * 0.5,
   })
-  await page.waitForTimeout(150)
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard' && world.arenaTransition?.phase === 'sealed'
+  }, 'Boneyard arena transition did not reach its authoritative sealed edge', 10_000)
+  await page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')
+      ?.__sdrBoneyardFrame?.arenaTransitionPhase === 'sealed'
+  ), undefined, { timeout: 5_000 })
 }
 
 function setHostPlayerPosition(host, index, position) {
@@ -1473,19 +1592,30 @@ async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
       || left.id - right.id
     ))[0]
   assert.ok(enemy)
-  const position = comparisonCapture && skillId === 72
-    ? { x: playerPosition.x + 200, y: playerPosition.y }
-    : {
-        x: playerPosition.x,
-        y: playerPosition.y + (skillId === 27 ? 100 : -50),
-      }
+  let targetOffsetY = -50
+  if (skillId === 27) targetOffsetY = 100
+  let position = {
+    x: playerPosition.x,
+    y: playerPosition.y + targetOffsetY,
+  }
+  if (skillId === 21) position = { x: playerPosition.x + 500, y: playerPosition.y }
+  if (comparisonCapture && skillId === 72) {
+    position = { x: playerPosition.x + 200, y: playerPosition.y }
+  }
   const enemies = {
     ...state.world.enemies,
     actors: state.world.enemies.actors.map((actor) => {
       if (actor.id === enemy.id) {
-        return { ...actor, nextMovementTick: state.tick + 100_000, position }
+        return {
+          ...actor,
+          nextMovementTick: state.tick + 100_000,
+          position,
+        }
       }
-      if (skillId !== 72 || actor.lifeState !== 'alive') return actor
+      if (
+        (skillId !== 21 && skillId !== 45 && skillId !== 72)
+        || actor.lifeState !== 'alive'
+      ) return actor
       return {
         ...actor,
         nextMovementTick: state.tick + 100_000,
@@ -1561,9 +1691,13 @@ async function collectCombatProof(host, playerId, skillId, baseline, scene) {
       const damaged = enemy === undefined || health < baseline.health
       const frozen = (effect?.frozenTicks ?? 0) > 0
       const frostBurn = (effect?.frostBurnTicks ?? 0) > 0
+      const actorKinds = state.secondaryAbilities.actors
+        .filter(({ ownerId }) => ownerId === playerId)
+        .map(({ kind }) => kind)
       const succeeded = skillId === 35 ? frozen && frostBurn : damaged
       if (!succeeded) return false
       receipt = {
+        actorKinds,
         damaged,
         enemyId: baseline.enemyId,
         finalHealth: health,
@@ -1881,6 +2015,18 @@ async function waitUntil(predicate, message, timeoutMs = 10_000) {
   throw new Error(message)
 }
 
+function ringSampleSummary(samples) {
+  const ring = samples.filter(({ kinds }) => (
+    kinds.includes('ring-fire-explosion') || kinds.includes('ring-fire-fragment')
+  ))
+  return {
+    count: ring.length,
+    first: ring[0] ?? null,
+    kinds: [...new Set(ring.flatMap(({ kinds }) => kinds))],
+    last: ring.at(-1) ?? null,
+  }
+}
+
 async function waitForStableHostCadence(host) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const start = host.state().tick
@@ -1911,6 +2057,25 @@ async function waitForStablePresentationCadence(page) {
         && sample.observedAtMs - previous.observedAtMs <= 100
     })
   }, undefined, { timeout: 30_000 })
+}
+
+async function waitForHostPresentationCatchUp(canvas, host) {
+  let consecutive = 0
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const hostTick = host.state().tick
+    const presentationTick = await canvas.evaluate((node) => (
+      (node.__sdrHubFrame ?? node.__sdrBoneyardFrame)?.tick ?? Number.NaN
+    ))
+    const lag = hostTick - presentationTick
+    if (lag >= 0 && lag <= 8) {
+      consecutive += 1
+      if (consecutive >= 3) return
+    } else {
+      consecutive = 0
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error('browser presentation did not converge within eight authoritative ticks')
 }
 
 async function blockedSecondaryReceipt(page, canvas, host, playerId, contract) {

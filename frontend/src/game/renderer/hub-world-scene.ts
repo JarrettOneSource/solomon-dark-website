@@ -40,6 +40,7 @@ import {
   HUB_TEACHER_RUNE_CENTER,
   hubTeacherBurstAt,
   hubTeacherFrameAt,
+  type HubTeacherBurstPresentation,
 } from '../hub-teacher.ts'
 import { HubPlayerView, HubStudentView, actorSprite } from './hub-actors.ts'
 import {
@@ -163,7 +164,12 @@ export class HubWorldScene {
     this.world.addChild(this.potion.actor, this.potion.balloons)
 
     this.teacher = new HubTeacherView(textures, 576.5, 710.5, traderAnimationSeed ^ 5008)
-    this.world.addChild(this.teacher.container)
+    this.world.addChild(
+      this.teacher.preWorld,
+      this.teacher.container,
+      this.teacher.worldRelease,
+      this.teacher.postWorld,
+    )
 
     this.skorcha = new HubSkorchaView(textures)
     this.world.addChild(this.skorcha.container)
@@ -283,6 +289,10 @@ export class HubWorldScene {
 
   get teacherFrame(): number {
     return this.teacher.frame
+  }
+
+  get teacherBurst(): HubTeacherBurstPresentation {
+    return this.teacher.burstPresentation
   }
 
   get astronomerTelescopeFrame(): number {
@@ -948,47 +958,64 @@ class HubPotionTraderView {
 
 class HubTeacherView {
   readonly container = new Container({ label: 'teacher' })
+  readonly postWorld = new Container({ label: 'teacher-release-post-world' })
+  readonly preWorld = new Container({ label: 'teacher-release-pre-world' })
+  readonly worldRelease = new Container({ label: 'teacher-release-world-sorted' })
   private readonly rune: Sprite
   private readonly actor: Sprite
-  private readonly burst: Container
   private readonly column: Sprite
   private readonly flare: Sprite
   private readonly core: Sprite
   private readonly frames: Sprite
   private readonly textures: HubWorldTextures
   private readonly seed: number
+  private currentBurst: HubTeacherBurstPresentation
   private currentFrame = 0
 
   constructor(textures: HubWorldTextures, x: number, y: number, seed: number) {
     this.textures = textures
     this.seed = seed
+    this.currentBurst = hubTeacherBurstAt(0, seed)
     this.container.sortableChildren = true
     this.container.position.set(x, y)
     this.container.zIndex = hubWorldDepthForActor(y)
     this.container.eventMode = 'none'
+    const releaseX = x + HUB_TEACHER_CAST_ORIGIN.x
+    const releaseY = y + HUB_TEACHER_CAST_ORIGIN.y
+    this.preWorld.position.set(releaseX, releaseY)
+    this.preWorld.zIndex = HUB_WORLD_DEPTH.teacherPreWorld
+    this.preWorld.eventMode = 'none'
+    this.worldRelease.position.set(releaseX, releaseY)
+    this.worldRelease.zIndex = hubWorldDepthForActor(releaseY)
+    this.worldRelease.eventMode = 'none'
+    this.postWorld.position.set(releaseX, releaseY)
+    this.postWorld.zIndex = HUB_WORLD_DEPTH.teacherPostWorld
+    this.postWorld.eventMode = 'none'
     this.rune = actorSprite(textures.base[hub.npcs.teacher.rune], 0)
     this.rune.position.set(HUB_TEACHER_RUNE_CENTER.x, HUB_TEACHER_RUNE_CENTER.y)
     this.rune.alpha = HUB_TEACHER_RUNE_ALPHA
     const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 1)
     shadow.scale.set(1.25)
     this.actor = actorSprite(textures.teacher.actor[0], 2)
-    this.burst = new Container({ label: 'teacher-cast-release' })
-    this.burst.position.set(HUB_TEACHER_CAST_ORIGIN.x, HUB_TEACHER_CAST_ORIGIN.y)
-    this.burst.zIndex = 3
     this.column = centered(textures.base[hub.npcs.teacher.burst.column])
     this.flare = centered(textures.base[hub.npcs.teacher.burst.flare])
     this.core = centered(textures.base[hub.npcs.teacher.burst.core])
     this.frames = centered(textures.teacher.burst[0])
     this.frames.blendMode = 'add'
-    this.burst.addChild(this.column, this.flare, this.core, this.frames)
-    this.container.addChild(this.rune, shadow, this.actor, this.burst)
+    this.preWorld.addChild(this.flare)
+    this.worldRelease.addChild(this.column, this.frames)
+    this.postWorld.addChild(this.core)
+    this.container.addChild(this.rune, shadow, this.actor)
   }
 
   update(elapsedSeconds: number): void {
     this.currentFrame = hubTeacherFrameAt(elapsedSeconds, this.seed)
     this.actor.texture = this.textures.teacher.actor[this.currentFrame]
     const burst = hubTeacherBurstAt(elapsedSeconds, this.seed)
-    this.burst.visible = burst.visible
+    this.currentBurst = burst
+    this.preWorld.visible = burst.flare.visible
+    this.worldRelease.visible = burst.column.visible || burst.frames.visible
+    this.postWorld.visible = burst.core.visible
     if (!burst.visible) return
     this.column.visible = burst.column.visible
     this.column.alpha = burst.column.alpha
@@ -1007,6 +1034,10 @@ class HubTeacherView {
 
   get frame(): number {
     return this.currentFrame
+  }
+
+  get burstPresentation(): HubTeacherBurstPresentation {
+    return this.currentBurst
   }
 }
 

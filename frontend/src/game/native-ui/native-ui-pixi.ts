@@ -1,6 +1,9 @@
 import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js'
 
 import { textureFrom, type GameTextureMap } from '../renderer/game-webgl.ts'
+import {
+  nativeStockPointTextureFromImage,
+} from '../renderer/native-fixed-function-render-pipeline.ts'
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
 import {
   nativeUiFont,
@@ -52,6 +55,7 @@ export function destroyNativeUiPixiFor(textures: GameTextureMap): void {
 
 export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPixiAdapter {
   const derived = new Map<string, Texture>()
+  const pointFilteredAtlases = new Map<NativeUiAtlasName, Texture>()
   let destroyed = false
 
   const assertLive = (): void => {
@@ -117,7 +121,16 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
     const key = `${atlas}.glyph.${glyph.record}.${x}.${y}.${width}.${height}`
     const cached = derived.get(key)
     if (cached) return cached
-    const source = textureFrom(textures.textures, nativeUiAtlasSource(atlas))
+    let source = pointFilteredAtlases.get(atlas)
+    if (!source) {
+      const linearSource = textureFrom(textures.textures, nativeUiAtlasSource(atlas))
+      const image = linearSource.source.resource
+      if (!(image instanceof HTMLImageElement)) {
+        throw new Error(`native ${atlas} font atlas is not image-backed`)
+      }
+      source = nativeStockPointTextureFromImage(image)
+      pointFilteredAtlases.set(atlas, source)
+    }
     const result = new Texture({
       frame: new Rectangle(x, y, width, height),
       source: source.source,
@@ -336,6 +349,8 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
       destroyed = true
       for (const item of derived.values()) item.destroy(false)
       derived.clear()
+      for (const item of pointFilteredAtlases.values()) item.destroy(true)
+      pointFilteredAtlases.clear()
     },
     glyph,
     render(fragment, label = 'native-ui-plan') {

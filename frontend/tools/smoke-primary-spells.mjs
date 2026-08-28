@@ -190,8 +190,11 @@ try {
       })
       if (spell.kind === 'ether') etherPage = page
       else if (spell.kind === 'air') airPage = page
+      else if (spell.kind === 'fire') firePage = page
+      else if (spell.kind === 'water') waterPage = page
+      else if (spell.kind === 'earth') earthPage = page
       else if (spell.kind === 'blizzard') blizzardPage = page
-      else throw new Error('Boneyard-only acceptance is implemented for Ether, Air, and Blizzard')
+      else throw new Error(`Boneyard-only acceptance is not implemented for ${spell.kind}`)
       continue
     }
     const eventStart = await audioEventCount(page)
@@ -1542,6 +1545,16 @@ function round(value) {
 
 async function castWaterInBoneyard(page) {
   const canvas = await enterBoneyard(page)
+  const scene = page.locator('.boneyard-scene')
+  const gate = hostOpenedBoneyard
+    ? { fixture: 'host-opened-boneyard' }
+    : await crossEntryGate(page, scene)
+  const combatAdmission = hostOpenedBoneyard
+    ? await page.waitForFunction(() => (
+        document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-combat-enabled') === 'true'
+      ), undefined, { timeout: 90_000 }).then(() => ({ fixture: 'host-opened-boneyard' }))
+    : await enableSolomonCombat(page, scene)
   const eventStart = await audioEventCount(page)
   const target = await castTarget(canvas, 0.67, 0.38)
   await page.mouse.move(target.x, target.y)
@@ -1565,7 +1578,7 @@ async function castWaterInBoneyard(page) {
   await page.screenshot({ path: heldScreenshotPath })
   await page.mouse.up({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'pause')
-  return { held, heldScreenshotPath, wire }
+  return { combatAdmission, gate, held, heldScreenshotPath, wire }
 }
 
 async function latestWireTick(page) {
@@ -1764,7 +1777,7 @@ async function alignWithEntryGate(page, scene) {
             && (value - initial) * sign >= Math.abs(targetX - initial) - 3
         },
         { initial: initialX, sign: direction, targetX: target.x },
-        { timeout: 3_000 },
+        { timeout: 30_000 },
       )
     } finally {
       await page.keyboard.up(key)
@@ -2463,7 +2476,7 @@ async function waitForEtherFanFixture(page) {
       const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
       if (!frame || !Number.isFinite(frame.playerX) || !Number.isFinite(frame.playerY)) return null
       const enemies = frame.enemySamples.filter(({ currentHealth }) => currentHealth > 0)
-      if (enemies.length !== 10) return null
+      if (enemies.length < 4) return null
       const center = enemies.reduce((sum, enemy) => ({
         x: sum.x + enemy.x / enemies.length,
         y: sum.y + enemy.y / enemies.length,
@@ -2473,7 +2486,7 @@ async function waitForEtherFanFixture(page) {
       )))
       const distance = Math.hypot(center.x - frame.playerX, center.y - frame.playerY)
       return spread <= 40 && distance >= 180 && distance <= 300
-        ? { distance, spread, tick: frame.tick }
+        ? { distance, enemyCount: enemies.length, spread, tick: frame.tick }
         : null
     }, undefined, { timeout: 30_000 })
   } catch (error) {

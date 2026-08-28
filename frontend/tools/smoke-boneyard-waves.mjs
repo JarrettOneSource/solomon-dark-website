@@ -60,6 +60,7 @@ const dirtScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-dirt$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
 const retiredEntryScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-retired-entry$1')
 const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-melee$1')
+const staffSmokeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-smoke$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
 const chillArrowScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-chill-arrow$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
@@ -280,7 +281,11 @@ try {
       ? await proveRunCombatAdmitted(page, scene)
       : null
     const staffMelee = staffMeleeOnly
-      ? await proveStaffMeleeContact(page, combatNavigation)
+      ? await proveStaffMeleeContact(
+          page,
+          combatNavigation,
+          staffSmokeScreenshotPath,
+        )
       : null
     const chillArrow = chillArrowOnly
       ? await proveChillWindArrowTumble(page, wire, chillArrowScreenshotPath)
@@ -1482,13 +1487,21 @@ async function waitForWaterCohort(page, playerId, expectedCount, expectedSpeed) 
   throw new Error(`Water cohort ${expectedCount}@${expectedSpeed} was not rendered`)
 }
 
-async function proveStaffMeleeContact(page, navigation) {
-  const initialState = host.state()
+async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {
+  let initialState = host.state()
   assert.equal(initialState.world.kind, 'boneyard')
   const playerId = initialState.playerEntities.identities[0]?.playerId
   assert.ok(playerId, 'expected the authoritative browser player')
+  learnFortunateFlailing(initialState, playerId)
   fortifyStaffMovementTrial(initialState, playerId)
   const stagedTargetId = stageStaffMovementTarget(initialState, playerId, navigation)
+  stabilizeStaffMeleeEnemies(initialState, playerId, stagedTargetId)
+  await waitForStaffPresentationReady(page)
+  initialState = host.state()
+  const existingSmokeIds = new Set(initialState.primarySpells.transients
+    .filter(({ kind, ownerId }) => kind === 'player-staff-smoke' && ownerId === playerId)
+    .map(({ id }) => id))
+  const renderedSmokePromise = captureRenderedStaffSmoke(page, smokeScreenshotPath)
   const existingActionIds = new Set(initialState.primarySpells.transients
     .filter((transient) => (
       transient.ownerId === playerId
@@ -1579,10 +1592,19 @@ async function proveStaffMeleeContact(page, navigation) {
     damage.some(({ id }) => targetId === `enemy:${id}`)
   )))
   assert.equal(getPlayerProgression(contactState, playerId).currentMana, manaAtAction)
+  const healthBeforeRepeat = hostileHealthById(contactState)
   await page.waitForFunction(() => {
     const sources = window.__sdrAudioPlaySources ?? []
     return sources.some((source) => source.includes('staff-swoosh'))
   }, undefined, { timeout: 10_000 })
+
+  const smoke = await waitForStaffSmoke(
+    page,
+    playerId,
+    existingSmokeIds,
+    renderedSmokePromise,
+    navigation,
+  )
 
   const repeatDeadline = Date.now() + 30_000
   let repeatAction = null
@@ -1610,10 +1632,7 @@ async function proveStaffMeleeContact(page, navigation) {
   }
   assert.ok(repeatAction && repeatActionState, 'movement did not admit the next Staff action')
 
-  const repeatContactIds = new Set(repeatActionState.primarySpells.transients
-    .filter(({ kind, ownerId }) => kind === 'player-staff-contact' && ownerId === playerId)
-    .map(({ id }) => id))
-  const repeatHealth = hostileHealthById(repeatActionState)
+  const repeatContactIds = new Set([...contactIdsAtAction, contact.id])
   const repeatContactDeadline = Date.now() + 10_000
   let repeatContact = null
   let repeatDamage = []
@@ -1625,7 +1644,7 @@ async function proveStaffMeleeContact(page, navigation) {
       && !repeatContactIds.has(transient.id)
     )) ?? null
     repeatDamage = [...hostileHealthById(state)].flatMap(([id, currentHealth]) => {
-      const previousHealth = repeatHealth.get(id)
+      const previousHealth = healthBeforeRepeat.get(id)
       return previousHealth !== undefined && currentHealth < previousHealth
         ? [{ currentHealth, id, previousHealth }]
         : []
@@ -1659,6 +1678,7 @@ async function proveStaffMeleeContact(page, navigation) {
     repeatActionKind: repeatAction.kind,
     repeatContactId: repeatContact.id,
     repeatDamage,
+    smoke,
     targetId: targetAtAction.id,
     stagedTargetId,
     targetToken: targetAtAction.enemyToken,
@@ -1752,6 +1772,147 @@ async function proveMovementDuringStaffAction(page, playerId, action, actionStat
   assert.ok(receipt.initialVelocityProjection < 0)
   assert.ok(receipt.escapeDistanceFromTurn > 0)
   return receipt
+}
+
+function learnFortunateFlailing(state, playerId) {
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const sourceBook = state.playerEntities.skillBooks[index]
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[71] = 9
+  effectiveRanks[71] = 9
+  const skillBooks = [...state.playerEntities.skillBooks]
+  const progressions = [...state.playerEntities.progressions]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder: sourceBook.learnedSkillOrder.includes(71)
+      ? sourceBook.learnedSkillOrder
+      : [...sourceBook.learnedSkillOrder, 71],
+    permanentRanks,
+  }
+  progressions[index] = {
+    ...progressions[index],
+    revision: progressions[index].revision + 1,
+  }
+  Object.assign(state, {
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      progressions,
+      skillBooks,
+    }, playerId, getPlayerEconomy(state, playerId)),
+  })
+}
+
+async function waitForStaffSmoke(
+  page,
+  playerId,
+  existingSmokeIds,
+  renderedSmokePromise,
+  navigation,
+) {
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    const state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    const smoke = state.primarySpells.transients.find((transient) => (
+      transient.kind === 'player-staff-smoke'
+      && transient.ownerId === playerId
+      && !existingSmokeIds.has(transient.id)
+    ))
+    if (smoke) {
+      const rendered = await renderedSmokePromise
+      if (rendered.error !== null) throw rendered.error
+      return {
+        ageTicks: smoke.ageTicks,
+        alpha: smoke.alpha,
+        entry: smoke.entry,
+        id: smoke.id,
+        kind: smoke.kind,
+        renderedTick: rendered.tick,
+        scale: smoke.scale,
+        screenshotPath: rendered.screenshotPath,
+      }
+    }
+    const frame = await boneyardFrame(page)
+    assert.equal(frame.localPlayerLifeState, 'alive', 'player died before Staff SmokePuff')
+    const direction = nearestEnemyApproachDirection(frame, navigation)
+    if (direction === null) await page.waitForTimeout(20)
+    else await pulseMovement(page, movementKeys(direction), 60)
+  }
+  throw new Error('rank-nine Fortunate Flailing did not render Staff SmokePuff')
+}
+
+function captureRenderedStaffSmoke(page, screenshotPath) {
+  return (async () => {
+    try {
+      await page.waitForFunction(() => (
+        document.querySelector('.boneyard-world-canvas')
+          ?.__sdrBoneyardFrame?.primarySpellKinds?.includes('player-staff-smoke')
+      ), undefined, { timeout: 120_000 })
+      const frame = await boneyardFrame(page)
+      assert.ok(frame.primarySpellKinds.includes('player-staff-smoke'))
+      await page.screenshot({ path: screenshotPath })
+      return { error: null, screenshotPath, tick: frame.tick }
+    } catch (error) {
+      return { error, screenshotPath, tick: null }
+    }
+  })()
+}
+
+async function waitForStaffPresentationReady(page) {
+  await page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')
+      ?.__sdrBoneyardFrame?.arenaTransitionPhase === 'sealed'
+  ), undefined, { timeout: 15_000 })
+  const deadline = Date.now() + 10_000
+  let consecutiveSamples = 0
+  while (Date.now() < deadline) {
+    const frame = await boneyardFrame(page)
+    const lagTicks = host.state().tick - frame.tick
+    consecutiveSamples = lagTicks >= 0 && lagTicks <= 10
+      ? consecutiveSamples + 1
+      : 0
+    if (consecutiveSamples >= 3) return
+    await page.waitForTimeout(20)
+  }
+  throw new Error('Staff presentation did not catch up to the sealed Arena epoch')
+}
+
+function stabilizeStaffMeleeEnemies(state, playerId, targetId) {
+  assert.equal(state.world.kind, 'boneyard')
+  const player = getPlayerCharacter(state, playerId)
+  const target = state.world.enemies.actors.find((actor) => actor.id === targetId)
+  assert.ok(target, 'Staff SmokePuff proof requires one living enemy')
+  const enemies = {
+    ...state.world.enemies,
+    actors: state.world.enemies.actors.map((actor) => {
+      if (actor.id === targetId) {
+        return {
+          ...actor,
+          config: {
+            ...actor.config,
+            extraDamage: 0,
+            maximumHealth: 1_000,
+            primaryDamage: actor.config.primaryDamage === null ? null : 0,
+            secondaryDamage: 0,
+            tertiaryDamage: 0,
+          },
+          currentHealth: 1_000,
+          nextMovementTick: state.tick + 1_000_000,
+          nextTargetRefreshTick: state.tick + 1_000_000,
+        }
+      }
+      return {
+        ...actor,
+        nextMovementTick: state.tick + 1_000_000,
+        nextTargetRefreshTick: state.tick + 1_000_000,
+        position: { x: player.position.x + 2_000 + actor.id, y: player.position.y + 2_000 },
+      }
+    }),
+  }
+  Object.assign(state, { world: { ...state.world, enemies } })
 }
 
 function nearestHostileActor(state, position) {
