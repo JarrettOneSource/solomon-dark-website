@@ -651,6 +651,10 @@ test('takes the native maximum contribution and keeps Lantern flicker cosmetic',
     nativeLanternLightSource({ x: 4, y: 5 }, 0, false).castsDirectionalShadow,
     false,
   )
+  assert.equal(NATIVE_LANTERN_LIGHT_MIN_INTENSITY, 0.55)
+  assert.equal(NATIVE_LANTERN_LIGHT_FLICKER, 0.2)
+  assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).radius, 0.65)
+  assert.deepEqual(nativeLanternLightSource({ x: 4, y: 5 }, 0).position, { x: 4, y: 5 })
 })
 
 test('uses the shipped Windows light-quality profile and a square low-resolution target', () => {

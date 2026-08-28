@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import type { BoneyardDoc } from '../../editor/format/boneyard.ts'
-import type { BoneyardScene } from '../core-kernels/boneyard.ts'
+import type { BoneyardPoint, BoneyardScene } from '../core-kernels/boneyard.ts'
 
 export const SOLOMON_DIG_FRAME_PROGRAM = [
   0, 0, 0, 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17,
@@ -12,6 +12,18 @@ const SOLOMON_X_FROM_GRAVE = 10
 const SOLOMON_Y_FROM_GRAVE = 113
 const LANTERN_X_FROM_GRAVE = -55
 const LANTERN_Y_FROM_GRAVE = 73
+
+// Generated compact entry N binds DeadHawg record 114+N. These seven exact
+// centered record sizes are the generator's dirt/rock families.
+const OPENING_SOLOMON_GROUND_CLUTTER_SIZES = new Map<number, readonly [number, number]>([
+  [6, [260, 178]],
+  [7, [89, 89]],
+  [8, [62, 62]],
+  [21, [64, 56]],
+  [22, [70, 58]],
+  [23, [80, 62]],
+  [24, [69, 59]],
+])
 
 export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
   const spawn = doc.geometry.playerSpawn
@@ -75,9 +87,16 @@ function explicitPostVariant(value: number | undefined): number | undefined {
 }
 
 export function materializeOpeningSolomonSetPiece(scene: BoneyardScene): BoneyardScene {
+  const solomonDig = selectSolomonSetPiece(scene.objects, scene.spawn)
   return {
     ...scene,
-    solomonDig: selectSolomonSetPiece(scene.objects, scene.spawn),
+    solomonDig,
+    sprites: solomonDig === null
+      ? scene.sprites
+      : scene.sprites.filter((sprite) => !openingSolomonGroundClutterContains(
+          sprite,
+          solomonDig.position,
+        )),
   }
 }
 
@@ -116,6 +135,26 @@ function selectSolomonSetPiece(
     frameProgram: SOLOMON_DIG_FRAME_PROGRAM,
     ticksPerFrame: 5,
   }
+}
+
+function openingSolomonGroundClutterContains(
+  sprite: BoneyardScene['sprites'][number],
+  point: Readonly<BoneyardPoint>,
+): boolean {
+  const compactEntry = sprite.deadHawgEntry === undefined
+    ? sprite.atlasEntry
+    : sprite.deadHawgEntry - 114
+  const size = OPENING_SOLOMON_GROUND_CLUTTER_SIZES.get(compactEntry)
+  if (!size) return false
+  const scaleY = Number.isFinite(sprite.s1) ? Math.max(0, sprite.s1) : 1
+  const scaleX = scaleY * ((sprite.flags & 1) !== 0 ? 0.8 : 1)
+  const rotation = (Number.isFinite(sprite.s0) ? sprite.s0 : 0) * Math.PI / 180
+  const dx = point.x - sprite.pos.x
+  const dy = point.y - sprite.pos.y
+  const localX = dx * Math.cos(rotation) + dy * Math.sin(rotation)
+  const localY = -dx * Math.sin(rotation) + dy * Math.cos(rotation)
+  return Math.abs(localX) <= size[0] * scaleX / 2
+    && Math.abs(localY) <= size[1] * scaleY / 2
 }
 
 function compact<T extends object>(

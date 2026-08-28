@@ -112,6 +112,10 @@ page.on('response', (response) => {
     url: response.url(),
   })
 })
+await page.route('**/deployment.json?*', async (route) => {
+  const revision = new URL(route.request().url()).searchParams.get('current')
+  await route.fulfill({ json: { revision } })
+})
 await page.addInitScript((runtime) => {
   window.solomonDarkRuntime = runtime
 }, {
@@ -144,6 +148,11 @@ try {
   )
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
   assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
+  const openingSpriteIds = new Set(loadedBoneyard.scene.sprites.map(({ eid }) => eid))
+  assert.equal(openingSpriteIds.has('sprite-196'), false)
+  for (const preservedSpriteId of ['sprite-193', 'sprite-194', 'sprite-195', 'sprite-197']) {
+    assert.equal(openingSpriteIds.has(preservedSpriteId), true, preservedSpriteId)
+  }
   const surface = await boneyardSurfaceReceipt(page, loadedBoneyard.scene)
   const digAudio = await captureSolomonDigAudio(page)
   const combatNavigation = {
@@ -173,6 +182,9 @@ try {
     digAudio.eventId,
     digAudio.events.length,
   )
+  const nearSolomonFrame = await boneyardFrame(page)
+  assert.ok(nearSolomonFrame.lanternLightIntensity >= 0.55)
+  assert.ok(nearSolomonFrame.lanternLightIntensity <= 0.75)
   await installSolomonSpeakingProbe(page)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
@@ -309,6 +321,11 @@ try {
       gateCrossing,
       nearDigAudio,
       nearSolomon,
+      nearSolomonFrame: {
+        lanternLightIntensity: nearSolomonFrame.lanternLightIntensity,
+        lightSourceCount: nearSolomonFrame.lightSourceCount,
+        solomonGraveMarkPassCount: nearSolomonFrame.solomonGraveMarkPassCount,
+      },
       opening,
       openingSteering,
       productionFrontend,

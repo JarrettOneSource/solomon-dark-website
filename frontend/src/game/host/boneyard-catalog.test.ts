@@ -6,7 +6,10 @@ import {
   materializeBoneyard,
 } from './boneyard-catalog.ts'
 import { NATIVE_GENERATED_BONEYARDS } from './native-generated-boneyards.ts'
-import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
+import {
+  boneyardGeometrySha256,
+  SOLOMON_DIG_FRAME_PROGRAM,
+} from './project-boneyard.ts'
 
 test('native default bank contains distinct exact materializations and Solomon Dig', () => {
   assert.equal(NATIVE_GENERATED_BONEYARDS.length, 12)
@@ -21,6 +24,7 @@ test('native default bank contains distinct exact materializations and Solomon D
   for (const template of NATIVE_GENERATED_BONEYARDS) {
     assert.match(template.sourceSha256, /^[0-9a-f]{64}$/)
     assert.match(template.geometrySha256, /^[0-9a-f]{64}$/)
+    assert.equal(template.geometrySha256, boneyardGeometrySha256(template.scene))
     assert.ok(template.scene.objects.length >= 300)
     assert.ok(template.scene.sprites.length >= 190)
     const candidates = template.scene.objects.filter((object) => (
@@ -92,6 +96,33 @@ test('native default bank retains the complete stock generator output-family cen
   assert.deepEqual([...environmentModes].sort((a, b) => a - b), [0, 1, 2])
 })
 
+test('native default openings contain no transformed dirt or rock beneath Solomon', () => {
+  const overlaps = NATIVE_GENERATED_BONEYARDS.flatMap((template, templateIndex) => {
+    const position = template.scene.solomonDig?.position
+    if (!position) return []
+    return template.scene.sprites.flatMap((sprite) => (
+      openingGroundClutterContains(sprite, position)
+        ? [{ entry: sprite.atlasEntry, sprite: sprite.eid, templateIndex }]
+        : []
+    ))
+  })
+
+  assert.deepEqual(overlaps, [])
+  assert.deepEqual(
+    NATIVE_GENERATED_BONEYARDS
+      .filter(({ sourceSha256 }) => OPENING_CLEARANCE_RECEIPTS.has(sourceSha256))
+      .map(({ geometrySha256, scene, sourceSha256 }) => ({
+        geometrySha256,
+        sourceSha256,
+        spriteCount: scene.sprites.length,
+      })),
+    [...OPENING_CLEARANCE_RECEIPTS].map(([sourceSha256, receipt]) => ({
+      ...receipt,
+      sourceSha256,
+    })),
+  )
+})
+
 test('default selector reaches every stock-generated template', () => {
   const catalog = createBoneyardCatalog()
   const selected = NATIVE_GENERATED_BONEYARDS.map((_, index) => {
@@ -151,4 +182,46 @@ function squaredDistance(
   right: { x: number, y: number },
 ): number {
   return (left.x - right.x) ** 2 + (left.y - right.y) ** 2
+}
+
+const OPENING_GROUND_CLUTTER_SIZES = new Map<number, readonly [number, number]>([
+  [6, [260, 178]],
+  [7, [89, 89]],
+  [8, [62, 62]],
+  [21, [64, 56]],
+  [22, [70, 58]],
+  [23, [80, 62]],
+  [24, [69, 59]],
+])
+
+const OPENING_CLEARANCE_RECEIPTS = new Map([
+  ['2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f', {
+    geometrySha256: 'bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0',
+    spriteCount: 327,
+  }],
+  ['ec2b27a1415c944c233158da8c21324760cd896e1228143aa18d262f65fa2a45', {
+    geometrySha256: 'ffaacb41b92345b1816c0a49c5b0585ac6da7b7ab8153ad162bb833473620750',
+    spriteCount: 271,
+  }],
+  ['624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123', {
+    geometrySha256: 'a026e733247fe03510a517288a6f04f47f41bec54cf16ecbf1926303a529d2b6',
+    spriteCount: 303,
+  }],
+])
+
+function openingGroundClutterContains(
+  sprite: (typeof NATIVE_GENERATED_BONEYARDS)[number]['scene']['sprites'][number],
+  point: { x: number, y: number },
+): boolean {
+  const size = OPENING_GROUND_CLUTTER_SIZES.get(sprite.atlasEntry)
+  if (!size) return false
+  const scaleY = Math.max(0, sprite.s1)
+  const scaleX = scaleY * ((sprite.flags & 1) !== 0 ? 0.8 : 1)
+  const rotation = sprite.s0 * Math.PI / 180
+  const dx = point.x - sprite.pos.x
+  const dy = point.y - sprite.pos.y
+  const localX = dx * Math.cos(rotation) + dy * Math.sin(rotation)
+  const localY = -dx * Math.sin(rotation) + dy * Math.cos(rotation)
+  return Math.abs(localX) <= size[0] * scaleX / 2
+    && Math.abs(localY) <= size[1] * scaleY / 2
 }

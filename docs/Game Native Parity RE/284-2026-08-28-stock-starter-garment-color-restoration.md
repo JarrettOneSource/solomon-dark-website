@@ -256,3 +256,53 @@ No member is blocked by the browser platform.
   requested and were not performed. A final exact-tree canonical gate follows
   this receipt-only ledger update; its result is reported in the task handoff
   rather than recursively mutating this document again.
+
+## 2026-08-28 follow-up report audit
+
+The later report that a newly created wizard can show the wrong robe color is
+already closed by the current `origin/main` implementation above; no second
+writer or renderer patch is justified. The exact observable contract is more
+specific than “always recolor to the selected primary”:
+
+- an ordinary fresh or post-Game-Over generation constructs Hat and Robe from
+  the selected Ether/Fire/Air/Water/Earth base through the native three draws,
+  clamp, and luminance mix, so the item visibly belongs to that family without
+  using the superseded neon RGB;
+- first-College admission constructs one green Hat/Robe pair before Create,
+  and stock's `Game+0x86` guard means Create changes the selected primary but
+  does **not** recolor those existing items;
+- Tutorial tan/orange clothing remains its separate authored override; and
+- every later named, generated, recipe, dyed, modded, or individually changed
+  garment keeps its own item colors and is never rewritten from current spell
+  selection.
+
+Current source at Website `0c510ce3` still routes ordinary construction and
+the narrow vivid-save repair through `rollNativeStarterEquipmentAppearance`,
+retains the College one-shot pair, and projects item tints to local/remote
+Hub/Boneyard, inventory, death, memorial, persistence, and reconnect consumers.
+The final task receipt will repeat the established ordinary/College browser
+assertions on the exact integrated candidate. A failure there reopens this
+system; a passing receipt leaves the implementation untouched.
+
+### Follow-up validation receipt
+
+- No starter-equipment, economy, save, protocol, or renderer production file
+  changed in this task. The complete Mac gate retained all ordinary five-
+  element construction, persistence, consumer, College, Tutorial, and custom-
+  clothing contracts.
+- Built Mac Chrome completed the stock-size Tutorial/College scenario with Fire
+  selected. Tutorial appearance remained exact `0xC4915E`. College Title 7,
+  Title 9, acknowledged Office save, restored Office, returned Courtyard Hat,
+  Robe, and live material all remained exact `0x6F7E72`. Create selected Fire
+  primary row `16` and reset the skills/config without recoloring the existing
+  College pair. Page, console, and failed-response arrays were empty.
+- Browser-log SHA-256 is
+  `0dfb4c788bd0bac573e4a729daf572b6f06e2540b5844f228f0cfaf955c32248`.
+  The reviewed selected-Fire frame is SHA-256
+  `97b5b2e2e4878d7c3479923f7d8d7fb6ef6fc51adabc94ac58d46e908ea44690`;
+  restored Office is
+  `60a0a63abee91dc761bafe899d7cd033858af7af6b28f4f44fe2fb4200eba47f`.
+- The follow-up report therefore does not justify another color writer.
+  Ordinary new generations follow their selected native family; College and
+  Tutorial keep their stock exceptions; later found/generated/dyed/mod clothes
+  remain item-owned.

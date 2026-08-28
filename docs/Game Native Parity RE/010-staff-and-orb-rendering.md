@@ -117,7 +117,7 @@ An instruction-level follow-up removed several phase guesses from the first
 web draw-plan pass:
 
 - Both iterations of Ether's outer two-pass loop reuse the same four values
-  computed before the loop: `tick * 15`, `tick * 5`, `tick * 11`, and
+  computed before the loop: `tick * 15`, `tick * 5`, `tick * 8`, and
   `tick * 0.5`. There is no per-pass `37`-tick offset. Its first two core
   scales use the shared `0.15` amplitude with bases `2.5` and `1.5`.
 - Fire selects `floor(tick / 5) % 12`.
@@ -146,3 +146,8 @@ canvas must therefore preserve each operation's blend mode and use ordinary
 composition for the canvas itself. Create canvas CSS geometry must also scale
 with the `1600 x 900` virtual stage, while the Hub canvas remains in fixed
 world pixels inside the Hub's already-scaled native frame.
+
+The 2026-08-28 Create element-ray cadence correction is the fresh raw-
+instruction authority for the corrected Ether `8` multiplier and the Create
+caller's free-running 100 Hz `App+0x28` phase. Water remains `11`; Staff and
+actor-owned callers retain their established 100 Hz/actor phase sources.

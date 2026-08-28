@@ -7,6 +7,7 @@ import {
   nativeElementVfxPlanAtPhase,
   nativeSelectedPrimaryElementVfxPlan,
 } from './element-vfx-native.ts'
+import { NATIVE_APPLICATION_TICK_MS } from './native-application-tick.ts'
 
 test('uses the native Create and equipped-staff scale inputs', () => {
   assert.deepEqual(NATIVE_ELEMENT_VFX_SCALE, { held: 6, picker: 2, staff: 1 })
@@ -39,6 +40,23 @@ test('Air includes four core passes and both complementary sprite frames', () =>
   assert.ok(Math.hypot(plan[4].x, plan[4].y) < 1)
 })
 
+test('Air keeps one complementary fork bank for eight 100 Hz application ticks', () => {
+  const forks = Array.from({ length: 8 }, (_, tick) => (
+    nativeElementVfxPlan('air', tick, 1).slice(-2)
+  ))
+  assert.equal(8 * NATIVE_APPLICATION_TICK_MS, 80)
+  assert.equal(new Set(forks.map(([first]) => first!.frame)).size, 1)
+  assert.ok(forks.every((pair, tick) => {
+    const first = pair[0]!
+    const second = pair[1]!
+    return first.frame + second.frame === 3
+      && first.blend === 'lighter'
+      && second.blend === 'lighter'
+      && Math.abs(first.alpha - Math.sin(tick * Math.PI / 8)) < 1e-12
+      && Math.abs(second.alpha - first.alpha * 0.25) < 1e-12
+  }))
+})
+
 test('Water holds each native frame for eight ticks and reuses one ray phase', () => {
   assert.equal(nativeElementVfxPlan('water', 7, 1)[0].frame, 0)
   assert.equal(nativeElementVfxPlan('water', 8, 1)[0].frame, 1)
@@ -57,6 +75,25 @@ test('Ether reuses native phases across both painter passes', () => {
   assert.equal(fixedSparks[0].rotation, fixedSparks[1].rotation)
   assert.equal(rays[0].alpha, rays[1].alpha)
   assert.equal(rays[0].rotation, rays[1].rotation)
+})
+
+test('Ether and Water retain their distinct native record-112 opacity phases', () => {
+  const tick = 5
+  const etherRays = nativeElementVfxPlan('ether', tick, 1)
+    .filter(({ sprite }) => sprite === 'ray')
+  const waterRays = nativeElementVfxPlan('water', tick, 1)
+    .filter(({ sprite }) => sprite === 'ray')
+
+  assert.equal(etherRays.length, 2)
+  assert.equal(waterRays.length, 2)
+  assert.ok(etherRays.every(({ blend }) => blend === 'lighter'))
+  assert.ok(waterRays.every(({ blend }) => blend === 'source-over'))
+  assert.ok(etherRays.every(({ alpha }) => Math.abs(
+    alpha - Math.abs(Math.sin(tick * 8 * Math.PI / 180)) * 0.55,
+  ) < 1e-12))
+  assert.ok(waterRays.every(({ alpha }) => Math.abs(
+    alpha - Math.abs(Math.sin(tick * 11 * Math.PI / 180)) * 0.55,
+  ) < 1e-12))
 })
 
 test('explicit element phase preserves Ball Lightning inherited sub-tick motion', () => {

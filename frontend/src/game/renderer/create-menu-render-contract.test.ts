@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -9,6 +10,15 @@ import {
   createEntryFlashAlpha,
   createSelectionFlashAlpha,
 } from './create-menu-render-contract.ts'
+
+const createMenuRenderer = readFileSync(
+  new URL('./create-menu-renderer.ts', import.meta.url),
+  'utf8',
+)
+const createMenuScene = readFileSync(
+  new URL('../CreateMenuScene.tsx', import.meta.url),
+  'utf8',
+)
 
 test('Create hands retain the recovered native centers without rotation offsets', () => {
   assert.deepEqual(CREATE_HAND_CENTERS.left, { x: 400, y: 560 })
@@ -31,4 +41,15 @@ test('Create flash and star presentation are finite at their boundaries', () => 
   assert.equal(createSelectionFlashAlpha(0), 0.78)
   assert.equal(createSelectionFlashAlpha(1680), 0)
   assert.equal(CREATE_STARS.length, 50)
+})
+
+test('Create element painters consume the free-running 100 Hz application tick', () => {
+  assert.match(createMenuScene, /nativeApplicationTick\(now\)/)
+  assert.match(createMenuScene, /applicationTick:\s*nativeApplicationTick\(now\)/)
+  assert.match(
+    createMenuRenderer,
+    /const tick = frame\.reducedMotion \? 0 : frame\.applicationTick/,
+  )
+  assert.doesNotMatch(createMenuRenderer, /sceneElapsedMs \* 60 \/ 1000/)
+  assert.match(createMenuRenderer, /diagnostics\.applicationTick = tick/)
 })

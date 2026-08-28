@@ -593,3 +593,5 @@ Add or revise evidence in the relevant system file, not in this index.
 ## [2026-08-28 — Resume grace after orienting surfaces only](<Game Native Parity RE/294-2026-08-28-resume-grace-after-orienting-surfaces-only.md>)
 
 ## [2026-08-28 — Gold amount, removable perks, overlapping casts, InventoryScreen pages, and completed-run scavenging reopening](<Game Native Parity RE/295-2026-08-28-gold-amount-removable-perks-overlapping-casts-inventoryscreen-pages-and-completed-run-scavenging-reopening.md>)
+
+## [2026-08-28 — Create element-fork and ray cadence correction](<Game Native Parity RE/296-2026-08-28-create-element-ray-cadence-correction.md>)

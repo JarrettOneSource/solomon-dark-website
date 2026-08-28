@@ -425,3 +425,47 @@ non-default LightQuality and fallback class painters used when Complex Shadows
 is disabled remain outside the current on/default WebGL target. Neither permits
 an approximation in the default geometry, lifecycle, source order, or painter
 ownership documented above.
+
+## 2026-08-28 — Solomon Dig Lantern level re-audit
+
+The user requested a fresh check of the Solomon Dig Lantern's lighting level.
+This audit finds no current Website defect and authorizes no tuning.
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified Beta `0.72.5` image, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed lighting oracle as the complete Region closure. | high |
+| Fresh instructions | canonical Ghidra 12.0.3 read-only replica, Lantern provider `0x005E6220` | Provider reads actor root `+0x18/+0x1C`, calls `Float(.2)`, adds `.55`, passes radius `.65`, and forwards global Multiple Shadows to generic submitter `0x0057FE40`. | high |
+| Fresh constants | `0x00784CE8=.2f`, `0x00785680=.5500000119` double, `0x00784DC0=.65f` | Native intensity domain is the inclusive float lattice `0.55..0.75`; radius is exactly `0.65`. | high |
+| Current Website | `native-boneyard-lighting.ts`, `boneyard-lighting.ts`, `boneyard-world-renderer.ts` at `0c510ce3` | Constants are `0.55/.2/.65`; production uses float32 addition and the inclusive semantic native-random projection, submits at `dig.lanternPosition`, and preserves both Multiple Shadows branches. | high |
+| Consumer/lighting census | Region raster stamp, analytic grid, directional records, `nativeSolomonSetPieceLighting` | Lantern is one actor-lane source. Solomon body, Flydirt, and Lantern art query their established separate roots; the late player-aperture policy does not alter it. | high |
+
+Membership remains: one Lantern type `5010` for every materialized opening
+Solomon set piece; no source with zero candidates; one provider at the actor
+root; radius `0.65`; intensity `0.55+Float(.2)`; directional flag equal to
+Multiple Shadows; Region raster/analytic/shadow consumers; teardown with the
+run. All are `verified-already-at-parity`. Solomon_Dig itself remains a
+non-provider, and the separate subdued late player aperture is out of this
+source's system.
+
+The final task acceptance must strengthen the existing contracts and capture a
+real deterministic Boneyard frame with Lantern intensity inside the exact
+inclusive domain, accepted-source diagnostics, unchanged actor/source root,
+and empty browser error arrays. Unless that receipt falsifies this audit, no
+Lantern radius, gain, falloff, position, render order, or product brightness
+constant changes.
+
+### Re-audit validation receipt
+
+- No Lantern production file changed. Focused coverage now explicitly pins
+  `0.55`, `0.2`, radius `0.65`, exact caller position, and both Multiple
+  Shadows branches; the complete Mac gate passed it.
+- In the built deterministic Solomon journey, the near-set-piece frame reported
+  Lantern intensity `0.604095995426178`, two accepted sources, and one visible
+  record-13 Solomon pass. The value lies on the recovered `0.55..0.75`
+  inclusive domain; source collection, Region raster/analytic products,
+  directional shadows, and visible Lantern art remained active. Page, console,
+  failed-response, and wire-error arrays were empty.
+- The reviewed frame SHA-256 is
+  `967c734098f2cb204bcb50f16f3170afb8ff301ac8acd1545bee28361f6f3901`.
+  No evidence falsified the current level, so radius, intensity, falloff,
+  placement, and compositing remain unchanged.

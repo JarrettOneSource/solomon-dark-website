@@ -83,6 +83,34 @@ test('does not synthesize an opening Solomon set piece without an eligible grave
   assert.equal(materializeOpeningSolomonSetPiece(scene).solomonDig, null)
 })
 
+test('clears only transformed ground clutter covering the opening Solomon root', () => {
+  const root = { x: 13, y: 117 }
+  const scene = solomonSelectionScene([
+    { eid: 'grave', typeId: 2029, overlayVariant: 8, pos: { x: 3, y: 4 } },
+  ], [
+    compactSprite('covering-large-dirt', 6, root),
+    compactSprite('covering-dark-dirt', 7, root),
+    compactSprite('covering-small-dark-dirt', 8, root),
+    compactSprite('covering-rock-21', 21, root),
+    compactSprite('covering-rock-22', 22, root),
+    compactSprite('covering-rock-23', 23, { x: root.x, y: root.y + 36 }, 0, 90),
+    compactSprite('covering-rock-24', 24, root),
+    { ...compactSprite('covering-direct-record', 0, root), deadHawgEntry: 121 },
+    compactSprite('covering-foliage', 0, root),
+    compactSprite('outside-dark-dirt', 7, { x: root.x + 60, y: root.y }),
+    compactSprite('outside-flipped-dark-dirt', 7, { x: root.x + 40, y: root.y }, 1),
+  ])
+
+  assert.deepEqual(
+    materializeOpeningSolomonSetPiece(scene).sprites.map(({ eid }) => eid),
+    [
+      'covering-foliage',
+      'outside-dark-dirt',
+      'outside-flipped-dark-dirt',
+    ],
+  )
+})
+
 test('projects explicit Fencepost selectors and omits the native sentinel', () => {
   const document = parseBoneyard(readFileSync(storyFixture))
   assert.ok(document.fences[0])
@@ -154,7 +182,10 @@ test('projects only Demon raw FireBurst death layers into the direct post-world 
   )
 })
 
-function solomonSelectionScene(objects: BoneyardScene['objects']): BoneyardScene {
+function solomonSelectionScene(
+  objects: BoneyardScene['objects'],
+  sprites: BoneyardScene['sprites'] = [],
+): BoneyardScene {
   return {
     bounds: { x: -100, y: -100, w: 200, h: 200 },
     environmentMode: 0,
@@ -164,8 +195,26 @@ function solomonSelectionScene(objects: BoneyardScene['objects']): BoneyardScene
     roads: [],
     solomonDig: null,
     spawn: { x: 0, y: 0, facingDeg: 0 },
-    sprites: [],
+    sprites,
     terrain: [],
+  }
+}
+
+function compactSprite(
+  eid: string,
+  atlasEntry: number,
+  pos: { x: number, y: number },
+  flags = 0,
+  rotation = 0,
+): BoneyardScene['sprites'][number] {
+  return {
+    atlasEntry,
+    eid,
+    flags,
+    pos,
+    s0: rotation,
+    s1: 1,
+    s2: 1,
   }
 }
 

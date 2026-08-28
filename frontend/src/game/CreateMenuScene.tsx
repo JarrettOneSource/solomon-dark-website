@@ -25,6 +25,7 @@ import {
   type CreateAudioEvent,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
+import { nativeApplicationTick } from './native-application-tick.ts'
 import {
   CREATE_DISCIPLINES,
   CREATE_ELEMENTS,
@@ -180,6 +181,7 @@ export default function CreateMenuScene({
           previousSemanticTick = semanticTick
         }
         renderer.render({
+          applicationTick: nativeApplicationTick(now),
           displayName: activeDisplayNameRef.current,
           hoveredAction: hoveredActionRef.current,
           phase,

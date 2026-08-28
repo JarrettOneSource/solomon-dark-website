@@ -59,6 +59,7 @@ export type CreateMenuAction = 'back' | WizardElement | WizardDiscipline
 export type CreateMenuPhase = 'discipline' | 'element'
 
 export interface CreateMenuRenderFrame {
+  applicationTick: number
   displayName: string
   hoveredAction: CreateMenuAction | null
   phase: CreateMenuPhase
@@ -253,6 +254,7 @@ export async function createCreateMenuRenderer(
   let cachedMotionPhase: CreateMenuPhase | null = null
   let cachedMotionTick = -1
   const diagnostics = {
+    applicationTick: 0,
     element: null as WizardElement | null,
     frameCount: 0,
     phase: 'element' as CreateMenuPhase,
@@ -288,7 +290,7 @@ export async function createCreateMenuRenderer(
       }
       const motion = cachedMotion
       const idle = createHandIdleOffsetAt(frame.reducedMotion ? 0 : frame.sceneElapsedMs)
-      const tick = frame.reducedMotion ? 0 : Math.floor(frame.sceneElapsedMs * 60 / 1000)
+      const tick = frame.reducedMotion ? 0 : frame.applicationTick
 
       wheel.rotation = (frame.reducedMotion ? 0 : frame.sceneElapsedMs / 1000 * 10)
         * Math.PI / 180
@@ -325,6 +327,7 @@ export async function createCreateMenuRenderer(
       updateStars(starSprites, frame)
 
       application.render()
+      diagnostics.applicationTick = tick
       diagnostics.element = frame.selectedElement
       diagnostics.frameCount += 1
       diagnostics.phase = frame.phase
@@ -390,6 +393,7 @@ export async function createCreateMenuRenderer(
     resolution,
   )
   renderer.render({
+    applicationTick: 0,
     displayName: 'HELVIDIUS',
     hoveredAction: null,
     phase: 'element',

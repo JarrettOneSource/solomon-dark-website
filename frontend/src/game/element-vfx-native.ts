@@ -155,7 +155,7 @@ function etherPlan(tick: number, scale: number): NativeElementVfxDraw[] {
     }
 
     plan.push(draw('ray', (1 + visualRandom(tick, randomChannel++) * 0.3) * scale, {
-      alpha: Math.abs(Math.sin(tick * 11 * Math.PI / 180)) * 0.55,
+      alpha: Math.abs(Math.sin(tick * 8 * Math.PI / 180)) * 0.55,
       blend: 'lighter',
       rotation: Math.sin(tick * 0.5 * Math.PI / 180) * scale * 50,
     }))

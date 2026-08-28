@@ -10,6 +10,11 @@ const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
 const screenshotPrefix = process.env.SDR_GAME_PERF_SCREENSHOT_PREFIX?.trim()
 const browserFrameLimitDisabled = process.env.SDR_GAME_PERF_UNCAPPED === '1'
 const presentationUncapped = process.env.SDR_GAME_PRESENTATION_UNCAPPED === '1'
+const gameEndpoint = process.env.SDR_GAME_SMOKE_ENDPOINT?.trim()
+const gameCredential = process.env.SDR_GAME_SMOKE_CREDENTIAL?.trim()
+if (Boolean(gameEndpoint) !== Boolean(gameCredential)) {
+  throw new Error('SDR_GAME_SMOKE_ENDPOINT and SDR_GAME_SMOKE_CREDENTIAL must be set together')
+}
 const connectedBrowser = Boolean(cdpUrl)
 const browser = cdpUrl
   ? await chromium.connectOverCDP(cdpUrl)
@@ -32,6 +37,21 @@ page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(message.text())
 })
+await page.route('**/deployment.json?*', async (route) => {
+  const revision = new URL(route.request().url()).searchParams.get('current')
+  await route.fulfill({ json: { revision } })
+})
+if (gameEndpoint && gameCredential) {
+  await page.addInitScript((runtime) => {
+    window.solomonDarkRuntime = runtime
+  }, {
+    gameEndpoint: {
+      credential: gameCredential,
+      kind: 'localhost',
+      url: gameEndpoint,
+    },
+  })
+}
 
 try {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
@@ -54,11 +74,25 @@ try {
   const title = await measureScene(page, sampleMs, '.main-menu-stage')
   if (screenshotPrefix) await page.screenshot({ path: `${screenshotPrefix}-title.png` })
 
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
     .waitFor({ timeout: 30_000 })
+  const elementApplicationTickStartedAt = performance.now()
+  const elementApplicationTickStart = await createApplicationTick(page)
   const elementPicker = await measureScene(page, sampleMs, '.create-menu-scene')
+  const elementApplicationTickEnd = await createApplicationTick(page)
+  const elementApplicationTickElapsedMs = performance.now() - elementApplicationTickStartedAt
+  const elementApplicationTickDelta = elementApplicationTickEnd - elementApplicationTickStart
+  assert.ok(
+    Math.abs(elementApplicationTickDelta - elementApplicationTickElapsedMs / 10) <= 3,
+    JSON.stringify({ elementApplicationTickDelta, elementApplicationTickElapsedMs }),
+  )
   if (screenshotPrefix) await page.screenshot({ path: `${screenshotPrefix}-element.png` })
 
   await page.getByRole('button', { name: /fire/i }).click()
@@ -81,6 +115,8 @@ try {
   process.stdout.write(`${JSON.stringify({
     browserFrameLimitDisabled,
     disciplinePicker,
+    elementApplicationTickDelta,
+    elementApplicationTickElapsedMs: round(elementApplicationTickElapsedMs),
     elementPicker,
     loader,
     presentationFrameCap: presentation.frameCap,
@@ -112,6 +148,12 @@ try {
 } finally {
   await page.close()
   await browser.close()
+}
+
+async function createApplicationTick(page) {
+  return page.locator('.create-menu-canvas').evaluate((canvas) => (
+    Number(canvas.__sdrCreateFrame?.applicationTick)
+  ))
 }
 
 async function measureScene(page, duration, sceneSelector) {

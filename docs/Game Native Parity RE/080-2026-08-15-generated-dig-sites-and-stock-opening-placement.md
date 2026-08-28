@@ -239,3 +239,135 @@ Chrome journey above is the browser acceptance for this placement-specific
 change; host/client selection equality remains structurally guaranteed by the
 single host-authored projected scene and geometry hash rather than a claimed
 new multiplayer browser receipt.
+
+## 2026-08-28 — Opening set-piece ground-clutter clearance
+
+### Reported smell and boundary correction
+
+The user asked for another Solomon Dig placement review and for a visible
+"rock" at the set piece to be removed. A deterministic Website template-zero
+journey makes the object concrete: the large dark patch directly under
+Solomon is generated compact entry `7`, DeadHawg record `121`, whose maintained
+catalogue name is **dark dirt patch**. It is not Solomon record 13, Flydirt,
+the grave underlay, the Lantern, or an actor shadow.
+
+The fixed stock placement remains correct. Fresh review of `0x00465920` and
+`0x00467230` confirms that mode 10 still selects the first strict
+spawn-nearest overlay-8 grave and builds Solomon/Lantern at `(+10,+113)` and
+`(-55,+73)`. The builder does not delete the serialized compact patch. The
+exact stock-generator source also contains it, so the requested removal is a
+deliberate Website readability override rather than a newly recovered retail
+deletion. That predicted stock difference is recorded explicitly instead of
+being disguised as native parity.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail instructions | canonical read-only Ghidra replica; placement builder `0x00465920`, candidate owner `0x00467230`, duplicate gate `0x00467160` | The selected grave survives; the builder creates type `5009` and `5010` at the established offsets and has no compact-sprite deletion path. | high |
+| Exact stock-generated data | template-zero `play.boneyard`, SHA-256 `2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f`; projected sprite `196` | Compact entry `7` is centered at `(951.7761840820312,2293.22265625)`, rotated `8.779399871826172` degrees, scale `1.1761225461959839`, flags `1`; its transformed record-121 rectangle contains Solomon root `(931.10498046875,2279.613037109375)`. | high |
+| Asset/data | Website DeadHawg manifest and palette; generated compact entry maps as `114+entry` | Ground-clutter membership is entry `6/7/8/21/22/23/24` = records `120/121/122/135/136/137/138`; exact centered dimensions are `260x178`, `89x89`, `62x62`, `64x56`, `70x58`, `80x62`, `69x59`. Record 121 is catalogued `dark dirt patch`; record 137 is a rock. | high |
+| Complete retained-bank sweep | all twelve exact stock-generator sources and current projected scenes | Exact inverse-rotated containment finds four covering ground-clutter sprites: template 0 record 121; template 5 records 120 and 121; template 6 record 137. The other nine templates contain none. | high |
+| Current Mac reproduction | Website `0c94685e`, template-zero seed, Mac Chrome 151, 1600x900 | The dark record-121 patch is visibly centered under digging/speaking Solomon. Dirt-frame SHA-256 `1a64f891cfba0f11789f50d191f5bc2e0f80bce0a25dd6b0acdf80623a924315`; speaking frame `ee3525e043cad3e21cc932310d506ac6fbf8f1c5e33290db091c79075cff5860`. The journey later failed an unrelated retired-entry movement assertion and is baseline evidence, not a passing acceptance receipt. | high |
+| User product direction | explicit 2026-08-28 report | Clear the rock/patch from Solomon Dig while reviewing placement. | authoritative |
+
+### System boundary and membership inventory
+
+Native/product system: **opening Solomon set-piece projection**, from exact
+grave selection through fixed resident roots and the narrow Website clearance
+of generated ground clutter that covers the Solomon actor root.
+
+| Member / branch | Source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| mode-10 qualifying graves, strict nearest, first-wins ties, zero-candidate branch | `0x00467230`; existing projection | `verified-already-at-parity` | no selection or tie-rule change |
+| grave root and serialized grave actor/underlay | type `2029`, overlay `8` | `verified-already-at-parity` | grave remains in objects and normal painter passes |
+| Solomon root `grave+(10,113)` | `0x00465920` | `verified-already-at-parity` | all twelve roots unchanged |
+| Lantern root `grave+(-55,73)` | `0x00465920` | `verified-already-at-parity` | all twelve roots unchanged |
+| DeadHawg record-13 co-rooted Solomon pass | `0x004A2610` | `verified-already-at-parity` | remains visible through digging/dialogue and retires with established phase |
+| template 0 entry-7 / record-121 covering patch | exact source `21180537...` | `out-of-system` (explicit Website readability removal) | excluded because its exact transformed rectangle contains Solomon root |
+| template 5 entry-6/7 / records 120/121 covering patches | exact source `ec2b27a1...` | `out-of-system` (same product rule) | both excluded by the same geometry predicate |
+| template 6 entry-23 / record-137 covering rock | exact source `624b79ae...` | `out-of-system` (same product rule) | excluded by the same geometry predicate |
+| ground-clutter entries `6/7/8/21..24` not covering Solomon | exact seven-row footprint table | `verified-already-at-parity` | byte-identical sprite rows survive |
+| compact foliage `0..5`, environment `25..28`, promoted-grave decoration not in the covering ground-clutter set | complete generator census | `verified-already-at-parity` | no broad radius filter or template-specific deletion |
+| other nine retained templates | complete bank sweep | `verified-already-at-parity` | sprite count/rows unchanged |
+| custom projected Boneyard with an overlay-8 opening grave | Website projection boundary | `exact-ported` placement plus the same explicit product clearance | no hard-coded template hash or sprite EID |
+| later random mode-2 replacement, modes 3..5, unsupported 6..9 | native script/runtime branches | `out-of-system` (browser does not execute these script policies) | no new generic script interpreter |
+
+No browser member is blocked. The predicted visible stock difference is the
+intentional absence of a compact dirt/rock sprite only when its transformed
+ground-clutter rectangle covers the opening Solomon root.
+
+### Recovered/product contract and implementation consequence
+
+- Preserve exact compact transform semantics: position is the registered
+  center; rotation is `s0`; Y scale is `max(0,s1)`; X scale additionally uses
+  the native `0.8` factor when flags bit zero is set.
+- Footprints are the seven exact DeadHawg centered record dimensions above.
+  Transform the Solomon point into sprite-local space and use inclusive
+  half-width/half-height containment. A distance-only radius, axis-aligned
+  approximation, template hash, or sprite EID is forbidden.
+- Apply the filter only after the opening grave and fixed roots are known.
+  Preserve all noncovering compact rows byte-for-byte.
+- Rebuild the checked-in twelve-template bank from the same exact read-only
+  stock-generated source files. Source SHA-256 values stay fixed; projected
+  geometry hashes change only for templates 0, 5, and 6.
+- Keep selection, objects, roads, fences, terrain, collision, actor state,
+  record-13 pass, Flydirt, Lantern art/light, and multiplayer ownership
+  unchanged.
+
+### Validation contract
+
+- Red/green projection tests must pin all seven footprint rows, inverse-rotated
+  containment including the flags-bit X scale, four removed members across
+  exactly three retained templates, unchanged source hashes/roots, and
+  identity preservation for every other sprite.
+- The complete stock-generator census remains `0..8,21..28`; filtering a
+  projected opening does not rewrite the source-data truth or invent another
+  generator family.
+- Mac Chrome must enter deterministic template zero, reach Solomon, prove
+  record 121 is absent from the served scene and frame while record 13, the
+  remaining promoted-grave patches, grave, Lantern, body, and Flydirt remain;
+  page/console/failed-response arrays must be empty.
+- The exact final candidate must pass `/opt/homebrew/bin/bash
+  ./scripts/validate.sh` on the Mac mini.
+
+### Implementation validation receipt
+
+- `materializeOpeningSolomonSetPiece` still performs the same strict-nearest
+  grave selection and fixed resident placement, then tests only generated
+  ground-clutter entries `6/7/8/21..24` against the Solomon root in exact local
+  sprite coordinates. The predicate preserves centered record dimensions,
+  `s0` rotation, `s1` scale, and flags-bit X factor; it has no template hash,
+  sprite EID, distance-radius, or renderer-only exception.
+- The twelve-template bank was regenerated from the same read-only stock files.
+  Every source SHA-256 and Solomon/grave/Lantern state is unchanged. Template 0
+  removes only `sprite-196` and changes geometry hash to
+  `bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0`
+  with 327 sprites; template 5 removes `sprite-131/142`, hash
+  `ffaacb41b92345b1816c0a49c5b0585ac6da7b7ab8153ad162bb833473620750`
+  with 271; template 6 removes `sprite-34`, hash
+  `a026e733247fe03510a517288a6f04f47f41bec54cf16ecbf1926303a529d2b6`
+  with 303. The other nine scene hashes and sprite arrays are identity-equal.
+- Focused coverage includes all seven dirt/rock rows, direct-record mapping,
+  a rotation-discriminating rock, flags-bit X scaling, non-ground foliage,
+  noncovering patches, zero-candidate behavior, all twelve computed geometry
+  hashes, exact three-template receipts, fixed roots, and the complete
+  generator-family census. These contracts participated in the complete green
+  Mac gate recorded above.
+- Built production Mac Chrome selected deterministic template-zero source
+  `2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f`.
+  The served scene omitted `sprite-196` while retaining neighboring
+  `sprite-193/194/195/197`. Record-13 pass count was one while digging and
+  speaking and zero after Solomon ran. Flydirt retained two passes across ages
+  `1..28` and retired naturally; the run reached 11 opening enemies. Wire,
+  page, console, and failed-response arrays were empty.
+- Reviewed corrected dirt and speaking frames are SHA-256
+  `967c734098f2cb204bcb50f16f3170afb8ff301ac8acd1545bee28361f6f3901`
+  and
+  `adaa5ba940d467e7f6681112cd47cae71adad622d9a3808409834dbb41691415`.
+  They retain the grave, neighboring authored dirt, record-13 strip, body,
+  Flydirt, and Lantern while the actor-covering dark patch is absent.
+- This is an explicit four-sprite Website readability difference from the
+  sealed stock-generated files, not a retail-parity claim. No browser member is
+  blocked and no placement unknown remains. Publication/deployment were not
+  requested or performed.

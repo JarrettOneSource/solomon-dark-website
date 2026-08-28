@@ -314,3 +314,14 @@ Confidence: high from all participating bundle records, the shared painter
 call sites, the live quad/entry breakpoint values, clean native/web 1600x900
 comparison captures, and direct inspection of the browser backing pixels after
 the failed clear had accumulated for several seconds.
+
+## 2026-08-28 element-fork/ray cadence reopening
+
+The dedicated [Create element-fork and ray cadence correction](<296-2026-08-28-create-element-ray-cadence-correction.md>)
+supersedes the web phase source implicit in the first WebGL port. All five
+Create element painters read the free-running 100 Hz application tick
+`0x0081F658`; they do not advance at a scene-local 60 Hz conversion. This
+restores Air's eight-tick fork bank to 80 ms, corrects Ether record-112 opacity
+to `8` degrees per tick, and retains Water's separate `11`-degree row.
+Geometry, scale, assets, pass count, blend, and painter order above remain
+authoritative.
