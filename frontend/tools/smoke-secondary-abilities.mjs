@@ -445,8 +445,17 @@ try {
         '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown path',
       )
       await path.waitFor({ timeout: 2_000 })
-      cooldownPath = await path.getAttribute('d')
+      cooldownQuickbar = await captureQuickbarPresentation(page)
+      cooldownPath = cooldownQuickbar.cooldownPath
+      assert.equal(cooldownQuickbar.alpha, 0.25)
+      assert.equal(cooldownQuickbar.iconOpacity, 0.25)
+      assert.equal(cooldownQuickbar.unavailable, false)
       assert.ok(cooldownPath?.startsWith('M 26.5 26.5 L '))
+      if (selectedContracts.length === 1) {
+        const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-cooldown.png`
+        await page.screenshot({ path: screenshotPath })
+        cooldownQuickbar = { ...cooldownQuickbar, screenshotPath }
+      }
       assert.ok((committedPlayer?.globalCooldownTicks ?? 0) > 0)
       const rowCurrent = committedPlayer?.cooldownTicksBySkill[contract.skillId] ?? 0
       if (expectedCooldownCapacity < 150) {
@@ -461,16 +470,6 @@ try {
         ).getAttribute('aria-label')) ?? '',
         /cooldown remaining/,
       )
-      cooldownQuickbar = await waitForQuickbarPresentation(page, {
-        alpha: 0.25,
-        cooldown: true,
-        unavailable: false,
-      })
-      if (selectedContracts.length === 1) {
-        const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-cooldown.png`
-        await page.screenshot({ path: screenshotPath })
-        cooldownQuickbar = { ...cooldownQuickbar, screenshotPath }
-      }
     }
     const cooldownAtCast = {
       capacityTicks: expectedCooldownCapacity,
