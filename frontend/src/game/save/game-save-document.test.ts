@@ -1044,7 +1044,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   assert.equal(encoded.profile.economy.backpack.length, 2)
   assert.deepEqual(
     encoded.continuation.simulation.playerEntities.economies[0].backpack[0],
-    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId },
+    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId, inventorySlot: 0 },
   )
   const retired = JSON.parse(retireGameSaveWizard(document))
   assert.equal(retired.continuation, null)
@@ -1060,7 +1060,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   assert.equal(restored.state.world.kind, 'boneyard')
   assert.deepEqual(
     restored.state.playerEntities.economies[0]?.backpack[0],
-    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId },
+    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId, inventorySlot: 0 },
   )
   if (restored.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')
   assert.deepEqual(restored.state.world.tutorial, state.world.kind === 'boneyard'

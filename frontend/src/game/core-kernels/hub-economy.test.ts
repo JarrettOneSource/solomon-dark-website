@@ -331,10 +331,12 @@ test('completed-run archival packs overflow and a full storage root without losi
   const backpack = Array.from({ length: 20 }, (_, index) => ({
     ...base.backpack[0]!,
     id: 20_000 + index,
+    inventorySlot: index,
   }))
   const storage = Array.from({ length: HUB_STORAGE_SLOT_CAPACITY }, (_, index) => ({
     ...base.backpack[1]!,
     id: 30_000 + index,
+    inventorySlot: index,
   }))
   const archived = archiveCompletedRunEconomy({
     ...base,
@@ -635,8 +637,11 @@ test('all six equipment classes route through the seven sinks and third ring is 
 test('equipping into an occupied compatible sink returns the exact displaced item once', () => {
   const base = createHubEconomy(1)
   const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
-  const first = createEquipmentInventoryItem(ringRecipe, base.nextItemId)
-  const second = createEquipmentInventoryItem(ringRecipe, base.nextItemId + 1)
+  const first = { ...createEquipmentInventoryItem(ringRecipe, base.nextItemId), inventorySlot: 2 }
+  const second = {
+    ...createEquipmentInventoryItem(ringRecipe, base.nextItemId + 1),
+    inventorySlot: 3,
+  }
   const stocked = {
     ...base,
     backpack: [...base.backpack, first, second],
@@ -655,17 +660,17 @@ test('equipping into an occupied compatible sink returns the exact displaced ite
 test('equipping a direct Sack child returns displaced gear to that same native root', () => {
   const base = createHubEconomy(1)
   const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!
-  const hat = createEquipmentInventoryItem(hatRecipe, base.nextItemId)
-  const sack = nativeTestSack(base.nextItemId + 1, [hat])
+  const hat = { ...createEquipmentInventoryItem(hatRecipe, base.nextItemId), inventorySlot: 0 }
+  const sack = { ...nativeTestSack(base.nextItemId + 1, [hat]), inventorySlot: 2 }
   const source = { ...base, backpack: [...base.backpack, sack], nextItemId: base.nextItemId + 2 }
   const equipped = equipInventoryItem(source, hat.id, 'hat')
   assert.equal(equipped.accepted, true)
   assert.strictEqual(equipped.state.equipment.hat, hat)
   assert.equal(equipped.state.backpack.some(({ id }) => id === base.equipment.hat!.id), false)
-  assert.strictEqual(
-    findInventoryItem(equipped.state.backpack, sack.id)?.contents?.[0],
-    base.equipment.hat,
-  )
+  assert.deepEqual(findInventoryItem(equipped.state.backpack, sack.id)?.contents?.[0], {
+    ...base.equipment.hat,
+    inventorySlot: 0,
+  })
 })
 
 test('Sack item action equips eligible direct children and returns displaced gear to that Sack', () => {
@@ -674,8 +679,12 @@ test('Sack item action equips eligible direct children and returns displaced gea
     DOWSING_EQUIPMENT_RECIPES.find((candidate) => candidate.type === type)!
   )
   let nextId = base.nextItemId
+  let nextInventorySlot = 0
   const equipment = (type: Exclude<HubInventoryItem['equipmentType'], null>) => (
-    createEquipmentInventoryItem(recipe(type), nextId++)
+    {
+      ...createEquipmentInventoryItem(recipe(type), nextId++),
+      inventorySlot: nextInventorySlot++,
+    }
   )
   const hat = equipment('hat')
   const robe = equipment('robe')
@@ -686,13 +695,16 @@ test('Sack item action equips eligible direct children and returns displaced gea
   const ringA = equipment('ring')
   const ringB = equipment('ring')
   const ringC = equipment('ring')
-  const nestedHat = equipment('hat')
-  const nested = nativeTestSack(nextId++, [nestedHat])
-  const potion = { ...base.backpack[0]!, id: nextId++ }
-  const actionSack = nativeTestSack(nextId++, [
+  const nestedHat = { ...equipment('hat'), inventorySlot: 0 }
+  const nested = {
+    ...nativeTestSack(nextId++, [nestedHat]),
+    inventorySlot: nextInventorySlot++,
+  }
+  const potion = { ...base.backpack[0]!, id: nextId++, inventorySlot: nextInventorySlot++ }
+  const actionSack = { ...nativeTestSack(nextId++, [
     hat, robe, staff, wand, amulet, highRing, ringA, ringB, ringC, nested, potion,
-  ])
-  const carrier = nativeTestSack(nextId++, [actionSack])
+  ]), inventorySlot: 0 }
+  const carrier = { ...nativeTestSack(nextId++, [actionSack]), inventorySlot: 2 }
   const source = { ...base, backpack: [...base.backpack, carrier], nextItemId: nextId }
 
   const result = equipEligibleInventorySackContents(source, actionSack.id, 5)
@@ -733,13 +745,29 @@ test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct na
     nativeTypeId: 7012,
     quantity: 1,
   })
-  const fullStorage = { ...base, storage: Array.from({ length: 28 }, (_, index) => unique(index)) }
+  const fullStorage = {
+    ...base,
+    storage: Array.from({ length: 28 }, (_, index) => ({
+      ...unique(index),
+      inventorySlot: index,
+    })),
+  }
   assert.equal(transferInventoryItem(fullStorage, health.id, 'to-storage').reason, 'capacity-full')
 
-  const backpack = Array.from({ length: 87 }, (_, index) => unique(index))
-  const oneSlot = { ...base, backpack, storage: [unique(999)] }
+  const backpack = Array.from({ length: 87 }, (_, index) => ({
+    ...unique(index),
+    inventorySlot: index,
+  }))
+  const oneSlot = { ...base, backpack, storage: [{ ...unique(999), inventorySlot: 0 }] }
   assert.equal(transferInventoryItem(oneSlot, oneSlot.storage[0]!.id, 'to-backpack').accepted, true)
-  const fullBackpack = { ...base, backpack: Array.from({ length: 88 }, (_, index) => unique(index)), storage: [unique(999)] }
+  const fullBackpack = {
+    ...base,
+    backpack: Array.from({ length: 88 }, (_, index) => ({
+      ...unique(index),
+      inventorySlot: index,
+    })),
+    storage: [{ ...unique(999), inventorySlot: 0 }],
+  }
   assert.equal(transferInventoryItem(fullBackpack, fullBackpack.storage[0]!.id, 'to-backpack').reason, 'capacity-full')
 })
 
@@ -897,6 +925,7 @@ test('unforge owns the exhaustive seven-type gate and rejects every sibling item
       contents: nativeTypeId === 7008 ? [] : undefined,
       equipmentType: nativeTypeId === 7008 ? null : 'ring' as const,
       id: 20_000 + nativeTypeId,
+      inventorySlot: 2,
       kind: nativeTypeId === 7008 ? 'sack' as const : 'equipment' as const,
       name: `Eligible ${nativeTypeId}`,
       nativeTypeId,
@@ -917,7 +946,7 @@ test('unforge owns the exhaustive seven-type gate and rejects every sibling item
   }
 
   for (const nativeTypeId of [7000, 7001, 7009, 7010, 7012]) {
-    const item = { ...template, id: 30_000 + nativeTypeId, nativeTypeId }
+    const item = { ...template, id: 30_000 + nativeTypeId, inventorySlot: 2, nativeTypeId }
     assert.equal(nativeInventoryItemCanUnforge(item), false, `${nativeTypeId} is ineligible`)
     const state = { ...base, backpack: [...base.backpack, item] }
     const result = unforgeInventoryItem(state, item.id, {
@@ -1191,7 +1220,9 @@ test('every recursive InventoryScreen root uses addressed slots and first-hole i
   })
   assert.equal(inserted.accepted, true)
   assert.equal(
-    projectInventoryRootSlots(inserted.state.backpack).find(({ item }) => item.id === 41_004)?.slot,
+    projectInventoryRootSlots(inserted.state.backpack).find(({ item }) => (
+      item.id === inserted.state.nextItemId - 1
+    ))?.slot,
     0,
   )
 })
@@ -1228,7 +1259,7 @@ test('sack relinking honors participant child and root replication bounds', () =
   const template = base.backpack[0]!
   const fullSack = nativeTestSack(11_000, Array.from(
     { length: HUB_SACK_CHILD_REPLICATION_LIMIT },
-    (_, index) => ({ ...template, id: 11_100 + index }),
+    (_, index) => ({ ...template, id: 11_100 + index, inventorySlot: index }),
   ))
   const loose = nativeTestSack(20_000)
   const childCapacity = moveInventoryItem(
@@ -1258,6 +1289,7 @@ test('sack relinking honors participant child and root replication bounds', () =
       ...Array.from({ length: HUB_INVENTORY_SLOT_CAPACITY - 1 }, (_, index) => ({
         ...template,
         id: 12_600 + index,
+        inventorySlot: index + 1,
       })),
     ],
   }
@@ -1297,13 +1329,16 @@ test('recursive backpack and storage transfer preserves nonempty Item_Sack desce
   const stored = transferInventoryItem(state, nested.id, 'to-storage')
   assert.equal(stored.accepted, true)
   assert.deepEqual(findInventoryItem(stored.state.backpack, outer.id)?.contents, [])
-  assert.strictEqual(stored.state.storage[0], nested)
-  assert.strictEqual(findInventoryItem(stored.state.storage, potion.id), potion)
+  assert.equal(stored.state.storage[0]?.id, nested.id)
+  assert.deepEqual(findInventoryItem(stored.state.storage, potion.id), {
+    ...potion,
+    inventorySlot: 0,
+  })
 
   const restored = transferInventoryItem(stored.state, nested.id, 'to-backpack')
   assert.equal(restored.accepted, true)
   assert.equal(restored.state.storage.length, 0)
-  assert.strictEqual(restored.state.backpack.at(-1), nested)
+  assert.equal(restored.state.backpack.find(({ id }) => id === nested.id)?.id, nested.id)
   assert.equal(findInventoryItem(restored.state.backpack, potion.id)?.quantity, 4)
 })
 

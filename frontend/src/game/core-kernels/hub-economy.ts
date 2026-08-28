@@ -1952,7 +1952,7 @@ export function equipInventoryItem(
   return accepted({
     ...source,
     backpack,
-    equipment: withEquippedItem(source.equipment, slot, detachedInventoryItem(item)),
+    equipment: withEquippedItem(source.equipment, slot, item),
   })
 }
 
@@ -2192,7 +2192,7 @@ interface RemovedInventoryTreeItem {
 function materializeInventoryRootSlots(
   source: readonly HubInventoryItem[],
 ): readonly HubInventoryItem[] {
-  return projectInventoryRootSlots(source).map(({ item, slot }) => {
+  const materialized = projectInventoryRootSlots(source).map(({ item, slot }) => {
     const contents = item.contents === undefined
       ? undefined
       : materializeInventoryRootSlots(item.contents)
@@ -2203,6 +2203,10 @@ function materializeInventoryRootSlots(
       inventorySlot: slot,
     }
   })
+  return materialized.length === source.length
+    && materialized.every((item, index) => item === source[index])
+    ? source
+    : materialized
 }
 
 function inventoryRootForParent(
@@ -2504,7 +2508,7 @@ function insertItem(
   while (occupied.has(slot) && slot < capacity) slot += 1
   return slot >= capacity
     ? null
-    : [...slotted, { ...item, inventorySlot: slot }]
+    : [...slotted, itemAtInventorySlot(item, slot)]
 }
 
 function insertItemAtSlot(
@@ -2516,7 +2520,7 @@ function insertItemAtSlot(
   if (!Number.isSafeInteger(slot) || slot < 0 || slot >= capacity) return null
   const slotted = materializeInventoryRootSlots(destination)
   const resident = slotted.find((entry) => entry.inventorySlot === slot)
-  if (!resident) return [...slotted, { ...item, inventorySlot: slot }]
+  if (!resident) return [...slotted, itemAtInventorySlot(item, slot)]
   if (!inventoryItemsShareStack(resident, item)) return null
   const maximum = item.modItemContent?.stackMaximum ?? 9_999
   if (resident.quantity + item.quantity > maximum) return null
@@ -2536,6 +2540,10 @@ function inventoryItemsShareStack(
   if (right.modContent) return left.modContent?.contentId === right.modContent.contentId
   return (right.nativeTypeId === 7001 || right.kind === 'mod-item')
     && left.nativeSubtype === right.nativeSubtype
+}
+
+function itemAtInventorySlot(item: HubInventoryItem, inventorySlot: number): HubInventoryItem {
+  return item.inventorySlot === inventorySlot ? item : { ...item, inventorySlot }
 }
 
 function slotAccepts(slot: EquipmentSlot, type: EquipmentType): boolean {
@@ -2572,11 +2580,6 @@ function withEquippedItem(
   return { ...source, [slot]: item }
 }
 
-function detachedInventoryItem(item: HubInventoryItem): HubInventoryItem {
-  const { inventorySlot: _inventorySlot, ...detached } = item
-  return detached
-}
-
 function equipDirectSackChild(
   source: HubEconomyState,
   sackId: number,
@@ -2607,7 +2610,7 @@ function equipDirectSackChild(
     : {
         ...source,
         backpack,
-        equipment: withEquippedItem(source.equipment, slot, detachedInventoryItem(item)),
+        equipment: withEquippedItem(source.equipment, slot, item),
       }
 }
 
