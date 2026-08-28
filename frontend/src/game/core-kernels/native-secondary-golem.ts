@@ -88,12 +88,14 @@ export interface NativeGolemContact {
 
 export interface NativeGolemKernelStepResult {
   readonly actor: NativeGolemKernelActor
-  readonly assemblyImpact: boolean
+  readonly assemblyMilestone: NativeGolemAssemblyMilestone | null
   readonly contact: NativeGolemContact | null
   readonly footstep: boolean
   readonly provokeStarted: boolean
   readonly rng: NativeRngState
 }
+
+export type NativeGolemAssemblyMilestone = 0 | 50 | 100 | 200
 
 export function nativeInitialGolemArticulation(
   position: Vector2,
@@ -171,12 +173,12 @@ export function stepNativeSecondaryGolem(
           : source.golem.phase,
     },
   }
-  const assemblyImpact = assembling && (
+  const assemblyMilestone: NativeGolemAssemblyMilestone | null = assembling && (
     source.ageTicks === 0
     || source.ageTicks === 50
     || source.ageTicks === 100
     || source.ageTicks === 200
-  )
+  ) ? source.ageTicks : null
   if (assembling) {
     const leftFoot = resolveFootTarget(
       actor.golem.leftFoot,
@@ -195,7 +197,7 @@ export function stepNativeSecondaryGolem(
     })
     return {
       actor,
-      assemblyImpact,
+      assemblyMilestone,
       contact: null,
       footstep: false,
       provokeStarted: false,
@@ -706,7 +708,7 @@ function activeResult(
   const articulated = advanceGolemArticulation(source, sourceRng, resolveFootTarget)
   return {
     actor: articulated.actor,
-    assemblyImpact: false,
+    assemblyMilestone: null,
     contact,
     footstep: articulated.footstep,
     provokeStarted,

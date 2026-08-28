@@ -215,3 +215,128 @@ No member in either system is `blocked-by-platform`.
   browser journeys; source, test, protocol, save, renderer, and harness bytes
   are unchanged from the cited candidate. Publication is authorized;
   deployment was not requested.
+
+## 2026-08-28 — InventoryFlyby, parent-holder, and release-feedback correction
+
+### Reported smell and parity question
+
+- Reported web behavior: inventory placement is authoritative but snaps to its
+  result. Stock visibly flies displaced items, leaves fading item copies, and
+  paints a prior-Sack holder in the upper-left cell. The web cell-zero parent
+  route is pointer-only and invisible to keyboard focus.
+- Stock behavior to recover: the complete `InventoryFlyby` lifetime, its
+  independently fading children, every release branch that does or does not
+  create one, the kind-7 parent holder painter/input contract, and exact
+  branch-owned feedback sounds.
+- Reproduction: ordinary blank placement, occupied swap, matching Potion
+  merge, invalid release, Sack insertion, and child-to-parent release in the
+  standalone College, active Boneyard, and every companion InventoryScreen.
+- Falsifiers: every successful move flying; blank placement making sound;
+  afterimages being part of the dragger; the parent holder being the
+  bottom-centre Game backpack control; or equipment/StoreGrid targets sharing
+  the ordinary-grid Flyby constructor.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player report | direct 2026-08-28 stock/web comparison and supplied stock save | Stock release motion/fading copies and the upper-left prior-bag member are visible; current web snaps and omits the cell control | authoritative symptom |
+| Retail identity | unmodified Beta 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed image as this entry's prior addressed-grid evidence | high |
+| Instructions | `InventoryFlyby` ctor/update/render `0x00550A70/0x0056F5A0/0x00557C30`; `Anim_FadeItem` base/update/render `0x00452E20/0x00454000/0x00457020`; release router `0x0056DE50`, constructor xrefs `0x0056E2A7/0x0056E5BE/0x0056E863` | Flyby advances `delta/20` for 20 100-Hz ticks, spawns a FadeItem on alternating ticks, commits/restores at tick 20, then independently registered fades finish | high |
+| Instructions/data | page builder `0x00560D30`, grid painter `0x0055A070`, holder commit `0x00575850`; floats `0x007DE920=20`, `0x007845E8=.1`, `0x007DE978=.25` | A nested root inserts a kind-7 holder at cell zero and paints the active Sack icon at quarter alpha; dropping there returns the item one root | high |
+| Audio registry/instructions | release calls in `0x0056DE50`; registry offsets `0x18` click, `0xF4` backpack-open, `0x120` bad-action; pitches `0x00785590=1.75`, `0x00784D58=1.25` | Occupied ordinary target/merge starts click at 1.75; Sack/parent insertion starts backpack-open at 1.25; invalid restore starts bad-action; blank placement has no release cue | high |
+| Current web | Website `0c510ce3`; `HubInventoryUi.tsx`, `hub-inventory-renderer.ts`, `hub-inventory-render-contract.ts` | Host mutations are correct, but pointer-up clears the dragger and dispatches immediately; no Flyby/FadeItem model exists. Cell zero is reserved but neither painted nor represented by a semantic action. All ordinary moves inherit a generic click at pitch one. | high |
+
+### System boundary and membership inventory
+
+Native system: ordinary InventoryGrid release presentation and feedback, from
+pointer release through holder routing, optional Flyby/FadeItem ownership,
+mutation, final pixels/audio, interruption, and teardown.
+
+| Member | Native source | Disposition required | Proof |
+| --- | --- | --- | --- |
+| blank ordinary holder | kind 0, `0x00575850` | `verified-already-at-parity`; remove false release click | addressed placement remains immediate and silent |
+| occupied non-Sack ordinary holder | `0x0056DE50`, xrefs `0x0056E2A7/0x0056E5BE` | `exact-ported` | two items fly between source/destination and swap only at tick 20 |
+| matching Potion/native-mod stack | merge branch after click | `exact-ported` feedback; mutation already exact | 1.75-pitch click, immediate merge, no Flyby |
+| invalid/off-target release | fallback xref `0x0056E863` | `exact-ported` | item flies from release point back to source; bad-action once |
+| main Flyby item | ctor/update/render | `exact-ported` | unclipped item follows 20 discrete linear steps |
+| ten alternating FadeItem children per lane | `0x0056F5A0`, `Anim_FadeItem` | `exact-ported` | births at ticks 1,3..19; alpha loses .1/tick and final child survives parent completion |
+| Item_Sack destination | container branch | `verified-already-at-parity`; feedback corrected | immediate insert, backpack-open 1.25, no Flyby |
+| kind-7 parent holder art/drop | `0x00560D30/0x0055A070/0x00575850` | `exact-ported` | cell-zero active-Sack icon alpha .25; pointer and semantic keyboard activation share return action |
+| standalone College and active Boneyard | shared InventoryScreen | `exact-ported` | same renderer/state machine in both hosts |
+| Fomentius, Hagatha, Luthacus, Shlorio companions | shared player grid plus separate service owner | `exact-ported` for player grid | service overlay cannot replace Flyby/parent holder |
+| equipment sinks and Luthacus StoreGrid | separate target callbacks/actions | `out-of-system` for ordinary-grid Flyby; retained existing exact action/audio contracts | no invented Flyby membership |
+| page transition, close, death/world/session teardown | InventoryScreen/Flyby destructors | `exact-ported` | pending uncommitted Flyby cancels; registered fades may finish only while screen owner remains |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- InventoryScreen owns the dragger, one active Flyby, current/parent roots,
+  grid pages, and interaction lock. Flyby owns the pending ordinary mutation;
+  FadeItems are independent screen children.
+- At each 10-ms tick the main item adds `(destination-source)/20`. After the
+  decrement, odd remaining counts create one FadeItem at the current position.
+  Each child begins at alpha one and loses `.1` per tick. The main owner calls
+  the release router at tick 20, clears the active Flyby reference, and dies.
+- Blank, stack, Sack, and parent branches remain immediate. Only occupied
+  ordinary swaps and invalid restoration use this Flyby family.
+- Authoritative item state remains host-owned. The browser may delay sending
+  the private inventory mutation until the recovered presentation completion;
+  it must never commit a visual-only slot result or replicate presentation
+  children.
+- Screen/root replacement and teardown cancel an uncommitted mutation and
+  delete its task-local children. No protocol/save version changes.
+
+### Web implementation consequence and validation contract
+
+- Add one local InventoryFlyby presentation owner with exact 100-Hz frame
+  math, dual occupied-swap lanes, invalid return, independently fading child
+  copies, and an action dispatch edge at tick 20.
+- Paint the path's active Sack in reserved cell zero at alpha `.25`; overlay a
+  semantic parent-drop target so keyboard activation performs the same action
+  as pointer release when an item is selected.
+- Remove generic move feedback and route exact release cues from the branch
+  plan. Do not add Flyby state to protocol/save or external target families.
+- Focused tests: all branch dispositions, ticks `0/1/19/20/29`, two-lane
+  swap, fade birth/alpha, current-Sack identity, quarter-alpha painter, and
+  keyboard/pointer action equality.
+- Mac browser: Hub, nested Sack, companion, and active-Boneyard journeys must
+  inspect intermediate motion/afterimage frames, exact cue/rate counts,
+  authoritative result only after tick 20, cancellation on close, and empty
+  page/console/response/host errors.
+
+### Implementation validation receipt
+
+- InventoryScreen now owns one active 20-tick local Flyby plus independent
+  fading tails. Occupied swaps use two source-to-destination lanes and dispatch
+  the authoritative move only at tick 20; invalid release uses one return lane.
+  Ten children are born at ticks `1,3..19`, lose `.1` alpha per tick, and the
+  final child retires at tick 29. A later move may begin while earlier children
+  finish, while root/screen teardown cancels its task-local presentation.
+- Blank placement remains immediate and silent; matching stacks remain
+  immediate after click pitch `1.75`; Sack/parent insertion remains immediate
+  after backpack-open pitch `1.25`; invalid return plays bad-action once.
+  Generic pitch-one move feedback was removed. The active Sack is painted in
+  visible cell zero at alpha `.25`, and its semantic control accepts keyboard
+  activation through the same parent-return action as pointer release. The
+  already recovered record-75 animated Unforge target remains unchanged and
+  continues its native pulse and transaction behavior.
+- The production Chrome journey proved a two-lane swap with both authoritative
+  items still in their original cells mid-flight, visible main items and
+  afterimages, commit at tick 20, a one-lane invalid restore, click `1.75`,
+  bad-action pitch one, parent icon alpha `.25`, keyboard return, and
+  backpack-open `1.25`. It then completed nested Sack, all four companion,
+  storage, dye, and active-Boneyard paths. The corrected branch membership
+  raises the exact journey census from 18 to 26 backpack-open starts while
+  leaving 12 closes unchanged. Page, console, and failed-response arrays were
+  empty.
+- Browser log SHA-256 is
+  `ce97294f2da01742ab6e552abbef2a43d705134a1b1bcc4a15716a19e6faaecb`.
+  Swap, invalid-return, and parent-holder capture hashes are respectively
+  `44053b9824f6c01a47ac0e641685c94d52731c10cf88024bb84c7167be028825`,
+  `4844bf1379b8b68274c3693a2af5a37ab7352636a296291744312e4d0b145dda`,
+  and
+  `4863066df84518475903ac2a21996a78bd8c5d4ff693cf196c9c718933616f93`.
+- The publication pass reruns the complete canonical gate after this receipt
+  and the browser-harness regressions are recorded.

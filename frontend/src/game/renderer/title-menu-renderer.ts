@@ -29,6 +29,7 @@ import {
   stepTitleGraveRow,
   tileStart,
   titleBackdropOffsetsAt,
+  titleSolomonCloakPasses,
   type TitleGraveRowState,
 } from './title-menu-render-contract.ts'
 import {
@@ -610,21 +611,14 @@ function updateSolomon(
   phase: number,
   tick: number,
 ): void {
-  const current = Math.floor(phase)
-  const fraction = phase - current
-  const next = (current + 1) % menuSolomon.cloak.length
-  const configure = (sprite: Sprite, index: number, alpha: number) => {
-    const edge = index === 0 || index === 4
-    sprite.texture = view.cloakTextures[index]
-    sprite.position.set(-40, edge ? 6 : 8)
+  for (const [spriteIndex, pass] of titleSolomonCloakPasses(phase).entries()) {
+    const sprite = view.cloaks[spriteIndex]
+    sprite.texture = view.cloakTextures[pass.index]
+    sprite.position.set(-40, pass.y)
     sprite.width = 366
-    sprite.height = edge ? 654 : 652
-    sprite.alpha = alpha
+    sprite.height = pass.height
+    sprite.alpha = pass.alpha
   }
-  configure(view.cloaks[0], current, 1 - fraction ** 3)
-  configure(view.cloaks[1], current, 1 - fraction ** 3)
-  configure(view.cloaks[2], next, fraction)
-  configure(view.cloaks[3], next, fraction)
   view.eyes.y = 230 + Math.sin(tick * Math.PI / 180)
 }
 

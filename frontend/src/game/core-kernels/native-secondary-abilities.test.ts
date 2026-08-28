@@ -3242,6 +3242,31 @@ test('Golem terminal damage owns the exact four-cue death sequence', () => {
   )
 })
 
+test('Golem assembly layers its crack stream with the native rise and impact point sounds', () => {
+  let state = cast(45).state
+  for (let tick = 2; tick <= 103; tick += 1) {
+    state = stepNativeSecondaryAbilities(state, context(45, tick, null)).state
+  }
+  const assembly = state.events
+    .filter(({ cue }) => cue === 'quake-crack-small'
+      || cue === 'flame-lash-start'
+      || cue === 'rock-hit')
+    .map(({ cue, pitch, tick }) => ({ cue, pitch, tick }))
+  assert.deepEqual(assembly, [
+    { cue: 'quake-crack-small', pitch: 1, tick: 2 },
+    { cue: 'flame-lash-start', pitch: 0.8, tick: 2 },
+    { cue: 'quake-crack-small', pitch: 1, tick: 27 },
+    { cue: 'rock-hit', pitch: 1, tick: 27 },
+    { cue: 'quake-crack-small', pitch: 1, tick: 52 },
+    { cue: 'rock-hit', pitch: 1, tick: 52 },
+    { cue: 'quake-crack-small', pitch: 1, tick: 102 },
+    { cue: 'rock-hit', pitch: 1, tick: 102 },
+  ])
+  assert.equal(state.events.some(({ cue, tick }) => (
+    tick === 103 && (cue === 'quake-crack-small' || cue === 'rock-hit')
+  )), false)
+})
+
 test('Firewalker emits immediately, then while stationary, preserving its seven-word births and global geometry cycle', () => {
   const initial = createNativeSecondarySimulation(123)
   const activationContext = context(23, 1, 0)

@@ -2545,7 +2545,7 @@ function insertItemAtSlot(
     : entry)
 }
 
-function inventoryItemsShareStack(
+export function inventoryItemsShareStack(
   left: HubInventoryItem,
   right: HubInventoryItem,
 ): boolean {

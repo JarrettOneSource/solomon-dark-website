@@ -13,6 +13,31 @@ export const TITLE_SOLOMON_LAYER_Z = {
   cloak: 2,
 } as const
 
+export interface TitleSolomonCloakPass {
+  readonly alpha: number
+  readonly height: 652 | 654
+  readonly index: number
+  readonly y: 6 | 8
+}
+
+export function titleSolomonCloakPasses(phase: number): readonly TitleSolomonCloakPass[] {
+  if (!Number.isFinite(phase)) throw new RangeError('title Solomon phase must be finite')
+  const normalized = ((phase % 5) + 5) % 5
+  const current = Math.floor(normalized)
+  const fraction = normalized - current
+  const next = (current + 1) % 5
+  const pass = (index: number, alpha: number): TitleSolomonCloakPass => {
+    const edge = index === 0 || index === 4
+    return { alpha, height: edge ? 654 : 652, index, y: edge ? 6 : 8 }
+  }
+  return [
+    pass(current, 1 - fraction ** 3),
+    pass(current, 1 - fraction ** 3),
+    pass(next, fraction),
+    pass(next, fraction),
+  ]
+}
+
 export interface TitleGraveRowDefinition {
   baseline: number
   gray: number

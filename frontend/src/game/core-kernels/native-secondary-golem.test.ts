@@ -61,6 +61,25 @@ test('Golem assembly advances by two and the 400-tick damage gate owns both heal
   }).killed, true)
 })
 
+test('Golem preserves the four distinct pre-increment assembly sound milestones', () => {
+  for (const ageTicks of [0, 50, 100, 200] as const) {
+    const result = stepNativeSecondaryGolem(golem({ ageTicks }), {
+      ownerPosition: null,
+      resolveMovement: noMovement,
+      rng: createNativeRng(1),
+      targets: [],
+    })
+    assert.equal(result.assemblyMilestone, ageTicks)
+  }
+  const active = stepNativeSecondaryGolem(golem({ ageTicks: 201 }), {
+    ownerPosition: null,
+    resolveMovement: noMovement,
+    rng: createNativeRng(1),
+    targets: [],
+  })
+  assert.equal(active.assemblyMilestone, null)
+})
+
 test('Golem publishes native foot anchors, alternating gait paths, bob, and attack limb state', () => {
   const initial = nativeInitialGolemArticulation({ x: 0, y: 0 }, 0)
   assert.deepEqual(initial.leftFoot, { x: 10, y: 19 })

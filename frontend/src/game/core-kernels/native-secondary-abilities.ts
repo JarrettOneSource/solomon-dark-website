@@ -2670,8 +2670,17 @@ export function stepNativeSecondaryAbilities(
           rotationRadians: stepped.actor.rotationRadians,
           targetId: stepped.actor.targetId,
         }
-        if (stepped.assemblyImpact) {
+        if (stepped.assemblyMilestone !== null) {
           state = emit(state, eventSeed(actor, context.tick, 'quake-crack-small', 'pulse'))
+          state = emit(state, {
+            ...eventSeed(
+              actor,
+              context.tick,
+              stepped.assemblyMilestone === 0 ? 'flame-lash-start' : 'rock-hit',
+              'pulse',
+            ),
+            pitch: stepped.assemblyMilestone === 0 ? 0.8 : 1,
+          })
         }
         if (stepped.provokeStarted) {
           state = emit(state, eventSeed(actor, context.tick, 'golem-provoke', 'pulse'))

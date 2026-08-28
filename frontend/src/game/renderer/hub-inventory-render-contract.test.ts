@@ -35,7 +35,9 @@ import {
   HUB_HOVER_BOX,
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
+  HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_INTERACTION,
+  HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ATTRIBUTES_PAGE,
   HUB_INVENTORY_STATS_PAGES,
   HUB_EQUIPMENT_SINK_RENDER,
@@ -78,6 +80,7 @@ import {
   hubNativeUiReveal,
   hubOwnedPerkSlotRect,
   hubInventoryEquipmentSlotRects,
+  hubInventoryFlybyFrame,
   hubInventoryRootSlot,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
@@ -136,6 +139,55 @@ test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells
   ])
   assert.deepEqual(hubInventoryEquipmentSlotRects('robe'), [[1354, 223, 72, 108]])
   assert.deepEqual(hubInventoryEquipmentSlotRects('robe', true), [[1301, 223, 72, 108]])
+})
+
+test('InventoryFlyby owns twenty discrete steps and ten independently fading copies', () => {
+  assert.deepEqual(HUB_INVENTORY_FLYBY, {
+    afterimageAlphaLossPerTick: 0.1,
+    afterimageBirthTicks: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19],
+    tailTicks: 10,
+    tickMs: 10,
+    travelTicks: 20,
+  })
+  assert.deepEqual(hubInventoryFlybyFrame(1_000, 1_000), {
+    afterimages: [],
+    complete: false,
+    mainProgress: 0,
+    mainVisible: true,
+    tick: 0,
+    travelComplete: false,
+  })
+  assert.deepEqual(hubInventoryFlybyFrame(1_000, 1_010), {
+    afterimages: [{ alpha: 1, progress: 0.05, spawnTick: 1 }],
+    complete: false,
+    mainProgress: 0.05,
+    mainVisible: true,
+    tick: 1,
+    travelComplete: false,
+  })
+  assert.deepEqual(hubInventoryFlybyFrame(1_000, 1_200), {
+    afterimages: [
+      { alpha: 0.1, progress: 0.55, spawnTick: 11 },
+      { alpha: 0.3, progress: 0.65, spawnTick: 13 },
+      { alpha: 0.5, progress: 0.75, spawnTick: 15 },
+      { alpha: 0.7, progress: 0.85, spawnTick: 17 },
+      { alpha: 0.9, progress: 0.95, spawnTick: 19 },
+    ],
+    complete: false,
+    mainProgress: 1,
+    mainVisible: false,
+    tick: 20,
+    travelComplete: true,
+  })
+  assert.equal(hubInventoryFlybyFrame(1_000, 1_290).complete, true)
+})
+
+test('nested InventoryGrid reserves its painted quarter-alpha parent holder at cell zero', () => {
+  assert.deepEqual(HUB_INVENTORY_PARENT_HOLDER, {
+    alpha: 0.25,
+    visibleSlot: 0,
+  })
+  assert.equal(hubInventoryRootSlot(HUB_INVENTORY_PARENT_HOLDER.visibleSlot, true), null)
 })
 
 test('Item_Sack pages traverse the fixed stage in exact discrete native ticks', () => {

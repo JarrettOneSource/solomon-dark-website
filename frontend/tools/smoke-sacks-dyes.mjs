@@ -12,6 +12,7 @@ import {
   NATIVE_DYE_SWATCHES,
   createEquipmentInventoryItem,
   nativeDyeCommittedTint,
+  projectInventoryItems,
 } from '../src/game/core-kernels/hub-economy.ts'
 import {
   createGameSimulation,
@@ -227,7 +228,26 @@ try {
   const occupiedDestinationSlot = Number(
     await backpackItem(IDS.clickRingOne).getAttribute('data-inventory-slot'),
   )
+  const occupiedFlybyAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
   await dragTo(page, backpackItem(IDS.rootKey), backpackItem(IDS.clickRingOne))
+  const inventoryCanvas = inventory.locator('.hub-inventory-native-canvas')
+  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="flying"]')
+    .waitFor()
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-inventory-native-canvas')
+    const ticks = Number(canvas?.dataset.nativeInventoryFlybyTicks ?? -1)
+    return ticks > 0 && ticks < 20
+      && Number(canvas?.dataset.nativeInventoryFlybyMainItems ?? 0) === 2
+      && Number(canvas?.dataset.nativeInventoryFlybyAfterimages ?? 0) > 0
+  })
+  const occupiedBeforeCommit = await savedEconomy(page)
+  assert.equal(
+    flatten(occupiedBeforeCommit.backpack).find(({ id }) => id === IDS.rootKey)?.inventorySlot,
+    blankDestinationSlot,
+  )
+  await page.screenshot({ path: `${screenshotRoot}-inventory-flyby-swap.png` })
+  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="trailing"]')
+    .waitFor()
   await waitForSavedEconomy(page, (economy) => {
     const backpack = flatten(economy.backpack)
     return backpack.find(({ id }) => id === IDS.rootKey)?.inventorySlot
@@ -235,6 +255,13 @@ try {
       && backpack.find(({ id }) => id === IDS.clickRingOne)?.inventorySlot
         === blankDestinationSlot
   })
+  const occupiedReleaseAudio = await audioEventsSince(page, occupiedFlybyAudioStart, 'click.wav')
+  assert.ok(occupiedReleaseAudio.some(({ playbackRate }) => playbackRate === 1.75))
+  const occupiedFlybyReceipt = {
+    audio: occupiedReleaseAudio,
+    destinationSlot: occupiedDestinationSlot,
+    sourceSlot: blankDestinationSlot,
+  }
   await page.keyboard.press('KeyI')
   await inventory.waitFor({ state: 'detached' })
   await page.getByRole('button', { name: /Open inventory/ }).click()
@@ -254,6 +281,28 @@ try {
     swappedRingSlot: Number(
       await backpackItem(IDS.clickRingOne).getAttribute('data-inventory-slot'),
     ),
+  }
+
+  const invalidFlybyAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  await dragToStagePoint(page, inventory, backpackItem(IDS.rootKey), { x: 800, y: 450 })
+  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="flying"]')
+    .waitFor()
+  await page.screenshot({ path: `${screenshotRoot}-inventory-flyby-restore.png` })
+  await inventoryCanvas.locator('xpath=self::*[@data-native-inventory-flyby-phase="trailing"]')
+    .waitFor()
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-inventory-native-canvas')
+      ?.dataset.nativeInventoryFlybyPhase === undefined
+  ))
+  assert.equal(
+    Number(await backpackItem(IDS.rootKey).getAttribute('data-inventory-slot')),
+    occupiedDestinationSlot,
+  )
+  const invalidReleaseAudio = await audioEventsSince(page, invalidFlybyAudioStart, 'bad-action.wav')
+  assert.ok(invalidReleaseAudio.some(({ playbackRate }) => playbackRate === 1))
+  const invalidFlybyReceipt = {
+    audio: invalidReleaseAudio,
+    restoredSlot: occupiedDestinationSlot,
   }
 
   const sackAudioBefore = {
@@ -396,6 +445,35 @@ try {
     await item(IDS.movableSackKey).getAttribute('data-parent-sack-id'),
     String(IDS.movableSack),
   )
+  const parentHolder = inventory.locator('[data-inventory-parent-holder="true"]')
+  await parentHolder.waitFor()
+  assert.equal(
+    await inventoryCanvas.getAttribute('data-native-inventory-parent-holder-alpha'),
+    '0.25',
+  )
+  await page.screenshot({ path: `${screenshotRoot}-inventory-parent-holder.png` })
+  const parentHolderAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  await item(IDS.movableSackKey).click()
+  await parentHolder.focus()
+  await page.keyboard.press('Enter')
+  await waitForSavedEconomy(page, (economy) => (
+    projectInventoryItems(economy.backpack).find(({ item: candidate }) => (
+      candidate.id === IDS.movableSackKey
+    ))?.parentSackId === IDS.destinationSack
+  ))
+  await item(IDS.movableSackKey).waitFor({ state: 'detached' })
+  const parentHolderAudio = await audioEventsSince(
+    page,
+    parentHolderAudioStart,
+    'backpack-open.wav',
+  )
+  assert.ok(parentHolderAudio.some(({ playbackRate }) => playbackRate === 1.25))
+  const parentHolderReceipt = {
+    alpha: 0.25,
+    audio: parentHolderAudio,
+    destinationSackId: IDS.destinationSack,
+    keyboard: true,
+  }
   await returnFromSack(inventory, String(IDS.destinationSack))
   await dragToInventorySlot(page, inventory, item(IDS.movableKey), 0)
   await item(IDS.movableKey).waitFor({ state: 'detached' })
@@ -584,7 +662,7 @@ try {
     close: await inventorySoundCount(page, 'backpack-close.wav') - sackAudioBefore.close,
     open: await inventorySoundCount(page, 'backpack-open.wav') - sackAudioBefore.open,
   }
-  assert.deepEqual(sackAudio, { close: 12, open: 18 })
+  assert.deepEqual(sackAudio, { close: 12, open: 26 })
 
   await returnFromSack(storage, '')
   await page.keyboard.press('Escape')
@@ -621,17 +699,25 @@ try {
       nested: addressedNestedReceipt,
       root: addressedRootReceipt,
     },
+    flyby: {
+      invalid: invalidFlybyReceipt,
+      occupied: occupiedFlybyReceipt,
+    },
     audioEvents: await dyeAudioCount(page),
     consoleErrors,
     dyedTarget: dyedTarget.iconTints,
     failedResponses,
     hasTouch,
     pageErrors,
+    parentHolder: parentHolderReceipt,
     resumeControls: resumeControlReceipts,
     sackAudio,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
       `${screenshotRoot}-addressed-root-slots.png`,
+      `${screenshotRoot}-inventory-flyby-swap.png`,
+      `${screenshotRoot}-inventory-flyby-restore.png`,
+      `${screenshotRoot}-inventory-parent-holder.png`,
       `${screenshotRoot}-addressed-nested-slot.png`,
       `${screenshotRoot}-item-belt-bind-activate-pull-off.png`,
       `${screenshotRoot}-sack-inside.png`,
@@ -1099,6 +1185,15 @@ async function inventorySoundCount(targetPage, source) {
     (event.type === 'buffer-start' || event.type === 'play')
     && window.__sdrAudioSourceMatches(event.src, filename)
   )).length, source)
+}
+
+async function audioEventsSince(targetPage, start, source) {
+  return targetPage.evaluate(({ eventStart, filename }) => (
+    window.__sdrAudioEvents.slice(eventStart)
+      .filter((event) => event.type === 'buffer-start'
+        && window.__sdrAudioSourceMatches(event.src, filename))
+      .map(({ playbackRate, src, volume }) => ({ playbackRate, src, volume }))
+  ), { eventStart: start, filename: source })
 }
 
 async function savedTarget(targetPage, itemId) {

@@ -22,6 +22,7 @@ import {
   MAX_NATIVE_DYE_SELECTIONS,
   findInventoryItem,
   inventoryItemsAtSackPath,
+  inventoryItemsShareStack,
   nativeDyeMixedTint,
   inventoryDyeableClothingItems,
   nativeInventoryItemCanUnforge,
@@ -105,6 +106,8 @@ import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
   type HubInventoryDyeModalModel,
+  type HubInventoryFlybyLaneModel,
+  type HubInventoryFlybyModel,
   type HubInventoryPressedControl,
   type HubInventoryRenderer,
   type HubInventoryRendererModel,
@@ -122,6 +125,8 @@ import {
   HUB_DOWSING_PREROLL,
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
+  HUB_INVENTORY_FLYBY,
+  HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_INTERACTION,
   HUB_INVENTORY_STATS_PAGES,
   HUB_NATIVE_UI_SIZE,
@@ -173,6 +178,19 @@ const EQUIPMENT_SLOT_ORDER: readonly EquipmentSlot[] = [
 interface HubServiceSelection {
   readonly id: number
   readonly owner: 'storage' | null
+}
+
+type InventoryMoveAction = Extract<HubInventoryAction, { readonly type: 'move-inventory-item' }>
+
+interface InventoryFlybyRequest {
+  readonly action: InventoryMoveAction | null
+  readonly lanes: readonly HubInventoryFlybyLaneModel[]
+}
+
+interface InventoryFlybyState extends HubInventoryFlybyModel {
+  readonly action: InventoryMoveAction | null
+  readonly actionDispatched: boolean
+  readonly feedbackSequence: number
 }
 
 interface HubInventoryUiNotice extends HubInventoryRendererNotice {
@@ -684,6 +702,7 @@ function NativeHubSurface({
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
+  const [inventoryFlybys, setInventoryFlybys] = useState<readonly InventoryFlybyState[]>([])
   const [statsPage, setStatsPage] = useState(0)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
@@ -720,6 +739,68 @@ function NativeHubSurface({
     inventorySkillsControl.height,
   ] as const
   const inventoryBeltRects = inventoryModalHud.belt
+
+  const inventoryFlyby = inventoryFlybys.find(({ phase }) => phase === 'flying') ?? null
+
+  const startInventoryFlyby = useCallback((request: InventoryFlybyRequest) => {
+    setInventoryFlybys((current) => current.some(({ phase }) => phase === 'flying')
+      ? current
+      : [...current, {
+          ...request,
+          actionDispatched: false,
+          feedbackSequence: economy.actionFeedback?.sequence ?? 0,
+          phase: 'flying',
+          startedAtMs: performance.now(),
+        }])
+  }, [economy.actionFeedback?.sequence])
+
+  useEffect(() => {
+    if (!inventoryFlyby || inventoryFlyby.phase !== 'flying'
+      || inventoryFlyby.actionDispatched) return
+    const travelMs = HUB_INVENTORY_FLYBY.travelTicks * HUB_INVENTORY_FLYBY.tickMs
+    const timeout = window.setTimeout(() => {
+      if (inventoryFlyby.action) onAction(inventoryFlyby.action)
+      setInventoryFlybys((current) => current.map((entry) => (
+        entry.startedAtMs === inventoryFlyby.startedAtMs
+          ? {
+              ...entry,
+              actionDispatched: true,
+              phase: entry.action === null ? 'trailing' : 'flying',
+            }
+          : entry
+      )))
+    }, Math.max(0, inventoryFlyby.startedAtMs + travelMs - performance.now()))
+    return () => window.clearTimeout(timeout)
+  }, [inventoryFlyby, onAction])
+
+  useEffect(() => {
+    if (!inventoryFlyby?.action || !inventoryFlyby.actionDispatched) return
+    const feedback = economy.actionFeedback
+    if (!feedback || feedback.sequence <= inventoryFlyby.feedbackSequence
+      || feedback.action !== inventoryFlyby.action.type) return
+    setInventoryFlybys((current) => current.map((entry) => (
+      entry.startedAtMs === inventoryFlyby.startedAtMs
+        ? { ...entry, phase: 'trailing' }
+        : entry
+    )))
+  }, [economy.actionFeedback, inventoryFlyby])
+
+  useEffect(() => {
+    const finalTick = HUB_INVENTORY_FLYBY.travelTicks - 1 + HUB_INVENTORY_FLYBY.tailTicks
+    const trailing = inventoryFlybys.filter(({ phase }) => phase === 'trailing')
+    if (trailing.length === 0) return
+    const nextExpiry = Math.min(...trailing.map(({ startedAtMs }) => (
+      startedAtMs + finalTick * HUB_INVENTORY_FLYBY.tickMs
+    )))
+    const timeout = window.setTimeout(() => {
+      const nowMs = performance.now()
+      setInventoryFlybys((current) => current.filter((entry) => (
+        entry.phase !== 'trailing'
+          || entry.startedAtMs + finalTick * HUB_INVENTORY_FLYBY.tickMs > nowMs
+      )))
+    }, Math.max(0, nextExpiry - performance.now()))
+    return () => window.clearTimeout(timeout)
+  }, [inventoryFlybys])
 
   useLayoutEffect(() => {
     if (surface.kind !== 'inventory') return
@@ -843,6 +924,7 @@ function NativeHubSurface({
   useEffect(() => {
     setInventorySelection(null)
     setInventoryDrag(null)
+    setInventoryFlybys([])
   }, [sackPath])
 
   useEffect(() => {
@@ -959,6 +1041,7 @@ function NativeHubSurface({
       dragging: inventoryDrag,
       dyeModal,
       economy,
+      flybys: inventoryFlybys,
       inspection: serviceHoverInspection ?? serviceFocusInspection,
       kind: 'inventory',
       notice,
@@ -986,6 +1069,7 @@ function NativeHubSurface({
       dragging: inventoryDrag,
       dyeModal,
       economy,
+      flybys: inventoryFlybys,
       inspection: serviceHoverInspection ?? serviceFocusInspection,
       inventorySelection,
       kind: 'service',
@@ -1006,6 +1090,7 @@ function NativeHubSurface({
     economy,
     dyeModal,
     inventoryDrag,
+    inventoryFlybys,
     inventorySelection,
     notice,
     pendingNpcSelection,
@@ -1374,7 +1459,8 @@ function NativeHubSurface({
               }}
               onInventoryAction={(action) => {
                 if (action.type !== 'consume' && action.type !== 'transfer'
-                  && action.type !== 'unforge' && action.type !== 'equip') audio.playSound('click')
+                  && action.type !== 'unforge' && action.type !== 'equip'
+                  && action.type !== 'move-inventory-item') audio.playSound('click')
                 onAction(action)
               }}
               onBeltBind={(itemId, slot) => {
@@ -1399,10 +1485,12 @@ function NativeHubSurface({
               onFocusInspection={setServiceFocusInspection}
               onHoverInspection={setServiceHoverInspection}
               onNotice={setNotice}
+              onFlyby={startInventoryFlyby}
+              onMoveSound={(cue, playbackRate) => audio.playSound(cue, { playbackRate })}
               onOpenDye={openDye}
               onPressedControl={setPressedControl}
               sackPath={sackPath}
-              transitionLocked={sackTransition !== null}
+              transitionLocked={sackTransition !== null || inventoryFlyby !== null}
               onSelect={setServiceSelection}
             />
           ) : (
@@ -1412,7 +1500,8 @@ function NativeHubSurface({
               selection={inventorySelection}
               onAction={(action) => {
                 if (action.type !== 'consume' && action.type !== 'unforge'
-                  && action.type !== 'bind-belt-item' && action.type !== 'equip') {
+                  && action.type !== 'bind-belt-item' && action.type !== 'equip'
+                  && action.type !== 'move-inventory-item') {
                   audio.playSound('click')
                 }
                 onAction(action)
@@ -1424,6 +1513,8 @@ function NativeHubSurface({
               onDragChange={setInventoryDrag}
               onDragMove={(point) => rendererRef.current?.moveDrag(point)}
               onNotice={setNotice}
+              onFlyby={startInventoryFlyby}
+              onMoveSound={(cue, playbackRate) => audio.playSound(cue, { playbackRate })}
               onOpenDye={openDye}
               onOpenSack={onOpenSack}
               onSelect={(next) => {
@@ -1431,7 +1522,7 @@ function NativeHubSurface({
                 setInventorySelection(next)
               }}
               sackPath={sackPath}
-              transitionLocked={sackTransition !== null}
+              transitionLocked={sackTransition !== null || inventoryFlyby !== null}
             />
           )}
           {(surface.kind === 'inventory'
@@ -1461,7 +1552,8 @@ function NativeHubSurface({
               <InventoryBeltActions
                 audio={audio}
                 belt={belt}
-                disabled={sackTransition !== null || !onUnassignBeltEntry}
+                disabled={sackTransition !== null || inventoryFlyby !== null
+                  || !onUnassignBeltEntry}
                 onPullOff={(slot) => onUnassignBeltEntry?.(slot)}
                 rects={inventoryBeltRects}
               />
@@ -1802,7 +1894,9 @@ function ServiceActions({
   onInventorySelect,
   onInteractionSound,
   onFocusInspection,
+  onFlyby,
   onHoverInspection,
+  onMoveSound,
   onNotice,
   onOpenDye,
   onOpenSack,
@@ -1826,7 +1920,12 @@ function ServiceActions({
   onInventorySelect: (selection: HubInventorySelectionModel | null) => void
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
   onFocusInspection: (inspection: HubServiceInspectionModel | null) => void
+  onFlyby: (request: InventoryFlybyRequest) => void
   onHoverInspection: (inspection: HubServiceInspectionModel | null) => void
+  onMoveSound: (
+    cue: 'backpack-open' | 'bad-action' | 'click',
+    playbackRate: number,
+  ) => void
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
   onOpenSack: (sackId: number) => void
@@ -1854,6 +1953,8 @@ function ServiceActions({
       onBeltBind={onBeltBind}
       onDragChange={onDragChange}
       onDragMove={onDragMove}
+      onFlyby={onFlyby}
+      onMoveSound={onMoveSound}
       onNotice={onNotice}
       onOpenDye={onOpenDye}
       onOpenSack={onOpenSack}
@@ -2500,6 +2601,8 @@ function InventoryActions({
   onBeltBind,
   onDragChange,
   onDragMove,
+  onFlyby,
+  onMoveSound,
   onNotice,
   onOpenDye,
   onOpenSack,
@@ -2516,6 +2619,11 @@ function InventoryActions({
   onBeltBind: (itemId: number, slot: number) => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
+  onFlyby: (request: InventoryFlybyRequest) => void
+  onMoveSound: (
+    cue: 'backpack-open' | 'bad-action' | 'click',
+    playbackRate: number,
+  ) => void
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
   onOpenSack: (sackId: number) => void
@@ -2727,6 +2835,8 @@ function InventoryActions({
         thirdRingUnlocked,
         onAction,
         onBeltBind,
+        onFlyby,
+        onMoveSound,
         onNotice,
         companion,
         sackPath,
@@ -2804,6 +2914,35 @@ function InventoryActions({
         onClick={clearInventorySelection}
       />
       <section aria-label="Backpack">
+        {sackPath.length > 0 ? (
+          <NativeAction
+            data={{ 'data-inventory-parent-holder': 'true' }}
+            disabled={transitionLocked}
+            label="Move selected item to parent inventory"
+            rect={(() => {
+              const position = hubInventorySlotPosition(HUB_INVENTORY_PARENT_HOLDER.visibleSlot)
+              return [
+                position.x,
+                position.y,
+                HUB_INVENTORY_GRID.cellSize,
+                HUB_INVENTORY_GRID.cellSize,
+              ] as const
+            })()}
+            onClick={() => {
+              if (!selectedBackpackItem) {
+                onMoveSound('bad-action', 1)
+                return
+              }
+              onMoveSound('backpack-open', 1.25)
+              onAction({
+                destinationSackId: sackPath.length > 1 ? sackPath[sackPath.length - 2]! : null,
+                destinationSlot: null,
+                itemId: selectedBackpackItem.id,
+                type: 'move-inventory-item',
+              })
+            }}
+          />
+        ) : null}
         {projectedBackpack.map(({ depth, item, parentSackId, slot, visibleSlot }) => {
           const position = hubInventorySlotPosition(visibleSlot)
           const source: InventoryPointerSource = {
@@ -2945,6 +3084,11 @@ function dropInventorySource(
   thirdRingUnlocked: boolean,
   onAction: (action: HubInventoryAction) => void,
   onBeltBind: (itemId: number, slot: number) => void,
+  onFlyby: (request: InventoryFlybyRequest) => void,
+  onMoveSound: (
+    cue: 'backpack-open' | 'bad-action' | 'click',
+    playbackRate: number,
+  ) => void,
   onNotice: (notice: HubInventoryUiNotice) => void,
   companion: boolean,
   sackPath: readonly number[],
@@ -2959,12 +3103,26 @@ function dropInventorySource(
     const visibleItems = projectInventoryRootSlots(activeRoot).filter(({ slot }) => (
       slot < HUB_INVENTORY_GRID.capacity - (hasParentRoot ? 1 : 0)
     ))
-    const item = sourceEntry?.item ?? null
-    if (!item) return
+    if (!sourceEntry) return
+    const item = sourceEntry.item
+    const sourceSlot = hubInventoryVisibleSlot(sourceEntry.slot, hasParentRoot)
+    const sourcePosition = hubInventorySlotPosition(sourceSlot)
+    const sourceCenter = {
+      x: sourcePosition.x + HUB_INVENTORY_GRID.cellSize / 2,
+      y: sourcePosition.y + HUB_INVENTORY_GRID.cellSize / 2,
+    }
+    const restore = () => {
+      onMoveSound('bad-action', 1)
+      onFlyby({ action: null, lanes: [{ from: point, item, to: sourceCenter }] })
+    }
     if (pointInRect(point, HUB_UNFORGE_TARGET.rect)) {
-      if (!nativeInventoryItemCanUnforge(item)) return
+      if (!nativeInventoryItemCanUnforge(item)) {
+        restore()
+        return
+      }
       if (item.nativeTypeId === 7008) {
         if ((item.contents?.length ?? 0) === 0) onAction({ type: 'unforge', itemId: item.id })
+        else restore()
         return
       }
       onNotice({ ...HUB_UNFORGE_CONFIRMATION_NOTICE, unforgeItemId: item.id })
@@ -2990,6 +3148,7 @@ function dropInventorySource(
     }
     const visibleSlot = inventoryVisibleSlotAtPoint(point)
     if (hasParentRoot && visibleSlot === 0) {
+      onMoveSound('backpack-open', 1.25)
       onAction({
         type: 'move-inventory-item',
         destinationSackId: sackPath.length > 1 ? sackPath[sackPath.length - 2]! : null,
@@ -3007,6 +3166,7 @@ function dropInventorySource(
           slot === destinationSlot && candidate.nativeTypeId === 7008
         ))?.item ?? null
     if (destinationSack) {
+      onMoveSound('backpack-open', 1.25)
       onAction({
         type: 'move-inventory-item',
         destinationSackId: destinationSack.id,
@@ -3016,13 +3176,44 @@ function dropInventorySource(
       return
     }
     if (destinationSlot !== null) {
-      onAction({
+      const action: InventoryMoveAction = {
         type: 'move-inventory-item',
         destinationSackId: sackPath.at(-1) ?? null,
         destinationSlot,
         itemId: item.id,
+      }
+      if (sourceEntry.parentSackId === action.destinationSackId
+        && destinationSlot === sourceEntry.slot) {
+        restore()
+        return
+      }
+      const resident = visibleItems.find(({ slot }) => slot === destinationSlot)?.item ?? null
+      if (!resident) {
+        onAction(action)
+        return
+      }
+      onMoveSound('click', 1.75)
+      if (inventoryItemsShareStack(resident, item)) {
+        onAction(action)
+        return
+      }
+      const destinationPosition = hubInventorySlotPosition(
+        hubInventoryVisibleSlot(destinationSlot, hasParentRoot),
+      )
+      const destinationCenter = {
+        x: destinationPosition.x + HUB_INVENTORY_GRID.cellSize / 2,
+        y: destinationPosition.y + HUB_INVENTORY_GRID.cellSize / 2,
+      }
+      onFlyby({
+        action,
+        lanes: [
+          { from: sourceCenter, item, to: destinationCenter },
+          { from: destinationCenter, item: resident, to: sourceCenter },
+        ],
       })
+      return
     }
+    restore()
     return
   }
   if (source.equipmentSlot !== null) {

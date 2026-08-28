@@ -11,6 +11,7 @@ import {
   stepTitleGraveRow,
   tileStart,
   titleBackdropOffsetsAt,
+  titleSolomonCloakPasses,
 } from './title-menu-render-contract.ts'
 
 test('title Solomon keeps every cloak pass painter-above the eyes', () => {
@@ -40,6 +41,22 @@ test('title Solomon keeps every cloak pass painter-above the eyes', () => {
     'cloak-next-second',
   ])
   parent.destroy({ children: true })
+})
+
+test('title Solomon enumerates every duplicate cloak pass and wraps continuously', () => {
+  assert.deepEqual(titleSolomonCloakPasses(0), [
+    { alpha: 1, height: 654, index: 0, y: 6 },
+    { alpha: 1, height: 654, index: 0, y: 6 },
+    { alpha: 0, height: 652, index: 1, y: 8 },
+    { alpha: 0, height: 652, index: 1, y: 8 },
+  ])
+  assert.deepEqual(titleSolomonCloakPasses(4.5), [
+    { alpha: 0.875, height: 654, index: 4, y: 6 },
+    { alpha: 0.875, height: 654, index: 4, y: 6 },
+    { alpha: 0.5, height: 654, index: 0, y: 6 },
+    { alpha: 0.5, height: 654, index: 0, y: 6 },
+  ])
+  assert.deepEqual(titleSolomonCloakPasses(5), titleSolomonCloakPasses(0))
 })
 
 test('title parallax uses the recovered native rates', () => {

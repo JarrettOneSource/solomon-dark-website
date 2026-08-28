@@ -47,6 +47,70 @@ export const HUB_INVENTORY_INTERACTION = {
   selectionTint: 0x00c020,
 } as const
 
+export const HUB_INVENTORY_FLYBY = {
+  afterimageAlphaLossPerTick: 0.1,
+  afterimageBirthTicks: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19] as const,
+  tailTicks: 10,
+  tickMs: 10,
+  travelTicks: 20,
+} as const
+
+export const HUB_INVENTORY_PARENT_HOLDER = {
+  alpha: 0.25,
+  visibleSlot: 0,
+} as const
+
+export interface HubInventoryFlybyAfterimageFrame {
+  readonly alpha: number
+  readonly progress: number
+  readonly spawnTick: number
+}
+
+export interface HubInventoryFlybyFrame {
+  readonly afterimages: readonly HubInventoryFlybyAfterimageFrame[]
+  readonly complete: boolean
+  readonly mainProgress: number
+  readonly mainVisible: boolean
+  readonly tick: number
+  readonly travelComplete: boolean
+}
+
+export function hubInventoryFlybyFrame(startedAtMs: number, nowMs: number): HubInventoryFlybyFrame {
+  const tick = Math.max(0, Math.floor((nowMs - startedAtMs) / HUB_INVENTORY_FLYBY.tickMs))
+  const travelComplete = tick >= HUB_INVENTORY_FLYBY.travelTicks
+  return {
+    afterimages: HUB_INVENTORY_FLYBY.afterimageBirthTicks.flatMap((spawnTick) => {
+      if (spawnTick > tick) return []
+      const alpha = Math.round(
+        (1 - (tick - spawnTick) * HUB_INVENTORY_FLYBY.afterimageAlphaLossPerTick) * 10,
+      ) / 10
+      return alpha <= 0 ? [] : [{
+        alpha,
+        progress: spawnTick / HUB_INVENTORY_FLYBY.travelTicks,
+        spawnTick,
+      }]
+    }),
+    complete: tick >= HUB_INVENTORY_FLYBY.travelTicks - 1 + HUB_INVENTORY_FLYBY.tailTicks,
+    mainProgress: Math.min(tick, HUB_INVENTORY_FLYBY.travelTicks)
+      / HUB_INVENTORY_FLYBY.travelTicks,
+    mainVisible: !travelComplete,
+    tick,
+    travelComplete,
+  }
+}
+
+export function hubInventoryFlybyPoint(
+  from: Readonly<{ x: number; y: number }>,
+  to: Readonly<{ x: number; y: number }>,
+  progress: number,
+): { readonly x: number; readonly y: number } {
+  const bounded = Math.max(0, Math.min(1, progress))
+  return {
+    x: from.x + (to.x - from.x) * bounded,
+    y: from.y + (to.y - from.y) * bounded,
+  }
+}
+
 export const HUB_SACK_PAGE_TRANSITION = {
   nativeTickMs: 10,
   pixelsPerTick: 10,

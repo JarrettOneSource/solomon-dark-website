@@ -90,6 +90,8 @@ import {
   HUB_HAGATHA_PERK_PANE,
   HUB_HOVER_BOX,
   HUB_INVENTORY_GRID,
+  HUB_INVENTORY_FLYBY,
+  HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ATTRIBUTES_PAGE,
   HUB_INVENTORY_INTERACTION,
   HUB_INVENTORY_STATS_PAGES,
@@ -117,6 +119,8 @@ import {
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
   hubInventoryEquipmentSlotRects,
+  hubInventoryFlybyFrame,
+  hubInventoryFlybyPoint,
   hubHagathaTooltipLines,
   hubItemTooltipLines,
   hubInventoryPrimarySpellLines,
@@ -173,6 +177,18 @@ export interface HubInventoryDragModel {
   readonly pointer: { readonly x: number; readonly y: number }
 }
 
+export interface HubInventoryFlybyLaneModel {
+  readonly from: { readonly x: number; readonly y: number }
+  readonly item: HubInventoryItem
+  readonly to: { readonly x: number; readonly y: number }
+}
+
+export interface HubInventoryFlybyModel {
+  readonly lanes: readonly HubInventoryFlybyLaneModel[]
+  readonly phase: 'flying' | 'trailing'
+  readonly startedAtMs: number
+}
+
 export interface HubInventorySackTransitionModel {
   readonly direction: HubSackPageDirection
   readonly fromPath: readonly number[]
@@ -211,6 +227,7 @@ export type HubInventoryRendererModel =
       readonly dragging: HubInventoryDragModel | null
       readonly dyeModal: HubInventoryDyeModalModel | null
       readonly economy: ProtocolPlayerEconomy
+      readonly flybys: readonly HubInventoryFlybyModel[]
       readonly inspection: HubServiceInspectionModel | null
       readonly kind: 'inventory'
       readonly notice: HubInventoryRendererNotice | null
@@ -238,6 +255,7 @@ export type HubInventoryRendererModel =
       readonly dragging: HubInventoryDragModel | null
       readonly dyeModal: HubInventoryDyeModalModel | null
       readonly economy: ProtocolPlayerEconomy
+      readonly flybys: readonly HubInventoryFlybyModel[]
       readonly kind: 'service'
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl
@@ -320,6 +338,7 @@ export async function createHubInventoryRenderer(
   let chatRenderState: ChatRenderState | null = null
   let playerPreviewVfx: NativeElementVfxView | null = null
   let inventoryDragger: Container | null = null
+  let inventoryFlybys: readonly InventoryFlybyView[] = []
   let inventoryItemInfo: Container | null = null
   let inventorySackPages: InventorySackPages | null = null
   let modalHud: Container | null = null
@@ -397,6 +416,33 @@ export async function createHubInventoryRenderer(
             child.alpha = 0.15 + (Math.sin(nowMs / 90) + 1) * 0.15
           }
         }
+      }
+      if (inventoryFlybys.length > 0) {
+        const frames = inventoryFlybys.map((flyby) => {
+          updateInventoryFlybyView(flyby, nowMs)
+          return hubInventoryFlybyFrame(flyby.model.startedAtMs, nowMs)
+        })
+        const activeIndex = inventoryFlybys.findIndex(({ model }) => model.phase === 'flying')
+        const representativeIndex = activeIndex >= 0 ? activeIndex : inventoryFlybys.length - 1
+        gpu.canvas.dataset.nativeInventoryFlybyAfterimages = `${inventoryFlybys.reduce(
+          (total, flyby, index) => total + frames[index]!.afterimages.length * flyby.model.lanes.length,
+          0,
+        )}`
+        gpu.canvas.dataset.nativeInventoryFlybyMainItems = `${inventoryFlybys.reduce(
+          (total, flyby, index) => total + (
+            frames[index]!.mainVisible && flyby.model.phase === 'flying'
+              ? flyby.model.lanes.length
+              : 0
+          ),
+          0,
+        )}`
+        gpu.canvas.dataset.nativeInventoryFlybyPhase = activeIndex >= 0 ? 'flying' : 'trailing'
+        gpu.canvas.dataset.nativeInventoryFlybyTicks = `${frames[representativeIndex]!.tick}`
+      } else {
+        delete gpu.canvas.dataset.nativeInventoryFlybyPhase
+        delete gpu.canvas.dataset.nativeInventoryFlybyAfterimages
+        delete gpu.canvas.dataset.nativeInventoryFlybyMainItems
+        delete gpu.canvas.dataset.nativeInventoryFlybyTicks
       }
       if (inventorySackPages) {
         const offsets = hubSackPageOffsets(
@@ -502,6 +548,13 @@ export async function createHubInventoryRenderer(
       previousNoticeTitle = nextNotice?.title ?? null
       currentKind = model.kind
       currentModel = model
+      if (model.kind !== 'dialogue' && model.sackPath.length > 0) {
+        gpu.canvas.dataset.nativeInventoryParentHolder = 'visible'
+        gpu.canvas.dataset.nativeInventoryParentHolderAlpha = `${HUB_INVENTORY_PARENT_HOLDER.alpha}`
+      } else {
+        delete gpu.canvas.dataset.nativeInventoryParentHolder
+        delete gpu.canvas.dataset.nativeInventoryParentHolderAlpha
+      }
       curtainAlpha = model.kind === 'dialogue' ? 0 : 1
       serviceOverlay = null
       dyeLayer = null
@@ -510,6 +563,7 @@ export async function createHubInventoryRenderer(
       chatRenderState = null
       playerPreviewVfx = null
       inventoryDragger = null
+      inventoryFlybys = []
       inventoryItemInfo = null
       inventorySackPages = null
       modalHud = null
@@ -519,6 +573,7 @@ export async function createHubInventoryRenderer(
         const inventory = buildInventory(context, surface, model)
         playerPreviewVfx = inventory.playerPreview
         inventoryDragger = inventory.dragger
+        inventoryFlybys = inventory.flybys
         inventoryItemInfo = inventory.itemInfo
         inventorySackPages = inventory.sackPages
         modalHud = inventory.modalHud
@@ -528,6 +583,7 @@ export async function createHubInventoryRenderer(
         const service = buildService(context, surface, model)
         serviceOverlay = service.overlay
         inventoryDragger = service.dragger
+        inventoryFlybys = service.flybys
         inventoryItemInfo = service.itemInfo
         inventorySackPages = service.sackPages
         modalHud = service.modalHud
@@ -579,6 +635,7 @@ interface ChatRenderState {
 
 interface InventoryBuildState {
   readonly dragger: Container | null
+  readonly flybys: readonly InventoryFlybyView[]
   readonly itemInfo: Container | null
   readonly modalHud: Container
   readonly playerPreview: NativeElementVfxView | null
@@ -600,6 +657,7 @@ function buildInventory(
     readonly economy: ProtocolPlayerEconomy
     readonly companion?: boolean
     readonly dragging?: HubInventoryDragModel | null
+    readonly flybys?: readonly HubInventoryFlybyModel[]
     readonly leftPane?: 'hagatha' | 'stats'
     readonly inspection?: HubServiceInspectionModel | null
     readonly progression: ProtocolPlayerProgression
@@ -612,6 +670,12 @@ function buildInventory(
   const { economy, progression } = model
   const companion = model.companion ?? false
   const dragging = model.dragging ?? null
+  const flybys = model.flybys ?? []
+  const hiddenItemIds = new Set(
+    flybys.flatMap((flyby) => (
+      flyby.phase === 'flying' ? flyby.lanes.map(({ item }) => item.id) : []
+    )),
+  )
   const selection = model.selection ?? null
   const visibleBackpack = inventoryItemsAtSackPath(economy.backpack, model.sackPath)
     ?? economy.backpack
@@ -627,7 +691,16 @@ function buildInventory(
     addOwnedPerkInspection(context, layer, economy, model.inspection, companion)
   }
   const playerPreview = companion ? null : addPlayerPreview(context, layer, model.config.element)
-  addEquipment(context, layer, economy, selection, dragging, companion, model.config.element)
+  addEquipment(
+    context,
+    layer,
+    economy,
+    selection,
+    dragging,
+    hiddenItemIds,
+    companion,
+    model.config.element,
+  )
 
   addTiledAtlas(context, layer, 'UI', 49, 0, 490, 1600, 310)
   addHorizontalChain(context, layer, 0, 470, 1600)
@@ -648,7 +721,8 @@ function buildInventory(
       null,
       null,
       model.config.element,
-      model.sackTransition.fromPath.length > 0,
+      inventorySackAtPath(economy.backpack, model.sackTransition.fromPath),
+      hiddenItemIds,
     )
     addInventoryGridPage(
       context,
@@ -657,7 +731,8 @@ function buildInventory(
       selection,
       null,
       model.config.element,
-      model.sackTransition.toPath.length > 0,
+      inventorySackAtPath(economy.backpack, model.sackTransition.toPath),
+      hiddenItemIds,
     )
     layer.addChild(outgoing, incoming)
     sackPages = { incoming, outgoing, transition: model.sackTransition }
@@ -671,7 +746,8 @@ function buildInventory(
       selection,
       dragging,
       model.config.element,
-      model.sackPath.length > 0,
+      inventorySackAtPath(economy.backpack, model.sackPath),
+      hiddenItemIds,
     )
     layer.addChild(page)
   }
@@ -694,11 +770,16 @@ function buildInventory(
   )
   unforgeTarget.label = 'native-unforge-target'
 
+  const flybyViews = flybys.map((flyby) => (
+    addInventoryFlyby(context, layer, flyby, model.config.element)
+  ))
+
   const selected = selection ? inventoryItemForSelection(economy, selection) : null
   const selectedCenter = selection
     ? inventorySelectionCenter(economy, selection, companion, model.sackPath)
     : null
   const itemInfo = selected && selectedCenter && !dragging
+      && flybys.every(({ phase }) => phase !== 'flying')
     ? addInventoryItemInfo(
         context,
         layer,
@@ -715,7 +796,7 @@ function buildInventory(
   const dragger = dragging
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
     : null
-  return { dragger, itemInfo, modalHud, playerPreview, sackPages }
+  return { dragger, flybys: flybyViews, itemInfo, modalHud, playerPreview, sackPages }
 }
 
 function addInventoryGridPage(
@@ -725,8 +806,10 @@ function addInventoryGridPage(
   selection: HubInventorySelectionModel | null,
   dragging: HubInventoryDragModel | null,
   element: WizardElement,
-  hasParentRoot: boolean,
+  parentHolderItem: HubInventoryItem | null,
+  hiddenItemIds: ReadonlySet<number>,
 ): void {
+  const hasParentRoot = parentHolderItem !== null
   const items = new Map(projectInventoryRootSlots(source)
     .filter(({ slot }) => slot < HUB_INVENTORY_GRID.capacity - (hasParentRoot ? 1 : 0))
     .map(({ item, slot }) => [hubInventoryVisibleSlot(slot, hasParentRoot), item] as const))
@@ -734,9 +817,25 @@ function addInventoryGridPage(
     const position = hubInventorySlotPosition(index)
     const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
     slot.alpha = HUB_INVENTORY_GRID.slotAlpha
+    if (index === HUB_INVENTORY_PARENT_HOLDER.visibleSlot && parentHolderItem) {
+      const parentHolder = new Container()
+      parentHolder.label = 'native-inventory-parent-holder'
+      parentHolder.alpha = HUB_INVENTORY_PARENT_HOLDER.alpha
+      addClippedItemIcon(
+        context,
+        parentHolder,
+        parentHolderItem,
+        position.x + HUB_INVENTORY_GRID.cellSize / 2,
+        position.y + HUB_INVENTORY_GRID.cellSize / 2,
+        element,
+        [position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize],
+      )
+      layer.addChild(parentHolder)
+    }
     const item = items.get(index)
     if (!item) continue
-    const held = dragging?.owner === 'backpack' && item.id === dragging.itemId
+    const held = hiddenItemIds.has(item.id)
+      || (dragging?.owner === 'backpack' && item.id === dragging.itemId)
     if (!held) addClippedItemIcon(
       context,
       layer,
@@ -760,6 +859,78 @@ function addInventoryGridPage(
         HUB_INVENTORY_GRID.cellSize,
         HUB_INVENTORY_GRID.cellSize,
       )
+    }
+  }
+}
+
+function inventorySackAtPath(
+  backpack: readonly HubInventoryItem[],
+  path: readonly number[],
+): HubInventoryItem | null {
+  const id = path.at(-1)
+  if (id === undefined) return null
+  const item = findInventoryItem(backpack, id)
+  return item?.kind === 'sack' && item.nativeTypeId === 7008 ? item : null
+}
+
+interface InventoryFlybyLaneView {
+  readonly afterimages: ReadonlyMap<number, Container>
+  readonly main: Container
+  readonly model: HubInventoryFlybyLaneModel
+}
+
+interface InventoryFlybyView {
+  readonly container: Container
+  readonly lanes: readonly InventoryFlybyLaneView[]
+  readonly model: HubInventoryFlybyModel
+}
+
+function addInventoryFlyby(
+  context: RenderContext,
+  layer: Container,
+  model: HubInventoryFlybyModel,
+  element: WizardElement,
+): InventoryFlybyView {
+  const container = new Container()
+  container.label = 'native-inventory-flyby'
+  const lanes = model.lanes.map((lane) => {
+    const afterimages = new Map<number, Container>()
+    for (const spawnTick of HUB_INVENTORY_FLYBY.afterimageBirthTicks) {
+      const afterimage = new Container()
+      afterimage.label = `native-inventory-flyby-afterimage-${spawnTick}`
+      afterimage.visible = false
+      addItemIcon(context, afterimage, lane.item, 0, 0, element)
+      afterimages.set(spawnTick, afterimage)
+      container.addChild(afterimage)
+    }
+    const main = new Container()
+    main.label = 'native-inventory-flyby-main'
+    addItemIcon(context, main, lane.item, 0, 0, element)
+    container.addChild(main)
+    return { afterimages, main, model: lane }
+  })
+  layer.addChild(container)
+  const view = { container, lanes, model }
+  updateInventoryFlybyView(view, model.startedAtMs)
+  return view
+}
+
+function updateInventoryFlybyView(view: InventoryFlybyView, nowMs: number): void {
+  const frame = hubInventoryFlybyFrame(view.model.startedAtMs, nowMs)
+  const afterimages = new Map(frame.afterimages.map((afterimage) => (
+    [afterimage.spawnTick, afterimage] as const
+  )))
+  for (const lane of view.lanes) {
+    const mainPoint = hubInventoryFlybyPoint(lane.model.from, lane.model.to, frame.mainProgress)
+    lane.main.position.set(mainPoint.x, mainPoint.y)
+    lane.main.visible = view.model.phase === 'flying' && frame.mainVisible
+    for (const [spawnTick, container] of lane.afterimages) {
+      const afterimage = afterimages.get(spawnTick)
+      container.visible = afterimage !== undefined
+      if (!afterimage) continue
+      const point = hubInventoryFlybyPoint(lane.model.from, lane.model.to, afterimage.progress)
+      container.position.set(point.x, point.y)
+      container.alpha = afterimage.alpha
     }
   }
 }
@@ -1064,6 +1235,7 @@ function addEquipment(
   economy: ProtocolPlayerEconomy,
   selection: HubInventorySelectionModel | null,
   dragging: HubInventoryDragModel | null,
+  hiddenItemIds: ReadonlySet<number>,
   companion: boolean,
   element: WizardElement,
 ): void {
@@ -1080,7 +1252,8 @@ function addEquipment(
   for (const slot of ['amulet', 'hat', 'weapon', 'robe', 'ring-0', 'ring-1', 'ring-2'] as const) {
     if (slot === 'ring-2' && !thirdRingUnlocked) continue
     const item = itemAtEquipmentSlot(economy, slot)
-    const held = dragging?.owner === 'equipment' && dragging.equipmentSlot === slot
+    const held = hiddenItemIds.has(item?.id ?? -1)
+      || (dragging?.owner === 'equipment' && dragging.equipmentSlot === slot)
     for (const [x, y, width, height] of hubInventoryEquipmentSlotRects(slot, companion)) {
       layer.addChild(new Graphics()
         .rect(x, y, width, height)
@@ -1317,6 +1490,7 @@ function buildService(
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
 ): {
   readonly dragger: Container | null
+  readonly flybys: readonly InventoryFlybyView[]
   readonly itemInfo: Container | null
   readonly modalHud: Container
   readonly overlay: Container
@@ -1328,6 +1502,7 @@ function buildService(
     config: model.config,
     economy: model.economy,
     dragging: model.dragging,
+    flybys: model.flybys,
     inspection: model.inspection,
     leftPane: model.trader === 'hagatha' ? 'hagatha' : 'stats',
     progression: model.progression,
@@ -1363,8 +1538,10 @@ function buildService(
     addDoneControl(context, overlay)
     addServiceInspection(context, layer, model)
     if (inventory.dragger) layer.addChild(inventory.dragger)
+    for (const flyby of inventory.flybys) layer.addChild(flyby.container)
     return {
       dragger: inventory.dragger,
+      flybys: inventory.flybys,
       itemInfo: inventory.itemInfo,
       modalHud: inventory.modalHud,
       overlay,
@@ -1388,8 +1565,10 @@ function buildService(
   addDoneControl(context, overlay)
   addServiceInspection(context, layer, model)
   if (inventory.dragger) layer.addChild(inventory.dragger)
+  for (const flyby of inventory.flybys) layer.addChild(flyby.container)
   return {
     dragger: inventory.dragger,
+    flybys: inventory.flybys,
     itemInfo: inventory.itemInfo,
     modalHud: inventory.modalHud,
     overlay,

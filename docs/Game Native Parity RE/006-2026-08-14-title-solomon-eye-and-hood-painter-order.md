@@ -147,3 +147,64 @@
   `C:\Users\User\AppData\Local\Temp\solomon-stock-title-eye-order-20260814.png`.
 - Remaining implementation explicitly out of scope: no other title geometry,
   logo, menu control, background painter lane, or animation timing changed.
+
+## 2026-08-28 — Reported Solomon flicker and black-box revalidation
+
+### Reported smell and parity question
+
+- Reported web behavior: the left title Solomon portrait flickers and presents
+  a black box.
+- Stock behavior to recover: revalidate the complete body/eye/five-cloak
+  composition, frame wrap, crossfade, initial upload, GPU/context state, and
+  responsive stage rather than deleting one of the visually suspicious
+  duplicate cloak passes.
+- Falsifiers: a frame-specific blank texture, wrong alpha/sampler state,
+  geometry discontinuity, context-restoration failure, or web-only hard scene
+  change aligned to the reported bounds.
+
+### Evidence, membership, and result
+
+| Member/evidence | Exact source | Disposition | Result |
+| --- | --- | --- | --- |
+| body, eyes, cloak `0..4`, wrap `4->0` | retail `MainMenu_Render 0x00598780`, calls `0x005991CB/0x005992C4/0x00599442/0x005994FF/0x005995E3/0x00599693` | `verified-already-at-parity` | the two current and two next cloak submissions are intentionally parameter-identical; body < eyes < all cloak passes remains exact |
+| stock live cycle | clean task-owned 0.72.5 process, 60-FPS 1600x900 capture, 600 frames | `verified-already-at-parity` | all five frames and wrap remained stable behind the stock Beta prompt |
+| web Windows/D3D11 cycle | production `0c510ce3`, Chrome/ANGLE AMD Radeon RX 9070 XT, 952 steady frames plus 494 loader-to-title frames | `verified-already-at-parity` | no black rectangle, missing texture, abrupt phase, page/console/response error, or context failure |
+| web Mac/Metal cycle | production `0c510ce3`, Chrome/ANGLE Apple M2, 599 frames | `verified-already-at-parity` | all phases stable; maximum adjacent cropped mean-luma delta `.20078/255`, no scene score above `.08`, empty errors |
+| alpha/sampler falsifiers | live WebGL state plus diagnostic forced straight-alpha and clamp samples | `out-of-system` as disproven causes | active normal state was already `SRC_ALPHA/ONE_MINUS_SRC_ALPHA`; neither override exposed or removed a distinct title artifact |
+| responsive/title entry and teardown | existing renderer lifecycle and fresh-profile startup captures | `verified-already-at-parity` | renderer is fully populated before its first manual render and destroys scene-owned textures on exit |
+
+No platform-specific difference or unresolved native member was found. The
+reported symptom is not reproducible on current main across both supported
+hardware paths; changing duplicate draws, alpha, sampler, geometry, or timing
+would knowingly diverge from stock. The implementation consequence is a
+stronger all-five-frame/wrap regression and repeated browser acceptance only,
+with no speculative title production change.
+
+### Validation contract and receipt
+
+- Focused test: enumerate phase `0..5`, assert current/next record, exact
+  `1-f^3`/`f` alpha, edge/non-edge geometry, four cloak submissions, eye
+  occlusion, and continuous wrap.
+- Browser: retain the high-rate Windows and Mac current-main loops above after
+  the combined candidate is built; page/console/failed-response arrays must be
+  empty and no hard frame delta may appear.
+- The production renderer now consumes a pure cloak-pass planner that
+  enumerates all four native submissions without changing their textures,
+  geometry, alpha, order, cadence, or lifetime. Its focused regression covers
+  frame zero, an in-frame crossfade, all edge geometry, and continuous `5->0`
+  wrap.
+- The built combined candidate ran for 600 compositor-presented frames over
+  ten seconds on Chrome/WebGL2 through ANGLE Metal on Apple M2. All five cloak
+  frames appeared; page, console, and failed-response arrays were empty. The
+  prompt crop stayed within `44.986..45.385/255` mean luminance with maximum
+  adjacent mean absolute delta `.02229/255`; the Solomon crop's maximum
+  adjacent delta was `.25222/255`. No presented frame contained a partial
+  painter, black rectangle, missing texture, or hard phase edge. Screencast
+  and analysis log SHA-256 values are respectively
+  `678f42d7e6789df06c0e6ee3022fac787a45c38847d2964a77954a37b5d82c1c`
+  and
+  `1a5efe93f61ad63bad7296b01d3b765bf5284d36803fef60e34f30ad6e1aeede`.
+- Together with the independent Windows/D3D11 and clean-stock runs above,
+  this disproves a current renderer defect on both supported GPU paths. No
+  speculative title behavior was changed. The publication pass still reruns
+  the complete canonical gate after this receipt is recorded.

@@ -760,3 +760,84 @@ targeting, actor/modifier phases, atlas programs, audio ownership, light
 enrollment/order, replication, interpolation, and teardown. Final Mac-mini
 browser acceptance remains the last publication gate and is intentionally not
 claimed by this pre-final receipt.
+
+## 2026-08-28 — Raise Golem assembly-audio reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: the rise is dominated by several click-like crack
+  streams and does not sound like stock.
+- Stock behavior to recover: every assembly milestone's complete concurrent
+  audio membership, including pitch, point/stream class, position, ordinary
+  and Iron variants, activation, death, replacement, and teardown.
+- Falsifier: if the four crack streams are the whole rise sequence, the
+  existing web event list is correct. Fresh instruction evidence refutes it.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail instructions | `Golem::Tick 0x00615CD0`; raw `0x00615EAC..0x00616075` | Ages `0/50/100/200` all play registry `+0x1404` QuakeCrackSmall. Age zero additionally plays `+0x5C4` flamelashstart at pitch `.8`; the later three additionally play `+0xD54` rockhit at pitch one. | high |
+| Audio registry | QuakeCrackSmall SHA-256 `bc66694a...ef09f`, flamelashstart `d563633c...db0a1dc`, rockhit `865484cf...de25b`; GolemProvoke `88394eab...15228` | All assets already exist in the Website manifest; no substitute or new media is required. | high |
+| Current web | `native-secondary-golem.ts`, `native-secondary-abilities.ts` at `0c510ce3` | Kernel collapses all four milestones to boolean `assemblyImpact`; caller emits only QuakeCrackSmall. flamelashstart/rockhit are wired only to the separate death sequence. | high |
+
+### System boundary and membership inventory
+
+Native system: Golem assembly sound edges from creation through active
+activation, including both presentation variants and all neighboring sound
+owners.
+
+| Member | Native source | Disposition required | Proof |
+| --- | --- | --- | --- |
+| age 0 ordinary/Iron | `0x00615ECB..0x0061605A` | `exact-ported` | crack stream plus flamelashstart point sound at pitch .8 |
+| ages 50, 100, 200 ordinary/Iron | `0x00615ECB..0x00616075` | `exact-ported` | crack stream plus rockhit point sound at pitch one for each age |
+| assembly placement/visual/debris | same tick and existing Golem painter | `verified-already-at-parity` | no timing or RNG change |
+| first active provoke | `0x006164BF..0x00616507` | `verified-already-at-parity` | GolemProvoke remains its separate edge |
+| footsteps/contact | existing tick branches | `verified-already-at-parity` | stone-step and knockback-golem unchanged |
+| death sequence | `0x00619730` | `verified-already-at-parity` | stonebreak, flamelashstart, GolemDie, rockhit remain terminal-only events in addition to assembly use |
+| replacement, owner death/disconnect, world reset | summon lifecycle | `verified-already-at-parity` | no assembly cue replay during generic retirement |
+| host/guest, late join, interpolation | semantic event wire | `exact-ported` | each new event carries world point and pitch once; late join never replays old IDs |
+
+No member is browser-blocked.
+
+### Native ownership thread, implementation consequence, and validation
+
+- Golem age advances by two during assembly. The pre-increment age owns the
+  four sound milestones and must remain distinguishable instead of a boolean.
+- Publish `0|50|100|200|null` from the Golem kernel. Emit the crack stream plus
+  the milestone-specific point sound at the actor position. Preserve all
+  existing visual, health, AI, cooldown, mana, and RNG state.
+- Focused tests must assert kernel milestone identity, exact two-cue sequence
+  and pitch at all four ages, ordinary/Iron equality, no replay at age 201,
+  and unchanged four-cue death sequence.
+- Mac browser must capture the real Raise Golem event IDs/play calls through
+  all four ages and provoke with empty page/console/response/host errors.
+
+### Implementation validation receipt
+
+- `native-secondary-golem.ts` now publishes the exact pre-increment assembly
+  milestone `0|50|100|200|null`; the common authoritative dispatcher emits
+  QuakeCrackSmall plus flamelashstart at pitch `.8` for zero, then
+  QuakeCrackSmall plus rockhit at pitch one for the later three. Provoke,
+  footsteps, damage, cooldown/mana, ordinary/Iron presentation, and the
+  terminal four-cue death sequence are unchanged.
+- The focused regressions first failed against the boolean-only kernel, then
+  passed with exact milestone identity and the eight-event sequence. The real
+  production Boneyard journey observed semantic ticks
+  `2417,2417,2442,2442,2467,2467,2517,2517`, therefore offsets
+  `0,0,25,25,50,50,100,100`, and the matching eight Chrome audio starts:
+  four QuakeCrackSmall at pitch one, one flamelashstart at `.8`, and three
+  rockhit at one. Chrome's float32 playback parameter exposed `.8` as
+  `.800000011920929`; the assertion normalizes only that browser precision.
+- The same journey retained the stock assembly primitive counts
+  `5/14/19/20`, one-Golem cap, real combat damage, ready/cooldown HUD, and
+  captures through age 400. Page, console, and response error arrays were
+  empty. Log SHA-256 is
+  `7f51eb728938bd9e65c3f1ee74760079129048bf358035050a4f9fc774f539dc`;
+  age-2/200/400 capture hashes are
+  `e084bd52f59cd93f67a142c390f0f88827271d291ffab89c8bff4316a67b8f09`,
+  `32d6e2700cbecbc5f6793a8a34530c9defce847c39fccffa749977b6f93029c9`,
+  and
+  `73855811bdce873fa3e1a29557e7ecad6324cb85c12c66b50daa20b06abe343b`.
+- The publication pass reruns the complete canonical gate after this receipt
+  and the browser-harness regressions are recorded.

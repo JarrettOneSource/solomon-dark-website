@@ -567,6 +567,7 @@ try {
       }, undefined, { timeout: 5_000 })
     }
     let framePacing = null
+    let golemAssemblyAudio = null
     let playerPresentation = null
     if (contract.skillId === 46 || contract.skillId === 54) {
       playerPresentation = await waitForPlayerPresentation(
@@ -640,7 +641,7 @@ try {
           kind === 'golem' && ownerId === playerId
         ))
         assert.ok(golem)
-        for (const ageTicks of [2, 50, 100, 200, 400]) {
+        for (const ageTicks of [2, 50, 100, 200]) {
           await waitUntil(() => (
             (host.state().secondaryAbilities.actors.find(({ id }) => id === golem.id)?.ageTicks ?? 0)
               >= ageTicks
@@ -649,6 +650,48 @@ try {
             path: `${screenshotRoot}/45-raise-golem-age-${ageTicks}.png`,
           })
         }
+        await waitForAudioCount(page, audioStart, 'quake-crack-small', 4)
+        await waitForAudioCount(page, audioStart, 'flame-lash-start', 1)
+        await waitForAudioCount(page, audioStart, 'rock-hit', 3)
+        const semanticAssembly = host.state().secondaryAbilities.events
+          .filter(({ actorId }) => actorId === golem.id)
+          .filter(({ cue }) => cue === 'quake-crack-small'
+            || cue === 'flame-lash-start'
+            || cue === 'rock-hit')
+          .map(({ cue, pitch, tick }) => ({ cue, pitch, tick }))
+        const browserAssembly = await page.evaluate((start) => (
+          window.__sdrAudioEvents.slice(start)
+            .filter(({ src, type }) => type === 'buffer-start' && [
+              'quake-crack-small.wav',
+              'flame-lash-start.wav',
+              'rock-hit.wav',
+            ].some((stem) => window.__sdrAudioSourceMatches(src, stem)))
+            .map(({ playbackRate, src }) => ({ playbackRate, src }))
+        ), audioStart)
+        assert.deepEqual(semanticAssembly.map(({ cue, pitch }) => ({ cue, pitch })), [
+          { cue: 'quake-crack-small', pitch: 1 },
+          { cue: 'flame-lash-start', pitch: 0.8 },
+          { cue: 'quake-crack-small', pitch: 1 },
+          { cue: 'rock-hit', pitch: 1 },
+          { cue: 'quake-crack-small', pitch: 1 },
+          { cue: 'rock-hit', pitch: 1 },
+          { cue: 'quake-crack-small', pitch: 1 },
+          { cue: 'rock-hit', pitch: 1 },
+        ])
+        assert.deepEqual(semanticAssembly.map(({ tick }) => tick - semanticAssembly[0].tick), [
+          0, 0, 25, 25, 50, 50, 100, 100,
+        ])
+        assert.deepEqual(browserAssembly.map(({ playbackRate }) => (
+          Math.round(playbackRate * 100) / 100
+        )), [1, 0.8, 1, 1, 1, 1, 1, 1])
+        golemAssemblyAudio = { browserAssembly, semanticAssembly }
+        await waitUntil(() => (
+          (host.state().secondaryAbilities.actors.find(({ id }) => id === golem.id)?.ageTicks ?? 0)
+            >= 400
+        ), 'single Golem did not reach age 400', 10_000)
+        await page.screenshot({
+          path: `${screenshotRoot}/45-raise-golem-age-400.png`,
+        })
         maximumSet = { expectedSummonCap: 1, summons: 1 }
       } else if (!golemCooldownTiming) {
         await waitUntil(() => {
@@ -776,6 +819,7 @@ try {
     )
     receipts.push({
       audio: proof.audio,
+      golemAssemblyAudio,
       cooldownAtCast,
       cooldownPath,
       cooldownTiming,
