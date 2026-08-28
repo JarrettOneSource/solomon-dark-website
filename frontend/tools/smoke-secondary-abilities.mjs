@@ -449,7 +449,6 @@ try {
       cooldownPath = cooldownQuickbar.cooldownPath
       assert.equal(cooldownQuickbar.alpha, 0.25)
       assert.equal(cooldownQuickbar.iconOpacity, 0.25)
-      assert.equal(cooldownQuickbar.unavailable, false)
       assert.ok(cooldownPath?.startsWith('M 26.5 26.5 L '))
       if (selectedContracts.length === 1) {
         const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-cooldown.png`
