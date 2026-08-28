@@ -20945,9 +20945,11 @@ heading perturbation. Disable permanently multiplies target movement by
 `.75` and the flag-2 action lane by `.5`; repeated hits compound as native.
 
 The complete presentation set has no light-provider call or world-light
-write. Knockback and Critical each birth normal-blend BadGuys 15 SmokePuff at
-25 units along heading, scale eight, alpha one, loss `.05`; its constructor
-still spends an overwritten `Float(.05)` and `Float(2)` angular draw. Disable
+write. Knockback and Critical each birth additive BadGuys 15 SmokePuff at 25
+units along heading, scale eight, alpha one, loss `.05`; renderer
+`Anim_SmokePuff 0x00449840` selects additive around the shared Fade draw, then
+restores normal. Its constructor still spends an overwritten `Float(.05)` and
+`Float(2)` angular draw. Disable
 births exactly 50 additive BadGuys 45 MoveFades at the damaged-target mean,
 using one `Float(360)` seed followed per child by `Integer(5)`, `Float(3)`, and
 `Float(.75)`, with scale `.25..1`, alpha `1.5`, loss `.05`, and velocity
