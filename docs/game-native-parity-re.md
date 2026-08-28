@@ -54960,3 +54960,46 @@ No member is `blocked-by-platform` and no authored row remains unextracted.
   runtime/browser processes exited. Publication, deployment, production
   cutover, and service restart were not requested; both isolated local branches
   and both detached Mac acceptance worktrees remain retained for handoff.
+
+### Publication rebase validation receipt
+
+- Before the authorized push, Website `origin/main` advanced to
+  `ec98c44ec5001802946289e833a3df5a0e8010fb` with the native Road/surface,
+  Sirmin wardrobe, and College blocker/reset closure; Mod Loader `origin/main`
+  advanced to matching report commit
+  `f3fc7ff52805cd88aefd0a4e8c461bd842b677f9`. Both task branches were rebased,
+  preserving the complete upstream implementation/tests/ledger entries and
+  this entry's movement, Staff, and title contracts.
+- The rebased runtime candidates are Website
+  `f6a206ef3e7abd9eca7b95df1fc53c917841d9c0` (tree
+  `649a375da1d823f6147a0623f8b7cfddba2e4ac0`) and Mod Loader
+  `6ff32d0623c0fb5781be3ac90fdb16b9817ed9ba` (tree
+  `4ca849ae654a88f6b32b759267e7040ea9851912`). Local/Mac changed-file blob
+  manifests are identical at
+  `2e16e1277ab0454a8a9ecaf3c97b3114e9a6f25b99f08a612250c079012d7fa5`
+  for Website and
+  `c0f3723a230e38e901f2bb9a2fed902f88beaf38e180b14607276eaaffb6284d`
+  for Mod Loader.
+- The rebased Mod Loader suite passed `521/521`; log SHA-256 is
+  `2c1028ad01d5404f8fa1ed06543c77af0509cda77c052f935d3773caf7dd2851`.
+  The rebased Website passed the complete canonical gate, including
+  `1,667/1,667` in the largest Boneyard group, all later groups/builds/policies,
+  and production entry `Game-AmVslleI.js` at `252,041` raw / `76,537` gzip.
+  Gate-log SHA-256 is
+  `ca7ac191f041ed9acb7355aabdaefd485463ceb5e272d6dff272c87ebc4392f1`.
+- Rebased desktop Chrome retained the 50-tick idle movement-copy dwell,
+  stationary Staff silence, movement action/contact `3/4`, HP `2 -> 1`, mana
+  `100`, Title 7 cursor `0.19760000053793192`, Title 9 cursor
+  `4.180800011381507`, and empty page/console/failed-response arrays. It also
+  passed the upstream surface/onboarding receipt in the same journey. Log
+  SHA-256 is
+  `5e16f7db21e39945477a7402113b64b234991d9e6dd896ae8e6ca0e247daedd8`.
+- Rebased touch Chrome retained the same prompt gate, then joystick-owned
+  action/contact `2/3` at distance `39.97422473539427` versus legal
+  `39.974224735423924`, HP `2 -> 1`, mana `100`, Title 7 alpha
+  `0.232124` at cursor `0.19760000053793192`, Title
+  9 cursor `4.186000011395663`, and empty error arrays. Log SHA-256 is
+  `3bd36885b755674d6fe930d81ba117b403ed9b94fd7f24d2bb9dd4adab7e0dd3`.
+- The earlier candidate SHAs remain historical pre-rebase evidence; this
+  receipt supersedes them for publication. Deployment and production cutover
+  remain outside the authorized push.
