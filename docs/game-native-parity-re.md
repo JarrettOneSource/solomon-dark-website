@@ -59935,6 +59935,38 @@ font and shared notification renderer can represent every stock surface.
 
 ### Implementation validation receipt
 
-- Investigation is complete enough to begin the exact port. Implementation,
-  focused red/green receipts, canonical gate, and browser/native captures are
-  intentionally pending in this pre-code ledger revision.
+- Root cause reproduced before implementation: the Mac diagnostic returned
+  `[3,4,2,3,3,1]` for the first six `RandomInt(5)` values from the web's
+  fixed-zero secondary stream, and the two new focused assertions were the only
+  failures in a 67-test red run.
+- Implemented on Website base `a24bb5d02d37775612886e0aa912a5264a1732d6`:
+  every offer producer now finalizes Insight through the actor store on the
+  returned active gameplay RNG; selected-card acquisition, refresh/autofill,
+  queued rebuild, and Insight use native order; the secondary RNG is unchanged;
+  protocol/save identity round-trips; and the shared renderer exposes the
+  pulsing gold card treatment, `Insight`, and `Insight Bonus: Skill +2`.
+- Focused Mac green receipt: TypeScript build plus 305 affected progression,
+  simulation, save, protocol, renderer, and mod-skill tests passed, including
+  queued successor, replacement, exact cursor/order, and double-apply cases.
+- Browser receipt on the exact candidate: a fresh session crossed its first Hub
+  threshold and first Boneyard threshold with four legal cards and active RNG
+  seed 1. Each scene showed exactly one marked card; selecting it advanced Magic
+  Circle `0 -> 2` and then `2 -> 4`; the run consumed six offer words and two
+  acquisition words, did not move the secondary RNG, and recorded no page,
+  console, failed-response, or protocol errors. Captures are retained at
+  `/Users/jarrett/codex-evidence/creativity-insight-20260828-root-r5/creativity-insight-hub.png`
+  (SHA-256 `a256b506e9b9b724c01746f8fe60755144fa87befe9fdb16aa684533bd22c2ed`)
+  and `creativity-insight-boneyard.png` (SHA-256
+  `620dea674f5288b5dd38bbd38640f51d6b4d48f4ef43cddca056a32be6b8b1e6`).
+- Native visual receipt is retained at
+  `/mnt/c/sd-creativity-insight-20260828-root/native-creativity-insight.png`;
+  it shows the independent stock gold treatment and label with no hovered card.
+  The exact task-owned retail process was stopped after capture.
+- The byte-identical Mod Loader RE report/test tree passed all 526 registered
+  static checks on the Mac. The exact Website candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`; its first receipt log is
+  retained as `validate.log` (SHA-256
+  `9315535116c23d76f08e326bc90bb72473f95c378578e0f7c469dae0031ec243`).
+  The canonical gate is repeated after this receipt-only ledger edit so the
+  final receipt names the exact final tree.
+- Publication and deployment were not requested and were not performed.
