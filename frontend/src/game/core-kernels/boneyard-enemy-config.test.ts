@@ -34,6 +34,11 @@ const BASE_PATH: NativeEnemyPathState = Object.freeze({
   flankRadius: 100,
   flankTicksRemaining: 0,
   reorientationTicksRemaining: 0,
+  routePreviousVector: null,
+  routeRefreshTicksRemaining: 0,
+  routeTicksRemaining: 0,
+  routeWaypointIndex: 0,
+  routeWaypoints: null,
   speedFactor: 1,
   stalledMovementTicks: 0,
   turnFactor: 1,
@@ -55,6 +60,11 @@ test('constructs common steering state in exact draw order and maps all path mod
     flankRadius: radius.value,
     flankTicksRemaining: 0,
     reorientationTicksRemaining: 0,
+    routePreviousVector: null,
+    routeRefreshTicksRemaining: 0,
+    routeTicksRemaining: 0,
+    routeWaypointIndex: 0,
+    routeWaypoints: null,
     speedFactor: 1,
     stalledMovementTicks: 0,
     turnFactor: 1,
@@ -298,6 +308,7 @@ test('ARMORMAYBE applies recovered armor durability only when selected', () => {
 test('Archer and Mage flags remain family-specific evaluated lanes', () => {
   const archer = evaluateBoneyardEnemyConfig('SKELETONARCHER', {
     archerExtraArrows: 3,
+    archerMultiArrowMode: 2,
     flags: ['FLAG_RANDOMSHOT', 'FLAG_RANGEEASY', 'FLAG_POISONARROW'],
   })
   assert.deepEqual(archer.family, {
@@ -305,6 +316,7 @@ test('Archer and Mage flags remain family-specific evaluated lanes', () => {
     arrowType: 'poison',
     extraArrows: 3,
     headgear: 0,
+    multiArrowMode: 2,
     rangeMode: 3,
   })
   assert.equal(archer.secondaryDamage, 12)
@@ -441,6 +453,9 @@ test('dormant policy/payload lanes fail closed while custom multi-arrow count is
   }), /extraArrows must be/)
   assert.throws(() => evaluateBoneyardEnemyConfig('SKELETON', {
     archerExtraArrows: 1,
+  }), /only valid for SKELETONARCHER/)
+  assert.throws(() => evaluateBoneyardEnemyConfig('SKELETON', {
+    archerMultiArrowMode: 1,
   }), /only valid for SKELETONARCHER/)
   assert.throws(() => evaluateBoneyardEnemyConfig('SKELETON', {
     pathfindingMode: 4 as 0,

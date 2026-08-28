@@ -196,6 +196,7 @@ import {
   resolveBoneyardMovement,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
+import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
 import { synchronizeAirWaterPlayerVisualActors } from './air-water-player-visual-system.ts'
 import {
@@ -2755,6 +2756,9 @@ function finishGameSimulationTick(
   const boneyardCollision = result.world.kind === 'boneyard'
     ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
     : null
+  const boneyardStaticCollision = result.world.kind === 'boneyard'
+    ? result.world.collision
+    : null
   const boneyardSpellBounds = result.world.kind === 'boneyard'
     ? result.world.arenaTransition === null
       ? result.world.bounds
@@ -3329,6 +3333,35 @@ function finishGameSimulationTick(
         ? isHubRegionPathTraversable(region, from, to, radius)
         : firstHubRegionLineObstruction(region, from, to) === null
     },
+    ...(result.world.kind === 'boneyard'
+      ? {
+          findEnemyRoute: (
+            start: Readonly<{ x: number; y: number }>,
+            end: Readonly<{ x: number; y: number }>,
+            clearance: number,
+            bodyRadius: number,
+          ) => findBoneyardEnemyRoute({
+            bodyRadius,
+            bounds: boneyardSpellBounds!,
+            clearance,
+            end,
+            start,
+            // GoodImp shares the persistent Arena NavMesh rather than
+            // rebuilding it from each tick's articulated gate leaves.
+            world: boneyardStaticCollision!,
+          }),
+          isEnemyPathClear: (
+            start: Readonly<{ x: number; y: number }>,
+            end: Readonly<{ x: number; y: number }>,
+          ) => firstBoneyardPathBlockProgress(
+            { ...start },
+            { ...end },
+            boneyardSpellBounds!,
+            boneyardCollision!,
+            0,
+          ) === null,
+        }
+      : {}),
     castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
       const progression = playerEntities.progressions[index]!
       const derived = playerSkillDerivedStatsAt(playerEntities, playerId)

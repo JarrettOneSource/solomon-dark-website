@@ -231,7 +231,12 @@ test('GoodImp preserves the native constructor stream, landing attack, flight st
     targets: [target],
   })
   assert.equal(first.goodImp?.remainingTicks, 299)
-  assert.equal(first.goodImp?.position.x, 11.25)
+  assert.ok(first.goodImp)
+  assert.ok(first.goodImp.position.x > 0)
+  assert.ok(Math.abs(Math.hypot(
+    first.goodImp.position.x,
+    first.goodImp.position.y,
+  ) - 11.25) < 0.01)
   assert.equal(first.goodImp?.verticalVelocity, Math.fround(0.4))
   assert.equal(first.contact, null)
 
@@ -256,7 +261,7 @@ test('GoodImp preserves the native constructor stream, landing attack, flight st
   assert.equal(landedImp.bounceSoundIndex >= 0 && landedImp.bounceSoundIndex < 8, true)
   assert.equal(landedImp.contactSoundSequence, 1)
   assert.equal(landedImp.contactSoundIndex >= 0 && landedImp.contactSoundIndex < 3, true)
-  assert.equal(landed.rng.indexA, 33)
+  assert.equal(landed.rng.indexA, 34)
 
   const targetless = stepNativeFireGoodImp({ ...spawned.goodImp, remainingTicks: 2 }, {
     canOccupy: () => true,
@@ -265,5 +270,49 @@ test('GoodImp preserves the native constructor stream, landing attack, flight st
   })
   assert.equal(targetless.goodImp, null)
   assert.equal(targetless.releaseFire, true)
-  assert.deepEqual(targetless.releasePosition, { x: 0, y: 0 })
+  assert.ok(Math.hypot(
+    targetless.releasePosition.x,
+    targetless.releasePosition.y,
+  ) > 0)
+})
+
+test('GoodImp uses the same blocked-goal route owner with ordinary clearance', () => {
+  const spawned = spawnNativeFireGoodImp({
+    burnDamage: 9,
+    damage: 12,
+    id: 9,
+    lifetimeTicks: 300,
+    ownerId: 'p1',
+    position: { x: 0, y: 0 },
+    worldKey: 'world',
+  }, createNativeRng(456))
+  const target = {
+    active: true,
+    actorFlags: 0x2,
+    attachment: { x: 0, y: 0 },
+    bodyRadius: 8,
+    cellBindingOrder: 0,
+    id: 'enemy:5',
+    kind: 'enemy' as const,
+    nativePriority: 0,
+    pendingRemove: false,
+    position: { x: 200, y: 0 },
+    registrationOrder: 0,
+  }
+  const clearances: number[] = []
+  const stepped = stepNativeFireGoodImp(spawned.goodImp, {
+    canOccupy: () => true,
+    findRoute: (start, end, clearance) => {
+      clearances.push(clearance)
+      return [start, { x: 0, y: 50 }, { x: 50, y: 50 }, end]
+    },
+    isPathClear: () => false,
+    rng: spawned.rng,
+    targets: [target],
+  })
+  assert.deepEqual(clearances, [25])
+  assert.deepEqual(stepped.goodImp?.path.routeWaypoints, [
+    { x: 0, y: 50 },
+    { x: 50, y: 50 },
+  ])
 })

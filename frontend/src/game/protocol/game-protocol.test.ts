@@ -1617,8 +1617,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v95 carries party-rejoin waiting, online preferences, match chat, viewport dimensions, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 95)
+test('protocol v96 carries online state, enemy routes, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 96)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

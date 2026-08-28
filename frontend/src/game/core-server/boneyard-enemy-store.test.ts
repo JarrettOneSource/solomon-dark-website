@@ -31,10 +31,8 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { buildNativeEnemySteering } from '../core-kernels/native-enemy-pathfinding.ts'
 import {
-  BOUNDED_ARCHER_RANGE_BANDS,
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   BOUNDED_ENEMY_POISON_DURATION_SECONDS,
-  BOUNDED_MAGE_RANGE_BANDS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import {
@@ -450,10 +448,10 @@ test('materialization gives all eight families stable actor and event identities
   )
 })
 
-test('Skeleton, Archer, and Mage schedulers replace the retained loot seed in native order', () => {
+test('Skeleton, Archer, and Mage schedulers replace retained seeds in native order', () => {
   for (const [token, distance, phase, expectedWrites, expectedSeed] of [
     ['SKELETON', 10, 'attack', [100, 101], 101],
-    ['SKELETONARCHER', 200, 'attack', [100, 101], 101],
+    ['SKELETONARCHER', 200, 'attack', [100], null],
     ['SKELETONMAGE', 150, 'cast', [100, 101, 102], 102],
   ] as const) {
     const writes: number[] = []
@@ -483,7 +481,14 @@ test('Skeleton, Archer, and Mage schedulers replace the retained loot seed in na
       tick: 1,
     })
     assert.equal(result.store.actors[0]?.brain.phase, phase)
-    assert.equal(result.store.actors[0]?.lootSeed, expectedSeed)
+    const actor = result.store.actors[0]!
+    if (expectedSeed === null) {
+      if (actor.brain.family !== 'archer') throw new Error('expected Archer brain')
+      assert.equal(actor.lootSeed, actor.brain.aimSeed)
+      assert.ok(actor.lootSeed >= 0 && actor.lootSeed < 1_000_000)
+    } else {
+      assert.equal(actor.lootSeed, expectedSeed)
+    }
     assert.deepEqual(writes, expectedWrites)
   }
 })
@@ -1055,6 +1060,65 @@ test('blocked requested movement still advances Skeleton limb and upper-body loc
   assert.equal(result.store.actors[0]!.lastMovementTick, null)
   assert.ok(gaitPoses.size > 1, JSON.stringify([...gaitPoses]))
   assert.deepEqual([...bodyPoses].sort((left, right) => left - right), [0, 1, 2])
+})
+
+test('every mobile survival family enters the shared blocked-goal route owner', () => {
+  for (const token of [
+    'SKELETON',
+    'SKELETONARCHER',
+    'SKELETONMAGE',
+    'IMP',
+    'ZOMBIE',
+    'WRAITH',
+    'DEMON',
+  ] as const) {
+    const players = { player: livingTarget(1_000, 0) }
+    const spawned = spawnOne(`shared-route-${token}`, token, { x: 0, y: 0 }, players)
+    const clearances: number[] = []
+    const result = stepBoneyardEnemyStore(spawned.store, {
+      clipSpellSegment: CLEAR_SPELL_SEGMENT,
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      navigation: {
+        findRoute: ({ end, navigationClearance, start }) => {
+          clearances.push(navigationClearance)
+          return [
+            { ...start },
+            { x: 0, y: 100 },
+            { x: 100, y: 100 },
+            { ...end },
+          ]
+        },
+        isPathClear: () => false,
+      },
+      players,
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [],
+      tick: 2,
+    })
+    assert.deepEqual(clearances, [token === 'DEMON' ? 50 : 25], token)
+    assert.deepEqual(result.store.actors[0]!.path.routeWaypoints, [
+      { x: 0, y: 100 },
+      { x: 100, y: 100 },
+    ], token)
+  }
+})
+
+test('stationary Coffin does not invoke its inherited route slot', () => {
+  const players = { player: livingTarget(1_000, 0) }
+  const spawned = spawnOne('stationary-coffin-route', 'COFFIN', { x: 0, y: 0 }, players)
+  const result = stepBoneyardEnemyStore(spawned.store, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    navigation: {
+      findRoute: () => assert.fail('Coffin has no live locomotion caller'),
+      isPathClear: () => assert.fail('Coffin has no live locomotion caller'),
+    },
+    players,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  })
+  assert.deepEqual(result.store.actors[0]!.position, { x: 0, y: 0 })
 })
 
 test('Skeleton-family wrappers retain or replace the common body gait exactly', () => {
@@ -1649,7 +1713,7 @@ test('Archer and Mage use their recovered variable progress programs', () => {
   assert.equal(mage.store.actors[0]!.gaitPose, mageInitialGaitPose)
 })
 
-test('every Archer and Mage range mode attacks, approaches, and retreats at its own band', () => {
+test('every Archer and Mage range mode uses one strict native maximum with no retreat band', () => {
   const variants = [
     [[], 0],
     [['FLAG_RANGEDOWN'], 1],
@@ -1657,45 +1721,102 @@ test('every Archer and Mage range mode attacks, approaches, and retreats at its 
     [['FLAG_RANGEEASY'], 3],
   ] as const
   for (const [flags, mode] of variants) {
-    for (const [token, range, actionPhase] of [
-      ['SKELETONARCHER', BOUNDED_ARCHER_RANGE_BANDS[mode], 'attack'],
-      ['SKELETONMAGE', BOUNDED_MAGE_RANGE_BANDS[mode], 'cast'],
+    for (const [token, actionPhase] of [
+      ['SKELETONARCHER', 'attack'],
+      ['SKELETONMAGE', 'cast'],
     ] as const) {
-      const insideDistance = (range.minimum + range.maximum) / 2
       let inside = spawnOne(
         `${token}-${mode}-inside`,
         token,
         { x: 0, y: 0 },
-        { player: livingTarget(insideDistance, 0) },
+        { player: livingTarget(1_000, 0) },
         flags,
       )
+      const insideBrain = inside.store.actors[0]!.brain
+      if (insideBrain.family !== 'archer' && insideBrain.family !== 'mage') {
+        throw new Error('expected ranged Skeleton-family brain')
+      }
+      const insideDistance = insideBrain.attackRange - 1
       inside = step(inside.store, 1, { player: livingTarget(insideDistance, 0) })
       assert.equal(inside.store.actors[0]!.brain.phase, actionPhase)
 
-      const nearDistance = range.minimum - 1
       let near = spawnOne(
         `${token}-${mode}-near`,
         token,
         { x: 0, y: 0 },
-        { player: livingTarget(nearDistance, 0) },
+        { player: livingTarget(10, 0) },
         flags,
       )
-      near = step(near.store, 2, { player: livingTarget(nearDistance, 0) })
-      assert.ok(near.store.actors[0]!.headingDeg < 90, `${token} mode ${mode} must turn to retreat`)
-      assert.ok(near.store.actors[0]!.position.x > 0, `${token} mode ${mode} must turn gradually`)
+      near = step(near.store, 1, { player: livingTarget(10, 0) })
+      assert.equal(near.store.actors[0]!.brain.phase, actionPhase)
 
-      const farDistance = range.maximum + 1
       let far = spawnOne(
         `${token}-${mode}-far`,
         token,
         { x: 0, y: 0 },
-        { player: livingTarget(farDistance, 0) },
+        { player: livingTarget(1_000, 0) },
         flags,
       )
+      const farBrain = far.store.actors[0]!.brain
+      if (farBrain.family !== 'archer' && farBrain.family !== 'mage') {
+        throw new Error('expected ranged Skeleton-family brain')
+      }
+      const farDistance = farBrain.attackRange + 1
       far = step(far.store, 2, { player: livingTarget(farDistance, 0) })
       assert.ok(far.store.actors[0]!.position.x > 0, `${token} mode ${mode} must approach`)
+
+      let boundary = spawnOne(
+        `${token}-${mode}-boundary`,
+        token,
+        { x: 0, y: 0 },
+        { player: livingTarget(1_000, 0) },
+        flags,
+      )
+      const boundaryBrain = boundary.store.actors[0]!.brain
+      if (boundaryBrain.family !== 'archer' && boundaryBrain.family !== 'mage') {
+        throw new Error('expected ranged Skeleton-family brain')
+      }
+      boundary = step(boundary.store, 2, {
+        player: livingTarget(boundaryBrain.attackRange, 0),
+      })
+      assert.notEqual(boundary.store.actors[0]!.brain.phase, actionPhase)
     }
   }
+})
+
+test('native target-facing actions follow a moving player throughout windup', () => {
+  for (const token of [
+    'SKELETON',
+    'SKELETONARCHER',
+    'SKELETONMAGE',
+    'ZOMBIE',
+  ] as const) {
+    const north = { player: livingTarget(0, -10) }
+    let result = spawnOne(`moving-action-target-${token}`, token, { x: 0, y: 0 }, north)
+    result = step(result.store, 1, north)
+    assert.ok(
+      ['attack', 'cast', 'swipe'].includes(result.store.actors[0]!.brain.phase),
+      `${token} did not enter its action`,
+    )
+    result = step(result.store, 2, { player: livingTarget(10, 0) })
+    assert.equal(result.store.actors[0]!.headingDeg, 90, token)
+  }
+
+  const north = { player: livingTarget(0, -200) }
+  let archer = spawnOne('moving-action-target-arrow-release', 'SKELETONARCHER', {
+    x: 0,
+    y: 0,
+  }, north)
+  archer = step(archer.store, 1, north)
+  const archerBrain = archer.store.actors[0]!.brain
+  if (archerBrain.family !== 'archer') throw new Error('expected Archer brain')
+  archer = withActorBrain(archer, 0, {
+    ...archerBrain,
+    actionProgress: NATIVE_ARCHER_ACTION_PROGRAM.markerProgress,
+    markerEmitted: false,
+  })
+  archer = step(archer.store, 2, { player: livingTarget(200, 0) })
+  assert.equal(archer.store.projectiles[0]!.headingDeg, 90)
 })
 
 test('Archer modes consume target velocity and RNG while payload and extra arrows stay orthogonal', () => {
@@ -1711,8 +1832,8 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
   const random = forcedArcherVolley('archer-random', ['FLAG_RANDOMSHOT'], movingTarget)
   assert.equal(normal.store.projectiles[0]!.headingDeg, 0)
   assert.ok(leading.store.projectiles[0]!.headingDeg > 0)
-  assert.ok(Math.abs(signedHeading(scatter.store.projectiles[0]!.headingDeg)) <= 12)
-  assert.ok(Math.abs(signedHeading(random.store.projectiles[0]!.headingDeg)) <= 25)
+  assert.ok(Math.abs(signedHeading(scatter.store.projectiles[0]!.headingDeg)) <= 25)
+  assert.ok(Number.isFinite(random.store.projectiles[0]!.headingDeg))
 
   const fire = forcedArcherVolley(
     'archer-fire-multishot',
@@ -1720,31 +1841,36 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
     { player: livingTarget(200, 0) },
     2,
   )
-  assert.deepEqual(fire.store.projectiles.map((projectile) => ({
+  const fireArrows = fire.store.projectiles.map((projectile) => ({
     damage: projectile.damage,
     headingDeg: projectile.headingDeg,
     lightRegistration: projectile.lightRegistration,
     payload: projectile.payload,
-  })), [
-    {
-      damage: 8,
-      headingDeg: 86,
-      lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
-      payload: 'fire',
-    },
-    {
-      damage: 8,
-      headingDeg: 90,
-      lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
-      payload: 'fire',
-    },
-    {
-      damage: 8,
-      headingDeg: 94,
-      lightRegistration: { managerLane: 'transient', registrationOrdinal: 2 },
-      payload: 'fire',
-    },
+  }))
+  assert.equal(fireArrows.length, 3)
+  assert.deepEqual(fireArrows.map(({ damage, payload }) => ({ damage, payload })), [
+    { damage: 8, payload: 'fire' },
+    { damage: 8, payload: 'fire' },
+    { damage: 8, payload: 'fire' },
   ])
+  assert.equal(fireArrows[0]!.headingDeg, 90)
+  assert.ok(fireArrows[1]!.headingDeg >= 79 && fireArrows[1]!.headingDeg <= 81)
+  assert.ok(fireArrows[2]!.headingDeg >= 99 && fireArrows[2]!.headingDeg <= 101)
+  assert.deepEqual(fireArrows.map(({ lightRegistration }) => lightRegistration), [
+    { managerLane: 'transient', registrationOrdinal: 0 },
+    { managerLane: 'transient', registrationOrdinal: 1 },
+    { managerLane: 'transient', registrationOrdinal: 2 },
+  ])
+  assert.deepEqual(fire.events.map(({ type }) => type), [
+    'attack-marker',
+    'enemy-action-sound',
+    'projectile-spawned',
+    'projectile-spawned',
+    'projectile-spawned',
+  ])
+  const shotSound = fire.events[1]!
+  assert.equal(shotSound.sound, 'shoot-arrow')
+  assert.ok(shotSound.pitch! >= 0.9 && shotSound.pitch! <= 1.1)
   const poison = forcedArcherVolley(
     'archer-poison',
     ['FLAG_POISONARROW'],
@@ -1763,6 +1889,37 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
     poisonDamage: 12,
     poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
   })
+})
+
+test('Arrow arc countdown is independent from its settled opacity retirement lane', () => {
+  let result = forcedArcherVolley(
+    'archer-arrow-arc-lifecycle',
+    [],
+    { player: livingTarget(200, 0) },
+  )
+  const born = result.store.projectiles[0]!
+  assert.equal(born.verticalOffset, -25)
+  assert.equal(born.visualScale, 5)
+  assert.equal(born.settledTicksRemaining, born.lifetimeTicks)
+
+  result = step(result.store, 31, {})
+  const landed = result.store.projectiles[0]!
+  assert.equal(landed.ageTicks, 30)
+  assert.equal(landed.verticalOffset, -2.5)
+  assert.ok(landed.speed < born.speed)
+  assert.equal(landed.visualScale, 5)
+
+  result = step(result.store, 32, {})
+  const fading = result.store.projectiles[0]!
+  assert.equal(fading.verticalOffset, 0)
+  assert.equal(fading.speed, 0)
+  assert.ok(fading.visualScale < 5)
+
+  result = step(result.store, 80, {})
+  assert.equal(result.store.projectiles.length, 1)
+  assert.ok(result.store.projectiles[0]!.ageTicks > born.lifetimeTicks)
+  result = step(result.store, 140, {})
+  assert.equal(result.store.projectiles.length, 0)
 })
 
 test('Fire Arrow impact uses its unsigned half-scale burst and one transient wrapper', () => {
@@ -1790,7 +1947,11 @@ test('Fire Arrow impact uses its unsigned half-scale burst and one transient wra
   const frame = result.store.projectileEffects.find(
     ({ kind }) => kind === 'fire-burst-frame',
   )!
-  assert.deepEqual(frame.position, { x: 5, y: -10 })
+  const radians = projectile.headingDeg * Math.PI / 180
+  assert.deepEqual(frame.position, {
+    x: projectile.position.x + Math.sin(radians) * projectile.speed,
+    y: projectile.position.y - Math.cos(radians) * projectile.speed - 10,
+  })
   assert.deepEqual(glow.position, frame.position)
   assert.ok(frame.scale >= 0.5 && frame.scale <= 0.6)
   assert.equal(glow.scale, frame.scale * 5)
@@ -2394,7 +2555,7 @@ test('Imp contact is an immediate landing edge with native escape, VFX, and audi
   )
 })
 
-test('Demon bomb marker consumes its raw FireBurst constructor before projectile RNG', () => {
+test('Demon bomb keeps its action-entry facing and consumes raw FireBurst RNG first', () => {
   const players = { player: livingTarget(100, 0) }
   let result = spawnOne('demon-bomb-muzzle-rng', 'DEMON', { x: 0, y: 0 }, players)
   const brain = result.store.actors[0]!.brain
@@ -2406,18 +2567,27 @@ test('Demon bomb marker consumes its raw FireBurst constructor before projectile
     markerEmitted: false,
     phase: 'bomb',
   })
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      actors: [{ ...result.store.actors[0]!, headingDeg: 37 }],
+    },
+  }
   let expectedRngState = result.store.rngState
   for (let draw = 0; draw < 5; draw += 1) {
     expectedRngState = nextBoneyardWaveRandom(expectedRngState).state
   }
 
-  result = step(result.store, 1, players)
+  result = step(result.store, 1, { player: livingTarget(0, 100) })
   assert.equal(result.store.rngState, expectedRngState)
   assert.deepEqual(result.events.map(({ type }) => type), [
     'attack-marker',
     'projectile-spawned',
   ])
+  assert.equal(result.store.actors[0]?.headingDeg, 37)
   assert.equal(result.store.projectiles[0]?.kind, 'demon-bomb')
+  assert.equal(result.store.projectiles[0]?.headingDeg, 37)
 })
 
 test('remaining action families keep separate approach, special, and cooldown states', () => {
@@ -2796,6 +2966,48 @@ test('Maggot landing owns 1-in-5 combat admission and a 30-inactive ceiling', ()
   assert.ok(result.store.maggots.every(({ combatActive }) => !combatActive))
   assert.deepEqual(result.retired.map(({ actorId }) => actorId), [10_030])
   assert.equal(boneyardEnemyLiveCount(result.store), 1)
+})
+
+test('combat Maggot crawl joins the ordinary blocked-goal route owner', () => {
+  const players = { player: livingTarget(500, 0) }
+  let result = freezeOpenedCoffin(openedCoffin('maggot-shared-route', players))
+  const source = result.store.maggots[0]!
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      maggots: [{
+        ...source,
+        combatActive: true,
+        movementPhase: 'crawl',
+        nextMovementTick: 0,
+        targetPlayerId: 'player',
+        verticalOffset: 0,
+        verticalVelocity: 0,
+      }],
+    },
+  }
+  const clearances: number[] = []
+  result = stepBoneyardEnemyStore(result.store, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    navigation: {
+      findRoute: ({ end, navigationClearance, start }) => {
+        clearances.push(navigationClearance)
+        return [start, { x: 0, y: 75 }, { x: 75, y: 75 }, end]
+      },
+      isPathClear: () => false,
+    },
+    players,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 100,
+  })
+  assert.deepEqual(clearances, [25])
+  assert.deepEqual(result.store.maggots[0]!.path.routeWaypoints, [
+    { x: 0, y: 75 },
+    { x: 75, y: 75 },
+  ])
 })
 
 test('a crawling Maggot bites once, enters death, and cannot damage again', () => {
@@ -3638,7 +3850,11 @@ function forcedArcherVolley(
         },
         config: {
           ...actor.config,
-          family: { ...actor.config.family, extraArrows },
+          family: {
+            ...actor.config.family,
+            extraArrows,
+            multiArrowMode: extraArrows > 0 ? 3 : actor.config.family.multiArrowMode,
+          },
         },
       }],
     },

@@ -14,6 +14,14 @@ export interface NativeEnemyPathState {
   readonly flankRadius: number
   readonly flankTicksRemaining: number
   readonly reorientationTicksRemaining: number
+  readonly routePreviousVector: Readonly<BoneyardPoint> | null
+  readonly routeRefreshTicksRemaining: number
+  readonly routeTicksRemaining: number
+  readonly routeWaypointIndex: 0 | 1
+  readonly routeWaypoints: readonly [
+    Readonly<BoneyardPoint>,
+    Readonly<BoneyardPoint>,
+  ] | null
   readonly speedFactor: number
   readonly stalledMovementTicks: number
   readonly turnFactor: number
@@ -29,12 +37,39 @@ export interface NativeEnemySteeringRequest {
   readonly actorHeadingDeg: number
   readonly actorPosition: Readonly<BoneyardPoint>
   readonly cadenceTicks: number
+  readonly goalPosition?: Readonly<BoneyardPoint>
   readonly movementPerTick: number
   readonly radialDirection: -1 | 0 | 1
   readonly statusFactor: number
   readonly tangentDirection: -1 | 0 | 1
   readonly targetHeadingDeg: number
   readonly targetPosition: Readonly<BoneyardPoint> | null
+}
+
+export interface NativeEnemyPathGoalRequest {
+  readonly actorPosition: Readonly<BoneyardPoint>
+  readonly bodyRadius: number
+  readonly cadenceTicks: number
+  readonly directPathClear: (
+    start: Readonly<BoneyardPoint>,
+    end: Readonly<BoneyardPoint>,
+  ) => boolean
+  readonly findRoute: (
+    start: Readonly<BoneyardPoint>,
+    end: Readonly<BoneyardPoint>,
+    clearance: number,
+    bodyRadius: number,
+  ) => readonly Readonly<BoneyardPoint>[] | null
+  readonly navigationClearance: number
+  readonly rawGoal: Readonly<BoneyardPoint>
+  readonly targetPosition: Readonly<BoneyardPoint> | null
+  readonly targetRefreshTicks: number
+}
+
+export interface NativeEnemyPathGoalResult {
+  readonly goal: Readonly<BoneyardPoint>
+  readonly state: NativeEnemyPathState
+  readonly turnAround: boolean
 }
 
 export interface NativeEnemySteeringResult {
@@ -97,11 +132,81 @@ export function createNativeEnemyPathState(
       flankRadius: flankRadius.value,
       flankTicksRemaining: 0,
       reorientationTicksRemaining: 0,
+      routePreviousVector: null,
+      routeRefreshTicksRemaining: 0,
+      routeTicksRemaining: 0,
+      routeWaypointIndex: 0,
+      routeWaypoints: null,
       speedFactor: 1,
       stalledMovementTicks: 0,
       turnFactor: 1,
       wanderHeadingDeg: wander.value,
     }),
+  }
+}
+
+export function resolveNativeEnemyPathGoal(
+  source: NativeEnemyPathState,
+  request: NativeEnemyPathGoalRequest,
+): NativeEnemyPathGoalResult {
+  validatePathGoalRequest(request)
+  const active = resolveActiveRoute(source, request)
+  if (active !== null) return active
+
+  const routeRefreshTicksRemaining = Math.max(
+    0,
+    source.routeRefreshTicksRemaining - request.cadenceTicks,
+  )
+  if (routeRefreshTicksRemaining > 0) {
+    return {
+      goal: Object.freeze({ ...request.rawGoal }),
+      state: Object.freeze({ ...source, routeRefreshTicksRemaining }),
+      turnAround: false,
+    }
+  }
+
+  const routeGoal = request.targetPosition ?? request.rawGoal
+  if (request.directPathClear(request.actorPosition, routeGoal)) {
+    return {
+      goal: Object.freeze({ ...routeGoal }),
+      state: clearRoute(source, request.targetRefreshTicks),
+      turnAround: false,
+    }
+  }
+
+  const route = request.findRoute(
+    request.actorPosition,
+    routeGoal,
+    request.navigationClearance,
+    request.bodyRadius,
+  )
+  if (route === null || route.length < 3) {
+    return {
+      goal: Object.freeze({ ...routeGoal }),
+      state: clearRoute(source, 0),
+      turnAround: true,
+    }
+  }
+
+  const first = Object.freeze({ ...route[1]! })
+  const second = Object.freeze({ ...route[2]! })
+  const routeWaypoints: [Readonly<BoneyardPoint>, Readonly<BoneyardPoint>] = [
+    first,
+    second,
+  ]
+  const previous = vectorFromWaypoint(request.actorPosition, first)
+  return {
+    goal: first,
+    state: Object.freeze({
+      ...source,
+      flankTicksRemaining: 0,
+      routePreviousVector: Object.freeze(previous),
+      routeRefreshTicksRemaining: 0,
+      routeTicksRemaining: request.targetRefreshTicks,
+      routeWaypointIndex: 0,
+      routeWaypoints: Object.freeze(routeWaypoints),
+    }),
+    turnAround: false,
   }
 }
 
@@ -114,6 +219,12 @@ export function nativeEnemyTargetRefreshTicks(
     case 2: return NATIVE_ENEMY_PATH_BASE_REPATH_TICKS
     case 3: return 10
   }
+}
+
+export function clearNativeEnemyRoute(
+  source: NativeEnemyPathState,
+): NativeEnemyPathState {
+  return clearRoute(source, 0)
 }
 
 export function buildNativeEnemySteering(
@@ -287,10 +398,11 @@ export function selectNativeEnemyFlank(
   return { rngState, state, triggeredState0D: false }
 }
 
-function nativeEnemySteeringGoal(
+export function nativeEnemySteeringGoal(
   state: NativeEnemyPathState,
   request: NativeEnemySteeringRequest,
 ): BoneyardPoint {
+  if (request.goalPosition !== undefined) return { ...request.goalPosition }
   const target = request.targetPosition
   if (target === null) {
     return offsetPoint(
@@ -363,9 +475,103 @@ function turnTowardHeading(
   target: number,
   maximumStep: number,
 ): number {
-  const delta = positiveModulo(target - current + 180, 360) - 180
-  if (Math.abs(delta) < 1 || Math.abs(delta) >= 359) return current
-  return positiveModulo(current + Math.sign(delta) * Math.min(Math.abs(delta), maximumStep), 360)
+  const normalizedCurrent = positiveModulo(current, 360)
+  const normalizedTarget = positiveModulo(target, 360)
+  const separation = Math.abs(normalizedCurrent - normalizedTarget)
+  if (separation < 1 || separation >= 359) return normalizedCurrent
+  const direction = normalizedTarget <= normalizedCurrent
+    ? normalizedCurrent - normalizedTarget <= 180 ? -1 : 1
+    : normalizedTarget - normalizedCurrent > 180 ? -1 : 1
+  return positiveModulo(normalizedCurrent + direction * maximumStep, 360)
+}
+
+function resolveActiveRoute(
+  source: NativeEnemyPathState,
+  request: NativeEnemyPathGoalRequest,
+): NativeEnemyPathGoalResult | null {
+  if (source.routeWaypoints === null || source.routeTicksRemaining <= 0) return null
+  const waypoint = source.routeWaypoints[source.routeWaypointIndex]
+  const current = vectorFromWaypoint(request.actorPosition, waypoint)
+  const previous = source.routePreviousVector ?? current
+  const dot = current.x * previous.x + current.y * previous.y
+  if (dot > 100) {
+    return {
+      goal: waypoint,
+      state: Object.freeze({
+        ...source,
+        routePreviousVector: Object.freeze(current),
+        routeRefreshTicksRemaining: 0,
+        routeTicksRemaining: Math.max(
+          0,
+          source.routeTicksRemaining - request.cadenceTicks,
+        ),
+      }),
+      turnAround: false,
+    }
+  }
+  if (source.routeWaypointIndex === 0) {
+    const nextWaypoint = source.routeWaypoints[1]
+    const nextVector = vectorFromWaypoint(request.actorPosition, nextWaypoint)
+    return resolveNativeEnemyPathGoal(Object.freeze({
+      ...source,
+      routePreviousVector: Object.freeze(nextVector),
+      routeRefreshTicksRemaining: 0,
+      routeTicksRemaining: request.targetRefreshTicks,
+      routeWaypointIndex: 1,
+    }), request)
+  }
+  return null
+}
+
+function clearRoute(
+  source: NativeEnemyPathState,
+  routeRefreshTicksRemaining: number,
+): NativeEnemyPathState {
+  return Object.freeze({
+    ...source,
+    routePreviousVector: null,
+    routeRefreshTicksRemaining,
+    routeTicksRemaining: 0,
+    routeWaypointIndex: 0,
+    routeWaypoints: null,
+  })
+}
+
+function vectorFromWaypoint(
+  actorPosition: Readonly<BoneyardPoint>,
+  waypoint: Readonly<BoneyardPoint>,
+): BoneyardPoint {
+  return {
+    x: actorPosition.x - waypoint.x,
+    y: actorPosition.y - waypoint.y,
+  }
+}
+
+function validatePathGoalRequest(request: NativeEnemyPathGoalRequest): void {
+  if (!Number.isSafeInteger(request.cadenceTicks) || request.cadenceTicks < 1) {
+    throw new RangeError('enemy route cadence must be a positive safe integer')
+  }
+  if (
+    !Number.isSafeInteger(request.targetRefreshTicks)
+    || request.targetRefreshTicks < 1
+  ) throw new RangeError('enemy route refresh must be a positive safe integer')
+  if (!Number.isFinite(request.navigationClearance) || request.navigationClearance <= 0) {
+    throw new RangeError('enemy navigation clearance must be positive and finite')
+  }
+  if (!Number.isFinite(request.bodyRadius) || request.bodyRadius < 0) {
+    throw new RangeError('enemy route body radius must be non-negative and finite')
+  }
+  for (const [label, point] of [
+    ['actor position', request.actorPosition],
+    ['raw goal', request.rawGoal],
+    ...(request.targetPosition === null
+      ? []
+      : [['target position', request.targetPosition]] as const),
+  ] as const) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      throw new RangeError(`enemy ${label} must be finite`)
+    }
+  }
 }
 
 function positiveModulo(value: number, period: number): number {

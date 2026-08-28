@@ -7,8 +7,11 @@ import {
 } from './native-rng.ts'
 import {
   buildNativeEnemySteering,
+  clearNativeEnemyRoute,
   createNativeEnemyPathState,
+  nativeEnemySteeringGoal,
   nativeEnemyTargetRefreshTicks,
+  resolveNativeEnemyPathGoal,
   stepNativeEnemyPathRecovery,
   stepNativeEnemyReorientation,
   type NativeEnemyPathState,
@@ -230,6 +233,16 @@ export interface NativeFirePatchSpawn {
 
 export interface NativeFireGoodImpStepContext {
   readonly canOccupy: (position: Vector2) => boolean
+  readonly findRoute?: (
+    start: Readonly<Vector2>,
+    end: Readonly<Vector2>,
+    clearance: number,
+    bodyRadius: number,
+  ) => readonly Readonly<Vector2>[] | null
+  readonly isPathClear?: (
+    start: Readonly<Vector2>,
+    end: Readonly<Vector2>,
+  ) => boolean
   readonly rng: NativeRngState
   readonly targets: readonly PrimarySpellTarget[]
 }
@@ -457,7 +470,9 @@ export function stepNativeFireGoodImp(
   let headingDegrees = source.headingDegrees
   let position = source.position
   let rng = context.rng
-  let path = source.path
+  let path = (target?.id ?? null) === source.targetId
+    ? source.path
+    : clearNativeEnemyRoute(source.path)
   if (path.reorientationTicksRemaining > 0) {
     const reoriented = stepNativeEnemyReorientation(
       path,
@@ -468,7 +483,7 @@ export function stepNativeFireGoodImp(
     headingDegrees = reoriented.headingDeg
     path = reoriented.state
   } else if (source.ageTicks % NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS === 0) {
-    const steering = buildNativeEnemySteering(path, {
+    const steeringRequest = {
       actorHeadingDeg: source.headingDegrees,
       actorPosition: source.position,
       cadenceTicks: NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS,
@@ -482,6 +497,31 @@ export function stepNativeFireGoodImp(
       tangentDirection: 0,
       targetHeadingDeg: target?.headingDeg ?? 0,
       targetPosition: target?.position ?? null,
+    } as const
+    let actorHeadingDeg = source.headingDegrees
+    let goalPosition = nativeEnemySteeringGoal(path, steeringRequest)
+    if (context.findRoute && context.isPathClear) {
+      const routed = resolveNativeEnemyPathGoal(path, {
+        actorPosition: source.position,
+        bodyRadius: source.collisionRadius,
+        cadenceTicks: NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS,
+        directPathClear: context.isPathClear,
+        findRoute: context.findRoute,
+        navigationClearance: 25,
+        rawGoal: goalPosition,
+        targetPosition: target?.position ?? null,
+        targetRefreshTicks: nativeEnemyTargetRefreshTicks(1),
+      })
+      path = routed.state
+      actorHeadingDeg = routed.turnAround
+        ? positiveModulo(actorHeadingDeg + 180, 360)
+        : actorHeadingDeg
+      goalPosition = routed.goal
+    }
+    const steering = buildNativeEnemySteering(path, {
+      ...steeringRequest,
+      actorHeadingDeg,
+      goalPosition,
     })
     const requested = Object.freeze({
       x: Math.fround(source.position.x + steering.delta.x),

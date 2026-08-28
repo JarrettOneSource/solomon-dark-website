@@ -368,7 +368,11 @@ function enemyProjectileAssetSamples(): readonly BoneyardEnemyProjectileSnapshot
   const samples: BoneyardEnemyProjectileSnapshot[] = []
   for (let headingDeg = 0; headingDeg < 360; headingDeg += 1) {
     for (const payload of ['normal', 'fire', 'poison'] as const) {
-      samples.push(enemyProjectile('arrow', 0x7da, { headingDeg, payload }))
+      samples.push(enemyProjectile('arrow', 0x7da, {
+        headingDeg,
+        payload,
+        visualPhaseDeg: headingDeg,
+      }))
     }
     samples.push(enemyProjectile('firebolt', 0x7eb, { headingDeg, payload: 'fire' }))
   }

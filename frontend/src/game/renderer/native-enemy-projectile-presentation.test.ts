@@ -38,11 +38,18 @@ test('live projectile selectors and clocks follow the recovered compositor', () 
     headingDeg: 90,
     payload: 'normal',
     verticalOffset: -25,
+    visualPhaseDeg: 90,
   }), 120).layers[0]!
   assert.equal(arrow.entry, 2)
   assert.deepEqual(arrow.offset, { x: 0, y: -25 })
   assert.equal(arrow.rotationRadians, Math.PI / 2)
   assert.equal(arrow.scale, 1.25)
+
+  const fadedArrow = nativeEnemyProjectilePlan(projectile('arrow', 0x7da, {
+    payload: 'fire',
+    visualScale: 0.4,
+  }), 120)
+  assert.ok(fadedArrow.layers.every(({ alpha }) => alpha === 0.4))
 
   const firebolt = nativeEnemyProjectilePlan(projectile('firebolt', 0x7eb, {
     ageTicks: 5,

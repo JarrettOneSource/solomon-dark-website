@@ -117,6 +117,7 @@ import {
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
+import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import {
   createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
@@ -628,6 +629,27 @@ export function stepBoneyardWorldTick(
         radius,
       )
     ),
+    navigation: {
+      findRoute: ({ bodyRadius, end, navigationClearance, start }) => (
+        findBoneyardEnemyRoute({
+          bodyRadius,
+          bounds: activeBounds,
+          clearance: navigationClearance,
+          end,
+          start,
+          // Stock builds the three Arena NavMeshes once from Region geometry;
+          // moving gate leaves remain final movement-collision owners.
+          world: world.collision,
+        })
+      ),
+      isPathClear: ({ end, radius, start }) => firstBoneyardPathBlockProgress(
+        { ...start },
+        { ...end },
+        activeBounds,
+        collision,
+        radius,
+      ) === null,
+    },
     paused: hostileScenePaused,
     players: Object.fromEntries([
       ...Object.entries(nextPlayers).map(([playerId, player]) => {

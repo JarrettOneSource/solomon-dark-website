@@ -214,6 +214,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)
   assert.equal(NATIVE_SOUND_MANIFEST['start-boulder'].registryOffset, 0xf0c)
   assert.equal(NATIVE_SOUND_MANIFEST['skeleton-die'].registryOffset, 0xdac)
+  assert.equal(NATIVE_SOUND_MANIFEST['shoot-arrow'].registryOffset, 0xd80)
   assert.equal(NATIVE_SOUND_MANIFEST['critical-hit'].registryOffset, 0x330)
   assert.equal(NATIVE_SOUND_MANIFEST['disable-enemy'].registryOffset, 0x3b4)
   assert.equal(NATIVE_SOUND_MANIFEST.knockback.registryOffset, 0x8b0)
@@ -696,6 +697,32 @@ test('pins Deflect swipe to its stock PCM and maps the successful global feedbac
   }), {
     cue: 'bite-2',
     playbackRate: 1.125,
+    sourcePosition: { x: 10, y: 20 },
+    volume: 1,
+  })
+})
+
+test('pins the Archer release cue and maps its authoritative positional pitch', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/shoot-arrow.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST['shoot-arrow'].sourceSha256,
+  )
+  assert.deepEqual(nativeEnemyEventSoundRequest({
+    actorId: 4,
+    eventId: 5,
+    gainScale: 1,
+    pitch: 0.95,
+    runId: 'run-1',
+    sound: 'shoot-arrow',
+    sourcePosition: { x: 10, y: 20 },
+    tick: 122,
+    type: 'enemy-action-sound',
+  }), {
+    cue: 'shoot-arrow',
+    playbackRate: 0.95,
     sourcePosition: { x: 10, y: 20 },
     volume: 1,
   })

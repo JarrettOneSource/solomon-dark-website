@@ -36,9 +36,12 @@ export function nativeEnemyProjectilePlan(
   switch (projectile.kind) {
     case 'arrow': {
       const payload = requirePayload(projectile, ['normal', 'fire', 'poison'])
+      const visualHeadingRadians = projectile.visualPhaseDeg * Math.PI / 180
+      const alpha = Math.min(1, projectile.visualScale)
       const body = layer('BadGuys', 2, `arrow-${payload}`, {
+        alpha,
         offset: { x: 0, y: projectile.verticalOffset },
-        rotationRadians: headingRadians,
+        rotationRadians: visualHeadingRadians,
         scale: 1.25,
       })
       if (payload === 'normal') return plan(projectile, [body])
@@ -47,15 +50,17 @@ export function nativeEnemyProjectilePlan(
         + deterministicUnit(projectile.id, fixedTick, 0) * 0.5 * heightScale
       const overlay = payload === 'fire'
         ? layer('BadGuys', 255 + Math.floor(fixedTick / 5) % 12, 'arrow-fire-overlay', {
+            alpha,
             blendMode: 'add',
             offset: { x: 0, y: projectile.verticalOffset },
-            rotationRadians: headingRadians + Math.PI,
+            rotationRadians: visualHeadingRadians + Math.PI,
             scale: overlayScale,
           })
         : layer('BadGuys', 271 + Math.floor(age / 6) % 12, 'arrow-poison-overlay', {
+            alpha,
             blendMode: 'add',
             offset: { x: 0, y: projectile.verticalOffset },
-            rotationRadians: headingRadians + Math.PI,
+            rotationRadians: visualHeadingRadians + Math.PI,
             scale: overlayScale,
             tint: 0x008000,
           })

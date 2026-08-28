@@ -87,6 +87,8 @@ export interface EvaluateBoneyardEnemyConfigOptions {
   authoredRecipe?: AuthoredBoneyardEnemyRecipe
   /** Custom-authoring lane; retail wave data leaves this at zero. */
   archerExtraArrows?: number
+  /** Native MonsterRecipe +0x88; retail wave data leaves this at zero. */
+  archerMultiArrowMode?: 0 | 1 | 2 | 3
   flags?: readonly string[]
   /** Native MonsterRecipe +0xB8; the constructor default is enabled. */
   flanking?: boolean
@@ -160,6 +162,7 @@ export interface BoneyardArcherConfig extends BoneyardEnemyConfigBase {
     arrowType: BoneyardArrowType
     extraArrows: number
     headgear: 0 | 1 | 2 | 3
+    multiArrowMode: 0 | 1 | 2 | 3
     rangeMode: 0 | 1 | 2 | 3
   }>
 }
@@ -275,6 +278,7 @@ interface MutableConfig {
   accuracyMode: 0 | 1 | 2 | 3
   arrowType: BoneyardArrowType
   extraArrows: number
+  multiArrowMode: 0 | 1 | 2 | 3
   rangeMode: 0 | 1 | 2 | 3
   mageElement: BoneyardMageElement
   otherShield: boolean
@@ -325,6 +329,10 @@ export function evaluateBoneyardEnemyConfig(
     maggotPoisonDamage: 0,
     maximumHealth: base.health,
     maximumMaggots: 20,
+    multiArrowMode: validatedArcherMultiArrowMode(
+      enemyToken,
+      options.archerMultiArrowMode,
+    ),
     otherShield: false,
     otherShieldHealth: 0,
     poisonDuration: 0,
@@ -398,6 +406,7 @@ export function evaluateBoneyardEnemyConfig(
         arrowType: config.arrowType,
         extraArrows: config.extraArrows,
         headgear: config.headgear,
+        multiArrowMode: config.multiArrowMode,
         rangeMode: config.rangeMode,
       },
     })
@@ -521,6 +530,17 @@ function validatedExtraArrows(
     throw new RangeError(
       `extraArrows must be a safe integer within 0..${BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS}`,
     )
+  }
+  return value
+}
+
+function validatedArcherMultiArrowMode(
+  enemyToken: BoneyardWaveEnemyToken,
+  value: 0 | 1 | 2 | 3 | undefined,
+): 0 | 1 | 2 | 3 {
+  if (value === undefined) return 0
+  if (enemyToken !== 'SKELETONARCHER') {
+    throw new Error('multiArrowMode is only valid for SKELETONARCHER')
   }
   return value
 }

@@ -385,7 +385,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 95
+export const GAME_PROTOCOL_VERSION = 96
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -5411,9 +5411,19 @@ function nativeEnemyPathState(value: unknown, field: string): NativeEnemyPathSta
   const source = record(value, field)
   onlyKeys(source, field, [
     'baseTurnRate', 'flankAngleDeg', 'flankRadius', 'flankTicksRemaining',
-    'reorientationTicksRemaining', 'speedFactor', 'stalledMovementTicks',
-    'turnFactor', 'wanderHeadingDeg',
+    'reorientationTicksRemaining', 'routePreviousVector',
+    'routeRefreshTicksRemaining', 'routeTicksRemaining',
+    'routeWaypointIndex', 'routeWaypoints', 'speedFactor',
+    'stalledMovementTicks', 'turnFactor', 'wanderHeadingDeg',
   ])
+  const routeWaypoints = source.routeWaypoints === null
+    ? null
+    : limitedArray(source.routeWaypoints, `${field}.routeWaypoints`, 2).map(
+        (waypoint, index) => vector(waypoint, `${field}.routeWaypoints[${index}]`),
+      )
+  if (routeWaypoints !== null && routeWaypoints.length !== 2) {
+    throw new GameProtocolError(`${field}.routeWaypoints must contain two entries`)
+  }
   return {
     baseTurnRate: positiveFinite(source.baseTurnRate, `${field}.baseTurnRate`),
     flankAngleDeg: finite(source.flankAngleDeg, `${field}.flankAngleDeg`),
@@ -5426,6 +5436,26 @@ function nativeEnemyPathState(value: unknown, field: string): NativeEnemyPathSta
       source.reorientationTicksRemaining,
       `${field}.reorientationTicksRemaining`,
     ),
+    routePreviousVector: source.routePreviousVector === null
+      ? null
+      : vector(source.routePreviousVector, `${field}.routePreviousVector`),
+    routeRefreshTicksRemaining: nonnegativeInteger(
+      source.routeRefreshTicksRemaining,
+      `${field}.routeRefreshTicksRemaining`,
+    ),
+    routeTicksRemaining: nonnegativeInteger(
+      source.routeTicksRemaining,
+      `${field}.routeTicksRemaining`,
+    ),
+    routeWaypointIndex: boundedInteger(
+      source.routeWaypointIndex,
+      `${field}.routeWaypointIndex`,
+      0,
+      1,
+    ) as 0 | 1,
+    routeWaypoints: routeWaypoints === null
+      ? null
+      : [routeWaypoints[0]!, routeWaypoints[1]!],
     speedFactor: positiveFinite(source.speedFactor, `${field}.speedFactor`),
     stalledMovementTicks: nonnegativeInteger(
       source.stalledMovementTicks,
@@ -10467,7 +10497,7 @@ function boneyardEnemyProjectileSnapshot(
   }
   const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
   const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
-  if (kind !== 'demon-bomb' && ageTicks > lifetimeTicks) {
+  if (kind !== 'demon-bomb' && kind !== 'arrow' && ageTicks > lifetimeTicks) {
     throw new GameProtocolError(`${field}.ageTicks exceeds lifetimeTicks`)
   }
   const speed = finite(source.speed, `${field}.speed`)

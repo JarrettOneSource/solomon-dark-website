@@ -110,6 +110,7 @@ export type GameSoundCue =
   | 'shock-1'
   | 'shock-2'
   | 'shock-3'
+  | 'shoot-arrow'
   | 'spin-attack'
   | 'staff-swoosh'
   | 'staff-hit-wood'
@@ -621,6 +622,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x222c,
     sourceName: 'sounds\\Shock\\s3',
     sourceSha256: '5ca5ce12ad76cd77f0ab856928a4048c8b466b3637783f16b6947e42b46b46d4',
+  },
+  'shoot-arrow': {
+    registryOffset: 0xd80,
+    sourceName: 'sounds\\shootarrow',
+    sourceSha256: 'a155d0ab8b11b6c88d0248aad41c46c95a734c638b1f15114051f0affebfa1b5',
   },
   'spin-attack': {
     registryOffset: 0xe5c,

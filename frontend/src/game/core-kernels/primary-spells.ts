@@ -552,8 +552,18 @@ export interface PrimarySpellTickContext {
     radius?: number,
     nativeExclusionMask?: number,
   ) => boolean
+  findEnemyRoute?: (
+    start: Readonly<Vector2>,
+    end: Readonly<Vector2>,
+    clearance: number,
+    bodyRadius: number,
+  ) => readonly Readonly<Vector2>[] | null
   castAuthority: Readonly<Record<string, PrimarySpellCastAuthority>>
   inputs: Readonly<Record<string, PlayerCharacterInput>>
+  isEnemyPathClear?: (
+    start: Readonly<Vector2>,
+    end: Readonly<Vector2>,
+  ) => boolean
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
   registerLightProvider?: RegisterNativeLightProvider
@@ -1063,6 +1073,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           position,
           effect.collisionRadius,
         ),
+        ...(context.findEnemyRoute === undefined
+          ? {}
+          : { findRoute: context.findEnemyRoute }),
+        ...(context.isEnemyPathClear === undefined
+          ? {}
+          : { isPathClear: context.isEnemyPathClear }),
         rng,
         targets: context.spellTargets(effect.ownerId),
       })

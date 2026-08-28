@@ -404,6 +404,7 @@ export const BONEYARD_ENEMY_ACTION_SOUNDS = [
   'imp-vocal-6',
   'imp-vocal-7',
   'imp-vocal-8',
+  'shoot-arrow',
 ] as const
 
 export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [

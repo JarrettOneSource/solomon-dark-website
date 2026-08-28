@@ -117,6 +117,7 @@ import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
 import shock1 from '../assets/game/audio/sfx/shock-1.wav'
 import shock2 from '../assets/game/audio/sfx/shock-2.wav'
 import shock3 from '../assets/game/audio/sfx/shock-3.wav'
+import shootArrow from '../assets/game/audio/sfx/shoot-arrow.wav'
 import spinAttack from '../assets/game/audio/sfx/spin-attack.wav'
 import staffSwoosh from '../assets/game/audio/sfx/staff-swoosh.wav'
 import staffHitWood from '../assets/game/audio/sfx/staff-hit-wood.wav'
@@ -292,6 +293,7 @@ export const GAME_AUDIO_SOURCES = {
     'shock-1': shock1,
     'shock-2': shock2,
     'shock-3': shock3,
+    'shoot-arrow': shootArrow,
     'spin-attack': spinAttack,
     'staff-swoosh': staffSwoosh,
     'staff-hit-wood': staffHitWood,

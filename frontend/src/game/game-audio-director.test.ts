@@ -124,6 +124,7 @@ const SOURCES = {
     'shock-1': 'shock-1.wav',
     'shock-2': 'shock-2.wav',
     'shock-3': 'shock-3.wav',
+    'shoot-arrow': 'shoot-arrow.wav',
     'spin-attack': 'spin-attack.wav',
     'staff-swoosh': 'staff-swoosh.wav',
     'staff-hit-wood': 'staff-hit-wood.wav',
