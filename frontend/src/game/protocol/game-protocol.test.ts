@@ -2397,6 +2397,55 @@ test('protocol validates active primary and concentration selections against eff
   )
 })
 
+test('protocol gives every welded one-shot the shared Fire-rate Cast 1 clock', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const baseFrame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const message = (frame: typeof baseFrame) => ({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame,
+    sequence: 2,
+  })
+
+  for (const buildId of [1000, 1001, 1002, 1009]) {
+    for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
+      const frame = JSON.parse(JSON.stringify(baseFrame))
+      const player = frame.players['player-1']
+      player.config.element = element
+      player.lighting.driveActive = true
+      player.primaryCast.actionTick = 72
+      player.primaryCast.selectedPrimaryId = buildId
+      player.progression.learnedSkills.push([52, 1, 1])
+      player.progression.learnedSkills.sort((left: number[], right: number[]) => left[0] - right[0])
+      player.progression.learnedSkillOrder.push(52)
+      player.progression.selectedPrimarySkillId = 52
+      player.progression.weldBuildId = buildId
+      player.progression.weldComponentRanks = [1, 1, 1, 1, 1, 1]
+
+      const decoded = decodeServerGameMessage(JSON.stringify(message(frame)))
+      assert.equal(decoded.type, 'server-snapshot', `${buildId}:${element}:tick-72`)
+
+      player.primaryCast.actionTick = 73
+      assert.throws(
+        () => decodeServerGameMessage(JSON.stringify(message(frame))),
+        /outside the Staff Cast 1 program/,
+        `${buildId}:${element}:tick-73`,
+      )
+    }
+  }
+
+  const pureEther = JSON.parse(JSON.stringify(baseFrame))
+  pureEther.players['player-1'].lighting.driveActive = true
+  pureEther.players['player-1'].primaryCast.actionTick = 55
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(message(pureEther))),
+    /outside the Staff Cast 1 program/,
+  )
+})
+
 test('protocol rejects legacy, malformed, and unsupported discriminated payloads', () => {
   assert.throws(() => decodeClientGameMessage('{'), GameProtocolError)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
