@@ -91,6 +91,7 @@ test('StaffMelee consumes chance, rate, and acceleration in native order and cro
   while (action !== null) {
     poses.add(nativePlayerStaffActionPose(action))
     const stepped = stepNativePlayerStaffAction(action, { x: 11, y: 22 })
+    assert.deepEqual(stepped.sample.origin, { x: 11, y: 22 })
     if (stepped.contact) contacts += 1
     action = stepped.action
   }
@@ -108,7 +109,9 @@ test('StaffSpin uses the one-word native sign primitive and contacts after eight
   let steps = 0
   let contacts = 0
   while (action !== null) {
-    const stepped = stepNativePlayerStaffAction(action, { x: 0, y: 0 })
+    const ownerPosition = { x: steps + 1, y: -(steps + 1) }
+    const stepped = stepNativePlayerStaffAction(action, ownerPosition)
+    assert.deepEqual(stepped.sample.origin, ownerPosition)
     steps += 1
     if (stepped.contact) contacts += 1
     action = stepped.action

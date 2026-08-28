@@ -37,6 +37,11 @@ import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
   NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
 } from '../core-kernels/player-lighting.ts'
+import type {
+  NativePlayerStaffAction,
+  NativePlayerStaffMeleeAction,
+  NativePlayerStaffSpinAction,
+} from '../core-kernels/native-player-staff-action.ts'
 import {
   createDeferredNativeLightProviderRegistrations,
   createNativeLightProviderOrder,
@@ -2545,6 +2550,11 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
     actionDistance <= legalContactDistance + 0.0001,
     `Staff action began outside contact clearance (${actionDistance} > ${legalContactDistance})`,
   )
+  const preEscapePosition = getPlayerCharacter(state, 'caster').position
+  state = stepGameSimulationTick(state, { caster: gameplayInput(1, 0) })
+  const escapedDuringAction = getPlayerCharacter(state, 'caster')
+  assert.ok(escapedDuringAction.position.x > preEscapePosition.x)
+  assert.ok(state.primarySpells.transients.some(({ id }) => id === firstAction.id))
   for (let tick = 1; tick < 100; tick += 1) {
     state = stepGameSimulationTick(state, { caster: gameplayInput(0, -1) })
     if (state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-contact')) {
@@ -2575,6 +2585,109 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
   assert.equal(state.primarySpells.transients.some((transient) => (
     transient.kind === 'player-staff-melee' && transient.id !== firstAction.id
   )), true)
+})
+
+test('live Staff melee and spin keep native movement while retaining action ownership', () => {
+  const cases = [
+    {
+      expectedHeadingDegrees: 180,
+      label: 'melee',
+      materialize: (
+        origin: Readonly<{ x: number; y: number }>,
+        worldKey: string,
+      ): NativePlayerStaffMeleeAction => ({
+        actionTimingFactor: 1,
+        ageTicks: 0,
+        baseProgressPerTick: 0.1,
+        contactSequence: 0,
+        headingDegrees: 180,
+        id: 900,
+        kind: 'player-staff-melee',
+        lane: 'primary',
+        origin,
+        outcome: 'normal',
+        ownerId: 'caster',
+        progress: 0,
+        swooshPitch: 1,
+        worldKey,
+      }),
+    },
+    {
+      expectedHeadingDegrees: 200,
+      label: 'spin',
+      materialize: (
+        origin: Readonly<{ x: number; y: number }>,
+        worldKey: string,
+      ): NativePlayerStaffSpinAction => ({
+        ageTicks: 0,
+        contactSequence: 0,
+        countdown: 360,
+        headingDegrees: 180,
+        id: 901,
+        kind: 'player-staff-spin',
+        origin,
+        outcome: 'whirl',
+        ownerId: 'caster',
+        swooshPitch: 1,
+        turnSign: 1,
+        worldKey,
+      }),
+    },
+  ] as const
+
+  for (const actionCase of cases) {
+    let state = enterBoneyardWorld(createGameSimulation({ caster: {
+      discipline: 'body',
+      displayName: `Moving ${actionCase.label}`,
+      element: 'air',
+    } }), combatBoneyard(`moving-staff-${actionCase.label}`))
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    const before = getPlayerCharacter(state, 'caster')
+    const worldKey = `boneyard:${state.world.runId}`
+    const action: NativePlayerStaffAction = actionCase.materialize(
+      { ...before.position },
+      worldKey,
+    )
+    state = {
+      ...state,
+      primarySpells: {
+        ...state.primarySpells,
+        nextId: action.id + 1,
+        transients: [action],
+      },
+    }
+
+    state = stepGameSimulationTick(state, { caster: {
+      ...gameplayInput(1, 0),
+      aim: { x: 1, y: 0 },
+      cast: { primary: true, quickbar: null },
+    } })
+
+    const after = getPlayerCharacter(state, 'caster')
+    assert.ok(
+      after.position.x > before.position.x,
+      `${actionCase.label} action suppressed PlayerWizard movement`,
+    )
+    assert.ok(after.velocity.x > 0, `${actionCase.label} action suppressed velocity input`)
+    assert.ok(
+      after.gaitDegrees > before.gaitDegrees,
+      `${actionCase.label} action suppressed gait`,
+    )
+    assert.ok(
+      after.walkCyclePrimary > before.walkCyclePrimary,
+      `${actionCase.label} action suppressed the locomotion strip`,
+    )
+    assert.equal(
+      after.headingIndex,
+      actorHeadingIndex(actionCase.expectedHeadingDegrees),
+      `${actionCase.label} movement replaced action-owned heading`,
+    )
+    assert.equal(after.primaryCast.castSequence, 0)
+    assert.equal(after.primaryCast.actionTick, -1)
+    assert.ok(state.primarySpells.transients.some((transient) => (
+      transient.id === action.id && transient.kind === action.kind
+    )), `${actionCase.label} movement cancelled the live Staff action`)
+  }
 })
 
 test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {

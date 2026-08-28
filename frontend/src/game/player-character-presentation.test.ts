@@ -565,15 +565,17 @@ test('player draw plan holds the sustained Staff Constant pose bank', () => {
 test('player draw plan consumes authoritative melee poses and world ownership', () => {
   const state = {
     config: FIRE_CONFIG,
-    gaitDegrees: 0,
+    gaitDegrees: 45,
     headingIndex: 0,
     primaryCast: createIdlePlayerPrimaryCast(),
-    velocity: { x: 0, y: 0 },
-    walkCyclePrimary: 0,
+    velocity: { x: 100, y: 0 },
+    walkCyclePrimary: 2.5,
   }
   const plan = createPlayerCharacterDrawPlan(state, 1, 4)
   assert.equal(plan.attachmentPose, 4)
   assert.deepEqual(plan.orbOffset, { x: 39.5, y: -24.5 })
+  assert.equal(plan.moving, true)
+  assert.equal(plan.robePose, 2)
   assert.equal(plan.staffFront, false)
   assert.equal(playerCharacterStaffIsFront(8, 4), true)
 

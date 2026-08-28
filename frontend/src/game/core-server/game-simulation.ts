@@ -2085,9 +2085,9 @@ export function stepGameSimulationTick(
       : input
     return [playerId, staffActionOwnerIds.has(playerId)
       ? {
+          // Native +0xE4 is checked after MoveStep; action occupancy never seals locomotion.
           ...gatedInput,
           cast: { primary: false, quickbar: null },
-          movement: { x: 0, y: 0 },
         }
       : gatedInput]
   }))

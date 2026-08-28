@@ -8,6 +8,7 @@ import {
   preview as previewBuiltFrontend,
 } from 'vite'
 
+import { actorHeadingIndex } from '../src/game/core-kernels/actor-heading.ts'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { nativeSolomonDirtStateAt } from '../src/game/renderer/boneyard-solomon-dirt-presentation.ts'
@@ -1278,11 +1279,107 @@ function learnChillWind(state, playerId) {
   })
 }
 
+function fortifyStaffMovementTrial(state, playerId) {
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...progressions[index],
+    currentHealth: 1_000_000,
+    maximumHealth: 1_000_000,
+    revision: progressions[index].revision + 1,
+  }
+  Object.assign(state, {
+    playerEntities: { ...state.playerEntities, progressions },
+  })
+}
+
+function stageStaffMovementTarget(state, playerId, navigation) {
+  assert.equal(state.world.kind, 'boneyard')
+  const player = getPlayerCharacter(state, playerId)
+  const targetIndex = state.world.enemies.actors.findIndex((actor) => (
+    actor.lifeState === 'alive'
+    && actor.config.enemyToken !== 'COFFIN'
+    && actor.brain.phase === 'approach'
+  ))
+  assert.notEqual(targetIndex, -1, 'opening wave had no controllable Staff target')
+  const target = state.world.enemies.actors[targetIndex]
+  const directions = [
+    { x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 },
+    { x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: 1 }, { x: -1, y: -1 },
+  ]
+  let targetPosition = null
+  const contactDistance = PLAYER_CHARACTER_RADIUS + target.config.collisionRadius
+  for (const distance of [contactDistance + 8, contactDistance + 16, contactDistance + 24]) {
+    for (const direction of directions) {
+      const length = Math.hypot(direction.x, direction.y)
+      const candidate = {
+        x: player.position.x + direction.x / length * distance,
+        y: player.position.y + direction.y / length * distance,
+      }
+      const insideBounds = candidate.x >= navigation.bounds.x + PLAYER_CHARACTER_RADIUS
+        && candidate.x <= navigation.bounds.x + navigation.bounds.w - PLAYER_CHARACTER_RADIUS
+        && candidate.y >= navigation.bounds.y + PLAYER_CHARACTER_RADIUS
+        && candidate.y <= navigation.bounds.y + navigation.bounds.h - PLAYER_CHARACTER_RADIUS
+      if (!insideBounds || !traversesBoneyard(
+        player.position,
+        candidate,
+        navigation.bounds,
+        navigation.collision,
+      )) continue
+      const clearOfOthers = state.world.enemies.actors.every((actor, index) => (
+        index === targetIndex
+        || actor.lifeState !== 'alive'
+        || Math.hypot(
+          actor.position.x - candidate.x,
+          actor.position.y - candidate.y,
+        ) > actor.config.collisionRadius + target.config.collisionRadius + 20
+      ))
+      if (!clearOfOthers) continue
+      targetPosition = candidate
+      break
+    }
+    if (targetPosition !== null) break
+  }
+  assert.ok(targetPosition, 'could not stage a collision-safe Staff target')
+  const actors = [...state.world.enemies.actors]
+  actors[targetIndex] = {
+    ...target,
+    currentHealth: 1_000,
+    nextMovementTick: Number.MAX_SAFE_INTEGER,
+    nextTargetRefreshTick: Number.MAX_SAFE_INTEGER,
+    position: targetPosition,
+    targetPlayerId: null,
+  }
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: { ...state.world.enemies, actors },
+    },
+  })
+  return target.id
+}
+
+function stagedStaffTargetDirection(state, playerId, targetId) {
+  if (state.world.kind !== 'boneyard') return null
+  const target = state.world.enemies.actors.find((actor) => (
+    actor.id === targetId && actor.lifeState === 'alive'
+  ))
+  if (!target) return null
+  const player = getPlayerCharacter(state, playerId)
+  return {
+    x: target.position.x - player.position.x,
+    y: target.position.y - player.position.y,
+  }
+}
+
 async function proveStaffMeleeContact(page, navigation) {
   const initialState = host.state()
   assert.equal(initialState.world.kind, 'boneyard')
   const playerId = initialState.playerEntities.identities[0]?.playerId
   assert.ok(playerId, 'expected the authoritative browser player')
+  fortifyStaffMovementTrial(initialState, playerId)
+  const stagedTargetId = stageStaffMovementTarget(initialState, playerId, navigation)
   const existingActionIds = new Set(initialState.primarySpells.transients
     .filter((transient) => (
       transient.ownerId === playerId
@@ -1307,7 +1404,8 @@ async function proveStaffMeleeContact(page, navigation) {
     }
     const frame = await boneyardFrame(page)
     assert.equal(frame.localPlayerLifeState, 'alive', 'player died before Staff contact')
-    const direction = nearestEnemyApproachDirection(frame, navigation)
+    const direction = stagedStaffTargetDirection(state, playerId, stagedTargetId)
+      ?? nearestEnemyApproachDirection(frame, navigation)
     if (direction === null) {
       await page.waitForTimeout(50)
     } else {
@@ -1337,6 +1435,12 @@ async function proveStaffMeleeContact(page, navigation) {
     .map(({ id }) => id))
   const healthAtAction = hostileHealthById(actionState)
   const manaAtAction = getPlayerProgression(actionState, playerId).currentMana
+  const movement = await proveMovementDuringStaffAction(
+    page,
+    playerId,
+    action,
+    actionState,
+  )
   const contactDeadline = Date.now() + 10_000
   let contact = null
   let damage = []
@@ -1369,11 +1473,11 @@ async function proveStaffMeleeContact(page, navigation) {
   await page.waitForFunction(() => {
     const sources = window.__sdrAudioPlaySources ?? []
     return sources.some((source) => source.includes('staff-swoosh'))
-      && sources.some((source) => source.includes('staff-hit-wood'))
   }, undefined, { timeout: 10_000 })
 
-  const repeatDeadline = Date.now() + 10_000
+  const repeatDeadline = Date.now() + 30_000
   let repeatAction = null
+  let repeatActionState = null
   while (Date.now() < repeatDeadline && repeatAction === null) {
     const state = host.state()
     repeatAction = state.primarySpells.transients.find((transient) => (
@@ -1381,9 +1485,50 @@ async function proveStaffMeleeContact(page, navigation) {
       && transient.id !== action.id
       && (transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin')
     )) ?? null
-    if (repeatAction === null) await page.waitForTimeout(10)
+    if (repeatAction !== null) {
+      repeatActionState = state
+      break
+    }
+    const frame = await boneyardFrame(page)
+    assert.equal(frame.localPlayerLifeState, 'alive', 'player died before repeated Staff contact')
+    const direction = stagedStaffTargetDirection(state, playerId, stagedTargetId)
+      ?? nearestEnemyApproachDirection(frame, navigation)
+    if (direction === null) {
+      await page.waitForTimeout(25)
+    } else {
+      await pulseMovement(page, movementKeys(direction), 80)
+    }
   }
-  assert.ok(repeatAction, 'settled current contact did not admit the next Staff action')
+  assert.ok(repeatAction && repeatActionState, 'movement did not admit the next Staff action')
+
+  const repeatContactIds = new Set(repeatActionState.primarySpells.transients
+    .filter(({ kind, ownerId }) => kind === 'player-staff-contact' && ownerId === playerId)
+    .map(({ id }) => id))
+  const repeatHealth = hostileHealthById(repeatActionState)
+  const repeatContactDeadline = Date.now() + 10_000
+  let repeatContact = null
+  let repeatDamage = []
+  while (Date.now() < repeatContactDeadline) {
+    const state = host.state()
+    repeatContact = state.primarySpells.transients.find((transient) => (
+      transient.kind === 'player-staff-contact'
+      && transient.ownerId === playerId
+      && !repeatContactIds.has(transient.id)
+    )) ?? null
+    repeatDamage = [...hostileHealthById(state)].flatMap(([id, currentHealth]) => {
+      const previousHealth = repeatHealth.get(id)
+      return previousHealth !== undefined && currentHealth < previousHealth
+        ? [{ currentHealth, id, previousHealth }]
+        : []
+    })
+    if (repeatContact !== null && repeatDamage.length > 0) break
+    await page.waitForTimeout(10)
+  }
+  assert.ok(repeatContact && repeatContact.kind === 'player-staff-contact')
+  assert.ok(repeatDamage.length > 0, 're-engaged Staff marker did not damage a hostile')
+  await page.waitForFunction(() => (
+    (window.__sdrAudioPlaySources ?? []).some((source) => source.includes('staff-hit-wood'))
+  ), undefined, { timeout: 10_000 })
 
   const audioSources = await page.evaluate(() => (
     [...new Set(window.__sdrAudioPlaySources ?? [])].filter((source) => (
@@ -1400,11 +1545,104 @@ async function proveStaffMeleeContact(page, navigation) {
     damage,
     legalDistance,
     manaAtAction,
+    movement,
     repeatActionId: repeatAction.id,
     repeatActionKind: repeatAction.kind,
+    repeatContactId: repeatContact.id,
+    repeatDamage,
     targetId: targetAtAction.id,
+    stagedTargetId,
     targetToken: targetAtAction.enemyToken,
   }
+}
+
+async function proveMovementDuringStaffAction(page, playerId, action, actionState) {
+  const playerAtAction = getPlayerCharacter(actionState, playerId)
+  const initialSpeed = Math.hypot(
+    playerAtAction.velocity.x,
+    playerAtAction.velocity.y,
+  )
+  assert.ok(initialSpeed > 0.01, 'Staff admission did not retain its movement epoch velocity')
+  const keys = movementKeys({
+    x: -playerAtAction.velocity.x,
+    y: -playerAtAction.velocity.y,
+  })
+  assert.ok(keys.length > 0, 'Staff escape direction produced no movement keys')
+  const keyDirection = {
+    x: Number(keys.includes('d')) - Number(keys.includes('a')),
+    y: Number(keys.includes('s')) - Number(keys.includes('w')),
+  }
+  const keyDirectionLength = Math.hypot(keyDirection.x, keyDirection.y)
+  const direction = {
+    x: keyDirection.x / keyDirectionLength,
+    y: keyDirection.y / keyDirectionLength,
+  }
+  const positionProjection = (player) => (
+    player.position.x * direction.x + player.position.y * direction.y
+  )
+  const velocityProjection = (player) => (
+    player.velocity.x * direction.x + player.velocity.y * direction.y
+  )
+  const initialPositionProjection = positionProjection(playerAtAction)
+  const initialVelocityProjection = velocityProjection(playerAtAction)
+  let priorPositionProjection = initialPositionProjection
+  let minimumPositionProjection = initialPositionProjection
+  let receipt = null
+
+  await page.bringToFront()
+  for (const key of keys) await page.keyboard.down(key)
+  try {
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+    const deadline = Date.now() + 750
+    while (Date.now() < deadline && receipt === null) {
+      await page.waitForTimeout(5)
+      const state = host.state()
+      const activeAction = state.primarySpells.transients.find((transient) => (
+        transient.id === action.id
+        && transient.ownerId === playerId
+        && transient.kind === action.kind
+      ))
+      if (!activeAction) break
+      const player = getPlayerCharacter(state, playerId)
+      const currentPositionProjection = positionProjection(player)
+      const currentVelocityProjection = velocityProjection(player)
+      minimumPositionProjection = Math.min(
+        minimumPositionProjection,
+        currentPositionProjection,
+      )
+      if (
+        currentVelocityProjection > 0.01
+        && currentPositionProjection > priorPositionProjection + 0.001
+      ) {
+        const frame = await boneyardFrame(page)
+        assert.equal(
+          player.headingIndex,
+          actorHeadingIndex(activeAction.headingDegrees),
+          'escape movement replaced Staff-action heading',
+        )
+        receipt = {
+          actionAgeTicks: activeAction.ageTicks,
+          attachmentPose: frame.playerAttachmentPose,
+          escapeDistanceFromTurn: currentPositionProjection - minimumPositionProjection,
+          initialSpeed,
+          initialVelocityProjection,
+          playerHeadingIndex: player.headingIndex,
+          velocityProjection: currentVelocityProjection,
+          walkPose: frame.playerWalkPose,
+        }
+        break
+      }
+      priorPositionProjection = currentPositionProjection
+    }
+  } finally {
+    for (const key of [...keys].reverse()) await page.keyboard.up(key)
+    await publishStoppedMovement(page)
+  }
+
+  assert.ok(receipt, `${action.kind} retired before escape movement became authoritative`)
+  assert.ok(receipt.initialVelocityProjection < 0)
+  assert.ok(receipt.escapeDistanceFromTurn > 0)
+  return receipt
 }
 
 function nearestHostileActor(state, position) {
