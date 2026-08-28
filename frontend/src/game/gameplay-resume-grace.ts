@@ -1,7 +1,8 @@
-import type {
-  GameplayPauseSource,
-  GameplayResumeGraceReason,
-  GameplayResumeGraceState,
+import {
+  GAMEPLAY_RESUME_GRACE_DURATION_MS,
+  type GameplayPauseSource,
+  type GameplayResumeGraceReason,
+  type GameplayResumeGraceState,
 } from './protocol/game-protocol.ts'
 
 const PAUSE_SOURCE_GRACE_REASON = {
@@ -17,11 +18,14 @@ export function gameplayResumeGraceReasonForPauseSource(
   return PAUSE_SOURCE_GRACE_REASON[source]
 }
 
-export function gameplayResumeGraceSeconds(
+export function gameplayResumeGraceProgress(
   grace: GameplayResumeGraceState,
   elapsedMs: number,
 ): number | null {
   if (grace.remainingMs === null) return null
-  const remainingMs = grace.remainingMs - Math.max(0, elapsedMs)
-  return Math.max(1, Math.ceil(remainingMs / 1_000))
+  const remainingMs = Math.max(0, grace.remainingMs - Math.max(0, elapsedMs))
+  return Math.min(1, Math.max(
+    0,
+    1 - remainingMs / GAMEPLAY_RESUME_GRACE_DURATION_MS,
+  ))
 }

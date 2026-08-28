@@ -55026,7 +55026,6 @@ No member is `blocked-by-platform` and no authored row remains unextracted.
   markers; `collegeIntro=null` proves loadout confirmation; a post-loadout
   incoming transition can occur before confirmation; or save/restore loses the
   state needed to distinguish acknowledged Office from returned Courtyard.
-
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
@@ -55277,7 +55276,6 @@ the title/walk, plus refresh and save boundaries that can reconstruct it.
 - The earlier HUD candidate/base receipts remain historical evidence; this
   receipt supersedes them for publication. Deployment and production cutover
   remain outside the authorized push.
-
 ## 2026-08-27 — Sustained primary and Blizzard Beam contact geometry reopening
 
 ### Reported smell and parity question
@@ -55304,7 +55302,6 @@ source glows the complete child set. The 2026-08-23 primary-collision reopening
 then enumerated point/cone helpers without sweeping `0x006427E0` or the
 Blizzard call at `0x00541F37`. Both passes violated whole-system membership;
 this entry supersedes their Blizzard collision and child-membership wording.
-
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
@@ -55510,7 +55507,6 @@ No member is blocked by the browser platform.
   `d2920ba731cbe1082cf328eb30c34690fe48ffdfa7e0e16ffcf4de285333c585`.
 - No push, deployment, or production cutover was requested or performed. The
   isolated Website and Mod Loader task branches and Mac receipts remain local.
-
 ## 2026-08-27 — Shared mobile HUD layouts and full-screen touch authoring
 
 ### Reported smell and system question
@@ -55539,7 +55535,6 @@ No member is blocked by the browser platform.
   claimed. The native preservation question is unchanged: geometry and
   publication must not cross into HUD semantics, input authority, tutorial
   gates, session protocol, simulation, saves, or desktop placement.
-
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
@@ -55675,3 +55670,331 @@ the server document again before replacing the local committed document.
   physical-phone ergonomics receipt. The work is committed only on the local
   task branch; nothing has been pushed, deployed, restarted, or cut over in
   production.
+## 2026-08-27 — Atomic match-loading presentation and complete Boneyard coverage
+
+### Reported smell and parity question
+
+- Reported web behavior: the match progress bar can paint over the prior scene
+  before `Wizards_dire_BG` appears. During Boneyard renderer construction the
+  bare world/HUD `Preparing the Boneyard…` fallback can therefore leak instead
+  of the full loading presentation and its semantic status.
+- Required behavior: every nontrivial Hub/Boneyard transition presents one
+  complete atomic loading frame—art, scrim, useful lifecycle label, and bar—
+  while input remains sealed through destination renderer readiness.
+- This reopens the 2026-08-14 match-loading and 2026-08-22 mobile visual-lifetime
+  entries. The skipped membership was the process-wide match cover: the mobile
+  cutover correctly removed inactive world/actor art from startup but removed
+  the cover too, while `MatchLoadingScreen` continued assuming it was decoded.
+- Falsifiers: match art already belonging to current startup readiness; the
+  component gating its chrome on image readiness; a nontransparent cover behind
+  the bar; Boneyard work completing outside the existing barrier; or restoring
+  the former route-wide world/actor manifest.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| User observation | browser report, 2026-08-27 | The progress UI sometimes precedes the cover, and the Boneyard preparation fallback is exposed. | authoritative |
+| Existing native/loader evidence | retail Beta 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Mod Loader `native-menus-and-boot.md`; Website entries dated 2026-08-14 | One process-wide `LoadingScreenState` owns the exact art, 18-percent scrim, discrete stage label/bar, 150-ms anti-flash gate, input seal, cancel, and renderer-ready completion. | high |
+| Current web causal trace | Website `ec98c44ec5001802946289e833a3df5a0e8010fb`; `game-assets.ts`, `MatchLoadingScreen.tsx`, `match-loading-screen.css`, `MainMenuScene.tsx`, `BoneyardScene.tsx` | Startup includes Loader/Title but not `matchLoading`. After 150 ms the component sets `data-visible=true` without testing `<img>` load/decode; the root is transparent, so the already-paintable label/bar and scene fallback can precede the image response. | high |
+| Regression history | Website `f94d4f64e01d5ab883ca47943694e0fa1cfd341f` and mobile cutover `cfda6be4980059808d107746b7928e71be70d81a` | The first port put the cover in a route-resident manifest. The mobile fix removed the entire manifest after measuring about 1,064 MiB startup residency, but its inventory omitted the single 7.91-MiB transition-shell surface. | high |
+| Exact asset | `frontend/src/assets/game/match-loading-background.png`, 1920 x 1080, 3,579,758 encoded bytes, 8,294,400 RGBA bytes, SHA-256 `251365e025129972707b436d441d52ae2c5f8199bc3f80a1c4e03b2a28a1180c` | One decoded shell surface is sufficient for every Hub/Boneyard branch; no world, actor, mod, or modal atlas needs startup residency. | high |
+
+No new executable address, loader stage, authored row, or asset fact was
+recovered. The current Mod Loader report already owns the reusable native
+contract and remains unchanged.
+
+### System boundary and membership inventory
+
+Native system: **process-wide match-transition barrier and its browser visual
+readiness adapter**, from route readiness and the first transition edge through
+semantic stage advancement, atomic painting, destination first frame, cancel,
+and teardown.
+
+| Member / branch | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| Exact `Wizards_dire_BG` cover | loader asset/renderer contract | `exact-ported` | one startup-shell member with exact hash and 7.91-MiB decoded cost; no inactive scene atlas joins it |
+| Art/scrim/label/bar first visible frame | D3D renderer's composed frame | `exact-ported` | visual readiness is `150 ms elapsed AND image loaded`; no visible child may precede positive image dimensions |
+| Discipline commit -> shared/private Hub | `connecting_transport` owner | `verified-already-at-parity` with atomic-art correction | barrier still begins at accepted discipline before Create's final recurrence and ends at Hub renderer ready |
+| Last Game -> Hub | same transport/checkpoint path | `exact-ported` shared correction | cover is already decoded before the title action; semantic stages remain monotonic |
+| Last Game/rejoin/restart -> Boneyard | connection plus run-content path | `exact-ported` shared correction | no restored renderer/HUD/status leaks before the full cover |
+| College-intro admission | Hub transition path | `exact-ported` shared correction | same shell art, transport labels, cancel, and renderer-ready teardown |
+| Hub map -> ordinary/custom Boneyard | `preparing_boneyard -> reading_boneyard -> materializing_participants` | `exact-ported` shared correction | `Preparing/Loading/Gathering` labels appear on the cover; scene fallback remains covered |
+| Stock Tutorial Boneyard | same Arena/loading owner plus authored prelude | `verified-already-at-parity` with atomic-art correction | prelude remains intentional; after its handoff the same complete cover owns renderer work |
+| Non-host start and late restored peer | loaded-content/snapshot writers | `exact-ported` shared correction | already-decoded process cover is available even when the local client did not request the run |
+| Progress stage table and strict-greater advancement | existing 18 applicable browser rows from the complete 20-row loader table | `verified-already-at-parity` | every current semantic label/progress row remains exact and no timer fabricates missing host stages |
+| Sub-150-ms transition | loader reveal gate | `verified-already-at-parity` | input is sealed but no loading pixels flash; successful teardown has no minimum hold |
+| Hub/Boneyard renderer fallback diagnostics | Website renderer-specific diagnostic | `out-of-system` for native presentation; retained for errors/direct isolation | ordinary match flow covers the loading fallback; actionable WebGL error remains visible after cancel |
+| Startup Loader, Title/Create/world/actor/modal/mod art | distinct native owners | `out-of-system` | no old route-wide resident manifest or inactive-scene preload returns |
+| Failure/cancel, run replacement, route teardown | loading lifecycle | `verified-already-at-parity` plus atomic readiness | asset failure fails route readiness; session/renderer failure cancels; no late child paint survives unmount |
+
+There is no browser-blocked member. A browser image has an asynchronous load
+edge, and explicitly owning it is the browser adaptation required to preserve
+the native composited-frame invariant.
+
+### Ownership thread and recovered behavioral contract
+
+- Route startup owns only Loader, immediately-next Title, global audio, and the
+  one process-wide transition cover. The cover is not Hub/Boneyard scene art:
+  either Title, Create, Hub, or an incoming restored run can enter its barrier.
+- Startup must finish the cover's successful `load` plus best-effort `decode()`
+  through the existing bounded four-worker loader before Title becomes
+  interactive. This adds one 7.91-MiB decoded surface, not the superseded
+  1,064-MiB route manifest.
+- `MatchLoadingScreen` independently requires its mounted image to report
+  positive readiness before exposing any sibling child. That local invariant
+  protects cached-image eviction and DOM paint ordering without a delay,
+  timeout, retry, alternate art, or partial fallback.
+- The existing 150-ms reveal threshold, stretched Website art policy, exact
+  geometry/colors, semantic stage table, immediate input seal, renderer-ready
+  completion, and cancel semantics remain unchanged.
+- Boneyard's `Preparing the Boneyard…` node remains a renderer diagnostic, not
+  a second transition surface. Once the reveal threshold is crossed it cannot
+  be topmost during an ordinary match transition.
+
+### Confidence and open questions
+
+- Confirmed: omitted startup membership, transparent partial-paint mechanism,
+  exact asset bytes/cost, all flow entry/advance/ready/cancel owners, and the
+  existing mobile cap/scene ownership contract.
+- Inferred: none used for the implementation.
+- Unknown: none material. Browser eviction is handled by the component's own
+  positive image-readiness gate even after startup succeeded.
+
+### Web implementation consequence
+
+- Add one explicit match-transition source group and startup stage; do not put
+  any Hub, Boneyard, player, spell, modal, or mod imagery back into startup.
+- Make the presentation flag the conjunction of the existing reveal threshold
+  and mounted image readiness. Publish readiness in data attributes for the
+  browser race probe.
+- Keep every useful existing semantic stage label and remove no renderer error
+  diagnostic. The reported Boneyard result must emerge from shared cover
+  ownership, not from hiding one text node.
+
+### Validation contract
+
+- Focused red/green tests: startup membership contains exactly the transition
+  cover; startup-memory policy permits that one member but still rejects every
+  inactive scene family; presentation source gates all children on art
+  readiness; stage/lifecycle/input contracts remain unchanged.
+- Mac Chrome delayed-image journey: throttle the cover beyond 150 ms and prove
+  zero frame where progress/label is visible with zero natural image width;
+  then observe one atomic complete frame and the exact Hub/Boneyard semantic
+  labels through renderer readiness.
+- Mobile startup probe: peak work remains at most four and decoded startup
+  imagery remains below 128 MiB with only the named 7.91-MiB increase.
+- Exact candidate: byte-identical Mac tree, canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`, empty page/console/failed-
+  response arrays, and no exposed Boneyard renderer fallback after reveal.
+
+### Implementation validation receipt
+
+- `game-assets.ts` now owns one explicit process-wide match-transition source
+  group and loads it in the bounded startup program after Title. No Hub,
+  Boneyard, player, spell, modal, or mod atlas returned to route-wide
+  residency. `MatchLoadingScreen` independently requires both the existing
+  150-ms threshold and a positive mounted-image load edge before any child is
+  visible; diagnostic data exposes both predicates for the race probe.
+- Focused red coverage failed on the omitted source group and absent art-ready
+  gate, then the exact final Mac tree passed all 94 focused loading,
+  protocol-95, client/save, and College integration contracts. The canonical
+  gate passed 26 backend/contracts, 311 prerequisite tests, 1,687 broad
+  Boneyard/host tests, 77 ML tests, every remaining registered suite,
+  production builds, media policy, and bundle budget (`252,960` raw / `76,818`
+  gzip). Gate-log SHA-256 is
+  `dcd8d6739ca7fbd7a70de06ab249d9708978c09ac18b16762b24707c7f1e8900`.
+- Mac Chrome 151 forced each mounted Hub/Boneyard image to arrive 650 ms late
+  on top of 750-ms network latency. Both flows sampled the post-150-ms state at
+  `naturalWidth=0` with art, label, and bar all hidden, then exposed one atomic
+  `1920 x 1080` image/scrim/label/bar frame. Boneyard published
+  `Preparing the boneyard... .73` and then real `Gathering the coven... .92`;
+  input held through readiness, did not replay, and fresh input moved normally.
+  Page, console, and failed-response arrays were empty. Browser-log SHA-256 is
+  `e84ed31ee72cc7a86196e02987ca6574bce6163c3e43c75ae11a29df71e02283`;
+  inspected final loading-frame SHA-256 is
+  `728958d1ecfc5e9d9228c28a721df13aba7265e453d22fa60c19fc3feaec8555`.
+- The production startup probe loaded the transition cover exactly once,
+  retained the four-worker cap, decoded 25.01 MiB across 52 startup images,
+  and loaded no world/player/SkillPicker-skills texture. It recorded one page
+  load with empty crash/page/console/response errors; log SHA-256 is
+  `18009aea3e410cf9f23dc611528f8bc907cda7ab1465ef845b988fdb81b4b501`.
+- The byte-identical pre-receipt source trees were local commit
+  `8acb4f5ac0dc1ba9801986ffee2aef159dad6025` and detached Mac base
+  `0bf893b63ab48da9b9b78e583a8f3ecf0e18b262`, with 25 changed/deleted paths
+  under manifest SHA-256
+  `032480c59c97d6a0ccd07faece62cadb7de83b12825767296e0baba4863880ec`.
+  This receipt is the sole post-validation documentation write; no runtime,
+  test, build, or browser byte changed afterward.
+
+## 2026-08-27 — Two-second authoritative resume grace with progress presentation
+
+### Reported smell and parity question
+
+- Product correction: reduce the Website resume grace from three seconds to
+  two and replace the numeric `RESUMING IN 3,2,1` countdown with a progress bar.
+- Preserve the recovered authority boundary: the host, not the bar, owns the
+  deadline; pending renderer/player readiness remains an indefinite textual
+  wait; expiry clears input and resumes with no catch-up.
+- This reopens the 2026-08-26 resume-grace and 2026-08-27 mutual-renderer-
+  readiness entries only at their explicit Website extension. No retail timing
+  claim changes: stock still has no post-modal resume grace.
+- Falsifiers: a retained 3,000-ms host deadline, a client-only two-second bar
+  over three seconds of held simulation, numeric countdown copy/digits, a bar
+  during nullable pending readiness, or any reason/surface retaining the old
+  duration.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Product direction | user correction, 2026-08-27 | Exactly two seconds and a progress bar replace the countdown. | authoritative |
+| Existing retail evidence | same pinned retail image and `native-gameplay-pause.md`; `0x005CBD40`, `0x00427800`, `0x005ABF10` | Stock suspension/release and no-catch-up semantics remain the base; stock supplies no grace duration or countdown. | high |
+| Current authority trace | Website `ec98c44e`; `GAMEPLAY_RESUME_GRACE_DURATION_MS`, `game-host.ts`, strict decoder, client session | One shared 3,000-ms constant caps the wire projection and creates every standalone/shared/menu/picker/loading deadline. | high |
+| Current presentation trace | `GameplayResumeCountdown.tsx`, `gameplay-resume-grace.ts`, CSS and browser journeys | The client derives `3,2,1` from host-issued remaining time and renders one large number; nullable pending state already has the correct waiting copy. | high |
+
+### System boundary and membership inventory
+
+System boundary: **run-scoped authoritative resume grace**, including every
+admission reason, waiting/deadline phase, wire bound, presentation projection,
+input/simulation hold, late projection, expiry, and teardown.
+
+| Member / branch | Required disposition | Proof contract |
+| --- | --- | --- |
+| Multiplayer Pause Menu and gameplay Settings release | `exact-ported` Website policy correction | one 2,000-ms host deadline and monotonic bar; no numeric countdown |
+| Multiplayer Inventory close | `exact-ported` shared correction | same duration/bar and held authority |
+| Multiplayer full Skill Book close/handoff | `exact-ported` shared correction | 40-tick native close remains; grace begins only at actual release |
+| Multiplayer compact skill-selector close | `exact-ported` shared correction | same duration/bar |
+| Final mandatory SkillPicker cohort release | `exact-ported` shared correction | pending close/readiness first, then one 2,000-ms bar for all peers |
+| Initial ordinary/custom/Tutorial Boneyard readiness | `exact-ported` shared correction | `Waiting on players ...` remains until all renderers; then two-second bar |
+| Active-party rejoin, staged catch-up, and same-tab takeover | `exact-ported` shared correction | all existing readiness/materialization composition retained; bar starts only at the valid all-ready edge |
+| Active saved-run restart, including solo | `exact-ported` shared correction | two-second authoritative bar after renderer readiness |
+| `party-rejoin-wait` | `exact-ported` shared correction | indefinite `Waiting for players to rejoin` has no bar; valid return changes to the same two-second bar |
+| Late client during an active grace | `exact-ported` | receives current remainder and begins at the corresponding nonzero fill; cannot restart or lengthen the deadline |
+| Gameplay pause/level barrier composition | `verified-already-at-parity` with new duration | no progress accrues beneath an older owner because the deadline remains null |
+| Solo menu/modal release and pause-owner disconnect | `verified-already-at-parity`, no grace | immediate ordinary resume remains unchanged |
+| Hub/title/Create/loading/Game Over/loadout/observer/bot/unrelated party | `out-of-system` | no active-run grace progress surface or hold |
+| Stale/duplicate ready intent, expiry, run replacement, empty retirement | `verified-already-at-parity` | cannot shorten authority; teardown removes bar and record exactly once |
+| Strict wire contract | `exact-ported` Website protocol 95 | maximum positive remainder is 2,000; 2,001 is rejected; shape and reason family are unchanged |
+
+No browser member is blocked. `performance.now()` supplies the monotonic host
+deadline and presentation clock required for the exact Website policy.
+
+### Ownership thread and recovered behavioral contract
+
+- `GAMEPLAY_RESUME_GRACE_DURATION_MS` remains the one authority constant but is
+  exactly `2_000`. Every host deadline and strict maximum consumes it; tests do
+  not carry independent three-second literals.
+- Nullable `remainingMs` still means waiting, has no numeric/progress value,
+  and retains the two existing messages. A positive remainder begins progress
+  at `1 - remainingMs / 2_000` and advances monotonically to 100 percent from
+  the client receipt clock. It never sends a ready/release intent or changes
+  host state.
+- The active presentation is one centered native-gold panel labeled
+  `RESUMING...` with an accessible 0-to-100 progressbar. The old seconds
+  function, number node, countdown classes/selectors, and screenshot names are
+  removed rather than retained as compatibility paths.
+- Protocol 95 prevents an old 3,000-ms server projection from being accepted as
+  the same wire contract. Saves remain unchanged because grace is ephemeral.
+- Input clearing, prediction/presentation hold, per-party isolation, readiness
+  cohorts, late projection, scheduler reset, and no catch-up are unchanged.
+
+### Confidence and open questions
+
+- Confirmed: complete reason/surface family, sole duration constant, host/wire
+  consumers, pending/active phases, and presentation clock ownership.
+- Inferred: none used for authority.
+- Unknown: none. Bar styling is Website presentation policy and does not claim
+  a retail record.
+
+### Web implementation consequence
+
+- Change the authority/wire constant and protocol version together; update
+  every duration assertion across host, supervisor, client, and protocol
+  coverage.
+- Replace the countdown module and CSS completely with a progress component.
+  Preserve pending waiting copy and the existing centralized presentation-frame
+  subscription.
+- Update every browser journey to prove monotonic early/middle/late progress,
+  exact held simulation, two-second teardown, and no old selector/digit.
+
+### Validation contract
+
+- Pure tests: exact 2,000-ms constant; progress at full/partial/expired
+  remainder; nullable waiting; clamp before/after bounds; strict 2,001 rejection;
+  protocol 95.
+- Host/client tests: all reasons start above 1,900 ms, remain held through a
+  1,500-ms sample, expire no earlier than the tolerance around 2,000 ms, and
+  preserve no-catch-up/readiness/stale-intent behavior.
+- Mac Chrome: initial loading readiness, Inventory, Skill Book, selector,
+  Pause Menu, SkillPicker, rejoin/restart, and party-rejoin wait show waiting or
+  monotonic progress as applicable; authority tick/world stays exact until
+  teardown; old countdown DOM/copy is absent.
+- Exact candidate: canonical Mac gate plus the loading and pause/rejoin browser
+  journeys with empty error arrays.
+
+### Implementation validation receipt
+
+- `GAMEPLAY_RESUME_GRACE_DURATION_MS` is now the single exact `2_000` authority
+  and strict-wire maximum. The concurrent viewport-height wire change owns
+  protocol 94, so their correctly combined contract is protocol 95. Every
+  standalone/shared/menu/picker/loading deadline consumes the same constant;
+  a 2,001-ms projection fails closed and save schemas remain unchanged.
+- `GameplayResumeProgress` completely replaces the old countdown component,
+  seconds projector, CSS names, selectors, and screenshot contracts. Nullable
+  readiness retains only its two useful waiting messages. Positive remainder
+  projects `1 - remaining / 2_000` through the existing presentation-frame
+  clock into a centered `RESUMING...` progressbar; the bar never sends a ready
+  or release intent and its frequently changing value is outside the polite
+  text live region.
+- Mac Chrome 151 observed monotonic 10/50/90-percent progress with exact held
+  authority for initial renderer readiness, Inventory, Skill Book, compact
+  selector, Pause Menu, peer ownership, and a solo saved restart. Example held
+  ticks were owner `1780`, peer `1789`, and restart `1795`; all resumed without
+  catch-up. Page and failed-response arrays were empty. Log SHA-256 is
+  `91738d8cd567b145d31e52057076914e43ad1f78b5f7655d95341cb065b5d0d5`;
+  inspected progress-frame SHA-256 values are
+  `2dcf6a5d198549d62cb2600eab28c873293475b55c55472733faad0d5e2a1538`
+  and
+  `aac381bbb9721b20968daacff1239d94159534d98772ca094a58a3cdb0f668db`.
+- The two-client SkillPicker journey held tick `8769` through both clients'
+  10/50/90-percent progress and resumed at `8770`, retaining distinct offers,
+  level-up particles/audio, and empty page/console errors. Log SHA-256 is
+  `b77bd62764aa51ba66a167cb6c8f3125bf8247f531cc7fa3a94c40465761887c`.
+- The active-party journey retained tick `999`, resolved catch-up offer
+  sequences `[4,6,8,10,12,14,16,18]`, showed the indefinite rejoin message
+  without a bar, switched to authoritative progress only after readiness, and
+  resumed at `1000`; save revision advanced `2 -> 23`. Page, console,
+  request/response, and host-error arrays were empty. Log SHA-256 is
+  `ace9d2da173eab798ffb0005ffb50416be743ba6abeae61aff77bba5a84d7f66`;
+  inspected waiting/catch-up frame SHA-256 values are
+  `a452791c8ab7c4d0899ea31937915b3ddc40203605de1992116bc6d7763c80ac`
+  and
+  `de50c92d4eef05028f9921f430e7e76e2446d698cdab509fb743ecbc7e9ccbb2`.
+- No browser-platform exception, native unknown, or retained compatibility path
+  remains. No Mod Loader file changed because its existing reports already own
+  the reusable retail facts. Deployment and production cutover remain outside
+  the user-authorized `main` publication.
+- Publication rebase: the exact pre-receipt candidate was Website
+  `aaa220a21eaceacdf81fb33cef9c356a5e3b77d6` over current `main`
+  `2f2f4097df0488854064a62fc8a5b3eae172e308`; its local/Mac 25-path manifest
+  matched at SHA-256
+  `348ae73126d7d926a3b8e04a9c5ab657715bc6cccae7b4726793641fa774bcaf`.
+  The canonical Mac gate passed 27 backend/contracts, 311 prerequisites,
+  1,691 Boneyard/host tests, 77 ML tests, all auxiliary suites, production
+  builds/media policy, and the bundle budget (`251,319` raw / `76,425` gzip).
+  Gate-log SHA-256 is
+  `c2b5e556a5ed0980cfab69d4ec3ff9c18563a1b7a205d518edae08922f143a0b`.
+- Publication Chrome 151 receipts repeated one bounded startup, two atomic
+  delayed-art loading transitions, all modal/restart progress branches,
+  SkillPicker tick `10543 -> 10544`, and active-party rejoin with offers
+  `[4,6,8,10,12,14,16,18]`. Every page/console/request/response/host error
+  array was empty. Log SHA-256 values are
+  `6a4104ed77b042721d692a662359156160eca08e87a52e4390cc67e21b795067`,
+  `6ad73c75519f25dd0afdb4c2ea3104d2a50018e3c1dc4706034eb44c23161cc0`,
+  `69e581018a17ee0b10dafba8837163aea42c51b4ac070fb850573792dd3087ea`,
+  `8050c9d602e4fe105d2a2417987a6972e90074ab6415337d84952a3ffe245a75`,
+  and
+  `317304d50728d53fdfa999f4ae3ebfd0e254647e2cc570946eb9f27103a47bdb`.
+  This publication receipt is the sole post-validation documentation write;
+  no runtime, test, build, or browser byte changed afterward.

@@ -163,8 +163,8 @@ const loadSkillBook = () => import('./SkillBook.tsx')
 const SkillBook = lazy(loadSkillBook)
 const loadHudSkillSelector = () => import('./HudSkillSelector.tsx')
 const HudSkillSelector = lazy(loadHudSkillSelector)
-const loadGameplayResumeCountdown = () => import('./GameplayResumeCountdown.tsx')
-const GameplayResumeCountdown = lazy(loadGameplayResumeCountdown)
+const loadGameplayResumeProgress = () => import('./GameplayResumeProgress.tsx')
+const GameplayResumeProgress = lazy(loadGameplayResumeProgress)
 const loadGameplayPauseMenu = () => import('./GameplayPauseMenu.tsx')
 const GameplayPauseMenu = lazy(loadGameplayPauseMenu)
 const ModMinimap = lazy(() => import('./mod-ui/ModMinimap.tsx'))
@@ -822,7 +822,7 @@ export default function MainMenuScene({
     if (runtimeConnected) {
       void loadSkillBook()
       void loadHudSkillSelector()
-      void loadGameplayResumeCountdown()
+      void loadGameplayResumeProgress()
       void loadGameplayPauseMenu()
     }
   }, [runtimeConnected])
@@ -2034,7 +2034,7 @@ export default function MainMenuScene({
 
         {gameplayResumeGrace ? (
           <Suspense fallback={null}>
-            <GameplayResumeCountdown
+            <GameplayResumeProgress
               grace={gameplayResumeGrace}
               style={nativeStageStyle}
             />

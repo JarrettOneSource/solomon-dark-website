@@ -1596,7 +1596,8 @@ test('initial multiplayer Boneyard waits for every renderer before starting grac
   const [startedFirst, startedSecond] = await Promise.all([countingFirst, countingSecond])
   assert.equal(startedFirst.type, 'server-gameplay-resume-grace')
   assert.equal(startedSecond.type, 'server-gameplay-resume-grace')
-  assert.ok((startedFirst.grace?.remainingMs ?? 0) > 2_900)
+  assert.ok((startedFirst.grace?.remainingMs ?? 0) > 1_900)
+  assert.ok((startedFirst.grace?.remainingMs ?? Infinity) <= 2_000)
   await new Promise(resolve => setTimeout(resolve, 80))
   assert.equal(host.state().tick, heldTick)
 })
@@ -1703,7 +1704,8 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   assert.equal(resumedA.type, 'server-gameplay-resume-grace')
   assert.equal(resumedB.type, 'server-gameplay-resume-grace')
   assert.equal(resumedA.grace?.reason, 'skill-book-closed')
-  assert.ok((resumedA.grace?.remainingMs ?? 0) > 2_900)
+  assert.ok((resumedA.grace?.remainingMs ?? 0) > 1_900)
+  assert.ok((resumedA.grace?.remainingMs ?? Infinity) <= 2_000)
   const graceStartedAt = performance.now()
   const graceCompleted = nextMessage(first.socket, (message) => (
     message.type === 'server-gameplay-resume-grace' && message.grace === null
@@ -1713,10 +1715,10 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
     event === 'gameplay.paused' || event === 'gameplay.resumed'
   )), [])
   assert.ok(host.state().tick - heldTick <= 10, 'Boneyard release must not replay paused wall time')
-  await new Promise((resolve) => setTimeout(resolve, 2_500))
+  await new Promise((resolve) => setTimeout(resolve, 1_500))
   assert.equal(host.state().tick, heldTick)
   await graceCompleted
-  assert.ok(performance.now() - graceStartedAt >= 2_850)
+  assert.ok(performance.now() - graceStartedAt >= 1_850)
   assert.ok(logs.some(entry => entry.event === 'gameplay.resumed'))
   await waitFor(() => host.state().tick > heldTick)
   assert.ok(host.state().tick - heldTick <= 10, 'grace expiry must not replay held wall time')
@@ -2278,7 +2280,8 @@ test('multiplayer SkillPicker starts one grace only after the final choice', asy
   }))
   const grace = await counting
   assert.equal(grace.type, 'server-gameplay-resume-grace')
-  assert.ok((grace.grace?.remainingMs ?? 0) > 2_900)
+  assert.ok((grace.grace?.remainingMs ?? 0) > 1_900)
+  assert.ok((grace.grace?.remainingMs ?? Infinity) <= 2_000)
 })
 
 test('game host validates and broadcasts the complete Sorceror action sequence', async (context) => {
@@ -3150,7 +3153,8 @@ test('solo active-run restart waits for renderer readiness before its countdown'
   const grace = await counting
   assert.equal(grace.type, 'server-gameplay-resume-grace')
   assert.equal(grace.grace?.reason, 'game-restarted')
-  assert.ok((grace.grace?.remainingMs ?? 0) > 2_900)
+  assert.ok((grace.grace?.remainingMs ?? 0) > 1_900)
+  assert.ok((grace.grace?.remainingMs ?? Infinity) <= 2_000)
   await new Promise(resolve => setTimeout(resolve, 80))
   assert.equal(host.state().tick, heldTick)
 })
@@ -3886,7 +3890,8 @@ test('saved party member catches up detached while the live party run continues'
   const countingGrace = await resumeGraceStarted
   assert.equal(countingGrace.type, 'server-gameplay-resume-grace')
   assert.equal(countingGrace.grace?.reason, 'game-rejoined')
-  assert.ok((countingGrace.grace?.remainingMs ?? 0) > 2_900)
+  assert.ok((countingGrace.grace?.remainingMs ?? 0) > 1_900)
+  assert.ok((countingGrace.grace?.remainingMs ?? Infinity) <= 2_000)
   assert.deepEqual(catchUpSnapshot.materializingPlayerIds, [])
   assert.equal(host.playerState(welcome.playerId)?.levelUpBarrier, null)
   const rotated = await rotatedCheckpoint

@@ -1095,7 +1095,8 @@ test('first returning nonleader recovers the updated party run under the origina
   const [memberGrace, leaderGrace] = await Promise.all([memberCounting, leaderCounting])
   assert.equal(memberGrace.type, 'server-gameplay-resume-grace')
   assert.equal(leaderGrace.type, 'server-gameplay-resume-grace')
-  assert.ok((memberGrace.grace?.remainingMs ?? 0) > 2_900)
+  assert.ok((memberGrace.grace?.remainingMs ?? 0) > 1_900)
+  assert.ok((memberGrace.grace?.remainingMs ?? Infinity) <= 2_000)
   recoveredMember.socket.off('message', observeEarlyCountdown)
   const recoveredParty = await recoveredLeader.next(message => (
     message.type === 'server-party-state'

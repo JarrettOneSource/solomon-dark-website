@@ -143,9 +143,8 @@ try {
   for (const forbidden of [
     'anim-solomon-encounter',
     'hub-courtyard',
-    'match-loading-background',
     'player-character-',
-    'skill-picker-',
+    'skill-picker-skills-atlas',
   ]) {
     assert.equal(
       loadedSources.some(source => source.includes(forbidden)),
@@ -153,6 +152,11 @@ try {
       `startup loaded inactive-scene source ${forbidden}`,
     )
   }
+  assert.equal(
+    loadedSources.filter(source => source.includes('match-loading-background')).length,
+    1,
+    'startup must decode the one process-wide match loading cover',
+  )
   if (screenshotPath) await page.screenshot({ path: screenshotPath })
 
   process.stdout.write(`${JSON.stringify({

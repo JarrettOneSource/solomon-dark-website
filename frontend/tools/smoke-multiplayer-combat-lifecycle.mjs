@@ -168,7 +168,7 @@ try {
   ])
   await Promise.all([hostPage, guestPage].map(async page => {
     const initialGrace = page.locator(
-      '.gameplay-resume-countdown-overlay'
+      '.gameplay-resume-progress-overlay'
       + '[data-gameplay-resume-grace-reason="game-started"]',
     )
     await initialGrace.waitFor({ timeout: 30_000 })
@@ -1044,11 +1044,11 @@ async function proveSharedLevelUpAndEnemyEffects({
   }
   assert.deepEqual(
     quickbarLabels.guest.map((label) => label.split(',')[0]),
-    ['Magic Storm'],
+    ['Magic Storm', 'Health Potion', 'Mana Potion'],
   )
   assert.deepEqual(
     quickbarLabels.host.map((label) => label.split(',')[0]),
-    ['Ring of Fire'],
+    ['Ring of Fire', 'Health Potion', 'Mana Potion'],
   )
 
   const [hostTerminalFrame, guestTerminalFrame] = await Promise.all([
@@ -1116,15 +1116,16 @@ async function proveSharedLevelUpAndEnemyEffects({
     guestPicker.waitFor({ state: 'detached', timeout: 15_000 }),
   ])
   assert.equal(host.state().levelUpBarrier, null)
-  for (const seconds of [3, 2, 1]) {
-    await Promise.all([hostPage, guestPage].map(page => page.locator(
-      '.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]'
-      + `[data-gameplay-resume-grace-seconds="${seconds}"]`,
-    ).waitFor({ timeout: 15_000 })))
+  for (const threshold of [0.1, 0.5, 0.9]) {
+    await Promise.all([hostPage, guestPage].map(page => page.waitForFunction(minimum => (
+      Number(document.querySelector(
+        '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
+      )?.getAttribute('data-gameplay-resume-grace-progress')) >= minimum
+    ), threshold, { timeout: 15_000 })))
     assert.equal(host.state().tick, frozenTick)
   }
   await Promise.all([hostPage, guestPage].map(page => page.locator(
-    '.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
+    '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
   ).waitFor({ state: 'detached', timeout: 15_000 })))
   await Promise.all([hostPage, guestPage].map((page) => page.waitForFunction(() => (
     document.querySelector('.boneyard-world-canvas')?.dataset.levelUpDynamicSuppressed

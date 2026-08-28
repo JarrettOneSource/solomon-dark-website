@@ -385,7 +385,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 94
+export const GAME_PROTOCOL_VERSION = 95
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -497,7 +497,7 @@ export interface GameplayPauseState {
   source: GameplayPauseSource
 }
 
-export const GAMEPLAY_RESUME_GRACE_DURATION_MS = 3_000
+export const GAMEPLAY_RESUME_GRACE_DURATION_MS = 2_000
 export const GAMEPLAY_RESUME_GRACE_REASONS = [
   'game-rejoined',
   'game-restarted',

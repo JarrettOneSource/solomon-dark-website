@@ -63,9 +63,10 @@ test('startup loader exposes total readiness and the representative active item'
   assert.match(loaderStyles, /\.native-loader-status/)
 })
 
-test('startup owns only Loader, Title, and global audio while scenes own visual residency', () => {
+test('startup owns Loader, Title, the transition cover, and global audio while scenes own visual residency', () => {
   assert.match(gameAssets, /GAME_STARTUP_IMAGE_SOURCES/)
   assert.match(gameAssets, /sources:\s*TITLE_GAME_ASSET_SOURCES/)
+  assert.match(gameAssets, /sources:\s*MATCH_LOADING_GAME_ASSET_SOURCES/)
   assert.match(gameAssets, /sources:\s*GAME_RESIDENT_AUDIO_SOURCES/)
   assert.doesNotMatch(gameAssets, /GAME_RESIDENT_IMAGE_SOURCES/)
   assert.doesNotMatch(gameAssets, /BONEYARD_RESIDENT_IMAGE_SOURCES/)

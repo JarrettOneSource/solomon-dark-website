@@ -229,7 +229,7 @@ try {
     memberInitialGrace,
   ])
   const initialWaiting = page.locator(
-    '.gameplay-resume-countdown-overlay'
+    '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="game-started"]'
     + '[data-gameplay-resume-grace-phase="waiting"]',
   )
@@ -422,31 +422,32 @@ try {
     await page.locator('.main-menu-page').getAttribute('data-gameplay-resume-grace'),
     'game-rejoined',
   )
-  const countdown = page.locator('.gameplay-resume-countdown-overlay')
-  await countdown.waitFor({ timeout: 20_000 })
+  const progress = page.locator('.gameplay-resume-progress-overlay')
+  await progress.waitFor({ timeout: 20_000 })
   assert.equal(
-    await countdown.getAttribute('data-gameplay-resume-grace-reason'),
+    await progress.getAttribute('data-gameplay-resume-grace-reason'),
     'game-rejoined',
   )
   assert.equal(
-    await countdown.getAttribute('data-gameplay-resume-grace-phase'),
+    await progress.getAttribute('data-gameplay-resume-grace-phase'),
     'waiting',
   )
-  assert.match(await countdown.textContent() ?? '', /Waiting on players \.\.\./)
+  assert.match(await progress.textContent() ?? '', /Waiting on players \.\.\./)
   await new Promise(resolve => setTimeout(resolve, 200))
   assert.equal(host.playerState(browserPlayerId)?.tick, heldTick)
   const rejoinSequence = Number(
-    await countdown.getAttribute('data-gameplay-resume-grace-sequence'),
+    await progress.getAttribute('data-gameplay-resume-grace-sequence'),
   )
   assert.ok(Number.isSafeInteger(rejoinSequence) && rejoinSequence > 0)
   member.readyResumeGrace(rejoinSequence)
-  for (const seconds of [3, 2, 1]) {
-    await page.locator(
-      `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-seconds="${seconds}"]`,
-    ).waitFor({ timeout: 20_000 })
+  for (const threshold of [0.1, 0.5, 0.9]) {
+    await page.waitForFunction(minimum => (
+      Number(document.querySelector('.gameplay-resume-progress-overlay')
+        ?.getAttribute('data-gameplay-resume-grace-progress')) >= minimum
+    ), threshold, { timeout: 20_000 })
     assert.equal(host.playerState(browserPlayerId)?.tick, heldTick)
   }
-  await countdown.waitFor({ state: 'detached', timeout: 20_000 })
+  await progress.waitFor({ state: 'detached', timeout: 20_000 })
   await waitForHost(() => (
     host.playerState(browserPlayerId)?.levelUpBarrier === null
     && (host.playerState(browserPlayerId)?.tick ?? 0) > heldTick
@@ -479,7 +480,7 @@ try {
   })
   const memberCheckpoint = await member.checkpointBeforeLeave(702)
   const rejoinWait = page.locator(
-    '.gameplay-resume-countdown-overlay'
+    '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="party-rejoin-wait"]'
     + '[data-gameplay-resume-grace-phase="waiting"]',
   )
@@ -516,9 +517,9 @@ try {
   }, member.playerId)
   returnedMember.readyResumeGrace(returnedMember.welcome.gameplayResumeGrace.sequence)
   await page.locator(
-    '.gameplay-resume-countdown-overlay'
+    '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="party-rejoin-wait"]'
-    + '[data-gameplay-resume-grace-phase="countdown"]',
+    + '[data-gameplay-resume-grace-phase="progress"]',
   ).waitFor({ timeout: 20_000 })
   await rejoinWait.waitFor({ state: 'detached', timeout: 20_000 })
   await waitForHost(
@@ -542,12 +543,12 @@ try {
   const leaderRejoinSequence = returnedLeader.welcome.gameplayResumeGrace.sequence
   returnedMember.readyResumeGrace(leaderRejoinSequence)
   returnedLeader.readyResumeGrace(leaderRejoinSequence)
-  const leaderCountdown = page.locator(
-    '.gameplay-resume-countdown-overlay'
+  const leaderProgress = page.locator(
+    '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="game-rejoined"]',
   )
-  await leaderCountdown.waitFor({ timeout: 20_000 })
-  await leaderCountdown.waitFor({ state: 'detached', timeout: 20_000 })
+  await leaderProgress.waitFor({ timeout: 20_000 })
+  await leaderProgress.waitFor({ state: 'detached', timeout: 20_000 })
 
   const screenshotPath = evidenceRoot
     ? join(evidenceRoot, `party-rejoin-catch-up-${sessionKind}.png`)
@@ -677,6 +678,7 @@ async function reenterRawPlayer(checkpoint, displayName, element) {
   const next = messageQueue(socket, `${displayName} rejoin`)
   socket.send(JSON.stringify({
     type: 'client-hello',
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,

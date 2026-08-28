@@ -5,6 +5,7 @@ import test from 'node:test'
 
 const component = readFileSync(new URL('./MatchLoadingScreen.tsx', import.meta.url), 'utf8')
 const css = readFileSync(new URL('./match-loading-screen.css', import.meta.url), 'utf8')
+const gameAssets = readFileSync(new URL('./game-assets.ts', import.meta.url), 'utf8')
 const createScene = readFileSync(new URL('./CreateMenuScene.tsx', import.meta.url), 'utf8')
 const mainScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
@@ -20,6 +21,11 @@ test('uses the exact Mod Loader art and recovered viewport-relative painter', ()
   assert.match(component, /role="progressbar"/)
   assert.match(component, /aria-valuenow=\{loading\.progress \* 100\}/)
   assert.match(component, /shouldPresentMatchLoading/)
+  assert.match(component, /data-art-ready=\{artReady\}/)
+  assert.match(component, /data-delay-elapsed=\{delayElapsed\}/)
+  assert.match(component, /data-visible=\{delayElapsed && artReady\}/)
+  assert.match(component, /image\.complete && image\.naturalWidth > 0/)
+  assert.match(component, /onLoad=\{markArtReady\}/)
   assert.match(css, /\.match-loading-art[\s\S]*object-fit:\s*fill/)
   assert.match(css, /\.match-loading-scrim[\s\S]*height:\s*18%/)
   assert.match(css, /\.match-loading-progress[\s\S]*left:\s*calc\(20% - 0\.5px\)/)
@@ -28,6 +34,19 @@ test('uses the exact Mod Loader art and recovered viewport-relative painter', ()
   for (const color of ['#000000b3', '#69522ae6', '#14110deb', '#caa14d', '#f2e5c7']) {
     assert.match(css.toLowerCase(), new RegExp(color))
   }
+})
+
+test('loads only the process-wide match cover with startup shell readiness', () => {
+  assert.match(gameAssets, /matchLoading,/)
+  assert.match(
+    gameAssets,
+    /MATCH_LOADING_GAME_ASSET_SOURCES\s*=\s*collectAssetSources\(matchLoading\)/,
+  )
+  assert.match(gameAssets, /sources:\s*MATCH_LOADING_GAME_ASSET_SOURCES/)
+  assert.match(gameAssets, /stage:\s*'transition'/)
+  assert.match(gameAssets, /Preparing match loading screen/)
+  assert.doesNotMatch(gameAssets, /GAME_RESIDENT_IMAGE_SOURCES/)
+  assert.doesNotMatch(gameAssets, /BONEYARD_RESIDENT_IMAGE_SOURCES/)
 })
 
 test('owns both requested transitions through destination renderer readiness', () => {

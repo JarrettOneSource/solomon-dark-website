@@ -51,7 +51,7 @@ test('projects the complete pre-Create College chrome gate from authoritative li
     'SkillBook',
     'HudSkillSelector',
     'SkillPicker',
-    'GameplayResumeCountdown',
+    'GameplayResumeProgress',
     'GameplayPauseMenu',
     'GameSettingsDialog',
   ]) {

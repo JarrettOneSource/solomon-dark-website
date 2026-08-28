@@ -400,7 +400,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     type: 'server-gameplay-pause',
     pause: null,
   })
-  for (const remainingMs of [3_000, 1, null] as const) {
+  for (const remainingMs of [2_000, 1, null] as const) {
     assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
       type: 'server-gameplay-resume-grace',
       grace: {
@@ -419,11 +419,11 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   }
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
-    grace: { reason: 'skill-picker-closed', remainingMs: 3_001, sequence: 7 },
+    grace: { reason: 'skill-picker-closed', remainingMs: 2_001, sequence: 7 },
   })), /duration/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
-    grace: { reason: 'unknown', remainingMs: 3_000, sequence: 7 },
+    grace: { reason: 'unknown', remainingMs: 2_000, sequence: 7 },
   })), /reason/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-pause',
@@ -1617,8 +1617,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v94 carries party-rejoin waiting, online preferences, match chat, viewport dimensions, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 94)
+test('protocol v95 carries party-rejoin waiting, online preferences, match chat, viewport dimensions, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 95)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

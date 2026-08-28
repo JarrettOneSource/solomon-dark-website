@@ -14,6 +14,7 @@ let page
 const pageErrors = []
 const consoleErrors = []
 const failedResponses = []
+let delayedLoadingArtRequests = 0
 
 try {
   page = await browser.newPage({ viewport: { width: 1200, height: 900 } })
@@ -29,11 +30,27 @@ try {
   // Transition loading does not consume PCM. Its audio pipeline has a separate
   // browser smoke; avoid making this focused journey decode every resident WAV.
   await page.addInitScript(bypassStartupAudioPreload)
+  await page.addInitScript(delayMountedLoadingArt)
   await page.addInitScript(installLoadingProbe)
+  await page.route('**/deployment.json?*', route => route.fulfill({
+    body: JSON.stringify({ commit: 'smoke-local' }),
+    contentType: 'application/json',
+    status: 200,
+  }))
+  await page.route('**/match-loading-background.png?match-mount=*', async (route) => {
+    delayedLoadingArtRequests += 1
+    await new Promise(resolve => setTimeout(resolve, 650))
+    await route.continue()
+  })
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: startupTimeoutMs })
   await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -75,6 +92,11 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: sceneTimeoutMs })
   await waitForLoadingTeardown(page, 'boneyard')
+  const initialResumeProgress = page.locator(
+    '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="game-started"]',
+  )
+  await initialResumeProgress.waitFor({ timeout: 15_000 })
+  await initialResumeProgress.waitFor({ state: 'detached', timeout: 15_000 })
 
   await page.waitForTimeout(250)
   const idleStart = await playerPosition(page)
@@ -97,6 +119,7 @@ try {
   const samples = await page.evaluate(() => window.__sdrMatchLoadingSamples)
   assertFlowSamples(samples, 'hub')
   assertFlowSamples(samples, 'boneyard')
+  assert.equal(delayedLoadingArtRequests, 2)
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -110,6 +133,7 @@ try {
     pageErrors,
     consoleErrors,
     failedResponses,
+    delayedLoadingArtRequests,
   }, null, 2)}\n`)
 } catch (error) {
   process.stderr.write(`${JSON.stringify({
@@ -213,6 +237,16 @@ function assertFlowSamples(samples, flow) {
   }
   const first = flowSamples[0]
   const visible = flowSamples.find((sample) => sample.visible)
+  assert.ok(
+    flowSamples.some(sample => sample.delayElapsed && !sample.artReady),
+    `${flow} did not exercise delayed mounted art: ${JSON.stringify(flowSamples)}`,
+  )
+  for (const sample of flowSamples) {
+    if (sample.artReady) continue
+    assert.equal(sample.visible, false)
+    assert.equal(sample.chromeVisible, false)
+    assert.equal(sample.artNaturalWidth, 0)
+  }
   if (flow === 'hub') {
     assert.equal(typeof first.disciplineCommitAtMs, 'number')
     const attachDelayMs = first.atMs - first.disciplineCommitAtMs
@@ -225,11 +259,19 @@ function assertFlowSamples(samples, flow) {
     )
   }
   assert.ok(visible, `${flow} loading never became visible`)
+  assert.equal(visible.artReady, true)
+  assert.equal(visible.artNaturalWidth, 1920)
+  assert.equal(visible.chromeVisible, true)
   assert.ok(
     visible.atMs - first.atMs >= 130,
     `${flow} loading ignored the 150 ms reveal gate: ${JSON.stringify(flowSamples)}`,
   )
   assert.equal(flowSamples.at(-1).progress, 0.92)
+  if (flow === 'boneyard') {
+    const preparing = flowSamples.find(sample => sample.stage === 'preparing_boneyard')
+    assert.ok(preparing, `missing Preparing the boneyard stage: ${JSON.stringify(flowSamples)}`)
+    assert.equal(preparing.label, 'Preparing the boneyard...')
+  }
 }
 
 function closeTo(actual, expected, tolerance = 0.05) {
@@ -257,16 +299,34 @@ function installLoadingProbe() {
   const sample = () => {
     const loading = document.querySelector('.match-loading-screen')
     if (loading) {
+      const art = loading.querySelector('.match-loading-art')
+      const label = loading.querySelector('.match-loading-label')
+      const progress = loading.querySelector('.match-loading-progress')
       const next = {
+        artNaturalWidth: art instanceof HTMLImageElement ? art.naturalWidth : 0,
+        artReady: loading.dataset.artReady === 'true',
         atMs: performance.now(),
+        chromeVisible: [label, progress].every(element => (
+          element instanceof HTMLElement
+          && getComputedStyle(element).visibility === 'visible'
+        )),
+        delayElapsed: loading.dataset.delayElapsed === 'true',
         flow: loading.dataset.flow,
         disciplineCommitAtMs,
+        label: label?.textContent?.trim() ?? null,
         stage: loading.dataset.stage,
         progress: Number(loading.dataset.progress),
         visible: loading.dataset.visible === 'true',
       }
       if (next.visible) next.metrics = loadingMetrics(loading)
-      const key = JSON.stringify([next.flow, next.stage, next.progress, next.visible])
+      const key = JSON.stringify([
+        next.flow,
+        next.stage,
+        next.progress,
+        next.visible,
+        next.artReady,
+        next.delayElapsed,
+      ])
       if (key !== previousKey) {
         samples.push(next)
         previousKey = key
@@ -338,6 +398,35 @@ function installLoadingProbe() {
       zIndex: getComputedStyle(node).zIndex,
     }
   }
+}
+
+function delayMountedLoadingArt() {
+  const sourceDescriptor = Object.getOwnPropertyDescriptor(
+    HTMLImageElement.prototype,
+    'src',
+  )
+  if (!sourceDescriptor?.get || !sourceDescriptor.set) return
+  let sequence = 0
+  Object.defineProperty(HTMLImageElement.prototype, 'src', {
+    configurable: sourceDescriptor.configurable,
+    enumerable: sourceDescriptor.enumerable,
+    get: sourceDescriptor.get,
+    set(value) {
+      if (
+        typeof value !== 'string'
+        || !this.classList.contains('match-loading-art')
+      ) {
+        sourceDescriptor.set.call(this, value)
+        return
+      }
+      const source = new URL(value, window.location.href)
+      if (!source.searchParams.has('match-mount')) {
+        sequence += 1
+        source.searchParams.set('match-mount', `${sequence}`)
+      }
+      sourceDescriptor.set.call(this, source.href)
+    },
+  })
 }
 
 function bypassStartupAudioPreload() {

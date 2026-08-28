@@ -45,10 +45,10 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-leave-pressed.png',
   resumePressed: process.env.SDR_GAME_PAUSE_RESUME_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-resume-pressed.png',
-  resumeCountdown: process.env.SDR_GAME_RESUME_COUNTDOWN_SCREENSHOT
-    || '/tmp/solomon-dark-resume-countdown.png',
-  restartCountdown: process.env.SDR_GAME_RESTART_COUNTDOWN_SCREENSHOT
-    || '/tmp/solomon-dark-restart-countdown.png',
+  resumeProgress: process.env.SDR_GAME_RESUME_PROGRESS_SCREENSHOT
+    || '/tmp/solomon-dark-resume-progress.png',
+  restartProgress: process.env.SDR_GAME_RESTART_PROGRESS_SCREENSHOT
+    || '/tmp/solomon-dark-restart-progress.png',
   settingsPressed: process.env.SDR_GAME_PAUSE_SETTINGS_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-settings-pressed.png',
   skillBookOwner: process.env.SDR_GAME_PAUSE_SKILL_BOOK_SCREENSHOT
@@ -581,7 +581,7 @@ try {
     pendingLoadingGrace.grace.sequence,
   )
   const loadingWaiting = page.locator(
-    '.gameplay-resume-countdown-overlay'
+    '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="game-started"]'
     + '[data-gameplay-resume-grace-phase="waiting"]',
   )
@@ -599,7 +599,7 @@ try {
     type: 'client-resume-grace-ready',
     sequence: pendingLatePeerLoadingGrace.grace.sequence,
   }))
-  await assertResumeCountdown(page, loadingHeldTick, 'game-started')
+  await assertResumeProgress(page, loadingHeldTick, 'game-started')
 
   await page.setViewportSize({ height: 1080, width: 2560 })
   const largeBoneyard = page.locator('.boneyard-scene')
@@ -625,11 +625,11 @@ try {
   const largeBoneyardInventoryHeldTick = host.state().tick
   await page.keyboard.press('i')
   await largeBoneyardInventory.waitFor({ state: 'detached' })
-  await assertResumeCountdown(
+  await assertResumeProgress(
     page,
     largeBoneyardInventoryHeldTick,
     'inventory-closed',
-    screenshots.resumeCountdown,
+    screenshots.resumeProgress,
   )
 
   await page.keyboard.press('k')
@@ -647,7 +647,7 @@ try {
   const boneyardSkillBookHeldTick = host.state().tick
   await boneyardSkillBook.getByRole('button', { name: 'Close skills' }).click()
   await boneyardSkillBook.waitFor({ state: 'detached' })
-  await assertResumeCountdown(
+  await assertResumeProgress(
     page,
     boneyardSkillBookHeldTick,
     'skill-book-closed',
@@ -670,7 +670,7 @@ try {
   const boneyardSelectorHeldTick = host.state().tick
   await page.keyboard.press('Escape')
   await boneyardSelector.waitFor({ state: 'detached' })
-  await assertResumeCountdown(
+  await assertResumeProgress(
     page,
     boneyardSelectorHeldTick,
     'skill-selector-closed',
@@ -722,7 +722,7 @@ try {
   )
   await boneyardOwner.waitFor({ state: 'detached' })
   await assertNonMusicMuted(page, false)
-  await assertResumeCountdown(
+  await assertResumeProgress(
     page,
     heldBoneyardOwner.tick,
     'pause-menu-closed',
@@ -781,16 +781,16 @@ try {
   await waitForHost(() => host.humanPlayerCount() === 0, 'empty restart host')
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'Last Game' }).click()
-  const restartedCountdown = page.locator(
-    '.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="game-restarted"]',
+  const restartedProgress = page.locator(
+    '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="game-restarted"]',
   )
-  await restartedCountdown.waitFor({ timeout: 90_000 })
+  await restartedProgress.waitFor({ timeout: 90_000 })
   const heldRestartTick = host.state().tick
-  await assertResumeCountdown(
+  await assertResumeProgress(
     page,
     heldRestartTick,
     'game-restarted',
-    screenshots.restartCountdown,
+    screenshots.restartProgress,
   )
 
   assert.deepEqual(errors, [])
@@ -853,6 +853,7 @@ async function assertChatOverModal({
   }
 
   let sequence = null
+  let channel = null
   if (send) {
     const text = `Chat over ${label}`
     const delivered = nextRawMessage(peer.socket, (message) => (
@@ -867,8 +868,9 @@ async function assertChatOverModal({
     const message = await delivered
     assert.equal(message.type, 'server-chat')
     assert.equal(message.sender.playerId, host.hostPlayerId())
+    channel = message.channel
     sequence = message.sequence
-    await chat.locator('[data-message-channel="party"]', { hasText: text }).waitFor()
+    await chat.locator(`[data-message-channel="${channel}"]`, { hasText: text }).waitFor()
     await inputOwner.locator('xpath=self::*[@data-input-suspended="false"]').waitFor()
     assert.equal(await modalHandle.evaluate(node => node.isConnected), true)
   }
@@ -876,6 +878,7 @@ async function assertChatOverModal({
     escapeClosedOnlyChat: true,
     label,
     modalRetained: true,
+    sentChannel: channel,
     sentSequence: sequence,
   }
 }
@@ -1164,24 +1167,30 @@ function assertNoCatchUp(heldTick, resumedAtMs, label) {
   )
 }
 
-async function assertResumeCountdown(page, heldTick, reason, screenshotPath = null) {
-  const countdown = page.locator(
-    `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="${reason}"]`,
+async function assertResumeProgress(page, heldTick, reason, screenshotPath = null) {
+  const progress = page.locator(
+    `.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="${reason}"]`,
   )
-  await countdown.waitFor()
-  for (const seconds of [3, 2, 1]) {
-    await page.locator(
-      `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="${reason}"]`
-      + `[data-gameplay-resume-grace-seconds="${seconds}"]`,
-    ).waitFor()
+  await progress.waitFor()
+  await progress.getByRole('progressbar', { name: 'Resuming gameplay' }).waitFor()
+  let previous = -1
+  for (const threshold of [0.1, 0.5, 0.9]) {
+    await page.waitForFunction(({ expectedReason, minimum }) => {
+      const node = document.querySelector(
+        `.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="${expectedReason}"]`,
+      )
+      return Number(node?.getAttribute('data-gameplay-resume-grace-progress')) >= minimum
+    }, { expectedReason: reason, minimum: threshold })
+    const current = Number(
+      await progress.getAttribute('data-gameplay-resume-grace-progress'),
+    )
+    assert.ok(current >= threshold)
+    assert.ok(current >= previous)
+    previous = current
     assert.equal(host.state().tick, heldTick)
-    if (seconds === 3 && screenshotPath) {
-      await page.waitForTimeout(100)
-      assert.equal(await countdown.getAttribute('data-gameplay-resume-grace-seconds'), '3')
-      await page.screenshot({ path: screenshotPath })
-    }
+    if (threshold === 0.1 && screenshotPath) await page.screenshot({ path: screenshotPath })
   }
-  await countdown.waitFor({ state: 'detached' })
+  await progress.waitFor({ state: 'detached' })
   const resumedTick = host.state().tick
   const resumedAtMs = performance.now()
   await waitForHost(() => host.state().tick > resumedTick, `${reason} grace expiry`)

@@ -4,6 +4,7 @@ import {
   hub,
   loader,
   mainMenu,
+  matchLoading,
   menuSolomon,
 } from '../lib/assets.ts'
 import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/native-ui-assets.ts'
@@ -30,9 +31,11 @@ export const CREATE_GAME_ASSET_SOURCES = collectAssetSources({
   elementVfx,
   nameFont: hub.hud.fontAtlas,
 })
+export const MATCH_LOADING_GAME_ASSET_SOURCES = collectAssetSources(matchLoading)
 export const GAME_STARTUP_IMAGE_SOURCES = collectAssetSources([
   LOADER_ASSET_SOURCES,
   TITLE_GAME_ASSET_SOURCES,
+  MATCH_LOADING_GAME_ASSET_SOURCES,
 ])
 export const GAME_STARTUP_ASSET_SOURCES = [
   ...GAME_STARTUP_IMAGE_SOURCES,
@@ -41,7 +44,7 @@ export const GAME_STARTUP_ASSET_SOURCES = [
 
 const imagePromises = new Map<string, Promise<HTMLImageElement>>()
 
-export type GameStartupStage = 'audio' | 'loader' | 'title'
+export type GameStartupStage = 'audio' | 'loader' | 'title' | 'transition'
 export type GameStartupProgress = StagedAssetProgress<GameStartupStage>
 
 export function initialGameStartupProgress(): GameStartupProgress {
@@ -94,6 +97,11 @@ export function loadGameStartupAssets(
       stage: 'title',
     },
     {
+      load: loadGameImage,
+      sources: MATCH_LOADING_GAME_ASSET_SOURCES,
+      stage: 'transition',
+    },
+    {
       load: loadGameAudioAsset,
       sources: GAME_RESIDENT_AUDIO_SOURCES,
       stage: 'audio',
@@ -105,6 +113,7 @@ export function gameStartupStageLabel(progress: GameStartupProgress): string {
   if (!progress.activeSource) return 'Finishing startup'
   if (progress.stage === 'loader') return 'Preparing loading screen'
   if (progress.stage === 'title') return 'Loading title artwork'
+  if (progress.stage === 'transition') return 'Preparing match loading screen'
   return 'Loading game audio'
 }
 

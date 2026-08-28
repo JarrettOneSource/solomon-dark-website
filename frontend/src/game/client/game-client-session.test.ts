@@ -601,7 +601,7 @@ test('client publishes Hub activity locally but reserves gameplay pause for Bone
   session.sendInput(gameplayInput({ x: 1, y: 0 }))
   assert.equal(transport.sent.length, heldMessageCount)
 
-  const countingGrace = { ...pendingGrace, remainingMs: 3_000 }
+  const countingGrace = { ...pendingGrace, remainingMs: 2_000 }
   transport.receive(encodeGameMessage({
     type: 'server-gameplay-resume-grace',
     grace: countingGrace,

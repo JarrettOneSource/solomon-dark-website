@@ -109,8 +109,8 @@ An active run freezes only when detaching a recoverable living member leaves at
 least one connected dead human and no materialized living actor. The remaining
 client sees `Waiting for players to rejoin`; all-dead arbitration cannot consume
 the run while that owner is pending. The returning living member must
-materialize and acknowledge renderer readiness before the existing three-second
-countdown releases the exact frozen tick. If everybody disconnects, no dead
+materialize and acknowledge renderer readiness before the two-second resume
+progress hold releases the exact frozen tick. If everybody disconnects, no dead
 browser is kept as simulation authority: the live instance suspends and the
 same durable recovery path spins it up on demand.
 
@@ -362,7 +362,7 @@ protocol-89 client asserts the refuted toughness-derived ceiling. Save schema
 18 is unchanged because retained primary-spell actors are session state, not
 checkpoint state.
 Protocol 91 adds the run-owned `party-rejoin-wait` resume-grace reason. It uses
-the existing sequence-qualified renderer-ready intent and nullable countdown;
+the existing sequence-qualified renderer-ready intent and nullable wait state;
 it adds no client pause vote and changes no save shape.
 Protocol 92 widens chat with the `boneyard` channel, host-authored semantic
 Global activity events, a required complete effective online-preference set in
@@ -494,11 +494,18 @@ they close after their final player and proxy leave. Their reusable standing
 credential and leaderboard signing key were removed.
 
 Browser visual assets follow the native screen/actor lifetime instead of one
-route-wide resident manifest. Startup owns only Loader and immediately-next
-Title images plus the app-global compiled audio registry. Title, Create, Hub,
-Boneyard, SkillPicker, inventory/traders, pause, and mod presentation each
-acquire their renderer-contracted texture membership through the renderer that
-consumes it and destroy that membership with the renderer. Player appearances
+route-wide resident manifest. Startup owns Loader and immediately-next Title
+images, the one shell-global match-transition cover, and the app-global
+compiled audio registry. The match cover is decoded before Title becomes
+interactive because the process-wide transition barrier can be entered from
+Title, Create, Hub, or a restored Boneyard; its 1920 x 1080 RGBA surface adds
+7.91 MiB rather than restoring any inactive world/actor atlas to startup.
+`MatchLoadingScreen` also gates its scrim, label, and bar on the mounted image's
+positive load edge, so browser paint ordering cannot expose overlay chrome
+before the cover. Title, Create, Hub, Boneyard, SkillPicker,
+inventory/traders, pause, and mod presentation each acquire their
+renderer-contracted texture membership through the renderer that consumes it
+and destroy that membership with the renderer. Player appearances
 retain every dynamic element/equipment/death variant through a compact
 multi-page atlas, mirroring the native `Clothes` bundle page set. They do not
 retain one decoded 170-pixel padded image for every extracted logical sheet.
@@ -1908,7 +1915,7 @@ renderers must become ready, and either a pending marker or a host-monotonic
 expiry deadline. It is never serialized into a save.
 
 Multiplayer Pause Menu, Inventory, full Skill Book, compact skill-selector,
-and final mandatory SkillPicker release atomically enter a 3,000-ms grace only
+and final mandatory SkillPicker release atomically enter a 2,000-ms grace only
 when that active run contains more than one connected materialized human.
 Solo modal release stays immediate. Active-party rejoin, same-player takeover,
 and active saved-run restart install grace even for one player. A restarted or
@@ -1917,11 +1924,13 @@ ready edge; the clock waits for every addressed returner and for older gameplay
 pause/level-up owners to clear. This prevents the grace from expiring beneath
 loading or another modal.
 
-Protocol 83 projects `gameplayResumeGrace` in welcome and live messages as
+Protocol 83 introduced `gameplayResumeGrace` in welcome and live messages as
 `{ sequence, reason, remainingMs }`. `remainingMs=null` means the run is held
 while readiness or an older owner remains pending. Positive remaining time is
-sampled when the message is encoded; clients derive the visible whole-second
-`3,2,1` countdown from their monotonic receipt clock. The authenticated
+sampled when the message is encoded. Protocol 95 caps that value at 2,000 ms;
+clients derive a monotonic 0-to-100-percent progress presentation from the
+host-issued remainder and their receipt clock, without displaying or owning a
+countdown. The authenticated
 `client-resume-grace-ready` message carries the sequence and cannot release or
 shorten authority.
 
@@ -1931,7 +1940,7 @@ pause-held and grace-held party IDs while Hub and unrelated runs continue.
 Standalone stepping stops while either hold exists. Expiry clears queued and
 held input again; standalone resets its next-tick wall-clock deadline, while a
 shared run rejoins the already-live scheduler on its next ordinary edge. No
-elapsed wall time becomes catch-up simulation. The visible countdown overlay
+elapsed wall time becomes catch-up simulation. The visible progress overlay
 exists only after readiness and is presentation-only; it never owns expiry.
 
 ## Tutorial opening guidance and selective hostile hold
