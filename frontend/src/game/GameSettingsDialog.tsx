@@ -42,15 +42,16 @@ import {
   type MobileUiLayout,
   type MobileUiSize,
 } from './mobile-ui-layout.ts'
-import NativeSaveTransferSettings, {
-  type NativeSaveTransferController,
-} from './NativeSaveTransferSettings.tsx'
+import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
 type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
 
 const MobileUiEditor = lazy(() => import('./MobileUiEditor.tsx'))
+const MobileUiLayoutSettingsAction = lazy(() => import('./MobileUiLayoutSettingsAction.tsx'))
+const NativeSaveTransferSettings = lazy(() => import('./NativeSaveTransferSettings.tsx'))
 
 interface GameSettingsDialogProps {
+  accountUsername: string | null
   context: GameSettingsContext
   onChange: (settings: GameSettings) => void
   onClose: () => void
@@ -86,6 +87,7 @@ const BINDING_GROUPS = Object.freeze([
 ])
 
 export default function GameSettingsDialog({
+  accountUsername,
   context,
   onChange,
   onClose,
@@ -95,6 +97,7 @@ export default function GameSettingsDialog({
   const [page, setPage] = useState<SettingsPage>('root')
   const [listening, setListening] = useState<GameBindingAction | null>(null)
   const [mobileUiDraft, setMobileUiDraft] = useState<MobileUiLayout>(DEFAULT_MOBILE_UI_LAYOUT)
+  const [mobileUiFullscreen, setMobileUiFullscreen] = useState(false)
   const [mobileUiPage, setMobileUiPage] = useState<MobileUiSize>({ height: 414, width: 896 })
   const [mobileUiRestoringDefault, setMobileUiRestoringDefault] = useState(true)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -122,11 +125,13 @@ export default function GameSettingsDialog({
           settings.uiScalePercent / 100,
         ).layout)
     setMobileUiRestoringDefault(!stored.customized)
+    setMobileUiFullscreen(coarsePointer)
     setPage('mobile-ui')
   }
 
   const leaveSubpage = useCallback(() => {
     if (page === 'mobile-ui') commitMobileUi()
+    setMobileUiFullscreen(false)
     setPage('root')
   }, [commitMobileUi, page])
 
@@ -169,6 +174,44 @@ export default function GameSettingsDialog({
     onClose()
   }
 
+  const mobileUiEditor = (
+    <Suspense fallback={<p className="game-settings-context-note" role="status">Opening editor…</p>}>
+      <MobileUiEditor
+        layout={mobileUiDraft}
+        onChange={(layout) => {
+          setMobileUiDraft(layout)
+          setMobileUiRestoringDefault(false)
+        }}
+        onReset={() => {
+          setMobileUiDraft(defaultMobileUiGeometry(
+            mobileUiPage.width,
+            mobileUiPage.height,
+            settings.uiScalePercent / 100,
+          ).layout)
+          setMobileUiRestoringDefault(true)
+        }}
+        onSave={mobileUiFullscreen ? leaveSubpage : undefined}
+        page={mobileUiPage}
+        presentation={mobileUiFullscreen ? 'fullscreen' : 'windowed'}
+        restoringDefault={mobileUiRestoringDefault}
+        uiScale={settings.uiScalePercent / 100}
+      />
+    </Suspense>
+  )
+
+  if (page === 'mobile-ui' && mobileUiFullscreen) {
+    return (
+      <div
+        aria-label="Mobile UI Editor"
+        aria-modal="true"
+        className="game-settings-backdrop game-settings-mobile-ui-fullscreen"
+        role="dialog"
+      >
+        {mobileUiEditor}
+      </div>
+    )
+  }
+
   return (
     <div className="game-settings-backdrop" role="presentation">
       <section
@@ -200,6 +243,7 @@ export default function GameSettingsDialog({
         <div ref={contentRef} className="game-settings-content">
           {page === 'root' ? (
             <RootSettings
+              accountUsername={accountUsername}
               context={context}
               onChange={onChange}
               onOpen={(nextPage) => {
@@ -216,30 +260,13 @@ export default function GameSettingsDialog({
               settings={settings}
             />
           ) : page === 'mobile-ui' ? (
-            <Suspense fallback={<p className="game-settings-context-note" role="status">Opening editor…</p>}>
-              <MobileUiEditor
-                layout={mobileUiDraft}
-                onChange={(layout) => {
-                  setMobileUiDraft(layout)
-                  setMobileUiRestoringDefault(false)
-                }}
-                onReset={() => {
-                  setMobileUiDraft(defaultMobileUiGeometry(
-                    mobileUiPage.width,
-                    mobileUiPage.height,
-                    settings.uiScalePercent / 100,
-                  ).layout)
-                  setMobileUiRestoringDefault(true)
-                }}
-                page={mobileUiPage}
-                restoringDefault={mobileUiRestoringDefault}
-                uiScale={settings.uiScalePercent / 100}
-              />
-            </Suspense>
+            mobileUiEditor
           ) : page === 'performance' ? (
             <PerformanceSettings onChange={onChange} settings={settings} />
           ) : saveTransfer ? (
-            <NativeSaveTransferSettings controller={saveTransfer} />
+            <Suspense fallback={<p className="game-settings-context-note" role="status">Opening save transfer…</p>}>
+              <NativeSaveTransferSettings controller={saveTransfer} />
+            </Suspense>
           ) : null}
         </div>
         <button
@@ -256,12 +283,14 @@ export default function GameSettingsDialog({
 }
 
 function RootSettings({
+  accountUsername,
   context,
   onChange,
   onOpen,
   saveTransfer,
   settings,
 }: {
+  accountUsername: string | null
   context: GameSettingsContext
   onChange: (settings: GameSettings) => void
   onOpen: (page: SettingsPage) => void
@@ -350,6 +379,9 @@ function RootSettings({
       <SettingsGroup title="CONTROLS">
         <SettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
         <SettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
+        <Suspense fallback={null}>
+          <MobileUiLayoutSettingsAction accountUsername={accountUsername} />
+        </Suspense>
       </SettingsGroup>
 
       <SettingsGroup title="PERFORMANCE">

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 
 import accountFlourish from '../assets/game/dark-cloud/account-flourish.png'
 import borderBottomLeft from '../assets/game/dark-cloud/border-corner-bl.png'
@@ -42,7 +51,9 @@ import {
 } from './game-content-cache.ts'
 import './dark-cloud.css'
 
-type DarkCloudTab = 'mods' | 'subscribed' | 'parties'
+const DarkCloudLayouts = lazy(() => import('./DarkCloudLayouts.tsx'))
+
+type DarkCloudTab = 'layouts' | 'mods' | 'subscribed' | 'parties'
 type SortMode = 'downloads' | 'members' | 'name' | 'newest' | 'updated'
 
 type DarkCloudRow =
@@ -161,14 +172,16 @@ export default function DarkCloudScene({
   ), [subscriptions])
 
   const rows = useMemo<DarkCloudRow[]>(() => {
-    const source: DarkCloudRow[] = tab === 'parties'
-      ? parties.map(party => ({ key: `party:${party.id}`, kind: 'party', party }))
-      : (tab === 'subscribed' ? subscriptions.map(item => item.mod) : mods).map(mod => ({
-          key: `mod:${mod.slug}`,
-          kind: 'mod',
-          mod,
-          subscription: subscriptionsBySlug.get(mod.slug) ?? null,
-        }))
+    const source: DarkCloudRow[] = tab === 'layouts'
+      ? []
+      : tab === 'parties'
+        ? parties.map(party => ({ key: `party:${party.id}`, kind: 'party', party }))
+        : (tab === 'subscribed' ? subscriptions.map(item => item.mod) : mods).map(mod => ({
+            key: `mod:${mod.slug}`,
+            kind: 'mod',
+            mod,
+            subscription: subscriptionsBySlug.get(mod.slug) ?? null,
+          }))
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const filtered = normalizedQuery.length === 0 ? source : source.filter(row => (
       row.kind === 'mod'
@@ -189,7 +202,7 @@ export default function DarkCloudScene({
     ? modsError
     : tab === 'subscribed'
       ? subscriptionsError
-      : partyDirectory.error
+      : tab === 'parties' ? partyDirectory.error : null
   const detailSubscription = detailMod
     ? subscriptionsBySlug.get(detailMod.slug) ?? null
     : null
@@ -203,6 +216,8 @@ export default function DarkCloudScene({
     setSelectedKey(firstKey)
     setQuery('')
     setDraftQuery('')
+    setSearchOpen(false)
+    setSortOpen(false)
     setSort(next === 'parties' ? 'members' : 'newest')
   }
 
@@ -273,6 +288,7 @@ export default function DarkCloudScene({
   }
 
   const primaryAction = () => {
+    if (tab === 'layouts') return
     if (tab === 'parties') {
       if (selected?.kind === 'party') joinParty(selected.party)
       return
@@ -295,7 +311,7 @@ export default function DarkCloudScene({
   const statusControls = (
     <>
       <span className="dark-cloud-status-label">{statusLabel(tab, rows.length, query, loading)}</span>
-      {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length > 0
+      {tab !== 'layouts' && (tab === 'parties' ? partyDirectory.loading : loading) && rows.length > 0
         ? <span className="dark-cloud-status-note">REFRESHING…</span>
         : null}
       {query ? <button type="button" onClick={() => setQuery('')}>CLEAR SEARCH</button> : null}
@@ -334,6 +350,7 @@ export default function DarkCloudScene({
           ['mods', 'MODS'],
           ['subscribed', 'SUBSCRIBED MODS'],
           ['parties', 'PARTIES'],
+          ['layouts', 'LAYOUTS'],
         ] as const).map(([value, label]) => (
           <button
             key={value}
@@ -353,99 +370,115 @@ export default function DarkCloudScene({
         <img src={borderBottomLeft} className="dark-cloud-corner bottom-left" alt="" />
         <img src={borderBottomRight} className="dark-cloud-corner bottom-right" alt="" />
 
-        <div className={`dark-cloud-columns dark-cloud-columns-${tab}`} aria-hidden>
-          {columnLabels(tab).map(label => <span key={label}>{label}</span>)}
-        </div>
-        <div className="dark-cloud-list-status">{statusControls}</div>
-
-        <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={tab === 'parties' ? partyDirectory.loading : loading}>
-          {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
-          {!(tab === 'parties' ? partyDirectory.loading : loading) && activeError && rows.length === 0 ? (
-            <div className="dark-cloud-empty dark-cloud-empty-error" role="alert">
-              <p>{activeError}</p>
-              <button type="button" onClick={() => { void load() }}>RETRY</button>
+        {tab === 'layouts' ? (
+          <Suspense fallback={<p className="dark-cloud-empty">OPENING LAYOUTS…</p>}>
+            <DarkCloudLayouts accountUsername={accountUsername} />
+          </Suspense>
+        ) : (
+          <>
+            <div className={`dark-cloud-columns dark-cloud-columns-${tab}`} aria-hidden>
+              {columnLabels(tab).map(label => <span key={label}>{label}</span>)}
             </div>
-          ) : null}
-          {!(tab === 'parties' ? partyDirectory.loading : loading) && !activeError && rows.length === 0 ? (
-            <p className="dark-cloud-empty">{emptyMessage(tab, accountUsername !== null, query)}</p>
-          ) : null}
-          {rows.map(row => row.kind === 'mod' ? (
-            <ModRow
-              busy={busySlug !== null}
-              key={row.key}
-              mod={row.mod}
-              onOpen={() => openMod(row.mod)}
-              onSelect={() => setSelectedKey(row.key)}
-              onSubscriptionAction={action => runRowAction(row.mod, action)}
-              selected={selectedKey === row.key}
-              subscription={row.subscription}
-              tab={tab}
-            />
-          ) : (
-            <PartyRow
-              busy={partyActions.busy}
-              key={row.key}
-              onEnter={() => joinParty(row.party)}
-              onSelect={() => setSelectedKey(row.key)}
-              party={row.party}
-              pending={partyActions.pendingListingId === row.party.id}
-              selected={selectedKey === row.key}
-            />
-          ))}
-          {tab === 'parties' && developerAccess ? (
-            <DeveloperPresenceSection
-              error={developerPresence.error}
-              loading={developerPresence.loading}
-              matches={developerPresence.matches}
-              observingMatchId={observingMatchId}
-              onObserve={async (matchId) => {
-                if (observingMatchId !== null) return
-                setObservingMatchId(matchId)
-                setActionError(null)
-                try {
-                  await onObserveMatch(matchId)
-                } catch (error) {
-                  setActionError(message(error, 'The match could not be observed.'))
-                  setObservingMatchId(null)
-                }
-              }}
-              players={developerPresence.players}
-            />
-          ) : null}
-        </div>
+            <div className="dark-cloud-list-status">{statusControls}</div>
+
+            <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={tab === 'parties' ? partyDirectory.loading : loading}>
+              {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
+              {!(tab === 'parties' ? partyDirectory.loading : loading) && activeError && rows.length === 0 ? (
+                <div className="dark-cloud-empty dark-cloud-empty-error" role="alert">
+                  <p>{activeError}</p>
+                  <button type="button" onClick={() => { void load() }}>RETRY</button>
+                </div>
+              ) : null}
+              {!(tab === 'parties' ? partyDirectory.loading : loading) && !activeError && rows.length === 0 ? (
+                <p className="dark-cloud-empty">{emptyMessage(tab, accountUsername !== null, query)}</p>
+              ) : null}
+              {rows.map(row => row.kind === 'mod' ? (
+                <ModRow
+                  busy={busySlug !== null}
+                  key={row.key}
+                  mod={row.mod}
+                  onOpen={() => openMod(row.mod)}
+                  onSelect={() => setSelectedKey(row.key)}
+                  onSubscriptionAction={action => runRowAction(row.mod, action)}
+                  selected={selectedKey === row.key}
+                  subscription={row.subscription}
+                  tab={tab}
+                />
+              ) : (
+                <PartyRow
+                  busy={partyActions.busy}
+                  key={row.key}
+                  onEnter={() => joinParty(row.party)}
+                  onSelect={() => setSelectedKey(row.key)}
+                  party={row.party}
+                  pending={partyActions.pendingListingId === row.party.id}
+                  selected={selectedKey === row.key}
+                />
+              ))}
+              {tab === 'parties' && developerAccess ? (
+                <DeveloperPresenceSection
+                  error={developerPresence.error}
+                  loading={developerPresence.loading}
+                  matches={developerPresence.matches}
+                  observingMatchId={observingMatchId}
+                  onObserve={async (matchId) => {
+                    if (observingMatchId !== null) return
+                    setObservingMatchId(matchId)
+                    setActionError(null)
+                    try {
+                      await onObserveMatch(matchId)
+                    } catch (error) {
+                      setActionError(message(error, 'The match could not be observed.'))
+                      setObservingMatchId(null)
+                    }
+                  }}
+                  players={developerPresence.players}
+                />
+              ) : null}
+            </div>
+          </>
+        )}
       </main>
 
       <footer className="dark-cloud-footer">
         <DarkCloudDownloadProgress progress={downloadProgress} />
         <div className="dark-cloud-footer-tools">
-          <button type="button" className="dark-cloud-icon-button" onClick={() => {
-            setDraftQuery(query)
-            setSearchOpen(true)
-          }} aria-label="Search">
-            <img src={searchIcon} alt="" />
-          </button>
-          <button type="button" className="dark-cloud-icon-button" onClick={() => setSortOpen(true)} aria-label="Sort">
-            <img src={sortIcon} alt="" />
-          </button>
+          {tab !== 'layouts' ? (
+            <>
+              <button type="button" className="dark-cloud-icon-button" onClick={() => {
+                setDraftQuery(query)
+                setSearchOpen(true)
+              }} aria-label="Search">
+                <img src={searchIcon} alt="" />
+              </button>
+              <button type="button" className="dark-cloud-icon-button" onClick={() => setSortOpen(true)} aria-label="Sort">
+                <img src={sortIcon} alt="" />
+              </button>
+            </>
+          ) : null}
         </div>
-        <button
-          type="button"
-          className="dark-cloud-primary-button"
-          disabled={tab === 'parties'
-            ? selectedPartyAction === null
-              || selectedPartyAction === 'wait'
-              || partyActions.busy
-            : selected?.kind !== 'mod'}
-          onClick={primaryAction}
-        >
-          {tab === 'parties'
-            ? selectedPartyAction === null
-              ? 'SELECT PARTY'
-              : selectedPartyAction === 'wait'
-                ? 'IN GAME'
-                : selectedPartyAction === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
-            : 'VIEW MOD'}
-        </button>
+        {tab === 'layouts' ? (
+          <div className="dark-cloud-layout-footer">SHARE A CODE. LOAD IT ANYWHERE.</div>
+        ) : (
+          <button
+            type="button"
+            className="dark-cloud-primary-button"
+            disabled={tab === 'parties'
+              ? selectedPartyAction === null
+                || selectedPartyAction === 'wait'
+                || partyActions.busy
+              : selected?.kind !== 'mod'}
+            onClick={primaryAction}
+          >
+            {tab === 'parties'
+              ? selectedPartyAction === null
+                ? 'SELECT PARTY'
+                : selectedPartyAction === 'wait'
+                  ? 'IN GAME'
+                  : selectedPartyAction === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
+              : 'VIEW MOD'}
+          </button>
+        )}
         <div className="dark-cloud-footer-status">{statusControls}</div>
       </footer>
 
@@ -828,12 +861,14 @@ async function listAllMods(): Promise<ModSummary[]> {
 }
 
 function columnLabels(tab: DarkCloudTab): readonly string[] {
+  if (tab === 'layouts') return []
   if (tab === 'parties') return ['PARTY', 'WIZARDS', 'STATUS', 'LOCATION', 'ACTION']
   if (tab === 'subscribed') return ['SUBSCRIBED MOD', 'AUTHOR', 'VERSION', 'STATUS', 'MANAGE']
   return ['MOD', 'AUTHOR', 'VERSION', 'STATUS', 'ACTION']
 }
 
 function statusLabel(tab: DarkCloudTab, count: number, query: string, loading: boolean): string {
+  if (tab === 'layouts') return 'MOBILE UI LAYOUTS'
   if (loading && count === 0) return 'CONSULTING THE DARK CLOUD…'
   if (query) return `"${query.toUpperCase()}" · ${count} ${count === 1 ? 'MATCH' : 'MATCHES'}`
   if (tab === 'parties') return `${count} ${count === 1 ? 'PARTY' : 'PARTIES'}`
@@ -842,6 +877,7 @@ function statusLabel(tab: DarkCloudTab, count: number, query: string, loading: b
 }
 
 function emptyMessage(tab: DarkCloudTab, authenticated: boolean, query: string): string {
+  if (tab === 'layouts') return ''
   if (query) return 'NOTHING MATCHES YOUR SEARCH.'
   if (tab === 'parties') return 'NO PUBLIC PARTIES ARE FORMING RIGHT NOW.'
   if (tab === 'subscribed') {

@@ -108,6 +108,17 @@ public sealed class WebGameSave
     public User User { get; set; } = null!;
 }
 
+public sealed class SharedMobileUiLayout
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public int AuthorId { get; set; }
+    public string Document { get; set; } = string.Empty;
+    public DateTime CreatedAtUtc { get; set; }
+
+    public User Author { get; set; } = null!;
+}
+
 public sealed class GameLeaderboardEntry
 {
     public int Id { get; set; }

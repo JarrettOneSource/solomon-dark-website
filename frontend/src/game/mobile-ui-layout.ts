@@ -15,10 +15,12 @@ export const MOBILE_UI_SCALE_MIN = 0.4
 export const MOBILE_UI_SCALE_MAX = 3
 export const MOBILE_UI_PAGE_ZOOM_MIN = 0.35
 export const MOBILE_UI_PAGE_ZOOM_MAX = 4
+export const MOBILE_UI_LAYOUT_VERSION = 2
 
 export const MOBILE_UI_ELEMENT_IDS = Object.freeze([
   'pause',
   'diagnostics',
+  'meters',
   'leftJoystick',
   'rightJoystick',
   'slot1',
@@ -40,6 +42,7 @@ export type MobileUiElementId = typeof MOBILE_UI_ELEMENT_IDS[number]
 
 export const MOBILE_UI_ELEMENT_LABELS: Readonly<Record<MobileUiElementId, string>> = Object.freeze({
   diagnostics: 'FPS / Ping',
+  meters: 'Health / Mana',
   healthPotion: 'Health Potion',
   inventory: 'Inventory',
   leftJoystick: 'Left Joystick',
@@ -84,6 +87,11 @@ export interface MobileUiGeometry {
 export interface MobileUiLayoutState {
   readonly customized: boolean
   readonly layout: MobileUiLayout
+}
+
+export interface MobileUiLayoutDocument {
+  readonly elements: MobileUiLayout
+  readonly version: typeof MOBILE_UI_LAYOUT_VERSION
 }
 
 export interface MobileUiLayoutStorage {
@@ -135,6 +143,16 @@ export function defaultMobileUiGeometry(
   // Width varies slightly with the live FPS digits; this stable two-digit seed keeps the
   // complete saved profile centred on the shipped diagnostics lane.
   add('diagnostics', 126.865, 20.1, 69.73, 10.2)
+  // Base-health and base-mana tracks are each 110 HUD pixels wide with the
+  // native 100 px gap between their inner edges. The live values may widen
+  // either track, but both remain one transform owner centred at the screen top.
+  add(
+    'meters',
+    viewportWidth / 2,
+    24.5 * rootScale,
+    320 * rootScale,
+    20 * rootScale,
+  )
   add(
     'leftJoystick',
     (48 + MOBILE_JOYSTICK_BASE / 2) * rootScale,
@@ -222,10 +240,9 @@ export function mobileUiEditorPageSize(
   ) {
     return { height: MOBILE_UI_CANONICAL_HEIGHT, width: MOBILE_UI_CANONICAL_WIDTH }
   }
-  const aspect = Math.max(viewportWidth, viewportHeight) / Math.min(viewportWidth, viewportHeight)
   return {
-    height: Math.round(MOBILE_UI_CANONICAL_WIDTH / aspect),
-    width: MOBILE_UI_CANONICAL_WIDTH,
+    height: viewportHeight,
+    width: viewportWidth,
   }
 }
 
@@ -236,21 +253,32 @@ export function readMobileUiLayoutState(
   if (serialized === null) return defaultLayoutState()
   try {
     const parsed: unknown = JSON.parse(serialized)
-    if (!record(parsed) || !sameKeys(Object.keys(parsed), ['elements', 'version'])) {
-      return defaultLayoutState()
-    }
-    if (parsed.version !== 1 || !record(parsed.elements)) return defaultLayoutState()
-    if (!sameKeys(Object.keys(parsed.elements), MOBILE_UI_ELEMENT_IDS)) return defaultLayoutState()
-    const layout = {} as Record<MobileUiElementId, MobileUiElementTransform>
-    for (const id of MOBILE_UI_ELEMENT_IDS) {
-      const transform = parsed.elements[id]
-      if (!validTransform(transform)) return defaultLayoutState()
-      layout[id] = frozenTransform(transform)
-    }
-    return Object.freeze({ customized: true, layout: freezeLayout(layout) })
+    const current = mobileUiLayoutFromDocument(parsed)
+    if (current) return Object.freeze({ customized: true, layout: current })
+    const migrated = legacyMobileUiLayout(parsed)
+    return migrated
+      ? Object.freeze({ customized: true, layout: migrated })
+      : defaultLayoutState()
   } catch {
     return defaultLayoutState()
   }
+}
+
+export function mobileUiLayoutDocument(layout: MobileUiLayout): MobileUiLayoutDocument {
+  return Object.freeze({
+    elements: normalizeLayout(layout),
+    version: MOBILE_UI_LAYOUT_VERSION,
+  })
+}
+
+export function mobileUiLayoutFromDocument(value: unknown): MobileUiLayout | null {
+  if (!record(value)
+    || !sameKeys(Object.keys(value), ['elements', 'version'])
+    || value.version !== MOBILE_UI_LAYOUT_VERSION
+    || !record(value.elements)
+    || !sameKeys(Object.keys(value.elements), MOBILE_UI_ELEMENT_IDS)) return null
+  const transforms = transformsFromElements(value.elements, MOBILE_UI_ELEMENT_IDS)
+  return transforms ? freezeLayout(transforms as Record<MobileUiElementId, MobileUiElementTransform>) : null
 }
 
 export function setMobileUiLayout(
@@ -258,10 +286,7 @@ export function setMobileUiLayout(
   storage: MobileUiLayoutStorage = browserStorage(),
 ): MobileUiLayoutState {
   const normalized = normalizeLayout(layout)
-  storage.setItem(MOBILE_UI_LAYOUT_STORAGE_KEY, JSON.stringify({
-    elements: normalized,
-    version: 1,
-  }))
+  storage.setItem(MOBILE_UI_LAYOUT_STORAGE_KEY, JSON.stringify(mobileUiLayoutDocument(normalized)))
   const state = Object.freeze({ customized: true, layout: normalized })
   emit(state)
   return state
@@ -408,6 +433,37 @@ function validTransform(value: unknown): value is MobileUiElementTransform {
     && finiteInRange(value.y, 0, 100)
     && finiteInRange(value.scale, MOBILE_UI_SCALE_MIN, MOBILE_UI_SCALE_MAX)
     && finiteInRange(value.rotation, -180, 180)
+}
+
+const LEGACY_MOBILE_UI_ELEMENT_IDS = Object.freeze(
+  MOBILE_UI_ELEMENT_IDS.filter((id) => id !== 'meters'),
+)
+
+function legacyMobileUiLayout(value: unknown): MobileUiLayout | null {
+  if (!record(value)
+    || !sameKeys(Object.keys(value), ['elements', 'version'])
+    || value.version !== 1
+    || !record(value.elements)
+    || !sameKeys(Object.keys(value.elements), LEGACY_MOBILE_UI_ELEMENT_IDS)) return null
+  const legacy = transformsFromElements(value.elements, LEGACY_MOBILE_UI_ELEMENT_IDS)
+  if (!legacy) return null
+  return freezeLayout({
+    ...legacy,
+    meters: DEFAULT_MOBILE_UI_LAYOUT.meters,
+  } as Record<MobileUiElementId, MobileUiElementTransform>)
+}
+
+function transformsFromElements(
+  elements: Record<string, unknown>,
+  ids: readonly MobileUiElementId[],
+): Partial<Record<MobileUiElementId, MobileUiElementTransform>> | null {
+  const layout: Partial<Record<MobileUiElementId, MobileUiElementTransform>> = {}
+  for (const id of ids) {
+    const transform = elements[id]
+    if (!validTransform(transform)) return null
+    layout[id] = frozenTransform(transform)
+  }
+  return layout
 }
 
 function boundedCenter(center: number, halfExtentPercent: number): number {

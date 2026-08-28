@@ -2073,6 +2073,7 @@ export default function MainMenuScene({
           && displayedGameplayPause?.ownerPlayerId === session.playerId
           && gameplaySettingsOpen ? (
             <GameSettingsDialog
+              accountUsername={accountUsername}
               context="gameplay"
               onChange={requestGameSettingsUpdate}
               onClose={() => {
@@ -2093,6 +2094,7 @@ export default function MainMenuScene({
 
         {settingsContext && !gameplaySettingsOpen ? (
           <GameSettingsDialog
+            accountUsername={accountUsername}
             context={settingsContext}
             onChange={requestGameSettingsUpdate}
             onClose={() => setSettingsContext(null)}

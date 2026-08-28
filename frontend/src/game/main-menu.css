@@ -499,6 +499,7 @@
   height: 25px;
   appearance: none;
   border: 0;
+  background-color: transparent;
   background-image: var(--settings-control-panel-atlas);
   background-position: -26px -45px;
   background-repeat: no-repeat;
@@ -508,6 +509,7 @@
   width: 64px;
   height: 25px;
   border: 0;
+  background-color: transparent;
   background-image: var(--settings-control-panel-atlas);
   background-position: -26px -45px;
   background-repeat: no-repeat;
@@ -566,6 +568,45 @@
   background-image: var(--settings-control-panel-atlas);
   background-position: -308px -89px;
   background-repeat: no-repeat;
+}
+
+.game-settings-mobile-ui-share > small {
+  display: block;
+  padding: 5px 10px 7px;
+  color: #8f856b;
+  background: #030303;
+  font: 10px var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.game-settings-mobile-ui-share .game-settings-mobile-ui-share-error { color: #e4a39a; }
+
+.game-settings-layout-code {
+  display: grid;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid #3b3731;
+  color: #dbc174;
+  background: #090806;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  font: 700 12px var(--font-display);
+}
+
+.game-settings-layout-code output {
+  color: #f3e2a9;
+  font: 700 16px 'JetBrains Mono', monospace;
+  letter-spacing: 0.08em;
+}
+
+.game-settings-layout-code button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #756238;
+  color: #d3b86f;
+  background: #080706;
+  font: 700 10px var(--font-display);
 }
 
 .game-settings-binding[aria-pressed='true'] strong {

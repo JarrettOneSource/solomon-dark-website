@@ -13,6 +13,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<ModScreenshot> ModScreenshots => Set<ModScreenshot>();
     public DbSet<ModComment> ModComments => Set<ModComment>();
     public DbSet<WebGameSave> WebGameSaves => Set<WebGameSave>();
+    public DbSet<SharedMobileUiLayout> SharedMobileUiLayouts => Set<SharedMobileUiLayout>();
     public DbSet<GameLeaderboardEntry> GameLeaderboardEntries => Set<GameLeaderboardEntry>();
     public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
     public DbSet<DiagnosticLog> DiagnosticLogs => Set<DiagnosticLog>();
@@ -121,6 +122,17 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             entity.HasOne(save => save.User)
                 .WithMany()
                 .HasForeignKey(save => save.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SharedMobileUiLayout>(entity =>
+        {
+            entity.Property(layout => layout.Code).HasMaxLength(8).UseCollation("NOCASE");
+            entity.HasIndex(layout => layout.Code).IsUnique();
+            entity.HasIndex(layout => new { layout.AuthorId, layout.CreatedAtUtc });
+            entity.HasOne(layout => layout.Author)
+                .WithMany()
+                .HasForeignKey(layout => layout.AuthorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

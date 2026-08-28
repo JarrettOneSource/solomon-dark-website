@@ -35,6 +35,8 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
   report without a session credential.
 - `/api/game/leaderboards` publicly reads Hall boards and accepts only
   account-bound receipts signed by the authoritative game host.
+- `/api/game/layouts` stores immutable account-authored mobile UI layouts;
+  code lookup is public so guests can install a shared layout.
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
 
@@ -60,6 +62,29 @@ classes: `null` when no provisioned session is known, `shared-hub` for the
 resident Hub, or the existing 32-character URL-safe private-session id. Other
 short labels remain invalid. The report remains consent-driven, rate-limited,
 credential-free, and stored as a private diagnostic archive.
+
+## Shared mobile UI layouts
+
+`SharedMobileUiLayout` stores an eight-character unambiguous code, author id,
+canonical layout document, and UTC creation time. Codes use uppercase
+`A-HJ-NP-Z2-9`; responses display them as `ABCD-EFGH`. Lookup accepts either
+case and ignores a hyphen or space. Rows are immutable snapshots. Publishing
+the same document again creates a different code, and deleting an account
+cascades its authored rows.
+
+- `POST /api/game/layouts` requires a Website JWT and accepts
+  `{ "layout": <document> }`. It returns `201` with the share code, exact
+  canonical document, public author username, and creation timestamp.
+- `GET /api/game/layouts/{code}` is anonymous and returns the same receipt.
+  Unknown or malformed codes return `404` without revealing account state.
+
+The server accepts only the current version-2 document: exactly `version` and
+`elements`, the complete declared 18-member element set, and exactly `x`, `y`,
+`scale`, and `rotation` for every transform. Centres are finite `0..100`, scale
+is finite `0.4..3`, and rotation is finite `-180..180`. Partial, extra,
+out-of-range, or differently versioned documents are rejected before storage.
+The client repeats this validation before a public response can replace local
+layout state.
 
 ## Web mod subscriptions and sessions
 

@@ -31,6 +31,7 @@ import {
 } from './game-settings.ts'
 
 const settingsComponent = readFileSync(new URL('./GameSettingsDialog.tsx', import.meta.url), 'utf8')
+const settingsSharing = readFileSync(new URL('./MobileUiLayoutSettingsAction.tsx', import.meta.url), 'utf8')
 const settingsCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 const mainMenuScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const darkCloudScene = readFileSync(new URL('./DarkCloudScene.tsx', import.meta.url), 'utf8')
@@ -194,6 +195,7 @@ test('Settings covers every native root, requested online control, and context m
     'CAMERA FOV',
     'UI SCALE',
     'CUSTOMIZE KEYBOARD',
+    'CUSTOMIZE MOBILE UI',
     'TWEAK GAME',
     'ENABLE CHEATS',
     'COMPLEX LIGHTING',
@@ -206,6 +208,7 @@ test('Settings covers every native root, requested online control, and context m
   assert.match(settingsComponent, /title="ONLINE FEATURES"[\s\S]*?disabled=\{!onlineFeatures\}[\s\S]*?nested/)
   assert.match(mainMenuScene, /gameSharedHubEnabled\(gameSettings\)/)
   assert.match(mainMenuScene, /session\?\.setOnlinePreferences\(gameOnlinePreferences\(gameSettings\)\)/)
+  assert.match(settingsSharing, /SUBMIT TO DARK CLOUD/)
   assert.doesNotMatch(settingsComponent, />ZOOM EFFECTS</)
   for (const label of [
     'MOVE UP', 'MOVE DOWN', 'MOVE LEFT', 'MOVE RIGHT',
@@ -233,6 +236,9 @@ test('Settings presentation consumes the untouched stock ControlPanel records', 
   assert.match(settingsCss, /background-position: -92px -46px/)
   assert.match(settingsCss, /background-position: -407px -31px/)
   assert.match(settingsCss, /background-position: -26px -45px/)
+  assert.match(settingsCss, /input::?-webkit-slider-thumb|input::-webkit-slider-thumb/)
+  assert.match(settingsCss, /input::-webkit-slider-thumb \{[\s\S]*background-color: transparent;/)
+  assert.match(settingsCss, /input::-moz-range-thumb \{[\s\S]*background-color: transparent;/)
   assert.match(settingsCss, /background-position: -308px -89px/)
   assert.match(settingsCss, /background-position: -743px -588px/)
   assert.match(settingsCss, /background-position: -543px -205px/)

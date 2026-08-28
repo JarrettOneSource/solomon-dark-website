@@ -2,6 +2,11 @@
   width: min(1080px, 100%);
 }
 
+.game-settings-backdrop.game-settings-mobile-ui-fullscreen {
+  padding: 0;
+  background: #b8bdc1;
+}
+
 .game-settings-dialog[data-settings-page='mobile-ui'] .game-settings-content {
   padding: 8px;
   overflow: hidden;
@@ -15,6 +20,87 @@
   gap: 7px;
   color: #eee7d1;
   font-family: var(--font-display);
+}
+
+.mobile-ui-editor[data-editor-presentation='fullscreen'] {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.mobile-ui-editor[data-editor-presentation='fullscreen'] .mobile-ui-editor-viewport {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  cursor: default;
+}
+
+.mobile-ui-editor[data-editor-presentation='fullscreen'] .mobile-ui-editor-page-shell {
+  margin: 0;
+}
+
+.mobile-ui-editor[data-editor-presentation='fullscreen'] .mobile-ui-editor-page {
+  top: 0;
+  left: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.mobile-ui-editor-dock {
+  position: absolute;
+  z-index: 200;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  overflow: hidden;
+  width: max-content;
+  height: 42px;
+  border: 1px solid #c6a85f;
+  border-radius: 5px;
+  background: rgb(10 9 7 / 0.94);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.78), inset 0 0 10px rgb(205 174 94 / 0.08);
+  grid-template-columns: 34px 70px 70px;
+}
+
+.mobile-ui-editor-dock button {
+  min-width: 0;
+  padding: 0 7px;
+  border: 0;
+  border-left: 1px solid rgb(198 168 95 / 0.34);
+  color: #e9d79d;
+  background: transparent;
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.04em;
+  touch-action: manipulation;
+}
+
+.mobile-ui-editor-dock button:hover,
+.mobile-ui-editor-dock button:focus-visible {
+  color: #fff5c9;
+  background: rgb(100 82 39 / 0.32);
+  outline: 1px solid #f0d487;
+  outline-offset: -2px;
+}
+
+.mobile-ui-editor-dock .mobile-ui-editor-dock-handle {
+  padding: 0;
+  border-left: 0;
+  color: #a99768;
+  cursor: grab;
+  font-size: 19px;
+  line-height: 1;
+  touch-action: none;
+}
+
+.mobile-ui-editor-dock-handle:active { cursor: grabbing; }
+
+.mobile-ui-editor-dock .mobile-ui-editor-dock-save {
+  color: #eef3e6;
+  background: linear-gradient(#4e8255, #294a2e);
 }
 
 .mobile-ui-editor-toolbar {
@@ -186,19 +272,48 @@
 
 .mobile-ui-editor-diagnostics {
   display: flex;
-  box-sizing: border-box;
   width: 100%;
   height: 100%;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  border-radius: 3px;
-  color: #f4f4ee;
-  background: rgb(29 34 38 / 0.76);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
-  font: 12px/1 'JetBrains Mono', monospace;
-  text-shadow: 0 1px 2px #000;
+  gap: 8.5px;
+  color: #d8d4c8;
+  font: 10.2px/1 'JetBrains Mono', monospace;
+  text-shadow: 0 0.85px 1.7px #000, 0 0 3.4px #000;
   pointer-events: none;
+}
+
+.mobile-ui-editor-pause {
+  width: 81.818% !important;
+  height: auto !important;
+}
+
+.mobile-ui-editor-meters {
+  position: relative;
+  display: block !important;
+}
+
+.mobile-ui-editor-meter {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  width: 34.375%;
+  height: 100%;
+  border: 1px ridge #a9a39a;
+  border-radius: 999px;
+  background: #202629;
+  box-shadow: 0 1px 1.5px #000, inset 0 0 2px #000;
+}
+
+.mobile-ui-editor-meter.health { left: 0; }
+.mobile-ui-editor-meter.mana { right: 0; }
+
+.mobile-ui-editor-meter img {
+  position: absolute;
+  top: 15%;
+  left: 2.73%;
+  width: 90.91%;
+  height: 50%;
 }
 
 .mobile-ui-editor-joystick {
@@ -245,9 +360,17 @@
   height: 100%;
 }
 
+.mobile-ui-editor-dock-art {
+  position: absolute;
+  bottom: 2.308%;
+  left: 5.385%;
+  width: 89.231% !important;
+  height: 95.385% !important;
+}
+
 .mobile-ui-editor-potion {
-  width: 58% !important;
-  height: 58% !important;
+  width: 53% !important;
+  height: 53% !important;
 }
 
 .mobile-ui-editor-resize-node,

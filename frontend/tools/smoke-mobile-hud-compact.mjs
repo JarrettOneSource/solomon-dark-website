@@ -13,7 +13,9 @@ import {
 } from '../src/game/mobile-quickbar-layout.ts'
 import {
   MOBILE_UI_ELEMENT_IDS,
+  MOBILE_UI_LAYOUT_VERSION,
   MOBILE_UI_LAYOUT_STORAGE_KEY,
+  defaultMobileUiGeometry,
 } from '../src/game/mobile-ui-layout.ts'
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
 
@@ -44,6 +46,7 @@ const deviceScaleFactor = Number(process.env.SDR_MOBILE_HUD_DPR || 2)
 // the plain supervisor socket exactly like smoke-shared-hub-parties.mjs does.
 const gatewayUrl = process.env.SDR_MOBILE_HUD_GATEWAY_URL?.trim()
 const publicWebSocketOrigin = process.env.SDR_MOBILE_HUD_PUBLIC_ORIGIN?.trim()
+const layoutEditorOnly = process.argv.includes('--layout-editor-only')
 const IPHONE_USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) '
   + 'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
 
@@ -105,7 +108,7 @@ const rawClients = []
 const receipts = {}
 let page = null
 
-try {
+smokeFlow: try {
   await mkdir(evidenceRoot, { recursive: true })
   const context = await browser.newContext({
     deviceScaleFactor,
@@ -156,13 +159,27 @@ try {
   const { mobileUiProfile, playerId } = await enterHub(page, context, 'Aurelia', 'Water')
   const customized = await capture(page, 'hub-custom-mobile-ui')
   await assertCustomMobileUi(page, customized, mobileUiProfile)
+  await clearCustomMobileUi(page)
   await assertFinePointerMobileUiIsolation(mobileUiProfile)
-  await resetCustomMobileUi(page)
   const solo = await capture(page, 'hub-solo')
   assertHubLayout(solo, 'hub-solo', { primaryJoystick: false })
+  assertEditorMatchesDefaultHud(receipts['mobile-ui-editor'].defaultGeometry, solo, false)
   assertCluster(solo, 'hub-solo', { expanded: false })
   assertEnvelope(solo.members.partyPanel[0], 'hub-solo party chip', { maxHeight: 24, maxWidth: 124 })
   assertAllyColumn(solo, 'hub-solo', { hidden: false, rows: 0, top: 82 })
+  if (layoutEditorOnly) {
+    const unexpectedFailedRequests = failedRequests.filter((request) => !expectedNavigationCancellation(request))
+    receipts.errors = { consoleErrors, failedResponses, pageErrors, unexpectedFailedRequests }
+    receipts.layoutContract = layoutContract()
+    receipts.viewport = { deviceScaleFactor, height, width }
+    await writeFile(join(evidenceRoot, 'receipt.json'), `${JSON.stringify(receipts, null, 2)}\n`)
+    assert.deepEqual(pageErrors, [], 'page errors')
+    assert.deepEqual(consoleErrors, [], 'console errors')
+    assert.deepEqual(unexpectedFailedRequests, [], 'unexpected failed requests')
+    assert.deepEqual(failedResponses, [], 'failed responses')
+    console.log(`mobile layout editor journey captured under ${evidenceRoot}`)
+    break smokeFlow
+  }
 
   // Orientation round trip: portrait and back must reproduce the landscape layout exactly.
   await page.setViewportSize({ width: height, height: width })
@@ -285,6 +302,7 @@ try {
   await page.locator(MEMBER_SELECTORS.joystickPrimary).waitFor({ timeout: 15_000 })
   const runIdle = await capture(page, 'run-idle')
   assertHubLayout(runIdle, 'run-idle', { primaryJoystick: true })
+  assertEditorMatchesDefaultHud(receipts['mobile-ui-editor'].defaultGeometry, runIdle, true)
   assertSkullButton(runIdle, 'run-idle')
   // A run has no party chip: the roster takes the chip's anchor.
   assertAllyColumn(runIdle, 'run-idle', { hidden: false, rows: 1, top: 54 })
@@ -320,15 +338,15 @@ try {
   assertHubLayout(runReleased, 'run-released', { primaryJoystick: true })
   assertAllyColumn(runReleased, 'run-released', { hidden: false, rows: 1, top: 54 })
 
-  const expectedAbortedAudioRequests = failedRequests.filter((request) => (
-    /\.mp3 net::ERR_ABORTED$/.test(request)
+  const expectedCancelledRequests = failedRequests.filter((request) => (
+    expectedNavigationCancellation(request)
   ))
   const unexpectedFailedRequests = failedRequests.filter((request) => (
-    !/\.mp3 net::ERR_ABORTED$/.test(request)
+    !expectedNavigationCancellation(request)
   ))
   receipts.errors = {
     consoleErrors,
-    expectedAbortedAudioRequests,
+    expectedCancelledRequests,
     failedResponses,
     pageErrors,
     unexpectedFailedRequests,
@@ -368,6 +386,8 @@ async function capture(page, label) {
 
 // Tap the skull, expect the pause menu, resume through its own RESUME action.
 async function pauseRoundTrip(page, label) {
+  await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]')
+    .waitFor({ timeout: 15_000 })
   await page.locator(MEMBER_SELECTORS.skullButton).tap()
   const overlay = page.locator(MEMBER_SELECTORS.pauseOverlay)
   await overlay.waitFor({ timeout: 10_000 })
@@ -419,6 +439,8 @@ function readGeometry(page) {
         if (slot !== null) entry.slot = Number(slot)
         const bank = node.getAttribute('data-quickbar-bank')
         if (bank !== null) entry.bank = bank
+        const entryKind = node.getAttribute('data-entry-kind')
+        if (entryKind !== null) entry.entryKind = entryKind
         return entry
       })
     }
@@ -438,10 +460,10 @@ function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
 }
 
-function editorScale(status) {
-  const match = status.match(/SIZE\s+(\d+)%/)
-  assert.ok(match, `missing editor scale in ${JSON.stringify(status)}`)
-  return Number(match[1])
+function editorElementScale(label) {
+  const match = label?.match(/scale\s+(\d+(?:\.\d+)?)/)
+  assert.ok(match, `missing editor scale in ${JSON.stringify(label)}`)
+  return Number(match[1]) * 100
 }
 
 // Expected screen-pixel layout for this viewport, derived from the same module the
@@ -494,6 +516,7 @@ function assertHubLayout(geometry, label, { primaryJoystick }) {
   const slots = [...geometry.members.quickbarSlots].sort((a, b) => a.slot - b.slot)
   assert.equal(slots.length, 8, `${label}: eight quickbar slots`)
   for (const actual of slots) {
+    if (actual.entryKind === 'health-potion' || actual.entryKind === 'mana-potion') continue
     const expected = contract.slots[actual.slot]
     assert.ok(actual.visible, `${label}: slot ${actual.slot} visible`)
     assert.equal(actual.bank, expected.bank, `${label}: slot ${actual.slot} bank`)
@@ -524,7 +547,12 @@ function assertHubLayout(geometry, label, { primaryJoystick }) {
   }
   // The moved members (joysticks, banks) may not touch each other nor any of the
   // unchanged dock members; the dock's own overlays (counts on bottles) are pre-existing.
-  const moved = [['movement', movement], ...slots.map((slot) => [`slot${slot.slot}`, slot])]
+  const moved = [
+    ['movement', movement],
+    ...slots
+      .filter((slot) => slot.entryKind !== 'health-potion' && slot.entryKind !== 'mana-potion')
+      .map((slot) => [`slot${slot.slot}`, slot]),
+  ]
   if (primaryJoystick) moved.push(['primary', primary])
   const fixed = [
     ...dockMembers.map(([name]) => [name, geometry.members[name][0]]),
@@ -541,8 +569,52 @@ function assertHubLayout(geometry, label, { primaryJoystick }) {
       `${label}: ${name} inside the viewport ${JSON.stringify(rect)}`)
   }
   const [chatOpen] = geometry.members.chatOpen
-  assert.ok(chatOpen?.visible, `${label}: chat opener visible`)
-  assertEnvelope(chatOpen, `${label} chat opener`, { maxHeight: 32, maxWidth: 32 })
+  if (!primaryJoystick) {
+    assert.ok(chatOpen?.visible, `${label}: chat opener visible`)
+    assertEnvelope(chatOpen, `${label} chat opener`, { maxHeight: 32, maxWidth: 32 })
+  }
+}
+
+function assertEditorMatchesDefaultHud(editor, runtime, primaryJoystick) {
+  const meters = unionRect(runtime.members.meterHealth[0], runtime.members.meterMana[0])
+  const direct = [
+    ['pause', runtime.members.skullButton[0]],
+    ['meters', meters],
+    ['leftJoystick', runtime.members.joystickMovement[0]],
+    ['inventory', runtime.members.backpack[0]],
+    ['skillbook', runtime.members.tome[0]],
+    ['xp', runtime.members.xp[0]],
+    ['healthPotion', runtime.members.potionRed[0]],
+    ['manaPotion', runtime.members.potionBlue[0]],
+  ]
+  if (primaryJoystick) direct.push(['rightJoystick', runtime.members.joystickPrimary[0]])
+  for (const [id, actual] of direct) {
+    assert.ok(actual, `live default ${id} is mounted`)
+    nearRect(editor[id], rectOnly(actual), `editor/live default ${id}`)
+  }
+  const diagnostics = runtime.members.diagnostics[0]
+  nearRect(editor.diagnostics, {
+    height: diagnostics.height,
+    x: diagnostics.x,
+    y: diagnostics.y,
+  }, 'editor/live default diagnostics')
+  const slots = [...runtime.members.quickbarSlots].sort((a, b) => a.slot - b.slot)
+  for (const slot of slots) {
+    if (slot.entryKind === 'health-potion' || slot.entryKind === 'mana-potion') continue
+    nearRect(editor[`slot${slot.slot + 1}`], rectOnly(slot), `editor/live default slot${slot.slot + 1}`)
+  }
+}
+
+function rectOnly(rect) {
+  return { height: rect.height, width: rect.width, x: rect.x, y: rect.y }
+}
+
+function unionRect(first, second) {
+  const left = Math.min(first.x, second.x)
+  const top = Math.min(first.y, second.y)
+  const right = Math.max(first.x + first.width, second.x + second.width)
+  const bottom = Math.max(first.y + first.height, second.y + second.height)
+  return { height: bottom - top, width: right - left, x: left, y: top }
 }
 
 // Top-left row in stage pixels (the stage is already safe-area inset): 44 px pause skull
@@ -657,6 +729,10 @@ function assertOverlapFree(entries, label, against = null) {
   }
 }
 
+function expectedNavigationCancellation(request) {
+  return /(?:\.mp3|deployment\.json\?current=[a-f0-9]{40}) net::ERR_ABORTED$/.test(request)
+}
+
 async function dismissTutorialOffer(page) {
   const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
   if (await tutorialOffer.isVisible()) {
@@ -670,9 +746,12 @@ async function exerciseMobileUiEditor(page, context) {
   const dialog = page.locator('.game-settings-dialog')
   await dialog.waitFor({ timeout: 15_000 })
   await dialog.getByRole('button', { name: 'CUSTOMIZE MOBILE UI' }).tap()
-  const editor = dialog.locator('.mobile-ui-editor')
+  const overlay = page.getByRole('dialog', { name: 'Mobile UI Editor' })
+  await overlay.waitFor({ timeout: 15_000 })
+  const editor = overlay.locator('.mobile-ui-editor')
   await editor.waitFor({ timeout: 15_000 })
-  assert.equal(await dialog.getAttribute('data-settings-page'), 'mobile-ui')
+  assert.equal(await editor.getAttribute('data-editor-presentation'), 'fullscreen')
+  assert.equal(await dialog.count(), 0, 'the nested Settings window yields to the touch editor')
   assert.deepEqual(
     await editor.locator('[data-mobile-ui-editor-element]').evaluateAll((nodes) => (
       nodes.map((node) => node.getAttribute('data-mobile-ui-editor-element'))
@@ -680,15 +759,82 @@ async function exerciseMobileUiEditor(page, context) {
     [...MOBILE_UI_ELEMENT_IDS],
     'editor exposes the complete requested membership in catalog order',
   )
+  const overlayBounds = await overlay.boundingBox()
+  const pageBounds = await editor.locator('.mobile-ui-editor-page').boundingBox()
+  nearRect(overlayBounds, { height, width, x: 0, y: 0 }, 'full-screen mobile editor overlay')
+  nearRect(pageBounds, { height, width, x: 0, y: 0 }, 'full-screen mobile editor canvas')
+
+  const expectedGeometry = defaultMobileUiGeometry(width, height, 1)
+  const editorRects = await editor.locator('[data-mobile-ui-editor-element]').evaluateAll((nodes) => (
+    Object.fromEntries(nodes.map((node) => {
+      const bounds = node.getBoundingClientRect()
+      return [node.getAttribute('data-mobile-ui-editor-element'), {
+        height: bounds.height,
+        width: bounds.width,
+        x: bounds.x,
+        y: bounds.y,
+      }]
+    }))
+  ))
+  for (const id of MOBILE_UI_ELEMENT_IDS) {
+    const transform = expectedGeometry.layout[id]
+    const size = expectedGeometry.sizes[id]
+    nearRect(editorRects[id], {
+      height: size.height,
+      width: size.width,
+      x: transform.x / 100 * width - size.width / 2,
+      y: transform.y / 100 * height - size.height / 2,
+    }, `editor default ${id}`)
+  }
   const silver = await editor.locator('.mobile-ui-editor-page').evaluate((node) => ({
     backgroundColor: getComputedStyle(node).backgroundColor,
     backgroundImage: getComputedStyle(node).backgroundImage,
   }))
   assert.equal(silver.backgroundColor, 'rgb(184, 189, 193)')
   assert.notEqual(silver.backgroundImage, 'none')
+  const diagnostics = await editor.locator('.mobile-ui-editor-diagnostics').evaluate((node) => ({
+    background: getComputedStyle(node).backgroundColor,
+    text: node.textContent,
+  }))
+  assert.equal(diagnostics.background, 'rgba(0, 0, 0, 0)')
+  assert.match(diagnostics.text, /60 FPS0 ms/)
+  assert.equal(await editor.locator('.mobile-ui-editor-meters').count(), 1)
 
-  await editor.getByLabel('Selected mobile UI element').selectOption('inventory')
+  const dock = editor.locator('.mobile-ui-editor-dock')
+  const dockBefore = await dock.boundingBox()
+  const dockHandle = dock.getByRole('button', { name: 'Move editor actions' })
+  const handleBounds = await dockHandle.boundingBox()
+  assert.ok(dockBefore && handleBounds, 'mobile editor action dock is visible')
+  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(120, 150, { steps: 8 })
+  await page.mouse.up()
+  const dockAfter = await dock.boundingBox()
+  assert.ok(dockAfter && (Math.abs(dockAfter.x - dockBefore.x) > 40 || Math.abs(dockAfter.y - dockBefore.y) > 40),
+    `mobile editor dock moves (${JSON.stringify(dockBefore)} -> ${JSON.stringify(dockAfter)})`)
+  assert.ok(dockAfter.x >= 8 && dockAfter.y >= 8
+    && dockAfter.x + dockAfter.width <= width - 8
+    && dockAfter.y + dockAfter.height <= height - 8,
+  `mobile editor dock stays on canvas (${JSON.stringify(dockAfter)})`)
+
+  const pauseControl = editor.locator('[data-mobile-ui-editor-element="pause"]')
+  const pauseBefore = await pauseControl.boundingBox()
+  assert.ok(pauseBefore, 'editor pause control has bounds')
+  await page.mouse.move(pauseBefore.x + pauseBefore.width / 2, pauseBefore.y + pauseBefore.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(pauseBefore.x + pauseBefore.width / 2 + 60, pauseBefore.y + pauseBefore.height / 2 + 35, { steps: 8 })
+  await page.mouse.up()
+  const pauseMoved = await pauseControl.boundingBox()
+  assert.ok(pauseMoved && Math.abs(pauseMoved.x - pauseBefore.x) > 20, 'pause control moves before reset')
+  await dock.getByRole('button', { name: 'RESET' }).tap()
+  await page.waitForFunction(({ x, y }) => {
+    const bounds = document.querySelector('[data-mobile-ui-editor-element="pause"]')?.getBoundingClientRect()
+    return bounds && Math.abs(bounds.x - x) < 0.75 && Math.abs(bounds.y - y) < 0.75
+  }, { x: pauseBefore.x, y: pauseBefore.y })
+
   const inventory = editor.locator('[data-mobile-ui-editor-element="inventory"]')
+  await inventory.tap()
+  assert.equal(await inventory.getAttribute('data-selected'), 'true')
   const initialInventory = await inventory.boundingBox()
   assert.ok(initialInventory, 'editor inventory has bounds')
   await page.mouse.move(
@@ -731,7 +877,7 @@ async function exerciseMobileUiEditor(page, context) {
   await page.mouse.move(inventoryCenter.x + 70, inventoryCenter.y, { steps: 8 })
   await page.mouse.up()
 
-  const beforeElementPinch = editorScale(await editor.locator('.mobile-ui-editor-status').innerText())
+  const beforeElementPinch = editorElementScale(await inventory.getAttribute('aria-label'))
   const cdp = await context.newCDPSession(page)
   const rotatedInventory = await inventory.boundingBox()
   assert.ok(rotatedInventory, 'rotated inventory keeps bounds')
@@ -751,98 +897,19 @@ async function exerciseMobileUiEditor(page, context) {
     ],
   })
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  const afterElementPinch = editorScale(await editor.locator('.mobile-ui-editor-status').innerText())
+  const afterElementPinch = editorElementScale(await inventory.getAttribute('aria-label'))
   assert.ok(afterElementPinch > beforeElementPinch,
     `selection pinch grows the element (${beforeElementPinch}% -> ${afterElementPinch}%)`)
-
-  const zoomOutput = editor.locator('.mobile-ui-editor-zoom-controls output')
-  const initialZoom = Number.parseInt(await zoomOutput.textContent(), 10)
-  const pageCenter = await editor.locator('.mobile-ui-editor-page').evaluate((node) => {
-    const bounds = node.getBoundingClientRect()
-    const x = bounds.left + bounds.width / 2
-    for (const fraction of [0.3, 0.4, 0.5, 0.6]) {
-      const y = bounds.top + bounds.height * fraction
-      const empty = [x - 25, x, x + 25].every((candidateX) => (
-        document.elementFromPoint(candidateX, y)?.closest('.mobile-ui-editor-element') === null
-      ))
-      if (empty) return { x, y }
-    }
-    throw new Error('No empty silver pinch row remained')
-  })
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [
-      { id: 201, x: pageCenter.x - 25, y: pageCenter.y },
-      { id: 202, x: pageCenter.x + 25, y: pageCenter.y },
-    ],
-  })
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [
-      { id: 201, x: pageCenter.x - 150, y: pageCenter.y },
-      { id: 202, x: pageCenter.x + 150, y: pageCenter.y },
-    ],
-  })
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await page.waitForFunction(({ before }) => {
-    const output = document.querySelector('.mobile-ui-editor-zoom-controls output')
-    return output && Number.parseInt(output.textContent ?? '', 10) > before
-  }, { before: initialZoom })
-  const finalZoom = Number.parseInt(await zoomOutput.textContent(), 10)
-  assert.ok(finalZoom >= 150, `editor supports deep page zoom (${finalZoom}%)`)
-  const viewport = editor.locator('.mobile-ui-editor-viewport')
-  await page.evaluate(() => new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve))
-  }))
-  const panStart = await viewport.evaluate((node) => {
-    const bounds = node.getBoundingClientRect()
-    const elements = [...node.querySelectorAll('.mobile-ui-editor-element')]
-      .map((element) => element.getBoundingClientRect())
-    for (let y = bounds.top + 35; y < bounds.bottom - 35; y += 24) {
-      for (let x = bounds.left + 35; x < bounds.right - 35; x += 24) {
-        const target = document.elementFromPoint(x, y)
-        const clearance = Math.min(...elements.map((element) => {
-          const dx = Math.max(element.left - x, 0, x - element.right)
-          const dy = Math.max(element.top - y, 0, y - element.bottom)
-          return Math.hypot(dx, dy)
-        }))
-        if (clearance >= 50
-          && target?.closest('.mobile-ui-editor-page')
-          && !target.closest('.mobile-ui-editor-element')) return { x, y }
-      }
-    }
-    throw new Error('No visible silver pan point remained clear of the HUD elements')
-  })
-  const scrollBeforePan = await viewport.evaluate((node) => ({
-    left: node.scrollLeft,
-    top: node.scrollTop,
-  }))
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ id: 301, x: panStart.x, y: panStart.y }],
-  })
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [{ id: 301, x: panStart.x - 80, y: panStart.y - 40 }],
-  })
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  const scrollAfterPan = await viewport.evaluate((node) => ({
-    left: node.scrollLeft,
-    top: node.scrollTop,
-  }))
-  assert.ok(
-    scrollAfterPan.left > scrollBeforePan.left + 20
-      || scrollAfterPan.top > scrollBeforePan.top + 20,
-    `empty-page drag pans the zoomed canvas (${JSON.stringify(scrollBeforePan)} -> ${JSON.stringify(scrollAfterPan)})`,
-  )
   await page.screenshot({ path: join(evidenceRoot, 'mobile-ui-editor.png') })
 
-  await dialog.getByRole('button', { name: 'SAVE' }).tap()
+  await dock.getByRole('button', { name: 'SAVE' }).tap()
+  await overlay.waitFor({ state: 'detached', timeout: 10_000 })
+  await dialog.waitFor({ timeout: 10_000 })
   assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
   const serialized = await page.evaluate((key) => localStorage.getItem(key), MOBILE_UI_LAYOUT_STORAGE_KEY)
   assert.ok(serialized, 'SAVE writes the mobile UI profile')
   const profile = JSON.parse(serialized)
-  assert.equal(profile.version, 1)
+  assert.equal(profile.version, MOBILE_UI_LAYOUT_VERSION)
   assert.deepEqual(Object.keys(profile.elements), [...MOBILE_UI_ELEMENT_IDS])
   assert.ok(profile.elements.inventory.x > 50, `inventory drag persisted x=${profile.elements.inventory.x}`)
   assert.ok(profile.elements.inventory.y < 90, `inventory drag persisted y=${profile.elements.inventory.y}`)
@@ -852,10 +919,11 @@ async function exerciseMobileUiEditor(page, context) {
   await dialog.getByRole('button', { name: 'DONE' }).tap()
   await dialog.waitFor({ state: 'detached', timeout: 10_000 })
   receipts['mobile-ui-editor'] = {
-    finalZoom,
+    defaultGeometry: editorRects,
+    dock: { after: dockAfter, before: dockBefore },
     inventory: profile.elements.inventory,
     memberCount: Object.keys(profile.elements).length,
-    pan: { after: scrollAfterPan, before: scrollBeforePan },
+    overlay: overlayBounds,
     silver,
   }
   return profile
@@ -864,8 +932,18 @@ async function exerciseMobileUiEditor(page, context) {
 async function assertCustomMobileUi(page, geometry, profile) {
   const actualIds = await page.locator('[data-mobile-ui-custom="true"]')
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-mobile-ui-element')).sort())
-  const expectedIds = MOBILE_UI_ELEMENT_IDS.filter((id) => id !== 'rightJoystick').sort()
-  assert.deepEqual(actualIds, expectedIds, 'Hub applies every mounted member and keeps the right stick absent')
+  const quickbarIds = await page.locator('.hub-hud-quickbar-slot')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-mobile-ui-element')))
+  assert.equal(quickbarIds.length, 8, 'all eight live belt positions consume a mobile transform')
+  assert.equal(new Set(quickbarIds).size, 8, 'each live belt position has one transform owner')
+  assert.ok(quickbarIds.includes('healthPotion'), 'the recursive Health alias consumes its dedicated transform')
+  assert.ok(quickbarIds.includes('manaPotion'), 'the recursive Mana alias consumes its dedicated transform')
+  const fixedIds = ['diagnostics', 'inventory', 'leftJoystick', 'meters', 'pause', 'skillbook', 'xp']
+  assert.deepEqual(
+    actualIds,
+    [...fixedIds, ...quickbarIds].sort(),
+    'Hub applies every mounted member and keeps only the Boneyard right stick absent',
+  )
   const inventory = geometry.members.backpack[0]
   const center = rectCenter(inventory)
   assert.ok(Math.abs(center.x - profile.elements.inventory.x / 100 * width) < 2,
@@ -918,6 +996,21 @@ async function assertFinePointerMobileUiIsolation(profile) {
     await desktop.goto(`${baseUrl}/game`, { timeout: 240_000, waitUntil: 'domcontentloaded' })
     await desktop.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
     await dismissTutorialOffer(desktop)
+    await desktop.getByRole('button', { name: 'Settings' }).click()
+    const settings = desktop.locator('.game-settings-dialog')
+    await settings.waitFor({ timeout: 15_000 })
+    await settings.getByRole('button', { name: 'CUSTOMIZE MOBILE UI' }).click()
+    const desktopEditor = settings.locator('.mobile-ui-editor')
+    await desktopEditor.waitFor({ timeout: 15_000 })
+    assert.equal(await desktopEditor.getAttribute('data-editor-presentation'), 'windowed')
+    assert.equal(await desktopEditor.locator('.mobile-ui-editor-toolbar').count(), 1)
+    assert.equal(await desktop.locator('.game-settings-mobile-ui-fullscreen').count(), 0)
+    await desktop.screenshot({ path: join(evidenceRoot, 'desktop-mobile-ui-editor.png') })
+    await settings.getByRole('button', { name: 'SAVE' }).click()
+    assert.equal(await settings.getAttribute('data-settings-page'), 'root')
+    await settings.getByRole('button', { name: 'DONE' }).click()
+    await settings.waitFor({ state: 'detached', timeout: 10_000 })
+    receipts['desktop-mobile-ui-editor'] = { presentation: 'windowed' }
     await desktop.getByRole('button', { name: 'Play' }).click()
     await desktop.getByRole('button', { name: 'New Game' }).click()
     await desktop.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -953,27 +1046,19 @@ async function assertFinePointerMobileUiIsolation(profile) {
   }
 }
 
-async function resetCustomMobileUi(page) {
-  await page.locator(MEMBER_SELECTORS.skullButton).tap()
-  const pause = page.locator(MEMBER_SELECTORS.pauseOverlay)
-  await pause.waitFor({ timeout: 10_000 })
-  await page.locator('[data-pause-action="settings"]').tap()
-  const dialog = page.locator('.game-settings-dialog')
-  await dialog.waitFor({ timeout: 10_000 })
-  await dialog.getByRole('button', { name: 'CUSTOMIZE MOBILE UI' }).tap()
-  const editor = dialog.locator('.mobile-ui-editor')
-  await editor.waitFor({ timeout: 15_000 })
-  await editor.locator('[data-mobile-ui-reset]').tap()
-  await dialog.getByRole('button', { name: 'SAVE' }).tap()
-  assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
-  await dialog.getByRole('button', { name: 'DONE' }).tap()
-  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
-  await pause.waitFor({ state: 'detached', timeout: 10_000 })
+async function clearCustomMobileUi(page) {
+  await page.evaluate((key) => {
+    localStorage.removeItem(key)
+    window.dispatchEvent(new StorageEvent('storage', {
+      key,
+      storageArea: localStorage,
+    }))
+  }, MOBILE_UI_LAYOUT_STORAGE_KEY)
   await page.waitForFunction(() => document.querySelectorAll('[data-mobile-ui-custom="true"]').length === 0)
   assert.equal(
     await page.evaluate((key) => localStorage.getItem(key), MOBILE_UI_LAYOUT_STORAGE_KEY),
     null,
-    'RESET DEFAULT removes the profile instead of serializing one phone layout',
+    'the acceptance journey restored the adaptive default profile',
   )
 }
 

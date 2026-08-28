@@ -361,6 +361,7 @@ ModEndpoints.Map(app);
 BoneyardEndpoints.Map(app);
 WebGameSaveEndpoints.Map(app);
 GameLeaderboardEndpoints.Map(app);
+MobileUiLayoutEndpoints.Map(app);
 GameContentEndpoints.Map(app);
 StatsEndpoints.Map(app);
 DiagnosticLogEndpoints.Map(app);

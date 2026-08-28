@@ -9,6 +9,7 @@ import {
   MOBILE_UI_CANONICAL_WIDTH,
   MOBILE_UI_ELEMENT_IDS,
   MOBILE_UI_LAYOUT_STORAGE_KEY,
+  MOBILE_UI_LAYOUT_VERSION,
   MOBILE_UI_PAGE_ZOOM_MAX,
   MOBILE_UI_PAGE_ZOOM_MIN,
   MOBILE_UI_SCALE_MAX,
@@ -20,6 +21,8 @@ import {
   mobileUiElementRotation,
   mobileUiElementStyle,
   mobileUiLayoutWith,
+  mobileUiLayoutDocument,
+  mobileUiLayoutFromDocument,
   mobileUiPagePinchZoom,
   readMobileUiLayoutState,
   resetMobileUiLayout,
@@ -41,6 +44,7 @@ test('the mobile layout catalog drains every requested HUD member exactly once',
   assert.deepEqual(MOBILE_UI_ELEMENT_IDS, [
     'pause',
     'diagnostics',
+    'meters',
     'leftJoystick',
     'rightJoystick',
     'slot1',
@@ -75,6 +79,8 @@ test('the editor seed projects the accepted 896 x 414 touch HUD from its owning 
   near(geometry.layout.pause.y, 6.2802)
   near(geometry.layout.diagnostics.x, 14.159)
   near(geometry.layout.diagnostics.y, 4.8551)
+  near(geometry.layout.meters.x, 50)
+  near(geometry.layout.meters.y, 2.7222)
   near(geometry.layout.leftJoystick.x, 8.5608)
   near(geometry.layout.leftJoystick.y, 80.5833)
   near(geometry.layout.rightJoystick.x, 91.4392)
@@ -87,6 +93,8 @@ test('the editor seed projects the accepted 896 x 414 touch HUD from its owning 
   near(geometry.layout.xp.y, 95.1111)
   assert.deepEqual(geometry.sizes.pause, { height: 44, width: 44 })
   assert.deepEqual(geometry.sizes.diagnostics, { height: 10.2, width: 69.73 })
+  near(geometry.sizes.meters.height, 9.2)
+  near(geometry.sizes.meters.width, 147.2)
   assert.deepEqual(geometry.sizes.leftJoystick, { height: 109.25, width: 109.25 })
   assert.deepEqual(geometry.sizes.slot1, { height: 46, width: 46 })
   near(geometry.sizes.inventory.height, 59.8)
@@ -95,9 +103,9 @@ test('the editor seed projects the accepted 896 x 414 touch HUD from its owning 
 })
 
 test('default projection follows the current device aspect and UI scale without storing device pixels', () => {
-  assert.deepEqual(mobileUiEditorPageSize(390, 844, true), { height: 414, width: 896 })
-  assert.deepEqual(mobileUiEditorPageSize(844, 390, true), { height: 414, width: 896 })
-  assert.deepEqual(mobileUiEditorPageSize(1280, 800, true), { height: 560, width: 896 })
+  assert.deepEqual(mobileUiEditorPageSize(390, 844, true), { height: 844, width: 390 })
+  assert.deepEqual(mobileUiEditorPageSize(844, 390, true), { height: 390, width: 844 })
+  assert.deepEqual(mobileUiEditorPageSize(1280, 800, true), { height: 800, width: 1280 })
   assert.deepEqual(mobileUiEditorPageSize(1920, 1080, false), { height: 414, width: 896 })
   const enlarged = defaultMobileUiGeometry(896, 414, 1.5)
   assert.equal(enlarged.sizes.leftJoystick.width, 163.875)
@@ -122,7 +130,9 @@ test('layout persistence is complete, bounded, versioned, observable, and resett
   const unsubscribe = subscribeMobileUiLayout((state) => events.push(state.customized))
   assert.deepEqual(setMobileUiLayout(changed, storage), { customized: true, layout: changed })
   assert.deepEqual(readMobileUiLayoutState(storage), { customized: true, layout: changed })
-  assert.match(storage.values.get(MOBILE_UI_LAYOUT_STORAGE_KEY) ?? '', /"version":1/)
+  assert.equal(MOBILE_UI_LAYOUT_VERSION, 2)
+  assert.match(storage.values.get(MOBILE_UI_LAYOUT_STORAGE_KEY) ?? '', /"version":2/)
+  assert.deepEqual(mobileUiLayoutFromDocument(mobileUiLayoutDocument(changed)), changed)
   resetMobileUiLayout(storage)
   assert.deepEqual(readMobileUiLayoutState(storage), {
     customized: false,
@@ -133,17 +143,32 @@ test('layout persistence is complete, bounded, versioned, observable, and resett
 
   for (const malformed of [
     '{',
-    '{"version":2,"elements":{}}',
-    JSON.stringify({ version: 1, elements: { ...changed, slot8: undefined } }),
+    '{"version":3,"elements":{}}',
+    JSON.stringify({ version: 2, elements: { ...changed, slot8: undefined } }),
     JSON.stringify({
-      version: 1,
+      version: 2,
       elements: { ...changed, inventory: { ...changed.inventory, scale: 99 } },
     }),
-    JSON.stringify({ version: 1, elements: { ...changed, extra: changed.inventory } }),
+    JSON.stringify({ version: 2, elements: { ...changed, extra: changed.inventory } }),
   ]) {
     storage.values.set(MOBILE_UI_LAYOUT_STORAGE_KEY, malformed)
     assert.equal(readMobileUiLayoutState(storage).customized, false, malformed)
   }
+
+  const { meters: _meters, ...legacyElements } = changed
+  storage.values.set(MOBILE_UI_LAYOUT_STORAGE_KEY, JSON.stringify({
+    elements: legacyElements,
+    version: 1,
+  }))
+  const migrated = readMobileUiLayoutState(storage)
+  assert.equal(migrated.customized, true)
+  assert.deepEqual(migrated.layout.meters, DEFAULT_MOBILE_UI_LAYOUT.meters)
+  assert.deepEqual(migrated.layout.inventory, changed.inventory)
+
+  assert.equal(mobileUiLayoutFromDocument({
+    ...mobileUiLayoutDocument(changed),
+    extra: true,
+  }), null)
 })
 
 test('grid, bounds, element gestures, page zoom, and CSS projection stay independent', () => {

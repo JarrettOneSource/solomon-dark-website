@@ -40,7 +40,9 @@ interface MobileUiEditorProps {
   layout: MobileUiLayout
   onChange: (layout: MobileUiLayout) => void
   onReset: () => void
+  onSave?: () => void
   page: MobileUiSize
+  presentation?: 'fullscreen' | 'windowed'
   restoringDefault: boolean
   uiScale: number
 }
@@ -84,6 +86,11 @@ type PageInteraction = {
   readonly kind: 'pinch'
 }
 
+interface DockInteraction {
+  readonly offset: MobileUiPoint
+  readonly pointerId: number
+}
+
 const RESIZE_HANDLES = Object.freeze([
   'north-west',
   'north',
@@ -99,7 +106,9 @@ export default function MobileUiEditor({
   layout,
   onChange,
   onReset,
+  onSave,
   page,
+  presentation = 'windowed',
   restoringDefault,
   uiScale,
 }: MobileUiEditorProps) {
@@ -110,6 +119,10 @@ export default function MobileUiEditor({
   const [selected, setSelected] = useState<MobileUiElementId>('pause')
   const [snap, setSnap] = useState(true)
   const [zoom, setZoom] = useState(1)
+  const [dockPosition, setDockPosition] = useState<MobileUiPoint | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const dockRef = useRef<HTMLDivElement>(null)
+  const dockInteraction = useRef<DockInteraction | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   const elementRefs = useRef(new Map<MobileUiElementId, HTMLDivElement>())
@@ -124,6 +137,12 @@ export default function MobileUiEditor({
   const fitPage = useCallback(() => {
     const viewport = viewportRef.current
     if (!viewport) return
+    if (presentation === 'fullscreen') {
+      setZoom(1)
+      viewport.scrollLeft = 0
+      viewport.scrollTop = 0
+      return
+    }
     const next = clamp(
       Math.min(
         (viewport.clientWidth - 48) / page.width,
@@ -138,11 +157,23 @@ export default function MobileUiEditor({
       viewport.scrollLeft = Math.max(0, (page.width * next + 48 - viewport.clientWidth) / 2)
       viewport.scrollTop = Math.max(0, (page.height * next + 48 - viewport.clientHeight) / 2)
     })
-  }, [page.height, page.width])
+  }, [page.height, page.width, presentation])
 
   useLayoutEffect(() => {
     fitPage()
   }, [fitPage])
+
+  useLayoutEffect(() => {
+    if (presentation !== 'fullscreen') return
+    const root = rootRef.current
+    const dock = dockRef.current
+    if (!root || !dock) return
+    setDockPosition((current) => constrainDockPosition(
+      current ?? { x: root.clientWidth - dock.offsetWidth - 8, y: 8 },
+      root,
+      dock,
+    ))
+  }, [page.height, page.width, presentation])
 
   useEffect(() => () => {
     if (zoomFrame.current !== null) cancelAnimationFrame(zoomFrame.current)
@@ -451,68 +482,111 @@ export default function MobileUiEditor({
     })
   }
 
+  const beginDockDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const dock = dockRef.current
+    if (!dock) return
+    const bounds = dock.getBoundingClientRect()
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dockInteraction.current = {
+      offset: { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      pointerId: event.pointerId,
+    }
+  }
+
+  const moveDock = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const interaction = dockInteraction.current
+    const root = rootRef.current
+    const dock = dockRef.current
+    if (!interaction || interaction.pointerId !== event.pointerId || !root || !dock) return
+    event.preventDefault()
+    event.stopPropagation()
+    const bounds = root.getBoundingClientRect()
+    setDockPosition(constrainDockPosition({
+      x: event.clientX - bounds.left - interaction.offset.x,
+      y: event.clientY - bounds.top - interaction.offset.y,
+    }, root, dock))
+  }
+
+  const finishDockDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const interaction = dockInteraction.current
+    if (!interaction || interaction.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    dockInteraction.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
   const selectedTransform = layout[selected]
   return (
     <div
+      ref={rootRef}
       className="mobile-ui-editor"
+      data-editor-presentation={presentation}
       data-grid-snap={snap}
       data-restoring-default={restoringDefault}
       data-selected-element={selected}
     >
-      <div className="mobile-ui-editor-toolbar" aria-label="Mobile UI editor tools">
-        <label>
-          <span>ELEMENT</span>
-          <select
-            aria-label="Selected mobile UI element"
-            value={selected}
-            onChange={(event) => setSelected(event.currentTarget.value as MobileUiElementId)}
+      {presentation === 'windowed' ? (
+        <div className="mobile-ui-editor-toolbar" aria-label="Mobile UI editor tools">
+          <label>
+            <span>ELEMENT</span>
+            <select
+              aria-label="Selected mobile UI element"
+              value={selected}
+              onChange={(event) => setSelected(event.currentTarget.value as MobileUiElementId)}
+            >
+              {MOBILE_UI_ELEMENT_IDS.map((id) => (
+                <option key={id} value={id}>{MOBILE_UI_ELEMENT_LABELS[id]}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            aria-pressed={snap}
+            data-mobile-ui-grid-toggle
+            onClick={() => setSnap((enabled) => !enabled)}
+            type="button"
           >
-            {MOBILE_UI_ELEMENT_IDS.map((id) => (
-              <option key={id} value={id}>{MOBILE_UI_ELEMENT_LABELS[id]}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          aria-pressed={snap}
-          data-mobile-ui-grid-toggle
-          onClick={() => setSnap((enabled) => !enabled)}
-          type="button"
-        >
-          GRID {snap ? 'ON' : 'OFF'}
-        </button>
-        <div className="mobile-ui-editor-zoom-controls" aria-label="Page zoom">
-          <button
-            aria-label="Zoom out"
-            disabled={zoom <= MOBILE_UI_PAGE_ZOOM_MIN}
-            onClick={() => zoomAt(zoom / 1.25, viewportCenter(viewportRef.current))}
-            type="button"
-          >−</button>
-          <output aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
-          <button
-            aria-label="Zoom in"
-            disabled={zoom >= MOBILE_UI_PAGE_ZOOM_MAX}
-            onClick={() => zoomAt(zoom * 1.25, viewportCenter(viewportRef.current))}
-            type="button"
-          >+</button>
-          <button onClick={fitPage} type="button">FIT</button>
+            GRID {snap ? 'ON' : 'OFF'}
+          </button>
+          <div className="mobile-ui-editor-zoom-controls" aria-label="Page zoom">
+            <button
+              aria-label="Zoom out"
+              disabled={zoom <= MOBILE_UI_PAGE_ZOOM_MIN}
+              onClick={() => zoomAt(zoom / 1.25, viewportCenter(viewportRef.current))}
+              type="button"
+            >−</button>
+            <output aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
+            <button
+              aria-label="Zoom in"
+              disabled={zoom >= MOBILE_UI_PAGE_ZOOM_MAX}
+              onClick={() => zoomAt(zoom * 1.25, viewportCenter(viewportRef.current))}
+              type="button"
+            >+</button>
+            <button onClick={fitPage} type="button">FIT</button>
+          </div>
+          <button data-mobile-ui-reset onClick={onReset} type="button">RESET DEFAULT</button>
         </div>
-        <button data-mobile-ui-reset onClick={onReset} type="button">RESET DEFAULT</button>
-      </div>
+      ) : null}
 
       <div
         ref={viewportRef}
         className="mobile-ui-editor-viewport"
-        onPointerCancel={finishPage}
-        onPointerDown={beginPage}
-        onPointerMove={movePage}
-        onPointerUp={finishPage}
-        onWheel={wheel}
+        onPointerCancel={presentation === 'windowed' ? finishPage : undefined}
+        onPointerDown={presentation === 'windowed' ? beginPage : undefined}
+        onPointerMove={presentation === 'windowed' ? movePage : undefined}
+        onPointerUp={presentation === 'windowed' ? finishPage : undefined}
+        onWheel={presentation === 'windowed' ? wheel : undefined}
       >
         <div
           className="mobile-ui-editor-page-shell"
           style={{
-            height: page.height * zoom + 48,
-            width: page.width * zoom + 48,
+            height: page.height * zoom + (presentation === 'windowed' ? 48 : 0),
+            width: page.width * zoom + (presentation === 'windowed' ? 48 : 0),
           }}
         >
           <div
@@ -595,25 +669,65 @@ export default function MobileUiEditor({
         </div>
       </div>
 
-      <div className="mobile-ui-editor-status" aria-live="polite">
-        <strong>{MOBILE_UI_ELEMENT_LABELS[selected]}</strong>
-        <span>X {selectedTransform.x.toFixed(1)}%</span>
-        <span>Y {selectedTransform.y.toFixed(1)}%</span>
-        <span>SIZE {Math.round(selectedTransform.scale * 100)}%</span>
-        <span>ROTATE {Math.round(selectedTransform.rotation)}°</span>
-        <small>Drag to move. Pinch the selection or use its nodes to resize. Pinch empty silver to zoom.</small>
-      </div>
+      {presentation === 'windowed' ? (
+        <div className="mobile-ui-editor-status" aria-live="polite">
+          <strong>{MOBILE_UI_ELEMENT_LABELS[selected]}</strong>
+          <span>X {selectedTransform.x.toFixed(1)}%</span>
+          <span>Y {selectedTransform.y.toFixed(1)}%</span>
+          <span>SIZE {Math.round(selectedTransform.scale * 100)}%</span>
+          <span>ROTATE {Math.round(selectedTransform.rotation)}°</span>
+          <small>Drag to move. Pinch the selection or use its nodes to resize. Pinch empty silver to zoom.</small>
+        </div>
+      ) : (
+        <div
+          ref={dockRef}
+          className="mobile-ui-editor-dock"
+          aria-label="Mobile UI editor actions"
+          style={dockPosition ? { left: dockPosition.x, right: 'auto', top: dockPosition.y } : undefined}
+        >
+          <button
+            aria-label="Move editor actions"
+            className="mobile-ui-editor-dock-handle"
+            onPointerCancel={finishDockDrag}
+            onPointerDown={beginDockDrag}
+            onPointerMove={moveDock}
+            onPointerUp={finishDockDrag}
+            type="button"
+          >⠿</button>
+          <button
+            className="mobile-ui-editor-dock-save"
+            data-mobile-ui-save
+            onClick={onSave}
+            type="button"
+          >SAVE</button>
+          <button data-mobile-ui-reset onClick={onReset} type="button">RESET</button>
+        </div>
+      )}
     </div>
   )
 }
 
 function MobileUiElementPreview({ id }: { id: MobileUiElementId }) {
-  if (id === 'pause') return <img draggable={false} src={hub.hud.skull} alt="" />
+  if (id === 'pause') {
+    return <img className="mobile-ui-editor-pause" draggable={false} src={hub.hud.skull} alt="" />
+  }
   if (id === 'diagnostics') {
     return (
       <span className="mobile-ui-editor-diagnostics">
         <span>60 FPS</span>
-        <span>42 ms</span>
+        <span>0 ms</span>
+      </span>
+    )
+  }
+  if (id === 'meters') {
+    return (
+      <span className="mobile-ui-editor-meters" aria-hidden>
+        <span className="mobile-ui-editor-meter health">
+          <img draggable={false} src={hub.hud.barRed} alt="" />
+        </span>
+        <span className="mobile-ui-editor-meter mana">
+          <img draggable={false} src={hub.hud.barBlue} alt="" />
+        </span>
       </span>
     )
   }
@@ -627,8 +741,12 @@ function MobileUiElementPreview({ id }: { id: MobileUiElementId }) {
   if (id.startsWith('slot')) {
     return <span className="mobile-ui-editor-slot">{id.slice(4)}</span>
   }
-  if (id === 'inventory') return <img draggable={false} src={hub.hud.backpack} alt="" />
-  if (id === 'skillbook') return <img draggable={false} src={hub.hud.tome} alt="" />
+  if (id === 'inventory') {
+    return <img className="mobile-ui-editor-dock-art" draggable={false} src={hub.hud.backpack} alt="" />
+  }
+  if (id === 'skillbook') {
+    return <img className="mobile-ui-editor-dock-art" draggable={false} src={hub.hud.tome} alt="" />
+  }
   if (id === 'xp') {
     return (
       <span className="mobile-ui-editor-xp" aria-hidden>
@@ -668,6 +786,18 @@ function viewportCenter(viewport: HTMLDivElement | null): MobileUiPoint {
   if (!viewport) return { x: 0, y: 0 }
   const bounds = viewport.getBoundingClientRect()
   return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+}
+
+function constrainDockPosition(
+  position: MobileUiPoint,
+  root: HTMLElement,
+  dock: HTMLElement,
+): MobileUiPoint {
+  const inset = 8
+  return {
+    x: clamp(position.x, inset, Math.max(inset, root.clientWidth - dock.offsetWidth - inset)),
+    y: clamp(position.y, inset, Math.max(inset, root.clientHeight - dock.offsetHeight - inset)),
+  }
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

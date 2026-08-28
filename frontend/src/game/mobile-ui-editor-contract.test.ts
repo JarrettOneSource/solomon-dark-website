@@ -6,6 +6,8 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf
 const dialog = read('./GameSettingsDialog.tsx')
 const editor = read('./MobileUiEditor.tsx')
 const editorCss = read('./mobile-ui-editor.css')
+const settingsSharing = read('./MobileUiLayoutSettingsAction.tsx')
+const sharing = read('./mobile-ui-sharing.ts')
 const gameHud = read('./GameHud.tsx')
 const quickbar = read('./SkillQuickbar.tsx')
 const skull = read('./GameMenuSkull.tsx')
@@ -16,7 +18,7 @@ const hubCss = read('./hub.css')
 const joystickCss = read('./input/touch-joystick.css')
 const mainMenuCss = read('./main-menu.css')
 
-test('Settings owns one save/reset Mobile UI page in every existing entry context', () => {
+test('Settings owns a windowed desktop editor and full-stage touch editor in every entry context', () => {
   assert.match(dialog, /type SettingsPage = 'controls' \| 'mobile-ui' \| 'performance' \| 'root'/)
   assert.match(dialog, /<SettingsAction label="CUSTOMIZE MOBILE UI" onClick=\{\(\) => onOpen\('mobile-ui'\)\} \/>/)
   assert.match(dialog, /if \(page === 'mobile-ui'\) commitMobileUi\(\)/)
@@ -24,6 +26,12 @@ test('Settings owns one save/reset Mobile UI page in every existing entry contex
   assert.match(dialog, /page === 'mobile-ui' \? 'SAVE'/)
   assert.match(dialog, /if \(page === 'mobile-ui'\) return 'MOBILE UI EDITOR'/)
   assert.match(editorCss, /\.game-settings-dialog\[data-settings-page='mobile-ui'\] \{\s*width: min\(1080px, 100%\);/)
+  assert.match(dialog, /setMobileUiFullscreen\(coarsePointer\)/)
+  assert.match(dialog, /page === 'mobile-ui' && mobileUiFullscreen/)
+  assert.match(dialog, /className="game-settings-backdrop game-settings-mobile-ui-fullscreen"/)
+  assert.match(dialog, /presentation=\{mobileUiFullscreen \? 'fullscreen' : 'windowed'\}/)
+  assert.match(editorCss, /\.mobile-ui-editor\[data-editor-presentation='fullscreen'\] \{[\s\S]*position: absolute;[\s\S]*inset: 0;/)
+  assert.match(editorCss, /\.mobile-ui-editor\[data-editor-presentation='fullscreen'\] \.mobile-ui-editor-page \{[\s\S]*top: 0;[\s\S]*left: 0;/)
 })
 
 test('the silver authoring page separates member transforms from page pan and deep zoom', () => {
@@ -37,12 +45,32 @@ test('the silver authoring page separates member transforms from page pan and de
   assert.match(editor, /if \(event\.target instanceof Element && event\.target\.closest\('\.mobile-ui-editor-element'\)\) return/)
   assert.match(editor, /pagePointers\.current\.size === 2[\s\S]*initialZoom: zoom[\s\S]*kind: 'pinch'/)
   assert.match(editor, /mobileUiPagePinchZoom\(/)
-  assert.match(editor, /onWheel=\{wheel\}/)
+  assert.match(editor, /onWheel=\{presentation === 'windowed' \? wheel : undefined\}/)
   assert.match(editor, /Pinch empty silver to zoom/)
 })
 
+test('touch authoring has a draggable adjacent Save and Reset dock without persisted dock state', () => {
+  assert.match(editor, /className="mobile-ui-editor-dock"/)
+  assert.match(editor, /aria-label="Move editor actions"/)
+  assert.match(editor, /setPointerCapture\(event\.pointerId\)/)
+  assert.match(editor, /constrainDockPosition/)
+  assert.match(editor, /className="mobile-ui-editor-dock-save"[\s\S]*?data-mobile-ui-save[\s\S]*?onClick=\{onSave\}/)
+  assert.match(editor, /<button data-mobile-ui-reset onClick=\{onReset\} type="button">RESET<\/button>/)
+  assert.doesNotMatch(sharing, /dockPosition|editor-dock/)
+})
+
+test('Settings publishes only a committed account layout and exposes the returned code', () => {
+  assert.match(dialog, /<MobileUiLayoutSettingsAction accountUsername=\{accountUsername\} \/>/)
+  assert.match(settingsSharing, /SUBMIT TO DARK CLOUD/)
+  assert.match(settingsSharing, /accountUsername === null \|\| !customized/)
+  assert.match(settingsSharing, /publishCurrentMobileUiLayout\(\)/)
+  assert.match(settingsSharing, /<output>\{shared\.code\}<\/output>/)
+  assert.match(sharing, /if \(!current\.customized\)/)
+  assert.match(sharing, /api\.mobileUiLayouts\.publish\(mobileUiLayoutDocument\(current\.layout\)\)/)
+})
+
 test('all requested runtime owners consume their transform without replacing semantic actions', () => {
-  for (const id of ['diagnostics', 'inventory', 'xp', 'skillbook']) {
+  for (const id of ['diagnostics', 'meters', 'inventory', 'xp', 'skillbook']) {
     assert.match(gameHud, new RegExp(`data-mobile-ui-element="${id}"`), id)
     assert.match(gameHud, new RegExp(`mobileUiElementStyle\\(mobileUi, '${id}'\\)`), id)
   }
@@ -65,6 +93,7 @@ test('custom runtime geometry is coarse-only and scene membership remains unchan
   const hubCustom = hubCss.slice(hubCss.indexOf('A saved Mobile UI profile'))
   assert.match(hubCustom, /@media \(hover: none\) and \(pointer: coarse\)/)
   assert.match(hubCustom, /\.hub-hud-quickbar-slot\[data-mobile-ui-custom='true'\]/)
+  assert.match(hubCustom, /\.hub-hud-meters\[data-mobile-ui-custom='true'\]/)
   assert.match(hubCustom, /left: var\(--mobile-ui-x\);[\s\S]*rotate\(var\(--mobile-ui-rotation\)\)/)
   assert.match(joystickCss.slice(joystickCss.lastIndexOf('@media')), /\.game-touch-joystick\[data-mobile-ui-custom='true'\]/)
   assert.match(mainMenuCss.slice(mainMenuCss.lastIndexOf('@media')), /\.game-menu-skull\[data-mobile-ui-custom='true'\]/)
@@ -72,6 +101,18 @@ test('custom runtime geometry is coarse-only and scene membership remains unchan
   assert.equal(hub.match(/lane="primary"/g)?.length ?? 0, 0)
   assert.equal(boneyard.match(/lane="movement"/g)?.length, 1)
   assert.equal(boneyard.match(/lane="primary"/g)?.length, 1)
+})
+
+test('editor previews use the live diagnostics, paired meter, and dock-art proportions', () => {
+  assert.match(editor, /<span>60 FPS<\/span>[\s\S]*<span>0 ms<\/span>/)
+  assert.match(editor, /className="mobile-ui-editor-meters"/)
+  assert.match(editor, /src=\{hub\.hud\.barRed\}/)
+  assert.match(editor, /src=\{hub\.hud\.barBlue\}/)
+  assert.match(editor, /className="mobile-ui-editor-pause"/)
+  assert.match(editor, /className="mobile-ui-editor-dock-art"/)
+  assert.match(editorCss, /\.mobile-ui-editor-pause \{[\s\S]*width: 81\.818%/)
+  assert.match(editorCss, /\.mobile-ui-editor-dock-art \{[\s\S]*width: 89\.231%/)
+  assert.doesNotMatch(editorCss.slice(editorCss.indexOf('.mobile-ui-editor-diagnostics'), editorCss.indexOf('.mobile-ui-editor-pause')), /background:/)
 })
 
 test('rotated joysticks keep screen-relative input and lifecycle release ownership', () => {

@@ -74,6 +74,25 @@ cannot admit a new wizard, reveal a private party, or bypass the run/content
 identity it names. Visibility remains authoritative throughout the run, so
 private parties stay absent rather than becoming observable in game.
 
+Mobile HUD customization is a separate presentation-only control-plane seam.
+One versioned local document owns centre percentages, uniform scale, and
+rotation for the stage pause control, diagnostics, paired Health/Mana meters,
+two scene joysticks, eight belt positions, Inventory, Skillbook, XP, and the
+two potion aliases. Only coarse-pointer CSS consumes it. Click/hold handlers,
+tutorial gates, scene membership, protocol state, simulation, saves, and
+fine-pointer desktop geometry remain under their existing owners. The detailed
+desktop Settings editor authors the same document on a canonical phone page;
+the touch editor instead uses the complete current safe stage and a transient
+draggable Save/Reset dock. Dock position and editor zoom are never durable.
+
+The Website may copy a committed layout into an immutable
+`SharedMobileUiLayout`. Publication derives the author only from the account
+JWT and returns a short code. Dark Cloud `Layouts` and the Settings submit row
+share that typed publication seam. Resolving a code is deliberately anonymous:
+the client validates the returned complete version before replacing its local
+document. Shared layouts are not account preferences, cloud saves, mods,
+subscriptions, gameplay protocol messages, or mutable user slots.
+
 The frozen launch roster is also the durable continuation roster. Transport
 loss removes only the actor binding: it leaves the member, original leader,
 reserved capacity, last authoritative ally state, and recovery lineage attached

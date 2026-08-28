@@ -242,6 +242,13 @@ export interface WebGameSave {
   updatedAtUtc: string
 }
 
+export interface SharedMobileUiLayout {
+  code: string
+  layout: unknown
+  author: { username: string }
+  createdAtUtc: string
+}
+
 export type GameLeaderboardBoard = 'awesomeness' | 'wave' | 'kills' | 'time'
 
 export interface GameLeaderboardEntry {
@@ -474,6 +481,16 @@ export const api = {
     remove: (slot: number, expectedRevision: number) => request<void>(
       `/api/game/saves/${slot}?expectedRevision=${expectedRevision}`,
       { method: 'DELETE' },
+    ),
+  },
+
+  mobileUiLayouts: {
+    publish: (layout: unknown) => request<SharedMobileUiLayout>(
+      '/api/game/layouts',
+      json({ layout }),
+    ),
+    get: (code: string) => request<SharedMobileUiLayout>(
+      `/api/game/layouts/${encodeURIComponent(code)}`,
     ),
   },
 

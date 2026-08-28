@@ -267,7 +267,12 @@ export default function GameHud({
         <FpsCounter />
         <PingCounter getPingMs={getPingMs} subscribePing={subscribePing} />
       </div>
-      <div className="hub-hud-meters">
+      <div
+        className="hub-hud-meters"
+        data-mobile-ui-custom={mobileUi.customized || undefined}
+        data-mobile-ui-element="meters"
+        style={mobileUiElementStyle(mobileUi, 'meters')}
+      >
         <div
           className="hub-hud-meter hub-hud-meter-health"
           data-tutorial-anchor="health-meter"

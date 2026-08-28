@@ -13,6 +13,24 @@ public static class DatabaseSchema
 
         await db.Database.ExecuteSqlRawAsync(
             """
+            CREATE TABLE IF NOT EXISTS SharedMobileUiLayouts (
+                Id INTEGER NOT NULL CONSTRAINT PK_SharedMobileUiLayouts PRIMARY KEY AUTOINCREMENT,
+                Code TEXT COLLATE NOCASE NOT NULL,
+                AuthorId INTEGER NOT NULL,
+                Document TEXT NOT NULL,
+                CreatedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_SharedMobileUiLayouts_Users_AuthorId
+                    FOREIGN KEY (AuthorId) REFERENCES Users (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_SharedMobileUiLayouts_Code
+                ON SharedMobileUiLayouts (Code);
+            CREATE INDEX IF NOT EXISTS IX_SharedMobileUiLayouts_AuthorId_CreatedAtUtc
+                ON SharedMobileUiLayouts (AuthorId, CreatedAtUtc);
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
             CREATE TABLE IF NOT EXISTS WebGameSaves (
                 Id INTEGER NOT NULL CONSTRAINT PK_WebGameSaves PRIMARY KEY AUTOINCREMENT,
                 UserId INTEGER NOT NULL,

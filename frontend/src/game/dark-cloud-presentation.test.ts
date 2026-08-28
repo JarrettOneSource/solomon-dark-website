@@ -4,22 +4,43 @@ import test from 'node:test'
 
 const css = await readFile(new URL('./dark-cloud.css', import.meta.url), 'utf8')
 const source = await readFile(new URL('./DarkCloudScene.tsx', import.meta.url), 'utf8')
+const layouts = await readFile(new URL('./DarkCloudLayouts.tsx', import.meta.url), 'utf8')
+const sharing = await readFile(new URL('./mobile-ui-sharing.ts', import.meta.url), 'utf8')
+const api = await readFile(new URL('../lib/api.ts', import.meta.url), 'utf8')
 const detail = await readFile(new URL('./DarkCloudModDetail.tsx', import.meta.url), 'utf8')
 const media = await readFile(new URL('./DarkCloudMedia.tsx', import.meta.url), 'utf8')
 const menu = await readFile(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const menuCss = await readFile(new URL('./main-menu.css', import.meta.url), 'utf8')
 const game = await readFile(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
 
-test('Dark Cloud uses the requested three-lane catalog model with Mods selected first', () => {
+test('Dark Cloud uses the four-section model with Mods selected first and shared Layouts isolated', () => {
   assert.match(source, /useState<DarkCloudTab>\('mods'\)/)
   assert.match(source, /\['mods', 'MODS'\]/)
   assert.match(source, /\['subscribed', 'SUBSCRIBED MODS'\]/)
   assert.match(source, /\['parties', 'PARTIES'\]/)
+  assert.match(source, /\['layouts', 'LAYOUTS'\]/)
+  assert.match(source, /<DarkCloudLayouts accountUsername=\{accountUsername\} \/>/)
   assert.match(source, /api\.mods\.list\(\{ sort: 'newest', pageSize: 50 \}\)/)
   assert.match(source, /usePartyDirectory\(tab === 'parties'\)/)
   assert.match(source, /usePartyJoinActions\(requesterDisplayName, onPartyResolved\)/)
   assert.doesNotMatch(source, /'recent'|'boneyards'|'multiplayer'/)
   assert.doesNotMatch(source, />RECENT<|>BONEYARDS<|>MULTIPLAYER</)
+})
+
+test('Layouts permits anonymous code loading and account-only immutable publishing', () => {
+  assert.match(layouts, /LOAD A LAYOUT/)
+  assert.match(layouts, /No account is needed\./)
+  assert.match(layouts, /loadSharedMobileUiLayout\(code\)/)
+  assert.match(layouts, /accountUsername === null \|\| !customized/)
+  assert.match(layouts, /publishCurrentMobileUiLayout\(\)/)
+  assert.match(layouts, /Submitting creates a new code and does not change older shared layouts\./)
+  assert.match(layouts, /<output>\{receipt\.code\}<\/output>/)
+  assert.match(sharing, /api\.mobileUiLayouts\.get\(code\.trim\(\)\)/)
+  assert.match(sharing, /mobileUiLayoutFromDocument\(shared\.layout\)/)
+  assert.match(sharing, /setMobileUiLayout\(layout\)/)
+  assert.match(api, /mobileUiLayouts: \{[\s\S]*publish:[\s\S]*'\/api\/game\/layouts'[\s\S]*get:/)
+  assert.match(css, /\.dark-cloud-layouts \{[\s\S]*grid-row: 1 \/ -1;/)
+  assert.match(css, /\.dark-cloud-layout-card input \{[\s\S]*min-height|\.dark-cloud-layout-card input \{[\s\S]*height: 46px;/)
 })
 
 test('Dark Cloud removes invented heading copy and keeps account identity actionable', () => {

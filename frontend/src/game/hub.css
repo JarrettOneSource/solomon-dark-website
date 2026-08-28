@@ -1633,6 +1633,22 @@
     transform-origin: center;
   }
 
+  .hub-hud-meters[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    width: 0;
+    height: 0;
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(var(--mobile-ui-scale));
+    transform-origin: center;
+  }
+
+  .hub-hud-meters[data-mobile-ui-custom='true'] .hub-hud-meter { top: -10px; }
+
   .hub-hud-quickbar-slot[data-mobile-ui-custom='true'],
   .hub-hud-backpack-button[data-mobile-ui-custom='true'],
   .hub-hud-tome-button[data-mobile-ui-custom='true'],

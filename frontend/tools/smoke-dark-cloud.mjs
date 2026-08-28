@@ -9,9 +9,16 @@ const landscapeScreenshotPath = process.env.SDR_DARK_CLOUD_LANDSCAPE_SCREENSHOT 
 const mobileScreenshotPath = process.env.SDR_DARK_CLOUD_MOBILE_SCREENSHOT || '/tmp/solomon-dark-cloud-mobile.png'
 const partyScreenshotPath = process.env.SDR_DARK_CLOUD_PARTY_SCREENSHOT || '/tmp/solomon-dark-cloud-party-desktop.png'
 const partyMobileScreenshotPath = process.env.SDR_DARK_CLOUD_PARTY_MOBILE_SCREENSHOT || '/tmp/solomon-dark-cloud-party-mobile.png'
+const layoutsScreenshotPath = process.env.SDR_DARK_CLOUD_LAYOUTS_SCREENSHOT || '/tmp/solomon-dark-cloud-layouts.png'
 const joinPartyScreenshotPath = process.env.SDR_JOIN_PARTY_SCREENSHOT || '/tmp/solomon-join-party-desktop.png'
 const joinPartyMobileScreenshotPath = process.env.SDR_JOIN_PARTY_MOBILE_SCREENSHOT || '/tmp/solomon-join-party-mobile.png'
 const username = `darkcloud${Date.now().toString(36)}`
+const mobileUiStorageKey = 'solomon-dark-mobile-ui-layout-v1'
+const mobileUiElementIds = [
+  'pause', 'diagnostics', 'meters', 'leftJoystick', 'rightJoystick',
+  'slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8',
+  'inventory', 'skillbook', 'xp', 'healthPotion', 'manaPotion',
+]
 
 const registration = await fetch(`${baseUrl}/api/auth/register`, {
   method: 'POST',
@@ -81,11 +88,16 @@ try {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   const explore = page.getByRole('button', { name: 'Explore the Dark Cloud' })
   await explore.waitFor({ timeout: 90_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { name: 'NO', exact: true }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await explore.click()
   await page.getByRole('heading', { name: 'THE DARK CLOUD', exact: true }).waitFor({ timeout: 15_000 })
   await page.getByText(username.toUpperCase(), { exact: true }).waitFor()
 
-  for (const label of ['MODS', 'SUBSCRIBED MODS', 'PARTIES']) {
+  for (const label of ['MODS', 'SUBSCRIBED MODS', 'PARTIES', 'LAYOUTS']) {
     assert.equal(await page.getByRole('button', { name: label, exact: true }).count(), 1)
   }
   for (const removed of ['RECENT', 'BONEYARDS', 'MULTIPLAYER']) {
@@ -214,6 +226,60 @@ try {
   assert.equal(await page.locator('.dark-cloud-party-row').count(), 1)
   await page.screenshot({ path: partyScreenshotPath })
 
+  const sharedDocument = {
+    version: 2,
+    elements: Object.fromEntries(mobileUiElementIds.map((id, index) => [id, {
+      rotation: 0,
+      scale: 1,
+      x: 10 + index * 4,
+      y: 15 + index * 3,
+    }])),
+  }
+  await page.evaluate(({ key, layout }) => {
+    localStorage.setItem(key, JSON.stringify(layout))
+  }, { key: mobileUiStorageKey, layout: sharedDocument })
+  await page.getByRole('button', { name: 'LAYOUTS', exact: true }).click()
+  await page.getByRole('heading', { name: 'MOBILE UI LAYOUTS', exact: true }).waitFor()
+  const publishLayoutResponse = page.waitForResponse(response => (
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/game/layouts'
+  ))
+  await page.getByRole('button', { name: 'SUBMIT CURRENT LAYOUT', exact: true }).click()
+  assert.equal((await publishLayoutResponse).status(), 201)
+  await page.getByText('LAYOUT PUBLISHED', { exact: true }).waitFor()
+  const sharedCode = await page.locator('.dark-cloud-layout-receipt output').innerText()
+  assert.match(sharedCode, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+  await page.screenshot({ path: layoutsScreenshotPath })
+
+  await page.locator('.game-menu-skull').click()
+  await page.getByRole('button', { name: 'SIGN OUT', exact: true }).click()
+  await explore.waitFor({ timeout: 30_000 })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { name: 'NO', exact: true }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
+  await explore.click()
+  await page.getByText('YOU ARE SIGNED IN AS A GUEST.', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'LAYOUTS', exact: true }).click()
+  await page.evaluate(key => localStorage.removeItem(key), mobileUiStorageKey)
+  const codeInput = page.getByLabel('SHARE CODE')
+  await codeInput.fill(sharedCode)
+  const loadLayoutResponse = page.waitForResponse(response => (
+    response.request().method() === 'GET'
+    && new URL(response.url()).pathname === `/api/game/layouts/${sharedCode}`
+  ))
+  await page.getByRole('button', { name: 'LOAD LAYOUT', exact: true }).click()
+  const loadedResponse = await loadLayoutResponse
+  assert.equal(loadedResponse.status(), 200)
+  assert.equal(loadedResponse.request().headers().authorization, undefined)
+  await page.getByText('LAYOUT LOADED', { exact: true }).waitFor()
+  assert.deepEqual(
+    JSON.parse(await page.evaluate(key => localStorage.getItem(key), mobileUiStorageKey)),
+    sharedDocument,
+  )
+  await page.getByRole('button', { name: 'PARTIES', exact: true }).click()
+  await partyRow.waitFor()
+
   await page.setViewportSize({ width: 390, height: 844 })
   for (const text of ['2 / 16', 'The Survival Grounds']) {
     assert.ok(await partyRow.getByText(text, { exact: true }).boundingBox(), `${text} was hidden on mobile`)
@@ -240,6 +306,10 @@ try {
   await page.setViewportSize({ width: 1600, height: 900 })
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { name: 'NO', exact: true }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   await page.getByRole('button', { name: 'Join party', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Join party', exact: true }).click()
@@ -263,8 +333,8 @@ try {
   await page.screenshot({ path: joinPartyMobileScreenshotPath })
 
   assert.deepEqual(pageErrors, [])
-  assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
+  assert.deepEqual(consoleErrors, [])
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     username,
@@ -273,12 +343,14 @@ try {
     landscapeGeometry,
     partySource: 'bounded browser fixture; host/supervisor contracts prove the live projection',
     cachedGameContent: enabledAssetUrls.length,
+    sharedLayoutCode: sharedCode,
     screenshots: {
       desktop: desktopScreenshotPath,
       detail: detailScreenshotPath,
       joinParty: joinPartyScreenshotPath,
       joinPartyMobile: joinPartyMobileScreenshotPath,
       landscape: landscapeScreenshotPath,
+      layouts: layoutsScreenshotPath,
       mobile: mobileScreenshotPath,
       party: partyScreenshotPath,
       partyMobile: partyMobileScreenshotPath,
