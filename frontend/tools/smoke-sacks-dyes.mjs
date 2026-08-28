@@ -21,6 +21,10 @@ import { replacePlayerEconomy } from '../src/game/core-server/player-entity-stor
 import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
+  HUB_INVENTORY_GRID,
+  hubInventorySlotPosition,
+} from '../src/game/renderer/hub-inventory-render-contract.ts'
+import {
   WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
@@ -142,16 +146,58 @@ try {
       viewport,
     }, null, 2)}\n`)
   } else {
-  const sackAudioBefore = {
-    close: await inventorySoundCount(page, 'backpack-close.wav'),
-    open: await inventorySoundCount(page, 'backpack-open.wav'),
-  }
-
   const item = (id) => inventory.locator(`[data-inventory-item-id="${id}"]`)
   const backpackItem = (id) => inventory.locator(
     `[data-inventory-owner="backpack"][data-inventory-item-id="${id}"]`,
   )
   const equipmentSlot = (slot) => inventory.locator(`[data-equipment-slot="${slot}"]`).first()
+
+  const blankDestinationSlot = 12
+  await dragToInventorySlot(page, inventory, backpackItem(IDS.rootKey), blankDestinationSlot)
+  await waitForSavedEconomy(page, (economy) => (
+    flatten(economy.backpack).find(({ id }) => id === IDS.rootKey)?.inventorySlot
+      === blankDestinationSlot
+  ))
+  await backpackItem(IDS.rootKey)
+    .locator(`xpath=self::*[@data-inventory-slot="${blankDestinationSlot}"]`)
+    .waitFor()
+
+  const occupiedDestinationSlot = Number(
+    await backpackItem(IDS.clickRingOne).getAttribute('data-inventory-slot'),
+  )
+  await dragTo(page, backpackItem(IDS.rootKey), backpackItem(IDS.clickRingOne))
+  await waitForSavedEconomy(page, (economy) => {
+    const backpack = flatten(economy.backpack)
+    return backpack.find(({ id }) => id === IDS.rootKey)?.inventorySlot
+      === occupiedDestinationSlot
+      && backpack.find(({ id }) => id === IDS.clickRingOne)?.inventorySlot
+        === blankDestinationSlot
+  })
+  await page.keyboard.press('KeyI')
+  await inventory.waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  await inventory.waitFor()
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  await backpackItem(IDS.rootKey)
+    .locator(`xpath=self::*[@data-inventory-slot="${occupiedDestinationSlot}"]`)
+    .waitFor()
+  await backpackItem(IDS.clickRingOne)
+    .locator(`xpath=self::*[@data-inventory-slot="${blankDestinationSlot}"]`)
+    .waitFor()
+  await page.screenshot({ path: `${screenshotRoot}-addressed-root-slots.png` })
+  const addressedRootReceipt = {
+    blankDestinationSlot,
+    occupiedDestinationSlot,
+    rootKeySlot: Number(await backpackItem(IDS.rootKey).getAttribute('data-inventory-slot')),
+    swappedRingSlot: Number(
+      await backpackItem(IDS.clickRingOne).getAttribute('data-inventory-slot'),
+    ),
+  }
+
+  const sackAudioBefore = {
+    close: await inventorySoundCount(page, 'backpack-close.wav'),
+    open: await inventorySoundCount(page, 'backpack-open.wav'),
+  }
 
   await backpackItem(IDS.clickRingOne).click()
   await backpackItem(IDS.clickRingOne).locator('xpath=self::*[@data-selected="true"]').waitFor()
@@ -250,6 +296,25 @@ try {
   await openSack(page, inventory, item(IDS.sourceSack), IDS.sourceSack)
   await page.screenshot({ path: `${screenshotRoot}-sack-inside.png` })
   await waitForParent(item(IDS.movableKey), IDS.sourceSack)
+  const nestedVisibleDestinationSlot = 10
+  const nestedRootDestinationSlot = nestedVisibleDestinationSlot - 1
+  await dragToInventorySlot(
+    page,
+    inventory,
+    item(IDS.movableKey),
+    nestedVisibleDestinationSlot,
+  )
+  await waitForSavedTarget(page, IDS.movableKey, ({ inventorySlot }) => (
+    inventorySlot === nestedRootDestinationSlot
+  ))
+  await item(IDS.movableKey)
+    .locator(`xpath=self::*[@data-inventory-slot="${nestedRootDestinationSlot}"]`)
+    .waitFor()
+  await page.screenshot({ path: `${screenshotRoot}-addressed-nested-slot.png` })
+  const addressedNestedReceipt = {
+    rootSlot: Number(await item(IDS.movableKey).getAttribute('data-inventory-slot')),
+    visibleSlot: nestedVisibleDestinationSlot,
+  }
   await dragToStagePoint(page, inventory, item(IDS.movableKey), { x: 1_200, y: 750 })
   await item(IDS.movableKey).waitFor({ state: 'detached' })
   await dragToStagePoint(page, inventory, item(IDS.movableSack), { x: 1_200, y: 750 })
@@ -490,6 +555,10 @@ try {
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
+    addressedSlots: {
+      nested: addressedNestedReceipt,
+      root: addressedRootReceipt,
+    },
     audioEvents: await dyeAudioCount(page),
     consoleErrors,
     dyedTarget: dyedTarget.iconTints,
@@ -500,6 +569,8 @@ try {
     sackAudio,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
+      `${screenshotRoot}-addressed-root-slots.png`,
+      `${screenshotRoot}-addressed-nested-slot.png`,
       `${screenshotRoot}-item-belt-bind-activate-pull-off.png`,
       `${screenshotRoot}-sack-inside.png`,
       `${screenshotRoot}-sack-movement.png`,
@@ -741,6 +812,14 @@ async function dragToStagePoint(targetPage, dialog, source, point) {
   await dragToPoint(targetPage, source, {
     x: stage.x + point.x * stage.width / 1_600,
     y: stage.y + point.y * stage.height / 900,
+  })
+}
+
+async function dragToInventorySlot(targetPage, dialog, source, visibleSlot) {
+  const position = hubInventorySlotPosition(visibleSlot)
+  await dragToStagePoint(targetPage, dialog, source, {
+    x: position.x + HUB_INVENTORY_GRID.cellSize / 2,
+    y: position.y + HUB_INVENTORY_GRID.cellSize / 2,
   })
 }
 

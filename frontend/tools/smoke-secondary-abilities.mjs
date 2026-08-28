@@ -284,6 +284,7 @@ try {
   }
   if (expectBlocked) assert.equal(selectedContracts.length, 1)
   const receipts = []
+  let insufficientManaReceipt = null
   for (const contract of selectedContracts) {
     if (expectBlocked) {
       armQuickbar(host, playerId, baseSkillBook, [contract.skillId])
@@ -313,6 +314,38 @@ try {
     await waitForStableHostCadence(host)
     await waitForStablePresentationCadence(page)
     await waitForHostPresentationCatchUp(canvas, host)
+    let readyQuickbar = null
+    if (requestedScene === 'boneyard') {
+      readyQuickbar = await waitForQuickbarPresentation(page, {
+        alpha: 0.75,
+        cooldown: false,
+        unavailable: false,
+      })
+      if (insufficientManaReceipt === null) {
+        setHostMana(host, playerId, 0)
+        insufficientManaReceipt = await waitForQuickbarPresentation(page, {
+          alpha: 0.375,
+          cooldown: false,
+          unavailable: true,
+        })
+        if (selectedContracts.length === 1) {
+          const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-insufficient-mana.png`
+          await page.screenshot({ path: screenshotPath })
+          insufficientManaReceipt = { ...insufficientManaReceipt, screenshotPath }
+        }
+        setHostMana(host, playerId, playerProgression(host, playerId).maximumMana)
+        readyQuickbar = await waitForQuickbarPresentation(page, {
+          alpha: 0.75,
+          cooldown: false,
+          unavailable: false,
+        })
+      }
+      if (selectedContracts.length === 1) {
+        const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-ready.png`
+        await page.screenshot({ path: screenshotPath })
+        readyQuickbar = { ...readyQuickbar, screenshotPath }
+      }
+    }
     const castSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
     const firstEventId = host.state().secondaryAbilities.nextEventId
     const sampleStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
@@ -399,6 +432,7 @@ try {
       expectedCooldownCapacity,
     )
     let cooldownPath = null
+    let cooldownQuickbar = null
     if (contract.skillId === 78 || contract.skillId === 79) {
       assert.equal(committedPlayer?.cooldownTicksBySkill[contract.skillId], 0)
       assert.equal(committedPlayer?.globalCooldownTicks, 0)
@@ -426,6 +460,16 @@ try {
         ).getAttribute('aria-label')) ?? '',
         /cooldown remaining/,
       )
+      cooldownQuickbar = await waitForQuickbarPresentation(page, {
+        alpha: 0.25,
+        cooldown: true,
+        unavailable: false,
+      })
+      if (selectedContracts.length === 1) {
+        const screenshotPath = `${screenshotRoot}/${contract.skillId}-hotbar-cooldown.png`
+        await page.screenshot({ path: screenshotPath })
+        cooldownQuickbar = { ...cooldownQuickbar, screenshotPath }
+      }
     }
     const cooldownAtCast = {
       capacityTicks: expectedCooldownCapacity,
@@ -735,6 +779,10 @@ try {
       maximumSet,
       name: contract.name,
       playerPresentation,
+      quickbar: {
+        cooldown: cooldownQuickbar,
+        ready: readyQuickbar,
+      },
       reportedPresentation,
       screenshotPath,
       teleport,
@@ -772,6 +820,7 @@ try {
       rendererName: node.dataset.rendererName,
     })),
     consoleErrors,
+    insufficientMana: insufficientManaReceipt,
     pageErrors,
     receipts,
     responseErrors,
@@ -1226,6 +1275,13 @@ function playerProgression(host, playerId) {
   const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
   assert.notEqual(index, -1)
   return state.playerEntities.progressions[index]
+}
+
+function setHostMana(host, playerId, mana) {
+  const state = host.state()
+  Object.assign(state, {
+    playerEntities: setPlayerEntityMana(state.playerEntities, playerId, mana),
+  })
 }
 
 function clearSecondaryCooldown(host, playerId, skillId) {
@@ -1826,13 +1882,16 @@ async function captureBeltReceipt(page) {
       const mouse = node.querySelector('.hub-hud-quickbar-input-mouse')
       return {
         height: bounds.height,
+        iconAlpha: node.getAttribute('data-icon-alpha'),
         iconFilter: icon ? getComputedStyle(icon).filter : null,
         iconOpacity: icon ? getComputedStyle(icon).opacity : null,
         keyBackingHeight: backing?.getBoundingClientRect().height ?? null,
         keyBackingWidth: backing?.getBoundingClientRect().width ?? null,
         label: node.getAttribute('aria-label'),
         mouseOpacity: mouse ? getComputedStyle(mouse).opacity : null,
+        manaCost: node.getAttribute('data-mana-cost'),
         slot: Number(node.getAttribute('data-slot')),
+        unavailable: node.getAttribute('data-unavailable') === 'true',
         width: bounds.width,
         x: bounds.x,
         y: bounds.y,
@@ -1848,6 +1907,9 @@ async function captureBeltReceipt(page) {
     assert.ok(Math.abs(slot.y - 832.5) < 0.01)
     assert.equal(slot.iconFilter, 'brightness(0.25)')
     assert.equal(slot.iconOpacity, '0.375')
+    assert.equal(slot.iconAlpha, '0.375')
+    assert.equal(slot.unavailable, true)
+    assert.ok(Number(slot.manaCost) > 0)
     if (slot.slot === 0) {
       assert.equal(slot.mouseOpacity, '0.6')
       assert.equal(slot.keyBackingWidth, null)
@@ -1857,6 +1919,33 @@ async function captureBeltReceipt(page) {
     }
   }
   return slots
+}
+
+async function waitForQuickbarPresentation(page, expected) {
+  await page.waitForFunction(({ alpha, cooldown, unavailable }) => {
+    const slot = document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
+    const icon = slot?.querySelector('.hub-hud-quickbar-skill-icon')
+    const path = slot?.querySelector('.hub-hud-quickbar-cooldown path')
+    return slot
+      && icon
+      && Number(slot.getAttribute('data-icon-alpha')) === alpha
+      && Number(getComputedStyle(icon).opacity) === alpha
+      && (slot.getAttribute('data-unavailable') === 'true') === unavailable
+      && Boolean(path) === cooldown
+  }, expected, { timeout: 10_000 })
+  return page.locator('.hub-hud-quickbar-slot[data-slot="0"]').evaluate((slot) => {
+    const icon = slot.querySelector('.hub-hud-quickbar-skill-icon')
+    const path = slot.querySelector('.hub-hud-quickbar-cooldown path')
+    return {
+      alpha: Number(slot.getAttribute('data-icon-alpha')),
+      cooldownFill: path ? getComputedStyle(path).fill : null,
+      cooldownPath: path?.getAttribute('d') ?? null,
+      iconFilter: icon ? getComputedStyle(icon).filter : null,
+      iconOpacity: icon ? Number(getComputedStyle(icon).opacity) : null,
+      manaCost: Number(slot.getAttribute('data-mana-cost')),
+      unavailable: slot.getAttribute('data-unavailable') === 'true',
+    }
+  })
 }
 
 async function waitForBeltSkill(page, name) {
