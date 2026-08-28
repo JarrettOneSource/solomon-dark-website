@@ -134,7 +134,13 @@ export function nativeSkillPageWrappedLines(source: string): readonly string[] {
         }
       }
       if (characters[breakAt] !== ' ' && characters[breakAt] !== '-') {
-        throw new RangeError(`native SkillPage word exceeds ${NATIVE_SKILL_ROW_PRESENTATION.textWrapWidth}px`)
+        const insertAt = Math.max(previousBreak, breakAt > 1 ? breakAt - 1 : breakAt)
+        characters.splice(insertAt, 0, '-', '\n')
+        currentWidth = 0
+        previousBreak = insertAt + 1
+        restartingLine = true
+        index = insertAt + 1
+        continue
       }
       characters[breakAt] = '\n'
       currentWidth = advance

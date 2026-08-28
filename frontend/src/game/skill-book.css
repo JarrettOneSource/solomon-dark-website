@@ -23,7 +23,8 @@
   pointer-events: none;
 }
 
-.skill-book-close-action {
+.skill-book-close-action,
+.skill-book-inventory-action {
   position: absolute;
   padding: 0;
   border: 0;

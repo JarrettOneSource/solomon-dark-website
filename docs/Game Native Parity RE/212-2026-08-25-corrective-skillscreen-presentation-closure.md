@@ -65,7 +65,7 @@ remain sibling systems already closed separately.
 | first selected primary/concentration frame and label | `0x00672795..0x00672981` | exact-ported | Skills.5 tint `0x97c797`, recovered from source RGB `(.25,1,.25)` blended `.75` toward luminance, alpha `1`, plus group-0 source `casting` / `concentrate` small caps |
 | ordinary icon rows `27..122` | row icon byte `+0x30` | exact-ported | full icon domain and opaque black `(+4,+4)` shadow |
 | Spell Welding row 52 and builds `1000..1009` | `0x00671810` | exact-ported | all ten split-root glow/icon/name/description variants |
-| name/family/quick-description/category footer | `0x006738C7`, `0x00673996`, `0x00673E06`, `0x00673A2D` | exact-ported | Fonts groups `1/5/1/0`, rank suffix, original-case `FUN_0043D030` wrap at `140`, native line restart, shadowless quick description, and dynamic name/description heights |
+| name/family/quick-description/category footer | `0x006738C7`, `0x00673996`, `0x00673E06`, `0x00673A2D` | exact-ported | Fonts groups `1/5/1/0`, rank suffix, original-case `FUN_0043D030` wrap at `140`, native line restart/no-break `PLANEWALK-\nER`, shadowless quick description, and dynamic name/description heights |
 | shared HoverBox construction/layout/render | `0x00656CE0`, `0x005C38F0`, `0x005C3A60`, `0x005AB060` | exact-ported | opaque black/native edge, 25 margin, 50 source gap, above/below flip and viewport clamp |
 | tooltip ordinary rank/title/category/description | `0x0066B990` | exact-ported | case-preserving lines, native scaled rank suffix, every public row |
 | tooltip boosted and item-granted effective-rank branches | `0x0066BB0D..0x0066BC33` | exact-ported | both `BOOSTED` / `GRANTED BY ITEM` branches |
@@ -75,7 +75,7 @@ remain sibling systems already closed separately.
 | drag target and SkillDragger | `0x00656980`, `0x006564A0` | exact-ported | natural held icon, threshold, target highlight, accepted/rejected release |
 | Hub consumer | gameplay `+0x1664`, opener `0x005CA640` | exact-ported | HUD/key open, hover, drag, close, input block browser journey |
 | Boneyard consumer | same gameplay/actor screen owner | exact-ported | matching settled composition and state-survival journey |
-| open, close, Inventory handoff, interruption and teardown | `0x0067CAC0`, `0x006568E0`, `0x0066B200` | exact-ported | 40-tick edges, silent lifecycle, mutual exclusion, no input leak |
+| open, close, Inventory handoff, interruption and teardown | `0x0067CAC0`, `0x006568E0`, `0x0066B200` | exact-ported by the 2026-08-28 reopening in ledger 115 | 40-tick overlap, silent open, one `openpanel` close cue, reciprocal replacement, no input leak |
 | runtime-only 80, reserved 81, allocated reserve 82 | public learned-vector/page admission | out-of-system (no public SkillPage producer) | existing complete row-domain test |
 | mandatory SkillPicker and compact HUD selector | separate native modal owners | out-of-system (already closed sibling systems) | their render/authority suites remain unchanged |
 
@@ -179,10 +179,11 @@ No member is blocked by the browser platform.
   selected/Weld variant; every icon and font group; all 72 `mStats` arrays;
   all fourteen category-3 `mBonus` arrays; D/F/X/N/percent/ExactText parsing;
   HoverBox flip/clamp; eight slot states and duplicate replacement.
-- Focused component/source guard: no stretched Skills.5 nine-slice, per-row
-  rounded background, fixed top tooltip, or `nativeTooltipStatLines` remains.
+- Focused render/integration coverage and browser pixels: no stretched Skills.5
+  nine-slice, per-row rounded background, fixed top tooltip, or substitute stat
+  line presentation remains.
 - Mac full gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact
-  candidate tree; Mod Loader static RE suite for the corrected durable report.
+  Website candidate tree.
 - Mac Chrome/WebGL2: matching `1600 x 900` fresh Ether frame, hover primary and
   secondary, mixed primary/concentration/Weld pages, dependency chain/wrap,
   duplicate drop, Hub/Boneyard, open/close/handoff, touch-copy branch, and
@@ -201,9 +202,9 @@ No member is blocked by the browser platform.
   contracts, every frontend suite including the 1,549-test Boneyard group and
   all eleven Skill Book checks, desktop tests, production build, media policy,
   and the game bundle budget (`471608` raw / `132295` gzip bytes).
-- The matching Mod Loader documentation candidate
-  `35d0941d6baad59dd7c46907a39d2ba6e6072c09` passed the complete Mac static-RE
-  suite `501/501`.
+- The historical 2026-08-25 receipt recorded a matching read-only external RE
+  snapshot at `35d0941d6baad59dd7c46907a39d2ba6e6072c09`; that snapshot is provenance,
+  not a maintained Website validation gate.
 - Mac Chrome completed `npm run smoke:game:skill-book` at `1600 x 900` with
   WebGL2, duplicate Call Leviathan slots, mixed primary/concentration state,
   Hub and Boneyard selector paths, and empty console, page, and failed-response

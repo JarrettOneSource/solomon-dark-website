@@ -18,6 +18,7 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wav
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { advanceNativeRngWords } from '../src/game/core-kernels/native-rng.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { SKILL_PICKER_ROOT_TINTS } from '../src/game/renderer/skill-picker-render-contract.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotPath = process.env.SDR_SKILL_PICKER_SMOKE_SCREENSHOT
@@ -26,6 +27,8 @@ const revealScreenshotPath = process.env.SDR_SKILL_PICKER_REVEAL_SMOKE_SCREENSHO
   || screenshotPath.replace(/\.png$/i, '-reveal.png')
 const boneyardScreenshotPath = process.env.SDR_SKILL_PICKER_BONEYARD_SMOKE_SCREENSHOT
   || screenshotPath.replace(/\.png$/i, '-boneyard.png')
+const variantsScreenshotPath = process.env.SDR_SKILL_PICKER_VARIANTS_SMOKE_SCREENSHOT
+  || screenshotPath.replace(/\.png$/i, '-variants.png')
 const chatScreenshotPath = process.env.SDR_SKILL_PICKER_CHAT_SMOKE_SCREENSHOT
   || screenshotPath.replace(/\.png$/i, '-chat.png')
 const credential = randomBytes(32).toString('base64url')
@@ -271,12 +274,21 @@ try {
     assert.ok(bounds)
     actionReceipt.push({
       centerX: bounds.x + bounds.width / 2,
+      description: await action.getAttribute('data-description'),
       label: await action.getAttribute('aria-label'),
+      root: Number(await action.getAttribute('data-root')),
+      rootTint: await action.getAttribute('data-root-tint'),
       skillId: Number(await action.getAttribute('data-skill-id')),
     })
   }
   assert.deepEqual(actionReceipt.map(({ centerX }) => centerX), [600, 800, 1000])
   assert.ok(actionReceipt.every(({ label, skillId }) => label && skillId >= 8 && skillId <= 79))
+  assert.ok(actionReceipt.every(({ description }) => description && description.length > 0))
+  assert.ok(actionReceipt.every(({ root, rootTint }) => (
+    root >= 0
+    && root < SKILL_PICKER_ROOT_TINTS.length
+    && rootTint === SKILL_PICKER_ROOT_TINTS[root].toString(16).padStart(6, '0')
+  )))
   assert.equal(new Set(actionReceipt.map(({ skillId }) => skillId)).size, 3)
 
   const beforeChoice = getPlayerProgression(host.state(), playerId)
@@ -517,8 +529,34 @@ try {
     getPlayerProgression(boneyardLevelUp, playerId),
     'Boneyard offer',
   )
+  const boneyardOffer = getPlayerProgression(boneyardLevelUp, playerId).pendingOffer
+  assert.ok(boneyardOffer)
+  const variantOffer = {
+    ...boneyardOffer,
+    options: [
+      { skillId: 21, targetRank: 2 },
+      { insight: true, skillId: 72, targetRank: 1 },
+      { skillId: 52, targetRank: 1, weldBuildId: 1003 },
+      { skillId: 79, targetRank: 1 },
+    ],
+  }
+  const playerIndex = boneyardLevelUp.playerEntities.identities
+    .findIndex(({ playerId: identityPlayerId }) => identityPlayerId === playerId)
+  assert.notEqual(playerIndex, -1)
+  const variantProgressions = [...boneyardLevelUp.playerEntities.progressions]
+  variantProgressions[playerIndex] = {
+    ...variantProgressions[playerIndex],
+    pendingOffer: variantOffer,
+  }
+  const boneyardVariantLevelUp = {
+    ...boneyardLevelUp,
+    playerEntities: {
+      ...boneyardLevelUp.playerEntities,
+      progressions: variantProgressions,
+    },
+  }
   const boneyardRevealReceiptPromise = observeNextPickerReveal(page, 'Boneyard')
-  Object.assign(host.state(), boneyardLevelUp)
+  Object.assign(host.state(), boneyardVariantLevelUp)
   const boneyardPicker = page.getByRole('dialog', { name: /Select a skill/ })
   await page.locator('.hub-hud-quickbar-slot[data-entry-kind="health-potion"]').click()
   await boneyardPicker.waitFor({ timeout: 30_000 })
@@ -567,6 +605,39 @@ try {
   assert.equal(host.state().tick, boneyardPickerHeldTick)
   await page.screenshot({ path: boneyardScreenshotPath })
 
+  const variantActions = boneyardPicker.locator('.skill-picker-action')
+  await variantActions.nth(3).waitFor({ timeout: 10_000 })
+  const variantReceipt = []
+  for (let index = 0; index < 4; index += 1) {
+    const action = variantActions.nth(index)
+    variantReceipt.push({
+      description: await action.getAttribute('data-description'),
+      insight: await action.getAttribute('data-insight'),
+      label: await action.getAttribute('aria-label'),
+      root: Number(await action.getAttribute('data-root')),
+      rootTint: await action.getAttribute('data-root-tint'),
+      skillId: Number(await action.getAttribute('data-skill-id')),
+    })
+  }
+  assert.deepEqual(variantReceipt.map(({ skillId }) => skillId), [21, 72, 52, 79])
+  assert.deepEqual(variantReceipt.map(({ root }) => root), [1, 2, 7, 5])
+  assert.deepEqual(variantReceipt.map(({ rootTint }) => rootTint), [
+    'ffcbcb',
+    'e5ffff',
+    'e5e5e5',
+    'ffe5cb',
+  ])
+  assert.equal(variantReceipt[0].label?.startsWith('RING OF FIRE 2, FIRE.'), true)
+  assert.equal(variantReceipt[1].insight, 'true')
+  assert.equal(variantReceipt[1].description, 'spawn a shower of hot acid')
+  assert.equal(variantReceipt[2].label?.startsWith('Flame Lash, ARCANE.'), true)
+  assert.equal(variantReceipt[2].description, 'Welded Lighting + Fireball')
+  assert.equal(variantReceipt[3].description, 'boosts health recovery')
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => (
+    requestAnimationFrame(resolve)
+  ))))
+  await page.screenshot({ path: variantsScreenshotPath })
+
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -598,6 +669,8 @@ try {
     releasedAudioReceipt,
     levelUpSoundRates,
     unlockSkillSoundRates,
+    variantReceipt,
+    variantsScreenshotPath,
   })}\n`)
 } catch (error) {
   process.stderr.write(`${JSON.stringify({

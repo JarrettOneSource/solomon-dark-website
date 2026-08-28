@@ -9,6 +9,11 @@ import {
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import {
+  nativeOptionalBookHudProgress,
+  nativeOptionalBookKeyAction,
+  nativeOptionalBookOwnsInventoryPause,
+} from './native-optional-book.ts'
+import {
   NATIVE_SKILL_DRAGGER_SCALE,
   NATIVE_SKILL_DRAGGER_SIZE,
   NATIVE_SKILL_DRAG_THRESHOLD_SQUARED,
@@ -57,6 +62,33 @@ test('builds the two native starting pages in learned acquisition order', () => 
   assert.deepEqual(pages.map(({ rootSkillId }) => rootSkillId), [8, 11])
   assert.deepEqual(pages.map(({ rows }) => rows.map(({ id }) => id)), [[8], [11]])
   assert.deepEqual(pages.map(({ width }) => width), [200, 200])
+})
+
+test('routes both optional books through configured reciprocal keys and forces the shared HUD during overlap', () => {
+  const bindings = {
+    inventory: 'KeyB',
+    menu: 'Escape',
+    skills: 'KeyV',
+  } as const
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyV', 'inventory', bindings), {
+    target: 'skills',
+    type: 'replace',
+  })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyB', 'skills', bindings), {
+    target: 'inventory',
+    type: 'replace',
+  })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyB', 'inventory', bindings), { type: 'close' })
+  assert.deepEqual(nativeOptionalBookKeyAction('KeyV', 'skills', bindings), { type: 'close' })
+  assert.deepEqual(nativeOptionalBookKeyAction('Escape', 'inventory', bindings), { type: 'close' })
+  assert.equal(nativeOptionalBookKeyAction('KeyI', 'skills', bindings), null)
+  assert.equal(nativeOptionalBookHudProgress(0.25, false), 0.25)
+  assert.equal(nativeOptionalBookHudProgress(0, true), 1)
+  assert.equal(nativeOptionalBookHudProgress(0.75, true), 1)
+  assert.throws(() => nativeOptionalBookHudProgress(-0.01, false), RangeError)
+  assert.equal(nativeOptionalBookOwnsInventoryPause(true, true), true)
+  assert.equal(nativeOptionalBookOwnsInventoryPause(true, false), false)
+  assert.equal(nativeOptionalBookOwnsInventoryPause(false, true), false)
 })
 
 test('groups learned transitive dependents under every related native root', () => {

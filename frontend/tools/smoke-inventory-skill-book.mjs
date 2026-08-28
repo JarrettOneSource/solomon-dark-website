@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
 
+import {
+  DEFAULT_GAME_SETTINGS,
+  GAME_SETTINGS_STORAGE_KEY,
+} from '../src/game/game-settings.ts'
+
 const baseUrl = process.env.SDR_GAME_BOOK_SMOKE_URL || 'http://127.0.0.1:4191'
 const screenshotRoot = process.env.SDR_GAME_BOOK_SMOKE_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-inventory-skill-book'
@@ -21,6 +26,19 @@ page.on('console', (message) => {
 })
 page.on('pageerror', (error) => pageErrors.push(error.message))
 await page.addInitScript(bypassStartupAudioPreload)
+await page.addInitScript(({ key, settings }) => {
+  localStorage.setItem(key, JSON.stringify(settings))
+}, {
+  key: GAME_SETTINGS_STORAGE_KEY,
+  settings: {
+    ...DEFAULT_GAME_SETTINGS,
+    controls: {
+      ...DEFAULT_GAME_SETTINGS.controls,
+      openInventory: 'KeyB',
+      openSkills: 'KeyV',
+    },
+  },
+})
 await page.addInitScript(() => {
   window.__sdrInventoryPointerEvents = []
   for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend']) {
@@ -42,10 +60,27 @@ await page.addInitScript(() => {
 try {
   await enterHub(page)
 
+  const optionalBookReceipts = []
+
   await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 10_000 })
   await activate(page, page.getByRole('button', { name: /Open inventory/ }))
   const hubInventory = page.getByRole('dialog', { name: 'Inventory' })
   await hubInventory.waitFor({ timeout: 5_000 })
+  await waitForInventory(hubInventory)
+  const inventoryToSkills = observeOptionalBookOverlap(page, 'skills')
+  await hubInventory.getByRole('button', { name: 'Open skills' }).click()
+  optionalBookReceipts.push(await inventoryToSkills)
+  const hubSkills = page.getByRole('dialog', { name: 'Skills' })
+  await hubSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  await hubInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  await page.screenshot({ path: `${screenshotRoot}-hub-skills.png` })
+  const skillsToInventory = observeOptionalBookOverlap(page, 'inventory')
+  await hubSkills.getByRole('button', { name: 'Open inventory' }).click()
+  optionalBookReceipts.push(await skillsToInventory)
+  await hubSkills.waitFor({ state: 'hidden', timeout: 10_000 })
+  await hubInventory.waitFor({ timeout: 10_000 })
   await waitForInventory(hubInventory)
   const healthPotion = hubInventory.getByLabel('Backpack').getByRole('button', {
     exact: true,
@@ -63,7 +98,7 @@ try {
   await healthPotion.waitFor({ state: 'detached' })
   await page.screenshot({ path: `${screenshotRoot}-hub-inventory.png` })
   assert.equal(await hubInventory.getByRole('button', { name: 'Done' }).count(), 0)
-  await page.keyboard.press('i')
+  await page.keyboard.press('b')
   await hubInventory.waitFor({ state: 'hidden' })
   await page.locator(
     '.hub-scene[data-gameplay-input-blocked="false"]',
@@ -78,6 +113,20 @@ try {
   await activate(page, page.getByRole('button', { name: /Open inventory/ }))
   const matchInventory = page.getByRole('dialog', { name: 'Inventory' })
   await matchInventory.waitFor()
+  await waitForInventory(matchInventory)
+  const matchInventoryToSkills = observeOptionalBookOverlap(page, 'skills')
+  await page.keyboard.press('v')
+  optionalBookReceipts.push(await matchInventoryToSkills)
+  const matchSkills = page.getByRole('dialog', { name: 'Skills' })
+  await matchSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  await matchInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  const matchSkillsToInventory = observeOptionalBookOverlap(page, 'inventory')
+  await page.keyboard.press('b')
+  optionalBookReceipts.push(await matchSkillsToInventory)
+  await matchSkills.waitFor({ state: 'hidden', timeout: 10_000 })
+  await matchInventory.waitFor({ timeout: 10_000 })
   await waitForInventory(matchInventory)
   assert.equal(await boneyard.getAttribute('data-gameplay-input-blocked'), 'true')
   const matchManaPotion = matchInventory.getByLabel('Backpack').getByRole('button', {
@@ -106,7 +155,7 @@ try {
   await matchManaPotion.waitFor({ state: 'detached' })
   await page.screenshot({ path: `${screenshotRoot}-match-inventory.png` })
 
-  await page.keyboard.press('i')
+  await page.keyboard.press('b')
   await matchInventory.waitFor({ state: 'hidden' })
   await boneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
 
@@ -118,6 +167,7 @@ try {
     matchInventory: true,
     matchInventoryPotionConsumed: true,
     mobile,
+    optionalBookReceipts,
     pageErrors,
     pointerEvents: await page.evaluate(() => window.__sdrInventoryPointerEvents),
   })}\n`)
@@ -142,6 +192,26 @@ async function waitForInventory(inventory) {
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({
     timeout: 10_000,
   })
+}
+
+async function observeOptionalBookOverlap(page, target) {
+  const receipt = await page.waitForFunction((replacementTarget) => {
+    const inventory = document.querySelector('.hub-native-ui-overlay[data-surface-kind="inventory"]')
+    const skills = document.querySelector('.skill-book-stage')
+    if (!inventory || !skills) return false
+    if (replacementTarget === 'skills') {
+      if (inventory.getAttribute('data-replacement-target') !== 'skills') return false
+    } else if (skills.getAttribute('data-transition-target') !== 'inventory') return false
+    return {
+      inventoryReveal: inventory.querySelector('.hub-inventory-native-canvas')
+        ?.getAttribute('data-native-reveal-progress') ?? null,
+      inventoryTarget: inventory.getAttribute('data-replacement-target'),
+      skillsProgress: skills.getAttribute('data-open-progress'),
+      skillsTarget: skills.getAttribute('data-transition-target'),
+      target: replacementTarget,
+    }
+  }, target, { timeout: 5_000 })
+  return receipt.jsonValue()
 }
 
 async function activate(page, target) {

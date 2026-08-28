@@ -24,7 +24,7 @@
 | --- | --- | --- | --- |
 | Clean stock | unmodified retail Beta 0.72.5 `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, directly launched from isolated `sd-stock-skillbook-D64dCC`, no loader | Hub and Boneyard use the same opaque full-screen SkillScreen and InventoryScreen; `T` replaces Inventory; dragging Call Leviathan from the page to slot 1 leaves it simultaneously in slots 0 and 1 | high |
 | Clean-stock captures | Mod Loader `tests/fixtures/webgame/menu-reference-captures/skill-screen.png` SHA-256 `5b2423d5daf56e6bb5d154dd2ce0abc80d947286f087c8f81134b01686bb1c87`; `skill-screen-duplicate-belt.png` SHA-256 `e934a18512ef5ed92753be150f5a37e5182751c8ed25644f5030a5d63b87f05d`; settled Inventory witness SHA-256 `0d99c6bb3f1815aa061fd4ee49e7bfccbd0ee058ea69b0e8936155c7e5156d8b` | fixes complete settled composition, starter page/card state, bottom HUD/belt membership, duplicate-slot behavior, and Inventory geometry | high |
-| Instructions | `0x00689750`, Inventory opener `0x005C6F10`, Skill opener `0x005CA640`, ctor `0x006576C0`, open `0x0067CAC0`, tick `0x006567E0`, close `0x006568E0`, root render `0x0065B550`, page builder `0x0066B380`, page open/render `0x00673EE0/0x006720F0`, quickbar `0x00657A70/0x0066F330/0x00659AD0`, category selector `0x0066F0B0`, Game HUD action `0x005D8120` | fixes ownership, scene-independent entry, mutual exclusion, 40-tick envelopes, silence, page order/layout, all eight belt slots, duplicate legality, and primary/concentration branches | high |
+| Instructions | `0x00689750`, Inventory opener `0x005C6F10`, Skill opener `0x005CA640`, ctor `0x006576C0`, open `0x0067CAC0`, tick `0x006567E0`, close `0x006568E0`, root render `0x0065B550`, page builder `0x0066B380`, page open/render `0x00673EE0/0x006720F0`, quickbar `0x00657A70/0x0066F330/0x00659AD0`, category selector `0x0066F0B0`, Game HUD action `0x005D8120` | fixes ownership, scene-independent entry, reciprocal overlap, 40-tick envelopes, silent opens and `openpanel` closes, page order/layout, all eight belt slots, duplicate legality, and primary/concentration branches; corrected by the 2026-08-28 reopening below | high |
 | Asset/data | Mod Loader `native-asset-object-map.json`, 83-row native skill catalog, Inventory/Skills/UI/Fonts bundles | SkillScreen drains direct UI `3,30,31,32,49` plus shared rails `10,79`; Skills `5,6,12,14,27..122,164..165`; Fonts groups `1..92,93..184,216..307,350..375`; public page rows are exactly `8..79` | high |
 | Web baseline | Website `origin/main` `3754115`; `HubInventoryUi`, `GameHud`, Boneyard/Hub scenes, protocol 35, `equipPlayerSecondaryAbility` | authoritative Inventory actions exist but Boneyard cannot send them; tome has no action; secondary belt moves a skill instead of allowing stock duplicates; no SkillScreen/loadout command family exists | high |
 
@@ -43,13 +43,13 @@ mutation, and Hub/Boneyard consumers.
 | --- | --- | --- | --- |
 | `I` and backpack entry in Hub and Boneyard | preset `0x005A8790`, dispatcher action `0x405`, HUD callback | exact-ported | scene hotkey/button journey and shared screen tests |
 | `T` and tome entry in Hub and Boneyard | preset `0x005A8790`, dispatcher action `0x406`, HUD callback | exact-ported | scene hotkey/button journey and shared screen tests |
-| mutual exclusion and close | `0x005CA640`, `0x005C6F10`, screen destructors | exact-ported | Inventory-to-Skills and Skills-to-Inventory tests |
+| reciprocal replacement and close | `0x005CA640`, `0x005C6F10`, screen destructors | exact-ported by the 2026-08-28 reopening below | the old receipt did not prove Skills-to-Inventory; the new contract does |
 | local input suppression and multiplayer owner isolation | nesting `0x005CBD40`; actor-owned books | exact-ported | stopped-input and two-owner tests |
 | Inventory root, selection/details, paging, held drag and restore | InventoryScreen/Grid/Dragger family in the settled 2026-08-15 entry | verified-already-at-parity | existing render/input contracts; mounted through the same owner in both scenes |
 | six potion use branches and accepted/rejected feedback | `0x0056D1B0`, `0x0056D246`, `0x0056D3D2` | verified-already-at-parity | existing per-subtype authority/audio tests plus Boneyard journey |
 | seven equipment sinks, equip and unequip | `0x00570CD0`, `0x00575850`, `0x00570D80`, `0x0066F020` | verified-already-at-parity | existing per-sink tests plus Boneyard journey |
 | trader companion InventoryScreen and storage/service overlays | `0x00514A20`, Shop family | out-of-system (Hub NPC services; no Boneyard producer) | scene/owner boundary |
-| SkillScreen 40-tick open/close and silent lifecycle | `0x006567E0`, `0x006568E0` | exact-ported | fixed-tick transition and audio-negative tests |
+| SkillScreen 40-tick open/close lifecycle | `0x006567E0`, `0x006568E0` | exact-ported by the reopening below: open is silent; close owns `openpanel` | fixed-tick transition and positive close-audio tests |
 | opaque fixed chrome and complete UI/Skills/Fonts membership | `0x0065B550`, asset-object map | exact-ported | atlas membership and deterministic render tests |
 | dependency-root pages and every public row `8..79` | `0x0066B380`, `0x0065E670`, 83-row catalog | exact-ported | table-driven page membership/order tests |
 | ordinary, shared-dependency, Welding, selected-primary, category-2, concentration card variants | `0x006720F0`, Skills `5,6,12,14,27..122,164..165` | exact-ported | per-variant render-plan assertions |
@@ -70,7 +70,8 @@ client authority to pause other actors.
   actor/profile book. Hub and Boneyard dispatch to those same owners.
 - State transitions: closed -> opening (`+0.025/tick`) -> settled -> closing
   (`-0.025/tick`) -> destroyed. Skill auxiliary pulse decays `*0.9` below
-  `0.01`. Opening/closing Skills is silent.
+  `0.01`. Opening Skills is silent; close owns one `openpanel` request, as the
+  2026-08-28 raw-instruction correction below proves.
 - Downstream consumers: render tree, pointer/keyboard hit routing, authoritative
   item/equipment economy, skill book, primary identity, secondary belt, and
   concentration runtime. Presentation focus/hover/drag is transient.
@@ -143,3 +144,121 @@ client authority to pause other actors.
   `inventory-skillbook-match-inventory.png`, and
   `inventory-skillbook-match-skills.png`. No member is browser-blocked and no
   native constant remains guessed in this system.
+
+## 2026-08-28 — Player-reported reciprocal switching reopening
+
+### Reported smell and process failure
+
+- A player reports that direct switching between Skills and Inventory has been
+  removed. Current source confirms the report: SkillBook recognizes literal
+  `I` and requests Inventory only after its complete close, while Inventory has
+  no configured-Skills or painted-tome route at all.
+- This reopens the `mutual exclusion and close` row above. The earlier pass
+  listed both directions, but browser acceptance exercised only Inventory to
+  Skills and source-presence assertions stood in for the reciprocal member.
+  It also failed to compare the user's current binding with the literal key in
+  SkillBook. Calling that inventory exact-ported violated per-member proof.
+
+### Evidence refresh
+
+| Evidence class | Exact source | Recovered fact | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Beta 0.72.5 `SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, re-hashed 2026-08-28 | Canonical image; no runtime/ASLR address is used. | high |
+| Complete opener xrefs | read-only canonical Ghidra replica; Inventory `0x005C6F10`, Skills `0x005CA640` | Exactly three producers per screen: configured keyboard `0x005CB360` (`0x005CB3A3/0x005CB3CF`), HUD `0x005D8120` (`0x005D8165/0x005D8184`), authored actions `0x00689750` (`0x0068A222/0x0068A25E`). | high |
+| Raw opener instructions | `0x005C6F10`, `0x005CA640` | Each opener marks a live sibling closing and immediately constructs/attaches the requested screen. Old and new coexist; the opener does not wait 40 ticks. | high |
+| Raw close instructions | Inventory `0x00550760`, Skills `0x006568E0`, ordinary Inventory close `0x00555810` | Both replacement directions play registry 64 `sounds\\openpanel` exactly once at gain one. Both opens are silent. | high |
+| Current web | `origin/main` `0c94685e`; `SkillBook`, `HubInventoryUi`, `MainMenuScene`, Hub/Boneyard scenes | literal-key, missing reciprocal control, delayed handoff, and no Inventory closing envelope reproduce the defect. | high |
+
+### Reopened boundary and complete membership
+
+Native system remains the optional actor-owned InventoryScreen/SkillScreen
+sibling controller, now closed over every input producer and both directions.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| configured Inventory key, closed -> Inventory | keyboard xref | exact-ported by this reopening | current binding; Hub/Boneyard |
+| configured Skills key, closed -> Skills | keyboard xref | exact-ported by this reopening | current binding; Hub/Boneyard |
+| configured Skills key, Inventory -> Skills | `0x005CA640` | exact-ported by this reopening | immediate overlapping replacement |
+| configured Inventory key, Skills -> Inventory | `0x005C6F10` | exact-ported by this reopening | immediate overlap; no literal `I` |
+| backpack control, closed/Skills -> Inventory | HUD Inventory child | exact-ported by this reopening | live slid rectangle; mouse/touch/focus |
+| tome control, closed/Inventory -> Skills | HUD Skills child | exact-ported by this reopening | live slid rectangle; mouse/touch/focus |
+| authored action `0x405` | `0x00689750` | exact-ported through the same controller | no duplicate Inventory owner |
+| authored action `0x406` | `0x00689750` | exact-ported through the same controller | no duplicate Skills owner |
+| reinvoke currently live screen | requested-pointer guard | exact-ported | close once, construct no duplicate |
+| reciprocal transition overlap | both openers and screen ticks | exact-ported by this reopening | old fades while new opens; HUD slide forced to one |
+| close/replacement audio | `0x00550760`, `0x006568E0`, registry 64 | exact-ported by this reopening | one `openpanel`; opening silent |
+| continuous input/pause owner | `0x005CBD40` | verified-already-at-parity across corrected handoff | no world-input frame between screens |
+| Hub and Boneyard | shared Game screen pointers | exact-ported by this reopening | both keys, both controls, both directions |
+| Boneyard Tutorial open/close events | same shared owner plus Tutorial observer | exact-ported | Skills close and Inventory open each report once |
+| developer match observer Boneyard projection | read-only `DeveloperObserverScene` | out-of-system: observer input and optional books are disabled; overlap is explicitly false | production type/member assertion |
+| service companion InventoryScreen | Shop/Chat exclusive modal | out-of-system: optional Skills is not exposed through the service modal | existing service coverage unchanged |
+| browser gamepad focus | no supported retail controller mapping | out-of-system retail extension; retained through the reciprocal semantic controls | shared focus/confirm router |
+
+No member is browser-blocked.
+
+### Corrected behavioral contract and implementation consequence
+
+- Game owns Inventory at `+0x15A0` and Skills at `+0x1664`. A replacement marks
+  the old object closing, plays its cue, and mounts the new top input owner in
+  the same call. Both independent 0.025-per-tick envelopes remain alive; the
+  bottom HUD is forced to its settled slide while both pointers exist.
+- Current configured physical codes, not `event.key` literals, route close and
+  replacement. The rendered backpack and tome remain reciprocal semantic hit
+  targets on their live slid rectangles.
+- Web ownership stays split between parent session/modal state and scene-local
+  Inventory presentation, but one pure input rule and one overlap predicate
+  must govern both components. The old screen remains mounted and inert until
+  its 40th close tick; the new screen owns input immediately.
+- `open-panel` plays once at close start for ordinary close and either
+  replacement. A newly mounted sibling adds no open cue.
+
+### Validation contract and receipt
+
+- Focused tests must cover rebound codes, both painted controls, same-screen
+  close, both replacement directions, open/close overlap from partial and
+  settled progress, exactly one cue, no duplicate owner, both scenes, Tutorial
+  event counts, and continuous input suspension.
+- Mac Chrome must perform rebound-key and pointer replacement in both Hub and
+  Boneyard while checking overlap data, modal progress, authoritative position,
+  WebGL identity, and empty page/console/failed-response arrays.
+- Implementation and exact-tree Mac receipts are recorded below. The older
+  Windows receipt above remains historical evidence for the one direction it
+  actually exercised; it is not proof of this reopening.
+
+### 2026-08-28 implementation receipt
+
+- `native-optional-book.ts` now owns configured reciprocal key routing, forced
+  overlap HUD progress, and the owner-local Inventory pause predicate while the
+  host changes its replicated source label. `SkillBook` and `HubInventoryUi`
+  consume that shared contract and expose reciprocal semantic backpack/tome
+  controls on the live slid rectangles.
+- SkillScreen starts its 40-tick close, plays one `openpanel`, and requests
+  Inventory immediately. Inventory now has the missing symmetric close envelope,
+  starts Skills immediately, remains inert/under the new screen, and releases
+  only at progress zero. Both renderers force the shared HUD to progress one
+  during coexistence. The old Inventory input listener yields immediately to
+  the new top owner.
+- The Boneyard-specific source-label race is closed: a locally owned modal pause
+  plus live Inventory remains admitted while the host changes `skill-book` to
+  `inventory`; the screen is no longer destroyed during that acknowledgement
+  gap. The read-only developer observer explicitly disposes its overlap member
+  as false.
+- Mac focused red failed only on the missing shared module/card exports. The
+  final byte-identical candidate passed production/test TypeScript plus the
+  focused Inventory, SkillScreen, and picker behavior suites; the complete
+  Boneyard group passed.
+- Chrome `151.0.7922.174` on Apple M2 completed four real overlap transitions:
+  pointer Skills -> Inventory -> Skills in Hub and rebound `B`/`V` Skills ->
+  Inventory -> Skills in Boneyard. Each receipt observed both DOM owners and the
+  correct retiring target before the old 40-tick owner disappeared. Per-edge
+  audio counters advanced by exactly one for all four replacements, proving one
+  close cue and no new-screen open cue. Existing WebGL2 SkillScreen, quickbar,
+  hover, drag, selection, and Boneyard authority checks also passed. Page,
+  console, and failed-response arrays were empty.
+- The inspected Hub Inventory-switch frame SHA-256 is
+  `858bf4825630ba89fea63346b260b67ccb51f69d557a8ec1f91c4d1b2bc4fa14`;
+  `skill-book-boneyard-inventory-switch.png` is
+  `b3eb393c199320d44e5af440b3a1c3a359c6f24b18b07fbe73f2c7e1e3b7a305`.
+  These hashes record the result; task-owned copies are disposable after the
+  exact-tree acceptance rerun.
+- Publication and deployment were not requested and were not performed.

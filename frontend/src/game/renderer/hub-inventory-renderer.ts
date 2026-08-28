@@ -256,7 +256,7 @@ export interface HubInventoryRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
   moveDrag(pointer: { readonly x: number; readonly y: number }): void
-  render(nowMs: number, reveal: number): { readonly chatComplete: boolean }
+  render(nowMs: number, reveal: number, hudProgress?: number): { readonly chatComplete: boolean }
   setModel(model: HubInventoryRendererModel): void
 }
 
@@ -357,15 +357,16 @@ export async function createHubInventoryRenderer(
       if (!inventoryDragger) return
       inventoryDragger.position.set(pointer.x, pointer.y)
     },
-    render(nowMs, reveal) {
+    render(nowMs, reveal, hudProgress = reveal) {
       if (destroyed) return { chatComplete: false }
       const clampedReveal = Math.max(0, Math.min(1, reveal))
+      const clampedHudProgress = Math.max(0, Math.min(1, hudProgress))
       gpu.canvas.dataset.nativeReveal = clampedReveal >= 1 ? 'settled' : 'revealing'
       gpu.canvas.dataset.nativeRevealProgress = `${clampedReveal}`
       dimmer.alpha = curtainAlpha * clampedReveal
       surface.alpha = clampedReveal
       surface.y = 0
-      if (modalHud) modalHud.position.y = nativeHudModalSlideOffset(clampedReveal)
+      if (modalHud) modalHud.position.y = nativeHudModalSlideOffset(clampedHudProgress)
       if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
         ? hubShopSlideOffset(clampedReveal)
         : 0

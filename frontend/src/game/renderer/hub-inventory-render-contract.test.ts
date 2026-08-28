@@ -73,6 +73,7 @@ import {
   hubItemTooltipLines,
   hubNativeEquipmentEffectText,
   hubNativeLabeledControlPresentation,
+  hubNativeUiCloseReveal,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
   hubOwnedPerkSlotRect,
@@ -738,6 +739,17 @@ test('trader Chat owns its stock panel, clip, controls, and timing independently
     hubNativeUiReveal(200, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
     hubNativeUiReveal(400, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
   ], [0, 0, 0.025, 0.5, 1])
+  assert.deepEqual([
+    hubNativeUiCloseReveal(1, 0, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiCloseReveal(1, 10, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiCloseReveal(1, 200, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiCloseReveal(1, 400, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiCloseReveal(0.5, 200, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+  ], [1, 0.975, 0.5, 0, 0])
+  assert.throws(
+    () => hubNativeUiCloseReveal(1.01, 0, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    RangeError,
+  )
   assert.deepEqual([0, 0.25, 0.5, 0.75, 1].map(hubShopSlideOffset), [
     -100,
     -75,

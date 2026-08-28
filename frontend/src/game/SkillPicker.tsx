@@ -10,12 +10,6 @@ import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   NATIVE_SELECTOR_ACCEPT_TICKS,
 } from './core-kernels/native-hub-npc.ts'
-import {
-  NATIVE_SKILL_CATALOG,
-  SPELL_WELDING_QUICK_DESCRIPTION,
-  SPELL_WELDING_SKILL_ID,
-  nativeWeldBuild,
-} from './core-kernels/player-progression.ts'
 import type { ProtocolPlayerSkillOffer } from './protocol/game-state.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import {
@@ -29,6 +23,7 @@ import {
 } from './renderer/level-up-presentation.ts'
 import {
   skillPickerCardCenters,
+  skillPickerCardPresentation,
   skillPickerSpecialActionBounds,
 } from './renderer/skill-picker-render-contract.ts'
 import './skill-picker.css'
@@ -415,15 +410,7 @@ export default function SkillPicker({
         <div ref={hostRef} className="skill-picker-renderer" aria-hidden />
         <div className="skill-picker-actions">
           {offerContentVisible ? displayedOffer.options.map((option, index) => {
-            const skill = NATIVE_SKILL_CATALOG[option.skillId]!
-            const weldBuild = option.skillId === SPELL_WELDING_SKILL_ID
-              ? nativeWeldBuild(option.weldBuildId ?? Number.NaN)
-              : null
-            const description = weldBuild
-              ? `${SPELL_WELDING_QUICK_DESCRIPTION}. ${weldBuild.primarySkillIds
-                  .map((skillId) => NATIVE_SKILL_CATALOG[skillId]!.name)
-                  .join(' and ')}.`
-              : skill.config?.mQDescription ?? skill.config?.mDescription ?? ''
+            const card = skillPickerCardPresentation(option)
             const insightDetail = option.insight === true
               ? ' Insight Bonus: Skill +2.'
               : ''
@@ -434,10 +421,13 @@ export default function SkillPicker({
                 type="button"
                 className="skill-picker-action"
                 style={{ left: centers[index] }}
-                aria-label={`${option.insight === true ? 'Insight. ' : ''}${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}, ${skill.family}. ${description}${insightDetail}`}
+                aria-label={`${option.insight === true ? 'Insight. ' : ''}${card.name}, ${card.familyLabel.trim()}. ${card.quickDescription}${insightDetail}`}
                 aria-pressed={selectedIndex === index}
                 data-choice-index={index}
+                data-description={card.quickDescription}
                 data-insight={option.insight === true}
+                data-root={card.root}
+                data-root-tint={card.rootTint.toString(16).padStart(6, '0')}
                 data-skill-id={option.skillId}
                 disabled={disabled}
                 onClick={() => choose(index)}

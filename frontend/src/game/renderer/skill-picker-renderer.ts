@@ -1,5 +1,6 @@
 import {
   Container,
+  MeshSimple,
   NineSliceSprite,
   Sprite,
   TilingSprite,
@@ -7,13 +8,6 @@ import {
 } from 'pixi.js'
 
 import { skillPicker } from '../../lib/assets.ts'
-import {
-  NATIVE_SKILL_CATALOG,
-  SPELL_WELDING_QUICK_DESCRIPTION,
-  SPELL_WELDING_SKILL_ID,
-  nativeWeldBuild,
-  type NativeSkillCatalogEntry,
-} from '../core-kernels/player-progression.ts'
 import type {
   ProtocolPlayerSkillOffer,
   ProtocolPlayerSkillOfferOption,
@@ -26,11 +20,13 @@ import {
 } from './game-webgl.ts'
 import {
   SKILL_PICKER_CARD_FRAME,
+  SKILL_PICKER_CARD_TEXT,
   SKILL_PICKER_ICON_ANCHOR_OFFSET,
   SKILL_PICKER_INSIGHT_LABEL_Y,
   SKILL_PICKER_INSIGHT_TINT,
   SKILL_PICKER_PANEL,
   SKILL_PICKER_SIZE,
+  skillPickerCardPresentation,
   skillPickerCardCenters,
   skillPickerInsightAlpha,
   skillPickerPanelBounds,
@@ -228,9 +224,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       )
       const centers = skillPickerCardCenters(offer.options.length)
       offer.options.forEach((option, index) => {
-        const skill = NATIVE_SKILL_CATALOG[option.skillId]
-        if (!skill) throw new Error(`skill picker has no catalog row ${option.skillId}`)
-        const insight = addSkillCard(offerLayer, resources, skill, option, centers[index]!)
+        const insight = addSkillCard(offerLayer, resources, option, centers[index]!)
         insightPanels[index]!.visible = insight !== null
         if (insight !== null) {
           insightCardTreatments.push({ cardIndex: index, container: insight })
@@ -259,47 +253,41 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
 function addSkillCard(
   layer: Container,
   textures: GameTextureMap,
-  skill: NativeSkillCatalogEntry,
   option: ProtocolPlayerSkillOfferOption,
   centerX: number,
 ): Container | null {
+  const presentation = skillPickerCardPresentation(option)
   const aura = spriteFor(textures, 'Skills', 13)
   aura.anchor.set(0.5)
   aura.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
   aura.scale.set(1.15)
   layer.addChild(aura)
 
-  const glow = spriteFor(textures, 'Skills', 164)
-  glow.anchor.set(0.5)
-  glow.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-  glow.scale.set(1.15)
-  layer.addChild(glow)
+  if (presentation.glowTints.length === 2) {
+    addWeldGlow(layer, textures, presentation.glowTints, centerX)
+  } else {
+    const glow = spriteFor(textures, 'Skills', 164)
+    glow.anchor.set(0.5)
+    glow.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+    glow.scale.set(1.15)
+    glow.tint = presentation.rootTint
+    layer.addChild(glow)
+  }
 
-  const frame = spriteFor(textures, 'Skills', 5)
+  const frame = spriteFor(textures, 'Skills', presentation.frameRecord)
   frame.anchor.set(0.5)
   frame.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
   layer.addChild(frame)
 
-  const weldBuild = option.skillId === SPELL_WELDING_SKILL_ID
-    ? nativeWeldBuild(option.weldBuildId ?? Number.NaN)
-    : null
-  if (option.skillId === SPELL_WELDING_SKILL_ID && !weldBuild) {
-    throw new Error('Spell Welding choice has no native synthetic build')
-  }
-  if (option.skillId !== SPELL_WELDING_SKILL_ID && option.weldBuildId !== undefined) {
-    throw new Error('ordinary skill choice carries a Spell Welding build')
-  }
-  const iconRecord = weldBuild?.skillsAtlasIconRecord ?? skill.skills_atlas_icon_record
-  const shadow = spriteFor(textures, 'Skills', iconRecord)
+  const shadow = spriteFor(textures, 'Skills', presentation.iconRecord)
   shadow.anchor.set(0.5)
   shadow.position.set(
     centerX + SKILL_PICKER_ICON_ANCHOR_OFFSET.x,
     SKILL_PICKER_CARD_FRAME.y + SKILL_PICKER_ICON_ANCHOR_OFFSET.y,
   )
-  shadow.tint = 0x062932
-  shadow.alpha = 0.92
+  shadow.tint = 0x000000
   layer.addChild(shadow)
-  const icon = spriteFor(textures, 'Skills', iconRecord)
+  const icon = spriteFor(textures, 'Skills', presentation.iconRecord)
   icon.anchor.set(0.5)
   icon.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
   layer.addChild(icon)
@@ -318,11 +306,11 @@ function addSkillCard(
     insightGlow.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
     insightGlow.scale.set(1.15)
     insightGlow.tint = SKILL_PICKER_INSIGHT_TINT
-    const insightFrame = spriteFor(textures, 'Skills', 5)
+    const insightFrame = spriteFor(textures, 'Skills', presentation.frameRecord)
     insightFrame.anchor.set(0.5)
     insightFrame.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
     insightFrame.tint = SKILL_PICKER_INSIGHT_TINT
-    const insightIcon = spriteFor(textures, 'Skills', iconRecord)
+    const insightIcon = spriteFor(textures, 'Skills', presentation.iconRecord)
     insightIcon.anchor.set(0.5)
     insightIcon.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
     insightIcon.tint = SKILL_PICKER_INSIGHT_TINT
@@ -339,26 +327,76 @@ function addSkillCard(
     layer.addChild(insightTreatment)
   }
 
-  const name = `${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}`.toUpperCase()
-  const tint = skillTextTint(skill.family)
-  addBitmapText(layer, textures, name, 'medium', centerX, 449, {
-    align: 'center',
-    tint,
-  })
-  addBitmapText(layer, textures, skill.family.toUpperCase(), 'skill', centerX, 468, {
-    align: 'center',
-    tint,
-  })
-  const quickDescription = weldBuild
-    ? SPELL_WELDING_QUICK_DESCRIPTION
-    : skill.config?.mQDescription ?? skill.config?.mDescription ?? ''
-  addBitmapText(layer, textures, quickDescription.toUpperCase(), 'medium', centerX, 506, {
-    align: 'center',
-    lineHeight: 18,
-    maxWidth: 110,
-    tint: 0xffffff,
-  })
+  addShadowedBitmapText(
+    layer,
+    textures,
+    presentation.nameLines.join('\n'),
+    'medium',
+    centerX,
+    presentation.nameBaselineY,
+    presentation.rootTint,
+  )
+  addShadowedBitmapText(
+    layer,
+    textures,
+    presentation.familyLabel,
+    'skill',
+    centerX,
+    presentation.familyBaselineY,
+    presentation.rootTint,
+  )
+  addBitmapText(
+    layer,
+    textures,
+    presentation.descriptionLines.join('\n'),
+    'medium',
+    centerX,
+    presentation.descriptionBaselineY,
+    {
+      align: 'center',
+      lineHeight: 17,
+      maxWidth: SKILL_PICKER_CARD_TEXT.wrapWidth,
+      tint: 0xffffff,
+    },
+  )
   return insightTreatment
+}
+
+function addWeldGlow(
+  layer: Container,
+  textures: GameTextureMap,
+  tints: readonly number[],
+  centerX: number,
+): void {
+  const [width, height] = nativeUiRecord('Skills', 164).logicalSize
+  const halfWidth = width * 1.15 / 2
+  const halfHeight = height * 1.15 / 2
+  const triangles = [
+    {
+      tint: tints[0]!,
+      uvs: [0, 0, 1, 0, 0, 1],
+      vertices: [-halfWidth, -halfHeight, halfWidth, -halfHeight, -halfWidth, halfHeight],
+    },
+    {
+      tint: tints[1]!,
+      uvs: [1, 0, 0, 1, 1, 1],
+      vertices: [halfWidth, -halfHeight, -halfWidth, halfHeight, halfWidth, halfHeight],
+    },
+  ] as const
+  for (const triangle of triangles) {
+    const mesh = new MeshSimple({
+      indices: new Uint32Array([0, 1, 2]),
+      texture: textureFor(textures, 'Skills', 164),
+      topology: 'triangle-list',
+      uvs: new Float32Array(triangle.uvs),
+      vertices: new Float32Array(triangle.vertices),
+    })
+    mesh.autoUpdate = false
+    mesh.eventMode = 'none'
+    mesh.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+    mesh.tint = triangle.tint
+    layer.addChild(mesh)
+  }
 }
 
 function rebuildPanel(
@@ -465,19 +503,6 @@ function rebuildPanel(
   return { cards, corners, insightCards }
 }
 
-function skillTextTint(family: string): number {
-  switch (family.toLowerCase()) {
-    case 'fire': return 0xf0b5bd
-    case 'water': return 0xb8dcf2
-    case 'air': return 0xc5eef2
-    case 'earth': return 0xc8d9b4
-    case 'ether': return 0xd9c3ed
-    case 'mind': return 0xd4def5
-    case 'arcane': return 0xdeccef
-    default: return 0xf0e9df
-  }
-}
-
 export function spriteFor(
   textures: GameTextureMap,
   atlas: 'Fonts' | 'Inventory' | 'Skills' | 'UI',
@@ -518,6 +543,31 @@ export function addBitmapText(
     x,
     y,
   }))
+}
+
+function addShadowedBitmapText(
+  layer: Container,
+  textures: GameTextureMap,
+  text: string,
+  fontName: SkillPickerFontName,
+  x: number,
+  y: number,
+  tint: number,
+): void {
+  const options = {
+    align: 'center' as const,
+    ...(fontName === 'medium' ? { lineHeight: 17 } : {}),
+  }
+  addBitmapText(
+    layer,
+    textures,
+    text,
+    fontName,
+    x + SKILL_PICKER_CARD_TEXT.textShadowOffset,
+    y + SKILL_PICKER_CARD_TEXT.textShadowOffset,
+    { ...options, tint: 0x000000 },
+  )
+  addBitmapText(layer, textures, text, fontName, x, y, { ...options, tint })
 }
 
 export function measureNativeBitmapText(

@@ -21,7 +21,7 @@ import {
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
-import type { GameControlBindings } from './game-settings.ts'
+import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { mobileUiElementStyle } from './mobile-ui-layout.ts'
@@ -436,6 +436,7 @@ export default function GameHud({
           disabled={!onInventoryClick}
           onClick={onInventoryClick}
           style={mobileUiElementStyle(mobileUi, 'inventory')}
+          title={`Inventory (${gameBindingLabel(controls.openInventory)})`}
         >
           <img
             className="hub-hud-backpack"
@@ -472,7 +473,7 @@ export default function GameHud({
           disabled={!onSkillsClick}
           onClick={onSkillsClick}
           style={mobileUiElementStyle(mobileUi, 'skillbook')}
-          title="Skills (K)"
+          title={`Skills (${gameBindingLabel(controls.openSkills)})`}
         >
           <img
             className="hub-hud-tome"

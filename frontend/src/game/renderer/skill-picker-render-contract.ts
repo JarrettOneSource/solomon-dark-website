@@ -1,8 +1,20 @@
+import {
+  NATIVE_SKILL_CATALOG,
+  SPELL_WELDING_SKILL_ID,
+  nativeSkillColorRoot,
+  nativeWeldBuild,
+} from '../core-kernels/player-progression.ts'
+import type { ProtocolPlayerSkillOfferOption } from '../protocol/game-state.ts'
+import {
+  nativeSkillPageTextHeight,
+  nativeSkillPageWrappedLines,
+} from './skill-book-render-contract.ts'
+
 export const SKILL_PICKER_SIZE = { height: 900, width: 1600 } as const
 export const SKILL_PICKER_NATIVE_UI_RECORDS = [
   3, 10, 37, 49, 56, 57, 59, 62, 79, 107, 108, 109, 110,
 ] as const
-export const SKILL_PICKER_CARD_RECORDS = [0, 13, 164, 5] as const
+export const SKILL_PICKER_CARD_RECORDS = [0, 13, 164, 5, 14] as const
 export const SKILL_PICKER_ROOT_TINTS = [
   0xffe5ff,
   0xffcbcb,
@@ -31,6 +43,40 @@ export const SKILL_PICKER_PANEL = {
 export const SKILL_PICKER_INSIGHT_TINT = 0xd9ba70
 export const SKILL_PICKER_INSIGHT_LABEL_Y = SKILL_PICKER_PANEL.top + 33
 export const SKILL_PICKER_INSIGHT_PULSE_DEGREES_PER_TICK = 2
+export const SKILL_PICKER_CARD_TEXT = {
+  descriptionCenterY: 532.5,
+  nameBaselineY: 452.5,
+  textShadowOffset: 1,
+  wrapWidth: 140,
+} as const
+
+const SKILL_PICKER_ROOT_LABELS = [
+  ' ETHER',
+  ' FIRE',
+  ' AIR',
+  ' WATER',
+  ' EARTH',
+  'BODY ',
+  'MIND ',
+  'ARCANE ',
+] as const
+
+export interface SkillPickerCardPresentation {
+  readonly descriptionBaselineY: number
+  readonly descriptionLines: readonly string[]
+  readonly familyBaselineY: number
+  readonly familyLabel: string
+  readonly frameRecord: 5 | 14
+  readonly glowTints: readonly number[]
+  readonly iconRecord: number
+  readonly name: string
+  readonly nameBaselineY: number
+  readonly nameLines: readonly string[]
+  readonly quickDescription: string
+  readonly root: number
+  readonly rootTint: number
+  readonly textShadowOffset: number
+}
 
 export interface SkillPickerPanelBounds {
   readonly height: number
@@ -54,6 +100,54 @@ export function skillPickerRootTint(root: number | null): number {
     throw new RangeError(`unknown native skill root ${String(root)}`)
   }
   return SKILL_PICKER_ROOT_TINTS[root]
+}
+
+export function skillPickerCardPresentation(
+  option: ProtocolPlayerSkillOfferOption,
+): SkillPickerCardPresentation {
+  const skill = NATIVE_SKILL_CATALOG[option.skillId]
+  if (!skill) throw new RangeError(`skill picker has no catalog row ${option.skillId}`)
+  const weldBuild = option.skillId === SPELL_WELDING_SKILL_ID
+    ? nativeWeldBuild(option.weldBuildId ?? Number.NaN)
+    : null
+  if (option.skillId === SPELL_WELDING_SKILL_ID && !weldBuild) {
+    throw new RangeError('Spell Welding choice has no native synthetic build')
+  }
+  if (option.skillId !== SPELL_WELDING_SKILL_ID && option.weldBuildId !== undefined) {
+    throw new RangeError('ordinary skill choice carries a Spell Welding build')
+  }
+  const root = nativeSkillColorRoot(option.skillId)
+  if (root === null) throw new RangeError(`skill picker row ${option.skillId} has no color root`)
+  const rootTint = skillPickerRootTint(root)
+  const name = weldBuild
+    ? weldBuild.syntheticName
+    : `${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}`.toUpperCase()
+  const nameLines = nativeSkillPageWrappedLines(name)
+  const quickDescription = weldBuild
+    ? weldBuild.pairDescription
+    : skill.config?.mQDescription ?? skill.config?.mDescription ?? ''
+  if (!quickDescription) throw new RangeError(`skill picker row ${option.skillId} has no description`)
+  const descriptionLines = nativeSkillPageWrappedLines(quickDescription)
+  return Object.freeze({
+    descriptionBaselineY: SKILL_PICKER_CARD_TEXT.descriptionCenterY
+      - nativeSkillPageTextHeight(descriptionLines) / 2,
+    descriptionLines,
+    familyBaselineY: SKILL_PICKER_CARD_TEXT.nameBaselineY
+      + nativeSkillPageTextHeight(nameLines),
+    familyLabel: SKILL_PICKER_ROOT_LABELS[root]!,
+    frameRecord: weldBuild ? 14 : 5,
+    glowTints: Object.freeze(weldBuild
+      ? weldBuild.colorRoots.map(skillPickerRootTint)
+      : [rootTint]),
+    iconRecord: weldBuild?.skillScreenIconRecord ?? skill.skills_atlas_icon_record,
+    name,
+    nameBaselineY: SKILL_PICKER_CARD_TEXT.nameBaselineY,
+    nameLines,
+    quickDescription,
+    root,
+    rootTint,
+    textShadowOffset: SKILL_PICKER_CARD_TEXT.textShadowOffset,
+  })
 }
 
 export function skillPickerInsightAlpha(ageTicks: number): number {

@@ -126,6 +126,7 @@ interface BoneyardSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
+  optionalBookOverlap: boolean
   modalDisabled: boolean
   modAssets: readonly GameModAsset[]
   modCatalog: readonly ModConsumableCatalogEntry[]
@@ -187,6 +188,7 @@ export default function BoneyardScene({
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
+  optionalBookOverlap,
   modalDisabled,
   modAssets,
   modCatalog,
@@ -331,13 +333,23 @@ export default function BoneyardScene({
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [spectatorStatus, setSpectatorStatus] =
     useState<BoneyardSpectatorStatusPresentation | null>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (inventoryRequestRef.current === inventoryRequestSequence) return
     inventoryRequestRef.current = inventoryRequestSequence
-    if (!inputBlocked && tutorialAccess?.inventory !== false && run.phase === 'active') {
+    if (
+      (!inputBlocked || optionalBookOverlap)
+      && tutorialAccess?.inventory !== false
+      && run.phase === 'active'
+    ) {
       setInventorySurface({ kind: 'inventory' })
     }
-  }, [inputBlocked, inventoryRequestSequence, run.phase, tutorialAccess?.inventory])
+  }, [
+    inputBlocked,
+    inventoryRequestSequence,
+    optionalBookOverlap,
+    run.phase,
+    tutorialAccess?.inventory,
+  ])
   const previousAudioRunRef = useRef(boneyardInitialSnapshot.run)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
     gameViewportLayout(1600, 900)
@@ -1130,20 +1142,25 @@ export default function BoneyardScene({
               audio={audio}
               belt={liveBelt}
               config={boneyardInitialSnapshot.players[playerId]!.config}
-              disabled={modalDisabled || tutorialAccess?.inventory === false || run.phase !== 'active'}
+              disabled={(modalDisabled && !optionalBookOverlap)
+                || tutorialAccess?.inventory === false
+                || run.phase !== 'active'}
               economy={economy}
               inputSuspended={chatInputActive}
               inventoryKeyCode={settings.controls.openInventory}
+              forceModalHudSettled={optionalBookOverlap}
               menuKeyCode={settings.controls.openMenu}
               modAssets={modAssets}
               nativeUiStageStyle={nativeUiStageStyle}
               onAction={onHubAction}
               onBlockingOverlayChange={setNpcNoteboxOpen}
+              onOpenSkills={onOpenSkills}
               onSurfaceChange={setInventorySurface}
               onUnassignBeltEntry={onUnassignQuickbarSkill}
               overlayRoot={sceneRef}
               playerPosition={playerPosition}
               progression={progression}
+              skillsKeyCode={settings.controls.openSkills}
               region="courtyard"
               surface={inventorySurface}
               interactionsEnabled={false}

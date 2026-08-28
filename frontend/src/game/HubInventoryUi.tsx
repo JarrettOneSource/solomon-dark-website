@@ -62,6 +62,10 @@ import {
   setNativeModalSlideProgress,
   subscribeNativeModalSlideProgress,
 } from './native-modal-slide-progress.ts'
+import {
+  nativeOptionalBookHudProgress,
+  nativeOptionalBookKeyAction,
+} from './native-optional-book.ts'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import {
   HUB_INTERACTION_DIALOGUES,
@@ -130,6 +134,7 @@ import {
   HUB_UNFORGE_TARGET,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  hubNativeUiCloseReveal,
   hubNativeUiReveal,
   hubDowsingSlotPosition,
   hubDyeItemLayerRects,
@@ -233,6 +238,7 @@ interface HubInventoryUiProps {
   config: PlayerCharacterConfig
   disabled: boolean
   economy: ProtocolPlayerEconomy
+  forceModalHudSettled: boolean
   inputSuspended: boolean
   inventoryEnabled?: boolean
   inventoryKeyCode: string
@@ -241,6 +247,7 @@ interface HubInventoryUiProps {
   nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
   onBlockingOverlayChange?: (open: boolean) => void
+  onOpenSkills: () => void
   onUnassignBeltEntry?: (slot: number) => void
   modAssets: readonly GameModAsset[]
   onSurfaceChange: (surface: HubUiSurface) => void
@@ -248,6 +255,7 @@ interface HubInventoryUiProps {
   playerPosition: Vector2
   progression: ProtocolPlayerProgression
   region: HubRegionId
+  skillsKeyCode: string
   surface: HubUiSurface
   skorchaDismissalIndex?: number
   skorchaPosition?: Vector2 | null
@@ -262,6 +270,7 @@ export default function HubInventoryUi({
   config,
   disabled,
   economy,
+  forceModalHudSettled,
   inputSuspended,
   inventoryEnabled = true,
   inventoryKeyCode,
@@ -270,6 +279,7 @@ export default function HubInventoryUi({
   nativeUiStageStyle,
   onAction,
   onBlockingOverlayChange,
+  onOpenSkills,
   onUnassignBeltEntry,
   modAssets,
   onSurfaceChange,
@@ -277,6 +287,7 @@ export default function HubInventoryUi({
   playerPosition,
   progression,
   region,
+  skillsKeyCode,
   surface,
   skorchaDismissalIndex = 0,
   skorchaPosition = null,
@@ -289,6 +300,8 @@ export default function HubInventoryUi({
   const [inventorySackPath, setInventorySackPath] = useState<readonly number[]>([])
   const [inventorySackTransition, setInventorySackTransition] =
     useState<HubInventorySackTransitionModel | null>(null)
+  const [inventoryCloseTarget, setInventoryCloseTarget] =
+    useState<'closed' | 'skills' | null>(null)
   const nearestInteraction = useMemo(
     () => disabled || inputSuspended || transitionActive || !interactionsEnabled
       ? null
@@ -315,6 +328,7 @@ export default function HubInventoryUi({
     }
     setInventorySackPath([])
     setInventorySackTransition(null)
+    setInventoryCloseTarget(null)
     onSurfaceChange(null)
   }, [economy.dowsingOffers.length, onAction, onSurfaceChange, surface])
 
@@ -355,11 +369,21 @@ export default function HubInventoryUi({
     return true
   }, [audio, inventorySackPath, inventorySackTransition])
 
+  const beginInventoryClose = useCallback((target: 'closed' | 'skills') => {
+    if (surface?.kind !== 'inventory' || inventoryCloseTarget !== null) return
+    setInventoryCloseTarget(target)
+    audio.playSound('open-panel')
+    if (target === 'skills') onOpenSkills()
+  }, [audio, inventoryCloseTarget, onOpenSkills, surface])
+
   const inventoryBackOrClose = useCallback(() => {
     if (returnFromInventorySack()) return
-    audio.playSound('open-panel')
-    closeSurface()
-  }, [audio, closeSurface, returnFromInventorySack])
+    if (surface?.kind === 'inventory') beginInventoryClose('closed')
+    else {
+      audio.playSound('open-panel')
+      closeSurface()
+    }
+  }, [audio, beginInventoryClose, closeSurface, returnFromInventorySack, surface])
 
   useEffect(() => {
     const inventoryOwnerActive = surface?.kind === 'inventory' || surface?.kind === 'service'
@@ -420,10 +444,22 @@ export default function HubInventoryUi({
     const keyDown = (event: KeyboardEvent) => {
       if (inputSuspended) return
       if (event.repeat) return
-      if (surface && (
-        event.code === menuKeyCode
-        || (surface.kind === 'inventory' && event.code === inventoryKeyCode)
-      )) {
+      if (inventoryCloseTarget !== null) return
+      if (surface?.kind === 'inventory') {
+        const action = nativeOptionalBookKeyAction(event.code, 'inventory', {
+          inventory: inventoryKeyCode,
+          menu: menuKeyCode,
+          skills: skillsKeyCode,
+        })
+        if (action !== null) {
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          if (action.type === 'replace') beginInventoryClose('skills')
+          else inventoryBackOrClose()
+          return
+        }
+      }
+      if (surface && event.code === menuKeyCode) {
         if (surface.kind === 'dialogue' && event.code === menuKeyCode) return
         event.preventDefault()
         event.stopImmediatePropagation()
@@ -452,15 +488,19 @@ export default function HubInventoryUi({
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
   }, [
+    beginInventoryClose,
     closeSurface,
     disabled,
     inventoryBackOrClose,
     inventoryEnabled,
     inventoryKeyCode,
+    inventoryCloseTarget,
     inputSuspended,
     menuKeyCode,
     nearestInteraction,
     openWorldDialogue,
+    onSurfaceChange,
+    skillsKeyCode,
     surface,
     transitionActive,
   ])
@@ -490,21 +530,28 @@ export default function HubInventoryUi({
       key={hubNativeSurfaceOwnerKey(surface)}
       audio={audio}
       belt={belt}
+      closing={inventoryCloseTarget !== null}
       config={config}
       economy={economy}
+      forceModalHudSettled={forceModalHudSettled}
       inputSuspended={inputSuspended}
       modAssets={modAssets}
       menuKeyCode={menuKeyCode}
       memorial={memorial}
       onAction={onAction}
       onClose={closeSurface}
+      onInventoryCloseComplete={() => {
+        if (inventoryCloseTarget !== null) closeSurface()
+      }}
       onInventoryBack={inventoryBackOrClose}
       onOpenSack={openInventorySack}
+      onOpenSkills={() => beginInventoryClose('skills')}
       onNotebox={setNpcNotebox}
       onSurfaceChange={onSurfaceChange}
       onUnassignBeltEntry={onUnassignBeltEntry}
       perkRemovalEnabled={interactionsEnabled}
       progression={progression}
+      replacementTarget={inventoryCloseTarget}
       sackPath={inventorySackPath}
       sackTransition={inventorySackTransition}
       skorchaDismissalIndex={skorchaDismissalIndex}
@@ -533,21 +580,26 @@ export default function HubInventoryUi({
 function NativeHubSurface({
   audio,
   belt,
+  closing,
   config,
   economy,
+  forceModalHudSettled,
   inputSuspended,
   modAssets,
   menuKeyCode,
   memorial,
   onAction,
   onClose,
+  onInventoryCloseComplete,
   onInventoryBack,
   onNotebox,
   onOpenSack,
+  onOpenSkills,
   onSurfaceChange,
   onUnassignBeltEntry,
   perkRemovalEnabled,
   progression,
+  replacementTarget,
   sackPath,
   sackTransition,
   skorchaDismissalIndex,
@@ -557,21 +609,26 @@ function NativeHubSurface({
 }: {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
+  closing: boolean
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
+  forceModalHudSettled: boolean
   inputSuspended: boolean
   modAssets: readonly GameModAsset[]
   menuKeyCode: string
   memorial: HubMemorialState | null
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
+  onInventoryCloseComplete: () => void
   onInventoryBack: () => void
   onNotebox: (text: string) => void
   onOpenSack: (sackId: number) => void
+  onOpenSkills: () => void
   onSurfaceChange: (surface: HubUiSurface) => void
   onUnassignBeltEntry?: (slot: number) => void
   perkRemovalEnabled: boolean
   progression: ProtocolPlayerProgression
+  replacementTarget: 'closed' | 'skills' | null
   sackPath: readonly number[]
   sackTransition: HubInventorySackTransitionModel | null
   skorchaDismissalIndex: number
@@ -584,6 +641,12 @@ function NativeHubSurface({
   const rendererRef = useRef<HubInventoryRenderer | null>(null)
   const modelRef = useRef<HubInventoryRendererModel | null>(null)
   const revealStartedAtRef = useRef<number | null>(null)
+  const closeStartedAtRef = useRef<number | null>(null)
+  const closeStartRevealRef = useRef(0)
+  const closeCompletedRef = useRef(false)
+  const closingRef = useRef(closing)
+  const forceModalHudSettledRef = useRef(forceModalHudSettled)
+  const onInventoryCloseCompleteRef = useRef(onInventoryCloseComplete)
   const chatCompletionHandledRef = useRef(false)
   const advanceChatRef = useRef<() => void>(() => undefined)
   const chatRandomIndexRef = useRef(
@@ -624,31 +687,45 @@ function NativeHubSurface({
   const [statsPage, setStatsPage] = useState(0)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
+  closingRef.current = closing
+  forceModalHudSettledRef.current = forceModalHudSettled
+  onInventoryCloseCompleteRef.current = onInventoryCloseComplete
   const modalSlides = useSyncExternalStore(
     subscribeNativeModalSlideProgress,
     nativeModalSlideProgressSnapshot,
     initialNativeModalSlideProgressSnapshot,
   )
-  const inventoryResumeProgress = surface.kind === 'inventory' ? modalSlides.inventory : 1
-  const inventoryResumeControl = nativeHudModalSlideLayout(
+  const inventoryIntrinsicProgress = surface.kind === 'inventory' ? modalSlides.inventory : 1
+  const inventoryHudProgress = nativeOptionalBookHudProgress(
+    inventoryIntrinsicProgress,
+    forceModalHudSettled,
+  )
+  const inventoryModalHud = nativeHudModalSlideLayout(
     NATIVE_HUD_BACKBUFFER.width,
     NATIVE_HUD_BACKBUFFER.height,
-    inventoryResumeProgress,
-  ).backpack
+    inventoryHudProgress,
+  )
+  const inventoryResumeControl = inventoryModalHud.backpack
   const inventoryResumeRect = [
     inventoryResumeControl.x,
     inventoryResumeControl.y,
     inventoryResumeControl.width,
     inventoryResumeControl.height,
   ] as const
-  const inventoryBeltRects = nativeHudModalSlideLayout(
-    NATIVE_HUD_BACKBUFFER.width,
-    NATIVE_HUD_BACKBUFFER.height,
-    surface.kind === 'inventory' ? modalSlides.inventory : 1,
-  ).belt
+  const inventorySkillsControl = inventoryModalHud.tome
+  const inventorySkillsRect = [
+    inventorySkillsControl.x,
+    inventorySkillsControl.y,
+    inventorySkillsControl.width,
+    inventorySkillsControl.height,
+  ] as const
+  const inventoryBeltRects = inventoryModalHud.belt
 
   useLayoutEffect(() => {
     if (surface.kind !== 'inventory') return
+    closeStartedAtRef.current = null
+    closeStartRevealRef.current = 0
+    closeCompletedRef.current = false
     setNativeModalSlideProgress('inventory', 0)
   }, [surface.kind])
 
@@ -981,9 +1058,36 @@ function NativeHubSurface({
       const step = currentKind === 'dialogue'
         ? HUB_NATIVE_UI_TIMING.chatRevealPerTick
         : HUB_NATIVE_UI_TIMING.inventoryRevealPerTick
-      const reveal = hubNativeUiReveal(nowMs - revealStartedAtRef.current, step)
+      const openingReveal = hubNativeUiReveal(nowMs - revealStartedAtRef.current, step)
+      let reveal = openingReveal
+      if (currentKind === 'inventory' && closingRef.current) {
+        if (closeStartedAtRef.current === null) {
+          closeStartedAtRef.current = nowMs
+          closeStartRevealRef.current = openingReveal
+        }
+        reveal = hubNativeUiCloseReveal(
+          closeStartRevealRef.current,
+          nowMs - closeStartedAtRef.current,
+          step,
+        )
+      }
       if (currentKind === 'inventory') setNativeModalSlideProgress('inventory', reveal)
-      const frame = renderer.render(nowMs, reveal)
+      const frame = renderer.render(
+        nowMs,
+        reveal,
+        currentKind === 'inventory'
+          ? nativeOptionalBookHudProgress(reveal, forceModalHudSettledRef.current)
+          : reveal,
+      )
+      if (
+        currentKind === 'inventory'
+        && closingRef.current
+        && reveal === 0
+        && !closeCompletedRef.current
+      ) {
+        closeCompletedRef.current = true
+        onInventoryCloseCompleteRef.current()
+      }
       const current = modelRef.current
       if (frame.chatComplete && current?.kind === 'dialogue'
         && current.content.kind === 'speech' && !chatCompletionHandledRef.current) {
@@ -1094,8 +1198,9 @@ function NativeHubSurface({
     <div
       className="hub-native-ui-overlay"
       data-input-suspended={inputSuspended}
+      data-replacement-target={replacementTarget ?? ''}
       data-surface-kind={surface.kind}
-      inert={inputSuspended || undefined}
+      inert={inputSuspended || closing || undefined}
     >
       <section
         className="hub-native-ui-stage"
@@ -1363,6 +1468,14 @@ function NativeHubSurface({
             ) : null}
           {semanticTooltip ? (
             <span className="hub-native-ui-semantic" role="tooltip">{semanticTooltip}</span>
+          ) : null}
+          {surface.kind === 'inventory' && !notice && !dyeModal ? (
+            <NativeAction
+              data={{ 'data-inventory-skills': 'true' }}
+              label="Open skills"
+              rect={inventorySkillsRect}
+              onClick={onOpenSkills}
+            />
           ) : null}
           {(surface.kind === 'inventory'
             || (surface.kind === 'service' && sackPath.length > 0))

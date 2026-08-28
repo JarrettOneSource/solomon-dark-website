@@ -557,6 +557,17 @@ export function hubNativeUiReveal(elapsedMs: number, incrementPerTick: number): 
   return Math.min(1, hubNativeUiElapsedTicks(elapsedMs) * incrementPerTick)
 }
 
+export function hubNativeUiCloseReveal(
+  startProgress: number,
+  elapsedMs: number,
+  decrementPerTick: number,
+): number {
+  if (!Number.isFinite(startProgress) || startProgress < 0 || startProgress > 1) {
+    throw new RangeError('native InventoryScreen close progress must be within [0, 1]')
+  }
+  return Math.max(0, startProgress - hubNativeUiElapsedTicks(elapsedMs) * decrementPerTick)
+}
+
 export const HUB_NATIVE_LABELED_CONTROL = {
   idleBodyRecord: 101,
   pressedBodyRecord: 102,

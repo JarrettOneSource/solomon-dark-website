@@ -76,6 +76,7 @@ export default function DeveloperObserverScene({
         initialSnapshot={observerState.snapshot}
         inputBlocked
         inventoryRequestSequence={0}
+        optionalBookOverlap={false}
         levelUpPresentationId={null}
         modalDisabled
         modAssets={session.modAssets}

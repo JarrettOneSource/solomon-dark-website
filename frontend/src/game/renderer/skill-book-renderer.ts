@@ -86,6 +86,7 @@ export interface SkillBookRendererPresentation {
   readonly economy: ProtocolPlayerEconomy
   readonly element: WizardElement
   readonly hoveredSkillId: number | null
+  readonly hudProgress: number
   readonly openProgress: number
   readonly placements: readonly NativeSkillBookPagePlacement[]
   readonly progression: ProtocolPlayerProgression
@@ -206,7 +207,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       const hudLayout = nativeHudModalSlideLayout(
         NATIVE_HUD_BACKBUFFER.width,
         NATIVE_HUD_BACKBUFFER.height,
-        progress,
+        presentation.hudProgress,
       )
       drawSkillQuickbar(hud, resources, presentation, hudLayout)
       drawInventoryHud(

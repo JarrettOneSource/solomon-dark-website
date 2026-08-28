@@ -67,6 +67,7 @@ import {
   type GameSettings,
 } from './game-settings.ts'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
+import { nativeOptionalBookOwnsInventoryPause } from './native-optional-book.ts'
 import {
   nativeHudSkillSelectorTarget,
   type NativeHudSkillSelectorTarget,
@@ -1578,9 +1579,11 @@ export default function MainMenuScene({
   const ownsModalPause = gameplayPause !== null
     && gameplayPause.ownerPlayerId === session?.playerId
     && gameplayPause.source !== 'pause-menu'
-  const ownsActiveInventoryPause = ownsModalPause
-    && gameplayPause?.source === 'inventory'
-    && inventoryScreenOpen
+  const ownsActiveInventoryPause = nativeOptionalBookOwnsInventoryPause(
+    ownsModalPause,
+    inventoryScreenOpen,
+  )
+  const optionalBookOverlap = skillBookOpen && inventoryScreenOpen
   const tutorialSession = runtimeSnapshot?.world.kind === 'boneyard'
     && runtimeSnapshot.world.tutorial !== null
   const tutorialPreludeVisible = screen === 'tutorial-prelude'
@@ -1914,6 +1917,7 @@ export default function MainMenuScene({
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
+              optionalBookOverlap={optionalBookOverlap}
               modalDisabled={sceneModalDisabled}
               modAssets={session.modAssets}
               modCatalog={session.getModCatalog()}
@@ -1959,6 +1963,7 @@ export default function MainMenuScene({
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
+              optionalBookOverlap={optionalBookOverlap}
               modalDisabled={sceneModalDisabled}
               modAssets={session.modAssets}
               levelUpPresentationId={levelUpPresentationId}
@@ -2105,6 +2110,9 @@ export default function MainMenuScene({
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               element={runtimeSnapshot!.players[session.playerId]!.config.element}
               inputSuspended={chatOpen || socialModalOpen}
+              inventoryKeyCode={gameSettings.controls.openInventory}
+              inventoryScreenOpen={inventoryScreenOpen}
+              menuKeyCode={gameSettings.controls.openMenu}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => {
                 setSkillBookOpen(false)
@@ -2124,6 +2132,7 @@ export default function MainMenuScene({
               playerId={session.playerId}
               progression={runtimeProgression}
               session={session}
+              skillsKeyCode={gameSettings.controls.openSkills}
               style={nativeStageStyle}
               subscribeSnapshot={session.onSnapshot}
               topMost

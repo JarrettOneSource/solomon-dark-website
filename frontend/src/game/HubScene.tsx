@@ -103,6 +103,7 @@ interface HubSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
+  optionalBookOverlap: boolean
   modalDisabled: boolean
   modAssets: readonly GameModAsset[]
   levelUpPresentationId: number | null
@@ -164,6 +165,7 @@ export default function HubScene({
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
+  optionalBookOverlap,
   modalDisabled,
   modAssets,
   levelUpPresentationId,
@@ -345,13 +347,25 @@ export default function HubScene({
     onInventoryOpenChange(hubUiSurface?.kind === 'inventory')
   }, [hubUiSurface?.kind, onInventoryOpenChange])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (inventoryRequestRef.current === inventoryRequestSequence) return
     inventoryRequestRef.current = inventoryRequestSequence
-    if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
+    if (
+      !gameplayHudHidden
+      && (!inputBlocked || optionalBookOverlap)
+      && !pickerOpen
+      && !transitionActive
+    ) {
       setHubUiSurface({ kind: 'inventory' })
     }
-  }, [gameplayHudHidden, inputBlocked, inventoryRequestSequence, pickerOpen, transitionActive])
+  }, [
+    gameplayHudHidden,
+    inputBlocked,
+    inventoryRequestSequence,
+    optionalBookOverlap,
+    pickerOpen,
+    transitionActive,
+  ])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -929,10 +943,11 @@ export default function HubScene({
           audio={audio}
           belt={liveBelt}
           config={hubInitialSnapshot.players[playerId]!.config}
-          disabled={modalDisabled || pickerOpen}
+          disabled={(modalDisabled && !optionalBookOverlap) || pickerOpen}
           economy={economy}
           inputSuspended={chatInputActive}
           inventoryKeyCode={settings.controls.openInventory}
+          forceModalHudSettled={optionalBookOverlap}
           inventoryEnabled={!gameplayHudHidden}
           menuKeyCode={settings.controls.openMenu}
           memorial={memorial}
@@ -940,11 +955,13 @@ export default function HubScene({
           nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
           onBlockingOverlayChange={setNpcNoteboxOpen}
+          onOpenSkills={onOpenSkills}
           onSurfaceChange={setHubUiSurface}
           onUnassignBeltEntry={onUnassignQuickbarSkill}
           overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
+          skillsKeyCode={settings.controls.openSkills}
           region={currentRegion}
           skorchaDismissalIndex={skorchaInteraction?.dismissalIndex ?? 0}
           skorchaPosition={skorchaInteraction?.position ?? null}

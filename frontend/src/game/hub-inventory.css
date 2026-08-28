@@ -71,6 +71,10 @@
   user-select: none;
 }
 
+.hub-native-ui-overlay[data-replacement-target='skills'] {
+  z-index: 70;
+}
+
 /* Dialogue keeps the world visible behind the stage (renderer curtainAlpha = 0). */
 .hub-native-ui-overlay[data-surface-kind='dialogue'] {
   background: transparent;

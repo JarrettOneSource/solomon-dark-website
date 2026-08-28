@@ -272,5 +272,228 @@ byte-for-byte into the Website runtime slice with its source hash.
   become `2`. The same journey proved modal movement stop/resume, mandatory
   Escape handling, and independent two-client ownership with no console or
   page errors. Its captured frame is `/tmp/solomon-dark-skill-picker-smoke.png`.
-- The Mod Loader static native-progression contract check passes against the
-  reusable report and sealed fixture metadata.
+- The historical 2026-08-14 receipt also recorded a read-only static check of
+  the then-current external report and sealed fixture metadata; it is not a
+  maintained Website validation gate.
+
+## 2026-08-28 — Player-reported first-presented card reopening
+
+### Reported smell and process failure
+
+- A player reports that the level-up screen's first selection differs from
+  retail: cards lack colored icons and descriptions, although the full Skills
+  screen exposes the information after selection.
+- This reopens the card-composition rows above. The earlier pass verified one
+  generic three-card frame and source record presence, but did not table-test
+  the 72 public rows, eight roots, rank wrapping, or ten Welding variants. It
+  left the exact palette helper unused and accepted generic family colors,
+  records `81..90` for Welding, fixed name anchors, and transformed quick copy.
+  One screenshot could not prove that complete membership.
+
+### Evidence refresh
+
+| Evidence class | Exact source | Recovered fact | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Beta 0.72.5 `SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, re-hashed 2026-08-28 | Canonical image; no runtime/ASLR address is used. | high |
+| Stock cards | `Mod Loader/tests/fixtures/webgame/menu-reference-captures/skill-picker.png`, SHA-256 `96fa5827e56de2a274b44eb9e6ccc10ad6da27fe973c946d76febbb9f7612556`; native Insight frame SHA-256 `a299c649f5e4a9c66302dc9cd6704ab0626d421d955075bb9a427469ada20023` | Root treatment, wrapped names/families, and quick descriptions are visible before hover. Insight is a second pass and does not replace copy. | high-live |
+| Instructions | card renderer `0x006720F0`, Welding override `0x00671810`, LevelupScreen render `0x0067DF80` | Painter/text order, exact anchors, palette, shadows, and Welding domains. | high |
+| Authored data | `native-skill-catalog.json`, `native-skills-and-spells.md`, `spell-welding.md` | All public rows `8..79` have nonempty quick/full description data; executable rules assign roots/categories; ten Welding rows own synthetic names/pairs/records. | high |
+| Current web | `origin/main` `0c94685e`; `skill-picker-render-contract` and renderer | `skillPickerRootTint` is unused; Skills 164 stays white; family approximations replace roots; Welding uses the wrong icon domain/generic copy; names do not wrap; descriptions are uppercased, narrowed to 110, and misanchored. | high |
+
+### Reopened boundary and authored-row inventory
+
+Native system: **first-presented LevelupScreen card composition**, from each
+ordered authoritative offer option through every visible layer before pointer,
+keyboard, or controller selection. Every authored public row has one explicit
+disposition below. `root` is the executable color root and `cat` is its compiled
+category byte.
+
+| ID / skill | root | cat | Disposition |
+| --- | ---: | ---: | --- |
+| 8 Magic Missile | 0 | 1 | exact-ported by the table-driven card contract |
+| 9 Smart Missiles | 0 | 0 | exact-ported by the table-driven card contract |
+| 10 More Missiles | 0 | 0 | exact-ported by the table-driven card contract |
+| 11 Call Leviathan | 0 | 2 | exact-ported by the table-driven card contract |
+| 12 Planewalker | 0 | 2 | exact-ported by the table-driven card contract |
+| 13 Piercing | 0 | 4 | exact-ported by the table-driven card contract |
+| 14 Ether Blast | 0 | 4 | exact-ported by the table-driven card contract |
+| 15 Phasing | 0 | 2 | exact-ported by the table-driven card contract |
+| 16 Fireball | 1 | 1 | exact-ported by the table-driven card contract |
+| 17 Embers | 1 | 0 | exact-ported by the table-driven card contract |
+| 18 Explode | 1 | 0 | exact-ported by the table-driven card contract |
+| 19 Embers to Imps | 1 | 4 | exact-ported by the table-driven card contract |
+| 20 Immolate | 1 | 4 | exact-ported by the table-driven card contract |
+| 21 Ring of Fire | 1 | 2 | exact-ported by the table-driven card contract |
+| 22 Burn | 1 | 0 | exact-ported by the table-driven card contract |
+| 23 Firewalker | 1 | 2 | exact-ported by the table-driven card contract |
+| 24 Lightning | 2 | 1 | exact-ported by the table-driven card contract |
+| 25 Chaining | 2 | 0 | exact-ported by the table-driven card contract |
+| 26 Stun | 2 | 0 | exact-ported by the table-driven card contract |
+| 27 Magic Storm | 2 | 2 | exact-ported by the table-driven card contract |
+| 28 Magic Tornado | 2 | 0 | exact-ported by the table-driven card contract |
+| 29 Hurricane | 2 | 4 | exact-ported by the table-driven card contract |
+| 30 Prismatic Shock | 2 | 2 | exact-ported by the table-driven card contract |
+| 31 Disintegrate | 2 | 4 | exact-ported by the table-driven card contract |
+| 32 Frost Jet | 3 | 1 | exact-ported by the table-driven card contract |
+| 33 Chill Wind | 3 | 0 | exact-ported by the table-driven card contract |
+| 34 Cone of Ice | 3 | 0 | exact-ported by the table-driven card contract |
+| 35 Ring of Ice | 3 | 2 | exact-ported by the table-driven card contract |
+| 36 Harden | 3 | 4 | exact-ported by the table-driven card contract |
+| 37 Cold Aura | 3 | 4 | exact-ported by the table-driven card contract |
+| 38 Hail | 3 | 0 | exact-ported by the table-driven card contract |
+| 39 Permafrost | 3 | 0 | exact-ported by the table-driven card contract |
+| 40 Boulder | 4 | 1 | exact-ported by the table-driven card contract |
+| 41 Earthquake | 4 | 2 | exact-ported by the table-driven card contract |
+| 42 Hasten Rocks | 4 | 0 | exact-ported by the table-driven card contract |
+| 43 Bind Rocks | 4 | 0 | exact-ported by the table-driven card contract |
+| 44 Rock Surge | 4 | 4 | exact-ported by the table-driven card contract |
+| 45 Raise Golem | 4 | 2 | exact-ported by the table-driven card contract |
+| 46 Stoneskin | 4 | 2 | exact-ported by the table-driven card contract |
+| 47 Gargantuan | 4 | 4 | exact-ported by the table-driven card contract |
+| 48 Teleport | 7 | 2 | exact-ported by the table-driven card contract |
+| 49 Magic Circle | 7 | 2 | exact-ported by the table-driven card contract |
+| 50 Magic Trap | 7 | 2 | exact-ported by the table-driven card contract |
+| 51 Dampen | 7 | 2 | exact-ported by the table-driven card contract |
+| 52 Spell Welding | 7 | 1 | exact-ported through all ten special builds below |
+| 53 Flash | 7 | 0 | exact-ported by the table-driven card contract |
+| 54 Magic Shield | 7 | 2 | exact-ported by the table-driven card contract |
+| 55 Explosive Shield | 7 | 0 | exact-ported by the table-driven card contract |
+| 56 Mana Up | 6 | 0 | exact-ported by the table-driven card contract |
+| 57 Channel Mana | 6 | 3 | exact-ported by the table-driven card contract |
+| 58 Meditation | 6 | 3 | exact-ported by the table-driven card contract |
+| 59 Battle Mage | 6 | 3 | exact-ported by the table-driven card contract |
+| 60 Focus | 6 | 3 | exact-ported by the table-driven card contract |
+| 61 Siege Mage | 6 | 3 | exact-ported by the table-driven card contract |
+| 62 Resist Magic | 6 | 3 | exact-ported by the table-driven card contract |
+| 63 Creativity | 6 | 3 | exact-ported by the table-driven card contract |
+| 64 Health Up | 5 | 0 | exact-ported by the table-driven card contract |
+| 65 Enchant Staff | 5 | 3 | exact-ported by the table-driven card contract |
+| 66 Telekinesis | 5 | 3 | exact-ported by the table-driven card contract |
+| 67 Rush | 5 | 3 | exact-ported by the table-driven card contract |
+| 68 Deflect | 5 | 3 | exact-ported by the table-driven card contract |
+| 69 Resist Poison | 5 | 3 | exact-ported by the table-driven card contract |
+| 70 Faster Caster | 5 | 3 | exact-ported by the table-driven card contract |
+| 71 Fortunate Flailing | 5 | 3 | exact-ported by the table-driven card contract |
+| 72 Acid Rain | 2 | 2 | exact-ported by the table-driven card contract |
+| 73 Fire Wall | 1 | 2 | exact-ported by the table-driven card contract |
+| 74 Ether Drain | 0 | 2 | exact-ported by the table-driven card contract |
+| 75 Iron Golem | 4 | 0 | exact-ported by the table-driven card contract |
+| 76 Call Comet | 3 | 2 | exact-ported by the table-driven card contract |
+| 77 Turn Undead | 7 | 2 | exact-ported by the table-driven card contract |
+| 78 Mindstar | 6 | 2 | exact-ported by the table-driven card contract |
+| 79 Regenerate | 5 | 2 | exact-ported by the table-driven card contract |
+
+### Cross-row and special-variant inventory
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| root 0 Ether `#FFE5FF` / ` ETHER` | `0x006720F0` | exact-ported | every root-0 row |
+| root 1 Fire `#FFCBCB` / ` FIRE` | same | exact-ported | every root-1 row |
+| root 2 Air `#E5FFFF` / ` AIR` | same | exact-ported | every root-2 row |
+| root 3 Water `#CBCBFF` / ` WATER` | same | exact-ported | every root-3 row |
+| root 4 Earth `#CBFFCB` / ` EARTH` | same | exact-ported | every root-4 row |
+| root 5 Body `#FFE5CB` / `BODY ` | same | exact-ported | every root-5 row |
+| root 6 Mind `#CBD8FF` / `MIND ` | same | exact-ported | every root-6 row |
+| root 7 Arcane `#E5E5E5` / `ARCANE ` | same | exact-ported | every root-7 row |
+| white record 13, root-tinted record 164, frame 5, black/main icon | card painter order | exact-ported | exact layer/tint assertions |
+| ordinary uppercase name/rank, width 140 | centered text wrapper | exact-ported | every row plus rank-up wrapping |
+| no-break word branch (`PLANEWALK-\nER`) | `0x0043D17D..0x0043D1A6` | exact-ported by this reopening | insert hyphen then rendered newline instead of throwing |
+| family after measured wrapped name | same | exact-ported | exact eight labels/spaces |
+| authored-case description, white/no shadow, width 140, center Y 532.5 | CFG plus card painter | exact-ported | all 71 ordinary public cards nonempty |
+| hidden classification lane | same-SHA Ring-of-Fire pixels | verified-already-at-parity | no invented footer pixels |
+| build 1000 Burning Bolt / record 108 | `0x00671810` | exact-ported | split 0/1, exact pair copy |
+| build 1001 Frost Missile / record 109 | same | exact-ported | split 0/3, exact pair copy |
+| build 1002 Ball Lightning / record 110 | same | exact-ported | split 0/2, exact pair copy |
+| build 1003 Flame Lash / record 111 | same | exact-ported | split 2/1, retail `Lighting` spelling |
+| build 1004 Blizzard Beam / record 112 | same | exact-ported | split 2/3, exact pair copy |
+| build 1005 Steam Jet / record 113 | same | exact-ported | split 3/1, exact pair copy |
+| build 1006 Ethereal Boulder / record 114 | same | exact-ported | split 0/4, exact pair copy |
+| build 1007 Meteor Swarm / record 115 | same | exact-ported | split 4/1, exact pair copy |
+| build 1008 Hailstones / record 116 | same | exact-ported | split 4/3, exact pair copy |
+| build 1009 Crawling Shock / record 117 | same | exact-ported | split 4/2, exact pair copy |
+| three/four cards | LevelupScreen panel builder | verified-already-at-parity after shared-card correction | exact centers/bounds |
+| Creativity Insight on ordinary/Welding | `0x0067EA49..0x0067EDD0` | verified-already-at-parity above corrected base card | gold pass/label never hides description |
+| Sorceror SAVE/ROLL | UI 57/56 | verified-already-at-parity | unchanged actions |
+| automatic, queued, reconnect presentations | authoritative offer identity | verified-already-at-parity after shared renderer correction | identical first-presented copy |
+| runtime rows 80/81 and reserve 82 | offer exclusion | out-of-system: never public picker cards | complete domain assertion |
+
+No member is blocked by the browser platform.
+
+### Corrected behavioral contract and implementation consequence
+
+- The reported colored icon is the exact root-tinted Skills-164 glow behind the
+  icon. Skills 13, frame 5, and the main icon remain white; the opaque black
+  icon copy sits at `(+4,+4)`. Coloring only text is insufficient.
+- Ordinary painter order is aura, root glow, frame, black/main icon, shadow/main
+  name, shadow/main exact family, then unshadowed description. All lanes exist
+  on the first frame and never depend on hover/focus.
+- Ordinary names are uppercase with rank suffix and exact 140-pixel wrapping.
+  The reachable no-break branch inserts `-\n` before the final overflowing
+  pair; authored `PLANEWALKER` therefore renders as `PLANEWALK-\nER` rather
+  than throwing or overflowing.
+  Descriptions select `mQDescription` then `mDescription`, preserve authored
+  case, wrap at 140, and center their measured 16/17-pixel block around 532.5.
+  Lowercase source glyphs look like small caps but have distinct advances.
+- Root is `nativeSkillColorRoot(skillId)`, not catalog family; advanced rows
+  `72..79` therefore inherit Air, Fire, Ether, Earth, Water, Arcane, Mind, and
+  Body respectively.
+- Welding uses `skillScreenIconRecord` `108..117`, frame 14, split-color Skills
+  164, synthetic Title Case name, exact `Welded ...` pair description, and
+  `ARCANE `. `skillsAtlasIconRecord` `81..90` belongs another display domain.
+- Preserve the existing Insight second pass, special actions, authority,
+  selection, queue, and close lifecycle; repair the shared base card rather
+  than adding report-specific DOM copy.
+
+### Validation contract and receipt
+
+- Table tests iterate IDs `8..79`, all eight roots/categories, rank one/rank up,
+  name/description wrapping, exact labels/shadows/anchors, three/four cards,
+  every Welding build, and Insight over ordinary/Welding cards.
+- Mac Chrome must show an ordinary rank-up, advanced-root, four-card Insight,
+  and Welding offer with root color and description present on the first frame;
+  compare 1600x900 pixels and require empty page/console/failed-response arrays.
+- Implementation and exact-tree Mac receipts are recorded below. Publication
+  and deployment were not requested.
+
+### 2026-08-28 implementation receipt
+
+- `skill-picker-render-contract.ts` now produces one immutable visible-card
+  plan from each authoritative option. All 71 ordinary public cards resolve
+  exact root, packed tint, label, record, uppercase/rank wrapping, authored-case
+  description, measured anchors, and shadows; row 52 resolves all ten synthetic
+  Welding plans instead of entering the ordinary branch.
+- `skill-picker-renderer.ts` consumes that plan before any focus/hover state. It
+  tints Skills 164, keeps the main icon white over its black `(+4,+4)` copy,
+  uses name/family black shadows, renders the unshadowed 140-pixel authored
+  description block, and draws Welding frame 14, records 108..117, and the
+  split two-root mesh. The existing Insight pass remains a later gold overlay.
+- The full authored sweep exposed and closed the shared native no-break branch:
+  `0x0043D17D..0x0043D1A6` produces `PLANEWALK-\nER` instead of the former web
+  exception. Both full SkillScreen and LevelupScreen consume the corrected
+  wrapper.
+- Mac focused coverage iterates every ID `8..79`, all roots/categories, rank-up
+  wrapping, every nonempty description, all ten Welding builds, Insight, both
+  card counts, records `108..117`, and exact geometry. Production/test
+  TypeScript and the three focused behavior suites passed; the complete
+  Boneyard group passed on the same Mac candidate.
+- Chrome `151.0.7922.174` on Apple M2/macOS `26.6.2` rendered WebGL2 at
+  `1600x900`. Its ordinary first frame exposed nonempty authored descriptions
+  and exact roots for Magic Circle (`slows time, boosts life and mana`,
+  `#E5E5E5`), Health Up (`increases maximum health`, `#FFE5CB`), and Enchant
+  Staff (`enchant staff for melee fighting`, `#FFE5CB`). The inspected frame
+  SHA-256 is
+  `74c0c68cf81ea5b0926445835f6d3ebbfdcc83ebb0eb5cac692d9ad5b41c7af6`.
+- The same real Boneyard journey published a four-card authoritative first
+  frame: rank-two Ring of Fire, Insight Acid Rain, Welding build 1003 Flame
+  Lash, and Regenerate. Semantic roots were `1/2/7/5`; descriptions were
+  `blast all surrounding enemies`, `spawn a shower of hot acid`, retail
+  `Welded Lighting + Fireball`, and `boosts health recovery`. Direct visual
+  review confirmed the four distinct root treatments, Insight's separate gold
+  pass, the split Welding glow/frame, and unclipped copy. The frame SHA-256 is
+  `e829336572796b07f9c1c7f067c0728e7dd17cfaf8f973ef2bef1d054066dd5c`.
+  Page, console, and failed-response arrays were empty in both scenes.
+- The final exact-tree Website gate on base `0c94685e` passed backend/Website
+  contracts, formatting, lint, every frontend suite, desktop tests, production
+  builds, bundle budget, and media policy. Mod Loader remained read-only
+  evidence tooling and was not a validation or publication target.
+- Publication and deployment were not requested and were not performed.

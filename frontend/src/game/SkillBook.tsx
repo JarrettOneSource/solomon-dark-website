@@ -25,6 +25,10 @@ import {
   type NativeHudRect,
 } from './native-hud-layout.ts'
 import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
+import {
+  nativeOptionalBookHudProgress,
+  nativeOptionalBookKeyAction,
+} from './native-optional-book.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -54,6 +58,9 @@ interface SkillBookProps {
   economy: ProtocolPlayerEconomy
   element: WizardElement
   inputSuspended: boolean
+  inventoryKeyCode: string
+  inventoryScreenOpen: boolean
+  menuKeyCode: string
   onAssignQuickbarSkill: (skillId: number, slot: number) => void
   onUnassignQuickbarSkill: (slot: number) => void
   onClose: () => void
@@ -64,6 +71,7 @@ interface SkillBookProps {
   playerId: string
   progression: ProtocolPlayerProgression
   session: GameClientSession
+  skillsKeyCode: string
   style: CSSProperties
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   topMost: boolean
@@ -85,6 +93,9 @@ export default function SkillBook({
   economy: initialEconomy,
   element,
   inputSuspended,
+  inventoryKeyCode,
+  inventoryScreenOpen,
+  menuKeyCode,
   onAssignQuickbarSkill,
   onClose,
   onCloseStart,
@@ -95,6 +106,7 @@ export default function SkillBook({
   playerId,
   progression: initialProgression,
   session,
+  skillsKeyCode,
   style,
   subscribeSnapshot,
   topMost,
@@ -121,6 +133,7 @@ export default function SkillBook({
   const closeCompletedRef = useRef(false)
   const closeStartedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
+  const hudProgress = nativeOptionalBookHudProgress(openProgress, inventoryScreenOpen)
   const presentationRef = useRef<SkillBookRendererPresentation>({
     belt: beltEntries,
     dragPosition: drag?.position ?? null,
@@ -128,6 +141,7 @@ export default function SkillBook({
     economy,
     element,
     hoveredSkillId,
+    hudProgress,
     openProgress,
     placements,
     progression,
@@ -140,6 +154,7 @@ export default function SkillBook({
     economy,
     element,
     hoveredSkillId,
+    hudProgress,
     openProgress,
     placements,
     progression,
@@ -180,9 +195,8 @@ export default function SkillBook({
     if (phase === 'closing' && progress === 0 && !closeCompletedRef.current) {
       closeCompletedRef.current = true
       onClose()
-      if (closeTargetRef.current === 'inventory') onOpenInventory()
     }
-  }), [onClose, onOpenInventory, phase])
+  }), [onClose, phase])
 
   useEffect(() => {
     if (topMost && !inputSuspended) rootRef.current?.focus()
@@ -226,6 +240,7 @@ export default function SkillBook({
     drag,
     economy,
     hoveredSkillId,
+    hudProgress,
     openProgress,
     placements,
     progression,
@@ -254,20 +269,27 @@ export default function SkillBook({
     setDrag(null)
     setTargetQuickbarSlot(null)
     onCloseStart?.()
+    audio.playSound('open-panel')
     closeTargetRef.current = target
     transitionStartProgressRef.current = openProgress
     transitionStartedAtRef.current = performance.now()
+    if (target === 'inventory') onOpenInventory()
     setPhase('closing')
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' || event.key.toLowerCase() === 'k') {
+    const action = nativeOptionalBookKeyAction(event.code, 'skills', {
+      inventory: inventoryKeyCode,
+      menu: menuKeyCode,
+      skills: skillsKeyCode,
+    })
+    if (action?.type === 'close') {
       event.preventDefault()
       event.stopPropagation()
       beginClose()
       return
     }
-    if (event.key.toLowerCase() === 'i') {
+    if (action?.type === 'replace' && action.target === 'inventory') {
       event.preventDefault()
       event.stopPropagation()
       beginClose('inventory')
@@ -280,16 +302,14 @@ export default function SkillBook({
       setTargetQuickbarSlot(slot)
     }
   }
-  const tome = nativeHudModalSlideLayout(
+  const modalHud = nativeHudModalSlideLayout(
     NATIVE_HUD_BACKBUFFER.width,
     NATIVE_HUD_BACKBUFFER.height,
-    openProgress,
-  ).tome
-  const belt = nativeHudModalSlideLayout(
-    NATIVE_HUD_BACKBUFFER.width,
-    NATIVE_HUD_BACKBUFFER.height,
-    openProgress,
-  ).belt
+    hudProgress,
+  )
+  const backpack = modalHud.backpack
+  const tome = modalHud.tome
+  const belt = modalHud.belt
 
   return (
     <div
@@ -299,9 +319,10 @@ export default function SkillBook({
       role="dialog"
       aria-modal="true"
       aria-label="Skills"
-      inert={inputSuspended || undefined}
+      inert={inputSuspended || phase === 'closing' || undefined}
       tabIndex={-1}
       data-transition-phase={phase}
+      data-transition-target={phase === 'closing' ? closeTargetRef.current : ''}
       data-open-progress={openProgress}
       data-dragged-skill-id={drag?.skillId ?? ''}
       data-drag-position-x={drag?.position.x ?? ''}
@@ -313,6 +334,14 @@ export default function SkillBook({
     >
       <div ref={hostRef} className="skill-book-renderer" aria-hidden />
       <h2 className="skill-book-semantic-title">SKILLS</h2>
+      <button
+        type="button"
+        className="skill-book-inventory-action"
+        aria-label="Open inventory"
+        data-skill-book-inventory="true"
+        style={{ height: backpack.height, left: backpack.x, top: backpack.y, width: backpack.width }}
+        onClick={() => beginClose('inventory')}
+      />
       <button
         type="button"
         className="skill-book-close-action"

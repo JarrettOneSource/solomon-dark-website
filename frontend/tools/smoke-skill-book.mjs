@@ -7,6 +7,10 @@ import { createServer as createViteServer } from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
+  DEFAULT_GAME_SETTINGS,
+  GAME_SETTINGS_STORAGE_KEY,
+} from '../src/game/game-settings.ts'
+import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
 } from '../src/game/native-hud-layout.ts'
@@ -54,8 +58,23 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 await page.addInitScript(installGameAudioSmokeProbe)
+await page.addInitScript(({ key, settings }) => {
+  localStorage.setItem(key, JSON.stringify(settings))
+}, {
+  key: GAME_SETTINGS_STORAGE_KEY,
+  settings: {
+    ...DEFAULT_GAME_SETTINGS,
+    controls: {
+      ...DEFAULT_GAME_SETTINGS.controls,
+      openInventory: 'KeyB',
+      openSkills: 'KeyV',
+    },
+  },
+})
 
 try {
+  const optionalBookReceipts = []
+  const optionalBookCueReceipts = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('requestfailed', (request) => {
     const failure = request.failure()?.errorText ?? 'failed'
@@ -151,6 +170,33 @@ try {
   })), { height: 900, webgl2: true, width: 1600 })
   const hubSealMotion = await sampleSkillBookSealMotion(page, book)
   await page.screenshot({ path: `${screenshotRoot}-settled.png` })
+
+  let cueCountBefore = await soundCount(page, 'openpanel')
+  const hubSkillsToInventory = observeOptionalBookOverlap(page, 'inventory')
+  await book.getByRole('button', { name: 'Open inventory' }).click()
+  optionalBookReceipts.push(await hubSkillsToInventory)
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  await book.waitFor({ state: 'hidden', timeout: 10_000 })
+  optionalBookCueReceipts.push(await optionalBookCueReceipt(
+    page,
+    'Hub Skills to Inventory',
+    cueCountBefore,
+  ))
+  await page.screenshot({ path: `${screenshotRoot}-hub-inventory-switch.png` })
+  cueCountBefore = await soundCount(page, 'openpanel')
+  const hubInventoryToSkills = observeOptionalBookOverlap(page, 'skills')
+  await inventory.getByRole('button', { name: 'Open skills' }).click()
+  optionalBookReceipts.push(await hubInventoryToSkills)
+  await book.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({ timeout: 10_000 })
+  await inventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  optionalBookCueReceipts.push(await optionalBookCueReceipt(
+    page,
+    'Hub Inventory to Skills',
+    cueCountBefore,
+  ))
 
   const leviathan = book.getByRole('button', { name: /Call Leviathan, rank 1/ })
   await leviathan.hover()
@@ -460,6 +506,31 @@ try {
     timeout: 5_000,
   })
   const boneyardSealMotion = await sampleSkillBookSealMotion(page, book, 3)
+  cueCountBefore = await soundCount(page, 'openpanel')
+  const boneyardSkillsToInventory = observeOptionalBookOverlap(page, 'inventory')
+  await page.keyboard.press('b')
+  optionalBookReceipts.push(await boneyardSkillsToInventory)
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  await book.waitFor({ state: 'hidden', timeout: 10_000 })
+  optionalBookCueReceipts.push(await optionalBookCueReceipt(
+    page,
+    'Boneyard Skills to Inventory',
+    cueCountBefore,
+  ))
+  await page.screenshot({ path: `${screenshotRoot}-boneyard-inventory-switch.png` })
+  cueCountBefore = await soundCount(page, 'openpanel')
+  const boneyardInventoryToSkills = observeOptionalBookOverlap(page, 'skills')
+  await page.keyboard.press('v')
+  optionalBookReceipts.push(await boneyardInventoryToSkills)
+  await book.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({ timeout: 10_000 })
+  await inventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  optionalBookCueReceipts.push(await optionalBookCueReceipt(
+    page,
+    'Boneyard Inventory to Skills',
+    cueCountBefore,
+  ))
   await page.keyboard.press('Escape')
   await book.waitFor({ state: 'detached', timeout: 5_000 })
   await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
@@ -549,6 +620,8 @@ try {
     paintedDrag,
     pullOff,
     networkErrors,
+    optionalBookCueReceipts,
+    optionalBookReceipts,
     pageErrors,
     sealMotion: {
       boneyard: boneyardSealMotion,
@@ -565,12 +638,14 @@ try {
     primarySelection: 'Fireball after Boneyard selector',
     screenshots: [
       `${screenshotRoot}-settled.png`,
+      `${screenshotRoot}-hub-inventory-switch.png`,
       `${screenshotRoot}-tooltip.png`,
       `${screenshotRoot}-mixed-quickbar.png`,
       `${screenshotRoot}-hud-primary-selector.png`,
       `${screenshotRoot}-hud-selectors.png`,
       `${screenshotRoot}-hub-hotbar-key-swaps.png`,
       `${screenshotRoot}-boneyard-selector.png`,
+      `${screenshotRoot}-boneyard-inventory-switch.png`,
       `${screenshotRoot}-boneyard-hotbar-key-swap.png`,
       `${screenshotRoot}-hub-ether-orb.png`,
       `${screenshotRoot}-boneyard-fire-orb.png`,
@@ -580,6 +655,38 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function observeOptionalBookOverlap(page, target) {
+  const receipt = await page.waitForFunction((replacementTarget) => {
+    const inventory = document.querySelector('.hub-native-ui-overlay[data-surface-kind="inventory"]')
+    const skills = document.querySelector('.skill-book-stage')
+    if (!inventory || !skills) return false
+    if (replacementTarget === 'skills') {
+      if (inventory.getAttribute('data-replacement-target') !== 'skills') return false
+    } else if (skills.getAttribute('data-transition-target') !== 'inventory') return false
+    return {
+      inventoryReveal: inventory.querySelector('.hub-inventory-native-canvas')
+        ?.getAttribute('data-native-reveal-progress') ?? null,
+      inventoryTarget: inventory.getAttribute('data-replacement-target'),
+      skillsProgress: skills.getAttribute('data-open-progress'),
+      skillsTarget: skills.getAttribute('data-transition-target'),
+      target: replacementTarget,
+    }
+  }, target, { timeout: 5_000 })
+  return receipt.jsonValue()
+}
+
+async function optionalBookCueReceipt(page, transition, before) {
+  const after = await soundCount(page, 'openpanel')
+  assert.equal(after - before, 1, `${transition} must play exactly one close cue`)
+  return { after, before, transition }
+}
+
+async function soundCount(page, sourceFragment) {
+  return page.evaluate((fragment) => window.__sdrAudioEvents
+    .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
+    .length, sourceFragment)
 }
 
 function currentConcentrations(host, playerId) {
