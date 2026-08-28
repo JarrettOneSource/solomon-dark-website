@@ -11,6 +11,8 @@ import { cloudIdFor, setCloudId } from '../../editor/store'
 import { playSound } from '../../fx/sounds'
 import { api, ApiError } from '../../lib/api'
 import { ErrorNote, Field } from '../ui'
+import ModVisibilityField from '../ModVisibilityField'
+import type { ModVisibility } from '../../lib/api'
 
 interface Props {
   doc: EditorDoc
@@ -22,6 +24,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
   const [name, setName] = useState(doc.meta.name || 'Untitled Acre')
   const [summary, setSummary] = useState('')
   const [description, setDescription] = useState('')
+  const [visibility, setVisibility] = useState<ModVisibility>('public')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -58,6 +61,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
         name: name.trim(),
         summary: summary.trim(),
         description: description.trim(),
+        visibility,
         ...(waveCount > 0 ? { waveText: serializeWaveText(pressed.waves!) } : {}),
       })
       playSound('tomeGet', 0.16)
@@ -100,6 +104,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
               onChange={(e) => setDescription(e.target.value)}
             />
           </Field>
+          <ModVisibilityField disabled={busy} onChange={setVisibility} value={visibility} />
           {error && <ErrorNote message={error} />}
           <p className="text-fell text-xs text-bone-dim/70">
             Publishing compiles the plot to a native .boneyard, validates the container,

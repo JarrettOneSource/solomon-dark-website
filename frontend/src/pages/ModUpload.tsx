@@ -7,6 +7,8 @@ import { api, ApiError } from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
+import ModVisibilityField from '../components/ModVisibilityField'
+import type { ModVisibility } from '../lib/api'
 
 const MAX_ZIP_MB = 100
 
@@ -19,6 +21,7 @@ export default function ModUpload() {
   const [description, setDescription] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [version, setVersion] = useState('1.0.0')
+  const [visibility, setVisibility] = useState<ModVisibility>('public')
   const [file, setFile] = useState<File | null>(null)
   const [screens, setScreens] = useState<File[]>([])
   const [dragOver, setDragOver] = useState(false)
@@ -63,6 +66,7 @@ export default function ModUpload() {
       form.set('description', description)
       if (tags.length > 0) form.set('tags', tags.join(','))
       form.set('version', version.trim() || '1.0.0')
+      form.set('visibility', visibility)
       form.set('file', file)
       for (const s of screens.slice(0, 10)) form.append('screenshots', s)
       const created = await api.mods.create(form)
@@ -128,6 +132,8 @@ export default function ModUpload() {
             </>
           )}
         </div>
+
+        <ModVisibilityField disabled={busy} onChange={setVisibility} value={visibility} />
 
         <div>
           <span className="label">Filing tags</span>

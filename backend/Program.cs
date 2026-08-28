@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using SolomonDarkRevived.Api;
 using SolomonDarkRevived.Data;
@@ -340,11 +339,6 @@ var frontendFiles = new StaticFileOptions
 };
 app.UseDefaultFiles();
 app.UseStaticFiles(frontendFiles);
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(storage.ScreenshotsPath),
-    RequestPath = "/uploads/screenshots"
-});
 
 app.UseRouting();
 if (isDevelopment)

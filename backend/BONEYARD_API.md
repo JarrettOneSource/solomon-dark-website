@@ -131,13 +131,17 @@ Content-Type: application/json
   "name": "The Survival Grounds, As Shipped",
   "slug": "the-survival-grounds-as-shipped",
   "summary": "The stock survival boneyard, byte for byte from the 0.72.5 beta. The yard re-rolls itself every time you visit; the file is the recipe, not the furniture.",
-  "description": "Extracted from the preserved 0.72.5 beta data."
+  "description": "Extracted from the preserved 0.72.5 beta data.",
+  "visibility": "unlisted"
 }
 ```
 
 `slug` is optional. When omitted, the existing Library slugger derives one
 from `name` and appends a numeric suffix when required. A supplied slug must be
 canonical lowercase kebab case and unused.
+
+`visibility` accepts `public`, `unlisted`, or `private`. API clients that omit
+it retain the historical `public` default.
 
 Publication returns the normal Library mod detail with status `201`. It keeps
 the draft. Screenshots begin empty and may be added through the existing mod

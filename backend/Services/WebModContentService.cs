@@ -66,7 +66,11 @@ public sealed class WebModContentService(
         }
 
         var subscriptions = await db.ModSubscriptions
-            .Where(subscription => subscription.UserId == userId && subscription.Enabled)
+            .Where(subscription =>
+                subscription.UserId == userId &&
+                subscription.Enabled &&
+                (subscription.Mod.Visibility != ModVisibility.Private ||
+                 subscription.Mod.AuthorId == userId))
             .Include(subscription => subscription.Mod)
                 .ThenInclude(mod => mod.Versions)
             .AsSplitQuery()

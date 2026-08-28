@@ -457,7 +457,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         version: str,
         archive: bytes,
         *,
+        screenshot: bytes | None = None,
         slug: str | None = None,
+        tags: str | None = None,
+        visibility: str | None = None,
     ) -> tuple[int, object]:
         boundary = f"----sdr-{uuid.uuid4().hex}"
         fields = {
@@ -466,6 +469,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "description": "Automated package contract coverage.",
             "version": version,
         }
+        if tags is not None:
+            fields["tags"] = tags
+        if visibility is not None:
+            fields["visibility"] = visibility
         parts: list[bytes] = []
         for key, value in fields.items():
             parts.append(
@@ -480,6 +487,16 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             + archive
             + b"\r\n"
         )
+        if screenshot is not None:
+            parts.append(
+                (
+                    f"--{boundary}\r\n"
+                    'Content-Disposition: form-data; name="screenshots"; filename="plate.png"\r\n'
+                    "Content-Type: image/png\r\n\r\n"
+                ).encode()
+                + screenshot
+                + b"\r\n"
+            )
         parts.append(f"--{boundary}--\r\n".encode())
         path = "/api/mods" if slug is None else f"/api/mods/{slug}/versions"
         return cls.request(
@@ -1375,6 +1392,257 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 400, rejected)
 
+    def test_mod_visibility_owns_discovery_direct_access_media_and_subscriptions(self) -> None:
+        def lua_package(package_id: str, name: str) -> bytes:
+            return package(
+                {"scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n"},
+                {
+                    "id": package_id,
+                    "name": name,
+                    "version": "1.0.0",
+                    "runtime": {
+                        "apiVersion": "1.0.0",
+                        "entryScript": "scripts/main.lua",
+                    },
+                },
+            )
+
+        author = {"Authorization": f"Bearer {self.token}"}
+        status, peer = self.request(
+            "POST",
+            "/api/auth/register",
+            json_body={
+                "username": "visibilitypeer",
+                "email": "visibilitypeer@example.invalid",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(status, 201, peer)
+        peer_auth = {"Authorization": f"Bearer {peer['token']}"}
+
+        status, stats_before = self.request("GET", "/api/stats")
+        self.assertEqual(status, 200, stats_before)
+        status, public = self.upload(
+            "Visibility Public",
+            "1.0.0",
+            lua_package("tests.visibility-public", "Visibility Public"),
+            tags="vis-public",
+        )
+        self.assertEqual(status, 201, public)
+        self.assertEqual(public["visibility"], "public")
+        status, unlisted = self.upload(
+            "Visibility Unlisted",
+            "1.0.0",
+            lua_package("tests.visibility-unlisted", "Visibility Unlisted"),
+            screenshot=ONE_PIXEL_PNG,
+            tags="vis-unlisted",
+            visibility="unlisted",
+        )
+        self.assertEqual(status, 201, unlisted)
+        self.assertEqual(unlisted["visibility"], "unlisted")
+        status, private = self.upload(
+            "Visibility Private",
+            "1.0.0",
+            lua_package("tests.visibility-private", "Visibility Private"),
+            screenshot=ONE_PIXEL_PNG,
+            tags="vis-private",
+            visibility="private",
+        )
+        self.assertEqual(status, 201, private)
+        self.assertEqual(private["visibility"], "private")
+
+        status, stats_after = self.request("GET", "/api/stats")
+        self.assertEqual(status, 200, stats_after)
+        self.assertEqual(stats_after["tomes"], stats_before["tomes"] + 1)
+
+        status, listed = self.request("GET", "/api/mods?pageSize=50")
+        self.assertEqual(status, 200, listed)
+        listed_slugs = {mod["slug"] for mod in listed["items"]}
+        self.assertIn(public["slug"], listed_slugs)
+        self.assertNotIn(unlisted["slug"], listed_slugs)
+        self.assertNotIn(private["slug"], listed_slugs)
+        status, _ = self.request("GET", "/api/mods?mine=true")
+        self.assertEqual(status, 401)
+        status, mine = self.request(
+            "GET",
+            "/api/mods?mine=true&pageSize=50",
+            headers=author,
+        )
+        self.assertEqual(status, 200, mine)
+        mine_by_slug = {mod["slug"]: mod for mod in mine["items"]}
+        for mod in (public, unlisted, private):
+            self.assertEqual(mine_by_slug[mod["slug"]]["visibility"], mod["visibility"])
+
+        status, tags = self.request("GET", "/api/tags")
+        self.assertEqual(status, 200, tags)
+        tag_names = {entry["tag"] for entry in tags["items"]}
+        self.assertIn("vis-public", tag_names)
+        self.assertNotIn("vis-unlisted", tag_names)
+        self.assertNotIn("vis-private", tag_names)
+        status, profile = self.request("GET", "/api/users/modsync")
+        self.assertEqual(status, 200, profile)
+        profile_slugs = {mod["slug"] for mod in profile["mods"]}
+        self.assertIn(public["slug"], profile_slugs)
+        self.assertNotIn(unlisted["slug"], profile_slugs)
+        self.assertNotIn(private["slug"], profile_slugs)
+
+        status, direct_unlisted = self.request("GET", f"/api/mods/{unlisted['slug']}")
+        self.assertEqual(status, 200, direct_unlisted)
+        self.assertEqual(direct_unlisted["visibility"], "unlisted")
+        status, _ = self.request("GET", f"/api/mods/{private['slug']}")
+        self.assertEqual(status, 404)
+        status, _ = self.request(
+            "GET",
+            f"/api/mods/{private['slug']}",
+            headers=peer_auth,
+        )
+        self.assertEqual(status, 404)
+        status, _ = self.request(
+            "PATCH",
+            f"/api/mods/{private['slug']}",
+            headers=peer_auth,
+            json_body={"summary": "Still hidden"},
+        )
+        self.assertEqual(status, 404)
+        status, owned_private = self.request(
+            "GET",
+            f"/api/mods/{private['slug']}",
+            headers=author,
+        )
+        self.assertEqual(status, 200, owned_private)
+
+        unlisted_plate = direct_unlisted["screenshots"][0]["url"]
+        private_plate = owned_private["screenshots"][0]["url"]
+        status, plate_bytes, _ = self.request_bytes("GET", unlisted_plate)
+        self.assertEqual(status, 200)
+        self.assertEqual(plate_bytes, ONE_PIXEL_PNG)
+        status, _, _ = self.request_bytes("GET", private_plate)
+        self.assertEqual(status, 404)
+        status, plate_bytes, _ = self.request_bytes("GET", private_plate, headers=author)
+        self.assertEqual(status, 200)
+        self.assertEqual(plate_bytes, ONE_PIXEL_PNG)
+        status, _, _ = self.request_bytes("GET", private_plate, headers=peer_auth)
+        self.assertEqual(status, 404)
+        with closing(sqlite3.connect(Path(self.temp.name) / "sdr.db")) as database:
+            private_file = database.execute(
+                "SELECT FileName FROM ModScreenshots WHERE ModId = ?",
+                (private["id"],),
+            ).fetchone()[0]
+        status, _, _ = self.request_bytes("GET", f"/uploads/screenshots/{private_file}")
+        self.assertEqual(status, 404)
+
+        status, comments = self.request(
+            "GET",
+            f"/api/mods/{unlisted['slug']}/comments",
+        )
+        self.assertEqual(status, 200, comments)
+        status, _ = self.request(
+            "GET",
+            f"/api/mods/{private['slug']}/comments",
+        )
+        self.assertEqual(status, 404)
+        status, _ = self.request(
+            "POST",
+            f"/api/mods/{private['slug']}/comments",
+            headers=peer_auth,
+            json_body={"body": "I should not see this."},
+        )
+        self.assertEqual(status, 404)
+        status, comment = self.request(
+            "POST",
+            f"/api/mods/{private['slug']}/comments",
+            headers=author,
+            json_body={"body": "Author-only note."},
+        )
+        self.assertEqual(status, 201, comment)
+
+        status, _ = self.request(
+            "PUT",
+            f"/api/mods/{unlisted['slug']}/subscription",
+            headers=peer_auth,
+        )
+        self.assertEqual(status, 201)
+        status, peer_active = self.request("GET", "/api/mods/active", headers=peer_auth)
+        self.assertEqual(status, 200, peer_active)
+        self.assertEqual([mod["id"] for mod in peer_active["mods"]], ["tests.visibility-unlisted"])
+        status, _ = self.request(
+            "PUT",
+            f"/api/mods/{private['slug']}/subscription",
+            headers=peer_auth,
+        )
+        self.assertEqual(status, 404)
+        status, _ = self.request(
+            "PUT",
+            f"/api/mods/{private['slug']}/subscription",
+            headers=author,
+        )
+        self.assertEqual(status, 201)
+        status, author_active = self.request("GET", "/api/mods/active", headers=author)
+        self.assertEqual(status, 200, author_active)
+        self.assertIn("tests.visibility-private", {mod["id"] for mod in author_active["mods"]})
+
+        status, hidden = self.request(
+            "PATCH",
+            f"/api/mods/{unlisted['slug']}",
+            headers=author,
+            json_body={"visibility": "private"},
+        )
+        self.assertEqual(status, 200, hidden)
+        self.assertEqual(hidden["visibility"], "private")
+        status, _ = self.request("GET", f"/api/mods/{unlisted['slug']}")
+        self.assertEqual(status, 404)
+        status, subscriptions = self.request(
+            "GET",
+            "/api/mods/subscriptions",
+            headers=peer_auth,
+        )
+        self.assertEqual(status, 200, subscriptions)
+        self.assertNotIn(
+            unlisted["slug"],
+            {entry["mod"]["slug"] for entry in subscriptions["items"]},
+        )
+        status, peer_active = self.request("GET", "/api/mods/active", headers=peer_auth)
+        self.assertEqual(status, 200, peer_active)
+        self.assertEqual(peer_active["mods"], [])
+        status, _ = self.request(
+            "PATCH",
+            f"/api/mods/{unlisted['slug']}/subscription",
+            headers=peer_auth,
+            json_body={"enabled": True},
+        )
+        self.assertEqual(status, 404)
+        status, _, _ = self.request_bytes("GET", unlisted_plate)
+        self.assertEqual(status, 404)
+        status, _, _ = self.request_bytes("GET", unlisted_plate, headers=author)
+        self.assertEqual(status, 200)
+
+        version = direct_unlisted["versions"][0]
+        status, _ = self.request(
+            "POST",
+            "/api/mods/subscriptions/sync",
+            headers=peer_auth,
+            json_body={"mods": [{
+                "id": direct_unlisted["packageId"],
+                "slug": direct_unlisted["slug"],
+                "version": version["version"],
+                "contentSha256": version["contentSha256"],
+            }]},
+        )
+        self.assertEqual(status, 409)
+        status, rejected = self.request(
+            "PATCH",
+            f"/api/mods/{public['slug']}",
+            headers=author,
+            json_body={"visibility": "secret"},
+        )
+        self.assertEqual(status, 400, rejected)
+        status, _ = self.request(
+            "DELETE",
+            f"/api/mods/{private['slug']}/subscription",
+            headers=author,
+        )
+        self.assertEqual(status, 204)
+
     def test_subscriptions_are_account_owned_enabled_and_dependency_resolved(self) -> None:
         dependency_manifest = {
             "id": "tests.web-dependency",
@@ -1832,7 +2100,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             database.executescript(
                 """
                 DROP INDEX IX_Mods_PackageId;
+                DROP INDEX IX_Mods_Visibility;
                 ALTER TABLE Mods RENAME COLUMN PackageId TO LauncherModId;
+                ALTER TABLE Mods DROP COLUMN Visibility;
                 DROP INDEX IX_ModVersions_ModId_ManifestVersion_ContentSha256;
                 ALTER TABLE ModVersions DROP COLUMN ManifestVersion;
                 ALTER TABLE ModVersions DROP COLUMN PackageSha256;
@@ -1857,6 +2127,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 )
             }
         self.assertIn("PackageId", columns["Mods"])
+        self.assertIn("Visibility", columns["Mods"])
         self.assertNotIn("LauncherModId", columns["Mods"])
         self.assertTrue(
             {"ManifestVersion", "PackageSha256", "ContentSha256"}
@@ -1871,6 +2142,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             {"UserId", "RunId", "Awesomeness", "Wave", "MonstersKilled", "ElapsedTicks", "PortraitScale"}
             <= columns["GameLeaderboardEntries"]
         )
+        with closing(sqlite3.connect(database_path)) as database:
+            self.assertEqual(
+                {row[0] for row in database.execute("SELECT DISTINCT Visibility FROM Mods")},
+                {"public"},
+            )
 
 
 if __name__ == "__main__":

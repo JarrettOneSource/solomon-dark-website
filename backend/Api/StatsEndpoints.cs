@@ -28,10 +28,11 @@ public static class StatsEndpoints
         }
         var matchesLive = sharedHub.Parties;
         var wizardsOnline = sharedHub.Players;
-        var tomes = await db.Mods.CountAsync(cancellationToken);
+        var publicMods = db.Mods.Where(mod => mod.Visibility == ModVisibility.Public);
+        var tomes = await publicMods.CountAsync(cancellationToken);
         var savesSynced = await db.WebGameSaves.CountAsync(cancellationToken);
         var enrolled = await db.Users.CountAsync(cancellationToken);
-        var downloadsTotal = await db.Mods
+        var downloadsTotal = await publicMods
             .SumAsync(mod => (long?)mod.Downloads, cancellationToken) ?? 0;
 
         return Results.Ok(new

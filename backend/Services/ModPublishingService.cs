@@ -12,6 +12,7 @@ public sealed record ModPublicationRequest(
     string Description,
     string? Slug,
     string? Version,
+    ModVisibility Visibility,
     IReadOnlyList<string> Tags,
     string Changelog);
 
@@ -42,6 +43,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         string summary,
         string description,
         ReadOnlyMemory<byte> boneyard,
+        ModVisibility visibility = ModVisibility.Public,
         string? waveText = null,
         CancellationToken cancellationToken = default)
     {
@@ -58,6 +60,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
                 description,
                 slug,
                 BoneyardPackageBuilder.InitialVersion,
+                visibility,
                 waveText is null ? new[] { "boneyard" } : new[] { "boneyard", "waves" },
                 "Published from the Boneyard editor."),
             resolvedSlug =>
@@ -83,6 +86,12 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         var name = request.Name.Trim();
         var summary = request.Summary.Trim();
         ValidateMetadata(name, summary, request.Description);
+        if (!Enum.IsDefined(request.Visibility))
+        {
+            throw new ModPublishingException(
+                StatusCodes.Status400BadRequest,
+                "Visibility must be public, unlisted, or private.");
+        }
         var tags = NormalizeTags(request.Tags);
 
         if (!await db.Users.AnyAsync(user => user.Id == request.AuthorId, cancellationToken))
@@ -146,6 +155,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
             Name = name,
             Summary = summary,
             Description = request.Description,
+            Visibility = request.Visibility,
             PackageId = package.PackageId,
             AuthorId = request.AuthorId,
             CreatedAtUtc = now,

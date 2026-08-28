@@ -65,6 +65,8 @@ public sealed partial class StorageService
         return fileName;
     }
 
+    public string GetScreenshotPath(string fileName) => ResolvePath(ScreenshotsPath, fileName);
+
     public Task<StoredDiagnosticLogFile> SaveDiagnosticLogAsync(
         DateTime submittedAtUtc,
         string publicId,

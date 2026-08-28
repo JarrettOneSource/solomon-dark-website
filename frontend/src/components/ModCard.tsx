@@ -3,6 +3,7 @@ import type { ModSummary } from '../lib/api'
 import { formatCount, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
 import { TagBadge } from './ui'
+import AuthenticatedImage from './AuthenticatedImage'
 
 interface ModCardProps {
   mod: ModSummary
@@ -49,7 +50,7 @@ export default function ModCard({
     >
       <div className="relative flex aspect-[16/8] items-center justify-center overflow-hidden border-b border-gold/10 bg-[#0b0910]">
         {mod.thumbnailUrl ? (
-          <img
+          <AuthenticatedImage
             src={mod.thumbnailUrl}
             alt=""
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import AuthenticatedImage from '../components/AuthenticatedImage'
 
 interface DarkCloudMediaProps {
   alt: string
@@ -20,11 +21,11 @@ export default function DarkCloudMedia({
   return (
     <span className={`dark-cloud-media ${className}`.trim()}>
       {src && !failed ? (
-        <img
+        <AuthenticatedImage
           alt={alt}
           decoding="async"
           loading={eager ? 'eager' : 'lazy'}
-          onError={() => setFailed(true)}
+          onLoadError={() => setFailed(true)}
           src={src}
         />
       ) : (

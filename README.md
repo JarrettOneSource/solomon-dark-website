@@ -172,6 +172,10 @@ Boneyards to that session only. Browser lobby rows advertise the exact host
 manifest before joining. Save schema 2 records that manifest and bounded
 per-mod state.
 
+Published mods may be `public`, `unlisted`, or `private`. Unlisted mods stay
+out of discovery but work for anyone with the direct link. Private mods are
+visible and playable only by their author.
+
 Run the backend integration contract with a .NET 10 SDK:
 
 ```bash

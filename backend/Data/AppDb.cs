@@ -32,6 +32,13 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         modelBuilder.Entity<Mod>(entity =>
         {
             entity.HasIndex(mod => mod.Slug).IsUnique();
+            entity.Property(mod => mod.Visibility)
+                .HasConversion(
+                    visibility => ModVisibilityContract.Value(visibility),
+                    value => Enum.Parse<ModVisibility>(value, ignoreCase: true))
+                .HasDefaultValue(ModVisibility.Public)
+                .HasMaxLength(16);
+            entity.HasIndex(mod => mod.Visibility);
             entity.Property(mod => mod.PackageId).HasMaxLength(128).UseCollation("NOCASE");
             entity.HasIndex(mod => mod.PackageId).IsUnique();
             entity.HasOne(mod => mod.Author)

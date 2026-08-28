@@ -1,5 +1,45 @@
 namespace SolomonDarkRevived.Data;
 
+public enum ModVisibility
+{
+    Public,
+    Unlisted,
+    Private
+}
+
+public static class ModVisibilityContract
+{
+    public static bool CanView(Mod mod, int? viewerId) =>
+        mod.Visibility != ModVisibility.Private || mod.AuthorId == viewerId;
+
+    public static string Value(ModVisibility visibility) => visibility switch
+    {
+        ModVisibility.Public => "public",
+        ModVisibility.Unlisted => "unlisted",
+        ModVisibility.Private => "private",
+        _ => throw new ArgumentOutOfRangeException(nameof(visibility))
+    };
+
+    public static bool TryParse(string? value, out ModVisibility visibility)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case "public":
+                visibility = ModVisibility.Public;
+                return true;
+            case "unlisted":
+                visibility = ModVisibility.Unlisted;
+                return true;
+            case "private":
+                visibility = ModVisibility.Private;
+                return true;
+            default:
+                visibility = default;
+                return false;
+        }
+    }
+}
+
 public sealed class User
 {
     public int Id { get; set; }
@@ -17,6 +57,7 @@ public sealed class Mod
     public string Name { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public ModVisibility Visibility { get; set; } = ModVisibility.Public;
     public string? PackageId { get; set; }
     public int AuthorId { get; set; }
     public int Downloads { get; set; }

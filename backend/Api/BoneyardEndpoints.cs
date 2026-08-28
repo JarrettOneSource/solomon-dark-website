@@ -322,6 +322,11 @@ public static class BoneyardEndpoints
         {
             return ApiErrors.BadRequest("Publication requires name, summary, and description.");
         }
+        var rawVisibility = request.Visibility ?? "public";
+        if (!ModVisibilityContract.TryParse(rawVisibility, out var visibility))
+        {
+            return ApiErrors.BadRequest("Visibility must be public, unlisted, or private.");
+        }
 
         var draft = await db.BoneyardDrafts.AsNoTracking().SingleOrDefaultAsync(
             candidate => candidate.Id == id && candidate.UserId == userId.Value,
@@ -368,6 +373,7 @@ public static class BoneyardEndpoints
                 request.Summary,
                 request.Description,
                 compiled,
+                visibility,
                 waveText,
                 cancellationToken);
             var mod = await ModEndpoints.LoadModAsync(db, slug, cancellationToken);
@@ -447,5 +453,6 @@ public static class BoneyardEndpoints
         string? Slug,
         string? Summary,
         string? Description,
+        string? Visibility,
         string? WaveText);
 }

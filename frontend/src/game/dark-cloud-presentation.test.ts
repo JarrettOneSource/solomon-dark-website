@@ -53,7 +53,7 @@ test('Dark Cloud removes invented heading copy and keeps account identity action
 test('mod rows own media fallback, explicit view, double-click detail, and direct subscription controls', () => {
   assert.match(source, /<DarkCloudMedia/)
   assert.match(media, /NO IMAGE/)
-  assert.match(media, /onError=/)
+  assert.match(media, /onLoadError=/)
   assert.match(source, /onDoubleClick=\{onOpen\}/)
   assert.match(source, /aria-label=\{`View \$\{mod\.name\}`\}/)
   assert.match(source, /aria-label=\{`\$\{subscription\.enabled \? 'Disable' : 'Enable'\} \$\{mod\.name\}`\}/)

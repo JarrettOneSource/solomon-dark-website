@@ -25,6 +25,7 @@ export interface MeResponse {
 
 /** Sort orders the Library index understands. */
 export type ModSort = 'newest' | 'downloads' | 'updated' | 'name'
+export type ModVisibility = 'public' | 'unlisted' | 'private'
 
 /** A catalogue tag in use, and how many tomes bear it. */
 export interface TagCount {
@@ -38,6 +39,7 @@ export interface ModSummary {
   name: string
   summary: string
   packageId: string | null
+  visibility: ModVisibility
   tags: string[]
   author: { id: number; username: string; school: School | null }
   latestVersion: string
@@ -337,8 +339,9 @@ export const api = {
     request<{ user: User }>('/api/auth/school', { ...json({ school }), method: 'PUT' }),
 
   mods: {
-    list: (params: { search?: string; tags?: string[]; sort?: ModSort; page?: number; pageSize?: number } = {}) => {
+    list: (params: { mine?: boolean; search?: string; tags?: string[]; sort?: ModSort; page?: number; pageSize?: number } = {}) => {
       const q = new URLSearchParams()
+      if (params.mine) q.set('mine', 'true')
       if (params.search) q.set('search', params.search)
       for (const tag of params.tags ?? []) q.append('tag', tag)
       if (params.sort) q.set('sort', params.sort)
@@ -380,7 +383,7 @@ export const api = {
     create: (form: FormData) => request<ModDetail>('/api/mods', { method: 'POST', body: form }),
     update: (
       slug: string,
-      patch: { name?: string; summary?: string; description?: string; tags?: string[] },
+      patch: { name?: string; summary?: string; description?: string; tags?: string[]; visibility?: ModVisibility },
     ) =>
       request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}`, {
         ...json(patch),
@@ -436,7 +439,7 @@ export const api = {
     remove: (id: number) => request<void>(`/api/boneyards/${id}`, { method: 'DELETE' }),
     publish: (
       id: number,
-      body: { name: string; slug?: string; summary: string; description: string; waveText?: string },
+      body: { name: string; slug?: string; summary: string; description: string; visibility: ModVisibility; waveText?: string },
     ) => request<ModDetail>(`/api/boneyards/${id}/publish`, json(body)),
   },
 

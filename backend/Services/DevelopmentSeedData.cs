@@ -98,6 +98,7 @@ public static class DevelopmentSeedData
                 SurvivalSummary,
                 SurvivalDescription,
                 survival,
+                visibility: ModVisibility.Public,
                 waveText: null,
                 cancellationToken);
         }

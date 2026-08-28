@@ -93,6 +93,20 @@ layout state.
 
 ## Web mod subscriptions and sessions
 
+Every `Mod` has one visibility:
+
+- `public` appears in Library listings, search, tags, popularity, public wizard
+  profiles, and aggregate stats.
+- `unlisted` is omitted from discovery but anyone with its direct link can
+  view, comment on, and subscribe to it.
+- `private` is visible, manageable, subscribable, and playable only by its
+  author. Existing subscriptions owned by other accounts remain stored but are
+  excluded from subscription lists and game manifests while the mod is private.
+
+`GET /api/mods?mine=true` is author-only and lists all of the caller's mods.
+Screenshot URLs use visibility-checked mod API routes; the old public static
+screenshot directory is not served.
+
 `ModSubscription` binds one account to one Library mod and stores the enabled
 state for the next admission. `GET /api/mods/subscriptions` lists membership;
 `PUT`, `PATCH`, and `DELETE /api/mods/{slug}/subscription` subscribe, change

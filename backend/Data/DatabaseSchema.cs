@@ -118,6 +118,13 @@ public static class DatabaseSchema
             }
         }
 
+        if (!await HasColumnAsync(db, "Mods", "Visibility", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE Mods ADD COLUMN Visibility TEXT NOT NULL DEFAULT 'public';",
+                cancellationToken);
+        }
+
         if (!await HasColumnAsync(db, "ModVersions", "ManifestVersion", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
@@ -152,6 +159,7 @@ public static class DatabaseSchema
             CREATE UNIQUE INDEX IF NOT EXISTS IX_Mods_PackageId
             ON Mods (PackageId COLLATE NOCASE)
             WHERE PackageId IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS IX_Mods_Visibility ON Mods (Visibility);
 
             CREATE UNIQUE INDEX IF NOT EXISTS IX_ModVersions_ModId_ManifestVersion_ContentSha256
             ON ModVersions (ModId, ManifestVersion, ContentSha256)

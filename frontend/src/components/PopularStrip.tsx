@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { formatCount } from '../lib/format'
 import { art } from '../lib/assets'
+import AuthenticatedImage from './AuthenticatedImage'
 
 const WINDOWS = [30, 60, 90] as const
 type PopularWindow = (typeof WINDOWS)[number]
@@ -67,7 +68,7 @@ export default function PopularStrip({
                 <Link key={m.id} to={`/mods/${m.slug}`} className="group min-w-0">
                   <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded border border-gold/15 bg-[#0b0910] transition-colors group-hover:border-gold/40">
                     {m.thumbnailUrl ? (
-                      <img
+                      <AuthenticatedImage
                         src={m.thumbnailUrl}
                         alt=""
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"

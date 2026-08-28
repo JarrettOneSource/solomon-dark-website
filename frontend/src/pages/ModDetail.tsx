@@ -11,6 +11,9 @@ import { useAuth } from '../lib/auth'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
 import { playSound } from '../fx/sounds'
+import AuthenticatedImage from '../components/AuthenticatedImage'
+import ModVisibilityField from '../components/ModVisibilityField'
+import type { ModVisibility } from '../lib/api'
 
 /** Marginalia: notes other wizards left in this tome's margins. */
 function Marginalia({ mod }: { mod: ModDetailShape }) {
@@ -189,7 +192,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
         <div className="grid grid-cols-3 gap-2">
           {plates.map((p, n) => (
             <div key={p.id} className="group relative overflow-hidden rounded border border-gold/20">
-              <img src={p.url} alt="" className="h-14 w-full object-cover" />
+              <AuthenticatedImage src={p.url} alt="" className="h-14 w-full object-cover" />
               <button
                 type="button"
                 aria-label="Unbind this plate"
@@ -301,6 +304,41 @@ function TagEditor({ mod, onChanged }: { mod: ModDetailShape; onChanged: () => v
   )
 }
 
+function VisibilityEditor({ mod, onChanged }: { mod: ModDetailShape; onChanged: () => void }) {
+  const [visibility, setVisibility] = useState<ModVisibility>(mod.visibility)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.mods.update(mod.slug, { visibility })
+      onChanged()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The visibility change was rejected.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-gold/15 pt-4">
+      <ModVisibilityField disabled={busy} onChange={setVisibility} value={visibility} />
+      {error && <div className="mt-2"><ErrorNote message={error} /></div>}
+      {visibility !== mod.visibility && (
+        <button
+          type="button"
+          className="btn btn-stone mt-3 w-full !py-2 !text-[11px]"
+          disabled={busy}
+          onClick={save}
+        >
+          {busy ? 'Updating…' : 'Save visibility'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function RecordRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2 text-sm">
@@ -388,6 +426,7 @@ export default function ModDetail() {
         </Link>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <h1 className="h-display text-3xl">{m.name}</h1>
+          {m.visibility !== 'public' && <span className="badge badge-gold">{m.visibility}</span>}
           {m.tags.length > 0 && (
             <span className="flex flex-wrap items-center gap-1.5">
               {m.tags.map((tag) => (
@@ -516,6 +555,7 @@ export default function ModDetail() {
               <RecordRow label="Revised">{timeAgo(m.updatedAtUtc)}</RecordRow>
               <RecordRow label="Editions">{m.versions.length}</RecordRow>
               <RecordRow label="Downloads">{formatCount(m.downloads)}</RecordRow>
+              <RecordRow label="Visibility">{m.visibility}</RecordRow>
             </div>
           </div>
 
@@ -523,6 +563,7 @@ export default function ModDetail() {
             <div className="panel p-6">
               <div className="kicker">Author’s desk</div>
               <PlateManager mod={m} onChanged={mod.reload} />
+              <VisibilityEditor key={m.visibility} mod={m} onChanged={mod.reload} />
               <TagEditor key={m.tags.join(',')} mod={m} onChanged={mod.reload} />
               <div className="mt-4 border-t border-gold/15 pt-4">
                 <Link

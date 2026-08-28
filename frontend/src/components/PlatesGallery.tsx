@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { playSound } from '../fx/sounds'
+import AuthenticatedImage from './AuthenticatedImage'
 
 export type Plate = { id: number; url: string }
 
@@ -41,14 +42,6 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
       setIndex((current) => (Math.min(current, count - 1) + delta + count) % count),
     [count],
   )
-
-  useEffect(() => {
-    if (count < 2) return
-    for (const n of [(i + 1) % count, (i - 1 + count) % count]) {
-      const img = new Image()
-      img.src = plates[n].url
-    }
-  }, [i, count, plates])
 
   useEffect(() => {
     activeThumb.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
@@ -108,7 +101,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
           }}
           className="block w-full cursor-zoom-in"
         >
-          <img
+          <AuthenticatedImage
             key={plate.id}
             src={plate.url}
             alt={`${name} — plate ${i + 1}`}
@@ -151,7 +144,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
                   : 'border-gold/15 opacity-50 hover:opacity-90'
               }`}
             >
-              <img src={p.url} alt="" className="h-full w-full object-cover" />
+              <AuthenticatedImage src={p.url} alt="" className="h-full w-full object-cover" />
             </button>
           ))}
         </div>
@@ -167,7 +160,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm sm:p-10"
           >
-            <img
+            <AuthenticatedImage
               key={plate.id}
               src={plate.url}
               alt={`${name} — plate ${i + 1}`}

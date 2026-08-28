@@ -287,12 +287,14 @@ export default function Account() {
     () => user ? api.gameSaves.get(0) : Promise.resolve(null),
     [user?.id],
   )
-  // The public index has no author filter, so pull one page and filter client-side.
-  const mods = useApi(() => api.mods.list({ pageSize: 50, sort: 'newest' }), [user?.id])
+  const mods = useApi(
+    () => user ? api.mods.list({ mine: true, pageSize: 50, sort: 'newest' }) : Promise.resolve(null),
+    [user?.id],
+  )
 
   if (loading || !user) return <Spinner label="Loading your account…" />
 
-  const myMods: ModSummary[] = (mods.data?.items ?? []).filter((m) => m.author.id === user.id)
+  const myMods: ModSummary[] = mods.data?.items ?? []
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
@@ -370,6 +372,7 @@ export default function Account() {
                   <TagBadge key={tag} tag={tag} />
                 ))}
                 <span className="badge badge-gold">v{m.latestVersion}</span>
+                <span className="badge">{m.visibility}</span>
                 <span className="font-mono text-xs text-bone-dim">↓ {formatCount(m.downloads)}</span>
                 <span className="text-xs text-bone-dim/70">updated {timeAgo(m.updatedAtUtc)}</span>
                 <Link to={`/mods/${m.slug}`} className="link-arcane ml-auto text-[11px] uppercase tracking-wider">
