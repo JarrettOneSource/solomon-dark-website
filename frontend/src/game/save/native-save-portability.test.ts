@@ -29,11 +29,13 @@ import {
   readNativeSaveArchive,
   readZip,
 } from './native-save-archive.ts'
+import { readNativeSaveFileSelection } from './native-save-files.ts'
 import {
   createPortableGameProfileFromNative,
   encodePortableGameProfile,
   parsePortableGameProfile,
   portableSha256,
+  type PortableGameProfile,
 } from './portable-game-profile.ts'
 import {
   createPortableGameProfileFromWebSave,
@@ -71,6 +73,102 @@ const fixture = JSON.parse(readFileSync(
 
 function bytes(value: string): Uint8Array {
   return Uint8Array.from(atob(value), character => character.charCodeAt(0))
+}
+
+function selectedFile(
+  name: string,
+  contents: Uint8Array,
+  webkitRelativePath = '',
+): File {
+  const copy = contents.slice()
+  return {
+    arrayBuffer: async () => copy.slice().buffer as ArrayBuffer,
+    name,
+    webkitRelativePath,
+  } as unknown as File
+}
+
+function nativeBindingLayout(source: Uint8Array) {
+  const buffer = parseNativeSyncBuffer(source)
+  const owner = buffer.root.children[1]!
+  const node = owner.children[0]!
+  const view = new DataView(node.payload.buffer, node.payload.byteOffset, node.payload.byteLength)
+  const booleanCount = view.getUint32(0, true)
+  const countOffset = 4 + booleanCount
+  const integerCount = view.getUint32(countOffset, true)
+  const valuesOffset = countOffset + 4
+  assert.ok(valuesOffset + integerCount * 4 <= node.payload.byteLength)
+  return { buffer, countOffset, integerCount, node, owner, valuesOffset }
+}
+
+function withNativeBindingIntegerCount(source: Uint8Array, integerCount: number): Uint8Array {
+  const layout = nativeBindingLayout(source)
+  assert.ok(integerCount >= 0)
+  const originalEnd = layout.valuesOffset + layout.integerCount * 4
+  const payload = new Uint8Array(
+    layout.node.payload.byteLength + (integerCount - layout.integerCount) * 4,
+  )
+  payload.set(layout.node.payload.subarray(0, layout.countOffset))
+  const view = new DataView(payload.buffer)
+  view.setUint32(layout.countOffset, integerCount, true)
+  const retainedCount = Math.min(integerCount, layout.integerCount)
+  payload.set(
+    layout.node.payload.subarray(
+      layout.valuesOffset,
+      layout.valuesOffset + retainedCount * 4,
+    ),
+    layout.valuesOffset,
+  )
+  for (let index = layout.integerCount; index < integerCount; index += 1) {
+    view.setInt32(layout.valuesOffset + index * 4, 0x1000_0000 + index, true)
+  }
+  payload.set(
+    layout.node.payload.subarray(originalEnd),
+    layout.valuesOffset + integerCount * 4,
+  )
+  const owner = replaceNativeNodeChild(layout.owner, 0, { ...layout.node, payload })
+  return encodeNativeSyncBuffer({
+    ...layout.buffer,
+    root: replaceNativeNodeChild(layout.buffer.root, 1, owner),
+  })
+}
+
+function nativeBindingIntegers(source: Uint8Array): number[] {
+  const layout = nativeBindingLayout(source)
+  const view = new DataView(
+    layout.node.payload.buffer,
+    layout.node.payload.byteOffset,
+    layout.node.payload.byteLength,
+  )
+  return Array.from(
+    { length: layout.integerCount },
+    (_, index) => view.getInt32(layout.valuesOffset + index * 4, true),
+  )
+}
+
+function withEffectiveOnlyLearnedRow(
+  source: Uint8Array,
+  wizard: PortableGameProfile['wizard'],
+  skillId: number,
+  effectiveRank: number,
+): Uint8Array {
+  assert.equal(wizard.permanentRanks[skillId], 0)
+  assert.equal(wizard.learnedOrder.includes(skillId), false)
+  const ordered = patchNativeGamestate(source, {
+    ...wizard,
+    learnedOrder: [...wizard.learnedOrder, skillId],
+  })
+  const buffer = parseNativeSyncBuffer(ordered)
+  const wizardNode = buffer.root.children[0]!
+  const progressionNode = wizardNode.children[0]!
+  const payload = progressionNode.payload.slice()
+  const rowOffset = 4 + (82 - skillId) * 12
+  new DataView(payload.buffer).setUint16(rowOffset + 2, effectiveRank, true)
+  const nextWizard = replaceNativeNodeChild(wizardNode, 0, { ...progressionNode, payload })
+  return encodeNativeSyncBuffer({
+    ...buffer,
+    root: replaceNativeNodeChild(buffer.root, 0, nextWizard),
+  })
 }
 
 function withRetailNullBoastSentinel(source: Uint8Array): Uint8Array {
@@ -551,6 +649,108 @@ test('launcher archive write/read preserves hashes and rejects manifest drift', 
     1,
   )
   await assert.rejects(() => readZip(overexpanding), /declared size/)
+})
+
+test('active-run binding tables follow their live count and preserve opaque members', async () => {
+  const activeGamestate = withNativeBindingIntegerCount(gamestate, 113)
+  const activeBindings = nativeBindingIntegers(activeGamestate)
+  assert.equal(activeBindings.length, 113)
+  assert.equal(activeBindings[12], fixture.expected.startingPrimary)
+
+  const decoded = decodeNativeGamestateWizard(activeGamestate)
+  assert.equal(decoded.name, fixture.expected.wizardName)
+  assert.equal(decoded.rows.length, 83)
+  const portable = await createPortableGameProfileFromNative(
+    darkdata,
+    activeGamestate,
+    fixture.expected.runName,
+  )
+  const patched = patchNativeGamestate(activeGamestate, {
+    ...portable.wizard,
+    name: 'ACTIVUS',
+  })
+  const patchedBindings = nativeBindingIntegers(patched)
+  assert.equal(decodeNativeGamestateWizard(patched).name, 'ACTIVUS')
+  assert.equal(patchedBindings.length, 113)
+  assert.deepEqual(patchedBindings.slice(24), activeBindings.slice(24))
+
+  const missingPortableSlots = withNativeBindingIntegerCount(gamestate, 20)
+  assert.throws(
+    () => decodeNativeGamestateWizard(missingPortableSlots),
+    /portable fields require at least 21/,
+  )
+})
+
+test('standalone gamestate selections use explicit stock profile defaults and remain exportable', async () => {
+  const base = await createPortableGameProfileFromNative(
+    darkdata,
+    gamestate,
+    fixture.expected.runName,
+  )
+  const equipmentGamestate = withEffectiveOnlyLearnedRow(gamestate, base.wizard, 54, 2)
+  const activeGamestate = withNativeBindingIntegerCount(equipmentGamestate, 113)
+  const singleSaveZip = createStoredZip([
+    { bytes: activeGamestate, path: 'gamestate.sav' },
+  ])
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    assert.equal(String(input), '/game/native/portable-profile-template.json')
+    return new Response(JSON.stringify(fixture), {
+      headers: { 'content-type': 'application/json' },
+      status: 200,
+    })
+  }
+  try {
+    const direct = await readNativeSaveFileSelection([
+      selectedFile('gamestate.sav', activeGamestate),
+    ])
+    const zipped = await readNativeSaveFileSelection([
+      selectedFile('SolomonDarkStockSaveWaterMage.zip', singleSaveZip),
+    ])
+    const expectedGamestateSha256 = await portableSha256(activeGamestate)
+    for (const portable of [direct, zipped]) {
+      assert.equal(portable.profile.gold, 500)
+      assert.equal(portable.wizard.name, fixture.expected.wizardName)
+      assert.equal(portable.nativeSource.runName, '_survival')
+      assert.equal(portable.nativeSource.darkdataSha256, fixture.files.darkdata.sha256)
+      assert.equal(portable.nativeSource.gamestateSha256, expectedGamestateSha256)
+      assert.equal(portable.wizard.permanentRanks[54], 0)
+      assert.equal(portable.wizard.learnedOrder.includes(54), false)
+      assert.match(
+        portable.warnings.join('\n'),
+        /Only gamestate\.sav was supplied.*missing darkdata\.cfg profile fields start from stock defaults/s,
+      )
+      assert.match(portable.warnings.join('\n'), /row\(s\) 54 depend only on effective equipment ranks/)
+    }
+
+    const imported = createWebGameSaveFromPortableProfile(zipped)
+    const restored = restoreGameSaveDocument(imported.document)
+    assert.equal(restored.state.playerEntities.skillBooks[0]?.learnedSkillOrder.includes(54), false)
+    assert.equal(restored.state.playerEntities.belts[0]?.[3]?.kind, 'health-potion')
+    const exported = await exportWebGameSaveToNativeArchive(imported.document)
+    const archive = await readNativeSaveArchive(exported.archive)
+    assert.equal(decodeNativeDarkdataProfile(archive.darkdata).gold, 500)
+    const exportedWizard = decodeNativeGamestateWizard(archive.gamestate)
+    assert.equal(exportedWizard.name, fixture.expected.wizardName)
+    assert.equal(exportedWizard.learnedOrder.includes(54), false)
+    assert.equal(exportedWizard.rows[54]?.permanentRank, 0)
+    assert.equal(exportedWizard.rows[54]?.effectiveRank, 0)
+    assert.deepEqual(
+      nativeBindingIntegers(archive.gamestate).slice(24),
+      nativeBindingIntegers(activeGamestate).slice(24),
+    )
+
+    const ambiguous = createStoredZip([
+      { bytes: activeGamestate, path: 'gamestate.sav' },
+      { bytes: Uint8Array.of(1), path: 'notes.txt' },
+    ])
+    await assert.rejects(
+      () => readNativeSaveFileSelection([selectedFile('ambiguous.zip', ambiguous)]),
+      /must contain only one gamestate\.sav/,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('web export preserves the native source through schema 17 and returns stock-decodable rows', async () => {

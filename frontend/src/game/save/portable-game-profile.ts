@@ -184,6 +184,7 @@ export async function createPortableGameProfileFromNative(
   gamestateBytes: Uint8Array,
   runName: string,
   retainedFiles: readonly Readonly<{ bytes: Uint8Array; path: string }>[] = [],
+  additionalWarnings: readonly string[] = [],
 ): Promise<PortableGameProfile> {
   const profile = decodeNativeDarkdataProfile(darkdataBytes)
   const wizard = decodeNativeGamestateWizard(gamestateBytes)
@@ -192,6 +193,11 @@ export async function createPortableGameProfileFromNative(
     throw new NativeSaveFormatError('native local wizard and Boast progression flags disagree')
   }
   const ranks = wizard.rows.map(row => row.permanentRank)
+  const effectiveOnlyLearnedOrder = wizard.learnedOrder.filter(skillId => ranks[skillId] === 0)
+  if (effectiveOnlyLearnedOrder.some(skillId => wizard.rows[skillId]?.effectiveRank === 0)) {
+    throw new NativeSaveFormatError('native learned order contains an inactive row')
+  }
+  const learnedOrder = wizard.learnedOrder.filter(skillId => ranks[skillId]! > 0)
   const candidate: PortableGameProfile = Object.freeze({
     format: PORTABLE_GAME_PROFILE_FORMAT,
     nativeSource: await createNativeGameSaveSource(
@@ -218,6 +224,7 @@ export async function createPortableGameProfileFromNative(
     retailExecutableSha256: RETAIL_SOLOMON_DARK_SHA256,
     version: PORTABLE_GAME_PROFILE_VERSION,
     warnings: Object.freeze([
+      ...additionalWarnings,
       'Native Luthacus storage is retained byte-for-byte but is not materialized in the web inventory bridge.',
       'Machinimbus purchase-only unlocks are not stored by retail; only already learned advanced rows can cross.',
       'Serendipity and Reverie active-until-hurt flags are not retail disk members and start inactive after import.',
@@ -227,6 +234,12 @@ export async function createPortableGameProfileFromNative(
         : []),
       ...(wizard.selectedPrimarySkillId === 80
         ? ['Plane Orb is a live Planewalker override and resets in the settled portable Hub.']
+        : []),
+      ...(effectiveOnlyLearnedOrder.length > 0
+        ? [
+            `Native learned/visible row(s) ${effectiveOnlyLearnedOrder.join(', ')} depend only on effective equipment ranks; `
+            + 'they remain in the native attachment but are unavailable in the settled web Hub.',
+          ]
         : []),
       'The portable wizard starts in a settled Hub; in-flight native Arena and Region objects remain in the native attachment.',
       ...(retainedFiles.length > 0
@@ -250,7 +263,7 @@ export async function createPortableGameProfileFromNative(
       experienceBonus: wizard.experienceBonus,
       firewalkerActive: wizard.firewalkerActive,
       hagathaOwnership: wizard.hagathaOwnership,
-      learnedOrder: wizard.learnedOrder,
+      learnedOrder: Object.freeze(learnedOrder),
       level: wizard.level,
       manaCostReduction: wizard.manaCostReduction,
       maximumHealth: wizard.maximumHealth,

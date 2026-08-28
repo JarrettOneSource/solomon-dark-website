@@ -21,7 +21,7 @@ export const NATIVE_FIRST_MIX_COUNT = 30
 export const NATIVE_SOURCE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024
 
 const GAMESTATE_ROOT_CHILD_COUNT = 8
-const NATIVE_BINDING_COUNT = 24
+const NATIVE_PORTABLE_BINDING_MIN_COUNT = 21
 const NATIVE_BELT_SLOT_COUNT = 8
 const NATIVE_BELT_EMPTY_TYPE = 7000
 const NATIVE_BELT_SKILL_TYPE = 7015
@@ -524,9 +524,10 @@ function decodeNativeBindingState(root: NativeChunkNode): NativeBindingState {
     reader.boolean(`boolean ${index}`)
   }
   const integerCount = reader.u32('integer count')
-  if (integerCount !== NATIVE_BINDING_COUNT) {
+  if (integerCount < NATIVE_PORTABLE_BINDING_MIN_COUNT) {
     throw new NativeSaveFormatError(
-      `native binding state has ${integerCount} integers; expected ${NATIVE_BINDING_COUNT}`,
+      `native binding state has ${integerCount} integers; portable fields require at least `
+      + `${NATIVE_PORTABLE_BINDING_MIN_COUNT}`,
     )
   }
   const integerOffset = reader.offset

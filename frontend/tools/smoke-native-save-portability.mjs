@@ -1,38 +1,77 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
 import { chromium } from 'playwright-core'
 
 import {
-  createNativeSaveArchive,
+  createStoredZip,
   readNativeSaveArchive,
+  readZip,
 } from '../src/game/save/native-save-archive.ts'
 import {
   decodeNativeDarkdataProfile,
   decodeNativeGamestateWizard,
 } from '../src/game/save/native-save-bridge.ts'
+import { parseNativeSyncBuffer } from '../src/game/save/native-save-codec.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
 
 const baseUrl = process.env.SDR_NATIVE_SAVE_SMOKE_URL || 'http://127.0.0.1:4187'
 const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
 const screenshotRoot = process.env.SDR_NATIVE_SAVE_SMOKE_SCREENSHOT_ROOT || '/tmp'
+const localCredential = 'native-save-browser-parity'
+const localHost = new URL(baseUrl).protocol === 'https:'
+  ? null
+  : await startGameHost({
+      allowedOrigins: [new URL(baseUrl).origin],
+      authentication: { credential: localCredential, kind: 'shared' },
+      snapshotRate: 100,
+    })
+const runtime = localHost
+  ? {
+      gameEndpoint: {
+        credential: localCredential,
+        kind: 'localhost',
+        url: localHost.address.url,
+      },
+    }
+  : null
 await mkdir(screenshotRoot, { recursive: true })
 const fixture = JSON.parse(await readFile(
   new URL('../public/game/native/portable-profile-template.json', import.meta.url),
   'utf8',
 ))
-const darkdata = Buffer.from(fixture.files.darkdata.base64, 'base64')
-const gamestate = Buffer.from(fixture.files.gamestate.base64, 'base64')
-const expectedLearnedRows = decodeNativeGamestateWizard(gamestate).rows
+const templateGamestate = Buffer.from(fixture.files.gamestate.base64, 'base64')
+const sourceZipPath = process.env.SDR_NATIVE_SAVE_SOURCE_ZIP
+let stockArchive
+let gamestate
+if (sourceZipPath) {
+  stockArchive = new Uint8Array(await readFile(sourceZipPath))
+  const files = [...(await readZip(stockArchive)).entries()]
+  assert.equal(files.length, 1)
+  assert.equal(files[0][0].split('/').at(-1).toLowerCase(), 'gamestate.sav')
+  gamestate = files[0][1]
+} else {
+  gamestate = new Uint8Array(templateGamestate)
+  stockArchive = createStoredZip([{ bytes: gamestate, path: 'gamestate.sav' }])
+}
+const expectedWizard = decodeNativeGamestateWizard(gamestate)
+const expectedLearnedRows = expectedWizard.rows
   .filter(row => row.permanentRank > 0).length
-const stockArchive = await createNativeSaveArchive({
-  darkdata,
-  gamestate,
-  runName: fixture.expected.runName,
-})
+const expectedEffectiveOnlyRows = expectedWizard.learnedOrder.filter(skillId => (
+  expectedWizard.rows[skillId]?.permanentRank === 0
+  && expectedWizard.rows[skillId]?.effectiveRank > 0
+))
+const expectedGamestateSha256 = createHash('sha256').update(gamestate).digest('hex')
+const expectedBindingIntegerCount = bindingIntegerCount(gamestate)
+const elementName = ['Ether', 'Fire', 'Air', 'Water', 'Earth'][expectedWizard.elementRoot]
+const disciplineName = ({ 5: 'Body', 6: 'Mind', 7: 'Arcane' })[expectedWizard.disciplineRoot]
+assert.ok(elementName)
+assert.ok(disciplineName)
 const stockUpload = {
   buffer: Buffer.from(stockArchive),
   mimeType: 'application/zip',
-  name: 'controlled-stock-save.zip',
+  name: sourceZipPath ? 'SolomonDarkStockSaveWaterMage.zip' : 'controlled-standalone-save.zip',
 }
 
 const accountUsername = process.env.SDR_NATIVE_SAVE_SMOKE_USERNAME
@@ -49,13 +88,19 @@ try {
     anonymous,
     cloud,
     fixture: {
-      level: fixture.expected.level,
-      wizardName: fixture.expected.wizardName,
+      bindingIntegerCount: expectedBindingIntegerCount,
+      effectiveOnlyRows: expectedEffectiveOnlyRows,
+      gamestateSha256: expectedGamestateSha256,
+      level: expectedWizard.level,
+      wizardName: expectedWizard.name,
     },
     status: 'ok',
   })}\n`)
 } finally {
-  await browser.close()
+  await Promise.all([
+    browser.close(),
+    localHost?.close(),
+  ])
 }
 
 async function runAnonymousJourney(browser) {
@@ -64,6 +109,11 @@ async function runAnonymousJourney(browser) {
     viewport: { height: 900, width: 1600 },
   })
   await mockDevelopmentDeployment(context)
+  if (runtime) {
+    await context.addInitScript((value) => {
+      window.solomonDarkRuntime = value
+    }, runtime)
+  }
   const page = await context.newPage()
   const diagnostics = collectDiagnostics(page)
   try {
@@ -97,6 +147,7 @@ async function runAnonymousJourney(browser) {
       exportedBytes: exported.byteLength,
       archivePath,
       importedRevision: imported.revision,
+      previewScreenshot: `${screenshotRoot}/solomon-dark-native-save-anonymous-preview.png`,
       resumedRevision: persisted.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
     }
@@ -111,6 +162,11 @@ async function runCloudJourney(browser, token) {
     viewport: { height: 900, width: 1600 },
   })
   await mockDevelopmentDeployment(context)
+  if (runtime) {
+    await context.addInitScript((value) => {
+      window.solomonDarkRuntime = value
+    }, runtime)
+  }
   await context.addInitScript((value) => localStorage.setItem('sdr.token', value), token)
   const page = await context.newPage()
   const diagnostics = collectDiagnostics(page)
@@ -120,8 +176,10 @@ async function runCloudJourney(browser, token) {
     await page.getByRole('heading', { name: 'Cloud Saves' }).waitFor()
     await page.getByRole('button', { name: /import stock save/i }).waitFor()
     await page.locator('input[type="file"][accept*=".zip"]').setInputFiles(stockUpload)
-    const accountPreview = page.getByText(fixture.expected.wizardName, { exact: true }).locator('..')
+    const accountPreview = page.getByText(expectedWizard.name, { exact: true }).locator('..')
     await assertImportPreview(accountPreview)
+    const previewScreenshot = `${screenshotRoot}/solomon-dark-native-save-cloud-preview.png`
+    await page.screenshot({ path: previewScreenshot })
     const importResponse = page.waitForResponse(response => (
       response.request().method() === 'PUT'
       && new URL(response.url()).pathname === '/api/game/saves/0'
@@ -162,6 +220,7 @@ async function runCloudJourney(browser, token) {
       exportedBytes: exported.byteLength,
       archivePath,
       importedRevision: imported.revision,
+      previewScreenshot,
       resumedRevision: persisted.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-cloud.png`,
       username: accountUsername,
@@ -197,6 +256,9 @@ async function importFromTitleSettings(page) {
   await page.getByRole('button', { name: 'CHOOSE STOCK SAVE FILES', exact: true }).waitFor()
   await page.locator('.native-save-transfer-settings input[type="file"]').setInputFiles(stockUpload)
   await assertImportPreview(page.getByRole('region', { name: 'Stock import preview' }))
+  await page.screenshot({
+    path: `${screenshotRoot}/solomon-dark-native-save-anonymous-preview.png`,
+  })
   await page.getByRole('button', { name: 'REPLACE BROWSER SLOT', exact: true }).click()
   await page.getByRole('status').filter({ hasText: 'Stock progression imported' }).waitFor()
   await page.getByRole('button', { name: 'BACK', exact: true }).click()
@@ -205,11 +267,15 @@ async function importFromTitleSettings(page) {
 
 async function assertImportPreview(preview) {
   await preview.waitFor({ timeout: 30_000 })
-  await assertContains(preview, fixture.expected.wizardName)
-  await assertContains(preview, `Level ${fixture.expected.level}`)
-  await assertContains(preview, 'Fire / Arcane')
+  await assertContains(preview, expectedWizard.name)
+  await assertContains(preview, `Level ${expectedWizard.level}`)
+  await assertContains(preview, `${elementName} / ${disciplineName}`)
   await assertContains(preview, '500 gold')
   await assertContains(preview, `${expectedLearnedRows} learned rows`)
+  await assertContains(preview, 'Only gamestate.sav was supplied')
+  if (expectedEffectiveOnlyRows.length > 0) {
+    await assertContains(preview, `row(s) ${expectedEffectiveOnlyRows.join(', ')}`)
+  }
 }
 
 async function resumeLastGame(page) {
@@ -256,11 +322,12 @@ async function assertStockExport(bytes) {
   const profile = decodeNativeDarkdataProfile(archive.darkdata)
   const wizard = decodeNativeGamestateWizard(archive.gamestate)
   assert.equal(profile.gold, 500)
-  assert.equal(wizard.name, fixture.expected.wizardName)
-  assert.equal(wizard.level, fixture.expected.level)
-  assert.equal(wizard.elementRoot, fixture.expected.elementRoot)
-  assert.equal(wizard.disciplineRoot, fixture.expected.disciplineRoot)
-  assert.equal(wizard.rows.length, fixture.expected.progressionRows)
+  assert.equal(wizard.name, expectedWizard.name)
+  assert.equal(wizard.level, expectedWizard.level)
+  assert.equal(wizard.elementRoot, expectedWizard.elementRoot)
+  assert.equal(wizard.disciplineRoot, expectedWizard.disciplineRoot)
+  assert.equal(wizard.rows.length, 83)
+  assert.equal(bindingIntegerCount(archive.gamestate), expectedBindingIntegerCount)
 }
 
 function assertImportedWebSave(record) {
@@ -270,18 +337,25 @@ function assertImportedWebSave(record) {
   assert.equal(document.continuation.simulation.world.kind, 'hub')
   assert.equal(
     document.continuation.simulation.playerEntities.configs[0].displayName,
-    fixture.expected.wizardName,
+    expectedWizard.name,
   )
   assert.equal(
     document.continuation.simulation.playerEntities.progressions[0].level,
-    fixture.expected.level,
+    expectedWizard.level,
   )
   assert.equal(
     document.continuation.simulation.playerEntities.economies[0].gold,
     500,
   )
   assert.equal(document.nativeSource.darkdataSha256, fixture.files.darkdata.sha256)
-  assert.equal(document.nativeSource.gamestateSha256, fixture.files.gamestate.sha256)
+  assert.equal(document.nativeSource.gamestateSha256, expectedGamestateSha256)
+}
+
+function bindingIntegerCount(bytes) {
+  const binding = parseNativeSyncBuffer(bytes).root.children[1].children[0].payload
+  const view = new DataView(binding.buffer, binding.byteOffset, binding.byteLength)
+  const booleanCount = view.getUint32(0, true)
+  return view.getUint32(4 + booleanCount, true)
 }
 
 async function assertContains(locator, expected) {
@@ -295,6 +369,8 @@ function escapeRegExp(value) {
 function collectDiagnostics(page) {
   const pageErrors = []
   const consoleErrors = []
+  const failedResponses = []
+  const requestFailures = []
   page.on('pageerror', error => pageErrors.push(error.message))
   page.on('console', message => {
     if (message.type() === 'error') {
@@ -302,12 +378,24 @@ function collectDiagnostics(page) {
       consoleErrors.push(`${message.text()}${location ? ` [${location}]` : ''}`)
     }
   })
-  return { consoleErrors, pageErrors }
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push(`${response.status()} ${response.request().method()} ${response.url()}`)
+    }
+  })
+  page.on('requestfailed', (request) => {
+    const errorText = request.failure()?.errorText ?? ''
+    if (errorText === 'net::ERR_ABORTED') return
+    requestFailures.push(`${request.method()} ${request.url()} ${errorText}`.trim())
+  })
+  return { consoleErrors, failedResponses, pageErrors, requestFailures }
 }
 
 function assertCleanDiagnostics(diagnostics) {
   assert.deepEqual(diagnostics.pageErrors, [])
   assert.deepEqual(diagnostics.consoleErrors, [])
+  assert.deepEqual(diagnostics.failedResponses, [])
+  assert.deepEqual(diagnostics.requestFailures, [])
 }
 
 function readLocalSave(page) {
