@@ -52,6 +52,7 @@ import {
 } from './boneyard-enemy-store.ts'
 import {
   nativeWeldFrostRadialRadius,
+  nativeWaterPushTargetFactor,
   resolveBoneyardSpellCombat,
   WATER_PRIMARY_ACTOR_MASK,
   WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK,
@@ -148,6 +149,7 @@ function resolveCombatWithAuthority(
     fireActorContacts?: readonly NativeFireActorContact[]
     fireballCorridorLength?: number
     primarySceneryTargets?: readonly PrimarySpellTarget[]
+    pushStrengthMultiplier?: number
     rngSeed?: number
     steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
@@ -168,6 +170,7 @@ function resolveCombatWithAuthority(
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
     options.steamedPulses ?? [],
     () => options.fireballCorridorLength ?? 1_600,
+    () => options.pushStrengthMultiplier ?? 1,
   )
 }
 
@@ -1256,7 +1259,10 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
   }
   const water = emission({ id: 11, kind: 'water' })
   assert.equal(water.primarySkill.kind, 'water')
-  const profile = { ...water.primarySkill, pushbackPercent: 10 }
+  const profile = {
+    ...water.primarySkill,
+    pushbackFactor: Math.fround(10 * 0.009999999776482582),
+  }
   const initialRng = createNativeRng(23)
   const rotation = drawNativeFloat(initialRng, 360)
   const angularMagnitude = drawNativeFloat(rotation.state, 1)
@@ -1264,13 +1270,39 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     angularMagnitude.state,
     Math.fround(1 + angularMagnitude.value),
   )
+  let retainedEnemies = enemies
+  let retainedRng = initialRng
+  const tumbleGain = Math.fround(
+    profile.pushbackFactor * Math.fround(0.3199999928474426),
+  )
+  let expectedAccumulator = Math.fround(0)
+  for (let tick = 1; tick <= 31; tick += 1) {
+    const retained = resolveBoneyardSpellCombat(
+      retainedEnemies,
+      spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+      [{ ...water, primarySkill: profile }],
+      tick,
+      WORLD_KEY,
+      retainedRng,
+    )
+    assert.equal(retained.enemies.projectiles.length, 1, `Arrow retired on contact ${tick}`)
+    expectedAccumulator = Math.fround(expectedAccumulator + tumbleGain)
+    assert.equal(
+      retained.enemies.projectiles[0]?.chillTumbleAccumulator,
+      expectedAccumulator,
+    )
+    assert.deepEqual(retained.enemies.projectileEffects, [])
+    assert.deepEqual(retained.rng, initialRng)
+    retainedEnemies = retained.enemies
+    retainedRng = retained.rng
+  }
   const result = resolveBoneyardSpellCombat(
-    enemies,
+    retainedEnemies,
     spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
     [{ ...water, primarySkill: profile }],
-    1,
+    32,
     WORLD_KEY,
-    initialRng,
+    retainedRng,
   )
 
   assert.deepEqual(result.enemies.projectiles, [])
@@ -1289,7 +1321,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     entry: 2,
     id: 20,
     kind: 'arrow-tumble',
-    lastStepTick: 1,
+    lastStepTick: 32,
     lightRegistration: null,
     lifetimeTicks: 60,
     ownerActorId: 3,
@@ -1298,7 +1330,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     position: { x: 50, y: 0 },
     rotationDeg: rotation.value,
     scale: 1,
-    spawnTick: 1,
+    spawnTick: 32,
     tint: 0xffffff,
     velocity: { x: 1, y: 0 },
   }])
@@ -1318,7 +1350,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     players: {},
     resolveMovement: (request) => request.requestedPosition,
     resolveSpawnIntents: () => [],
-    tick: 2,
+    tick: 33,
   }).store
   const advanced = advancedStore.projectileEffects[0]!
   assert.equal(advanced.ageTicks, 1)
@@ -1327,7 +1359,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
   assert.equal(advanced.rotationDeg, Math.fround(rotation.value + angularVelocity.value))
   assert.deepEqual(advanced.velocity, { x: Math.fround(0.98), y: 0 })
 
-  for (let tick = 3; tick <= 61; tick += 1) {
+  for (let tick = 34; tick <= 92; tick += 1) {
     advancedStore = stepBoneyardEnemyStore(advancedStore, {
       firstProjectileWorldContact: () => null,
       players: {},
@@ -1345,6 +1377,135 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     }
   }
   assert.deepEqual(advancedStore.projectileEffects, [])
+})
+
+test('Chill Wind excludes Firebolt and Guided Missile projectile families', () => {
+  const base = spawnEnemies([])
+  const projectiles: readonly BoneyardEnemyProjectile[] = [
+    {
+      ...enemyArrow({ id: 7, position: { x: 50, y: 0 } }),
+      kind: 'firebolt',
+      nativeTypeId: 0x7eb,
+    },
+    {
+      ...enemyArrow({ id: 8, position: { x: 60, y: 0 } }),
+      kind: 'guided-missile',
+      nativeTypeId: 0x7ec,
+    },
+  ]
+  const water = emission({ id: 11, kind: 'water' })
+  assert.equal(water.primarySkill.kind, 'water')
+  const result = resolveBoneyardSpellCombat(
+    { ...base, projectiles },
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{ ...water, primarySkill: { ...water.primarySkill, pushbackFactor: 1 } }],
+    1,
+    WORLD_KEY,
+    COMBAT_RNG,
+  )
+  assert.deepEqual(result.enemies.projectiles, projectiles)
+  assert.deepEqual(result.enemies.projectileEffects, [])
+})
+
+test('Chill Wind drains every authored percent through the normalized near-target impulse', () => {
+  for (const authoredPushback of [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]) {
+    const enemies = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
+    const water = emission({ id: 11, kind: 'water' })
+    assert.equal(water.primarySkill.kind, 'water')
+    const pushbackFactor = Math.fround(authoredPushback * 0.009999999776482582)
+    const result = resolveCombatWithAuthority(
+      enemies,
+      spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+      [{ ...water, primarySkill: { ...water.primarySkill, pushbackFactor } }],
+      1,
+      { resolveMovement: (_actorId, _start, requested) => requested },
+    )
+    const magnitude = Math.fround(pushbackFactor * 2.5)
+    assert.equal(
+      result.enemies.actors[0]?.position.x,
+      Math.fround(50 + magnitude),
+      `authored Chill ${authoredPushback}`,
+    )
+  }
+})
+
+test('Chill Wind keeps the native squared-distance taper and movement collision owner', () => {
+  assert.equal(nativeWaterPushTargetFactor(0x2), 1)
+  assert.equal(nativeWaterPushTargetFactor(0x42), Math.fround(0.10000000149011612))
+  const enemies = spawnEnemies([
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 140, y: 0 }, token: 'SKELETON' },
+    { position: { x: 160, y: 0 }, token: 'SKELETON' },
+  ])
+  const water = emission({ id: 11, kind: 'water' })
+  assert.equal(water.primarySkill.kind, 'water')
+  const profile = { ...water.primarySkill, pushbackFactor: 1 }
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{ ...water, primarySkill: profile }],
+    1,
+    { resolveMovement: (_actorId, _start, requested) => requested },
+  )
+  const outerSquared = Math.fround(Math.fround(180 * 180) * 0.75)
+  const innerSquared = Math.fround(outerSquared * 0.5)
+  const taper = Math.fround((outerSquared - Math.fround(140 * 140)) / (
+    outerSquared - innerSquared
+  ))
+  assert.deepEqual(result.enemies.actors.map(({ position }) => position.x), [
+    Math.fround(102.5),
+    Math.fround(140 + Math.fround(2.5 * taper)),
+    160,
+  ])
+
+  const blocked = resolveCombatWithAuthority(
+    spawnEnemies([{ position: { x: 100, y: 0 }, token: 'SKELETON' }]),
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{ ...water, primarySkill: profile }],
+    1,
+    { resolveMovement: (_actorId, start) => start },
+  )
+  assert.equal(blocked.enemies.actors[0]?.position.x, 100)
+
+  const boosted = resolveCombatWithAuthority(
+    spawnEnemies([{ position: { x: 100, y: 0 }, token: 'SKELETON' }]),
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{ ...water, primarySkill: profile }],
+    1,
+    {
+      pushStrengthMultiplier: 2,
+      resolveMovement: (_actorId, _start, requested) => requested,
+    },
+  )
+  assert.equal(boosted.enemies.actors[0]?.position.x, 105)
+})
+
+test('Cone-expanded Frost runs Hail allocation for every emitted visual child', () => {
+  const water = emission({ id: 11, kind: 'water' })
+  assert.equal(water.primarySkill.kind, 'water')
+  const profile = {
+    ...water.primarySkill,
+    hailChance: 100,
+    hailDamageMaximum: 1,
+    hailDamageMinimum: 1,
+    hailThreshold: 3_000,
+    halfAngleDegrees: 52.5,
+    reach: 505,
+    widenHalfDegrees: 75,
+  }
+  const frost = Array.from({ length: 10 }, (_, variant) => transient({
+    id: 11 + variant,
+    kind: 'water',
+    speed: 10,
+    variant,
+  }))
+  const result = resolveCombatWithAuthority(
+    spawnEnemies([]),
+    spellState({ transients: frost }),
+    [{ ...water, primarySkill: profile }],
+    1,
+  )
+  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'water-hail').length, 10)
 })
 
 test('underpowered Water carries half damage through the narrow actor-mask lane', () => {
@@ -2158,15 +2319,16 @@ test('underpowered channels suppress every learned Air and Water branch', () => 
     hailDamageMaximum: 10,
     hailDamageMinimum: 5,
     hailThreshold: 3_000,
-    halfAngleDegrees: 25,
+    halfAngleDegrees: 20,
     kind: 'water',
     manaCost: 12.5,
     minimumColdDurationTicks: 200,
-    pushbackPercent: 4,
+    pushbackFactor: 0.04,
     rank: 1,
     reach: 245,
     skillId: 32,
     slowdownScale: 2,
+    widenHalfDegrees: 10,
   } as const
   const movementRequests: unknown[] = []
   const water = resolveCombatWithAuthority(
@@ -2217,15 +2379,16 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
     hailDamageMinimum: 1,
     hailChance: 100,
     hailThreshold: 3_000,
-    halfAngleDegrees: 25,
+    halfAngleDegrees: 20,
     kind: 'water',
     manaCost: 12.5,
     minimumColdDurationTicks: 200,
-    pushbackPercent: 4,
+    pushbackFactor: 0.04,
     rank: 1,
     reach: 245,
     skillId: 32,
     slowdownScale: 2,
+    widenHalfDegrees: 10,
   } as const
   const result = resolveCombatWithAuthority(
     enemies,
@@ -2247,8 +2410,8 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
     { actorId: 2, spellKind: 'water-hail' },
   ])
   assert.equal(result.enemies.actors[0]?.currentHealth, 3)
-  assert.equal(result.enemies.actors[0]?.position.x, 60)
-  assert.deepEqual(movementRequests, [{ x: 60, y: 0 }])
+  assert.equal(result.enemies.actors[0]?.position.x, Math.fround(50.1))
+  assert.deepEqual(movementRequests, [{ x: Math.fround(50.1), y: 0 }])
   assert.deepEqual(result.targetEffects, [
     { patch: { coldSlowFactor: 0.4, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
     { patch: { coldSlowFactor: 0.25, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
@@ -2429,7 +2592,9 @@ function transient(options: {
   direction?: Readonly<{ x: number; y: number }>
   id: number
   kind: 'air' | 'water'
+  speed?: number
   targetId?: string | null
+  variant?: number
   worldKey?: string
 }): PrimarySpellTransientState {
   const direction = { ...(options.direction ?? { x: 1, y: 0 }) }
@@ -2440,7 +2605,7 @@ function transient(options: {
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
     underpowered: false,
-    variant: 0,
+    variant: options.variant ?? 0,
     worldKey: options.worldKey ?? WORLD_KEY,
   }
   return options.kind === 'air'
@@ -2463,6 +2628,7 @@ function transient(options: {
         lightRegistration: null,
         obstructionDistance: null,
         obstructionPoint: null,
+        speed: options.speed ?? 4,
       }
 }
 
@@ -2518,11 +2684,12 @@ function emission(options: {
           kind: 'water',
           manaCost: 12.5,
           minimumColdDurationTicks: 0,
-          pushbackPercent: 0,
+          pushbackFactor: 0,
           rank: 1,
           reach: 205,
           skillId: 32,
           slowdownScale: 1,
+          widenHalfDegrees: 0,
         }),
     queryOrigin: { x: 0, y: 0 },
     terrainContact: false,
@@ -2581,6 +2748,7 @@ function enemyArrow(options: {
   return {
     ageTicks: 8,
     bounceVelocity: 0,
+    chillTumbleAccumulator: 0,
     coldSlowTicks: 0,
     contactRadius: 8,
     damage: 1,

@@ -629,7 +629,7 @@ function normalizeSimulation(
     nextLevelUpBarrierId: source.nextLevelUpBarrierId,
     nextModConsumableUseId: source.nextModConsumableUseId ?? 1,
     playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion),
-    primarySpells: source.primarySpells,
+    primarySpells: normalizePrimarySpells(source.primarySpells, sourceSchemaVersion),
     run: normalizeRun(source.run),
     secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities),
     tick: source.tick,
@@ -728,6 +728,24 @@ function normalizePlayerStore(
     skillBooks,
     skillRuntimes,
   } as unknown as GameSimulationState['playerEntities']
+}
+
+function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): unknown {
+  const source = record(value, 'game save primary spells')
+  const transients = array(source.transients, 'game save primary spell transients').map(
+    (value, index) => {
+      const transient = record(value, `game save primary spell transient ${index}`)
+      if (transient.kind !== 'water') return transient
+      const speed = sourceSchemaVersion < 19 && transient.speed === undefined
+        ? 4
+        : finiteNumber(transient.speed, `game save Water transient ${index} speed`)
+      if (speed < 4 || speed > 10) {
+        throw new Error(`game save Water transient ${index} speed is invalid`)
+      }
+      return { ...transient, speed }
+    },
+  )
+  return { ...source, transients }
 }
 
 function normalizeDiskSecondary(value: unknown): GameSimulationState['secondaryAbilities'] {
@@ -933,6 +951,23 @@ function normalizeWorld(
       }
     },
   )
+  const enemyProjectiles = array(
+    enemies.projectiles,
+    'game save Boneyard enemy projectiles',
+  ).map((value, index) => {
+    const projectile = record(value, `game save Boneyard enemy projectile ${index}`)
+    const chillTumbleAccumulator = sourceSchemaVersion < 19
+      && projectile.chillTumbleAccumulator === undefined
+      ? 0
+      : finiteNumber(
+          projectile.chillTumbleAccumulator,
+          `game save Boneyard enemy projectile ${index} Chill accumulator`,
+        )
+    if (chillTumbleAccumulator < 0 || chillTumbleAccumulator > 1) {
+      throw new Error(`game save Boneyard enemy projectile ${index} Chill accumulator is invalid`)
+    }
+    return { ...projectile, chillTumbleAccumulator }
+  })
   const encounter = source.encounter === null
     ? null
     : record(source.encounter, 'game save Boneyard Solomon encounter')
@@ -1002,6 +1037,7 @@ function normalizeWorld(
       ...enemies,
       actors: enemyActors,
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
+      projectiles: enemyProjectiles,
       steeringRngState: enemies.steeringRngState ?? defaults.enemies.steeringRngState,
     },
     encounter: normalizedEncounter,

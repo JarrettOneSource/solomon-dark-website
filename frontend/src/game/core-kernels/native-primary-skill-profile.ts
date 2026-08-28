@@ -73,9 +73,10 @@ export interface NativeWaterPrimarySkillProfile extends NativePrimarySkillProfil
   readonly halfAngleDegrees: number
   readonly kind: 'water'
   readonly minimumColdDurationTicks: number
-  readonly pushbackPercent: number
+  readonly pushbackFactor: number
   readonly reach: number
   readonly slowdownScale: number
+  readonly widenHalfDegrees: number
 }
 
 export interface NativeEarthPrimarySkillProfile extends NativePrimarySkillProfileBase {
@@ -243,7 +244,13 @@ export function nativePrimarySkillProfile(
       const auraRank = effectiveRank(skillBook, 37)
       const hailRank = effectiveRank(skillBook, 38)
       const permafrostRank = effectiveRank(skillBook, 39)
-      const widen = rankedOr(statBook, 34, 'mWiden', coneRank, 0)
+      const widenHalfDegrees = Math.fround(
+        rankedOr(statBook, 34, 'mWiden', coneRank, 0) * 0.5,
+      )
+      const pushbackFactor = Math.fround(
+        rankedOr(statBook, 33, 'mPushback', chillRank, 0)
+          * 0.009999999776482582,
+      )
       const slowdownScale = 1 + rankedOr(
         statBook,
         39,
@@ -269,12 +276,13 @@ export function nativePrimarySkillProfile(
         hailDamageMinimum: rankedOr(statBook, 38, 'mDamage1', hailRank, 0)
           * factors.damage,
         hailThreshold: Math.round(hailChance * 30),
-        halfAngleDegrees: 15 + widen * 0.5,
+        halfAngleDegrees: 15 + widenHalfDegrees * 0.5,
         kind: 'water',
         minimumColdDurationTicks,
-        pushbackPercent: rankedOr(statBook, 33, 'mPushback', chillRank, 0),
-        reach: 205 + 4 * widen,
+        pushbackFactor,
+        reach: 205 + 4 * widenHalfDegrees,
         slowdownScale,
+        widenHalfDegrees,
       })
     }
     case 40: {

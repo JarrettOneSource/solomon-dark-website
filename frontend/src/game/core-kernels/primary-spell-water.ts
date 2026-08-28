@@ -3,16 +3,16 @@ import type { Vector2 } from './vector.ts'
 
 export const WATER_FROST_PARTICLES_PER_TICK = 2
 export const WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK = 1
+export const WATER_FROST_MAX_PARTICLES_PER_TICK = 10
+export const WATER_FROST_MINIMUM_SPEED = 4
+export const WATER_FROST_MAXIMUM_SPEED = 10
 
 const DEGREES_TO_RADIANS = Math.fround(Math.PI) / 180
 const FROST_HEADING_MULTIPLIER = 65
 const FROST_CAST_SPEED = 1 * DEGREES_TO_RADIANS
-const FROST_INTRA_TICK_PHASE = Math.fround(
-  FROST_HEADING_MULTIPLIER / WATER_FROST_PARTICLES_PER_TICK,
-)
 const FROST_JITTER_ANGLE = 45 * DEGREES_TO_RADIANS
 const FROST_JITTER_RADIUS = 10
-const FROST_SPEED = 4
+const FROST_SPEED = WATER_FROST_MINIMUM_SPEED
 const FROST_LIFETIME_BASE = 1.25
 const FROST_LIFETIME_RANDOM = Math.fround(0.05)
 const FROST_LIFETIME_STEP = Math.fround(0.04)
@@ -70,6 +70,7 @@ export interface WaterFrostJetEmission {
   direction: Vector2
   jitterRadius: number
   origin: Vector2
+  speed: number
 }
 
 export interface WaterFrostJetChainingState {
@@ -105,11 +106,15 @@ export function waterFrostJetEmission(
   tick: number,
   ordinal: number,
   id: number,
+  particleCount: number,
+  speed: number,
 ): WaterFrostJetEmission {
   const baseHeading = Math.atan2(baseDirection.x, -baseDirection.y)
-  const phase = Math.fround(
-    Math.fround(tick) + Math.fround(ordinal * FROST_INTRA_TICK_PHASE),
-  )
+  const phaseStep = Math.fround(FROST_HEADING_MULTIPLIER / particleCount)
+  let phase = Math.fround(tick)
+  for (let index = 0; index < ordinal; index += 1) {
+    phase = Math.fround(phase + phaseStep)
+  }
   const heading = baseHeading + Math.sin(
     phase * FROST_HEADING_MULTIPLIER * DEGREES_TO_RADIANS,
   ) * FROST_CAST_SPEED
@@ -127,7 +132,22 @@ export function waterFrostJetEmission(
       x: Math.fround(emitter.x + Math.fround(jitter.x)),
       y: Math.fround(emitter.y + Math.fround(jitter.y)),
     },
+    speed,
   }
+}
+
+export function waterFrostJetParticleCount(
+  widenHalfDegrees: number,
+  enhancedEffects = true,
+): number {
+  return 1 - Math.trunc((widenHalfDegrees + 15) / (enhancedEffects ? -10 : -20))
+}
+
+export function waterFrostJetSpeed(widenHalfDegrees: number): number {
+  const factor = Math.fround(
+    Math.fround(widenHalfDegrees / 2.5) * Math.fround(0.05000000074505806) + 1,
+  )
+  return Math.fround(FROST_SPEED * factor)
 }
 
 export function waterFrostJetObstruction(
@@ -138,7 +158,7 @@ export function waterFrostJetObstruction(
   underpowered = false,
 ): WaterFrostJetObstruction | null {
   if (waterFrostJetKind(id, underpowered) !== 'normal') return null
-  const velocity = frostVelocity(emission.direction)
+  const velocity = frostVelocity(emission.direction, emission.speed)
   const predictionSteps = Math.fround(
     waterFrostJetInitialLifetime(id) / FROST_LIFETIME_STEP + emission.jitterRadius,
   )
@@ -200,7 +220,7 @@ export function waterFrostJetChainingPlan(
     if (lifetime < 1) coreScale = Math.fround(coreScale + FROST_CORE_GROWTH)
     coreScale = Math.fround(coreScale - FROST_CORE_GROWTH)
   }
-  const velocity = frostVelocity(state.direction)
+  const velocity = frostVelocity(state.direction, FROST_SPEED)
   const position = float32Vector(state.origin)
   for (let tick = 0; tick < completedUpdates; tick += 1) {
     position.x = Math.fround(position.x + velocity.x)
@@ -405,7 +425,7 @@ function waterFrostJetMotion(state: PrimarySpellWaterTransientState): {
   position: Vector2
   velocity: Vector2
 } {
-  const velocity = frostVelocity(state.direction)
+  const velocity = frostVelocity(state.direction, state.speed)
   const obstructionPoint = state.obstructionPoint
   let pendingDistance = state.obstructionDistance
   let currentVelocity = velocity
@@ -433,10 +453,11 @@ function waterFrostJetMotion(state: PrimarySpellWaterTransientState): {
   return { position, velocity: currentVelocity }
 }
 
-function frostVelocity(direction: Vector2): Vector2 {
+function frostVelocity(direction: Vector2, speed: number): Vector2 {
+  const speedFactor = Math.fround(speed / FROST_SPEED)
   return {
-    x: Math.fround(Math.fround(direction.x) * FROST_SPEED),
-    y: Math.fround(Math.fround(direction.y) * FROST_SPEED),
+    x: Math.fround(Math.fround(Math.fround(direction.x) * FROST_SPEED) * speedFactor),
+    y: Math.fround(Math.fround(Math.fround(direction.y) * FROST_SPEED) * speedFactor),
   }
 }
 

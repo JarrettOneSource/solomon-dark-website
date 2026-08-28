@@ -1645,7 +1645,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v98 carries cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 98)
+  assert.equal(GAME_PROTOCOL_VERSION, 99)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -3604,6 +3604,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        speed: 4,
         underpowered: false,
         variant: 0,
         worldKey: 'hub:courtyard',
@@ -3625,12 +3626,79 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        speed: 10,
         underpowered: false,
-        variant: 4,
+        variant: 10,
         worldKey: 'hub:courtyard',
       }],
     },
-  }), /variant exceeds the native family/)
+  }), /variant exceeds the Frost emission ordinal/)
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ageTicks: 1,
+        direction: { x: 0, y: -1 },
+        id: 1,
+        kind: 'water',
+        lightRegistration: null,
+        obstructionDistance: null,
+        obstructionPoint: null,
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        speed: 10,
+        underpowered: false,
+        variant: 9,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }))
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ageTicks: 1,
+        direction: { x: 0, y: -1 },
+        id: 1,
+        kind: 'water',
+        lightRegistration: null,
+        obstructionDistance: null,
+        obstructionPoint: null,
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        speed: 3.999,
+        underpowered: false,
+        variant: 0,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }), /speed is outside the authored Frost range/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ageTicks: 1,
+        direction: { x: 0, y: -1 },
+        id: 1,
+        kind: 'water',
+        lightRegistration: null,
+        obstructionDistance: null,
+        obstructionPoint: null,
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        speed: 4,
+        underpowered: true,
+        variant: 1,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }), /variant exceeds the weak Frost emission ordinal/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {
@@ -3645,6 +3713,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionDistance: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        speed: 4,
         underpowered: false,
         variant: 0,
         worldKey: 'hub:courtyard',
@@ -3666,6 +3735,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        speed: 4,
         underpowered: false,
         variant: 0,
         worldKey: 'hub:courtyard',

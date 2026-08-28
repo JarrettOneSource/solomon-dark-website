@@ -2159,7 +2159,7 @@ test('game host replicates and checkpoints native NPC hint acknowledgement', asy
   const [snapshotMessage, checkpointMessage] = await Promise.all([snapshot, checkpoint])
   assert.equal(snapshotMessage.type, 'server-snapshot')
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
-  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 18)
+  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 19)
 })
 
 test('shared Hub NPC actions and late-join defaults stay bound to the authenticated player', async (context) => {
@@ -3211,7 +3211,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 18)
+  assert.equal(saved.schemaVersion, 19)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.summary.partyRejoinToken, null)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)

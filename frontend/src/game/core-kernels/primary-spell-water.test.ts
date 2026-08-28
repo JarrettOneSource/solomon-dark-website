@@ -4,6 +4,8 @@ import test from 'node:test'
 import type { PrimarySpellWaterTransientState } from './primary-spells.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
+  WATER_FROST_MAXIMUM_SPEED,
+  WATER_FROST_MAX_PARTICLES_PER_TICK,
   WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   packWaterFrostTint,
   quantizeWaterFrostAlpha,
@@ -11,8 +13,10 @@ import {
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
   waterFrostJetObstruction,
+  waterFrostJetParticleCount,
   waterFrostJetPainterLane,
   waterFrostJetPlan,
+  waterFrostJetSpeed,
 } from './primary-spell-water.ts'
 
 function state(
@@ -26,10 +30,12 @@ function state(
     direction: { x: 0, y: -1 },
     id,
     kind: 'water',
+    lightRegistration: null,
     obstructionDistance: null,
     obstructionPoint: null,
     origin: { x: 100, y: 200 },
     ownerId: 'caster',
+    speed: 4,
     underpowered,
     variant,
     worldKey: 'hub:room',
@@ -56,6 +62,24 @@ test('pins the shipped Enhanced Effects density and native lifetime band', () =>
   assert.deepEqual([...new Set(lifetimes)].sort(), [32, 33])
 })
 
+test('drains every cached Cone width through Enhanced density and Frost speed', () => {
+  const cachedWidths = [0, 15, 25, 35, 40, 45, 50, 55, 60, 65, 70, 75]
+  assert.deepEqual(
+    cachedWidths.map((widen) => waterFrostJetParticleCount(widen)),
+    [2, 4, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10],
+  )
+  assert.deepEqual(
+    cachedWidths.map((widen) => waterFrostJetParticleCount(widen, false)),
+    [1, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5],
+  )
+  assert.deepEqual(
+    cachedWidths.map((widen) => waterFrostJetSpeed(widen)),
+    [4, 5.2, 6, 6.8, 7.2, 7.6, 8, 8.4, 8.8, 9.2, 9.6, 10].map(Math.fround),
+  )
+  assert.equal(waterFrostJetParticleCount(75), WATER_FROST_MAX_PARTICLES_PER_TICK)
+  assert.equal(waterFrostJetSpeed(75), WATER_FROST_MAXIMUM_SPEED)
+})
+
 test('underpowered Water forces Normal construction and quarters both opacity fields', () => {
   const overId = firstId('over')
   const created = waterFrostJetPlan(state(overId, 0, 0, true))
@@ -69,7 +93,7 @@ test('underpowered Water forces Normal construction and quarters both opacity fi
 
   let clips = 0
   const obstruction = waterFrostJetObstruction(
-    { direction: { x: 1, y: 0 }, jitterRadius: 0, origin: { x: 0, y: 0 } },
+    { direction: { x: 1, y: 0 }, jitterRadius: 0, origin: { x: 0, y: 0 }, speed: 4 },
     { x: 0, y: 0 },
     overId,
     () => {
@@ -93,9 +117,9 @@ test('deterministically preserves the native 75 percent Normal / 25 percent Over
 
 test('birth owns world-tick wiggle while radial jitter stays around the caster heading', () => {
   const emitter = { x: 100, y: 200 }
-  const first = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 0, 36)
-  const born = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 37)
-  const samePhase = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 9001)
+  const first = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 0, 36, 2, 4)
+  const born = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 37, 2, 4)
+  const samePhase = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 9001, 2, 4)
   const nativePi = Math.fround(Math.PI)
   const firstHeading = Math.sin(3 * 65 * nativePi / 180) * nativePi / 180
   const expectedHeading = Math.sin((3 + 32.5) * 65 * nativePi / 180) * nativePi / 180
@@ -113,6 +137,34 @@ test('birth owns world-tick wiggle while radial jitter stays around the caster h
   assert.ok(Math.abs(Math.atan2(jitter.x, -jitter.y)) <= 45 * Math.PI / 180)
 })
 
+test('Cone density divides the native 65-unit phase across every emitted ordinal', () => {
+  const emitter = { x: 100, y: 200 }
+  const count = WATER_FROST_MAX_PARTICLES_PER_TICK
+  const emissions = Array.from({ length: count }, (_, ordinal) => waterFrostJetEmission(
+    emitter,
+    { x: 0, y: -1 },
+    3,
+    ordinal,
+    100 + ordinal,
+    count,
+    10,
+  ))
+  const nativePi = Math.fround(Math.PI)
+  let expectedLastPhase = Math.fround(3)
+  const phaseStep = Math.fround(65 / count)
+  for (let ordinal = 0; ordinal < 9; ordinal += 1) {
+    expectedLastPhase = Math.fround(expectedLastPhase + phaseStep)
+  }
+  const expectedLastHeading = Math.sin(
+    expectedLastPhase * 65 * nativePi / 180,
+  ) * nativePi / 180
+  assert.equal(
+    emissions.at(-1)?.direction.x,
+    Math.fround(Math.sin(expectedLastHeading)),
+  )
+  assert.notEqual(emissions.at(-1)?.direction.x, emissions[0]?.direction.x)
+})
+
 test('Normal snapshots point and native distance, including the zero-distance immediate-splay quirk', () => {
   const normalId = firstId('normal')
   const overId = firstId('over')
@@ -120,6 +172,7 @@ test('Normal snapshots point and native distance, including the zero-distance im
     direction: { x: 1, y: 0 },
     jitterRadius: 0,
     origin: { x: 0, y: 0 },
+    speed: 4,
   }
   let clipCalls = 0
   assert.deepEqual(waterFrostJetObstruction(
@@ -231,6 +284,21 @@ test('Normal uses the native ordinary core, additive half-core, and forward glin
     updated.velocity.y * 3,
   )
   assert.equal(updated.worldY, updated.position.y)
+})
+
+test('Cone speed snapshots the native two-stage float32 velocity recurrence', () => {
+  for (const kind of ['normal', 'over'] as const) {
+    const moving = state(firstId(kind), 1)
+    moving.direction = { x: 0.31622776601683794, y: -0.9486832980505138 }
+    moving.origin = { x: 0, y: 0 }
+    moving.speed = waterFrostJetSpeed(75)
+    const plan = waterFrostJetPlan(moving)
+    assert.deepEqual(plan.velocity, {
+      x: Math.fround(Math.fround(Math.fround(moving.direction.x) * 4) * 2.5),
+      y: Math.fround(Math.fround(Math.fround(moving.direction.y) * 4) * 2.5),
+    })
+    assert.deepEqual(plan.position, plan.velocity)
+  }
 })
 
 test('uses the QWORD late-life growth and gradual Normal color recurrence', () => {

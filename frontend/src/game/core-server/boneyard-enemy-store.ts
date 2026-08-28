@@ -432,6 +432,7 @@ export type BoneyardEnemyProjectileKind =
 export interface BoneyardEnemyProjectile {
   readonly ageTicks: number
   readonly bounceVelocity: number
+  readonly chillTumbleAccumulator: number
   readonly coldSlowTicks: number
   readonly contactRadius: number
   readonly damage: number
@@ -1480,6 +1481,22 @@ export function setBoneyardEnemyBlizzardPushState(
     blizzardPushLastTick: lastTick,
   }
   return { ...source, maggots }
+}
+
+export function setBoneyardArrowChillTumbleAccumulator(
+  source: BoneyardEnemyStore,
+  projectileId: BoneyardEnemyProjectileId,
+  accumulator: number,
+): BoneyardEnemyStore {
+  if (!Number.isFinite(accumulator) || accumulator < 0 || accumulator > 1) {
+    throw new RangeError('Arrow Chill accumulator must be finite and within [0,1]')
+  }
+  const projectileIndex = source.projectiles.findIndex(({ id }) => id === projectileId)
+  const projectile = source.projectiles[projectileIndex]
+  if (!projectile || projectile.kind !== 'arrow') return source
+  const projectiles = [...source.projectiles]
+  projectiles[projectileIndex] = { ...projectile, chillTumbleAccumulator: accumulator }
+  return { ...source, projectiles }
 }
 
 /**
@@ -5002,6 +5019,7 @@ function spawnProjectile(
     bounceVelocity: kind === 'demon-bomb'
       ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombInitialBounceVelocity
       : 0,
+    chillTumbleAccumulator: 0,
     coldSlowTicks: options.coldSlowTicks ?? 0,
     contactRadius: program.contactRadius,
     damage: kind === 'poison-pool' ? 0 : damage + (options.secondaryDamage ?? 0),

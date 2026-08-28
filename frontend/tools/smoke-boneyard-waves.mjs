@@ -1115,17 +1115,59 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
   learnChillWind(state, playerId)
-  const player = getPlayerCharacter(state, playerId)
-  const arrowId = state.world.enemies.nextProjectileId
-  const effectId = state.world.enemies.nextProjectileEffectId
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        actors: Object.freeze([]),
+        deathEffects: Object.freeze([]),
+        mageLightningPulses: Object.freeze([]),
+        maggots: Object.freeze([]),
+        projectileEffects: Object.freeze([]),
+        projectiles: Object.freeze([]),
+      },
+      waves: state.world.waves === null
+        ? null
+        : { ...state.world.waves, phase: 'dormant' },
+    },
+  })
+
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds)
+  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.5)
+  const baselineScreenshotPath = screenshotPath.replace(/\.png$/, '-frost-jet.png')
+  let baseline = null
+  await page.mouse.down({ button: 'left' })
+  try {
+    baseline = await waitForWaterCohort(page, playerId, 2, 4)
+    await page.waitForTimeout(120)
+    baseline = {
+      ...baseline,
+      visualPrimarySpellCount: (await boneyardFrame(page)).primarySpellCount,
+    }
+    await page.screenshot({ path: baselineScreenshotPath })
+  } finally {
+    await page.mouse.up({ button: 'left' })
+  }
+  assert.ok(baseline)
+  await page.waitForTimeout(400)
+
+  const arrowState = host.state()
+  assert.equal(arrowState.world.kind, 'boneyard')
+  const player = getPlayerCharacter(arrowState, playerId)
+  const arrowId = arrowState.world.enemies.nextProjectileId
+  const effectId = arrowState.world.enemies.nextProjectileEffectId
   assert.ok(arrowId > 0)
   assert.ok(effectId > 0)
-  const tick = state.tick
-  const nativeCellBindingOrder = state.world.enemies.nextNativeCellBindingOrder
-  const nativeRegistrationOrder = state.world.enemies.nextNativeRegistrationOrder
+  const tick = arrowState.tick
+  const nativeCellBindingOrder = arrowState.world.enemies.nextNativeCellBindingOrder
+  const nativeRegistrationOrder = arrowState.world.enemies.nextNativeRegistrationOrder
   const arrow = Object.freeze({
-    ageTicks: 8,
+    ageTicks: 0,
     bounceVelocity: 0,
+    chillTumbleAccumulator: 0,
     coldSlowTicks: 0,
     contactRadius: 8,
     damage: 1,
@@ -1146,57 +1188,58 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     poisonDamage: 0,
     poisonDuration: 0,
     position: Object.freeze({ x: player.position.x + 80, y: player.position.y }),
-    speed: 5,
-    settledTicksRemaining: 0,
-    spawnTick: Math.max(0, tick - 8),
+    speed: 0,
+    settledTicksRemaining: 300,
+    spawnTick: tick,
     targetPlayerId: null,
     verticalOffset: -25,
     verticalVelocity: 0,
     visualPhaseDeg: 0,
     visualScale: 1,
   })
-  Object.assign(state, {
+  Object.assign(arrowState, {
     world: {
-      ...state.world,
+      ...arrowState.world,
       enemies: {
-        ...state.world.enemies,
-        actors: Object.freeze([]),
-        deathEffects: Object.freeze([]),
-        mageLightningPulses: Object.freeze([]),
-        maggots: Object.freeze([]),
+        ...arrowState.world.enemies,
         nextNativeCellBindingOrder: nativeCellBindingOrder + 1,
         nextNativeRegistrationOrder: nativeRegistrationOrder + 1,
         nextProjectileId: arrowId + 1,
         projectileEffects: Object.freeze([]),
         projectiles: Object.freeze([arrow]),
       },
-      waves: state.world.waves === null
-        ? null
-        : { ...state.world.waves, phase: 'dormant' },
     },
   })
 
-  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
-  const bounds = await canvas.boundingBox()
-  assert.ok(bounds)
-  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.5)
-  await page.mouse.down({ button: 'left' })
   let hostEffect = null
+  let firstAccumulatorTick = null
+  let maximumAccumulator = 0
+  await page.mouse.down({ button: 'left' })
   try {
     const deadline = Date.now() + 10_000
     while (Date.now() < deadline && hostEffect === null) {
       const current = host.state()
       if (current.world.kind === 'boneyard') {
+        const retainedArrow = current.world.enemies.projectiles.find(({ id }) => id === arrowId)
+        if (retainedArrow?.kind === 'arrow' && retainedArrow.chillTumbleAccumulator > 0) {
+          firstAccumulatorTick ??= current.tick
+          maximumAccumulator = Math.max(
+            maximumAccumulator,
+            retainedArrow.chillTumbleAccumulator,
+          )
+        }
         hostEffect = current.world.enemies.projectileEffects.find((effect) => (
           effect.id === effectId && effect.kind === 'arrow-tumble'
         )) ?? null
       }
-      if (hostEffect === null) await page.waitForTimeout(10)
+      if (hostEffect === null) await page.waitForTimeout(1)
     }
   } finally {
     await page.mouse.up({ button: 'left' })
   }
   assert.ok(hostEffect, 'learned Chill Wind did not tumble the hostile Arrow')
+  assert.ok(firstAccumulatorTick !== null, 'Chill Wind never accumulated Arrow tumble force')
+  assert.ok(maximumAccumulator > 0.9 && maximumAccumulator <= 1)
   assert.ok(hostEffect.alpha > 2 && hostEffect.alpha <= 6)
   assert.equal(hostEffect.entry, 2)
   assert.equal(hostEffect.ownerProjectileId, arrowId)
@@ -1238,32 +1281,62 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     false,
   )
   assert.ok(host.hostPlayerId(), 'the browser player disconnected during SpinAway')
+  learnConeOfIce(host.state(), playerId, 11)
+  const coneScreenshotPath = screenshotPath.replace(/\.png$/, '-cone-of-ice-rank-11.png')
+  await page.mouse.down({ button: 'left' })
+  let cone
+  try {
+    cone = await waitForWaterCohort(page, playerId, 10, 10)
+    await page.waitForTimeout(120)
+    cone = {
+      ...cone,
+      visualPrimarySpellCount: (await boneyardFrame(page)).primarySpellCount,
+    }
+    await page.screenshot({ path: coneScreenshotPath })
+  } finally {
+    await page.mouse.up({ button: 'left' })
+  }
   return {
     arrowId,
+    baseline,
+    baselineScreenshotPath,
+    cone,
+    coneScreenshotPath,
     effectId,
     entry: wireEffect.entry,
+    firstAccumulatorTick,
     initialAlpha: wireEffect.alpha,
+    maximumAccumulator,
     renderedEffectIds: renderedFrame.enemyProjectileEffectIds,
     retirementTick: finalState.tick,
+    tumbleTick: hostEffect.spawnTick,
   }
 }
 
 function learnChillWind(state, playerId) {
+  learnWaterSkill(state, playerId, 33, 1)
+}
+
+function learnConeOfIce(state, playerId, rank) {
+  learnWaterSkill(state, playerId, 34, rank)
+}
+
+function learnWaterSkill(state, playerId, skillId, rank) {
   const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
   assert.notEqual(index, -1)
   const sourceBook = state.playerEntities.skillBooks[index]
   const permanentRanks = [...sourceBook.permanentRanks]
   const effectiveRanks = [...sourceBook.effectiveRanks]
-  permanentRanks[33] = 1
-  effectiveRanks[33] = 1
+  permanentRanks[skillId] = rank
+  effectiveRanks[skillId] = rank
   const skillBooks = [...state.playerEntities.skillBooks]
   const progressions = [...state.playerEntities.progressions]
   skillBooks[index] = {
     ...sourceBook,
     effectiveRanks,
-    learnedSkillOrder: sourceBook.learnedSkillOrder.includes(33)
+    learnedSkillOrder: sourceBook.learnedSkillOrder.includes(skillId)
       ? sourceBook.learnedSkillOrder
-      : [...sourceBook.learnedSkillOrder, 33],
+      : [...sourceBook.learnedSkillOrder, skillId],
     permanentRanks,
   }
   progressions[index] = {
@@ -1371,6 +1444,42 @@ function stagedStaffTargetDirection(state, playerId, targetId) {
     x: target.position.x - player.position.x,
     y: target.position.y - player.position.y,
   }
+}
+
+async function waitForWaterCohort(page, playerId, expectedCount, expectedSpeed) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const state = host.state()
+    const cohorts = new Map()
+    for (const transient of state.primarySpells.transients) {
+      if (transient.kind !== 'water' || transient.ownerId !== playerId) continue
+      const cohortId = transient.id - transient.variant
+      const cohort = cohorts.get(cohortId) ?? []
+      cohort.push(transient)
+      cohorts.set(cohortId, cohort)
+    }
+    for (const cohort of [...cohorts.values()].reverse()) {
+      if (cohort.length !== expectedCount) continue
+      cohort.sort((left, right) => left.variant - right.variant)
+      if (!cohort.every(({ speed }) => speed === expectedSpeed)) continue
+      const frame = await boneyardFrame(page)
+      if (!frame.primarySpellKinds.includes('water')) continue
+      assert.ok(frame.primarySpellCount >= expectedCount)
+      assert.deepEqual(
+        cohort.map(({ variant }) => variant),
+        Array.from({ length: expectedCount }, (_, index) => index),
+      )
+      return {
+        ids: cohort.map(({ id }) => id),
+        maximumVariant: cohort.at(-1).variant,
+        renderedPrimarySpellCount: frame.primarySpellCount,
+        speeds: cohort.map(({ speed }) => speed),
+        tick: state.tick,
+      }
+    }
+    await page.waitForTimeout(1)
+  }
+  throw new Error(`Water cohort ${expectedCount}@${expectedSpeed} was not rendered`)
 }
 
 async function proveStaffMeleeContact(page, navigation) {

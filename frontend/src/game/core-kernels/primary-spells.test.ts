@@ -575,6 +575,14 @@ test('sustained primaries select the same fixed branch at every mana boundary', 
         )),
         true,
       )
+      if (element === 'water' && expected.underpowered) {
+        assert.deepEqual(
+          outcome.state.spells.transients.map((effect) => (
+            effect.kind === 'water' ? effect.speed : null
+          )),
+          [4],
+        )
+      }
     }
   }
 })
@@ -2006,6 +2014,58 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
   state = step(state, false, 32)
   assert.equal(state.primarySpells.transients.length, 0)
+})
+
+test('Cone of Ice drains every authored row into Frost density and snapshotted speed', () => {
+  const expectedRows = [
+    { count: 2, halfAngle: 15, rank: 0, reach: 205, speed: 4, widen: 0 },
+    { count: 4, halfAngle: 22.5, rank: 1, reach: 265, speed: Math.fround(5.2), widen: 15 },
+    { count: 5, halfAngle: 27.5, rank: 2, reach: 305, speed: 6, widen: 25 },
+    { count: 6, halfAngle: 32.5, rank: 3, reach: 345, speed: Math.fround(6.8), widen: 35 },
+    { count: 6, halfAngle: 35, rank: 4, reach: 365, speed: Math.fround(7.2), widen: 40 },
+    { count: 7, halfAngle: 37.5, rank: 5, reach: 385, speed: Math.fround(7.6), widen: 45 },
+    { count: 7, halfAngle: 40, rank: 6, reach: 405, speed: 8, widen: 50 },
+    { count: 8, halfAngle: 42.5, rank: 7, reach: 425, speed: Math.fround(8.4), widen: 55 },
+    { count: 8, halfAngle: 45, rank: 8, reach: 445, speed: Math.fround(8.8), widen: 60 },
+    { count: 9, halfAngle: 47.5, rank: 9, reach: 465, speed: Math.fround(9.2), widen: 65 },
+    { count: 9, halfAngle: 50, rank: 10, reach: 485, speed: Math.fround(9.6), widen: 70 },
+    { count: 10, halfAngle: 52.5, rank: 11, reach: 505, speed: 10, widen: 75 },
+  ] as const
+
+  for (const expected of expectedRows) {
+    const primarySkill = primarySkillWithRanks('water', { 32: 1, 34: expected.rank })
+    assert.equal(primarySkill.kind, 'water')
+    if (primarySkill.kind !== 'water') throw new Error('expected Water profile')
+    assert.deepEqual({
+      halfAngleDegrees: primarySkill.halfAngleDegrees,
+      reach: primarySkill.reach,
+      widenHalfDegrees: primarySkill.widenHalfDegrees,
+    }, {
+      halfAngleDegrees: expected.halfAngle,
+      reach: expected.reach,
+      widenHalfDegrees: expected.widen,
+    })
+    const outcome = stepSpellKernel(
+      directSpellHarness('water'),
+      true,
+      1_000_000,
+      true,
+      () => true,
+      primarySkill,
+    )
+    const frost = outcome.state.spells.transients.filter((effect) => effect.kind === 'water')
+    assert.equal(frost.length, expected.count, `Cone rank ${expected.rank} density`)
+    assert.deepEqual(
+      frost.map(({ variant }) => variant),
+      Array.from({ length: expected.count }, (_, index) => index),
+      `Cone rank ${expected.rank} ordinals`,
+    )
+    assert.deepEqual(
+      frost.map((effect) => 'speed' in effect ? effect.speed : null),
+      Array(expected.count).fill(expected.speed),
+      `Cone rank ${expected.rank} speed`,
+    )
+  }
 })
 
 test('Water wiggle uses the shared authority tick when player ids interleave', () => {

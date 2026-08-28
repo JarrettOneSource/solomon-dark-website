@@ -26,11 +26,12 @@ import {
   nativeEarthBoulderReleasedDamage,
 } from './native-earth-boulder.ts'
 import {
-  WATER_FROST_PARTICLES_PER_TICK,
   WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
   waterFrostJetObstruction,
+  waterFrostJetParticleCount,
+  waterFrostJetSpeed,
 } from './primary-spell-water.ts'
 import {
   earthImpactLifetimeTicks,
@@ -269,6 +270,7 @@ export interface PrimarySpellWaterTransientState extends PrimarySpellChannelTran
   lightRegistration: null
   obstructionDistance: number | null
   obstructionPoint: Vector2 | null
+  speed: number
 }
 
 export type PrimarySpellChannelTransientState =
@@ -2182,12 +2184,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             underpowered,
             worldKey,
           })
+          const widenHalfDegrees = underpowered
+            ? 0
+            : authority.primarySkill.widenHalfDegrees
+          const particleCount = underpowered
+            ? WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK
+            : waterFrostJetParticleCount(widenHalfDegrees)
+          const speed = waterFrostJetSpeed(widenHalfDegrees)
           const emitted = Array.from(
-            {
-              length: underpowered
-                ? WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK
-                : WATER_FROST_PARTICLES_PER_TICK,
-            },
+            { length: particleCount },
             (_, variant): PrimarySpellTransientState => {
               const id = nextId + variant
               const born = waterFrostJetEmission(
@@ -2196,6 +2201,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 context.tick,
                 variant,
                 id,
+                particleCount,
+                speed,
               )
               const obstruction = waterFrostJetObstruction(
                 born,
@@ -2214,6 +2221,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 obstructionPoint: obstruction?.point ?? null,
                 origin: born.origin,
                 ownerId: playerId,
+                speed: born.speed,
                 underpowered,
                 variant,
                 worldKey,

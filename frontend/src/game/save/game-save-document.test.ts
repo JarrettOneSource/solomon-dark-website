@@ -90,7 +90,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 18)
+  assert.equal(encoded.schemaVersion, 19)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -831,6 +831,132 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
 })
 
+test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 19', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 23),
+  )
+  assert.ok(loadedBoneyard)
+  const waterCharacter = { ...OWNER, element: 'water' as const }
+  let state = enterBoneyardWorld(createGameSimulation({ owner: waterCharacter }), loadedBoneyard)
+  state = stepGameSimulationTick(state, { owner: createIdlePlayerCharacterInput() })
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const simulation = document.continuation.simulation
+  const worldKey = `boneyard:${loadedBoneyard.runId}`
+  simulation.primarySpells = {
+    nextId: 2,
+    projectiles: [],
+    transients: [{
+      ageTicks: 1,
+      direction: { x: 1, y: 0 },
+      id: 1,
+      kind: 'water',
+      lightRegistration: null,
+      obstructionDistance: null,
+      obstructionPoint: null,
+      origin: { x: 250, y: 250 },
+      ownerId: 'owner',
+      speed: 4,
+      underpowered: false,
+      variant: 0,
+      worldKey,
+    }],
+  }
+  const enemies = simulation.world.enemies
+  const arrowId = enemies.nextProjectileId
+  enemies.projectiles = [{
+    ageTicks: 1,
+    bounceVelocity: 0,
+    chillTumbleAccumulator: 0,
+    coldSlowTicks: 0,
+    contactRadius: 8,
+    damage: 1,
+    headingDeg: 90,
+    hitPlayerIds: [],
+    homing: false,
+    id: arrowId,
+    kind: 'arrow',
+    lastStepTick: state.tick,
+    lightRegistration: null,
+    lifetimeTicks: 300,
+    minimumSpeed: 0,
+    nativeCellBindingOrder: enemies.nextNativeCellBindingOrder,
+    nativeRegistrationOrder: enemies.nextNativeRegistrationOrder,
+    nativeTypeId: 0x7da,
+    ownerActorId: 1,
+    payload: 'normal',
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: { x: 330, y: 250 },
+    settledTicksRemaining: 300,
+    spawnTick: state.tick - 1,
+    speed: 0,
+    targetPlayerId: null,
+    verticalOffset: -25,
+    verticalVelocity: 0,
+    visualPhaseDeg: 0,
+    visualScale: 1,
+  }]
+  enemies.nextProjectileId = arrowId + 1
+  enemies.nextNativeCellBindingOrder += 1
+  enemies.nextNativeRegistrationOrder += 1
+
+  const current = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(current.state.primarySpells.transients[0]?.kind, 'water')
+  assert.equal(
+    current.state.primarySpells.transients[0]?.kind === 'water'
+      ? current.state.primarySpells.transients[0].speed
+      : null,
+    4,
+  )
+  assert.equal(
+    current.state.world.kind === 'boneyard'
+      ? current.state.world.enemies.projectiles[0]?.chillTumbleAccumulator
+      : null,
+    0,
+  )
+
+  const legacy = structuredClone(document)
+  legacy.schemaVersion = 18
+  delete legacy.continuation.simulation.primarySpells.transients[0].speed
+  delete legacy.continuation.simulation.world.enemies.projectiles[0].chillTumbleAccumulator
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(
+    migrated.state.primarySpells.transients[0]?.kind === 'water'
+      ? migrated.state.primarySpells.transients[0].speed
+      : null,
+    4,
+  )
+  assert.equal(
+    migrated.state.world.kind === 'boneyard'
+      ? migrated.state.world.enemies.projectiles[0]?.chillTumbleAccumulator
+      : null,
+    0,
+  )
+
+  const missingCurrent = structuredClone(document)
+  delete missingCurrent.continuation.simulation.primarySpells.transients[0].speed
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrent)),
+    /Water transient 0 speed/,
+  )
+  const missingAccumulator = structuredClone(document)
+  const missingArrow = missingAccumulator.continuation.simulation.world.enemies.projectiles[0]
+  delete missingArrow.chillTumbleAccumulator
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingAccumulator)),
+    /enemy projectile 0 Chill accumulator/,
+  )
+})
+
 test('current schema resumes the complete stock Tutorial controller and exact level identity', () => {
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
   let state = enterBoneyardWorld(
@@ -857,7 +983,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 18)
+  assert.equal(encoded.schemaVersion, 19)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,

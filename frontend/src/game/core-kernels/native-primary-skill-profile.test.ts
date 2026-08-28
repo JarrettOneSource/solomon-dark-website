@@ -132,16 +132,34 @@ test('resolves Water geometry, armor, aura, hail, and permafrost payloads', () =
     hailDamageMaximum: 30,
     hailDamageMinimum: 12,
     hailThreshold: 240,
-    halfAngleDegrees: 50,
+    halfAngleDegrees: 32.5,
     kind: 'water',
     manaCost: (17.5 + 10 + 20 + 8 + 10 + 10) * 0.75,
     minimumColdDurationTicks: 200,
-    pushbackPercent: 20,
+    pushbackFactor: Math.fround(20 * 0.009999999776482582),
     rank: 2,
-    reach: 485,
+    reach: 345,
     skillId: 32,
     slowdownScale: 1.5,
+    widenHalfDegrees: 35,
   })
+})
+
+test('normalizes every authored Chill Wind percent before the Water handler', () => {
+  for (const [rank, authored] of [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].entries()) {
+    const profile = nativePrimarySkillProfile(
+      book('water', { 32: 1, 33: rank }),
+      playerStatBook(),
+      { damage: 1, manaCost: 1 },
+    )
+    assert.equal(profile.kind, 'water')
+    if (profile.kind !== 'water') throw new Error('expected Water profile')
+    assert.equal(
+      profile.pushbackFactor,
+      Math.fround(authored * 0.009999999776482582),
+      `Chill rank ${rank}`,
+    )
+  }
 })
 
 test('resolves Earth growth, toughness, surge, and Gargantuan ceiling', () => {

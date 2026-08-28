@@ -39,7 +39,10 @@ import {
   nativeHurricaneOrbitForce,
   NATIVE_HURRICANE_CONTACT_COOLDOWN,
 } from '../core-kernels/native-hurricane.ts'
-import { waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
+import {
+  waterFrostJetParticleCount,
+  waterFrostJetPlan,
+} from '../core-kernels/primary-spell-water.ts'
 import {
   nativeEtherBlastDamage,
   NATIVE_ETHER_BLAST_CONTACT_RADIUS,
@@ -95,6 +98,7 @@ import type { RegisterNativeLightProvider } from '../core-kernels/native-light-p
 import {
   damageBoneyardEnemy,
   positionBoneyardEnemy,
+  setBoneyardArrowChillTumbleAccumulator,
   setBoneyardEnemyBlizzardPushState,
   setBoneyardEnemyHurricaneContactCooldown,
   tumbleBoneyardArrow,
@@ -1695,6 +1699,7 @@ export function resolveBoneyardSpellCombat(
               emission.queryOrigin,
               pushback * pushStrengthMultiplier(emission.ownerId),
               205 + 4 * widen,
+              1,
               resolveEnemyMovement,
             )
           }
@@ -1711,7 +1716,11 @@ export function resolveBoneyardSpellCombat(
     }
     const profile = emission.primarySkill
     if (!emission.underpowered && profile.hailThreshold > 0) {
-      for (const frost of waterEmissionTransients(sourceSpells, emission)) {
+      for (const frost of waterEmissionTransients(
+        sourceSpells,
+        emission,
+        waterFrostJetParticleCount(profile.widenHalfDegrees),
+      )) {
         const visualGate = drawNativeInteger(rng, 250)
         rng = visualGate.state
         if (visualGate.value >= profile.hailThreshold) continue
@@ -1759,6 +1768,9 @@ export function resolveBoneyardSpellCombat(
       }
     }
 
+    const pushbackFactor = emission.underpowered
+      ? 0
+      : Math.fround(profile.pushbackFactor * pushStrengthMultiplier(emission.ownerId))
     const rows = primaryWaterTargetRows(enemies)
     const contacts = nativePrimaryConeTargets({
       actorMask: emission.underpowered
@@ -1780,11 +1792,19 @@ export function resolveBoneyardSpellCombat(
       if (!row) continue
       if (row.kind === 'arrow') {
         const tumbleGain = Math.fround(
-          profile.pushbackPercent
-            * pushStrengthMultiplier(emission.ownerId)
-            * NATIVE_CHILL_ARROW_TUMBLE_FACTOR,
+          pushbackFactor * NATIVE_CHILL_ARROW_TUMBLE_FACTOR,
         )
-        if (tumbleGain < 1) continue
+        const tumbleAccumulator = Math.fround(
+          row.projectile.chillTumbleAccumulator + tumbleGain,
+        )
+        if (tumbleAccumulator <= 1) {
+          enemies = setBoneyardArrowChillTumbleAccumulator(
+            enemies,
+            row.projectile.id,
+            tumbleAccumulator,
+          )
+          continue
+        }
         const tumbled = tumbleBoneyardArrow(
           enemies,
           row.projectile.id,
@@ -1802,13 +1822,14 @@ export function resolveBoneyardSpellCombat(
         coldSlowMaterial: true,
         coldSlowTicks: emission.underpowered ? 25 : profile.coldDurationTicks,
       })
-      if (!emission.underpowered && profile.pushbackPercent > 0) {
+      if (pushbackFactor > 0) {
         enemies = applyWaterPushback(
           enemies,
           row.actor,
           emission.queryOrigin,
-          profile.pushbackPercent * pushStrengthMultiplier(emission.ownerId),
+          pushbackFactor,
           profile.reach,
+          nativeWaterPushTargetFactor(target.actorFlags),
           resolveEnemyMovement,
         )
       }
@@ -1932,9 +1953,14 @@ export function nativeWeldFrostRadialRadius(pushScalar: number): number {
   return radius
 }
 
+export function nativeWaterPushTargetFactor(actorFlags: number): number {
+  return (actorFlags & 0x40) !== 0 ? Math.fround(0.10000000149011612) : 1
+}
+
 function waterEmissionTransients(
   spells: PrimarySpellSimulationState,
   emission: PrimarySpellChannelEmission,
+  particleCount: number,
 ): readonly Extract<PrimarySpellTransientState, { kind: 'water' }>[] {
   return spells.transients.filter((effect): effect is Extract<
     PrimarySpellTransientState,
@@ -1944,7 +1970,7 @@ function waterEmissionTransients(
     && effect.ownerId === emission.ownerId
     && effect.worldKey === emission.worldKey
     && effect.id >= emission.id
-    && effect.id < emission.id + 2
+    && effect.id < emission.id + particleCount
   )).sort(bySpellId)
 }
 
@@ -2141,22 +2167,32 @@ function applyWaterPushback(
   origin: Readonly<Vector2>,
   pushback: number,
   reach: number,
+  targetPushFactor: number,
   resolveMovement: ResolveBoneyardSpellEnemyMovement,
 ): BoneyardEnemyStore {
-  const distanceSquared = squaredDistance(origin, actor.position)
-  const baseRadius = reach - NATIVE_CHILL_BASE_REACH_OFFSET
-  const outerSquared = NATIVE_CHILL_OUTER_RADIUS_FACTOR * baseRadius * baseRadius
+  const distanceSquared = Math.fround(squaredDistance(origin, actor.position))
+  const baseRadius = Math.fround(reach - NATIVE_CHILL_BASE_REACH_OFFSET)
+  const outerSquared = Math.fround(
+    Math.fround(baseRadius * baseRadius) * NATIVE_CHILL_OUTER_RADIUS_FACTOR,
+  )
   if (distanceSquared >= outerSquared) return source
-  const innerSquared = NATIVE_CHILL_INNER_RADIUS_FACTOR * outerSquared
+  const innerSquared = Math.fround(NATIVE_CHILL_INNER_RADIUS_FACTOR * outerSquared)
   const attenuation = distanceSquared <= innerSquared
     ? 1
-    : (outerSquared - distanceSquared) / (outerSquared - innerSquared)
-  const distance = Math.sqrt(distanceSquared)
+    : Math.fround((outerSquared - distanceSquared) / (outerSquared - innerSquared))
+  const distance = Math.fround(Math.sqrt(distanceSquared))
   if (distance === 0) return source
-  const magnitude = pushback * NATIVE_CHILL_IMPULSE_FACTOR * attenuation
+  const magnitude = Math.fround(
+    Math.fround(Math.fround(pushback * targetPushFactor) * NATIVE_CHILL_IMPULSE_FACTOR)
+      * attenuation,
+  )
+  const direction = {
+    x: Math.fround((actor.position.x - origin.x) / distance),
+    y: Math.fround((actor.position.y - origin.y) / distance),
+  }
   const requested = {
-    x: actor.position.x + (actor.position.x - origin.x) / distance * magnitude,
-    y: actor.position.y + (actor.position.y - origin.y) / distance * magnitude,
+    x: Math.fround(actor.position.x + Math.fround(direction.x * magnitude)),
+    y: Math.fround(actor.position.y + Math.fround(direction.y * magnitude)),
   }
   const resolved = resolveMovement(
     actor.id,

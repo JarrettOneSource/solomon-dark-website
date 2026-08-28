@@ -56,6 +56,9 @@ import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-target
 import { NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS } from '../core-kernels/native-ether-blast.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
+  WATER_FROST_MAXIMUM_SPEED,
+  WATER_FROST_MAX_PARTICLES_PER_TICK,
+  WATER_FROST_MINIMUM_SPEED,
   waterFrostJetKind,
   waterFrostJetLifetimeTicks,
 } from '../core-kernels/primary-spell-water.ts'
@@ -391,7 +394,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 98
+export const GAME_PROTOCOL_VERSION = 99
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -8418,7 +8421,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     source,
     field,
     source.kind === 'water'
-      ? [...transientKeys, 'obstructionDistance', 'obstructionPoint', 'underpowered']
+      ? [...transientKeys, 'obstructionDistance', 'obstructionPoint', 'speed', 'underpowered']
       : source.kind === 'air'
         ? [
             ...transientKeys,
@@ -8437,7 +8440,9 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   const id = positiveInteger(source.id, `${field}.id`)
   const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
   const variant = nonnegativeInteger(source.variant, `${field}.variant`)
-  if (variant > 3) throw new GameProtocolError(`${field}.variant exceeds the native family`)
+  if (source.kind !== 'water' && variant > 3) {
+    throw new GameProtocolError(`${field}.variant exceeds the native family`)
+  }
   if (source.kind === 'fire') {
     if (variant !== nativeFireParticleVariant(id)) {
       throw new GameProtocolError(`${field}.variant does not match its Fire particle id`)
@@ -8457,8 +8462,11 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'water') {
     const underpowered = boolean(source.underpowered, `${field}.underpowered`)
-    if (variant > 1) {
-      throw new GameProtocolError(`${field}.variant exceeds the two-per-tick ordinal`)
+    if (variant >= WATER_FROST_MAX_PARTICLES_PER_TICK) {
+      throw new GameProtocolError(`${field}.variant exceeds the Frost emission ordinal`)
+    }
+    if (underpowered && variant !== 0) {
+      throw new GameProtocolError(`${field}.variant exceeds the weak Frost emission ordinal`)
     }
     if (ageTicks < 1 || ageTicks >= waterFrostJetLifetimeTicks(id)) {
       throw new GameProtocolError(`${field}.ageTicks is outside its visible Frost lifetime`)
@@ -8477,12 +8485,17 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     if (waterFrostJetKind(id, underpowered) === 'over' && obstructionPoint !== null) {
       throw new GameProtocolError(`${field} Over particles cannot own obstruction state`)
     }
+    const speed = positiveFinite(source.speed, `${field}.speed`)
+    if (speed < WATER_FROST_MINIMUM_SPEED || speed > WATER_FROST_MAXIMUM_SPEED) {
+      throw new GameProtocolError(`${field}.speed is outside the authored Frost range`)
+    }
     return {
       ...common,
       kind: 'water',
       lightRegistration: absentNativeActorLight(source, field),
       obstructionDistance,
       obstructionPoint,
+      speed,
       underpowered,
     }
   }
