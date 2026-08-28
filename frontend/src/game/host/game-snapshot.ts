@@ -4,10 +4,12 @@ import {
   getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
+  getPlayerStatBook,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import {
   hagathaOffers,
+  projectInventoryRootSlots,
   SPLIT_MIND_CHARM_SELECTOR,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
@@ -21,6 +23,7 @@ import {
   playerEntityDisplayHealth,
   playerEntityMovementScale,
   playerLightingAt,
+  playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
 } from '../core-server/player-entity-store.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
@@ -42,6 +45,13 @@ import {
 } from './project-boneyard-enemies.ts'
 import { hubSkorchaHatFrame } from '../core-server/hub-skorcha.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
+import { effectiveSkillNumericValue } from '../core-kernels/player-skill-runtime.ts'
+import {
+  nativeSecondaryAbilityManaCost,
+} from '../core-kernels/native-secondary-abilities.ts'
+import {
+  NATIVE_SECONDARY_ABILITY_IDS,
+} from '../core-kernels/native-secondary-ability-contract.ts'
 
 export function createGameSnapshot(
   state: GameSimulationState,
@@ -255,8 +265,18 @@ function protocolPlayerState(
   const lighting = playerLightingAt(state.playerEntities, playerId)
   if (!lighting) throw new Error(`game simulation has no player lighting ${playerId}`)
   const skillBook = getPlayerSkillBook(state, playerId)
+  const statBook = getPlayerStatBook(state, playerId)
   const skillRuntime = playerSkillRuntimeAt(state.playerEntities, playerId)
   if (!skillRuntime) throw new Error(`game simulation has no player skill runtime ${playerId}`)
+  const derived = playerSkillDerivedStatsAt(state.playerEntities, playerId)
+  if (!derived) throw new Error(`game simulation has no player derived skill state ${playerId}`)
+  const offensiveFactors = {
+    damage: derived.offensiveDamageFactor,
+    equipment: skillRuntime.equipmentModifiers,
+    globalFlatDamage: derived.offensiveDamageFlat,
+    globalManaReduction: derived.offensiveManaCostReduction,
+    manaCost: derived.offensiveManaCostFactor,
+  }
   const learnedSkills: Array<readonly [number, number, number]> = []
   for (let skillId = 0; skillId < skillBook.permanentRanks.length; skillId += 1) {
     const permanentRank = skillBook.permanentRanks[skillId] ?? 0
@@ -265,6 +285,26 @@ function protocolPlayerState(
       learnedSkills.push([skillId, permanentRank, effectiveRank])
     }
   }
+  const secondaryManaCostAuthority = {
+    explosiveShieldRawManaCost: effectiveSkillNumericValue(
+      skillBook,
+      statBook,
+      55,
+      'mManaCost',
+    ),
+    golemRawManaCost: effectiveSkillNumericValue(skillBook, statBook, 75, 'mManaCost'),
+    magicStormRawManaCost: effectiveSkillNumericValue(skillBook, statBook, 28, 'mManaCost'),
+    offensiveFactors,
+    skillBook,
+  }
+  const secondaryManaCosts = NATIVE_SECONDARY_ABILITY_IDS.flatMap((skillId) => (
+    (skillBook.effectiveRanks[skillId] ?? 0) < 1
+      ? []
+      : [[skillId, nativeSecondaryAbilityManaCost(
+          secondaryManaCostAuthority,
+          skillId,
+        )] as const]
+  ))
   return {
     ...player,
     belt: freezeNativeBelt(getPlayerBelt(state, playerId).map((entry) => (
@@ -272,7 +312,9 @@ function protocolPlayerState(
     ))),
     economy: {
       actionFeedback: economy.actionFeedback && { ...economy.actionFeedback },
-      backpack: economy.backpack.map(protocolInventoryItem),
+      backpack: projectInventoryRootSlots(economy.backpack).map(({ item, slot }) => (
+        protocolInventoryItem(item, slot)
+      )),
       charmCapacity: economy.charmCapacity,
       collegeIntroPending: economy.collegeIntroPending,
       dowsingFee: economy.dowsingFee,
@@ -304,7 +346,9 @@ function protocolPlayerState(
       },
       ownedPerkSelectors: [...economy.ownedPerkSelectors],
       revision: economy.revision,
-      storage: economy.storage.map(protocolInventoryItem),
+      storage: projectInventoryRootSlots(economy.storage).map(({ item, slot }) => (
+        protocolInventoryItem(item, slot)
+      )),
       tonicPurchases: economy.tonicPurchases,
       tutorialPending: economy.tutorialPending,
       unforgeBonuses: { ...economy.unforgeBonuses },
@@ -348,6 +392,7 @@ function protocolPlayerState(
       poisonTicksRemaining: progression.poisonTicksRemaining,
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,
+      secondaryManaCosts,
       selectedPrimarySkillId: skillBook.primarySkillId,
       sorcerorsCharmAvailable: progression.sorcerorsCharmAvailable,
       splitMind: economy.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
@@ -370,12 +415,21 @@ function protocolSecondaryAbilities(
   return snapshot
 }
 
-function protocolInventoryItem(item: HubInventoryItem): HubInventoryItem {
+function protocolInventoryItem(
+  item: HubInventoryItem,
+  inventorySlot: number | null = null,
+): HubInventoryItem {
+  const { inventorySlot: _inventorySlot, ...identity } = item
   return {
-    ...item,
+    ...identity,
+    ...(inventorySlot === null ? {} : { inventorySlot }),
     ...(item.contents === undefined
       ? {}
-      : { contents: item.contents.map(protocolInventoryItem) }),
+      : {
+          contents: projectInventoryRootSlots(item.contents).map(({ item: child, slot }) => (
+            protocolInventoryItem(child, slot)
+          )),
+        }),
     iconRecords: [...item.iconRecords],
     ...(item.iconTints === undefined ? {} : { iconTints: [...item.iconTints] }),
     ...(item.nativeEffects === undefined

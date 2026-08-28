@@ -119,6 +119,7 @@ export type HubInventoryAction =
   | {
       readonly type: 'move-inventory-item'
       readonly destinationSackId: number | null
+      readonly destinationSlot: number | null
       readonly itemId: number
     }
   | { readonly type: 'read-librarian-book'; readonly bookId: number }
@@ -169,6 +170,8 @@ export interface HubInventoryItem {
   readonly iconRecords: readonly number[]
   readonly iconTints?: readonly [number | null, number | null]
   readonly id: number
+  /** Native Inventory root index. Omitted only by pre-slot web saves/fixtures. */
+  readonly inventorySlot?: number
   readonly kind: HubItemKind
   readonly modContent?: ModConsumableContent
   readonly modItemContent?: ModItemContent
@@ -187,6 +190,12 @@ export interface ProjectedInventoryItem {
   readonly depth: number
   readonly item: HubInventoryItem
   readonly parentSackId: number | null
+  readonly slot: number
+}
+
+export interface ProjectedInventoryRootSlot {
+  readonly item: HubInventoryItem
+  readonly slot: number
 }
 
 export interface ModSpriteFrame {
@@ -742,10 +751,10 @@ export function archiveCompletedRunEconomy(
   const carried = archive.transferCarriedItems
     ? [
         ...equippedItems(source.equipment),
-        ...source.backpack,
+        ...projectInventoryRootSlots(source.backpack).map(({ item }) => item),
       ]
     : []
-  const contents = [...carried, ...groundItems]
+  const contents = repackInventoryRoot([...carried, ...groundItems])
   let storage = source.storage
   if (contents.length > 0) {
     const suffix = drawNativeInteger(rng, NATIVE_RETAINED_SACK_SUFFIXES.length)
@@ -758,12 +767,23 @@ export function archiveCompletedRunEconomy(
       packed.contents,
     )
     nextItemId += 1
-    if (storage.length < HUB_STORAGE_SLOT_CAPACITY) {
-      storage = [...storage, retained]
+    const inserted = insertItem(storage, retained, HUB_STORAGE_SLOT_CAPACITY)
+    if (inserted) {
+      storage = inserted
     } else {
-      const consolidated = packSackContents([...storage, retained], nextItemId)
+      const consolidated = packSackContents([
+        ...projectInventoryRootSlots(storage).map(({ item }) => item),
+        retained,
+      ], nextItemId)
       nextItemId = consolidated.nextItemId
-      storage = [archiveSack(nextItemId, `${archive.displayName}'s Stored Possessions`, consolidated.contents)]
+      storage = [{
+        ...archiveSack(
+          nextItemId,
+          `${archive.displayName}'s Stored Possessions`,
+          consolidated.contents,
+        ),
+        inventorySlot: 0,
+      }]
       nextItemId += 1
     }
   }
@@ -818,7 +838,11 @@ function packSackContents(
     }
     contents = parents
   }
-  return { contents, nextItemId }
+  return { contents: repackInventoryRoot(contents), nextItemId }
+}
+
+function repackInventoryRoot(source: readonly HubInventoryItem[]): readonly HubInventoryItem[] {
+  return source.map((item, inventorySlot) => ({ ...item, inventorySlot }))
 }
 
 function archiveSafeRoots(
@@ -841,7 +865,7 @@ function archiveSack(
   contents: readonly HubInventoryItem[],
 ): HubInventoryItem {
   return {
-    contents,
+    contents: repackInventoryRoot(contents),
     equipmentType: null,
     iconRecords: [70],
     id,
@@ -983,11 +1007,11 @@ export function projectInventoryItems(
     depth: number,
     parentSackId: number | null,
   ) => {
-    for (const item of items) {
+    for (const { item, slot } of projectInventoryRootSlots(items)) {
       if (seenIds.has(item.id) || seenItems.has(item)) continue
       seenIds.add(item.id)
       seenItems.add(item)
-      projected.push({ depth, item, parentSackId })
+      projected.push({ depth, item, parentSackId, slot })
       if (item.nativeTypeId === 7008 && item.contents !== undefined) {
         visit(item.contents, depth + 1, item.id)
       }
@@ -995,6 +1019,34 @@ export function projectInventoryItems(
   }
   visit(source, 0, null)
   return projected
+}
+
+/**
+ * Projects one native inventory root without compacting its addressed cells.
+ * Schema-19 and older web saves omitted indices, so an entirely legacy root
+ * deterministically occupies its existing array positions.
+ */
+export function projectInventoryRootSlots(
+  source: readonly HubInventoryItem[],
+): readonly ProjectedInventoryRootSlot[] {
+  const explicitlyOccupied = new Set(source.flatMap((item) => (
+    item.inventorySlot === undefined ? [] : [item.inventorySlot]
+  )))
+  const assigned = new Set<number>()
+  let nextLegacySlot = 0
+  const projected = source.map((item): ProjectedInventoryRootSlot => {
+    let slot = item.inventorySlot
+    if (slot === undefined) {
+      while (explicitlyOccupied.has(nextLegacySlot) || assigned.has(nextLegacySlot)) {
+        nextLegacySlot += 1
+      }
+      slot = nextLegacySlot
+      nextLegacySlot += 1
+    }
+    assigned.add(slot)
+    return { item, slot }
+  })
+  return Object.freeze(projected.sort((left, right) => left.slot - right.slot))
 }
 
 export function inventoryItemsAtSackPath(
@@ -1160,12 +1212,30 @@ export function moveInventoryItem(
   source: HubEconomyState,
   itemId: number,
   destinationSackId: number | null,
+  destinationSlot: number | null = null,
 ): HubEconomyResult {
   if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  if (destinationSlot !== null && (
+    !Number.isSafeInteger(destinationSlot)
+    || destinationSlot < 0
+    || destinationSlot >= HUB_INVENTORY_SLOT_CAPACITY
+  )) return rejected(source, 'invalid-target')
   const projected = projectInventoryItems(source.backpack)
   const sourceEntry = projected.find(({ item }) => item.id === itemId)
   if (!sourceEntry) return rejected(source, 'item-not-found')
-  if (sourceEntry.parentSackId === destinationSackId) return rejected(source, 'invalid-target')
+  if (sourceEntry.parentSackId === destinationSackId) {
+    if (destinationSlot === null || sourceEntry.slot === destinationSlot) {
+      return rejected(source, 'invalid-target')
+    }
+    const root = inventoryRootForParent(source.backpack, destinationSackId)
+    if (!root) return rejected(source, 'invalid-target')
+    const relocated = relocateInventoryRootItem(root, itemId, destinationSlot)
+    if (relocated.reason !== null) return rejected(source, relocated.reason)
+    const backpack = replaceInventoryRoot(source.backpack, destinationSackId, relocated.items)
+    return backpack === null
+      ? rejected(source, 'invalid-target')
+      : accepted({ ...source, backpack })
+  }
   if (destinationSackId === itemId) return rejected(source, 'invalid-target')
   if (destinationSackId !== null) {
     const destination = projected.find(({ item }) => item.id === destinationSackId)?.item
@@ -1180,11 +1250,14 @@ export function moveInventoryItem(
   const removed = removeInventoryTreeItem(source.backpack, itemId, null)
   if (!removed) return rejected(source, 'item-not-found')
   if (destinationSackId === null) {
-    const backpack = insertItem(
-      removed.items,
-      removed.item,
-      HUB_INVENTORY_SLOT_CAPACITY,
-    )
+    const backpack = destinationSlot === null
+      ? insertItem(removed.items, removed.item, HUB_INVENTORY_SLOT_CAPACITY)
+      : insertItemAtSlot(
+          removed.items,
+          removed.item,
+          destinationSlot,
+          HUB_INVENTORY_SLOT_CAPACITY,
+        )
     return backpack
       ? accepted({ ...source, backpack })
       : rejected(source, 'capacity-full')
@@ -1194,11 +1267,18 @@ export function moveInventoryItem(
   if (!destination || destination.nativeTypeId !== 7008) {
     return rejected(source, 'invalid-target')
   }
-  const contents = insertItem(
-    destination.contents ?? [],
-    removed.item,
-    HUB_SACK_CHILD_REPLICATION_LIMIT,
-  )
+  const contents = destinationSlot === null
+    ? insertItem(
+        destination.contents ?? [],
+        removed.item,
+        HUB_SACK_CHILD_REPLICATION_LIMIT,
+      )
+    : insertItemAtSlot(
+        destination.contents ?? [],
+        removed.item,
+        destinationSlot,
+        HUB_SACK_CHILD_REPLICATION_LIMIT,
+      )
   if (!contents) return rejected(source, 'capacity-full')
   const backpack = replaceInventoryTreeItem(removed.items, destinationSackId, {
     ...destination,
@@ -1654,14 +1734,7 @@ export function insertLootInventoryItem(
     throw new RangeError('loot inventory quantity must be a positive safe integer')
   }
   if (item.nativeTypeId === 7001 || item.kind === 'mod-item') {
-    const stackIndex = source.backpack.findIndex((entry) => (
-      entry.nativeTypeId === item.nativeTypeId
-      && (item.modItemContent
-        ? entry.modItemContent?.contentId === item.modItemContent.contentId
-        : item.modContent === undefined
-          ? entry.modContent === undefined && entry.nativeSubtype === item.nativeSubtype
-          : entry.modContent?.contentId === item.modContent.contentId)
-    ))
+    const stackIndex = source.backpack.findIndex((entry) => inventoryItemsShareStack(entry, item))
     if (stackIndex >= 0) {
       const maximum = item.modItemContent?.stackMaximum ?? 9_999
       if (source.backpack[stackIndex]!.quantity + item.quantity > maximum) {
@@ -1680,11 +1753,17 @@ export function insertLootInventoryItem(
     }
   }
   const identified = identifyLootItemTree(item, source.nextItemId)
+  const backpack = insertItem(
+    source.backpack,
+    identified.item,
+    NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
+  )
+  if (!backpack) return { accepted: false, state: source }
   return {
     accepted: true,
     state: {
       ...source,
-      backpack: [...source.backpack, identified.item],
+      backpack,
       nextItemId: identified.nextItemId,
       revision: source.revision + 1,
     },
@@ -1705,11 +1784,13 @@ export function archiveHagathaLastWordItems(
   const retained = retainedLastWordSack(items, sackName, 0)
   if (retained === null) return { accepted: false, state: source }
   const identified = identifyLootItemTree(retained, source.nextItemId)
+  const storage = insertItem(source.storage, identified.item, HUB_STORAGE_SLOT_CAPACITY)
+  if (!storage) return { accepted: false, state: source }
   const state = {
     ...source,
     nextItemId: identified.nextItemId,
     revision: source.revision + 1,
-    storage: [...source.storage, identified.item],
+    storage,
   }
   return hubEconomyInventoryIsValid(state)
     ? { accepted: true, state }
@@ -1721,15 +1802,16 @@ export function economyHasWizardKey(source: HubEconomyState): boolean {
 }
 
 export function consumeWizardKey(source: HubEconomyState): HubWizardKeyResult {
-  for (let index = 0; index < source.backpack.length; index += 1) {
-    const consumed = consumeWizardKeyFromItem(source.backpack[index]!)
+  const backpack = materializeInventoryRootSlots(source.backpack)
+  for (let index = 0; index < backpack.length; index += 1) {
+    const consumed = consumeWizardKeyFromItem(backpack[index]!)
     if (!consumed.consumed) continue
-    const backpack = [...source.backpack]
-    if (consumed.item === null) backpack.splice(index, 1)
-    else backpack[index] = consumed.item
+    const nextBackpack = [...backpack]
+    if (consumed.item === null) nextBackpack.splice(index, 1)
+    else nextBackpack[index] = consumed.item
     return {
       consumed: true,
-      state: { ...source, backpack, revision: source.revision + 1 },
+      state: { ...source, backpack: nextBackpack, revision: source.revision + 1 },
     }
   }
   return { consumed: false, state: source }
@@ -1791,7 +1873,7 @@ function retainedLastWordSack(
     ? [...source.slice(0, HUB_SACK_CHILD_REPLICATION_LIMIT - 1), continuation!]
     : [...source]
   return {
-    contents: Object.freeze(contents),
+    contents: Object.freeze(repackInventoryRoot(contents)),
     equipmentType: null,
     iconRecords: Object.freeze([70]),
     id: 1,
@@ -1819,10 +1901,11 @@ function consumeWizardKeyFromItem(
       : { consumed: true, item: null }
   }
   if (source.contents === undefined) return { consumed: false, item: source }
-  for (let index = 0; index < source.contents.length; index += 1) {
-    const consumed = consumeWizardKeyFromItem(source.contents[index]!)
+  const slottedContents = materializeInventoryRootSlots(source.contents)
+  for (let index = 0; index < slottedContents.length; index += 1) {
+    const consumed = consumeWizardKeyFromItem(slottedContents[index]!)
     if (!consumed.consumed) continue
-    const contents = [...source.contents]
+    const contents = [...slottedContents]
     if (consumed.item === null) contents.splice(index, 1)
     else contents[index] = consumed.item
     return { consumed: true, item: { ...source, contents } }
@@ -1869,7 +1952,7 @@ export function equipInventoryItem(
   return accepted({
     ...source,
     backpack,
-    equipment: withEquippedItem(source.equipment, slot, item),
+    equipment: withEquippedItem(source.equipment, slot, detachedInventoryItem(item)),
   })
 }
 
@@ -2031,8 +2114,8 @@ function starterLoadout(
 } {
   return {
     backpack: [
-      starterPotion(firstItemId, 'health-potion', 'Health Potion', 0, 46),
-      starterPotion(firstItemId + 1, 'mana-potion', 'Mana Potion', 1, 47),
+      { ...starterPotion(firstItemId, 'health-potion', 'Health Potion', 0, 46), inventorySlot: 0 },
+      { ...starterPotion(firstItemId + 1, 'mana-potion', 'Mana Potion', 1, 47), inventorySlot: 1 },
     ],
     equipment: starterEquipment(firstItemId + 2, appearance),
     nextItemId: firstItemId + 5,
@@ -2106,17 +2189,93 @@ interface RemovedInventoryTreeItem {
   readonly parentSackId: number | null
 }
 
+function materializeInventoryRootSlots(
+  source: readonly HubInventoryItem[],
+): readonly HubInventoryItem[] {
+  return projectInventoryRootSlots(source).map(({ item, slot }) => {
+    const contents = item.contents === undefined
+      ? undefined
+      : materializeInventoryRootSlots(item.contents)
+    if (item.inventorySlot === slot && contents === item.contents) return item
+    return {
+      ...item,
+      ...(contents === undefined ? {} : { contents }),
+      inventorySlot: slot,
+    }
+  })
+}
+
+function inventoryRootForParent(
+  backpack: readonly HubInventoryItem[],
+  parentSackId: number | null,
+): readonly HubInventoryItem[] | null {
+  if (parentSackId === null) return backpack
+  const parent = findInventoryItem(backpack, parentSackId)
+  return parent?.nativeTypeId === 7008 ? parent.contents ?? [] : null
+}
+
+function replaceInventoryRoot(
+  backpack: readonly HubInventoryItem[],
+  parentSackId: number | null,
+  items: readonly HubInventoryItem[],
+): readonly HubInventoryItem[] | null {
+  if (parentSackId === null) return items
+  const parent = findInventoryItem(backpack, parentSackId)
+  if (!parent || parent.nativeTypeId !== 7008) return null
+  return replaceInventoryTreeItem(backpack, parentSackId, { ...parent, contents: items })
+}
+
+function relocateInventoryRootItem(
+  source: readonly HubInventoryItem[],
+  itemId: number,
+  destinationSlot: number,
+): {
+  readonly items: readonly HubInventoryItem[]
+  readonly reason: Extract<HubEconomyRejection, 'capacity-full' | 'invalid-target'> | null
+} {
+  const items = materializeInventoryRootSlots(source)
+  const moving = items.find((item) => item.id === itemId)
+  if (!moving || moving.inventorySlot === undefined || moving.inventorySlot === destinationSlot) {
+    return { items: source, reason: 'invalid-target' }
+  }
+  const resident = items.find((item) => item.inventorySlot === destinationSlot)
+  if (resident && inventoryItemsShareStack(resident, moving)) {
+    const maximum = moving.modItemContent?.stackMaximum ?? 9_999
+    if (resident.quantity + moving.quantity > maximum) {
+      return { items: source, reason: 'capacity-full' }
+    }
+    return {
+      items: items
+        .filter((item) => item.id !== moving.id)
+        .map((item) => item.id === resident.id
+          ? { ...item, quantity: item.quantity + moving.quantity }
+          : item),
+      reason: null,
+    }
+  }
+  const sourceSlot = moving.inventorySlot
+  return {
+    items: items.map((item) => item.id === moving.id
+      ? { ...item, inventorySlot: destinationSlot }
+      : item.id === resident?.id
+        ? { ...item, inventorySlot: sourceSlot }
+        : item),
+    reason: null,
+  }
+}
+
 function removeInventoryTreeItem(
   source: readonly HubInventoryItem[],
   itemId: number,
   parentSackId: number | null,
 ): RemovedInventoryTreeItem | null {
-  for (let index = 0; index < source.length; index += 1) {
-    const item = source[index]!
+  const items = materializeInventoryRootSlots(source)
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]!
     if (item.id === itemId) {
       return {
         item,
-        items: source.filter((_, candidateIndex) => candidateIndex !== index),
+        items: items.filter((_, candidateIndex) => candidateIndex !== index),
         parentSackId,
       }
     }
@@ -2125,7 +2284,7 @@ function removeInventoryTreeItem(
     if (!nested) continue
     return {
       ...nested,
-      items: source.map((entry, candidateIndex) => candidateIndex === index
+      items: items.map((entry, candidateIndex) => candidateIndex === index
         ? { ...item, contents: nested.items }
         : entry),
     }
@@ -2138,15 +2297,18 @@ function replaceInventoryTreeItem(
   itemId: number,
   replacement: HubInventoryItem,
 ): readonly HubInventoryItem[] | null {
-  for (let index = 0; index < source.length; index += 1) {
-    const item = source[index]!
+  const items = materializeInventoryRootSlots(source)
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]!
     if (item.id === itemId) {
-      return source.map((entry, candidateIndex) => candidateIndex === index ? replacement : entry)
+      return items.map((entry, candidateIndex) => candidateIndex === index
+        ? { ...replacement, inventorySlot: item.inventorySlot }
+        : entry)
     }
     if (item.nativeTypeId !== 7008 || item.contents === undefined) continue
     const contents = replaceInventoryTreeItem(item.contents, itemId, replacement)
     if (!contents) continue
-    return source.map((entry, candidateIndex) => candidateIndex === index
+    return items.map((entry, candidateIndex) => candidateIndex === index
       ? { ...item, contents }
       : entry)
   }
@@ -2196,8 +2358,18 @@ function clothingTints(
 export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
   const seenIds = new Set<number>()
   const seenItems = new Set<HubInventoryItem>()
-  const visit = (items: readonly HubInventoryItem[], depth = 0): boolean => {
+  const visit = (
+    items: readonly HubInventoryItem[],
+    depth = 0,
+    slotCapacity: number | null = null,
+  ): boolean => {
     if (depth > HUB_SACK_REPLICATION_DEPTH_LIMIT) return false
+    if (slotCapacity !== null) {
+      const slots = projectInventoryRootSlots(items).map(({ slot }) => slot)
+      if (new Set(slots).size !== slots.length || slots.some((slot) => (
+        !Number.isSafeInteger(slot) || slot < 0 || slot >= slotCapacity
+      ))) return false
+    }
     for (const item of items) {
       if (
         !Number.isSafeInteger(item.id)
@@ -2221,7 +2393,11 @@ export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
       if ((item.nativeTypeId === 7008) !== (item.kind === 'sack')) return false
       if (item.contents !== undefined) {
         if (!sack || item.contents.length > HUB_SACK_CHILD_REPLICATION_LIMIT) return false
-        if (item.contents.length > 0 && !visit(item.contents, depth + 1)) return false
+        if (item.contents.length > 0 && !visit(
+          item.contents,
+          depth + 1,
+          HUB_SACK_CHILD_REPLICATION_LIMIT,
+        )) return false
       }
     }
     return true
@@ -2233,10 +2409,20 @@ export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
     source.equipment.robe,
     source.equipment.weapon,
   ].filter((item): item is HubInventoryItem => item !== null)
-  return visit(source.backpack)
-    && visit(source.storage)
+  return visit(source.backpack, 0, NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT)
+    && visit(source.storage, 0, HUB_STORAGE_SLOT_CAPACITY)
     && visit(equipment)
     && visit(source.fomentiusStock)
+}
+
+export function normalizeHubEconomyInventorySlots(
+  source: HubEconomyState,
+): HubEconomyState {
+  return {
+    ...source,
+    backpack: materializeInventoryRootSlots(source.backpack),
+    storage: materializeInventoryRootSlots(source.storage),
+  }
 }
 
 export function modItemInventoryIdentityIsValid(item: HubInventoryItem): boolean {
@@ -2302,22 +2488,54 @@ function insertItem(
   item: HubInventoryItem,
   capacity: number,
 ): readonly HubInventoryItem[] | null {
+  const slotted = materializeInventoryRootSlots(destination)
   if (item.nativeTypeId === 7001 || item.kind === 'mod-item') {
-    const stackIndex = destination.findIndex((entry) => (
-      entry.nativeTypeId === item.nativeTypeId
-      && (item.modItemContent
-        ? entry.modItemContent?.contentId === item.modItemContent.contentId
-        : entry.nativeSubtype === item.nativeSubtype)
-    ))
+    const stackIndex = slotted.findIndex((entry) => inventoryItemsShareStack(entry, item))
     if (stackIndex >= 0) {
       const maximum = item.modItemContent?.stackMaximum ?? 9_999
-      if (destination[stackIndex]!.quantity + item.quantity > maximum) return null
-      return destination.map((entry, index) => index === stackIndex
+      if (slotted[stackIndex]!.quantity + item.quantity > maximum) return null
+      return slotted.map((entry, index) => index === stackIndex
         ? { ...entry, quantity: entry.quantity + item.quantity }
         : entry)
     }
   }
-  return destination.length >= capacity ? null : [...destination, item]
+  const occupied = new Set(slotted.map(({ inventorySlot }) => inventorySlot!))
+  let slot = 0
+  while (occupied.has(slot) && slot < capacity) slot += 1
+  return slot >= capacity
+    ? null
+    : [...slotted, { ...item, inventorySlot: slot }]
+}
+
+function insertItemAtSlot(
+  destination: readonly HubInventoryItem[],
+  item: HubInventoryItem,
+  slot: number,
+  capacity: number,
+): readonly HubInventoryItem[] | null {
+  if (!Number.isSafeInteger(slot) || slot < 0 || slot >= capacity) return null
+  const slotted = materializeInventoryRootSlots(destination)
+  const resident = slotted.find((entry) => entry.inventorySlot === slot)
+  if (!resident) return [...slotted, { ...item, inventorySlot: slot }]
+  if (!inventoryItemsShareStack(resident, item)) return null
+  const maximum = item.modItemContent?.stackMaximum ?? 9_999
+  if (resident.quantity + item.quantity > maximum) return null
+  return slotted.map((entry) => entry.id === resident.id
+    ? { ...entry, quantity: entry.quantity + item.quantity }
+    : entry)
+}
+
+function inventoryItemsShareStack(
+  left: HubInventoryItem,
+  right: HubInventoryItem,
+): boolean {
+  if (left.nativeTypeId !== right.nativeTypeId) return false
+  if (right.modItemContent) {
+    return left.modItemContent?.contentId === right.modItemContent.contentId
+  }
+  if (right.modContent) return left.modContent?.contentId === right.modContent.contentId
+  return (right.nativeTypeId === 7001 || right.kind === 'mod-item')
+    && left.nativeSubtype === right.nativeSubtype
 }
 
 function slotAccepts(slot: EquipmentSlot, type: EquipmentType): boolean {
@@ -2354,6 +2572,11 @@ function withEquippedItem(
   return { ...source, [slot]: item }
 }
 
+function detachedInventoryItem(item: HubInventoryItem): HubInventoryItem {
+  const { inventorySlot: _inventorySlot, ...detached } = item
+  return detached
+}
+
 function equipDirectSackChild(
   source: HubEconomyState,
   sackId: number,
@@ -2384,7 +2607,7 @@ function equipDirectSackChild(
     : {
         ...source,
         backpack,
-        equipment: withEquippedItem(source.equipment, slot, item),
+        equipment: withEquippedItem(source.equipment, slot, detachedInventoryItem(item)),
       }
 }
 

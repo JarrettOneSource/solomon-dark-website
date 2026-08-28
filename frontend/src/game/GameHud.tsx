@@ -175,7 +175,9 @@ export default function GameHud({
   const [quickbarHud, setQuickbarHud] = useState(() => ({
     belt: initialSnapshot.players[playerId]!.belt,
     concentrationSkillIds: initialSnapshot.players[playerId]!.progression.concentrationSkillIds,
+    currentMana: initialSnapshot.players[playerId]!.progression.currentMana,
     playerState: initialSnapshot.secondaryAbilities.players[playerId],
+    secondaryManaCosts: initialSnapshot.players[playerId]!.progression.secondaryManaCosts,
     selectedPrimarySkillId: initialSnapshot.players[playerId]!.progression.selectedPrimarySkillId,
     tick: initialSnapshot.tick,
     weldBuildId: initialSnapshot.players[playerId]!.progression.weldBuildId,
@@ -186,7 +188,9 @@ export default function GameHud({
     setQuickbarHud({
       belt: player.belt,
       concentrationSkillIds: player.progression.concentrationSkillIds,
+      currentMana: player.progression.currentMana,
       playerState: snapshot.secondaryAbilities.players[playerId],
+      secondaryManaCosts: player.progression.secondaryManaCosts,
       selectedPrimarySkillId: player.progression.selectedPrimarySkillId,
       tick: snapshot.tick,
       weldBuildId: player.progression.weldBuildId,
@@ -388,6 +392,7 @@ export default function GameHud({
         concentrationSkillIds={quickbarHud.concentrationSkillIds}
         controls={controls}
         controllerQuickbarSlot={controllerQuickbarSlot}
+        currentMana={quickbarHud.currentMana}
         displayScale={viewport.displayScale}
         economy={economy}
         element={initialSnapshot.players[playerId]!.config.element}
@@ -396,6 +401,7 @@ export default function GameHud({
         onInput={onQuickbarInput}
         onUnassign={onQuickbarUnassign}
         playerState={quickbarHud.playerState}
+        secondaryManaCosts={quickbarHud.secondaryManaCosts}
         selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
         uiScale={uiScale}
         viewportWidth={viewport.width}

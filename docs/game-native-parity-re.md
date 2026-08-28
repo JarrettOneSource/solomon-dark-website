@@ -587,3 +587,5 @@ Add or revise evidence in the relevant system file, not in this index.
 ## [2026-08-28 — Continuous held-primary facing across every input producer](<Game Native Parity RE/291-2026-08-28-continuous-held-primary-facing-across-every-input-producer.md>)
 
 ## [2026-08-28 — Standalone stock gamestate import and dynamic Game bindings](<Game Native Parity RE/292-2026-08-28-standalone-stock-gamestate-import-and-dynamic-game-bindings.md>)
+
+## [2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation](<Game Native Parity RE/293-2026-08-28-reopened-inventorygrid-addressed-slots-and-beltbutton-readiness-presentation.md>)

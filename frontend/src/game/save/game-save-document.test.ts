@@ -71,6 +71,41 @@ const MOD_STATE = {
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
+test('schema 19 compact inventory roots migrate to schema 20 addressed slots', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const legacy = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  legacy.schemaVersion = 19
+  const legacyBackpack = legacy.continuation.simulation.playerEntities.economies[0].backpack
+  for (const item of legacyBackpack) delete item.inventorySlot
+
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.deepEqual(
+    restored.state.playerEntities.economies[0]!.backpack.map(({ inventorySlot }) => inventorySlot),
+    [0, 1],
+  )
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: restored.state,
+  }))
+  assert.equal(current.schemaVersion, 20)
+  assert.deepEqual(
+    current.continuation.simulation.playerEntities.economies[0].backpack
+      .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
+    [0, 1],
+  )
+})
+
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
     hubTraderAnimationSeed: 2,
@@ -92,7 +127,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 19)
+  assert.equal(encoded.schemaVersion, 20)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -991,7 +1026,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 19)
+  assert.equal(encoded.schemaVersion, 20)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,

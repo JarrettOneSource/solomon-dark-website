@@ -28,6 +28,7 @@ import {
 import {
   layoutNativeQuickbarBinding,
   nativeCooldownSectorPath,
+  nativeSkillQuickbarIconAlpha,
   nativeSkillQuickbarCooldownPresentation,
   NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
@@ -65,6 +66,7 @@ interface SkillQuickbarProps {
   concentrationSkillIds: readonly [number | null, number | null]
   controls: GameControlBindings
   controllerQuickbarSlot?: number
+  currentMana: number
   displayScale: number
   economy: Pick<HubEconomyState, 'backpack' | 'equipment'>
   element: WizardElement
@@ -73,6 +75,7 @@ interface SkillQuickbarProps {
   onInput?: (slot: number, pressed: boolean) => void
   onUnassign?: (slot: number) => void
   playerState: NativeSecondaryPlayerState | undefined
+  secondaryManaCosts: readonly (readonly [number, number])[]
   selectedPrimarySkillId: number
   /** Settings UI scale; coarse-pointer bank placement is computed in HUD-root pixels. */
   uiScale: number
@@ -85,6 +88,7 @@ export default function SkillQuickbar({
   concentrationSkillIds,
   controls,
   controllerQuickbarSlot,
+  currentMana,
   displayScale,
   economy,
   element,
@@ -93,6 +97,7 @@ export default function SkillQuickbar({
   onInput,
   onUnassign,
   playerState,
+  secondaryManaCosts,
   selectedPrimarySkillId,
   uiScale,
   viewportWidth,
@@ -112,6 +117,7 @@ export default function SkillQuickbar({
           entry={belt[slot] ?? null}
           concentrationSkillIds={concentrationSkillIds}
           controllerSelected={controllerQuickbarSlot === slot}
+          currentMana={currentMana}
           inputScale={displayScale * uiScale}
           key={slot}
           mobilePlacement={mobileQuickbarSlotPlacement(slot, mobileBank)}
@@ -121,6 +127,7 @@ export default function SkillQuickbar({
           onInput={onInput}
           onUnassign={onUnassign}
           playerState={playerState}
+          secondaryManaCosts={secondaryManaCosts}
           selectedPrimarySkillId={selectedPrimarySkillId}
           slot={slot}
         />
@@ -133,6 +140,7 @@ function SkillQuickbarSlot({
   bindingCode,
   concentrationSkillIds,
   controllerSelected,
+  currentMana,
   economy,
   element,
   entry,
@@ -144,12 +152,14 @@ function SkillQuickbarSlot({
   onInput,
   onUnassign,
   playerState,
+  secondaryManaCosts,
   selectedPrimarySkillId,
   slot,
 }: {
   bindingCode: string
   concentrationSkillIds: SkillQuickbarProps['concentrationSkillIds']
   controllerSelected: boolean
+  currentMana: number
   economy: Pick<HubEconomyState, 'backpack' | 'equipment'>
   element: WizardElement
   entry: NativeBeltEntry | null
@@ -161,6 +171,7 @@ function SkillQuickbarSlot({
   onInput: SkillQuickbarProps['onInput']
   onUnassign: SkillQuickbarProps['onUnassign']
   playerState: SkillQuickbarProps['playerState']
+  secondaryManaCosts: SkillQuickbarProps['secondaryManaCosts']
   selectedPrimarySkillId: number
   slot: number
 }) {
@@ -189,6 +200,12 @@ function SkillQuickbarSlot({
   const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
   const concentration = skillId !== null && nativeSkillCategory(skillId) === 3
   const combatDisabled = mode === 'hub' && secondary
+  const manaCost = secondary && skillId !== null
+    ? secondaryManaCosts.find(([candidate]) => candidate === skillId)?.[1] ?? 0
+    : 0
+  const insufficientMana = secondary
+    && Math.max(0, currentMana - (playerState?.reservedMana ?? 0)) < manaCost
+  const unavailable = combatDisabled || insufficientMana
   const { capacity, remaining } = !secondary
     ? { capacity: 0, remaining: 0 }
     : nativeSkillQuickbarCooldownPresentation(
@@ -196,6 +213,10 @@ function SkillQuickbarSlot({
         playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
         playerState?.globalCooldownTicks ?? 0,
       )
+  const iconAlpha = nativeSkillQuickbarIconAlpha({
+    cooldown: remaining > 0,
+    unavailable,
+  })
   const bindingLabel = gameBindingLabel(bindingCode)
   const input = bindingCode.startsWith('Mouse')
     ? `${bindingLabel.toLowerCase()} button`
@@ -216,7 +237,9 @@ function SkillQuickbarSlot({
     ? `Empty belt slot ${slot + 1}, ${input}`
     : `${entryName}, ${input}${potion ? `, ${potion.count} available` : ''}${remaining > 0
       ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
-      : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}`
+      : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}${
+        insufficientMana ? ', insufficient mana' : ''
+      }`
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>, activate: boolean) => {
     const press = pressRef.current
     if (!press || press.pointerId !== event.pointerId) return
@@ -244,6 +267,9 @@ function SkillQuickbarSlot({
           : undefined}
       data-binding-code={bindingCode}
       data-active={active}
+      data-icon-alpha={skill === undefined ? undefined : iconAlpha}
+      data-mana-cost={secondary ? manaCost : undefined}
+      data-unavailable={unavailable || undefined}
       data-controller-selected={controllerSelected || undefined}
       data-mobile-ui-custom={mobileUi.customized || undefined}
       data-mobile-ui-element={mobileUiId}
@@ -302,6 +328,7 @@ function SkillQuickbarSlot({
       {skill === undefined ? null : (
         <NativeSkillIcon
           cooldown={remaining > 0}
+          opacity={iconAlpha}
           record={skill.skills_atlas_icon_record}
         />
       )}
@@ -377,7 +404,7 @@ export function NativeSkillIcon({
         backgroundPosition: `${trimX - x}px ${trimY - y}px`,
         backgroundSize: `${ATLAS_WIDTH}px ${ATLAS_HEIGHT}px`,
         height: logicalHeight,
-        opacity: opacity ?? (cooldown ? 0.25 : 0.375),
+        opacity: opacity ?? nativeSkillQuickbarIconAlpha({ cooldown, unavailable: false }),
         width: logicalWidth,
       }}
     />

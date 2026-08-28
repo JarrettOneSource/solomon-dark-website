@@ -56,6 +56,7 @@ import {
   nativeUnforgeOutcomeText,
   restockFomentius,
   projectInventoryItems,
+  projectInventoryRootSlots,
   reconcileInventorySackPath,
   reconcileHubEconomyModPackages,
   reforgeModEquipment,
@@ -1121,6 +1122,78 @@ test('native inventory projection is depth-first and sack relinking preserves on
   const sameOwner = moveInventoryItem(rooted.state, inner.id, outer.id)
   assert.equal(sameOwner.reason, 'invalid-target')
   assert.strictEqual(sameOwner.state, rooted.state)
+})
+
+test('InventoryGrid preserves addressed blank cells, occupied swaps, and resident stack identity', () => {
+  const base = createHubEconomy(1)
+  const health = { ...base.backpack[0]!, inventorySlot: 0, quantity: 2 }
+  const mana = { ...base.backpack[1]!, inventorySlot: 1 }
+  const state = { ...base, backpack: [health, mana] }
+
+  const placed = moveInventoryItem(state, health.id, null, 10)
+  assert.equal(placed.accepted, true)
+  assert.deepEqual(
+    projectInventoryRootSlots(placed.state.backpack).map(({ item, slot }) => [item.id, slot]),
+    [[mana.id, 1], [health.id, 10]],
+  )
+
+  const swapped = moveInventoryItem(placed.state, mana.id, null, 10)
+  assert.equal(swapped.accepted, true)
+  assert.deepEqual(
+    projectInventoryRootSlots(swapped.state.backpack).map(({ item, slot }) => [item.id, slot]),
+    [[health.id, 1], [mana.id, 10]],
+  )
+
+  const resident = { ...health, id: 40_001, inventorySlot: 20, quantity: 3 }
+  const incoming = { ...health, id: 40_002, inventorySlot: 21, quantity: 4 }
+  const merged = moveInventoryItem(
+    { ...base, backpack: [resident, incoming] },
+    incoming.id,
+    null,
+    resident.inventorySlot,
+  )
+  assert.equal(merged.accepted, true)
+  assert.equal(findInventoryItem(merged.state.backpack, incoming.id), null)
+  assert.deepEqual(findInventoryItem(merged.state.backpack, resident.id), {
+    ...resident,
+    quantity: 7,
+  })
+
+  assert.equal(moveInventoryItem(swapped.state, health.id, null, 1).reason, 'invalid-target')
+  assert.equal(moveInventoryItem(swapped.state, health.id, null, -1).reason, 'invalid-target')
+  assert.equal(
+    moveInventoryItem(swapped.state, health.id, null, HUB_INVENTORY_SLOT_CAPACITY).reason,
+    'invalid-target',
+  )
+})
+
+test('every recursive InventoryScreen root uses addressed slots and first-hole insertion', () => {
+  const base = createHubEconomy(1)
+  const first = { ...base.backpack[0]!, id: 41_001, inventorySlot: 0 }
+  const second = { ...base.backpack[1]!, id: 41_002, inventorySlot: 1 }
+  const sack = { ...nativeTestSack(41_003, [first, second]), inventorySlot: 4 }
+  const state = { ...base, backpack: [sack] }
+
+  const placed = moveInventoryItem(state, second.id, sack.id, 12)
+  assert.equal(placed.accepted, true)
+  assert.deepEqual(
+    projectInventoryRootSlots(findInventoryItem(placed.state.backpack, sack.id)!.contents!)
+      .map(({ item, slot }) => [item.id, slot]),
+    [[first.id, 0], [second.id, 12]],
+  )
+
+  const removed = discardInventoryItem(placed.state, first.id)
+  assert.equal(removed.accepted, true)
+  const inserted = insertLootInventoryItem(removed.state, {
+    ...base.backpack[0]!,
+    id: 41_004,
+    inventorySlot: 87,
+  })
+  assert.equal(inserted.accepted, true)
+  assert.equal(
+    projectInventoryRootSlots(inserted.state.backpack).find(({ item }) => item.id === 41_004)?.slot,
+    0,
+  )
 })
 
 test('InventoryScreen resolves only the direct children of its active Sack root', () => {

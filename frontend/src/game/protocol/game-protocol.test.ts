@@ -578,8 +578,8 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'dowse' },
     { type: 'equip', itemId: 3, slot: 'ring-2' },
     { type: 'interact-goodie' },
-    { type: 'move-inventory-item', destinationSackId: 10, itemId: 9 },
-    { type: 'move-inventory-item', destinationSackId: null, itemId: 9 },
+    { type: 'move-inventory-item', destinationSackId: 10, destinationSlot: null, itemId: 9 },
+    { type: 'move-inventory-item', destinationSackId: null, destinationSlot: 87, itemId: 9 },
     { type: 'read-librarian-book', bookId: 25 },
     { type: 'select-boast', boastId: 4 },
     { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
@@ -603,7 +603,7 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [], targetItemId: 2 },
     { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [18], targetItemId: 2 },
     { type: 'equip', itemId: 1, slot: 'boots' },
-    { type: 'move-inventory-item', destinationSackId: 0, itemId: 1 },
+    { type: 'move-inventory-item', destinationSackId: 0, destinationSlot: -1, itemId: 1 },
     { type: 'read-librarian-book', bookId: 26 },
     { type: 'select-boast', boastId: 5 },
     { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
@@ -716,6 +716,10 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
   assert.equal(welcome.snapshot.players['player-1'].economy.gold, 500)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
+  assert.deepEqual(
+    welcome.snapshot.players['player-1'].economy.backpack.map(({ inventorySlot }) => inventorySlot),
+    [0, 1],
+  )
   const tonicWelcome = structuredClone(welcome)
   Object.assign(tonicWelcome.snapshot.players['player-1'].economy, {
     charmCapacity: 9,
@@ -1101,6 +1105,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     poisonTicksRemaining: 0,
     previousThreshold: 0,
     revision: 0,
+    secondaryManaCosts: [[11, 75]],
     selectedPrimarySkillId: 8,
     sorcerorsCharmAvailable: false,
     splitMind: false,
@@ -1656,8 +1661,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v102 carries Web Lua readiness, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 102)
+test('protocol v103 carries addressed inventory slots, effective secondary costs, Web Lua readiness, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 103)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

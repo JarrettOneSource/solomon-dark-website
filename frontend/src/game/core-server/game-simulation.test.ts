@@ -1376,6 +1376,7 @@ test('simulation owns recursive sack moves, Fabric Dye commits, and nested potio
   const moved = applyGameSimulationHubAction(state, 'first', {
     type: 'move-inventory-item',
     destinationSackId: destinationSack.id,
+    destinationSlot: null,
     itemId: target.id,
   })
   assert.equal(moved.accepted, true)

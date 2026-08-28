@@ -74,7 +74,9 @@ import {
   hubNativeUiReveal,
   hubOwnedPerkSlotRect,
   hubInventoryEquipmentSlotRects,
+  hubInventoryRootSlot,
   hubInventorySlotPosition,
+  hubInventoryVisibleSlot,
   hubShopSlotPosition,
   hubShopSlideOffset,
   hubSackPageOffsets,
@@ -159,6 +161,14 @@ test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells
   assert.deepEqual(hubInventorySlotPosition(4), { x: 99, y: 496 })
   assert.deepEqual(hubInventorySlotPosition(87), { x: 1599, y: 721 })
   assert.throws(() => hubInventorySlotPosition(88), /\[0, 87\]/)
+  assert.equal(hubInventoryVisibleSlot(0, false), 0)
+  assert.equal(hubInventoryVisibleSlot(0, true), 1)
+  assert.equal(hubInventoryVisibleSlot(86, true), 87)
+  assert.throws(() => hubInventoryVisibleSlot(87, true), /not visible/)
+  assert.equal(hubInventoryRootSlot(0, true), null)
+  assert.equal(hubInventoryRootSlot(1, true), 0)
+  assert.equal(hubInventoryRootSlot(87, true), 86)
+  assert.equal(hubInventoryRootSlot(87, false), 87)
   assert.deepEqual(hubInventoryEquipmentSlotRects('weapon'), [
     [1274, 223, 72, 72],
     [1434, 223, 72, 72],
@@ -214,6 +224,16 @@ test('Item_Sack pages traverse the fixed stage in exact discrete native ticks', 
     settled: true,
     ticks: 160,
   })
+})
+
+test('InventoryScreen rendering and actions share addressed sparse slot ownership', () => {
+  assert.match(inventoryComponent, /projectInventoryRootSlots\(activeRoot\)/)
+  assert.match(inventoryComponent, /data-inventory-slot': slot/)
+  assert.match(inventoryComponent, /hubInventoryRootSlot\(visibleSlot, hasParentRoot\)/)
+  assert.match(inventoryComponent, /destinationSlot/)
+  assert.match(inventoryRenderer, /projectInventoryRootSlots\(source\)/)
+  assert.match(inventoryRenderer, /hubInventoryVisibleSlot\(slot, hasParentRoot\)/)
+  assert.doesNotMatch(inventoryComponent, /activeRoot\.slice\(0, HUB_INVENTORY_GRID\.capacity\)/)
 })
 
 test('InventoryScreen paints the Game-owned backpack return control at every Sack depth', () => {
@@ -1060,7 +1080,7 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /native-sack-page-outgoing/)
   assert.match(rendererSource, /native-sack-page-incoming/)
   assert.match(rendererSource, /hubSackPageOffsets\(/)
-  assert.match(source, /const projectedStorage = economy\.storage[\s\S]*?parentSackId: null/)
+  assert.match(source, /const projectedStorage = projectInventoryRootSlots\(economy\.storage\)[\s\S]*?parentSackId: null/)
   assert.match(
     rendererSource,
     /addStoreGrid\(\s*context,\s*overlay,\s*model\.economy\.storage,\s*model,\s*'storage'/,

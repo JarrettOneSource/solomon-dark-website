@@ -1456,6 +1456,7 @@ export function applyGameSimulationHubAction(
         economy,
         action.itemId,
         action.destinationSackId,
+        action.destinationSlot,
       )
       case 'read-librarian-book': return readLibrarianBook(economy, action.bookId)
       case 'read-skill-book': return readInventorySkillBook(economy, action.itemId)

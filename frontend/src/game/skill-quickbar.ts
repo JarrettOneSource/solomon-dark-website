@@ -49,6 +49,23 @@ export interface NativeSkillQuickbarCooldownPresentation {
   remaining: number
 }
 
+export const NATIVE_SKILL_QUICKBAR_READY_ALPHA = 0.75
+export const NATIVE_SKILL_QUICKBAR_COOLDOWN_ALPHA = 0.25
+export const NATIVE_SKILL_QUICKBAR_UNAVAILABLE_ALPHA = 0.375
+
+export function nativeSkillQuickbarIconAlpha({
+  cooldown,
+  unavailable,
+}: {
+  readonly cooldown: boolean
+  readonly unavailable: boolean
+}): number {
+  if (cooldown) return NATIVE_SKILL_QUICKBAR_COOLDOWN_ALPHA
+  return unavailable
+    ? NATIVE_SKILL_QUICKBAR_UNAVAILABLE_ALPHA
+    : NATIVE_SKILL_QUICKBAR_READY_ALPHA
+}
+
 export const NATIVE_SKILL_QUICKBAR_FONT: NativeBeltFontData = nativeFontData
 export const NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS = Object.freeze([
   -332, -272, -212, -152, 98, 158, 218, 278,

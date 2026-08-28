@@ -13,7 +13,7 @@ import {
   inventoryItemsAtSackPath,
   nativeDyeMixedTint,
   inventoryDyeableClothingItems,
-  projectInventoryItems,
+  projectInventoryRootSlots,
   type EquipmentSlot,
   type HubInventoryItem,
   type HubShopItem,
@@ -119,6 +119,7 @@ import {
   hubItemTooltipLines,
   hubInventoryPrimarySpellLines,
   hubInventorySlotPosition,
+  hubInventoryVisibleSlot,
   hubNativeLabeledControlPresentation,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
@@ -636,6 +637,7 @@ function buildInventory(
       null,
       null,
       model.config.element,
+      model.sackTransition.fromPath.length > 0,
     )
     addInventoryGridPage(
       context,
@@ -644,6 +646,7 @@ function buildInventory(
       selection,
       null,
       model.config.element,
+      model.sackTransition.toPath.length > 0,
     )
     layer.addChild(outgoing, incoming)
     sackPages = { incoming, outgoing, transition: model.sackTransition }
@@ -657,6 +660,7 @@ function buildInventory(
       selection,
       dragging,
       model.config.element,
+      model.sackPath.length > 0,
     )
     layer.addChild(page)
   }
@@ -744,13 +748,16 @@ function addInventoryGridPage(
   selection: HubInventorySelectionModel | null,
   dragging: HubInventoryDragModel | null,
   element: WizardElement,
+  hasParentRoot: boolean,
 ): void {
-  const items = source.slice(0, HUB_INVENTORY_GRID.capacity)
+  const items = new Map(projectInventoryRootSlots(source)
+    .filter(({ slot }) => slot < HUB_INVENTORY_GRID.capacity - (hasParentRoot ? 1 : 0))
+    .map(({ item, slot }) => [hubInventoryVisibleSlot(slot, hasParentRoot), item] as const))
   for (let index = 0; index < HUB_INVENTORY_GRID.capacity; index += 1) {
     const position = hubInventorySlotPosition(index)
     const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
     slot.alpha = HUB_INVENTORY_GRID.slotAlpha
-    const item = items[index]
+    const item = items.get(index)
     if (!item) continue
     const held = dragging?.owner === 'backpack' && item.id === dragging.itemId
     if (!held) addClippedItemIcon(
@@ -1375,21 +1382,27 @@ function buildDyeClothing(
     tint: 0xe4c56d,
   })
 
-  const projected = (inventoryItemsAtSackPath(economy.backpack, model.path) ?? [])
-    .slice(0, HUB_INVENTORY_GRID.capacity)
-    .map((item) => ({ item }))
+  const projected = projectInventoryRootSlots(
+    inventoryItemsAtSackPath(economy.backpack, model.path) ?? [],
+  ).filter(({ slot }) => (
+    slot < HUB_INVENTORY_GRID.capacity - (model.path.length > 0 ? 1 : 0)
+  ))
   const eligibleIds = new Set(inventoryDyeableClothingItems(economy.backpack).map(({ item }) => item.id))
-  projected.forEach(({ item }, index) => {
+  projected.forEach(({ item, slot }) => {
     if (!eligibleIds.has(item.id)) return
-    const { x, y } = hubInventorySlotPosition(index)
+    const visibleSlot = hubInventoryVisibleSlot(slot, model.path.length > 0)
+    const { x, y } = hubInventorySlotPosition(visibleSlot)
     layer.addChild(new Graphics()
       .rect(x + 2, y + 2, HUB_INVENTORY_GRID.cellSize - 4, HUB_INVENTORY_GRID.cellSize - 4)
       .stroke({ color: item.id === model.targetItemId ? 0xffffff : 0xd8ba70, width: 3 }))
   })
   if (model.targetItemId !== null) {
-    const targetIndex = projected.findIndex(({ item }) => item.id === model.targetItemId)
-    if (targetIndex >= 0) {
-      const rects = hubDyeItemLayerRects(targetIndex)
+    const target = projected.find(({ item }) => item.id === model.targetItemId)
+    if (target) {
+      const rects = hubDyeItemLayerRects(hubInventoryVisibleSlot(
+        target.slot,
+        model.path.length > 0,
+      ))
       layer.addChild(new Graphics()
         .rect(...rects.cloth)
         .fill({ color: 0x000000, alpha: 0.38 })
@@ -1667,11 +1680,14 @@ function addStoreGrid(
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
   owner: 'storage' | null,
 ): void {
+  const addressedItems = owner === 'storage'
+    ? new Map(projectInventoryRootSlots(items).map(({ item, slot }) => [slot, item] as const))
+    : null
   for (let index = 0; index < HUB_SHOP_GRID.retainedCapacity; index += 1) {
     const { x, y } = hubShopSlotPosition(index)
     const slot = addAtlasSprite(context, layer, 'Inventory', 10, x, y)
     slot.alpha = HUB_SHOP_GRID.slotAlpha
-    const item = items[index]
+    const item = addressedItems?.get(index) ?? items[index]
     if (!item) continue
     const held = owner === 'storage'
       && model.dragging?.owner === 'storage'
@@ -1874,17 +1890,19 @@ function addServiceInspection(
     return
   }
 
-  const items = model.trader === 'luthacus'
-    ? projectInventoryItems(model.economy.storage).map(({ item }) => item)
-    : serviceItems(model)
+  const projectedStorage = model.trader === 'luthacus'
+    ? projectInventoryRootSlots(model.economy.storage)
+    : null
+  const items = projectedStorage?.map(({ item }) => item) ?? serviceItems(model)
   const index = items.findIndex(({ id }) => id === inspection.id)
   const item = items[index]
   if (!item) return
   if (model.trader === 'luthacus' && inspection.owner !== 'storage') return
   if (model.trader !== 'luthacus' && inspection.owner !== null) return
+  const displayIndex = projectedStorage?.[index]?.slot ?? index
   const position = model.trader === 'shlorio'
     ? hubDowsingSlotPosition(index)
-    : hubShopSlotPosition(index)
+    : hubShopSlotPosition(displayIndex)
   const cellSize = model.trader === 'shlorio'
     ? HUB_DOWSING_GRID.cellSize
     : HUB_SHOP_GRID.cellSize
@@ -2198,9 +2216,15 @@ function inventorySelectionCenter(
 ): { readonly x: number; readonly y: number } | null {
   if (selection.owner === 'backpack') {
     const visible = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
-    const index = visible.findIndex((item) => item.id === selection.id)
-    if (index < 0) return null
-    const position = hubInventorySlotPosition(index)
+    const selected = projectInventoryRootSlots(visible).find(({ item }) => item.id === selection.id)
+    const hasParentRoot = sackPath.length > 0
+    if (!selected || selected.slot >= HUB_INVENTORY_GRID.capacity - (hasParentRoot ? 1 : 0)) {
+      return null
+    }
+    const position = hubInventorySlotPosition(hubInventoryVisibleSlot(
+      selected.slot,
+      hasParentRoot,
+    ))
     return { x: position.x + 36, y: position.y + 36 }
   }
   if (selection.equipmentSlot === null) return null

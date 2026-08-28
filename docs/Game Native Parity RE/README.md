@@ -320,3 +320,4 @@ entry only when the evidence belongs to a genuinely separate system.
 - [2026-08-28 — Concentrated Creativity Insight RNG, feedback, and offer lifecycle reopening](<290-2026-08-28-concentrated-creativity-insight-rng-feedback-and-offer-lifecycle-reopening.md>)
 - [2026-08-28 — Continuous held-primary facing across every input producer](<291-2026-08-28-continuous-held-primary-facing-across-every-input-producer.md>)
 - [2026-08-28 — Standalone stock gamestate import and dynamic Game bindings](<292-2026-08-28-standalone-stock-gamestate-import-and-dynamic-game-bindings.md>)
+- [2026-08-28 — Reopened InventoryGrid addressed slots and BeltButton readiness presentation](<293-2026-08-28-reopened-inventorygrid-addressed-slots-and-beltbutton-readiness-presentation.md>)

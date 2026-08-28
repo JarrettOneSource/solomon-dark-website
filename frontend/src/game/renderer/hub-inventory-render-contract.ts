@@ -1009,6 +1009,31 @@ export function hubInventorySlotPosition(index: number): { x: number; y: number 
   }
 }
 
+/** Child Sack pages reserve visible cell zero for the native kind-7 parent return holder. */
+export function hubInventoryVisibleSlot(
+  inventorySlot: number,
+  hasParentRoot: boolean,
+): number {
+  const visibleSlot = inventorySlot + (hasParentRoot ? 1 : 0)
+  if (!Number.isInteger(inventorySlot) || inventorySlot < 0
+    || visibleSlot >= HUB_INVENTORY_GRID.capacity) {
+    throw new RangeError('native inventory root slot is not visible on this page')
+  }
+  return visibleSlot
+}
+
+export function hubInventoryRootSlot(
+  visibleSlot: number,
+  hasParentRoot: boolean,
+): number | null {
+  if (!Number.isInteger(visibleSlot) || visibleSlot < 0
+    || visibleSlot >= HUB_INVENTORY_GRID.capacity) {
+    throw new RangeError('native inventory visible slot must be within [0, 87]')
+  }
+  if (hasParentRoot && visibleSlot === 0) return null
+  return visibleSlot - (hasParentRoot ? 1 : 0)
+}
+
 export function hubInventoryEquipmentSlotRects(
   slot: EquipmentSlot,
   companion = false,

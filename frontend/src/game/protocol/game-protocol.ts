@@ -164,15 +164,18 @@ import {
   EQUIPMENT_SLOTS,
   EQUIPMENT_TYPES,
   HAGATHA_PERKS,
+  HUB_INVENTORY_SLOT_CAPACITY,
   HUB_ITEM_KINDS,
   HUB_SACK_CHILD_REPLICATION_LIMIT,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  HUB_STORAGE_SLOT_CAPACITY,
   nativeHagathaOutcomeStateIsValid,
   MAX_NATIVE_DYE_SELECTIONS,
   modItemInventoryIdentityIsValid,
   modWearableContentIsValid,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   NATIVE_UNFORGE_OUTCOME_KINDS,
+  projectInventoryRootSlots,
   type DowsingOffer,
   type EquipmentSlot,
   type EquipmentType,
@@ -394,7 +397,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 102
+export const GAME_PROTOCOL_VERSION = 103
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2741,12 +2744,20 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     }
   }
   if (type === 'move-inventory-item') {
-    onlyKeys(source, 'action', ['type', 'destinationSackId', 'itemId'])
+    onlyKeys(source, 'action', ['type', 'destinationSackId', 'destinationSlot', 'itemId'])
     return {
       type,
       destinationSackId: source.destinationSackId === null
         ? null
         : positiveInteger(source.destinationSackId, 'action.destinationSackId'),
+      destinationSlot: source.destinationSlot === null
+        ? null
+        : integerWithin(
+            source.destinationSlot,
+            'action.destinationSlot',
+            0,
+            HUB_INVENTORY_SLOT_CAPACITY - 1,
+          ),
       itemId: positiveInteger(source.itemId, 'action.itemId'),
     }
   }
@@ -2918,7 +2929,15 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     `${field}.backpack`,
     NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   )
-  const storage = inventoryItems(source.storage, `${field}.storage`, 28)
+  const storage = inventoryItems(
+    source.storage,
+    `${field}.storage`,
+    HUB_STORAGE_SLOT_CAPACITY,
+  )
+  if (
+    !protocolInventoryRootSlotsAreValid(backpack, NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT)
+    || !protocolInventoryRootSlotsAreValid(storage, HUB_STORAGE_SLOT_CAPACITY)
+  ) throw new GameProtocolError(`${field} inventory slots are invalid`)
   const equipment = playerEquipment(source.equipment, `${field}.equipment`)
   const fomentiusStock = limitedArray(
     source.fomentiusStock,
@@ -3204,6 +3223,19 @@ function inventoryItems(
   ))
 }
 
+function protocolInventoryRootSlotsAreValid(
+  items: readonly HubInventoryItem[],
+  capacity: number,
+): boolean {
+  const slots = projectInventoryRootSlots(items).map(({ slot }) => slot)
+  return new Set(slots).size === slots.length
+    && slots.every((slot) => Number.isSafeInteger(slot) && slot >= 0 && slot < capacity)
+    && items.every((item) => item.contents === undefined || protocolInventoryRootSlotsAreValid(
+      item.contents,
+      HUB_SACK_CHILD_REPLICATION_LIMIT,
+    ))
+}
+
 function flattenInventoryItem(item: HubInventoryItem): readonly HubInventoryItem[] {
   return [item, ...(item.contents ?? []).flatMap(flattenInventoryItem)]
 }
@@ -3222,6 +3254,7 @@ function inventoryItem(
     'iconRecords',
     'iconTints',
     'id',
+    'inventorySlot',
     'itemContentId',
     'kind',
     'modContent',
@@ -3265,6 +3298,9 @@ function inventoryItem(
   const nativeSubtype = source.nativeSubtype === null
     ? null
     : boundedInteger(source.nativeSubtype, `${field}.nativeSubtype`, 0, 261)
+  const inventorySlot = source.inventorySlot === undefined
+    ? undefined
+    : nonnegativeInteger(source.inventorySlot, `${field}.inventorySlot`)
   const modContent = source.modContent === undefined
     ? undefined
     : modConsumableContent(source.modContent, `${field}.modContent`)
@@ -3478,6 +3514,7 @@ function inventoryItem(
     iconRecords,
     ...(iconTints === undefined ? {} : { iconTints }),
     id: positiveInteger(source.id, `${field}.id`),
+    ...(inventorySlot === undefined ? {} : { inventorySlot }),
     kind: kind as HubItemKind,
     ...(modContent === undefined ? {} : { modContent }),
     ...(modAffixes === undefined ? {} : { modAffixes }),
@@ -4043,6 +4080,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'poisonTicksRemaining',
     'previousThreshold',
     'revision',
+    'secondaryManaCosts',
     'selectedPrimarySkillId',
     'sorcerorsCharmAvailable',
     'splitMind',
@@ -4146,6 +4184,39 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   const learnedPermanentIds = learnedSkills
     .filter(([skillId, permanentRank]) => skillId >= 8 && skillId <= 79 && permanentRank > 0)
     .map(([skillId]) => skillId)
+  const secondaryManaCosts = limitedArray(
+    source.secondaryManaCosts,
+    `${field}.secondaryManaCosts`,
+    NATIVE_SECONDARY_ABILITY_IDS.length,
+  ).map((entry, index) => {
+    const raw = array(entry, `${field}.secondaryManaCosts[${index}]`)
+    if (raw.length !== 2) {
+      throw new GameProtocolError(`${field}.secondaryManaCosts[${index}] must have two fields`)
+    }
+    const skillId = nonnegativeInteger(raw[0], `${field}.secondaryManaCosts[${index}][0]`)
+    if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
+      throw new GameProtocolError(`${field}.secondaryManaCosts[${index}] has a non-secondary skill`)
+    }
+    return [
+      skillId,
+      nonnegativeFinite(raw[1], `${field}.secondaryManaCosts[${index}][1]`),
+    ] as const
+  })
+  if (secondaryManaCosts.some((entry, index) => (
+    index > 0 && entry[0] <= secondaryManaCosts[index - 1]![0]
+  ))) throw new GameProtocolError(`${field}.secondaryManaCosts must be unique and sorted`)
+  const learnedSecondaryIds = learnedSkills
+    .filter(([skillId, , effectiveRank]) => (
+      (NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)
+      && effectiveRank > 0
+    ))
+    .map(([skillId]) => skillId)
+  if (
+    secondaryManaCosts.length !== learnedSecondaryIds.length
+    || learnedSecondaryIds.some((skillId) => (
+      !secondaryManaCosts.some(([candidate]) => candidate === skillId)
+    ))
+  ) throw new GameProtocolError(`${field}.secondaryManaCosts must contain every learned secondary`)
   const learnedSkillOrder = limitedArray(
     source.learnedSkillOrder,
     `${field}.learnedSkillOrder`,
@@ -4268,6 +4339,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       `${field}.previousThreshold`,
     ),
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
+    secondaryManaCosts,
     selectedPrimarySkillId,
     sorcerorsCharmAvailable: boolean(
       source.sorcerorsCharmAvailable,

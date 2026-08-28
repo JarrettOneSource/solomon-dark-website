@@ -10,6 +10,7 @@ import {
   archiveCompletedRunEconomy,
   createNativeUnforgeBonuses,
   hubEconomyInventoryIsValid,
+  normalizeHubEconomyInventorySlots,
   nativeHagathaOutcomeStateIsValid,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
@@ -275,7 +276,9 @@ export function createGameSaveDocument(
     modState: options.modState,
     nativeSource: options.nativeSource ?? null,
     profile: {
-      economy: gameSimulationRetiredWizardEconomy(ownerState, options.playerId),
+      economy: normalizeHubEconomyInventorySlots(
+        gameSimulationRetiredWizardEconomy(ownerState, options.playerId),
+      ),
       hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
     },
   })
@@ -357,6 +360,7 @@ function ownerProjection(
 function diskPlayerStoreProjection(
   source: GameSimulationState['playerEntities'],
 ): GameSimulationState['playerEntities'] {
+  const economies = source.economies.map(normalizeHubEconomyInventorySlots)
   const progressions = source.progressions.map(progression => Object.freeze({
     ...progression,
     damageX4TicksRemaining: 0,
@@ -375,13 +379,14 @@ function diskPlayerStoreProjection(
       },
       source.skillBooks[index]!,
       source.statBooks[index]!,
-      source.economies[index]!,
+      economies[index]!,
     )
     skillBooks.push(refreshed.skillBook)
     skillRuntimes.push(refreshed.runtime)
   }
   return {
     ...source,
+    economies: Object.freeze(economies),
     progressions: Object.freeze(progressions),
     skillBooks: Object.freeze(skillBooks),
     skillRuntimes: Object.freeze(skillRuntimes),
@@ -790,7 +795,7 @@ function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEcono
     && tonicPurchases > tonicEntries
     ? [...sourceOutcomes, ...Array(tonicPurchases - tonicEntries).fill(27)]
     : sourceOutcomes
-  const restored = {
+  const restored = normalizeHubEconomyInventorySlots({
     ...source,
     actionFeedback: feedback,
     collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
@@ -798,7 +803,7 @@ function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEcono
     ownedPerkSelectors,
     tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
-  } as unknown as HubEconomyState
+  } as unknown as HubEconomyState)
   if (
     !hubEconomyInventoryIsValid(restored)
     || !nativeHagathaOutcomeStateIsValid(
@@ -1372,14 +1377,14 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
       && !('unforgeOutcome' in economy.actionFeedback)
       ? { ...economy.actionFeedback, unforgeOutcome: null }
       : economy.actionFeedback
-    const restored = {
+    const restored = normalizeHubEconomyInventorySlots({
       ...economy,
       actionFeedback: feedback,
       collegeIntroPending: economy.collegeIntroPending === true,
       npc: normalizeNativeHubNpcState(economy.npc, true),
       tutorialPending: economy.tutorialPending === true,
       unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),
-    } as unknown as HubEconomyState
+    } as unknown as HubEconomyState)
     if (!hubEconomyInventoryIsValid(restored)) {
       throw new Error(`game save player economy ${index} inventory is invalid`)
     }

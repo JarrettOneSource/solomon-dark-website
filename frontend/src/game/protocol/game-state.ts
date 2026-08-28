@@ -140,6 +140,7 @@ export interface ProtocolPlayerProgression {
   poisonTicksRemaining: number
   previousThreshold: number
   revision: number
+  secondaryManaCosts: readonly (readonly [number, number])[]
   selectedPrimarySkillId: number
   sorcerorsCharmAvailable: boolean
   splitMind: boolean

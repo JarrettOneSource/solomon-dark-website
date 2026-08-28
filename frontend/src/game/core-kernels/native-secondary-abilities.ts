@@ -3797,7 +3797,7 @@ interface CastResult {
 }
 
 function resolvedSecondaryAbilityRankStats(
-  authority: NativeSecondaryPlayerAuthority,
+  authority: Pick<NativeSecondaryPlayerAuthority, 'offensiveFactors' | 'skillBook'>,
   skillId: NativeSecondaryAbilityId,
 ): NativeSecondaryAbilityRankStats {
   const ranked = effectiveSecondaryAbilityRankStats(authority.skillBook, skillId)
@@ -3812,6 +3812,27 @@ function resolvedSecondaryAbilityRankStats(
     return [property, value]
   }))
   return Object.freeze({ ...ranked, values: Object.freeze(values) })
+}
+
+export function nativeSecondaryAbilityManaCost(
+  authority: Pick<NativeSecondaryPlayerAuthority,
+    | 'explosiveShieldRawManaCost'
+    | 'golemRawManaCost'
+    | 'magicStormRawManaCost'
+    | 'offensiveFactors'
+    | 'skillBook'
+  >,
+  skillId: NativeSecondaryAbilityId,
+): number {
+  const values = resolvedSecondaryAbilityRankStats(
+    authority,
+    skillId,
+  ).values
+  let rawCost = values.mManaCost ?? 0
+  if (skillId === 27) rawCost += authority.magicStormRawManaCost
+  if (skillId === 45) rawCost += authority.golemRawManaCost
+  if (skillId === 54) rawCost += authority.explosiveShieldRawManaCost
+  return resolveNativeSkillManaCostValue(skillId, rawCost, authority.offensiveFactors)
 }
 
 function castAbility(
@@ -3849,15 +3870,7 @@ function castAbility(
   }
   const ranked = resolvedSecondaryAbilityRankStats(authority, skillId)
   const v = ranked.values
-  let rawCost = v.mManaCost ?? 0
-  if (skillId === 27) rawCost += authority.magicStormRawManaCost
-  if (skillId === 45) rawCost += authority.golemRawManaCost
-  if (skillId === 54) rawCost += authority.explosiveShieldRawManaCost
-  const cost = resolveNativeSkillManaCostValue(
-    skillId,
-    rawCost,
-    authority.offensiveFactors,
-  )
+  const cost = nativeSecondaryAbilityManaCost(authority, skillId)
   const cooldownCapacityTicks = nativeSecondaryCooldownCapacityTicks(
     authority.skillBook,
     skillId,

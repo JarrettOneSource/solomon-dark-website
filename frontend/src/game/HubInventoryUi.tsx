@@ -26,6 +26,7 @@ import {
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
   projectInventoryItems,
+  projectInventoryRootSlots,
   reconcileInventorySackPath,
   type EquipmentSlot,
   type HubInventoryAction,
@@ -133,8 +134,10 @@ import {
   hubDyeSwatchRect,
   hubHagathaTooltipLines,
   hubInventoryEquipmentSlotRects,
+  hubInventoryRootSlot,
   hubItemTooltipLines,
   hubInventorySlotPosition,
+  hubInventoryVisibleSlot,
   hubOwnedPerkSlotRect,
   hubShopSlotPosition,
 } from './renderer/hub-inventory-render-contract.ts'
@@ -1779,9 +1782,9 @@ function InventoryShopStorageActions({
 }) {
   const pressRef = useRef<StoragePointerPress | null>(null)
   const lastActivationRef = useRef<StorageActivation | null>(null)
-  const projectedStorage = economy.storage
-    .slice(0, HUB_SHOP_GRID.retainedCapacity)
-    .map((item) => ({ depth: 0, item, parentSackId: null }))
+  const projectedStorage = projectInventoryRootSlots(economy.storage)
+    .filter(({ slot }) => slot < HUB_SHOP_GRID.retainedCapacity)
+    .map(({ item, slot }) => ({ depth: 0, item, parentSackId: null, slot }))
 
   const clearStorageSelection = () => {
     pressRef.current = null
@@ -1940,8 +1943,8 @@ function InventoryShopStorageActions({
   return (
     <>
       <section aria-label="Scavenged Goods">
-        {projectedStorage.map(({ depth, item, parentSackId }, index) => {
-          const position = hubShopSlotPosition(index)
+        {projectedStorage.map(({ depth, item, parentSackId, slot }) => {
+          const position = hubShopSlotPosition(slot)
           return (
             <NativeAction
               key={item.id}
@@ -1949,6 +1952,7 @@ function InventoryShopStorageActions({
                 'data-inventory-item-id': item.id,
                 'data-inventory-depth': depth,
                 'data-inventory-owner': 'storage',
+                'data-inventory-slot': slot,
                 'data-parent-sack-id': parentSackId ?? '',
                 'data-selected': sourceIsSelected(item.id) ? 'true' : 'false',
               }}
@@ -1980,7 +1984,8 @@ function InventoryShopStorageActions({
           )
         })}
         <EmptyStoreGridActions
-          fromIndex={projectedStorage.length}
+          fromIndex={0}
+          occupiedSlots={projectedStorage.map(({ slot }) => slot)}
           onClear={clearStorageSelection}
         />
       </section>
@@ -2017,15 +2022,25 @@ function DyeClothingActions({
   onSelectSwatch: (row: number) => void
   onSelectTarget: (targetItemId: number) => void
 }) {
-  const projected = (inventoryItemsAtSackPath(economy.backpack, modal.path) ?? [])
-    .slice(0, HUB_INVENTORY_GRID.capacity)
-    .map((item) => ({ depth: modal.path.length, item, parentSackId: modal.path.at(-1) ?? null }))
+  const projected = projectInventoryRootSlots(
+    inventoryItemsAtSackPath(economy.backpack, modal.path) ?? [],
+  )
+    .filter(({ slot }) => (
+      slot < HUB_INVENTORY_GRID.capacity - (modal.path.length > 0 ? 1 : 0)
+    ))
+    .map(({ item, slot }) => ({
+      depth: modal.path.length,
+      item,
+      parentSackId: modal.path.at(-1) ?? null,
+      slot,
+      visibleSlot: hubInventoryVisibleSlot(slot, modal.path.length > 0),
+    }))
   const eligibleIds = new Set(
     inventoryDyeableClothingItems(economy.backpack).map(({ item }) => item.id),
   )
-  const targetIndex = modal.targetItemId === null
-    ? -1
-    : projected.findIndex(({ item }) => item.id === modal.targetItemId)
+  const targetSlot = modal.targetItemId === null
+    ? null
+    : projected.find(({ item }) => item.id === modal.targetItemId)?.slot ?? null
   const blocked = modal.pending || modal.closingAtMs !== null
   const phase = modal.targetItemId === null
     ? modal.swatchRows.length === 0 ? 'mix' : 'target'
@@ -2055,9 +2070,9 @@ function DyeClothingActions({
             />
           ))}
           {modal.swatchRows.length > 0
-            ? projected.map(({ depth, item, parentSackId }, index) => {
+            ? projected.map(({ depth, item, parentSackId, visibleSlot }) => {
                 if (!eligibleIds.has(item.id)) return null
-                const position = hubInventorySlotPosition(index)
+                const position = hubInventorySlotPosition(visibleSlot)
                 return (
                   <NativeAction
                     key={`dye-target-${item.id}`}
@@ -2080,7 +2095,7 @@ function DyeClothingActions({
               })
             : null}
         </>
-      ) : targetIndex >= 0 ? (
+      ) : targetSlot !== null ? (
         <>
           <NativeAction
             data={{
@@ -2089,7 +2104,10 @@ function DyeClothingActions({
             }}
             disabled={blocked}
             label="Dye cloth"
-            rect={hubDyeItemLayerRects(targetIndex).cloth}
+            rect={hubDyeItemLayerRects(hubInventoryVisibleSlot(
+              targetSlot,
+              modal.path.length > 0,
+            )).cloth}
             onClick={() => onCommit('cloth')}
           />
           <NativeAction
@@ -2099,7 +2117,10 @@ function DyeClothingActions({
             }}
             disabled={blocked}
             label="Dye trim"
-            rect={hubDyeItemLayerRects(targetIndex).trim}
+            rect={hubDyeItemLayerRects(hubInventoryVisibleSlot(
+              targetSlot,
+              modal.path.length > 0,
+            )).trim}
             onClick={() => onCommit('trim')}
           />
         </>
@@ -2237,11 +2258,17 @@ function InventoryActions({
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
   const activeRoot = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
   const parentSackId = sackPath.at(-1) ?? null
-  const projectedBackpack = activeRoot.slice(0, HUB_INVENTORY_GRID.capacity).map((item) => ({
-    depth: sackPath.length,
-    item,
-    parentSackId,
-  }))
+  const projectedBackpack = projectInventoryRootSlots(activeRoot)
+    .filter(({ slot }) => (
+      slot < HUB_INVENTORY_GRID.capacity - (sackPath.length > 0 ? 1 : 0)
+    ))
+    .map(({ item, slot }) => ({
+      depth: sackPath.length,
+      item,
+      parentSackId,
+      slot,
+      visibleSlot: hubInventoryVisibleSlot(slot, sackPath.length > 0),
+    }))
   const pressRef = useRef<InventoryPointerPress | null>(null)
   const equipmentClickRef = useRef<InventoryEquipmentClickPress | null>(null)
   const lastActivationRef = useRef<InventoryActivation | null>(null)
@@ -2507,8 +2534,8 @@ function InventoryActions({
         onClick={clearInventorySelection}
       />
       <section aria-label="Backpack">
-        {projectedBackpack.map(({ depth, item, parentSackId }, index) => {
-          const position = hubInventorySlotPosition(index)
+        {projectedBackpack.map(({ depth, item, parentSackId, slot, visibleSlot }) => {
+          const position = hubInventorySlotPosition(visibleSlot)
           const source: InventoryPointerSource = {
             equipmentSlot: null,
             itemId: item.id,
@@ -2521,6 +2548,7 @@ function InventoryActions({
                 'data-inventory-item-id': item.id,
                 'data-inventory-depth': depth,
                 'data-inventory-owner': 'backpack',
+                'data-inventory-slot': slot,
                 'data-parent-sack-id': parentSackId ?? '',
                 'data-selected': selection?.id === item.id && selection.owner === 'backpack' ? 'true' : 'false',
               }}
@@ -2625,6 +2653,21 @@ function pointInRect(
     && point.y >= top && point.y <= top + height
 }
 
+function inventoryVisibleSlotAtPoint(
+  point: { readonly x: number; readonly y: number },
+): number | null {
+  for (let slot = 0; slot < HUB_INVENTORY_GRID.capacity; slot += 1) {
+    const position = hubInventorySlotPosition(slot)
+    if (pointInRect(point, [
+      position.x,
+      position.y,
+      HUB_INVENTORY_GRID.cellSize,
+      HUB_INVENTORY_GRID.cellSize,
+    ])) return slot
+  }
+  return null
+}
+
 function dropInventorySource(
   source: InventoryPointerSource,
   point: { readonly x: number; readonly y: number },
@@ -2642,7 +2685,10 @@ function dropInventorySource(
     const projected = projectInventoryItems(economy.backpack)
     const sourceEntry = projected.find(({ item }) => item.id === source.itemId)
     const activeRoot = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
-    const visibleItems = activeRoot.slice(0, HUB_INVENTORY_GRID.capacity)
+    const hasParentRoot = sackPath.length > 0
+    const visibleItems = projectInventoryRootSlots(activeRoot).filter(({ slot }) => (
+      slot < HUB_INVENTORY_GRID.capacity - (hasParentRoot ? 1 : 0)
+    ))
     const item = sourceEntry?.item ?? null
     if (!item) return
     if (pointInRect(point, HUB_UNFORGE_TARGET.rect)) {
@@ -2672,36 +2718,38 @@ function dropInventorySource(
       onAction({ type: 'equip', itemId: item.id, slot })
       return
     }
-    const destinationSack = visibleItems.find((candidate, index) => {
-      if (candidate.nativeTypeId !== 7008) return false
-      const position = hubInventorySlotPosition(index)
-      return pointInRect(point, [
-        position.x,
-        position.y,
-        HUB_INVENTORY_GRID.cellSize,
-        HUB_INVENTORY_GRID.cellSize,
-      ])
-    }) ?? null
-    if (destinationSack) {
+    const visibleSlot = inventoryVisibleSlotAtPoint(point)
+    if (hasParentRoot && visibleSlot === 0) {
       onAction({
         type: 'move-inventory-item',
-        destinationSackId: destinationSack.id,
+        destinationSackId: sackPath.length > 1 ? sackPath[sackPath.length - 2]! : null,
+        destinationSlot: null,
         itemId: item.id,
       })
       return
     }
-    const backpackRect = [
-      HUB_INVENTORY_GRID.left,
-      HUB_INVENTORY_GRID.top,
-      (HUB_INVENTORY_GRID.columns - 1) * HUB_INVENTORY_GRID.pitch
-        + HUB_INVENTORY_GRID.cellSize,
-      (HUB_INVENTORY_GRID.rows - 1) * HUB_INVENTORY_GRID.pitch
-        + HUB_INVENTORY_GRID.cellSize,
-    ] as const
-    if (sourceEntry && sourceEntry.parentSackId !== null && pointInRect(point, backpackRect)) {
+    const destinationSlot = visibleSlot === null
+      ? null
+      : hubInventoryRootSlot(visibleSlot, hasParentRoot)
+    const destinationSack = destinationSlot === null
+      ? null
+      : visibleItems.find(({ item: candidate, slot }) => (
+          slot === destinationSlot && candidate.nativeTypeId === 7008
+        ))?.item ?? null
+    if (destinationSack) {
       onAction({
         type: 'move-inventory-item',
-        destinationSackId: sackPath.length > 1 ? sackPath[sackPath.length - 2]! : null,
+        destinationSackId: destinationSack.id,
+        destinationSlot: null,
+        itemId: item.id,
+      })
+      return
+    }
+    if (destinationSlot !== null) {
+      onAction({
+        type: 'move-inventory-item',
+        destinationSackId: sackPath.at(-1) ?? null,
+        destinationSlot,
         itemId: item.id,
       })
     }
@@ -2782,17 +2830,22 @@ function ShopAction({
 function EmptyStoreGridActions({
   dowsing = false,
   fromIndex,
+  occupiedSlots,
   onClear,
 }: {
   dowsing?: boolean
   fromIndex: number
+  occupiedSlots?: readonly number[]
   onClear: () => void
 }) {
   const capacity = dowsing
     ? HUB_DOWSING_GRID.retainedCapacity
     : HUB_SHOP_GRID.retainedCapacity
-  return Array.from({ length: Math.max(0, capacity - fromIndex) }, (_, offset) => {
-    const index = fromIndex + offset
+  const occupied = new Set(occupiedSlots ?? [])
+  const indices = occupiedSlots === undefined
+    ? Array.from({ length: Math.max(0, capacity - fromIndex) }, (_, offset) => fromIndex + offset)
+    : Array.from({ length: capacity }, (_, index) => index).filter((index) => !occupied.has(index))
+  return indices.map((index) => {
     const position = dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index)
     return (
       <NativeAction

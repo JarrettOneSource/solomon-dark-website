@@ -207,7 +207,7 @@ function inventoryModalPlans(input: TutorialModalTeachingInput): readonly Tutori
   const belt7 = nativeHudRectCenter(hud.belt[7]!)
   const belt6 = nativeHudRectCenter(hud.belt[6]!)
   const projected = projectInventoryItems(input.backpack)
-  const amuletIndex = projected.findIndex(({ item }) => nativeTutorialAmuletIdentityMatches(item))
+  const amuletSlot = projected.find(({ item }) => nativeTutorialAmuletIdentityMatches(item))?.slot
   const [amuletX, amuletY, amuletWidth, amuletHeight] = hubInventoryEquipmentSlotRects(
     'amulet',
     false,
@@ -224,8 +224,8 @@ function inventoryModalPlans(input: TutorialModalTeachingInput): readonly Tutori
     callout('equipment', TUTORIAL_MODAL_TEXT.equipment, amulet.x - 250, amulet.y + 50),
     pointer('equipment', { x: amulet.x - 60, y: amulet.y + 40 }, amulet, false),
   ]
-  if (amuletIndex >= 0) {
-    const cell = hubInventorySlotPosition(amuletIndex)
+  if (amuletSlot !== undefined && amuletSlot < HUB_INVENTORY_GRID.capacity) {
+    const cell = hubInventorySlotPosition(amuletSlot)
     const cellCenter = {
       x: cell.x + HUB_INVENTORY_GRID.cellSize / 2,
       y: cell.y + HUB_INVENTORY_GRID.cellSize / 2,

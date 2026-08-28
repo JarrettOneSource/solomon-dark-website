@@ -744,6 +744,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
       ...player.progression,
       hagathaRuntime: { ...player.progression.hagathaRuntime },
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
+      secondaryManaCosts: player.progression.secondaryManaCosts.map((entry) => [...entry]),
       weldComponentRanks: player.progression.weldComponentRanks === null
         ? null
         : [...player.progression.weldComponentRanks],

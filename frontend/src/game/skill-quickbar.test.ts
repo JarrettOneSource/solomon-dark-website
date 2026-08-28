@@ -5,6 +5,7 @@ import test from 'node:test'
 import {
   layoutNativeQuickbarBinding,
   nativeCooldownSectorPath,
+  nativeSkillQuickbarIconAlpha,
   nativeSkillQuickbarCooldownPresentation,
   NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
@@ -66,6 +67,18 @@ test('cooldown presentation selects the stock common or longer row timer', () =>
     capacity: 0,
     remaining: 0,
   })
+})
+
+test('BeltButton uses distinct ready, cooldown, and unavailable icon alpha', () => {
+  assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: false, unavailable: false }), 0.75)
+  assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: true, unavailable: false }), 0.25)
+  assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: false, unavailable: true }), 0.375)
+  assert.equal(nativeSkillQuickbarIconAlpha({ cooldown: true, unavailable: true }), 0.25)
+  assert.match(component, /const iconAlpha = nativeSkillQuickbarIconAlpha\(/)
+  assert.match(component, /opacity=\{iconAlpha\}/)
+  assert.match(component, /secondaryManaCosts\.find/)
+  assert.match(component, /currentMana - \(playerState\?\.reservedMana \?\? 0\)/)
+  assert.doesNotMatch(component, /cooldown \? 0\.25 : 0\.375/)
 })
 
 test('item belt lays out native group-8 key labels over 13 px plaques', () => {
