@@ -97,6 +97,14 @@ test('the picker owns one full-viewport curtain above its fixed native stage', (
   assert.doesNotMatch(skillPickerRenderer, /dimmer|new Graphics/)
 })
 
+test('the picker presents authoritative Creativity Insight identity and detail', () => {
+  assert.match(skillPickerRenderer, /option\.insight/)
+  assert.match(skillPickerRenderer, /['"]Insight['"]/)
+  assert.match(skillPickerRenderer, /0xd9ba70/i)
+  assert.match(skillPickerRenderer, /Math\.sin\([^\n]*Math\.PI\s*\/\s*180\)/)
+  assert.match(skillPickerComponent, /option\.insight[\s\S]*Insight Bonus: Skill \+2/)
+})
+
 function pngDimensions(name: string): readonly [number, number] {
   const contents = readFileSync(new URL(name, ASSET_ROOT))
   assert.equal(contents.subarray(1, 4).toString('ascii'), 'PNG')

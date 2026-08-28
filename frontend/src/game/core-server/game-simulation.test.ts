@@ -1518,6 +1518,45 @@ test('a shared level milestone freezes every gameplay clock until the fixed coho
   assert.equal(state.tick, frozenTick + 1)
 })
 
+test('concentrated Creativity rolls Insight on active gameplay RNG and applies its marked card twice', () => {
+  const first = {
+    discipline: 'mind',
+    displayName: 'Creative',
+    element: 'ether',
+  } as const
+  let state = withPlayerSkillRank(createGameSimulation({ first }), 'first', 63, 1)
+  state = {
+    ...state,
+    gameRng: createNativeRng(1),
+    playerEntities: selectPlayerEntityConcentration(state.playerEntities, 'first', 63),
+  }
+  const secondaryRng = state.secondaryAbilities.rng
+
+  state = grantGameSimulationPlayerExperience(state, 'first', 91)
+  const offer = getPlayerProgression(state, 'first').pendingOffer
+  assert.ok(offer)
+  assert.equal(offer.options.length, 4)
+  const insightIndex = offer.options.findIndex(({ insight }) => insight === true)
+  assert.notEqual(insightIndex, -1)
+  assert.deepEqual(state.gameRng, advanceNativeRngWords(createNativeRng(1), 6))
+  assert.strictEqual(state.secondaryAbilities.rng, secondaryRng)
+
+  const option = offer.options[insightIndex]!
+  const rankBefore = getPlayerSkillBook(state, 'first').permanentRanks[option.skillId]!
+  const beforeChoiceRng = state.gameRng
+  state = selectGameSimulationPlayerSkill(state, 'first', {
+    choiceIndex: insightIndex,
+    offerSequence: offer.sequence,
+    skillId: option.skillId,
+  })!
+  assert.equal(
+    getPlayerSkillBook(state, 'first').permanentRanks[option.skillId],
+    rankBefore + 2,
+  )
+  assert.deepEqual(state.gameRng, advanceNativeRngWords(beforeChoiceRng, 2))
+  assert.strictEqual(state.secondaryAbilities.rng, secondaryRng)
+})
+
 test('shared milestones keep More Missiles private to the participant who knows Magic Missile', () => {
   let state = createGameSimulation({
     air: { discipline: 'arcane', displayName: 'Air', element: 'air' },
