@@ -612,6 +612,7 @@ export async function createBoneyardWorldRenderer(
       options.boneyard.scene,
       world,
       {
+        ground: textures.ground,
         roads: textures.roads,
       },
       options.initialSnapshot.world.kind === 'boneyard'
@@ -679,7 +680,8 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.arenaSaturation = 'native-fragment-0.65'
   canvas.dataset.arenaTextureAlpha = 'mixed-native-unpremultiplied'
-  canvas.dataset.arenaBaseRenderer = 'opaque-black-clear+native-layout'
+  canvas.dataset.arenaBaseRenderer = 'retail-editor-field-capture+native-road-layout'
+  canvas.dataset.arenaGroundRenderer = 'retail-editor-field-capture-web-override'
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
   canvas.dataset.buildingLightingGrid = NATIVE_BROWSER_ENHANCED_EFFECTS ? '3x3' : '2x2'
   canvas.dataset.complexShadows = 'native-indexed-owner-mesh'

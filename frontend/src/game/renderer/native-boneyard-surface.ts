@@ -1,7 +1,49 @@
 import type {
+  BoneyardBounds,
   BoneyardPoint,
   BoneyardRoad,
 } from '../core-kernels/boneyard.ts'
+
+export const WEB_ARENA_GROUND_TEXTURE_SIZE = 512
+
+export interface WebArenaGroundMeshPlan {
+  readonly colors: Uint8Array
+  readonly indices: Uint32Array
+  readonly positions: Float32Array
+  readonly uvs: Float32Array
+}
+
+export function webArenaGroundMeshPlan(
+  bounds: Readonly<BoneyardBounds>,
+): WebArenaGroundMeshPlan {
+  if (bounds.w <= 0 || bounds.h <= 0) {
+    throw new RangeError('Web Arena ground requires positive bounds')
+  }
+  const left = Math.fround(bounds.x)
+  const top = Math.fround(bounds.y)
+  const right = Math.fround(bounds.x + bounds.w)
+  const bottom = Math.fround(bounds.y + bounds.h)
+  return Object.freeze({
+    colors: new Uint8Array(16).fill(255),
+    indices: Uint32Array.from([0, 1, 2, 1, 3, 2]),
+    positions: Float32Array.from([
+      left, top,
+      right, top,
+      left, bottom,
+      right, bottom,
+    ]),
+    uvs: Float32Array.from([
+      Math.fround(left / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(top / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(right / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(top / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(left / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(bottom / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(right / WEB_ARENA_GROUND_TEXTURE_SIZE),
+      Math.fround(bottom / WEB_ARENA_GROUND_TEXTURE_SIZE),
+    ]),
+  })
+}
 
 export const NATIVE_ROAD_STYLE_PROGRAMS = Object.freeze([
   Object.freeze({ edgeInset: 30, halfWidth: 55, textureSize: 128, verticalUvScale: 0.800000011920929 }),

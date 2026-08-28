@@ -2,7 +2,7 @@ import type { Texture } from 'pixi.js'
 
 import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
-import { ROAD_TEXTURES } from '../../editor/textures.ts'
+import { GROUND_TEXTURE, ROAD_TEXTURES } from '../../editor/textures.ts'
 import { boneyard } from '../../lib/assets.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
 import {
@@ -32,6 +32,7 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   base: Readonly<Record<string, Texture>>
   combatAtlas: BoneyardCombatAtlas
+  ground: Texture
   lantern: Texture
   levelUpSparkle: Texture
   regionLightGlyph: Texture
@@ -73,6 +74,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyardCombatAssetSource(boneyard.levelUpSparkle),
     boneyard.solomonDig,
     boneyard.solomonFlydirt,
+    GROUND_TEXTURE,
     ...ROAD_TEXTURES,
     solomonEncounterSource,
     solomonGraveMarkSource,
@@ -112,6 +114,8 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     200,
   )
   const roads = ROAD_TEXTURES.map(texture)
+  const ground = texture(GROUND_TEXTURE)
+  ground.source.addressMode = 'repeat'
   for (const road of roads) road.source.addressMode = 'repeat'
 
   return {
@@ -119,6 +123,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     assetSources: sources,
     base,
     combatAtlas,
+    ground,
     lantern: texture(boneyard.lantern),
     levelUpSparkle: texture(boneyard.levelUpSparkle),
     regionLightGlyph: texture(regionLightRef.src),

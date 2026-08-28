@@ -238,6 +238,30 @@ try {
           + viewport.height / 2,
       }
     }
+    const groundPixelSummary = (pixels, point, radius) => {
+      const current = frame()
+      const centerX = (point.x - current.cameraX) * current.cameraZoom + viewport.width / 2
+      const centerY = (point.y - current.cameraY) * current.cameraZoom + viewport.height / 2
+      const left = Math.max(0, Math.floor(centerX - radius))
+      const top = Math.max(0, Math.floor(centerY - radius))
+      const right = Math.min(renderer.canvas.width, Math.ceil(centerX + radius))
+      const bottom = Math.min(renderer.canvas.height, Math.ceil(centerY + radius))
+      const colors = new Set()
+      let maximumRgbTotal = 0
+      let nonBlackPixels = 0
+      let rgbTotal = 0
+      for (let y = top; y < bottom; y += 1) {
+        for (let x = left; x < right; x += 1) {
+          const offset = (y * renderer.canvas.width + x) * 4
+          const rgb = pixels[offset] + pixels[offset + 1] + pixels[offset + 2]
+          if (rgb > 3) nonBlackPixels += 1
+          if (rgb > maximumRgbTotal) maximumRgbTotal = rgb
+          colors.add(`${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]}`)
+          rgbTotal += rgb
+        }
+      }
+      return { distinctRgbCount: colors.size, maximumRgbTotal, nonBlackPixels, rgbTotal }
+    }
 
     const buildingProofs = []
     for (const building of buildings) {
@@ -281,13 +305,16 @@ try {
       variant: monument.variant,
     }))
     renderer.render(snapshotAt(1_300, { x: 675, y: 510 }))
+    const groundPixels = groundPixelSummary(capture(), { x: 610, y: 410 }, 8)
 
     window.__buildingLightingRenderer = renderer
     return {
+      arenaGroundRenderer: renderer.canvas.dataset.arenaGroundRenderer,
       buildingLighting: renderer.canvas.dataset.buildingLighting,
       buildingLightingGrid: renderer.canvas.dataset.buildingLightingGrid,
       buildingProofs,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
+      groundPixels,
       lightingOff,
       monumentFrame,
       monumentProofs,
@@ -301,6 +328,11 @@ try {
   assert.equal(receipt.renderer, 'pixi-webgl')
   assert.match(receipt.rendererName.toLowerCase(), /webgl/)
   assert.equal(receipt.context, 'webgl2')
+  assert.ok(receipt.groundPixels.nonBlackPixels > 100, JSON.stringify(receipt))
+  assert.ok(receipt.groundPixels.rgbTotal > 5_000, JSON.stringify(receipt))
+  assert.ok(receipt.groundPixels.distinctRgbCount > 8, JSON.stringify(receipt))
+  assert.ok(receipt.groundPixels.maximumRgbTotal < 700, JSON.stringify(receipt))
+  assert.equal(receipt.arenaGroundRenderer, 'retail-editor-field-capture-web-override')
   assert.equal(receipt.buildingLighting, 'native-elevated-vertex-grid')
   assert.equal(receipt.buildingLightingGrid, '3x3')
   assert.equal(receipt.lightingOff.buildingCount, 4)

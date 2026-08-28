@@ -2010,12 +2010,14 @@ async function boneyardSurfaceReceipt(page, scene) {
   const receipt = await page.locator('.boneyard-world-canvas').evaluate((node) => ({
     activeRoadMeshCount: Number(node.dataset.roadActiveMeshCount),
     arenaBaseRenderer: node.dataset.arenaBaseRenderer,
+    arenaGroundRenderer: node.dataset.arenaGroundRenderer,
     roadIndexCount: Number(node.dataset.roadIndexCount),
     roadMeshCount: Number(node.dataset.roadMeshCount),
     roadRenderer: node.dataset.roadRenderer,
     roadVertexCount: Number(node.dataset.roadVertexCount),
   }))
-  assert.equal(receipt.arenaBaseRenderer, 'opaque-black-clear+native-layout')
+  assert.equal(receipt.arenaBaseRenderer, 'retail-editor-field-capture+native-road-layout')
+  assert.equal(receipt.arenaGroundRenderer, 'retail-editor-field-capture-web-override')
   assert.equal(receipt.roadRenderer, 'native-indexed-owner-mesh')
   assert.equal(receipt.roadMeshCount, scene.roads.length)
   assert.equal(receipt.roadVertexCount, scene.roads.length * 8)

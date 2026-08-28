@@ -115,12 +115,19 @@ test('Solomon owns exactly one co-rooted record-13 pass after body and mouth', (
   assert.match(boneyardRenderer, /solomonGraveMarkPassCount/)
 })
 
-test('runtime ground uses the black clear and exact Road owner before the post-Road canvas', () => {
+test('runtime ground restores the known-good web field below exact Roads and Region light', () => {
   assert.match(boneyardRenderer, /new NativeBoneyardSurfaceView\(base, scene, surfaceTextures\)/)
   assert.match(boneyardRenderer, /drawNativeBoneyardPostRoadBase/)
   assert.doesNotMatch(boneyardRenderer, /drawNativeBoneyardBase/)
   assert.doesNotMatch(boneyardRenderer, /STAGE_TEXTURES/)
-  assert.match(boneyardRenderer, /arenaBaseRenderer = 'opaque-black-clear\+native-layout'/)
+  assert.match(
+    boneyardRenderer,
+    /arenaBaseRenderer = 'retail-editor-field-capture\+native-road-layout'/,
+  )
+  assert.match(
+    boneyardRenderer,
+    /arenaGroundRenderer = 'retail-editor-field-capture-web-override'/,
+  )
   assert.match(boneyardRenderer, /roadRenderer = 'native-indexed-owner-mesh'/)
   assert.match(nativeBoneyardSurface, /sourceVertexCount: 18/)
   assert.match(
@@ -131,9 +138,14 @@ test('runtime ground uses the black clear and exact Road owner before the post-R
   assert.match(nativeBoneyardSurfaceView, /MeshGeometry/)
   assert.match(nativeBoneyardSurfaceView, /format: 'unorm8x4'/)
   assert.match(nativeBoneyardSurfaceView, /NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL/)
-  assert.doesNotMatch(nativeBoneyardSurfaceView, /nativeArenaFieldPlan|native-arena-field/)
-  assert.doesNotMatch(boneyardTextures, /arenaField20Source|arenaField21Source/)
-  assert.doesNotMatch(boneyardTextures, /arena-ground|GROUND_TEXTURE/)
+  assert.match(nativeBoneyardSurface, /webArenaGroundMeshPlan/)
+  assert.match(
+    nativeBoneyardSurfaceView,
+    /this\.container\.addChild\(this\.ground\.mesh, this\.roadRoot\)/,
+  )
+  assert.doesNotMatch(nativeBoneyardSurfaceView, /native-arena-field|fieldSprites/)
+  assert.match(boneyardTextures, /GROUND_TEXTURE/)
+  assert.match(boneyardTextures, /ground\.source\.addressMode = 'repeat'/)
   assert.match(boneyardTextures, /road\.source\.addressMode = 'repeat'/)
 })
 const playerTextures = readFileSync(

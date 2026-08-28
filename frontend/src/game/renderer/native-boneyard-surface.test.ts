@@ -8,6 +8,7 @@ import {
   NATIVE_ROAD_STYLE_PROGRAMS,
   nativeRoadEndpointAlphas,
   nativeRoadMeshPlan,
+  webArenaGroundMeshPlan,
 } from './native-boneyard-surface.ts'
 
 const ROAD: BoneyardRoad = {
@@ -35,6 +36,31 @@ test('pins all five loose Road textures to retail bytes', () => {
       path,
     )
   }
+})
+
+test('pins and world-anchors the restored known-good web ground field', () => {
+  assert.equal(
+    createHash('sha256').update(readFileSync(new URL(
+      '../../assets/game/boneyard/textures/arena-ground.webp',
+      import.meta.url,
+    ))).digest('hex'),
+    'dabc48e7af0220283889647f57cde6442aecc79629555ce9104815ebadbdb070',
+  )
+  const bounds = { h: 400, w: 600, x: -200, y: 100 }
+  const plan = webArenaGroundMeshPlan(bounds)
+  assert.deepEqual([...plan.positions], [-200, 100, 400, 100, -200, 500, 400, 500])
+  assert.deepEqual([...plan.indices], [0, 1, 2, 1, 3, 2])
+  assert.deepEqual([...plan.colors], new Array(16).fill(255))
+  assert.deepEqual([...plan.uvs], [
+    Math.fround(-200 / 512), Math.fround(100 / 512),
+    Math.fround(400 / 512), Math.fround(100 / 512),
+    Math.fround(-200 / 512), Math.fround(500 / 512),
+    Math.fround(400 / 512), Math.fround(500 / 512),
+  ])
+  assert.throws(
+    () => webArenaGroundMeshPlan({ ...bounds, w: 0 }),
+    /requires positive bounds/,
+  )
 })
 
 test('pins every Road style width, side fade, texture size, and vertical UV scale', () => {
