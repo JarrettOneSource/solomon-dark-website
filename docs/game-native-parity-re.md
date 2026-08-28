@@ -59087,6 +59087,7 @@ not require an update.
   native selector, premultiplied RGB reaching native multiply, a VFX member
   missing from the reflection capture, or a browser capture with errors or a
   visible stock disagreement reopens this system.
+
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
@@ -59969,4 +59970,31 @@ font and shared notification renderer can represent every stock surface.
   `9315535116c23d76f08e326bc90bb72473f95c378578e0f7c469dae0031ec243`).
   The canonical gate is repeated after this receipt-only ledger edit so the
   final receipt names the exact final tree.
-- Publication and deployment were not requested and were not performed.
+- Publication was subsequently authorized. Immediately before publication,
+  Website `origin/main` had advanced to
+  `f974f26801de7630d60a57cf0bea2baeff253575` and Mod Loader `origin/main` to
+  `80df2ed5dcaba3d5e5be50820a83259193ce6c15`; both focused branches were
+  rebased. The sole Website conflict was this append-only ledger boundary, and
+  resolution retained the complete upstream render/VFX closure before this
+  complete Insight entry. All other Website patches and the Loader patch were
+  range-diff identical.
+- Direct SHA-256 comparison found zero mismatches across the 15 changed Website
+  files and five changed Mod Loader files transferred to clean detached Mac
+  worktrees at those exact bases. The rebased Loader tree passed `531/531`
+  registered static checks; log SHA-256 is
+  `92be72482314f5ba41487c93f60083430c92c1d3ae05994086ca9a830521bfd9`.
+- The rebased Website tree passed the complete canonical Mac gate; pre-receipt
+  log SHA-256 is
+  `0fc1b2b2c39ecd1468a96c8e747ae20dabb1f326503b8ddb30d9cb5f8828db62`.
+  A fresh production Chrome/WebGL journey then repeated the Hub and Boneyard
+  four-card offers, exactly one Insight marker, Magic Circle `0 -> 2 -> 4`,
+  unchanged secondary RNG, and empty page, console, response, and protocol
+  error arrays. Browser log SHA-256 is
+  `ac963459a0d0e98607a12a3fc352a27f5e987bd58fc4e24109b1c8d654ef7b25`;
+  Hub/Boneyard capture SHA-256 values are respectively
+  `c37c6cfbff709a5be7fb643aa870f4cb0d8e9e55e47676bf36849749a71cebe3`
+  and `0c463280f7f37725dae9edfa13f01296c4cd5c18f9c56b524e08080079a92e74`.
+- This publication receipt is the sole post-gate tracked edit. The canonical
+  Website gate is repeated on that exact final tree before the normal
+  fast-forward push. Deployment was not requested and is not part of this
+  publication receipt.
