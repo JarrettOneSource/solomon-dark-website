@@ -29,7 +29,10 @@ import {
   NativeEnemyWorldFeedbackPresentation,
   nativeEnemyWorldFeedbackTransform,
 } from './native-enemy-world-feedback.ts'
-import { nativeDirectEnvironmentLightAlpha } from './boneyard-environment-light-plan.ts'
+import {
+  WEB_DIRECT_ENVIRONMENT_LIGHT_SCALE,
+  nativeDirectEnvironmentLightAlpha,
+} from './boneyard-environment-light-plan.ts'
 import {
   NATIVE_SPECTATOR_HUD_CONTRACT,
   nativeSpectatorHudLayout,
@@ -488,10 +491,11 @@ test('mode one and two add bounded player light without masking later Region sou
   )
 })
 
-test('environment player-light plan retains the native grayscale aperture', () => {
+test('environment player-light plan applies the requested web brightness scale', () => {
+  assert.equal(WEB_DIRECT_ENVIRONMENT_LIGHT_SCALE, 0.14)
   for (let frame = 0; frame < 360; frame += 1) {
     const direct = nativeDirectEnvironmentLightAlpha(frame, frame % 4)
-    assert.ok(direct >= 0.2375 && direct <= 0.25)
+    assert.ok(direct >= 0.03325 && direct <= 0.035)
   }
 })
 
