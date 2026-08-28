@@ -1,0 +1,282 @@
+# 2026-08-26 — Native save progression, unlock persistence, and stock/web portability
+
+## Reported smell and parity question
+
+- Reported behavior: inspect the complete stock save system, ensure every
+  gameplay-progression/unlock member survives at the correct lifetime in the
+  web port, continue through adjacent unported mechanics, and determine whether
+  stock and browser saves can be exchanged in both directions.
+- Stock behavior to recover: the durable `darkdata.cfg` profile, the current
+  wizard in `gamestate.sav`, sleeping `Region<N>._cache` state, Hall/portrait
+  siblings, every progression/unlock writer and consumer, title resume
+  selection, Game Over archival, clean destruction, and corruption behavior.
+- Reproduction inputs: fresh profile, completed first-play profile, Lace read,
+  Hagatha purchase, Machinimbus purchase, learned skill/level progression,
+  active self toggles, Hub save, Boneyard save, clean close, Last Game, Game
+  Over, launcher slot selection, native import, browser resume, and native
+  export/load.
+- Falsifiers: a native serializer for Machinimbus's eight bytes; a disk path
+  that carries all three Firewalker/Mindstar/Regenerate toggles; a retail write
+  below the launcher's selected `stage\\savegames` link; or an arbitrary native
+  mid-Arena object graph that the web simulation can restore without a semantic
+  projection would falsify the recovered boundary.
+
+## Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`; re-hashed 2026-08-26 | The canonical analyzed and probed executable is unchanged. | high |
+| Profile instructions | `0x005A8390`, `0x005BC1B0`, `0x005BE0B0`; profile root `0x0081A330` | `darkdata.cfg` carries gold, ten Memoratorium marker bits, first-play byte `+0x104`, ten help bytes, FIFO ages/portrait ids/counters, Lace byte `+0x105`, Luthacus storage, Hagatha bundle/first-mix state, and Shlorio fee. | high |
+| Wizard disk serializer | `Skills::vftable +0x14 -> 0x0065EE80`; `Skills_Wizard::vftable +0x14 -> 0x00663AE0`; vtable bases `0x0079FEFC` / `0x007A0CD4` | Base disk payload serializes all 83 rows, level/XP, pending/deferred choices, selected roots/spells, offer seed, learned order, Hagatha ownership/list, vital/stat scalars, and associated vectors. The wizard override adds only meditation idle delay `+0x884`, Firewalker byte `+0x8DC`, and weld-effect scalar `+0x8E0`. | high |
+| Network-only serializer | `Skills_Wizard::vftable +0x48 -> 0x0067C830`; sole xref at `0x007A0D1C` | The broader derived-state serializer, including adjacent toggle bytes, is a different virtual lane. It is not the `+0x14` disk serializer and cannot justify disk persistence. | high |
+| Advanced-unlock census | `0x004F90C0`, globals `0x00B3BDD8..0x00B3BDDF`; consumers `0x004F8480`, `0x00579E90`, `0x0065E830`, `0x0065EBA0` | Machinimbus sets eight process globals. No profile/progression save call or direct disk serializer reference exists. A purchased-but-unlearned advanced spell has no retail persisted representation; a learned row remains visible in the 83-row book. | high |
+| Native save corpus | controlled Hub `gamestate.sav`, 27,788 bytes, SHA-256 `d562fe8ec3db4a6159b6422913b7a0a5f4dfd14c974894af5861ce70e1ff0cfc`; 26 older independent gamestates | Every sampled file has eight root children; root child zero is the local wizard; its first child is the 83-row progression node. Name length varies safely and progression payload length varies with serialized vectors. All parse/re-encode byte-identically. | high-live |
+| Live profile diagnostic | task-owned Windows instance `save-unlock-probe-20260826`; injected loader supporting diagnostic | The Machinimbus Acid Rain byte changed `0 -> 1` in memory. A normal WM_CLOSE then persisted a simultaneous gold change `698 -> 777` into `darkdata.cfg`, while the advanced byte has no encoded field. This supports the static boundary; the known launcher routing defect prevented treating the next staged launch as a same-tree restart receipt. | medium-live |
+| Launcher source/live route | `StageSandboxCompatibilityLinks.cs`, `StagedGameLauncher.cs`, `CloudSaveBackupCoordinator.cs`; G10 `sav-route` receipt | An override recreates only `stage\\savegames`; retail writes `stage\\sandbox\\savegames`. Native play, watcher backup, restore, and selected-slot claims therefore address different trees. | high |
+| Current web save | schema 15, `game-save-contract.ts`, `game-save-document.ts`, `game-host.ts`, cloud/IndexedDB slot zero | The web owns a complete normalized authoritative document but has no native source attachment, importer/exporter, native codec, or launcher routing closure. It also names some current-wizard state more durably than retail can represent. | high |
+
+The native live runs above were isolated task-owned instances. Runtime addresses
+were obtained by rebasing preferred addresses through `sd.debug`; no runtime
+address is reused as static evidence. The generated Hub template is a stock
+writer output observed through an injected loader, not a clean-stock appearance
+capture, and is labeled accordingly.
+
+## System boundary and membership inventory
+
+Native system: retail player persistence from profile/current-wizard mutation
+through disk encoding, launcher routing, Last Game reconstruction, Game Over
+archival, and portable semantic projection into or out of the web authority.
+
+| Member | Native source | Disposition required by this pass | Proof contract |
+| --- | --- | --- | --- |
+| SyncBuffer container, names, order, bounds | `0x004248F0`, common save files | exact-ported | hostile decode plus byte-identical encode |
+| darkdata XOR/marker-LZ wrapper | `0x004258B0`, G10 goldens | exact-ported | all three goldens and mutation corpus |
+| durable gold | profile `+0x58` | exact-ported | stock -> web -> stock scalar round trip |
+| first-play completion | profile `+0x104` | exact-ported | maps both web onboarding obligations without resetting existing profiles |
+| ten Hub help flags | profile `+0x9A..+0xA3` | exact-ported | every row maps to the existing NPC help state |
+| Lace one-shot | profile `+0x105`, `0x004FA290` | exact-ported | 26 -> 25 BookReview membership after import/resume/export |
+| Memoratorium marker/FIFO/portrait fields | profile `+0x90`, `+0xA4`, `+0xCC`, `+0xF4..+0xFC` | out-of-system for account import (shared Website memorial is process authority); byte-preserved in native attachment/export | import cannot overwrite the shared memorial; untouched bytes remain exact |
+| Luthacus polymorphic storage | profile `+0x8C`, darkdata child 1 | exact-preserved, semantically projected only for supported native item members | opaque subtree retained; unsupported materialization is reported, never dropped on export |
+| Hagatha bundle selectors | profile `+0x60/+0x64` | exact-ported | ordered selectors and bundle offer survive |
+| Hagatha first-mix flags | profile `+0x6C[30]` | exact-ported | every selector price state survives |
+| Shlorio fee | profile `+0x100` | exact-ported | exact fee survives |
+| local wizard name/class | gamestate root child 0 plus progression roots | exact-ported | all 15 element/discipline combinations and UTF-8 bounds |
+| all eight root rows | Create finalizer `0x005D0290` | exact-ported | roots 0..7 rank one; selected identities remain separate |
+| level, XP, thresholds | progression `+0x30..+0x3C` | exact-ported | native levels 1..75 and cap policy |
+| permanent/effective rows 0..82 | progression table, disk `0x0065EE80` | exact-ported from permanent ranks; effective ranks rebuilt | every row/cap/rank bound asserted |
+| Unforge max-HP/max-MP base bonuses | mutations at progression `+0x6C/+0x78`; omitted by `0x0065EE80`; post-load refresh `0x0065F9A0` | out-of-system for pure retail persistence; stock import rebuilds maxima and preserves saved vital ratios; stock export warns | web bonuses remain web-durable but cannot survive an unmodified retail process restart |
+| learned/visible order | progression `+0x850/+0x854` | exact-ported | Hall/SkillScreen tie order retained |
+| selected element/discipline/starting spells | `+0x82C/+0x830/+0x86C/+0x870` | exact-ported | immutable class/action defaults survive independently from live selection |
+| selected primary | local-wizard trailing `i32` plus Game binding 12 | exact-ported for pure rows; temporary Plane Orb resets; selected Weld resets because its synthetic build is not a disk member | both duplicated native values must agree; learned pure selection survives stock-web-stock |
+| concentration A/B and replacement cursor | Game bindings 16/20; Game `+0x1C24` | exact-ported for materially learned rows | A/B uniqueness, Split Mind B, next A/B replacement owner, and stock-web-stock state survive |
+| eight BeltButton slots | Game root payload; type 7015 skill rows plus non-skill entries | exact-ported for skill entries; non-skill members exact-preserved | skill order/duplicates/removal survive; potions/items remain byte-identical unless a web skill intentionally replaces that slot |
+| active synthetic Weld build | progression `+0x844`; omitted between serialized `+0x840` and `+0x848` | out-of-system for retail disk portability | learned row 52 survives; selected/belted Weld warns and resets to the creation primary for stock/web settled import |
+| offer seed, pending/deferred choices | `+0x834`, `+0x44/+0x48` | exact-ported | deterministic next offer and queued-choice count |
+| Hagatha ordered outcome list/ownership/capacity | `+0x7C0/+0x7C4`, `+0x7CC[50]`, `+0x800`; producer `0x0066EF70` | exact-ported | purchase order survives; ordinary selectors are unique; repeatable selector 27 Tonic appears up to twice and remains visible in the list; ownership flags and 3/6/9 capacity agree |
+| selected Boast lifecycle | Game serializer `0x005CE3D0`; `Gameplay+0x1D44/+0x1D48/+0x1D80/+0x1D81`; progression random flag `+0x2D` | exact-ported | selected ID and authored statement, one-shot failure, success, ID-3 random-choice byte, score/eulogy state, and stock-web-stock bytes agree; local XP gate `+0x2C` remains true |
+| Serendipity/Reverie active-until-hurt bytes | progression `+0x73C/+0x73D`; purchase producer `0x0066EF70` | out-of-system for stock disk portability; clear on stock import like retail disk restore | ownership persists, but consumed one-shot effects are never resurrected by import |
+| Firewalker active state | wizard disk override `0x00663AE0`, `+0x8DC` | exact-ported | native import/export and web resume preserve it |
+| Mindstar/Regenerate active state | network serializer `0x0067C830`, no disk member | out-of-system for stock disk portability; web resume resets these nonpersisted toggles | explicit negative disk and reset tests |
+| Mind Chug and active casts/UI | no durable disk member in recovered serializers | out-of-system for portable wizard projection | import starts a settled Hub with no replayed transient |
+| Machinimbus purchase-only bytes 72..79 | `0x00B3BDD8..DF` | out-of-system for pure retail persistence; learned rows infer availability | purchased-only warning; learned advanced rows survive |
+| native selected story path/unlock bitmap | Game `+0x1BD8/+0x1CDC` | out-of-system for web world projection; stock export normalizes the selected path to portable stock Survival while preserving the unlock bitmap | no invented Website/story-map mapping; exported path has no machine-local absolute prefix |
+| active native Hub/Arena object graph | `gamestate.sav` and Region caches | out-of-system for semantic cross-engine projection; source bytes preserved | import starts a fresh web Hub; export patches a validated native base/template |
+| Hall of Fame and raw portraits | `halloffame.dat`, `Portraits\\portrait<N>.raw` | out-of-system for untrusted Website-global Hall; losslessly retained when supplied | no account/global score injection |
+| settings credentials/network fields | `settings.txt` | out-of-system | never imported or uploaded |
+| resume selector | `Game.Resume` plus run directory | exact-ported in launcher bridge | valid existing selector kept; one unambiguous exported run materialized |
+| launcher selected slot | native `stage\\sandbox\\savegames` | exact-ported | native sentinel write/backup/restore path proof |
+| corrupt/truncated/ambiguous input | retail zero-fill vs strict bridge policy | exact-ported safety boundary | copied input fails closed; source remains untouched |
+| abrupt browser termination after latest checkpoint | browser process/network constraint | blocked-by-platform | bounded periodic checkpoint remains the predicted difference |
+
+No native profile, Hall, or arbitrary Arena bytes are accepted as account or
+leaderboard authority. Native imports are always `local-only`. The portable
+unit is a settled wizard/profile projection, not a promise that two different
+engines can resume the same in-flight projectile, actor pointer graph, or
+browser party capability.
+
+## Native ownership thread and recovered contract
+
+- `0x005BE0B0` writes the durable profile. `0x005CBE10` writes the current
+  `Game`; root child zero is the local wizard and reaches the `+0x14` Skills
+  disk virtual. Clean `Game` destruction writes profile then game state.
+- The current wizard disk payload is self-describing only through native call
+  order. It has no tags or version, so the bridge validates the exact root,
+  row count, child structure, vector bounds, class roots, thresholds, and
+  trailing exhaustion before assigning semantics.
+- Effective ranks/stat caches are regenerated from permanent ranks, items,
+  perks, and the selected class. Pointer values and runtime caches never cross
+  the bridge as authority.
+- `Skills_Wizard +0x14` proves that only Firewalker of the three adjacent self
+  toggles has a disk byte. The broader `+0x48` serializer remains useful for
+  network state but is not save evidence.
+- Machinimbus purchase changes session globals. The portable bridge can carry a
+  learned advanced row, but no honest unmodified-retail file can encode
+  "purchased but not yet learned." The UI must say so before export.
+- Stock and web use different world/runtime topologies. The bridge therefore
+  preserves the original native files as an attachment, imports understood
+  wizard/profile state into a fresh authoritative web Hub, and applies later
+  understood web changes back onto a validated native base (or controlled Hub
+  template) without rewriting opaque sibling nodes.
+- Hagatha `+0x7C0/+0x7C4` is an ordered outcome vector, not a sorted set.
+  `ActorProgression_ApplyHagathaPerk 0x0066EF70` appends each purchase;
+  ordinary selectors reject duplicates, while selector 27 Tonic appends once
+  per purchase (at most twice), and raises capacity 3 -> 6 -> 9. Common apply
+  still sets ownership byte 27; only duplicate-list rejection is bypassed. The
+  web authority, protocol, save, Hall
+  projection, and stock bridge must retain that exact list. Protocol 86 owns
+  the ordered/repeated projection; schema 17 owns it directly, while schemas
+  1..16 migrate the older sorted ordinary set by appending their recorded
+  Tonic count.
+- The same serializer audit distinguishes ownership from runtime: purchase
+  writes Serendipity/Reverie active bytes at `+0x73C/+0x73D`, but disk
+  serializer `0x0065EE80` never emits either offset. A stock import therefore
+  clears both active flags instead of reactivating them from ownership.
+- Unforge max-health/max-mana bonuses are another retail disk defect. The shop
+  mutates base HP/MP `+0x6C/+0x78`; `0x0065EE80` writes current/max
+  `+0x70/+0x74/+0x7C/+0x80` but not either base. Post-load `0x0065F9A0`
+  snapshots the saved current/max ratios, rebuilds maxima from constructor
+  bases, then reapplies those ratios. Stock import must emulate that result;
+  stock export can carry the ratio but must warn that a web base-stat bonus
+  itself has no retail disk representation.
+- The durable Boast is elsewhere in the resumable Game node. Game vslot
+  `+0x14 -> 0x005CE3D0` serializes selected signed ID `+0x1D44`, exact statement
+  String `+0x1D48`, failure `+0x1D80`, and success `+0x1D81`. Those fields own
+  random skill choice (ID 3), failure gates, score bonus, and eulogy. Preserving
+  only the opaque Game bytes would make stock-imported web play forget the
+  Boast and web changes fail to reach stock, so the bridge must map all four.
+  It must also patch serialized progression `+0x2D` to `selected == 3` and
+  require the local-wizard XP gate `+0x2C`; otherwise the text and actual
+  level-up behavior diverge after stock load.
+- Launcher selection must own the path retail actually opens. A compatibility
+  alias may remain, but `stage\\sandbox\\savegames` is the writer/watcher/mirror
+  source of truth.
+
+## Nearby-system findings
+
+- The earlier save-format label "class availability flags" is stale. Profile
+  `+0x90[10]` is the Memoratorium urn-marker array already closed by the
+  memorial producer pass.
+- The earlier progression persistence statement conflated disk vslot `+0x14`
+  with network vslot `+0x48`. It overclaimed all three active toggles as disk
+  state and must be corrected in the durable native report.
+- The launcher cloud archive loses `settings.txt`, including `Game.Resume`.
+  The safe bridge is to derive only one unambiguous exported run when the
+  existing selector is absent/invalid; credentials and renderer settings stay
+  untouched.
+- A native archive can be losslessly round-tripped even when a semantic member
+  is not yet materialized in web gameplay, provided its ordered bytes remain in
+  the bounded native attachment. Preservation is not a claim that the web
+  consumes that mechanic.
+
+## Confidence and open questions
+
+- Confirmed: executable identity; profile field census; exact disk/network
+  vtable slots; complete base progression write order; local-wizard tree path
+  across 27 gamestates; advanced-global xrefs; launcher path mismatch.
+- Inferred but implementation-safe: an already learned advanced row is treated
+  as available on web import even though retail's purchase-only byte is absent;
+  otherwise the imported learned row would be unusable.
+- Explicit platform/product limits: arbitrary in-flight native Arena state is
+  preserved but begins as a fresh web Hub; Website-global Hall/memorial state
+  cannot be overwritten by an untrusted personal file; abrupt browser loss can
+  still miss the post-checkpoint window.
+- No extractable native constant/table required by the portable wizard/profile
+  mapping remains unnamed. Unsupported polymorphic item materialization must
+  remain explicit and byte-preserved rather than guessed.
+
+## Web and launcher implementation consequence
+
+- Add strict TypeScript native codecs and a portable profile/wizard mapper.
+  Imported stock sources remain attached with hashes and bounded bytes; schema
+  migration keeps older browser saves valid. One semantic gamestate is
+  required; non-gamestate launcher members are retained as path/hash/base64
+  rows and re-exported byte-identically without becoming Hall or profile
+  authority. `settings.txt` is rejected rather than attached because its
+  credentials/network/Resume fields are outside the portable trust boundary.
+- Build a settled Hub continuation from the mapped local wizard, never from a
+  rendered snapshot. Mark it `local-only`, clear nonpersisted selection/action
+  state, rebuild derived ranks/stats, and retain deterministic offer ownership.
+- Export by patching the known fields of the attached native base, or the
+  controlled Hub template for a web-origin wizard. Parse the result again and
+  prove every untouched node byte and file hash before packaging it.
+- Correct fresh class books to all eight native roots. Preserve Firewalker at
+  the save boundary; clear Mindstar, Regenerate, concentration, and other named
+  non-disk selection state on disk-style resume.
+- Correct launcher routing and Wine mirror ownership, then set `Game.Resume`
+  only when one exported run is unambiguous and an existing valid selector is
+  unavailable.
+- Add Save Manager `Import Save ZIP` for the browser-generated launcher
+  archive. It runs the existing manifest/hash/path validator, preserves strict
+  source-slot matching for cloud restore, and uses the explicitly selected
+  local slot for manual import before normal Resume materialization.
+- Account slot I and title Settings -> Save Transfer expose explicit import
+  preview/replace and stock export over the same cloud-or-IndexedDB save
+  coordinator. No implicit retail-install scan, credential import, silent
+  overwrite, or global score eligibility is allowed.
+
+## Validation contract
+
+- Native codecs: every G10 darkdata golden, the controlled Hub gamestate, all
+  83 rows, every vector/flag/member, exact encode round trip, malformed counts,
+  duplicate names, trailing bytes, compressed bombs, and unsupported item
+  materialization.
+- Portable mapping: all 15 classes, levels 1/2/75, every learned row, ordered
+  ties, pending/deferred choices, 30 first-mix flags, 50 Hagatha flags, Lace,
+  help/onboarding, Firewalker, learned advanced rows, and negative purchased-
+  only/Mindstar/Regenerate cases.
+- Launcher: Windows junction and Wine mirror both route the actual native path,
+  cloud close copies the actual mirror, valid Resume is preserved, and one
+  exported run is materialized without touching credential rows.
+- Schema/storage: schema 17 frontend/backend parity, schemas 1..16 migration,
+  source attachment bounds/hash validation, conditional cloud replacement,
+  Game Over/wizard retirement retention, and unknown-version rejection.
+- Browser: exercise Account/cloud and anonymous title-Settings/IndexedDB import
+  preview -> slot replacement -> `/game` Last Game -> exact wizard/level/ranks/
+  Lace/Hagatha state -> stock export -> reload, with empty page/console/failed-
+  response arrays.
+- Stock: use the exact Mac-built Windows launcher candidate to load the exported
+  archive in the retail executable and compare the local wizard name, class,
+  level/XP, learned-order/ranks, perks, gold, Lace/help/onboarding, and
+  Firewalker fields.
+- Run the Mod Loader registered portable suite and the Website's complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate on the Mac mini only.
+
+## Implementation validation receipt
+
+- The clean rebased Website candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini: backend build
+  and integration contracts, formatting, frontend lint/boundaries/generated
+  assets, every frontend and desktop suite, production frontend/game-host
+  builds, bundle budget, and production media policy all exited zero.
+- Real Mac Chrome exercised both storage owners. Anonymous IndexedDB and an
+  authenticated cloud account each imported the controlled stock archive,
+  previewed POMPONIUS as level 1 Fire/Arcane with 500 gold, wrote revision 1,
+  resumed through Last Game, persisted revision 2, exported, reloaded, and
+  resumed again. Both downloaded 28,619-byte archives with SHA-256
+  `c70859cdb52e709a7e586bde542b200f9dc4c9f32c10bc7f7fa0528e5eb176c8`;
+  page/console errors were empty after the standard Vite-only deployment
+  manifest route was fulfilled.
+- The exact final Mod Loader candidate passed `510/510` registered static RE
+  contracts and its managed Windows build on the Mac. That Mac-built x86
+  contract executable then passed every launcher contract on Windows plus the
+  real browser-produced archive import, including manifest/hash validation,
+  destination-slot materialization, and native Resume selection.
+- The task-owned Windows stage used the exact retail EXE SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  all 40 discovered mods disabled, and the browser ZIP as its selected save.
+  Stock exposed `RESUME LAST GAME`, loaded POMPONIUS into the Hub, and showed
+  Fireball plus Ring of Fire on its native Skills screen. An ordinary close
+  rewrote a valid 26,897-byte gamestate with SHA-256
+  `0c6d19652ede0e6794b49de40c5d1eb8694f87cf195375d06f35a61dd979bbc9`.
+- That retail rewrite exposed two adjacent variants now closed in both codecs:
+  the null-Boast statement may become the one-byte `0x01` sentinel, and a
+  first-process control-scheme/Create path may emit root rows `0..7` at rank
+  zero while retaining the authoritative Fire/Arcane roots and starter spells.
+  Strict decoding accepts only the proved sentinel; web import reconstructs
+  all eight class roots at rank 1 and keeps public learned order scoped to rows
+  `8..79`.
+- The iPhone was reported available again, but this Mac has neither the full
+  Xcode `devicectl`/`xctrace` utilities nor a libimobiledevice/Appium bridge, so
+  no physical-iPhone automation receipt is claimed. That optional device proof
+  is separate from the completed real-Chrome, Windows-launcher, and retail
+  compatibility gates. No production deployment was performed.

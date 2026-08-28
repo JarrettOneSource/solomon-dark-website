@@ -4,9 +4,12 @@ import test from 'node:test'
 
 import { NATIVE_SKILL_CATALOG } from './player-progression.ts'
 
-const LEDGER_HEADING = '### 2026-08-21 v49 complete 82-row effect and presentation ledger'
+const LEDGER_HEADING = '## 2026-08-21 v49 complete 82-row effect and presentation ledger'
 const ledger = readFileSync(
-  new URL('../../../../docs/game-native-parity-re.md', import.meta.url),
+  new URL(
+    '../../../../docs/Game Native Parity RE/123-2026-08-20-welded-primary-runtime-and-presentation-closure.md',
+    import.meta.url,
+  ),
   'utf8',
 ).split(LEDGER_HEADING)[1]?.split('The mechanical property audit')[0]
 

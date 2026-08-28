@@ -5,9 +5,9 @@ desktop-solo, headless-crowd, and compact-replication slices implemented,
 2026-08-24
 
 This document records the load-bearing runtime decisions for the rebuilt game.
-It does not replace `game-native-parity-re.md`: the native game remains the
-visual and behavioral oracle, while this document defines where recovered
-behavior lives in the clean rebuild.
+It does not replace the [native parity RE ledger](<Game Native Parity RE/README.md>):
+the native game remains the visual and behavioral oracle, while this document
+defines where recovered behavior lives in the clean rebuild.
 
 ## Product topology
 
@@ -1883,8 +1883,9 @@ scaling, recipe-backed dynamic items, and every native-memory/debug path remain
 absent until their web owners exist. The only bot and navigation surface is the
 developer-entitled server participant path described above; it is not
 available to mod VMs.
-The complete disposition is recorded in `game-native-parity-re.md` and the Mod
-Loader's `web-lua-runtime-parity-contract.md`.
+The complete disposition is recorded in the
+[native parity RE ledger](<Game Native Parity RE/README.md>) and the Mod Loader's
+`web-lua-runtime-parity-contract.md`.
 
 ## Durable party roster and absent leader
 

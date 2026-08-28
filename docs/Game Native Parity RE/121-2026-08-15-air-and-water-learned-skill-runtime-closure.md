@@ -1,0 +1,278 @@
+# 2026-08-15 — Air and Water learned-skill runtime closure
+
+## Reported smell and parity question
+
+- Reported web behavior: player skill/stat books and the level-up picker retain
+  learned ranks, but Air 24..31 and Water 32..39 do not yet change gameplay.
+  Rank-one Lightning/Frost Jet presentation and contact are present; all learned
+  primary branches and both families' secondary actors are absent.
+- Stock behavior to recover: actor-private ranks must resolve into per-cast
+  payloads, authoritative contacts/modifiers/RNG, persistent secondary actors,
+  and separately replicated presentation state for every family member.
+- Reproduction inputs/scenes: hold Air or Water primary against multiple live
+  Boneyard enemies; cast Magic Storm, Prismatic Shock, and Ring of Ice; release,
+  disconnect, die, leave the run, and observe a second client.
+- Falsifiers: a learned rank that changes only visuals, a client-selected random
+  outcome, a lingering contact after release, a shared modifier/book between
+  players, or an effect reconstructed only inside a renderer disproves parity.
+
+## Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Instructions | pinned retail `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Air handler `0x0053F9C0`, Water handler `0x00543860` | Both primaries are immediate 100 Hz queries. Air owns an ordered retained-target chain; Water owns an LOS-filtered cone plus cold/push/status branches. | high |
+| Instructions | `0x006021A0`, `0x00645540`, `0x00644460`, `0x005FFDC0` | StormCloud, Prismatic cast wave, Ring-of-Ice factory, and FreezeWave own their state/lifetime rather than player render code. | high |
+| Instructions | Hurricane source registration/painter `0x00548B00`/`0x0052C2A0`, lane init/step `0x00528DA0`/`0x00528E30`, target movement/contact `0x0047CB20`, Badguy/Maggot callers `0x004835F0`/`0x004881A0` | Hurricane owns a live target orbit/damage field, eight randomized presentation lanes, a refreshed release latch, and target-private contact cooldown. The `+0x8D4/+0x8D8` damage caches are consumed. | high |
+| Static data | `native-skill-catalog.json` rows 24..39, 72, and 76 and Skills atlas records 51..66, 99, and 103 | Every rank property, cap, prerequisite, exclusion, advanced-root identity, and picker icon is fully catalogued. | high |
+| Instructions | advanced dispatcher `0x0054CC50`; `AcidRain 0x7FE` constructor/tick `0x005E3540`/`0x00604E90`; shuffle `0x005E41F0`; `Comet 0x80C` constructor/tick/impact/factory `0x005F0C50`/`0x006220D0`/`0x0061E9C0`/`0x0063FD00` | Air-root Acid Rain is a 1,500-tick persistent direct-damage field with an exact 400-unit query, fixed-bound shuffle, and `floor(n/3)+1` target count. Water-root Call Comet falls for 400 ticks; its impact owns 400-unit damage plus the common FreezeWave helper. | high |
+| Asset/data | BadGuys records 44, 84, 110, 1836..1839, 30, 28, 32, and 14; DeadHawg record 15; audio registry 54/162, 44/161, and ambient-loop entry 171 | Base Lightning/Frost art/audio is already exact; Hurricane uses DeadHawg 15 plus BadGuys 84 and renews `steadywind__loop`; learned Hail and Cold Aura are distinct records 32 and 14. | high |
+| Existing browser proof | rank-one Air/Water receipts documented above, protocol 19, current Website tree | Base held lifecycle, world target geometry, audio ownership, and rank-one art are verified already; learned effects remain the boundary. | high |
+
+## System boundary and membership inventory
+
+Native system: player-owned Air/Water elemental spell runtime, from rank refresh
+and input dispatch through transient/persistent actor creation, contact/modifier
+merge, simulation tick, replication, presentation, audio, and teardown.
+
+| Member | Native source | Current disposition | Required closure |
+| --- | --- | --- | --- |
+| 24 Lightning | `0x0053F9C0` | exact-ported | per-tick ranked damage/cost and typed electric contact |
+| 25 Chaining | `0x0053F9C0`, `0x00641340` | exact-ported | exact distinct-target hop order and float32 `0.600000024` decay |
+| 26 Stun | `0x1B6A`, `0x006231B0`, `0x00625850` | exact-ported | 25-tick minimum-factor merge and movement consumer |
+| 27 Magic Storm | dispatcher `+0x6C`, `StormCloud 0x7F0` | exact-ported | paid secondary, persistent 1,000-tick actor, RNG strike and registered rain-child lifecycle |
+| 28 Magic Tornado | `0x005E2440`, `0x006021A0` | exact-ported | frequency factor, extra duration, moving-cloud compositor and presentation controls |
+| 29 Hurricane | `0x0053F9C0`, `0x00548B00`, `0x0047CB20`, `0x0052C2A0`, progression `+0x8D4/+0x8D8` | exact-ported | refreshed charge/release ordering, Region-equivalent source registration, strict 280-unit tangential field, charge-cubed random damage, target cooldown and low-charge sound suppression, exact 16-word eight-lane painter program, high/low draw branches, and shared `steadywind__loop`; explicitly no light provider |
+| 30 Prismatic Shock | `0x00645540`, `Mod_Prismatic 0x1B76` | exact-ported | 350-unit circular application, duration merge, electric secondary-damage doubling, retained child fade/motion |
+| 31 Disintegrate | `0x0053F9C0`, `Badguy_Contact 0x0048A290` | exact-ported | event-scoped percentile roll and strict post-hit 20% execute gate |
+| 32 Frost Jet | `0x00543860`, `0x00641B10` | exact-ported | ranked damage/cost and cold modifier contact |
+| 33 Chill Wind | `0x00543860`, target impulse vslot `+0x64` | exact-ported | distance-aware actor push plus hostile Arrow `Anim_SpinAway`; exact inner/outer squared-radius taper |
+| 34 Cone of Ice | `0x00543860`, `0x00641B10` | exact-ported | reach `205 + 4*widen`, half aperture `15+widen`, visual density/speed inputs |
+| 35 Ring of Ice | `0x00644460`, `FreezeWave 0x7E8` | exact-ported | paid expanding one-contact-per-target wave, freeze/cold application, three bursts, ring, and 100/200 WhirlSnow children |
+| 36 Harden | Water handler, progression `+0x8B8/+0x8BC` | exact-ported | held accrual, actor-private cap, persistent armor pool and damage consumer |
+| 37 Cold Aura | Water handler, record 14, progression `+0x8AC/+0x8B0` | exact-ported | held radius query, six-tick presentation cadence, slow merge |
+| 38 Hail | Water handler, `Anim_Hail 0x00454030`, record 32 | exact-ported | native 3,000-cell hit roll, event-time damage draw, presentation actor |
+| 39 Permafrost | progression `+0x8B4`, cold/freeze modifier construction | exact-ported | slowdown scaling and 200-tick minimum-duration rule across both Water spells |
+| 72 Acid Rain (advanced Air root) | dispatcher `0x0054CC50`, `AcidRain 0x7FE`, tick `0x00604E90` | exact-ported | paid aimed field, 1,500-tick activity, 25-tick authoritative direct-damage pulses, shuffled target subset, registered rain/splash children, field composite/light, audio, replication, teardown |
+| 76 Call Comet (advanced Water root) | dispatcher `0x0054CC50`, factory `0x0063FD00`, `Comet 0x80C`, impact `0x0061E9C0` | exact-ported | paid aimed falling actor, impact-area damage/freeze contact, shared FreezeWave, burst/ring/debris children, audio, replication, teardown |
+
+Sibling uses of Lightning/Frost/Freeze modifiers by welded spells, Magic Trap,
+enemy projectiles, and Skeleton Mage are outside the player Air/Water cast
+boundary, but their common modifier ABI is in-system. Call Comet is explicitly
+inside this pass because advanced row 76 is the Water display root and reuses
+the same FreezeWave/status ABI. The modifier seam must remain reusable rather
+than becoming an Air/Water-only boolean.
+
+## Native ownership thread
+
+- Owner and construction path: rank books and cached derived values live on one
+  wizard. A cast snapshots values into one channel contact, modifier, or world
+  actor. StormCloud and FreezeWave are independent world actors; Stun,
+  ColdSlow/Frozen, and Prismatic attach to the contacted target.
+- Upstream producers: authoritative player input, selected primary/secondary,
+  actor-private effective rank, Battle Mage mana factor, Siege Mage damage
+  factor, and the active gameplay RNG. Offer RNG is never consumed by combat.
+- State transitions: press starts a secondary only after payment; held primary
+  emits exactly once per accepted tick; release stops primary queries at once.
+  Modifier reapplication merges into one target-owned row. Persistent actors
+  tick once per world tick and retire once.
+- Downstream consumers: enemy HP/shield contact, enemy movement/action, player
+  armor damage gate, entity snapshots, WebGL world views, resident audio, and
+  run/owner teardown.
+- Entry/reset/teardown: joining creates independent player ECS rows. Run entry
+  resets transient armor/casts/effects. Owner removal, death, run exit, and
+  world replacement retire owned actors and loops without replay.
+
+## Recovered behavioral contract
+
+- Lightning damage/cost and Frost damage/cost are ranked per-second values
+  divided by 100 at the 100 Hz authoritative tick. Upgrade costs add before the
+  actor mana factor.
+- Chain hops exclude every earlier contact in the same tick and multiply the
+  preceding hop damage by float32 `0.600000024`.
+- Stun lasts 25 ticks; merge keeps greater remaining duration and the smaller
+  movement factor. Disintegrate is event-local and executes only after ordinary
+  damage leaves HP strictly below 20% of maximum. Its roll exists only when
+  `globalTick % 40 == targetRegistrationOrder % 40`, uses `Integer(100) >=
+  100-chance`, and is followed on every ordinary Air contact by the native
+  `Float(0.5)` presentation-scalar draw.
+- Frost cone reach is `205 + 4*mWiden`; half aperture is `15+mWiden`. Every
+  candidate needs line of sight. Visual particles remain presentation-only.
+- Native Hail tests an integer in `[0,2999]` against
+  `round(mToHit*30)` for each gameplay contact and draws damage only on
+  success. Before the target query, each shipped-default Frost visual child
+  independently tests `Integer(250)` against the same threshold. A successful
+  visual allocation consumes the `Anim_Bouncer` constructor draws
+  `Float(3), Float(20), Float(360), Float(10)`, then `Anim_Hail` `Float(1)`,
+  handler `Float(15)`, random-unit-vector `Integer(100001)`, and handler
+  `Float(2)`, in that order. It uses
+  BadGuys record 32, scale `1+Float(1)`, speed `4+Float(2)`, initial height
+  `-Float(20)`, rotation `Float(360)`, rotation step `1+Float(10)`, life `2`
+  with `0.015` decay, and `0.65` bounce restitution. Cold Aura presentation
+  emits every sixth tick and queries `mRadius*120` world units. Its parent-
+  attached record-14 actor consumes `Float(1)` then `Float(360)`, follows the
+  owner each tick, begins at alpha `0.5`, fades by `0.15/radius`, multiplies
+  scale by float32 `1.0149999856948853`, rotates by its first draw, and fades
+  red by `0.02` per tick while retaining green/blue.
+- Acid Rain snapshots row-72 `mDamage` and caster/world identity into one
+  `AcidRain (0x7FE)`. It remains active for 1,500 ticks, performs authoritative
+  direct damage (not Poison) on a 25-tick pulse after an initial 50-tick
+  counter, and retires only after ground alpha fades by `0.01` per tick and the
+  remaining rain alpha fades by `0.0005` per tick. The pulse queries radius
+  `400` with flags `2`, shuffles all candidates by drawing `Integer(n)` once
+  for every list index, and damages exactly `floor(n/3)+1` candidates for
+  `mDamage/6`. Its ordinary cadence creates two `Anim_AcidRaindrop` children,
+  while the shipped Enhanced Effects default creates five per tick; the web
+  port therefore materializes five. Each drop consumes `Float(200)` then
+  random-unit-vector `Integer(100001)` and uses an ellipse with Y factor `0.8`.
+  The subsequent `Integer(4)==3` splash branch consumes discarded
+  `Float(360)`, rotation `Float(360)`, `Float(0.75)`, `Float(200)`, and another
+  unit-vector draw. A positive pulse then consumes `Integer(2)` for its sound
+  gate and, when one, `Float(0.5)` pitch plus `Float(0.45)` gain. Rainfall loop
+  ownership belongs to the field actor. Acid uses BadGuys records `0` for the
+  raindrop and `10` for the field/splash.
+- Call Comet snapshots row-76 `mDamage` and `mFreeze` into one `Comet (0x80C)`.
+  Factory `0x0063FD00` writes its fifth argument to actor `+0x140` and sixth to
+  `+0x13C`; the dispatcher passes ranked `mDamage` fifth and the
+  Permafrost-scaled `mFreeze` sixth. Therefore `+0x140` is impact damage and
+  `+0x13C` is freeze seconds, correcting the earlier Loader field labels. The
+  constructor consumes `Float(1)` for cosmetic heading and initializes an
+  `8000` raw fall counter. Tick subtracts `20`, so impact occurs on tick `400`;
+  the one-shot warning starts only once the post-decrement counter is strictly
+  below `3500` (174 ticks remain). Every fall tick creates one BadGuys record
+  `51` trail and consumes `Float(0.5)`, `Float(360)`, `Integer(2)`, then
+  `Float(0.5)`; trail life is `0.5*(0.5+draw)` with `0.025` decay and scale
+  `2.5`. At expiry, `0x0061E9C0` queries radius `400` with flags `2`, writes
+  `+0x140` into each contact's secondary-damage field, and creates the same
+  list-backed FreezeWave used by Ring of Ice with `+0x13C*200` ticks. The
+  DeadHawg record `5` comet, impact burst/debris, world color restore, and
+  retirement are presentation consequences of that single authoritative
+  impact.
+- Harden adds its cached per-tick increment while held, clamps to the cached
+  maximum, and stops accruing on release without deleting the pool. Player
+  contact `0x0052FCA5` resolves Deflect cancellation first, applies Resist
+  Magic to surviving magic damage, then consumes the actor-private flat armor
+  pool at `+0x1E8`; only the remainder reaches HP. Deflected contacts do not
+  consume Harden.
+- StormCloud starts with 1,000 active ticks. Tornado adds
+  `trunc(mDuration*100)` and resets strike delay to
+  `trunc(IntegerInclusive(30,120)/(1+mSpeed/100))`.
+- Ring of Ice creates one list-backed expanding FreezeWave so each target is
+  contacted at most once by that wave. The FreezeWave query runs every tenth
+  age tick as radius grows by six per tick and the wave retires after tick 93.
+  A target with native flag `0x40` receives `Mod_ColdSlow`; otherwise it
+  receives `Mod_Frozen` with movement factor zero. Current Boneyard hostiles
+  take the Frozen branch. The player Ring factory does not set the optional
+  FrostBurn bit. Permafrost scales cold strength and raises cold/freeze
+  duration to at least 200 ticks.
+- Hurricane is a player-owned Lightning extension with separate early-tick and
+  late-handler edges. Byte `+0x310` retains the preceding Lightning refresh:
+  when clear, early player tick subtracts `0.03`, removes a zero charge from the
+  Region Hurricane list, registers every remaining positive charge, consumes
+  `FloatRange(2,3)` for core phase, advances eight lane angles, renews ambient
+  `steadywind__loop` at `charge*attenuation`, then clears the latch. The later
+  normal Lightning handler sets the latch, initializes a zero charge with 16
+  ordered RNG words, and adds `0.0015` up to one. Consequently first activation
+  draws before its first contact tick, and release retains one full-charge tick
+  before decay.
+- Each Hurricane target movement update uses strict squared radius `78,400`.
+  With `dx=source.x-target.x` and `dy=source.y-target.y`, stock normalizes the
+  clockwise tangent `(dy,-dx)` and adds
+  `falloff*targetMovementStep*charge*1.5`, where falloff is full through 100 and
+  linearly reaches zero at 280 after the native one-iteration fast-square-root
+  approximation. Ordinary targets move on their ten-tick object-serial phase.
+  Target `+0x1DA` is initialized with `Integer(100)`, decreases by the movement
+  step every tick, and resets to 100 after contact. The first eligible source in
+  Region registration order consumes
+  `FloatRange(cache+0x8D4,cache+0x8D8)` and deals float32
+  `charge^3*randomDamage`; charge below `0.5` suppresses the ordinary target hit
+  sound but not damage/death. The field affects Badguy subclasses and Maggots;
+  GoodImp receives orbit force but its friendly contact override ignores damage.
+- Hurricane presentation is not Lightning corona art. Each activation stores
+  eight `Float(360)` angles and eight `Float(15)` vertical offsets, with authored
+  velocities `10*0.75^i` and radii `1.5*1.2^i`. The owner-overlay painter draws
+  source-over DeadHawg 15 at `(x,y-15)`, rotation `1.5*phase`, scale `(5,4)`,
+  RGB `(0.95,1,1)`, alpha `0.75*charge`; then additive BadGuys 84 lanes at
+  `(radius,0.8*radius)`, RGB `(0.8,1,1)`, alpha `0.4*charge`. Enhanced mode
+  draws all eight plus copies at `0.75*angle`; low mode draws even lanes only.
+  It creates no Region/Misc/manager light and casts no shadow.
+- Chill Wind uses `mPushback` as its impulse scalar. At near range the applied
+  vector has magnitude `mPushback*2.5`; squared-distance attenuation begins at
+  half of `0.75*(180+4*mWiden)^2`, reaches zero at that outer squared radius,
+  and target flag `0x40` multiplies the result by float32 `0.100000001`.
+- Magic Storm queries a 500-unit hostile circle. A moving Tornado translates
+  by float32 `0.349999994` per tick; `mSpeed` controls only strike frequency.
+- Authority owns all combat RNG and results. Protocol sends semantic state;
+  clients do not reroll, retarget, or author damage.
+
+## Confidence and open questions
+
+- Confirmed: rows 24..32 and 34..39 properties/ownership above; base
+  primary visual/audio asset sets; typed native modifier IDs and merge rules.
+- Exact child art: Ring uses DeadHawg records 114 (`+0xC78`) and 121
+  (`+0xD3C`), while Hail/Aura use BadGuys records 32/14. Storm queries radius
+  500 and owns its rain/wind ambience. Prismatic spray draws from BadGuys
+  records 10, 11, and 110..112.
+- The serialized actor pass closed Acid Rain's query, pulse, subset, child RNG,
+  residue, sound gate and three direct draw layers; Call Comet's field split,
+  fall/warning clocks, body/trail transforms, impact radius, and FreezeWave
+  duration conversion; and Harden's production contact order. The Website
+  shared secondary-action dispatcher owns press edge, payment, cast sequence,
+  recharge, and Focus RNG; the Air/Water callback never latches input itself.
+- The prior presentation-residual list is closed by the unified secondary
+  actor/painter model. Storm registers and advances every `Anim_Raindrop`
+  fall/puddle child. Prismatic retains the exact 19-word emission batches and
+  replays their independently fading/moving records 10, 11, and 111 from the
+  replicated pre-emission RNG state. Ring/FreezeWave creates the three
+  DeadHawg-114 bursts, DeadHawg-121 ring, and 100/200 `Anim_WhirlSnow`
+  children; constructor `0x004588E0`, vtable `0x007853A8`, and the native asset
+  map pin WhirlSnow to BadGuys record 72. Call Comet owns BadGuys-15,
+  DeadHawg-6, and Bouncer debris records 203..207 as separately retiring
+  actors. Acid Rain owns its record-0 drops, record-10 parent/splash passes,
+  actor-provider light, and the 350-unit `PuppetPointer` scene-submission
+  extent at `0x005E3600 -> 0x0064E910`; that 350 scalar is not a second light
+  radius.
+- Chill Wind now queries the full native `0x1082` target membership. Arrow
+  constructor `0x005E1000` writes flag `0x80`; the Water handler passes
+  float32 `mPushback*0.3199999928474426` to Arrow vslot `+0x64`.
+  Every learned rank crosses the Arrow's one-point accumulator on the first
+  eligible contact, retires it, and creates one world-owned record-2
+  `Anim_SpinAway`: life 6, loss 0.1, unit cast-direction velocity damped by
+  float32 0.98, `Float(360)` rotation, and signed `1+Float(1)` angular speed.
+  Firebolt/GuidedMissile use flag `0x100`, so they are intentionally outside
+  this query branch; underpowered Water uses mask `0x2` and suppresses it.
+
+## Web implementation consequence
+
+- Player rank/runtime/armor stays in dense player ECS columns. Enemy modifiers
+  are target-owned authoritative rows. Persistent spells are simulation-owned
+  entities with stable IDs, owner/world identity, clocks, and contact ledgers.
+  Deflect, Resist Magic, and persistent flat Harden are applied in that native
+  order by the central player harmful-contact seam; Harden is not depleted by
+  damage.
+- Existing rank-one Air and Water render plans remain their proven owners.
+  Learned Hail/Aura and secondary art get separate presentation actors; combat
+  never depends on a sprite lifetime.
+- One combat RNG stream advances only on authoritative event draws. Offer and
+  cosmetic deterministic streams remain separate.
+- Protocol 36 validates every added numeric range, target owner, modifier,
+  effect ID, sequence edge, and lifecycle field. Clients copy/interpolate the
+  semantic state without rerolling combat or reconstructing lifetimes.
+
+## Validation contract
+
+- Focused tests: every ID 24..39 plus advanced Air/Water roots 72 and 76 has at
+  least one property, transition, contact, merge, teardown, and invalid-wire
+  assertion appropriate to its branch.
+- Multiplayer test: two players with different ranks cast simultaneously and
+  retain isolated mana, armor, targets, modifiers, RNG outcomes, and owned
+  persistent actors.
+- Browser/WebGL: real Air/Water primary and secondary casts show exact loaded
+  records, balanced loop ownership, deterministic replicated geometry, no page
+  or console errors, and no effect replay after a late snapshot.
+- Full gate: only `./scripts/validate.sh` is a supported repository receipt.
+  Solomon Dark completion additionally requires the decisive tests and browser
+  journey to be run on the Mac mini; WSL and Windows runs are diagnostic only.
+- Isolated implementation receipt, 2026-08-15: the 14-file Air/Water focused
+  Node suite passed 155/155, `tsc -p tsconfig.test.json --noEmit` passed, and
+  the production `tsc -b` project build passed. These are diagnostic WSL
+  receipts, not the final Mac mini browser acceptance.
