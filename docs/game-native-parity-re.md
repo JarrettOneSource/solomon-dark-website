@@ -59655,6 +59655,7 @@ policy needs no browser approximation.
   This receipt is the sole tracked post-browser change; the exact post-receipt
   canonical gate and remote fast-forward are the remaining publication steps.
 
+
 ## 2026-08-28: College walker prediction parity and presented facing hysteresis
 
 ### Reported smell and parity question
@@ -59998,3 +59999,15 @@ font and shared notification renderer can represent every stock surface.
   Website gate is repeated on that exact final tree before the normal
   fast-forward push. Deployment was not requested and is not part of this
   publication receipt.
+- That final gate completed successfully, but concurrent Website publication
+  advanced `origin/main` to `300d8eb6abddd219fbee83e6613eb970efd541b6`
+  and then, before the next Mac gate began, to
+  `77e31bf46b4fe2446d576c9a22bf5cd1b202515c`. Focused rebases retained both the
+  complete upstream fresh-match readiness and College-walker entries before
+  this Insight entry; every non-ledger patch remained range-diff identical.
+  This is the final tracked Website tree, so the canonical gate and
+  Hub/Boneyard browser journey are repeated on a byte-identical Mac worktree at
+  `77e31bf4` before push.
+- Mod Loader main was fast-forwarded and independently verified at
+  `f31429459320a7ece21c98e3fc6c45afd747be6f`; local `HEAD`, `origin/main`, and
+  `refs/heads/main` matched. Website deployment was not requested.
