@@ -167,12 +167,13 @@ try {
     waitForBoneyard(guestPage),
   ])
   await Promise.all([hostPage, guestPage].map(async page => {
-    const initialGrace = page.locator(
+    const initialProgress = page.locator(
       '.gameplay-resume-progress-overlay'
-      + '[data-gameplay-resume-grace-reason="game-started"]',
+      + '[data-gameplay-resume-grace-reason="game-started"]'
+      + '[data-gameplay-resume-grace-phase="progress"]',
     )
-    await initialGrace.waitFor({ timeout: 30_000 })
-    await initialGrace.waitFor({ state: 'detached', timeout: 30_000 })
+    assert.equal(await initialProgress.count(), 0)
+    assert.equal(await page.getByRole('progressbar', { name: 'Resuming gameplay' }).count(), 0)
   }))
   const [hostInitial, guestInitial] = await Promise.all([
     boneyardFrame(hostPage),

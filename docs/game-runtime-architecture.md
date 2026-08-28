@@ -406,6 +406,14 @@ headings remain half-open `[0,360)`. Protocol 100 additionally accepts
 Coffin-owned Maggot emergence component `5120`, the quantized closed endpoint
 of native private `Float(5)`, while rejecting `5121`. Save schema 19 is
 unchanged because these are live authoritative actor fields.
+Protocol 101 retains protocol 100 in full and adds Web Lua's run-qualified
+`client-ready-boneyard` receipt plus its expanded authored-action and runtime
+projection families. Protocol 102 retains protocol 101 and makes
+`game-started` a strict pending-only renderer-readiness state. Its
+`remainingMs` must be null; the fresh all-ready edge clears the hold directly.
+Rejoin, restart, and eligible in-game unpause reasons retain the same positive
+two-second grace. No save shape changes because readiness and resume grace
+remain ephemeral.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
@@ -1946,6 +1954,15 @@ host stores one per active party run. Each record has a monotonic sequence, an
 enumerated admission reason, a set of returning players whose Boneyard
 renderers must become ready, and either a pending marker or a host-monotonic
 expiry deadline. It is never serialized into a save.
+
+Fresh Boneyard and Tutorial entry reuse the pending record only as the
+authoritative renderer-readiness barrier. Their `game-started` projection can
+never carry a positive remainder: once every expected renderer is ready, the
+host clears the hold and admits the next ordinary fixed tick directly. An
+already loaded peer may see `Waiting on players ...`, but fresh entry never
+enters the `RESUMING...` progress phase. Positive-duration grace is reserved
+for returning to an existing active run or releasing an eligible in-game
+pause/barrier owner.
 
 Multiplayer Pause Menu, Inventory, full Skill Book, compact skill-selector,
 and final mandatory SkillPicker release atomically enter a 2,000-ms grace only

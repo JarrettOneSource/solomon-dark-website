@@ -6413,6 +6413,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
       ))
     ) return false
+    if (grace.reason === 'game-started') {
+      setGameplayResumeGrace(scope, null)
+      stopResumeGraceInputs(scope)
+      if (!sharedWorlds) resetNextTickDeadline()
+      broadcastGameplayResumeGrace(playerId, scope)
+      return true
+    }
     grace.deadlineMs = performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS
     stopResumeGraceInputs(scope)
     if (!sharedWorlds) resetNextTickDeadline()

@@ -1712,7 +1712,7 @@ test('every crafted Hub gameplay-pause source is rejected without suspending the
   assert.deepEqual(pauseMessages, [])
 })
 
-test('initial multiplayer Boneyard waits for every renderer before starting grace', async (context) => {
+test('initial multiplayer Boneyard waits for every renderer then starts directly', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
     snapshotRate: 100,
@@ -1761,29 +1761,42 @@ test('initial multiplayer Boneyard waits for every renderer before starting grac
   await new Promise(resolve => setTimeout(resolve, 80))
   assert.equal(host.state().tick, heldTick)
 
-  const countingFirst = nextMessage(first.socket, message => (
+  let positiveFreshGraceMessages = 0
+  const observeFreshGrace = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (
+      message.type === 'server-gameplay-resume-grace'
+      && message.grace?.reason === 'game-started'
+      && message.grace.remainingMs !== null
+    ) positiveFreshGraceMessages += 1
+  }
+  first.socket.on('message', observeFreshGrace)
+  second.socket.on('message', observeFreshGrace)
+  context.after(() => {
+    first.socket.off('message', observeFreshGrace)
+    second.socket.off('message', observeFreshGrace)
+  })
+  const releasedFirst = nextMessage(first.socket, message => (
     message.type === 'server-gameplay-resume-grace'
-    && message.grace !== null
-    && message.grace.sequence === firstGrace.grace?.sequence
-    && message.grace.remainingMs !== null
+    && message.grace === null
   ))
-  const countingSecond = nextMessage(second.socket, message => (
+  const releasedSecond = nextMessage(second.socket, message => (
     message.type === 'server-gameplay-resume-grace'
-    && message.grace !== null
-    && message.grace.sequence === secondGrace.grace?.sequence
-    && message.grace.remainingMs !== null
+    && message.grace === null
   ))
   second.socket.send(encodeGameMessage({
     type: 'client-resume-grace-ready',
     sequence: secondGrace.grace!.sequence,
   }))
-  const [startedFirst, startedSecond] = await Promise.all([countingFirst, countingSecond])
-  assert.equal(startedFirst.type, 'server-gameplay-resume-grace')
-  assert.equal(startedSecond.type, 'server-gameplay-resume-grace')
-  assert.ok((startedFirst.grace?.remainingMs ?? 0) > 1_900)
-  assert.ok((startedFirst.grace?.remainingMs ?? Infinity) <= 2_000)
+  const releasedDirectly = await Promise.race([
+    Promise.all([releasedFirst, releasedSecond]).then(() => true),
+    new Promise<false>(resolve => setTimeout(() => resolve(false), 250)),
+  ])
+  assert.equal(releasedDirectly, true, 'fresh readiness must not start resume grace')
+  assert.equal(positiveFreshGraceMessages, 0)
+  await waitFor(() => host.state().tick > heldTick)
   await new Promise(resolve => setTimeout(resolve, 80))
-  assert.equal(host.state().tick, heldTick)
+  assert.ok(host.state().tick - heldTick <= 35, 'fresh readiness must not replay held wall time')
 })
 
 test('modded Boneyard accepts renderer readiness while start grace is pending', async (context) => {
@@ -1834,6 +1847,22 @@ test('modded Boneyard accepts renderer readiness while start grace is pending', 
   assert.equal(firstLoaded.boneyard.runId, secondLoaded.boneyard.runId)
 
   const heldTick = host.state().tick
+  let positiveFreshGraceMessages = 0
+  const observeFreshGrace = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (
+      message.type === 'server-gameplay-resume-grace'
+      && message.grace?.reason === 'game-started'
+      && message.grace.remainingMs !== null
+    ) positiveFreshGraceMessages += 1
+  }
+  for (const { socket } of [first, second]) socket.on('message', observeFreshGrace)
+  context.after(() => {
+    for (const { socket } of [first, second]) socket.off('message', observeFreshGrace)
+  })
+  const released = [first, second].map(({ socket }) => nextMessage(socket, message => (
+    message.type === 'server-gameplay-resume-grace' && message.grace === null
+  )))
   for (const { socket } of [first, second]) socket.send(encodeGameMessage({
     type: 'client-ready-boneyard',
     runId: firstLoaded.boneyard.runId,
@@ -1846,6 +1875,12 @@ test('modded Boneyard accepts renderer readiness while start grace is pending', 
       sequence: message.grace.sequence,
     }))
   }
+  const releasedDirectly = await Promise.race([
+    Promise.all(released).then(() => true),
+    new Promise<false>(resolve => setTimeout(() => resolve(false), 250)),
+  ])
+  assert.equal(releasedDirectly, true, 'fresh modded readiness must not start resume grace')
+  assert.equal(positiveFreshGraceMessages, 0)
   await waitFor(() => host.state().tick > heldTick)
 })
 
@@ -5124,7 +5159,11 @@ async function completeInitialGameplayReadiness(
       sequence: message.grace.sequence,
     }))
   }
-  await Promise.all(completed)
+  const releasedDirectly = await Promise.race([
+    Promise.all(completed).then(() => true),
+    new Promise<false>(resolve => setTimeout(() => resolve(false), 250)),
+  ])
+  assert.equal(releasedDirectly, true, 'fresh readiness must release without resume grace')
 }
 
 async function openSavedRunSocket(

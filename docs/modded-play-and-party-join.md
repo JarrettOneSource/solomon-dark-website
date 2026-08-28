@@ -65,14 +65,19 @@ Status: implemented contract, 2026-08-28.
 - Shared-Hub admission rejects nonempty content and cheats at both Website and
   host seams. Private sessions use ticket authentication and are destroyed when
   their final authenticated player and proxy leave.
-- Protocol 100 retains protocol 99 in full, including protocol 98's session
+- Protocol 101 retains protocol 100 in full, including protocol 98's session
   kind, party access state/actions,
   request views, cross-host player references, Player Card request/results,
   College invitation snapshots, authoritative room cheat mode, and
   content-addressed assets. Host
   and client deploy together; protocol 100 additionally accepts the exact inclusive
   native endpoints in replicated welded-primary presentation state and accepts
-  the quantized closed endpoint of Coffin-owned Maggot emergence phase.
+  the quantized closed endpoint of Coffin-owned Maggot emergence phase. It adds
+  Web Lua's run-qualified Boneyard renderer-ready receipt and expanded authored
+  action/runtime projections. Protocol 102 retains protocol 101 and restricts
+  fresh `game-started` renderer readiness to a nullable
+  wait that clears directly; positive resume grace remains reserved for
+  returning to an existing run or releasing an eligible in-game pause.
 
 ## Content and saves
 

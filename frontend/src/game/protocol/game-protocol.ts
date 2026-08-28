@@ -394,7 +394,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 101
+export const GAME_PROTOCOL_VERSION = 102
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2606,6 +2606,11 @@ function gameplayResumeGraceState(
 ): GameplayResumeGraceState {
   const source = record(value, field)
   onlyKeys(source, field, ['reason', 'remainingMs', 'sequence'])
+  const reason = memberString(
+    source.reason,
+    `${field}.reason`,
+    GAMEPLAY_RESUME_GRACE_REASONS,
+  )
   const remainingMs = source.remainingMs === null
     ? null
     : positiveInteger(source.remainingMs, `${field}.remainingMs`)
@@ -2614,12 +2619,13 @@ function gameplayResumeGraceState(
       `${field}.remainingMs exceeds the resume grace duration`,
     )
   }
+  if (reason === 'game-started' && remainingMs !== null) {
+    throw new GameProtocolError(
+      `${field}.remainingMs must be null while game-started readiness is pending`,
+    )
+  }
   return {
-    reason: memberString(
-      source.reason,
-      `${field}.reason`,
-      GAMEPLAY_RESUME_GRACE_REASONS,
-    ),
+    reason,
     remainingMs,
     sequence: positiveInteger(source.sequence, `${field}.sequence`),
   }

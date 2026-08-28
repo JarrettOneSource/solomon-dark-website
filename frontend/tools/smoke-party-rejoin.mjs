@@ -239,10 +239,16 @@ try {
   assert.equal(host.playerState(leader.playerId).tick, initialHeldTick)
   leader.readyResumeGrace(leaderStart.grace.sequence)
   member.readyResumeGrace(memberStart.grace.sequence)
-  await initialWaiting.waitFor({ state: 'detached', timeout: 10_000 })
+  await initialWaiting.waitFor({ state: 'detached', timeout: 1_000 })
+  assert.equal(await page.locator(
+    '.gameplay-resume-progress-overlay'
+    + '[data-gameplay-resume-grace-reason="game-started"]'
+    + '[data-gameplay-resume-grace-phase="progress"]',
+  ).count(), 0)
+  assert.equal(await page.getByRole('progressbar', { name: 'Resuming gameplay' }).count(), 0)
   await waitForHost(
     () => host.playerState(leader.playerId).tick > initialHeldTick,
-    'initial all-player grace',
+    'initial all-player readiness release',
   )
 
   const savedRun = await waitForLocalSave(page, record => (

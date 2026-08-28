@@ -434,6 +434,17 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     type: 'server-gameplay-resume-grace',
     grace: { reason: 'skill-picker-closed', remainingMs: 2_001, sequence: 7 },
   })), /duration/)
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'game-started', remainingMs: null, sequence: 8 },
+  })), {
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'game-started', remainingMs: null, sequence: 8 },
+  })
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'game-started', remainingMs: 1, sequence: 8 },
+  })), /game-started.*pending/i)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
     grace: { reason: 'unknown', remainingMs: 2_000, sequence: 7 },
@@ -1645,8 +1656,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v101 carries Web Lua readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 101)
+test('protocol v102 carries Web Lua readiness, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 102)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

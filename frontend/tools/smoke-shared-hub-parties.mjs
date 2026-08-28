@@ -522,6 +522,18 @@ smokeFlow: try {
   ])
   host.readyResumeGrace(hostResumeGrace.grace.sequence)
   member.readyResumeGrace(memberResumeGrace.grace.sequence)
+  await firstBoneyard.locator(
+    'xpath=self::*[@data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 1_000 })
+  assert.equal(await first.page.locator(
+    '.gameplay-resume-progress-overlay'
+    + '[data-gameplay-resume-grace-reason="game-started"]'
+    + '[data-gameplay-resume-grace-phase="progress"]',
+  ).count(), 0)
+  assert.equal(await first.page.getByRole(
+    'progressbar',
+    { name: 'Resuming gameplay' },
+  ).count(), 0)
   await waitForPlayers(observer.page, 2)
   await waitForSocialSoundCount(
     observer.page,
