@@ -172,5 +172,46 @@ No member in either system is `blocked-by-platform`.
 
 ## Implementation validation receipt
 
-- Pending implementation and exact-tree Mac/browser validation. Publication
-  and deployment were not requested.
+- Website implementation now preserves recursive addressed cells through the
+  host action, protocol `103`, save schema `20`, and deterministic schema-19
+  compact-array migration. Blank drops place, occupied drops swap, matching
+  stacks merge, nested Sack pages reserve visible cell zero for parent return,
+  and every insertion producer fills the first hole before append. The shared
+  BeltButton projection now consumes authoritative effective mana costs and
+  presents ready/cooldown/unavailable icon alpha as `.75/.25/.375`.
+- The byte-identical Mac candidate at commit
+  `3e9635d274a108d0a3624569f1c486bdf59baad0`, tree
+  `95e060187e849b3ffbcfab71b3998cad1b0f4be1`, passed the canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate: 29 backend contracts,
+  2,593 frontend/desktop tests, lint/import boundaries, backend and production
+  frontend/game-host builds, bundle budget, and media policy. Log SHA-256 is
+  `97576c86d6cce3bb2909936445b3c15fd6a8c8da25cc2225cbb80d2d739552fe`.
+- The production Chrome inventory journey moved the root key into blank slot
+  12, swapped it with the ring in slot 6, closed and reopened InventoryScreen,
+  and retained key/ring slots `6/12`. A nested Sack key retained root slot 9
+  at visible slot 10. The journey continued through equipment, item belt,
+  storage, all four companion screens, dye, nested Sack, parent-return, and
+  active-Boneyard paths with empty page, console, and failed-response arrays.
+  Log SHA-256 is
+  `e89e12f3fc2bd1fa57d862ff02b05e9ccece6780abbe5ea2cf17801cf3a433ef`;
+  addressed-root and nested-Sack captures hash respectively to
+  `b260ab79648faffcb471cad6a91c8e2d2b55668d7915b192d39ddf47626b6ed8`
+  and `55c16d41f9ecb7df8b423550a204256c12781e1b54d540c2c6a2787aa1dda074`.
+- The production Chrome/WebGL2 Phasing journey observed the same icon at ready
+  alpha `.75`, insufficient-mana alpha `.375`, and cooldown alpha `.25` over
+  `rgba(128,26,26,.75)` with a native square-sector path. Page, console, and
+  response error arrays were empty. Log SHA-256 is
+  `acd02ae732907050d513703df5760c831ea9c357c59328e3b601b6e48e1df95b`;
+  the ready, insufficient-mana, and cooldown captures hash to
+  `2198d22af3b424a9f01540e0a55fff5a3effc167a99af076efc3c831bc9a25c6`,
+  `0c40d1f9a60008ee7f5298950dadb1c28ef461aa33e922d0e7ffd3e804a1a914`,
+  and `2fbfea957fc0132cae57235a39f0379ead9e52c08a916aa74e6ac2aed7ada6bd`.
+- The rebased Mod Loader evidence tree at commit
+  `a369115d524516336770ddb7439f4c202ed45f4c`, tree
+  `a6536bde126e6becf99d8ff98c2f3bd6e80d0e86`, passed all `531/531`
+  registered Mac `--ci` static RE checks. Log SHA-256 is
+  `91f9b0af5df5e48d2144ffc01a7937869cd703caee5b2f56e295b8dfc2c819d9`.
+- This receipt is the sole tracked edit after the final canonical gate and
+  browser journeys; source, test, protocol, save, renderer, and harness bytes
+  are unchanged from the cited candidate. Publication is authorized;
+  deployment was not requested.
