@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
@@ -9,7 +10,6 @@ import {
   getPlayerCharacter,
   getPlayerProgression,
   getPlayerSkillBook,
-  grantGameSimulationPlayerExperience,
 } from '../src/game/core-server/game-simulation.ts'
 import {
   forcePlayerEntitySkillOfferIds,
@@ -23,6 +23,8 @@ import {
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const require = createRequire(import.meta.url)
+const luaWasmPath = require.resolve('wasmoon/dist/glue.wasm')
 const screenshotRoot = process.env.SDR_CREATIVITY_INSIGHT_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-creativity-insight'
 const credential = randomBytes(32).toString('base64url')
@@ -46,6 +48,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
+  luaWasmPath,
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -84,8 +87,17 @@ try {
   if (await tutorialOffer.isVisible()) {
     await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
   }
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await settings.waitFor()
+  const cheats = settings.getByRole('button', { name: /Enable Cheats/i })
+  if (await cheats.getAttribute('aria-pressed') !== 'true') await cheats.click()
+  await settings.getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  const localPlay = page.getByRole('dialog', { name: 'Local play is active' })
+  await localPlay.waitFor()
+  await localPlay.getByRole('button', { name: 'CONTINUE LOCAL' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
     timeout: 30_000,
   })
@@ -95,6 +107,7 @@ try {
   })
   await page.locator('.create-menu-discipline-mind').click()
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+  await page.waitForFunction(() => window.solomonDark?.lua)
 
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
@@ -149,11 +162,19 @@ try {
       ),
     })
     const before = getPlayerProgression(host.state(), playerId)
-    const leveled = grantGameSimulationPlayerExperience(
-      host.state(),
-      playerId,
+    const grant = await page.evaluate(
+      amount => window.solomonDark.lua.execute(
+        `return sd.player.grant_experience(${amount})`,
+      ),
       before.nextThreshold - before.experience + 1,
     )
+    assert.equal(grant.ok, true, grant.error)
+    assert.deepEqual(grant.values, [true])
+    await waitForHost(
+      () => getPlayerProgression(host.state(), playerId).level > before.level,
+      `${scene} authoritative experience grant`,
+    )
+    const leveled = host.state()
     const progression = getPlayerProgression(leveled, playerId)
     const offer = progression.pendingOffer
     assert.ok(offer)
@@ -162,7 +183,6 @@ try {
     assert.equal(insightOptions.length, 1)
     assert.deepEqual(leveled.gameRng, advanceNativeRngWords(insightSeed, 6))
     assert.strictEqual(leveled.secondaryAbilities.rng, secondaryRng)
-    Object.assign(host.state(), leveled)
 
     const picker = page.getByRole('dialog', {
       name: `Level ${progression.level}. Select a skill.`,

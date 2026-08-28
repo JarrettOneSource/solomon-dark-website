@@ -60011,3 +60011,22 @@ font and shared notification renderer can represent every stock surface.
 - Mod Loader main was fast-forwarded and independently verified at
   `f31429459320a7ece21c98e3fc6c45afd747be6f`; local `HEAD`, `origin/main`, and
   `refs/heads/main` matched. Website deployment was not requested.
+- The byte-identical `77e31bf4` candidate passed the complete canonical gate;
+  pre-harness-adjustment log SHA-256 is
+  `c98cdb6dd1f11177960d91c7a784be6b9d866b4cde04187283fb4088b702bdae`.
+  Its first two browser repeats then deterministically exposed a validation-
+  harness defect: direct `host.state()` mutation created the Boneyard level-up
+  barrier between ticks, so the frozen host could not observe that out-of-band
+  transition and emit its snapshot. Tagged host/client probes proved the
+  authoritative offer and barrier existed while no barrier snapshot was sent;
+  readiness had already released and presentation never received an offer.
+- The smoke now grants threshold XP through the existing authority-owned Web
+  Lua `sd.player.grant_experience` command, which enters on the game thread and
+  exercises the normal barrier snapshot. No gameplay module changed. The clean
+  rerun restored Hub/Boneyard Magic Circle `0 -> 2 -> 4` with exactly one
+  Insight card and empty error arrays. Browser log SHA-256 is
+  `e6c1aec42b807c45222808780aa9be787ed2fc982399f7cb0e4969dedc39a052`;
+  Hub/Boneyard capture SHA-256 values are respectively
+  `13a98c979a5e3fb75a9857fe20ebb22a162cfe386ebd08e9dacf80d962096eae`
+  and `5b91fd2f2318b860c69182da4b689b470d272f05f7fc58952aa4a400f9d23fd8`.
+  The complete gate is repeated after this receipt and harness-only change.
