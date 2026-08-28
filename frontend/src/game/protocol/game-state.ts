@@ -100,6 +100,7 @@ export interface ProtocolPlayerLighting {
 }
 
 export interface ProtocolPlayerSkillOfferOption {
+  insight?: true
   skillId: number
   targetRank: number
   weldBuildId?: number

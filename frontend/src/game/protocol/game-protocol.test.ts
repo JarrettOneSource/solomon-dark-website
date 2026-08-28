@@ -2288,6 +2288,29 @@ test('progression snapshots carry the next rank needed by the stock picker label
     sequence: 2,
   })), /targetRank/)
 
+  const insight = JSON.parse(JSON.stringify(frame))
+  insight.players['player-1'].progression.pendingOffer.options[0].insight = true
+  const decodedInsight = decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: insight,
+    sequence: 2,
+  }))
+  assert.equal(decodedInsight.type, 'server-snapshot')
+  assert.equal(
+    decodedInsight.frame.players['player-1']!.progression.pendingOffer?.options[0]?.insight,
+    true,
+  )
+
+  const invalidInsight = JSON.parse(JSON.stringify(frame))
+  invalidInsight.players['player-1'].progression.pendingOffer.options[0].insight = false
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: invalidInsight,
+    sequence: 2,
+  })), /insight must be true/)
+
   const missingWeldBuild = JSON.parse(JSON.stringify(frame))
   missingWeldBuild.players['player-1'].progression.pendingOffer.options[0] = {
     skillId: 52,
