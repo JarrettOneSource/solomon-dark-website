@@ -6,7 +6,7 @@ import {
 } from './native-rng.ts'
 import type { WizardElement } from './player-character.ts'
 import {
-  rollNativeStarterEquipmentAppearance,
+  selectedElementStarterEquipmentAppearance,
   type NativeStarterEquipmentAppearance,
 } from './native-starter-equipment.ts'
 import {
@@ -682,8 +682,7 @@ export function createHubEconomy(
     readonly starterElement?: WizardElement
   } = {},
 ): HubEconomyState {
-  const starterAppearance = rollNativeStarterEquipmentAppearance(
-    createNativeRng(seed),
+  const starterAppearance = selectedElementStarterEquipmentAppearance(
     options.starterElement ?? 'ether',
   )
   const starters = starterLoadout(1, starterAppearance)
@@ -767,8 +766,7 @@ export function archiveCompletedRunEconomy(
       nextItemId += 1
     }
   }
-  const starterAppearance = rollNativeStarterEquipmentAppearance(
-    rng,
+  const starterAppearance = selectedElementStarterEquipmentAppearance(
     archive.starterElement ?? 'ether',
   )
   const starters = starterLoadout(nextItemId, starterAppearance)

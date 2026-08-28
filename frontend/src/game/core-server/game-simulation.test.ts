@@ -48,7 +48,7 @@ import {
   drawNativeFloat,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
-import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import { selectedElementStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   createNativeSecondaryPlayerState,
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
@@ -280,10 +280,7 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
-  const selectedAppearance = rollNativeStarterEquipmentAppearance(
-    createNativeRng(getPlayerProgression(state, 'owner').offerSeed),
-    'air',
-  )
+  const selectedAppearance = selectedElementStarterEquipmentAppearance('air')
   assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, [
     selectedAppearance.primaryTint,
     selectedAppearance.secondaryTint,
@@ -3731,11 +3728,7 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     ['second', 'water'],
   ] as const) {
     const economy = getPlayerEconomy(hub, playerId)
-    const progression = getPlayerProgression(hub, playerId)
-    const appearance = rollNativeStarterEquipmentAppearance(
-      createNativeRng(progression.offerSeed),
-      element,
-    )
+    const appearance = selectedElementStarterEquipmentAppearance(element)
     assert.ok(economy.revision > loadoutEconomyRevisions[playerId]!)
     assert.deepEqual(economy.equipment.hat?.iconTints, [
       appearance.primaryTint,

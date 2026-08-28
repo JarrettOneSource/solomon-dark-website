@@ -35,7 +35,7 @@ import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/ga
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
-  rollNativeStarterEquipmentAppearance,
+  selectedElementStarterEquipmentAppearance,
 } from '../src/game/core-kernels/native-starter-equipment.ts'
 import { resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import {
@@ -73,6 +73,14 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const screenshotRoot = process.env.SDR_TUTORIAL_RESPONSIVE_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-tutorial-responsive'
+const selectedLoadout = Object.freeze({
+  air: { element: 'air', primarySkillId: 24, secondarySkillId: 27 },
+  earth: { element: 'earth', primarySkillId: 40, secondarySkillId: 45 },
+  ether: { element: 'ether', primarySkillId: 8, secondarySkillId: 11 },
+  fire: { element: 'fire', primarySkillId: 16, secondarySkillId: 21 },
+  water: { element: 'water', primarySkillId: 32, secondarySkillId: 35 },
+})[process.env.SDR_TUTORIAL_SELECTED_ELEMENT?.trim().toLowerCase() || 'air']
+assert.ok(selectedLoadout, 'SDR_TUTORIAL_SELECTED_ELEMENT must be air, earth, ether, fire, or water')
 const acidComparisonCapture = process.env.SDR_TUTORIAL_ACID_COMPARISON === '1'
 const acidComparisonRngSeed = process.env.SDR_TUTORIAL_ACID_RNG_SEED === undefined
   ? null
@@ -448,7 +456,7 @@ async function tutorialSurfaceReceipt(host, page) {
     roadVertexCount: Number(node.dataset.roadVertexCount),
   }))
   assert.deepEqual(receipt, {
-    arenaBaseRenderer: 'opaque-black-clear+native-layout',
+    arenaBaseRenderer: 'retail-editor-field-capture+native-road-layout',
     orbSpriteCount: receipt.orbSpriteCount,
     primaryElementEffectId: 8,
     roadActiveMeshCount: receipt.roadActiveMeshCount,
@@ -1349,7 +1357,9 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.equal(createChrome.chatMounted, true)
   assert.equal(createChrome.sceneGate, null)
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-create.png` })
-  await page.getByRole('button', { name: /air/i }).click()
+  await page.getByRole('button', {
+    name: new RegExp(selectedLoadout.element, 'i'),
+  }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
     timeout: 15_000,
   })
@@ -1373,17 +1383,14 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const resetEconomy = getPlayerEconomy(resetState, playerId)
   const resetProgression = getPlayerProgression(resetState, playerId)
   const resetSkills = getPlayerSkillBook(resetState, playerId)
-  const resetAppearance = rollNativeStarterEquipmentAppearance(
-    createNativeRng(resetProgression.offerSeed),
-    'air',
-  )
+  const resetAppearance = selectedElementStarterEquipmentAppearance(selectedLoadout.element)
   assert.equal(resetProgression.level, 1)
   assert.equal(resetProgression.experience, 0)
   assert.equal(resetSkills.permanentRanks[72], 0)
-  assert.equal(resetSkills.permanentRanks[24], 1)
-  assert.equal(resetSkills.permanentRanks[27], 1)
+  assert.equal(resetSkills.permanentRanks[selectedLoadout.primarySkillId], 1)
+  assert.equal(resetSkills.permanentRanks[selectedLoadout.secondarySkillId], 1)
   assert.deepEqual(getPlayerBelt(resetState, playerId), [
-    { kind: 'skill', skillId: 27 }, null, null,
+    { kind: 'skill', skillId: selectedLoadout.secondarySkillId }, null, null,
     { kind: 'health-potion' }, { kind: 'mana-potion' }, null, null, null,
   ])
   assert.equal(resetEconomy.equipment.amulet, null)
@@ -1398,14 +1405,20 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.deepEqual(resetEconomy.equipment.robe?.iconTints, resetEconomy.equipment.hat?.iconTints)
   assert.notEqual(resetAppearance.primaryTint, title9Wizard.primaryTint)
   assert.deepEqual(resetEconomy.storage, [])
+  assert.equal(
+    getPlayerCharacter(resetState, playerId).config.element,
+    selectedLoadout.element,
+  )
   const resetWizard = await page.locator('.hub-world-canvas').evaluate((node) => ({
     materialTint: node.__sdrHubFrame.playerMaterialTint,
     primaryElementEffectId: node.__sdrHubFrame.playerElementEffectPrimaryId,
   }))
   assert.deepEqual(resetWizard, {
     materialTint: resetAppearance.primaryTint,
-    primaryElementEffectId: 24,
+    primaryElementEffectId: selectedLoadout.primarySkillId,
   })
+  const selectedElementScreenshot = `${screenshotPath}-tutorial-selected-${selectedLoadout.element}-robe.png`
+  await page.screenshot({ path: selectedElementScreenshot })
 
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
@@ -1419,8 +1432,14 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     timeout: 10_000,
   })
   assert.equal(await skillsDialog.locator('[data-skill-id="72"]').count(), 0)
-  assert.equal(await skillsDialog.locator('[data-skill-id="24"]').count(), 1)
-  assert.equal(await skillsDialog.locator('[data-skill-id="27"]').count(), 1)
+  assert.equal(
+    await skillsDialog.locator(`[data-skill-id="${selectedLoadout.primarySkillId}"]`).count(),
+    1,
+  )
+  assert.equal(
+    await skillsDialog.locator(`[data-skill-id="${selectedLoadout.secondarySkillId}"]`).count(),
+    1,
+  )
   await page.screenshot({ path: `${screenshotPath}-tutorial-reset-skills.png` })
   await skillsDialog.getByRole('button', { name: 'Close skills' }).click()
   const restoredCollision = await verifyRestoredCollegeCollision(host, playerId)
@@ -1428,6 +1447,10 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     backpack: resetEconomy.backpack.map(item => item.name),
     level: resetProgression.level,
     learnedTutorialAcidRainRank: resetSkills.permanentRanks[72],
+    renderedMaterialTint: resetWizard.materialTint,
+    robeTint: resetEconomy.equipment.robe?.iconTints?.[0] ?? null,
+    selectedElement: getPlayerCharacter(resetState, playerId).config.element,
+    selectedElementScreenshot,
     selectedPrimary: resetSkills.primarySkillId,
     selectedPrimaryTint: resetAppearance.primaryTint,
     storageCount: resetEconomy.storage.length,

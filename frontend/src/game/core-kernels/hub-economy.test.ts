@@ -106,6 +106,23 @@ test('a fresh participant owns the retail 500-gold profile and complete native s
   assert.ok(state.fomentiusStock.every(({ id }) => id >= 6))
 })
 
+test('selected-element starter garments keep the exact web element palette', () => {
+  const expected = {
+    air: 0x19ffff,
+    earth: 0x00bf00,
+    ether: 0xff19ff,
+    fire: 0xff1919,
+    water: 0x1980ff,
+  } as const
+  for (const [element, primaryTint] of Object.entries(expected)) {
+    const equipment = createHubEconomy(1, {
+      starterElement: element as keyof typeof expected,
+    }).equipment
+    assert.deepEqual(equipment.hat?.iconTints, [primaryTint, 0xffffff])
+    assert.deepEqual(equipment.robe?.iconTints, equipment.hat?.iconTints)
+  }
+})
+
 test('mod reforge attaches stable affixes to one backpack equipment item', () => {
   const base = createHubEconomy(1)
   const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, base.nextItemId)

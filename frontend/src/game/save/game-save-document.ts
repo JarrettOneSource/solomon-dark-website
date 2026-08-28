@@ -74,6 +74,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import {
   autofillPlayerEntitySkillSelections,
+  migratePlayerStarterEquipmentAppearance,
   replacePlayerCharacter,
   replacePlayerEconomy,
 } from '../core-server/player-entity-store.ts'
@@ -425,6 +426,9 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   }
   onlyKeys(rawState, 'game save simulation', SIMULATION_KEYS)
   let playerEntities = validatePlayerStore(rawState.playerEntities, continuation.summary.playerId)
+  for (const { playerId } of playerEntities.identities) {
+    playerEntities = migratePlayerStarterEquipmentAppearance(playerEntities, playerId)
+  }
   const rawRun = record(rawState.run, 'game save run')
   if (rawRun.phase !== continuation.summary.phase) throw new Error('game save phase summary drifted')
   if (!Number.isSafeInteger(rawState.tick) || Number(rawState.tick) < 0) {
@@ -584,10 +588,11 @@ export function hydrateGameSaveProfile(
   playerId: string,
   profile: RestoredGameSaveProfile,
 ): GameSimulationState {
-  const economyStore = replacePlayerEconomy(state.playerEntities, playerId, profile.economy)
+  let economyStore = replacePlayerEconomy(state.playerEntities, playerId, profile.economy)
   if (economyStore === state.playerEntities) {
     throw new Error('game save profile owner is absent from the fresh game')
   }
+  economyStore = migratePlayerStarterEquipmentAppearance(economyStore, playerId)
   const ownerIndex = economyStore.identities.findIndex(identity => identity.playerId === playerId)
   const progressions = [...economyStore.progressions]
   progressions[ownerIndex] = {

@@ -182,6 +182,82 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.equal(restored.state.world.participants.owner?.transition, null)
 })
 
+test('save restore migrates completed starter garments but preserves pending College colors', () => {
+  const character = { ...OWNER, element: 'fire' as const }
+  let state = createGameSimulation({ owner: character })
+  const economy = getPlayerEconomy(state, 'owner')
+  const staleTints = [0x895e5d, 0xffffff] as const
+  const staleEconomy = {
+    ...economy,
+    collegeIntroPending: false,
+    equipment: {
+      ...economy.equipment,
+      hat: { ...economy.equipment.hat!, iconTints: staleTints },
+      robe: { ...economy.equipment.robe!, iconTints: staleTints },
+    },
+    revision: 7,
+    tutorialPending: false,
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', staleEconomy),
+  }
+  const continuation = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const restored = restoreGameSaveDocument(continuation).state
+  const restoredEconomy = getPlayerEconomy(restored, 'owner')
+  assert.deepEqual(restoredEconomy.equipment.hat?.iconTints, [0xff1919, 0xffffff])
+  assert.deepEqual(restoredEconomy.equipment.robe?.iconTints, [0xff1919, 0xffffff])
+  assert.equal(restoredEconomy.revision, 8)
+
+  const profile = restoreGameSaveProfile(createGameProfileSaveDocument({
+    integrity: 'global-clean',
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const hydrated = hydrateGameSaveProfile(
+    createGameSimulation({ owner: character }),
+    'owner',
+    profile,
+  )
+  const hydratedEconomy = getPlayerEconomy(hydrated, 'owner')
+  assert.deepEqual(hydratedEconomy.equipment.hat?.iconTints, [0xff1919, 0xffffff])
+  assert.deepEqual(hydratedEconomy.equipment.robe?.iconTints, [0xff1919, 0xffffff])
+  assert.equal(hydratedEconomy.revision, 8)
+
+  const collegeTints = [0x6f7e72, 0xffffff] as const
+  const collegeState = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...staleEconomy,
+      collegeIntroPending: true,
+      equipment: {
+        ...staleEconomy.equipment,
+        hat: { ...staleEconomy.equipment.hat!, iconTints: collegeTints },
+        robe: { ...staleEconomy.equipment.robe!, iconTints: collegeTints },
+      },
+    }),
+  }
+  const pending = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: collegeState,
+  })).state
+  assert.deepEqual(getPlayerEconomy(pending, 'owner').equipment.hat?.iconTints, collegeTints)
+  assert.deepEqual(getPlayerEconomy(pending, 'owner').equipment.robe?.iconTints, collegeTints)
+})
+
 test('Hub resume reconstructs its authoritative Skorcha population with the other Region actors', () => {
   const state = createGameSimulation({ owner: OWNER }, {
     hubTraderAnimationSeed: 2,

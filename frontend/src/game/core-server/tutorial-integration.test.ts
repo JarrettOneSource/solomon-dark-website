@@ -2,10 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
-  rollNativeStarterEquipmentAppearance,
+  selectedElementStarterEquipmentAppearance,
 } from '../core-kernels/native-starter-equipment.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
@@ -328,10 +327,7 @@ test('Tutorial death discards its items and skills when Create confirms the new 
   const progression = getPlayerProgression(confirmed, 'owner')
   const skills = getPlayerSkillBook(confirmed, 'owner')
   const economy = getPlayerEconomy(confirmed, 'owner')
-  const appearance = rollNativeStarterEquipmentAppearance(
-    createNativeRng(progression.offerSeed),
-    'air',
-  )
+  const appearance = selectedElementStarterEquipmentAppearance('air')
   assert.equal(progression.level, 1)
   assert.equal(progression.experience, 0)
   assert.equal(progression.pendingOffer, null)

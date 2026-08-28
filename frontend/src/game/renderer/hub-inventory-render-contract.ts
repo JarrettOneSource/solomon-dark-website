@@ -23,6 +23,9 @@ import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   nativeTutorialAmuletIdentityMatches,
 } from '../core-kernels/native-tutorial.ts'
+import {
+  WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS,
+} from '../core-kernels/native-starter-equipment.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 
 export const HUB_NATIVE_UI_SIZE = { height: 900, width: 1600 } as const
@@ -201,13 +204,8 @@ export function hubUnforgeTargetTint(nativeTick: number): number {
   return (red << 16) | 0x00ffff
 }
 
-export const HUB_STARTER_EQUIPMENT_PRIMARY_TINT: Readonly<Record<WizardElement, number>> = {
-  air: 0xa0c3c3,
-  earth: 0x90b390,
-  ether: 0x886688,
-  fire: 0x998077,
-  water: 0x5e6e81,
-}
+export const HUB_STARTER_EQUIPMENT_PRIMARY_TINT: Readonly<Record<WizardElement, number>> =
+  WEB_SELECTED_ELEMENT_STARTER_PRIMARY_TINTS
 
 export const HUB_ITEM_ICON_TRANSFORMS = {
   amulet: { rotationDegrees: 0, translation: [0, -5] },

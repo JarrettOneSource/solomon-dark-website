@@ -11,7 +11,7 @@ import {
 } from '../core-kernels/player-combat.ts'
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
-import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import { selectedElementStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import { bindNativeBeltSkill } from '../core-kernels/native-belt.ts'
 import {
   playerLightDriveActive,
@@ -159,7 +159,7 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
     123_456,
     { starterAppearanceOwner: 'air' },
   )
-  const appearance = rollNativeStarterEquipmentAppearance(createNativeRng(123_456), 'air')
+  const appearance = selectedElementStarterEquipmentAppearance('air')
   assert.deepEqual(replaced.configs[0], nextConfig)
   assert.notStrictEqual(replaced.economies[0], economy)
   assert.equal(replaced.economies[0]!.revision, 12)
@@ -272,10 +272,7 @@ test('all fifteen post-Game-Over Create choices build a fresh complete generatio
       const book = store.skillBooks[0]!
       const progression = store.progressions[0]!
       const runtime = store.skillRuntimes[0]!
-      const appearance = rollNativeStarterEquipmentAppearance(
-        createNativeRng(offerSeed),
-        element,
-      )
+      const appearance = selectedElementStarterEquipmentAppearance(element)
       const learnedRanks = book.permanentRanks.flatMap((rank, skillId) => (
         rank === 0 ? [] : [[skillId, rank] as const]
       ))

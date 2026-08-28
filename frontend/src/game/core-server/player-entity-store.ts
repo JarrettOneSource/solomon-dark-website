@@ -12,7 +12,7 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
-import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   coldSlowPlayer,
   dazzlePlayer,
@@ -85,7 +85,7 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
-  rollNativeStarterEquipmentAppearance,
+  selectedElementStarterEquipmentAppearance,
 } from '../core-kernels/native-starter-equipment.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
@@ -367,6 +367,26 @@ export function replacePlayerEconomy(
     source.skillRuntimes[index]!,
     economy,
   )
+}
+
+export function migratePlayerStarterEquipmentAppearance(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const economy = source.economies[index]!
+  if (economy.tutorialPending || economy.collegeIntroPending) return source
+  const migrated = applyNativeStarterEquipmentAppearance(
+    economy,
+    selectedElementStarterEquipmentAppearance(source.configs[index]!.element),
+  )
+  return migrated === economy
+    ? source
+    : replacePlayerEconomy(source, playerId, {
+        ...migrated,
+        revision: economy.revision + 1,
+      })
 }
 
 export function playerLightingAt(
@@ -813,8 +833,7 @@ export function replacePlayerLoadout(
     : {
         ...applyNativeStarterEquipmentAppearance(
           previousEconomy,
-          rollNativeStarterEquipmentAppearance(
-            createNativeRng(offerSeed),
+          selectedElementStarterEquipmentAppearance(
             options.starterAppearanceOwner,
           ),
         ),
