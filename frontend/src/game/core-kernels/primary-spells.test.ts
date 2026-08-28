@@ -266,6 +266,7 @@ function stepSpellKernel(
   primarySkill: NativePrimarySkillProfile = state.primarySkill,
   canTraverseProjectile: PrimarySpellTickContext['canTraverseProjectile'] = canPlaceProjectile,
   castProgressFactor = 1,
+  aimPoint: { x: number; y: number } | null = null,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   manaUnderflow: boolean
@@ -290,7 +291,7 @@ function stepSpellKernel(
     inputs: {
       [PLAYER_ID]: {
         ...createIdlePlayerCharacterInput(),
-        aim: { x: player.position.x, y: player.position.y - 200 },
+        aim: aimPoint ?? { x: player.position.x, y: player.position.y - 200 },
         cast: { primary, quickbar: null },
       },
     },
@@ -1933,6 +1934,101 @@ test('a continued one-shot hold captures moved aim for the next Ether and Fire a
     const secondProjectile = state.primarySpells.projectiles.at(-1)
     assert.ok(secondProjectile)
     assert.ok(secondProjectile.velocity.x > 0, `${element}: successor emission must travel right`)
+  }
+})
+
+test('every held one-shot tracks changed aim before its current action or emission advances', () => {
+  const cases: readonly {
+    element: WizardElement
+    profile: NativePrimarySkillProfile
+  }[] = [
+    { element: 'ether', profile: primarySkillRankStats('ether', 1) },
+    { element: 'fire', profile: primarySkillRankStats('fire', 1) },
+    {
+      element: 'ether',
+      profile: weldedProfile(1000, 'one-shot', [4, 10, 12, 2, 1.25, 3, 8, 2, 3]),
+    },
+    {
+      element: 'ether',
+      profile: weldedProfile(1001, 'one-shot', [4, 10, 12, 2, 1.1, 0.5, 0.1]),
+    },
+    {
+      element: 'ether',
+      profile: weldedProfile(1002, 'one-shot', [4, 10, 12, 2, 1.1, 1, 0.5]),
+    },
+    {
+      element: 'fire',
+      profile: weldedProfile(1009, 'one-shot', [4, 12, 1, 0.5, 1, 1]),
+    },
+  ]
+
+  for (const { element, profile } of cases) {
+    let harness = { ...directSpellHarness(element), primarySkill: profile }
+    harness = stepSpellKernel(
+      harness,
+      true,
+      1_000,
+      true,
+      () => true,
+      profile,
+    ).state
+    const accepted = harness.players[PLAYER_ID]!
+    const castSequence = accepted.primaryCast.castSequence
+    const emissionSequence = accepted.primaryCast.emissionSequence
+    assert.equal(accepted.headingIndex, 0, `${profile.skillId}: accepted north facing`)
+
+    const eastAim = {
+      x: accepted.position.x + 200,
+      y: accepted.position.y - 25 / INTEGRATION_VIEW_SCALE,
+    }
+    harness = stepSpellKernel(
+      harness,
+      true,
+      1_000,
+      true,
+      () => true,
+      profile,
+      () => true,
+      1,
+      eastAim,
+    ).state
+    const tracked = harness.players[PLAYER_ID]!
+    assert.equal(tracked.primaryCast.castSequence, castSequence, `${profile.skillId}: cast`)
+    assert.equal(
+      tracked.primaryCast.emissionSequence,
+      emissionSequence,
+      `${profile.skillId}: emission`,
+    )
+    assert.deepEqual(tracked.primaryCast.aimDirection, { x: 1, y: 0 }, `${profile.skillId}: aim`)
+    assert.equal(tracked.headingIndex, 6, `${profile.skillId}: facing`)
+
+    let guard = 0
+    while (
+      harness.players[PLAYER_ID]!.primaryCast.emissionSequence === emissionSequence
+      && guard < 100
+    ) {
+      harness = stepSpellKernel(
+        harness,
+        true,
+        1_000,
+        true,
+        () => true,
+        profile,
+        () => true,
+        1,
+        eastAim,
+      ).state
+      guard += 1
+    }
+    const emitted = harness.players[PLAYER_ID]!
+    assert.ok(guard < 100, `${profile.skillId}: emission guard`)
+    assert.equal(
+      emitted.primaryCast.emissionSequence,
+      emissionSequence + 1,
+      `${profile.skillId}: emitted`,
+    )
+    assert.deepEqual(emitted.primaryCast.aimDirection, { x: 1, y: 0 }, `${profile.skillId}: aim`)
+    assert.equal(emitted.headingIndex, 6, `${profile.skillId}: facing`)
   }
 })
 

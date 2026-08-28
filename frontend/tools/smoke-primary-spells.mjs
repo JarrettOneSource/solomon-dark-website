@@ -69,6 +69,7 @@ const boneyardOnlyAcceptance = process.env.SDR_PRIMARY_SPELL_BONEYARD_ONLY === '
 const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
 const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
+const heldFacingAcceptance = process.env.SDR_PRIMARY_HELD_FACING === '1'
 const heldPoseAcceptance = process.env.SDR_PRIMARY_HELD_POSE === '1'
 const performanceAcceptance = process.env.SDR_PRIMARY_PERFORMANCE === '1'
 const nativePhaseExpectation = process.env.SDR_PRIMARY_EXPECT_NATIVE_PHASE === '1'
@@ -105,6 +106,15 @@ if (heldPoseAcceptance && (
   || selectedSpells[0].kind !== 'ether'
 )) {
   throw new Error('Held-pose acceptance requires full-power SDR_PRIMARY_SPELL_KIND=ether')
+}
+if (heldFacingAcceptance && (
+  lowManaAcceptance
+  || etherFanAcceptance
+  || performanceAcceptance
+  || selectedSpells.length !== 1
+  || selectedSpells[0].kind !== 'ether'
+)) {
+  throw new Error('Held-facing acceptance requires isolated full-power Ether')
 }
 if (performanceAcceptance && !heldPoseAcceptance) {
   throw new Error('Primary performance acceptance requires the held Ether journey')
@@ -1172,6 +1182,9 @@ async function castEtherInBoneyard(page) {
   const heldPoseCheckpoint = heldPoseAcceptance
     ? await oneShotPoseCheckpoint(page)
     : null
+  const heldFacingCheckpoint = heldFacingAcceptance
+    ? await oneShotFacingCheckpoint(page)
+    : null
   await page.mouse.move(aimPoint.x, aimPoint.y)
   await page.mouse.down({ button: 'left' })
   const launch = await waitForAudio(
@@ -1183,6 +1196,9 @@ async function castEtherInBoneyard(page) {
   )
   let flight = null
   let flightScreenshotPath = null
+  const heldFacing = heldFacingCheckpoint
+    ? await waitForHeldOneShotFacing(page, canvas, heldFacingCheckpoint)
+    : null
   let heldPose = null
   if (heldPoseCheckpoint) {
     heldPose = await waitForHeldOneShotPose(page, heldPoseCheckpoint, 3)
@@ -1256,6 +1272,7 @@ async function castEtherInBoneyard(page) {
     flight,
     flightScreenshotPath,
     gate: { fixture: 'host-opened-boneyard' },
+    heldFacing,
     heldPose,
     impact,
     screenshotPath,
@@ -1266,19 +1283,22 @@ async function castEtherInBoneyard(page) {
 
 async function castUntargetedEtherInBoneyard(page, canvas) {
   const scene = page.locator('.boneyard-scene')
-  const gate = heldPoseAcceptance || combatAdmissionAcceptance
+  const gate = heldFacingAcceptance || heldPoseAcceptance || combatAdmissionAcceptance
     ? await crossEntryGate(page, scene)
     : null
   const performanceBaseline = performanceAcceptance
     ? await measurePresentation(page, 800)
     : null
-  const combatAdmission = heldPoseAcceptance || combatAdmissionAcceptance
+  const combatAdmission = heldFacingAcceptance || heldPoseAcceptance || combatAdmissionAcceptance
     ? await enableSolomonCombat(page, scene)
     : null
   const eventStart = await audioEventCount(page)
   const afterTick = await latestWireTick(page)
   const heldPoseCheckpoint = heldPoseAcceptance
     ? await oneShotPoseCheckpoint(page)
+    : null
+  const heldFacingCheckpoint = heldFacingAcceptance
+    ? await oneShotFacingCheckpoint(page)
     : null
   const target = await castTarget(canvas, 0.5, performanceAcceptance ? 0.35 : 0.05)
   await page.mouse.move(target.x, target.y)
@@ -1305,6 +1325,9 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
   }
   let flight = null
   let flightScreenshotPath = null
+  const heldFacing = heldFacingCheckpoint
+    ? await waitForHeldOneShotFacing(page, canvas, heldFacingCheckpoint)
+    : null
   let heldPose = null
   if (heldPoseCheckpoint) {
     heldPose = await waitForHeldOneShotPose(page, heldPoseCheckpoint, 3)
@@ -1374,6 +1397,7 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
     flight,
     flightScreenshotPath,
     gate,
+    heldFacing,
     heldPose,
     impact,
     performance,
@@ -1890,6 +1914,134 @@ async function oneShotPoseCheckpoint(page) {
       wireFrameIndex: window.__primarySpellWireFrames.length,
     }
   })
+}
+
+async function oneShotFacingCheckpoint(page) {
+  return page.evaluate(() => {
+    const playerId = window.__primarySpellLocalPlayerId
+    const wire = window.__primarySpellWireFrames.at(-1)
+    const player = playerId ? wire?.players[playerId] : null
+    if (!playerId || !player || !wire) {
+      throw new Error('Local one-shot facing wire is unavailable')
+    }
+    return {
+      aimDirection: { ...player.primaryCast.aimDirection },
+      emissionSequence: player.primaryCast.emissionSequence,
+      headingIndex: player.headingIndex,
+      playerId,
+      tick: wire.tick,
+    }
+  })
+}
+
+async function waitForHeldOneShotFacing(page, canvas, checkpoint) {
+  const baselineHandle = await page.waitForFunction((start) => {
+    for (const wire of window.__primarySpellWireFrames) {
+      if (wire.tick <= start.tick) continue
+      const player = wire.players[start.playerId]
+      if (
+        player?.primaryCast.held === true
+        && player.primaryCast.emissionSequence > start.emissionSequence
+      ) {
+        return {
+          aimDirection: { ...player.primaryCast.aimDirection },
+          castSequence: player.primaryCast.castSequence,
+          emissionSequence: player.primaryCast.emissionSequence,
+          headingIndex: player.headingIndex,
+          tick: wire.tick,
+        }
+      }
+    }
+    return null
+  }, checkpoint, { timeout: 10_000 })
+  const baseline = await baselineHandle.jsonValue()
+  await baselineHandle.dispose()
+
+  const target = await castTarget(canvas, 0.82, 0.55)
+  await page.mouse.move(target.x, target.y)
+  let trackedHandle
+  try {
+    trackedHandle = await page.waitForFunction(([playerId, before]) => {
+      const headingIndexFor = (direction) => {
+        const degrees = (
+          Math.atan2(direction.x, -direction.y) * 180 / Math.PI + 360
+        ) % 360
+        return Math.floor((degrees + 7.5) / 15) % 24
+      }
+      for (const wire of window.__primarySpellWireFrames) {
+        if (wire.tick <= before.tick) continue
+        const player = wire.players[playerId]
+        const cast = player?.primaryCast
+        if (
+          !player
+          || cast?.held !== true
+          || cast.castSequence !== before.castSequence
+          || cast.emissionSequence !== before.emissionSequence
+        ) continue
+        const expectedHeadingIndex = headingIndexFor(cast.aimDirection)
+        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+        if (
+          expectedHeadingIndex !== before.headingIndex
+          && player.headingIndex === expectedHeadingIndex
+          && frame?.playerHeadingIndex === expectedHeadingIndex
+        ) {
+          return {
+            actionTick: cast.actionTick,
+            aimDirection: { ...cast.aimDirection },
+            castSequence: cast.castSequence,
+            emissionSequence: cast.emissionSequence,
+            expectedHeadingIndex,
+            renderedHeadingIndex: frame.playerHeadingIndex,
+            tick: wire.tick,
+            wireHeadingIndex: player.headingIndex,
+          }
+        }
+      }
+      return null
+    }, [checkpoint.playerId, baseline], { timeout: 10_000 })
+  } catch (error) {
+    const diagnostics = await page.evaluate(([playerId, before]) => ({
+      frame: structuredClone(
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame,
+      ),
+      wires: window.__primarySpellWireFrames
+        .filter(({ tick }) => tick > before.tick)
+        .slice(-40)
+        .map((wire) => {
+          const player = wire.players[playerId]
+          return {
+            actionTick: player?.primaryCast.actionTick ?? null,
+            aimDirection: player ? { ...player.primaryCast.aimDirection } : null,
+            castSequence: player?.primaryCast.castSequence ?? null,
+            emissionSequence: player?.primaryCast.emissionSequence ?? null,
+            headingIndex: player?.headingIndex ?? null,
+            held: player?.primaryCast.held ?? null,
+            tick: wire.tick,
+          }
+        }),
+    }), [checkpoint.playerId, baseline])
+    const failureScreenshotPath = `${screenshotRoot}/solomon-primary-ether-held-facing-failure.png`
+    await page.screenshot({ path: failureScreenshotPath })
+    throw new Error(
+      `Held Ether did not track before its next action: ${JSON.stringify({
+        baseline,
+        diagnostics,
+        failureScreenshotPath,
+        target,
+      })}`,
+      { cause: error },
+    )
+  }
+  const tracked = await trackedHandle.jsonValue()
+  await trackedHandle.dispose()
+
+  assert.equal(tracked.castSequence, baseline.castSequence)
+  assert.equal(tracked.emissionSequence, baseline.emissionSequence)
+  assert.notEqual(tracked.wireHeadingIndex, baseline.headingIndex)
+  assert.equal(tracked.renderedHeadingIndex, tracked.expectedHeadingIndex)
+  const screenshotPath = `${screenshotRoot}/solomon-primary-ether-held-facing.png`
+  await page.screenshot({ path: screenshotPath })
+  return { baseline, screenshotPath, target, tracked }
 }
 
 async function waitForHeldOneShotPose(page, checkpoint, minimumEmissions) {

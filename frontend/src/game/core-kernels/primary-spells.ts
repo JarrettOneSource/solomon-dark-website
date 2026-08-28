@@ -1325,10 +1325,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const sustainedPrimary = authority?.primarySkill.kind === 'weld'
       ? authority.primarySkill.castKind !== 'one-shot'
       : primaryElement === 'air' || primaryElement === 'water' || primaryElement === 'earth'
-    const aimSamplesInput = rawHeld && (
-      sustainedPrimary || actionAvailable
-    )
-    const aimDirection = aimSamplesInput && input?.aim
+    const aimDirection = rawHeld && input?.aim
       ? primarySpellAimDirection(player.position, input.aim, context.viewScale)
       : previous.primaryCast.aimDirection
     let primaryCast = advancePrimaryCast(

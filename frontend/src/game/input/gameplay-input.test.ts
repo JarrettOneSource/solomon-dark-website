@@ -561,11 +561,20 @@ test('standard gamepad supplies retained twin-stick aim and authoritative held c
     viewportWidth: 1_600,
   })
 
+  pad.axes[2] = -1
+  assert.deepEqual(input.sample().input, {
+    aim: { x: 0, y: 200 },
+    cast: { primary: true, quickbar: null },
+    movement: { x: 0, y: 0 },
+    viewportHeight: 900,
+    viewportWidth: 1_600,
+  })
+
   pad.axes[2] = 0
   pad.releaseButton(7)
   playerX = 300
   assert.deepEqual(input.sample().input, {
-    aim: { x: 400, y: 200 },
+    aim: { x: 200, y: 200 },
     cast: { primary: false, quickbar: null },
     movement: { x: 0, y: 0 },
     viewportHeight: 900,

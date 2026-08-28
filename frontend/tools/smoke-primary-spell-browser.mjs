@@ -13,6 +13,7 @@ import { startGameHost } from '../src/game/host/game-host.ts'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const luaWasmPath = fileURLToPath(new URL('../node_modules/wasmoon/dist/glue.wasm', import.meta.url))
 const kind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
+const heldFacingAcceptance = process.env.SDR_PRIMARY_HELD_FACING === '1'
 const supportedKinds = new Set(['ether', 'fire', 'air', 'water', 'earth'])
 if (!kind || !supportedKinds.has(kind)) {
   throw new Error('SDR_PRIMARY_SPELL_KIND must name one elemental primary')
@@ -58,15 +59,18 @@ try {
       SDR_GAME_SMOKE_URL: baseUrl,
       SDR_PRIMARY_SPELL_BONEYARD_ONLY: '1',
       SDR_PRIMARY_SPELL_COMBAT_ADMISSION: kind === 'ether' || kind === 'air' ? '1' : '',
-      SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD: kind === 'water' ? '1' : '',
+      SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD:
+        kind === 'water' || heldFacingAcceptance ? '1' : '',
       SDR_PRIMARY_SPELL_KIND: kind,
       SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
     }),
-    kind === 'water'
-      ? openWaterCombat(host)
-      : process.env.SDR_PRIMARY_PERFORMANCE === '1'
-        ? stabilizePerformanceCombat(host)
-        : Promise.resolve(null),
+    heldFacingAcceptance
+      ? stabilizeHeldFacingCombat(host)
+      : kind === 'water'
+        ? openWaterCombat(host)
+        : process.env.SDR_PRIMARY_PERFORMANCE === '1'
+          ? stabilizePerformanceCombat(host)
+          : Promise.resolve(null),
   ])
   assert.equal(receipt.status, 'ok')
   assert.deepEqual(receipt.errors, [])
@@ -77,9 +81,10 @@ try {
     assert.ok(receipt.boneyard.performance, 'the Ether journey must include performance phases')
   }
   process.stdout.write(`${JSON.stringify({
+    heldFacingFixture: heldFacingAcceptance ? supportFixture : null,
     hostFixture: kind === 'water' ? supportFixture : null,
     kind,
-    performanceFixture: process.env.SDR_PRIMARY_PERFORMANCE === '1'
+    performanceFixture: !heldFacingAcceptance && process.env.SDR_PRIMARY_PERFORMANCE === '1'
       ? supportFixture
       : null,
     receipt,
@@ -138,6 +143,81 @@ async function openWaterCombat(host) {
     playerId,
     runId: combat.world.runId,
     tick: combat.tick,
+  }
+}
+
+async function stabilizeHeldFacingCombat(host) {
+  await waitUntil(() => {
+    const state = host.state()
+    return state.world.kind === 'boneyard' && host.hostPlayerId() !== null
+  }, 'held-facing fixture did not enter the Boneyard', 120_000)
+  const initial = host.state()
+  const playerId = host.hostPlayerId()
+  const playerIndex = initial.playerEntities.identities.findIndex(({ playerId: id }) => (
+    id === playerId
+  ))
+  if (initial.world.kind !== 'boneyard' || playerId === null || playerIndex < 0) {
+    throw new Error('held-facing fixture has no Boneyard player')
+  }
+  const solomon = initial.world.encounter?.position
+  if (!solomon) throw new Error('held-facing fixture has no Solomon encounter')
+
+  setHostPlayerPosition(host, playerIndex, solomon)
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard' && world.encounter?.phase === 'speaking'
+  }, 'held-facing fixture did not start Solomon dialogue', 10_000)
+  setHostPlayerPosition(host, playerIndex, { x: solomon.x, y: solomon.y + 250 })
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard'
+      && (world.encounter?.runEventId ?? 0) > 0
+      && world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')
+  }, 'held-facing fixture did not release combat', 30_000)
+
+  const state = host.state()
+  if (state.world.kind !== 'boneyard') throw new Error('held-facing fixture left the Boneyard')
+  const playerPosition = state.playerEntities.locomotions[playerIndex].position
+  const bounds = state.world.arenaTransition?.combatBounds
+  if (!bounds) throw new Error('held-facing fixture has no sealed combat bounds')
+  const targetPosition = {
+    x: Math.max(bounds.x + 80, Math.min(bounds.x + bounds.w - 80, playerPosition.x)),
+    y: Math.max(bounds.y + 80, Math.min(bounds.y + bounds.h - 80, playerPosition.y - 220)),
+  }
+  const frozenUntilTick = state.tick + 10_000
+  const actors = state.world.enemies.actors.map((actor) => ({
+    ...actor,
+    action: null,
+    actionProgress: 0,
+    nextMovementTick: frozenUntilTick,
+    nextTargetRefreshTick: frozenUntilTick,
+    position: { ...targetPosition },
+    staffActionFactor: 0,
+    staffMovementFactor: 0,
+    targetPlayerId: playerId,
+  }))
+  const progressions = [...state.playerEntities.progressions]
+  progressions[playerIndex] = {
+    ...progressions[playerIndex],
+    currentHealth: progressions[playerIndex].maximumHealth,
+    currentMana: progressions[playerIndex].maximumMana,
+  }
+  Object.assign(state, {
+    playerEntities: {
+      ...state.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+    world: {
+      ...state.world,
+      enemies: { ...state.world.enemies, actors: Object.freeze(actors) },
+    },
+  })
+  return {
+    enemyCount: actors.length,
+    frozenUntilTick,
+    playerId,
+    runId: state.world.runId,
+    targetPosition,
   }
 }
 
