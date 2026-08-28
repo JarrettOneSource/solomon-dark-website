@@ -215,6 +215,12 @@ export type HubUiSurface =
     }
   | null
 
+function hubNativeSurfaceOwnerKey(surface: Exclude<HubUiSurface, null>): string {
+  if (surface.kind === 'dialogue') return surface.interaction
+  if (surface.kind === 'service') return surface.trader
+  return surface.kind
+}
+
 interface HubInventoryUiProps {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
@@ -475,9 +481,7 @@ export default function HubInventoryUi({
 
   const overlay = surface ? (
     <NativeHubSurface
-      key={surface.kind === 'dialogue'
-        ? `${surface.kind}-${surface.interaction}`
-        : `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`}
+      key={hubNativeSurfaceOwnerKey(surface)}
       audio={audio}
       belt={belt}
       config={config}
@@ -928,6 +932,10 @@ function NativeHubSurface({
   ])
 
   useLayoutEffect(() => {
+    revealStartedAtRef.current = null
+  }, [surface.kind])
+
+  useLayoutEffect(() => {
     modelRef.current = model
     rendererRef.current?.setModel(model)
   }, [model])
@@ -954,11 +962,13 @@ function NativeHubSurface({
     const unsubscribe = subscribeGamePresentationFrames((nowMs) => {
       if (!renderer) return
       revealStartedAtRef.current ??= nowMs
-      const step = surface.kind === 'dialogue'
+      const currentKind = modelRef.current?.kind
+      if (!currentKind) return
+      const step = currentKind === 'dialogue'
         ? HUB_NATIVE_UI_TIMING.chatRevealPerTick
         : HUB_NATIVE_UI_TIMING.inventoryRevealPerTick
       const reveal = hubNativeUiReveal(nowMs - revealStartedAtRef.current, step)
-      if (surface.kind === 'inventory') setNativeModalSlideProgress('inventory', reveal)
+      if (currentKind === 'inventory') setNativeModalSlideProgress('inventory', reveal)
       const frame = renderer.render(nowMs, reveal)
       const current = modelRef.current
       if (frame.chatComplete && current?.kind === 'dialogue'
@@ -974,7 +984,7 @@ function NativeHubSurface({
       renderer?.destroy()
       host.replaceChildren()
     }
-  }, [modAssets, surface.kind])
+  }, [modAssets])
 
   useEffect(() => {
     if (surface.kind !== 'dialogue' && inventorySelection) {

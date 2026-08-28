@@ -406,12 +406,22 @@ try {
   await luthacusPrompt.click()
   const dialogue = page.getByRole('dialog', { name: 'Talking to Luthacus' })
   await dialogue.waitFor()
+  const dialogueCanvas = dialogue.locator('.hub-inventory-native-canvas')
+  await dialogueCanvas.waitFor()
+  await dialogueCanvas.evaluate((canvas) => {
+    canvas.dataset.sdrTraderCanvasOwner = 'luthacus'
+  })
   await dialogue.getByRole('button', { name: 'Skip' }).click()
   await dialogue.getByRole('button', { name: 'Done' }).waitFor()
   await dialogue.getByRole('button', { name: 'Examine Items' }).click()
   const storage = page.getByRole('dialog', { name: "LUTHACUS' SCAVENGED GOODS" })
   await storage.waitFor()
   await storage.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  assert.equal(
+    await storage.locator('.hub-inventory-native-canvas').getAttribute('data-sdr-trader-canvas-owner'),
+    'luthacus',
+  )
+  assert.equal(await storage.locator('[data-inventory-owner="storage"]').count(), 7)
   const storageKey = storage.locator(
     `[data-inventory-owner="storage"][data-inventory-item-id="${IDS.storageKey}"]`,
   )
@@ -548,6 +558,18 @@ function createSeededSave() {
   const dyeCarrier = sack(IDS.dyeCarrier, 'Dye Carrier', [dyeInnerSack])
   const storageKey = inventoryItem(IDS.storageKey, 'Wizard Key', 'key', 7012, 1, [43])
   const storageSack = sack(IDS.storageSack, 'Storage Sack', [storageKey])
+  const archivedStorage = Array.from({ length: 6 }, (_, index) => sack(
+    41_000 + index,
+    `Archived Wizard ${index + 1}`,
+    [inventoryItem(
+      42_000 + index,
+      'Health Potion',
+      'health-potion',
+      7001,
+      0,
+      [46],
+    )],
+  ))
   const mergePotion = inventoryItem(
     IDS.mergePotion,
     'Health Potion',
@@ -583,7 +605,7 @@ function createSeededSave() {
     ],
     collegeIntroPending: false,
     nextItemId: 50_000,
-    storage: [storageSack],
+    storage: [storageSack, ...archivedStorage],
     tutorialPending: false,
   }
   const playerEntities = replacePlayerEconomy(

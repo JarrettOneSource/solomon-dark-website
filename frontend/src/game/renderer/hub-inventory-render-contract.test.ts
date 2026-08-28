@@ -1073,3 +1073,18 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /sprite\.skew\.x = -italicAngle/)
   assert.doesNotMatch(rendererSource, /replaceAll\('\*', ''\)/)
 })
+
+test('trader Chat replacement retains one native WebGL surface owner', () => {
+  const source = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
+  assert.match(source, /function hubNativeSurfaceOwnerKey\(/)
+  assert.match(source, /key=\{hubNativeSurfaceOwnerKey\(surface\)\}/)
+  assert.doesNotMatch(source, /\[modAssets, surface\.kind\]/)
+  assert.match(
+    source,
+    /const currentKind = modelRef\.current\?\.kind[\s\S]*?currentKind === 'dialogue'/,
+  )
+  assert.match(
+    source,
+    /revealStartedAtRef\.current = null[\s\S]*?\[surface\.kind\]/,
+  )
+})
