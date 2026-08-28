@@ -399,25 +399,32 @@ test('wizard variants share compact atlas pages instead of decoded padded sheets
   assert.match(playerAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
   assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PAGE_SIZE = 2048/)
   assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_DECODED_BYTES = 33554432/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCE_SHEET_COUNT = 79/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_FRAME_COUNT = 7723/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RECTANGLE_COUNT = 5338/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RGBA_BYTES = 28736300/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCE_SHEET_COUNT = 84/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_FRAME_COUNT = 8227/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_EMPTY_FRAME_COUNT = 2049/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RECTANGLE_COUNT = 5723/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RGBA_BYTES = 29585880/)
   assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCES = \[page0, page1\]/)
   assert.match(playerAtlasPacker, /cell\.getchannel\("A"\)\.getbbox\(\)/)
+  assert.match(playerAtlasPacker, /expected 84 player source sheets/)
   assert.match(playerAtlasPacker, /if len\(pages\) > 2:/)
   assert.match(
     playerAtlasPacker,
     /committed\.size != page\.size or committed\.tobytes\(\) != page\.tobytes\(\)/,
   )
   assert.doesNotMatch(sharedAssets, /player-character-/)
-  for (const page of [0, 1]) {
+  const expectedPages = [
+    [0, 'dd05d41788c406c0a702942abf68c437658240e24e4c42796cead8f65debf6c4'],
+    [1, '13d5e2e098fcd50e9e67e043295d0f7a75145978c6a5f5a684dc67fef550bf64'],
+  ] as const
+  for (const [page, sha256] of expectedPages) {
     const png = readFileSync(new URL(
       `../../assets/game/player-character-atlas-${page}.png`,
       import.meta.url,
     ))
     assert.equal(png.readUInt32BE(16), 2048)
     assert.equal(png.readUInt32BE(20), 2048)
+    assert.equal(createHash('sha256').update(png).digest('hex'), sha256)
   }
 })
 
@@ -434,6 +441,74 @@ test('selector-zero Robe keeps both dynamic and fixed color lanes beside the Sta
   )
   assert.match(hubActors, /this\.staffBack\.texture = weaponTextures\.back/)
   assert.match(hubActors, /this\.staffFront\.texture = weaponTextures\.front/)
+})
+
+test('selected-primary -1 owns complete fallback, scroll, and plain-Staff pixels', () => {
+  assert.match(hubExtractor, /records\[1588 \+ heading\]/)
+  assert.match(hubExtractor, /records\[460 \+ heading\]\.points/)
+  assert.match(hubExtractor, /PRE_CREATE_STAFF_SOCKET_SCALE = 1\.1/)
+  assert.match(hubExtractor, /records\[5\]/)
+  assert.match(hubExtractor, /first_bank = 484 \+ offset/)
+  assert.match(hubExtractor, /second_bank = 676 \+ offset/)
+  assert.match(hubExtractor, /paste_player_layer\(cell, atlas, records\[second_bank\]\)/)
+  assert.match(playerAtlas, /bareAttachment:[\s\S]*?back:[\s\S]*?front:/)
+  assert.match(playerAtlas, /unselectedAttachment:[\s\S]*?back:[\s\S]*?front:[\s\S]*?robe:/)
+  assert.match(playerTextures, /bareAttachment:[\s\S]*?back:[\s\S]*?front:/)
+  assert.match(playerTextures, /unselectedAttachment:[\s\S]*?back:[\s\S]*?front:[\s\S]*?robe:/)
+  assert.match(hubActors, /plan\.unselectedPrimaryAttachment/)
+  assert.match(hubActors, /NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE/)
+  assert.match(hubActors, /this\.textures\.equipment\.bareAttachment\.back/)
+  assert.match(
+    hubActors,
+    /const bareAttachmentVisible = !plan\.unselectedPrimaryAttachment[\s\S]*?&& !hasWeapon[\s\S]*?&& plan\.bareAttachmentPose !== null/,
+  )
+  assert.match(hubActors, /\?\.\[plan\.bareAttachmentPose\]/)
+  assert.doesNotMatch(
+    hubActors,
+    /bareAttachment\.(?:back|front)\[heading\]\?\.\[attachmentPose\]/,
+  )
+  assert.match(hubActors, /this\.unselectedRobeAttachment\.texture/)
+  assert.match(hubActors, /this\.unselectedRobeAttachment\.position\.set\(fixedOffset\.x, fixedOffset\.y\)/)
+  assert.match(hubActors, /const ordinaryWeaponVisible = !plan\.unselectedPrimaryAttachment && hasWeapon/)
+  assert.match(hubActors, /this\.hitUnselectedRobeAttachment\.texture = this\.unselectedRobeAttachment\.texture/)
+  const sources = [
+    [
+      'player-character-bare-attachment-back.png',
+      850,
+      4080,
+      'd8444de17999e2aaeae3f51a0a9ab141918dc86933b9d31afddca8465c8acd07',
+    ],
+    [
+      'player-character-bare-attachment-front.png',
+      850,
+      4080,
+      'c31caa3d120c29826ca8269e662211b2d2255958670d72d0b4c7d6f073bf38ce',
+    ],
+    [
+      'player-character-unselected-attachment-back.png',
+      850,
+      4080,
+      '50bf42d6fb5c31c4297c1e946666c5c500d0734f8820cc5e2c4ff7d6d5a7a8aa',
+    ],
+    [
+      'player-character-unselected-attachment-front.png',
+      850,
+      4080,
+      '1cc9790e9095b66cdaa6259351ae1b40147b23f8f8e4e9d87fb53f81b6abdee2',
+    ],
+    [
+      'player-character-unselected-robe-attachment.png',
+      170,
+      4080,
+      '1e23a6c304df1a1bc634bc048a33a12d32d3ae9d751ee9e09c732b0c8f64a460',
+    ],
+  ] as const
+  for (const [name, width, height, sha256] of sources) {
+    const png = readFileSync(new URL(`../../assets/game/${name}`, import.meta.url))
+    assert.equal(png.readUInt32BE(16), width)
+    assert.equal(png.readUInt32BE(20), height)
+    assert.equal(createHash('sha256').update(png).digest('hex'), sha256)
+  }
 })
 
 test('Tree foreground stays per-object and shares native alpha and root tint', () => {

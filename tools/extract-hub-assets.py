@@ -50,6 +50,7 @@ PLAYER_HEADINGS = 24
 PLAYER_WALK_POSES = 5
 PLAYER_ATTACHMENT_POSES = 10
 PLAYER_ATTACHMENT_DEPTH_BASELINE = 0.5
+PRE_CREATE_STAFF_SOCKET_SCALE = 1.100000023841858
 PLAYER_DEATH_FACINGS = 6
 PLAYER_DEATH_FRAMES = 4
 PLAYER_DEATH_ROBE_PRIMARY_BASES = (76, 100, 124)
@@ -641,6 +642,10 @@ def tint(sprite: Image.Image, color: tuple[int, int, int]) -> Image.Image:
     )
 
 
+def float32(value: float) -> float:
+    return struct.unpack("<f", struct.pack("<f", value))[0]
+
+
 def student_prop_color(color: tuple[int, int, int]) -> tuple[int, int, int]:
     """Replay Color::Saturate(color, 0.85) from Student::Student."""
     red, green, blue = (channel / 255 for channel in color)
@@ -905,6 +910,86 @@ def build_player_staff_sheet(
                 cell,
                 (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
             )
+    return sheet
+
+
+def build_player_fallback_attachment_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    front: bool,
+    duplicate_second_bank: bool,
+) -> Image.Image:
+    """Replay the generic attachment compositor's two directional banks."""
+    sheet = empty_player_sheet(PLAYER_WALK_POSES)
+    for heading in range(PLAYER_HEADINGS):
+        for pose in range(PLAYER_WALK_POSES):
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            offset = pose * PLAYER_HEADINGS + heading
+            first_bank = 484 + offset
+            second_bank = 676 + offset
+            if attachment_is_front(records, first_bank) == front:
+                paste_player_layer(cell, atlas, records[first_bank])
+            if attachment_is_front(records, second_bank) == front:
+                paste_player_layer(cell, atlas, records[second_bank])
+            if duplicate_second_bank:
+                # 0x00539A5B..0x00539AEC submits this bank once more in both
+                # compositor passes when the selected primary is exactly -1.
+                paste_player_layer(cell, atlas, records[second_bank])
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def build_player_bare_attachment_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    front: bool,
+) -> Image.Image:
+    return build_player_fallback_attachment_sheet(atlas, records, front, False)
+
+
+def build_player_unselected_attachment_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    front: bool,
+) -> Image.Image:
+    return build_player_fallback_attachment_sheet(atlas, records, front, True)
+
+
+def build_player_unselected_robe_attachment_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+) -> Image.Image:
+    """Extract Item_Robe's 24-way scroll and generated plain Staff pair."""
+    sheet = empty_player_sheet()
+    center = PLAYER_CELL_SIZE / 2
+    material = records[5]
+    for heading in range(PLAYER_HEADINGS):
+        cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+        paste_player_layer(cell, atlas, records[1588 + heading])
+        points = records[460 + heading].points
+        if len(points) != 2:
+            raise ValueError(
+                f"pre-Create Staff socket record {460 + heading} must have two points"
+            )
+        start = (
+            center + float32(points[0][0] * PRE_CREATE_STAFF_SOCKET_SCALE),
+            center + float32(points[0][1] * PRE_CREATE_STAFF_SOCKET_SCALE),
+        )
+        end = (
+            center + float32(points[1][0] * PRE_CREATE_STAFF_SOCKET_SCALE),
+            center + float32(points[1][1] * PRE_CREATE_STAFF_SOCKET_SCALE),
+        )
+        paste_segment(
+            cell,
+            crop(atlas, material),
+            start,
+            end,
+            material.logical_width,
+        )
+        sheet.alpha_composite(cell, (0, heading * PLAYER_CELL_SIZE))
     return sheet
 
 
@@ -1565,6 +1650,31 @@ def main() -> int:
         )
     save(build_player_staff_sheet(clothes, clothes_records, False), output_dir, "player-character-staff-back")
     save(build_player_staff_sheet(clothes, clothes_records, True), output_dir, "player-character-staff-front")
+    save(
+        build_player_bare_attachment_sheet(clothes, clothes_records, False),
+        output_dir,
+        "player-character-bare-attachment-back",
+    )
+    save(
+        build_player_bare_attachment_sheet(clothes, clothes_records, True),
+        output_dir,
+        "player-character-bare-attachment-front",
+    )
+    save(
+        build_player_unselected_attachment_sheet(clothes, clothes_records, False),
+        output_dir,
+        "player-character-unselected-attachment-back",
+    )
+    save(
+        build_player_unselected_attachment_sheet(clothes, clothes_records, True),
+        output_dir,
+        "player-character-unselected-attachment-front",
+    )
+    save(
+        build_player_unselected_robe_attachment_sheet(clothes, clothes_records),
+        output_dir,
+        "player-character-unselected-robe-attachment",
+    )
     save(build_player_wand_sheet(clothes, clothes_records, False), output_dir, "player-character-wand-back")
     save(build_player_wand_sheet(clothes, clothes_records, True), output_dir, "player-character-wand-front")
     for selector in range(4):

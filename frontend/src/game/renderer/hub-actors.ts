@@ -13,6 +13,7 @@ import type {
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
 import {
+  NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE,
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   isPlayerModEquipmentAppearance,
@@ -55,6 +56,7 @@ export class PlayerWorldView {
   private readonly orbFrontOverlay: NativeElementVfxView
   private readonly robe: Sprite
   private readonly robeSecondary: Sprite
+  private readonly unselectedRobeAttachment: Sprite
   private readonly fixed: Sprite
   private readonly fixedSecondary: Sprite
   private readonly staffFront: Sprite
@@ -64,6 +66,7 @@ export class PlayerWorldView {
   private readonly hitStaffBack: Sprite
   private readonly hitRobe: Sprite
   private readonly hitRobeSecondary: Sprite
+  private readonly hitUnselectedRobeAttachment: Sprite
   private readonly hitFixed: Sprite
   private readonly hitFixedSecondary: Sprite
   private readonly hitStaffFront: Sprite
@@ -84,6 +87,8 @@ export class PlayerWorldView {
   private currentElementEffectScale = 1
   private currentDeathFrame: number | null = null
   private currentHeadingIndex = 0
+  private currentOrdinaryWeaponVisible = false
+  private currentUnselectedPrimaryAttachment = false
   private movementFacingState: ActorMovementFacingState | null = null
   private secondaryState: NativeSecondaryPlayerState | undefined
   private robePrimaryTint = 0xffffff
@@ -107,6 +112,10 @@ export class PlayerWorldView {
     this.staffBack = actorSprite(playerTextures.staffBack[0][0], 1)
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
     this.robeSecondary = actorSprite(playerTextures.robe[0][0], 3)
+    this.unselectedRobeAttachment = actorSprite(
+      textures.equipment.unselectedAttachment.robe[0],
+      3.5,
+    )
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
@@ -134,6 +143,10 @@ export class PlayerWorldView {
     this.hitStaffBack = actorSprite(playerTextures.staffBack[0][0], 1)
     this.hitRobe = actorSprite(playerTextures.robe[0][0], 3)
     this.hitRobeSecondary = actorSprite(playerTextures.robe[0][0], 3)
+    this.hitUnselectedRobeAttachment = actorSprite(
+      textures.equipment.unselectedAttachment.robe[0],
+      3.5,
+    )
     this.hitFixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.hitFixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.hitStaffFront = actorSprite(playerTextures.staffFront[0][0], 5)
@@ -143,6 +156,7 @@ export class PlayerWorldView {
       this.hitStaffBack,
       this.hitRobe,
       this.hitRobeSecondary,
+      this.hitUnselectedRobeAttachment,
       this.hitFixed,
       this.hitFixedSecondary,
       this.hitStaffFront,
@@ -153,6 +167,7 @@ export class PlayerWorldView {
       this.hitStaffBack,
       this.hitRobe,
       this.hitRobeSecondary,
+      this.hitUnselectedRobeAttachment,
       this.hitFixed,
       this.hitFixedSecondary,
       this.hitStaffFront,
@@ -175,6 +190,7 @@ export class PlayerWorldView {
       this.staffBack,
       this.robe,
       this.robeSecondary,
+      this.unselectedRobeAttachment,
       this.fixed,
       this.fixedSecondary,
       this.staffFront,
@@ -272,6 +288,16 @@ export class PlayerWorldView {
     }
     const hasWeapon = weaponTextures !== null || modWeaponTextures !== null
     const hasStaff = livingAppearance.weapon?.kind === 'staff'
+    const bareAttachmentVisible = !plan.unselectedPrimaryAttachment
+      && !hasWeapon
+      && plan.bareAttachmentPose !== null
+    const fallbackAttachmentVisible = plan.unselectedPrimaryAttachment
+      || bareAttachmentVisible
+    const ordinaryWeaponVisible = !plan.unselectedPrimaryAttachment && hasWeapon
+    const ordinaryStaffVisible = !plan.unselectedPrimaryAttachment && hasStaff
+    const unselectedRobeAttachmentVisible = plan.unselectedPrimaryAttachment
+      && livingAppearance.robe !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.robe)
     const selectedPrimaryAvailable = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       || player.primaryCast.selectedPrimaryId >= 0
     const modStaffFront = modWeaponTextures
@@ -282,6 +308,8 @@ export class PlayerWorldView {
     const hatHasSecondary = livingAppearance.hat !== null
       && (modHatTextures ? modHatTextures.secondary !== null : true)
     this.currentDeathFrame = death.visible ? death.frame : null
+    this.currentOrdinaryWeaponVisible = ordinaryWeaponVisible
+    this.currentUnselectedPrimaryAttachment = plan.unselectedPrimaryAttachment
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
@@ -289,14 +317,17 @@ export class PlayerWorldView {
     // The extracted native item banks already partition each pose into an
     // all-transparent back or front cell from Clothes point-0 depth. Keeping
     // both passes live preserves every melee pose without duplicating pixels.
-    this.staffBack.visible = !death.visible && hasWeapon && modStaffFront !== true
+    this.staffBack.visible = !death.visible && (
+      fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && modStaffFront !== true)
+    )
     this.orbFrontBase.container.visible = !death.visible
       && elementEffectVisible
-      && hasStaff
+      && ordinaryStaffVisible
       && plan.orbPasses.frontBase
     this.orbFrontOverlay.container.visible = !death.visible
       && elementEffectVisible
-      && hasStaff
+      && ordinaryStaffVisible
       && plan.orbPasses.frontOverlay
     this.damageX4FrontBase.container.visible = this.orbFrontBase.container.visible
       && selectedPrimaryAvailable
@@ -306,24 +337,56 @@ export class PlayerWorldView {
       && player.progression.damageX4TicksRemaining > 0
     this.robe.visible = !death.visible
     this.robeSecondary.visible = !death.visible && robeHasSecondary
+    this.unselectedRobeAttachment.visible = !death.visible
+      && unselectedRobeAttachmentVisible
     this.fixed.visible = !death.visible
     this.fixedSecondary.visible = !death.visible && robeHasSecondary
-    this.staffFront.visible = !death.visible && hasWeapon && modStaffFront !== false
+    this.staffFront.visible = !death.visible && (
+      fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && modStaffFront !== false)
+    )
     this.head.visible = !death.visible
     this.headSecondary.visible = !death.visible && hatHasSecondary
     this.updateDeathLayers(playerTextures, death, deathAppearance)
     const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
     this.hitOverlay.alpha = hitAlpha
     this.hitOverlay.visible = !death.visible && hitAlpha > 0
-    this.hitStaffBack.visible = hasWeapon && modStaffFront !== true
+    this.hitStaffBack.visible = fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && modStaffFront !== true)
     this.hitRobe.visible = true
     this.hitRobeSecondary.visible = robeHasSecondary
+    this.hitUnselectedRobeAttachment.visible = unselectedRobeAttachmentVisible
     this.hitFixed.visible = true
     this.hitFixedSecondary.visible = robeHasSecondary
-    this.hitStaffFront.visible = hasWeapon && modStaffFront !== false
+    this.hitStaffFront.visible = fallbackAttachmentVisible
+      || (ordinaryWeaponVisible && modStaffFront !== false)
     this.hitHead.visible = true
     this.hitHeadSecondary.visible = hatHasSecondary
-    if (modWeaponTextures !== null) {
+    if (plan.unselectedPrimaryAttachment) {
+      const back = this.textures.equipment.unselectedAttachment.back[heading]
+        ?.[NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE]
+      const front = this.textures.equipment.unselectedAttachment.front[heading]
+        ?.[NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE]
+      if (back === undefined || front === undefined) {
+        throw new RangeError('Missing selected-primary -1 attachment pose 4')
+      }
+      this.staffBack.texture = back
+      this.staffFront.texture = front
+      this.hitStaffBack.texture = back
+      this.hitStaffFront.texture = front
+    } else if (bareAttachmentVisible && plan.bareAttachmentPose !== null) {
+      const back = this.textures.equipment.bareAttachment.back[heading]
+        ?.[plan.bareAttachmentPose]
+      const front = this.textures.equipment.bareAttachment.front[heading]
+        ?.[plan.bareAttachmentPose]
+      if (back === undefined || front === undefined) {
+        throw new RangeError(`Missing bare attachment pose ${plan.bareAttachmentPose}`)
+      }
+      this.staffBack.texture = back
+      this.staffFront.texture = front
+      this.hitStaffBack.texture = back
+      this.hitStaffFront.texture = front
+    } else if (modWeaponTextures !== null) {
       const texture = wearableFrame(modWeaponTextures, 'primary', heading, attachmentPose)
       this.staffBack.texture = texture
       this.staffFront.texture = texture
@@ -335,6 +398,9 @@ export class PlayerWorldView {
       this.hitStaffBack.texture = weaponTextures.back[heading]![attachmentPose]!
       this.hitStaffFront.texture = weaponTextures.front[heading]![attachmentPose]!
     }
+    this.unselectedRobeAttachment.texture =
+      this.textures.equipment.unselectedAttachment.robe[heading]!
+    this.unselectedRobeAttachment.position.set(fixedOffset.x, fixedOffset.y)
     if (livingAppearance.robe === null) {
       this.robe.texture = playerTextures.robe[heading]![pose]!
       this.fixed.texture = playerTextures.fixed[heading]![attachmentPose]!
@@ -395,6 +461,8 @@ export class PlayerWorldView {
     this.headSecondary.position.set(headOffset.x, headOffset.y)
     this.hitRobe.texture = this.robe.texture
     this.hitRobeSecondary.texture = this.robeSecondary.texture
+    this.hitUnselectedRobeAttachment.texture = this.unselectedRobeAttachment.texture
+    this.hitUnselectedRobeAttachment.position.set(fixedOffset.x, fixedOffset.y)
     this.hitFixed.texture = this.fixed.texture
     this.hitFixedSecondary.texture = this.fixedSecondary.texture
     this.hitFixed.position.set(fixedOffset.x, fixedOffset.y)
@@ -507,6 +575,18 @@ export class PlayerWorldView {
     return this.staffBack.scale.x
   }
 
+  get ordinaryWeaponVisible(): boolean {
+    return this.currentOrdinaryWeaponVisible
+  }
+
+  get unselectedPrimaryAttachment(): boolean {
+    return this.currentUnselectedPrimaryAttachment
+  }
+
+  get unselectedRobeAttachmentVisible(): boolean {
+    return this.unselectedRobeAttachment.visible
+  }
+
   get magicShieldScale(): number {
     return this.magicShield.scale.x
   }
@@ -550,6 +630,7 @@ export class PlayerWorldView {
     this.staffBack.tint = tint
     this.robe.tint = multiplyTints(this.robePrimaryTint, tint)
     this.robeSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
+    this.unselectedRobeAttachment.tint = tint
     this.fixed.tint = multiplyTints(this.robePrimaryTint, tint)
     this.fixedSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
     this.staffFront.tint = tint

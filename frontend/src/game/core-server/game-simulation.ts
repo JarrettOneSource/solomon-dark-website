@@ -3,6 +3,7 @@ import {
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
   NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
+  createIdlePlayerPrimaryCast,
   createIdlePlayerCharacterInput,
   createPlayerCharacter,
   type PlayerCharacterConfig,
@@ -14,6 +15,7 @@ import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor
 import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
 import { isBoneyardPlayerCombatEnabled } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { hubCollegeAdmissionPrimaryUnset } from '../core-kernels/college-admission-lifecycle.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   nativePrimaryViewBounds,
@@ -565,22 +567,33 @@ export function armGameSimulationCollegeIntro(
     'college',
   )
   const economyWithAppearance = applyNativeStarterEquipmentAppearance(economy, appearance)
+  const playerEntitiesWithAppearance = economyWithAppearance === economy
+    ? state.playerEntities
+    : replacePlayerEconomy(state.playerEntities, playerId, economyWithAppearance)
   const collegeIntroAlreadyPassed = participant.collegeIntro === null
     && (participant.region !== 'courtyard' || participant.transition !== null)
   const world = collegeIntroAlreadyPassed
     ? state.world
     : beginHubCollegeIntro(state.world, playerId)
   if (world === state.world) {
-    return economyWithAppearance === economy
-      ? state
-      : {
-          ...state,
-          playerEntities: replacePlayerEconomy(
-            state.playerEntities,
-            playerId,
-            economyWithAppearance,
-          ),
-        }
+    const resetPrimaryCast = participant.collegeIntro !== null
+      || (
+        hubCollegeAdmissionPrimaryUnset(participant, true)
+        && player.primaryCast.selectedPrimaryId !== -1
+      )
+    if (!resetPrimaryCast) {
+      return playerEntitiesWithAppearance === state.playerEntities
+        ? state
+        : { ...state, playerEntities: playerEntitiesWithAppearance }
+    }
+    return {
+      ...state,
+      playerEntities: replacePlayerCharacter(
+        playerEntitiesWithAppearance,
+        playerId,
+        { ...player, primaryCast: createIdlePlayerPrimaryCast() },
+      ),
+    }
   }
   const character = {
     ...createPlayerCharacter(player.config, NATIVE_COLLEGE_COURTYARD_PATH[0]),
@@ -592,10 +605,10 @@ export function armGameSimulationCollegeIntro(
   }
   return {
     ...state,
-    playerEntities: replacePlayerEconomy(
-      replacePlayerCharacter(state.playerEntities, playerId, character),
+    playerEntities: replacePlayerCharacter(
+      playerEntitiesWithAppearance,
       playerId,
-      economyWithAppearance,
+      character,
     ),
     world,
   }
@@ -1713,7 +1726,10 @@ export function selectGameSimulationPlayerPrimarySkill(
   playerId: PlayerId,
   skillId: number,
 ): GameSimulationState | null {
-  if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
+  if (
+    !gameSimulationPlayerCanEditBooks(state, playerId)
+    || gameSimulationHubCollegePrimaryUnset(state.world, state.playerEntities, playerId)
+  ) return null
   try {
     return {
       ...state,
@@ -2872,7 +2888,9 @@ function finishGameSimulationTick(
     const skillId = entry?.kind === 'skill' ? entry.skillId : null
     const category = skillId === null ? null : nativeSkillCategory(skillId)
     if (skillId !== null && category === 1) {
-      playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
+      if (!gameSimulationHubCollegePrimaryUnset(world, playerEntities, playerId)) {
+        playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
+      }
     } else if (skillId !== null && category === 2) {
       playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'secondary-cast')
     } else if (
@@ -3338,7 +3356,8 @@ function finishGameSimulationTick(
           ) === null,
         }
       : {}),
-    castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
+    castAuthority: Object.fromEntries(playerEntities.identities.flatMap(({ playerId }, index) => {
+      if (gameSimulationHubCollegePrimaryUnset(result.world, playerEntities, playerId)) return []
       const progression = playerEntities.progressions[index]!
       const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
       const runtime = playerSkillRuntimeAt(playerEntities, playerId)
@@ -3356,7 +3375,7 @@ function finishGameSimulationTick(
           manaCost: derived.offensiveManaCostFactor,
         },
       )
-      return [
+      return [[
         playerId,
         {
           alive: progression.lifeState === 'alive',
@@ -3373,7 +3392,7 @@ function finishGameSimulationTick(
           ) > 0,
           primarySkill,
         },
-      ]
+      ] as const]
     })),
     inputs: primaryInputs,
     players: secondaryPlayers,
@@ -3808,6 +3827,18 @@ function finishGameSimulationTick(
     tick,
     world,
   }
+}
+
+function gameSimulationHubCollegePrimaryUnset(
+  world: GameWorldState,
+  playerEntities: PlayerEntityStore,
+  playerId: PlayerId,
+): boolean {
+  return world.kind === 'hub'
+    && hubCollegeAdmissionPrimaryUnset(
+      world.participants[playerId],
+      playerEconomyAt(playerEntities, playerId)?.collegeIntroPending === true,
+    )
 }
 
 function gameWorldKey(world: GameWorldState, playerId: string): string {

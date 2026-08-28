@@ -17,3 +17,17 @@ export function hubCollegeAdmissionPreLoadout(
     && transition.destination === 'courtyard'
   )
 }
+
+export function hubCollegeAdmissionPrimaryUnset(
+  participant: HubParticipantState | undefined,
+  collegeIntroPending: boolean,
+): boolean {
+  return participant !== undefined
+    && hubCollegeAdmissionPreLoadout(participant, collegeIntroPending)
+    && (
+      participant.collegeIntro !== null
+      || participant.region === 'office'
+      || participant.transition?.phase === 'college-loadout'
+      || participant.transition?.sourceRegion === 'office'
+    )
+}

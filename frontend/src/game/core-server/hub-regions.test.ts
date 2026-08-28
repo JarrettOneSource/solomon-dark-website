@@ -24,7 +24,10 @@ import {
   type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
-import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
+import {
+  hubCollegeAdmissionPreLoadout,
+  hubCollegeAdmissionPrimaryUnset,
+} from '../core-kernels/college-admission-lifecycle.ts'
 import {
   NATIVE_COLLEGE_COURTYARD_PATH,
   NATIVE_COLLEGE_TITLE_CURSOR_STEP,
@@ -191,6 +194,14 @@ test('College admission stays pre-loadout until the confirmed Office return', ()
   assert.equal(hubCollegeAdmissionPreLoadout(fresh, true), true)
   assert.equal(hubCollegeAdmissionPreLoadout(undefined, true), true)
   assert.equal(hubCollegeAdmissionPreLoadout(fresh, false), false)
+  assert.equal(hubCollegeAdmissionPrimaryUnset(fresh, true), false)
+  assert.equal(hubCollegeAdmissionPrimaryUnset(undefined, true), false)
+  assert.equal(hubCollegeAdmissionPrimaryUnset(createHubCollegeIntroParticipantState(), true), true)
+  assert.equal(hubCollegeAdmissionPrimaryUnset({
+    collegeIntro: null,
+    region: 'office',
+    transition: null,
+  }, true), true)
 
   const loadout: HubParticipantState = {
     collegeIntro: null,
@@ -205,7 +216,12 @@ test('College admission stays pre-loadout until the confirmed Office return', ()
     },
   }
   assert.equal(hubCollegeAdmissionPreLoadout(loadout, true), true)
+  assert.equal(hubCollegeAdmissionPrimaryUnset(loadout, true), true)
   assert.equal(hubCollegeAdmissionPreLoadout({
+    ...loadout,
+    transition: { ...loadout.transition!, phase: 'incoming' },
+  }, true), false)
+  assert.equal(hubCollegeAdmissionPrimaryUnset({
     ...loadout,
     transition: { ...loadout.transition!, phase: 'incoming' },
   }, true), false)
@@ -217,6 +233,14 @@ test('College admission stays pre-loadout until the confirmed Office return', ()
       sourceRegion: 'library',
     },
   }, true), true)
+  assert.equal(hubCollegeAdmissionPrimaryUnset({
+    ...loadout,
+    transition: {
+      ...loadout.transition!,
+      phase: 'incoming',
+      sourceRegion: 'library',
+    },
+  }, true), false)
 })
 
 test('encodes the recovered College room graph, bounds, and ordinary portal constants', () => {

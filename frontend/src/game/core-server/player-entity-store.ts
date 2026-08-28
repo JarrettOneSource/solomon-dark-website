@@ -827,6 +827,10 @@ export function replacePlayerLoadout(
     statBook,
     economy,
   )
+  const selectedCharacter = {
+    ...character,
+    primaryCast: resetSelectedPlayerPrimaryCast(character.primaryCast, skillState.skillBook),
+  }
   const previousProgression = source.progressions[index]!
   const weldingOfferBias = nativeEquipmentHasFeature(
     skillState.runtime.equipmentModifiers,
@@ -868,7 +872,7 @@ export function replacePlayerLoadout(
   skillRuntimes[index] = skillState.runtime
   statBooks[index] = statBook
   return {
-    ...replacePlayerCharacter(source, playerId, character),
+    ...replacePlayerCharacter(source, playerId, selectedCharacter),
     belts,
     configs,
     economies,

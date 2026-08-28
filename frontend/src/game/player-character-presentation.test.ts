@@ -9,6 +9,7 @@ import {
 } from './renderer/player-death-weapon-presentation.ts'
 
 import {
+  NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE,
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   playerEquippedElementEffectScale,
@@ -384,6 +385,53 @@ test('player character draw plan preserves native attachment and gait transforms
     playerWorldView,
     /planewalkerTicksRemaining[\s\S]*\? 80[\s\S]*: player\.primaryCast\.selectedPrimaryId/,
   )
+})
+
+test('selected primary -1 owns the pre-Create fallback and Robe prop branch', () => {
+  const unselected = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
+    gaitDegrees: 90,
+    headingIndex: 18,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId: -1 },
+    velocity: { x: -1, y: 0 },
+    walkCyclePrimary: 3.5,
+  })
+  assert.equal(unselected.unselectedPrimaryAttachment, true)
+  assert.equal(unselected.attachmentPose, 0)
+  assert.equal(unselected.bareAttachmentPose, null)
+  assert.equal(NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE, 4)
+  assert.equal(unselected.robePose, 3)
+
+  for (const selectedPrimaryId of [8, 16, 24, 32, 40, 52, 80, 1000]) {
+    const selected = createPlayerCharacterDrawPlan({
+      config: FIRE_CONFIG,
+      gaitDegrees: 0,
+      headingIndex: 18,
+      primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId },
+      velocity: { x: 0, y: 0 },
+      walkCyclePrimary: 0,
+    })
+    assert.equal(selected.unselectedPrimaryAttachment, false, `${selectedPrimaryId}`)
+    assert.equal(selected.bareAttachmentPose, 0, `${selectedPrimaryId}`)
+  }
+})
+
+test('ordinary no-weapon art never reuses a Staff action pose as a Hand-bank index', () => {
+  const state = {
+    config: FIRE_CONFIG,
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId: 16 },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  }
+  assert.equal(createPlayerCharacterDrawPlan(state).bareAttachmentPose, 0)
+  assert.equal(createPlayerCharacterDrawPlan({
+    ...state,
+    primaryCast: { ...state.primaryCast, actionTick: 19 },
+  }).bareAttachmentPose, null)
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, 4).bareAttachmentPose, null)
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, true).bareAttachmentPose, null)
 })
 
 test('Staff element effects preserve exact native call membership across every heading and pose', () => {

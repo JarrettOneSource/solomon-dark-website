@@ -331,8 +331,8 @@ def main() -> None:
         / "player-character-atlas.generated.ts"
     )
     paths = source_paths(assets_directory)
-    if len(paths) != 79:
-        raise SystemExit(f"expected 79 player source sheets, found {len(paths)}")
+    if len(paths) != 84:
+        raise SystemExit(f"expected 84 player source sheets, found {len(paths)}")
     sheets, rectangles = collect_sources(paths)
     pages = pack_rectangles(rectangles)
     if len(pages) > 2:

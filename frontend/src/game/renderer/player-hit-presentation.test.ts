@@ -16,6 +16,7 @@ test('player renderer owns a separate native-red living-body redraw pass', () =>
   assert.match(membership, /this\.hitStaffBack/)
   assert.match(membership, /this\.hitRobe/)
   assert.match(membership, /this\.hitRobeSecondary/)
+  assert.match(membership, /this\.hitUnselectedRobeAttachment/)
   assert.match(membership, /this\.hitFixed/)
   assert.match(membership, /this\.hitFixedSecondary/)
   assert.match(membership, /this\.hitStaffFront/)
@@ -29,11 +30,19 @@ test('player renderer owns a separate native-red living-body redraw pass', () =>
 })
 
 test('hit redraw mirrors current textures, offsets, and item-owned depth-mask passes', () => {
-  assert.match(source, /this\.hitStaffBack\.visible = hasWeapon/)
-  assert.match(source, /this\.hitStaffFront\.visible = hasWeapon/)
+  assert.match(source, /this\.hitStaffBack\.visible = fallbackAttachmentVisible/)
+  assert.match(source, /this\.hitStaffFront\.visible = fallbackAttachmentVisible/)
   assert.match(source, /this\.hitStaffBack\.texture = weaponTextures\.back\[heading\]!\[attachmentPose\]!/)
   assert.match(source, /this\.hitRobe\.texture = this\.robe\.texture/)
   assert.match(source, /this\.hitRobeSecondary\.texture = this\.robeSecondary\.texture/)
+  assert.match(
+    source,
+    /this\.hitUnselectedRobeAttachment\.texture = this\.unselectedRobeAttachment\.texture/,
+  )
+  assert.match(
+    source,
+    /this\.hitUnselectedRobeAttachment\.position\.set\(fixedOffset\.x, fixedOffset\.y\)/,
+  )
   assert.match(source, /this\.hitFixed\.texture = this\.fixed\.texture/)
   assert.match(source, /this\.hitFixedSecondary\.texture = this\.fixedSecondary\.texture/)
   assert.match(source, /this\.hitFixed\.position\.set\(fixedOffset\.x, fixedOffset\.y\)/)

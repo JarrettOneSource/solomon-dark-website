@@ -47,6 +47,7 @@ const MELEE_ALT_STAFF_FRONT: readonly boolean[] = [
 
 export interface PlayerCharacterDrawPlan {
   attachmentPose: PlayerStaffAttachmentPose
+  bareAttachmentPose: 0 | null
   fixedRobeOffset: Vector2
   frontAttachmentOffset: Vector2
   headOffset: Vector2
@@ -56,6 +57,7 @@ export interface PlayerCharacterDrawPlan {
   orbOffset: Vector2
   robePose: number
   staffFront: boolean
+  unselectedPrimaryAttachment: boolean
 }
 
 export interface PlayerStaffOrbPasses {
@@ -65,6 +67,7 @@ export interface PlayerStaffOrbPasses {
 
 export const NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD =
   0.10000000149011612
+export const NATIVE_UNSELECTED_PRIMARY_ATTACHMENT_POSE = 4
 
 export interface PlayerDeathDrawPlan {
   facing: number
@@ -107,9 +110,19 @@ export function createPlayerCharacterDrawPlan(
   const attachmentPose = secondaryCastActive
     ? 9
     : staffActionPose ?? primaryCastPresentationPose(state.primaryCast, castElement)
+  const unselectedPrimaryAttachment = state.primaryCast.selectedPrimaryId === -1
+  const bareAttachmentPose: 0 | null = !unselectedPrimaryAttachment
+    && staffActionPose === null
+    && !secondaryCastActive
+    && state.primaryCast.actionTick < 0
+    && !state.primaryCast.channelActive
+    && !state.primaryCast.oneShotAttackPoseHeld
+    ? 0
+    : null
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
     attachmentPose,
+    bareAttachmentPose,
     fixedRobeOffset: playerCharacterFixedRobeOffset(state.gaitDegrees, scale),
     frontAttachmentOffset: playerCharacterFrontAttachmentOffset(
       state.gaitDegrees,
@@ -132,6 +145,7 @@ export function createPlayerCharacterDrawPlan(
       : playerStaffAttachmentOffset(state.headingIndex, attachmentPose),
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
+    unselectedPrimaryAttachment,
   }
 }
 

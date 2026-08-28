@@ -95,9 +95,13 @@ interface HubFrameDiagnostics {
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
   playerMoving: boolean
+  playerOrdinaryWeaponVisible: boolean
   playerPositions: Record<string, { x: number; y: number }>
   playerScreenPositions: Record<string, { x: number; y: number }>
+  playerSelectedPrimaryId: number
   playerWalkPose: number
+  playerUnselectedPrimaryAttachment: boolean
+  playerUnselectedRobeAttachmentVisible: boolean
   playerWeaponScale: number
   playerX: number
   playerY: number
@@ -323,9 +327,13 @@ export async function createHubWorldRenderer(
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
     playerMoving: false,
+    playerOrdinaryWeaponVisible: false,
     playerPositions: {},
     playerScreenPositions: {},
+    playerSelectedPrimaryId: -1,
     playerWalkPose: 0,
+    playerUnselectedPrimaryAttachment: false,
+    playerUnselectedRobeAttachmentVisible: false,
     playerWeaponScale: 1,
     playerX: Number.NaN,
     playerY: Number.NaN,
@@ -474,7 +482,12 @@ export async function createHubWorldRenderer(
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
     frameDiagnostics.playerMaterialTint = playerView.materialTint
+    frameDiagnostics.playerOrdinaryWeaponVisible = playerView.ordinaryWeaponVisible
+    frameDiagnostics.playerSelectedPrimaryId = player.primaryCast.selectedPrimaryId
     frameDiagnostics.playerWalkPose = playerView.walkPose
+    frameDiagnostics.playerUnselectedPrimaryAttachment = playerView.unselectedPrimaryAttachment
+    frameDiagnostics.playerUnselectedRobeAttachmentVisible =
+      playerView.unselectedRobeAttachmentVisible
     frameDiagnostics.playerWeaponScale = playerView.weaponScale
     frameDiagnostics.orbSpriteCount = playerView.orbSpriteCount
   }

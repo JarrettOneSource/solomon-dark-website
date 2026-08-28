@@ -1523,6 +1523,10 @@ test('client follows the authority-owned College spline heading instead of prese
   receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
   const session = await connecting
   assert.equal(session.samplePresentation().players['player-1'].headingIndex, 2)
+  assert.equal(
+    session.samplePresentation().players['player-1'].primaryCast.selectedPrimaryId,
+    -1,
+  )
 
   for (let tick = 0; tick < 2_000; tick += 1) {
     serverState = stepGameSimulationTick(serverState, {}, {
@@ -1532,10 +1536,15 @@ test('client follows the authority-owned College spline heading instead of prese
   }
   const authoritative = getPlayerCharacter(serverState, 'player-1')
   assert.equal(authoritative.headingIndex, 18)
+  assert.equal(authoritative.primaryCast.selectedPrimaryId, -1)
   nowMs += 50
   receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
 
   assert.equal(session.samplePresentation().players['player-1'].headingIndex, 18)
+  assert.equal(
+    session.samplePresentation().players['player-1'].primaryCast.selectedPrimaryId,
+    -1,
+  )
   session.destroy()
 })
 

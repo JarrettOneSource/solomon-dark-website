@@ -70,6 +70,10 @@ export interface PlayerActorTextureFrames {
 }
 
 export interface PlayerLivingEquipmentTextureFrames {
+  readonly bareAttachment: Readonly<{
+    back: readonly (readonly Texture[])[]
+    front: readonly (readonly Texture[])[]
+  }>
   readonly hats: readonly Readonly<{
     primary: readonly Texture[]
     secondary: readonly Texture[]
@@ -86,6 +90,11 @@ export interface PlayerLivingEquipmentTextureFrames {
     back: readonly (readonly Texture[])[]
     front: readonly (readonly Texture[])[]
   }>[]
+  readonly unselectedAttachment: Readonly<{
+    back: readonly (readonly Texture[])[]
+    front: readonly (readonly Texture[])[]
+    robe: readonly Texture[]
+  }>
   readonly wand: Readonly<{
     back: readonly (readonly Texture[])[]
     front: readonly (readonly Texture[])[]
@@ -238,6 +247,18 @@ export function createPlayerWorldTextures(
   ])) as Record<WizardElement, PlayerActorTextureFrames>
   const elementTextures = createNativeElementVfxTextures(texture)
   const equipment: PlayerLivingEquipmentTextureFrames = {
+    bareAttachment: {
+      back: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.bareAttachment.back,
+        ACTOR_WALK_FRAMES,
+        ACTOR_HEADINGS,
+      ),
+      front: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.bareAttachment.front,
+        ACTOR_WALK_FRAMES,
+        ACTOR_HEADINGS,
+      ),
+    },
     hats: PLAYER_CHARACTER_SHEETS.hatStyles.map((style) => ({
       primary: playerCharacterAtlas.strip(style.primary, ACTOR_HEADINGS),
       secondary: playerCharacterAtlas.strip(style.secondary, ACTOR_HEADINGS),
@@ -262,6 +283,22 @@ export function createPlayerWorldTextures(
       back: playerCharacterAtlas.grid(style.back, ACTOR_ATTACHMENT_POSES, ACTOR_HEADINGS),
       front: playerCharacterAtlas.grid(style.front, ACTOR_ATTACHMENT_POSES, ACTOR_HEADINGS),
     })),
+    unselectedAttachment: {
+      back: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.unselectedAttachment.back,
+        ACTOR_WALK_FRAMES,
+        ACTOR_HEADINGS,
+      ),
+      front: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.unselectedAttachment.front,
+        ACTOR_WALK_FRAMES,
+        ACTOR_HEADINGS,
+      ),
+      robe: playerCharacterAtlas.strip(
+        PLAYER_CHARACTER_SHEETS.unselectedAttachment.robe,
+        ACTOR_HEADINGS,
+      ),
+    },
     wand: {
       back: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.wand.back,
@@ -455,6 +492,8 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
   textures.death.robe.fixedSecondary.forEach((sheet) => sheet.forEach(add))
   textures.death.robe.primary.forEach((sheet) => sheet.forEach(add))
   textures.death.robe.secondary.forEach((sheet) => sheet.forEach(add))
+  textures.equipment.bareAttachment.back.forEach(add)
+  textures.equipment.bareAttachment.front.forEach(add)
   for (const hat of textures.equipment.hats) {
     add(hat.primary)
     add(hat.secondary)
@@ -469,6 +508,9 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
     staff.back.forEach(add)
     staff.front.forEach(add)
   }
+  textures.equipment.unselectedAttachment.back.forEach(add)
+  textures.equipment.unselectedAttachment.front.forEach(add)
+  add(textures.equipment.unselectedAttachment.robe)
   textures.equipment.wand.back.forEach(add)
   textures.equipment.wand.front.forEach(add)
   Object.values(textures.elementVfx).forEach(add)

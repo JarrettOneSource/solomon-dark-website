@@ -371,6 +371,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
+  playerOrdinaryWeaponVisible: boolean
   playerSamples: readonly Readonly<{
     displayName: string
     id: string
@@ -383,6 +384,8 @@ interface BoneyardRendererFrameDiagnostics {
   playerScreenX: number
   playerScreenY: number
   playerWalkPose: number
+  playerUnselectedPrimaryAttachment: boolean
+  playerUnselectedRobeAttachmentVisible: boolean
   playerWeaponScale: number
   playerX: number
   playerY: number
@@ -816,12 +819,15 @@ export async function createBoneyardWorldRenderer(
     playerMagicShieldScale: 1.5,
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
+    playerOrdinaryWeaponVisible: false,
     playerSamples: [],
     primarySpellCount: 0,
     primarySpellKinds: [],
     playerScreenX: Number.NaN,
     playerScreenY: Number.NaN,
     playerWalkPose: 0,
+    playerUnselectedPrimaryAttachment: false,
+    playerUnselectedRobeAttachmentVisible: false,
     playerWeaponScale: 1,
     playerX: Number.NaN,
     playerY: Number.NaN,
@@ -1313,6 +1319,12 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerMagicShieldScale = playerView?.magicShieldScale ?? 1.5
       frameDiagnostics.playerMagicShieldVisible = playerView?.magicShieldVisible ?? false
       frameDiagnostics.playerMaterialTint = playerView?.materialTint ?? 0xffffff
+      frameDiagnostics.playerOrdinaryWeaponVisible =
+        playerView?.ordinaryWeaponVisible ?? false
+      frameDiagnostics.playerUnselectedPrimaryAttachment =
+        playerView?.unselectedPrimaryAttachment ?? false
+      frameDiagnostics.playerUnselectedRobeAttachmentVisible =
+        playerView?.unselectedRobeAttachmentVisible ?? false
       frameDiagnostics.playerX = player.position.x
       frameDiagnostics.playerY = player.position.y
       frameDiagnostics.residentCount = currentStaticWorld.activeResidents.length

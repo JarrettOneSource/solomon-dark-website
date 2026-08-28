@@ -86,6 +86,7 @@ import {
   returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
+  selectGameSimulationPlayerPrimarySkill,
   selectGameSimulationPlayerSkill,
   synchronizeDetachedGameSimulationPlayer,
   stepGameSimulation,
@@ -215,11 +216,46 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(ownerParticipant()?.collegeIntro?.phase, 'courtyard-walk')
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 972, y: 1_044 })
   assert.equal(getPlayerCharacter(state, 'owner').headingIndex, 2)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.actionTick, -1)
+  const staleCollegeCharacter = getPlayerCharacter(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'owner', {
+      ...staleCollegeCharacter,
+      primaryCast: {
+        ...staleCollegeCharacter.primaryCast,
+        actionTick: 0,
+        selectedPrimaryId: 8,
+      },
+    }),
+  }
+  state = armGameSimulationCollegeIntro(state, 'owner')
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.actionTick, -1)
   const collegeStarterTint = getPlayerEconomy(state, 'owner').equipment.hat?.iconTints
   assert.ok(collegeStarterTint)
   assert.notDeepEqual(collegeStarterTint, initialStarterTint)
   assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.robe?.iconTints, collegeStarterTint)
   assert.equal(collegeStarterTint[1], 0xffffff)
+
+  state = withPlayerSkillRank(state, 'owner', 16, 1)
+  const boundAlternatePrimary = bindGameSimulationPlayerSkillQuickbar(
+    state,
+    'owner',
+    16,
+    7,
+  )
+  assert.ok(boundAlternatePrimary)
+  state = boundAlternatePrimary
+  assert.equal(selectGameSimulationPlayerPrimarySkill(state, 'owner', 16), null)
+  const alternatePrimaryInput = {
+    ...gameplayInput(0, 0),
+    cast: { primary: false, quickbar: 7 },
+  }
+  state = stepGameSimulationTick(state, { owner: alternatePrimaryInput })
+  assert.equal(getPlayerSkillBook(state, 'owner').primarySkillId, 8)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
 
   for (let tick = 0; tick < 5_000; tick += 1) {
     if (ownerParticipant()?.collegeIntro?.phase === 'arch-dialogue') break
@@ -230,6 +266,7 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
 
   assert.equal(ownerParticipant()?.region, 'office')
   assert.equal(ownerParticipant()?.collegeIntro?.phase, 'arch-dialogue')
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
   assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision)
   assert.equal(hubCollegeAdmissionPreLoadout(
@@ -243,11 +280,26 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(acknowledged.accepted, true)
   state = acknowledged.state
   assert.equal(ownerParticipant()?.collegeIntro, null)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
   assert.equal(hubCollegeAdmissionPreLoadout(
     ownerParticipant(),
     getPlayerEconomy(state, 'owner').collegeIntroPending,
   ), true)
+  state = stepGameSimulationTick(state, { owner: alternatePrimaryInput })
+  assert.equal(getPlayerSkillBook(state, 'owner').primarySkillId, 8)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
+  const staleOfficeCharacter = getPlayerCharacter(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'owner', {
+      ...staleOfficeCharacter,
+      primaryCast: { ...staleOfficeCharacter.primaryCast, selectedPrimaryId: 8 },
+    }),
+  }
+  state = armGameSimulationCollegeIntro(state, 'owner')
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
+  assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
 
   state = {
     ...state,
@@ -276,6 +328,19 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
     ownerParticipant(),
     getPlayerEconomy(state, 'owner').collegeIntroPending,
   ), true)
+  state = stepGameSimulationTick(state, { owner: alternatePrimaryInput })
+  assert.equal(getPlayerSkillBook(state, 'owner').primarySkillId, 8)
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
+  const staleLoadoutCharacter = getPlayerCharacter(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'owner', {
+      ...staleLoadoutCharacter,
+      primaryCast: { ...staleLoadoutCharacter.primaryCast, selectedPrimaryId: 8 },
+    }),
+  }
+  state = armGameSimulationCollegeIntro(state, 'owner')
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, -1)
 
   const confirmed = confirmGameSimulationLoadout(state, 'owner', {
     discipline: 'body',
@@ -286,6 +351,7 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
+  assert.equal(getPlayerCharacter(state, 'owner').primaryCast.selectedPrimaryId, 24)
   assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
   assert.deepEqual(
     getPlayerEconomy(state, 'owner').equipment.robe?.iconTints,

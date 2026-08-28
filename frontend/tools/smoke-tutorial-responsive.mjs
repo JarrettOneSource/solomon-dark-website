@@ -1836,7 +1836,12 @@ async function collegeWizardReceipt(host, page) {
     collegePathCursor: node.__sdrHubFrame.collegePathCursor,
     headingIndex: node.__sdrHubFrame.playerHeadingIndex,
     materialTint: node.__sdrHubFrame.playerMaterialTint,
+    ordinaryWeaponVisible: node.__sdrHubFrame.playerOrdinaryWeaponVisible,
     orbSpriteCount: node.__sdrHubFrame.orbSpriteCount,
+    selectedPrimaryId: node.__sdrHubFrame.playerSelectedPrimaryId,
+    unselectedPrimaryAttachment: node.__sdrHubFrame.playerUnselectedPrimaryAttachment,
+    unselectedRobeAttachmentVisible:
+      node.__sdrHubFrame.playerUnselectedRobeAttachmentVisible,
     x: node.__sdrHubFrame.playerX,
     y: node.__sdrHubFrame.playerY,
   }))
@@ -1852,10 +1857,15 @@ async function collegeWizardReceipt(host, page) {
     frameHeadingIndex: frame.headingIndex,
     headingIndex: player.headingIndex,
     materialTint: frame.materialTint,
+    ordinaryWeaponVisible: frame.ordinaryWeaponVisible,
     orbSpriteCount: frame.orbSpriteCount,
     robeSelector: equipment.robe?.selector ?? null,
     primaryTint: economy.equipment.hat?.iconTints?.[0] ?? null,
     robeTint: economy.equipment.robe?.iconTints?.[0] ?? null,
+    selectedPrimaryId: player.primaryCast.selectedPrimaryId,
+    selectedPrimaryIdInFrame: frame.selectedPrimaryId,
+    unselectedPrimaryAttachment: frame.unselectedPrimaryAttachment,
+    unselectedRobeAttachmentVisible: frame.unselectedRobeAttachmentVisible,
     weaponSelector: equipment.weapon?.selector ?? null,
   }
 }
@@ -1868,6 +1878,19 @@ function assertCollegeWizardReceipt(receipt, label) {
     `${label} presentation heading: ${JSON.stringify(receipt)}`,
   )
   assert.equal(receipt.orbSpriteCount, 0, `${label} selected-element effect`)
+  assert.equal(receipt.selectedPrimaryId, -1, `${label} authority primary: ${JSON.stringify(receipt)}`)
+  assert.equal(
+    receipt.selectedPrimaryIdInFrame,
+    -1,
+    `${label} presented primary: ${JSON.stringify(receipt)}`,
+  )
+  assert.equal(
+    receipt.unselectedPrimaryAttachment,
+    true,
+    `${label} selected-primary -1 branch: ${JSON.stringify(receipt)}`,
+  )
+  assert.equal(receipt.unselectedRobeAttachmentVisible, true, `${label} scroll/plain-Staff pixels`)
+  assert.equal(receipt.ordinaryWeaponVisible, false, `${label} ordinary equipped weapon`)
   assert.equal(receipt.robeSelector, 0, `${label} scroll-bearing Robe selector`)
   assert.equal(receipt.weaponSelector, 0, `${label} Staff selector`)
   assert.ok(receipt.primaryTint !== null, `${label} starter tint`)
