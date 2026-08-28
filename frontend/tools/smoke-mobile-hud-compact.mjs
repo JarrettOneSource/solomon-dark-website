@@ -13,6 +13,7 @@ import {
 } from '../src/game/mobile-quickbar-layout.ts'
 import {
   MOBILE_UI_ELEMENT_IDS,
+  MOBILE_UI_GRID_SIZE,
   MOBILE_UI_LAYOUT_VERSION,
   MOBILE_UI_LAYOUT_STORAGE_KEY,
   defaultMobileUiGeometry,
@@ -164,9 +165,6 @@ smokeFlow: try {
   const solo = await capture(page, 'hub-solo')
   assertHubLayout(solo, 'hub-solo', { primaryJoystick: false })
   assertEditorMatchesDefaultHud(receipts['mobile-ui-editor'].defaultGeometry, solo, false)
-  assertCluster(solo, 'hub-solo', { expanded: false })
-  assertEnvelope(solo.members.partyPanel[0], 'hub-solo party chip', { maxHeight: 24, maxWidth: 124 })
-  assertAllyColumn(solo, 'hub-solo', { hidden: false, rows: 0, top: 82 })
   if (layoutEditorOnly) {
     const unexpectedFailedRequests = failedRequests.filter((request) => !expectedNavigationCancellation(request))
     receipts.errors = { consoleErrors, failedResponses, pageErrors, unexpectedFailedRequests }
@@ -180,6 +178,9 @@ smokeFlow: try {
     console.log(`mobile layout editor journey captured under ${evidenceRoot}`)
     break smokeFlow
   }
+  assertCluster(solo, 'hub-solo', { expanded: false })
+  assertEnvelope(solo.members.partyPanel[0], 'hub-solo party chip', { maxHeight: 24, maxWidth: 124 })
+  assertAllyColumn(solo, 'hub-solo', { hidden: false, rows: 0, top: 82 })
 
   // Orientation round trip: portrait and back must reproduce the landscape layout exactly.
   await page.setViewportSize({ width: height, height: width })
@@ -458,6 +459,23 @@ function readGeometry(page) {
 function rectCenter(rect) {
   assert.ok(rect, 'expected element bounds')
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
+function rectGridDistance(rect, pageRect, axis) {
+  const start = axis === 'x' ? rect.x - pageRect.x : rect.y - pageRect.y
+  const size = axis === 'x' ? rect.width : rect.height
+  return Math.min(...[start, start + size / 2, start + size].map((position) => {
+    const remainder = ((position % MOBILE_UI_GRID_SIZE) + MOBILE_UI_GRID_SIZE)
+      % MOBILE_UI_GRID_SIZE
+    return Math.min(remainder, MOBILE_UI_GRID_SIZE - remainder)
+  }))
+}
+
+function assertGridAlignedRect(rect, pageRect, label) {
+  assert.ok(rectGridDistance(rect, pageRect, 'x') < 0.75,
+    `${label}: no horizontal anchor is on the grid (${JSON.stringify(rect)})`)
+  assert.ok(rectGridDistance(rect, pageRect, 'y') < 0.75,
+    `${label}: no vertical anchor is on the grid (${JSON.stringify(rect)})`)
 }
 
 function editorElementScale(label) {
@@ -801,6 +819,10 @@ async function exerciseMobileUiEditor(page, context) {
   assert.equal(await editor.locator('.mobile-ui-editor-meters').count(), 1)
 
   const dock = editor.locator('.mobile-ui-editor-dock')
+  const gridToggle = dock.locator('[data-mobile-ui-grid-toggle]')
+  assert.equal(await gridToggle.count(), 1, 'fullscreen editor exposes the coupled GRID control')
+  assert.equal(await gridToggle.getAttribute('aria-pressed'), 'true')
+  assert.equal(await editor.getAttribute('data-grid-snap'), 'true')
   const dockBefore = await dock.boundingBox()
   const dockHandle = dock.getByRole('button', { name: 'Move editor actions' })
   const handleBounds = await dockHandle.boundingBox()
@@ -822,15 +844,55 @@ async function exerciseMobileUiEditor(page, context) {
   assert.ok(pauseBefore, 'editor pause control has bounds')
   await page.mouse.move(pauseBefore.x + pauseBefore.width / 2, pauseBefore.y + pauseBefore.height / 2)
   await page.mouse.down()
-  await page.mouse.move(pauseBefore.x + pauseBefore.width / 2 + 60, pauseBefore.y + pauseBefore.height / 2 + 35, { steps: 8 })
+  await page.mouse.move(pageBounds.x + 400.4, pageBounds.y + 250.4, { steps: 8 })
+  const pauseGuides = await editor.locator('.mobile-ui-editor-snap-guide').evaluateAll((nodes) => (
+    nodes.map((node) => ({
+      axis: node.getAttribute('data-snap-guide-axis'),
+      kind: node.getAttribute('data-snap-guide-kind'),
+    }))
+  ))
+  assert.ok(pauseGuides.some(({ axis, kind }) => axis === 'x' && kind === 'grid'),
+    `pause move exposes a vertical grid guide (${JSON.stringify(pauseGuides)})`)
+  assert.ok(pauseGuides.some(({ axis, kind }) => axis === 'y' && kind === 'grid'),
+    `pause move exposes a horizontal grid guide (${JSON.stringify(pauseGuides)})`)
+  await page.screenshot({ path: join(evidenceRoot, 'mobile-ui-editor-move-guide.png') })
   await page.mouse.up()
   const pauseMoved = await pauseControl.boundingBox()
   assert.ok(pauseMoved && Math.abs(pauseMoved.x - pauseBefore.x) > 20, 'pause control moves before reset')
+  assertGridAlignedRect(pauseMoved, pageBounds, 'pause smart move')
   await dock.getByRole('button', { name: 'RESET' }).tap()
   await page.waitForFunction(({ x, y }) => {
     const bounds = document.querySelector('[data-mobile-ui-editor-element="pause"]')?.getBoundingClientRect()
     return bounds && Math.abs(bounds.x - x) < 0.75 && Math.abs(bounds.y - y) < 0.75
   }, { x: pauseBefore.x, y: pauseBefore.y })
+
+  await gridToggle.tap()
+  assert.equal(await gridToggle.getAttribute('aria-pressed'), 'false')
+  assert.equal(await editor.getAttribute('data-grid-snap'), 'false')
+  assert.equal(await editor.locator('.mobile-ui-editor-page').getAttribute('data-grid-visible'), 'false')
+  const unsnappedStart = await pauseControl.boundingBox()
+  assert.ok(unsnappedStart, 'pause returns before the unsnapped move')
+  const unsnappedStartCenter = rectCenter(unsnappedStart)
+  await page.mouse.move(unsnappedStartCenter.x, unsnappedStartCenter.y)
+  await page.mouse.down()
+  await page.mouse.move(unsnappedStartCenter.x + 50.5, unsnappedStartCenter.y + 35.5, { steps: 8 })
+  assert.equal(await editor.locator('.mobile-ui-editor-snap-guide').count(), 0,
+    'GRID OFF suppresses alignment guides')
+  await page.mouse.up()
+  const pauseUnsnapped = await pauseControl.boundingBox()
+  assert.ok(pauseUnsnapped, 'pause has unsnapped bounds')
+  const pauseUnsnappedCenter = rectCenter(pauseUnsnapped)
+  assert.ok(Math.abs(pauseUnsnappedCenter.x - unsnappedStartCenter.x - 50.5) < 0.75,
+    `GRID OFF preserves the raw x move (${JSON.stringify(pauseUnsnappedCenter)})`)
+  assert.ok(Math.abs(pauseUnsnappedCenter.y - unsnappedStartCenter.y - 35.5) < 0.75,
+    `GRID OFF preserves the raw y move (${JSON.stringify(pauseUnsnappedCenter)})`)
+  assert.ok(rectGridDistance(pauseUnsnapped, pageBounds, 'x') > 1.5,
+    `GRID OFF does not align a horizontal anchor (${JSON.stringify(pauseUnsnapped)})`)
+  assert.ok(rectGridDistance(pauseUnsnapped, pageBounds, 'y') > 1.5,
+    `GRID OFF does not align a vertical anchor (${JSON.stringify(pauseUnsnapped)})`)
+  await dock.getByRole('button', { name: 'RESET' }).tap()
+  await gridToggle.tap()
+  assert.equal(await gridToggle.getAttribute('aria-pressed'), 'true')
 
   const inventory = editor.locator('[data-mobile-ui-editor-element="inventory"]')
   await inventory.tap()
@@ -857,12 +919,32 @@ async function exerciseMobileUiEditor(page, context) {
     resizeBounds.y + resizeBounds.height / 2,
   )
   await page.mouse.down()
+  const inventoryBeforeResize = await inventory.boundingBox()
+  assert.ok(inventoryBeforeResize, 'inventory has pre-resize bounds')
+  const inventoryRight = inventoryBeforeResize.x + inventoryBeforeResize.width - pageBounds.x
+  const snappedRight = Math.ceil((inventoryRight + 12) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE
+  const resizeDelta = snappedRight - inventoryRight
   await page.mouse.move(
-    resizeBounds.x + resizeBounds.width / 2 + 6,
-    resizeBounds.y + resizeBounds.height / 2 + 6,
+    resizeBounds.x + resizeBounds.width / 2 + resizeDelta,
+    resizeBounds.y + resizeBounds.height / 2 + resizeDelta,
     { steps: 6 },
   )
+  const resizeGuides = await editor.locator('.mobile-ui-editor-snap-guide').evaluateAll((nodes) => (
+    nodes.map((node) => ({
+      axis: node.getAttribute('data-snap-guide-axis'),
+      position: Number.parseFloat(node.style.left || node.style.top),
+    }))
+  ))
+  assert.ok(resizeGuides.some(({ axis, position }) => (
+    axis === 'x' && Math.abs(position - snappedRight) < 0.01
+  )), `resize exposes the exact dragged-edge guide (${JSON.stringify(resizeGuides)})`)
+  await page.screenshot({ path: join(evidenceRoot, 'mobile-ui-editor-resize-guide.png') })
   await page.mouse.up()
+  const snappedInventory = await inventory.boundingBox()
+  assert.ok(snappedInventory, 'inventory has snapped resize bounds')
+  assert.ok(Math.abs(
+    snappedInventory.x + snappedInventory.width - pageBounds.x - snappedRight,
+  ) < 0.75, `inventory resized edge lands on ${snappedRight}px grid line (${JSON.stringify(snappedInventory)})`)
 
   const rotate = inventory.locator('.mobile-ui-editor-rotate-handle')
   const rotateBounds = await rotate.boundingBox()
@@ -925,6 +1007,12 @@ async function exerciseMobileUiEditor(page, context) {
     memberCount: Object.keys(profile.elements).length,
     overlay: overlayBounds,
     silver,
+    snapping: {
+      gridControl: { coupled: true, fullscreen: true },
+      gridMove: pauseMoved,
+      gridResize: { bounds: snappedInventory, rightLine: snappedRight },
+      unsnappedMove: pauseUnsnapped,
+    },
   }
   return profile
 }

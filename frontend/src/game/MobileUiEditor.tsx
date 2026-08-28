@@ -18,20 +18,28 @@ import {
   MOBILE_UI_GRID_SIZE,
   MOBILE_UI_PAGE_ZOOM_MAX,
   MOBILE_UI_PAGE_ZOOM_MIN,
+  MOBILE_UI_RESIZE_HANDLES,
   MOBILE_UI_SCALE_MAX,
   MOBILE_UI_SCALE_MIN,
+  MOBILE_UI_SNAP_THRESHOLD,
   constrainMobileUiTransform,
   defaultMobileUiGeometry,
   mobileUiElementPinchScale,
   mobileUiElementRotation,
+  mobileUiElementSnapRect,
   mobileUiLayoutWith,
   mobileUiPagePinchZoom,
-  snapMobileUiPoint,
+  mobileUiResizeTransform,
+  snapMobileUiMove,
+  snapMobileUiResize,
+  snapMobileUiScale,
   type MobileUiElementId,
   type MobileUiElementTransform,
   type MobileUiLayout,
   type MobileUiPoint,
+  type MobileUiResizeHandle,
   type MobileUiSize,
+  type MobileUiSnapGuide,
 } from './mobile-ui-layout.ts'
 
 import './mobile-ui-editor.css'
@@ -50,7 +58,7 @@ interface MobileUiEditorProps {
 type ElementInteraction = {
   readonly id: MobileUiElementId
   readonly initialDistance: number
-  readonly initialScale: number
+  readonly initialTransform: MobileUiElementTransform
   readonly kind: 'pinch'
 } | {
   readonly id: MobileUiElementId
@@ -67,10 +75,10 @@ type HandleInteraction = {
   readonly kind: 'rotate'
   readonly pointerId: number
 } | {
-  readonly center: MobileUiPoint
+  readonly handle: MobileUiResizeHandle
   readonly id: MobileUiElementId
-  readonly initialDistance: number
-  readonly initialScale: number
+  readonly initialPointer: MobileUiPoint
+  readonly initialTransform: MobileUiElementTransform
   readonly kind: 'resize'
   readonly pointerId: number
 }
@@ -91,17 +99,6 @@ interface DockInteraction {
   readonly pointerId: number
 }
 
-const RESIZE_HANDLES = Object.freeze([
-  'north-west',
-  'north',
-  'north-east',
-  'east',
-  'south-east',
-  'south',
-  'south-west',
-  'west',
-] as const)
-
 export default function MobileUiEditor({
   layout,
   onChange,
@@ -118,6 +115,7 @@ export default function MobileUiEditor({
   )
   const [selected, setSelected] = useState<MobileUiElementId>('pause')
   const [snap, setSnap] = useState(true)
+  const [snapGuides, setSnapGuides] = useState<readonly MobileUiSnapGuide[]>([])
   const [zoom, setZoom] = useState(1)
   const [dockPosition, setDockPosition] = useState<MobileUiPoint | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -199,6 +197,32 @@ export default function MobileUiEditor({
     }
   }, [])
 
+  const pagePixelPoint = useCallback((clientX: number, clientY: number): MobileUiPoint => {
+    const bounds = pageRef.current?.getBoundingClientRect()
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+      return { x: page.width / 2, y: page.height / 2 }
+    }
+    return {
+      x: (clientX - bounds.left) / bounds.width * page.width,
+      y: (clientY - bounds.top) / bounds.height * page.height,
+    }
+  }, [page.height, page.width])
+
+  const snapTargets = useCallback((id: MobileUiElementId) => (
+    MOBILE_UI_ELEMENT_IDS
+      .filter((candidate) => candidate !== id)
+      .map((candidate) => mobileUiElementSnapRect(
+        layout[candidate],
+        geometry.sizes[candidate],
+        page,
+      ))
+  ), [geometry.sizes, layout, page])
+
+  const toggleGrid = () => {
+    setSnap((enabled) => !enabled)
+    setSnapGuides([])
+  }
+
   const beginElement = (
     id: MobileUiElementId,
     event: ReactPointerEvent<HTMLDivElement>,
@@ -207,6 +231,7 @@ export default function MobileUiEditor({
     if (elementPointers.current.size > 0 && elementPointerOwner.current !== id) return
     event.preventDefault()
     event.stopPropagation()
+    setSnapGuides([])
     setSelected(id)
     event.currentTarget.focus({ preventScroll: true })
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -226,7 +251,7 @@ export default function MobileUiEditor({
       elementInteraction.current = {
         id,
         initialDistance: distance(first, second),
-        initialScale: layout[id].scale,
+        initialTransform: layout[id],
         kind: 'pinch',
       }
     }
@@ -245,14 +270,28 @@ export default function MobileUiEditor({
     if (interaction.kind === 'pinch') {
       if (elementPointers.current.size < 2) return
       const [first, second] = [...elementPointers.current.values()]
-      updateElement(id, {
-        ...layout[id],
-        scale: snapScale(mobileUiElementPinchScale(
-          interaction.initialScale,
+      const candidate = {
+        ...interaction.initialTransform,
+        scale: mobileUiElementPinchScale(
+          interaction.initialTransform.scale,
           interaction.initialDistance,
           distance(first, second),
-        ), snap),
-      })
+        ),
+      }
+      if (!snap) {
+        setSnapGuides([])
+        updateElement(id, candidate)
+        return
+      }
+      const result = snapMobileUiScale(
+        candidate,
+        geometry.sizes[id],
+        page,
+        snapTargets(id),
+        MOBILE_UI_SNAP_THRESHOLD / zoom,
+      )
+      setSnapGuides(result.guides)
+      updateElement(id, result.transform)
       return
     }
     const current = pagePoint(event.clientX, event.clientY)
@@ -260,8 +299,21 @@ export default function MobileUiEditor({
       x: interaction.initialTransform.x + current.x - interaction.initialPointer.x,
       y: interaction.initialTransform.y + current.y - interaction.initialPointer.y,
     }
-    const position = snap ? snapMobileUiPoint(moved, page) : moved
-    updateElement(id, { ...interaction.initialTransform, ...position })
+    const candidate = { ...interaction.initialTransform, ...moved }
+    if (!snap) {
+      setSnapGuides([])
+      updateElement(id, candidate)
+      return
+    }
+    const result = snapMobileUiMove(
+      candidate,
+      geometry.sizes[id],
+      page,
+      snapTargets(id),
+      MOBILE_UI_SNAP_THRESHOLD / zoom,
+    )
+    setSnapGuides(result.guides)
+    updateElement(id, result.transform)
   }
 
   const finishElement = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -271,6 +323,7 @@ export default function MobileUiEditor({
     elementPointers.current.delete(event.pointerId)
     if (elementPointers.current.size === 0) elementPointerOwner.current = null
     elementInteraction.current = null
+    setSnapGuides([])
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -278,33 +331,35 @@ export default function MobileUiEditor({
 
   const beginHandle = (
     id: MobileUiElementId,
-    kind: HandleInteraction['kind'],
+    handle: MobileUiResizeHandle | 'rotate',
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault()
     event.stopPropagation()
+    setSnapGuides([])
     setSelected(id)
-    const bounds = elementRefs.current.get(id)?.getBoundingClientRect()
-    if (!bounds) return
-    const center = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
-    event.currentTarget.setPointerCapture(event.pointerId)
-    if (kind === 'rotate') {
+    if (handle === 'rotate') {
+      const bounds = elementRefs.current.get(id)?.getBoundingClientRect()
+      if (!bounds) return
+      event.currentTarget.setPointerCapture(event.pointerId)
+      const center = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
       handleInteraction.current = {
         center,
         id,
         initialAngle: angle(center, { x: event.clientX, y: event.clientY }),
         initialRotation: layout[id].rotation,
-        kind,
+        kind: 'rotate',
         pointerId: event.pointerId,
       }
       return
     }
+    event.currentTarget.setPointerCapture(event.pointerId)
     handleInteraction.current = {
-      center,
+      handle,
       id,
-      initialDistance: Math.max(1, distance(center, { x: event.clientX, y: event.clientY })),
-      initialScale: layout[id].scale,
-      kind,
+      initialPointer: pagePixelPoint(event.clientX, event.clientY),
+      initialTransform: layout[id],
+      kind: 'resize',
       pointerId: event.pointerId,
     }
   }
@@ -316,6 +371,7 @@ export default function MobileUiEditor({
     event.stopPropagation()
     const current = { x: event.clientX, y: event.clientY }
     if (interaction.kind === 'rotate') {
+      setSnapGuides([])
       updateElement(interaction.id, {
         ...layout[interaction.id],
         rotation: mobileUiElementRotation(
@@ -327,14 +383,31 @@ export default function MobileUiEditor({
       })
       return
     }
-    updateElement(interaction.id, {
-      ...layout[interaction.id],
-      scale: snapScale(mobileUiElementPinchScale(
-        interaction.initialScale,
-        interaction.initialDistance,
-        distance(interaction.center, current),
-      ), snap),
-    })
+    const currentPointer = pagePixelPoint(current.x, current.y)
+    if (!snap) {
+      setSnapGuides([])
+      updateElement(interaction.id, mobileUiResizeTransform(
+        interaction.initialTransform,
+        geometry.sizes[interaction.id],
+        page,
+        interaction.handle,
+        interaction.initialPointer,
+        currentPointer,
+      ))
+      return
+    }
+    const result = snapMobileUiResize(
+      interaction.initialTransform,
+      geometry.sizes[interaction.id],
+      page,
+      interaction.handle,
+      interaction.initialPointer,
+      currentPointer,
+      snapTargets(interaction.id),
+      MOBILE_UI_SNAP_THRESHOLD / zoom,
+    )
+    setSnapGuides(result.guides)
+    updateElement(interaction.id, result.transform)
   }
 
   const finishHandle = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -343,6 +416,7 @@ export default function MobileUiEditor({
     event.preventDefault()
     event.stopPropagation()
     handleInteraction.current = null
+    setSnapGuides([])
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -371,6 +445,7 @@ export default function MobileUiEditor({
     if (event.target instanceof Element && event.target.closest('.mobile-ui-editor-element')) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
     event.preventDefault()
+    setSnapGuides([])
     const viewport = viewportRef.current
     if (!viewport) return
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -474,6 +549,7 @@ export default function MobileUiEditor({
       return
     } else return
     event.preventDefault()
+    setSnapGuides([])
     const current = layout[id]
     updateElement(id, {
       ...current,
@@ -548,7 +624,7 @@ export default function MobileUiEditor({
           <button
             aria-pressed={snap}
             data-mobile-ui-grid-toggle
-            onClick={() => setSnap((enabled) => !enabled)}
+            onClick={toggleGrid}
             type="button"
           >
             GRID {snap ? 'ON' : 'OFF'}
@@ -602,6 +678,16 @@ export default function MobileUiEditor({
               width: page.width,
             } as CSSProperties}
           >
+            {snapGuides.map((guide) => (
+              <span
+                aria-hidden
+                className="mobile-ui-editor-snap-guide"
+                data-snap-guide-axis={guide.axis}
+                data-snap-guide-kind={guide.kind}
+                key={`${guide.axis}:${guide.kind}:${guide.position}`}
+                style={guide.axis === 'x' ? { left: guide.position } : { top: guide.position }}
+              />
+            ))}
             {MOBILE_UI_ELEMENT_IDS.map((id) => {
               const transform = layout[id]
               const size = geometry.sizes[id]
@@ -638,14 +724,14 @@ export default function MobileUiEditor({
                   <MobileUiElementPreview id={id} />
                   {active ? (
                     <>
-                      {RESIZE_HANDLES.map((handle) => (
+                      {MOBILE_UI_RESIZE_HANDLES.map((handle) => (
                         <button
                           aria-label={`Resize ${MOBILE_UI_ELEMENT_LABELS[id]} from ${handle}`}
                           className="mobile-ui-editor-resize-node"
                           data-resize-handle={handle}
                           key={handle}
                           onPointerCancel={finishHandle}
-                          onPointerDown={(event) => beginHandle(id, 'resize', event)}
+                          onPointerDown={(event) => beginHandle(id, handle, event)}
                           onPointerMove={moveHandle}
                           onPointerUp={finishHandle}
                           type="button"
@@ -676,7 +762,7 @@ export default function MobileUiEditor({
           <span>Y {selectedTransform.y.toFixed(1)}%</span>
           <span>SIZE {Math.round(selectedTransform.scale * 100)}%</span>
           <span>ROTATE {Math.round(selectedTransform.rotation)}°</span>
-          <small>Drag to move. Pinch the selection or use its nodes to resize. Pinch empty silver to zoom.</small>
+          <small>GRID snaps nearby edges and centres. Drag to move; pinch or use a node to resize.</small>
         </div>
       ) : (
         <div
@@ -694,6 +780,12 @@ export default function MobileUiEditor({
             onPointerUp={finishDockDrag}
             type="button"
           >⠿</button>
+          <button
+            aria-pressed={snap}
+            data-mobile-ui-grid-toggle
+            onClick={toggleGrid}
+            type="button"
+          >GRID {snap ? 'ON' : 'OFF'}</button>
           <button
             className="mobile-ui-editor-dock-save"
             data-mobile-ui-save
@@ -763,11 +855,6 @@ function MobileUiElementPreview({ id }: { id: MobileUiElementId }) {
       alt=""
     />
   )
-}
-
-function snapScale(scale: number, snap: boolean): number {
-  if (!snap) return scale
-  return clamp(Math.round(scale / 0.05) * 0.05, MOBILE_UI_SCALE_MIN, MOBILE_UI_SCALE_MAX)
 }
 
 function angle(center: MobileUiPoint, point: MobileUiPoint): number {

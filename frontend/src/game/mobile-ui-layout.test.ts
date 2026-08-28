@@ -10,6 +10,7 @@ import {
   MOBILE_UI_LAYOUT_VERSION,
   MOBILE_UI_PAGE_ZOOM_MAX,
   MOBILE_UI_PAGE_ZOOM_MIN,
+  MOBILE_UI_RESIZE_HANDLES,
   MOBILE_UI_SCALE_MAX,
   MOBILE_UI_SCALE_MIN,
   constrainMobileUiTransform,
@@ -17,18 +18,24 @@ import {
   mobileUiEditorPageSize,
   mobileUiElementPinchScale,
   mobileUiElementRotation,
+  mobileUiElementSnapRect,
   mobileUiElementStyle,
   mobileUiLayoutWith,
   mobileUiLayoutDocument,
   mobileUiLayoutFromDocument,
   mobileUiPagePinchZoom,
+  mobileUiResizeTransform,
   readMobileUiLayoutState,
   resetMobileUiLayout,
   resetMobileUiLayoutListenersForTests,
   setMobileUiLayout,
-  snapMobileUiPoint,
+  snapMobileUiMove,
+  snapMobileUiResize,
+  snapMobileUiScale,
   subscribeMobileUiLayout,
   type MobileUiLayoutStorage,
+  type MobileUiPoint,
+  type MobileUiResizeHandle,
 } from './mobile-ui-layout.ts'
 
 class MemoryStorage implements MobileUiLayoutStorage {
@@ -169,11 +176,127 @@ test('layout persistence is complete, bounded, versioned, observable, and resett
   }), null)
 })
 
-test('grid, bounds, element gestures, page zoom, and CSS projection stay independent', () => {
-  assert.deepEqual(
-    snapMobileUiPoint({ x: 51, y: 49 }, { height: 414, width: 896 }),
-    { x: 51.78571428571429, y: 50.24154589371981 },
+test('smart move snapping aligns edges to grid, page, and sibling guides without escaping bounds', () => {
+  const page = { height: 100, width: 100 }
+  const size = { height: 20, width: 20 }
+  const moved = snapMobileUiMove(
+    { rotation: 0, scale: 1, x: 25, y: 37 },
+    size,
+    page,
   )
+  assert.deepEqual(moved.transform, { rotation: 0, scale: 1, x: 26, y: 38 })
+  assert.deepEqual(moved.guides, [
+    { axis: 'x', kind: 'grid', position: 16 },
+    { axis: 'y', kind: 'grid', position: 48 },
+  ])
+
+  const sibling = mobileUiElementSnapRect(
+    { rotation: 0, scale: 1, x: 60, y: 80 },
+    size,
+    page,
+  )
+  const aligned = snapMobileUiMove(
+    { rotation: 0, scale: 1, x: 40.5, y: 12.5 },
+    size,
+    page,
+    [sibling],
+  )
+  assert.equal(aligned.transform.x, 40)
+  assert.deepEqual(aligned.guides.find((guide) => guide.axis === 'x'), {
+    axis: 'x',
+    kind: 'element',
+    position: 50,
+  })
+
+  const bounded = snapMobileUiMove(
+    { rotation: 0, scale: 1, x: -20, y: 140 },
+    size,
+    page,
+  )
+  assert.deepEqual(bounded.transform, { rotation: 0, scale: 1, x: 10, y: 90 })
+  assert.deepEqual(bounded.guides, [
+    { axis: 'x', kind: 'page', position: 0 },
+    { axis: 'y', kind: 'page', position: 100 },
+  ])
+})
+
+test('all resize nodes keep their opposite anchor fixed and the dragged node snaps to geometry', () => {
+  const page = { height: 100, width: 100 }
+  const size = { height: 20, width: 20 }
+  const initial = { rotation: 0, scale: 1, x: 50, y: 50 }
+  const pointers: Readonly<Record<MobileUiResizeHandle, readonly [MobileUiPoint, MobileUiPoint]>> = {
+    'north-west': [{ x: 40, y: 40 }, { x: 35, y: 35 }],
+    north: [{ x: 50, y: 40 }, { x: 50, y: 35 }],
+    'north-east': [{ x: 60, y: 40 }, { x: 65, y: 35 }],
+    east: [{ x: 60, y: 50 }, { x: 65, y: 50 }],
+    'south-east': [{ x: 60, y: 60 }, { x: 65, y: 65 }],
+    south: [{ x: 50, y: 60 }, { x: 50, y: 65 }],
+    'south-west': [{ x: 40, y: 60 }, { x: 35, y: 65 }],
+    west: [{ x: 40, y: 50 }, { x: 35, y: 50 }],
+  }
+  assert.deepEqual(Object.keys(pointers), [...MOBILE_UI_RESIZE_HANDLES])
+  for (const handle of MOBILE_UI_RESIZE_HANDLES) {
+    const [start, current] = pointers[handle]
+    const resized = mobileUiResizeTransform(initial, size, page, handle, start, current)
+    const frame = mobileUiElementSnapRect(resized, size, page)
+    if (handle.includes('north')) assert.equal(frame.bottom, 60, handle)
+    if (handle.includes('south')) assert.equal(frame.top, 40, handle)
+    if (handle.includes('west')) assert.equal(frame.right, 60, handle)
+    if (handle.includes('east')) assert.equal(frame.left, 40, handle)
+  }
+
+  const eastStart = { x: 50, y: 40 }
+  const eastCurrent = { x: 65, y: 40 }
+  const raw = mobileUiResizeTransform(
+    { rotation: 0, scale: 1, x: 40, y: 40 },
+    size,
+    page,
+    'east',
+    eastStart,
+    eastCurrent,
+  )
+  assert.deepEqual(raw, { rotation: 0, scale: 1.75, x: 47.5, y: 40 })
+  assert.deepEqual(mobileUiResizeTransform(
+    { rotation: 0, scale: 1, x: 20, y: 40 },
+    size,
+    { height: 100, width: 200 },
+    'east',
+    eastStart,
+    eastCurrent,
+  ), { rotation: 0, scale: 1.75, x: 23.75, y: 40 })
+  assert.deepEqual(mobileUiResizeTransform(
+    { rotation: 0, scale: 1, x: 90, y: 50 },
+    size,
+    page,
+    'east',
+    { x: 100, y: 50 },
+    { x: 120, y: 50 },
+  ), { rotation: 0, scale: 1, x: 90, y: 50 })
+  const snapped = snapMobileUiResize(
+    { rotation: 0, scale: 1, x: 40, y: 40 },
+    size,
+    page,
+    'east',
+    eastStart,
+    eastCurrent,
+  )
+  assert.deepEqual(snapped.transform, { rotation: 0, scale: 1.7, x: 47, y: 40 })
+  assert.deepEqual(snapped.guides, [{ axis: 'x', kind: 'grid', position: 64 }])
+  assert.equal(mobileUiElementSnapRect(snapped.transform, size, page).right, 64)
+})
+
+test('pinch resizing snaps scaled bounds while unsnapped gesture and page zoom math stay independent', () => {
+  const page = { height: 100, width: 100 }
+  const size = { height: 20, width: 20 }
+  const raw = { rotation: 0, scale: 1.45, x: 50, y: 50 }
+  const snapped = snapMobileUiScale(raw, size, page)
+  assert.deepEqual(snapped.transform, { rotation: 0, scale: 1.4, x: 50, y: 50 })
+  assert.deepEqual(snapped.guides, [
+    { axis: 'x', kind: 'grid', position: 64 },
+    { axis: 'y', kind: 'grid', position: 64 },
+  ])
+  assert.equal(constrainMobileUiTransform(raw, size, page).scale, 1.45)
+
   assert.equal(mobileUiElementPinchScale(1, 100, 180), 1.8)
   assert.equal(mobileUiElementPinchScale(2.8, 100, 180), MOBILE_UI_SCALE_MAX)
   assert.equal(mobileUiElementPinchScale(0.5, 100, 20), MOBILE_UI_SCALE_MIN)

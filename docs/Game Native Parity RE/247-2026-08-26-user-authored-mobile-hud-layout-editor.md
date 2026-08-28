@@ -207,3 +207,130 @@ No member is blocked by the browser platform.
   material implementation unknown remains. This implementation receipt is the
   sole post-validation documentation write; no runtime, test, build, or browser
   source byte changed after the receipts above.
+
+## 2026-08-28 reopening — geometry-aware grid snapping
+
+### Reported smell and causal trace
+
+- Owner report: editor controls do not actually settle on the drawn grid while
+  moving or resizing; both interactions need smart snapping, and snapping must
+  remain disableable.
+- Static reproduction on current `origin/main` (`0c510ce3`):
+  `moveElement` sends only the control centre through `snapMobileUiPoint`, then
+  `updateElement` applies bounds afterward. A boundary correction can therefore
+  move the centre back off its selected line, and no edge or sibling alignment
+  is considered. All eight resize nodes enter the same radial-distance path;
+  the node identity is discarded and `snapScale` merely rounds the uniform
+  scale to `0.05`. No resized edge or node is measured against a grid line.
+  Rotation alone has a deliberate five-degree snap. Element pinch shares the
+  same percentage-scale rounding and likewise has no geometry target.
+- The silver page draws a 16-pixel grid, but its windowed one-pixel border is
+  part of `getBoundingClientRect()` while the authored page coordinate system
+  is the unbordered declared width/height. The visual and interaction origins
+  can consequently differ in the windowed editor.
+- The existing coupled `GRID` toggle is a valid product boundary and remains
+  the single visibility/snap control. It is currently rendered only by the
+  windowed toolbar; the actual coarse-pointer fullscreen editor has no way to
+  disable snapping.
+
+### Reopened system boundary and complete membership
+
+System: editor-only manipulation geometry for the existing complete Mobile UI
+catalog. It owns grid/page/sibling alignment targets, snap threshold and guide
+presentation, move projection, uniform resize projection, and the coupled
+`GRID` switch. It still ends before persisted profile schema, runtime HUD
+projection, semantic actions, scene membership, input intent, protocol, and
+simulation.
+
+| Member | Disposition | Correction contract |
+| --- | --- | --- |
+| All 18 catalog controls | `out-of-system` (Website authoring extension), reopened | every control uses the same move, pinch, resize, bounds, and guide engine |
+| Pointer/touch move | `out-of-system`, reopened | nearby left/centre/right and top/centre/bottom anchors snap to actual 16-pixel grid, page, or sibling anchors; bounds cannot invalidate the chosen guide |
+| Eight resize nodes | `out-of-system`, reopened | the named node determines its dragged and fixed opposite anchors; uniform scaling remains the persisted model, while the dragged node snaps to geometry targets |
+| Same-control pinch scale | `out-of-system`, reopened | uniform scale remains centre-owned; resized bounds can snap to the same geometry targets |
+| Rotate handle | `out-of-system`, verified-already-correct | coupled `GRID` state retains the existing five-degree rotation snap and disables it when off |
+| Keyboard precision controls | `out-of-system`, verified-already-correct | one-pixel arrows and explicit Shift-grid steps remain a non-pointer precision path |
+| Coupled GRID control | `out-of-system`, reopened | grid visibility and every pointer/touch snap path toggle together in both windowed and fullscreen presentations |
+| Active alignment guides | `out-of-system`, reopened | show the exact selected vertical/horizontal target during manipulation and disappear on completion or when GRID is off |
+| Empty-page pan, pinch zoom, wheel zoom, fit, and movable action dock | `out-of-system`, verified-already-correct | remain independent of element snapping |
+| Stored layout and live HUD projection | `verified-already-at-parity` | no schema/version/runtime selector or semantic owner changes |
+
+No member is blocked by the browser platform. Retail `0.72.5` still has no
+mobile editor, so this reopening claims no new executable or Mod Loader fact.
+
+### Implementation and validation consequence
+
+- Replace centre rounding and percentage-scale rounding with one pure
+  page-pixel snap model. It must derive rotated element bounds, use a bounded
+  screen-space threshold, prefer the nearest valid grid/page/sibling anchor,
+  and return both the corrected transform and exact guide lines.
+- Preserve the uniform persisted scale, but recover the named resize handle in
+  the interaction state so its opposite anchor remains stable while the chosen
+  node moves. Pinch continues to scale about the element centre.
+- Keep `GRID` coupled to snapping per the owner decision; add the same toggle to
+  the fullscreen dock and clear guides immediately when it is disabled.
+- Regression coverage must falsify the old implementation: edge-aware move,
+  handle-aware anchored resize onto an exact grid coordinate, sibling/page
+  alignment, pinch-scale snapping, bound-safe results, and unsnapped output
+  when the coupled control is off. Mac Chrome acceptance must exercise the
+  fullscreen toggle plus move and resize, measure the resulting DOM anchors
+  against the rendered 16-pixel grid, and record empty page/console/request
+  error arrays.
+
+### Implementation validation receipt
+
+- Implementation: the pure Mobile UI geometry owner now derives each rotated
+  control's page-pixel bounds and evaluates its left/centre/right and
+  top/centre/bottom anchors against the 16-pixel grid, page edges/centre, and
+  every sibling control. The nearest target inside a six-screen-pixel threshold
+  wins independently per axis; invalid bound-crossing targets are discarded.
+  Move and pinch share that target catalog. Each of the eight resize nodes now
+  retains its identity, projects pointer travel in the control's rotated local
+  axis, holds the opposite node fixed, and clamps scale before a page bound can
+  displace that anchor. Snapped results return the exact active guide lines.
+- Presentation: active grid, page, and sibling guides render on the silver page
+  and clear at interaction end. The existing `GRID` state remains deliberately
+  coupled: turning it off hides the grid, bypasses move/pinch/resize/rotation
+  snapping, and clears guides. The same switch is now present in both the
+  windowed toolbar and the coarse-pointer fullscreen action dock. The windowed
+  page border became a non-sizing outline, so its declared page coordinates,
+  drawn grid, pointer projection, and persisted percentages share one origin.
+- Scope preservation: the current 18-member catalog and version-2 persisted
+  centre/scale/rotation document are unchanged. Runtime selectors, coarse-only
+  projection, semantic actions, scene gates, page pan/zoom, keyboard precision,
+  protocol, and simulation received no new owner or path.
+- Exact source candidate: the six changed Website files were byte-identical on
+  local and Mac task worktrees based on current `origin/main`
+  `0c510ce3b5bfed817966aad9d5ed0d49e54a1e8f` before validation. The focused Mac
+  model contract passed `7/7`, including all eight resize handles, non-square
+  page projection, opposite-anchor boundary clamping, grid/page/sibling move,
+  pinch resizing, and the unsnapped path.
+- The exact candidate passed `/opt/homebrew/bin/bash ./scripts/validate.sh` on
+  the Mac mini: 28 Website/backend contracts, all lint/format/import/generated
+  checks, `2,456/2,456` Node tests, desktop tests, production frontend/game-host
+  builds, media policy, and bundle budget. `Game-CLaq0vqd.js` measured `262,276`
+  raw / `79,525` gzip bytes against `524,288` / `134,144`. The gate stdout
+  SHA-256 is
+  `7987548a91df9dce76a49aa286fc78d892a82198cea4f2fa258789753ac5103a`.
+- Mac Chrome `151.0.7922.174` production acceptance at touch/coarse `896x414`,
+  DPR 2, exposed all 18 controls and the fullscreen coupled switch. The moved
+  `44x44` Pause control settled at `(378,228)`: its centre `x=400` and bottom
+  `y=272` are exact 16-pixel lines, with both active guides present. With GRID
+  off, the same control preserved the raw half-pixel move at `(54.5,39.5)` and
+  produced no guide; none of its edge/centre anchors was within 1.5 pixels of a
+  grid line. South-east Inventory resize settled its right edge at `543.988`
+  against the selected `544`-pixel line. Save/reload, live Hub projection,
+  reset-to-adaptive geometry, and fine-pointer isolation also passed.
+- Page errors, console errors, failed HTTP responses, and unexpected request
+  failures were empty. The browser receipt SHA-256 is
+  `7d9069a45b75b1b570e19fe851847d2252de0559e768fb4ddf5a6b1d26fe46d4`;
+  visually inspected move-guide and resize-guide frames have SHA-256
+  `3bfdc40f4875f05d9ba99fc4d7b10ae0cd84573fa3d0c54a23c9eb5554c0f94b`
+  and `8374cc9dd0771903d4f4005c2e5a2448e0b189c0f75ce0780a261f61859ef5ec`.
+  Chrome touch emulation is not a physical-phone ergonomics receipt, but no
+  browser-platform member or material implementation unknown remains.
+- No commit, push, deployment, or live-production change was requested or
+  performed. Task-owned preview/game-host processes and listeners were stopped;
+  disposable receipts and screenshots were deleted after recording these
+  results. The focused local and Mac worktrees remain because unpublished work
+  must not be discarded.

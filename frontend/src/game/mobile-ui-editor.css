@@ -46,7 +46,7 @@
 .mobile-ui-editor[data-editor-presentation='fullscreen'] .mobile-ui-editor-page {
   top: 0;
   left: 0;
-  border: 0;
+  outline: 0;
   box-shadow: none;
 }
 
@@ -63,7 +63,7 @@
   border-radius: 5px;
   background: rgb(10 9 7 / 0.94);
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.78), inset 0 0 10px rgb(205 174 94 / 0.08);
-  grid-template-columns: 34px 70px 70px;
+  grid-template-columns: 34px repeat(3, 70px);
 }
 
 .mobile-ui-editor-dock button {
@@ -84,6 +84,11 @@
   background: rgb(100 82 39 / 0.32);
   outline: 1px solid #f0d487;
   outline-offset: -2px;
+}
+
+.mobile-ui-editor-dock button[aria-pressed='true'] {
+  color: #fff2bd;
+  background: rgb(100 82 39 / 0.48);
 }
 
 .mobile-ui-editor-dock .mobile-ui-editor-dock-handle {
@@ -209,7 +214,7 @@
   top: 24px;
   left: 24px;
   overflow: hidden;
-  border: 1px solid #f0f2f2;
+  border: 0;
   background-color: #b8bdc1;
   background-image:
     linear-gradient(rgb(57 65 70 / 0.22) 1px, transparent 1px),
@@ -220,6 +225,7 @@
     var(--mobile-ui-editor-grid) var(--mobile-ui-editor-grid),
     100% 100%;
   box-shadow: 0 8px 22px rgb(0 0 0 / 0.72), inset 0 0 24px rgb(255 255 255 / 0.24);
+  outline: 1px solid #f0f2f2;
   transform-origin: top left;
   touch-action: none;
 }
@@ -228,6 +234,32 @@
   background-image: linear-gradient(145deg, rgb(255 255 255 / 0.34), transparent 54%);
   background-size: 100% 100%;
 }
+
+.mobile-ui-editor-snap-guide {
+  position: absolute;
+  z-index: 90;
+  display: block;
+  background: #00a7ed;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.8), 0 0 5px rgb(0 96 160 / 0.8);
+  pointer-events: none;
+}
+
+.mobile-ui-editor-snap-guide[data-snap-guide-axis='x'] {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+
+.mobile-ui-editor-snap-guide[data-snap-guide-axis='y'] {
+  right: 0;
+  left: 0;
+  height: 1px;
+  transform: translateY(-0.5px);
+}
+
+.mobile-ui-editor-snap-guide[data-snap-guide-kind='element'] { background: #ffcf4a; }
+.mobile-ui-editor-snap-guide[data-snap-guide-kind='page'] { background: #ff7ad9; }
 
 .mobile-ui-editor-element {
   position: absolute;

@@ -11,6 +11,7 @@ import { fixedGameViewportLayout } from './renderer/game-viewport.ts'
 export const MOBILE_UI_CANONICAL_WIDTH = 896
 export const MOBILE_UI_CANONICAL_HEIGHT = 414
 export const MOBILE_UI_GRID_SIZE = 16
+export const MOBILE_UI_SNAP_THRESHOLD = 6
 export const MOBILE_UI_SCALE_MIN = 0.4
 export const MOBILE_UI_SCALE_MAX = 3
 export const MOBILE_UI_PAGE_ZOOM_MIN = 0.35
@@ -38,7 +39,19 @@ export const MOBILE_UI_ELEMENT_IDS = Object.freeze([
   'manaPotion',
 ] as const)
 
+export const MOBILE_UI_RESIZE_HANDLES = Object.freeze([
+  'north-west',
+  'north',
+  'north-east',
+  'east',
+  'south-east',
+  'south',
+  'south-west',
+  'west',
+] as const)
+
 export type MobileUiElementId = typeof MOBILE_UI_ELEMENT_IDS[number]
+export type MobileUiResizeHandle = typeof MOBILE_UI_RESIZE_HANDLES[number]
 
 export const MOBILE_UI_ELEMENT_LABELS: Readonly<Record<MobileUiElementId, string>> = Object.freeze({
   diagnostics: 'FPS / Ping',
@@ -69,6 +82,26 @@ export interface MobileUiPoint {
 export interface MobileUiSize {
   readonly height: number
   readonly width: number
+}
+
+export interface MobileUiSnapRect {
+  readonly bottom: number
+  readonly centerX: number
+  readonly centerY: number
+  readonly left: number
+  readonly right: number
+  readonly top: number
+}
+
+export interface MobileUiSnapGuide {
+  readonly axis: 'x' | 'y'
+  readonly kind: 'element' | 'grid' | 'page'
+  readonly position: number
+}
+
+export interface MobileUiSnapResult {
+  readonly guides: readonly MobileUiSnapGuide[]
+  readonly transform: MobileUiElementTransform
 }
 
 export interface MobileUiElementTransform extends MobileUiPoint {
@@ -334,15 +367,196 @@ export function mobileUiElementStyle(
   } as CSSProperties
 }
 
-export function snapMobileUiPoint(point: MobileUiPoint, page: MobileUiSize): MobileUiPoint {
+export function mobileUiElementSnapRect(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+): MobileUiSnapRect {
+  assertPositiveFinite(naturalSize.width, 'naturalSize.width')
+  assertPositiveFinite(naturalSize.height, 'naturalSize.height')
   assertPositiveFinite(page.width, 'page.width')
   assertPositiveFinite(page.height, 'page.height')
-  return {
-    x: Math.round(point.x / 100 * page.width / MOBILE_UI_GRID_SIZE)
-      * MOBILE_UI_GRID_SIZE / page.width * 100,
-    y: Math.round(point.y / 100 * page.height / MOBILE_UI_GRID_SIZE)
-      * MOBILE_UI_GRID_SIZE / page.height * 100,
+  const normalized = normalizeTransform(transform)
+  const centerX = normalized.x / 100 * page.width
+  const centerY = normalized.y / 100 * page.height
+  const extent = rotatedHalfExtent(normalized, naturalSize)
+  return Object.freeze({
+    bottom: centerY + extent.y,
+    centerX,
+    centerY,
+    left: centerX - extent.x,
+    right: centerX + extent.x,
+    top: centerY - extent.y,
+  })
+}
+
+export function snapMobileUiMove(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  siblingRects: readonly MobileUiSnapRect[] = [],
+  threshold: number = MOBILE_UI_SNAP_THRESHOLD,
+): MobileUiSnapResult {
+  assertSnapThreshold(threshold)
+  const bounded = constrainMobileUiTransform(transform, naturalSize, page)
+  const frame = mobileUiElementSnapRect(bounded, naturalSize, page)
+  const horizontal = bestAxisSnap(
+    [frame.left, frame.centerX, frame.right],
+    frame.centerX,
+    frame.centerX - frame.left,
+    page.width - (frame.right - frame.centerX),
+    snapTargets('x', page, siblingRects),
+    threshold,
+  )
+  const vertical = bestAxisSnap(
+    [frame.top, frame.centerY, frame.bottom],
+    frame.centerY,
+    frame.centerY - frame.top,
+    page.height - (frame.bottom - frame.centerY),
+    snapTargets('y', page, siblingRects),
+    threshold,
+  )
+  const snapped = constrainMobileUiTransform({
+    ...bounded,
+    x: (frame.centerX + (horizontal?.delta ?? 0)) / page.width * 100,
+    y: (frame.centerY + (vertical?.delta ?? 0)) / page.height * 100,
+  }, naturalSize, page)
+  const snappedFrame = mobileUiElementSnapRect(snapped, naturalSize, page)
+  const guides = [
+    validGuide(horizontal?.guide, snappedFrame),
+    validGuide(vertical?.guide, snappedFrame),
+  ].filter((guide): guide is MobileUiSnapGuide => guide !== null)
+  return snapResult(snapped, guides)
+}
+
+export function mobileUiResizeTransform(
+  initialTransform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  handle: MobileUiResizeHandle,
+  initialPointer: MobileUiPoint,
+  currentPointer: MobileUiPoint,
+): MobileUiElementTransform {
+  const resize = resizeProjection(
+    initialTransform,
+    naturalSize,
+    page,
+    handle,
+    initialPointer,
+    currentPointer,
+  )
+  return constrainMobileUiTransform(resizeAtScale(resize, resize.scale), naturalSize, page)
+}
+
+export function snapMobileUiResize(
+  initialTransform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  handle: MobileUiResizeHandle,
+  initialPointer: MobileUiPoint,
+  currentPointer: MobileUiPoint,
+  siblingRects: readonly MobileUiSnapRect[] = [],
+  threshold: number = MOBILE_UI_SNAP_THRESHOLD,
+): MobileUiSnapResult {
+  assertSnapThreshold(threshold)
+  const resize = resizeProjection(
+    initialTransform,
+    naturalSize,
+    page,
+    handle,
+    initialPointer,
+    currentPointer,
+  )
+  const spanLength = Math.hypot(resize.span.x, resize.span.y)
+  let best: ScaleSnap | null = null
+  for (const axis of ['x', 'y'] as const) {
+    const span = resize.span[axis]
+    if (Math.abs(span) <= SNAP_EPSILON) continue
+    for (const target of snapTargets(axis, page, siblingRects)) {
+      const scale = (target.position - resize.fixed[axis]) / span
+      if (scale < MOBILE_UI_SCALE_MIN || scale > resize.maximumScale) continue
+      const travel = Math.abs(scale - resize.scale) * spanLength
+      if (travel > threshold + SNAP_EPSILON) continue
+      const candidate = constrainMobileUiTransform(
+        resizeAtScale(resize, scale),
+        naturalSize,
+        page,
+      )
+      if (!resizeGuideAligned(candidate, naturalSize, page, resize.direction, axis, target.position)) {
+        continue
+      }
+      const next = { guide: target, scale, travel }
+      if (betterScaleSnap(next, best)) best = next
+    }
   }
+  if (!best) {
+    return snapResult(
+      constrainMobileUiTransform(resizeAtScale(resize, resize.scale), naturalSize, page),
+      [],
+    )
+  }
+  const transform = constrainMobileUiTransform(
+    resizeAtScale(resize, best.scale),
+    naturalSize,
+    page,
+  )
+  const guides = matchingResizeGuides(
+    transform,
+    naturalSize,
+    page,
+    resize.direction,
+    siblingRects,
+    best.guide,
+  )
+  return snapResult(transform, guides)
+}
+
+export function snapMobileUiScale(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  siblingRects: readonly MobileUiSnapRect[] = [],
+  threshold: number = MOBILE_UI_SNAP_THRESHOLD,
+): MobileUiSnapResult {
+  assertSnapThreshold(threshold)
+  const bounded = constrainMobileUiTransform(transform, naturalSize, page)
+  const frame = mobileUiElementSnapRect(bounded, naturalSize, page)
+  const unitExtent = rotatedHalfExtent({ ...bounded, scale: 1 }, naturalSize)
+  let best: ScaleSnap | null = null
+  for (const axis of ['x', 'y'] as const) {
+    const center = axis === 'x' ? frame.centerX : frame.centerY
+    const extent = unitExtent[axis]
+    const anchors = axis === 'x'
+      ? [{ position: frame.left, sign: -1 }, { position: frame.right, sign: 1 }]
+      : [{ position: frame.top, sign: -1 }, { position: frame.bottom, sign: 1 }]
+    for (const anchor of anchors) {
+      for (const target of snapTargets(axis, page, siblingRects)) {
+        const travel = Math.abs(target.position - anchor.position)
+        if (travel > threshold + SNAP_EPSILON) continue
+        const scale = (target.position - center) / (anchor.sign * extent)
+        if (scale < MOBILE_UI_SCALE_MIN || scale > MOBILE_UI_SCALE_MAX) continue
+        const candidate = constrainMobileUiTransform({ ...bounded, scale }, naturalSize, page)
+        const candidateFrame = mobileUiElementSnapRect(candidate, naturalSize, page)
+        const candidateAnchor = axis === 'x'
+          ? (anchor.sign < 0 ? candidateFrame.left : candidateFrame.right)
+          : (anchor.sign < 0 ? candidateFrame.top : candidateFrame.bottom)
+        if (Math.abs(candidateAnchor - target.position) > SNAP_EPSILON) continue
+        const next = { guide: target, scale, travel }
+        if (betterScaleSnap(next, best)) best = next
+      }
+    }
+  }
+  if (!best) return snapResult(bounded, [])
+  const snapped = constrainMobileUiTransform({ ...bounded, scale: best.scale }, naturalSize, page)
+  return snapResult(
+    snapped,
+    matchingFrameGuides(
+      mobileUiElementSnapRect(snapped, naturalSize, page),
+      page,
+      siblingRects,
+      best.guide,
+    ),
+  )
 }
 
 export function constrainMobileUiTransform(
@@ -397,6 +611,363 @@ export function mobileUiPagePinchZoom(
   if (!Number.isFinite(initialDistance) || initialDistance <= 0) return normalizeZoom(initialZoom)
   if (!Number.isFinite(currentDistance) || currentDistance < 0) return normalizeZoom(initialZoom)
   return normalizeZoom(initialZoom * currentDistance / initialDistance)
+}
+
+type SnapTarget = MobileUiSnapGuide
+
+interface AxisSnap {
+  readonly delta: number
+  readonly guide: SnapTarget
+}
+
+interface ScaleSnap {
+  readonly guide: SnapTarget
+  readonly scale: number
+  readonly travel: number
+}
+
+interface ResizeProjection {
+  readonly direction: MobileUiPoint
+  readonly fixed: MobileUiPoint
+  readonly initial: MobileUiElementTransform
+  readonly maximumScale: number
+  readonly page: MobileUiSize
+  readonly scale: number
+  readonly span: MobileUiPoint
+}
+
+const SNAP_EPSILON = 1e-6
+
+const RESIZE_DIRECTIONS: Readonly<Record<MobileUiResizeHandle, MobileUiPoint>> = Object.freeze({
+  'north-west': Object.freeze({ x: -1, y: -1 }),
+  north: Object.freeze({ x: 0, y: -1 }),
+  'north-east': Object.freeze({ x: 1, y: -1 }),
+  east: Object.freeze({ x: 1, y: 0 }),
+  'south-east': Object.freeze({ x: 1, y: 1 }),
+  south: Object.freeze({ x: 0, y: 1 }),
+  'south-west': Object.freeze({ x: -1, y: 1 }),
+  west: Object.freeze({ x: -1, y: 0 }),
+})
+
+function rotatedHalfExtent(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+): MobileUiPoint {
+  const radians = transform.rotation * Math.PI / 180
+  const cosine = Math.abs(Math.cos(radians))
+  const sine = Math.abs(Math.sin(radians))
+  return {
+    x: (naturalSize.width * cosine + naturalSize.height * sine) * transform.scale / 2,
+    y: (naturalSize.width * sine + naturalSize.height * cosine) * transform.scale / 2,
+  }
+}
+
+function snapTargets(
+  axis: MobileUiSnapGuide['axis'],
+  page: MobileUiSize,
+  siblingRects: readonly MobileUiSnapRect[],
+): readonly SnapTarget[] {
+  const dimension = axis === 'x' ? page.width : page.height
+  const targets: SnapTarget[] = []
+  for (let position = 0; position <= dimension + SNAP_EPSILON; position += MOBILE_UI_GRID_SIZE) {
+    targets.push({ axis, kind: 'grid', position })
+  }
+  targets.push(
+    { axis, kind: 'page', position: 0 },
+    { axis, kind: 'page', position: dimension / 2 },
+    { axis, kind: 'page', position: dimension },
+  )
+  for (const rect of siblingRects) {
+    const positions = axis === 'x'
+      ? [rect.left, rect.centerX, rect.right]
+      : [rect.top, rect.centerY, rect.bottom]
+    for (const position of positions) {
+      if (Number.isFinite(position)) targets.push({ axis, kind: 'element', position })
+    }
+  }
+  return targets
+}
+
+function bestAxisSnap(
+  anchors: readonly number[],
+  center: number,
+  minimumCenter: number,
+  maximumCenter: number,
+  targets: readonly SnapTarget[],
+  threshold: number,
+): AxisSnap | null {
+  let best: AxisSnap | null = null
+  for (const target of targets) {
+    for (const anchor of anchors) {
+      const delta = target.position - anchor
+      if (Math.abs(delta) > threshold + SNAP_EPSILON) continue
+      const nextCenter = center + delta
+      if (
+        nextCenter < minimumCenter - SNAP_EPSILON
+        || nextCenter > maximumCenter + SNAP_EPSILON
+      ) continue
+      const next = { delta, guide: target }
+      if (betterAxisSnap(next, best)) best = next
+    }
+  }
+  return best
+}
+
+function betterAxisSnap(candidate: AxisSnap, current: AxisSnap | null): boolean {
+  if (!current) return true
+  const candidateDistance = Math.abs(candidate.delta)
+  const currentDistance = Math.abs(current.delta)
+  if (Math.abs(candidateDistance - currentDistance) > SNAP_EPSILON) {
+    return candidateDistance < currentDistance
+  }
+  const candidatePriority = snapKindPriority(candidate.guide.kind)
+  const currentPriority = snapKindPriority(current.guide.kind)
+  if (candidatePriority !== currentPriority) return candidatePriority < currentPriority
+  return candidate.guide.position < current.guide.position
+}
+
+function betterScaleSnap(candidate: ScaleSnap, current: ScaleSnap | null): boolean {
+  if (!current) return true
+  if (Math.abs(candidate.travel - current.travel) > SNAP_EPSILON) {
+    return candidate.travel < current.travel
+  }
+  const candidatePriority = snapKindPriority(candidate.guide.kind)
+  const currentPriority = snapKindPriority(current.guide.kind)
+  if (candidatePriority !== currentPriority) return candidatePriority < currentPriority
+  if (candidate.guide.axis !== current.guide.axis) return candidate.guide.axis === 'x'
+  return candidate.guide.position < current.guide.position
+}
+
+function snapKindPriority(kind: MobileUiSnapGuide['kind']): number {
+  if (kind === 'element') return 0
+  if (kind === 'page') return 1
+  return 2
+}
+
+function resizeProjection(
+  initialTransform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  handle: MobileUiResizeHandle,
+  initialPointer: MobileUiPoint,
+  currentPointer: MobileUiPoint,
+): ResizeProjection {
+  assertFinitePoint(initialPointer, 'initialPointer')
+  assertFinitePoint(currentPointer, 'currentPointer')
+  const initial = constrainMobileUiTransform(initialTransform, naturalSize, page)
+  const direction = RESIZE_DIRECTIONS[handle]
+  const radians = initial.rotation * Math.PI / 180
+  const activeUnit = rotatePoint({
+    x: direction.x * naturalSize.width / 2,
+    y: direction.y * naturalSize.height / 2,
+  }, radians)
+  const span = { x: activeUnit.x * 2, y: activeUnit.y * 2 }
+  const center = {
+    x: initial.x / 100 * page.width,
+    y: initial.y / 100 * page.height,
+  }
+  const fixed = {
+    x: center.x - activeUnit.x * initial.scale,
+    y: center.y - activeUnit.y * initial.scale,
+  }
+  const pointerDelta = {
+    x: currentPointer.x - initialPointer.x,
+    y: currentPointer.y - initialPointer.y,
+  }
+  const spanSquared = span.x * span.x + span.y * span.y
+  const rawScale = normalizeScale(
+    initial.scale + (pointerDelta.x * span.x + pointerDelta.y * span.y) / spanSquared,
+  )
+  const maximumScale = resizeMaximumScale(initial, naturalSize, page, fixed, span)
+  const scale = clamp(rawScale, MOBILE_UI_SCALE_MIN, maximumScale)
+  return { direction, fixed, initial, maximumScale, page, scale, span }
+}
+
+function resizeMaximumScale(
+  initial: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  fixed: MobileUiPoint,
+  span: MobileUiPoint,
+): number {
+  const extent = rotatedHalfExtent({ ...initial, scale: 1 }, naturalSize)
+  let maximum = MOBILE_UI_SCALE_MAX
+  maximum = upperScaleForMinimum(maximum, fixed.x, span.x / 2 - extent.x, 0)
+  maximum = upperScaleForMaximum(maximum, fixed.x, span.x / 2 + extent.x, page.width)
+  maximum = upperScaleForMinimum(maximum, fixed.y, span.y / 2 - extent.y, 0)
+  maximum = upperScaleForMaximum(maximum, fixed.y, span.y / 2 + extent.y, page.height)
+  return clamp(Math.max(initial.scale, maximum), MOBILE_UI_SCALE_MIN, MOBILE_UI_SCALE_MAX)
+}
+
+function upperScaleForMinimum(
+  current: number,
+  constant: number,
+  slope: number,
+  minimum: number,
+): number {
+  return slope < -SNAP_EPSILON
+    ? Math.min(current, (constant - minimum) / -slope)
+    : current
+}
+
+function upperScaleForMaximum(
+  current: number,
+  constant: number,
+  slope: number,
+  maximum: number,
+): number {
+  return slope > SNAP_EPSILON
+    ? Math.min(current, (maximum - constant) / slope)
+    : current
+}
+
+function resizeAtScale(
+  projection: ResizeProjection,
+  scale: number,
+): MobileUiElementTransform {
+  return {
+    rotation: projection.initial.rotation,
+    scale,
+    x: (projection.fixed.x + projection.span.x * scale / 2) / projection.page.width * 100,
+    y: (projection.fixed.y + projection.span.y * scale / 2) / projection.page.height * 100,
+  }
+}
+
+function resizeGuideAligned(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  direction: MobileUiPoint,
+  axis: MobileUiSnapGuide['axis'],
+  position: number,
+): boolean {
+  return Math.abs(resizeHandlePoint(transform, naturalSize, page, direction)[axis] - position)
+    <= SNAP_EPSILON
+}
+
+function resizeHandlePoint(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  direction: MobileUiPoint,
+): MobileUiPoint {
+  const radians = transform.rotation * Math.PI / 180
+  const offset = rotatePoint({
+    x: direction.x * naturalSize.width * transform.scale / 2,
+    y: direction.y * naturalSize.height * transform.scale / 2,
+  }, radians)
+  return {
+    x: transform.x / 100 * page.width + offset.x,
+    y: transform.y / 100 * page.height + offset.y,
+  }
+}
+
+function matchingResizeGuides(
+  transform: MobileUiElementTransform,
+  naturalSize: MobileUiSize,
+  page: MobileUiSize,
+  direction: MobileUiPoint,
+  siblingRects: readonly MobileUiSnapRect[],
+  primary: SnapTarget,
+): readonly MobileUiSnapGuide[] {
+  const point = resizeHandlePoint(transform, naturalSize, page, direction)
+  const guides: MobileUiSnapGuide[] = [primary]
+  const otherAxis = primary.axis === 'x' ? 'y' : 'x'
+  const other = preferredTargetAt(point[otherAxis], snapTargets(otherAxis, page, siblingRects))
+  if (other) guides.push(other)
+  return freezeGuides(guides)
+}
+
+function matchingFrameGuides(
+  frame: MobileUiSnapRect,
+  page: MobileUiSize,
+  siblingRects: readonly MobileUiSnapRect[],
+  primary: SnapTarget,
+): readonly MobileUiSnapGuide[] {
+  const guides: MobileUiSnapGuide[] = [primary]
+  const otherAxis = primary.axis === 'x' ? 'y' : 'x'
+  const anchors = otherAxis === 'x' ? [frame.left, frame.right] : [frame.top, frame.bottom]
+  let other: SnapTarget | null = null
+  for (const anchor of anchors) {
+    const aligned = preferredTargetAt(anchor, snapTargets(otherAxis, page, siblingRects))
+    if (aligned && (!other || snapKindPriority(aligned.kind) < snapKindPriority(other.kind))) {
+      other = aligned
+    }
+  }
+  if (other) guides.push(other)
+  return freezeGuides(guides)
+}
+
+function preferredTargetAt(
+  position: number,
+  targets: readonly SnapTarget[],
+): SnapTarget | null {
+  let preferred: SnapTarget | null = null
+  for (const target of targets) {
+    if (Math.abs(target.position - position) > SNAP_EPSILON) continue
+    if (!preferred || snapKindPriority(target.kind) < snapKindPriority(preferred.kind)) {
+      preferred = target
+    }
+  }
+  return preferred
+}
+
+function validGuide(
+  guide: SnapTarget | undefined,
+  frame: MobileUiSnapRect,
+): MobileUiSnapGuide | null {
+  return guide && frameGuideAligned(frame, guide) ? guide : null
+}
+
+function frameGuideAligned(frame: MobileUiSnapRect, guide: MobileUiSnapGuide): boolean {
+  const anchors = guide.axis === 'x'
+    ? [frame.left, frame.centerX, frame.right]
+    : [frame.top, frame.centerY, frame.bottom]
+  return anchors.some((position) => Math.abs(position - guide.position) <= SNAP_EPSILON)
+}
+
+function snapResult(
+  transform: MobileUiElementTransform,
+  guides: readonly MobileUiSnapGuide[],
+): MobileUiSnapResult {
+  return Object.freeze({
+    guides: freezeGuides(guides),
+    transform: frozenTransform(transform),
+  })
+}
+
+function freezeGuides(guides: readonly MobileUiSnapGuide[]): readonly MobileUiSnapGuide[] {
+  const unique = new Map<string, MobileUiSnapGuide>()
+  for (const guide of guides) {
+    const key = `${guide.axis}:${guide.kind}:${guide.position}`
+    unique.set(key, Object.freeze({ ...guide }))
+  }
+  return Object.freeze([...unique.values()].sort((left, right) => (
+    left.axis.localeCompare(right.axis)
+    || left.position - right.position
+    || snapKindPriority(left.kind) - snapKindPriority(right.kind)
+  )))
+}
+
+function rotatePoint(point: MobileUiPoint, radians: number): MobileUiPoint {
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  return {
+    x: point.x * cosine - point.y * sine,
+    y: point.x * sine + point.y * cosine,
+  }
+}
+
+function assertSnapThreshold(threshold: number): void {
+  if (!Number.isFinite(threshold) || threshold < 0) {
+    throw new RangeError(`threshold must be a non-negative finite number, received ${threshold}`)
+  }
+}
+
+function assertFinitePoint(point: MobileUiPoint, name: string): void {
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    throw new RangeError(`${name} must contain finite coordinates`)
+  }
 }
 
 function normalizeLayout(layout: MobileUiLayout): MobileUiLayout {
