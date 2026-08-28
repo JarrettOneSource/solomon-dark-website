@@ -13,7 +13,7 @@
  * scales them to the viewport.
  */
 
-import { projectInventoryItems, type HubInventoryItem } from './core-kernels/hub-economy.ts'
+import { projectInventoryRootSlots, type HubInventoryItem } from './core-kernels/hub-economy.ts'
 import { nativeTutorialAmuletIdentityMatches } from './core-kernels/native-tutorial.ts'
 import {
   NATIVE_HUD_BACKBUFFER,
@@ -206,7 +206,7 @@ function inventoryModalPlans(input: TutorialModalTeachingInput): readonly Tutori
   const backpack = nativeHudRectCenter(hud.backpack)
   const belt7 = nativeHudRectCenter(hud.belt[7]!)
   const belt6 = nativeHudRectCenter(hud.belt[6]!)
-  const projected = projectInventoryItems(input.backpack)
+  const projected = projectInventoryRootSlots(input.backpack)
   const amuletSlot = projected.find(({ item }) => nativeTutorialAmuletIdentityMatches(item))?.slot
   const [amuletX, amuletY, amuletWidth, amuletHeight] = hubInventoryEquipmentSlotRects(
     'amulet',
