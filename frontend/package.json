@@ -82,6 +82,7 @@
     "smoke:game:player-death-game-over:strict": "node --experimental-strip-types tools/smoke-multiplayer-combat-lifecycle.mjs --death-game-over-only --require-all-death-frames",
     "smoke:game:multiplayer-audio": "node --experimental-strip-types tools/smoke-multiplayer-audio.mjs",
     "smoke:game:skill-picker": "node --experimental-strip-types tools/smoke-skill-picker.mjs",
+    "smoke:game:creativity-insight": "node --experimental-strip-types tools/smoke-creativity-insight.mjs",
     "smoke:game:skill-book": "node --experimental-strip-types tools/smoke-skill-book.mjs",
     "smoke:game:inventory-skill-book": "node --experimental-strip-types tools/smoke-inventory-skill-book.mjs",
     "smoke:game:tutorial-amulet": "node --experimental-strip-types tools/smoke-sorcerors-amulet.mjs",
