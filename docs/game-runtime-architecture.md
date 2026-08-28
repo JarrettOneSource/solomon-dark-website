@@ -414,6 +414,15 @@ projection families. Protocol 102 retains protocol 101 and makes
 Rejoin, restart, and eligible in-game unpause reasons retain the same positive
 two-second grace. No save shape changes because readiness and resume grace
 remain ephemeral.
+Protocol 103 retains protocol 102 and adds participant-authoritative recursive
+inventory slot indices plus the exact effective mana cost of every learned
+secondary skill. Inventory identity remains in the economy tree; the slot is
+the web compression of native root order and internal `Item_None` rows, while
+selection/drag animation remains client-local. Save schema 20 persists those
+indices; schema 19 and older compact roots migrate deterministically by array
+order before they re-enter simulation. The effective-cost rows are derived
+snapshot state used by the Game-owned BeltButton presenter and are not a second
+spell-authority lane.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
