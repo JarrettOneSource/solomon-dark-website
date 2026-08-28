@@ -1852,15 +1852,22 @@ export function replacePlayerEntitySkillChoiceWithMod(
   if (index < 0) return null
   const progression = replacePlayerSkillChoiceWithMod(
     source.progressions[index]!,
-    source.skillBooks[index]!,
     offerSequence,
     sourceGameplayRng,
+  )
+  if (progression === null) return null
+  const opened = openNextPlayerSkillOffer(
+    progression.progression,
+    source.skillBooks[index]!,
+    progression.rng,
     ownsSorcerorsCharm(source, index),
   )
-  return progression === null ? null : {
-    rng: progression.rng,
-    store: replacePlayerProgression(source, index, progression.progression),
-  }
+  return finalizeNewPlayerEntitySkillOffer(
+    replacePlayerProgression(source, index, opened.progression),
+    index,
+    source.progressions[index]!.pendingOffer?.sequence,
+    opened.rng,
+  )
 }
 
 export function rerollPlayerEntitySkillOffer(

@@ -81,6 +81,7 @@ import {
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
   rejoinGameSimulationPlayer,
+  replaceGameSimulationPlayerSkillWithMod,
   selectDetachedGameSimulationPlayerSkill,
   returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
@@ -1554,6 +1555,38 @@ test('concentrated Creativity rolls Insight on active gameplay RNG and applies i
     rankBefore + 2,
   )
   assert.deepEqual(state.gameRng, advanceNativeRngWords(beforeChoiceRng, 2))
+  assert.strictEqual(state.secondaryAbilities.rng, secondaryRng)
+})
+
+test('mod skill replacement finalizes its queued native Insight offer on gameplay RNG', () => {
+  const first = {
+    discipline: 'mind',
+    displayName: 'Creative Modder',
+    element: 'ether',
+  } as const
+  let state = withPlayerSkillRank(createGameSimulation({ first }), 'first', 63, 1)
+  state = {
+    ...state,
+    playerEntities: selectPlayerEntityConcentration(state.playerEntities, 'first', 63),
+  }
+  state = grantGameSimulationPlayerExperience(state, 'first', 300)
+  const replacedOffer = getPlayerProgression(state, 'first').pendingOffer
+  assert.ok(replacedOffer)
+  const insightSeed = createNativeRng(1)
+  const secondaryRng = state.secondaryAbilities.rng
+  state = { ...state, gameRng: insightSeed }
+
+  state = replaceGameSimulationPlayerSkillWithMod(
+    state,
+    'first',
+    replacedOffer.sequence,
+  )!
+  const queuedOffer = getPlayerProgression(state, 'first').pendingOffer
+  assert.ok(queuedOffer)
+  assert.notEqual(queuedOffer.sequence, replacedOffer.sequence)
+  assert.equal(queuedOffer.options.length, 4)
+  assert.equal(queuedOffer.options.filter(({ insight }) => insight === true).length, 1)
+  assert.deepEqual(state.gameRng, advanceNativeRngWords(insightSeed, 6))
   assert.strictEqual(state.secondaryAbilities.rng, secondaryRng)
 })
 
