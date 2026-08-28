@@ -1693,10 +1693,11 @@ function addStoreGrid(
       && model.dragging?.owner === 'storage'
       && model.dragging.itemId === item.id
     const selected = item.id === model.selectedItemId && model.selectedOwner === owner
+    const price = 'price' in item && typeof item.price === 'number' ? item.price : null
     if (selected && !held) {
       const record = owner === 'storage'
         ? HUB_STOREGRID_SELECTED_RECORDS.takeClickAgain
-        : 'price' in item && item.price > model.economy.gold
+        : price !== null && price > model.economy.gold
           ? HUB_STOREGRID_SELECTED_RECORDS.unaffordable
           : HUB_STOREGRID_SELECTED_RECORDS.buyClickAgain
       const unaffordable = record === HUB_STOREGRID_SELECTED_RECORDS.unaffordable
@@ -1721,17 +1722,17 @@ function addStoreGrid(
       model.config.element,
       [x, y, HUB_SHOP_GRID.cellSize, HUB_SHOP_GRID.cellSize],
     )
-    if (!held && 'price' in item) {
+    if (!held && price !== null) {
       addBitmapText(
         context,
         layer,
-        `${item.price}`,
+        `${price}`,
         HUB_SHOP_TEXT.priceFont,
         x + HUB_SHOP_TEXT.priceTextRightOffsetX,
         y + HUB_SHOP_TEXT.priceTextBaselineOffsetY,
         {
           align: 'right',
-          tint: item.price > model.economy.gold
+          tint: price > model.economy.gold
             ? HUB_SHOP_TEXT.unaffordableTint
             : HUB_SHOP_TEXT.affordableTint,
         },
