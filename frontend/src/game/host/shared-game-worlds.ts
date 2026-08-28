@@ -555,9 +555,10 @@ export function sharedLoadedBoneyardForPlayer(
   state: SharedGameWorldsState,
   playerId: PlayerId,
 ): LoadedBoneyard | null {
-  return state.runs.find(({ state: runState }) => (
+  const run = state.runs.find(({ state: runState }) => (
     runState.playerEntities.identities.some(({ playerId: id }) => id === playerId)
-  ))?.loadedBoneyard ?? null
+  ))
+  return run?.state.world.kind === 'boneyard' ? run.loadedBoneyard : null
 }
 
 function hubHasPlayer(state: SharedGameWorldsState, playerId: PlayerId): boolean {

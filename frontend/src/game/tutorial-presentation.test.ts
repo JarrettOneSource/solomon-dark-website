@@ -88,6 +88,18 @@ test('projects the complete pre-Create College chrome gate from authoritative li
   assert.doesNotMatch(css, /(?:^|[,\s])\.touch-joystick\b/m)
 })
 
+test('restored Arch dialogue waits behind the Hub loading owner without acknowledging', () => {
+  const hub = source('./HubScene.tsx')
+  assert.match(
+    hub,
+    /rendererState !== 'ready'[\s\S]*?modalDisabled[\s\S]*?collegeIntro\?\.phase !== 'arch-dialogue'[\s\S]*?source: 'college-intro'/,
+  )
+  assert.match(
+    hub,
+    /\}, \[collegeIntro, hubUiSurface, modalDisabled, rendererState\]\)/,
+  )
+})
+
 test('renders exact stock UI records for the prelude and blinking lesson pointer', () => {
   const prelude = source('./TutorialPrelude.tsx')
   const overlay = source('./TutorialOverlay.tsx')

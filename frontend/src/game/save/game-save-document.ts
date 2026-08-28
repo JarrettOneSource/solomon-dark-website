@@ -27,6 +27,7 @@ import {
 import {
   NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  STOCK_TUTORIAL_BONEYARD_ID,
 } from '../core-kernels/native-tutorial.ts'
 import {
   nativeWeldBuild,
@@ -234,6 +235,7 @@ export function createGameSaveDocument(
   if (ownerState.run.phase === 'game-over' || ownerState.run.phase === 'loadout') {
     throw new Error(`game save cannot checkpoint ${ownerState.run.phase}`)
   }
+  assertLoadedBoneyardOwnership(ownerState, options.loadedBoneyard)
   const partyRejoinToken = options.partyRejoinToken ?? null
   if (
     partyRejoinToken !== null
@@ -333,6 +335,48 @@ function encodeDocument(document: Omit<Record<string, unknown>, 'schemaVersion'>
     throw new Error('game save exceeds its size limit')
   }
   return encoded
+}
+
+function assertLoadedBoneyardOwnership(
+  state: GameSimulationState,
+  loadedBoneyard: LoadedBoneyard | null,
+): void {
+  if (state.world.kind === 'hub') {
+    if (loadedBoneyard !== null) throw new Error('Hub game save carries a Boneyard')
+    return
+  }
+  if (loadedBoneyard === null) {
+    throw new Error('Boneyard game save is missing its loaded content')
+  }
+  if (
+    state.run.phase !== 'active'
+    || state.run.runId !== loadedBoneyard.runId
+    || state.world.runId !== loadedBoneyard.runId
+  ) throw new Error('Boneyard run ownership is inconsistent')
+}
+
+function isCompletedTutorialHubAttachment(
+  value: unknown,
+  playerEntities: GameSimulationState['playerEntities'],
+  playerId: string,
+  runPhase: unknown,
+): boolean {
+  if (runPhase !== 'hub') return false
+  const ownerIndex = playerEntities.identities.findIndex(identity => (
+    identity.playerId === playerId
+  ))
+  if (ownerIndex < 0 || playerEntities.economies[ownerIndex]?.tutorialPending !== false) {
+    return false
+  }
+  try {
+    const loadedBoneyard = parseLoadedBoneyard(value)
+    return loadedBoneyard.choice.id === STOCK_TUTORIAL_BONEYARD_ID
+      && loadedBoneyard.choice.name === 'Tutorial'
+      && loadedBoneyard.choice.source === 'default'
+      && loadedBoneyard.scene.name === 'Tutorial'
+  } catch {
+    return false
+  }
 }
 
 function ownerProjection(
@@ -465,7 +509,15 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   let world: GameSimulationState['world']
   let loadedBoneyard: LoadedBoneyard | null
   if (rawWorld.kind === 'hub') {
-    if (continuation.loadedBoneyard !== null) throw new Error('Hub game save carries a Boneyard')
+    if (
+      continuation.loadedBoneyard !== null
+      && !isCompletedTutorialHubAttachment(
+        continuation.loadedBoneyard,
+        playerEntities,
+        continuation.summary.playerId,
+        rawRun.phase,
+      )
+    ) throw new Error('Hub game save carries a Boneyard')
     onlyKeys(
       rawWorld,
       'game save Hub world',

@@ -523,6 +523,16 @@ async function exerciseHistoricalSave(document, label) {
   children.push(supervisor.child)
   try {
     const parsed = JSON.parse(document)
+    const continuation = parsed.continuation ?? parsed
+    assert.ok(continuation?.summary && continuation?.simulation)
+    const sourceSummary = continuation.summary
+    const sourceHubPosition = parsed.continuation && sourceSummary.worldKind === 'hub'
+      ? continuation.simulation.playerEntities.locomotions[0].position
+      : null
+    const sourceCollegeIntroPhase = parsed.continuation && sourceSummary.worldKind === 'hub'
+      ? continuation.simulation.world.participants[sourceSummary.playerId]?.collegeIntro?.phase
+        ?? null
+      : null
     const ticket = parsed.schemaVersion < 4
       ? await issuePrivateTicket(supervisor.url)
       : await issueHubTicket(supervisor.url)
@@ -565,7 +575,7 @@ async function exerciseHistoricalSave(document, label) {
       .waitFor({ timeout: 30_000 })
     assert.equal(await lastGame.isEnabled(), true)
     await lastGame.click()
-    const scene = parsed.summary.worldKind === 'boneyard'
+    const scene = sourceSummary.worldKind === 'boneyard'
       ? '.boneyard-scene[data-renderer-state="ready"]'
       : '.hub-scene[data-renderer-state="ready"]'
     try {
@@ -579,16 +589,50 @@ async function exerciseHistoricalSave(document, label) {
       })}`, { cause: error })
     }
     const migrated = await waitForSave(page, null, record => record?.revision > 1)
-    const migratedSummary = JSON.parse(migrated.document).continuation.summary
-    assert.equal(migratedSummary.activeRun, parsed.summary.worldKind === 'boneyard')
+    const migratedDocument = JSON.parse(migrated.document)
+    const migratedSummary = migratedDocument.continuation.summary
+    const migratedCollegeIntroPhase = migratedSummary.worldKind === 'hub'
+      ? migratedDocument.continuation.simulation.world
+        .participants[migratedSummary.playerId]?.collegeIntro?.phase ?? null
+      : null
+    assert.equal(migratedSummary.activeRun, sourceSummary.worldKind === 'boneyard')
     let resumedHubPosition = null
-    if (parsed.summary.worldKind === 'hub') {
+    let resumedCollegeIntroPhase = null
+    if (sourceSummary.worldKind === 'hub') {
       resumedHubPosition = await page.locator('.hub-world-canvas').evaluate(node => ({
         x: node.__sdrHubFrame.playerX,
         y: node.__sdrHubFrame.playerY,
       }))
-      assert.ok(Math.abs(resumedHubPosition.x - 950.64) < 0.01)
-      assert.ok(Math.abs(resumedHubPosition.y - 164.04) < 0.01)
+      const expectedPosition = sourceHubPosition ?? { x: 950.64, y: 164.04 }
+      assert.ok(Math.abs(resumedHubPosition.x - expectedPosition.x) < 0.01)
+      assert.ok(Math.abs(resumedHubPosition.y - expectedPosition.y) < 0.01)
+      if (sourceCollegeIntroPhase !== null) {
+        try {
+          await page.locator(
+            `.hub-scene[data-college-intro="${sourceCollegeIntroPhase}"]`,
+          ).waitFor({ timeout: 30_000 })
+        } catch (error) {
+          throw new Error(`historical save ${label} lost its College phase: ${JSON.stringify({
+            body: (await page.locator('body').innerText()).slice(0, 2_000),
+            hubAttributes: await page.locator('.hub-scene').evaluate(node => ({
+              collegeIntro: node.getAttribute('data-college-intro'),
+              region: node.getAttribute('data-hub-region'),
+              surface: node.getAttribute('data-hub-ui-surface'),
+            })),
+            migratedCollegeIntroPhase,
+            sourceCollegeIntroPhase,
+          })}`, { cause: error })
+        }
+      }
+      resumedCollegeIntroPhase = await page.locator('.hub-scene')
+        .getAttribute('data-college-intro')
+      assert.equal(resumedCollegeIntroPhase, sourceCollegeIntroPhase)
+      assert.equal(migratedDocument.continuation.loadedBoneyard, null)
+      if (sourceCollegeIntroPhase === 'arch-dialogue') {
+        await page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+          .waitFor({ timeout: 30_000 })
+        await page.waitForTimeout(1_000)
+      }
     }
     const screenshotPath = `/tmp/solomon-${label}-resume.png`
     await page.screenshot({ path: screenshotPath })
@@ -599,10 +643,12 @@ async function exerciseHistoricalSave(document, label) {
     return {
       label,
       activeRun: migratedSummary.activeRun,
+      migratedCollegeIntroPhase,
+      resumedCollegeIntroPhase,
       resumedHubPosition,
       schemaVersion: parsed.schemaVersion,
       screenshotPath,
-      worldKind: parsed.summary.worldKind,
+      worldKind: sourceSummary.worldKind,
     }
   } finally {
     const index = children.indexOf(supervisor.child)
@@ -655,6 +701,7 @@ async function startSupervisor(revision = currentRevision) {
         ...process.env,
         SDR_GAME_ALLOWED_ORIGINS: baseUrl,
         SDR_GAME_LOG_LEVEL: 'warning',
+        SDR_GAME_MEMORIAL_PATH: resolve(storageRoot, 'memorial.json'),
         SDR_GAME_ML_BOT_CHECKPOINT: resolve(
           frontendRoot,
           'server-assets/ml-bot-policy-v7-selected.sdml',

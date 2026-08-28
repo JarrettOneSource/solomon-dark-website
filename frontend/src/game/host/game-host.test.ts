@@ -3489,6 +3489,99 @@ test('Tutorial Game Over clears its Boneyard before the first College checkpoint
   )
 })
 
+test('shared-Hub Tutorial College deployment checkpoint detaches the completed Boneyard', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'ticket-college-deployment', FIRST_CHARACTER)
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  await loaded
+
+  const tutorial = host.playerState(client.welcome.playerId)
+  assert.ok(tutorial)
+  Object.assign(tutorial.run, {
+    gameOverEventId: 1,
+    gameOverExitKind: 'automatic',
+    gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+    gameOverTicks: 1_200,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
+  await waitFor(() => host.playerState(client.welcome.playerId)?.world.kind === 'hub')
+  placeCollegeAdmissionAtArch(host, client.welcome.playerId)
+  const archState = host.playerState(client.welcome.playerId)
+  assert.equal(
+    archState?.world.kind === 'hub'
+      ? archState.world.participants[client.welcome.playerId]?.collegeIntro?.phase
+      : null,
+    'arch-dialogue',
+  )
+
+  const targetRevision = 'c'.repeat(40)
+  const deployment = deploymentMessages(client.socket)
+  const closed = socketClose(client.socket)
+  const restarting = host.restartForDeployment(targetRevision, 1_000)
+  const { checkpoint, restart } = await deployment
+  assert.equal(restart.checkpointSequence, checkpoint.sequence)
+  const raw = JSON.parse(checkpoint.save)
+  assert.equal(raw.continuation.simulation.world.kind, 'hub')
+  assert.equal(raw.continuation.loadedBoneyard, null)
+  const restored = restoreGameSaveDocument(checkpoint.save)
+  assert.equal(restored.loadedBoneyard, null)
+  assert.equal(
+    restored.state.world.kind === 'hub'
+      ? restored.state.world.participants[client.welcome.playerId]?.collegeIntro?.phase
+      : null,
+    'arch-dialogue',
+  )
+  client.socket.send(encodeGameMessage({
+    type: 'client-deployment-ready',
+    checkpointSequence: restart.checkpointSequence,
+    targetRevision,
+  }))
+  assert.deepEqual(await restarting, {
+    players: 1,
+    savedPlayers: 1,
+    unacknowledgedPlayers: 0,
+  })
+  assert.deepEqual(await closed, { code: 1012, reason: 'game updating' })
+
+  const replacement = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => replacement.close())
+  const resumedSocket = await openSocket(replacement.address.url)
+  context.after(() => resumedSocket.close())
+  resumedSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'ticket-college-deployment',
+    character: FIRST_CHARACTER,
+    save: checkpoint.save,
+    saveIntent: 'resume',
+  }))
+  const welcome = await nextMessage(resumedSocket, message => message.type === 'server-welcome')
+  assert.equal(welcome.type, 'server-welcome')
+  assert.equal(welcome.snapshot.world.kind, 'hub')
+  assert.equal(
+    welcome.snapshot.world.kind === 'hub'
+      ? welcome.snapshot.world.participants[welcome.playerId]?.collegeIntro?.phase
+      : null,
+    'arch-dialogue',
+  )
+})
+
 test('private College retires a restored Tutorial when its final actor disconnects', async (context) => {
   const logs: GameServerLogEntry[] = []
   const runtimeEvents: string[] = []

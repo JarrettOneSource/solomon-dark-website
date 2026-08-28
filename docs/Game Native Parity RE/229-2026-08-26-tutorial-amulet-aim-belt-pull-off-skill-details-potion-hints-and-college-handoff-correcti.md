@@ -168,3 +168,278 @@ other mechanism directly.
 - Run the exact Website canonical gate and Mod Loader registered static RE
   suite on byte-identical clean Mac candidates. No validation command runs on
   Windows/WSL.
+
+## 2026-08-28 — Shared-Tutorial College continuation save attachment
+
+### Reported smell and parity question
+
+- Reported web behavior: a player disconnected while the automatic College
+  introduction was presenting the Archchancellor dialogue. `LAST GAME` then
+  failed with `Hub game save carries a Boneyard`.
+- Stock/browser behavior to preserve: the completed Tutorial hands its wizard
+  into the College admission program. A browser continuation taken anywhere in
+  that Courtyard/Office/Create sequence must resume the exact Hub phase without
+  reattaching the completed Tutorial Arena.
+- Reproduction: start the stock Tutorial from the shared Hub, cross its
+  automatic Game Over handoff into College, request the deployment-final save
+  while the Arch dialogue owns the surface, then load that document on the
+  replacement shared host.
+- Falsifiers: any Hub continuation still containing a Boneyard descriptor; any
+  active Boneyard continuation losing its matching descriptor; an ordinary
+  post-run loadout becoming resumable; an arbitrary forged Hub/Boneyard pair
+  being accepted; College cursor/dialogue/loadout replay or loss; or a
+  deployment-final checkpoint differing from explicit-leave/autosave output.
+
+This reopens the 2026-08-26 College-admission row named `Tutorial Boneyard
+descriptor retirement`. That pass proved only the standalone host member. It
+did not enumerate the shared-world run container, whose Tutorial simulation
+legitimately becomes a Hub-shaped isolated College admission before final
+Create confirmation. The missing shared sibling is the process failure.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Live production | `solomon-dark-game.service` structured journal, 2026-08-28 `14:41:16.954Z..14:41:28.709Z` | Protocol-99 deployment requested the final checkpoint and disconnected the player for target `6c8ac194`; protocol 100 then rejected the resume on the shared Hub with the exact reported message. The host stayed up. | high-live |
+| Deployed identities | producer `36b140621ed99217f062a422a5731123bf54fe09` (protocol 99); consumer `6c8ac1940d6ff858b3183ec09073e7ed7c46eb72` (protocol 100) | The checkpoint was authored immediately before the planned cross-revision disconnect; this is not an old idle save or an unplanned transport failure. | high |
+| Current causal trace | Website `8279c379`; `stepSharedGameWorlds`, `sharedPartySaveStateForPlayer`, `sharedLoadedBoneyardForPlayer`, `publishSaveCheckpointForClient`, `createGameSaveDocument`, `restoreGameSaveDocument` | A completed shared Tutorial remains in its party-run container while College admission is pending. Its save-state projection is Hub, but the independent attachment lookup still returns the container's stock-Tutorial descriptor. The encoder permits that split pair and the strict decoder rejects it. | high |
+| Existing positive control | `game-host.test.ts`, `Tutorial Game Over clears its Boneyard before the first College checkpoint` | The standalone host clears its scalar `loadedBoneyard` before the Hub checkpoint. It does not exercise `sharedWorlds.runs`, which explains the false closure. | high |
+| Mac browser red after save repair | current-main `a1ae89af`; Chrome 151; exact schema-19 Hub/Arch continuation with the stale stock-Tutorial descriptor | `LAST GAME` reached the Office and rewrote a clean `loadedBoneyard:null` continuation, but the rewritten authoritative College phase was already `null`. `HubScene` opened the restored College dialogue while match loading still made `HubInventoryUi.disabled=true`; its generic disabled-surface teardown called `closeSurface`, which acknowledged the College dialogue without user input. | high-live |
+| Durable native evidence | existing Tutorial, College, Game Over, and browser-save entries and reports | Native owns the Tutorial-to-College handoff and exact admission phase. `loadedBoneyard` is a browser content attachment, not native Hub state; discarding a stale completed-Tutorial attachment changes no native simulation fact. | high |
+
+No new executable address, authored table, asset, or runtime-memory fact is
+required. The native system is already closed; this pass corrects the browser
+continuation projection across one missed shared-host owner.
+
+### System boundary and membership inventory
+
+System boundary: **browser continuation world/content attachment consistency**,
+from an authoritative per-player world projection through every checkpoint
+trigger, persistence inspector, strict restore, shared-world materialization,
+and the completed Tutorial container lifetime.
+
+| Member / branch | Source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Standalone/private Tutorial -> College | scalar `state` plus `loadedBoneyard`; completed-Game-Over ordering | `verified-already-at-parity` | first Courtyard checkpoint and Arch checkpoint carry Hub plus `null` attachment |
+| Shared-Hub solo Tutorial -> isolated College | `SharedPartyRun` whose simulation becomes Hub/`run.phase=hub` before Create | `exact-ported` projection correction | all College phases remain in the intended isolated run container, but every continuation attachment is `null` |
+| Restored Arch dialogue while Hub renderer/loading barrier settles | `HubScene` College surface opener plus `HubInventoryUi` disabled teardown | `exact-ported` lifecycle correction | no surface and no acknowledgement until renderer ready and parent loading clears; then the saved dialogue opens once |
+| Explicit Arch dialogue skip/done/choice/Escape | College dialogue surface and host action | `verified-already-at-parity` | the first actual player dismissal/choice acknowledges once; ordinary world/service surfaces retain generic disabled teardown |
+| College dialogue acknowledgement, Office exit, `college-loadout`, and confirmed incoming | Hub participant/economy/transition owners | `exact-ported` through shared rule | exact cursor/dialogue/transition/save restore; final confirmation still merges into public Hub once |
+| Periodic progress checkpoint | `publishSaveCheckpointForClient(..., 'periodic')` | `exact-ported` shared correction | uses world-qualified attachment |
+| Tutorial-boundary and College-complete checkpoint | shared tick lifecycle publishers | `exact-ported` shared correction | same document invariant at transition edges |
+| Explicit leave | `client-save-before-leave` | `exact-ported` shared correction | forced final document restores |
+| Deployment-final checkpoint | `restartForDeployment` | `exact-ported` reported branch | target-revision checkpoint restores on replacement protocol/host |
+| Active stock/default/custom/mod Boneyard | Boneyard simulation and matching `LoadedBoneyard` | `verified-already-at-parity`, hardened producer contract | descriptor remains required and run IDs agree |
+| Party-rejoin staging/recovery | detached active Boneyard projection and signed lineage | `verified-already-at-parity` | matching active descriptor/token remain unchanged |
+| Ordinary shared Game Over/loadout | terminal profile-only checkpoint until all loadouts confirm | `verified-already-at-parity` | no resumable continuation or accidental early Hub merge |
+| Existing malformed Hub + completed stock-Tutorial descriptor | protocol-99 and earlier affected browser documents | `exact-ported` one-way recovery | fully validate the descriptor and Hub state, discard only this known stale attachment, resume College exactly |
+| Hub + arbitrary ordinary/custom/mod Boneyard descriptor | strict restore and backend inspector | `verified-already-at-parity` failure branch | still rejected as inconsistent |
+| Boneyard + null/mismatched descriptor | strict restore and encoder contract | `verified-already-at-parity` failure branch | still rejected before admission |
+| Browser IndexedDB and account slot 0 | `GameSaveCoordinator`, API inspector/store | `exact-ported` common document rule | frontend read may repair the historical document; every new local/cloud write is strict and clean |
+| Native save import | portability owner resumes in Hub with no web Boneyard attachment | `verified-already-at-parity` | remains `loadedBoneyard:null` |
+
+There is no browser-blocked member and no approximation. The complete
+stock-Tutorial descriptor is parseable, but no longer owns anything after its
+simulation has entered the Hub.
+
+### Native ownership thread
+
+- Owner and construction: the shared party run owns loaded Boneyard content
+  while its simulation is a Boneyard. The Tutorial terminal tick changes that
+  simulation into the participant-local College admission Hub; the run
+  container remains temporarily useful to isolate the pre-Create wizard.
+- Upstream producers: Tutorial automatic Game Over, shared-world stepping,
+  College dialogue/loadout transitions, periodic/lifecycle checkpoint writers,
+  explicit leave, and deployment drain all converge on one checkpoint builder.
+- Representation: the resumable simulation's `world.kind` is authoritative.
+  `loadedBoneyard` is a dependent attachment and may be non-null only for a
+  Boneyard simulation with the same run ID.
+- Downstream consumers: local/cloud persistence, backend inspection, strict
+  restore, shared-Hub import, renderer loading, Lua content activation, party
+  recovery, and title `LAST GAME` consume the pair. After admission, `HubScene`
+  owns the restored College surface and must wait for its renderer plus parent
+  loading barrier before constructing that surface; only player dismissal owns
+  the acknowledgement action.
+- Entry/reset/teardown: active Boneyard entry attaches content; Tutorial-to-
+  College detaches it from the continuation; confirmed Create merges the
+  isolated wizard into the shared Hub; disconnect and deployment do not change
+  the serialization rule.
+
+### Recovered behavioral contract
+
+- A Hub continuation always serializes `loadedBoneyard:null`, including a Hub
+  simulation temporarily stored in a shared party-run container.
+- An active Boneyard continuation always serializes one fully validated,
+  run-ID-matching descriptor. Terminal Game Over/loadout remains profile-only.
+- The encoder rejects an inconsistent pair so another caller cannot recreate
+  this class silently.
+- Restore may repair only the historical signature produced here: a valid Hub
+  continuation with a fully valid stock-Tutorial descriptor and a completed
+  Tutorial profile. It discards that dependent attachment; it does not rewrite
+  player, economy, College, RNG, tick, transition, mod, or integrity state.
+- Arbitrary default/custom/mod descriptors and Boneyard-side mismatches remain
+  fail-closed. Protocol version is not a sufficient trust signal by itself.
+- Every checkpoint trigger uses the same projection, so deployment does not
+  acquire a second save model.
+- Restoring `arch-dialogue` must retain that phase while the Hub renderer and
+  loader settle. Loading is not a dialogue dismissal: it must neither construct
+  a surface that generic disabled teardown immediately closes nor emit
+  `acknowledge-college-intro-dialogue`. Once ready, the dialogue opens exactly
+  once from its saved sequence and ordinary explicit close semantics resume.
+
+### Nearby-system findings
+
+- Durable finding: a shared run container is not itself proof that its current
+  simulation is a Boneyard. During the stock Tutorial handoff it intentionally
+  contains a Hub-shaped, pre-admission College continuation.
+- Why it matters: content/Lua/render/save callers must qualify run-owned data by
+  the active simulation world instead of treating container membership as the
+  world discriminator.
+- Native report/catalog update: none; this is browser runtime topology already
+  represented in the Website architecture and does not revise native truth.
+
+### Confidence and open questions
+
+- Confirmed: live producer/consumer timestamps and revisions; exact shared
+  state/attachment split; standalone coverage gap; every checkpoint call path;
+  active/terminal Boneyard siblings; strict restore failure.
+- Inferred: the persisted browser document is the deployment-final checkpoint;
+  the journal ordering and exact immediate error make this causal inference
+  strong without reading private browser storage.
+- Unknown: whether the affected slot is IndexedDB or account-owned. The fix and
+  validation cover both persistence inspectors, so that distinction is not
+  material and no private account data is required.
+
+### Web implementation consequence
+
+- Derive the continuation attachment from the already-selected save state:
+  Hub -> `null`; Boneyard -> the matching active attachment.
+- Add a symmetric encoder invariant rather than relying on a future restore to
+  catch producer corruption.
+- Add one narrow stock-Tutorial stale-attachment migration in the TypeScript
+  restore. Keep the C# write inspector strict so a newly uploaded inconsistent
+  document is still rejected; existing slot reads are repaired by the same
+  frontend restore path as IndexedDB.
+- Gate the `HubScene` College dialogue opener on both local renderer readiness
+  and the parent modal/loading barrier. Do not weaken `HubInventoryUi` generic
+  teardown or suppress a real user acknowledgement.
+- Do not merge the pending College admission into the public shared Hub early,
+  remove the run container, weaken general save validation, add a protocol
+  compatibility shim, or special-case the deployment UI.
+
+### Validation contract
+
+- Red/green host test: shared-Hub Tutorial automatic completion -> Arch College
+  state -> forced deployment-final checkpoint -> strict restore -> replacement
+  shared-host admission, with `loadedBoneyard:null` and exact College phase.
+- Save tests: valid affected stock-Tutorial document repairs; ordinary/custom/
+  mod descriptors remain rejected; active Boneyard descriptor remains exact;
+  encoder rejects both Hub/non-null and Boneyard/null/mismatched pairs.
+- Backend tests: new Hub/non-null uploads remain rejected; clean repaired Hub
+  documents remain accepted. Existing slot reads continue to return exact
+  stored bytes for frontend migration.
+- Mac canonical gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` on the
+  byte-identical candidate.
+- Mac Chrome: fresh shared-Hub Tutorial/College checkpoint or an exact fixture,
+  planned disconnect, `LAST GAME`, clean rewritten continuation, and restored
+  Arch dialogue after the loading cover with no premature acknowledgement and
+  empty page, console, failed-response, protocol, and host-error arrays.
+
+### Implementation validation receipt
+
+- Root correction: `sharedLoadedBoneyardForPlayer` now returns content only
+  while that player's current run simulation is actually a Boneyard. The
+  pre-Create College run container remains intact, but save, same-tab welcome,
+  renderer loading, and Lua/content consumers can no longer infer a Boneyard
+  from the container alone. `createGameSaveDocument` now rejects Hub/non-null,
+  Boneyard/null, inactive, and run-ID-mismatched pairs before encoding.
+- Historical recovery: `restoreGameSaveDocument` discards only a structurally
+  valid default `stock-tutorial`/`Tutorial` attachment from a Hub/`run.phase`
+  `hub` continuation whose owner has completed the Tutorial. Arbitrary default,
+  custom, or mod Boneyards remain rejected. Backend upload inspection remains
+  strict; a repaired client immediately checkpoints clean bytes.
+- Restored presentation: `HubScene` now waits for local renderer readiness and
+  the parent modal/loading barrier before constructing a saved Arch dialogue.
+  `HubInventoryUi` keeps its generic disabled teardown, and only the later
+  explicit dialogue close/choice owns acknowledgement.
+- Mac red receipts: the shared deployment test exposed the complete non-null
+  stock-Tutorial descriptor at the expected `null` assertion; the parser threw
+  the reported error; the encoder raised no exception; and the UI contract
+  lacked a loading/readiness gate. Log SHA-256 values are respectively
+  `756b0e3f6e74560ca0fc2bac4394c5d5775e157f4d5849081483232be448ea0c`
+  and `d8139545b5544dc1f775b315a697c4ead3f59082f808f38232ef914fcbcf1d47`
+  for the host and UI lanes; the save red failures share the retained focused
+  red log in the task evidence directory.
+- Focused/broad green receipts: the exact three new save/deployment tests pass
+  `3/3`; complete `game-host`, `shared-game-worlds`, and `game-save-document`
+  files pass `118/118`; Tutorial plus Hub Inventory render contracts pass
+  `41/41`. Log SHA-256 values are
+  `ed7df103af0d35f9fc4b2b4eb4005289653cb776cea6aa779b1cac50a7b4e563`,
+  `a53ce235fafc0ba59cd5c57aaeeed09c035f530ab7a1a80a7f65a6ce66e04a53`,
+  and `541cbd4891337e40b9059b8c7f116f2717c3a5e776f513151099838dbcf06a13`.
+- Mac Chrome 151 on current-main base `a1ae89af` loaded an exact affected
+  schema-19 IndexedDB fixture through `LAST GAME`, rewrote it with
+  `loadedBoneyard:null`, and retained authoritative plus presented
+  `arch-dialogue`. Page, console, failed-response, protocol, and host-error
+  arrays were empty. The settled 1600-by-900 capture visibly shows the
+  Archchancellor frame and `SKIP` action; SHA-256 is
+  `b565924195264b4e1d7cffdf4d702594ea5eeaec9615b73590d867e07e78c2b6`.
+  Browser log SHA-256 is
+  `1c76d1ed3d29bf808cf2ddbf59c8dc4cebb5ca758275a3c2b1685c946fbdd662`.
+- The browser harness now accepts both root-form legacy and current nested
+  continuation fixtures, requires a clean rewritten Hub attachment, waits for
+  the exact saved College phase, and supplies its required task-owned Memorial
+  path. It does not weaken legacy position assertions.
+- Pre-split integration base was Website `a68c043b0b4253a1bed45a98ed458dfc7fb0e2fd`.
+  SHA-256 comparison found zero mismatches across all eight changed files in
+  the detached Mac worktree. The exact final-base Chrome repeat again restored
+  and rewrote the affected fixture with both authoritative and presented
+  `arch-dialogue`; its error arrays stayed empty. Browser/backend-build log
+  SHA-256 values are
+  `347507309a8668b0d610c5a3aace651e8fcb1a0cf7963328ab78d71ae627e067`
+  and `1d71861b6fa6d84cec8c797a93fb75d09fcd2c9e36bbe0fd01a8dd6f97001095`;
+  the visually inspected final screenshot SHA-256 is
+  `94e8f35d0e499ff7d851e3cd519b8237f00a186e1929bc38ea48ae647cb6c96d`.
+  The complete Mac canonical gate then passed through backend build with zero
+  warnings/errors, all 29 Website/backend contracts, formatting, lint and
+  generated/boundary checks, every registered frontend group including
+  `1,751/1,751` Boneyard tests, production frontend/game-host builds, bundle
+  budget (`261,906` raw / `79,454` gzip), and CSP/media policy. Pre-receipt log
+  SHA-256 is
+  `bfa6cae0c2e6aa5e2fcc4b050911b6bf9553fb6bbcefa089b8a680da77cddd7f`.
+  Its post-receipt exact-tree repeat also passed with `VALIDATE_EXIT=0`.
+- Concurrent main then split this ledger into numbered system files and added
+  unrelated authenticated screenshot routing. The focused section now extends
+  this existing College-handoff owner as required by the new index. Current
+  integration base is Website `d2c4b9a6`; SHA-256 comparison again found zero
+  mismatches across all eight changed files. The exact browser journey passed
+  with `EXIT_CODE=0`, clean attachment rewrite, retained authoritative/presented
+  `arch-dialogue`, and empty error arrays. Browser log and visually inspected
+  settled-frame SHA-256 values are
+  `1a053ca4b8f15dc7aa06fb312ade526d8f88effbff5909c9f588df38b647f1d3`
+  and `48de60ce70807a443160c14c1c5fe855e92f2fd74cd2922ff8edd2e42c15b0b7`.
+  The complete canonical gate passed with `VALIDATE_EXIT=0`; log SHA-256 is
+  `f42079967c5e51ff1604bc7658899a34987a8b0595c09c9d3df9701c308f66e9`.
+  This paragraph is the sole post-gate edit; one final exact-tree gate follows.
+  No Mod Loader or native report changed because no native fact changed.
+  Publication and deployment were not requested.
+- The final concurrent resume-grace publication rebased cleanly without
+  changing this production path. Final current-main base is Website
+  `2d57b148f09d3b0480b869c777ce31e762974ff9`, save schema 20, and protocol
+  104. All eight files are byte-identical on the detached Mac worktree. Current
+  focused suites pass `121/121` save/host/shared-world tests and `42/42`
+  College/UI tests; log SHA-256 is
+  `538da57d83abb5c1f829866e0b6ef4b855d8582311dde7054104a8141381f623`.
+- The exact schema-19 incident fixture still resumes and migrates under schema
+  20/protocol 104 with `EXIT_CODE=0`, a clean attachment, retained
+  authoritative/presented `arch-dialogue`, and empty error arrays. Browser log,
+  backend-build log, and settled screenshot SHA-256 values are
+  `9bee6b9984e1eb5db866c61740fdf91c37e91cc31fe79e68950f55b15187a977`,
+  `e3c763347e8b2f90f7e6ba14f31b3cb6f265906ddcf9ea9ca7a1488434e082ff`,
+  and `e93e474f11f27d7148af8f1a1851c80752914609fbf67a228783da7f41269d04`.
+- The complete current-main canonical gate passed with `VALIDATE_EXIT=0`;
+  production entry `Game-CM1jx4T2.js` measured `262,008` raw / `79,505` gzip,
+  and log SHA-256 is
+  `1f65975b551cceafccfb5b8efd49db1833016b11acdc698858f6bec1242714ae`.
+  This final receipt is the sole post-gate edit; the frozen exact tree receives
+  one last canonical repeat with no later tracked change.

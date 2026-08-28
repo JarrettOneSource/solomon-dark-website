@@ -293,7 +293,9 @@ export default function HubScene({
   const collegeDialogueSequenceRef = useRef(0)
   useEffect(() => {
     if (
-      collegeIntro?.phase !== 'arch-dialogue'
+      rendererState !== 'ready'
+      || modalDisabled
+      || collegeIntro?.phase !== 'arch-dialogue'
       || collegeIntro.dialogueSequence <= collegeDialogueSequenceRef.current
       || hubUiSurface !== null
     ) return
@@ -303,7 +305,7 @@ export default function HubScene({
       kind: 'dialogue',
       source: 'college-intro',
     })
-  }, [collegeIntro, hubUiSurface])
+  }, [collegeIntro, hubUiSurface, modalDisabled, rendererState])
   const polisherWipeGain = storyOffice ? hubPolisherWipeGain(playerPosition) : 0
   useEffect(() => {
     if (!storyOffice) {

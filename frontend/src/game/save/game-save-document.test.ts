@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import {
   applyGameSimulationHubAction,
@@ -217,6 +218,93 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, HUB_SPAWN)
   assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
   assert.equal(restored.state.world.participants.owner?.transition, null)
+})
+
+test('restore drops only the stale completed-Tutorial attachment from a Hub College save', () => {
+  const tutorial = materializeStockTutorial(Buffer.alloc(16, 31))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), tutorial)
+  state = {
+    ...state,
+    run: {
+      ...state.run,
+      gameOverEventId: 1,
+      gameOverExitKind: 'automatic',
+      gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+      gameOverTicks: 1_200,
+      nextGameOverEventId: 2,
+      phase: 'game-over',
+    },
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.kind, 'hub')
+  assert.equal(state.run.phase, 'hub')
+  assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
+
+  const clean = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const affected = JSON.parse(clean)
+  affected.continuation.loadedBoneyard = tutorial
+  const restored = restoreGameSaveDocument(JSON.stringify(affected))
+  assert.equal(restored.loadedBoneyard, null)
+  assert.equal(restored.state.world.kind, 'hub')
+  assert.equal(
+    restored.state.world.kind === 'hub'
+      ? restored.state.world.participants.owner?.collegeIntro?.phase
+      : null,
+    'courtyard-walk',
+  )
+
+  const ordinary = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 37),
+  )
+  assert.ok(ordinary)
+  affected.continuation.loadedBoneyard = ordinary
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(affected)),
+    /Hub game save carries a Boneyard/,
+  )
+})
+
+test('save creation rejects every world and Boneyard attachment mismatch', () => {
+  const tutorial = materializeStockTutorial(Buffer.alloc(16, 31))
+  const hub = createGameSimulation({ owner: OWNER })
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: tutorial,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: hub,
+  }), /Hub game save carries a Boneyard/)
+
+  const active = enterBoneyardWorld(hub, tutorial)
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: active,
+  }), /Boneyard game save is missing its loaded content/)
+
+  const other = materializeStockTutorial(Buffer.alloc(16, 32))
+  assert.notEqual(other.runId, tutorial.runId)
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: other,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: active,
+  }), /Boneyard run ownership is inconsistent/)
 })
 
 test('save restore repairs only the superseded vivid starter pair to the Stock roll', () => {
