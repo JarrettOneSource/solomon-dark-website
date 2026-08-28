@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
+import CollegeInvitationDialog from './CollegeInvitationDialog.tsx'
 import DarkCloudScene from './DarkCloudScene.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
@@ -88,6 +89,8 @@ import {
 } from './match-loading.ts'
 import type {
   GameChatMessage,
+  GameCollegeInvitation,
+  GamePlayerCardProfile,
   GameSnapshot,
   GameplayPauseSource,
   GameplayPauseState,
@@ -157,6 +160,7 @@ const BoneyardScene = lazy(() => import('./BoneyardScene.tsx'))
 const HubScene = lazy(() => import('./HubScene.tsx'))
 const DeveloperObserverScene = lazy(() => import('./DeveloperObserverScene.tsx'))
 const GameChat = lazy(() => import('./GameChat.tsx'))
+const PlayerCardDialog = lazy(() => import('./PlayerCardDialog.tsx'))
 const loadSkillPicker = () => import('./SkillPicker.tsx')
 const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
@@ -406,8 +410,16 @@ export default function MainMenuScene({
   const [gameplayPauseMenuGeneration, setGameplayPauseMenuGeneration] = useState(0)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
   const partyInvitationAudioCursorRef = useRef<PartyInvitationAudioCursor | null>(null)
+  const collegeInvitationAudioCursorRef = useRef<PartyInvitationAudioCursor | null>(null)
   const hubMembershipAudioCursorRef = useRef<HubMembershipAudioCursor | null>(null)
   const [partyActionError, setPartyActionError] = useState<string | null>(null)
+  const [collegeInvitations, setCollegeInvitations] =
+    useState<readonly GameCollegeInvitation[]>([])
+  const [resolvedPlayerCard, setResolvedPlayerCard] =
+    useState<GamePlayerCardProfile | null>(null)
+  const [resolvingPlayerCard, setResolvingPlayerCard] = useState(false)
+  const [sessionCheatsEnabled, setSessionCheatsEnabled] = useState(false)
+  const transferSaveDocumentRef = useRef<string | null>(null)
   const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [worldSpeeches, setWorldSpeeches] = useState<readonly GameWorldSpeech[]>([])
@@ -542,12 +554,16 @@ export default function MainMenuScene({
   }, [])
 
   useEffect(() => {
-    if (!session || (!session.developerAccess && (!cheatsEnabled || !session.isHost))) return
+    if (
+      !session
+      || (!session.developerAccess && (!sessionCheatsEnabled || !session.isHost))
+    ) return
     return installGameLuaConsole(window, session)
-  }, [cheatsEnabled, runtimeSnapshot?.hostPlayerId, session])
+  }, [runtimeSnapshot?.hostPlayerId, session, sessionCheatsEnabled])
 
   useEffect(() => {
-    session?.setCheatsEnabled(cheatsEnabled)
+    if (!session || (session.sessionKind === 'private-college' && !session.isHost)) return
+    session.setCheatsEnabled(cheatsEnabled)
   }, [cheatsEnabled, session])
 
   useEffect(() => {
@@ -647,6 +663,11 @@ export default function MainMenuScene({
       session.playerId,
     )
     const initialBoneyard = session.getBoneyard()
+    const initialCollegeInvitations = session.getCollegeInvitations()
+    collegeInvitationAudioCursorRef.current = createPartyInvitationAudioCursor(
+      initialCollegeInvitations.map(({ id }) => id),
+    )
+    setCollegeInvitations(initialCollegeInvitations)
     const initialSaveCheckpoint = session.getSaveCheckpoint()
     if (initialSaveCheckpoint) onSaveCheckpoint(initialSaveCheckpoint)
     activeBoneyardRunRef.current = initialSnapshot.world.kind === 'boneyard'
@@ -745,6 +766,28 @@ export default function MainMenuScene({
       setGameplayResumeGrace,
     )
     const removeChatMessage = session.onChatMessage(presentWorldSpeech)
+    const removeCheatMode = session.onCheatMode(setSessionCheatsEnabled)
+    const removeCollegeInvitations = session.onCollegeInvitations((invitations) => {
+      if (collegeInvitationAudioCursorRef.current === null) {
+        collegeInvitationAudioCursorRef.current = createPartyInvitationAudioCursor(
+          invitations.map(({ id }) => id),
+        )
+        setCollegeInvitations(invitations)
+        return
+      }
+      const delta = advancePartyInvitationAudioCursor(
+        collegeInvitationAudioCursorRef.current,
+        invitations.map(({ id }) => id),
+      )
+      collegeInvitationAudioCursorRef.current = delta.cursor
+      for (let index = 0; index < delta.newInvitationCount; index += 1) {
+        audio.playSound(PARTY_INVITATION_SOUND_REQUEST.cue, {
+          playbackRate: PARTY_INVITATION_SOUND_REQUEST.playbackRate,
+          volume: PARTY_INVITATION_SOUND_REQUEST.volume,
+        })
+      }
+      setCollegeInvitations(invitations)
+    })
     const removeLeaderboardReceipt = session.onLeaderboardReceipt((receipt) => {
       if (!session.developerAccess && gameCheatsEnabled()) return
       if (!gameOnlinePreferences(readGameSettings()).submitRuns) return
@@ -781,10 +824,13 @@ export default function MainMenuScene({
       removeGameplayPause()
       removeGameplayResumeGrace()
       removeChatMessage()
+      removeCheatMode()
+      removeCollegeInvitations()
       removeLeaderboardReceipt()
       removePartyAction()
       removePartyState()
       partyInvitationAudioCursorRef.current = null
+      collegeInvitationAudioCursorRef.current = null
       hubMembershipAudioCursorRef.current = null
       removeSaveCheckpoint()
     }
@@ -1094,6 +1140,39 @@ export default function MainMenuScene({
     setPartyConsent(resolution)
   }
 
+  const openChatPlayerCard = async (playerReference: string) => {
+    if (!session || resolvingPlayerCard) return
+    setResolvingPlayerCard(true)
+    setConnectionError(null)
+    try {
+      setResolvedPlayerCard(await session.resolvePlayerCard(playerReference))
+    } catch (error) {
+      setConnectionError(error instanceof Error
+        ? error.message
+        : 'That wizard is no longer available.')
+    } finally {
+      setResolvingPlayerCard(false)
+    }
+  }
+
+  const acceptCollegeInvitation = async (invitation: GameCollegeInvitation) => {
+    if (!session || routingBusy) return
+    setRoutingBusy(true)
+    setConnectionError(null)
+    try {
+      const resolution = await api.gameParties.resolveCode(invitation.joinCode)
+      session.dismissCollegeInvitation(invitation.id)
+      resolveParty(resolution)
+    } catch (error) {
+      session.dismissCollegeInvitation(invitation.id)
+      setConnectionError(error instanceof Error
+        ? error.message
+        : 'That College is no longer available.')
+    } finally {
+      setRoutingBusy(false)
+    }
+  }
+
   const observeMatch = async (matchId: string) => {
     if (observerSession || connecting) return
     setConnecting(true)
@@ -1135,6 +1214,8 @@ export default function MainMenuScene({
     }
     setRoutingBusy(true)
     setContentProgress(null)
+    const transferringSession = session !== null
+    let sourceLeft = false
     try {
       if (partyConsent.target.kind === 'global-hub') {
         if (accountUsername && activeMods.length > 0) {
@@ -1151,10 +1232,19 @@ export default function MainMenuScene({
         }
         await prefetchSubscribedModContent(partyConsent.target.content.mods)
       }
+      if (transferringSession) {
+        await leaveGameplayForPartyTransfer()
+        sourceLeft = true
+      }
       const admission = { kind: 'party', intentId: partyConsent.intentId } as const
-      if (collegeIntroPending) await startCollegeIntro(admission)
-      else beginCreate(admission)
+      const roomOwnsContent = partyConsent.target.kind === 'private-college'
+      if (collegeIntroPending && !transferringSession) {
+        await startCollegeIntro(admission, roomOwnsContent)
+      } else {
+        beginCreate(admission, roomOwnsContent)
+      }
     } catch (error) {
+      if (sourceLeft) setScreen('root')
       setConnectionError(error instanceof Error ? error.message : 'The party content could not be prepared.')
     } finally {
       setRoutingBusy(false)
@@ -1167,6 +1257,7 @@ export default function MainMenuScene({
     setConnectionError(null)
     try {
       await onCancelCreate()
+      transferSaveDocumentRef.current = null
       if (initialScreen !== 'create') transitionTo('play')
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'The shared Hub admission could not be closed.')
@@ -1179,7 +1270,11 @@ export default function MainMenuScene({
     const snapshot = nextSession.getSnapshot()
     rememberGameResumeToken(nextSession.playerId, nextSession.resumeToken)
     setWhisperRequest(null)
+    setResolvedPlayerCard(null)
     setSession(nextSession)
+    setSessionCheatsEnabled(nextSession.cheatsEnabled)
+    setCollegeInvitations(nextSession.getCollegeInvitations())
+    transferSaveDocumentRef.current = null
     setRuntimeSnapshot(snapshot)
     setRuntimeProgression(
       snapshot.players[nextSession.playerId]?.progression ?? null,
@@ -1261,6 +1356,8 @@ export default function MainMenuScene({
     setConnectionError(null)
     try {
       await prepareGame(pendingAdmission)
+      const saveDocument = transferSaveDocumentRef.current ?? profileSave?.document
+      const declineFreshTutorial = tutorialDeclined && saveDocument === undefined
       const nextSession = await connectSession(
         {
           discipline: selectedDiscipline,
@@ -1269,12 +1366,12 @@ export default function MainMenuScene({
         },
         advanceLoading,
         cheatsEnabled,
-        profileSave?.document,
-        profileSave ? 'new-game' : undefined,
+        saveDocument,
+        saveDocument === undefined ? undefined : 'new-game',
         newGameModMismatchAllowed,
         undefined,
         undefined,
-        tutorialDeclined,
+        declineFreshTutorial,
       )
       activateSession(nextSession)
       setNewGameModMismatchAllowed(false)
@@ -1314,8 +1411,8 @@ export default function MainMenuScene({
         },
         advanceLoading,
         cheatsEnabled,
-        profileSave?.document,
-        profileSave ? 'new-game' : undefined,
+        transferSaveDocumentRef.current ?? profileSave?.document,
+        transferSaveDocumentRef.current || profileSave ? 'new-game' : undefined,
         allowModMismatch,
         undefined,
         true,
@@ -1402,23 +1499,12 @@ export default function MainMenuScene({
     : null
   const displayedGameplayPause = gameplayPause ?? localHubPause
 
-  const leaveGameplay = async () => {
-    if (!session || leaving) return
-    setLeaving(true)
-    setConnectionError(null)
-    try {
-      const checkpoint = await session.saveBeforeLeave()
-      await persistSaveCheckpoint(checkpoint)
-      session.destroy()
-    } catch (error) {
-      setConnectionError(error instanceof Error
-        ? error.message
-        : 'The game could not be saved before leaving.')
-      setGameplayPauseMenuGeneration(current => current + 1)
-      setLeaving(false)
-      return
-    }
+  const clearGameplaySession = (nextScreen: MenuScreen | null) => {
+    if (nextScreen !== null) transferSaveDocumentRef.current = null
     setSession(null)
+    setSessionCheatsEnabled(false)
+    setCollegeInvitations([])
+    setResolvedPlayerCard(null)
     setRuntimeSnapshot(null)
     setRuntimeProgression(null)
     setRuntimeAudioScene(null)
@@ -1437,8 +1523,36 @@ export default function MainMenuScene({
     setHudSkillSelector(null)
     setInventoryScreenOpen(false)
     setHubSceneOccupied(false)
-    setScreen('root')
+    if (nextScreen) setScreen(nextScreen)
+  }
+
+  const leaveGameplay = async () => {
+    if (!session || leaving) return
+    setLeaving(true)
+    setConnectionError(null)
+    try {
+      const checkpoint = await session.saveBeforeLeave()
+      await persistSaveCheckpoint(checkpoint)
+      session.destroy()
+    } catch (error) {
+      setConnectionError(error instanceof Error
+        ? error.message
+        : 'The game could not be saved before leaving.')
+      setGameplayPauseMenuGeneration(current => current + 1)
+      setLeaving(false)
+      return
+    }
+    clearGameplaySession('root')
     setLeaving(false)
+  }
+
+  const leaveGameplayForPartyTransfer = async (): Promise<void> => {
+    if (!session) return
+    const checkpoint = await session.saveBeforeLeave()
+    await persistSaveCheckpoint(checkpoint)
+    transferSaveDocumentRef.current = checkpoint.document
+    session.destroy()
+    clearGameplaySession(null)
   }
 
   const levelUpBarrierId = runtimeSnapshot?.levelUpBarrier?.barrierId ?? null
@@ -1475,10 +1589,16 @@ export default function MainMenuScene({
       runtimeSnapshot?.world.kind === 'boneyard'
       && runtimeSnapshot.world.tutorial?.introActive === true
     )
+  const socialModalOpen = resolvedPlayerCard !== null
+    || (session !== null && (
+      partyConsent !== null
+      || (partyConsent === null && collegeInvitations.length > 0)
+    ))
   const chatDisabled = loading !== null
     || tutorialSession
     || gameplaySettingsOpen
     || gameplayResumeGrace !== null
+    || socialModalOpen
   const sceneInputBlocked = chatOpen
     || loading !== null
     || levelUpModalActive
@@ -1487,6 +1607,7 @@ export default function MainMenuScene({
     || hubPauseMenuOpen
     || (gameplayPause !== null && !ownsActiveInventoryPause)
     || gameplayResumeGrace !== null
+    || socialModalOpen
   const sceneModalDisabled = loading !== null
     || levelUpModalActive
     || skillBookOpen
@@ -1494,6 +1615,7 @@ export default function MainMenuScene({
     || hubPauseMenuOpen
     || (gameplayPause !== null && !ownsActiveInventoryPause)
     || gameplayResumeGrace !== null
+    || socialModalOpen
   const desiredModalPauseSource: GameplayPauseSource | null =
     runtimeSnapshot?.world.kind === 'boneyard'
       ? skillBookOpen
@@ -1510,6 +1632,7 @@ export default function MainMenuScene({
       : hubPauseMenuOpen
         ? 'paused'
         : chatOpen
+          || socialModalOpen
           || skillBookOpen
           || hudSkillSelector !== null
           || inventoryScreenOpen
@@ -1632,6 +1755,8 @@ export default function MainMenuScene({
       data-gameplay-resume-grace={gameplayResumeGrace?.reason ?? 'none'}
       data-game-sounds-muted={nonMusicMuted}
       data-hub-player-activity={localHubActivity ?? 'none'}
+      data-session-cheats-enabled={session ? sessionCheatsEnabled : undefined}
+      data-session-kind={session?.sessionKind}
       data-skill-book-open={skillBookOpen}
     >
       <section
@@ -1888,6 +2013,7 @@ export default function MainMenuScene({
               onMessagePlayer={(playerId, displayName) => setWhisperRequest({
                 displayName,
                 playerId,
+                playerReference: playerId,
                 requestedAtMs: Date.now(),
               })}
               onOpenSkillSelector={openHudSkillSelector}
@@ -1934,12 +2060,60 @@ export default function MainMenuScene({
                 enableGlobalChat,
               })}
               onOpenChange={setChatOpen}
+              onPlayerCardRequest={(playerReference) => {
+                void openChatPlayerCard(playerReference)
+              }}
               onWhisperRequestHandled={() => setWhisperRequest(null)}
               openKeyCode={gameSettings.controls.openChat}
               partyState={partyState}
               session={session}
               whisperRequest={whisperRequest}
               worldKind={runtimeSnapshot.world.kind}
+            />
+          </Suspense>
+        ) : null}
+
+        {session && resolvedPlayerCard ? (
+          <Suspense fallback={null}>
+            <PlayerCardDialog
+            canInvite={Boolean(
+              session.sessionKind === 'private-college'
+              && runtimeSnapshot?.world.kind === 'hub'
+              && partyState?.party.leaderPlayerId === session.playerId
+              && resolvedPlayerCard.activity === 'hub'
+            )}
+            canMessage
+            onClose={() => setResolvedPlayerCard(null)}
+            onInvite={() => {
+              session.inviteToCollege(resolvedPlayerCard.playerReference)
+              setResolvedPlayerCard(null)
+            }}
+            onMessage={() => {
+              setWhisperRequest({
+                displayName: resolvedPlayerCard.displayName,
+                playerId: resolvedPlayerCard.playerReference,
+                playerReference: resolvedPlayerCard.playerReference,
+                requestedAtMs: Date.now(),
+              })
+              setResolvedPlayerCard(null)
+            }}
+            player={{
+              accountUsername: resolvedPlayerCard.accountUsername,
+              activity: `${resolvedPlayerCard.sessionKind === 'private-college'
+                ? 'PRIVATE COLLEGE'
+                : resolvedPlayerCard.sessionKind === 'global-hub'
+                  ? 'GLOBAL HUB'
+                  : 'LOCAL SESSION'} · ${resolvedPlayerCard.activity === 'hub'
+                    ? 'IN COLLEGE'
+                    : 'IN BONEYARD'}`,
+              discipline: resolvedPlayerCard.discipline,
+              displayName: resolvedPlayerCard.displayName,
+              element: resolvedPlayerCard.element,
+              gold: resolvedPlayerCard.gold,
+              highestWave: resolvedPlayerCard.highestWave,
+              id: resolvedPlayerCard.playerReference,
+              totalPlaytimeMs: resolvedPlayerCard.totalPlaytimeMs,
+            }}
             />
           </Suspense>
         ) : null}
@@ -1951,7 +2125,7 @@ export default function MainMenuScene({
               belt={runtimeSnapshot!.players[session.playerId]!.belt}
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               element={runtimeSnapshot!.players[session.playerId]!.config.element}
-              inputSuspended={chatOpen}
+              inputSuspended={chatOpen || socialModalOpen}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => {
                 setSkillBookOpen(false)
@@ -1981,7 +2155,7 @@ export default function MainMenuScene({
           <Suspense fallback={null}>
             <HudSkillSelector
               audio={audio}
-              inputSuspended={chatOpen}
+              inputSuspended={chatOpen || socialModalOpen}
               onClose={() => setHudSkillSelector(null)}
               onSelectConcentrationSlot={session.selectConcentrationSlot}
               onSelectPrimarySkill={session.selectPrimarySkill}
@@ -1999,7 +2173,7 @@ export default function MainMenuScene({
             <SkillPicker
               audio={audio}
               offer={runtimeProgression?.pendingOffer ?? null}
-              inputSuspended={chatOpen}
+              inputSuspended={chatOpen || socialModalOpen}
               onClosingChange={(closing) => {
                 setLevelUpPickerClosing(closing)
                 if (!closing) session.readyResumeGrace()
@@ -2052,7 +2226,7 @@ export default function MainMenuScene({
             <GameplayPauseMenu
               key={gameplayPauseMenuGeneration}
               audio={audio}
-              inputSuspended={chatOpen}
+              inputSuspended={chatOpen || socialModalOpen}
               onSelect={(action) => {
                 if (leaving) return
                 if (action === 'leave') void leaveGameplay()
@@ -2086,9 +2260,11 @@ export default function MainMenuScene({
           ) : null}
         </>}
 
-        {(preparing || leaving || connectionError) && (
+        {(preparing || leaving || resolvingPlayerCard || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
-            {connectionError ?? (leaving ? 'Saving game…' : 'Entering the shared Hub…')}
+            {connectionError ?? (leaving
+              ? 'Saving game…'
+              : resolvingPlayerCard ? 'Opening Player Card…' : 'Entering the shared Hub…')}
           </div>
         )}
 
@@ -2174,6 +2350,22 @@ export default function MainMenuScene({
               && (activeMods.length > 0 || cheatsEnabled)}
             signedIn={accountUsername !== null}
             target={partyConsent.target}
+          />
+        ) : null}
+
+        {session
+          && !partyConsent
+          && !resolvedPlayerCard
+          && collegeInvitations[0] ? (
+          <CollegeInvitationDialog
+            busy={routingBusy}
+            invitation={collegeInvitations[0]}
+            onAccept={() => { void acceptCollegeInvitation(collegeInvitations[0]!) }}
+            onDecline={() => {
+              const invitation = collegeInvitations[0]!
+              session.dismissCollegeInvitation(invitation.id)
+              setCollegeInvitations(current => current.filter(({ id }) => id !== invitation.id))
+            }}
           />
         ) : null}
 

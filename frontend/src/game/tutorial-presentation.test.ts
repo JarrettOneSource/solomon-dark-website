@@ -26,7 +26,15 @@ test('declining the offer stays at title and routes the next new wizard through 
     /collegeIntroPending = useMemo\([\s\S]*?!tutorialDeclined[\s\S]*?\[profileSave, tutorialDeclined\]/,
   )
   const startHub = menu.slice(menu.indexOf('const startHub ='), menu.indexOf('async function startCollegeIntro'))
-  assert.match(startHub, /connectSession\([\s\S]*?tutorialDeclined/)
+  assert.match(
+    startHub,
+    /const saveDocument = transferSaveDocumentRef\.current \?\? profileSave\?\.document/,
+  )
+  assert.match(
+    startHub,
+    /const declineFreshTutorial = tutorialDeclined && saveDocument === undefined/,
+  )
+  assert.match(startHub, /connectSession\([\s\S]*?declineFreshTutorial/)
 })
 
 test('projects the complete pre-Create College chrome gate from authoritative lifecycle state', () => {
@@ -40,7 +48,10 @@ test('projects the complete pre-Create College chrome gate from authoritative li
   assert.match(menu, /const collegeAdmissionHudHidden = screen === 'hub'[\s\S]*?hubCollegeAdmissionPreLoadout/)
   assert.match(menu, /gameplayHudHidden=\{collegeAdmissionHudHidden\}/)
   const chromeStart = menu.indexOf('{!collegeAdmissionHudHidden && <>')
-  const chromeEnd = menu.indexOf('{(preparing || leaving || connectionError)', chromeStart)
+  const chromeEnd = menu.indexOf(
+    '{(preparing || leaving || resolvingPlayerCard || connectionError)',
+    chromeStart,
+  )
   assert.ok(chromeStart >= 0 && chromeEnd > chromeStart)
   const chrome = menu.slice(chromeStart, chromeEnd)
   for (const member of [

@@ -22,6 +22,7 @@ const component = readFileSync(new URL('./GameChat.tsx', import.meta.url), 'utf8
 const css = readFileSync(new URL('./game-chat.css', import.meta.url), 'utf8')
 const mainMenu = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
+const playerCard = readFileSync(new URL('./PlayerCardDialog.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('./BoneyardScene.tsx', import.meta.url), 'utf8')
 const inventory = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
 const skillBook = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
@@ -29,6 +30,7 @@ const skillPicker = readFileSync(new URL('./SkillPicker.tsx', import.meta.url), 
 const hudSkillSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
 const pauseMenu = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
 const mainMenuCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
+const playerReference = (suffix: string) => `player-ref-${suffix.padEnd(32, 'x').slice(0, 32)}`
 
 test('chat channels follow host-wide Global, Hub Party, and exact Boneyard scope', () => {
   assert.deepEqual(availableGameChatChannels('hub', singleton, 'global-hub'), ['global'])
@@ -45,7 +47,15 @@ test('chat channels follow host-wide Global, Hub Party, and exact Boneyard scope
   assert.equal(defaultGameChatChannel('boneyard', grouped, 'global-hub'), 'boneyard')
   assert.deepEqual(
     availableGameChatChannels('boneyard', grouped, 'private-college'),
-    ['boneyard'],
+    ['boneyard', 'global'],
+  )
+  assert.deepEqual(
+    availableGameChatChannels('hub', singleton, 'private-college'),
+    ['global'],
+  )
+  assert.deepEqual(
+    availableGameChatChannels('hub', grouped, 'private-college'),
+    ['party', 'global'],
   )
   assert.deepEqual(availableGameChatChannels('hub', null, 'standalone'), ['party'])
 })
@@ -88,7 +98,11 @@ test('chat history is ordered, duplicate-safe, and bounded', () => {
   for (let sequence = 1; sequence <= GAME_CHAT_HISTORY_LIMIT + 2; sequence += 1) {
     messages = appendGameChatMessage(messages, {
       channel: 'party',
-      sender: { displayName: 'Helvidius', playerId: 'player-1' },
+      sender: {
+        displayName: 'Helvidius',
+        playerId: 'player-1',
+        playerReference: playerReference('one'),
+      },
       sequence,
       text: `Message ${sequence}`,
     })
@@ -103,7 +117,11 @@ test('host-authored activity shares Global history without becoming player speec
   const activity = {
     activity: 'entered-college',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: {
+      displayName: 'Aurelia',
+      playerId: 'player-2',
+      playerReference: playerReference('two'),
+    },
     sequence: 1,
     text: 'Aurelia has entered the college.',
   } as const
@@ -156,13 +174,21 @@ test('chat rejections provide concise channel and retry feedback', () => {
 test('closed chat counts only remote messages as unread', () => {
   const own = {
     channel: 'global',
-    sender: { displayName: 'Helvidius', playerId: 'player-1' },
+    sender: {
+      displayName: 'Helvidius',
+      playerId: 'player-1',
+      playerReference: playerReference('one'),
+    },
     sequence: 1,
     text: 'sent and closed',
   } as const
   const remote = {
     ...own,
-    sender: { displayName: 'Daria', playerId: 'player-2' },
+    sender: {
+      displayName: 'Daria',
+      playerId: 'player-2',
+      playerReference: playerReference('two'),
+    },
     sequence: 2,
   } as const
   assert.equal(shouldIncrementGameChatUnread(own, 'player-1', false, 'global'), false)
@@ -180,6 +206,9 @@ test('chat UI owns its configured key, real text focus, Tab channels, fade, and 
     /if \(event\.key === 'Tab'\) \{\s*event\.preventDefault\(\)\s*event\.stopPropagation\(\)[\s\S]*?const enabledChannels[\s\S]*?chooseChannel/,
   )
   assert.match(component, /aria-live="polite"/)
+  assert.match(component, /className="game-chat-player-name"/)
+  assert.match(component, /onPlayerCardRequest\(message\.sender\.playerReference\)/)
+  assert.match(component, /messageCardTarget\(message, session\.playerId\)/)
   assert.match(component, /aria-label="Open chat"/)
   assert.match(css, /data-chat-faded='true'/)
   assert.match(css, /opacity 650ms ease/)
@@ -226,10 +255,11 @@ test('chat remains admitted over every gameplay modal while exclusive applicatio
     'tutorialSession',
     'gameplaySettingsOpen',
     'gameplayResumeGrace !== null',
+    'socialModalOpen',
   ]) assert.match(disabled, new RegExp(exclusiveSurface.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 
   assert.equal(mainMenu.match(/chatInputActive=\{chatOpen\}/g)?.length, 2)
-  assert.equal(mainMenu.match(/inputSuspended=\{chatOpen\}/g)?.length, 4)
+  assert.equal(mainMenu.match(/inputSuspended=\{chatOpen \|\| socialModalOpen\}/g)?.length, 4)
   assert.match(
     mainMenuCss,
     /\.main-menu-page\[data-chat-open='true'\] \.game-menu-skull,[\s\S]*\.main-menu-page\[data-chat-open='true'\] \.game-fullscreen-control\s*\{[\s\S]*pointer-events:\s*none/,
@@ -271,8 +301,13 @@ test('whisper UX runs from the Player Card into a dedicated chat thread', () => 
   assert.match(component, /whisperRequest/)
   assert.match(component, /onWhisperRequestHandled\(\)/)
   assert.match(css, /data-message-channel='whisper'/)
+  assert.match(css, /\.game-chat-player-name \{[\s\S]*pointer-events: auto;/)
+  assert.match(
+    css,
+    /data-chat-faded='true'\]\[data-chat-open='false'\] \.game-chat-player-name \{[\s\S]*pointer-events: none;/,
+  )
   assert.match(css, /data-channel='whisper'/)
-  assert.match(hubScene, /hub-player-profile-message/)
+  assert.match(playerCard, /hub-player-profile-message/)
   assert.match(hubScene, /onMessagePlayer\(/)
   assert.match(mainMenu, /whisperRequest=/)
   assert.match(mainMenu, /onWhisperRequestHandled=/)

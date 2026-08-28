@@ -24,7 +24,7 @@ export function availableGameChatChannels(
   sessionKind: GameSessionKind,
   hasWhisperThread = false,
 ): readonly GameChatChannel[] {
-  const globalHost = sessionKind === 'global-hub'
+  const globalHost = sessionKind !== 'standalone'
   const base: readonly GameChatChannel[] = worldKind === 'boneyard'
     ? globalHost ? GLOBAL_BONEYARD_CHANNELS : BONEYARD_CHANNELS
     : partyState?.party.memberPlayerIds.length

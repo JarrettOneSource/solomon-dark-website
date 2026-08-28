@@ -1,3 +1,8 @@
+import type {
+  WizardDiscipline,
+  WizardElement,
+} from '../core-kernels/player-character.ts'
+
 export const GAME_CHAT_MAX_TEXT_CODE_UNITS = 180
 export const GAME_CHAT_MAX_TEXT_BYTES = 512
 
@@ -25,6 +30,27 @@ export const DEFAULT_GAME_ONLINE_PREFERENCES: GameOnlinePreferences = Object.fre
 export interface GameChatSender {
   readonly displayName: string
   readonly playerId: string
+  readonly playerReference: string
+}
+
+export interface GamePlayerCardProfile {
+  readonly accountUsername: string | null
+  readonly activity: 'boneyard' | 'hub'
+  readonly discipline: WizardDiscipline
+  readonly displayName: string
+  readonly element: WizardElement
+  readonly gold: number
+  readonly highestWave: number | null
+  readonly playerReference: string
+  readonly sessionKind: 'global-hub' | 'private-college' | 'standalone'
+  readonly totalPlaytimeMs: number | null
+}
+
+export interface GameCollegeInvitation {
+  readonly expiresAtUnixMs: number
+  readonly id: string
+  readonly inviter: GameChatSender
+  readonly joinCode: string
 }
 
 export interface GameChatMessage {

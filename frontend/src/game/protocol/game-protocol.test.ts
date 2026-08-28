@@ -70,6 +70,18 @@ const ONLINE_PREFERENCES = {
   globalChat: true,
   submitRuns: true,
 } as const
+const PLAYER_REFERENCE_A = `player-ref-${'a'.repeat(32)}`
+const PLAYER_REFERENCE_B = `player-ref-${'b'.repeat(32)}`
+const CHAT_SENDER_A = {
+  displayName: 'Aurelia',
+  playerId: 'player-2',
+  playerReference: PLAYER_REFERENCE_A,
+} as const
+const CHAT_SENDER_B = {
+  displayName: 'Basil',
+  playerId: 'player-3',
+  playerReference: PLAYER_REFERENCE_B,
+} as const
 const ACTOR_LIGHT_REGISTRATION = {
   managerLane: 'actor' as const,
   registrationOrdinal: 1,
@@ -617,6 +629,7 @@ test('protocol v80 carries authoritative present Skorcha population and animatio
 test('server welcome round-trips content, kernel, character, and world ownership', () => {
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -1316,6 +1329,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }]
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -1630,8 +1644,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v97 carries Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 97)
+test('protocol v98 carries cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 98)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2083,6 +2097,7 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
 
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -4523,6 +4538,7 @@ test('protocol bounds server-controlled world collections', () => {
   const hubWorld = snapshot.world
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -4959,6 +4975,7 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    cheatsEnabled: false,
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     developerAccess: false,
     gameplayPause: null,
@@ -5667,13 +5684,13 @@ test('chat protocol strictly bounds client text and authoritative server events'
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
     type: 'server-chat',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 17,
     text: 'The Courtyard is busy today.',
   })), {
     type: 'server-chat',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 17,
     text: 'The Courtyard is busy today.',
   })
@@ -5681,14 +5698,14 @@ test('chat protocol strictly bounds client text and authoritative server events'
     type: 'server-chat',
     activity: 'searching-solomon',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 18,
     text: 'Aurelia is searching for Solomon.',
   })), {
     type: 'server-chat',
     activity: 'searching-solomon',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 18,
     text: 'Aurelia is searching for Solomon.',
   })
@@ -5696,7 +5713,7 @@ test('chat protocol strictly bounds client text and authoritative server events'
     type: 'server-chat',
     activity: 'left-game',
     channel: 'boneyard',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 19,
     text: 'Aurelia has left the game.',
   })), /activity messages require the global channel/)
@@ -5704,7 +5721,7 @@ test('chat protocol strictly bounds client text and authoritative server events'
     type: 'server-chat',
     activity: 'entered-college',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 20,
     text: 'Aurelia entered.',
   })), /activity text/)
@@ -5737,26 +5754,26 @@ test('chat protocol strictly bounds client text and authoritative server events'
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-chat',
     channel: 'whisper',
-    targetPlayerId: 'player-3',
+    targetPlayerReference: PLAYER_REFERENCE_B,
     text: 'Between us only.',
   })), {
     type: 'client-chat',
     channel: 'whisper',
-    targetPlayerId: 'player-3',
+    targetPlayerReference: PLAYER_REFERENCE_B,
     text: 'Between us only.',
   })
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
     type: 'server-chat',
     channel: 'whisper',
-    recipient: { displayName: 'Basil', playerId: 'player-3' },
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    recipient: CHAT_SENDER_B,
+    sender: CHAT_SENDER_A,
     sequence: 18,
     text: 'Between us only.',
   })), {
     type: 'server-chat',
     channel: 'whisper',
-    recipient: { displayName: 'Basil', playerId: 'player-3' },
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    recipient: CHAT_SENDER_B,
+    sender: CHAT_SENDER_A,
     sequence: 18,
     text: 'Between us only.',
   })
@@ -5775,32 +5792,32 @@ test('chat protocol strictly bounds client text and authoritative server events'
     type: 'client-chat',
     channel: 'whisper',
     text: 'Hello',
-  })), /targetPlayerId is required exactly when the channel is whisper/)
+  })), /targetPlayerReference is required exactly when the channel is whisper/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-chat',
     channel: 'party',
-    targetPlayerId: 'player-3',
+    targetPlayerReference: PLAYER_REFERENCE_B,
     text: 'Hello',
-  })), /targetPlayerId is required exactly when the channel is whisper/)
+  })), /targetPlayerReference is required exactly when the channel is whisper/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-chat',
     channel: 'whisper',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: CHAT_SENDER_A,
     sequence: 1,
     text: 'Hello',
   })), /recipient is required exactly when the channel is whisper/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-chat',
     channel: 'global',
-    recipient: { displayName: 'Basil', playerId: 'player-3' },
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    recipient: CHAT_SENDER_B,
+    sender: CHAT_SENDER_A,
     sequence: 1,
     text: 'Hello',
   })), /recipient is required exactly when the channel is whisper/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-chat',
     channel: 'party',
-    sender: { displayName: 'Aurelia', playerId: 'player-2', forged: true },
+    sender: { ...CHAT_SENDER_A, forged: true },
     sequence: 1,
     text: 'Hello',
   })), /sender\.forged is not allowed/)
@@ -5810,4 +5827,94 @@ test('chat protocol strictly bounds client text and authoritative server events'
     reason: 'rate-limited',
     retryAfterMs: 60_001,
   })), /retryAfterMs must be within/)
+})
+
+test('social protocol resolves current Player Cards and carries bounded College invitations', () => {
+  const profile = {
+    accountUsername: 'aurelia',
+    activity: 'hub',
+    discipline: 'mind',
+    displayName: 'Aurelia',
+    element: 'air',
+    gold: 1_250,
+    highestWave: 17,
+    playerReference: PLAYER_REFERENCE_A,
+    sessionKind: 'private-college',
+    totalPlaytimeMs: 9_000_000,
+  } as const
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-player-card-request',
+    playerReference: PLAYER_REFERENCE_A,
+    requestId: 7,
+  })), {
+    type: 'client-player-card-request',
+    playerReference: PLAYER_REFERENCE_A,
+    requestId: 7,
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-player-card',
+    profile,
+    requestId: 7,
+  })), {
+    type: 'server-player-card',
+    profile,
+    requestId: 7,
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-player-card',
+    profile: null,
+    requestId: 8,
+  })), {
+    type: 'server-player-card',
+    profile: null,
+    requestId: 8,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-college-invite',
+    playerReference: PLAYER_REFERENCE_B,
+  })), {
+    type: 'client-college-invite',
+    playerReference: PLAYER_REFERENCE_B,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-college-invitation-dismiss',
+    invitationId: 'college-invite-a',
+  })), {
+    type: 'client-college-invitation-dismiss',
+    invitationId: 'college-invite-a',
+  })
+  const invitation = {
+    expiresAtUnixMs: 1_800_000_000_000,
+    id: 'college-invite-a',
+    inviter: CHAT_SENDER_A,
+    joinCode: 'ABCD-EFGH',
+  } as const
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-college-invitations',
+    invitations: [invitation],
+  })), {
+    type: 'server-college-invitations',
+    invitations: [invitation],
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-cheat-mode',
+    enabled: true,
+  })), {
+    type: 'server-cheat-mode',
+    enabled: true,
+  })
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-player-card-request',
+    playerReference: 'player-1',
+    requestId: 1,
+  })), /server-issued player reference/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-college-invitations',
+    invitations: [invitation, invitation],
+  })), /duplicate id/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-player-card',
+    profile: { ...profile, gold: -1 },
+    requestId: 1,
+  })), /gold/)
 })

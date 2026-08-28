@@ -15,6 +15,8 @@ const hub = await readFile(new URL('./HubScene.tsx', import.meta.url), 'utf8')
 const consent = await readFile(new URL('./PartyJoinConsentDialog.tsx', import.meta.url), 'utf8')
 const moddedPlay = await readFile(new URL('./ModdedPlayDialog.tsx', import.meta.url), 'utf8')
 const partySettings = await readFile(new URL('./PartySettingsDialog.tsx', import.meta.url), 'utf8')
+const playerCard = await readFile(new URL('./PlayerCardDialog.tsx', import.meta.url), 'utf8')
+const chat = await readFile(new URL('./GameChat.tsx', import.meta.url), 'utf8')
 const partyCss = await readFile(new URL('./party-settings.css', import.meta.url), 'utf8')
 const joinCss = await readFile(new URL('./join-party.css', import.meta.url), 'utf8')
 
@@ -32,6 +34,9 @@ test('Play owns a dedicated mobile Party ID and directory wrapper', () => {
   assert.match(join, /className="join-party-location"/)
   assert.match(join, /className="join-party-squad"/)
   assert.match(joinCss, /\.join-party-squad/)
+  assert.match(join, /PRIVATE COLLEGE/)
+  assert.match(join, /MODDED · \{party\.modCount\}/)
+  assert.match(join, /className="cheats">CHEATS/)
   assert.match(joinCss, /grid-template-areas:[\s\S]*?'list'[\s\S]*?'actions'/)
   assert.doesNotMatch(joinCss, /span:nth-child\(2\)\s*\{\s*display:\s*none/)
 })
@@ -46,6 +51,8 @@ test('Dark Cloud keeps its distinct party wrapper over the same headless modules
   assert.match(darkCloud, /prefetchGameContent/)
   assert.match(darkCloud, /className="dark-cloud-download"/)
   assert.match(darkCloud, /REQUEST/)
+  assert.match(darkCloud, /PRIVATE COLLEGE/)
+  assert.match(darkCloud, /MODDED · \{party\.modCount\}/)
 })
 
 test('modded joining distinguishes persistent account sync from guest session content', () => {
@@ -53,6 +60,7 @@ test('modded joining distinguishes persistent account sync from guest session co
   assert.match(consent, /DOWNLOAD & JOIN ONCE/)
   assert.match(consent, /ACTIVE MODS AND CHEATS WILL BE DISABLED/)
   assert.match(consent, /DISABLE & JOIN/)
+  assert.match(consent, /CHEATS ENABLED FOR THIS COLLEGE/)
   assert.match(moddedPlay, /DISABLE ALL MODS/)
   assert.match(menu, /api\.mods\.subscriptions\.sync/)
   assert.match(menu, /prefetchGameContent/)
@@ -61,6 +69,8 @@ test('modded joining distinguishes persistent account sync from guest session co
 test('party cog owns Party ID, visibility, guest requests, copy, rotation, leave, and kick', () => {
   assert.match(partySettings, /navigator\.clipboard\?\.writeText\(state\.party\.joinCode\)/)
   assert.match(partySettings, /INVITE ONLY/)
+  assert.match(partySettings, /\{leader \? \([\s\S]*<fieldset className="party-settings-group">/)
+  assert.doesNotMatch(partySettings, /sessionKind === 'global-hub'/)
   assert.match(partySettings, /state\.joinRequests/)
   assert.match(partySettings, /REGENERATE/)
   assert.match(partySettings, /LEAVE PARTY/)
@@ -71,9 +81,20 @@ test('party cog owns Party ID, visibility, guest requests, copy, rotation, leave
 })
 
 test('only the current leader receives the Player Card invite action', () => {
-  assert.match(hub, /partyState\.party\.leaderPlayerId === playerId[\s\S]*!alreadyTogether[\s\S]*Invite to Party/)
+  assert.match(hub, /partyState\.party\.leaderPlayerId === playerId[\s\S]*!alreadyTogether/)
+  assert.match(playerCard, /Invite to Party/)
   assert.match(menu, /session\.onPartyAction/)
   assert.match(hub, /className="hub-party-error" role="alert"/)
+})
+
+test('chat names resolve the current reusable Player Card and private leaders can invite remotely', () => {
+  assert.match(chat, /onPlayerCardRequest\(message\.sender\.playerReference\)/)
+  assert.match(chat, /messageCardTarget\(message, session\.playerId\)/)
+  assert.match(menu, /session\.resolvePlayerCard\(playerReference\)/)
+  assert.match(menu, /<PlayerCardDialog/)
+  assert.match(menu, /session\.inviteToCollege\(resolvedPlayerCard\.playerReference\)/)
+  assert.match(menu, /<CollegeInvitationDialog/)
+  assert.match(menu, /await leaveGameplayForPartyTransfer\(\)/)
 })
 
 test('incoming invitation audio is edge-triggered from a session baseline without snapshot replay', () => {

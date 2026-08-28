@@ -474,9 +474,17 @@ test('each host owns its second-Escape result without changing the gameplay defa
 test('gameplay Main Menu durably saves the final host checkpoint before disconnecting', () => {
   assert.match(
     mainMenuComponent,
-    /const leaveGameplay = async \(\) => \{[\s\S]*await session\.saveBeforeLeave\(\)[\s\S]*await persistSaveCheckpoint\(checkpoint\)[\s\S]*session\.destroy\(\)[\s\S]*setSession\(null\)/,
+    /const leaveGameplay = async \(\) => \{[\s\S]*await session\.saveBeforeLeave\(\)[\s\S]*await persistSaveCheckpoint\(checkpoint\)[\s\S]*session\.destroy\(\)[\s\S]*clearGameplaySession\('root'\)/,
+  )
+  assert.match(
+    mainMenuComponent,
+    /const clearGameplaySession = [\s\S]*setSession\(null\)/,
+  )
+  assert.match(
+    mainMenuComponent,
+    /const leaveGameplayForPartyTransfer = async[\s\S]*await session\.saveBeforeLeave\(\)[\s\S]*await persistSaveCheckpoint\(checkpoint\)[\s\S]*session\.destroy\(\)[\s\S]*clearGameplaySession\(null\)/,
   )
   assert.match(mainMenuComponent, /setGameplayPauseMenuGeneration\(current => current \+ 1\)/)
   assert.match(mainMenuComponent, /key=\{gameplayPauseMenuGeneration\}/)
-  assert.match(mainMenuComponent, /leaving \? 'Saving game…' : 'Entering the shared Hub…'/)
+  assert.match(mainMenuComponent, /\? 'Saving game…'/)
 })

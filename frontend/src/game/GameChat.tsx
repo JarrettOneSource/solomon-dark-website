@@ -35,6 +35,7 @@ import './game-chat.css'
 export interface GameChatWhisperRequest {
   readonly displayName: string
   readonly playerId: string
+  readonly playerReference: string
   readonly requestedAtMs: number
 }
 
@@ -43,6 +44,7 @@ interface GameChatProps {
   globalChatEnabled: boolean
   onGlobalChatEnabledChange: (enabled: boolean) => void
   onOpenChange: (open: boolean) => void
+  onPlayerCardRequest: (playerReference: string) => void
   onWhisperRequestHandled: () => void
   openKeyCode: string
   partyState: LocalPartyState | null
@@ -62,6 +64,7 @@ export default function GameChat({
   globalChatEnabled,
   onGlobalChatEnabledChange,
   onOpenChange,
+  onPlayerCardRequest,
   onWhisperRequestHandled,
   openKeyCode,
   partyState,
@@ -243,6 +246,7 @@ export default function GameChat({
     setWhisperTarget({
       displayName: whisperRequest.displayName,
       playerId: whisperRequest.playerId,
+      playerReference: whisperRequest.playerReference,
     })
     manuallySelectedChannelRef.current = true
     channelRef.current = 'whisper'
@@ -480,10 +484,32 @@ export default function GameChat({
               key={message.sequence}
             >
               {message.activity ? (
-                <span className="game-chat-activity">{message.text}</span>
+                <span className="game-chat-activity">
+                  <button
+                    className="game-chat-player-name"
+                    onClick={() => {
+                      closeChat()
+                      onPlayerCardRequest(message.sender.playerReference)
+                    }}
+                    type="button"
+                  >{message.sender.displayName}</button>
+                  {message.text.slice(message.sender.displayName.length)}
+                </span>
               ) : (
                 <>
-                  <strong>{messageAuthorLabel(message, session.playerId)}</strong>
+                  <strong>
+                    {messageCardTarget(message, session.playerId) ? (
+                      <button
+                        className="game-chat-player-name"
+                        onClick={() => {
+                          const target = messageCardTarget(message, session.playerId)!
+                          closeChat()
+                          onPlayerCardRequest(target.playerReference)
+                        }}
+                        type="button"
+                      >{messageAuthorLabel(message, session.playerId)}</button>
+                    ) : messageAuthorLabel(message, session.playerId)}
+                  </strong>
                   <span>{message.text}</span>
                 </>
               )}
@@ -573,4 +599,14 @@ function whisperPartner(
 ): GameChatSender | null {
   if (message.channel !== 'whisper' || !message.recipient) return null
   return message.sender.playerId === localPlayerId ? message.recipient : message.sender
+}
+
+function messageCardTarget(
+  message: GameChatMessage,
+  localPlayerId: string,
+): GameChatSender | null {
+  if (message.channel === 'whisper' && message.sender.playerId === localPlayerId) {
+    return message.recipient ?? null
+  }
+  return message.sender.playerId === localPlayerId ? null : message.sender
 }

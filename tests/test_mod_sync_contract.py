@@ -175,11 +175,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         secret = cls.leaderboard_secret
         cls.party_directory_items = [
             {
+                "cheatsEnabled": True,
                 "id": "listing-safe-7",
                 "leader": "Hagatha",
                 "members": ["Hagatha", "Luthacus"],
                 "memberCount": 2,
                 "maxMembers": 16,
+                "modCount": 2,
+                "sessionKind": "private-college",
                 "status": "playing",
                 "visibility": "invite-only",
                 "boneyardName": "The Survival Grounds",
@@ -295,6 +298,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         {
                             "intentId": "intent-0123456789012345678901234",
                             "target": {
+                                "cheatsEnabled": True,
                                 "content": empty_content,
                                 "kind": "private-college",
                                 "leader": "Hagatha",
@@ -310,6 +314,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         {
                             "intentId": "intent-abcdefghijklmnopqrstuvwxyz",
                             "target": {
+                                "cheatsEnabled": False,
                                 "content": empty_content,
                                 "kind": "global-hub",
                                 "leader": "Hagatha",
@@ -575,11 +580,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             {
                 "items": [
                     {
+                        "cheatsEnabled": True,
                         "id": "listing-safe-7",
                         "leader": "Hagatha",
                         "members": ["Hagatha", "Luthacus"],
                         "memberCount": 2,
                         "maxMembers": 16,
+                        "modCount": 2,
+                        "sessionKind": "private-college",
                         "status": "playing",
                         "visibility": "invite-only",
                         "boneyardName": "The Survival Grounds",
@@ -610,6 +618,27 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     ]
                     response_status, response = self.request("GET", "/api/game/parties")
                     self.assertEqual(response_status, 503)
+                    self.assertEqual(
+                        response,
+                        {"error": "The public party directory is not available right now."},
+                    )
+        finally:
+            test_class.party_directory_items = original
+
+    def test_public_party_directory_rejects_inconsistent_session_content_flags(self) -> None:
+        test_class = type(self)
+        original = test_class.party_directory_items
+        try:
+            for patch in (
+                {"sessionKind": "standalone"},
+                {"modCount": 129},
+                {"sessionKind": "global-hub", "cheatsEnabled": True, "modCount": 0},
+                {"sessionKind": "global-hub", "cheatsEnabled": False, "modCount": 1},
+            ):
+                with self.subTest(patch=patch):
+                    test_class.party_directory_items = [{**original[0], **patch}]
+                    status, response = self.request("GET", "/api/game/parties")
+                    self.assertEqual(status, 503)
                     self.assertEqual(
                         response,
                         {"error": "The public party directory is not available right now."},
@@ -727,6 +756,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, resolved)
         self.assertEqual(resolved["target"]["kind"], "private-college")
+        self.assertTrue(resolved["target"]["cheatsEnabled"])
         self.assertNotIn("credential", json.dumps(resolved))
 
         status, requested = self.request(

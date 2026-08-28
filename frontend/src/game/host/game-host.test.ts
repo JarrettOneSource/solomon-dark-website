@@ -450,7 +450,7 @@ test('developer observer watches one private run without joining or mutating par
   leader.socket.send(encodeGameMessage({
     type: 'client-chat',
     channel: 'whisper',
-    targetPlayerId: guest.welcome.playerId,
+    targetPlayerReference: guest.welcome.playerId,
     text: 'Private observer copy',
   }))
   const whisper = await observedWhisper
@@ -854,7 +854,17 @@ test('private College projects one party, supports Party-ID reservation, and che
     snapshotRate: 100,
   })
   context.after(() => host.close())
-  const first = await join(host.address.url, 'ticket-a', FIRST_CHARACTER)
+  const first = await join(
+    host.address.url,
+    'ticket-a',
+    FIRST_CHARACTER,
+    true,
+    EMPTY_PLAYER_PROFILE,
+    false,
+    false,
+    ONLINE_PREFERENCES,
+    true,
+  )
   context.after(() => closeSocket(first.socket))
   const merged = nextMessage(first.socket, message => (
     message.type === 'server-party-state'
@@ -869,15 +879,179 @@ test('private College projects one party, supports Party-ID reservation, and che
   assert.equal(partyState.type, 'server-party-state')
   assert.match(partyState.state.party.joinCode, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
   assert.equal(partyState.state.party.visibility, 'private')
+  assert.equal(first.welcome.cheatsEnabled, true)
+  assert.equal(second.welcome.cheatsEnabled, true)
+  const rejectedCheatChange = nextMessage(second.socket, message => (
+    message.type === 'server-cheat-mode'
+  ))
+  second.socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: false }))
+  const retainedCheats = await rejectedCheatChange
+  assert.equal(retainedCheats.type, 'server-cheat-mode')
+  assert.equal(retainedCheats.enabled, true)
+  const disabledForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-cheat-mode' && !message.enabled
+  ))
+  const disabledForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-cheat-mode' && !message.enabled
+  ))
+  first.socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: false }))
+  await Promise.all([disabledForFirst, disabledForSecond])
+  const enabledForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-cheat-mode' && message.enabled
+  ))
+  const enabledForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-cheat-mode' && message.enabled
+  ))
+  first.socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: true }))
+  await Promise.all([enabledForFirst, enabledForSecond])
+  const publicState = nextMessage(first.socket, message => (
+    message.type === 'server-party-state' && message.state.party.visibility === 'public'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'public',
+  }))
+  const listedState = await publicState
+  assert.equal(listedState.type, 'server-party-state')
+  assert.deepEqual(host.publicParties(), [{
+    boneyardName: null,
+    cheatsEnabled: true,
+    id: listedState.state.party.listingId,
+    leader: FIRST_CHARACTER.displayName,
+    maxMembers: 16,
+    memberCount: 2,
+    members: [FIRST_CHARACTER.displayName, SECOND_CHARACTER.displayName],
+    modCount: 0,
+    sessionKind: 'private-college',
+    status: 'hub',
+    visibility: 'public',
+  }])
   const target = host.partyTargetByCode(partyState.state.party.joinCode)
   assert.equal(target?.memberCount, 2)
-  assert.equal(target?.visibility, 'private')
+  assert.equal(target?.visibility, 'public')
+  assert.equal(target?.cheatsEnabled, true)
   thirdPartyId = target!.id
   assert.equal(host.reservePartyJoin(target!.id, 'reservation-c', performance.now() + 1_000), null)
   const third = await join(host.address.url, 'ticket-c', FIRST_CHARACTER)
   context.after(() => closeSocket(third.socket))
   assert.equal((await firstCheckpoint).type, 'server-save-checkpoint')
   assert.equal(host.capacityParticipantCount(), 3)
+})
+
+test('reserved party transfer imports one durable profile into an existing private College', async (context) => {
+  let partyId: string | null = null
+  const reservationId = 'reserved-profile-transfer'
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => credential === 'leader-ticket'
+        ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+        : credential === 'unreserved-ticket'
+          ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+          : credential === 'transfer-ticket' && partyId
+            ? {
+                content: EMPTY_SHARED_CONTENT,
+                leaderboardUserId: null,
+                partyId,
+                reservationId,
+              }
+            : null,
+    },
+    sessionKind: 'private-college',
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const leader = await join(
+    host.address.url,
+    'leader-ticket',
+    FIRST_CHARACTER,
+    true,
+    EMPTY_PLAYER_PROFILE,
+    false,
+    false,
+    ONLINE_PREFERENCES,
+    true,
+  )
+  context.after(() => closeSocket(leader.socket))
+  const publicState = nextMessage(leader.socket, message => (
+    message.type === 'server-party-state' && message.state.party.visibility === 'public'
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'public',
+  }))
+  const listed = await publicState
+  assert.equal(listed.type, 'server-party-state')
+  partyId = listed.state.party.id
+  assert.equal(
+    host.reservePartyJoin(partyId, reservationId, performance.now() + 10_000),
+    null,
+  )
+
+  const source = createGameSimulation({ saved: FIRST_CHARACTER })
+  const savedEconomy = getPlayerEconomy(source, 'saved')
+  const profile = createGameProfileSaveDocument({
+    integrity: 'local-only',
+    mods: [],
+    modState: {},
+    playerId: 'saved',
+    state: {
+      ...source,
+      playerEntities: replacePlayerEconomy(source.playerEntities, 'saved', {
+        ...savedEconomy,
+        gold: 12_345,
+      }),
+    },
+  })
+  const unreservedSocket = await openSocket(host.address.url)
+  context.after(() => closeSocket(unreservedSocket))
+  const unreservedAdmission = nextMessage(unreservedSocket, message => (
+    message.type === 'server-disconnect'
+  ))
+  unreservedSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'unreserved-ticket',
+    character: SECOND_CHARACTER,
+    save: profile,
+    saveIntent: 'new-game',
+  }))
+  const unreserved = await unreservedAdmission
+  assert.equal(unreserved.type, 'server-disconnect')
+  assert.match(unreserved.reason, /fresh host owner/)
+
+  const transferredParty = nextMessage(leader.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  const socket = await openSocket(host.address.url)
+  context.after(() => closeSocket(socket))
+  const admitted = nextMessage(socket, message => (
+    message.type === 'server-welcome' || message.type === 'server-disconnect'
+  ))
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'transfer-ticket',
+    character: SECOND_CHARACTER,
+    save: profile,
+    saveIntent: 'new-game',
+  }))
+
+  const welcome = await admitted
+  assert.equal(welcome.type, 'server-welcome')
+  if (welcome.type !== 'server-welcome') return
+  assert.equal(welcome.cheatsEnabled, true)
+  assert.deepEqual(welcome.snapshot.players[leader.welcome.playerId]?.config, FIRST_CHARACTER)
+  assert.deepEqual(welcome.snapshot.players[welcome.playerId]?.config, SECOND_CHARACTER)
+  assert.equal(welcome.snapshot.players[welcome.playerId]?.economy.gold, 12_345)
+  assert.equal((await transferredParty).type, 'server-party-state')
+  assert.equal(host.capacityParticipantCount(), 2)
 })
 
 test('expired external join requests disappear from the leader projection', async (context) => {
@@ -984,7 +1158,9 @@ test('shared-host Global crosses Hub and Boneyard while match chat stays run-sco
   assert.deepEqual(partyA.sender, {
     displayName: FIRST_CHARACTER.displayName,
     playerId: first.welcome.playerId,
+    playerReference: partyA.sender.playerReference,
   })
+  assert.match(partyA.sender.playerReference, /^player-ref-[A-Za-z0-9_-]{32}$/)
   await new Promise(resolve => setTimeout(resolve, 60))
   assert.equal(outsiderChat.messages.length, 0)
 
@@ -1317,7 +1493,7 @@ test('whispers route to exactly the target pair and expose Hub social profiles',
   first.socket.send(encodeGameMessage({
     type: 'client-chat',
     channel: 'whisper',
-    targetPlayerId: second.welcome.playerId,
+    targetPlayerReference: second.welcome.playerId,
     text: 'Between us',
   }))
   const [atSender, atTarget] = await Promise.all([whisperForSender, whisperForTarget])
@@ -1327,11 +1503,15 @@ test('whispers route to exactly the target pair and expose Hub social profiles',
   assert.deepEqual(atSender.sender, {
     displayName: FIRST_CHARACTER.displayName,
     playerId: first.welcome.playerId,
+    playerReference: atSender.sender.playerReference,
   })
   assert.deepEqual(atSender.recipient, {
     displayName: SECOND_CHARACTER.displayName,
     playerId: second.welcome.playerId,
+    playerReference: atSender.recipient?.playerReference,
   })
+  assert.match(atSender.sender.playerReference, /^player-ref-[A-Za-z0-9_-]{32}$/)
+  assert.match(atSender.recipient!.playerReference, /^player-ref-[A-Za-z0-9_-]{32}$/)
   await new Promise(resolve => setTimeout(resolve, 60))
   assert.equal(outsiderChat.messages.length, 0)
 
@@ -1341,7 +1521,7 @@ test('whispers route to exactly the target pair and expose Hub social profiles',
   first.socket.send(encodeGameMessage({
     type: 'client-chat',
     channel: 'whisper',
-    targetPlayerId: 'player-toltec-departed',
+    targetPlayerReference: 'player-toltec-departed',
     text: 'Anyone there?',
   }))
   assert.deepEqual(await unavailable, {
@@ -1357,7 +1537,7 @@ test('whispers route to exactly the target pair and expose Hub social profiles',
   first.socket.send(encodeGameMessage({
     type: 'client-chat',
     channel: 'whisper',
-    targetPlayerId: first.welcome.playerId,
+    targetPlayerReference: first.welcome.playerId,
     text: 'Echoing into the void',
   }))
   assert.equal((await selfRejected).type, 'server-chat-rejected')
@@ -4837,6 +5017,7 @@ async function join(
   beginCollegeIntro = false,
   declineTutorial = false,
   onlinePreferences: GameOnlinePreferences = ONLINE_PREFERENCES,
+  cheatsEnabled = false,
 ) {
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
@@ -4845,7 +5026,7 @@ async function join(
     ...(declineTutorial ? { declineTutorial: true } : {}),
     onlinePreferences,
     profile,
-    cheatsEnabled: false,
+    cheatsEnabled,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential,
     character,

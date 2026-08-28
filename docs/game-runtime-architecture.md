@@ -56,13 +56,24 @@ rules. Player cards and a post-world same-region badge are presentation
 consumers. Activity clears when the participant leaves the Hub.
 
 The Play submenu and Dark Cloud keep distinct visual wrappers over one headless
-party-directory/join module. Opted-in singleton and grouped shared-Hub parties
-may be public or invite-only; private parties remain unlisted. A rotatable
+party-directory/join module. Opted-in singleton and grouped parties on the
+resident Hub or any private-College host may be public or invite-only; private
+parties remain unlisted. The supervisor aggregates only each host's safe
+projection. Private-College rows disclose session kind, mod count, and ordinary
+cheat policy but never content digests, host credentials, or Party ID. A rotatable
 eight-character Party ID is a direct-join capability and appears only in the
 leader cog. Resolution creates a ten-minute in-memory intent, while the actual
 host ticket is minted only after Create. Invite-only requests are memory-only,
 guest-capable, leader-approved, and expire with their party or supervisor.
-Only the current leader can issue Courtyard Player Card invitations.
+Only the current leader can issue ordinary Courtyard Player Card invitations.
+A private-College leader may also target the opaque live reference resolved
+from a Global-chat Player Card. That remote invitation is a ten-minute
+ephemeral offer, not an admission: acceptance resolves the Party ID again,
+previews room policy, durably saves and closes the source session, enters
+Create, and mints the target ticket just in time. That reserved `new-game`
+ticket may hydrate exactly the joining member's durable profile into the live
+private Hub; it cannot replace existing room simulation or restore the
+joiner's session-global mod state over the room owner.
 Starting a Boneyard does not remove an opted-in party from either directory.
 The host projects the retained membership together with its active run as an
 `IN GAME` listing carrying the authored Boneyard name and current squad
@@ -119,17 +130,20 @@ public-Hub singleton sees Global; a grouped Hub participant defaults to Party
 and may switch to Global. Entering a Boneyard exposes and initially selects a
 match-owned Boneyard channel; later manual channel choices survive chat
 close/reopen while that world remains active. Global reaches every opted-in
-authenticated participant on the process-wide shared-Hub host, whether that
-participant is in the Hub or any party run. Party reaches only current party
+authenticated participant registered with the supervisor's ephemeral social
+broker, whether that participant is in the resident Hub, a private College, or
+any of their Boneyards. Party reaches only current party
 members in the Hub. Boneyard reaches only participants in the sender's exact
 live run. A Whisper is an explicit one-to-one request: the client supplies a
-target player id, while the host derives the sender, resolves one currently
-connected target on the same host, and echoes the authoritative event to
-exactly that pair. Selecting Boneyard does not suspend Global or Whisper
+server-issued live player reference (or a same-host actor id from the existing
+Hub card), while the host derives the sender and resolves exactly one current
+target locally or through the broker. Selecting Boneyard does not suspend Global or Whisper
 receipt; those events continue into their bounded channel histories and unread
-counts. The Hub player projection is the only target-discovery surface; there
-is no cross-host directory, transcript service, offline delivery, or chat
-persistence in saves.
+counts. Authoritative chat sender and recipient records attach an opaque,
+unguessable player reference. Activating a name sends a correlated request;
+the target host samples the current Player Card projection on demand, so full
+stats are never copied into every chat event. There is no transcript service,
+offline delivery, cross-supervisor route, or chat persistence in saves.
 
 Browser-local Online Features settings own four subordinate choices. The
 master is an effective gate over Activity Messages, Global Chat, Shared Hub,
@@ -408,11 +422,13 @@ a fresh private singleton. A private College projects all connected clients as
 one party whose leader follows host transfer.
 
 Chat identity is never a fifth client-provided identity. A client chat command
-contains only a channel and bounded text. The host derives player ID and
-display name from the authenticated socket, resolves recipients against the
-current party/world graph, allocates the ordered chat sequence, and echoes the
-authoritative event. Client history is an 80-event presentation buffer, not an
-authority store.
+contains only a channel, bounded text, and an optional server-issued target
+reference. The host derives local player ID, display name, and opaque reference
+from the authenticated socket. The supervisor broker routes Global/remote
+Whisper without retaining text; each recipient host allocates one ordered
+sequence per social event and maps same-host references back to actor IDs for
+world speech. Current Player Card data resolves separately on demand. Client
+history is an 80-event presentation buffer, not an authority store.
 
 The browser supervisor owns one shared-Hub host for its process lifetime and a
 bounded set of single-use admission tickets. The host owns a shared Hub simulation plus zero or more
@@ -486,8 +502,9 @@ validated against those entries. That same ordered vector feeds the Hall
 projection and schema-17 stock bridge, so Tonic membership is neither hidden
 during web play nor reconstructed heuristically during export.
 
-The host also owns the safe public-party projection. A bearer-protected
-supervisor control-plane read exposes that projection to the Website backend;
+Each host owns its safe public-party projection. A bearer-protected supervisor
+control-plane read aggregates every nonclosing host and exposes that bounded
+projection to the Website backend;
 public clients receive only the bounded DTO from `GET /api/game/parties`.
 Private Colleges are bounded supervisor session records with per-player tickets;
 they close after their final player and proxy leave. Their reusable standing
@@ -1053,6 +1070,11 @@ RNG order, before publishing the next progression revision.
   isolated Lua VM per active Lua member and a room-local Boneyard catalog.
   Other Colleges cannot observe or mutate that content. Subscription changes
   affect only a later admission or explicit signed-in sync.
+- A private College also owns one ordinary-cheat policy. The first authority
+  initializes it and only the current authority may update it. Listings,
+  Party-ID/public/request resolutions, consent, welcome, and live protocol
+  updates all project that same value. Joined browsers cannot override it with
+  local settings, and enabling it permanently taints global-score eligibility.
 - On resume, the title owner first compares the stored manifest with the
   already-loaded account preview. Once that preflight is accepted, it starts
   the matching Hub/Boneyard loading barrier before requesting a ticket; the

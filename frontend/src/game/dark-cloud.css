@@ -414,6 +414,27 @@
   font: clamp(12px, 0.92vw, 14px) 'IM FELL English', serif;
 }
 
+.dark-cloud-row-copy > .dark-cloud-party-flags {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.dark-cloud-party-flags em {
+  padding: 1px 5px;
+  border: 1px solid rgb(190 156 76 / 0.38);
+  color: #c8ad69;
+  background: rgb(34 28 16 / 0.72);
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+}
+
+.dark-cloud-party-flags em.cheats {
+  color: #e6a078;
+  border-color: rgb(211 115 70 / 0.48);
+}
+
 .dark-cloud-row-tags {
   margin-top: 5px;
   color: #7c7258;

@@ -301,10 +301,12 @@ smokeFlow: try {
   assert.deepEqual(whisperMessage.sender, {
     displayName: 'Aurelia',
     playerId: first.playerId,
+    playerReference: whisperMessage.sender.playerReference,
   })
   assert.deepEqual(whisperMessage.recipient, {
     displayName: 'Daria',
     playerId: outsider.playerId,
+    playerReference: whisperMessage.recipient.playerReference,
   })
   await chat.locator('[data-message-channel="whisper"]', {
     hasText: 'Aurelia private hello',
@@ -930,11 +932,11 @@ async function enterRawHub(displayName, element) {
         targetTick,
       }))
     },
-    sendChat(channel, text, targetPlayerId) {
+    sendChat(channel, text, targetPlayerReference) {
       socket.send(JSON.stringify({
         type: 'client-chat',
         channel,
-        ...(targetPlayerId === undefined ? {} : { targetPlayerId }),
+        ...(targetPlayerReference === undefined ? {} : { targetPlayerReference }),
         text,
       }))
     },

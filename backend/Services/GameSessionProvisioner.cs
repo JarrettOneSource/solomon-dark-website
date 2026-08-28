@@ -477,7 +477,8 @@ public sealed partial class GameSessionProvisioner
 
     private static bool ValidPublicPartyDirectory(PublicGameParty[]? items)
     {
-        if (items is null || items.Select(party => party.Id).Distinct(StringComparer.Ordinal).Count() != items.Length)
+        if (items is null || items.Length > 1024 ||
+            items.Select(party => party.Id).Distinct(StringComparer.Ordinal).Count() != items.Length)
         {
             return false;
         }
@@ -490,6 +491,10 @@ public sealed partial class GameSessionProvisioner
             party.MaxMembers >= party.MemberCount &&
             party.Members.Contains(party.Leader, StringComparer.Ordinal) &&
             party.Members.All(member => !string.IsNullOrWhiteSpace(member)) &&
+            party.ModCount is >= 0 and <= 128 &&
+            party.SessionKind is "global-hub" or "private-college" &&
+            (party.SessionKind == "private-college" ||
+                (!party.CheatsEnabled && party.ModCount == 0)) &&
             party.Status is "hub" or "playing" &&
             party.Visibility is "invite-only" or "public" &&
             (party.Status == "hub"
@@ -548,6 +553,11 @@ public sealed partial class GameSessionProvisioner
             target.Visibility is not ("invite-only" or "private" or "public") ||
             target.Content is null || !Sha256Regex().IsMatch(target.Content.ManifestSha256) ||
             target.Content.Mods is null || target.Content.Mods.Length > 128)
+        {
+            return false;
+        }
+        if (target.Kind == "global-hub" &&
+            (target.CheatsEnabled || target.Content.Mods.Length > 0))
         {
             return false;
         }
@@ -634,11 +644,14 @@ public sealed record ProvisionedGameEndpoint(
 public sealed record SharedHubStats(int Players, int Parties, int Runs);
 
 public sealed record PublicGameParty(
+    bool CheatsEnabled,
     string Id,
     string Leader,
     string[] Members,
     int MemberCount,
     int MaxMembers,
+    int ModCount,
+    string SessionKind,
     string Status,
     string Visibility,
     string? BoneyardName);
@@ -693,6 +706,7 @@ public sealed record GamePartyMod(
 public sealed record GamePartyContent(string ManifestSha256, GamePartyMod[] Mods);
 
 public sealed record GamePartyJoinTarget(
+    bool CheatsEnabled,
     GamePartyContent? Content,
     string Kind,
     string Leader,

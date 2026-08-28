@@ -42,6 +42,7 @@ import type { RuntimeEventSink } from './runtime-event-publisher.ts'
 import {
   verifyPartyRecoveryClaim,
 } from './party-recovery-claim.ts'
+import { startGameSocialBroker } from './game-social-broker.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 export const GAME_HUB_PATH = '/game-hub'
@@ -149,6 +150,7 @@ export async function startGameSessionSupervisor(
   )
   const maxSessions = positiveInteger(options.maxSessions ?? DEFAULT_MAX_SESSIONS, 'maxSessions')
   const sessions = new Map<string, SessionRecord>()
+  const socialBroker = startGameSocialBroker()
   const hubTickets = new Map<string, HostTicket>()
   const joinIntents = new Map<string, JoinIntent>()
   const joinRequests = new Map<string, SupervisorJoinRequest>()
@@ -205,6 +207,8 @@ export async function startGameSessionSupervisor(
     runtimeEvents: options.runtimeEvents,
     sharedHub: true,
     sessionKind: 'global-hub',
+    socialBroker,
+    socialHostId: 'shared-hub',
     ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
     ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
   })
@@ -350,7 +354,7 @@ export async function startGameSessionSupervisor(
       return
     }
     if (request.method === 'GET' && path === '/admin/hub/parties') {
-      sendJson(response, 200, { items: hubHost.publicParties() })
+      sendJson(response, 200, { items: publicPartyDirectory() })
       return
     }
     if (request.method === 'GET' && path === '/admin/presence') {
@@ -903,6 +907,12 @@ export async function startGameSessionSupervisor(
     ))
   }
 
+  function publicPartyDirectory() {
+    return [hubSession, ...sessions.values()].flatMap(session => (
+      session.closing ? [] : session.host.publicParties()
+    ))
+  }
+
   function resolveObservationTarget(matchId: string): {
     session: SessionRecord
     target: GameHostObservationTarget
@@ -943,6 +953,7 @@ export async function startGameSessionSupervisor(
     return {
       intentId,
       target: {
+        cheatsEnabled: target.cheatsEnabled,
         content: target.content,
         kind: session.kind === 'hub' ? 'global-hub' : 'private-college',
         leader: target.leader,
@@ -1082,6 +1093,8 @@ export async function startGameSessionSupervisor(
         ...admission.content.boneyards,
       ]),
       sessionKind: 'private-college',
+      socialBroker,
+      socialHostId: id,
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
     const session: SessionRecord = {
@@ -1254,6 +1267,7 @@ export async function startGameSessionSupervisor(
 
   const expiryTimer = setInterval(() => {
     const now = performance.now()
+    socialBroker.prune()
     pruneHubTickets(now)
     for (const [intentId, intent] of joinIntents) {
       if (intent.expiresAt <= now) joinIntents.delete(intentId)
@@ -1387,6 +1401,7 @@ export async function startGameSessionSupervisor(
         closeSession(session, 'supervisor-shutdown')
       )))
       await hubHost.close('server-shutdown')
+      socialBroker.close()
       for (const socket of downstreamSockets) {
         closePeer(socket, 1012, 'server shutdown')
         const forceClose = setTimeout(() => {

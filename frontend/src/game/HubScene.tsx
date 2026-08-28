@@ -14,9 +14,7 @@ import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import type { NativeCollegeIntroState } from './core-kernels/native-college-intro.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
-import { HALL_OF_FAME_CLASS_NAMES } from './core-kernels/hall-of-fame.ts'
-import type { WizardElement } from './core-kernels/player-character.ts'
-import { art, skillIcons } from '../lib/assets.ts'
+import { art } from '../lib/assets.ts'
 import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
@@ -85,10 +83,6 @@ import {
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
 import { hubPolisherWipeGain } from './renderer/hub-private-room-presentation.ts'
-import {
-  PLAYER_CHARACTER_SHEETS,
-  playerCharacterAtlasCssFrame,
-} from './renderer/player-character-atlas.ts'
 import { nearestHubPlayer, selectHubPlayerAtPoint } from './hub-player-selection.ts'
 import {
   hubPlayerActivities,
@@ -96,6 +90,7 @@ import {
   sameHubPlayerActivities,
 } from './hub-player-activity.ts'
 import './hub.css'
+import PlayerCardDialog from './PlayerCardDialog.tsx'
 
 interface HubSceneProps {
   accountUsername: string | null
@@ -1098,116 +1093,33 @@ export default function HubScene({
           const isSelf = selectedPlayerId === playerId
           const cardElement = presented?.config.element ?? 'ether'
           const activity = playerActivities[selectedPlayerId] ?? null
-          const cardClassName =
-            HALL_OF_FAME_CLASS_NAMES[cardElement][presented?.config.discipline ?? 'arcane']
           return (
-            <div
-              className="hub-player-profile-backdrop"
-              role="presentation"
-              onPointerDown={(event) => {
-                if (event.target === event.currentTarget) setSelectedPlayerId(null)
+            <PlayerCardDialog
+              canInvite={Boolean(
+                partyState
+                && partyState.party.leaderPlayerId === playerId
+                && !alreadyTogether
+              )}
+              canMessage={!isSelf}
+              onClose={() => setSelectedPlayerId(null)}
+              onInvite={() => onInvitePlayer(selectedPlayerId)}
+              onMessage={() => {
+                onMessagePlayer(selectedPlayerId, displayName)
+                setSelectedPlayerId(null)
               }}
-            >
-              <section
-                className="hub-player-profile"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="hub-player-profile-name"
-                data-profile-player={selectedPlayerId}
-                data-profile-element={cardElement}
-              >
-                <img className="hub-player-profile-corner" src={art.cornerGold} alt="" aria-hidden />
-                <img
-                  className="hub-player-profile-corner hub-player-profile-corner-right"
-                  src={art.cornerGold}
-                  alt=""
-                  aria-hidden
-                />
-                <div className="hub-player-profile-body">
-                  <header className="hub-player-profile-header">
-                    <WizardPortrait element={cardElement} />
-                    <div className="hub-player-profile-title">
-                      <h2 id="hub-player-profile-name">{displayName}</h2>
-                      <p className="hub-player-profile-class">{cardClassName}</p>
-                      {profile && (
-                        <p
-                          className="hub-player-profile-badge"
-                          data-registered={profile.accountUsername !== null}
-                        >
-                          {profile.accountUsername !== null
-                            ? `Registered · ${profile.accountUsername}`
-                            : 'Guest wizard'}
-                        </p>
-                      )}
-                      {activity ? (
-                        <p
-                          className="hub-player-profile-activity"
-                          data-profile-activity={activity}
-                        >
-                          {hubPlayerActivityLabel(activity)}
-                        </p>
-                      ) : null}
-                    </div>
-                  </header>
-                  <dl className="hub-player-profile-stats">
-                    <div className="hub-player-profile-stat">
-                      <img src={skillIcons.bag} alt="" aria-hidden />
-                      <dt>Gold</dt>
-                      <dd data-profile-gold={selectedGold ?? undefined}>
-                        {selectedGold === null ? '—' : selectedGold.toLocaleString()}
-                      </dd>
-                    </div>
-                    <div className="hub-player-profile-stat">
-                      <img src={skillIcons.wave} alt="" aria-hidden />
-                      <dt>Highest Wave</dt>
-                      <dd>
-                        {profile?.highestWave == null ? '—' : profile.highestWave.toLocaleString()}
-                      </dd>
-                    </div>
-                    <div className="hub-player-profile-stat">
-                      <img src={skillIcons.infinity} alt="" aria-hidden />
-                      <dt>Time in the Dark</dt>
-                      <dd>
-                        {profile?.totalPlaytimeMs == null ? '—' : formatPlaytime(profile.totalPlaytimeMs)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="hub-player-profile-actions">
-                    {!isSelf && (
-                      <button
-                        type="button"
-                        className="hub-player-profile-message"
-                        onClick={() => {
-                          onMessagePlayer(selectedPlayerId, displayName)
-                          setSelectedPlayerId(null)
-                        }}
-                      >
-                        Message
-                      </button>
-                    )}
-                    {partyState
-                      && partyState.party.leaderPlayerId === playerId
-                      && !alreadyTogether && (
-                      <button
-                        type="button"
-                        className="hub-player-profile-invite"
-                        onClick={() => onInvitePlayer(selectedPlayerId)}
-                      >
-                        Invite to Party
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="hub-player-profile-close"
-                      data-game-back="true"
-                      onClick={() => setSelectedPlayerId(null)}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </section>
-            </div>
+              player={{
+                accountUsername: profile?.accountUsername ?? null,
+                activity: activity ? hubPlayerActivityLabel(activity) : null,
+                activityKind: activity ?? undefined,
+                discipline: presented?.config.discipline ?? 'arcane',
+                displayName,
+                element: cardElement,
+                gold: selectedGold,
+                highestWave: profile?.highestWave ?? null,
+                id: selectedPlayerId,
+                totalPlaytimeMs: profile?.totalPlaytimeMs ?? null,
+              }}
+            />
           )
         })()}
 
@@ -1279,40 +1191,4 @@ function sameViewport(left: GameViewportLayout, right: GameViewportLayout): bool
   return left.displayScale === right.displayScale
     && left.height === right.height
     && left.width === right.width
-}
-
-const WIZARD_PORTRAIT_HEADING_INDEX = 12
-
-function WizardPortrait({ element }: { element: WizardElement }) {
-  const layers = [
-    PLAYER_CHARACTER_SHEETS.staffBack,
-    PLAYER_CHARACTER_SHEETS.robeDynamic[element],
-    PLAYER_CHARACTER_SHEETS.robeFixed[element],
-    PLAYER_CHARACTER_SHEETS.staffFront,
-    PLAYER_CHARACTER_SHEETS.head[element],
-  ] as const
-  return (
-    <span className="hub-wizard-portrait" data-portrait-element={element} aria-hidden>
-      {layers.map((sheet, index) => (
-        <span
-          key={`${sheet}:${index}`}
-          className="hub-wizard-portrait-layer"
-        >
-          <span style={playerCharacterAtlasCssFrame(
-            sheet,
-            0,
-            WIZARD_PORTRAIT_HEADING_INDEX,
-          )} />
-        </span>
-      ))}
-      <img className="hub-wizard-portrait-frame" src={art.frameGold} alt="" />
-    </span>
-  )
-}
-
-function formatPlaytime(totalPlaytimeMs: number): string {
-  const totalMinutes = Math.floor(totalPlaytimeMs / 60_000)
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
 }

@@ -21,6 +21,7 @@ export default function PartyJoinConsentDialog({
   target: PartyJoinTarget
 }) {
   const modded = target.content.mods.length > 0
+  const cheats = target.cheatsEnabled
   return (
     <div className="play-routing-backdrop" role="presentation">
       <section className="play-routing-dialog" role="dialog" aria-modal="true" aria-label="Join party consent">
@@ -28,7 +29,7 @@ export default function PartyJoinConsentDialog({
         <p>
           {target.kind === 'global-hub'
             ? 'This is a vanilla global-Hub party.'
-            : 'The room decides its content. Your unrelated mods are ignored for this session.'}
+            : 'The room decides its content and cheat policy. Your unrelated mods and settings are ignored for this session.'}
         </p>
         {modded ? (
           <div>
@@ -37,6 +38,9 @@ export default function PartyJoinConsentDialog({
               <li key={mod.id}>{mod.name} · v{mod.version}</li>
             ))}</ul>
           </div>
+        ) : null}
+        {cheats ? (
+          <p className="play-routing-warning">CHEATS ENABLED FOR THIS COLLEGE</p>
         ) : null}
         {target.kind === 'private-college' ? (
           <p className="play-routing-warning">LOCAL HALL ONLY · GLOBAL SCORES OFF</p>
@@ -52,7 +56,7 @@ export default function PartyJoinConsentDialog({
               ? 'PREPARING…'
                 : requiresVanilla
                   ? 'DISABLE & JOIN'
-                  : modded
+                : modded
                 ? signedIn ? 'SYNC MODS & JOIN' : 'DOWNLOAD & JOIN ONCE'
                 : 'JOIN PARTY'}
           </button>

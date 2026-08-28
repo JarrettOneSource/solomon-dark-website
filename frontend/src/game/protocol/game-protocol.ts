@@ -341,6 +341,8 @@ import {
   normalizeGameChatText,
   type GameChatChannel,
   type GameChatMessage,
+  type GameCollegeInvitation,
+  type GamePlayerCardProfile,
   type GameChatRejection,
   type GameChatRejectionReason,
   type GameChatSender,
@@ -366,6 +368,8 @@ export type {
   GameChatChannel,
   GameChatActivity,
   GameChatMessage,
+  GameCollegeInvitation,
+  GamePlayerCardProfile,
   GameChatRejection,
   GameChatRejectionReason,
   GameChatSender,
@@ -387,7 +391,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 97
+export const GAME_PROTOCOL_VERSION = 98
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -439,6 +443,7 @@ export const MAX_LUA_CONSOLE_VALUE_DEPTH = 16
 export const MAX_LUA_CONSOLE_VALUE_NODES = 2_048
 export const MAX_LUA_CONSOLE_VALUE_FIELDS = 128
 export const MAX_LUA_CONSOLE_VALUE_STRING_LENGTH = 16_384
+export const MAX_GAME_COLLEGE_INVITATIONS = 8
 
 const luaTextEncoder = new TextEncoder()
 
@@ -601,9 +606,25 @@ export interface ClientOnlinePreferencesMessage {
 export interface ClientChatMessage {
   type: 'client-chat'
   channel: GameChatChannel
-  /** Required exactly when the channel is whisper: the private message target. */
-  targetPlayerId?: string
+  /** Required exactly when the channel is whisper: the server-issued live target reference. */
+  targetPlayerReference?: string
   text: string
+}
+
+export interface ClientPlayerCardRequestMessage {
+  readonly playerReference: string
+  readonly requestId: number
+  readonly type: 'client-player-card-request'
+}
+
+export interface ClientCollegeInviteMessage {
+  readonly playerReference: string
+  readonly type: 'client-college-invite'
+}
+
+export interface ClientCollegeInvitationDismissMessage {
+  readonly invitationId: string
+  readonly type: 'client-college-invitation-dismiss'
 }
 
 export interface ClientPartyInviteMessage {
@@ -747,6 +768,8 @@ export interface ClientModActionMessage {
 export type ClientGameMessage =
   | ClientChatMessage
   | ClientCheatModeMessage
+  | ClientCollegeInvitationDismissMessage
+  | ClientCollegeInviteMessage
   | ClientConfirmLoadoutMessage
   | ClientContinueGameOverMessage
   | ClientDeploymentReadyMessage
@@ -761,6 +784,7 @@ export type ClientGameMessage =
   | ClientModActionMessage
   | ClientOnlinePreferencesMessage
   | ClientObserverHelloMessage
+  | ClientPlayerCardRequestMessage
   | ClientPartyAcceptMessage
   | ClientPartyDenyMessage
   | ClientPartyInviteMessage
@@ -787,6 +811,7 @@ export type ClientGameMessage =
 
 export interface ServerWelcomeMessage {
   type: 'server-welcome'
+  cheatsEnabled: boolean
   developerAccess: boolean
   protocolVersion: number
   playerId: string
@@ -950,6 +975,7 @@ export const PARTY_ACTIONS = [
   'accept-invitation',
   'deny-invitation',
   'invite',
+  'invite-college',
   'kick',
   'leave',
   'request-accept',
@@ -993,6 +1019,22 @@ export interface ServerChatRejectedMessage extends GameChatRejection {
   type: 'server-chat-rejected'
 }
 
+export interface ServerPlayerCardMessage {
+  readonly profile: GamePlayerCardProfile | null
+  readonly requestId: number
+  readonly type: 'server-player-card'
+}
+
+export interface ServerCollegeInvitationsMessage {
+  readonly invitations: readonly GameCollegeInvitation[]
+  readonly type: 'server-college-invitations'
+}
+
+export interface ServerCheatModeMessage {
+  readonly enabled: boolean
+  readonly type: 'server-cheat-mode'
+}
+
 export interface LuaConsoleArray extends ReadonlyArray<LuaConsoleValue> {}
 
 export interface LuaConsoleObject {
@@ -1031,6 +1073,8 @@ export interface ServerDisconnectMessage {
 export type ServerGameMessage =
   | ServerChatMessage
   | ServerChatRejectedMessage
+  | ServerCheatModeMessage
+  | ServerCollegeInvitationsMessage
   | ServerDeploymentRestartMessage
   | ServerGameplayPauseMessage
   | ServerGameplayResumeGraceMessage
@@ -1046,6 +1090,7 @@ export type ServerGameMessage =
   | ServerModRuntimeMessage
   | ServerPartyStateMessage
   | ServerPartyActionMessage
+  | ServerPlayerCardMessage
   | ServerPongMessage
   | ServerDisconnectMessage
 
@@ -1148,20 +1193,47 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     }
   }
   if (value.type === 'client-chat') {
-    onlyKeys(value, 'message', ['type', 'channel', 'targetPlayerId', 'text'])
+    onlyKeys(value, 'message', ['type', 'channel', 'targetPlayerReference', 'text'])
     const channel = gameChatChannel(value.channel, 'channel')
-    if ((channel === 'whisper') !== (value.targetPlayerId !== undefined)) {
+    if ((channel === 'whisper') !== (value.targetPlayerReference !== undefined)) {
       throw new GameProtocolError(
-        'targetPlayerId is required exactly when the channel is whisper',
+        'targetPlayerReference is required exactly when the channel is whisper',
       )
     }
     return {
       type: 'client-chat',
       channel,
-      ...(value.targetPlayerId === undefined
+      ...(value.targetPlayerReference === undefined
         ? {}
-        : { targetPlayerId: validatedPlayerId(value.targetPlayerId, 'targetPlayerId') }),
+        : {
+            targetPlayerReference: playerTarget(
+              value.targetPlayerReference,
+              'targetPlayerReference',
+            ),
+          }),
       text: gameChatText(value.text, 'text'),
+    }
+  }
+  if (value.type === 'client-player-card-request') {
+    onlyKeys(value, 'message', ['type', 'playerReference', 'requestId'])
+    return {
+      type: 'client-player-card-request',
+      playerReference: playerReference(value.playerReference, 'playerReference'),
+      requestId: luaRequestId(value.requestId),
+    }
+  }
+  if (value.type === 'client-college-invite') {
+    onlyKeys(value, 'message', ['type', 'playerReference'])
+    return {
+      type: 'client-college-invite',
+      playerReference: playerReference(value.playerReference, 'playerReference'),
+    }
+  }
+  if (value.type === 'client-college-invitation-dismiss') {
+    onlyKeys(value, 'message', ['type', 'invitationId'])
+    return {
+      type: 'client-college-invitation-dismiss',
+      invitationId: partyIdentifier(value.invitationId, 'invitationId'),
     }
   }
   if (value.type === 'client-party-invite') {
@@ -1440,6 +1512,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
   if (value.type === 'server-welcome') {
     onlyKeys(value, 'message', [
       'type',
+      'cheatsEnabled',
       'developerAccess',
       'protocolVersion',
       'playerId',
@@ -1471,6 +1544,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     }
     return {
       type: 'server-welcome',
+      cheatsEnabled: boolean(value.cheatsEnabled, 'cheatsEnabled'),
       developerAccess: boolean(value.developerAccess, 'developerAccess'),
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       playerId: validatedPlayerId(value.playerId, 'playerId'),
@@ -1628,6 +1702,30 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       action: memberString(value.action, 'action', PARTY_ACTIONS),
       ok,
       reason,
+    }
+  }
+  if (value.type === 'server-cheat-mode') {
+    onlyKeys(value, 'message', ['type', 'enabled'])
+    return {
+      type: 'server-cheat-mode',
+      enabled: boolean(value.enabled, 'enabled'),
+    }
+  }
+  if (value.type === 'server-player-card') {
+    onlyKeys(value, 'message', ['type', 'profile', 'requestId'])
+    return {
+      type: 'server-player-card',
+      profile: value.profile === null
+        ? null
+        : gamePlayerCardProfile(value.profile, 'profile'),
+      requestId: luaRequestId(value.requestId),
+    }
+  }
+  if (value.type === 'server-college-invitations') {
+    onlyKeys(value, 'message', ['type', 'invitations'])
+    return {
+      type: 'server-college-invitations',
+      invitations: gameCollegeInvitations(value.invitations),
     }
   }
   if (value.type === 'server-chat') {
@@ -1966,6 +2064,26 @@ function validatedPlayerId(value: unknown, field: string): string {
   return result
 }
 
+function playerReference(value: unknown, field: string): string {
+  const result = limitedString(value, field, 43)
+  if (!/^player-ref-[A-Za-z0-9_-]{32}$/.test(result)) {
+    throw new GameProtocolError(`${field} is not a server-issued player reference`)
+  }
+  return result
+}
+
+function playerTarget(value: unknown, field: string): string {
+  const result = validatedPlayerId(value, field)
+  if (result.startsWith('player-ref-') && !isPlayerReference(result)) {
+    throw new GameProtocolError(`${field} contains an invalid player reference`)
+  }
+  return result
+}
+
+function isPlayerReference(value: string): boolean {
+  return /^player-ref-[A-Za-z0-9_-]{32}$/.test(value)
+}
+
 function partyIdentifier(value: unknown, field: string): string {
   const result = limitedString(value, field, 64)
   if (!/^[A-Za-z0-9_-]+$/.test(result)) {
@@ -2098,10 +2216,100 @@ function gameChatText(value: unknown, field: string): string {
 
 function gameChatSender(value: unknown, field: string): GameChatSender {
   const source = record(value, field)
-  onlyKeys(source, field, ['displayName', 'playerId'])
+  onlyKeys(source, field, ['displayName', 'playerId', 'playerReference'])
   return {
     displayName: limitedString(source.displayName, `${field}.displayName`, 64),
     playerId: validatedPlayerId(source.playerId, `${field}.playerId`),
+    playerReference: playerReference(
+      source.playerReference,
+      `${field}.playerReference`,
+    ),
+  }
+}
+
+function gamePlayerCardProfile(value: unknown, field: string): GamePlayerCardProfile {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'accountUsername',
+    'activity',
+    'discipline',
+    'displayName',
+    'element',
+    'gold',
+    'highestWave',
+    'playerReference',
+    'sessionKind',
+    'totalPlaytimeMs',
+  ])
+  const discipline = limitedString(source.discipline, `${field}.discipline`, 32)
+  if (!isWizardDiscipline(discipline)) {
+    throw new GameProtocolError(`${field}.discipline is not supported`)
+  }
+  const element = limitedString(source.element, `${field}.element`, 32)
+  if (!isWizardElement(element)) {
+    throw new GameProtocolError(`${field}.element is not supported`)
+  }
+  return {
+    accountUsername: source.accountUsername === null
+      ? null
+      : limitedString(source.accountUsername, `${field}.accountUsername`, 64),
+    activity: memberString(
+      source.activity,
+      `${field}.activity`,
+      ['boneyard', 'hub'] as const,
+    ),
+    discipline,
+    displayName: limitedString(source.displayName, `${field}.displayName`, 64),
+    element,
+    gold: nonnegativeInteger(source.gold, `${field}.gold`),
+    highestWave: source.highestWave === null
+      ? null
+      : integerWithin(source.highestWave, `${field}.highestWave`, 1, 1_000_000),
+    playerReference: playerReference(
+      source.playerReference,
+      `${field}.playerReference`,
+    ),
+    sessionKind: memberString(
+      source.sessionKind,
+      `${field}.sessionKind`,
+      ['global-hub', 'private-college', 'standalone'] as const,
+    ),
+    totalPlaytimeMs: source.totalPlaytimeMs === null
+      ? null
+      : integerWithin(
+          source.totalPlaytimeMs,
+          `${field}.totalPlaytimeMs`,
+          0,
+          10_000_000_000_000,
+        ),
+  }
+}
+
+function gameCollegeInvitations(value: unknown): readonly GameCollegeInvitation[] {
+  const invitations = limitedArray(
+    value,
+    'invitations',
+    MAX_GAME_COLLEGE_INVITATIONS,
+  ).map((entry, index) => gameCollegeInvitation(entry, `invitations[${index}]`))
+  if (new Set(invitations.map(({ id }) => id)).size !== invitations.length) {
+    throw new GameProtocolError('invitations contains a duplicate id')
+  }
+  return invitations
+}
+
+function gameCollegeInvitation(value: unknown, field: string): GameCollegeInvitation {
+  const source = record(value, field)
+  onlyKeys(source, field, ['expiresAtUnixMs', 'id', 'inviter', 'joinCode'])
+  return {
+    expiresAtUnixMs: integerWithin(
+      source.expiresAtUnixMs,
+      `${field}.expiresAtUnixMs`,
+      1,
+      10_000_000_000_000,
+    ),
+    id: partyIdentifier(source.id, `${field}.id`),
+    inviter: gameChatSender(source.inviter, `${field}.inviter`),
+    joinCode: partyJoinCode(source.joinCode, `${field}.joinCode`),
   }
 }
 

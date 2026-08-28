@@ -259,6 +259,31 @@
   font-style: italic;
 }
 
+.game-chat-player-name {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  pointer-events: auto;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.game-chat[data-chat-faded='true'][data-chat-open='false'] .game-chat-player-name {
+  pointer-events: none;
+}
+
+.game-chat-player-name:hover,
+.game-chat-player-name:focus-visible {
+  color: #fff2c2;
+  text-decoration-color: currentcolor;
+  outline: none;
+}
+
 .game-chat-message span {
   min-width: 0;
   color: #eee6d2;
@@ -270,6 +295,11 @@
   grid-column: 1 / -1;
   color: #9fc9dd;
   font-style: italic;
+}
+
+.game-chat-activity .game-chat-player-name {
+  color: inherit;
+  font-style: inherit;
 }
 
 .game-chat-empty {

@@ -20,24 +20,34 @@ test('projects complete opted-in singleton and grouped parties with safe display
     ['player-b', 'Hagatha'],
     ['player-c', 'Luthacus'],
     ['player-d', 'Incomplete'],
-  ]), 16)
+  ]), 16, {
+    cheatsEnabled: false,
+    modCount: 0,
+    sessionKind: 'global-hub',
+  })
 
   assert.deepEqual(directory, [{
     boneyardName: null,
+    cheatsEnabled: false,
     id: 'listing-party-1',
     leader: 'Alone',
     maxMembers: 16,
     memberCount: 1,
     members: ['Alone'],
+    modCount: 0,
+    sessionKind: 'global-hub',
     status: 'hub',
     visibility: 'public',
   }, {
     boneyardName: null,
+    cheatsEnabled: false,
     id: 'listing-party-2',
     leader: 'Hagatha',
     maxMembers: 16,
     memberCount: 2,
     members: ['Hagatha', 'Luthacus'],
+    modCount: 0,
+    sessionKind: 'global-hub',
     status: 'hub',
     visibility: 'invite-only',
   }])
@@ -57,15 +67,22 @@ test('projects a running party with only its public Boneyard name', () => {
     ['player-a', 'Fomentius'],
     ['player-b', 'Hagatha'],
     ['player-c', 'Luthacus'],
-  ]), 8)
+  ]), 8, {
+    cheatsEnabled: true,
+    modCount: 2,
+    sessionKind: 'private-college',
+  })
 
   assert.deepEqual(directory, [{
     boneyardName: 'The Survival Grounds',
+    cheatsEnabled: true,
     id: 'listing-party-4',
     leader: 'Fomentius',
     maxMembers: 8,
     memberCount: 3,
     members: ['Fomentius', 'Hagatha', 'Luthacus'],
+    modCount: 2,
+    sessionKind: 'private-college',
     status: 'playing',
     visibility: 'public',
   }])

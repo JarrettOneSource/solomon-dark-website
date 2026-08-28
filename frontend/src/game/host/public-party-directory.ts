@@ -2,11 +2,14 @@ import type { PartyMembership } from '../protocol/party-state.ts'
 
 export interface PublicPartyDirectoryEntry {
   readonly boneyardName: string | null
+  readonly cheatsEnabled: boolean
   readonly id: string
   readonly leader: string
   readonly maxMembers: number
   readonly memberCount: number
   readonly members: readonly string[]
+  readonly modCount: number
+  readonly sessionKind: 'global-hub' | 'private-college'
   readonly status: 'hub' | 'playing'
   readonly visibility: 'invite-only' | 'public'
 }
@@ -23,6 +26,11 @@ export function projectPublicPartyDirectory(
   source: PublicPartyDirectorySource,
   displayNames: ReadonlyMap<string, string>,
   maxMembers: number,
+  room: Readonly<{
+    cheatsEnabled: boolean
+    modCount: number
+    sessionKind: 'global-hub' | 'private-college'
+  }>,
 ): readonly PublicPartyDirectoryEntry[] {
   const runsByParty = new Map(source.runs.map(run => [run.partyId, run]))
   return source.memberships.flatMap((party) => {
@@ -38,11 +46,14 @@ export function projectPublicPartyDirectory(
     const run = runsByParty.get(party.id)
     return [{
       boneyardName: run?.boneyardName ?? null,
+      cheatsEnabled: room.cheatsEnabled,
       id: party.listingId,
       leader,
       maxMembers,
       memberCount: members.length,
       members,
+      modCount: room.modCount,
+      sessionKind: room.sessionKind,
       status: run ? 'playing' as const : 'hub' as const,
       visibility: party.visibility,
     }]

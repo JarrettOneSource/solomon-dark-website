@@ -70,7 +70,7 @@ export default function PartySettingsDialog({
         </header>
         {error ? <p className="party-settings-error" role="alert">{error}</p> : null}
         <div className="party-settings-body">
-          {leader && sessionKind === 'global-hub' ? (
+          {leader ? (
             <fieldset className="party-settings-group">
               <legend>VISIBILITY</legend>
               <div className="party-settings-segmented">
@@ -87,8 +87,6 @@ export default function PartySettingsDialog({
                 ))}
               </div>
             </fieldset>
-          ) : leader ? (
-            <p className="party-settings-note">PRIVATE · PARTY ID ONLY</p>
           ) : (
             <p className="party-settings-note">PARTY MEMBER</p>
           )}

@@ -23,7 +23,9 @@ import {
   type BoneyardEnemyEventSnapshot,
   type GameChatChannel,
   type GameChatMessage,
+  type GameCollegeInvitation,
   type GameChatRejection,
+  type GamePlayerCardProfile,
   type GameSnapshot,
   type GameSessionKind,
   type GameplayPauseSource,
@@ -112,6 +114,7 @@ export interface GameDeploymentRestartRequest {
 
 export interface GameClientSession {
   readonly boneyards: readonly BoneyardChoice[]
+  readonly cheatsEnabled: boolean
   readonly developerAccess: boolean
   readonly isHost: boolean
   readonly modAssets: readonly GameModAsset[]
@@ -128,6 +131,7 @@ export interface GameClientSession {
     displayName: string,
   ): void
   continueGameOver(runId: string, eventId: number): void
+  dismissCollegeInvitation(invitationId: string): void
   destroy(): void
   denyPartyInvitation(invitationId: string): void
   denyPartyJoinRequest(requestId: string): void
@@ -135,6 +139,7 @@ export interface GameClientSession {
   acceptPartyInvitation(invitationId: string): void
   getBoneyard(): LoadedBoneyard | null
   getChatMessages(): readonly GameChatMessage[]
+  getCollegeInvitations(): readonly GameCollegeInvitation[]
   getGameplayPause(): GameplayPauseState | null
   getGameplayResumeGrace(): GameplayResumeGraceState | null
   getModCatalog(): readonly ModConsumableCatalogEntry[]
@@ -147,6 +152,10 @@ export interface GameClientSession {
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onChatMessage(listener: (message: GameChatMessage) => void): () => void
   onChatRejected(listener: (rejection: GameChatRejection) => void): () => void
+  onCheatMode(listener: (enabled: boolean) => void): () => void
+  onCollegeInvitations(
+    listener: (invitations: readonly GameCollegeInvitation[]) => void,
+  ): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onGameplayResumeGrace(
     listener: (grace: GameplayResumeGraceState | null) => void,
@@ -165,6 +174,7 @@ export interface GameClientSession {
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
   requestGameplayPause(source: GameplayPauseSource | null): void
+  resolvePlayerCard(playerReference: string): Promise<GamePlayerCardProfile>
   readyCollegeIntro(): void
   readyResumeGrace(): void
   saveBeforeLeave(): Promise<GameSaveCheckpoint>
@@ -173,7 +183,7 @@ export interface GameClientSession {
   selectConcentrationSlot(skillId: number, slot: 0 | 1): void
   selectPrimarySkill(skillId: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
-  sendChatMessage(channel: GameChatChannel, text: string, targetPlayerId?: string): void
+  sendChatMessage(channel: GameChatChannel, text: string, targetPlayerReference?: string): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
   sendTutorialAction(action: NativeTutorialSurfaceAction): void
@@ -181,6 +191,7 @@ export interface GameClientSession {
   setHubActivity(activity: HubPlayerActivity | null): void
   setOnlinePreferences(preferences: GameOnlinePreferences): void
   inviteToParty(playerId: string): void
+  inviteToCollege(playerReference: string): void
   kickPartyPlayer(playerId: string): void
   leaveParty(): void
   rotatePartyCode(): void
@@ -225,6 +236,7 @@ const STOPPED_INPUT = createIdlePlayerCharacterInput()
 const PING_INTERVAL_MS = 2_000
 const PING_TIMEOUT_MS = 10_000
 const LUA_EXECUTION_TIMEOUT_MS = 10_000
+const PLAYER_CARD_REQUEST_TIMEOUT_MS = 10_000
 const MAX_PENDING_LUA_EXECUTIONS = 8
 const luaTextEncoder = new TextEncoder()
 let nextGameSaveStreamId = 1
@@ -232,6 +244,12 @@ let nextGameSaveStreamId = 1
 interface PendingLuaExecution {
   reject: (error: Error) => void
   resolve: (result: GameLuaExecutionResult) => void
+  timeout: ReturnType<typeof globalThis.setTimeout>
+}
+
+interface PendingPlayerCardRequest {
+  reject: (error: Error) => void
+  resolve: (profile: GamePlayerCardProfile) => void
   timeout: ReturnType<typeof globalThis.setTimeout>
 }
 
@@ -258,6 +276,8 @@ export function connectGameClientSession(
     let loadedBoneyard: LoadedBoneyard | null = null
     let gameplayPause: GameplayPauseState | null = null
     let gameplayResumeGrace: GameplayResumeGraceState | null = null
+    let authoritativeCheatsEnabled = options.cheatsEnabled === true
+    let collegeInvitations: readonly GameCollegeInvitation[] = []
     let onlinePreferences = validatedOnlinePreferences(
       options.onlinePreferences ?? DEFAULT_GAME_ONLINE_PREFERENCES,
     )
@@ -273,6 +293,7 @@ export function connectGameClientSession(
     let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
     let nextLuaRequestId = 1
+    let nextPlayerCardRequestId = 1
     let nextModRequestId = 1
     let nextLeaveSaveRequestId = 1
     let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
@@ -290,6 +311,10 @@ export function connectGameClientSession(
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     const chatMessageListeners = new Set<(message: GameChatMessage) => void>()
     const chatRejectionListeners = new Set<(rejection: GameChatRejection) => void>()
+    const cheatModeListeners = new Set<(enabled: boolean) => void>()
+    const collegeInvitationListeners = new Set<(
+      invitations: readonly GameCollegeInvitation[],
+    ) => void>()
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
     const gameplayResumeGraceListeners = new Set<(
       grace: GameplayResumeGraceState | null,
@@ -307,6 +332,7 @@ export function connectGameClientSession(
     const saveCheckpointListeners = new Set<(checkpoint: GameSaveCheckpoint) => void>()
     const pendingPings = new Map<number, number>()
     const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
+    const pendingPlayerCardRequests = new Map<number, PendingPlayerCardRequest>()
     let pendingLeaveSave: PendingLeaveSave | null = null
     const entityReplication = new EntityReplicationReconstructor()
     let pendingInputs: PendingInput[] = []
@@ -331,6 +357,7 @@ export function connectGameClientSession(
           return
         }
         welcome = message
+        authoritativeCheatsEnabled = message.cheatsEnabled
         snapshot = message.snapshot
         gameplayPause = message.gameplayPause
         gameplayResumeGrace = message.gameplayResumeGrace
@@ -466,6 +493,33 @@ export function connectGameClientSession(
       if (message.type === 'server-party-action') {
         const result = { action: message.action, ok: message.ok, reason: message.reason }
         for (const listener of partyActionListeners) listener(result)
+        return
+      }
+      if (message.type === 'server-cheat-mode') {
+        authoritativeCheatsEnabled = message.enabled
+        for (const listener of cheatModeListeners) listener(authoritativeCheatsEnabled)
+        return
+      }
+      if (message.type === 'server-college-invitations') {
+        collegeInvitations = message.invitations
+        for (const listener of collegeInvitationListeners) {
+          listener(collegeInvitations)
+        }
+        return
+      }
+      if (message.type === 'server-player-card') {
+        const pending = pendingPlayerCardRequests.get(message.requestId)
+        if (!pending) {
+          fail(new Error('The game server sent an unexpected Player Card response.'))
+          return
+        }
+        pendingPlayerCardRequests.delete(message.requestId)
+        globalThis.clearTimeout(pending.timeout)
+        if (message.profile === null) {
+          pending.reject(new Error('That wizard is no longer available.'))
+        } else {
+          pending.resolve(message.profile)
+        }
         return
       }
       if (message.type === 'server-chat') {
@@ -718,9 +772,19 @@ export function connectGameClientSession(
           runId,
         }))
       },
+      dismissCollegeInvitation(invitationId) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-college-invitation-dismiss',
+          invitationId,
+        }))
+      },
       get boneyards() {
         if (!welcome) throw new Error('game session has not been welcomed')
         return welcome.boneyards
+      },
+      get cheatsEnabled() {
+        return authoritativeCheatsEnabled
       },
       get developerAccess() {
         return welcome?.developerAccess === true
@@ -761,10 +825,14 @@ export function connectGameClientSession(
         options.transport.close(1000, 'session destroyed')
         rejectPendingLeaveSave(new Error('The game session was destroyed.'))
         rejectPendingLuaExecutions(new Error('The game session was destroyed.'))
+        rejectPendingPlayerCardRequests(new Error('The game session was destroyed.'))
         snapshotListeners.clear()
         boneyardListeners.clear()
         chatMessageListeners.clear()
         chatRejectionListeners.clear()
+        cheatModeListeners.clear()
+        collegeInvitationListeners.clear()
+        collegeInvitations = []
         chatMessages = []
         gameplayPauseListeners.clear()
         gameplayResumeGraceListeners.clear()
@@ -840,6 +908,9 @@ export function connectGameClientSession(
       getChatMessages() {
         return chatMessages
       },
+      getCollegeInvitations() {
+        return collegeInvitations
+      },
       getGameplayPause() {
         return gameplayPause
       },
@@ -883,6 +954,14 @@ export function connectGameClientSession(
       onChatRejected(listener) {
         chatRejectionListeners.add(listener)
         return () => chatRejectionListeners.delete(listener)
+      },
+      onCheatMode(listener) {
+        cheatModeListeners.add(listener)
+        return () => cheatModeListeners.delete(listener)
+      },
+      onCollegeInvitations(listener) {
+        collegeInvitationListeners.add(listener)
+        return () => collegeInvitationListeners.delete(listener)
       },
       onGameplayPause(listener) {
         gameplayPauseListeners.add(listener)
@@ -1068,6 +1147,35 @@ export function connectGameClientSession(
           onlinePreferences,
         }))
       },
+      resolvePlayerCard(playerReference) {
+        if (!welcome || destroyed) {
+          return Promise.reject(new Error('The game session is not connected.'))
+        }
+        if (pendingPlayerCardRequests.size >= 8) {
+          return Promise.reject(new Error('Too many Player Card requests are pending.'))
+        }
+        const requestId = nextAvailableRequestId(
+          nextPlayerCardRequestId,
+          pendingPlayerCardRequests,
+        )
+        nextPlayerCardRequestId = requestId === 0x7fff_ffff ? 1 : requestId + 1
+        return new Promise<GamePlayerCardProfile>((resolveCard, rejectCard) => {
+          const timeout = globalThis.setTimeout(() => {
+            pendingPlayerCardRequests.delete(requestId)
+            rejectCard(new Error('The Player Card request timed out.'))
+          }, PLAYER_CARD_REQUEST_TIMEOUT_MS)
+          pendingPlayerCardRequests.set(requestId, {
+            reject: rejectCard,
+            resolve: resolveCard,
+            timeout,
+          })
+          options.transport.send(encodeGameMessage({
+            type: 'client-player-card-request',
+            playerReference,
+            requestId,
+          }))
+        })
+      },
       requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
         if (gameplayResumeGrace !== null) return
@@ -1209,18 +1317,18 @@ export function connectGameClientSession(
           skillId,
         }))
       },
-      sendChatMessage(channel, text, targetPlayerId) {
+      sendChatMessage(channel, text, targetPlayerReference) {
         if (!welcome || destroyed) return
         if (channel === 'global' && !onlinePreferences.globalChat) {
           throw new Error('Global chat is disabled.')
         }
-        if ((channel === 'whisper') !== (targetPlayerId !== undefined)) {
+        if ((channel === 'whisper') !== (targetPlayerReference !== undefined)) {
           throw new Error('Whispers require a target wizard.')
         }
         options.transport.send(encodeGameMessage({
           type: 'client-chat',
           channel,
-          ...(targetPlayerId === undefined ? {} : { targetPlayerId }),
+          ...(targetPlayerReference === undefined ? {} : { targetPlayerReference }),
           text: normalizeGameChatText(text),
         }))
       },
@@ -1237,6 +1345,13 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-party-invite',
           targetPlayerId: playerId,
+        }))
+      },
+      inviteToCollege(playerReference) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-college-invite',
+          playerReference,
         }))
       },
       kickPartyPlayer(playerId) {
@@ -1350,6 +1465,14 @@ export function connectGameClientSession(
         pending.reject(error)
       }
       pendingLuaExecutions.clear()
+    }
+
+    function rejectPendingPlayerCardRequests(error: Error): void {
+      for (const pending of pendingPlayerCardRequests.values()) {
+        globalThis.clearTimeout(pending.timeout)
+        pending.reject(error)
+      }
+      pendingPlayerCardRequests.clear()
     }
 
     function rejectPendingLeaveSave(error: Error): void {
@@ -1523,6 +1646,7 @@ export function connectGameClientSession(
         stopPing()
         rejectPendingLeaveSave(failure)
         rejectPendingLuaExecutions(failure)
+        rejectPendingPlayerCardRequests(failure)
         removeClose()
         removeMessage()
         options.diagnostics?.error(
@@ -1541,6 +1665,7 @@ export function connectGameClientSession(
       stopPing()
       rejectPendingLeaveSave(failure)
       rejectPendingLuaExecutions(failure)
+      rejectPendingPlayerCardRequests(failure)
       removeClose()
       removeMessage()
       options.diagnostics?.error(
@@ -1616,12 +1741,16 @@ export function connectGameClientSession(
       stopPing()
       rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       rejectPendingLuaExecutions(new Error('The game is restarting for an update.'))
+      rejectPendingPlayerCardRequests(new Error('The game is restarting for an update.'))
       removeClose()
       removeMessage()
       snapshotListeners.clear()
       boneyardListeners.clear()
       chatMessageListeners.clear()
       chatRejectionListeners.clear()
+      cheatModeListeners.clear()
+      collegeInvitationListeners.clear()
+      collegeInvitations = []
       chatMessages = []
       gameplayPauseListeners.clear()
       gameplayResumeGraceListeners.clear()
@@ -1649,6 +1778,18 @@ function nextAvailableLuaRequestId(
   while (pending.has(requestId)) {
     requestId = requestId === 0x7fff_ffff ? 1 : requestId + 1
     if (requestId === start) throw new Error('Lua request ID space is exhausted.')
+  }
+  return requestId
+}
+
+function nextAvailableRequestId(
+  start: number,
+  pending: ReadonlyMap<number, unknown>,
+): number {
+  let requestId = start
+  while (pending.has(requestId)) {
+    requestId = requestId === 0x7fff_ffff ? 1 : requestId + 1
+    if (requestId === start) throw new Error('Request ID space is exhausted.')
   }
   return requestId
 }

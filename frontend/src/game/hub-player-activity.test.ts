@@ -19,6 +19,7 @@ const CHARACTER: PlayerCharacterConfig = {
 }
 
 const hubSceneSource = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
+const playerCardSource = readFileSync(new URL('./PlayerCardDialog.tsx', import.meta.url), 'utf8')
 const rendererSource = readFileSync(
   new URL('./renderer/hub-world-renderer.ts', import.meta.url),
   'utf8',
@@ -81,7 +82,8 @@ test('Hub activity maps compare all participant joins, removals, and state chang
 })
 
 test('Hub card and post-world badge consume one replicated activity field', () => {
-  assert.match(hubSceneSource, /data-profile-activity=\{activity\}/)
+  assert.match(playerCardSource, /data-profile-activity=\{player\.activityKind\}/)
+  assert.match(hubSceneSource, /activityKind: activity/)
   assert.match(hubSceneSource, /hubPlayerActivityLabel\(activity\)/)
   assert.match(
     hubSceneSource,

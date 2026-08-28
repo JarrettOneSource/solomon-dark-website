@@ -29,6 +29,10 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
   browser Hub. `/api/game/sessions` provisions a private College.
 - `/api/game/join/*` resolves Party IDs/listings, carries guest-capable
   invite-only requests, and mints a host ticket only after Create.
+- `/api/game/parties` relays the supervisor's bounded aggregate of opted-in
+  parties from the resident Hub and every live private College. Private-College
+  rows disclose only session kind, mod count, and ordinary-cheat policy; Party
+  ID, manifest, player reference, and credentials are excluded.
 - `/api/game/content/{sha256}` serves immutable verified mod presentation bytes.
 - `/api/game/saves*` provides the authoritative browser cloud slot.
 - `/api/game/diagnostics` accepts an explicit, bounded browser connection
@@ -44,7 +48,8 @@ The rebuilt browser game has no lobby namespace or join URL. `POST
 /api/game/hub` fails closed when the account has enabled mods. `POST
 /api/game/sessions` seals the caller's current content into a private College.
 Every browser credential is single-use. Party resolve returns only safe content
-metadata plus an opaque in-memory intent; `/api/game/join/admit` creates the
+metadata, the authoritative room cheat policy, and an opaque in-memory intent;
+`/api/game/join/admit` creates the
 credential just in time. The browser never supplies the account id or global
 score fields to the leaderboard write seam.
 
@@ -104,9 +109,14 @@ Lua scripts, bundles, and Boneyards remain authoritative-host material.
 Only sandboxed Lua and typed Boneyard overlays are accepted. Global-Hub tickets
 carry an empty manifest. A private College owns one sealed host manifest and
 every joiner receives that exact content regardless of unrelated personal
-subscriptions. Each run owns isolated Lua VMs and a content-local Boneyard
-catalog. Browser save schema 4 carries the exact manifest, bounded per-mod
-`sd.state`, and clean/local-only integrity.
+subscriptions. Its current authority also owns the room's ordinary-cheat
+policy; the browser join request cannot override either value. A save-backed
+member transfer is accepted only with a current private-party reservation and
+`new-game` intent. It imports that member's durable profile but never replaces
+the live room or restores the joiner's session-global mod state. Each run owns
+isolated Lua VMs and a content-local Boneyard catalog. Browser save schema 4
+carries the exact manifest, bounded per-mod `sd.state`, and clean/local-only
+integrity.
 
 ## Revision log
 

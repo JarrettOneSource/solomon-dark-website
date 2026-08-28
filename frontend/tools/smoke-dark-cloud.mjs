@@ -56,11 +56,14 @@ await page.route('**/api/game/parties', route => route.fulfill({
   contentType: 'application/json',
   body: JSON.stringify({
     items: [{
+      cheatsEnabled: true,
       id: 'party-smoke-public',
       leader: 'Hagatha',
       members: ['Hagatha', 'Luthacus'],
       memberCount: 2,
       maxMembers: 16,
+      modCount: 2,
+      sessionKind: 'private-college',
       status: 'playing',
       visibility: 'public',
       boneyardName: 'The Survival Grounds',
@@ -213,6 +216,9 @@ try {
   await partyRow.waitFor()
   await partyRow.getByText("HAGATHA'S PARTY", { exact: true }).waitFor()
   await partyRow.getByText('2 / 16', { exact: true }).waitFor()
+  for (const disclosure of ['PRIVATE COLLEGE', 'MODDED · 2', 'CHEATS']) {
+    await partyRow.getByText(disclosure, { exact: true }).waitFor()
+  }
   assert.equal(await partyRow.locator('.dark-cloud-party-status').innerText(), 'IN GAME')
   await partyRow.getByText('The Survival Grounds', { exact: true }).waitFor()
   assert.equal(
@@ -281,7 +287,7 @@ try {
   await partyRow.waitFor()
 
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const text of ['2 / 16', 'The Survival Grounds']) {
+  for (const text of ['2 / 16', 'The Survival Grounds', 'MODDED · 2', 'CHEATS']) {
     assert.ok(await partyRow.getByText(text, { exact: true }).boundingBox(), `${text} was hidden on mobile`)
   }
   assert.ok(await partyRow.locator('.dark-cloud-party-status').boundingBox(), 'IN GAME was hidden on mobile')
@@ -317,7 +323,15 @@ try {
   await joinParty.waitFor()
   const joinPartyRow = joinParty.locator('[data-party-listing="party-smoke-public"]')
   await joinPartyRow.waitFor()
-  for (const text of ['HAGATHA', 'Hagatha · Luthacus', '2 / 16', 'The Survival Grounds']) {
+  for (const text of [
+    'HAGATHA',
+    'PRIVATE COLLEGE',
+    'MODDED · 2',
+    'CHEATS',
+    'Hagatha · Luthacus',
+    '2 / 16',
+    'The Survival Grounds',
+  ]) {
     await joinPartyRow.getByText(text, { exact: true }).waitFor()
   }
   assert.equal(await joinPartyRow.locator('.join-party-status').innerText(), 'IN GAME')
@@ -325,7 +339,7 @@ try {
   await page.screenshot({ path: joinPartyScreenshotPath })
 
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const text of ['2 / 16', 'The Survival Grounds']) {
+  for (const text of ['2 / 16', 'The Survival Grounds', 'MODDED · 2', 'CHEATS']) {
     assert.ok(await joinPartyRow.getByText(text, { exact: true }).boundingBox(), `${text} was hidden on Join Party mobile`)
   }
   assert.ok(await joinPartyRow.locator('.join-party-status').boundingBox(), 'IN GAME was hidden on Join Party mobile')

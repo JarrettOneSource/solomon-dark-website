@@ -90,6 +90,11 @@ export default function JoinPartyScene({
             <article key={party.id} role="listitem" data-party-listing={party.id}>
               <span className="join-party-copy">
                 <strong>{party.leader.toUpperCase()}</strong>
+                <span className="join-party-flags">
+                  {party.sessionKind === 'private-college' ? <em>PRIVATE COLLEGE</em> : null}
+                  {party.modCount > 0 ? <em>MODDED · {party.modCount}</em> : null}
+                  {party.cheatsEnabled ? <em className="cheats">CHEATS</em> : null}
+                </span>
                 <small>{party.members.join(' · ')}</small>
                 <small>
                   <span className={`join-party-status ${party.status}`}>

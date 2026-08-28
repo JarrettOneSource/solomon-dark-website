@@ -51,6 +51,14 @@ const NULL_PROFILE = {
   highestWave: null,
   totalPlaytimeMs: null,
 }
+const PLAYER_REFERENCE_1 = `player-ref-${'a'.repeat(32)}`
+const PLAYER_REFERENCE_2 = `player-ref-${'b'.repeat(32)}`
+const PLAYER_REFERENCE_3 = `player-ref-${'c'.repeat(32)}`
+const AURELIA_CHAT_SENDER = {
+  displayName: 'Aurelia',
+  playerId: 'player-2',
+  playerReference: PLAYER_REFERENCE_2,
+} as const
 
 function gameplayInput(
   movement: { x: number; y: number },
@@ -117,6 +125,7 @@ test('client carries character config, publishes authority, and tears down', asy
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -229,6 +238,58 @@ test('client carries character config, publishes authority, and tears down', asy
     reason: 'not-leader',
   }))
   assert.equal(partyAction, 'kick:not-leader')
+  assert.equal(session.cheatsEnabled, false)
+  let projectedCheats = false
+  session.onCheatMode(enabled => { projectedCheats = enabled })
+  transport.receive(encodeGameMessage({ type: 'server-cheat-mode', enabled: true }))
+  assert.equal(projectedCheats, true)
+  assert.equal(session.cheatsEnabled, true)
+  const collegeInvitation = {
+    expiresAtUnixMs: 1_800_000_000_000,
+    id: 'college-invite-a',
+    inviter: AURELIA_CHAT_SENDER,
+    joinCode: 'ABCD-EFGH',
+  } as const
+  let invitationCount = 0
+  session.onCollegeInvitations(invitations => { invitationCount = invitations.length })
+  transport.receive(encodeGameMessage({
+    type: 'server-college-invitations',
+    invitations: [collegeInvitation],
+  }))
+  assert.equal(invitationCount, 1)
+  assert.deepEqual(session.getCollegeInvitations(), [collegeInvitation])
+  session.dismissCollegeInvitation(collegeInvitation.id)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-college-invitation-dismiss',
+    invitationId: collegeInvitation.id,
+  })
+  session.inviteToCollege(PLAYER_REFERENCE_2)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-college-invite',
+    playerReference: PLAYER_REFERENCE_2,
+  })
+  const pendingCard = session.resolvePlayerCard(PLAYER_REFERENCE_2)
+  const cardRequest = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(cardRequest.type, 'client-player-card-request')
+  if (cardRequest.type !== 'client-player-card-request') throw new Error('expected card request')
+  const cardProfile = {
+    accountUsername: 'aurelia',
+    activity: 'hub',
+    discipline: 'mind',
+    displayName: 'Aurelia',
+    element: 'air',
+    gold: 900,
+    highestWave: 12,
+    playerReference: PLAYER_REFERENCE_2,
+    sessionKind: 'private-college',
+    totalPlaytimeMs: 120_000,
+  } as const
+  transport.receive(encodeGameMessage({
+    type: 'server-player-card',
+    profile: cardProfile,
+    requestId: cardRequest.requestId,
+  }))
+  assert.deepEqual(await pendingCard, cardProfile)
   const receivedChat: GameChatMessage[] = []
   const rejectedChat: GameChatRejection[] = []
   session.onChatMessage(message => receivedChat.push(message))
@@ -243,20 +304,20 @@ test('client carries character config, publishes authority, and tears down', asy
   transport.receive(encodeGameMessage({
     type: 'server-chat',
     channel: 'party',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: AURELIA_CHAT_SENDER,
     sequence: 12,
     text: 'On my way.',
   }))
   transport.receive(encodeGameMessage({
     type: 'server-chat',
     channel: 'party',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: AURELIA_CHAT_SENDER,
     sequence: 12,
     text: 'Duplicate transport event.',
   }))
   assert.deepEqual(receivedChat, [{
     channel: 'party',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: AURELIA_CHAT_SENDER,
     sequence: 12,
     text: 'On my way.',
   }])
@@ -281,7 +342,7 @@ test('client carries character config, publishes authority, and tears down', asy
   transport.receive(encodeGameMessage({
     type: 'server-chat',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: AURELIA_CHAT_SENDER,
     sequence: 13,
     text: 'Filtered Global text.',
   }))
@@ -289,14 +350,18 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'server-chat',
     activity: 'left-game',
     channel: 'global',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: AURELIA_CHAT_SENDER,
     sequence: 14,
     text: 'Aurelia has left the game.',
   }))
   transport.receive(encodeGameMessage({
     type: 'server-chat',
     channel: 'boneyard',
-    sender: { displayName: 'Basil', playerId: 'player-3' },
+    sender: {
+      displayName: 'Basil',
+      playerId: 'player-3',
+      playerReference: PLAYER_REFERENCE_3,
+    },
     sequence: 15,
     text: 'Run lane remains live.',
   }))
@@ -445,7 +510,7 @@ test('client carries character config, publishes authority, and tears down', asy
   transport.receive(encodeGameMessage({
     type: 'server-chat',
     channel: 'party',
-    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sender: AURELIA_CHAT_SENDER,
     sequence: 13,
     text: 'After teardown.',
   }))
@@ -480,6 +545,7 @@ test('client carries the fresh Tutorial-decline admission intent', async () => {
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    cheatsEnabled: false,
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     developerAccess: false,
     gameplayPause: null,
@@ -733,6 +799,7 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
   })
   guestTransport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -1213,6 +1280,7 @@ test('client coalesces held aim updates but schedules every cast-level transitio
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -1318,6 +1386,7 @@ test('client disables prediction when the shared character kernel does not match
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -1359,6 +1428,7 @@ test('client presents bounded display-rate movement without resending unchanged 
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -1751,6 +1821,7 @@ test('client rejects a welcome that omits its assigned player', async () => {
   })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'missing-player',
@@ -1957,6 +2028,7 @@ function receiveWelcome(
 ): void {
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    cheatsEnabled: false,
     developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
@@ -2014,6 +2086,7 @@ test('observer session exposes only read-only match state, chat, and replication
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
     boneyards: [loaded.choice],
+    cheatsEnabled: false,
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     developerAccess: false,
     gameplayPause: null,
@@ -2042,13 +2115,21 @@ test('observer session exposes only read-only match state, chat, and replication
   transport.receive(encodeGameMessage({
     type: 'server-chat',
     channel: 'party',
-    sender: { displayName: 'Helvidius', playerId: 'player-1' },
+    sender: {
+      displayName: 'Helvidius',
+      playerId: 'player-1',
+      playerReference: PLAYER_REFERENCE_1,
+    },
     sequence: 1,
     text: 'Observer copy',
   }))
   assert.deepEqual(session.current().chatMessages, [{
     channel: 'party',
-    sender: { displayName: 'Helvidius', playerId: 'player-1' },
+    sender: {
+      displayName: 'Helvidius',
+      playerId: 'player-1',
+      playerReference: PLAYER_REFERENCE_1,
+    },
     sequence: 1,
     text: 'Observer copy',
   }])

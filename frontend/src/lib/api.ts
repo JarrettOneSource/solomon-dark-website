@@ -146,11 +146,14 @@ export interface Stats {
 }
 
 interface PublicGamePartyBase {
+  cheatsEnabled: boolean
   id: string
   leader: string
   members: string[]
   memberCount: number
   maxMembers: number
+  modCount: number
+  sessionKind: 'global-hub' | 'private-college'
   visibility: 'invite-only' | 'public'
 }
 
@@ -205,6 +208,7 @@ export interface PartyJoinMod {
 }
 
 export interface PartyJoinTarget {
+  cheatsEnabled: boolean
   content: {
     manifestSha256: string
     mods: PartyJoinMod[]

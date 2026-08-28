@@ -34,6 +34,9 @@
 .join-party-list > p { padding: 32px; text-align: center; }
 .join-party-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 10px 12px; border-bottom: 1px solid rgb(191 157 78 / 0.2); }
 .join-party-copy { display: grid; min-width: 0; }
+.join-party-flags { display: flex; flex-wrap: wrap; gap: 3px; margin: 2px 0; }
+.join-party-flags em { padding: 1px 4px; border: 1px solid rgb(190 156 76 / 0.38); color: #c8ad69; font: 700 8px Cinzel, Georgia, serif; font-style: normal; letter-spacing: 0.06em; }
+.join-party-flags em.cheats { border-color: rgb(211 115 70 / 0.48); color: #e6a078; }
 .join-party-list small { overflow: hidden; color: #9e9580; text-overflow: ellipsis; white-space: nowrap; }
 .join-party-status { color: #88af81; }
 .join-party-status.playing { color: #deb66b; }

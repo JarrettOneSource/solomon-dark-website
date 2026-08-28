@@ -18,7 +18,11 @@ function message(
 ): GameChatMessage {
   return {
     channel,
-    sender: { displayName: playerId, playerId },
+    sender: {
+      displayName: playerId,
+      playerId,
+      playerReference: `player-ref-${playerId.padEnd(32, 'x').slice(0, 32)}`,
+    },
     sequence,
     text: `Message ${sequence}`,
   }

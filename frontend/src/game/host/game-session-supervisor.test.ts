@@ -14,6 +14,7 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
+import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
 import { createGameSaveDocument } from '../save/game-save-document.ts'
 import { materializeStockTutorial } from './boneyard-catalog.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
@@ -153,6 +154,199 @@ test('game session supervisor provisions isolated authenticated game sessions', 
     () => openSocket(websocketUrl(supervisor.address.url, firstEndpoint.path), 'https://evil.example'),
     /403/,
   )
+})
+
+test('private Colleges opt into discovery and share live social routing with host content policy', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+
+  const modded = await join(
+    supervisor.address.url,
+    await provision(supervisor.address.url, MOD_CONTENT),
+    BROWSER_ORIGIN,
+    true,
+    {
+      character: { ...CHARACTER, displayName: 'Mod Host' },
+      cheatsEnabled: true,
+    },
+  )
+  const remote = await join(
+    supervisor.address.url,
+    await provision(supervisor.address.url),
+    BROWSER_ORIGIN,
+    true,
+    { character: { ...CHARACTER, displayName: 'Remote Guest' } },
+  )
+  const hub = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url),
+    BROWSER_ORIGIN,
+    true,
+    { character: { ...CHARACTER, displayName: 'Hub Guest' } },
+  )
+  context.after(() => closeSocket(modded.socket))
+  context.after(() => closeSocket(remote.socket))
+  context.after(() => closeSocket(hub.socket))
+  assert.equal(modded.welcome.cheatsEnabled, true)
+  assert.equal(remote.welcome.cheatsEnabled, false)
+
+  const remoteGlobal = remote.next(message => (
+    message.type === 'server-chat' && message.text === 'Hello from mods'
+  ))
+  const hubGlobal = hub.next(message => (
+    message.type === 'server-chat' && message.text === 'Hello from mods'
+  ))
+  modded.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Hello from mods',
+  }))
+  const [atRemote, atHub] = await Promise.all([remoteGlobal, hubGlobal])
+  assert.equal(atRemote.type, 'server-chat')
+  assert.equal(atHub.type, 'server-chat')
+  assert.equal(atRemote.sender.displayName, 'Mod Host')
+  assert.match(atRemote.sender.playerReference, /^player-ref-[A-Za-z0-9_-]{32}$/)
+  assert.equal(atRemote.sender.playerId, atRemote.sender.playerReference)
+
+  const moddedGlobal = modded.next(message => (
+    message.type === 'server-chat' && message.text === 'Hello from elsewhere'
+  ))
+  remote.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Hello from elsewhere',
+  }))
+  const remoteIdentity = await moddedGlobal
+  assert.equal(remoteIdentity.type, 'server-chat')
+  assert.equal(remoteIdentity.sender.displayName, 'Remote Guest')
+  assert.equal(remoteIdentity.sender.playerId, remoteIdentity.sender.playerReference)
+  assert.notEqual(remoteIdentity.sender.playerId, modded.welcome.playerId)
+
+  const card = modded.next(message => (
+    message.type === 'server-player-card' && message.requestId === 7
+  ))
+  modded.socket.send(encodeGameMessage({
+    type: 'client-player-card-request',
+    playerReference: remoteIdentity.sender.playerReference,
+    requestId: 7,
+  }))
+  const resolvedCard = await card
+  assert.equal(resolvedCard.type, 'server-player-card')
+  assert.equal(resolvedCard.profile?.displayName, 'Remote Guest')
+  assert.equal(resolvedCard.profile?.sessionKind, 'private-college')
+
+  const whisperedToRemote = remote.next(message => (
+    message.type === 'server-chat' && message.text === 'Private cross-host note'
+  ))
+  const whisperedToSender = modded.next(message => (
+    message.type === 'server-chat' && message.text === 'Private cross-host note'
+  ))
+  modded.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerReference: remoteIdentity.sender.playerReference,
+    text: 'Private cross-host note',
+  }))
+  const [remoteWhisper, senderWhisper] = await Promise.all([
+    whisperedToRemote,
+    whisperedToSender,
+  ])
+  assert.equal(remoteWhisper.type, 'server-chat')
+  assert.equal(senderWhisper.type, 'server-chat')
+  assert.equal(remoteWhisper.channel, 'whisper')
+  assert.equal(remoteWhisper.recipient?.playerId, remote.welcome.playerId)
+  assert.equal(senderWhisper.recipient?.playerReference, remoteIdentity.sender.playerReference)
+
+  const publicState = modded.next(message => (
+    message.type === 'server-party-state' && message.state.party.visibility === 'public'
+  ))
+  modded.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'public',
+  }))
+  const listedState = await publicState
+  assert.equal(listedState.type, 'server-party-state')
+  const directory = await readPublicParties(supervisor.address.url)
+  const listed = directory.find(({ id }) => id === listedState.state.party.listingId)
+  assert.deepEqual(listed, {
+    boneyardName: null,
+    cheatsEnabled: true,
+    id: listedState.state.party.listingId,
+    leader: 'Mod Host',
+    maxMembers: 16,
+    memberCount: 1,
+    members: ['Mod Host'],
+    modCount: 1,
+    sessionKind: 'private-college',
+    status: 'hub',
+    visibility: 'public',
+  })
+  assert.doesNotMatch(JSON.stringify(listed), /joinCode|credential|manifestSha256/)
+
+  const invitationAtTarget = remote.next(message => (
+    message.type === 'server-college-invitations' && message.invitations.length === 1
+  ))
+  const invitationResult = modded.next(message => (
+    message.type === 'server-party-action' && message.action === 'invite-college'
+  ))
+  modded.socket.send(encodeGameMessage({
+    type: 'client-college-invite',
+    playerReference: remoteIdentity.sender.playerReference,
+  }))
+  const [invitations, inviteAction] = await Promise.all([
+    invitationAtTarget,
+    invitationResult,
+  ])
+  assert.equal(invitations.type, 'server-college-invitations')
+  assert.equal(inviteAction.type, 'server-party-action')
+  assert.equal(inviteAction.ok, true)
+  const invitation = invitations.invitations[0]!
+  assert.equal(invitation.inviter.displayName, 'Mod Host')
+
+  const resolution = await resolveJoinCode(supervisor.address.url, invitation.joinCode)
+  assert.equal(resolution.target.cheatsEnabled, true)
+  assert.deepEqual(
+    (resolution.target.content as { manifestSha256: string }).manifestSha256,
+    MOD_CONTENT.manifestSha256,
+  )
+  const joined = await join(
+    supervisor.address.url,
+    await admitJoin(supervisor.address.url, resolution.intentId, 99),
+    BROWSER_ORIGIN,
+    true,
+    { character: { ...CHARACTER, displayName: 'Transferred Guest' } },
+  )
+  context.after(() => closeSocket(joined.socket))
+  assert.equal(joined.welcome.cheatsEnabled, true)
+  assert.equal(joined.welcome.content.manifestSha256, MOD_CONTENT.manifestSha256)
+
+  const hostLoaded = modded.next(message => message.type === 'server-boneyard-loaded')
+  const joinedLoaded = joined.next(message => message.type === 'server-boneyard-loaded')
+  modded.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [hostRun, joinedRun] = await Promise.all([hostLoaded, joinedLoaded])
+  assert.equal(hostRun.type, 'server-boneyard-loaded')
+  assert.equal(joinedRun.type, 'server-boneyard-loaded')
+  const runGlobal = remote.next(message => (
+    message.type === 'server-chat' && message.text === 'Global from a modded Boneyard'
+  ))
+  modded.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Global from a modded Boneyard',
+  }))
+  assert.equal((await runGlobal).type, 'server-chat')
+  const playing = (await readPublicParties(supervisor.address.url)).find(
+    ({ id }) => id === listedState.state.party.listingId,
+  )
+  assert.equal(playing?.status, 'playing')
+  assert.equal(playing?.boneyardName, hostRun.boneyard.choice.name)
 })
 
 test('game session supervisor enforces private capacity and expires unclaimed sessions', async (context) => {
@@ -316,11 +510,14 @@ test('game session supervisor admits independent players to one shared Hub and r
   const hubDirectory = await readPublicParties(supervisor.address.url)
   assert.deepEqual(hubDirectory, [{
     boneyardName: null,
+    cheatsEnabled: false,
     id: listedParty.state.party.listingId,
     leader: CHARACTER.displayName,
     maxMembers: 16,
     memberCount: 2,
     members: [CHARACTER.displayName, CHARACTER.displayName],
+    modCount: 0,
+    sessionKind: 'global-hub',
     status: 'hub',
     visibility: 'public',
   }])
@@ -1443,11 +1640,14 @@ interface SupervisorHealth {
 
 interface PublicPartyDirectoryEntry {
   boneyardName: string | null
+  cheatsEnabled: boolean
   id: string
   leader: string
   maxMembers: number
   memberCount: number
   members: string[]
+  modCount: number
+  sessionKind: 'global-hub' | 'private-college'
   status: 'hub' | 'playing'
   visibility: 'invite-only' | 'public'
 }
@@ -1478,14 +1678,17 @@ async function readPresence(supervisorUrl: string): Promise<PresenceDirectoryEnt
   return value.items
 }
 
-async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
+async function provision(
+  supervisorUrl: string,
+  content: typeof EMPTY_CONTENT | typeof MOD_CONTENT = EMPTY_CONTENT,
+): Promise<ProvisionedEndpoint> {
   const response = await fetch(`${supervisorUrl}/admin/sessions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${ADMIN_SECRET}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ content: EMPTY_CONTENT, leaderboardUserId: 42 }),
+    body: JSON.stringify({ content, leaderboardUserId: 42 }),
   })
   assert.equal(response.status, 201)
   assert.equal(response.headers.get('cache-control'), 'no-store')
@@ -1642,17 +1845,27 @@ async function join(
   endpoint: ProvisionedEndpoint,
   origin: string,
   autoPong = true,
+  options: Readonly<{
+    character?: PlayerCharacterConfig
+    cheatsEnabled?: boolean
+    onlinePreferences?: {
+      activityMessages: boolean
+      globalChat: boolean
+      submitRuns: boolean
+    }
+  }> = {},
 ) {
   const socket = await openSocket(websocketUrl(supervisorUrl, endpoint.path), origin, autoPong)
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
-    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
+    onlinePreferences: options.onlinePreferences
+      ?? { activityMessages: true, globalChat: true, submitRuns: true },
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
-    cheatsEnabled: false,
+    cheatsEnabled: options.cheatsEnabled ?? false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,
-    character: CHARACTER,
+    character: options.character ?? CHARACTER,
   }))
   const welcome = await next((message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')

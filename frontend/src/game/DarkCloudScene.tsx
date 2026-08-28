@@ -669,7 +669,9 @@ function PartyRow({
       <button
         type="button"
         className="dark-cloud-row-main"
-        aria-label={`Select ${party.leader}'s party`}
+        aria-label={`Select ${party.leader}'s party${party.modCount > 0
+          ? `, modded with ${party.modCount} ${party.modCount === 1 ? 'mod' : 'mods'}`
+          : ''}${party.cheatsEnabled ? ', cheats enabled' : ''}`}
         aria-pressed={selected}
         onClick={onSelect}
         onDoubleClick={onEnter}
@@ -677,6 +679,11 @@ function PartyRow({
         <span className="dark-cloud-party-mark" aria-hidden>{party.leader.slice(0, 1).toUpperCase()}</span>
         <span className="dark-cloud-row-copy">
           <strong>{`${party.leader}'s party`.toUpperCase()}</strong>
+          <span className="dark-cloud-party-flags">
+            {party.sessionKind === 'private-college' ? <em>PRIVATE COLLEGE</em> : null}
+            {party.modCount > 0 ? <em>MODDED · {party.modCount}</em> : null}
+            {party.cheatsEnabled ? <em className="cheats">CHEATS</em> : null}
+          </span>
           <small>{party.members.join(' · ')}</small>
         </span>
         <span className="dark-cloud-party-members">{presentation.squad}</span>

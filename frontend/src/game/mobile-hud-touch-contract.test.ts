@@ -19,6 +19,7 @@ import { MOBILE_DOCK_HALF_WIDTH, MOBILE_QUICKBAR_SLOT_MIN_SIZE } from './mobile-
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 const hub = read('./HubScene.tsx')
+const playerCard = read('./PlayerCardDialog.tsx')
 const boneyard = read('./BoneyardScene.tsx')
 const gameHud = read('./GameHud.tsx')
 const allyHud = read('./AllyHud.tsx')
@@ -134,7 +135,7 @@ test('every dialog backdrop centres with flex and the dialog scrolls inside the 
   assert.match(ruleBody(partyCss, '.party-settings-dialog'), /max-height: 100%;/)
   assert.match(ruleBody(hubCss, '.hub-boneyard-picker'), /overflow: auto;\s*overscroll-behavior: contain;/)
   assert.match(ruleBody(hubCss, '.hub-player-profile-body'), /min-height: 0;\s*overflow: auto;\s*overscroll-behavior: contain;/)
-  assert.match(hub, /<div className="hub-player-profile-body">\s*<header className="hub-player-profile-header">/)
+  assert.match(playerCard, /<div className="hub-player-profile-body">\s*<header className="hub-player-profile-header">/)
   // Touch: the picker and the player card leave the world frame's scale like the party dialog.
   const coarse = coarseBlock(hubCss)
   assert.match(coarse, /\.hub-boneyard-picker \{\s*width: min\(520px, 92cqw\);\s*max-height: 90cqh;[^}]*transform: scale\(calc\(1 \/ var\(--hud-display-scale, 1\)\)\);/)

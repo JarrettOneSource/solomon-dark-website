@@ -87,6 +87,7 @@ import {
   type GameChatActivity,
   type GameChatChannel,
   type GameOnlinePreferences,
+  type GamePlayerCardProfile,
   type GameSessionKind,
   type GameplayPauseState,
   type GameplayResumeGraceReason,
@@ -219,6 +220,11 @@ import {
 } from './party-recovery-claim.ts'
 import type { PartyRosterPlayer } from '../protocol/party-state.ts'
 import { gameplayResumeGraceReasonForPauseSource } from '../gameplay-resume-grace.ts'
+import type {
+  GameSocialBroker,
+  GameSocialChatDelivery,
+  GameSocialConnection,
+} from './game-social-broker.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -305,6 +311,8 @@ export interface GameHostOptions {
   sessionKind?: GameSessionKind
   sharedHub?: boolean
   snapshotRate?: number
+  socialBroker?: GameSocialBroker
+  socialHostId?: string
   trustedProxy?: boolean
 }
 
@@ -368,6 +376,7 @@ export interface GameHostDeploymentRestartResult {
 }
 
 export interface GameHostPartyTarget {
+  readonly cheatsEnabled: boolean
   readonly content: WebSessionContentSummary
   readonly id: string
   readonly leader: string
@@ -439,6 +448,7 @@ interface HostClient {
   acknowledgedSnapshotSequence: number
   activeInput: PlayerCharacterInput
   chatSentAtMs: number[]
+  cheatsEnabled: boolean
   connectedAtMs: number
   content: MaterializedWebSessionContent | null
   developerAccess: boolean
@@ -458,6 +468,8 @@ interface HostClient {
   pendingLuaRequestIds: Set<number>
   replicationRecovery: ReplicationRecoveryState | null
   resumeToken: string
+  socialConnection: GameSocialConnection | null
+  playerReference: string
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
   tutorialEligible: boolean
@@ -642,6 +654,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
   const sharedHub = options.sharedHub ?? false
   const sessionKind = options.sessionKind ?? (sharedHub ? 'global-hub' : 'standalone')
+  const socialHostId = options.socialHostId
+    ?? `game-host-${randomBytes(18).toString('base64url')}`
   if (sharedHub !== (sessionKind === 'global-hub')) {
     throw new Error('shared Hub ownership and session kind disagree')
   }
@@ -684,8 +698,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let nextGameplayResumeGraceSequence = 1
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
+  let privateCollegeCheatsEnabled = false
+  let privateCollegeCheatPolicyInitialized = false
   let loadedBoneyard: LoadedBoneyard | null = null
   let nextChatSequence = 1
+  const socialChatSequences = new Map<number, number>()
   let nextSnapshotSequence = 1
   const saveDocuments = new Map<string, string>()
   const saveSequences = new Map<string, number>()
@@ -706,6 +723,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const playerReferences = new Map<PlayerId, string>()
   const collegeIntroReadyPlayerIds = new Set<PlayerId>()
   const observers = new Map<WebSocket, HostObserver>()
   const bots = new Map<PlayerId, HostBot>()
@@ -992,6 +1010,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           observers.set(socket, joinedObserver)
           socket.send(encodeGameMessage({
             type: 'server-welcome',
+            cheatsEnabled: sessionKind === 'private-college' && privateCollegeCheatsEnabled,
             developerAccess: false,
             observer: true,
             protocolVersion: GAME_PROTOCOL_VERSION,
@@ -1157,6 +1176,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         let nativeSource: NativeGameSaveSource | null = null
         let retainedSaveModIds: readonly string[] | null = null
         const playerPartyIdentity = createPartyIdentity()
+        const importingProfileIntoPrivateParty = (
+          !sharedHub
+          && partyRejoinSlot === null
+          && authenticated.partyId !== null
+          && message.saveIntent === 'new-game'
+          && state.world.kind === 'hub'
+        )
         if (
           partyRejoinSlot !== null
           && (message.save === undefined || message.saveIntent !== 'resume')
@@ -1170,7 +1196,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             return
           }
           if (
-            !sharedHub && partyRejoinSlot === null && (
+            !sharedHub && partyRejoinSlot === null && !importingProfileIntoPrivateParty && (
               clients.size !== 0
               || state.world.kind !== 'hub'
               || state.playerEntities.identities.length !== 0
@@ -1469,7 +1495,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             armGameSimulationCollegeIntro(stateForPlayer(playerId), playerId),
           )
         }
-        if (savedProfile && !rejoinedParty && Object.keys(savedProfile.modState).length > 0) {
+        if (
+          savedProfile
+          && !rejoinedParty
+          && !importingProfileIntoPrivateParty
+          && Object.keys(savedProfile.modState).length > 0
+        ) {
           const activeMods = authenticated.content?.manifest.mods ?? content.mods
           if (sameContentMods(savedProfile.mods, activeMods)) {
             if (sharedHub) pendingRestoredModState.set(playerId, savedProfile.modState)
@@ -1630,12 +1661,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             'wizard resumed in another browser',
           )
         }
-        const clientCheatsEnabled = message.cheatsEnabled && !authenticated.developerAccess
+        const requestedCheatsEnabled = message.cheatsEnabled && !authenticated.developerAccess
+        if (sessionKind === 'private-college' && !privateCollegeCheatPolicyInitialized) {
+          privateCollegeCheatsEnabled = requestedCheatsEnabled
+          privateCollegeCheatPolicyInitialized = true
+        }
+        const clientCheatsEnabled = sessionKind === 'private-college'
+          ? privateCollegeCheatsEnabled
+          : requestedCheatsEnabled
+        const playerReference = replacedClient?.playerReference
+          ?? playerReferences.get(playerId)
+          ?? createPlayerReference()
         const joinedClient: HostClient = {
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
           chatSentAtMs: [],
+          cheatsEnabled: clientCheatsEnabled,
           connectedAtMs: Date.now(),
           content: authenticated.content,
           developerAccess: authenticated.developerAccess,
@@ -1675,6 +1717,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           queuedInputs: new Map(),
           replicationRecovery: null,
           resumeToken,
+          socialConnection: null,
+          playerReference,
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
           tutorialEligible: message.save === undefined
@@ -1682,6 +1726,27 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
         }
         clients.set(socket, joinedClient)
+        playerReferences.set(playerId, playerReference)
+        if (options.socialBroker) {
+          joinedClient.socialConnection = options.socialBroker.register({
+            hostId: socialHostId,
+            localPlayerId: playerId,
+            canReceiveCollegeInvitation: () => (
+              clients.get(socket) === joinedClient
+              && !joinedClient.partyRejoinSlot
+              && stateForPlayer(playerId).world.kind === 'hub'
+            ),
+            deliverChat: message => deliverSocialChat(joinedClient, message),
+            deliverCollegeInvitations: invitations => {
+              if (joinedClient.socket.readyState !== WebSocket.OPEN) return
+              joinedClient.socket.send(encodeGameMessage({
+                type: 'server-college-invitations',
+                invitations,
+              }))
+            },
+            profile: () => playerCardProfile(joinedClient),
+          }, joinedClient.onlinePreferences, playerReference)
+        }
         if (!joinedClient.globalScoreEligible && !stagedPartyRejoin) taintActiveRun(joinedClient)
         const connectedParty = activePartySystem()
           ? partyForPlayer(activePartySystem()!, playerId)
@@ -1741,6 +1806,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         options.onPlayerCountChanged?.(clients.size)
         socket.send(encodeGameMessage({
           type: 'server-welcome',
+          cheatsEnabled: joinedClient.cheatsEnabled,
           developerAccess: joinedClient.developerAccess,
           protocolVersion: GAME_PROTOCOL_VERSION,
           playerId,
@@ -1770,6 +1836,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           snapshot: welcomeSnapshot,
           snapshotSequence,
         }))
+        joinedClient.socialConnection?.activate()
         sendPreparedModProjection(
           socket,
           (stagedPartyRejoin
@@ -1792,7 +1859,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             boneyard: playerBoneyard,
           }))
         }
-        if (replacedClient === null && connectedState === sharedWorlds?.hub) {
+        if (replacedClient === null && connectedState.world.kind === 'hub') {
           publishPlayerActivity(joinedClient, 'entered-college')
         }
         if (sharedWorlds || privateParties) broadcastPartyState()
@@ -1872,6 +1939,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
       if (message.type === 'client-online-preferences') {
         client.onlinePreferences = { ...message.onlinePreferences }
+        client.socialConnection?.setOnlinePreferences(client.onlinePreferences)
         return
       }
 
@@ -2334,15 +2402,87 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (accepted) publishSaveCheckpoint('hub-action')
         return
       }
+      if (message.type === 'client-player-card-request') {
+        const profile = localPlayerCardByReference(message.playerReference)
+          ?? client.socialConnection?.resolvePlayerCard(message.playerReference)
+          ?? null
+        socket.send(encodeGameMessage({
+          type: 'server-player-card',
+          profile,
+          requestId: message.requestId,
+        }))
+        return
+      }
+      if (message.type === 'client-college-invitation-dismiss') {
+        client.socialConnection?.dismissCollegeInvitation(message.invitationId)
+        return
+      }
+      if (message.type === 'client-college-invite') {
+        const parties = activePartySystem()
+        const party = parties ? partyForPlayer(parties, client.playerId) : null
+        let reason: ProtocolPartyActionRejection | null = null
+        if (sessionKind !== 'private-college' || !party) reason = 'party-missing'
+        else if (party.leaderPlayerId !== client.playerId) reason = 'not-leader'
+        else if (stateForPlayer(client.playerId).world.kind !== 'hub') reason = 'not-in-hub'
+        else {
+          const localTarget = localClientByReference(message.playerReference)
+          if (message.playerReference === client.playerReference) reason = 'self-invite'
+          else if (localTarget && party.memberPlayerIds.includes(localTarget.playerId)) {
+            reason = 'same-party'
+          } else if (
+            party.memberPlayerIds.length
+            + reservationsForParty(party.id)
+            + detachedPartyRejoinsForParty(party.id, null) >= maxPlayers
+          ) {
+            reason = 'party-full'
+          } else {
+            reason = client.socialConnection
+              ? client.socialConnection.inviteToCollege(
+                  message.playerReference,
+                  party.id,
+                  party.joinCode,
+                )
+              : 'player-missing'
+          }
+        }
+        sendPartyAction(
+          client,
+          'invite-college',
+          { accepted: reason === null, reason },
+        )
+        return
+      }
       if (message.type === 'client-chat') {
         const whisperTarget = message.channel === 'whisper'
-          ? [...clients.values()].find(candidate => (
-              candidate.playerId === message.targetPlayerId
-              && candidate.playerId !== client.playerId
-              && candidate.socket.readyState === WebSocket.OPEN
-            )) ?? null
+          ? localClientByReference(message.targetPlayerReference!)
           : null
-        if (message.channel === 'whisper' && !whisperTarget) {
+        if (whisperTarget?.playerId === client.playerId) {
+          socket.send(encodeGameMessage({
+            type: 'server-chat-rejected',
+            channel: message.channel,
+            reason: 'target-unavailable',
+            retryAfterMs: 0,
+          }))
+          return
+        }
+        if (
+          message.channel === 'global'
+          && client.socialConnection
+          && !client.onlinePreferences.globalChat
+        ) {
+          socket.send(encodeGameMessage({
+            type: 'server-chat-rejected',
+            channel: message.channel,
+            reason: 'channel-unavailable',
+            retryAfterMs: 0,
+          }))
+          return
+        }
+        if (
+          message.channel === 'whisper'
+          && !whisperTarget
+          && !client.socialConnection
+        ) {
           socket.send(encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
@@ -2353,8 +2493,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         const recipients = whisperTarget
           ? [whisperTarget, client]
-          : chatRecipients(client, message.channel)
-        if (!recipients) {
+          : message.channel === 'global' && client.socialConnection
+            ? []
+            : chatRecipients(client, message.channel)
+        if (recipients === null) {
           socket.send(encodeGameMessage({
             type: 'server-chat-rejected',
             channel: message.channel,
@@ -2374,6 +2516,31 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }))
           return
         }
+        if (message.channel === 'global' && client.socialConnection) {
+          if (!client.socialConnection.publishGlobal(message.text)) {
+            socket.send(encodeGameMessage({
+              type: 'server-chat-rejected',
+              channel: message.channel,
+              reason: 'channel-unavailable',
+              retryAfterMs: 0,
+            }))
+          }
+          return
+        }
+        if (message.channel === 'whisper' && !whisperTarget) {
+          if (!client.socialConnection!.publishWhisper(
+            message.targetPlayerReference!,
+            message.text,
+          )) {
+            socket.send(encodeGameMessage({
+              type: 'server-chat-rejected',
+              channel: message.channel,
+              reason: 'target-unavailable',
+              retryAfterMs: 0,
+            }))
+          }
+          return
+        }
         const encoded = encodeGameMessage({
           type: 'server-chat',
           channel: message.channel,
@@ -2382,12 +2549,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 recipient: {
                   displayName: whisperTarget.displayName,
                   playerId: whisperTarget.playerId,
+                  playerReference: whisperTarget.playerReference,
                 },
               }
             : {}),
           sender: {
             displayName: client.displayName,
             playerId: client.playerId,
+            playerReference: client.playerReference,
           },
           sequence: nextChatSequence,
           text: message.text,
@@ -2520,10 +2689,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-party-settings') {
-        if (privateParties && message.visibility !== 'private') {
-          sendPartyAction(client, 'settings', rejectedPartyAction('party-private'))
-          return
-        }
         const parties = activePartySystem()
         const party = parties ? partyForPlayer(parties, client.playerId) : null
         const result = parties
@@ -2552,6 +2717,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ? rotatePartyJoinCode(parties, client.playerId, createPartyJoinCode())
           : rejectedPartyAction('party-missing')
         if (result.accepted) {
+          if (party) client.socialConnection?.revokeCollegeInvitations(party.id)
           replacePartySystem(result.state)
           logPartyActivity(
             'party.join_code_rotated',
@@ -2686,6 +2852,30 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-cheat-mode') {
+        if (sessionKind === 'private-college' && !client.developerAccess) {
+          if (client.playerId !== authorityForPlayer(client.playerId)) {
+            socket.send(encodeGameMessage({
+              type: 'server-cheat-mode',
+              enabled: privateCollegeCheatsEnabled,
+            }))
+            return
+          }
+          privateCollegeCheatsEnabled = message.enabled
+          for (const participant of clients.values()) {
+            participant.cheatsEnabled = privateCollegeCheatsEnabled
+            if (privateCollegeCheatsEnabled) {
+              participant.tutorialEligible = false
+              participant.globalScoreEligible = false
+              participant.localOnly = true
+              taintActiveRun(participant)
+            }
+          }
+          broadcast({
+            type: 'server-cheat-mode',
+            enabled: privateCollegeCheatsEnabled,
+          })
+          return
+        }
         if (message.enabled) {
           if (sharedHub && !client.developerAccess) {
             disconnect(socket, 'invalid-message', 'Cheats require a private College.')
@@ -2697,6 +2887,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.localOnly = true
           taintActiveRun(client)
         }
+        client.cheatsEnabled = message.enabled && !client.developerAccess
+        socket.send(encodeGameMessage({
+          type: 'server-cheat-mode',
+          enabled: client.cheatsEnabled,
+        }))
         return
       }
       if (message.type === 'client-lua-execute') {
@@ -2863,16 +3058,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           return
         }
         for (const connected of clients.values()) connected.hubActivity = null
+        const privatePartyId = privateParties?.parties[0]?.id ?? null
+        if (privatePartyId) client.socialConnection?.revokeCollegeInvitations(privatePartyId)
         loadedBoneyard = selected
         const previousState = state
         state = enterBoneyardWorld(state, selected)
+        for (const connected of clients.values()) {
+          connected.socialConnection?.refreshCollegeInvitationAvailability()
+        }
+        if (selected.choice.id !== 'stock-tutorial') {
+          publishPlayerActivity(client, 'searching-solomon')
+        }
         const beganLoadingGrace = beginRunLoadingResumeGrace(
           client.playerId,
           'game-started',
           null,
           false,
         )
-        armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
+        armPartyRejoinSlotsForState(privatePartyId, state)
         logGameActivity(previousState, state, selected, null)
         taintIneligibleClientRuns()
         if (privateModHost || activePrivateLuaRuntimes().length > 0) {
@@ -2950,13 +3153,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         loadedBoneyard = selected
         state = enterBoneyardWorld(state, selected)
+        const privatePartyId = privateParties?.parties[0]?.id ?? null
+        if (privatePartyId) client.socialConnection?.revokeCollegeInvitations(privatePartyId)
+        for (const connected of clients.values()) {
+          connected.socialConnection?.refreshCollegeInvitationAvailability()
+        }
         const beganLoadingGrace = beginRunLoadingResumeGrace(
           client.playerId,
           'game-started',
           null,
           false,
         )
-        armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
+        armPartyRejoinSlotsForState(privatePartyId, state)
         stopAllClientInputs()
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
         if (privateParties) broadcastPartyState()
@@ -3121,6 +3329,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
         return
       }
+      publishPlayerActivity(client, 'left-game')
+      client.socialConnection?.close()
       clients.delete(socket)
       collegeIntroReadyPlayerIds.delete(client.playerId)
       const activeDeploymentRestart = deploymentRestart
@@ -3181,9 +3391,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           nextPlayerId = 1
           loadedBoneyard = null
           nextChatSequence = 1
+          socialChatSequences.clear()
           nextSnapshotSequence = 1
           saveDocuments.clear()
           saveSequences.clear()
+          playerReferences.clear()
+          privateCollegeCheatsEnabled = false
+          privateCollegeCheatPolicyInitialized = false
           if (privateParties) privateParties = createPartySystem()
           gameplayPause = null
           gameplayResumeGrace = null
@@ -3245,7 +3459,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'A player disconnected from the game host.',
         disconnectedDetails,
       )
-      publishPlayerActivity(client, 'left-game')
       if (releasedGameplayPause) {
         releaseGameplayPause('owner-disconnected', client.playerId, disconnectedPauseScope)
       } else broadcastSnapshot()
@@ -4310,6 +4523,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return `${code.slice(0, 4)}-${code.slice(4)}`
   }
 
+  function createPlayerReference(): string {
+    return `player-ref-${randomBytes(24).toString('base64url')}`
+  }
+
   function armPartyRejoinSlotsForState(
     partyId: string | null,
     activeState: GameSimulationState,
@@ -4762,6 +4979,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ? sharedWorlds.runs.some(run => run.partyId === party.id)
       : state.world.kind === 'boneyard'
     return {
+      cheatsEnabled: sessionKind === 'private-college' && privateCollegeCheatsEnabled,
       content: partyContent,
       id: party.id,
       leader: leader.displayName,
@@ -4797,6 +5015,34 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       leaderPlayerId,
       party?.visibility ?? 'private',
     )]
+  }
+
+  function publicParties(): readonly PublicPartyDirectoryEntry[] {
+    const parties = activePartySystem()
+    if (!parties) return []
+    const runs = sharedWorlds
+      ? sharedWorlds.runs.map(run => ({
+          boneyardName: run.loadedBoneyard.choice.name,
+          partyId: run.partyId,
+        }))
+      : state.world.kind === 'boneyard' && loadedBoneyard && privateParties?.parties[0]
+        ? [{
+            boneyardName: loadedBoneyard.choice.name,
+            partyId: privateParties.parties[0].id,
+          }]
+        : []
+    return projectPublicPartyDirectory({
+      memberships: parties.parties,
+      runs,
+    }, new Map(
+      [...clients.values(), ...bots.values()].map(
+        ({ displayName, playerId }) => [playerId, displayName],
+      ),
+    ), maxPlayers, {
+      cheatsEnabled: sessionKind === 'private-college' && privateCollegeCheatsEnabled,
+      modCount: sessionKind === 'private-college' ? contentSummary.mods.length : 0,
+      sessionKind: sessionKind === 'private-college' ? 'private-college' : 'global-hub',
+    })
   }
 
   function observationWorld(runId: string): ObservationWorld | null {
@@ -5079,6 +5325,69 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
+  function localClientByReference(reference: string): HostClient | null {
+    return [...clients.values()].find(candidate => (
+      !candidate.partyRejoinSlot
+      && candidate.socket.readyState === WebSocket.OPEN
+      && (
+        candidate.playerReference === reference
+        || candidate.playerId === reference
+      )
+    )) ?? null
+  }
+
+  function localPlayerCardByReference(reference: string): GamePlayerCardProfile | null {
+    const target = localClientByReference(reference)
+    return target ? playerCardProfile(target) : null
+  }
+
+  function playerCardProfile(client: HostClient): GamePlayerCardProfile | null {
+    if (!clients.has(client.socket) || client.partyRejoinSlot) return null
+    const activeState = stateForPlayer(client.playerId)
+    const player = getPlayerCharacter(activeState, client.playerId)
+    return {
+      accountUsername: client.profile.accountUsername,
+      activity: activeState.world.kind,
+      discipline: player.config.discipline,
+      displayName: client.displayName,
+      element: player.config.element,
+      gold: getPlayerEconomy(activeState, client.playerId).gold,
+      highestWave: client.profile.highestWave,
+      playerReference: client.playerReference,
+      sessionKind,
+      totalPlaytimeMs: client.profile.totalPlaytimeMs,
+    }
+  }
+
+  function deliverSocialChat(
+    recipient: HostClient,
+    message: GameSocialChatDelivery,
+  ): void {
+    if (
+      clients.get(recipient.socket) !== recipient
+      || recipient.partyRejoinSlot
+      || recipient.socket.readyState !== WebSocket.OPEN
+    ) return
+    let sequence = socialChatSequences.get(message.deliveryId)
+    if (sequence === undefined) {
+      sequence = nextChatSequence
+      nextChatSequence += 1
+      socialChatSequences.set(message.deliveryId, sequence)
+      if (socialChatSequences.size > 256) {
+        socialChatSequences.delete(socialChatSequences.keys().next().value!)
+      }
+    }
+    recipient.socket.send(encodeGameMessage({
+      type: 'server-chat',
+      ...(message.activity === undefined ? {} : { activity: message.activity }),
+      channel: message.channel,
+      ...(message.recipient === undefined ? {} : { recipient: message.recipient }),
+      sender: message.sender,
+      sequence,
+      text: message.text,
+    }))
+  }
+
   function chatRecipients(
     sender: HostClient,
     channel: GameChatChannel,
@@ -5121,6 +5430,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function publishPlayerActivity(sender: HostClient, activity: GameChatActivity): void {
+    if (sender.socialConnection) {
+      sender.socialConnection.publishActivity(activity)
+      return
+    }
     if (
       !sharedWorlds
       || sessionKind !== 'global-hub'
@@ -5133,6 +5446,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       sender: {
         displayName: sender.displayName,
         playerId: sender.playerId,
+        playerReference: sender.playerReference,
       },
       sequence: nextChatSequence,
       text: gameChatActivityText(activity, sender.displayName),
@@ -6413,6 +6727,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       sharedWorlds = started.state
       state = sharedWorlds.hub
+      for (const connected of clients.values()) {
+        if (departingPlayerIds.has(connected.playerId)) {
+          connected.socialConnection?.refreshCollegeInvitationAvailability()
+        }
+      }
       const leader = clients.get(socket)
       if (leader && selected.choice.id !== 'stock-tutorial') {
         publishPlayerActivity(leader, 'searching-solomon')
@@ -6628,6 +6947,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       privateModHost?.close()
       privateModHost = null
       for (const partyId of [...partyModRuntimes.keys()]) closePartyModRuntimes(partyId)
+      const socialOwner = clients.values().next().value as HostClient | undefined
+      for (const party of activePartySystem()?.parties ?? []) {
+        socialOwner?.socialConnection?.revokeCollegeInvitations(party.id)
+      }
       const closeCode = reason === 'host-ended-session'
         ? GAME_HOST_ENDED_SESSION_CLOSE_CODE
         : 1012
@@ -6728,19 +7051,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             },
       activePartySystem()?.parties ?? [],
     ),
-    publicParties: () => sharedWorlds
-      ? projectPublicPartyDirectory({
-          memberships: sharedWorlds.parties.parties,
-          runs: sharedWorlds.runs.map(run => ({
-            boneyardName: run.loadedBoneyard.choice.name,
-            partyId: run.partyId,
-          })),
-        }, new Map(
-          [...clients.values(), ...bots.values()].map(
-            ({ displayName, playerId }) => [playerId, displayName],
-          ),
-        ), maxPlayers)
-      : [],
+    publicParties,
     restartForDeployment,
     reservePartyJoin: reserveExternalPartyJoin,
     reservePartyRejoin,
