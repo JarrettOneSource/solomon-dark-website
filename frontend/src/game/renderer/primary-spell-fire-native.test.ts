@@ -167,7 +167,12 @@ test('pins outbound Fireball light and self-lit inbound render paths', () => {
   assert.deepEqual(source.position, { x: 400, y: 300 })
   assert.equal(source.intensity, 0.75)
   assert.equal(source.castsDirectionalShadow, true)
-  assert.equal(source.radius >= 1 && source.radius <= 1.25, true)
+  assert.equal(source.radius >= 0.75 && source.radius <= 1.25, true)
+  const radii = Array.from({ length: 128 }, (_, frame) => (
+    nativeFireballLightSource(fireball(10), frame).radius
+  ))
+  assert.ok(radii.some((radius) => radius < 1))
+  assert.ok(radii.some((radius) => radius > 1))
 })
 
 test('pins exact Fire impact frame clock, recurrence, blend order, and light ownership', () => {

@@ -1,7 +1,7 @@
 import type { SpriteRef, Vec2 } from '../../editor/model.ts'
 import {
+  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
-  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
   NATIVE_LANTERN_LIGHT_RADIUS,
   NATIVE_LIGHT_OUTER_DISTANCE,
   NATIVE_PLAYER_LIGHT_OFFSET,
@@ -28,8 +28,8 @@ import type {
 import { nativeSolomonDirtOrigin } from './boneyard-solomon-dirt-presentation.ts'
 
 export {
+  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
-  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
   NATIVE_LANTERN_LIGHT_RADIUS,
   NATIVE_LIGHT_INNER_DISTANCE,
   NATIVE_LIGHT_OUTER_DISTANCE,
@@ -117,6 +117,13 @@ export interface NativeRegionLightTargetPlan {
   renderResolution: number
 }
 
+export interface NativeRegionLightManagerPlan {
+  managerScale: number
+  targetHeight: number
+  targetWidth: number
+  topLeft: Vec2
+}
+
 export const NATIVE_PLAYER_LIGHT_RASTER_JITTER = 0.2
 export const NATIVE_DEFAULT_MULTIPLE_SHADOWS = true
 export const NATIVE_DEFAULT_LIGHT_QUALITY = 0.25
@@ -125,6 +132,8 @@ export const NATIVE_REGION_LIGHT_ATLAS = 'DeadHawg'
 export const NATIVE_REGION_LIGHT_ENTRY = 18
 export const NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX = 0.5
 export const NATIVE_LIGHT_GRID_CELL_SIZE = 150
+export const NATIVE_REGION_LIGHT_BOTTOM_PADDING = 350
+export const NATIVE_REGION_LIGHT_WORLD_SCALE = 0.8
 
 export interface NativeBoneyardWeatherLightingOrder {
   readonly lightCompositeZIndex: number
@@ -333,8 +342,8 @@ export function nativeLanternLightSource(
 ): NativeBoneyardLightSource {
   return {
     intensity: Math.fround(
-      Math.fround(NATIVE_LANTERN_LIGHT_MIN_INTENSITY)
-      + presentationRandom(presentationFrame, 0, NATIVE_LANTERN_LIGHT_FLICKER),
+      Math.fround(NATIVE_LANTERN_LIGHT_BASE_INTENSITY)
+      + presentationSignedRandom(presentationFrame, 0, NATIVE_LANTERN_LIGHT_FLICKER),
     ),
     castsDirectionalShadow: multipleShadows,
     position,
@@ -353,7 +362,7 @@ export function nativeMissileLightSource(
     position: { ...owner.position },
     radius: Math.fround(
       Math.fround(0.75)
-      + presentationRandom(presentationFrame, owner.id ^ 0x5e4af0, 0.1),
+      + presentationSignedRandom(presentationFrame, owner.id ^ 0x5e4af0, 0.1),
     ),
   }
 }
@@ -622,12 +631,46 @@ export function nativeRegionLightTargetPlan(
   deviceResolution: number,
   quality = NATIVE_DEFAULT_LIGHT_QUALITY,
 ): NativeRegionLightTargetPlan {
-  const logicalSide = Math.max(viewport.width, viewport.height)
-  const physicalSide = Math.max(1, Math.trunc(logicalSide * deviceResolution * quality))
+  const requestedPhysicalSide = Math.max(1, Math.trunc(
+    Math.max(viewport.width, viewport.height) * deviceResolution * quality,
+  ))
+  const physicalSide = nextPowerOfTwo(requestedPhysicalSide)
+  const renderResolution = Math.fround(
+    Math.fround(deviceResolution)
+    * Math.fround(Math.fround(quality) * Math.fround(NATIVE_REGION_LIGHT_WORLD_SCALE)),
+  )
   return {
-    logicalSide,
+    logicalSide: physicalSide / renderResolution,
     physicalSide,
-    renderResolution: physicalSide / logicalSide,
+    renderResolution,
+  }
+}
+
+export function nativeRegionLightManagerPlan(
+  view: NativeBoneyardLightManagerView,
+  quality = NATIVE_DEFAULT_LIGHT_QUALITY,
+): NativeRegionLightManagerPlan {
+  const managerScale = Math.fround(
+    Math.fround(quality) * Math.fround(NATIVE_REGION_LIGHT_WORLD_SCALE),
+  )
+  const targetWidth = Math.fround(
+    Math.fround(view.viewport.width / view.camera.zoom) * Math.fround(quality),
+  )
+  return {
+    managerScale,
+    targetHeight: Math.fround(
+      targetWidth
+      + Math.fround(Math.fround(quality) * Math.fround(NATIVE_REGION_LIGHT_BOTTOM_PADDING)),
+    ),
+    targetWidth,
+    topLeft: {
+      x: Math.fround(
+        view.camera.x - view.viewport.width / (2 * view.camera.zoom),
+      ),
+      y: Math.fround(
+        view.camera.y - view.viewport.height / (2 * view.camera.zoom),
+      ),
+    },
   }
 }
 
@@ -941,29 +984,17 @@ export function nativeBoneyardLightVisibleInManager(
   quality = NATIVE_DEFAULT_LIGHT_QUALITY,
 ): boolean {
   const submitted = nativeSubmittedBoneyardLightSource(source)
-  const topLeftX = Math.fround(
-    view.camera.x - view.viewport.width / (2 * view.camera.zoom),
-  )
-  const topLeftY = Math.fround(
-    view.camera.y - view.viewport.height / (2 * view.camera.zoom),
-  )
-  const queryX = Math.fround(Math.fround(submitted.position.x) - topLeftX)
-  const queryY = Math.fround(Math.fround(submitted.position.y) - topLeftY)
-  const managerScale = Math.fround(Math.fround(quality) * Math.fround(0.8))
-  const centerX = Math.fround(queryX * managerScale)
-  const centerY = Math.fround(queryY * managerScale)
-  const targetSide = Math.fround(
-    Math.max(view.viewport.width, view.viewport.height) * Math.fround(quality),
-  )
-  const targetHeight = Math.fround(
-    targetSide + Math.fround(Math.fround(quality) * Math.fround(350)),
-  )
+  const manager = nativeRegionLightManagerPlan(view, quality)
+  const queryX = Math.fround(Math.fround(submitted.position.x) - manager.topLeft.x)
+  const queryY = Math.fround(Math.fround(submitted.position.y) - manager.topLeft.y)
+  const centerX = Math.fround(queryX * manager.managerScale)
+  const centerY = Math.fround(queryY * manager.managerScale)
   const reach = Math.fround(
     Math.fround(Math.fround(submitted.radius) * Math.fround(NATIVE_LIGHT_OUTER_DISTANCE))
-    * managerScale,
+    * manager.managerScale,
   )
-  const nearestX = Math.max(0, Math.min(targetSide, centerX))
-  const nearestY = Math.max(0, Math.min(targetHeight, centerY))
+  const nearestX = Math.max(0, Math.min(manager.targetWidth, centerX))
+  const nearestY = Math.max(0, Math.min(manager.targetHeight, centerY))
   const dx = Math.fround(centerX - nearestX)
   const dy = Math.fround(centerY - nearestY)
   return Math.fround(dx * dx + dy * dy) < Math.fround(reach * reach)
@@ -979,9 +1010,15 @@ function nativeFireProjectileLightSource(
     position: { ...projectile.position },
     radius: Math.fround(
       Math.fround(0.5)
-      + presentationRandom(presentationFrame, projectile.id ^ 0x5e6140, 0.25),
+      + presentationSignedRandom(presentationFrame, projectile.id ^ 0x5e6140, 0.25),
     ),
   }
+}
+
+function nextPowerOfTwo(value: number): number {
+  let result = 1
+  while (result < value) result *= 2
+  return result
 }
 
 function nativeSubmittedBoneyardLightSource(

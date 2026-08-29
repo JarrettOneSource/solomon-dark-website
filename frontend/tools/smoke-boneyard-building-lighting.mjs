@@ -80,6 +80,13 @@ try {
       typeId: 2_009,
       variant,
     }))
+    const wall = {
+      eid: 'wall-0',
+      points: [{ x: 450, y: 730 }, { x: 1_030, y: 730 }],
+      segmentCode: 3,
+      style: 3,
+      typeId: 3_013,
+    }
     const loaded = {
       choice: { id: 'building-lighting-proof', name: 'Building lighting proof', source: 'default' },
       geometrySha256: 'building-lighting-proof',
@@ -89,7 +96,7 @@ try {
       scene: {
         bounds: { h: 800, w: 1_480, x: 0, y: 0 },
         environmentMode: 0,
-        fences: [],
+        fences: [wall],
         name: 'Building lighting proof',
         objects: [...buildings, ...monuments],
         roads: [],
@@ -238,6 +245,19 @@ try {
           + viewport.height / 2,
       }
     }
+    const wallScreenRect = () => {
+      const current = frame()
+      const points = wall.points.map((point) => ({
+        x: (point.x - current.cameraX) * current.cameraZoom + viewport.width / 2,
+        y: (point.y - current.cameraY) * current.cameraZoom + viewport.height / 2,
+      }))
+      return {
+        h: Math.abs(points[1].y - points[0].y) + 50,
+        w: Math.abs(points[1].x - points[0].x) + 50,
+        x: Math.min(points[0].x, points[1].x) - 25,
+        y: Math.min(points[0].y, points[1].y) - 25,
+      }
+    }
     const groundPixelSummary = (pixels, point, radius) => {
       const current = frame()
       const centerX = (point.x - current.cameraX) * current.cameraZoom + viewport.width / 2
@@ -288,9 +308,15 @@ try {
     }
 
     renderer.setSettings({ ...settings, complexLighting: false })
-    renderer.render(snapshotAt(1_200, { x: 740, y: 400 }))
+    const wallProbePosition = { x: 515, y: 650 }
+    renderer.render(snapshotAt(1_200, wallProbePosition))
     const lightingOff = frame()
+    const wallDark = capture()
     renderer.setSettings(settings)
+    renderer.render(snapshotAt(1_201, wallProbePosition))
+    const wallLit = capture()
+    const wallFrame = frame()
+    const wallDifference = pixelDifference(wallDark, wallLit, wallScreenRect())
     renderer.render(snapshotAt(1_201, { x: 1_400, y: 750 }))
     const monumentsDark = capture()
     renderer.render(snapshotAt(1_202, { x: 720, y: 225 }))
@@ -320,6 +346,9 @@ try {
       monumentProofs,
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
+      wallDifference,
+      wallFrame,
+      wallLighting: renderer.canvas.dataset.wallLighting,
     }
   })
 
@@ -335,10 +364,20 @@ try {
   assert.equal(receipt.arenaGroundRenderer, 'retail-editor-field-capture-web-override')
   assert.equal(receipt.buildingLighting, 'native-elevated-vertex-grid')
   assert.equal(receipt.buildingLightingGrid, '3x3')
+  assert.equal(receipt.wallLighting, 'native-endpoint-vertex-gradient')
   assert.equal(receipt.lightingOff.buildingCount, 4)
   assert.equal(receipt.lightingOff.buildingBaseRoofColorMismatchCount, 0)
   assert.equal(receipt.lightingOff.buildingVertexLightMinimum, 1)
   assert.equal(receipt.lightingOff.buildingVertexLightMaximum, 1)
+  assert.equal(receipt.lightingOff.wallCount, 1)
+  assert.equal(receipt.lightingOff.wallVisibleCount, 1)
+  assert.equal(receipt.lightingOff.wallVertexLightMinimum, 1)
+  assert.equal(receipt.lightingOff.wallVertexLightMaximum, 1)
+  assert.equal(receipt.wallFrame.wallCount, 1)
+  assert.equal(receipt.wallFrame.wallVisibleCount, 1)
+  assert.ok(receipt.wallFrame.wallVertexLightMinimum < receipt.wallFrame.wallVertexLightMaximum)
+  assert.ok(receipt.wallDifference.changedPixels > 100, JSON.stringify(receipt.wallDifference))
+  assert.ok(receipt.wallDifference.channelDelta > 5_000, JSON.stringify(receipt.wallDifference))
   assert.deepEqual(receipt.buildingProofs.map(({ variant }) => variant), [0, 1, 2, 3])
   for (const proof of receipt.buildingProofs) {
     assert.equal(proof.baseRoofColorMismatchCount, 0, `Building ${proof.variant} color owner`)

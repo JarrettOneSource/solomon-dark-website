@@ -398,6 +398,11 @@ try {
   })
   assert.equal(await boneyardCanvas.getAttribute('data-light-quality'), `${Math.fround(0.06)}`)
   await nextPaint(page)
+  const lowQualityRegionTarget = await boneyardCanvas.evaluate((canvas) => ({
+    logicalSide: canvas.__sdrBoneyardFrame.regionLightLogicalSide,
+    physicalSide: canvas.__sdrBoneyardFrame.regionLightPhysicalSide,
+  }))
+  assert.equal(lowQualityRegionTarget.physicalSide, 128)
   await page.screenshot({ path: screenshots.boneyard })
   await dialog.getByRole('button', { name: 'BACK' }).click()
   await dialog.getByRole('button', { name: 'DONE' }).click()
@@ -416,6 +421,7 @@ try {
         await boneyardCanvas.getAttribute('data-complex-shadow-record-count'),
       ),
       lightQuality: Number(await boneyardCanvas.getAttribute('data-light-quality')),
+      lowQualityRegionTarget,
       multipleShadows: await boneyardCanvas.getAttribute('data-multiple-shadows'),
       zoomEffects: await boneyardCanvas.getAttribute('data-zoom-effects'),
     },

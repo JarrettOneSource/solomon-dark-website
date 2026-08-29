@@ -1,6 +1,7 @@
 import {
   nativeRandomFloatFromSemanticWord,
   nativeRandomIntFromSemanticWord,
+  nativeSignedRandomFloatFromSemanticWords,
 } from './native-random-domain.ts'
 
 export const NATIVE_FIRE_PARTICLE_FRAME_COUNT = 4
@@ -49,6 +50,19 @@ export function nativeFirePresentationRandomInt(
   return nativeRandomIntFromSemanticWord(
     nativeFirePresentationRandomWord(id, sample, channel),
     exclusiveBound,
+  )
+}
+
+export function nativeFirePresentationSignedRandom(
+  id: number,
+  sample: number,
+  channel: number,
+  maximum = 1,
+): number {
+  return nativeSignedRandomFloatFromSemanticWords(
+    nativeFirePresentationRandomWord(id, sample, channel),
+    nativeFirePresentationRandomWord(id, sample, channel ^ 0x7f4a7c15),
+    maximum,
   )
 }
 

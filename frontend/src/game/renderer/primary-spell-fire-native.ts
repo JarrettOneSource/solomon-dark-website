@@ -12,6 +12,7 @@ import {
   nativeFireParticleFadeStep,
   nativeFirePresentationRandom,
   nativeFirePresentationRandomInt,
+  nativeFirePresentationSignedRandom,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import {
   NATIVE_DEFAULT_MULTIPLE_SHADOWS,
@@ -568,7 +569,7 @@ export function nativeFireballLightSource(
     intensity: 0.75,
     castsDirectionalShadow: multipleShadows,
     position: { ...state.position },
-    radius: Math.fround(1 + nativeFirePresentationRandom(
+    radius: Math.fround(1 + nativeFirePresentationSignedRandom(
       state.id,
       Math.floor(presentationFrame),
       8,

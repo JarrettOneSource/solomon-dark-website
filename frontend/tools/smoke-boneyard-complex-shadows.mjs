@@ -149,6 +149,8 @@ try {
       if (includeLongAir) primarySpells.transients.push(longAir)
       return {
         hostPlayerId: 'local',
+        materializingPlayerIds: [],
+        modEffects: [],
         players: {
           local: {
             config: {
@@ -223,6 +225,7 @@ try {
           mageLightningPulses: [],
           maggots: [],
           runId,
+          tutorial: null,
           waves: null,
         },
       }
@@ -231,6 +234,8 @@ try {
       boneyard: loaded,
       devicePixelRatio: 1,
       initialSnapshot: snapshotAt(1_000, { x: 275, y: 330 }, 6),
+      modAssets: [],
+      modCatalog: [],
       playerId: 'local',
       viewport,
     })
@@ -328,8 +333,8 @@ try {
         >= left.frame.complexShadowQuadCount,
     )
     assert.equal(left.frame.complexShadowZOrderMismatchCount, 0)
-    assert.equal(left.frame.regionLightLogicalSide, 1_600)
-    assert.equal(left.frame.regionLightPhysicalSide, 400)
+    assert.equal(left.frame.regionLightLogicalSide, 512 / Math.fround(0.2))
+    assert.equal(left.frame.regionLightPhysicalSide, 512)
     assert.equal(left.frame.lightProviderCandidateCount, 2)
     assert.equal(
       left.frame.lightMiscTailCandidateCount,
@@ -417,6 +422,8 @@ try {
       : undefined
     const snapshotAt = (tick) => ({
       hostPlayerId: 'local',
+      materializingPlayerIds: [],
+      modEffects: [],
       players: {
         local: {
           config: {
@@ -496,6 +503,7 @@ try {
         loot: [],
         lootEvents: [],
         runId,
+        tutorial: null,
         waves: null,
       },
     })
@@ -515,6 +523,8 @@ try {
       boneyard,
       devicePixelRatio: 1,
       initialSnapshot: snapshotAt(2_000),
+      modAssets: [],
+      modCatalog: [],
       playerId: 'local',
       viewport,
     })
@@ -648,8 +658,8 @@ try {
   assert.equal(generated.firstFrame.frameCount, 1)
   assert.ok(generated.firstFrame.lightSourceCount > 0)
   assert.ok(generated.firstFrame.lightActiveBucketCount > 0)
-  assert.equal(generated.firstFrame.regionLightLogicalSide, 1_600)
-  assert.equal(generated.firstFrame.regionLightPhysicalSide, 400)
+  assert.equal(generated.firstFrame.regionLightLogicalSide, 512 / Math.fround(0.2))
+  assert.equal(generated.firstFrame.regionLightPhysicalSide, 512)
   for (const [index, startup] of generated.startupReceipts.entries()) {
     const startupFrame = startup.frame
     assert.equal(startupFrame.frameCount, 1, `startup ${index} frame count`)
@@ -657,7 +667,7 @@ try {
     assert.equal(startupFrame.lightSourceCount, 2, `startup ${index} accepted sources`)
     assert.ok(startupFrame.lightActiveBucketCount > 0, `startup ${index} light grid`)
     assert.ok(startupFrame.playerLightRadius > 0, `startup ${index} player light`)
-    assert.equal(startupFrame.regionLightPhysicalSide, 400, `startup ${index} target`)
+    assert.equal(startupFrame.regionLightPhysicalSide, 512, `startup ${index} target`)
     assert.ok(startup.pixels.nonBlackPixels > 10_000, `startup ${index} visible pixels`)
     assert.ok(startup.pixels.rgbTotal > 1_000_000, `startup ${index} lighting pixels`)
   }

@@ -23,7 +23,7 @@ import {
 import {
   NATIVE_DEFAULT_LIGHT_QUALITY,
   NATIVE_DEFAULT_MULTIPLE_SHADOWS,
-  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
   NATIVE_LIGHT_GRID_CELL_SIZE,
   NATIVE_LOW_CAPABILITY_LIGHT_QUALITY,
@@ -31,7 +31,9 @@ import {
   NATIVE_PLAYER_LIGHT_RASTER_JITTER,
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
+  NATIVE_REGION_LIGHT_BOTTOM_PADDING,
   NATIVE_REGION_LIGHT_ENTRY,
+  NATIVE_REGION_LIGHT_WORLD_SCALE,
   NativeBoneyardLightIndex,
   type NativeBoneyardLightSource,
   nativeAcceptedBoneyardLightSources,
@@ -47,6 +49,7 @@ import {
   nativeLanternLightSource,
   nativeMissileLightSource,
   nativePlayerLightSource,
+  nativeRegionLightManagerPlan,
   nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
   nativeSolomonSetPieceLighting,
@@ -60,7 +63,9 @@ import {
   NATIVE_MONUMENT_ENTRIES,
   nativeBuildingLightGrid,
   nativeBuildingMeshGrid,
-  writeNativeBuildingVertexColors,
+  nativeWallSurfaceVertexWeights,
+  writeNativeStaticSurfaceVertexColors,
+  writeNativeWallVertexScalars,
 } from './boneyard-static-surface-lighting.ts'
 import { etherPrimaryImpactLightSource } from './primary-spell-ether-native.ts'
 import {
@@ -91,13 +96,16 @@ const PORTRAIT_ZOOMED_LIGHT_VIEW = {
 const FLOAT32_STEP_BUFFER = new ArrayBuffer(4)
 const FLOAT32_STEP_VIEW = new DataView(FLOAT32_STEP_BUFFER)
 
-function adjacentFloat32(value: number, direction: -1 | 1): number {
-  const rounded = Math.fround(value)
-  FLOAT32_STEP_VIEW.setFloat32(0, rounded)
-  const bits = FLOAT32_STEP_VIEW.getUint32(0)
-  const step = (rounded > 0) === (direction > 0) ? 1 : -1
-  FLOAT32_STEP_VIEW.setUint32(0, bits + step)
-  return FLOAT32_STEP_VIEW.getFloat32(0)
+function adjacentFloat32(value: number, direction: -1 | 1, steps = 1): number {
+  let rounded = Math.fround(value)
+  for (let index = 0; index < steps; index += 1) {
+    FLOAT32_STEP_VIEW.setFloat32(0, rounded)
+    const bits = FLOAT32_STEP_VIEW.getUint32(0)
+    const step = (rounded > 0) === (direction > 0) ? 1 : -1
+    FLOAT32_STEP_VIEW.setUint32(0, bits + step)
+    rounded = FLOAT32_STEP_VIEW.getFloat32(0)
+  }
+  return rounded
 }
 
 test('matches the native inclusive random lattice, biased reducer, and signed draw', () => {
@@ -348,7 +356,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'x',
       edge: 'left',
       inward: 1,
-      position: { x: 62.40741729736328, y: 1335.4166259765625 },
+      inwardSteps: 3,
+      position: { x: 62.40740966796875, y: 1076.1573486328125 },
       view: WIDE_ZOOMED_LIGHT_VIEW,
       viewport: 'wide',
     },
@@ -356,7 +365,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'x',
       edge: 'right',
       inward: -1,
-      position: { x: 2352.407470703125, y: 1335.4166259765625 },
+      inwardSteps: 2,
+      position: { x: 1833.888916015625, y: 1076.1573486328125 },
       view: WIDE_ZOOMED_LIGHT_VIEW,
       viewport: 'wide',
     },
@@ -364,9 +374,10 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'y',
       edge: 'top',
       inward: 1,
+      inwardSteps: 5,
       position: {
         x: Math.fround(120_740_735 / 100_000),
-        y: Math.fround(-28_333_328 / 1_000_000),
+        y: -28.333335876464844,
       },
       view: WIDE_ZOOMED_LIGHT_VIEW,
       viewport: 'wide',
@@ -375,7 +386,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'y',
       edge: 'bottom',
       inward: -1,
-      position: { x: Math.fround(120_740_735 / 100_000), y: 2699.166748046875 },
+      inwardSteps: 1,
+      position: { x: 948.1481323242188, y: 2180.648193359375 },
       view: WIDE_ZOOMED_LIGHT_VIEW,
       viewport: 'wide',
     },
@@ -383,7 +395,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'x',
       edge: 'left',
       inward: 1,
-      position: { x: -94.4444351196289, y: 855.6574096679688 },
+      inwardSteps: 2,
+      position: { x: -94.44444274902344, y: 508.7129821777344 },
       view: PORTRAIT_ZOOMED_LIGHT_VIEW,
       viewport: 'portrait',
     },
@@ -391,7 +404,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'x',
       edge: 'right',
       inward: -1,
-      position: { x: 1250.5555419921875, y: 855.6574096679688 },
+      inwardSteps: 2,
+      position: { x: 556.6666870117188, y: 508.7129821777344 },
       view: PORTRAIT_ZOOMED_LIGHT_VIEW,
       viewport: 'portrait',
     },
@@ -399,7 +413,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'y',
       edge: 'top',
       inward: 1,
-      position: { x: 578.0555419921875, y: -35.59258270263672 },
+      inwardSteps: 3,
+      position: { x: 231.11111450195312, y: -35.59259033203125 },
       view: PORTRAIT_ZOOMED_LIGHT_VIEW,
       viewport: 'portrait',
     },
@@ -407,7 +422,8 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       axis: 'y',
       edge: 'bottom',
       inward: -1,
-      position: { x: 578.0555419921875, y: 1746.9073486328125 },
+      inwardSteps: 1,
+      position: { x: 231.11111450195312, y: 1053.0185546875 },
       view: PORTRAIT_ZOOMED_LIGHT_VIEW,
       viewport: 'portrait',
     },
@@ -429,6 +445,7 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
           [edgeCase.axis]: adjacentFloat32(
             tangent.position[edgeCase.axis],
             edgeCase.inward,
+            edgeCase.inwardSteps,
           ),
         },
       }
@@ -446,7 +463,7 @@ test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 vi
       assert.equal(
         nativeBoneyardLightVisibleInManager(inward, edgeCase.view),
         true,
-        `${label} inward float32`,
+        `${label} first manager-visible float32`,
       )
       assert.equal(index.rebuild([tangent], [], edgeCase.view).length, 0, `${label} provider`)
       assert.equal(index.rebuild([inward], [], edgeCase.view).length, 1, `${label} provider in`)
@@ -621,7 +638,7 @@ test('matches the native Building tessellator and packed vertex color', () => {
   assert.deepEqual([...nativeBuildingMeshGrid(300, 200, false).indices], [0, 1, 2, 1, 2, 3])
 
   const colors = new Uint8Array(5 * 4)
-  writeNativeBuildingVertexColors(colors, [-1, 0, 0.5, 1, 2])
+  writeNativeStaticSurfaceVertexColors(colors, [-1, 0, 0.5, 1, 2])
   assert.deepEqual([...colors], [
     0, 0, 0, 255,
     0, 0, 0, 255,
@@ -631,7 +648,30 @@ test('matches the native Building tessellator and packed vertex color', () => {
   ])
 })
 
-test('takes the native maximum contribution and keeps Lantern flicker cosmetic', () => {
+test('projects the two native Wall endpoint samples across its retained raster', () => {
+  const bounds = { h: 100, w: 200, x: 100, y: 200 }
+  assert.deepEqual([...nativeWallSurfaceVertexWeights(
+    bounds,
+    { x: 100, y: 250 },
+    { x: 300, y: 250 },
+  )], [0, 1, 0, 1])
+  const diagonalWeights = nativeWallSurfaceVertexWeights(
+    bounds,
+    { x: 100, y: 200 },
+    { x: 300, y: 300 },
+  )
+  assert.deepEqual([...diagonalWeights], [0, Math.fround(0.8), Math.fround(0.2), 1])
+  const scalars = new Float32Array(4)
+  writeNativeWallVertexScalars(scalars, diagonalWeights, 0.2, 0.8)
+  assert.deepEqual([...scalars], [
+    Math.fround(0.2),
+    Math.fround(0.68),
+    Math.fround(0.32),
+    Math.fround(0.8),
+  ])
+})
+
+test('takes the native maximum contribution and keeps signed Lantern flicker cosmetic', () => {
   const sources = [
     { intensity: 0.4, position: { x: 0, y: 0 }, radius: 1 },
     { intensity: 0.7, position: { x: 0, y: 0 }, radius: 1 },
@@ -641,9 +681,11 @@ test('takes the native maximum contribution and keeps Lantern flicker cosmetic',
     nativeLanternLightSource({ x: 4, y: 5 }, frame).intensity
   ))
   assert.ok(samples.every((sample) => (
-    sample >= NATIVE_LANTERN_LIGHT_MIN_INTENSITY
-    && sample <= NATIVE_LANTERN_LIGHT_MIN_INTENSITY + NATIVE_LANTERN_LIGHT_FLICKER
+    sample >= Math.fround(NATIVE_LANTERN_LIGHT_BASE_INTENSITY - NATIVE_LANTERN_LIGHT_FLICKER)
+    && sample <= Math.fround(NATIVE_LANTERN_LIGHT_BASE_INTENSITY + NATIVE_LANTERN_LIGHT_FLICKER)
   )))
+  assert.ok(samples.some((sample) => sample < NATIVE_LANTERN_LIGHT_BASE_INTENSITY))
+  assert.ok(samples.some((sample) => sample > NATIVE_LANTERN_LIGHT_BASE_INTENSITY))
   assert.ok(new Set(samples).size > 60)
   assert.equal(NATIVE_DEFAULT_MULTIPLE_SHADOWS, true)
   assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).castsDirectionalShadow, true)
@@ -651,39 +693,83 @@ test('takes the native maximum contribution and keeps Lantern flicker cosmetic',
     nativeLanternLightSource({ x: 4, y: 5 }, 0, false).castsDirectionalShadow,
     false,
   )
-  assert.equal(NATIVE_LANTERN_LIGHT_MIN_INTENSITY, 0.55)
+  assert.equal(NATIVE_LANTERN_LIGHT_BASE_INTENSITY, 0.55)
   assert.equal(NATIVE_LANTERN_LIGHT_FLICKER, 0.2)
   assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).radius, 0.65)
   assert.deepEqual(nativeLanternLightSource({ x: 4, y: 5 }, 0).position, { x: 4, y: 5 })
 })
 
-test('uses the shipped Windows light-quality profile and a square low-resolution target', () => {
+test('uses the signed stock ranges for shared Missile and Arrow-family providers', () => {
+  const missileRadii = Array.from({ length: 128 }, (_, frame) => (
+    nativeMissileLightSource({ id: 9, position: { x: 0, y: 0 } }, frame).radius
+  ))
+  assert.ok(missileRadii.every((radius) => radius >= 0.65 && radius <= 0.85))
+  assert.ok(missileRadii.some((radius) => radius < 0.75))
+  assert.ok(missileRadii.some((radius) => radius > 0.75))
+
+  const arrowRadii = Array.from({ length: 128 }, (_, frame) => (
+    nativeEnemyProjectileLightProvider(enemyProjectile({ payload: 'fire' }), frame)!.source.radius
+  ))
+  assert.ok(arrowRadii.every((radius) => radius >= 0.25 && radius <= 0.75))
+  assert.ok(arrowRadii.some((radius) => radius < 0.5))
+  assert.ok(arrowRadii.some((radius) => radius > 0.5))
+})
+
+test('uses the shipped Windows quality profile and next-power-of-two Region target', () => {
   assert.equal(NATIVE_DEFAULT_LIGHT_QUALITY, 0.25)
   assert.equal(NATIVE_LOW_CAPABILITY_LIGHT_QUALITY, Math.fround(0.06))
+  assert.equal(NATIVE_REGION_LIGHT_WORLD_SCALE, 0.8)
+  assert.equal(NATIVE_REGION_LIGHT_BOTTOM_PADDING, 350)
   assert.deepEqual(nativeRegionLightTargetPlan(
     { height: 390, width: 844 },
     2,
   ), {
-    logicalSide: 844,
-    physicalSide: 422,
-    renderResolution: 0.5,
+    logicalSide: 512 / Math.fround(0.4),
+    physicalSide: 512,
+    renderResolution: Math.fround(0.4),
   })
   assert.deepEqual(nativeRegionLightTargetPlan(
     { height: 801, width: 390 },
     1.25,
   ), {
-    logicalSide: 801,
-    physicalSide: 250,
-    renderResolution: 250 / 801,
+    logicalSide: 1_024,
+    physicalSide: 256,
+    renderResolution: 0.25,
   })
   assert.deepEqual(nativeRegionLightTargetPlan(
     { height: 900, width: 1_600 },
     1,
     Math.fround(0.06),
   ), {
-    logicalSide: 1_600,
-    physicalSide: 95,
-    renderResolution: 95 / 1_600,
+    logicalSide: 128 / Math.fround(0.048),
+    physicalSide: 128,
+    renderResolution: Math.fround(0.048),
+  })
+  assert.deepEqual(nativeRegionLightTargetPlan(
+    { height: 900, width: 1_600 },
+    1,
+  ), {
+    logicalSide: 512 / Math.fround(0.2),
+    physicalSide: 512,
+    renderResolution: Math.fround(0.2),
+  })
+})
+
+test('pins the live stock Region manager scale, top-left, and active rectangles', () => {
+  assert.deepEqual(nativeRegionLightManagerPlan(WIDE_ZOOMED_LIGHT_VIEW), {
+    managerScale: 0.20000000298023224,
+    targetHeight: 383.7962951660156,
+    targetWidth: 296.2962951660156,
+    topLeft: { x: 207.40740966796875, y: 116.66666412353516 },
+  })
+  assert.deepEqual(nativeRegionLightManagerPlan(
+    WIDE_ZOOMED_LIGHT_VIEW,
+    NATIVE_LOW_CAPABILITY_LIGHT_QUALITY,
+  ), {
+    managerScale: 0.04800000041723251,
+    targetHeight: 92.1111068725586,
+    targetWidth: 71.1111068725586,
+    topLeft: { x: 207.40740966796875, y: 116.66666412353516 },
   })
 })
 
@@ -694,9 +780,7 @@ test('publishes currently modeled Ether and Earth providers through native defau
   )
   assert.deepEqual(missile.position, { x: 10, y: 20 })
   assert.equal(missile.intensity, 0.75)
-  assert.ok(missile.radius >= 0.75 && missile.radius <= Math.fround(
-    Math.fround(0.75) + Math.fround(0.1),
-  ))
+  assert.ok(missile.radius >= Math.fround(0.65) && missile.radius <= Math.fround(0.85))
   assert.equal(missile.castsDirectionalShadow, true)
   assert.deepEqual(nativeBoulderLightSource({
     charge: 0.3,
@@ -770,7 +854,7 @@ test('projects every welded projectile and retained-rock light provider exactly'
   const missile = nativeWeldProjectileLightSource(weldProjectile(1000), 41)
   assert.equal(missile.intensity, 0.75)
   assert.equal(missile.castsDirectionalShadow, true)
-  assert.ok(missile.radius >= 0.75 && missile.radius <= 0.85)
+  assert.ok(missile.radius >= 0.65 && missile.radius <= 0.85)
 
   const spark = nativeWeldProjectileLightSource(weldProjectile(1009), 41)
   assert.equal(spark.castsDirectionalShadow, false)
@@ -1147,7 +1231,7 @@ test('exhaustively maps modeled enemy projectiles onto native provider lanes', (
   assert.equal(fireArrow?.source.castsDirectionalShadow, false)
   assert.equal(fireArrow?.source.intensity, 0.85)
   assert.deepEqual(fireArrow?.source.position, { x: 31, y: 47 })
-  assert.ok(fireArrow!.source.radius >= 0.5 && fireArrow!.source.radius <= 0.75)
+  assert.ok(fireArrow!.source.radius >= 0.25 && fireArrow!.source.radius <= 0.75)
 
   const firebolt = nativeEnemyProjectileLightProvider(enemyProjectile({
     kind: 'firebolt',
@@ -1156,7 +1240,7 @@ test('exhaustively maps modeled enemy projectiles onto native provider lanes', (
   }), 11)
   assert.equal(firebolt?.lane, 'transient')
   assert.equal(firebolt?.source.intensity, 0.85)
-  assert.ok(firebolt!.source.radius >= 0.5 && firebolt!.source.radius <= 0.75)
+  assert.ok(firebolt!.source.radius >= 0.25 && firebolt!.source.radius <= 0.75)
 
   for (const payload of ['cold', 'poison'] as const) {
     const guided = nativeEnemyProjectileLightProvider(enemyProjectile({
@@ -1167,9 +1251,8 @@ test('exhaustively maps modeled enemy projectiles onto native provider lanes', (
     assert.equal(guided?.lane, 'actor')
     assert.equal(guided?.source.castsDirectionalShadow, false)
     assert.equal(guided?.source.intensity, 0.75)
-    assert.ok(guided!.source.radius >= 0.75 && guided!.source.radius <= Math.fround(
-      Math.fround(0.75) + Math.fround(0.1),
-    ))
+    assert.ok(guided!.source.radius >= Math.fround(0.65))
+    assert.ok(guided!.source.radius <= Math.fround(0.85))
   }
 
   const bomb = nativeEnemyProjectileLightProvider(enemyProjectile({

@@ -212,6 +212,12 @@ function isActorOccludingMainItem(item: MainRenderItem): boolean {
     || (item.layer.fence.segmentCode ?? item.layer.fence.style ?? 0) !== 3
 }
 
+function isPreMainWallItem(item: MainRenderItem): item is FenceRenderItem {
+  return item.kind === 'fence'
+    && item.layer.part === 'body'
+    && (item.layer.fence.segmentCode ?? item.layer.fence.style ?? 0) === 3
+}
+
 function actorOccludingMainItems(doc: EditorDoc): MainRenderItem[] {
   return renderSceneFor(doc).main.filter(isActorOccludingMainItem)
 }
@@ -609,6 +615,12 @@ export function nativeBoneyardMainLayers(doc: EditorDoc): readonly MainLayer[] {
   return actorOccludingMainItems(doc).map((item) => item.layer)
 }
 
+export function nativeBoneyardPreMainWallLayers(
+  doc: EditorDoc,
+): readonly Extract<MainLayer, { kind: 'fence' }>[] {
+  return renderSceneFor(doc).main.filter(isPreMainWallItem).map((item) => item.layer)
+}
+
 export function nativeBoneyardForegroundLayers(
   doc: EditorDoc,
 ): readonly ObjectSpriteLayer[] {
@@ -685,6 +697,23 @@ export function drawNativeBoneyardMainBand(
     if (!item) continue
     if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
     else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
+  }
+}
+
+export function drawNativeBoneyardPreMainWallBand(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+  layerIndexes: readonly number[],
+) {
+  ctx.clearRect(0, 0, cssW, cssH)
+  ctx.imageSmoothingEnabled = true
+  const items = renderSceneFor(doc).main.filter(isPreMainWallItem)
+  for (const layerIndex of layerIndexes) {
+    const item = items[layerIndex]
+    if (item) drawFencePart(ctx, item.layer, cam, cssW, cssH)
   }
 }
 

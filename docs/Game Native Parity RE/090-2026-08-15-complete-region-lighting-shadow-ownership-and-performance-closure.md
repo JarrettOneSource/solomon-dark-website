@@ -469,3 +469,338 @@ constant changes.
   `967c734098f2cb204bcb50f16f3170afb8ff301ac8acd1545bee28361f6f3901`.
   No evidence falsified the current level, so radius, intensity, falloff,
   placement, and compositing remain unchanged.
+
+## 2026-08-29 — Complete lighting-system audit reopening
+
+### Reported smell and parity question
+
+- Reported request: audit the complete lighting system, independently compare
+  retail and Website behavior, and close every remaining discrepancy rather
+  than retesting only the previously reported player or Lantern symptom.
+- Stock behavior to recover: the complete Arena light-manager target,
+  persistent-provider and `MiscLight` membership, native random-call arity,
+  analytic consumers, elevated surfaces, environment-player pass, directional
+  shadows, every settings branch, and entry/reset/resize/teardown.
+- Reproduction inputs: retail 1600-by-900 high profile (`LightQuality=.25`,
+  Multiple Shadows and Enhanced Effects on), preserved low profile
+  (`.06`, both off), environment modes `0..2`, Complex Lighting/Shadows
+  independently toggled, the complete callback/xref census, and current
+  Website `origin/main` `acad2d24cd7d82550cb6ad3b6e54e62ab0026f76`.
+- Falsifiers: any provider vtable or `MiscLight` caller absent from the
+  inventory; a `RandomFloat` signed byte not checked in raw instructions; a
+  non-power-of-two stock target; a Website source admitted outside the native
+  active rectangle; a specialized-query xref left undispositioned; or a
+  browser receipt that checks only counts rather than rendered pixels.
+
+This is a secondary report against the same system. The earlier complete pass
+made three process errors that this audit corrects everywhere:
+
+1. it read decompiler expressions such as `base + RandomFloat(maximum)` but did
+   not inspect the raw signed-byte argument to `RandomFloat 0x00401310`;
+2. it treated the requested light side as the allocated texture side and
+   omitted `nextPowerOfTwo 0x00410450`, the `0.8` manager transform, and the
+   camera-relative active rectangle; and
+3. the Building pass explicitly deferred the only other specialized-query
+   consumer, Wall, even though a complete lighting census cannot omit it.
+
+The 2026-08-28 Lantern re-audit above is therefore superseded specifically for
+flicker signedness and its claimed `[.55,.75]` interval. Radius, position,
+provider order, setting flag, and all downstream consumers remain valid.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail image | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`, re-hashed 2026-08-29 | Same sealed executable backs every static and live row below. | high |
+| Ghidra provenance | canonical `SolomonDark` project through read-only replica wrapper revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49` | Fresh xrefs found 36 direct generic-provider callbacks, 54 provider vtables, 13 `MiscLight` append callsites in ten functions, two ordinary-scalar callers, two specialized-scalar callers, one directional-record caller, one target initializer, and one compositor caller. | high |
+| Raw provider instructions | `0x005E4AF0`, `0x005E50D0`, `0x005E6140`, `0x005E6220`; `RandomFloat 0x00401310` | Each call pushes signed byte `1`: Missile radius is `.75+S(.1)`, Fireball `1+S(.25)`, Arrow-family `.5+S(.25)`, Lantern intensity `.55+S(.2)`. Current Website uses unsigned samples for all four. | high |
+| Target instructions | `0x0057DF20`, `nextPowerOfTwo 0x00410450`, reset/finalize/composite `0x0057D4E0/0x0057D5E0/0x0057D670`, Arena callsites `0x0046ECED..0x0046EE6C` | Allocation is the next power of two above the truncated requested side. Manager coordinates use float32 `LightQuality*.8`; the active square is camera-visible world width times Light Quality and extends downward by `LightQuality*350`. | high |
+| High live diagnostic | injected task PID `22468`, runtime base `0x002A0000`, staged executable hash equal to retail; Lua exec against Arena `0x19A1C150` | `LQ=.25`, manager scale `.200000003`, allocation `512x512`, active rectangle `(0,0)..(296.296295,383.796295)`. | high supporting evidence |
+| Low live diagnostic | injected task PID `26040`, runtime base `0x009D0000`, staged executable hash equal to retail; Lua exec against Arena `0x19AB9D68` | `LQ=.059999999`, manager scale `.048`, allocation `128x128`, active rectangle `(0,0)..(71.111107,92.111107)`, Multiple Shadows/Enhanced Effects off. | high supporting evidence |
+| Live provider lane | high task PID `8212`, runtime base `0x002A0000`; persistent list `Arena+0x8D80/+0x8D8C`, accepted records `Arena+0x8C44 +0xFC/+0x108` | Player then Lantern vtables/callbacks were exact. Forty Lantern samples ranged `.364724010..749794006`; Multiple Shadows off changed only the Lantern record flag from one to zero. | high supporting evidence |
+| Live environment grids | trace of `0x00588040` plus Arena `+0x8AF4/+0x8F24/+0x8F84` | Retail queries the general spatial grid and both player target grids every frame. Both target grids were empty in the generated run. Offset xrefs identify `Anim_DeadSpider::Tick 0x00461740` as their only concrete producer. | high |
+| Specialized consumer | Wall builder `0x005EEBB0`, Wall render `0x0061DF40`, wrappers `0x0061E780/0x0061E990`; Building `0x0060E940` | Wall samples its two materialized endpoints through `0x0057E640`, creates endpoint grayscale values, and interpolates them through its generated surface/decor program. Website bakes its fixed-color three-stroke approximation into the untinted pre-main base; because Wall is correctly excluded from actor occlusion, the runtime never materializes the otherwise-modeled Wall lighting or shadow program. | high |
+| Current web differential | current Mac main; Building smoke and direct module probe | Default Website target is `400x400`/logical `1600`; low plan is `95x95`. Web source domains are Lantern `.550026..749932`, Missile `.750008..850000`, Fireball `1.000033..1.249970`, Arrow `.500030..749862`; a source past the native zoom-1.35 right edge remains admitted. | high |
+| Current Mac browser baseline | macOS 26.6.2 arm64, Chrome/WebGL2, detached `acad2d24` | Four Building and 21 Monument member proof passed; Settings toggles passed with empty error arrays. The checked-in complex-shadow smoke failed before a lighting assertion because it omitted newly required empty `modAssets/modCatalog`, exposing a stale acceptance harness. | high |
+
+Injected-loader data is supporting runtime evidence, not clean-image pixel
+authority. Exact formulas, call membership, target allocation, and sign flags
+come from the sealed instructions. The live runs prove those findings against
+fresh PIDs and explicit ASLR mappings.
+
+### System boundary and complete membership inventory
+
+Native system: **Arena Region lighting and directional-shadow manager**, from
+Arena construction and provider registration through raster target allocation,
+provider/Misc replay, spatial indexing, analytic/elevated queries, surface and
+actor consumers, environmental player masks, shadows, settings, reset, resize,
+and destruction. Hub has no Region manager and is a negative scene member.
+
+#### Manager, consumers, settings, and lifecycle
+
+| Member / branch | Native source | Disposition required by this reopening | Proof contract |
+| --- | --- | --- | --- |
+| target construction and allocation | `0x0057DF20 -> 0x00410450` | `exact-ported` by this correction | `.25 -> 512`, `.06 -> 128`, DPR-scaled browser allocation with unchanged CSS result |
+| manager coordinate transform | manager `+0xC4`, float32 `LQ*.8` | `exact-ported` by this correction | source world-query pixels and composite world coverage |
+| active cull rectangle | reset arguments, manager `+0xE8..+0xF4` | `exact-ported` by this correction | zoom-1.35 high `296.296295 x 383.796295`; low `71.111107 x 92.111107`; strict tangency |
+| reset, clear, finalize | `0x0057D4E0/0x0057D5E0` | `verified-already-at-parity` after target correction | one complete frame epoch; no stale accepted records |
+| persistent provider registration/order | Arena `+0x8D80/+0x8D8C`; vslot `+0x30` | `verified-already-at-parity` | actor before transient, stable registration ordinal, late join and teardown |
+| `MiscLight` append/replay | Arena `+0x8DF4/+0x8E00`; append `0x0044F4B0` | `verified-already-at-parity` | complete provider pass before ordered Misc batches |
+| asymmetric false-source containment | `0x0057E2F0`, generic submitter `0x0057FE40` | `verified-already-at-parity` after signed radii | intensity/radius/strict-circle tests across source order |
+| finite 150-unit analytic grid | `0x0057DB90/0x0057FC00/0x0057D870` | `verified-already-at-parity` | generation reuse, negative truncation, padding, finite bounds |
+| Region raster stamp and multiply | DeadHawg 18; `0x0057D670`, selector 2 | `exact-ported` by target correction | full allocation, world-query stamp, native `ZERO/SRCCOLOR`, pre-main or late setting branch |
+| ordinary analytic scalar | `0x0057F980`; callers `0x004881A0`, `0x00624B40` | `verified-already-at-parity` | plateau/falloff/vertical scale/max and byte truncation |
+| Building elevated surface | `0x0060E940/0x0060EC50`; all eight art rows | `verified-already-at-parity` | 3x3/2x2 grids, four selector offsets, shared base/roof colors |
+| Wall elevated endpoints | `0x0061DF40`; two `0x0057E640` calls | `exact-ported` by this correction for endpoint samples and interpolation | horizontal/vertical/diagonal, connected/unconnected, Complex Lighting off |
+| native Wall generated geometry/decor | builder `0x005EEBB0` | `out-of-system` for this lighting correction: separate known Wall-geometry parity debt | Website retains its current stone-band silhouette; endpoint lighting becomes exact, but cap/detail geometry may remain visibly different |
+| `ZFightHelper` endpoint wrapper | vslot `+0x1C -> 0x0061E990` | `out-of-system`: no corresponding Website helper object | Wall owner directly supplies the two materialized endpoints |
+| directional records | `0x0057F0E0`, common dispatcher xref | `verified-already-at-parity` after signed sources | record membership, pairwise attenuation, behind scalar, distance and projection samples |
+| generic authored shadow shapes | closer/projector `0x00655570/0x00655970` | `verified-already-at-parity` | exact point order, strict normal test, per-vertex alpha truncation |
+| Tree 15, Gravestone 17, Monument 21, Building 4, Goodie, Fencepost 14 | authored outline tables | `verified-already-at-parity` | every table row and variant remains individually asserted |
+| FenceGrate, moving Gate, Rails, Wall shadow programs | class programs | `verified-already-at-parity` | bar gaps, live leaves, dual rails, extended Wall endpoints |
+| Broken grate and Scrub shadow programs | compiled class branches | `out-of-system`: corresponding Website actor states are absent | no invented generic fallback |
+| Complex Lighting on/off | `0x00B3BCA8` | `verified-already-at-parity` after target correction | on pre-main plus analytic; off white analytic plus late raster composite |
+| Complex Shadows on/off | `0x00B3BCA9` | `verified-already-at-parity` | off releases directional meshes without removing flat class shadows or providers |
+| Multiple Shadows on/off | `0x00B3BCAA` | `verified-already-at-parity` after signed sources | only `MS` callbacks change flag; literal true/false remain fixed |
+| Light Quality `.06..25` | `0x00B3BCA4` | `exact-ported` by target correction | allocation, transform, cull and resize consume one value |
+| Enhanced Effects on/off | `0x00B3BCAD` | `verified-already-at-parity` for both Building grids; user toggle remains `out-of-system` per Settings authority | current browser policy stays visibly fixed on |
+| modes `0/1/2` direct player pass | `0x00470EE0`, DeadHawg 18 | `verified-already-at-parity` for membership/geometry; final opacity is `out-of-system` by explicit user product policy | mode 0 absent; modes 1/2 bounded additive; Website remains 14 percent of native brightness |
+| optional DeadHawg-9 target pass | Arena `+0x8F24/+0x8F84` | `out-of-system`: only `Anim_DeadSpider` populates these grids and Website has no Spider/DeadSpider actor | live target counts zero; no unconditional replacement mask |
+| weather splash/streak order | Arena weather callers | `verified-already-at-parity` | splash before Region, streak after foreground; Complex Lighting off reorders composite |
+| first frame, pause, reset, resize, scene replacement, destroy | Arena/Website scene owners | `exact-ported` after target resize correction | ready barrier, no hidden simulation clock, no stale textures/meshes/listeners |
+| Hub/private-room rendering | no Region initialization/composite | `out-of-system` negative member | no invented Hub radial lighting; Staff/ambient self-lit painters remain separate |
+
+There is no `blocked-by-platform` member. WebGL2 can express the native target,
+blend, interpolation, and shadow programs. Two visible differences remain
+intentional/outside this lighting correction: the subdued 14-percent late
+player aperture and the current approximate Wall silhouette/decor geometry.
+
+#### Persistent provider callbacks and every vtable row
+
+| Callback / complete vtable membership | Native formula or branch | Disposition |
+| --- | --- | --- |
+| `PlayerWizard::vftable 0x00793F74 -> 0x005299A0 -> 0x00580130` | source `+15` heading, analytic `(1+phase)*2.6`, raster `2.6-U(.2)`, intensity one, literal true | `verified-already-at-parity` after target correction |
+| `DemonSkull 0x00786074 -> 0x00474970` | capability-gated skull source | `out-of-system`: dormant Website enemy family |
+| `Skeleton 0x00786604 -> 0x004779E0` | glow-scaled `.5+U(.5)`, radius `.5`, `MS` | `verified-already-at-parity` |
+| `SkeletonArcher 0x00786CF4 -> 0x00478180` | burning Skeleton branch or charge `.75`, radius `charge*(.5+S(.1))`, `MS` | `verified-already-at-parity` |
+| `SkeletonMage 0x00786DA4 -> 0x004783E0` | Archer sibling plus intentional duplicate enrollment | `verified-already-at-parity` |
+| `Imp 0x00785E5C`, `GreenImp 0x007861B4`, `GoodImp 0x00793D9C -> 0x00478CC0` | glow-scaled `.75+U(.25)`, radius `.25+S(.1)`, literal false | `verified-already-at-parity`; GreenImp remains dormant |
+| `Wraith 0x00785FAC -> 0x00478E00` | glow-scaled `.5+U(.5)`, radius `.5`, `MS` | `verified-already-at-parity` |
+| `Demon 0x00786114 -> 0x00479470` | live intensity one/death `.5+U(.5)`, radius `1.5+S(.25)`, `MS` | `verified-already-at-parity` |
+| `Coffin 0x00786744 -> 0x00479EA0` | state-gated radius `.65`, intensity `1-I(9)*.1`, `MS` | `verified-already-at-parity` |
+| `DireFaculty 0x0078626C -> 0x00479F80` | signed radius/owned fields | `out-of-system`: dormant Website enemy family |
+| `Heartmonger 0x00786E54 -> 0x0047A040` | class-state source | `out-of-system`: dormant Website enemy family |
+| `Portal 0x007868CC -> 0x0047BED0` | portal-state source | `out-of-system`: no current Website Portal actor |
+| `ZAnimLit 0x0079C4DC -> 0x005E48E0` | wrapper radius/intensity/owned flag and child position | `verified-already-at-parity` for active impact/fade wrappers |
+| `MagicMissile 0x0079C544`, `FireMissile 0x0079D5F4`, `BallLightning 0x0079D66C`, `FrostMissile 0x0079D6E4`, `GuidedMissile 0x0079DA8C`, `SkullMissile 0x0079DCDC -> 0x005E4AF0` | intensity `.75`, radius `.75+S(.1)`, `MS` | `exact-ported` by this correction for every materialized sibling; unmaterialized rows remain catalogued |
+| `Fireball 0x0079C5BC -> 0x005E50D0` | intensity `.75`, radius `1+S(.25)`, `MS` | `exact-ported` by this correction |
+| `Boulder 0x0079E014`, `EBoulder 0x0079E08C`, `Hailstones 0x0079E104 -> 0x005E5670` | intensity `.5`, radius `max(1,2*charge)`, `MS` | `verified-already-at-parity` |
+| `Ember 0x0079C624`, `EvilEmber 0x0079C694 -> 0x005E5960` | intensity `.25*min(life,1)`, radius `1-U(.25)`, literal false | `verified-already-at-parity` |
+| `Arrow 0x0079C7E4`, `Firebolt 0x0079CAD4`, `DarkFireball 0x0079D144`, `Silk 0x0079D294 -> 0x005E6140` | radius `.5+S(.25)` with class-owned intensity/flag | `exact-ported` by this correction for fire Arrow/Firebolt; dormant siblings remain catalogued |
+| `Lantern 0x0079C854 -> 0x005E6220` | radius `.65`, intensity `.55+S(.2)`, `MS` | `exact-ported` by this correction; range `[.35,.75]` inclusive |
+| `Meteor 0x0079C9F4 -> 0x005E7040` | fall/impact visibility and body-scaled radius, literal false | `verified-already-at-parity` |
+| `GreenFire 0x0079DC2C -> 0x005E7420` | alpha-gated green-fire source | `out-of-system`: no current Website actor |
+| `Fire 0x0079D76C`, `Fire_Goodguy 0x0079D7DC`, `MovingFire 0x0079D8BC`, `DireFire 0x0079DD64 -> 0x005E7610` | radius `.6`, `min(1,3*alpha)`, `MS` | `verified-already-at-parity` for active good/moving fire; dormant siblings catalogued |
+| `GroundSpark 0x0079D84C -> 0x005E7800` | radius `.4`, intensity `.5+U(.5)`, literal false | `verified-already-at-parity` |
+| `Shockwave 0x0079D92C`, `FreezeWave 0x0079D994 -> 0x005E7AA0` | radius `waveRadius/140`, intensity alpha, literal false | `verified-already-at-parity` |
+| `Leviathan 0x0079DBAC -> 0x005E90C0` | radius/intensity one, `MS` | `verified-already-at-parity` |
+| `EtherBolt 0x0079CCF4`, `UnholySpit 0x0079CF34 -> 0x005E9160` | radius `.5`, intensity one, `MS` | `verified-already-at-parity` for EtherBolt; UnholySpit dormant |
+| `Golem 0x0079DE94 -> 0x005E94C0` | radius one, intensity `.75`, `MS` | `verified-already-at-parity` |
+| `MagicTrap 0x0079CD84 -> 0x005E97A0` | radius `.25`, intensity one, literal false | `verified-already-at-parity` |
+| `Bonus 0x0079CDEC -> 0x005E9840` | class scale/intensity, `MS` | `verified-already-at-parity` |
+| `DemonBomb 0x0079CE54 -> 0x005E98E0` | radius `.6`, intensity `1-U(.25)`, literal false | `verified-already-at-parity` |
+| `GameNPC 0x0079CEBC -> 0x005EA110` | class/state radius and `.9+U(.1)`, `MS` | `out-of-system`: no current Arena GameNPC snapshot member |
+| `StormCloud 0x0079CC8C`, `AcidRain 0x0079CF9C -> 0x005EB5C0` | radius two, `.5*cloudAlpha`, literal false | `verified-already-at-parity` |
+| `RainOfBones 0x0079D06C -> 0x005EBD90` | class-alpha random source | `out-of-system`: no current Website actor |
+| `EtherDrain 0x0079DF1C -> 0x005EE780` | radius two, `min(scale,1)*(.5+U(.5))`, `MS` | `verified-already-at-parity` |
+| `Comet 0x0079D304 -> 0x005F0DB0` | radius two, intensity `.5`, `MS` | `verified-already-at-parity` |
+| `OffscreenMagic 0x0079D44C -> 0x005F18A0` | actor-scale source | `out-of-system`: no current Website actor |
+
+#### Complete `MiscLight` producer membership
+
+| Producing function / family | Native source | Disposition |
+| --- | --- | --- |
+| DemonSkull MouthBeam | `0x0044FFE0 -> 0x0044F4B0` | `out-of-system`: dormant DemonSkull ability owner |
+| UltraBanish | `0x00460AB0 -> 0x0044F4B0` | `out-of-system`: distinct dormant native effect, never substitute Website banish |
+| normal/player/Mage Lightning factory | `0x00531640`, two append callsites | `verified-already-at-parity`: exact two-leg samples, one shared intensity, age-zero batch |
+| chain Lightning factory | `0x00531F00`, two append callsites | `verified-already-at-parity` through shared Air factory contract |
+| Blizzard/variant-24 Lightning factory | `0x005328D0`, two append callsites | `verified-already-at-parity` through welded Air/Blizzard contract |
+| MagicCircle | `0x006006E0` | `verified-already-at-parity`: `.75+S(.25)`, radius `.5*scale`, literal true |
+| EyeLaser | `0x006054F0` | `out-of-system`: dormant enemy ability owner |
+| Mod_ElectricBurn | `0x00628F10` | `verified-already-at-parity`: target registration, radius `.5+S(.25)`, intensity one |
+| Mod_Burn | `0x00629A40` | `verified-already-at-parity`: target registration, radius `.1+U(.1)`, terminal fade |
+| Mod_EtherBurn | `0x00629CD0` | `verified-already-at-parity`: active skill-14 target modifier; prior dormant statement superseded |
+
+Every compiled callback, vtable row, append callsite, setting, consumer, and
+authored shadow family has one disposition. No `not-yet-extracted` member
+remains.
+
+### Native ownership thread and recovered corrective contract
+
+- Arena owns one light manager at `+0x8C44`. Region tick rebuilds provider and
+  Misc lists from authoritative actor/transient managers; Arena render resets
+  the target, replays persistent callbacks in registration order, replays all
+  Misc records, restores the backbuffer, then uses the same accepted records
+  for analytic tints and directional records.
+- Target request is
+  `trunc(max(viewportPhysicalWidth,viewportPhysicalHeight)*LightQuality)`;
+  allocation is `nextPowerOfTwo(max(1,request))`. Native high and low are
+  `512` and `128`, not `400` and `96/95`.
+- Manager world-to-target scale is float32 `LightQuality*.8`. Per render, query
+  origin is the camera-visible world top-left. Active rectangle width is
+  `float32(viewportWidth/cameraZoom*LightQuality)` and height is that width plus
+  `float32(LightQuality*350)`. The full power-of-two texture composites from
+  the same top-left; unused padding is black.
+- A browser DPR multiplies both requested allocation and manager resolution,
+  preserving native CSS/world coverage rather than changing the light radius.
+- The four corrected signed calls each consume a magnitude word and a sign
+  word. Website keeps its established semantic sample-identity substitution,
+  but now preserves exact native signed domain, draw arity, float32 stores,
+  culling, containment, raster size, scalar reach, and shadow reach.
+- Wall samples the materialized shadow/program endpoints, not its midpoint.
+  Complex Lighting off supplies endpoint scalars one; on uses the same
+  elevated query as Building. The retained Website raster can carry the exact
+  affine endpoint grayscale even while its separate silhouette/decor debt is
+  explicitly preserved.
+- The implementation probe exposed one deeper Wall ownership error: code-3
+  Wall was baked into the tiled pre-main base. The correction must remove only
+  Wall from that base tile, retain it as a distinct pre-main resident, and
+  register its existing extended-endpoint shadow program. Promoting Wall into
+  the actor/scenery main queue would violate its proven slot-`+0x28` ownership.
+- Entry, pause, and teardown do not own new simulation state. Presentation RNG
+  and targets remain local; provider order and mutable fields remain
+  authoritative/replicated where already required.
+
+### Confidence and explicit residual differences
+
+- Confirmed: executable identity, all xrefs/vtables/callsites, signed flags,
+  constants, target allocator, high/low live layouts, active rectangle,
+  provider ordering, target-grid producer, all specialized consumers, current
+  web divergence, and stale smoke failure.
+- Intentional difference: the Website's post-world direct player aperture is
+  14 percent of native brightness by explicit prior user policy.
+- Known separate debt: Website Wall art remains an approximate stone-band
+  raster rather than the complete `0x005EEBB0` generated mesh/decor program;
+  this correction makes its endpoint lighting exact but does not claim exact
+  Wall pixels.
+- Designed multiplayer substitution: semantic presentation words replace the
+  process-global RNG stream. Domains and per-call relationships are exact;
+  stock and Website flicker phases need not match frame-for-frame.
+- Unknown material to this implementation: none.
+
+### Web implementation consequence
+
+- Correct the shared Region target plan, cull rectangle, source coordinate
+  space, stamp scale, composite placement, resize, and diagnostics. Remove the
+  screen-coordinate target path rather than layering padding around it.
+- Replace unsigned samples for the complete shared Missile, Fireball,
+  Arrow-family, and Lantern memberships with the native signed reducer and an
+  independent semantic sign word. Rename the Lantern constant from misleading
+  “minimum” to base intensity.
+- Lift every Wall out of the tiled base into a retained pre-main
+  two-endpoint surface-color mesh; sample its native extended shadow/program
+  endpoints and register that same resident as the custom Wall shadow depth
+  owner. Keep Wall out of the actor/scenery main queue and do not claim or
+  invent exact decorative geometry here.
+- Repair the checked-in complex-shadow browser harness to pass empty mod asset
+  inputs, update its native target receipts, add low-quality and outside-native-
+  rectangle falsifiers, and retain every existing shadow/performance check.
+- Remove only falsified expectations (`400/95`, unsigned ranges, midpoint Wall
+  tint). Provider order, falloff, shadow tables, Building, environment opacity
+  policy, gameplay, protocol, and audio remain unchanged.
+
+### Validation contract
+
+- Focused contracts: high/low/DPR target allocation and logical coverage;
+  active rectangle values and strict edges; source/stamp/composite world
+  coordinates; all four signed inclusive domains with samples on both sides of
+  base; every shared vtable family; Wall endpoint interpolation for horizontal,
+  vertical, diagonal, connected and unconnected programs; Complex Lighting
+  off; resize and destroy.
+- Built Mac WebGL2: default target `512`, low target `128`, native logical
+  coverage, one deliberately far provider candidate rejected before accepted
+  source/index/shadow products, late Air admission retained, zero Z mismatches,
+  every Building/Monument and Wall member visibly lit, and empty page/console/
+  failed-response arrays.
+- Settings journey: Complex Lighting, Complex Shadows, Multiple Shadows,
+  Light Quality, environment mode, first frame, resize, scene replacement, and
+  teardown remain independently exercised.
+- Stock-versus-web: compare the recorded high/low target values and signed
+  domains against the exact candidate diagnostics; inspect matching
+  1600-by-900 frames for source softness, fence/tree shadows, Wall endpoint
+  gradient, and bounded environment pass.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact byte-identical
+  Mac candidate, then repeat browser acceptance after any rebase.
+
+### Implementation validation receipt
+
+- Candidate base: current `origin/main`
+  `bea74208839c6078f9a3dd83321041c089e2ca0e`, in isolated Website worktree
+  `/home/user/.codex-worktrees/solomon-website-lighting-audit-20260829-root`.
+  The exact uncommitted diff was applied to detached Mac worktree
+  `/Users/jarrett/codex-acceptance/solomon-lighting-audit-20260829-root` and
+  repeatedly proved byte-identical by SHA-256 before executable validation.
+  This is the post-validation fast-forward over the independent Frost Jet
+  parity commit; it had no file overlap with the lighting candidate.
+- Focused Mac contracts: `tsc -p tsconfig.test.json --noEmit` passed and the
+  two lighting suites passed `45/45`. Those contracts include strict manager
+  edges, high/low/DPR allocation, both sides of every corrected signed domain,
+  horizontal/diagonal Wall interpolation, Building grids, provider membership,
+  containment, analytic/elevated queries, and Fire presentation ownership.
+- Canonical Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` completed
+  with exit zero after backend build/tests, strict lint, every frontend suite,
+  desktop tests, production build, bundle budget, and production media policy.
+  The first full attempt passed all tests but exposed the omitted Wall fields
+  in the production-only `BoneyardPainterFrame` interface; the interface was
+  completed, the focused production build passed, and the entire canonical
+  gate was then repeated successfully on the corrected tree. After the
+  independent Frost Jet fast-forward, the entire canonical gate passed again.
+  Final post-rebase game entry bundle was `263457` raw / `79952` gzip bytes
+  within budget.
+- Default Mac WebGL2 shadow/Region smoke: passed with target physical side
+  `512`, logical side `2559.999961853028`, zero Z-order mismatches, late Air
+  admission still visible, zero long tasks, and no page, console, or failed
+  response errors. The stale fixture was repaired for current empty mod inputs,
+  materialization state, and null tutorial ownership before it reached these
+  lighting assertions.
+- Building/Monument/Wall Mac WebGL2 smoke: all four Building selectors and all
+  21 Monument selectors changed pixels under the light; base/roof color
+  mismatch count remained zero. The synthetic pre-main Wall was materialized
+  exactly once, Complex Lighting off produced vertex min/max `1/1`, lighting on
+  produced `0.004239678382873535..0.16817410290241241`, and the Wall region
+  changed `26105` pixels with channel delta `2451450`. Its custom Wall shadow
+  program was active in the same frame. Error arrays were empty.
+- Settings Mac Chrome journey: Complex Lighting, Complex Shadows, Multiple
+  Shadows, and Zoom Effects all disabled cleanly; Light Quality stored
+  `0.05999999865889549`; the paused-menu target receipt updated immediately to
+  physical `128` / logical `2666.6666434870826`; error and failed-response
+  arrays were empty.
+- Built production proof: the canonical bundle was served by the real Release
+  .NET backend and driven against the built `dist-game-host` artifact. The
+  three-client desktop/mobile `/game` journey reached Boneyard with WebGL2 on
+  Apple M2, populated both painter/light receipts, preserved Region multiply
+  ordering, and returned empty host/client/mobile page and console error arrays.
+  An initial run without an injected supervisor endpoint is excluded: it
+  correctly failed at shared-Hub admission with HTTP 503 before Boneyard; the
+  unchanged journey passed once wired to the task-owned built host.
+- Post-rebase repeat: the default complex-shadow/Region smoke, the complete
+  Building/Monument/Wall smoke, the low-quality Settings journey, and the
+  built three-client production journey all passed again on `bea74208`; the
+  numeric lighting receipts above were unchanged and every error array stayed
+  empty.
+- Stock-versus-web visual inspection used the separately captured 1600-by-900
+  high/low/Multiple-Shadows-off stock frames and the final Mac WebGL2 frames.
+  The Region footprint, soft radial edge, pre-main darkness, and directional
+  fence/tree shadow behavior are qualitatively aligned. The frames use
+  different generated arenas and are therefore supporting visual evidence,
+  not pixel-equality authority; exact parity claims rest on the sealed
+  instructions and numeric live/module receipts above.
+- Residuals are explicit rather than unknown: the direct player aperture stays
+  at the user-directed 14 percent of stock brightness; semantic presentation
+  words intentionally replace the process-global RNG phase; browser Enhanced
+  Effects remains fixed on; Spider/DeadSpider target-grid masking has no web
+  actor; and Wall silhouette/decor remains the already-recorded approximate
+  geometry debt. No additional in-system lighting discrepancy remained after
+  the final membership and callsite rescan.
+- Publication state: implemented and validated in retained task worktrees only.
+  No commit, push, deployment, or live-production claim is made.

@@ -14,6 +14,7 @@ import {
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NATIVE_DEFAULT_LIGHT_QUALITY,
   NATIVE_REGION_LIGHT_ENTRY,
+  nativeRegionLightManagerPlan,
   nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
   type NativeBoneyardLightSource,
@@ -71,8 +72,10 @@ export class BoneyardRegionLightField {
     renderer: Renderer,
     sources: readonly NativeBoneyardLightSource[],
     camera: Camera,
+    viewport: GameViewportLayout,
   ): void {
-    this.syncSourceSprites(sources, camera)
+    const manager = nativeRegionLightManagerPlan({ camera, viewport }, this.quality)
+    this.syncSourceSprites(sources, manager.topLeft)
     renderer.render({
       clear: true,
       clearColor: 0x000000,
@@ -80,10 +83,10 @@ export class BoneyardRegionLightField {
       target: this.renderTexture,
     })
     this.composite.position.set(
-      camera.x - this.logicalSide / 2 / camera.zoom,
-      camera.y - this.logicalSide / 2 / camera.zoom,
+      manager.topLeft.x,
+      manager.topLeft.y,
     )
-    this.composite.scale.set(1 / camera.zoom)
+    this.composite.scale.set(1)
   }
 
   resize(viewport: GameViewportLayout, resolution: number): void {
@@ -124,7 +127,7 @@ export class BoneyardRegionLightField {
 
   private syncSourceSprites(
     sources: readonly NativeBoneyardLightSource[],
-    camera: Camera,
+    topLeft: Readonly<{ x: number; y: number }>,
   ): void {
     while (this.sourceSprites.length < sources.length) {
       const sprite = new Sprite(this.glyph)
@@ -138,9 +141,9 @@ export class BoneyardRegionLightField {
       sprite.visible = Boolean(source)
       if (!source) continue
       const stamp = nativeRegionLightStamp(source, {
-        x: (source.position.x - camera.x) * camera.zoom + this.logicalSide / 2,
-        y: (source.position.y - camera.y) * camera.zoom + this.logicalSide / 2,
-      }, this.glyphRef, camera.zoom)
+        x: source.position.x - topLeft.x,
+        y: source.position.y - topLeft.y,
+      }, this.glyphRef, 1)
       sprite.alpha = stamp.alpha
       sprite.anchor.set(stamp.anchorX, stamp.anchorY)
       sprite.position.set(stamp.x, stamp.y)

@@ -21,10 +21,12 @@ import type { MainLayer, ObjectSpriteLayer } from '../../editor/native-render-pl
 import {
   drawNativeBoneyardForegroundBand,
   drawNativeBoneyardMainBand,
+  drawNativeBoneyardPreMainWallBand,
   drawNativeBoneyardPostRoadBase,
   NATIVE_BONEYARD_POST_ROAD_TEXTURES,
   nativeBoneyardForegroundLayers,
   nativeBoneyardMainLayers,
+  nativeBoneyardPreMainWallLayers,
   type Camera,
 } from '../../editor/render.ts'
 import {
@@ -239,9 +241,14 @@ import {
 } from './native-arena-render-pipeline.ts'
 import {
   createNativeBuildingSurfaceMesh,
-  type NativeBuildingSurfaceMesh,
+  createNativeWallSurfaceMesh,
+  type NativeStaticSurfaceMesh,
 } from './boneyard-building-surface-view.ts'
-import { nativeBuildingLightGrid } from './boneyard-static-surface-lighting.ts'
+import {
+  nativeBuildingLightGrid,
+  nativeWallSurfaceVertexWeights,
+  writeNativeWallVertexScalars,
+} from './boneyard-static-surface-lighting.ts'
 import {
   cropBoneyardStaticPixels,
   type BoneyardStaticPixelRegion,
@@ -439,6 +446,10 @@ interface BoneyardRendererFrameDiagnostics {
   weatherSplashCount: number
   weatherSplashZIndex: number
   weatherStreakZIndex: number
+  wallCount: number
+  wallVertexLightMaximum: number
+  wallVertexLightMinimum: number
+  wallVisibleCount: number
   worldFeedbackMagnitude: number
   worldShakeX: number
   worldShakeY: number
@@ -486,15 +497,23 @@ interface ResidentTexture extends BoneyardBounds {
   pixels: Uint8ClampedArray
   shadowCaster: NativeBoneyardComplexShadowCaster | null
   sprite: Container
-  surfaceMesh: NativeBuildingSurfaceMesh | null
+  surfaceMesh: NativeStaticSurfaceMesh | null
   texture: Texture
 }
 
 interface BuildingResidents {
-  main: ResidentTexture & { surfaceMesh: NativeBuildingSurfaceMesh }
-  roof: ResidentTexture & { surfaceMesh: NativeBuildingSurfaceMesh }
+  main: ResidentTexture & { surfaceMesh: NativeStaticSurfaceMesh }
+  roof: ResidentTexture & { surfaceMesh: NativeStaticSurfaceMesh }
   samplePoints: readonly Vec2[]
   scalars: Float32Array
+}
+
+interface WallResident {
+  end: Vec2
+  resident: ResidentTexture & { surfaceMesh: NativeStaticSurfaceMesh }
+  scalars: Float32Array
+  start: Vec2
+  vertexWeights: Float32Array
 }
 
 interface TreeResidents {
@@ -517,6 +536,7 @@ interface StaticWorldBuild {
   surface: NativeBoneyardSurfaceView
   treeInputs: readonly NativeTreeOcclusionInput[]
   treeResidents: ReadonlyMap<string, TreeResidents>
+  wallResidents: ReadonlyMap<number, WallResident>
 }
 
 class BoneyardResidentVisibility {
@@ -667,6 +687,7 @@ export async function createBoneyardWorldRenderer(
     staticWorld.treeInputs,
     staticWorld.treeResidents,
     staticWorld.buildingResidents,
+    staticWorld.wallResidents,
     options.initialSnapshot,
     modTextures,
     options.modCatalog,
@@ -704,6 +725,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.arenaGroundRenderer = 'retail-editor-field-capture-web-override'
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
   canvas.dataset.buildingLightingGrid = NATIVE_BROWSER_ENHANCED_EFFECTS ? '3x3' : '2x2'
+  canvas.dataset.wallLighting = 'native-endpoint-vertex-gradient'
   canvas.dataset.complexShadows = 'native-indexed-owner-mesh'
   canvas.dataset.treeComplexShadowOutline = 'native-main-variant-table'
   canvas.dataset.rendererName = application.renderer.name
@@ -891,6 +913,10 @@ export async function createBoneyardWorldRenderer(
     weatherSplashCount: 0,
     weatherSplashZIndex: Number.NaN,
     weatherStreakZIndex: Number.NaN,
+    wallCount: staticWorld.wallResidents.size,
+    wallVertexLightMaximum: 0,
+    wallVertexLightMinimum: 0,
+    wallVisibleCount: 0,
     worldFeedbackMagnitude: 0,
     worldShakeX: 0,
     worldShakeY: 0,
@@ -1061,6 +1087,7 @@ export async function createBoneyardWorldRenderer(
         application.renderer,
         scene.currentLightSources,
         camera,
+        viewport,
       )
       for (const event of snapshot.secondaryAbilities.events) {
         secondaryScreenFeedback.consume(event, {
@@ -1386,6 +1413,10 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.weatherSplashCount = scene.weatherSplashCount
       frameDiagnostics.weatherSplashZIndex = painter.weatherLightingOrder.splashZIndex
       frameDiagnostics.weatherStreakZIndex = painter.weatherLightingOrder.streakZIndex
+      frameDiagnostics.wallCount = painter.wallCount
+      frameDiagnostics.wallVertexLightMaximum = painter.wallVertexLightMaximum
+      frameDiagnostics.wallVertexLightMinimum = painter.wallVertexLightMinimum
+      frameDiagnostics.wallVisibleCount = painter.wallVisibleCount
       frameDiagnostics.worldFeedbackMagnitude = feedbackMagnitude
       frameDiagnostics.regionLightCompositeZIndex = (
         painter.weatherLightingOrder.lightCompositeZIndex
@@ -1430,6 +1461,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.weatherSplashCount = `${scene.weatherSplashCount}`
       canvas.dataset.weatherSplashZIndex = `${painter.weatherLightingOrder.splashZIndex}`
       canvas.dataset.weatherStreakZIndex = `${painter.weatherLightingOrder.streakZIndex}`
+      canvas.dataset.wallVisibleCount = `${painter.wallVisibleCount}`
       canvas.dataset.regionLightCompositeZIndex = `${
         painter.weatherLightingOrder.lightCompositeZIndex
       }`
@@ -1449,6 +1481,8 @@ export async function createBoneyardWorldRenderer(
       resolution = nextResolution
       application.renderer.resize(viewport.width, viewport.height, resolution)
       regionLightField.resize(viewport, resolution)
+      frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
+      frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
       drawSecondaryScreenFlash(secondaryScreenFlash, viewport)
       canvas.dataset.resolution = `${resolution}`
       canvas.dataset.viewportHeight = `${viewport.height}`
@@ -1477,6 +1511,8 @@ export async function createBoneyardWorldRenderer(
       cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
       lightQuality = gameLightQuality(settings)
       regionLightField.setQuality(lightQuality, viewport, resolution)
+      frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
+      frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
       canvas.dataset.cameraZoom = `${cameraZoom}`
       canvas.dataset.complexLighting = `${settings.complexLighting}`
       canvas.dataset.complexShadowsEnabled = `${settings.complexShadows}`
@@ -1567,6 +1603,10 @@ interface BoneyardPainterFrame {
   solomonPainterRow: number
   solomonZIndex: number
   weatherLightingOrder: NativeBoneyardWeatherLightingOrder
+  wallCount: number
+  wallVertexLightMaximum: number
+  wallVertexLightMinimum: number
+  wallVisibleCount: number
 }
 
 interface RegisteredBoneyardLightProviderOwner {
@@ -1624,6 +1664,7 @@ class BoneyardDynamicScene {
   private readonly textures: BoneyardWorldTextures
   private readonly treeOcclusion: BoneyardTreeOcclusionPresentation
   private readonly treeResidents: ReadonlyMap<string, TreeResidents>
+  private readonly wallResidents: ReadonlyMap<number, WallResident>
   private readonly visibleShadowDepthOwners: ContainerChild[] = []
   private readonly weather: NativeBoneyardWeather
   private readonly weatherView: NativeBoneyardWeatherView
@@ -1641,6 +1682,7 @@ class BoneyardDynamicScene {
     treeInputs: readonly NativeTreeOcclusionInput[],
     treeResidents: ReadonlyMap<string, TreeResidents>,
     buildingResidents: ReadonlyMap<string, BuildingResidents>,
+    wallResidents: ReadonlyMap<number, WallResident>,
     initialSnapshot: GameSnapshot,
     modTextures: ModPresentationTextures,
     modCatalog: readonly ModConsumableCatalogEntry[],
@@ -1664,6 +1706,7 @@ class BoneyardDynamicScene {
     )
     this.treeResidents = treeResidents
     this.buildingResidents = buildingResidents
+    this.wallResidents = wallResidents
     this.primarySpells = new PrimarySpellWorldView(root, textures)
     this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer)
     this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
@@ -2215,6 +2258,33 @@ class BoneyardDynamicScene {
         buildingBaseRoofColorMismatchCount += 1
       }
     }
+    let wallVertexLightMaximum = 0
+    let wallVertexLightMinimum = 1
+    let wallVisibleCount = 0
+    for (const wall of this.wallResidents.values()) {
+      if (!wall.resident.sprite.renderable) continue
+      wallVisibleCount += 1
+      const startScalar = settings.complexLighting
+        ? nativeBoneyardSurfaceLightScalar(wall.start, this.lightIndex)
+        : 1
+      const endScalar = settings.complexLighting
+        ? nativeBoneyardSurfaceLightScalar(wall.end, this.lightIndex)
+        : 1
+      writeNativeWallVertexScalars(
+        wall.scalars,
+        wall.vertexWeights,
+        startScalar,
+        endScalar,
+      )
+      wall.resident.surfaceMesh.update(wall.scalars)
+      wall.resident.sprite.tint = 0xffffff
+      for (const scalar of wall.scalars) {
+        wallVertexLightMaximum = Math.max(wallVertexLightMaximum, scalar)
+        wallVertexLightMinimum = Math.min(wallVertexLightMinimum, scalar)
+        maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
+        minMainLightScalar = Math.min(minMainLightScalar, scalar)
+      }
+    }
     const treePresentations = this.treeOcclusion.update(
       snapshot.tick,
       localPlayer.position,
@@ -2698,6 +2768,10 @@ class BoneyardDynamicScene {
       solomonPainterRow: solomonPainter?.row ?? Number.NaN,
       solomonZIndex: solomonPainter?.zIndex ?? Number.NaN,
       weatherLightingOrder,
+      wallCount: this.wallResidents.size,
+      wallVertexLightMaximum,
+      wallVertexLightMinimum: wallVisibleCount > 0 ? wallVertexLightMinimum : 0,
+      wallVisibleCount,
     }
   }
 
@@ -3277,25 +3351,70 @@ async function buildStaticWorld(
   const treeMainResidents = new Map<string, ResidentTexture>()
   const treeInputs: NativeTreeOcclusionInput[] = []
   const treeResidents = new Map<string, TreeResidents>()
+  const wallResidents = new Map<number, WallResident>()
   const residentScratch = documentNodeCanvas(0, 0)
   const surface = new NativeBoneyardSurfaceView(base, scene, surfaceTextures)
   let staticPaintCount = 0
   let fullBaseResidents: ResidentTexture[] = []
   let cleanupPlan: ReturnType<typeof boneyardOffCameraCleanupPlan> | null = null
+  const mainLayers = nativeBoneyardMainLayers(document)
+  const wallLayers = nativeBoneyardPreMainWallLayers(document)
+  const wallSourceKeys = new Set(wallLayers.map((layer) => `fence:${layer.fence.eid}`))
   try {
     fullBaseResidents = await buildTiledStaticLayer(
       document,
       base,
       true,
       (context, width, height, camera) => {
-        drawNativeBoneyardPostRoadBase(context, width, height, camera, document)
+        drawNativeBoneyardPostRoadBase(
+          context,
+          width,
+          height,
+          camera,
+          document,
+          [],
+          wallSourceKeys,
+        )
         staticPaintCount += 1
       },
     )
     residents.push(...fullBaseResidents)
     activeResidents.push(...fullBaseResidents)
 
-    const mainLayers = nativeBoneyardMainLayers(document)
+    for (let layerIndex = 0; layerIndex < wallLayers.length; layerIndex += 1) {
+      const layer = wallLayers[layerIndex]!
+      const resident = buildPreMainWallResident(
+        document,
+        layer,
+        layerIndex,
+        mainLayers.length + layerIndex,
+        residentScratch,
+      )
+      staticPaintCount += 1
+      if (resident) {
+        base.addChild(resident.sprite)
+        residents.push(resident)
+        activeResidents.push(resident)
+        const shadowCaster = resident.shadowCaster
+        if (shadowCaster?.program?.kind !== 'wall') {
+          throw new Error(`Wall ${layer.fence.eid} lost its native shadow program.`)
+        }
+        shadowCasters.push({ caster: shadowCaster, depthOwner: resident.sprite })
+        wallResidents.set(layerIndex, {
+          end: { ...shadowCaster.program.end },
+          resident: resident as WallResident['resident'],
+          scalars: new Float32Array(4),
+          start: { ...shadowCaster.program.start },
+          vertexWeights: nativeWallSurfaceVertexWeights(
+            resident,
+            shadowCaster.program.start,
+            shadowCaster.program.end,
+          ),
+        })
+      }
+      if (layerIndex % 12 === 11) await nextFrame()
+    }
+
     for (let layerIndex = 0; layerIndex < mainLayers.length; layerIndex += 1) {
       const layer = mainLayers[layerIndex]
       if (isMovingGateBody(layer)) continue
@@ -3432,7 +3551,11 @@ async function buildStaticWorld(
         build.offCameraCleanupApplied
         || cleanupPlan === null
       ) return
-      repaintCleanedBase(document, fullBaseResidents, cleanupPlan.retiredSourceKeys)
+      repaintCleanedBase(
+        document,
+        fullBaseResidents,
+        new Set([...wallSourceKeys, ...cleanupPlan.retiredSourceKeys]),
+      )
       surface.applyOffCameraCleanup(cleanupPlan.retiredSourceKeys)
       let retiredStaticResidentCount = 0
       const retainedResidents = activeResidents.filter((resident) => {
@@ -3464,6 +3587,7 @@ async function buildStaticWorld(
     surface,
     treeInputs,
     treeResidents,
+    wallResidents,
   }
   return build
 }
@@ -3597,6 +3721,44 @@ function buildMainLayerResident(
     document,
     layer,
     layerIndex,
+  )
+  return resident
+}
+
+function buildPreMainWallResident(
+  document: EditorDoc,
+  layer: Extract<MainLayer, { kind: 'fence' }>,
+  wallLayerIndex: number,
+  shadowLayerIndex: number,
+  canvas: HTMLCanvasElement,
+): ResidentTexture | null {
+  const bounds = mainLayerCaptureBounds(layer)
+  resizeCanvas(canvas, bounds.w, bounds.h)
+  const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
+  if (!context) throw new Error('Boneyard Wall layer could not acquire Canvas2D.')
+  drawNativeBoneyardPreMainWallBand(
+    context,
+    bounds.w,
+    bounds.h,
+    {
+      x: bounds.x + bounds.w / 2,
+      y: bounds.y + bounds.h / 2,
+      zoom: 1,
+    },
+    document,
+    [wallLayerIndex],
+  )
+  const pixels = consumePaintedCanvas(canvas, true)
+  if (!pixels) return null
+  const resident = wallSurfaceResidentTexture(
+    pixels,
+    bounds.x + pixels.x,
+    bounds.y + pixels.y,
+  )
+  resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(
+    document,
+    layer,
+    shadowLayerIndex,
   )
   return resident
 }
@@ -3744,6 +3906,35 @@ function buildingSurfaceResidentTexture(
   surfaceMesh.mesh.label = mainLayerIndex === null
     ? 'native-building-roof'
     : 'native-building-base'
+  return {
+    cleanupSourceKey: null,
+    h: source.height,
+    mainLayerIndex,
+    pixels: source.pixels,
+    shadowCaster: null,
+    sprite: surfaceMesh.mesh,
+    surfaceMesh,
+    texture,
+    w: source.width,
+    x,
+    y,
+  }
+}
+
+function wallSurfaceResidentTexture(
+  source: BoneyardStaticPixelRegion,
+  x: number,
+  y: number,
+  mainLayerIndex: number | null = null,
+): ResidentTexture {
+  const texture = residentPixelTexture(source)
+  const surfaceMesh = createNativeWallSurfaceMesh(
+    texture,
+    source.width,
+    source.height,
+  )
+  surfaceMesh.mesh.position.set(x, y)
+  surfaceMesh.mesh.label = 'native-wall-body'
   return {
     cleanupSourceKey: null,
     h: source.height,

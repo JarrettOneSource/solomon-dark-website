@@ -61,7 +61,7 @@ import {
 } from '../core-kernels/player-character.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import {
-  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_RADIUS,
   NATIVE_PLAYER_LIGHT_OFFSET,
   NATIVE_PLAYER_LIGHT_RADIUS,
@@ -1152,7 +1152,7 @@ function boneyardSpawnLightSources(
   }
   if (world.lanternPosition !== null) {
     sources.push({
-      intensity: NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+      intensity: NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
       position: world.lanternPosition,
       radius: NATIVE_LANTERN_LIGHT_RADIUS,
     })

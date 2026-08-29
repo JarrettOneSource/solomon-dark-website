@@ -12,6 +12,13 @@ export interface NativeBuildingMeshGrid {
   uvs: Float32Array
 }
 
+export interface NativeStaticSurfaceBounds {
+  h: number
+  w: number
+  x: number
+  y: number
+}
+
 interface NativeBuildingLightGridInput {
   enhancedEffects: boolean
   position: Vec2
@@ -82,12 +89,52 @@ export function nativeBuildingMeshGrid(
   return { indices, positions, uvs }
 }
 
-export function writeNativeBuildingVertexColors(
+export function nativeWallSurfaceVertexWeights(
+  bounds: NativeStaticSurfaceBounds,
+  start: Vec2,
+  end: Vec2,
+): Float32Array {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  const weights = new Float32Array(4)
+  if (lengthSquared === 0) return weights
+  const corners = [
+    { x: bounds.x, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y },
+    { x: bounds.x, y: bounds.y + bounds.h },
+    { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+  ]
+  for (let index = 0; index < corners.length; index += 1) {
+    const corner = corners[index]!
+    weights[index] = Math.max(0, Math.min(1, (
+      (corner.x - start.x) * dx + (corner.y - start.y) * dy
+    ) / lengthSquared))
+  }
+  return weights
+}
+
+export function writeNativeWallVertexScalars(
+  scalars: Float32Array,
+  weights: ArrayLike<number>,
+  startScalar: number,
+  endScalar: number,
+): void {
+  if (scalars.length !== weights.length) {
+    throw new Error('Native Wall scalar buffer does not match its lighting weights.')
+  }
+  const range = endScalar - startScalar
+  for (let index = 0; index < weights.length; index += 1) {
+    scalars[index] = Math.fround(startScalar + range * weights[index]!)
+  }
+}
+
+export function writeNativeStaticSurfaceVertexColors(
   colors: Uint8Array,
   scalars: ArrayLike<number>,
 ): void {
   if (colors.length !== scalars.length * 4) {
-    throw new Error('Native Building color buffer does not match its lighting grid.')
+    throw new Error('Native static-surface color buffer does not match its lighting grid.')
   }
   for (let index = 0; index < scalars.length; index += 1) {
     const lane = Math.trunc(Math.max(0, Math.min(1, scalars[index]!)) * 255)

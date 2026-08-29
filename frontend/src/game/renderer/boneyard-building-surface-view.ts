@@ -14,20 +14,20 @@ import {
 
 import {
   nativeBuildingMeshGrid,
-  writeNativeBuildingVertexColors,
+  writeNativeStaticSurfaceVertexColors,
 } from './boneyard-static-surface-lighting.ts'
 import {
   NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
 } from './native-arena-render-pipeline.ts'
 
-export interface NativeBuildingSurfaceMesh {
+export interface NativeStaticSurfaceMesh {
   readonly colors: Uint8Array
   readonly mesh: Mesh<MeshGeometry, Shader>
   destroy(): void
   update(scalars: ArrayLike<number>): void
 }
 
-const NATIVE_BUILDING_SURFACE_PROGRAM = compileHighShaderGlProgram({
+const NATIVE_STATIC_SURFACE_PROGRAM = compileHighShaderGlProgram({
   bits: [
     colorBitGl,
     localUniformBitGl,
@@ -35,7 +35,7 @@ const NATIVE_BUILDING_SURFACE_PROGRAM = compileHighShaderGlProgram({
     roundPixelsBitGl,
     NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
   ],
-  name: 'native-building-surface',
+  name: 'native-static-surface',
 })
 
 export function createNativeBuildingSurfaceMesh(
@@ -43,18 +43,35 @@ export function createNativeBuildingSurfaceMesh(
   width: number,
   height: number,
   enhancedEffects: boolean,
-): NativeBuildingSurfaceMesh {
+): NativeStaticSurfaceMesh {
+  return createNativeStaticSurfaceMesh(texture, width, height, enhancedEffects)
+}
+
+export function createNativeWallSurfaceMesh(
+  texture: Texture,
+  width: number,
+  height: number,
+): NativeStaticSurfaceMesh {
+  return createNativeStaticSurfaceMesh(texture, width, height, false)
+}
+
+function createNativeStaticSurfaceMesh(
+  texture: Texture,
+  width: number,
+  height: number,
+  enhancedEffects: boolean,
+): NativeStaticSurfaceMesh {
   const grid = nativeBuildingMeshGrid(width, height, enhancedEffects)
   const colors = new Uint8Array(grid.positions.length * 2)
   colors.fill(255)
   const colorBuffer = new Buffer({
     data: colors,
-    label: 'native-building-surface-colors',
+    label: 'native-static-surface-colors',
     shrinkToFit: false,
     usage: BufferUsage.VERTEX | BufferUsage.COPY_DST,
   })
   const shader = new Shader({
-    glProgram: NATIVE_BUILDING_SURFACE_PROGRAM,
+    glProgram: NATIVE_STATIC_SURFACE_PROGRAM,
     resources: {
       textureUniforms: {
         uTextureMatrix: {
@@ -92,7 +109,7 @@ export function createNativeBuildingSurfaceMesh(
       mesh.geometry.destroy(true)
     },
     update(scalars) {
-      writeNativeBuildingVertexColors(colors, scalars)
+      writeNativeStaticSurfaceVertexColors(colors, scalars)
       colorBuffer.update()
     },
   }
