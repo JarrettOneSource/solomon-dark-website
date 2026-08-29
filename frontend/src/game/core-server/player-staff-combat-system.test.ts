@@ -168,6 +168,61 @@ test('Disabling Hit permanently multiplies target-owned movement and action lane
   )
 })
 
+test('a departed target leaves every non-normal Staff outcome silent at its marker', () => {
+  const rankedEntities = rankPlayerSkill(staffFixture().playerEntities, 71, 9)
+  for (const outcome of [
+    'knockback',
+    'disabling-hit',
+    'critical-hit',
+    'whirl',
+  ] as const) {
+    let context = staffFixture(rankedEntities)
+    context = {
+      ...context,
+      rng: createNativeRng(seedForOutcome(context.playerEntities, outcome)),
+    }
+    let result = stepPlayerStaffCombatSystem(context)
+    const action = result.spells.transients[0]
+    assert.ok(action && (
+      action.kind === 'player-staff-melee' || action.kind === 'player-staff-spin'
+    ))
+    assert.equal(action.outcome, outcome)
+    result = {
+      ...result,
+      enemies: { ...result.enemies, actors: [] },
+    }
+
+    for (let tick = 2; tick < 100; tick += 1) {
+      result = stepPlayerStaffCombatSystem({
+        ...context,
+        enemies: result.enemies,
+        playerEntities: result.playerEntities,
+        players: result.players,
+        rng: result.rng,
+        spells: result.spells,
+        tick,
+      })
+      if (result.spells.transients.some(({ kind }) => kind === 'player-staff-contact')) break
+    }
+
+    const contact = result.spells.transients.find(({ kind }) => kind === 'player-staff-contact')
+    assert.ok(contact && contact.kind === 'player-staff-contact')
+    assert.equal(contact.outcome, outcome)
+    assert.deepEqual(contact.targetIds, [])
+    assert.equal(contact.procSound, null)
+    assert.deepEqual(contact.procSoundPitches, [])
+    assert.equal(
+      result.spells.transients.some(({ kind }) => (
+        kind === 'player-staff-smoke'
+        || kind === 'player-staff-move-fade'
+        || kind === 'player-staff-perspective-fade'
+        || kind === 'player-staff-knockback'
+      )),
+      false,
+    )
+  }
+})
+
 test('a lethal proc still owns its same-contact Knockback actor', () => {
   let context = staffFixture(rankPlayerSkill(staffFixture().playerEntities, 71, 9))
   context = {
@@ -319,7 +374,7 @@ function rankPlayerSkill(
 
 function seedForOutcome(
   playerEntities: PlayerEntityStore,
-  outcome: 'normal' | 'knockback' | 'disabling-hit',
+  outcome: 'normal' | 'knockback' | 'disabling-hit' | 'critical-hit' | 'whirl',
 ): number {
   const derived = playerSkillDerivedStatsAt(playerEntities, PLAYER_ID)!
   const skillBook = playerSkillBookAt(playerEntities, PLAYER_ID)!

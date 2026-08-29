@@ -3315,6 +3315,58 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedStaff.type, 'server-snapshot')
   assert.deepEqual(decodedStaff.frame.primarySpells.transients, staffTransients)
+  const staffContact = staffTransients[2]
+  const staffProcCases = [
+    ['normal', null, []],
+    ['knockback', 'knockback', [1.03]],
+    ['disabling-hit', 'disable-enemy', [1]],
+    ['critical-hit', 'critical-hit', [1.03]],
+    ['whirl', 'spin-attack', [1, Math.fround(0.9), Math.fround(1.1)]],
+  ] as const
+  for (const [outcome, procSound, procSoundPitches] of staffProcCases) {
+    const targetedContact = {
+      ...staffContact,
+      outcome,
+      procSound,
+      procSoundPitches,
+    }
+    assert.doesNotThrow(() => decodeFrame({
+      ...frame,
+      primarySpells: { nextId: 10, projectiles: [], transients: [targetedContact] },
+    }))
+
+    const targetlessContact = {
+      ...targetedContact,
+      impactSoundPitches: [],
+      pikeBreakSoundIndexes: [],
+      procSound: null,
+      procSoundPitches: [],
+      targetIds: [],
+    }
+    assert.doesNotThrow(() => decodeFrame({
+      ...frame,
+      primarySpells: { nextId: 10, projectiles: [], transients: [targetlessContact] },
+    }))
+
+    if (procSound !== null) {
+      assert.throws(() => decodeFrame({
+        ...frame,
+        primarySpells: {
+          nextId: 10,
+          projectiles: [],
+          transients: [{ ...targetlessContact, procSound, procSoundPitches }],
+        },
+      }), /proc sound/)
+      assert.throws(() => decodeFrame({
+        ...frame,
+        primarySpells: {
+          nextId: 10,
+          projectiles: [],
+          transients: [{ ...targetedContact, procSound: null, procSoundPitches: [] }],
+        },
+      }), /proc sound/)
+    }
+  }
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {

@@ -312,3 +312,219 @@ green, and the production frontend/game-host build plus bundle-budget gate
 passed. Browser Staff/Deflect/cast-speed/equipment journeys, Mac mini, and
 publication receipts remain deliberately pending until Skill Book, Welding,
 the residual per-skill audit, and the final Mac/browser gate close.
+
+## 2026-08-29 — Production Staff miss/proc wire reopening
+
+### Reported smell and parity question
+
+- Production Website `e7addc2b9ec7dfeed88d2208853150e976ab7979`, protocol
+  105, remained active with zero game or Website process restarts, but four
+  shared-Boneyard frames at `2026-08-29T17:37:31Z`, `17:39:15Z`,
+  `17:39:53Z`, and `17:43:29Z` disconnected both connected browsers with code
+  `4008`. Every close reason was
+  `frame.primarySpells.transients[<index>] proc sound does not match its outcome`.
+- Seven submitted protocol-105 diagnostic archives, `DiagnosticLogs` rows
+  72..78, independently retain the same `client-error` at transient indexes
+  13, 5, 2, and 12. The service journal contains no paired
+  `simulation.tick_failed`, uncaught exception, or unhandled rejection.
+- This is a secondary report in the already-covered automatic Staff contact
+  system. The earlier closure recovered that action outcome is chosen at
+  admission while marker-time targets are queried later, and explicitly
+  dispositioned the target-departure branch. It nevertheless tested strict
+  protocol only with a successful target, incorrectly making the proc cue a
+  function of the earlier outcome alone. That omitted zero-accepted-target
+  codec member is the process failure reopened here.
+- Falsifiers: a full authoritative contact event with a mismatched cue; a
+  targetless normal outcome that also fails; a correct name with only an
+  invalid pitch; or failure limited to compact-delta/stale-baseline
+  reconstruction would disprove the leading model.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Live production | NFO `chicago-quad36-h-10-m7b`; `solomon-dark-game.service`; deployed SHA above; protocol 105 | Four two-player close clusters share the exact Staff proc validator reason. The supervisor, Website, and Caddy remain active; both application units report `NRestarts=0`. | high-live |
+| Submitted browser diagnostics | private `DiagnosticLogs` rows 72..78, captured `2026-08-29T17:37:34Z..17:43:32Z` | All seven archives report `client-error`, no dropped entries, and the same strict decoder stack in `game-protocol`; they differ only in the live transient index. | high-live |
+| Existing retail instructions | sealed retail `SolomonDark.exe` 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; `PlayerWizard_StartStaffAction 0x00537AA0`, action callback `0x00550180`, `PlayerWizard_StaffContact 0x0053B9F0` | Outcome RNG belongs to action admission. Damage and physical target membership are re-queried at the later marker. A proc cue belongs only to a successful proc/contact, not to an outcome whose target set has become empty. | high-existing |
+| Current producer trace | `stepPlayerStaffCombatSystem -> applyStaffContact -> createNativeStaffContactPresentation` at `e7addc2b` | The host preserves the action outcome but passes only accepted marker-time target IDs. The presentation producer correctly leaves `procSound` null, pitch list empty, and proc VFX absent when that list is empty. | high |
+| Current decoder trace | `game-protocol.ts`, validator introduced by `ba77b8982` | The decoder derives expected cue and pitch count solely from `outcome`, so every legal targetless Knockback, Disable, Critical, or Whirl event is rejected before either client can present it. | high |
+
+No new retail fact is required. The existing Staff/contact instruction record
+already owns the complete action-versus-marker timing and successful-only cue
+contract; this reopening corrects the Website protocol member that failed to
+consume it.
+
+### System boundary and membership inventory
+
+Native system: **automatic Staff action, marker-time accepted contact, and
+retained presentation wire lifecycle**, from outcome selection through the
+later damage/physical queries, cue/VFX construction, keyframe/delta decoding,
+audio replay identity, observer hydration, and teardown.
+
+| Member / branch | Native/web owner | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Normal outcome, zero accepted targets | action plus marker query | `verified-already-at-parity` | no proc cue/pitches/VFX; targetless event round-trips |
+| Normal outcome, one or more accepted targets | marker damage owner | `verified-already-at-parity` | hit-wood physical cues remain independent; no proc cue |
+| Knockback, Disable, Critical, or Whirl with accepted targets | `0x0053B9F0` successful proc branches | `verified-already-at-parity` | exact sound identity, pitch cardinality/range, VFX, damage, and retained actors remain strict |
+| Same four non-normal outcomes after every target leaves, dies, or rejects damage before the marker | action outcome plus current marker target query | `exact-ported` by this reopening | outcome remains authored; target IDs, proc sound, proc pitches, and proc VFX are empty; frame decodes |
+| Two players acting on the same short-lived target | Website multiplayer authority adaptation | `exact-ported` by the same rule | one player's earlier accepted action cannot make the other player's later miss protocol-invalid |
+| Damage target query versus physical-contact query | separate native passes in `0x0053B9F0` | `verified-already-at-parity` | hit-wood/Ether/Pike sound indexes remain legal even when the damage/proc target list is empty |
+| Staff contact full keyframe | host snapshot projection and shared decoder | `exact-ported` | targetless non-normal event survives full-frame validation without widening invalid combinations |
+| Compact delta, baseline recovery, and late join | replication/reconstructor plus shared decoder | `exact-ported` | the same event identity and fields reconstruct; no index-based repair or fallback |
+| Player and developer-observer recipients | shared projected frame | `exact-ported` | both recipients accept the same targetless event; truly invalid cue/outcome pairs still fail closed |
+| Generated Boneyard, Tutorial lesson 11, and custom/mod Arena | shared Staff combat owner | `exact-ported` by shared validator rule | no scene exception; target departure/multiplayer race is safe in each combat-enabled scene |
+| Cue playback and replay suppression | `primary-spell-audio.ts`, contact-event identity | `verified-already-at-parity` | null cue remains silent; successful cues play once at their exact pitches |
+| action retirement, player death/disconnect, world replacement | existing Staff/transient teardown | `verified-already-at-parity` | no event, audio identity, or repair state crosses teardown |
+| malformed targetless event carrying a proc cue, or targeted event carrying the wrong cue/pitches | strict protocol boundary | `verified-already-at-parity` after conditional correction | remains rejected; the fix admits only the recovered empty-target state |
+
+There is no browser-platform exception or approximation.
+
+### Native ownership thread and recovered contract
+
+- `0x00537AA0` chooses the action outcome and owns its RNG before the action
+  advances. The marker callback occurs later: melee crosses progress three;
+  Whirl reaches countdown zero on tick 18.
+- `0x0053B9F0` re-queries the current damage shape and the separate physical
+  contact list. A target admitted at action start can legally be absent,
+  already dying, or otherwise unaccepted at the marker.
+- The retained contact event keeps the selected outcome for action/presentation
+  provenance. A proc cue, proc pitch sequence, and proc VFX exist only when at
+  least one marker-time damage target is accepted. Physical hit-wood and Pike
+  cues are a separate list and do not synthesize a successful proc.
+- Website authority constructs that exact state once. Player and observer
+  decoders must validate it identically on full and reconstructed frames. No
+  client may infer a missing cue, rewrite the outcome, drop the event, or
+  suppress a protocol error for genuinely inconsistent fields.
+
+### Nearby-system findings
+
+- The one `simulation.tick_lag` warning and three ordinary code-`1001` browser
+  departures in the same live window have no matching decoder failure or
+  process crash. Baseline-missing warnings recovered through their existing
+  keyframe path. They are not causal members of this crash.
+- The generic validator error covers cue identity, pitch cardinality/range,
+  and swoosh pitch. The seven diagnostics alone do not identify which
+  subpredicate failed; the deterministic host producer and targetless branch
+  provide the discriminating evidence. Broadly relaxing pitch checks would
+  patch the message rather than the cause.
+
+### Confidence and open questions
+
+- Confirmed: production revision/protocol/timestamps, four shared two-client
+  failures, seven matching archives, no host-process failure, the producer's
+  target-conditioned cue construction, the decoder's outcome-only assertion,
+  and the already-recovered retail action/marker ownership.
+- Inferred: each production frame lost its last accepted damage target between
+  Staff admission and marker. The bounded archives do not retain raw frames,
+  but every reachable targetless non-normal event deterministically throws the
+  exact reported predicate while successful events and targetless normal
+  events do not.
+- Unknowns material to implementation: none. A raw production frame is not
+  needed to distinguish the validator bug once the exact producer state
+  reproduces the same failure.
+
+### Web implementation consequence and validation contract
+
+- Keep host simulation, outcome RNG, target queries, damage, cue/VFX
+  construction, audio, and lifecycle unchanged. Decode `targetIds` once and
+  require a proc cue only when the accepted target list is nonempty and the
+  outcome is non-normal.
+- Preserve exact successful cue mappings and pitch contracts. Continue to
+  reject targetless events that carry a proc cue and targeted events with a
+  missing, wrong, or malformed cue.
+- Red/green protocol seam: materialize each of the five outcomes with zero
+  targets through the real presentation producer; protocol 105 must currently
+  fail the four non-normal rows with the production error, then the corrected
+  candidate must round-trip all five. Every targeted row and every invalid
+  cross-pair remains asserted separately.
+- System seam: start a non-normal Staff action, remove the target before its
+  marker, and require the resulting retained event to preserve outcome while
+  carrying no target/proc/VFX; project and decode the authoritative frame.
+- Mac Chrome: in a real two-player generated Boneyard, overlap Staff actions on
+  a short-lived enemy or otherwise remove the target before one marker. Require
+  the miss event on both player/observer recipients, continued connection, and
+  empty page, console, failed-response, wire-decode, and host-error arrays.
+- Run the complete supported Mac gate
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact rebased candidate.
+
+### Implementation validation receipt
+
+- Implementation: `game-protocol.ts` now decodes the accepted marker-time
+  Staff `targetIds` before validating proc presentation. Only a non-normal
+  outcome with at least one accepted target requires its exact cue and pitch
+  program. Targetless outcomes require null/empty proc presentation; targeted
+  events with a missing or wrong cue and targetless events with a fabricated
+  cue remain strict errors. Host simulation, outcome RNG, damage/physical
+  queries, VFX/audio construction, event lifetime, protocol 105, and save
+  schema are unchanged.
+- Regression coverage: the protocol matrix drains Normal, Knockback, Disable,
+  Critical, and Whirl with and without targets, and asserts both invalid
+  cross-directions. The real Staff system starts each of the four non-normal
+  action families, removes its target before the marker, and proves the
+  retained outcome has no target, cue, pitch, proc VFX, or Knockback actor.
+- Red Mac candidate `d778e002e7098b4263538aed8355cdb12d6a3564`
+  over base `e1655aae529294963fea6f5b21408f1373531a66` matched the local
+  two-file manifest byte-for-byte. The canonical gate reached the Boneyard
+  group and failed the new targetless case at
+  `game-protocol.test.ts:3346` with the exact production message. One
+  independent developer-observer test also timed out and is not used as crash
+  evidence. Red log SHA-256 is
+  `bbfa0d281fa2eeb079dd338cff552b2558c5257e19ee2adb1160b2de000ecfc1`.
+- First corrected candidate `c20631f59aa787335b7b4ff57a0b86165c2dca46`,
+  tree `817ab43fd1f08db117a0c3ee78b1dc043dce663a`, matched all four
+  changed files byte-for-byte on a clean detached Mac worktree. macOS 26.6.2
+  arm64 passed `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build
+  had zero warnings/errors; `29/29` Website/backend contracts passed; strict
+  formatting/lint/import/generated checks passed with 19 existing lint
+  warnings and zero errors; the Staff system appeared green in the `320/320`
+  prerequisite group; the protocol matrix appeared green in the complete
+  `1720/1720` Boneyard/host group; ML passed `76/76`; every remaining
+  frontend/desktop suite, production build, media policy, and bundle budget
+  passed. Production `Game-DfQHUQiO.js` measured `264578` raw / `80327` gzip
+  bytes against `524288` / `134144`. Green log SHA-256 is
+  `475ef75518563e40cc8a742adae84622e467d91783ecad1b6367cecfce9ed642`.
+- Mac Chrome `151.0.7922.174` loaded that production bundle, traversed the
+  ordinary title/Create/Hub/generated-Boneyard/Gate/Solomon lifecycle, and
+  admitted a rank-nine Staff action. A task-owned driver removed the staged
+  hostile at action age three and fixed the already-selected outcome to
+  Knockback. Host contact ID 2 and the independently reconstructed browser
+  frame both carried `targetIds=[]`, `procSound=null`, and zero proc pitches;
+  proc audio stayed at zero. The browser remained connected. Page/console,
+  failed-response, and wire-decode arrays were empty. Browser log SHA-256 is
+  `23337b8bf9d9655aa06c8411f61a83b9cacd745bf264c9f68fe96ed03d12ed76`;
+  reviewed WebGL Boneyard screenshot SHA-256 is
+  `8487200ada4a33286384e90a85cdbeee1cfbe7f24e01a7cda08efdd36a037e4a`.
+- Publication rebase incorporated concurrent Phasing commit
+  `6fb5551f079a20782a066600c2bb6f47afb29a59`. Exact pre-receipt
+  candidate `d851d952482ec98fe4f52b598348981a90c8eb0c`, tree
+  `3316f55ef0bcc958f0e72d04d0e09478e37aba4f`, and the clean detached
+  final Mac worktree again matched all four changed files byte-for-byte. The
+  first final gate attempt ran while Mac load exceeded 31 and hit three
+  unrelated game-host/social/heartbeat timing failures; Staff regression 214
+  and protocol regression 1372 remained green. That attempt changed no source;
+  its log SHA-256 is
+  `a28d51ce8ba18d33b612a0b7ba438e2adfa80d5c30bd4637511f8962b5bf43f5`.
+- The unchanged rebased candidate then passed the complete canonical gate
+  after the competing workflows cleared: `29/29` Website/backend contracts,
+  strict checks, `321/321` prerequisites, `1721/1721` Boneyard/host tests,
+  `76/76` ML tests, every remaining frontend/desktop suite, both production
+  builds, bundle budget, and media policy. `Game-LknY2ugJ.js` measured
+  `264578` raw / `80328` gzip bytes. Final gate-log SHA-256 is
+  `df180da554acf504d8b69addb8d7a927a99a7edc07dd2ad54c5b01ce39434fbd`.
+- The first final disposable driver attempt encountered a naturally selected
+  StaffSpin and incorrectly rewrote it to Knockback; protocol correctly
+  rejected that invalid kind/outcome pair. The corrected driver preserves
+  Whirl for StaffSpin and uses Knockback only for StaffMelee; no repository
+  source changed. Final Mac Chrome repeated the complete generated-Boneyard
+  journey, removed the target at action age one, and carried contact ID 2 as
+  targetless silent Knockback in both host state and the reconstructed browser
+  frame. The browser stayed connected, proc audio remained zero, the runtime
+  error surface stayed absent, and page/console, failed-response, and wire
+  arrays were empty. Final browser-log SHA-256 is
+  `9bd4c607283f30065f30ddafffb13032c764593574570861ea07da9257b93876`;
+  reviewed WebGL screenshot SHA-256 is
+  `2dbe2e56f61d68d0f6199c291cf412391d00c99364b01dfa8aa0db930fc9180d`.
+- No browser-platform exception, material unknown, new retail fact, protocol
+  version, save schema, or Mod Loader edit remains. This receipt is the sole
+  post-validation documentation write; no runtime, test, build, asset, or
+  protocol byte changed after the final green gate/browser candidate.

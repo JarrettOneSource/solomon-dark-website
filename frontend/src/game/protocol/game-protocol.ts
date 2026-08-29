@@ -8831,6 +8831,7 @@ function nativePlayerStaffTransient(
     if (new Set(pikeBreakSoundIndexes).size !== pikeBreakSoundIndexes.length) {
       throw new GameProtocolError(`${field}.pikeBreakSoundIndexes contains a duplicate`)
     }
+    const targetIds = staffTargetIds(source.targetIds, `${field}.targetIds`)
     const expectedSound: Readonly<Record<typeof outcome, NativeStaffProcSound | null>> = {
       'critical-hit': 'critical-hit',
       'disabling-hit': 'disable-enemy',
@@ -8838,8 +8839,10 @@ function nativePlayerStaffTransient(
       normal: null,
       whirl: 'spin-attack',
     }
-    const expectedPitchCount = outcome === 'normal' ? 0 : outcome === 'whirl' ? 3 : 1
-    const pitchesMatch = outcome === 'normal'
+    const procSucceeded = targetIds.length > 0 && outcome !== 'normal'
+    const expectedProcSound = procSucceeded ? expectedSound[outcome] : null
+    const expectedPitchCount = !procSucceeded ? 0 : outcome === 'whirl' ? 3 : 1
+    const pitchesMatch = !procSucceeded
       ? procSoundPitches.length === 0
       : outcome === 'disabling-hit'
         ? procSoundPitches.length === 1 && procSoundPitches[0] === 1
@@ -8853,7 +8856,7 @@ function nativePlayerStaffTransient(
             && procSoundPitches[0]! <= Math.fround(1.1)
     const swooshPitch = staffPitch(source.swooshPitch, `${field}.swooshPitch`)
     if (
-      procSound !== expectedSound[outcome]
+      procSound !== expectedProcSound
       || procSoundPitches.length !== expectedPitchCount
       || !pitchesMatch
       || swooshPitch < 1
@@ -8877,7 +8880,7 @@ function nativePlayerStaffTransient(
       procSoundPitches,
       pikeBreakSoundIndexes,
       swooshPitch,
-      targetIds: staffTargetIds(source.targetIds, `${field}.targetIds`),
+      targetIds,
     }
   }
   if (kind === 'player-staff-contact-knockback') {
