@@ -625,3 +625,119 @@ No member is blocked by the browser platform.
   the stock first-frame quick description and every native picker lifecycle
   member remain unchanged. Publication and deployment were not requested and
   were not performed.
+
+## 2026-08-29 — Reopened: desktop icon activation versus touch metadata
+
+### Reported smell and parity question
+
+- Reported web behavior: the icon-owned details now appear, but the invisible
+  icon action consumes every click. A desktop player cannot choose the skill by
+  clicking its painted icon even though the rest of the card chooses normally.
+- Requested behavior: keep hover-driven details on desktop, let a desktop mouse
+  click on the painted icon choose the card, and reserve metadata-only icon
+  activation for mobile touch where no durable hover exists.
+- This reopens the 2026-08-28 entry because that pass collapsed mouse and touch
+  activation into one read-only branch. The shared metadata projection itself,
+  its exact geometry, and the authoritative card-choice lifecycle remain valid.
+- Falsifiers: a mouse icon click leaves the offer open, a touch icon tap sends
+  `selectSkill`, either branch plays the wrong audio count, hover stops showing
+  details, card-body activation changes, or pointer classification depends on a
+  user-agent/device-name guess instead of the activating pointer.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Beta 0.72.5 `SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; size/hash reverified 2026-08-29 | The recovered stock LevelupScreen whole-card activation contract and `87 x 88` painted icon frame are unchanged. | high |
+| Current web causal trace | Website `origin/main` `e7addc2b`; `SkillPicker.tsx` icon sibling above the whole-card action | `.skill-picker-info-action` has `z-index: 1`; its unconditional `onClick` stops propagation and calls only `setSelection`/`updateDetail`. The underlying `.skill-picker-action -> choose(index)` therefore never receives an icon click on any pointer class. | high |
+| Existing desktop acceptance | `frontend/tools/smoke-skill-picker.mjs` detail and choice journeys | Desktop hover proves metadata, but the later authoritative choice deliberately clicks `.skill-picker-action` outside the icon. The journey omitted the reported mouse-icon activation branch. | high |
+| Existing touch acceptance | same smoke with `SDR_SKILL_PICKER_TOUCH_DETAILS_ONLY=1`, Chrome `844 x 390` | A real touch pointer taps the icon, retains the offer/rank/phase/audio count, then selects through the card body. This remains the requested mobile contract. | high |
+
+No new stock behavior is inferred: the mouse/touch split is an explicit Website
+interaction requirement over the already recovered stock whole-card action and
+shared SkillScreen detail projection.
+
+### System boundary and membership inventory
+
+Native/web system: LevelupScreen card input plus the Website icon-owned detail
+projection. This reopening changes only activation routing at their overlap.
+
+| Member | Native/web source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| three-card and four-card icon rectangles | recovered `87 x 88` frame at Y `382.5`; `skillPickerIconBounds` | verified-already-at-parity | all icon actions remain exactly inside their card actions |
+| desktop mouse enter/leave | icon `pointerenter`/`pointerleave` and shared HoverBox | verified-already-at-parity | enter shows matching metadata without audio/authority; leave clears it |
+| desktop mouse icon activation | stock whole-card action plus requested Website overlap rule | exact-ported requested correction | one mouse click calls the existing `choose(index)` path exactly once |
+| touch icon activation | Website no-hover extension | verified-already-at-parity | tap pins metadata and changes no offer sequence, rank, phase, or `pickskill` count |
+| pen and keyboard icon activation | existing read-only detail semantics; neither is a desktop mouse click | verified-already-at-parity | focus/direct activation remains metadata-only and never submits accidentally |
+| ordinary card body, all input classes | native LevelupScreen card action | verified-already-at-parity | still chooses once through the existing close/audio/authority path |
+| all ordinary, concentration, Insight, and Welding metadata members | complete catalog and shared native HoverBox owner enumerated in the 2026-08-28 entry | verified-already-at-parity | content and renderer inputs are unchanged |
+| Reroll, Save, automatic choice, queued/reconnect replacement | existing picker lifecycle branches | verified-already-at-parity | details still clear on every rebuild/close boundary |
+| protocol, host, save, and replication | `MainMenuScene -> session.selectSkill -> client-select-skill` | verified-already-at-parity and unchanged | input classification remains local; only `choose` can submit |
+| rows 80/81 and reserve 82 | offer exclusion | out-of-system (never public SkillPicker options) | existing domain assertion |
+
+No member is blocked by the browser platform.
+
+### Recovered/requested behavioral contract and implementation consequence
+
+- Keep sibling buttons and exact icon bounds. The icon remains the topmost hit
+  target so it can own hover/focus metadata.
+- Classify the activation from the actual pointer event. A mouse activation
+  delegates to the existing `choose(index)` owner; touch activation retains the
+  existing local `setSelection(index)` plus `updateDetail(index)` behavior.
+  Pen and keyboard activation keep the read-only detail behavior.
+- Do not duplicate selection audio, close state, or protocol calls in the icon
+  handler. Mouse activation must enter `choose` so its guards and lifecycle stay
+  authoritative.
+- Do not use viewport size, mobile user-agent detection, or a global media query:
+  hybrid devices must follow the pointer that performed this activation.
+
+### Validation contract
+
+- Extend the existing Mac desktop Chrome journey so the first authoritative
+  selection after a rebuilt offer clicks `.skill-picker-info-action`, then prove
+  one rank increment, one `pickskill`, the native close/queue transition, and
+  cleared details.
+- Preserve the separate Mac Chrome `844 x 390` touch journey that taps the same
+  icon and proves unchanged offer sequence, rank, settled phase, and audio count
+  before selecting once through the card body.
+- Retain the three/four-card geometry and complete metadata contract suites,
+  require WebGL2 and empty page/console/failed-response arrays, and run the
+  complete supported Website gate.
+- Implementation, browser, gate, publication, and deployment receipts remain
+  pending below this investigation entry.
+
+### Implementation validation receipt
+
+- `SkillPicker` now records the actual primary pointer class that begins an icon
+  activation. The icon click delegates mouse input to the existing
+  `choose(index)` owner; touch, pen, and keyboard activation retain the local
+  detail projection. The choice guards, sounds, close envelope, queue rebuild,
+  protocol call, and card-body input path were not duplicated or changed. The
+  desktop icon cursor now advertises activation rather than help-only input.
+- The updated desktop browser regression failed against unmodified
+  `origin/main` `e7addc2b`: after `.skill-picker-info-action.click()`,
+  `observeQueuedWait` timed out because the picker never began closing. The same
+  regression passed after the input-router change, selected skill 18 through
+  the existing authority path, and measured exactly one new `pickskill` event.
+- Chrome `151.0.7922.174` on Apple M2/macOS `26.6.2` rendered WebGL2 at
+  `1600 x 900`. Desktop hover still projected the matching detail identity,
+  three-card icon bounds remained exactly `87 x 88` at centers
+  `(600|800|1000, 382.5)`, the four-card ordinary/Insight/Welding matrix remained
+  complete, and the mouse icon selection completed the native close/queued-offer
+  lifecycle. Page, console, and failed-response arrays were empty. The inspected
+  four-card frame SHA-256 was
+  `1a3a26e6515d2332a58d8c2126a197741fb92b213a8195b702fae5fc30addb5e`.
+- The independent `844 x 390` touch journey tapped a real `37.70 x 38.13` icon,
+  displayed skill 65 metadata, and retained offer sequence 2, rank, settled
+  phase, and `pickskill` count. A later tap on the same card outside the icon
+  selected once. WebGL2 was active and all error arrays were empty. The inspected
+  touch-detail frame SHA-256 was
+  `5199138e5498c0548174ced016fb839f3c96445b8dc9574cb6ec9ec403b52cd5`.
+- The focused native UI contract passed all 57 tests, including exact
+  three/four-card geometry and the complete ordinary/concentration/Insight/
+  Welding metadata membership. The complete supported Mac Website gate passed
+  backend build/contracts, formatting, lint and architecture boundaries, every
+  frontend suite, desktop tests, production build, bundle budget, and media
+  policy on current-main base `e7addc2b`.
+- There are no platform-blocked members or remaining unknowns in this input
+  split. Publication and deployment were not requested and were not performed.

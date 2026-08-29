@@ -58,7 +58,7 @@
   border: 0;
   opacity: 0;
   background: transparent;
-  cursor: help;
+  cursor: pointer;
 }
 
 .skill-picker-info-action:focus { outline: none; }

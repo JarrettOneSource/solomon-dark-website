@@ -442,10 +442,11 @@ try {
 
   const selectedSkillId = rerolled.pendingOffer.options[0].skillId
   const previousRank = getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId]
+  const pickSkillCountBeforeDesktopIconSelection = await soundCount(page, 'pickskill')
   const firstCloseSequence = rerolled.pendingOffer.sequence
   const firstCloseStartedAt = Date.now()
   const firstQueuedWaitReceiptPromise = observeQueuedWait(page)
-  await picker.locator('.skill-picker-action').first().click()
+  await picker.locator('.skill-picker-info-action').first().click()
   await waitForPickerCloseProgress(page, firstCloseSequence)
   assert.equal(await hubCanvas.getAttribute('data-level-up-dynamic-suppressed'), 'false')
   await waitForHost(() => (
@@ -462,6 +463,11 @@ try {
   }, firstCloseSequence, { timeout: 10_000 })
   assert.ok(Date.now() - firstCloseStartedAt >= 610)
   assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId], previousRank + 1)
+  assert.equal(await soundCount(page, 'pickskill'), pickSkillCountBeforeDesktopIconSelection + 1)
+  const desktopIconSelectionReceipt = {
+    pickSkillDelta: await soundCount(page, 'pickskill') - pickSkillCountBeforeDesktopIconSelection,
+    selectedSkillId,
+  }
   assert.equal(getPlayerProgression(host.state(), playerId).sorcerorsCharmAvailable, true)
   assert.equal(await picker.getByRole('button', { name: 'Save Skill' }).count(), 1)
 
@@ -732,6 +738,7 @@ try {
     chatPickerReceipt,
     chatScreenshotPath,
     desktopDetailReceipt,
+    desktopIconSelectionReceipt,
     detailActionReceipt,
     boneyardPresentationReceipt,
     boneyardRevealAlphas,

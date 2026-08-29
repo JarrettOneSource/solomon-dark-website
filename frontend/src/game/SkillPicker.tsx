@@ -83,6 +83,10 @@ export default function SkillPicker({
   const displayedAvailabilityRef = useRef(sorcerorsCharmAvailable)
   const displayedOfferRef = useRef(initialOfferRef.current)
   const detailIndexRef = useRef<number | null>(null)
+  const iconActivationRef = useRef<{
+    choiceIndex: number
+    pointerType: string
+  } | null>(null)
   const latestAvailabilityRef = useRef(sorcerorsCharmAvailable)
   const latestOfferRef = useRef(offer)
   const onClosingChangeRef = useRef(onClosingChange)
@@ -483,12 +487,24 @@ export default function SkillPicker({
                   data-skill-id={option.skillId}
                   disabled={disabled}
                   onBlur={() => {
+                    if (iconActivationRef.current?.choiceIndex === index) {
+                      iconActivationRef.current = null
+                    }
                     if (detailIndexRef.current === index) updateDetail(null)
                   }}
                   onClick={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
                     if (disabled) return
+                    const pointerType = event.detail > 0
+                      && iconActivationRef.current?.choiceIndex === index
+                      ? iconActivationRef.current.pointerType
+                      : null
+                    iconActivationRef.current = null
+                    if (pointerType === 'mouse') {
+                      choose(index)
+                      return
+                    }
                     setSelection(index)
                     updateDetail(index)
                   }}
@@ -496,6 +512,18 @@ export default function SkillPicker({
                     if (disabled) return
                     setSelection(index)
                     updateDetail(index)
+                  }}
+                  onPointerCancel={() => {
+                    if (iconActivationRef.current?.choiceIndex === index) {
+                      iconActivationRef.current = null
+                    }
+                  }}
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) return
+                    iconActivationRef.current = {
+                      choiceIndex: index,
+                      pointerType: event.pointerType,
+                    }
                   }}
                   onPointerEnter={() => {
                     if (disabled) return
