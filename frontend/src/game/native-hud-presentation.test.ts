@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { NATIVE_WELD_BUILDS } from './core-kernels/player-progression.ts'
 import {
+  nativeHealthHudLayers,
   nativeHealthHudPresentation,
   nativeHudSkillActionRect,
   nativeHudLeftOriginClipPath,
@@ -11,6 +12,31 @@ import {
   nativeTutorialSelectedHudLayout,
   nativeTutorialSelectedHudLayoutFromCenters,
 } from './native-hud-presentation.ts'
+
+test('orders additive life and Magic Shield strips across the first-hit crossover', () => {
+  assert.deepEqual(nativeHealthHudLayers(0.5184, 0), [
+    { kind: 'health', progress: 0.5184, record: 26, tint: 'white' },
+  ])
+  assert.deepEqual(nativeHealthHudLayers(0.5184, 0.52), [
+    { kind: 'health', progress: 0.5184, record: 26, tint: 'white' },
+    { kind: 'shield', progress: 0.52, record: 26, tint: 'magic-shield' },
+  ])
+  assert.deepEqual(nativeHealthHudLayers(0.5184, 0.5), [
+    { kind: 'shield', progress: 0.5, record: 26, tint: 'magic-shield' },
+    { kind: 'health', progress: 0.5184, record: 26, tint: 'white' },
+  ])
+})
+
+test('gives Magic Shield the native equality tie and shares the poisoned strip', () => {
+  assert.deepEqual(nativeHealthHudLayers(0.5, 0.5), [
+    { kind: 'shield', progress: 0.5, record: 26, tint: 'magic-shield' },
+    { kind: 'health', progress: 0.5, record: 26, tint: 'white' },
+  ])
+  assert.deepEqual(nativeHealthHudLayers(0.4, 0.6, true), [
+    { kind: 'health', progress: 0.4, record: 52, tint: 'white' },
+    { kind: 'shield', progress: 0.6, record: 52, tint: 'magic-shield' },
+  ])
+})
 
 test('clips local vital fills from the right so health remains left anchored', () => {
   assert.equal(nativeHudLeftOriginClipPath(1), 'inset(0 0% 0 0)')

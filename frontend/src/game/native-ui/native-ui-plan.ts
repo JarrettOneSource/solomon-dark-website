@@ -8,6 +8,12 @@ export interface NativeUiRect {
   readonly width: number
 }
 
+export interface NativeUiStripPiece {
+  readonly sourceLeft: number
+  readonly targetLeft: number
+  readonly width: number
+}
+
 interface NativeUiNodeBase {
   readonly alpha?: number
   readonly label?: string
@@ -200,6 +206,39 @@ export function nativeUiRect(
     throw new RangeError('native UI rectangle must be finite with positive size')
   }
   return { height, left, top, width }
+}
+
+/** Exact horizontal thirds emitted by stock repeated-strip helper `0x00415230`. */
+export function nativeUiStripPieces(
+  sourceWidth: number,
+  targetWidth: number,
+): readonly NativeUiStripPiece[] {
+  if (!Number.isFinite(sourceWidth) || sourceWidth <= 0) {
+    throw new RangeError('native UI strip source width must be positive and finite')
+  }
+  if (!Number.isFinite(targetWidth) || targetWidth < 0) {
+    throw new RangeError('native UI strip target width must be nonnegative and finite')
+  }
+  if (targetWidth === 0) return Object.freeze([])
+
+  const third = sourceWidth / 3
+  const pieces: NativeUiStripPiece[] = [
+    { sourceLeft: 0, targetLeft: 0, width: third },
+  ]
+  let remaining = targetWidth - 2 * third
+  let targetLeft = third
+  while (remaining > 1e-9) {
+    const width = Math.min(third, remaining)
+    pieces.push({ sourceLeft: third, targetLeft, width })
+    targetLeft += width
+    remaining -= width
+  }
+  pieces.push({
+    sourceLeft: 2 * third,
+    targetLeft: targetWidth - third,
+    width: third,
+  })
+  return Object.freeze(pieces.map((piece) => Object.freeze(piece)))
 }
 
 export function nativeUiPlan(

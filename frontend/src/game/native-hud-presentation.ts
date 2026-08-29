@@ -6,8 +6,20 @@ import {
 
 export const NATIVE_HUD_BASE_HEALTH = 50
 export const NATIVE_HUD_BASE_MANA = 100
+export const NATIVE_HUD_FRAME_RECORD = 70
+export const NATIVE_HUD_HEALTH_RECORD = 26
+export const NATIVE_HUD_MANA_RECORD = 40
+export const NATIVE_HUD_MANA_RESERVE_RECORD = 41
+export const NATIVE_HUD_POISONED_HEALTH_RECORD = 52
 export const NATIVE_HUD_METER_INSET = 5
 export const NATIVE_HUD_TRACK_PADDING = NATIVE_HUD_METER_INSET * 2
+
+export interface NativeHudHealthLayer {
+  readonly kind: 'health' | 'shield'
+  readonly progress: number
+  readonly record: typeof NATIVE_HUD_HEALTH_RECORD | typeof NATIVE_HUD_POISONED_HEALTH_RECORD
+  readonly tint: 'magic-shield' | 'white'
+}
 
 export interface NativeHudMeterPresentation {
   readonly coreWidth: number
@@ -164,6 +176,31 @@ export function nativeHealthHudPresentation(
     shieldWidth: coreWidth * shieldProgress,
     trackWidth: coreWidth + NATIVE_HUD_TRACK_PADDING,
   })
+}
+
+export function nativeHealthHudLayers(
+  healthProgress: number,
+  shieldProgress: number,
+  poisoned = false,
+): readonly NativeHudHealthLayer[] {
+  const record = poisoned ? NATIVE_HUD_POISONED_HEALTH_RECORD : NATIVE_HUD_HEALTH_RECORD
+  const health = Object.freeze({
+    kind: 'health' as const,
+    progress: clampUnit(healthProgress),
+    record,
+    tint: 'white' as const,
+  })
+  const shield = Object.freeze({
+    kind: 'shield' as const,
+    progress: clampUnit(shieldProgress),
+    record,
+    tint: 'magic-shield' as const,
+  })
+  if (shield.progress === 0) return Object.freeze([health])
+  return Object.freeze([health, shield].sort((left, right) => (
+    left.progress - right.progress
+    || (left.kind === 'shield' ? -1 : 1)
+  )))
 }
 
 export function nativeManaHudPresentation(

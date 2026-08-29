@@ -13,11 +13,13 @@ import {
   NATIVE_UI_MESSAGE,
   NATIVE_UI_TAB,
   nativeUiRect,
+  nativeUiStripPieces,
   planNativeUiButton,
   planNativeUiMessage,
   planNativeUiSimpleMenu,
   planNativeUiTabs,
 } from './native-ui-plan.ts'
+
 import {
   layoutNativeUiText,
   measureNativeUiText,
@@ -29,6 +31,35 @@ import {
   NATIVE_KILL_CHARACTER_TITLE,
   planTitleMenuPrompt,
 } from '../title-menu-prompt.ts'
+
+test('native repeated strips preserve thirds and repeat only their authored center', () => {
+  assert.deepEqual(nativeUiStripPieces(102, 125), [
+    { sourceLeft: 0, targetLeft: 0, width: 34 },
+    { sourceLeft: 34, targetLeft: 34, width: 34 },
+    { sourceLeft: 34, targetLeft: 68, width: 23 },
+    { sourceLeft: 68, targetLeft: 91, width: 34 },
+  ])
+  assert.deepEqual(nativeUiStripPieces(21, 31.25), [
+    { sourceLeft: 0, targetLeft: 0, width: 7 },
+    { sourceLeft: 7, targetLeft: 7, width: 7 },
+    { sourceLeft: 7, targetLeft: 14, width: 7 },
+    { sourceLeft: 7, targetLeft: 21, width: 3.25 },
+    { sourceLeft: 14, targetLeft: 24.25, width: 7 },
+  ])
+  assert.deepEqual(
+    nativeUiStripPieces(112, 135).map(({ sourceLeft, targetLeft, width }) => ({
+      sourceLeft: Number(sourceLeft.toFixed(6)),
+      targetLeft: Number(targetLeft.toFixed(6)),
+      width: Number(width.toFixed(6)),
+    })),
+    [
+      { sourceLeft: 0, targetLeft: 0, width: 37.333333 },
+      { sourceLeft: 37.333333, targetLeft: 37.333333, width: 37.333333 },
+      { sourceLeft: 37.333333, targetLeft: 74.666667, width: 23 },
+      { sourceLeft: 74.666667, targetLeft: 97.666667, width: 37.333333 },
+    ],
+  )
+})
 
 test('native UI catalog drains all stock presentation records and font wrappers', () => {
   assert.deepEqual(NATIVE_UI_MANIFEST.summary, {

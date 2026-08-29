@@ -9,6 +9,7 @@ import {
   getPlayerEconomy,
   selectGameSimulationPlayerConcentration,
 } from '../src/game/core-server/game-simulation.ts'
+import { applyNativeSecondaryPlayerDamage } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
@@ -49,6 +50,7 @@ try {
   page.on('requestfailed', (request) => {
     const failure = request.failure()?.errorText ?? 'failed'
     if (failure === 'net::ERR_ABORTED' && /\.(?:mp3|ogg)(?:\?|$)/.test(request.url())) return
+    if (failure === 'net::ERR_ABORTED' && new URL(request.url()).pathname === '/deployment.json') return
     networkErrors.push(`${request.url()}: ${failure}`)
   })
   page.on('response', (response) => {
@@ -56,6 +58,10 @@ try {
   })
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
   })
   await page.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
@@ -68,6 +74,11 @@ try {
   })
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
+    await tutorialPrompt.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -109,6 +120,73 @@ try {
 
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
+  setPlayerVitalComposition(host.state(), playerId, {
+    currentHealth: 36,
+    maximumHealth: 50,
+    shieldCurrent: 26,
+    shieldMaximum: 50,
+  })
+  await page.getByLabel('Magic shield 26 of 50').waitFor({ timeout: 10_000 })
+  const shieldBeforeHit = await measureVitalComposition(page)
+  assert.deepEqual(shieldBeforeHit.layers.map(({ kind }) => kind), ['health', 'shield'])
+  assert.ok(shieldBeforeHit.layers.every(({ blend }) => blend === 'plus-lighter'))
+  assert.equal(shieldBeforeHit.frameRecord, 'UI.70')
+
+  applyShieldHit(host.state(), playerId, 1, 'hub')
+  await page.getByLabel('Magic shield 25 of 50').waitFor({ timeout: 10_000 })
+  const shieldAfterHit = await measureVitalComposition(page)
+  assert.deepEqual(shieldAfterHit.layers.map(({ kind }) => kind), ['shield', 'health'])
+  assert.ok(shieldAfterHit.layers.every(({ blend }) => blend === 'plus-lighter'))
+  assert.equal(shieldAfterHit.shieldLabel, 'Magic shield 25 of 50')
+
+  setPlayerVitalComposition(host.state(), playerId, {
+    currentHealth: 30,
+    maximumHealth: 50,
+    shieldCurrent: 25,
+    shieldMaximum: 50,
+  })
+  await page.getByLabel('Magic shield 25 of 50').waitFor({ timeout: 10_000 })
+  const shieldWiderPixels = await sampleHealthMeterPixels(page, {
+    empty: [80, 10],
+    overlap: [20, 10],
+    suffix: [47, 10],
+  })
+  assertAdditiveOverlap(shieldWiderPixels)
+
+  setPlayerVitalComposition(host.state(), playerId, {
+    currentHealth: 30,
+    maximumHealth: 50,
+    shieldCurrent: 10,
+    shieldMaximum: 50,
+  })
+  await page.getByLabel('Magic shield 10 of 50').waitFor({ timeout: 10_000 })
+  const shieldNarrowerPixels = await sampleHealthMeterPixels(page, {
+    empty: [80, 10],
+    overlap: [15, 10],
+    suffix: [30, 10],
+  })
+  assertAdditiveOverlap(shieldNarrowerPixels)
+
+  setPlayerVitalComposition(host.state(), playerId, {
+    currentHealth: 36,
+    maximumHealth: 50,
+    poisonTicksRemaining: 100,
+    shieldCurrent: 25,
+    shieldMaximum: 50,
+  })
+  await page.locator('.hub-hud-meter-health [data-native-ui-strip="UI.52"]').first().waitFor({
+    timeout: 10_000,
+  })
+  const poisonedShield = await measureVitalComposition(page)
+  assert.deepEqual(poisonedShield.layers.map(({ record }) => record), ['UI.52', 'UI.52'])
+
+  setPlayerVitalComposition(host.state(), playerId, {
+    currentHealth: 50,
+    maximumHealth: 50,
+    poisonTicksRemaining: 0,
+    shieldCurrent: 0,
+    shieldMaximum: 0,
+  })
   mutatePlayer(host.state(), playerId, {
     learnedSkillIds: [12, 23, 56, 57, 58, 64],
     ownedPerkSelectors: [0, 1, 21],
@@ -128,7 +206,7 @@ try {
   assert.equal(charmedHud.mana.width, 147.5)
 
   setPlayerHealthRatio(host.state(), playerId, 0.5)
-  await waitForLocalHealthDamage(page)
+  await waitForLocalHealthRatio(page, 0.5)
   const damagedHud = await measureHud(page)
   assertLocalHealthRetractsFromRight(damagedHud)
 
@@ -191,17 +269,32 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
     timeout: 90_000,
   })
+  const boneyardMaximumHealth = playerProgression(host.state(), playerId).maximumHealth
+  setPlayerVitalComposition(host.state(), playerId, {
+    currentHealth: boneyardMaximumHealth * 0.72,
+    maximumHealth: boneyardMaximumHealth,
+    shieldCurrent: 26,
+    shieldMaximum: 50,
+  })
+  await page.getByLabel('Magic shield 26 of 50').waitFor({ timeout: 10_000 })
+  applyShieldHit(host.state(), playerId, 1, 'boneyard')
+  await page.getByLabel('Magic shield 25 of 50').waitFor({ timeout: 10_000 })
+  const boneyardShieldAfterHit = await measureVitalComposition(page)
+  assert.deepEqual(boneyardShieldAfterHit.layers.map(({ kind }) => kind), ['shield', 'health'])
+  assert.ok(boneyardShieldAfterHit.layers.every(({ blend }) => blend === 'plus-lighter'))
+
   setPlayerHealthRatio(host.state(), playerId, 0.5)
-  await waitForLocalHealthDamage(page)
+  await waitForLocalHealthRatio(page, 0.5)
   const boneyardDamagedHud = await measureHud(page)
   assertLocalHealthRetractsFromRight(boneyardDamagedHud)
 
   await page.screenshot({ path: screenshotPath })
   assert.deepEqual(pageErrors, [])
-  assert.deepEqual(consoleErrors, [])
+  assert.deepEqual(consoleErrors, [], JSON.stringify({ consoleErrors, networkErrors }))
   assert.deepEqual(networkErrors, [])
   process.stdout.write(`${JSON.stringify({
     boneyardDamagedHud,
+    boneyardShieldAfterHit,
     charmedHud,
     consoleErrors,
     damagedHud,
@@ -211,7 +304,12 @@ try {
     pageErrors,
     planeOrbSelectorGate: true,
     planewalkerHud,
+    poisonedShield,
     screenshotPath,
+    shieldAfterHit,
+    shieldBeforeHit,
+    shieldNarrowerPixels,
+    shieldWiderPixels,
     splitMindHud,
   })}\n`)
 } finally {
@@ -306,6 +404,75 @@ function setPlayerHealthRatio(state, playerId, ratio) {
   })
 }
 
+function setPlayerVitalComposition(state, playerId, {
+  currentHealth,
+  maximumHealth,
+  poisonTicksRemaining = 0,
+  shieldCurrent,
+  shieldMaximum,
+}) {
+  const index = playerProgressionIndex(state, playerId)
+  const current = state.playerEntities.progressions[index]
+  const secondary = state.secondaryAbilities.players[playerId]
+  assert.ok(current)
+  assert.ok(secondary)
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...current,
+    currentHealth,
+    maximumHealth,
+    poisonDamagePerTick: poisonTicksRemaining > 0 ? 0.01 : 0,
+    poisonTicksRemaining,
+  }
+  Object.assign(state, {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions,
+    },
+    secondaryAbilities: {
+      ...state.secondaryAbilities,
+      players: {
+        ...state.secondaryAbilities.players,
+        [playerId]: {
+          ...secondary,
+          magicShieldAbsorb: shieldCurrent,
+          magicShieldMaximum: shieldMaximum,
+        },
+      },
+    },
+  })
+}
+
+function playerProgression(state, playerId) {
+  return state.playerEntities.progressions[playerProgressionIndex(state, playerId)]
+}
+
+function playerProgressionIndex(state, playerId) {
+  const index = state.playerEntities.identities.findIndex(
+    ({ playerId: id }) => id === playerId,
+  )
+  assert.notEqual(index, -1)
+  return index
+}
+
+function applyShieldHit(state, playerId, damage, worldKey) {
+  const result = applyNativeSecondaryPlayerDamage(
+    state.secondaryAbilities,
+    playerId,
+    damage,
+    state.tick,
+    { x: 0, y: 0 },
+    worldKey,
+  )
+  assert.equal(result.absorbedDamage, damage)
+  assert.equal(result.healthDamage, 0)
+  Object.assign(state, {
+    ...state,
+    secondaryAbilities: result.state,
+  })
+}
+
 function setVitalLayers(state, playerId) {
   const player = state.secondaryAbilities.players[playerId]
   assert.ok(player)
@@ -372,10 +539,11 @@ async function measureHud(page) {
     const healthClip = getComputedStyle(healthFill).clipPath
     const healthRightInset = /^inset\(0px ([\d.]+)% 0px 0px\)$/.exec(healthClip)
     if (!healthRightInset) throw new Error(`Unexpected local health clip: ${healthClip}`)
-    const healthLabel = /^Health ([\d.]+) of ([\d.]+)$/.exec(
-      healthFill.getAttribute('alt') ?? '',
-    )
-    if (!healthLabel) throw new Error(`Unexpected local health label: ${healthFill.getAttribute('alt')}`)
+    const healthLabelText = healthFill.getAttribute('aria-label')
+      ?? healthFill.getAttribute('alt')
+      ?? ''
+    const healthLabel = /^Health ([\d.]+) of ([\d.]+)$/.exec(healthLabelText)
+    if (!healthLabel) throw new Error(`Unexpected local health label: ${healthLabelText}`)
     const healthRightInsetPercent = Number(healthRightInset[1])
     const healthVisibleWidth = healthFillBounds.width
       * (1 - healthRightInsetPercent / 100)
@@ -403,14 +571,60 @@ async function measureHud(page) {
   })
 }
 
-async function waitForLocalHealthDamage(page) {
-  await page.waitForFunction(() => {
+async function measureVitalComposition(page) {
+  return page.locator('.hub-hud-meter-health').evaluate((meter) => {
+    const layers = [...meter.querySelectorAll('.hub-hud-meter-fill')].map((element) => ({
+      blend: getComputedStyle(element).mixBlendMode,
+      kind: element.classList.contains('hub-hud-meter-shield') ? 'shield' : 'health',
+      label: element.getAttribute('aria-label') ?? element.getAttribute('alt'),
+      record: element.getAttribute('data-native-ui-strip'),
+    }))
+    return {
+      frameRecord: meter.querySelector('.hub-hud-meter-frame')
+        ?.getAttribute('data-native-ui-strip') ?? null,
+      layers,
+      shieldLabel: layers.find(({ kind }) => kind === 'shield')?.label ?? null,
+    }
+  })
+}
+
+async function sampleHealthMeterPixels(page, points) {
+  const png = await page.locator('.hub-hud-meter-health').screenshot()
+  return page.evaluate(async ({ dataUrl, samplePoints }) => {
+    const image = new Image()
+    image.src = dataUrl
+    await image.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (context === null) throw new Error('Unable to sample health-meter pixels')
+    context.drawImage(image, 0, 0)
+    return Object.fromEntries(Object.entries(samplePoints).map(([name, [x, y]]) => (
+      [name, [...context.getImageData(x, y, 1, 1).data]]
+    )))
+  }, {
+    dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+    samplePoints: points,
+  })
+}
+
+function assertAdditiveOverlap({ empty, overlap, suffix }) {
+  const energy = (pixel) => pixel[0] + pixel[1] + pixel[2]
+  assert.ok(energy(overlap) > energy(suffix) + 30)
+  assert.ok(energy(suffix) > energy(empty) + 30)
+}
+
+async function waitForLocalHealthRatio(page, expectedRatio) {
+  await page.waitForFunction((ratio) => {
     const fill = document.querySelector(
       '.hub-hud-meter-health .hub-hud-meter-fill:not(.hub-hud-meter-shield)',
     )
-    return fill instanceof HTMLElement
-      && getComputedStyle(fill).clipPath !== 'inset(0px 0% 0px 0px)'
-  }, undefined, { timeout: 10_000 })
+    if (!(fill instanceof HTMLElement)) return false
+    const label = fill.getAttribute('aria-label') ?? fill.getAttribute('alt') ?? ''
+    const match = /^Health ([\d.]+) of ([\d.]+)$/.exec(label)
+    return match !== null && Math.abs(Number(match[1]) / Number(match[2]) - ratio) < 0.01
+  }, expectedRatio, { timeout: 10_000 })
 }
 
 function assertLocalHealthRetractsFromRight(hud) {

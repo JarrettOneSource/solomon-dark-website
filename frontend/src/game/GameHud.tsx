@@ -28,15 +28,20 @@ import { mobileUiElementStyle } from './mobile-ui-layout.ts'
 import type { GameViewportLayout } from './renderer/game-viewport.ts'
 import { useMobileUiLayout } from './use-mobile-ui-layout.ts'
 import {
+  NATIVE_HUD_FRAME_RECORD,
+  NATIVE_HUD_MANA_RECORD,
+  NATIVE_HUD_MANA_RESERVE_RECORD,
   NATIVE_HUD_SKILL_ACTION_HEIGHT,
   NATIVE_HUD_SKILL_ACTION_TOP,
   NATIVE_HUD_SKILL_ACTION_WIDTH,
+  nativeHealthHudLayers,
   nativeHealthHudPresentation,
   nativeHudLeftOriginClipPath,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
   type NativeHudSkillBinding,
 } from './native-hud-presentation.ts'
+import NativeUiStrip from './native-ui/NativeUiStrip.tsx'
 
 interface GameHudProps {
   accountUsername: string | null
@@ -208,12 +213,11 @@ export default function GameHud({
     progression.maximumMana,
     quickbarHud.playerState?.reservedMana ?? 0,
   )
-  const healthLayers = [
-    { className: 'hub-hud-meter-fill', progress: healthHud.fillProgress, shield: false },
-    ...(healthHud.shieldProgress > 0
-      ? [{ className: 'hub-hud-meter-fill hub-hud-meter-shield', progress: healthHud.shieldProgress, shield: true }]
-      : []),
-  ].sort((left, right) => left.progress - right.progress)
+  const healthLayers = nativeHealthHudLayers(
+    healthHud.fillProgress,
+    healthHud.shieldProgress,
+    progression.poisonTicksRemaining > 0,
+  )
   const skillBindings = nativeHudSkillBindings({
     concentrationSkillIds: quickbarHud.concentrationSkillIds,
     planewalkerActive: (quickbarHud.playerState?.planewalkerTicksRemaining ?? 0) > 0,
@@ -283,19 +287,26 @@ export default function GameHud({
           data-core-width={healthHud.coreWidth}
           data-track-width={healthHud.trackWidth}
           style={{
-            '--native-meter-core-width': `${healthHud.coreWidth}px`,
             '--native-meter-track-width': `${healthHud.trackWidth}px`,
           } as CSSProperties}
         >
+          <NativeUiStrip
+            atlas="UI"
+            className="hub-hud-meter-frame"
+            record={NATIVE_HUD_FRAME_RECORD}
+            width={healthHud.trackWidth}
+          />
           {healthLayers.map((layer) => (
-            <img
-              className={layer.className}
-              key={layer.shield ? 'shield' : 'health'}
-              src={hub.hud.barRed}
-              style={{ clipPath: nativeHudLeftOriginClipPath(layer.progress) }}
-              alt={layer.shield
+            <NativeUiStrip
+              ariaLabel={layer.kind === 'shield'
                 ? `Magic shield ${quickbarHud.playerState!.magicShieldAbsorb} of ${quickbarHud.playerState!.magicShieldMaximum}`
                 : `Health ${progression.currentHealth} of ${progression.maximumHealth}`}
+              atlas="UI"
+              className={`hub-hud-meter-fill${layer.tint === 'magic-shield' ? ' hub-hud-meter-shield' : ''}`}
+              key={layer.kind}
+              record={layer.record}
+              style={{ clipPath: nativeHudLeftOriginClipPath(layer.progress) }}
+              width={healthHud.coreWidth}
             />
           ))}
         </div>
@@ -304,24 +315,30 @@ export default function GameHud({
           data-core-width={manaHud.coreWidth}
           data-track-width={manaHud.trackWidth}
           style={{
-            '--native-meter-core-width': `${manaHud.coreWidth}px`,
             '--native-meter-track-width': `${manaHud.trackWidth}px`,
           } as CSSProperties}
         >
-          <img
+          <NativeUiStrip
+            atlas="UI"
+            className="hub-hud-meter-frame"
+            record={NATIVE_HUD_FRAME_RECORD}
+            width={manaHud.trackWidth}
+          />
+          <NativeUiStrip
+            ariaLabel={`Mana ${progression.currentMana} of ${progression.maximumMana}`}
+            atlas="UI"
             className="hub-hud-meter-fill"
-            src={hub.hud.barBlue}
+            record={NATIVE_HUD_MANA_RECORD}
             style={{ clipPath: nativeHudLeftOriginClipPath(manaHud.fillProgress) }}
-            alt={`Mana ${progression.currentMana} of ${progression.maximumMana}`}
+            width={manaHud.coreWidth}
           />
           {manaHud.reserveProgress > 0 ? (
-            <span
+            <NativeUiStrip
+              ariaLabel={`${quickbarHud.playerState!.reservedMana} mana reserved`}
+              atlas="UI"
               className="hub-hud-mana-reserve"
-              style={{
-                backgroundImage: `url("${hub.hud.manaReserve}")`,
-                width: `${manaHud.reserveWidth}px`,
-              }}
-                aria-label={`${quickbarHud.playerState!.reservedMana} mana reserved`}
+              record={NATIVE_HUD_MANA_RESERVE_RECORD}
+              width={manaHud.reserveWidth}
             />
           ) : null}
         </div>

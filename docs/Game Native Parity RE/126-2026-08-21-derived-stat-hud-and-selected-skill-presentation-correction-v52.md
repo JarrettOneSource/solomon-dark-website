@@ -1,5 +1,11 @@
 # 2026-08-21 — Derived-stat HUD and selected-skill presentation correction (v52)
 
+> **2026-08-29 correction:** the v52 receipt proved dynamic geometry, but its
+> claim that Magic Shield presentation was exact did not cover the native
+> additive blend, third-strip construction, equality tie, or poisoned `UI.52`
+> sibling. Those dispositions are superseded by the reopened compositor
+> closure in `132-2026-08-21-local-player-hp-meter-depletion-direction-audit.md`.
+
 The user-reported smell is correct: Website current main computes Health Up and
 Mana Up maxima, but `GameHud` keeps both meter tracks at a fixed 110 pixels and
 both fill images at a fixed 102 pixels. The v49/v51 closure therefore missed a
