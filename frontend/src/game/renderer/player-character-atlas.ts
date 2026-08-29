@@ -108,6 +108,20 @@ export const PLAYER_CHARACTER_SHEETS = Object.freeze({
     back: `player-character-staff-${selector}-back`,
     front: `player-character-staff-${selector}-front`,
   })),
+  staffBodies: Array.from({ length: 6 }, (_, selector) => ({
+    back: `player-character-staff-${selector}-body-back`,
+    front: `player-character-staff-${selector}-body-front`,
+  })),
+  staffHands: {
+    primary: {
+      back: 'player-character-staff-hand-primary-back',
+      front: 'player-character-staff-hand-primary-front',
+    },
+    secondary: {
+      back: 'player-character-staff-hand-secondary-back',
+      front: 'player-character-staff-hand-secondary-front',
+    },
+  },
   unselectedAttachment: {
     back: 'player-character-unselected-attachment-back',
     front: 'player-character-unselected-attachment-front',

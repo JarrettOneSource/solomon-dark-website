@@ -12,9 +12,11 @@ RE lead, not evidence that the system should be patched heuristically.
   strength-versus-resistance threshold, weighted separation formula, and
   world-valid placement. Player dominance is emergent from stock constructor
   values rather than a player-only branch.
-- The clean default-staff call passes a null optional glow color, so Clothes
-  records `11..12` and their colored generated-quad branch do not belong in
-  the stock loadout rendered here.
+- The clean rank-zero default-Staff call passes a null optional glow color.
+  Entry 010 now closes the previously skipped positive branch: effective
+  Enchant Staff rank `>0` continuously adds the Staff's additive shaft pass
+  and the authored Clothes `11..12` colored gradient where the selector has a
+  row. These are shaft materials, never an invented orb layer.
 - All five element painters are mapped instruction-by-instruction. The web
   draw plans preserve their native sprite stacks, fixed-tick frame selection,
   scales, colors, transforms, and per-operation blend mode; Air includes both

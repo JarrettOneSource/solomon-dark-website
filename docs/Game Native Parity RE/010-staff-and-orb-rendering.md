@@ -35,12 +35,286 @@ Clean runtime trace at right-facing heading `6` entered `0x00578D20` with:
 - `param4 / scale = 1.0`;
 - `param5 / optional glow color = null`.
 
-Therefore the stock default loadout does **not** execute the optional colored
-secondary quad branch. Its visible orb comes from the element-specific renderer
-around the staff endpoint. The web parity fix must first remove the oversized
-generic core and reproduce the element renderer at native scale; it must not add
-Clothes `11/12` as an always-on orb layer. The optional quad remains relevant
-only for staff states that pass a non-null glow color.
+Therefore the rank-zero stock default loadout does **not** execute the optional
+colored secondary quad branch. Its visible orb comes from the element-specific
+renderer around the staff endpoint. That observation proves only the rank-zero
+branch: it does not justify omitting Clothes `11/12` after Enchant Staff becomes
+effective. The optional quad is a staff-shaft treatment, not an orb layer.
+
+## 2026-08-29 — Enchant Staff persistent attachment glow reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: learning Enchant Staff does not add the Staff glow;
+  the player expects the learned effect to remain active rather than appearing
+  only during a melee action or concentration.
+- Stock behavior to recover: identify the exact rank source and lifetime of the
+  optional fifth `Staff_RenderAttachment` argument, then drain its complete
+  material, geometry, color, selector, scene, item, and teardown membership.
+- Reproduction boundary: effective rank zero/nonzero; permanent learning,
+  equipment/Mindstar effective ranks, concentration on/off, all six native
+  Staff selectors, all ten attachment poses and 24 headings, every selected
+  pure/Weld/Plane primary, Hub and Boneyard local/remote players, death,
+  selected-primary `-1`, Wand/empty/mod weapons, and UI-owned wizard previews.
+- Falsifiers: the fifth argument remaining null at effective rank one; a
+  melee-action or concentration gate; a world-light registration; glow records
+  beyond Clothes `11..12`; an item selector remap; or another native caller
+  supplying the learned-rank color to a generic/UI wizard.
+
+This is a process reopening. The earlier pass captured one clean rank-zero call
+and correctly rejected an invented always-on **orb** layer, but it skipped the
+rank writer immediately upstream in `PlayerWizard_RenderAttachment
+0x00538B80`. It then generalized a single null sample into the false all-ranks
+claims in entries 020, 101, and 123. The missing native system is the learned
+Staff-shaft compositor, not the already-complete element orb.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified Beta 0.72.5 `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000` | Same pinned image as the rank-zero Staff trace and complete player painter reports. | high |
+| Existing clean stock | direct, mod-free right-facing call recorded above, `0x00578D20`, effective Enchant rank zero | Fifth argument is null and the learned branch is absent at rank zero. This is retained as the negative branch, not generalized to learned state. | high |
+| Fresh caller instructions | canonical Ghidra 12.0.3 replica; `0x00538C62..0x00538E83` in `PlayerWizard_RenderAttachment 0x00538B80` | Exact Staff type `0x1B5C`; row count is expanded to 66; row-65 effective-rank short at `skillArray + 0x1C92` is compared to zero. Strictly positive rank stores a pointer to the current selected-primary color; zero or negative stores null. The same pointer is passed in both depth branches. | high |
+| Fresh color ownership | `Skills_Wizard::vftable 0x007A0CD4`, slot `+0x88 -> 0x00660760`; selection resolver `0x0052DA40`; class resolver slot `+0x1C -> 0x00656430` | Color is resolved on every draw from the current selected-primary row or active Weld build, then passed unchanged to Staff. Plane Orb row 80 has default class/root zero and therefore uses Ether color. | high |
+| Fresh Staff instructions | complete `Staff_RenderAttachment 0x00578D20`; learned block `0x00579037..0x00579488` | Non-null color selects additive blend, redraws the exact shaft quad, extends point 2 by five units, consumes one endpoint-inclusive `Float(1.5)`, widens by `2 + draw`, draws one colored four-vertex gradient, restores normal blend, then paints both hand records. | high |
+| Complete xref/vtable sweep | only xref to `0x00578D20` is `Item_Staff::vftable 0x007857BC +0x20`; vtable refs are constructors/materializers `0x00462050`, `0x005CFA80`, and `0x005E3080`; generic attachment owner `0x0061AF10` | The live PlayerWizard route is the sole producer of the learned effective-rank pointer. Generic/source/UI wizard rendering passes literal null and does not inherit Enchant presentation. | high |
+| Authored Clothes data | retail `Clothes.bundle`/`Clothes.png`; builder `0x004E4CA0` | Base array has six rows `5..10`; optional glow array has exactly two rows `11..12`. Record 11 is crop `10x36`, logical `12x38`; record 12 is crop/logical `15x119`. All rows were parsed, not estimated. | high |
+| Missing-row behavior | array grower `0x0043A6B0`, Sprite default constructor `0x004138A0`, Staff access `0x00579240..0x00579271` | Selectors `2..5` grow the two-row glow array with zero/default Sprites. They still receive the additive shaft redraw, but their colored material quad is empty. | high |
+| Current web causal trace | Website `e7addc2b`; `hub-actors.ts`, `player-character-presentation.ts`, packed player atlas, and strict protocol progression | Live player rendering consumes no row-65 rank, has no Clothes `5..12` material textures or learned gradient, and uses a precomposed shaft-plus-hands sprite. Rank-zero and rank-one frames are therefore identical apart from unrelated orb animation. | high |
+
+Ghidra was invoked only through the read-only Mod Loader wrapper against the
+canonical replica pool. Tool checkout revision was
+`08bfba9ef367f7b863848030d0a289dc31e33192`; unrelated dirty Mod Loader docs
+were not touched. Wrapper SHA-256 was
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+material scripts were `decompile_targets.py`
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+`dump_function_instructions.py`
+`273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef`,
+and `vtable_slot_lookup.py` from that revision.
+
+### System boundary and membership inventory
+
+Native system: **effective-rank-owned enchanted Staff attachment compositor**,
+from progression refresh and selected-primary color resolution through the
+equipped Staff's normal/additive shaft, optional authored glow material,
+hands, PlayerWizard depth pass, scene replication, reset, and teardown. The
+element orb, Staff melee contact effects, UI-only generic wizard previews, and
+Region world lighting are adjacent systems with explicit dispositions below.
+
+The dispositions below are the complete system contract. The implementation
+and Mac receipts at the end of this section confirm each required outcome.
+
+| Member | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| rank zero | row 65 `+0x22 <= 0` | `verified-already-at-parity` | no additive shaft or colored material |
+| permanent learned rank | row 65 `+0x20 -> +0x22` refresh | `exact-ported` | rank one makes the effect continuously visible without an action |
+| equipment grant/boost and Mindstar | shared effective-rank refresh into row 65 `+0x22` | `exact-ported` | effective-only rank activates; removal deactivates on the next authoritative snapshot |
+| concentration selected/unselected | no read in `0x00538D61..0x00538D76` or `0x00578D20` | `exact-ported` | both states produce identical attachment plans at equal tick/color |
+| Staff action, cast, idle, and movement poses `0..9` | complete `3244..3483` / `3484..3723` pose banks and point table | `exact-ported` | all 240 pose/heading rows preserve body, learned pass, then hands |
+| Hub Courtyard/private rooms, local and remote players | shared live `PlayerWorldView` and strict rank/selection wire fields | `exact-ported` | same rank transition and selected color for every addressed player |
+| Boneyard, local and remote players | same live view under Arena saturation | `exact-ported` | same membership with the existing Arena shader/blend owner |
+| death/spectator | `PlayerWizard +0x160` living-render bypass | `out-of-system` — death painter owns separate corpse art | learned meshes are hidden and destroyed with the living view |
+| selected-primary `-1` / College pre-Create | `0x00538B80` fallback attachment branch | `out-of-system` — equipped Staff vslot is not called | no hidden glow while ordinary Staff is suppressed |
+| Wand and empty weapon | types `0x1B63` / no equipped item | `out-of-system` — no `Item_Staff` vslot | negative visibility assertions |
+| Website mod Staff | Web-content wearable without a retail Clothes selector/material row | `out-of-system` — no stock authored glow ABI | native rows are not guessed onto mod art |
+| generic/source wizard, Create, Inventory preview, Hall/Memorial portrait | `0x0061AF10` passes literal null or captured UI data without row-65 effective state | `out-of-system` — different native caller/lifetime | existing UI orb/portrait programs remain unchanged |
+| element orb and selected-primary VFX | `0x0053B1D0`, entries 010/237 | `verified-already-at-parity` | orb membership/scale/copies remain independent of row 65 |
+| Staff melee/proc presentation | entry 101 action/contact actors | `verified-already-at-parity` | no action-owned substitute or duplicate glow |
+| Region/player world light | no light-provider call or Region write in learned block | `out-of-system` — the effect is additive geometry, not a light | light-provider count stays unchanged |
+| audio, collision, damage, and hit testing | no consumer in learned block | `out-of-system` — presentation-only branch | gameplay outputs remain equivalent |
+
+All six authored Staff selector rows are closed explicitly:
+
+| Selector | Base Clothes row | Colored glow row | Required disposition |
+| ---: | ---: | ---: | --- |
+| 0 | 5 (`6x49`) | 11 (crop `10x36`, logical `12x38`) | `exact-ported`: additive base plus colored gradient |
+| 1 | 6 (`6x49`) | 12 (`15x119`) | `exact-ported`: additive base plus colored gradient |
+| 2 | 7 (`6x46`) | default/empty grown Sprite | `exact-ported`: additive base only |
+| 3 | 8 (`6x49`) | default/empty grown Sprite | `exact-ported`: additive base only |
+| 4 | 9 (`8x52`) | default/empty grown Sprite | `exact-ported`: additive base only |
+| 5 | 10 (`9x53`) | default/empty grown Sprite | `exact-ported`: additive base only |
+
+The selected-color table is also complete. Every base RGB below is transformed
+by `Color::Saturate(base, 0.85)`, meaning
+`0.85*luminance + 0.15*channel`, with luminance weights
+`0.30860000848770142/0.6093999743461609/0.0820000022649765`:
+
+| Selected ID/program | Unsaturated native RGB | Resulting 8-bit tint | Required disposition |
+| ---: | --- | ---: | --- |
+| 8 Ether | `(1,.1,1)` | `#886688` | `exact-ported` |
+| 16 Fire | `(1,.35,.1)` | `#998077` | `exact-ported` |
+| 24 Air | `(.1,1,1)` | `#A0C3C3` | `exact-ported` |
+| 32 Water | `(.1,.5,1)` | `#5E6E81` | `exact-ported` |
+| 40 Earth | `(.1,1,.1)` | `#90B390` | `exact-ported` |
+| 80 Plane Orb | row-root zero, Ether `(1,.1,1)` | `#886688` | `exact-ported` |
+| 1000 Burning Bolt | `(1,.1,.5)` | `#7F5D6C` | `exact-ported` |
+| 1001 Frost Missile | `(1,.5,1)` | `#BDAABD` | `exact-ported` |
+| 1002 Ball Lightning | `(1,.75,1)` | `#DED4DE` | `exact-ported` |
+| 1003 Flame Lash | `(1,.75,.5)` | `#D5CCC2` | `exact-ported` |
+| 1004 Blizzard Beam | `(1,.75,1)` | `#DED4DE` | `exact-ported` |
+| 1005 Steam Jet | `(.75,.75,.75)` | `#BFBFBF` | `exact-ported` |
+| 1006 Ethereal Boulder | `(1,.75,1)` | `#DED4DE` | `exact-ported` |
+| 1007 Meteor Swarm | `(1,.75,.5)` | `#D5CCC2` | `exact-ported` |
+| 1008 Hailstones | `(.8,1,1)` | `#EAF2F2` | `exact-ported` |
+| 1009 Crawling Shock | `(.9,1,1)` | `#F4F8F8` | `exact-ported` |
+| 1010 internal Ether program | `(1,.1,.5)` | `#7F5D6C` | `exact-ported` in the pure planner; `out-of-system` at wire input |
+| 1011 internal Fire program | `(1,.35,.1)` | `#998077` | `exact-ported` in the pure planner; `out-of-system` at wire input |
+| 1012 internal Water program | `(.1,.5,1)` | `#5E6E81` | `exact-ported` in the pure planner; `out-of-system` at wire input |
+| 1013 internal Air program | `(.1,1,1)` | `#A0C3C3` | `exact-ported` in the pure planner; `out-of-system` at wire input |
+| 1014 internal Earth program | `(.1,1,.1)` | `#90B390` | `exact-ported` in the pure planner; `out-of-system` at wire input |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- Owner and lifetime: `PlayerWizard_RenderAttachment 0x00538B80`, not the
+  skill tick or Staff action actor, owns the learned-state decision on every
+  living-player draw. Progression refresh owns effective rank; PlayerWizard
+  destruction/living-render bypass owns teardown.
+- State transition: exactly `effectiveRank > 0` selects the non-null branch.
+  Rank magnitude does not scale opacity, width, cadence, or color. There is no
+  concentration, action, cooldown, damage, or wall-clock latch.
+- Painter order: normal shaft quad; additive copy of that same shaft; optional
+  colored gradient quad; both pose-matched hand records; restore normal blend.
+  The glow must not be painted over the hands and must not be baked into the
+  element orb.
+- Geometry: points 1 and 2 of each complete Clothes `3244..3483` row own the
+  shaft. Base half-width is `base.logicalWidth * 0.5 * actorScale`. Glow keeps
+  point 1, extends point 2 five native units along the shaft, and multiplies
+  the base half-width by endpoint-inclusive `2 + Float(1.5)` (`2..3.5`).
+- Color/timing: the two point-1 vertices use alpha
+  `0.5 + 0.2*sin(globalTick*5 degrees)` (`0.3..0.7`); the two point-2 vertices
+  use exactly `0.35` of that alpha (`0.105..0.245`). RGB is the current
+  selected-primary color above. The pulse uses the 100 Hz application tick and
+  does not restart when rank or selection changes.
+- Randomness: one learned visible Staff composite consumes one
+  endpoint-inclusive `Float(1.5)` presentation draw. The Website keeps this
+  cosmetic sampling outside authoritative gameplay RNG while preserving the
+  exact one-sample range and per-player retained-view ownership.
+- Blend/lighting: both learned passes use selector-one additive
+  `SRCALPHA/ONE`; the normal shaft and hands remain selector zero. No Region
+  light, shadow, collision, audio, or protocol message is born.
+- Authority/replication: `learnedSkills` already publishes the effective rank
+  as tuple field two, and selected-primary identity is already atomic. Clients
+  consume those authoritative fields; no new client-owned skill state or
+  protocol version is legal.
+
+### Nearby-system findings
+
+- The two-row glow table is intentionally narrower than the six-row base table.
+  Correct parity is not to copy record 11 across selectors `2..5`; native grows
+  zero/default Sprite rows and retains only the additive base redraw there.
+- The current packed player sheet fuses shaft and hands. Exact learned painter
+  order requires a cohesive live attachment view (normal shaft, learned
+  passes, hands), backed by raw Clothes materials and the full point table;
+  overlaying a glow on the fused sheet would brighten hands and is rejected.
+- Entry 237 remains authoritative for the independent selected-primary orb.
+  This branch reuses its atomic selected identity but not its painter stack or
+  orb scale.
+
+### Confidence and open questions
+
+- Confirmed: rank field and strict gate, current-color producer, all pure/Weld/
+  Plane color rows, complete selector/material rows, array fallback behavior,
+  240 pose/heading geometry membership, order, blend, pulse, random range,
+  scenes, negative items/callers, and teardown owner.
+- Inferred: exact native global RNG sequence is presentation incidental state;
+  the browser projection preserves one sample and its endpoint-inclusive range
+  without coupling rendering to host gameplay RNG.
+- Unknown: none material. No authored row or caller remains unextracted.
+
+### Web implementation consequence
+
+- Add one pure attachment planner/catalog owning all 240 point pairs, six base
+  records, two glow records, color rows, pulse, random-width range, and negative
+  branches.
+- Render native living Staffs as an ordered body mesh, learned additive body
+  mesh, optional per-vertex colored glow mesh, then hand-only sheet. Keep
+  mod/Wand/fallback attachments on their existing independent paths.
+- Extend both Hub fixed-function and Boneyard Arena mesh batching to accept the
+  native per-vertex color gradient; do not split it into two flat-alpha quads.
+- Consume row-65 effective rank and selected-primary identity already present
+  on `ProtocolPlayerState`; no protocol or architecture change.
+- Remove the false no-presentation assumptions in entries 020, 101, and 123.
+
+### Validation contract
+
+- Focused planner tests: rank zero/nonzero/magnitude/concentration, the full
+  six-row material table, all 240 geometry rows, exact endpoint extension,
+  inclusive width endpoints `2/3.5`, alpha extrema and gradient factor, five
+  pure colors, Plane Orb, all fifteen Weld colors, and invalid selections.
+- View tests: exact body/additive/glow/hands order; selectors `0/1` colored,
+  `2..5` additive-only; effective-only rank; live deactivation; native versus
+  mod/Wand/empty; idle/cast/melee/spin poses; world tint isolation; death and
+  teardown.
+- Renderer tests: per-vertex colors survive fixed-function Hub and Arena
+  batching with selector-one blending and no Region-light registration.
+- Browser journey on Mac Chrome: capture the same player/heading/pose/tick
+  before and after `sd.dev.grant_skill(65,1)`, prove a shaft-region pixel delta,
+  additive and colored members, unchanged orb program/light count, persistence
+  while idle/moving/casting in Hub and Boneyard, a selected-primary color swap,
+  selector-2 additive-only behavior, and empty page/console/network error arrays.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the byte-identical Mac
+  candidate after the focused journey.
+
+### Implementation validation receipt
+
+- Website extraction now drains the complete Staff program into
+  `player-staff-attachment-program.json`: 240 point/depth rows, body records
+  `5..10`, logical widths `6/6/6/6/8/9`, and aura rows `11/12/null/null/null/null`.
+  It emits exact selector-specific body sheets, four ordered hand-bank sheets,
+  and untouched aura crops. `verify_player_staff_split` proves body plus hand
+  bank 1 plus hand bank 2 reconstructs every prior combined sheet byte-for-byte
+  before generation; the earlier two-hand precomposition was rejected because
+  8-bit alpha rounding is not associative over the shaft.
+- The packed player atlas now owns 100 reviewable source sheets and 12,403
+  frames across three bounded pages. Exact page `(height, SHA-256)` rows are
+  `(2048, 8e1b2f34c3898167e5625d460418f3acf21ba3d0d34ebe6b8dfbd775c8d3b106)`,
+  `(2048, d36cb7c00505e2b7a5db8d90b03e5538fe19ee4ad79a1311bc83ab4554429e65)`,
+  and `(1750, 2bad6b8b61dc9b9735a866dff45c71838193850fc1842f5d1145f9ceef5296e1)`.
+- `player-enchant-staff-presentation.ts` owns the strict effective-rank gate,
+  complete pure/Weld/Plane color table, 100 Hz alpha, endpoint-inclusive width
+  sample, and exact quad geometry. `PlayerEnchantStaffView` retains normal
+  body, additive body, per-vertex aura, then hand bank 1 and hand bank 2.
+  Selectors `2..5` keep their
+  additive body with no manufactured aura. Mod/Wand/empty/unselected/death
+  paths remain independent.
+- The shared fixed-function batcher now accepts the same packed per-vertex
+  colors already supported by the Arena batcher. Hub and Boneyard consume the
+  same live view; strict existing progression/selection fields drive local and
+  remote presentation with no protocol, save, audio, collision, damage, or
+  light-provider change.
+- The Mac red candidate was byte-identical to the local tree and failed the
+  canonical gate at TypeScript `TS2307` because the new presentation owner was
+  deliberately absent. Focused green coverage closes rank zero/positive/
+  effective-only, ranks 1/15, all selectors, all 240 frames, inclusive width
+  endpoints, alpha/gradient, every color row, painter order, negative owners,
+  material tint isolation, fixed/Arena vertex colors, diagnostics, atlas
+  census, and extraction ownership.
+- After `origin/main` advanced, the uncommitted task was rebased onto current
+  remote commit `8702fb2908fc9ea8746ff09a7a03c5d9f2484a78`; upstream Phasing,
+  skill-picker, and targetless Staff-proc changes remained intact. Final
+  byte-identical Mac mini gate on macOS 26.6.2 arm64, pinned Node
+  `22.17.0`, npm `10.9.2`, and .NET `10.0.302` passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: 29 Website/backend contracts,
+  backend Release build/formatting, lint/import/generated checks, the new
+  17-test Arena/Staff group, 321 pretests, all `1729/1729` Boneyard/game tests,
+  every later auxiliary suite, desktop tests, production frontend/game-host
+  builds, bundle budget, and CSP media policy. The production Game entry is
+  `264582` raw / `80323` gzip bytes against `524288/134144`.
+- Mac Chrome `151.0.7922.174` at `1600x900`, protocol
+  `solomon-dark/105`, ran the real developer-grants journey on that built
+  candidate. Rank zero reported inactive/null. `sd.dev.grant_skill(65,1)`
+  produced selector-0 aura row 11 and Fire tint `#998077` while idle; the
+  isolated shaft crop changed 1,561 pixels / 118,815 RGB-channel units. Weld
+  1000 recolored it to `#7F5D6C`; the addressed remote player reported the
+  same Weld tint/row; selecting Fire restored `#998077`; Boneyard retained the
+  active row-11 glow. Page, console, failed-request, host-error, and failed-response arrays were
+  empty. The visually inspected disposable Boneyard frame had SHA-256
+  `087a84494992eb67c2ec7ea5fa2ed1468a60b696152455edde8b0799704e6c38`.
+- No browser-platform exception or material unknown remains. The task is
+  uncommitted, unpushed, and undeployed; publication was not requested.
 
 ## Element orb painters
 

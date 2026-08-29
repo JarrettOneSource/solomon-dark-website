@@ -417,15 +417,15 @@ test('wizard variants share compact atlas pages instead of decoded padded sheets
   assert.match(playerAtlas, /orig: origin/)
   assert.match(playerAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
   assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PAGE_SIZE = 2048/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_DECODED_BYTES = 34889728/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCE_SHEET_COUNT = 84/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_FRAME_COUNT = 8563/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_EMPTY_FRAME_COUNT = 2049/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RECTANGLE_COUNT = 6059/)
-  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RGBA_BYTES = 30906372/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_DECODED_BYTES = 47890432/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCE_SHEET_COUNT = 100/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_FRAME_COUNT = 12403/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_EMPTY_FRAME_COUNT = 3993/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RECTANGLE_COUNT = 7931/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RGBA_BYTES = 42744408/)
   assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCES = \[page0, page1, page2\]/)
   assert.match(playerAtlasPacker, /cell\.getchannel\("A"\)\.getbbox\(\)/)
-  assert.match(playerAtlasPacker, /expected 84 player source sheets/)
+  assert.match(playerAtlasPacker, /expected 100 player source sheets/)
   assert.match(playerAtlasPacker, /if len\(pages\) > 3:/)
   assert.match(playerAtlasPacker, /max\(1, sum\(shelf\.height for shelf in shelves\)\)/)
   assert.match(
@@ -434,9 +434,9 @@ test('wizard variants share compact atlas pages instead of decoded padded sheets
   )
   assert.doesNotMatch(sharedAssets, /player-character-/)
   const expectedPages = [
-    [0, 2_048, 'adf78d1649e003ab035ad36f6f97ac2d03e6d6e76893b12f89c6fd9db73963aa'],
-    [1, 2_048, 'c446a130514bfa4645a061963c98b033247e534c4037e9848f0982897e3d3004'],
-    [2, 163, '9022fc5169b027e1da6ae311d672da5265fe880107b30d9a95fa81b4b2c9be08'],
+    [0, 2_048, '8e1b2f34c3898167e5625d460418f3acf21ba3d0d34ebe6b8dfbd775c8d3b106'],
+    [1, 2_048, 'd36cb7c00505e2b7a5db8d90b03e5538fe19ee4ad79a1311bc83ab4554429e65'],
+    [2, 1_750, '2bad6b8b61dc9b9735a866dff45c71838193850fc1842f5d1145f9ceef5296e1'],
   ] as const
   for (const [page, height, sha256] of expectedPages) {
     const png = readFileSync(new URL(
@@ -462,6 +462,23 @@ test('selector-zero Robe keeps both dynamic and fixed color lanes beside the Sta
   )
   assert.match(hubActors, /this\.staffBack\.texture = weaponTextures\.back/)
   assert.match(hubActors, /this\.staffFront\.texture = weaponTextures\.front/)
+})
+
+test('effective Enchant rank owns one shared live Staff body-aura-hand compositor', () => {
+  assert.match(playerTextures, /enchantStaffAuras: \[enchantStaffAura0, enchantStaffAura1\]/)
+  assert.match(playerTextures, /bodies: PLAYER_CHARACTER_SHEETS\.staffBodies\.map/)
+  assert.match(
+    playerTextures,
+    /hands: \{[\s\S]*?staffHands\.primary\.back[\s\S]*?staffHands\.primary\.front[\s\S]*?staffHands\.secondary\.back[\s\S]*?staffHands\.secondary\.front/,
+  )
+  assert.match(hubActors, /new PlayerEnchantStaffView\(textures\.enchantStaff\)/)
+  assert.match(hubActors, /learnedSkills: player\.progression\.learnedSkills/)
+  assert.match(hubActors, /selectedPrimarySkillId: planewalkerActive/)
+  assert.match(hubActors, /nativeStaff: nativeStaffVisible/)
+  assert.match(boneyardRenderer, /playerEnchantStaffActive/)
+  assert.match(hubExtractor, /write_player_staff_attachment_program/)
+  assert.match(hubExtractor, /verify_player_staff_split/)
+  assert.match(hubExtractor, /player-enchant-staff-aura-/)
 })
 
 test('selected-primary -1 owns complete fallback, scroll, and plain-Staff pixels', () => {

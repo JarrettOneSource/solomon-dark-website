@@ -66,6 +66,7 @@ type NativeBatchMeshElement = Parameters<DefaultBatcher['packAttributes']>[0]
 type NativeBatchQuadElement = Parameters<DefaultBatcher['packQuadAttributes']>[0]
 type NativeBatchShader = DefaultBatcher['shader']
 type NativeBatchOptions = ConstructorParameters<typeof DefaultBatcher>[0]
+const nativeFixedFunctionVertexColors = new WeakMap<object, Uint32Array>()
 
 interface NativeInstructionSet {
   readonly uid: number
@@ -307,6 +308,9 @@ class NativeFixedFunctionBatcher extends DefaultBatcher {
     const textureIdAndRound = textureId << 16 | element.roundPixels & 0xffff
     const transform = element.transform
     const { positions, uvs } = element
+    const vertexColors = nativeFixedFunctionVertexColors.get(
+      (element as NativeBatchMeshElement & { readonly renderable?: object }).renderable ?? element,
+    )
     const end = element.attributeOffset + element.attributeSize
     const texturePremultiplied = nativeTextureIsPremultiplied(element.texture)
     for (let vertex = element.attributeOffset; vertex < end; vertex += 1) {
@@ -317,7 +321,10 @@ class NativeFixedFunctionBatcher extends DefaultBatcher {
       float32View[index++] = transform.d * y + transform.b * x + transform.ty
       float32View[index++] = uvs[coordinate]!
       float32View[index++] = uvs[coordinate + 1]!
-      uint32View[index++] = element.color
+      const vertexColor = vertexColors?.[vertex - element.attributeOffset]
+      uint32View[index++] = vertexColor === undefined
+        ? element.color
+        : multiplyNativeFixedFunctionPackedColors(vertexColor, element.color)
       uint32View[index++] = textureIdAndRound
       float32View[index++] = texturePremultiplied
     }
@@ -367,6 +374,26 @@ class NativeFixedFunctionBatcher extends DefaultBatcher {
     shader.destroy(true)
     super.destroy()
   }
+}
+
+export function nativeFixedFunctionPackedColor(color: number, alpha: number): number {
+  const blueGreenRed = color >> 16 | color & 0x00ff00 | (color & 0xff) << 16
+  return (blueGreenRed + (Math.trunc(Math.min(1, Math.max(0, alpha)) * 255) << 24)) >>> 0
+}
+
+export function setNativeFixedFunctionVertexColors(
+  renderable: object,
+  colors: Uint32Array,
+): void {
+  nativeFixedFunctionVertexColors.set(renderable, colors)
+}
+
+function multiplyNativeFixedFunctionPackedColors(vertex: number, group: number): number {
+  const red = (vertex & 0xff) * (group & 0xff) / 0xff | 0
+  const green = (vertex >> 8 & 0xff) * (group >> 8 & 0xff) / 0xff | 0
+  const blue = (vertex >> 16 & 0xff) * (group >> 16 & 0xff) / 0xff | 0
+  const alpha = (vertex >>> 24) * (group >>> 24) / 0xff | 0
+  return (red | green << 8 | blue << 16 | alpha << 24) >>> 0
 }
 
 function installNativeTextureAlphaShaders(renderer: Renderer): void {

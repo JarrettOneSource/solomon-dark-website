@@ -90,6 +90,13 @@ interface HubFrameDiagnostics {
   playerElementEffectPrimaryId: number | null
   playerElementEffectPrimaryIds: Record<string, number | null>
   playerElementEffectScale: number
+  playerEnchantStaffActive: boolean
+  playerEnchantStaffActives: Record<string, boolean>
+  playerEnchantStaffAlpha: number
+  playerEnchantStaffAuraRecord: number | null
+  playerEnchantStaffAuraRecords: Record<string, number | null>
+  playerEnchantStaffTint: number | null
+  playerEnchantStaffTints: Record<string, number | null>
   playerHeadingIndex: number
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
@@ -331,6 +338,13 @@ export async function createHubWorldRenderer(
     playerElementEffectPrimaryId: null,
     playerElementEffectPrimaryIds: {},
     playerElementEffectScale: 1,
+    playerEnchantStaffActive: false,
+    playerEnchantStaffActives: {},
+    playerEnchantStaffAlpha: 0,
+    playerEnchantStaffAuraRecord: null,
+    playerEnchantStaffAuraRecords: {},
+    playerEnchantStaffTint: null,
+    playerEnchantStaffTints: {},
     playerHeadingIndex: 0,
     playerMagicShieldScale: 1.5,
     playerMagicShieldVisible: false,
@@ -456,6 +470,33 @@ export async function createHubWorldRenderer(
         return [playerId, view?.elementEffectPrimaryId ?? null]
       }),
     )
+    frameDiagnostics.playerEnchantStaffActives = Object.fromEntries(
+      Object.keys(snapshot.players).map((playerId) => {
+        const region = snapshot.world.participants[playerId]?.region
+        const view = region === 'courtyard'
+          ? courtyardScene.player(playerId)
+          : privateRoomScene.player(playerId)
+        return [playerId, view?.enchantStaffActive ?? false]
+      }),
+    )
+    frameDiagnostics.playerEnchantStaffAuraRecords = Object.fromEntries(
+      Object.keys(snapshot.players).map((playerId) => {
+        const region = snapshot.world.participants[playerId]?.region
+        const view = region === 'courtyard'
+          ? courtyardScene.player(playerId)
+          : privateRoomScene.player(playerId)
+        return [playerId, view?.enchantStaffAuraRecord ?? null]
+      }),
+    )
+    frameDiagnostics.playerEnchantStaffTints = Object.fromEntries(
+      Object.keys(snapshot.players).map((playerId) => {
+        const region = snapshot.world.participants[playerId]?.region
+        const view = region === 'courtyard'
+          ? courtyardScene.player(playerId)
+          : privateRoomScene.player(playerId)
+        return [playerId, view?.enchantStaffTint ?? null]
+      }),
+    )
     frameDiagnostics.playerDamageX4Alphas = Object.fromEntries(
       Object.keys(snapshot.players).map((playerId) => {
         const region = snapshot.world.participants[playerId]?.region
@@ -489,6 +530,10 @@ export async function createHubWorldRenderer(
     frameDiagnostics.playerDamageX4TicksRemaining = player.progression.damageX4TicksRemaining
     frameDiagnostics.playerElementEffectPrimaryId = playerView.elementEffectPrimaryId
     frameDiagnostics.playerElementEffectScale = playerView.elementEffectScale
+    frameDiagnostics.playerEnchantStaffActive = playerView.enchantStaffActive
+    frameDiagnostics.playerEnchantStaffAlpha = playerView.enchantStaffAlpha
+    frameDiagnostics.playerEnchantStaffAuraRecord = playerView.enchantStaffAuraRecord
+    frameDiagnostics.playerEnchantStaffTint = playerView.enchantStaffTint
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
     frameDiagnostics.playerMaterialTint = playerView.materialTint

@@ -376,6 +376,13 @@ interface BoneyardRendererFrameDiagnostics {
   playerElementEffectPrimaryId: number | null
   playerElementEffectPrimaryIds: Record<string, number | null>
   playerElementEffectScale: number
+  playerEnchantStaffActive: boolean
+  playerEnchantStaffActives: Record<string, boolean>
+  playerEnchantStaffAlpha: number
+  playerEnchantStaffAuraRecord: number | null
+  playerEnchantStaffAuraRecords: Record<string, number | null>
+  playerEnchantStaffTint: number | null
+  playerEnchantStaffTints: Record<string, number | null>
   seekerSegmentCount: number
   playerHeadingIndex: number
   playerLightRadius: number
@@ -852,6 +859,13 @@ export async function createBoneyardWorldRenderer(
     playerElementEffectPrimaryId: null,
     playerElementEffectPrimaryIds: {},
     playerElementEffectScale: 1,
+    playerEnchantStaffActive: false,
+    playerEnchantStaffActives: {},
+    playerEnchantStaffAlpha: 0,
+    playerEnchantStaffAuraRecord: null,
+    playerEnchantStaffAuraRecords: {},
+    playerEnchantStaffTint: null,
+    playerEnchantStaffTints: {},
     seekerSegmentCount: 0,
     playerHeadingIndex: 0,
     playerLightRadius: 0,
@@ -1325,6 +1339,24 @@ export async function createBoneyardWorldRenderer(
           scene.player(playerId)?.elementEffectPrimaryId ?? null,
         ]),
       )
+      frameDiagnostics.playerEnchantStaffActives = Object.fromEntries(
+        Object.keys(snapshot.players).map((playerId) => [
+          playerId,
+          scene.player(playerId)?.enchantStaffActive ?? false,
+        ]),
+      )
+      frameDiagnostics.playerEnchantStaffAuraRecords = Object.fromEntries(
+        Object.keys(snapshot.players).map((playerId) => [
+          playerId,
+          scene.player(playerId)?.enchantStaffAuraRecord ?? null,
+        ]),
+      )
+      frameDiagnostics.playerEnchantStaffTints = Object.fromEntries(
+        Object.keys(snapshot.players).map((playerId) => [
+          playerId,
+          scene.player(playerId)?.enchantStaffTint ?? null,
+        ]),
+      )
       frameDiagnostics.playerDamageX4Alphas = Object.fromEntries(
         Object.keys(snapshot.players).map((playerId) => [
           playerId,
@@ -1344,6 +1376,10 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerDamageX4TicksRemaining = player.progression.damageX4TicksRemaining
       frameDiagnostics.playerElementEffectPrimaryId = playerView?.elementEffectPrimaryId ?? null
       frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
+      frameDiagnostics.playerEnchantStaffActive = playerView?.enchantStaffActive ?? false
+      frameDiagnostics.playerEnchantStaffAlpha = playerView?.enchantStaffAlpha ?? 0
+      frameDiagnostics.playerEnchantStaffAuraRecord = playerView?.enchantStaffAuraRecord ?? null
+      frameDiagnostics.playerEnchantStaffTint = playerView?.enchantStaffTint ?? null
       frameDiagnostics.seekerSegmentCount = scene.seekerSegmentCount
       frameDiagnostics.orbSpriteCount = playerView?.orbSpriteCount ?? 0
       frameDiagnostics.offCameraCleanupApplied = currentStaticWorld.offCameraCleanupApplied

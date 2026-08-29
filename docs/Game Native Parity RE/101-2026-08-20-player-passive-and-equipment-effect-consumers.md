@@ -23,7 +23,7 @@ it is not a second hand-maintained list.
 | 62 Resist Magic | combined skill/concentration/equipment fraction before shield/Stoneskin interception | exact-ported |
 | 63 Creativity | four-card/lower-requirement picker already owned by progression; fixed concentration slot A alone rolls `Integer(5)==1`, selects an eligible card, and applies it twice | exact-ported authority/protocol; full Skill Book UI follows in the loadout slice |
 | 64 Health Up | base max HP plus authored `mValue`, then equipment max-HP transform; refresh preserves ratio | exact-ported |
-| 65 Enchant Staff | `mDamage` adds to both melee lanes; concentration action-rate factor is shipped `1.75`, not CFG text `2x` | exact-ported through automatic StaffMelee/StaffSpin gameplay, animation, protocol, VFX, and audio; full browser receipt remains pending |
+| 65 Enchant Staff | `mDamage` adds to both melee lanes; concentration action-rate factor is shipped `1.75`, not CFG text `2x`; every positive effective rank also supplies the selected-primary color to the persistent Staff attachment compositor | exact-ported through automatic StaffMelee/StaffSpin gameplay, action/contact presentation, and entry 010's always-on body/aura/hand correction with Mac browser proof |
 | 66 Telekinesis | pickup scalar `mValue*1.25`, doubled while concentrated | exact-ported through Orb pull/capture and Gold/Sack/Bonus pickup; full browser receipt remains pending |
 | 67 Rush | movement factor `1+mValue/100`, then concentrated factor and equipment walk transform | exact-ported into authoritative movement |
 | 68 Deflect | exact Staff type gate, one `Integer(100)` per deflectable contact, successful-only signed pitch, facing, global stock swipe, and nearby concentrated physical x5 reflection | exact-ported gameplay/event/audio; browser contact journey still required |
@@ -120,8 +120,10 @@ adds 200-tick Dazzle and consumes signed `Float(45)` per surviving target for
 heading perturbation. Disable permanently multiplies target movement by
 `.75` and the flag-2 action lane by `.5`; repeated hits compound as native.
 
-The complete presentation set has no light-provider call or world-light
-write. Knockback and Critical each birth additive BadGuys 15 SmokePuff at 25
+The action/contact presentation set has no light-provider call or world-light
+write. This does not exclude row 65's separately owned, always-on additive
+Staff attachment geometry recovered by entry 010; that geometry is still not
+a Region light. Knockback and Critical each birth additive BadGuys 15 SmokePuff at 25
 units along heading, scale eight, alpha one, loss `.05`; renderer
 `Anim_SmokePuff 0x00449840` selects additive around the shared Fade draw, then
 restores normal. Its constructor still spends an overwritten `Float(.05)` and

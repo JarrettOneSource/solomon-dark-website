@@ -34,6 +34,16 @@ const hubVisualAtlasPacker = readFileSync(
 )
 const gameAssets = readFileSync(new URL('../game-assets.ts', import.meta.url), 'utf8')
 
+test('Hub diagnostics expose local and addressed-player Enchant Staff presentation', () => {
+  assert.match(hubWorldRenderer, /playerEnchantStaffActive/)
+  assert.match(hubWorldRenderer, /playerEnchantStaffActives/)
+  assert.match(hubWorldRenderer, /playerEnchantStaffAuraRecords/)
+  assert.match(hubWorldRenderer, /playerEnchantStaffTints/)
+  assert.match(hubActors, /get enchantStaffActive\(\)/)
+  assert.match(hubActors, /get enchantStaffAuraRecord\(\)/)
+  assert.match(hubActors, /get enchantStaffTint\(\)/)
+})
+
 test('Hub-world visuals share three bounded exact-pixel pages', () => {
   assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_DECODED_BYTES = 42229760/)
   assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_SOURCE_COUNT = 87/)

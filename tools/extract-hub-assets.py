@@ -814,9 +814,57 @@ def draw_player_staff_pass(
     selector: int = 0,
 ) -> None:
     """Paint the stock staff and both hands as one item-owned depth pass."""
+    draw_player_staff_body_pass(
+        cell,
+        atlas,
+        records,
+        heading,
+        pose,
+        front,
+        selector,
+    )
+    draw_player_staff_hands_pass(cell, atlas, records, heading, pose, front)
+
+
+def draw_player_staff_body_pass(
+    cell: Image.Image,
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    heading: int,
+    pose: int,
+    front: bool,
+    selector: int = 0,
+) -> None:
     frame = pose * PLAYER_HEADINGS + heading
     primary_hand = 3244 + frame
-    secondary_hand = 3484 + frame
+    if attachment_is_front(records, primary_hand) != front:
+        return
+    draw_staff(cell, atlas, records, heading, pose, selector)
+
+
+def draw_player_staff_hands_pass(
+    cell: Image.Image,
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    heading: int,
+    pose: int,
+    front: bool,
+) -> None:
+    draw_player_staff_hand_pass(cell, atlas, records, heading, pose, front, 3244)
+    draw_player_staff_hand_pass(cell, atlas, records, heading, pose, front, 3484)
+
+
+def draw_player_staff_hand_pass(
+    cell: Image.Image,
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    heading: int,
+    pose: int,
+    front: bool,
+    base_record: int,
+) -> None:
+    frame = pose * PLAYER_HEADINGS + heading
+    primary_hand = 3244 + frame
     if attachment_is_front(records, primary_hand) != front:
         return
 
@@ -824,9 +872,7 @@ def draw_player_staff_pass(
     # records for the same heading-and-pose frame. The whole composite is
     # submitted either behind or in front of the robe from primary-hand point
     # zero; the two hands are never split into independent depth passes.
-    draw_staff(cell, atlas, records, heading, pose, selector)
-    paste_player_layer(cell, atlas, records[primary_hand])
-    paste_player_layer(cell, atlas, records[secondary_hand])
+    paste_player_layer(cell, atlas, records[base_record + frame])
 
 
 def empty_player_sheet(columns: int = 1) -> Image.Image:
@@ -912,6 +958,125 @@ def build_player_staff_sheet(
                 (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
             )
     return sheet
+
+
+def build_player_staff_body_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    front: bool,
+    selector: int,
+) -> Image.Image:
+    sheet = empty_player_sheet(PLAYER_STAFF_ATTACHMENT_POSES)
+    for heading in range(PLAYER_HEADINGS):
+        for pose in range(PLAYER_STAFF_ATTACHMENT_POSES):
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            draw_player_staff_body_pass(
+                cell,
+                atlas,
+                records,
+                heading,
+                pose,
+                front,
+                selector,
+            )
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def build_player_staff_hand_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    front: bool,
+    base_record: int,
+) -> Image.Image:
+    sheet = empty_player_sheet(PLAYER_STAFF_ATTACHMENT_POSES)
+    for heading in range(PLAYER_HEADINGS):
+        for pose in range(PLAYER_STAFF_ATTACHMENT_POSES):
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            draw_player_staff_hand_pass(
+                cell,
+                atlas,
+                records,
+                heading,
+                pose,
+                front,
+                base_record,
+            )
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def write_player_staff_attachment_program(
+    records: list[SpriteRecord],
+    output_dir: Path,
+) -> None:
+    frames = []
+    for pose in range(PLAYER_STAFF_ATTACHMENT_POSES):
+        pose_frames = []
+        for heading in range(PLAYER_HEADINGS):
+            record_index = 3244 + pose * PLAYER_HEADINGS + heading
+            record = records[record_index]
+            if len(record.points) < 3:
+                raise ValueError("staff attachment frame is missing native endpoints")
+            pose_frames.append({
+                "end": list(record.points[2]),
+                "front": attachment_is_front(records, record_index),
+                "start": list(record.points[1]),
+            })
+        frames.append(pose_frames)
+    payload = {
+        "auraRecords": [11, 12, None, None, None, None],
+        "bodyLogicalWidths": [records[index].logical_width for index in range(5, 11)],
+        "bodyRecords": list(range(5, 11)),
+        "frames": frames,
+        "schema": 1,
+    }
+    (output_dir / "player-staff-attachment-program.json").write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def verify_player_staff_split(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+) -> None:
+    hands = {
+        (front, base_record): build_player_staff_hand_sheet(
+            atlas,
+            records,
+            front,
+            base_record,
+        )
+        for front in (False, True)
+        for base_record in (3244, 3484)
+    }
+    for selector in range(6):
+        for front in (False, True):
+            reconstructed = build_player_staff_body_sheet(
+                atlas,
+                records,
+                front,
+                selector,
+            )
+            reconstructed.alpha_composite(hands[(front, 3244)])
+            reconstructed.alpha_composite(hands[(front, 3484)])
+            combined = build_player_staff_sheet(
+                atlas,
+                records,
+                front,
+                selector,
+            )
+            if reconstructed.tobytes() != combined.tobytes():
+                raise ValueError(
+                    f"staff selector {selector} split does not reconstruct the combined sheet"
+                )
 
 
 def build_player_fallback_attachment_sheet(
@@ -1637,6 +1802,7 @@ def main() -> int:
         raise ValueError(
             f"Clothes.bundle has {len(clothes_records)} records; expected 3724"
         )
+    verify_player_staff_split(clothes, clothes_records)
     save(crop(clothes, clothes_records[2]), output_dir, "player-mindblast-ring")
     for selector in range(6):
         save(
@@ -1649,6 +1815,34 @@ def main() -> int:
             output_dir,
             f"player-character-staff-{selector}-front",
         )
+        save(
+            build_player_staff_body_sheet(clothes, clothes_records, False, selector),
+            output_dir,
+            f"player-character-staff-{selector}-body-back",
+        )
+        save(
+            build_player_staff_body_sheet(clothes, clothes_records, True, selector),
+            output_dir,
+            f"player-character-staff-{selector}-body-front",
+        )
+    for layer, base_record in (("primary", 3244), ("secondary", 3484)):
+        save(
+            build_player_staff_hand_sheet(clothes, clothes_records, False, base_record),
+            output_dir,
+            f"player-character-staff-hand-{layer}-back",
+        )
+        save(
+            build_player_staff_hand_sheet(clothes, clothes_records, True, base_record),
+            output_dir,
+            f"player-character-staff-hand-{layer}-front",
+        )
+    for selector, record_index in enumerate((11, 12)):
+        save(
+            crop(clothes, clothes_records[record_index]),
+            output_dir,
+            f"player-enchant-staff-aura-{selector}",
+        )
+    write_player_staff_attachment_program(clothes_records, output_dir)
     save(build_player_staff_sheet(clothes, clothes_records, False), output_dir, "player-character-staff-back")
     save(build_player_staff_sheet(clothes, clothes_records, True), output_dir, "player-character-staff-front")
     save(

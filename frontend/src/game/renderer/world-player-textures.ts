@@ -1,6 +1,8 @@
 import { Rectangle, Texture } from 'pixi.js'
 
 import deathHatAnchors from '../../assets/game/player-character-death-hat-anchors.json'
+import enchantStaffAura0 from '../../assets/game/player-enchant-staff-aura-0.png'
+import enchantStaffAura1 from '../../assets/game/player-enchant-staff-aura-1.png'
 import {
   hub,
   primarySpells,
@@ -105,6 +107,24 @@ export interface PlayerLivingEquipmentTextureFrames {
   }>
 }
 
+export interface PlayerEnchantStaffTextureFrames {
+  readonly auras: readonly [Texture, Texture]
+  readonly bodies: readonly Readonly<{
+    back: readonly (readonly Texture[])[]
+    front: readonly (readonly Texture[])[]
+  }>[]
+  readonly hands: Readonly<{
+    primary: Readonly<{
+      back: readonly (readonly Texture[])[]
+      front: readonly (readonly Texture[])[]
+    }>
+    secondary: Readonly<{
+      back: readonly (readonly Texture[])[]
+      front: readonly (readonly Texture[])[]
+    }>
+  }>
+}
+
 export interface PlayerWorldTextures {
   death: {
     hat: {
@@ -125,6 +145,7 @@ export interface PlayerWorldTextures {
     }
   }
   elementVfx: Readonly<Record<NativeElementVfxSprite, readonly Texture[]>>
+  enchantStaff: PlayerEnchantStaffTextureFrames
   fontAtlas: Texture
   equipment: PlayerLivingEquipmentTextureFrames
   fireActors: NativeFireActorTextures
@@ -185,6 +206,7 @@ export function playerWorldAssetSources(): string[] {
     elementVfx: Object.values(NATIVE_ELEMENT_VFX_RECORDS).flat().map((entry) => (
       nativeEnemySpriteRecord('BadGuys', entry).source
     )),
+    enchantStaffAuras: [enchantStaffAura0, enchantStaffAura1],
     fontAtlas: hub.hud.fontAtlas,
     fireActors: {
       badGuys: NATIVE_FIRE_ACTOR_BADGUYS_RECORDS.map((entry) => (
@@ -266,6 +288,47 @@ export function createPlayerWorldTextures(
     playerTextures(element),
   ])) as Record<WizardElement, PlayerActorTextureFrames>
   const elementTextures = createNativeElementVfxTextures(texture)
+  const enchantStaff: PlayerEnchantStaffTextureFrames = {
+    auras: [texture(enchantStaffAura0), texture(enchantStaffAura1)],
+    bodies: PLAYER_CHARACTER_SHEETS.staffBodies.map((style) => ({
+      back: playerCharacterAtlas.grid(
+        style.back,
+        ACTOR_STAFF_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
+      front: playerCharacterAtlas.grid(
+        style.front,
+        ACTOR_STAFF_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
+    })),
+    hands: {
+      primary: {
+        back: playerCharacterAtlas.grid(
+          PLAYER_CHARACTER_SHEETS.staffHands.primary.back,
+          ACTOR_STAFF_ATTACHMENT_POSES,
+          ACTOR_HEADINGS,
+        ),
+        front: playerCharacterAtlas.grid(
+          PLAYER_CHARACTER_SHEETS.staffHands.primary.front,
+          ACTOR_STAFF_ATTACHMENT_POSES,
+          ACTOR_HEADINGS,
+        ),
+      },
+      secondary: {
+        back: playerCharacterAtlas.grid(
+          PLAYER_CHARACTER_SHEETS.staffHands.secondary.back,
+          ACTOR_STAFF_ATTACHMENT_POSES,
+          ACTOR_HEADINGS,
+        ),
+        front: playerCharacterAtlas.grid(
+          PLAYER_CHARACTER_SHEETS.staffHands.secondary.front,
+          ACTOR_STAFF_ATTACHMENT_POSES,
+          ACTOR_HEADINGS,
+        ),
+      },
+    },
+  }
   const equipment: PlayerLivingEquipmentTextureFrames = {
     bareAttachment: {
       back: playerCharacterAtlas.grid(
@@ -385,6 +448,7 @@ export function createPlayerWorldTextures(
       },
     },
     elementVfx: elementTextures,
+    enchantStaff,
     fontAtlas: texture(hub.hud.fontAtlas),
     equipment,
     fireActors: {
@@ -527,6 +591,14 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
     staff.back.forEach(add)
     staff.front.forEach(add)
   }
+  for (const body of textures.enchantStaff.bodies) {
+    body.back.forEach(add)
+    body.front.forEach(add)
+  }
+  textures.enchantStaff.hands.primary.back.forEach(add)
+  textures.enchantStaff.hands.primary.front.forEach(add)
+  textures.enchantStaff.hands.secondary.back.forEach(add)
+  textures.enchantStaff.hands.secondary.front.forEach(add)
   textures.equipment.unselectedAttachment.back.forEach(add)
   textures.equipment.unselectedAttachment.front.forEach(add)
   add(textures.equipment.unselectedAttachment.robe)

@@ -9,6 +9,8 @@ import { extname, resolve, sep } from 'node:path'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
 
+import staffProgram from '../src/assets/game/player-staff-attachment-program.json' with { type: 'json' }
+
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
 import {
   GAME_PROTOCOL_NAME,
@@ -47,6 +49,7 @@ const supervisor = spawn(process.execPath, [supervisorEntry], {
     ...process.env,
     SDR_GAME_ALLOWED_ORIGINS: baseUrl,
     SDR_GAME_LOG_LEVEL: 'warning',
+    SDR_GAME_MEMORIAL_PATH: resolve(releaseRoot, 'memorial.json'),
     SDR_GAME_ML_BOT_CHECKPOINT: checkpointPath,
     SDR_GAME_SUPERVISOR_HOST: '127.0.0.1',
     SDR_GAME_SUPERVISOR_PORT: '0',
@@ -88,6 +91,14 @@ try {
     requestFailures.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`)
   })
   await page.addInitScript(({ credential, endpoint }) => {
+    const NativeWebSocket = window.WebSocket
+    window.WebSocket = new Proxy(NativeWebSocket, {
+      construct(Target, args) {
+        const socket = new Target(...args)
+        window.__sdrDeveloperGrantsSocket = socket
+        return socket
+      },
+    })
     window.solomonDarkRuntime = {
       gameEndpoint: { credential, kind: 'localhost', url: endpoint },
     }
@@ -113,6 +124,58 @@ try {
   await page.locator('.hub-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 30_000 })
   await page.waitForFunction(() => window.solomonDark?.lua)
+  const hubCanvas = page.locator('.hub-world-canvas')
+  const hubBaselineFrame = await hubCanvas.evaluate(node => structuredClone(node.__sdrHubFrame))
+  const localPlayerId = hubBaselineFrame.localPlayerId
+  const baseline = enchantReceipt(hubBaselineFrame, localPlayerId, localPlayerId)
+  assert.equal(baseline.active, false)
+  assert.equal(baseline.auraRecord, null)
+  const staffCrop = enchantStaffCrop(hubBaselineFrame, localPlayerId)
+  const baselineScreenshot = await hubCanvas.screenshot()
+
+  const localEnchantGrant = await executeLua(page, 'return sd.dev.grant_skill(65, 1)')
+  assert.deepEqual(localEnchantGrant.values, [true])
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    return frame?.playerEnchantStaffActive === true
+      && frame.playerEnchantStaffAuraRecord === 11
+      && frame.playerEnchantStaffTint === 0x998077
+  })
+  const fireFrame = await hubCanvas.evaluate(node => structuredClone(node.__sdrHubFrame))
+  const fire = enchantReceipt(fireFrame, localPlayerId, localPlayerId)
+  assert.ok(fire.alpha >= 0.3 && fire.alpha <= 0.7)
+  const fireScreenshot = await hubCanvas.screenshot()
+  const pixelDifference = await compareScreenshotCrops(
+    page,
+    baselineScreenshot,
+    staffCrop,
+    fireScreenshot,
+    staffCrop,
+  )
+  assert.ok(pixelDifference.changedPixels > 5, JSON.stringify(pixelDifference))
+  assert.ok(pixelDifference.channelDelta > 100, JSON.stringify(pixelDifference))
+
+  const localWeldGrant = await executeLua(page, 'return sd.dev.grant_weld(1000)')
+  assert.deepEqual(localWeldGrant.values, [true])
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')
+      ?.__sdrHubFrame?.playerEnchantStaffTint === 0x7f5d6c
+  ))
+  const weld = enchantReceipt(
+    await hubCanvas.evaluate(node => structuredClone(node.__sdrHubFrame)),
+    localPlayerId,
+    localPlayerId,
+  )
+  await page.evaluate(() => {
+    window.__sdrDeveloperGrantsSocket.send(JSON.stringify({
+      skillId: 16,
+      type: 'client-select-primary-skill',
+    }))
+  })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')
+      ?.__sdrHubFrame?.playerEnchantStaffTint === 0x998077
+  ))
 
   const targetId = ordinary.welcome.playerId
   const granted = await executeLua(page, `
@@ -123,6 +186,7 @@ try {
     sd.dev.grant_gold(250, target)
     sd.dev.grant_item('health-potion', 3, target)
     sd.dev.grant_item('equipment:0', 1, target)
+    sd.dev.grant_skill(65, 1, target)
     sd.dev.grant_skill(72, 2, target)
     sd.dev.grant_weld(1000, target)
     return #items, #skills, #welds, true
@@ -133,6 +197,17 @@ try {
   await waitFor(() => grantsPresent(ordinary.snapshot(), targetId), 10_000)
   const hubPlayer = ordinary.snapshot().players[targetId]
   assert.ok(hubPlayer)
+  await page.waitForFunction((playerId) => {
+    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    return frame?.playerEnchantStaffActives?.[playerId] === true
+      && frame.playerEnchantStaffAuraRecords?.[playerId] === 11
+      && frame.playerEnchantStaffTints?.[playerId] === 0x7f5d6c
+  }, targetId)
+  const remoteHub = enchantReceipt(
+    await hubCanvas.evaluate(node => structuredClone(node.__sdrHubFrame)),
+    targetId,
+    localPlayerId,
+  )
   ordinary.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: ordinary.welcome.boneyards[0].id,
@@ -143,6 +218,28 @@ try {
   ), 15_000)
   const runPlayer = ordinary.snapshot().players[targetId]
   assert.ok(runPlayer)
+
+  await page.evaluate((boneyardId) => {
+    window.__sdrDeveloperGrantsSocket.send(JSON.stringify({
+      boneyardId,
+      type: 'client-start-match',
+    }))
+  }, ordinary.welcome.boneyards[0].id)
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]')
+    .waitFor({ timeout: 30_000 })
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.playerEnchantStaffActive === true
+      && frame.playerEnchantStaffAuraRecord === 11
+      && frame.playerEnchantStaffTint === 0x998077
+  })
+  const boneyard = enchantReceipt(
+    await page.locator('.boneyard-world-canvas').evaluate(
+      node => structuredClone(node.__sdrBoneyardFrame),
+    ),
+    localPlayerId,
+    localPlayerId,
+  )
 
   if (process.env.SDR_GAME_SMOKE_SCREENSHOT) {
     await page.screenshot({ path: process.env.SDR_GAME_SMOKE_SCREENSHOT })
@@ -159,6 +256,7 @@ try {
     browserVersion: browser.version(),
     catalogs: granted.values.slice(0, 3),
     consoleErrors,
+    enchantStaff: { baseline, boneyard, fire, pixelDifference, remoteHub, weld },
     hub: grantReceipt(hubPlayer),
     hostErrors,
     pageErrors,
@@ -184,11 +282,13 @@ function grantsPresent(snapshot, playerId) {
   const player = snapshot.players[playerId]
   if (!player) return false
   const acidRain = player.progression.learnedSkills.find(([skillId]) => skillId === 72)
+  const enchantStaff = player.progression.learnedSkills.find(([skillId]) => skillId === 65)
   return player.economy.gold === 750
     && player.economy.backpack.some(item => (
       item.kind === 'health-potion' && item.quantity === 4
     ))
     && player.economy.backpack.some(item => item.recipeIndex === 0)
+    && enchantStaff?.[1] === 1
     && acidRain?.[1] === 2
     && player.progression.advancedUnlocks[0] === true
     && player.progression.selectedPrimarySkillId === 52
@@ -198,6 +298,7 @@ function grantsPresent(snapshot, playerId) {
 function grantReceipt(player) {
   return {
     acidRain: player.progression.learnedSkills.find(([skillId]) => skillId === 72),
+    enchantStaff: player.progression.learnedSkills.find(([skillId]) => skillId === 65),
     equipmentRecipeZero: player.economy.backpack.some(item => item.recipeIndex === 0),
     gold: player.economy.gold,
     healthPotions: player.economy.backpack.find(item => (
@@ -206,6 +307,94 @@ function grantReceipt(player) {
     primarySkillId: player.progression.selectedPrimarySkillId,
     weldBuildId: player.progression.weldBuildId,
   }
+}
+
+function enchantReceipt(frame, playerId, localPlayerId) {
+  const local = playerId === localPlayerId
+  return {
+    active: local
+      ? frame.playerEnchantStaffActive
+      : frame.playerEnchantStaffActives?.[playerId] ?? false,
+    alpha: local ? frame.playerEnchantStaffAlpha : null,
+    auraRecord: local
+      ? frame.playerEnchantStaffAuraRecord
+      : frame.playerEnchantStaffAuraRecords?.[playerId] ?? null,
+    tint: local
+      ? frame.playerEnchantStaffTint
+      : frame.playerEnchantStaffTints?.[playerId] ?? null,
+  }
+}
+
+function enchantStaffCrop(frame, playerId) {
+  const heading = ((Math.round(frame.playerHeadingIndex) % 24) + 24) % 24
+  const pose = Math.max(0, Math.min(9, Math.round(frame.playerAttachmentPose)))
+  const attachment = staffProgram.frames[pose]?.[heading]
+  const player = frame.playerScreenPositions?.[playerId]
+  assert.ok(attachment && player, JSON.stringify({ heading, player, pose }))
+  const sample = weight => ({
+    x: player.x + attachment.start[0]
+      + (attachment.end[0] - attachment.start[0]) * weight,
+    y: player.y + attachment.start[1]
+      + (attachment.end[1] - attachment.start[1]) * weight,
+  })
+  const near = sample(0.3)
+  const far = sample(0.85)
+  const margin = 16
+  const x = Math.max(0, Math.floor(Math.min(near.x, far.x) - margin))
+  const y = Math.max(0, Math.floor(Math.min(near.y, far.y) - margin))
+  return {
+    height: Math.min(900 - y, Math.ceil(Math.abs(far.y - near.y) + margin * 2)),
+    width: Math.min(1600 - x, Math.ceil(Math.abs(far.x - near.x) + margin * 2)),
+    x,
+    y,
+  }
+}
+
+function compareScreenshotCrops(target, firstScreenshot, firstRect, secondScreenshot, secondRect) {
+  return target.evaluate(async ({ first, firstRect, second, secondRect }) => {
+    const load = source => new Promise((resolveImage, reject) => {
+      const image = new Image()
+      image.addEventListener('load', () => resolveImage(image), { once: true })
+      image.addEventListener('error', reject, { once: true })
+      image.src = `data:image/png;base64,${source}`
+    })
+    const [firstImage, secondImage] = await Promise.all([load(first), load(second)])
+    const pixels = (image, rect) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = rect.width
+      canvas.height = rect.height
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      context.drawImage(
+        image,
+        rect.x,
+        rect.y,
+        rect.width,
+        rect.height,
+        0,
+        0,
+        rect.width,
+        rect.height,
+      )
+      return context.getImageData(0, 0, rect.width, rect.height).data
+    }
+    const firstPixels = pixels(firstImage, firstRect)
+    const secondPixels = pixels(secondImage, secondRect)
+    let changedPixels = 0
+    let channelDelta = 0
+    for (let offset = 0; offset < secondPixels.length; offset += 4) {
+      const delta = Math.abs(firstPixels[offset] - secondPixels[offset])
+        + Math.abs(firstPixels[offset + 1] - secondPixels[offset + 1])
+        + Math.abs(firstPixels[offset + 2] - secondPixels[offset + 2])
+      if (delta > 3) changedPixels += 1
+      channelDelta += delta
+    }
+    return { changedPixels, channelDelta }
+  }, {
+    first: firstScreenshot.toString('base64'),
+    firstRect,
+    second: secondScreenshot.toString('base64'),
+    secondRect,
+  })
 }
 
 async function issueHubTicket(supervisorUrl, developerAccess, leaderboardUserId) {

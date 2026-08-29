@@ -12,6 +12,8 @@ import {
   nativeFixedFunctionMultiplyBlendFactors,
   nativeFixedFunctionMultiplyRgb,
   nativeFixedFunctionNormalBlendFactors,
+  nativeFixedFunctionPackedColor,
+  setNativeFixedFunctionVertexColors,
 } from './native-fixed-function-render-pipeline.ts'
 
 const gl = {
@@ -21,6 +23,16 @@ const gl = {
   SRC_COLOR: 0x0300,
   ZERO: 0,
 }
+
+test('packs and registers per-vertex colors for native Staff gradient meshes', () => {
+  assert.equal(nativeFixedFunctionPackedColor(0x123456, 0.5), 0x7f563412)
+  assert.equal(nativeFixedFunctionPackedColor(0xffffff, -1), 0x00ffffff)
+  assert.equal(nativeFixedFunctionPackedColor(0xffffff, 2), 0xffffffff)
+  assert.doesNotThrow(() => setNativeFixedFunctionVertexColors(
+    {},
+    new Uint32Array([0xffffffff, 0x7fffffff]),
+  ))
+})
 
 test('maps all three D3D selectors to exact RGB and non-separate alpha factors', () => {
   assert.deepEqual(nativeFixedFunctionMultiplyBlendFactors(gl), [

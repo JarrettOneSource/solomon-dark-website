@@ -25,6 +25,7 @@ import {
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { PlayerDamageX4VfxView } from './player-damage-x4-vfx-view.ts'
+import { PlayerEnchantStaffView } from './player-enchant-staff-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import {
@@ -61,6 +62,7 @@ export class PlayerWorldView {
   private readonly fixed: Sprite
   private readonly fixedSecondary: Sprite
   private readonly staffFront: Sprite
+  private readonly enchantStaff: PlayerEnchantStaffView
   private readonly head: Sprite
   private readonly headSecondary: Sprite
   private readonly hitOverlay: Container
@@ -121,6 +123,7 @@ export class PlayerWorldView {
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
+    this.enchantStaff = new PlayerEnchantStaffView(textures.enchantStaff)
     const damageX4Texture = textures.secondary[nativeSecondarySpriteKey('BadGuys', 7)]
     this.damageX4FrontBase = new PlayerDamageX4VfxView(damageX4Texture)
     this.damageX4FrontBase.container.label = 'player-damage-x4-vfx-front-base'
@@ -190,6 +193,7 @@ export class PlayerWorldView {
     this.container.addChild(
       this.shadow,
       this.staffBack,
+      this.enchantStaff.container,
       this.robe,
       this.robeSecondary,
       this.unselectedRobeAttachment,
@@ -299,6 +303,7 @@ export class PlayerWorldView {
       || bareAttachmentVisible
     const ordinaryWeaponVisible = !plan.unselectedPrimaryAttachment && hasWeapon
     const ordinaryStaffVisible = !plan.unselectedPrimaryAttachment && hasStaff
+    const nativeStaffVisible = ordinaryStaffVisible && !modWeapon
     const unselectedRobeAttachmentVisible = plan.unselectedPrimaryAttachment
       && nativeRobe
     const robeFixedPose = playerCharacterRobeFixedPose(
@@ -328,7 +333,7 @@ export class PlayerWorldView {
     // both passes live preserves every melee pose without duplicating pixels.
     this.staffBack.visible = !death.visible && (
       fallbackAttachmentVisible
-      || (ordinaryWeaponVisible && modStaffFront !== true)
+      || (ordinaryWeaponVisible && !nativeStaffVisible && modStaffFront !== true)
     )
     this.orbFrontBase.container.visible = !death.visible
       && elementEffectVisible
@@ -352,7 +357,7 @@ export class PlayerWorldView {
     this.fixedSecondary.visible = !death.visible && robeHasSecondary
     this.staffFront.visible = !death.visible && (
       fallbackAttachmentVisible
-      || (ordinaryWeaponVisible && modStaffFront !== false)
+      || (ordinaryWeaponVisible && !nativeStaffVisible && modStaffFront !== false)
     )
     this.head.visible = !death.visible
     this.headSecondary.visible = !death.visible && hatHasSecondary
@@ -442,6 +447,29 @@ export class PlayerWorldView {
     this.fixed.position.set(fixedOffset.x, fixedOffset.y)
     this.fixedSecondary.position.set(fixedOffset.x, fixedOffset.y)
     this.staffFront.position.set(attachmentOffset.x, attachmentOffset.y)
+    const planewalkerActive = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
+    const nativeStaffSelector = nativeStaffVisible
+      && livingAppearance.weapon !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.weapon)
+      ? livingAppearance.weapon.selector
+      : 0
+    this.enchantStaff.update({
+      headingIndex: heading,
+      learnedSkills: player.progression.learnedSkills,
+      living: !death.visible,
+      nativeStaff: nativeStaffVisible,
+      pose: attachmentPose,
+      selectedPrimarySkillId: planewalkerActive
+        ? 80
+        : player.progression.selectedPrimarySkillId,
+      selector: nativeStaffSelector,
+      tick,
+      weldBuildId: planewalkerActive ? null : player.progression.weldBuildId,
+    }, plan.staffFront)
+    this.enchantStaff.container.position.set(
+      plan.staffFront ? attachmentOffset.x : 0,
+      plan.staffFront ? attachmentOffset.y : 0,
+    )
     if (livingAppearance.hat === null) {
       this.head.texture = playerTextures.head[heading]!
       this.headPrimaryTint = 0xffffff
@@ -617,6 +645,22 @@ export class PlayerWorldView {
       + this.damageX4FrontOverlay.visibleSpriteCount
   }
 
+  get enchantStaffActive(): boolean {
+    return this.enchantStaff.active
+  }
+
+  get enchantStaffAuraRecord(): number | null {
+    return this.enchantStaff.auraRecord
+  }
+
+  get enchantStaffAlpha(): number {
+    return this.enchantStaff.nearAlpha
+  }
+
+  get enchantStaffTint(): number | null {
+    return this.enchantStaff.tint
+  }
+
   setDepth(depth: number): void {
     this.container.zIndex = depth
   }
@@ -647,6 +691,7 @@ export class PlayerWorldView {
     this.fixed.tint = multiplyTints(this.robePrimaryTint, tint)
     this.fixedSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
     this.staffFront.tint = tint
+    this.enchantStaff.setMaterialTint(tint)
     this.head.tint = multiplyTints(this.headPrimaryTint, tint)
     this.headSecondary.tint = multiplyTints(this.headSecondaryTint, tint)
     this.applyDeathTints()
@@ -661,6 +706,8 @@ export class PlayerWorldView {
   }
 
   destroy(): void {
+    this.container.removeChild(this.enchantStaff.container)
+    this.enchantStaff.destroy()
     for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay]) {
       this.container.removeChild(view.container)
       view.destroy()
