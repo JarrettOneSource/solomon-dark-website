@@ -14,6 +14,7 @@ export const NATIVE_SKELETON_HEAD_FACING_OFFSETS = Object.freeze([
 
 export const NATIVE_BADGUY_GAIT_PHASE_DIVISOR = 25
 export const NATIVE_BADGUY_GAIT_PHASE_PERIOD = 8
+export const NATIVE_BADGUY_STRIDE_PHASE_PER_MOVEMENT = 4
 export const NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR = 35
 export const NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD = 4
 export const NATIVE_SKELETON_BODY_GAIT_POSES = Object.freeze([
@@ -95,6 +96,30 @@ export function advanceNativeEnemyLocomotionPhase(
   for (let tick = 0; tick < representedTicks; tick += 1) {
     result = Math.fround(result + scalar / divisor)
     if (result > period) result = Math.fround(result - period)
+  }
+  return result
+}
+
+export function advanceNativeEnemyStridePhase(
+  phaseDegrees: number,
+  movementScalar: number,
+  representedTicks: number,
+): number {
+  if (!Number.isFinite(phaseDegrees) || phaseDegrees < 0) {
+    throw new RangeError('native enemy stride phase must be finite and non-negative')
+  }
+  if (!Number.isFinite(movementScalar) || movementScalar < 0) {
+    throw new RangeError('native enemy movement scalar must be finite and non-negative')
+  }
+  if (!Number.isSafeInteger(representedTicks) || representedTicks < 0) {
+    throw new RangeError('native enemy represented ticks must be a non-negative integer')
+  }
+  let result = Math.fround(phaseDegrees)
+  const increment = Math.fround(
+    Math.fround(movementScalar) * NATIVE_BADGUY_STRIDE_PHASE_PER_MOVEMENT,
+  )
+  for (let tick = 0; tick < representedTicks; tick += 1) {
+    result = Math.fround(result + increment)
   }
   return result
 }

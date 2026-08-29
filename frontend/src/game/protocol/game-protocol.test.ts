@@ -1189,6 +1189,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     spawnTick: 10,
     state: 'crawl',
     verticalOffset: 0,
+    visualScale: 1.1,
   }]
   const resumedWelcome = {
     ...welcome,
@@ -1262,6 +1263,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       impEffectFrame: -1,
       maggots: [],
       state: 'action',
+      stridePhaseDeg: 45,
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
@@ -1284,6 +1286,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     maximumHealth: 5,
     nativeTypeId: 1001,
     position: { x: 100, y: 100 },
+    scale: 1,
     lighting: { charge: 0, glow: 0.75, providerCopies: 1 },
     mageCloak: false,
     shieldHealth: 25,
@@ -1368,6 +1371,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     spawnTick: 1,
     state: 'emerging',
     verticalOffset: -20,
+    visualScale: 1.2,
   }]
   snapshot.world.deathEffects = [{
     ageTicks: 7,
@@ -1426,7 +1430,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    53,
+    54,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -1437,7 +1441,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 53)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 54)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,
@@ -1515,6 +1519,13 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   invalidShield.snapshot.world.enemies[0].shieldHealth = 51
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidShield)), /shieldHealth/)
 
+  const invalidEnemyScale = JSON.parse(encodeGameMessage(welcome))
+  invalidEnemyScale.snapshot.world.enemies[0].scale = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidEnemyScale)),
+    /enemies\[0\]\.scale/,
+  )
+
   const invalidMagicShield = JSON.parse(encodeGameMessage(welcome))
   invalidMagicShield.snapshot.world.enemies[0].animation.effects[0].entry = 382
   assert.throws(
@@ -1538,7 +1549,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 
   const invalidHeadFacing = JSON.parse(encodeGameMessage(replicatedMessage))
-  invalidHeadFacing.frame.world.entities.samples[0][43] = 2
+  invalidHeadFacing.frame.world.entities.samples[0][42] = 2
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidHeadFacing)),
     /invalid registered sample shape/,
@@ -1705,8 +1716,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v106 carries addressed inventory slots, world-painter registrations, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 106)
+test('protocol v107 carries addressed inventory slots, world-painter registrations, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 107)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -5036,7 +5047,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /encounter\.digFrame/,
   )
 
-  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0, 1, 0]
+  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0, 1, 0, 1]
   const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
   invalidType.frame.world.entities.spawned = [[...enemyDescriptor.slice(0, 3), 1004, ...enemyDescriptor.slice(4)]]
   assert.throws(

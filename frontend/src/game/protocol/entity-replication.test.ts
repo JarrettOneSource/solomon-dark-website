@@ -37,6 +37,10 @@ import {
   boneyardLootSample,
   materializeBoneyardLoot,
 } from './boneyard-loot-replication.ts'
+import {
+  BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION,
+  boneyardEnemyDeathEffectDescriptor,
+} from './boneyard-enemy-death-effect-replication.ts'
 
 function hubSnapshot(studentCount: number): GameSnapshot {
   return createGameSnapshot(createGameSimulation({}, {
@@ -353,10 +357,10 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
-  assert.equal(frame.world.entities.spawned[0]!.length, 13)
-  assert.equal(frame.world.entities.samples[0]!.length, 53)
+  assert.equal(frame.world.entities.spawned[0]!.length, 14)
+  assert.equal(frame.world.entities.samples[0]!.length, 54)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
-  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0])
+  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0, 1.25])
   assert.equal(frame.world.entities.samples[0]![32], 25 * 1024)
   assert.equal(frame.world.entities.samples[0]![33], 50 * 1024)
   assert.equal(frame.world.entities.samples[0]![38], 1)
@@ -390,6 +394,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.deepEqual(enemy.flags, ['FLAG_ARMOR'])
   assert.equal(enemy.shieldHealth, 25)
   assert.equal(enemy.shieldMaximumHealth, 50)
+  assert.equal(enemy.scale, 1.25)
   assert.deepEqual(enemy.lighting, { charge: 0, glow: 0.375, providerCopies: 1 })
   assert.deepEqual(enemy.animation.effects, enemySnapshot().animation.effects)
   assert.equal(enemy.animation.impBodyRotationRadians, 0.125)
@@ -397,6 +402,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(enemy.animation.headFacingOffset, 1)
   assert.ok(Math.abs(enemy.animation.zombieBodyRotationRadians + 0.2) <= 1 / 1024)
   assert.ok(Math.abs(enemy.animation.zombieHeadRotationRadians - 0.3) <= 1 / 1024)
+  assert.ok(Math.abs(enemy.animation.stridePhaseDeg - 123.5) <= 1 / 1024)
   assert.ok(Math.abs(enemy.position.x - 123.45) <= 1 / 16)
   assert.ok(Math.abs(enemy.animation.gaitPose - 2.75) <= 1 / 1024)
   assert.deepEqual(reconstructed.world.enemyEvents, initial.world.enemyEvents)
@@ -482,9 +488,9 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 43),
+    ...sample.slice(0, 44),
     1,
-    ...sample.slice(44),
+    ...sample.slice(45),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
     ...sample.slice(0, 39),
@@ -524,6 +530,7 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     0,
     1,
     0,
+    descriptor[13]!,
   ] as ReplicatedEntityDescriptor
   const mageCloakDescriptor = [
     descriptor[0]!,
@@ -539,6 +546,7 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     1,
     1,
     0,
+    descriptor[13]!,
   ] as ReplicatedEntityDescriptor
   assert.equal(registration.descriptorIsValid(invalidDescriptor), false)
   assert.equal(registration.descriptorIsValid(invalidActorLane), false)
@@ -850,12 +858,13 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
   assert.equal(descriptor[5], 1)
   assert.equal(descriptor[6], 0)
   assert.equal(descriptor[7], 1)
-  assert.equal(sample.length, 16)
+  assert.equal(sample.length, 17)
   assert.equal(sample[9], 768)
   assert.equal(sample[12], 12)
   assert.equal(sample[13], -20 * 1024)
   assert.equal(sample[14], 3)
   assert.equal(sample[15], 2.5 * 1024)
+  assert.equal(sample[16], 1.125 * 1024)
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
     REPLICATED_ENTITY_TYPES.boneyardMaggot,
   )!
@@ -961,6 +970,19 @@ test('enemy death effects replicate independent motion and exact retirement iden
   ] as unknown as [number, number, ...number[]]
   assert.equal(registration.descriptorIsValid(invalidPresentationOwner), false)
   assert.equal(registration.sampleIsValid(sample), true)
+  const preWorldDescriptor = boneyardEnemyDeathEffectDescriptor({
+    ...enemyDeathEffectSnapshot(),
+    painterRegistration: null,
+    presentationOwner: 'pre-world-queue',
+  })
+  assert.equal(
+    BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION.descriptorIsValid(
+      preWorldDescriptor,
+    ),
+    true,
+  )
+  assert.equal(preWorldDescriptor[8], 1)
+  assert.equal(preWorldDescriptor[9], -1)
   assert.equal(registration.sampleIsValid(
     sample.slice(0, -1) as [number, number, ...number[]],
   ), false)
@@ -1250,6 +1272,7 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       impEffectFrame: -1,
       maggots: [],
       state: 'action',
+      stridePhaseDeg: 123.5,
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
@@ -1272,6 +1295,7 @@ function enemySnapshot(): BoneyardEnemySnapshot {
     maximumHealth: 5,
     nativeTypeId: 1001,
     position: { x: 123.45, y: 456.75 },
+    scale: 1.25,
     lighting: { charge: 0, glow: 0.375, providerCopies: 1 },
     mageCloak: false,
     shieldHealth: 25,
@@ -1369,5 +1393,6 @@ function maggotSnapshot(): BoneyardMaggotSnapshot {
     spawnTick: 20,
     state: 'emerging',
     verticalOffset: -20,
+    visualScale: 1.125,
   }
 }

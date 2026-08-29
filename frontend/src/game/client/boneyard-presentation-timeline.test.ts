@@ -97,6 +97,7 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       impEffectFrame: 0,
       maggots: [],
       state: 'locomotion',
+      stridePhaseDeg: x,
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
@@ -125,6 +126,7 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
     maximumHealth: 6,
     nativeTypeId: 1001,
     position: { x, y: 500 },
+    scale: 1,
     shieldHealth: x / 10,
     shieldMaximumHealth: 100,
     spawnTick: 90,
@@ -175,6 +177,7 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
     spawnTick: 90,
     state: 'emerging',
     verticalOffset: -x / 10,
+    visualScale: 1.1,
   }
 }
 

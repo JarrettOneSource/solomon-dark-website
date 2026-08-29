@@ -490,6 +490,7 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     terminalEmitted: false,
     verticalOffset: 0,
     verticalVelocity: 0,
+    visualScale: 1,
   }
   const maggotContact = resolveCombatWithAuthority({
     ...createBoneyardEnemyStore('hurricane-maggot'),
@@ -1331,7 +1332,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     lightRegistration: null,
     lifetimeTicks: 60,
     ownerActorId: 3,
-    painterRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
     ownerProjectileId: 7,
     phaseOriginTicks: 8,
     position: { x: 50, y: 0 },

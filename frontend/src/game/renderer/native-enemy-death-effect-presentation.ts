@@ -21,6 +21,9 @@ export interface NativeEnemyDeathEffectPlan {
 export function nativeEnemyDeathEffectPlan(
   effect: BoneyardEnemyDeathEffectSnapshot,
 ): NativeEnemyDeathEffectPlan {
+  const perspective = effect.kind === 'fade-perspective'
+    || effect.kind === 'fade-perspective-clipped'
+    || effect.kind === 'late-splat'
   const main: NativeEnemyDeathEffectLayer = Object.freeze({
     alpha: effect.alpha,
     atlas: effect.atlas,
@@ -28,7 +31,10 @@ export function nativeEnemyDeathEffectPlan(
     entry: effect.entry,
     offset: Object.freeze({ x: 0, y: effect.height }),
     rotationRadians: effect.rotationRadians,
-    scale: Object.freeze({ x: effect.scale, y: effect.scale }),
+    scale: Object.freeze({
+      x: effect.scale,
+      y: perspective ? effect.scale * 0.75 : effect.scale,
+    }),
     tint: effect.tint,
   })
   return Object.freeze({
@@ -53,7 +59,7 @@ export function nativeEnemyDeathEffectPainterLayer(
   effect: BoneyardEnemyDeathEffectSnapshot,
 ): DynamicPainterLayer {
   if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') {
-    throw new Error('direct post-world death effect cannot enter the world-sorted painter')
+    throw new Error('direct death effect cannot enter the world-sorted painter')
   }
   if (effect.painterRegistration === null) {
     throw new Error('world-sorted death effect lost its painter registration')
@@ -69,14 +75,14 @@ export function nativeEnemyDeathEffectPainterLayer(
 
 export function nativeEnemyDeathEffectPainterLane(
   effect: BoneyardEnemyDeathEffectSnapshot,
-): 'post-world-queue' | 'world-sorted' {
-  return effect.presentationOwner === 'direct-post-world'
-    ? 'post-world-queue'
-    : 'world-sorted'
+): 'post-world-queue' | 'pre-world-queue' | 'world-sorted' {
+  if (effect.presentationOwner === 'direct-post-world') return 'post-world-queue'
+  if (effect.presentationOwner === 'pre-world-queue') return 'pre-world-queue'
+  return 'world-sorted'
 }
 
 export function nativeEnemyDeathEffectBypassesWorldTint(
-  effect: BoneyardEnemyDeathEffectSnapshot,
+  _effect: BoneyardEnemyDeathEffectSnapshot,
 ): boolean {
-  return effect.presentationOwner === 'direct-post-world'
+  return true
 }

@@ -728,6 +728,11 @@ function interpolateMaggots(
         newerMaggot.verticalOffset,
         blend,
       ),
+      visualScale: lerp(
+        olderMaggot.visualScale,
+        newerMaggot.visualScale,
+        blend,
+      ),
     }
   })
   if (blend >= 1) {
@@ -1054,6 +1059,7 @@ function interpolateEnemyAnimation(
       ? interpolateImpEffectFrame(first.impEffectFrame, second.impEffectFrame, blend)
       : discrete.impEffectFrame,
     maggots: [],
+    stridePhaseDeg: lerp(first.stridePhaseDeg, second.stridePhaseDeg, blend),
     verticalOffset: lerp(first.verticalOffset, second.verticalOffset, blend),
     zombieAngularOffsetDeg: lerp(
       first.zombieAngularOffsetDeg,

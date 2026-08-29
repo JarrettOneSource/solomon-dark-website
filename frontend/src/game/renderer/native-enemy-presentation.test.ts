@@ -75,6 +75,7 @@ function enemy(
       COFFIN: 1013,
     }[enemyToken],
     position: { x: 125, y: 240 },
+    scale: 1,
     shieldHealth: 0,
     shieldMaximumHealth: 0,
     spawnTick: 100,
@@ -422,10 +423,10 @@ test('Zombie keeps its native constructor selectors independent', () => {
   ])
   assert.deepEqual(plan.layers.map((layer) => layer.offset), [
     { x: 0, y: 0 },
-    { x: 0, y: 0 },
-    { x: -12.5, y: -17.5 },
-    { x: 8.5, y: -20.5 },
-    { x: 0, y: -8.5 },
+    { x: 1, y: 0 },
+    { x: -11.5, y: -17.5 },
+    { x: 9.5, y: -20.5 },
+    { x: 1, y: -8.5 },
   ])
 
   const rottenComponents = nativeEnemyPresentationPlan({
@@ -468,8 +469,23 @@ test('Zombie BODY TYPE 1 owns body/head bank three and both scaled overlays', ()
       plan.layers.slice(1, 6).map(({ scale }) => scale),
       [1.15, 1.15, 1.15, 1.15, 1.15],
     )
+    assert.equal(plan.layers[0]!.scale, 2)
     assert.equal(plan.layers[6]!.scale, 1)
   }
+
+  const shifted = nativeEnemyPresentationPlan({
+    ...enemy('ZOMBIE'),
+    headingDeg: 90,
+    animation: nativeEnemyIdleAnimationSample({
+      stridePhaseDeg: 180,
+      zombieBodyType: 3,
+      zombieHeadType: 3,
+    }),
+  }, 100)
+  assert.equal(shifted.layers[0]!.offset.x, 4)
+  assert.ok(Math.abs(shifted.layers[0]!.offset.y + 1) < 1e-12)
+  assert.ok(Math.abs(shifted.layers[1]!.offset.x + 4) < 1e-12)
+  assert.ok(Math.abs(shifted.layers[1]!.offset.y + 8) < 1e-12)
 })
 
 test('Wraith, Demon, and Coffin preserve their native spawn compositions', () => {
@@ -1053,7 +1069,7 @@ test('hit presentation preserves body layers and appends native red redraws', ()
   assert.ok(flash.every((layer) => layer.role.startsWith('hit:')))
 })
 
-test('dying bodies render no fallback strip after handing off to effect actors', () => {
+test('ordinary dying bodies render no fallback strip after handing off to effect actors', () => {
   const expected = {
     SKELETON: ['BadGuys:121', 'BadGuys:1822'],
     SKELETONARCHER: ['BadGuys:121', 'BadGuys:1822'],
@@ -1061,7 +1077,6 @@ test('dying bodies render no fallback strip after handing off to effect actors',
     IMP: ['BadGuys:419'],
     ZOMBIE: ['DeadHawg:30', 'DeadHawg:77'],
     WRAITH: ['BadGuys:121', 'BadGuys:1822'],
-    DEMON: ['Demon:61'],
     COFFIN: ['DeadHawg:144'],
   } as const
   for (const family of Object.keys(expected) as NativeEnemyVisualSnapshot['enemyToken'][]) {
@@ -1072,14 +1087,31 @@ test('dying bodies render no fallback strip after handing off to effect actors',
         state: 'death',
       }),
     }, 100)
-    assert.equal(plan.deathProgram?.provenance, 'bounded-web')
     assert.deepEqual(plan.layers, [], family)
   }
 })
 
+test('Demon death keeps the directional 100-tick native triple pass', () => {
+  const early = nativeEnemyPresentationPlan({
+    ...enemy('DEMON'),
+    headingDeg: 52,
+    animation: nativeEnemyIdleAnimationSample({ deathTick: 25, state: 'death' }),
+  }, 100)
+  assert.deepEqual(early.layers.map(({ alpha, blendMode, entry, scale }) => ({
+    alpha,
+    blendMode,
+    entry,
+    scale,
+  })), [
+    { alpha: 1, blendMode: 'add', entry: 56, scale: 1.2 },
+    { alpha: 0.75, blendMode: 'add', entry: 56, scale: 1.2 },
+    { alpha: 0.75, blendMode: 'add', entry: 56, scale: 1.2 },
+  ])
+})
+
 test('authoritative effect identities replace bounded terminal fallback art', () => {
   const plan = nativeEnemyPresentationPlan({
-    ...enemy('DEMON'),
+    ...enemy('IMP'),
     animation: nativeEnemyIdleAnimationSample({
       deathEpoch: 12,
       effects: [{
@@ -1096,7 +1128,6 @@ test('authoritative effect identities replace bounded terminal fallback art', ()
       state: 'death',
     }),
   }, 100)
-  assert.equal(plan.deathProgram?.name, 'demon-split')
   assert.deepEqual(plan.layers, [{
     alpha: 0.6,
     atlas: 'Demon',
@@ -1146,17 +1177,17 @@ test('Wraith opacity and Zombie articulation are sampled rather than wall-clock 
   assert.equal(zombie.layers[2].entry, 2114)
   assert.equal(zombie.layers[2].rotationRadians, 0.25)
   assert.deepEqual(zombie.layers[2].offset, {
-    x: -15.992224795114133,
+    x: -14.992224795114133,
     y: -18.8214969145001,
   })
   assert.equal(zombie.layers[3].entry, 2186)
   assert.equal(zombie.layers[3].rotationRadians, -0.4)
   assert.deepEqual(zombie.layers[3].offset, {
-    x: 5.220282238963552,
+    x: 6.220282238963552,
     y: -18.993384462637554,
   })
   assert.deepEqual(zombie.layers[4].offset, {
-    x: -2.2589952039616357,
+    x: -1.2589952039616357,
     y: -8.255116029982759,
   })
   assert.equal(zombie.layers[4].rotationRadians, 0.35)
@@ -1299,7 +1330,12 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     worldY: 240,
   })
   assert.equal(nativeEnemyDeathEffectPainterLane(effect), 'world-sorted')
-  assert.equal(nativeEnemyDeathEffectBypassesWorldTint(effect), false)
+  assert.equal(nativeEnemyDeathEffectBypassesWorldTint(effect), true)
+  assert.equal(nativeEnemyDeathEffectPainterLane({
+    ...effect,
+    painterRegistration: null,
+    presentationOwner: 'pre-world-queue',
+  }), 'pre-world-queue')
   assert.equal(nativeEnemyDeathEffectPainterLane({
     ...effect,
     presentationOwner: 'direct-post-world',

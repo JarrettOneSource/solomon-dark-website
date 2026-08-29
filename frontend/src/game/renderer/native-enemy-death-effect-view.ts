@@ -1,4 +1,4 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container, FillGradient, Graphics, Sprite, type Texture } from 'pixi.js'
 
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
@@ -62,9 +62,12 @@ export class NativeEnemyDeathEffectViews {
 }
 
 class NativeEnemyDeathEffectView {
+  private readonly banishGraphics = new Graphics({ label: 'enemy-banish-gradients' })
+  private readonly banishSprites = Array.from({ length: 4 }, () => new Sprite())
   private bypassesWorldTint = false
   private readonly container: Container
   private readonly effect = new Sprite()
+  private readonly gradients: FillGradient[] = []
   private readonly root: Container
   private readonly shadow = new Sprite()
   private readonly textures: BoneyardWorldTextures
@@ -76,18 +79,33 @@ class NativeEnemyDeathEffectView {
     this.container.eventMode = 'none'
     this.effect.eventMode = 'none'
     this.shadow.eventMode = 'none'
-    this.container.addChild(this.shadow, this.effect)
+    this.banishGraphics.eventMode = 'none'
+    for (const sprite of this.banishSprites) sprite.eventMode = 'none'
+    this.container.addChild(
+      this.shadow,
+      this.effect,
+      this.banishGraphics,
+      ...this.banishSprites,
+    )
     root.addChild(this.container)
   }
 
   update(effect: BoneyardEnemyDeathEffectSnapshot): void {
     const plan = nativeEnemyDeathEffectPlan(effect)
-    applyLayer(this.effect, plan.effect, this.textures)
-    if (plan.shadow) {
-      applyLayer(this.shadow, plan.shadow, this.textures)
-      this.shadow.visible = true
-    } else {
+    if (effect.kind === 'banish') {
+      this.effect.visible = false
       this.shadow.visible = false
+      this.updateBanish(effect)
+    } else {
+      this.clearBanish()
+      this.effect.visible = true
+      applyLayer(this.effect, plan.effect, this.textures)
+      if (plan.shadow) {
+        applyLayer(this.shadow, plan.shadow, this.textures)
+        this.shadow.visible = true
+      } else {
+        this.shadow.visible = false
+      }
     }
     this.container.label = `enemy-death-effect:${effect.kind}:${effect.id}`
     this.container.position.set(plan.position.x, plan.position.y)
@@ -107,9 +125,130 @@ class NativeEnemyDeathEffectView {
   }
 
   destroy(): void {
+    this.clearGradients()
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
   }
+
+  private updateBanish(effect: BoneyardEnemyDeathEffectSnapshot): void {
+    this.clearGradients()
+    this.banishGraphics.clear()
+    this.banishGraphics.visible = true
+    this.banishGraphics.blendMode = 'add'
+
+    const scale = effect.scale
+    const progress = Math.max(0, 2 - effect.ageTicks * (0.02 / scale))
+    const orangeAlpha = Math.min(1, progress * 0.5)
+    const whiteAlpha = Math.min(1, progress * 0.75)
+    const upperExtent = 450 * scale
+    const lowerExtent = 50 * scale
+    this.gradientRect(-10 * scale, -upperExtent, 20 * scale, upperExtent,
+      'rgba(0,0,0,1)', `rgba(255,128,0,${orangeAlpha})`)
+    this.gradientRect(-5 * progress * scale, -upperExtent,
+      10 * progress * scale, upperExtent,
+      'rgba(0,0,0,1)', `rgba(255,191,0,${orangeAlpha})`)
+    this.gradientRect(-2 * progress * scale, -upperExtent * 0.75,
+      4 * progress * scale, upperExtent * 0.75,
+      'rgba(0,0,0,1)', `rgba(255,255,255,${whiteAlpha})`)
+    this.gradientRect(-10 * scale, 0, 20 * scale, lowerExtent,
+      `rgba(255,128,0,${orangeAlpha})`, 'rgba(0,0,0,1)')
+    this.gradientRect(-5 * progress * scale, 0,
+      10 * progress * scale, lowerExtent,
+      `rgba(255,191,0,${orangeAlpha})`, 'rgba(0,0,0,1)')
+    this.gradientRect(-2 * progress * scale, 0,
+      4 * progress * scale, lowerExtent,
+      `rgba(255,255,255,${whiteAlpha})`, 'rgba(0,0,0,1)')
+
+    const alpha = Math.min(1, progress)
+    const green = Math.min(255, Math.round(progress * 0.75 * 255))
+    const tint = 0xff0000 | green << 8
+    for (let index = 0; index < 2; index += 1) {
+      applyBanishSprite(
+        this.banishSprites[index]!,
+        this.textures,
+        15,
+        { x: 0, y: 0 },
+        { x: 2 * progress * scale, y: 2 * progress * scale },
+        alpha,
+        tint,
+      )
+    }
+    const upperEntry = 333 + positiveModulo(
+      Math.floor((effect.spawnTick + effect.ageTicks) / 4),
+      4,
+    )
+    for (let index = 2; index < 4; index += 1) {
+      applyBanishSprite(
+        this.banishSprites[index]!,
+        this.textures,
+        upperEntry,
+        { x: 1, y: -40 * scale },
+        { x: 2 * scale, y: 3 * scale },
+        alpha,
+        tint,
+      )
+    }
+  }
+
+  private gradientRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    startColor: string,
+    endColor: string,
+  ): void {
+    if (width <= 0 || height <= 0) return
+    const gradient = new FillGradient({
+      colorStops: [
+        { color: startColor, offset: 0 },
+        { color: endColor, offset: 1 },
+      ],
+      end: { x: 0, y: 1 },
+      start: { x: 0, y: 0 },
+      textureSpace: 'local',
+    })
+    this.gradients.push(gradient)
+    this.banishGraphics.rect(x, y, width, height).fill(gradient)
+  }
+
+  private clearBanish(): void {
+    this.banishGraphics.visible = false
+    for (const sprite of this.banishSprites) sprite.visible = false
+    this.clearGradients()
+    this.banishGraphics.clear()
+  }
+
+  private clearGradients(): void {
+    for (const gradient of this.gradients) gradient.destroy()
+    this.gradients.length = 0
+  }
+}
+
+function applyBanishSprite(
+  sprite: Sprite,
+  textures: BoneyardWorldTextures,
+  entry: number,
+  position: Readonly<{ x: number; y: number }>,
+  scale: Readonly<{ x: number; y: number }>,
+  alpha: number,
+  tint: number,
+): void {
+  const record = nativeEnemySpriteRecord('BadGuys', entry)
+  sprite.visible = true
+  sprite.label = `banish:BadGuys:${entry}`
+  sprite.texture = requiredTexture(textures, record.source)
+  sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
+  sprite.position.set(position.x, position.y)
+  sprite.scale.set(scale.x, scale.y)
+  sprite.rotation = 0
+  sprite.alpha = alpha
+  sprite.blendMode = 'add'
+  sprite.tint = tint
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor
 }
 
 function applyLayer(

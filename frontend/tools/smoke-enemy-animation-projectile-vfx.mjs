@@ -9,6 +9,8 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4182'
 const screenshotPath = process.env.SDR_ENEMY_VFX_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-enemy-animation-projectile-vfx-20260815.png')
+const deathScreenshotPath = process.env.SDR_ENEMY_DEATH_VFX_SCREENSHOT
+  || join(tmpdir(), 'solomon-dark-enemy-death-vfx-20260829.png')
 const impContactScreenshotPath = process.env.SDR_IMP_CONTACT_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-imp-contact-authority-20260823.png')
 const skeletonEarlyScreenshotPath = process.env.SDR_SKELETON_ATTACK_EARLY_SCREENSHOT
@@ -199,14 +201,13 @@ try {
       flags,
       headingDeg: 0,
       id,
-      lightRegistration: enemyToken === 'ZOMBIE'
-        ? null
-        : { managerLane: 'actor', registrationOrdinal: id > 5 ? id - 1 : id },
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: id },
       lighting: enemyLighting[enemyToken],
       mageCloak: false,
       maximumHealth: 100,
       nativeTypeId,
       position,
+      scale: enemyToken === 'ZOMBIE' ? 1.25 : 1,
       shieldHealth: 0,
       shieldMaximumHealth: 0,
       spawnTick: 20,
@@ -297,6 +298,7 @@ try {
           action: 'zombie-beat',
           actionProgress: advanced ? 104 : 54,
           state: 'action',
+          stridePhaseDeg: advanced ? 180 : 0,
           verticalOffset: advanced ? -8 : 0,
           zombieAngularOffsetDeg: advanced ? 16 : -12,
           zombieAttackSide: advanced ? 1 : 0,
@@ -367,6 +369,10 @@ try {
       lifetimeTicks: 400,
       nativeTypeId,
       ownerActorId: id % 8 + 1,
+      painterRegistration: {
+        managerLane: 'actor',
+        registrationOrdinal: 20 + id - 101,
+      },
       payload,
       position,
       speed: 1.5,
@@ -422,6 +428,10 @@ try {
       lifetimeTicks: 20,
       ownerActorId: id % 8 + 1,
       ownerProjectileId: 100 + id % 8 + 1,
+      painterRegistration: {
+        managerLane: 'actor',
+        registrationOrdinal: 40 + id - 201,
+      },
       phaseOriginTicks: 120,
       position,
       rotationRadians: radians(12),
@@ -450,6 +460,63 @@ try {
       effect(208, 'poison-pool-fade-outer', 'DeadHawg', 0, 'normal', { x: 840, y: 375 }),
       effect(209, 'poison-pool-fade-inner', 'DeadHawg', 0, 'normal', { x: 920, y: 375 }),
     ]
+    const deathEffect = (
+      id,
+      kind,
+      atlas,
+      entry,
+      blendMode,
+      position,
+      overrides = {},
+    ) => {
+      const presentationOwner = kind === 'late-splat' || kind === 'sprite-array'
+        ? 'pre-world-queue'
+        : kind === 'unbind'
+          ? 'direct-post-world'
+          : 'world-sorted'
+      return {
+        ageTicks: 8,
+        alpha: 0.8,
+        atlas,
+        blendMode,
+        entry,
+        height: kind === 'bouncer' || kind === 'smoky-bouncer' ? -12 : 0,
+        id,
+        kind,
+        ownerActorId: 5,
+        painterRegistration: presentationOwner === 'world-sorted'
+          ? { managerLane: 'actor', registrationOrdinal: 120 + id - 401 }
+          : null,
+        position,
+        presentationOwner,
+        rotationRadians: radians(18),
+        scale: 1.2,
+        shadow: kind === 'bouncer' || kind === 'smoky-bouncer',
+        spawnTick: 112,
+        tint: 0xffffff,
+        ...overrides,
+      }
+    }
+    const deathEffects = [
+      deathEffect(401, 'banish', 'BadGuys', 15, 'add', { x: 165, y: 390 }),
+      deathEffect(402, 'bouncer', 'BadGuys', 117, 'normal', { x: 265, y: 390 }),
+      deathEffect(403, 'smoky-bouncer', 'BadGuys', 118, 'normal', { x: 365, y: 390 }),
+      deathEffect(404, 'fade', 'BadGuys', 69, 'add', { x: 465, y: 390 }),
+      deathEffect(405, 'fade-additive', 'BadGuys', 10, 'add', { x: 565, y: 390 }),
+      deathEffect(406, 'fade-perspective', 'DeadHawg', 28, 'normal', { x: 665, y: 390 }, {
+        tint: 0x828c6b,
+      }),
+      deathEffect(407, 'fade-perspective-clipped', 'DeadHawg', 30, 'normal', {
+        x: 765,
+        y: 390,
+      }),
+      deathEffect(408, 'fade-scale', 'BadGuys', 20, 'add', { x: 865, y: 390 }),
+      deathEffect(409, 'fire-array', 'DeadHawg', 52, 'add', { x: 965, y: 390 }),
+      deathEffect(410, 'late-splat', 'DeadHawg', 31, 'normal', { x: 315, y: 500 }),
+      deathEffect(411, 'move-fade', 'BadGuys', 11, 'normal', { x: 515, y: 500 }),
+      deathEffect(412, 'sprite-array', 'BadGuys', 408, 'add', { x: 715, y: 500 }),
+      deathEffect(413, 'unbind', 'BadGuys', 86, 'normal', { x: 915, y: 500 }),
+    ]
     const mageLightningPulses = [{
       contact: {
         kind: 'target-attached',
@@ -460,6 +527,11 @@ try {
       id: 91,
       midpoint: { x: 646, y: 259 },
       ownerActorId: 3,
+      painterRegistrations: [
+        { managerLane: 'actor', registrationOrdinal: 91 },
+        { managerLane: 'actor', registrationOrdinal: 92 },
+        { managerLane: 'actor', registrationOrdinal: 93 },
+      ],
       seed: 0x5d4a,
       source: { x: 700, y: 185 },
       tick: 120,
@@ -562,7 +634,7 @@ try {
       tick,
       world: {
         arenaTransition: null,
-        deathEffects: [],
+        deathEffects,
         encounter: null,
         enemies: enemiesAt(advanced),
         enemyEvents: [],
@@ -595,7 +667,7 @@ try {
           hitFlash: 0,
           id: 301,
           launchTrajectory: 'edge',
-          lightRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
+          lightRegistration: { managerLane: 'actor', registrationOrdinal: 80 },
           maximumHealth: 10,
           ownerCoffinActorId: 8,
           pose: advanced ? 1 : 0,
@@ -603,6 +675,7 @@ try {
           spawnTick: 20,
           state: 'bite',
           verticalOffset: 0,
+          visualScale: 1.2,
         }],
         runId,
         tutorial: null,
@@ -727,6 +800,7 @@ try {
     renderer.consumeEnemyEvent({
       actorId: 4,
       eventId: 900,
+      painterRegistration: { managerLane: 'actor', registrationOrdinal: 70 },
       runId,
       targetPlayerId: 'local',
       tick: 120.5,
@@ -748,6 +822,37 @@ try {
     enemyVfxImage.id = 'enemy-animation-projectile-vfx-probe'
     enemyVfxImage.src = enemyVfxCopy.toDataURL('image/png')
     document.body.append(enemyVfxImage)
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+    const deathSource = snapshotAt(121, true)
+    const deathSnapshot = {
+      ...deathSource,
+      world: {
+        ...deathSource.world,
+        enemies: [],
+        enemyEvents: [],
+        enemyProjectileEffects: [],
+        enemyProjectiles: [],
+        mageLightningPulses: [],
+        maggots: [],
+      },
+    }
+    const deathRenderer = await rendererModule.createBoneyardWorldRenderer({
+      boneyard: loaded,
+      devicePixelRatio: 1,
+      initialSnapshot: deathSnapshot,
+      modAssets: [],
+      modCatalog: [],
+      playerId: 'local',
+      viewport,
+    })
+    const deathFrame = structuredClone(deathRenderer.canvas.__sdrBoneyardFrame)
+    const deathImage = document.createElement('img')
+    deathImage.id = 'enemy-death-vfx-probe'
+    deathImage.src = copyCanvas(deathRenderer.canvas).toDataURL('image/png')
+    document.body.append(deathImage)
+    deathRenderer.destroy()
+    deathRenderer.canvas.remove()
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
     const impTarget = {
@@ -1001,6 +1106,7 @@ try {
       auxiliaryPlans,
       coffinRetirement: coffinRetirementReceipt,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
+      deathFrame,
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
       impAuthority: impAuthorityReceipt,
       renderer: renderer.canvas.dataset.gameRenderer,
@@ -1050,6 +1156,27 @@ try {
     ...receipt.coffinRetirement.childIds,
   ])
   assert.equal(receipt.frame.enemyCount, 8)
+  assert.equal(receipt.deathFrame.enemyCount, 0)
+  assert.equal(receipt.deathFrame.enemyDeathEffectCount, 13)
+  assert.equal(receipt.frame.enemyDeathEffectCount, 13)
+  assert.deepEqual(
+    receipt.frame.enemyDeathEffectSamples.map(({ kind }) => kind).sort(),
+    [
+      'banish',
+      'bouncer',
+      'fade',
+      'fade-additive',
+      'fade-perspective',
+      'fade-perspective-clipped',
+      'fade-scale',
+      'fire-array',
+      'late-splat',
+      'move-fade',
+      'smoky-bouncer',
+      'sprite-array',
+      'unbind',
+    ],
+  )
   assert.equal(receipt.frame.enemyAuxiliaryEffectCount, 3)
   assert.deepEqual(receipt.frame.enemyAuxiliaryEffectLanes, [
     'pre-world-queue',
@@ -1057,6 +1184,11 @@ try {
     'post-world-queue',
   ])
   assert.equal(receipt.frame.enemyFamilies, expectedFamilies)
+  const zombieSample = receipt.frame.enemySamples.find(({ enemyToken }) => (
+    enemyToken === 'ZOMBIE'
+  ))
+  assert.equal(zombieSample.scale, 1.25)
+  assert.equal(zombieSample.renderedScale, 1.25)
   assert.equal(receipt.frame.enemyProjectileCount, 8)
   assert.equal(receipt.frame.enemyProjectileEffectCount, 9)
   assert.deepEqual(receipt.frame.enemyProjectileIds, [101, 102, 103, 104, 105, 106, 107, 108])
@@ -1205,6 +1337,9 @@ try {
   await page.locator('#enemy-animation-projectile-vfx-probe').screenshot({
     path: screenshotPath,
   })
+  await page.locator('#enemy-death-vfx-probe').screenshot({
+    path: deathScreenshotPath,
+  })
   await page.locator('#imp-authority-contact-probe').screenshot({
     path: impContactScreenshotPath,
   })
@@ -1226,6 +1361,7 @@ try {
   console.log(JSON.stringify({
     ...receipt,
     consoleErrors,
+    deathScreenshotPath,
     failedResponses,
     impContactScreenshotPath,
     pageErrors,

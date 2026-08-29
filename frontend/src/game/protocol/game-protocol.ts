@@ -400,7 +400,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 106
+export const GAME_PROTOCOL_VERSION = 107
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -10873,6 +10873,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     'maximumHealth',
     'nativeTypeId',
     'position',
+    'scale',
     'shieldHealth',
     'shieldMaximumHealth',
     'spawnTick',
@@ -10907,6 +10908,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     throw new GameProtocolError(`${field}.headingDeg must be within [0,360)`)
   }
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
+  const scale = positiveFinite(source.scale, `${field}.scale`)
   const currentHealth = finite(source.currentHealth, `${field}.currentHealth`)
   if (currentHealth > maximumHealth) {
     throw new GameProtocolError(`${field}.currentHealth exceeds maximumHealth`)
@@ -10957,6 +10959,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     maximumHealth,
     nativeTypeId,
     position: boneyardPoint(source.position, `${field}.position`),
+    scale,
     shieldHealth,
     shieldMaximumHealth,
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
@@ -11039,6 +11042,10 @@ function boneyardEnemyProjectileSnapshot(
   const verticalOffset = finite(source.verticalOffset, `${field}.verticalOffset`)
   if (verticalOffset > 0) {
     throw new GameProtocolError(`${field}.verticalOffset must be non-positive`)
+  }
+  const visualScale = finite(source.visualScale, `${field}.visualScale`)
+  if (visualScale < 1 || visualScale > 1.25) {
+    throw new GameProtocolError(`${field}.visualScale must be within [1,1.25]`)
   }
   const visualPhaseDeg = finite(source.visualPhaseDeg, `${field}.visualPhaseDeg`)
   if (visualPhaseDeg < 0 || visualPhaseDeg >= 720) {
@@ -11222,6 +11229,7 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     'spawnTick',
     'state',
     'verticalOffset',
+    'visualScale',
   ])
   const state = limitedString(source.state, `${field}.state`, 16)
   if (!(BONEYARD_MAGGOT_STATES as readonly string[]).includes(state)) {
@@ -11261,6 +11269,10 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
   if (verticalOffset > 0) {
     throw new GameProtocolError(`${field}.verticalOffset must be non-positive`)
   }
+  const visualScale = positiveFinite(source.visualScale, `${field}.visualScale`)
+  if (visualScale > 1.25) {
+    throw new GameProtocolError(`${field}.visualScale exceeds its constructor range`)
+  }
   return {
     alpha,
     currentHealth,
@@ -11293,6 +11305,7 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
     state: state as BoneyardMaggotSnapshot['state'],
     verticalOffset,
+    visualScale,
   }
 }
 
@@ -11326,6 +11339,7 @@ function boneyardEnemyAnimation(
     'impEffectFrame',
     'maggots',
     'state',
+    'stridePhaseDeg',
     'verticalOffset',
     'zombieAngularOffsetDeg',
     'zombieAttackSide',
@@ -11438,6 +11452,10 @@ function boneyardEnemyAnimation(
     impEffectFrame: integer(source.impEffectFrame, `${field}.impEffectFrame`),
     maggots: [],
     state: state as BoneyardEnemyAnimationSnapshot['state'],
+    stridePhaseDeg: nonnegativeFinite(
+      source.stridePhaseDeg,
+      `${field}.stridePhaseDeg`,
+    ),
     verticalOffset: finite(source.verticalOffset, `${field}.verticalOffset`),
     zombieAngularOffsetDeg: finite(
       source.zombieAngularOffsetDeg,

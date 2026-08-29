@@ -14,7 +14,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 8
-const SAMPLE_LENGTH = 16
+const SAMPLE_LENGTH = 17
 
 export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
   name: 'boneyard-maggot',
@@ -45,6 +45,7 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(sample[12])
       && arrayIndex(sample[14], 10)
       && sample[15] >= 0 && sample[15] <= 5 * VALUE_SCALE
+      && sample[16] >= VALUE_SCALE && sample[16] <= 1.25 * VALUE_SCALE
   },
 }
 
@@ -87,6 +88,7 @@ export function boneyardMaggotSample(
     quantize(maggot.verticalOffset, VALUE_SCALE),
     maggot.emergenceOrientation,
     quantize(maggot.emergencePhase, VALUE_SCALE),
+    quantize(maggot.visualScale, VALUE_SCALE),
   ]
 }
 
@@ -129,6 +131,7 @@ export function materializeBoneyardMaggot(
     spawnTick: descriptor[3],
     state: BONEYARD_MAGGOT_STATES[sample[6]]!,
     verticalOffset: dequantize(sample[13], VALUE_SCALE),
+    visualScale: dequantize(sample[16], VALUE_SCALE),
   }
 }
 

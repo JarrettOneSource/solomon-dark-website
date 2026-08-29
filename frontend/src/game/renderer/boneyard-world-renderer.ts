@@ -307,6 +307,8 @@ interface BoneyardRendererFrameDiagnostics {
     lifeState: string
     limbsEntry: number | null
     maximumHealth: number
+    renderedScale: number | null
+    scale: number
     x: number
     y: number
   }>[]
@@ -1282,6 +1284,8 @@ export async function createBoneyardWorldRenderer(
         lifeState: enemy.animation.state,
         limbsEntry: scene.enemyLimbsEntry(enemy.id),
         maximumHealth: enemy.maximumHealth,
+        renderedScale: scene.enemyScale(enemy.id),
+        scale: enemy.scale,
         x: enemy.position.x,
         y: enemy.position.y,
       }))
@@ -2784,11 +2788,14 @@ class BoneyardDynamicScene {
       )
     }
     for (const effect of snapshot.world.deathEffects) {
+      const lane = nativeEnemyDeathEffectPainterLane(effect)
       this.enemyDeathEffects.setDepth(
         effect.id,
-        nativeEnemyDeathEffectPainterLane(effect) === 'post-world-queue'
-          ? order.foregroundZIndex + 0.25
-          : positionedDynamics.get(`enemy-death-effect:${effect.id}`)?.zIndex ?? 1,
+        lane === 'pre-world-queue'
+          ? 0.5
+          : lane === 'post-world-queue'
+            ? order.foregroundZIndex + 0.25
+            : positionedDynamics.get(`enemy-death-effect:${effect.id}`)?.zIndex ?? 1,
       )
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
@@ -2904,6 +2911,10 @@ class BoneyardDynamicScene {
 
   enemyLimbsEntry(id: number): number | null {
     return this.enemies.limbsEntry(id)
+  }
+
+  enemyScale(id: number): number | null {
+    return this.enemies.scale(id)
   }
 
   get enemyAuxiliaryEffectCount(): number {

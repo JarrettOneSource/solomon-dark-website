@@ -18,8 +18,8 @@ export const BONEYARD_ENEMY_ENTITY_TYPE_ID = 2
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 13
-const EFFECT_COMPONENT_OFFSET = 43
+const DESCRIPTOR_LENGTH = 14
+const EFFECT_COMPONENT_OFFSET = 44
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -90,6 +90,8 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       || (descriptor[11] !== -1 && descriptor[11] !== 1)
       || !Number.isSafeInteger(descriptor[12])
       || Math.abs(descriptor[12]) > Math.ceil(Math.PI / 12 * VALUE_SCALE)
+      || !Number.isFinite(descriptor[13])
+      || descriptor[13] <= 0
     ) return false
     const family = FAMILIES[descriptor[2]]!
     return BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3]
@@ -126,6 +128,7 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[41] >= 0 && sample[41] <= 2
       && sample[42] >= -1 && sample[42] <= 1
       && (sample[42] === 0 || sample[6] === 2)
+      && sample[43] >= 0
       && effectComponentsAreValid(sample)
   },
 }
@@ -147,6 +150,7 @@ export function boneyardEnemyDescriptor(
     Number(enemy.mageCloak),
     enemy.animation.coffinScaleX,
     quantize(enemy.animation.coffinRotationRadians, VALUE_SCALE),
+    enemy.scale,
   ]
 }
 
@@ -210,6 +214,7 @@ export function boneyardEnemySample(
     quantize(enemy.lighting.charge, VALUE_SCALE),
     enemy.lighting.providerCopies,
     animation.headFacingOffset,
+    quantize(animation.stridePhaseDeg, VALUE_SCALE),
     ...effectComponents,
   ]
 }
@@ -263,6 +268,7 @@ export function materializeBoneyardEnemy(
       impEffectAlpha: dequantize(sample[35], VALUE_SCALE),
       maggots: [],
       state: ANIMATION_STATES[sample[6]]!,
+      stridePhaseDeg: dequantize(sample[43], VALUE_SCALE),
       verticalOffset: dequantize(sample[19], VALUE_SCALE),
       zombieAngularOffsetDeg: dequantize(sample[20], VALUE_SCALE),
       zombieAttackSide: sample[29] as 0 | 1,
@@ -297,6 +303,7 @@ export function materializeBoneyardEnemy(
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE),
     },
+    scale: descriptor[13],
     shieldHealth: dequantize(sample[32], VALUE_SCALE),
     shieldMaximumHealth: dequantize(sample[33], VALUE_SCALE),
     spawnTick: descriptor[4],

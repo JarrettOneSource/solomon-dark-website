@@ -35,7 +35,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
         descriptor[8],
         BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS.length,
       )
-      && (descriptor[8] === 1
+      && (descriptor[8] === 2
         ? nonnegativeInteger(descriptor[9])
         : descriptor[9] === -1)
   },

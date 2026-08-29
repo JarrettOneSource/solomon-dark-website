@@ -25,23 +25,6 @@ export type NativeEnemyActionName =
   | 'zombie-beat'
   | 'wraith-drain'
 
-export type NativeEnemyDeathProgramName =
-  | 'skeleton-shatter'
-  | 'archer-shatter'
-  | 'mage-shatter'
-  | 'imp-split'
-  | 'zombie-collapse'
-  | 'wraith-dissolve'
-  | 'demon-split'
-  | 'coffin-break'
-
-export interface NativeEnemyDeathProgram {
-  readonly bodyRemovedAtTick: number | null
-  readonly durationTicks: number
-  readonly name: NativeEnemyDeathProgramName
-  readonly provenance: 'bounded-web'
-}
-
 export interface NativeEnemyActionProgram {
   readonly eventMarkers: readonly number[]
   readonly frames: readonly number[]
@@ -127,6 +110,7 @@ export interface NativeEnemyAnimationSample {
   impEffectFrame: number
   maggots: readonly NativeEnemyMaggotSample[]
   state: NativeEnemyAnimationState
+  stridePhaseDeg: number
   verticalOffset: number
   zombieAngularOffsetDeg: number
   zombieAttackSide: 0 | 1
@@ -217,22 +201,6 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
 }
 
-/**
- * Named renderer bounds for native death cadences whose exact clocks remain
- * unresolved. Skeleton-family body removal at tick zero is native-confirmed;
- * the replacement-effect durations are still deliberately marked bounded.
- */
-export const NATIVE_ENEMY_DEATH_PROGRAMS = {
-  SKELETON: deathProgram('skeleton-shatter', 24, 0),
-  SKELETONARCHER: deathProgram('archer-shatter', 24, 0),
-  SKELETONMAGE: deathProgram('mage-shatter', 24, 0),
-  IMP: deathProgram('imp-split', 19, null),
-  ZOMBIE: deathProgram('zombie-collapse', 36, null),
-  WRAITH: deathProgram('wraith-dissolve', 36, null),
-  DEMON: deathProgram('demon-split', 49, null),
-  COFFIN: deathProgram('coffin-break', 31, null),
-} as const satisfies Readonly<Record<string, NativeEnemyDeathProgram>>
-
 export function nativeEnemyActionFrame(
   name: NativeEnemyActionProgramName,
   progress: number,
@@ -279,6 +247,7 @@ export function nativeEnemyIdleAnimationSample(
     impEffectFrame: -1,
     maggots: [],
     state: 'idle',
+    stridePhaseDeg: 0,
     verticalOffset: 0,
     zombieAngularOffsetDeg: 0,
     zombieAttackSide: 0,
@@ -310,18 +279,5 @@ function exactProgram(
     provenance: 'native-exact',
     rateFactors,
     strictEnd,
-  }
-}
-
-function deathProgram(
-  name: NativeEnemyDeathProgramName,
-  durationTicks: number,
-  bodyRemovedAtTick: number | null,
-): NativeEnemyDeathProgram {
-  return {
-    bodyRemovedAtTick,
-    durationTicks,
-    name,
-    provenance: 'bounded-web',
   }
 }

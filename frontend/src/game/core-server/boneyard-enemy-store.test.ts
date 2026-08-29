@@ -49,7 +49,6 @@ import {
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
   BOUNDED_ENEMY_ACTION_PROGRAMS,
-  BOUNDED_ENEMY_DEATH_PROGRAM_TICKS,
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_DEMON_BOMB_ACTION_PROGRAM,
@@ -2504,6 +2503,10 @@ test('Imp contact is an immediate landing edge with native escape, VFX, and audi
   assert.equal(result.playerDamage.length, 1)
   const marker = result.events.find(({ type }) => type === 'attack-marker')
   assert.equal(marker?.eventId, result.playerDamage[0]?.eventId)
+  assert.deepEqual(marker?.painterRegistration, {
+    managerLane: 'transient',
+    registrationOrdinal: 0,
+  })
   assert.deepEqual(result.events.map(({ type }) => type), [
     'enemy-action-sound',
     'enemy-action-sound',
@@ -2919,11 +2922,12 @@ test('Coffin opening and open charge emit independently of the active Maggot cap
   assert.equal(capped.maggotCharge, 10)
 })
 
-test('Coffin construction retains the native Float(5) Maggot phase endpoint', () => {
-  const result = openedCoffin('maggot-replication-endpoint-6253', FAR_PLAYERS)
-  const maggot = result.store.maggots.find(({ id }) => id === 4)
+test('Coffin construction retains Maggot scale before the native Float(5) phase endpoint', () => {
+  const result = openedCoffin('maggot-phase-endpoint-907', FAR_PLAYERS)
+  const maggot = result.store.maggots.find(({ id }) => id === 3)
   assert.ok(maggot)
-  assert.equal(maggot.emergencePhase, 4.9995659198611975)
+  assert.equal(maggot.visualScale, 1.1695511061116122)
+  assert.equal(maggot.emergencePhase, 4.999967237235978)
   assert.equal(Math.round(maggot.emergencePhase * 1024), 5 * 1024)
 })
 
@@ -3117,7 +3121,10 @@ test('player-killed Maggot retires once and hands off to independent effects', (
   )
   assert.equal(effects.length, (1 + maggot.deathOffsets.length) * 2)
   assert.equal(effects.filter(({ kind }) => kind === 'bouncer').length, 1 + maggot.deathOffsets.length)
-  assert.equal(effects.filter(({ kind }) => kind === 'fade').length, 1 + maggot.deathOffsets.length)
+  assert.equal(
+    effects.filter(({ kind }) => kind === 'fade-perspective').length,
+    1 + maggot.deathOffsets.length,
+  )
   const sounds = result.events.filter(({ type }) => type === 'enemy-death-sound')
   assert.equal(sounds.length, 2)
   assert.ok(sounds[0]!.sound?.startsWith('maggot-squish-'))
@@ -3165,6 +3172,17 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
     resolveSpawnIntents: () => [],
     tick: 1,
   })
+  const impStep = result
+  const recursiveChildren = impStep.store.actors.filter(
+    (actor) => actor.lifeState === 'alive',
+  )
+  result = stepBoneyardEnemyStore(impStep.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement,
+    resolveSpawnIntents: () => [],
+    tick: 100,
+  })
   const children = result.store.actors.filter((actor) => actor.lifeState === 'alive')
   const impParent = store.actors.find((actor) => actor.config.enemyToken === 'IMP')!
   const demonParent = store.actors.find((actor) => actor.config.enemyToken === 'DEMON')!
@@ -3173,14 +3191,16 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
   assert.ok(children.every((actor) => actor.config.enemyToken === 'IMP'))
   assert.equal(placementRequests.length, 2 + NATIVE_IMP_SPLIT_CHILD_COUNT + 5)
   for (const request of placementRequests) {
-    const actor = [...store.actors, ...result.store.actors]
+    const actor = [...store.actors, ...impStep.store.actors, ...result.store.actors]
       .find(({ id }) => id === request.actorId)
     assert.ok(actor)
     assert.equal(request.radius, actor.config.collisionRadius)
   }
-  assert.deepEqual(result.spawnedActorIds, children.map((actor) => actor.id))
+  assert.deepEqual(
+    [...impStep.spawnedActorIds, ...result.spawnedActorIds],
+    children.map((actor) => actor.id),
+  )
   assert.equal(new Set(children.map((actor) => actor.id)).size, children.length)
-  const recursiveChildren = children.slice(0, NATIVE_IMP_SPLIT_CHILD_COUNT)
   assert.deepEqual(recursiveChildren.map((child) => child.position), [
     impParent.position,
     impParent.position,
@@ -3189,7 +3209,9 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
     (impParent.headingDeg + 270) % 360,
     (impParent.headingDeg + 90) % 360,
   ])
-  const terminalOutputs = result.events.filter((event) => event.type === 'enemy-terminal-output')
+  const terminalOutputs = [...impStep.events, ...result.events].filter(
+    (event) => event.type === 'enemy-terminal-output',
+  )
   assert.deepEqual(terminalOutputs.map(({ actorId, count, output }) => ({
     actorId,
     count,
@@ -3200,13 +3222,14 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
   ])
   assert.equal(
     terminalOutputs.reduce((count, event) => count + (event.count ?? 0), 0),
-    result.spawnedActorIds.length,
+    impStep.spawnedActorIds.length + result.spawnedActorIds.length,
   )
   for (const output of terminalOutputs) {
     const childIds = output.actorId === impParent.id
       ? recursiveChildren.map(({ id }) => id)
       : children.slice(NATIVE_IMP_SPLIT_CHILD_COUNT).map(({ id }) => id)
-    assert.ok(result.events
+    const events = output.actorId === impParent.id ? impStep.events : result.events
+    assert.ok(events
       .filter((event) => event.type === 'enemy-spawned' && childIds.includes(event.actorId))
       .every((event) => event.eventId > output.eventId))
   }
@@ -3361,7 +3384,7 @@ test('Demon terminal count reports only child Imps accepted beneath the construc
     sourcePlayerId: 'player',
     tick: 0,
   }).store
-  result = step(store, 1, FAR_PLAYERS)
+  result = step(store, 100, FAR_PLAYERS)
   const output = result.events.find((event) => event.type === 'enemy-terminal-output')
   assert.equal(output?.count, 1)
   assert.equal(output?.count, result.spawnedActorIds.length)
@@ -3446,7 +3469,7 @@ test('retail wave 35 and 42 recursive deaths obey native Imp caps and protocol c
       assert.ok(maximumImps <= NATIVE_IMP_CONSTRUCTION_MAXIMUM)
       assert.ok(maximumActors < protocolActorCapacity)
 
-      tick += BOUNDED_ENEMY_DEATH_PROGRAM_TICKS.DEMON
+      tick += 100
       result = step(result.store, tick, FAR_PLAYERS)
       maximumActors = Math.max(maximumActors, result.store.actors.length)
     }
@@ -3495,26 +3518,27 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   assert.equal(boneyardEnemyLiveCount(store), 8)
   assert.deepEqual(store.actors.map((actor) => actor.deathEpoch), [1, 2, 3, 4, 5, 6, 7, 8])
   assert.ok(store.actors.every((actor) => actor.lastDamageTick === 0))
+  const demonId = store.actors.find(({ config }) => config.enemyToken === 'DEMON')!.id
 
   result = step(store, 1, FAR_PLAYERS)
-  assert.equal(result.rewards.length, 8)
+  assert.equal(result.rewards.length, 7)
   assert.deepEqual(result.rewards.map((reward) => reward.experience), [
-    200, 800, 2, 10, 10, 10, 4, 210,
+    200, 2, 10, 10, 10, 4, 210,
   ])
   assert.deepEqual(result.rewards.map(({ actorId, lootSource }) => ({
     actorId,
     lootSource,
-  })), expectedLootSources)
-  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 8)
-  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 8)
+  })), expectedLootSources.filter(({ actorId }) => actorId !== demonId))
+  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 7)
+  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 7)
   assert.deepEqual(result.store.projectiles.map((projectile) => [
     projectile.id,
     projectile.kind,
     projectile.nativeTypeId,
   ]), [[1, 'poison-pool', 0x806]])
   assert.equal(result.store.projectiles[0]!.lightRegistration, null)
-  assert.equal(boneyardEnemyLiveCount(result.store), 0)
-  assert.equal(result.retired.length, 8)
+  assert.equal(boneyardEnemyLiveCount(result.store), 1)
+  assert.equal(result.retired.length, 7)
   assert.ok(result.store.deathEffects.length > 8)
 
   result = step(result.store, 2, FAR_PLAYERS)
@@ -3523,6 +3547,30 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   result = step(result.store, 50, FAR_PLAYERS)
   assert.equal(result.rewards.length, 0)
   assert.equal(result.retired.length, 0)
+
+  result = step(result.store, 95, FAR_PLAYERS)
+  assert.equal(result.rewards.length, 0)
+  assert.deepEqual(
+    result.events
+      .filter((event) => event.type === 'enemy-death-sound')
+      .map(({ sound }) => sound),
+    ['flash', 'demon-die'],
+  )
+  assert.equal(boneyardEnemyLiveCount(result.store), 1)
+
+  result = step(result.store, 100, FAR_PLAYERS)
+  assert.deepEqual(result.rewards.map(({ actorId, experience, lootSource }) => ({
+    actorId,
+    experience,
+    lootSource,
+  })), [{
+    ...expectedLootSources.find(({ actorId }) => actorId === demonId)!,
+    experience: 800,
+  }])
+  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 1)
+  assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 1)
+  assert.deepEqual(result.retired.map(({ actorId }) => actorId), [demonId])
+  assert.equal(boneyardEnemyLiveCount(result.store), 0)
 
   result = step(result.store, 3_001, FAR_PLAYERS)
   assert.equal(result.store.projectiles.length, 0)
@@ -3581,14 +3629,16 @@ test('Skeleton death hands off immediately to exact independent shatter actors',
   )
   assert.ok(result.store.deathEffects
     .filter(({ kind }) => kind === 'bouncer')
-    .every(({ opacityTimer, shadow }) => opacityTimer === 10 && shadow))
+    .every(({ opacityTimer, shadow }) => (
+      Math.abs(opacityTimer - 9.985) < 1e-12 && shadow
+    )))
   const star = result.store.deathEffects.find(({ kind }) => kind === 'unbind')
   assert.ok(star)
   assert.equal(star.atlas, 'BadGuys')
   assert.equal(star.entry, 86)
   assert.equal(star.alpha, 0.75)
   assert.equal(star.alphaLossPerTick, 0.0225)
-  assert.deepEqual(star.position, { x: 100, y: 185 })
+  assert.deepEqual(star.position, { x: 101, y: 185 })
   assert.equal(new Set(result.store.deathEffects.map(({ id }) => id)).size, 20)
 
   const before = result.store.deathEffects.find(({ kind }) => kind === 'bouncer')!
@@ -3638,32 +3688,166 @@ test('Wraith dissolve keeps the shared additive BadGuys-20 FadeScale core', () =
   )
 })
 
+test('every survival family assembles its native terminal animation classes', () => {
+  for (const token of ['SKELETON', 'SKELETONARCHER', 'SKELETONMAGE'] as const) {
+    const skeletonFamily = killOneAndStep(`terminal-classes-${token}`, token)
+    assert.equal(skeletonFamily.store.deathEffects.filter(
+      ({ role }) => role === 'skeleton-bone',
+    ).length, 18)
+    assert.equal(skeletonFamily.store.deathEffects.filter(
+      ({ role }) => role === 'skeleton-skull',
+    ).length, 1)
+    const unbind = skeletonFamily.store.deathEffects.find(
+      ({ role }) => role === 'death-unbind-star',
+    )!
+    assert.equal(unbind.presentationOwner, 'direct-post-world')
+    assert.equal(unbind.painterRegistration, null)
+  }
+
+  const ordinaryImp = killOneAndStep('terminal-classes-imp', 'IMP')
+  const ordinaryBanish = ordinaryImp.store.deathEffects.find(
+    ({ role }) => role === 'imp-banish',
+  )!
+  const ordinaryArray = ordinaryImp.store.deathEffects.find(
+    ({ role }) => role === 'imp-sprite-array',
+  )!
+  assert.deepEqual(
+    {
+      banishScale: ordinaryBanish.scale,
+      banishTicks: ordinaryBanish.lifetimeTicks,
+      frameDamping: ordinaryArray.frameVelocityDamping,
+      frameVelocity: ordinaryArray.frameVelocity,
+      owner: ordinaryArray.presentationOwner,
+      painter: ordinaryArray.painterRegistration,
+      spriteScale: ordinaryArray.scale,
+    },
+    {
+      banishScale: 1,
+      banishTicks: 100,
+      frameDamping: 0.98,
+      frameVelocity: 0.5,
+      owner: 'pre-world-queue',
+      painter: null,
+      spriteScale: 2,
+    },
+  )
+
+  const splitImp = killOneAndStep('terminal-classes-split-imp', 'IMP', ['FLAG_SPLIT'])
+  const splitBanish = splitImp.store.deathEffects.find(({ role }) => role === 'imp-banish')!
+  const splitArray = splitImp.store.deathEffects.find(
+    ({ role }) => role === 'imp-sprite-array',
+  )!
+  assert.deepEqual(
+    {
+      banishScale: splitBanish.scale,
+      banishTicks: splitBanish.lifetimeTicks,
+      frameVelocity: splitArray.frameVelocity,
+      spriteScale: splitArray.scale,
+    },
+    { banishScale: 0.25, banishTicks: 25, frameVelocity: 2, spriteScale: 0.5 },
+  )
+
+  const zombie = killOneAndStep('terminal-classes-zombie', 'ZOMBIE')
+  const zombieFragments = zombie.store.deathEffects.filter(
+    ({ role }) => role === 'zombie-fragment',
+  )
+  assert.deepEqual(
+    zombieFragments.map(({ entry }) => entry).sort((first, second) => first - second),
+    [
+      2089,
+      2090, 2090, 2090,
+      2091, 2091, 2091,
+      2092,
+      2093, 2093,
+      2094, 2094,
+    ],
+  )
+  assert.equal(zombieFragments.some(({ entry }) => entry === 2088), false)
+  assert.equal(zombie.store.deathEffects.filter(
+    ({ role }) => role === 'zombie-gait-fragment',
+  ).length, 1)
+  assert.equal(zombie.store.deathEffects.filter(
+    ({ kind }) => kind === 'fade-perspective-clipped',
+  ).length, 1)
+
+  const rotten = killOneAndStep(
+    'terminal-classes-rotten-zombie',
+    'ZOMBIE',
+    ['FLAG_ROTTEN'],
+  )
+  assert.equal(rotten.store.deathEffects.filter(
+    ({ role }) => role === 'zombie-fragment',
+  ).length, 22)
+  const lateSplats = rotten.store.deathEffects.filter(
+    ({ kind }) => kind === 'late-splat',
+  )
+  assert.ok(lateSplats.length >= 6 && lateSplats.length <= 10)
+  assert.ok(lateSplats.every(({ painterRegistration, presentationOwner }) => (
+    painterRegistration === null && presentationOwner === 'pre-world-queue'
+  )))
+
+  const wraith = killOneAndStep('terminal-classes-wraith', 'WRAITH')
+  assert.equal(wraith.store.deathEffects.filter(
+    ({ role }) => role.startsWith('wraith-dissolve-ray:'),
+  ).length, 12)
+  assert.equal(wraith.store.deathEffects.filter(
+    ({ role }) => role.startsWith('wraith-dissolve-bouncer:'),
+  ).length, 12)
+  assert.equal(wraith.store.deathEffects.filter(
+    ({ role }) => role === 'wraith-smoky-fragment',
+  ).length, 18)
+  assert.equal(wraith.store.deathEffects.filter(
+    ({ role }) => role === 'wraith-skull',
+  ).length, 1)
+  assert.ok(wraith.store.deathEffects
+    .filter(({ kind }) => kind === 'bouncer' || kind === 'smoky-bouncer')
+    .every(({ lastStepTick, opacityTimer }) => lastStepTick === 1 && opacityTimer < 10))
+
+  const coffin = killOneAndStep('terminal-classes-coffin', 'COFFIN')
+  assert.equal(coffin.store.deathEffects.filter(
+    ({ role }) => role === 'coffin-bone',
+  ).length, 18)
+  const mainFragments = coffin.store.deathEffects.filter(
+    ({ role }) => role.startsWith('coffin-main-fragment:'),
+  )
+  assert.ok(mainFragments.length >= 40 && mainFragments.length <= 50)
+  const extraFragments = coffin.store.deathEffects.filter(
+    ({ role }) => role.startsWith('coffin-extra-fragment:'),
+  )
+  assert.ok(extraFragments.length >= 12 && extraFragments.length <= 15)
+  assert.ok([...mainFragments, ...extraFragments].every(({ bounceVelocity }) => (
+    bounceVelocity <= -4 && bounceVelocity > -10
+  )))
+  assert.equal(coffin.store.deathEffects.filter(
+    ({ role }) => role === 'coffin-skull',
+  ).length, 1)
+})
+
 test('Demon death retains its body flames and delayed Anim_FireBurst choreography', () => {
   let result = killOneAndStep('demon-death-choreography', 'DEMON')
-  const effects = result.store.deathEffects
+  let effects = result.store.deathEffects
   assert.equal(effects.filter(({ kind }) => kind === 'fire-array').length, 5)
   assert.deepEqual(
     effects.filter(({ kind }) => kind === 'fire-array').map(({ spawnTick }) => spawnTick),
-    [1, 21, 41, 61, 81],
+    [0, 20, 40, 60, 80],
   )
-  const body = effects.find(({ role }) => role === 'demon-death-body')
-  assert.ok(body)
-  assert.deepEqual(
-    {
-      atlas: body.atlas,
-      firstEntry: body.firstEntry,
-      frameCount: body.frameCount,
-      frameTicks: body.frameTicks,
-    },
-    { atlas: 'Demon', firstEntry: 55, frameCount: 7, frameTicks: 7 },
-  )
+  assert.equal(effects.some(({ role }) => role === 'demon-death-body'), false)
+  assert.equal(result.store.actors[0]?.lifeState, 'dying')
+  assert.equal(result.store.actors[0]?.deathTick, 1)
+
+  result = step(result.store, 94, FAR_PLAYERS)
+  assert.equal(result.store.deathEffects.some(
+    ({ role }) => role === 'demon-death-fire-burst-frame',
+  ), false)
+  result = step(result.store, 95, FAR_PLAYERS)
+  effects = result.store.deathEffects
   assert.equal(
     effects.find(({ role }) => role === 'demon-death-fire-burst-glow')?.spawnTick,
-    96,
+    95,
   )
   assert.equal(
     effects.find(({ role }) => role === 'demon-death-fire-burst-frame')?.spawnTick,
-    96,
+    95,
   )
   const burstGlow = effects.find(
     ({ role }) => role === 'demon-death-fire-burst-glow',
@@ -3678,8 +3862,24 @@ test('Demon death retains its body flames and delayed Anim_FireBurst choreograph
   assert.equal(burstFrame.frameTicks, 1 / NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK)
   assert.equal(burstFrame.lifetimeTicks, NATIVE_DEMON_RAW_FIRE_BURST_TICKS)
   assert.notEqual(burstFrame.angularVelocityDeg, 0)
+  assert.deepEqual(
+    result.events
+      .filter(({ type }) => type === 'enemy-death-sound')
+      .map(({ sound }) => sound),
+    ['flash', 'demon-die'],
+  )
+  assert.equal(result.store.actors[0]?.deathTick, 95)
 
-  result = step(result.store, 96, FAR_PLAYERS)
+  result = step(result.store, 100, FAR_PLAYERS)
+  assert.equal(result.store.actors.length, 0)
+  assert.ok(result.store.deathEffects.some(({ role }) => role === 'demon-banish'))
+  assert.ok(result.store.deathEffects.some(({ role }) => role === 'demon-sprite-array'))
+  assert.deepEqual(
+    result.events
+      .filter(({ type }) => type === 'enemy-death-sound')
+      .map(({ sound }) => sound),
+    ['firey-death'],
+  )
   assert.equal(
     result.store.deathEffects.find(
       ({ role }) => role === 'demon-death-fire-burst-frame',
@@ -3690,9 +3890,9 @@ test('Demon death retains its body flames and delayed Anim_FireBurst choreograph
     result.store.deathEffects.find(
       ({ role }) => role === 'demon-death-fire-burst-glow',
     )?.alpha,
-    0.5,
+    0.5 - 5 * (0.5 * NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK / 4),
   )
-  result = step(result.store, 102, FAR_PLAYERS)
+  result = step(result.store, 101, FAR_PLAYERS)
   assert.equal(
     result.store.deathEffects.find(
       ({ role }) => role === 'demon-death-fire-burst-frame',
@@ -3760,10 +3960,15 @@ test('family death branches emit the recovered ordered sound calls and pitch ban
     ['banshee-die', 0.8, 1.2],
   ])
 
-  const demon = killOneAndStep('death-sound-demon', 'DEMON')
+  let demon = killOneAndStep('death-sound-demon', 'DEMON')
+  assertDeathSounds(demon, [])
+  demon = step(demon.store, 95, FAR_PLAYERS)
   assertDeathSounds(demon, [
     ['flash', 1, 1],
     ['demon-die', 1, 1],
+  ])
+  demon = step(demon.store, 100, FAR_PLAYERS)
+  assertDeathSounds(demon, [
     ['firey-death', 0.8, 1],
   ])
 
@@ -3772,9 +3977,9 @@ test('family death branches emit the recovered ordered sound calls and pitch ban
     ['coffin-break', 1, 1.1],
   ])
   const extraFragments = coffin.store.deathEffects.filter(
-    ({ role }) => role === 'coffin-extra-fragment',
+    ({ role }) => role.startsWith('coffin-extra-fragment:'),
   )
-  assert.ok(extraFragments.length >= 12 && extraFragments.length <= 16)
+  assert.ok(extraFragments.length >= 12 && extraFragments.length <= 15)
   assert.ok(extraFragments.every(({ atlas, entry }) => (
     (atlas === 'DeadHawg' && entry >= 114 && entry <= 144)
     || (atlas === 'BadGuys' && entry >= 2067 && entry <= 2069)
@@ -3800,7 +4005,7 @@ test('wave spawn resolution observes post-retirement and terminal-child live cou
       observedLiveCount = liveEnemyCount
       return []
     },
-    tick: BOUNDED_ENEMY_DEATH_PROGRAM_TICKS.SKELETON,
+    tick: 1,
   })
   assert.equal(observedLiveCount, 0)
   assert.equal(result.store.actors.length, 0)

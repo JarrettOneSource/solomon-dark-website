@@ -8,11 +8,17 @@ import type {
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 
 const PROGRAMS = Object.freeze({ poisonPoolAlphaLossPerTick: 0.005 })
+const registerTestWorldPainter = (managerLane: 'actor' | 'transient') => ({
+  managerLane,
+  registrationOrdinal: 99,
+})
 
 test('stationary transient rows reuse vectors without mutating their source branch', () => {
   const death = deathEffect()
   const projectile = projectileEffect({ kind: 'fire-burst-glow' })
-  const result = stepBoneyardTransientEffects([death], [projectile], 11, () => 0.5, PROGRAMS)
+  const result = stepBoneyardTransientEffects(
+    [death], [projectile], 11, () => 0.5, 100, registerTestWorldPainter, PROGRAMS,
+  )
   const steppedDeath = result.deathEffects[0]!
   const steppedProjectile = result.projectileEffects[0]!
 
@@ -29,8 +35,12 @@ test('stationary transient rows reuse vectors without mutating their source bran
 
 test('moving transient rows keep exact motion while sibling branches remain independent', () => {
   const source = deathEffect({ kind: 'move-fade', velocity: { x: 2, y: -3 } })
-  const first = stepBoneyardTransientEffects([source], [], 11, () => 0.5, PROGRAMS)
-  const second = stepBoneyardTransientEffects([source], [], 12, () => 0.5, PROGRAMS)
+  const first = stepBoneyardTransientEffects(
+    [source], [], 11, () => 0.5, 100, registerTestWorldPainter, PROGRAMS,
+  )
+  const second = stepBoneyardTransientEffects(
+    [source], [], 12, () => 0.5, 100, registerTestWorldPainter, PROGRAMS,
+  )
 
   assert.deepEqual(first.deathEffects[0]?.position, { x: 12, y: 17 })
   assert.deepEqual(second.deathEffects[0]?.position, { x: 14, y: 14 })
@@ -51,17 +61,53 @@ test('Bouncer ground contacts retain exact RNG order, settling, and retirement',
   const bounced = stepBoneyardTransientEffects([source], [], 11, () => {
     draws.push(0.25)
     return 0.25
-  }, PROGRAMS).deathEffects[0]!
+  }, 100, registerTestWorldPainter, PROGRAMS).deathEffects[0]!
 
-  assert.deepEqual(draws, [0.25])
+  assert.deepEqual(draws, [0.25, 0.25])
   assert.equal(bounced.height, 0)
   assert.equal(bounced.verticalVelocity, 0)
   assert.deepEqual(bounced.velocity, { x: 0, y: 0 })
   assert.equal(
-    stepBoneyardTransientEffects([bounced], [], 14, () => 0.75, PROGRAMS)
+    stepBoneyardTransientEffects(
+      [bounced], [], 14, () => 0.75, 100, registerTestWorldPainter, PROGRAMS,
+    )
       .deathEffects.length,
     0,
   )
+})
+
+test('SmokyBouncer births receive a fresh world-painter registration', () => {
+  const registrations: Array<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }> = []
+  const draws = [0.4, 0.5, 0.25, 0.75, 0.5, 0.25]
+  const result = stepBoneyardTransientEffects(
+    [deathEffect({
+      height: -10,
+      kind: 'smoky-bouncer',
+      verticalVelocity: 0,
+    })],
+    [],
+    11,
+    () => draws.shift() ?? 0,
+    100,
+    (managerLane) => {
+      const registration = {
+        managerLane,
+        registrationOrdinal: 200 + registrations.length,
+      }
+      registrations.push(registration)
+      return registration
+    },
+    PROGRAMS,
+  )
+
+  assert.equal(result.deathEffects.length, 2)
+  assert.equal(result.nextDeathEffectId, 101)
+  assert.deepEqual(registrations, [{ managerLane: 'actor', registrationOrdinal: 200 }])
+  assert.deepEqual(result.deathEffects[1]?.painterRegistration, registrations[0])
+  assert.equal(result.deathEffects[1]?.presentationOwner, 'world-sorted')
 })
 
 test('Arrow tumble keeps float32 motion and retires on its strict lifetime edge', () => {
@@ -73,7 +119,9 @@ test('Arrow tumble keeps float32 motion and retires on its strict lifetime edge'
     lifetimeTicks: 60,
     velocity: { x: Math.fround(1), y: Math.fround(-0.5) },
   })
-  const first = stepBoneyardTransientEffects([], [source], 11, () => 0, PROGRAMS)
+  const first = stepBoneyardTransientEffects(
+    [], [source], 11, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+  )
     .projectileEffects[0]!
   assert.equal(first.alpha, Math.fround(Math.fround(0.2) - Math.fround(0.1)))
   assert.deepEqual(first.position, { x: Math.fround(31), y: Math.fround(39.5) })
@@ -82,7 +130,9 @@ test('Arrow tumble keeps float32 motion and retires on its strict lifetime edge'
     y: Math.fround(Math.fround(-0.5) * Math.fround(0.98)),
   })
   assert.equal(
-    stepBoneyardTransientEffects([], [first], 12, () => 0, PROGRAMS)
+    stepBoneyardTransientEffects(
+      [], [first], 12, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+    )
       .projectileEffects.length,
     0,
   )
@@ -97,6 +147,7 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
     deathEffect({
       firstEntry: 40,
       frameCount: 4,
+      frameVelocity: 1,
       id: 5,
       kind: 'sprite-array',
       velocity: { x: 1, y: 0 },
@@ -116,10 +167,7 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
   const result = stepBoneyardTransientEffects(source, [], 13, () => {
     draws.push(0.75)
     return 0.75
-  }, PROGRAMS)
-  let banishScale = 1
-  for (let tick = 11; tick <= 13; tick += 1) banishScale *= 1.025
-
+  }, 100, registerTestWorldPainter, PROGRAMS)
   assert.equal(JSON.stringify(source), before)
   assert.deepEqual(result.deathEffects.map(({ id, kind }) => ({ id, kind })), [
     { id: 1, kind: 'fade' },
@@ -146,7 +194,7 @@ test('all death-effect kinds keep exact catch-up clocks and ordered projection',
     { ageTicks: 3, alpha: 0.7000000000000001, entry: 113, lastStepTick: 13,
       position: { x: 16, y: 11 }, rotationDeg: 11, scale: 1 },
     { ageTicks: 3, alpha: 0.7000000000000001, entry: 113, lastStepTick: 13,
-      position: { x: 10, y: 20 }, rotationDeg: 11, scale: banishScale },
+      position: { x: 10, y: 20 }, rotationDeg: 11, scale: 1 },
     { ageTicks: 3, alpha: 0.7000000000000001, entry: 43, lastStepTick: 13,
       position: { x: 13, y: 20 }, rotationDeg: 11, scale: 1 },
     { ageTicks: 3, alpha: 0.7000000000000001, entry: 50, lastStepTick: 13,
@@ -186,7 +234,9 @@ test('all projectile-effect kinds keep exact catch-up clocks and ordered project
     velocity: kind === 'arrow-tumble' ? { x: 1, y: -0.5 } : { x: 0, y: 0 },
   }))
   const before = JSON.stringify(source)
-  const result = stepBoneyardTransientEffects([], source, 14, () => 0, PROGRAMS)
+  const result = stepBoneyardTransientEffects(
+    [], source, 14, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+  )
 
   assert.equal(JSON.stringify(source), before)
   assert.deepEqual(result.projectileEffects.map(({ id, kind }) => ({ id, kind })),
@@ -219,14 +269,18 @@ test('all projectile-effect kinds keep exact catch-up clocks and ordered project
 
 test('delayed births and strict lifetime edges apply across complete transient populations', () => {
   const delayed = deathEffect({ lastStepTick: 10, spawnTick: 12 })
-  const beforeBirth = stepBoneyardTransientEffects([delayed], [], 11, () => 0, PROGRAMS)
+  const beforeBirth = stepBoneyardTransientEffects(
+    [delayed], [], 11, () => 0, 100, registerTestWorldPainter, PROGRAMS,
+  )
     .deathEffects[0]!
   assert.equal(beforeBirth.ageTicks, 0)
   assert.equal(beforeBirth.lastStepTick, 11)
   assert.equal(beforeBirth.opacityTimer, delayed.opacityTimer)
 
   const deathKinds = [
-    'banish', 'bouncer', 'fade', 'fire-array', 'move-fade', 'sprite-array', 'unbind',
+    'banish', 'bouncer', 'smoky-bouncer', 'fade', 'fade-additive',
+    'fade-perspective', 'fade-perspective-clipped', 'fade-scale', 'fire-array',
+    'late-splat', 'move-fade', 'sprite-array', 'unbind',
   ] as const
   const projectileKinds = [
     'arrow-tumble', 'demon-fire', 'fire-burst-frame', 'fire-burst-glow',
@@ -248,9 +302,15 @@ test('delayed births and strict lifetime edges apply across complete transient p
     })),
     30,
     () => 0,
+    100,
+    registerTestWorldPainter,
     PROGRAMS,
   )
-  assert.deepEqual(result, { deathEffects: [], projectileEffects: [] })
+  assert.deepEqual(result, {
+    deathEffects: [],
+    nextDeathEffectId: 100,
+    projectileEffects: [],
+  })
 })
 
 function deathEffect(
@@ -259,14 +319,19 @@ function deathEffect(
   return Object.freeze({
     ageTicks: 0,
     alpha: 1,
+    alphaMultiplier: 1,
     alphaLossPerTick: 0.1,
     angularVelocityDeg: 2,
     atlas: 'BadGuys',
     blendMode: 'normal',
+    bounceRetention: 0.65,
     bounceVelocity: 0,
     entry: 113,
     firstEntry: 113,
     frameCount: 1,
+    framePhase: 0,
+    frameVelocity: 0,
+    frameVelocityDamping: 1,
     frameTicks: 1,
     height: 0,
     id: 1,
@@ -275,16 +340,19 @@ function deathEffect(
     lifetimeTicks: 20,
     opacityTimer: 1,
     ownerActorId: 3,
-    painterRegistration: null,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
+    presentationOwner: 'world-sorted',
     position: Object.freeze({ x: 10, y: 20 }),
     role: 'transient-test',
     rotationDeg: 5,
     scale: 1,
+    scaleMultiplier: 1,
     shadow: false,
     spawnTick: 10,
     tint: 0xffffff,
     verticalVelocity: 0,
     velocity: Object.freeze({ x: 0, y: 0 }),
+    velocityDamping: 1,
     ...patch,
   })
 }

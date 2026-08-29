@@ -158,6 +158,10 @@ export class NativeEnemyViews {
     return this.views.get(id)?.view.limbsEntry ?? null
   }
 
+  scale(id: number): number | null {
+    return this.views.get(id)?.view.scale ?? null
+  }
+
   get size(): number {
     return this.views.size
   }
@@ -270,6 +274,7 @@ class NativeEnemyView {
       sprite.tint = layer.tint
     })
     this.container.position.set(enemy.position.x, enemy.position.y)
+    this.container.scale.set(enemy.scale)
     this.headingDeg = enemy.headingDeg
   }
 
@@ -287,6 +292,10 @@ class NativeEnemyView {
 
   get position(): Readonly<{ x: number; y: number }> {
     return { x: this.container.position.x, y: this.container.position.y }
+  }
+
+  get scale(): number {
+    return this.container.scale.x
   }
 
   impContactOrigin(): Readonly<{ x: number; y: number }> {

@@ -153,14 +153,19 @@ test('projects only Demon raw FireBurst death layers into the direct post-world 
   const effect: BoneyardEnemyDeathEffect = {
     ageTicks: 0,
     alpha: 0.5,
+    alphaMultiplier: 1,
     alphaLossPerTick: 0.02,
     angularVelocityDeg: 1,
     atlas: 'BadGuys',
     blendMode: 'add',
+    bounceRetention: 0,
     bounceVelocity: 0,
     entry: 251,
     firstEntry: 251,
     frameCount: 4,
+    framePhase: 0,
+    frameVelocity: 3 / 16,
+    frameVelocityDamping: 1,
     frameTicks: 16 / 3,
     height: 0,
     id: 1,
@@ -170,14 +175,17 @@ test('projects only Demon raw FireBurst death layers into the direct post-world 
     opacityTimer: 0,
     ownerActorId: 7,
     painterRegistration: null,
+    presentationOwner: 'direct-post-world',
     position: { x: 100, y: 200 },
     role: 'demon-death-fire-burst-frame',
     rotationDeg: 90,
     scale: 2,
+    scaleMultiplier: 1,
     shadow: false,
     spawnTick: 10,
     tint: 0xffffbf,
     velocity: { x: 0, y: -1 },
+    velocityDamping: 1,
     verticalVelocity: 0,
   }
   assert.equal(
@@ -187,6 +195,8 @@ test('projects only Demon raw FireBurst death layers into the direct post-world 
   assert.equal(
     projectBoneyardEnemyDeathEffect({
       ...effect,
+      painterRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+      presentationOwner: 'world-sorted',
       role: 'demon-death-body',
     }).presentationOwner,
     'world-sorted',
@@ -275,6 +285,7 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     terminalEmitted: false,
     verticalOffset: 0,
     verticalVelocity: 0,
+    visualScale: 1,
   }
   const store = {
     ...createBoneyardEnemyStore('maggot-hit-flash'),
@@ -342,6 +353,41 @@ test('projects the native refreshed 20-tick hit latch without changing enemy act
   assert.equal(expired.animation.hitFlash, 0)
   assert.equal(first.animation.state, 'action')
   assert.equal(first.animation.actionProgress, 4)
+})
+
+test('Demon lethal projection freezes its articulated composite root', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('demon-death-root'), {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'DEMON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON,
+      position: { x: 0, y: 0 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const actor = spawned.store.actors[0]!
+  const store = {
+    ...spawned.store,
+    actors: [{
+      ...actor,
+      deathStartedTick: 10,
+      deathTick: 10,
+      lifeState: 'dying' as const,
+    }],
+  }
+  const early = projectBoneyardEnemies(store, 20)[0]!
+  const late = projectBoneyardEnemies(store, 80)[0]!
+
+  assert.equal(early.animation.state, 'death')
+  assert.equal(late.animation.state, 'death')
+  assert.equal(early.animation.verticalOffset, late.animation.verticalOffset)
 })
 
 test('projects Maggot emergence trajectory and vertical launch height', () => {
@@ -682,6 +728,7 @@ function projectedMaggot(
     terminalEmitted: false,
     verticalOffset: 0,
     verticalVelocity: 0,
+    visualScale: 1,
     ...overrides,
   }
   return projectBoneyardMaggots({

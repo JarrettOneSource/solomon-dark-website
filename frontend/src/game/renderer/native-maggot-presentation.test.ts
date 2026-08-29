@@ -110,6 +110,7 @@ function maggot(overrides: Partial<BoneyardMaggotSnapshot>): BoneyardMaggotSnaps
     spawnTick: 0,
     state: 'crawl',
     verticalOffset: 0,
+    visualScale: 1,
     ...overrides,
   }
 }

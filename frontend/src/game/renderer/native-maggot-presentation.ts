@@ -23,7 +23,7 @@ export function nativeMaggotPresentationPlan(
       ? `maggot-body-emerging-${maggot.launchTrajectory}`
       : 'maggot-body',
     rotationRadians: 0,
-    scale: 1,
+    scale: maggot.visualScale,
     tint: 0xffffff,
   }
   const hitFlash = boundedUnit(maggot.hitFlash)

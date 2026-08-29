@@ -71,6 +71,7 @@ import {
   NATIVE_SKELETON_PIKE_BODY_POSES,
   NATIVE_SKELETON_WEAPON_BODY_POSES,
   advanceNativeEnemyLocomotionPhase,
+  advanceNativeEnemyStridePhase,
   nativeSkeletonBodyGaitPose,
   nativeSkeletonFamilyBodyPose,
   type NativeSkeletonHeadFacingOffset,
@@ -88,7 +89,10 @@ import {
   NATIVE_BADGUY_NAVIGATION_CLEARANCE,
   NATIVE_DEMON_NAVIGATION_CLEARANCE,
 } from './boneyard-enemy-navigation.ts'
-import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
+import {
+  stepBoneyardTransientEffects,
+  stepBornBoneyardBouncer,
+} from './boneyard-transient-effects.ts'
 import {
   createNativeWorldManagerOrder,
   type NativeWorldManagerLane,
@@ -160,17 +164,6 @@ export const BOUNDED_ENEMY_ATTACK_REACH = Object.freeze({
   SKELETONMAGE: 220,
   WRAITH: 52,
   ZOMBIE: 48,
-})
-
-export const BOUNDED_ENEMY_DEATH_PROGRAM_TICKS = Object.freeze({
-  COFFIN: 31,
-  DEMON: 49,
-  IMP: 19,
-  SKELETON: 24,
-  SKELETONARCHER: 24,
-  SKELETONMAGE: 24,
-  WRAITH: 36,
-  ZOMBIE: 36,
 })
 
 /**
@@ -377,6 +370,7 @@ export interface BoneyardEnemyActor {
   readonly config: EvaluatedBoneyardEnemyConfig
   readonly currentHealth: number
   readonly deathEpoch: number | null
+  readonly deathPresentationStarted: boolean
   readonly deathStartedTick: number | null
   readonly deathTick: number
   readonly gaitPose: number
@@ -407,6 +401,7 @@ export interface BoneyardEnemyActor {
   readonly spawnTick: number
   readonly staffActionFactor: number
   readonly staffMovementFactor: number
+  readonly stridePhaseDeg: number
   readonly targetPlayerId: string | null
   readonly terminalEmitted: boolean
   readonly waveOrdinal: number
@@ -547,13 +542,20 @@ export interface BoneyardMaggotActor {
   readonly terminalEmitted: boolean
   readonly verticalOffset: number
   readonly verticalVelocity: number
+  readonly visualScale: number
 }
 
 export type BoneyardEnemyDeathEffectKind =
   | 'banish'
   | 'bouncer'
+  | 'smoky-bouncer'
   | 'fade'
+  | 'fade-additive'
+  | 'fade-perspective'
+  | 'fade-perspective-clipped'
+  | 'fade-scale'
   | 'fire-array'
+  | 'late-splat'
   | 'move-fade'
   | 'sprite-array'
   | 'unbind'
@@ -561,14 +563,19 @@ export type BoneyardEnemyDeathEffectKind =
 export interface BoneyardEnemyDeathEffect {
   readonly ageTicks: number
   readonly alpha: number
+  readonly alphaMultiplier: number
   readonly alphaLossPerTick: number
   readonly angularVelocityDeg: number
   readonly atlas: 'BadGuys' | 'DeadHawg' | 'Demon'
   readonly blendMode: 'add' | 'normal'
+  readonly bounceRetention: number
   readonly bounceVelocity: number
   readonly entry: number
   readonly firstEntry: number
   readonly frameCount: number
+  readonly framePhase: number
+  readonly frameVelocity: number
+  readonly frameVelocityDamping: number
   readonly frameTicks: number
   readonly height: number
   readonly id: BoneyardEnemyDeathEffectId
@@ -578,15 +585,18 @@ export interface BoneyardEnemyDeathEffect {
   readonly ownerActorId: BoneyardEnemyActorId
   readonly opacityTimer: number
   readonly painterRegistration: NativeWorldManagerRegistration | null
+  readonly presentationOwner: 'direct-post-world' | 'pre-world-queue' | 'world-sorted'
   readonly position: Readonly<BoneyardPoint>
   readonly role: string
   readonly rotationDeg: number
   readonly scale: number
+  readonly scaleMultiplier: number
   readonly shadow: boolean
   readonly spawnTick: number
   readonly tint: number
   readonly verticalVelocity: number
   readonly velocity: Readonly<BoneyardPoint>
+  readonly velocityDamping: number
 }
 
 export interface BoneyardMageLightningWorldContact {
@@ -1113,7 +1123,11 @@ function standaloneEnemyWorldManagerOrderState(source: BoneyardEnemyStore) {
     ...source.actors.map(({ lightRegistration }) => lightRegistration),
     ...source.maggots.map(({ lightRegistration }) => lightRegistration),
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
+    ...source.projectiles.map(({ painterRegistration }) => painterRegistration),
     ...source.projectileEffects.map(({ lightRegistration }) => lightRegistration),
+    ...source.projectileEffects.map(({ painterRegistration }) => painterRegistration),
+    ...source.deathEffects.map(({ painterRegistration }) => painterRegistration),
+    ...source.mageLightningPulses.flatMap(({ painterRegistrations }) => painterRegistrations),
   ]) {
     if (registration === null) continue
     nextRegistrationOrdinal[registration.managerLane] = Math.max(
@@ -1726,14 +1740,19 @@ function spawnShieldBreakParticles(
     work.deathEffects.push(Object.freeze({
       ageTicks: 0,
       alpha,
+      alphaMultiplier: 1,
       alphaLossPerTick: 0.05,
       angularVelocityDeg: 0,
       atlas: 'BadGuys',
       blendMode: 'add',
+      bounceRetention: 0,
       bounceVelocity: 0,
       entry: 69,
       firstEntry: 69,
       frameCount: 1,
+      framePhase: 0,
+      frameVelocity: 0,
+      frameVelocityDamping: 1,
       frameTicks: 1,
       height: 0,
       id: work.nextDeathEffectId,
@@ -1743,15 +1762,18 @@ function spawnShieldBreakParticles(
       opacityTimer: alpha,
       ownerActorId: actor.id,
       painterRegistration: work.registerWorldPainter('actor'),
+      presentationOwner: 'world-sorted',
       position: Object.freeze({ x: actor.position.x, y: actor.position.y - 30 }),
       role: 'shield-break-particle',
       rotationDeg,
       scale,
+      scaleMultiplier: 1,
       shadow: false,
       spawnTick: tick,
       tint: 0xffffff,
       verticalVelocity: 0,
       velocity: Object.freeze({ x: 0, y: 0 }),
+      velocityDamping: 1,
     }))
     work.nextDeathEffectId += 1
   }
@@ -1817,9 +1839,12 @@ export function stepBoneyardEnemyStore(
     source.projectileEffects,
     context.tick,
     () => drawUnit(work),
+    work.nextDeathEffectId,
+    work.registerWorldPainter,
     NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS,
   )
   work.deathEffects = transients.deathEffects
+  work.nextDeathEffectId = transients.nextDeathEffectId
   work.projectileEffects = transients.projectileEffects
   for (const actor of source.actors) {
     const timedActor = stepDamagePresentationTimers(
@@ -2026,6 +2051,9 @@ function materializeSpawnIntents(
     }
     validatePoint(position, 'resolved enemy spawn position')
     const targetPlayerId = nearestEligibleTarget(position, context.players)
+    const stridePhaseDeg = config.enemyToken === 'ZOMBIE'
+      ? drawLocomotionStridePhase(work)
+      : 0
     const gaitPose = drawLocomotionPhase(work)
     const bodyGaitPhase = drawLocomotionPhase(work)
     const path = createNativeEnemyPathState(work.steeringRngState)
@@ -2044,6 +2072,7 @@ function materializeSpawnIntents(
       config,
       currentHealth: config.maximumHealth,
       deathEpoch: null,
+      deathPresentationStarted: false,
       deathStartedTick: null,
       deathTick: 0,
       gaitPose,
@@ -2075,6 +2104,7 @@ function materializeSpawnIntents(
       spawnTick: intent.spawnTick,
       staffActionFactor: 1,
       staffMovementFactor: 1,
+      stridePhaseDeg,
       targetPlayerId,
       terminalEmitted: false,
       waveOrdinal: intent.waveOrdinal,
@@ -3481,7 +3511,7 @@ function advanceZombieVisual(
   let verticalVelocity = sourceBrain.verticalVelocity
 
   if (sourceBrain.phase !== 'swipe') {
-    bodyPhaseDeg += random()
+    bodyPhaseDeg += random() * 1.5
     headPhaseDeg += random() * 0.75
     if (randomInteger(100) === 5) {
       if (randomInteger(2) === 1) {
@@ -3492,7 +3522,7 @@ function advanceZombieVisual(
       if (randomInteger(15) === 3) {
         headBaseRotationDeg = signedUnit(random()) * 65
       }
-      if (source.config.flags.includes('FLAG_ROTTEN')) {
+      if (sourceBrain.bodyType === 3) {
         rearArmBaseRotationDeg /= 3
         frontArmBaseRotationDeg /= 3
         headBaseRotationDeg *= 0.5
@@ -3664,6 +3694,7 @@ function spawnCoffinMaggots(
       brain.launchScale < 0 ? 360 - sourceHeadingDeg : sourceHeadingDeg,
       360,
     )
+    const visualScale = 1 + drawUnit(work) * 0.25
     const launchVelocity = radialVector(headingDeg, 1)
     const emergencePhase = drawUnit(work) * 5
     const landingBounceVelocity = Math.fround(-drawUnit(work) * 0.5)
@@ -3722,6 +3753,7 @@ function spawnCoffinMaggots(
       terminalEmitted: false,
       verticalOffset,
       verticalVelocity: 0,
+      visualScale,
     }))
     work.nextNativeCellBindingOrder += 1
     work.nextNativeRegistrationOrder += 1
@@ -4083,29 +4115,81 @@ function spawnMaggotDeathEffects(
       y: maggot.position.y + offset.y,
     })),
   ]
-  for (const position of positions) {
-    const owner: DeathEffectOwner = { id: maggot.id, position }
-    spawnRadialBouncer(
+  const rootOwner: DeathEffectOwner = { id: maggot.id, position: positions[0]! }
+  spawnMaggotFragmentBouncer(work, rootOwner, tick, 1, 'maggot-fragment:root')
+  spawnMaggotPerspectiveFade(work, rootOwner, tick, 'maggot-perspective-fade:root')
+  for (let index = 1; index < positions.length; index += 1) {
+    const owner: DeathEffectOwner = { id: maggot.id, position: positions[index]! }
+    spawnMaggotPerspectiveFade(
       work,
       owner,
       tick,
-      2013 + drawInteger(work, 50),
-      'maggot-fragment',
+      `maggot-perspective-fade:${index}`,
     )
-    spawnSimpleDeathEffect(work, owner, tick, {
-      alpha: 1,
-      alphaLossPerTick: 1 / NATIVE_MAGGOT_PROGRAM.deathTicks,
-      atlas: 'DeadHawg',
-      blendMode: 'normal',
-      entry: 28,
-      kind: 'fade',
-      lifetimeTicks: NATIVE_MAGGOT_PROGRAM.deathTicks,
-      role: 'maggot-perspective-fade',
-      rotationDeg: drawUnit(work) * 360,
-      scale: 0.75 + drawUnit(work) * 0.5,
-      tint: 0x828c6b,
-    })
+    spawnMaggotFragmentBouncer(
+      work,
+      owner,
+      tick,
+      1,
+      `maggot-fragment:${index}`,
+    )
   }
+}
+
+function spawnMaggotFragmentBouncer(
+  work: WorkingStep,
+  owner: DeathEffectOwner,
+  tick: number,
+  speedScale: number,
+  role: string,
+): void {
+  spawnBouncer(
+    work,
+    owner,
+    tick,
+    () => 2013 + drawInteger(work, 50),
+    role,
+    () => {
+      const speed = (0.5 + drawUnit(work) * 0.5) * speedScale
+      const direction = radialVector(drawUnit(work) * 360, speed)
+      const velocity = { x: direction.x * 1.5, y: direction.y }
+      const distance = 15 + drawUnit(work) * 10
+      return {
+        position: {
+          x: owner.position.x + velocity.x * (distance + 2),
+          y: owner.position.y + velocity.y * distance,
+        },
+        velocity,
+      }
+    },
+  )
+}
+
+function spawnMaggotPerspectiveFade(
+  work: WorkingStep,
+  owner: DeathEffectOwner,
+  tick: number,
+  role: string,
+): void {
+  const rotationDeg = drawUnit(work) * 360
+  const scale = 0.65 + drawUnit(work) * 0.35
+  const alphaMultiplier = 0.25 + drawUnit(work) * 0.25
+  const opacityTimer = 2.5
+  spawnSimpleDeathEffect(work, owner, tick, {
+    alpha: alphaMultiplier,
+    alphaLossPerTick: 0.01,
+    alphaMultiplier,
+    atlas: 'DeadHawg',
+    blendMode: 'normal',
+    entry: 28,
+    kind: 'fade-perspective',
+    lifetimeTicks: 250,
+    opacityTimer,
+    role,
+    rotationDeg,
+    scale,
+    tint: 0x828c6b,
+  })
 }
 
 function emitMaggotDeathSounds(
@@ -4420,6 +4504,11 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
     nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
     path: recovery.state,
     position: Object.freeze({ ...position }),
+    stridePhaseDeg: advanceNativeEnemyStridePhase(
+      actor.stridePhaseDeg,
+      movementScalar,
+      NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    ),
   }
 }
 
@@ -4720,6 +4809,9 @@ function attackMarker(
   targetPlayerId: string | null = actor.targetPlayerId,
 ): number {
   return emitEvent(work, tick, 'attack-marker', actor.id, {
+    ...(actor.config.enemyToken === 'IMP'
+      ? { painterRegistration: work.registerWorldPainter('transient') }
+      : {}),
     targetPlayerId,
   })
 }
@@ -5894,10 +5986,26 @@ function projectileNativeTypeId(
 
 function stepDyingActor(
   work: WorkingStep,
-  source: BoneyardEnemyActor,
+  stored: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor | null {
   const tick = context.tick
+  let source = stored
+  if (source.config.enemyToken === 'DEMON') {
+    const deathStartedTick = source.deathStartedTick ?? tick
+    const deathTick = Math.max(0, tick - deathStartedTick)
+    if (!source.deathPresentationStarted) {
+      spawnDemonDeathFires(work, source, deathStartedTick)
+      source = { ...source, deathPresentationStarted: true }
+    }
+    if (source.deathTick < 95 && deathTick >= 95) {
+      emitEnemyDeathSound(work, tick, source, 'flash', 1)
+      emitEnemyDeathSound(work, tick, source, 'demon-die', 1)
+      spawnDemonDeathFireBurst(work, source, tick)
+    }
+    source = { ...source, deathTick }
+    if (deathTick < 100) return source
+  }
   emitEvent(work, tick, 'enemy-death', source.id)
   const output = terminalOutput(source.config.enemyToken)
   const outputCount = terminalOutputCount(work, source)
@@ -5907,8 +6015,6 @@ function stepDyingActor(
   })
   context.retirementObserver?.onTerminalOutput(output, outputCount)
   emitEnemyDeathSounds(work, source, tick, outputCount)
-  spawnEnemyDeathEffects(work, source, tick)
-  spawnTerminalChildren(work, source, context)
   if (
     source.config.enemyToken === 'ZOMBIE'
     && source.config.family.rotten
@@ -5922,6 +6028,8 @@ function stepDyingActor(
       source.config.family.poisonPoolDamage,
     )
   }
+  spawnEnemyDeathEffects(work, source, tick, outputCount)
+  spawnTerminalChildren(work, source, context)
   const rewardEventId = emitEvent(work, tick, 'reward', source.id, {
     targetPlayerId: source.lastDamagedByPlayerId,
   })
@@ -5950,6 +6058,7 @@ function spawnEnemyDeathEffects(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   tick: number,
+  outputCount: number | undefined,
 ): void {
   switch (actor.config.enemyToken) {
     case 'SKELETON':
@@ -5959,187 +6068,465 @@ function spawnEnemyDeathEffects(
       return
     case 'IMP':
       spawnUnbind(work, actor, tick)
-      spawnSimpleDeathEffect(work, actor, tick, {
-        alpha: 1,
-        alphaLossPerTick: 1 / 24,
-        atlas: 'BadGuys',
-        blendMode: 'add',
-        entry: 15,
-        kind: 'banish',
-        lifetimeTicks: 24,
-        role: 'imp-banish',
-        scale: 1.25,
-      })
-      spawnSpriteArray(work, actor, tick, 'imp-sprite-array', 401, 19, 1)
-      return
-    case 'ZOMBIE':
-      for (const entry of [2088, 2089, 2091, 2093, 2293, 2297]) {
-        spawnRadialBouncer(work, actor, tick, entry, 'zombie-fragment')
-      }
-      spawnUnbind(work, actor, tick)
-      spawnSimpleDeathEffect(work, actor, tick, {
-        alpha: 1,
-        alphaLossPerTick: 1 / 36,
-        atlas: 'DeadHawg',
-        blendMode: 'normal',
-        entry: 30,
-        kind: 'move-fade',
-        lifetimeTicks: 36,
-        role: 'zombie-clipped-fade',
-        scale: 1,
-      })
-      return
-    case 'WRAITH':
-      for (const entry of SKELETON_BASE_FRAGMENT_ENTRIES) {
-        spawnRadialBouncer(work, actor, tick, entry, 'wraith-smoky-fragment')
-      }
-      spawnRadialBouncer(work, actor, tick, 1819 + drawInteger(work, 4), 'wraith-skull')
-      spawnUnbind(work, actor, tick)
-      for (let index = 0; index < 12; index += 1) {
-        const angle = index * 30
-        const velocity = radialVector(angle, 1.25)
+      {
+        const scale = outputCount === NATIVE_IMP_SPLIT_CHILD_COUNT ? 0.25 : 1
         spawnSimpleDeathEffect(work, actor, tick, {
-          alpha: 0.75,
-          alphaLossPerTick: 0.025,
+          alpha: 1,
+          alphaLossPerTick: 0.02 / scale,
           atlas: 'BadGuys',
           blendMode: 'add',
-          entry: 10 + index % 2,
-          kind: 'move-fade',
-          lifetimeTicks: 30,
-          role: 'wraith-dissolve-ray',
-          scale: 1 + drawUnit(work) * 0.25,
-          velocity,
+          entry: 15,
+          kind: 'banish',
+          lifetimeTicks: Math.ceil(2 / (0.02 / scale)),
+          opacityTimer: 2,
+          role: 'imp-banish',
+          scale,
+        })
+        spawnSpriteArray(work, actor, tick, 'imp-sprite-array', 401, 19, 1, {
+          frameVelocity: 0.5 / scale,
+          frameVelocityDamping: 0.98,
+          presentationOwner: 'pre-world-queue',
+          scale: 2 * scale,
         })
       }
-      spawnSimpleDeathEffect(work, actor, tick, {
-        alpha: 1,
-        alphaLossPerTick: 1 / 36,
-        atlas: 'BadGuys',
-        blendMode: 'add',
-        entry: 20,
-        kind: 'fade',
-        lifetimeTicks: 36,
-        role: 'wraith-dissolve-core',
-        scale: 1.5,
-      })
-      for (let index = 0; index < 12; index += 1) {
-        spawnRadialBouncer(work, actor, tick, 27, 'wraith-dissolve-bouncer')
-      }
+      return
+    case 'ZOMBIE':
+      spawnZombieTerminalEffects(work, actor, tick)
+      return
+    case 'WRAITH':
+      spawnWraithTerminalEffects(work, actor, tick)
       return
     case 'DEMON':
       spawnSimpleDeathEffect(work, actor, tick, {
         alpha: 1,
-        alphaLossPerTick: 1 / 49,
+        alphaLossPerTick: 0.01,
         atlas: 'BadGuys',
         blendMode: 'add',
         entry: 15,
         kind: 'banish',
-        lifetimeTicks: 49,
+        lifetimeTicks: 200,
+        opacityTimer: 2,
         role: 'demon-banish',
         scale: 2,
       })
-      spawnSpriteArray(work, actor, tick, 'demon-sprite-array', 401, 19, 2)
-      spawnSpriteArray(work, actor, tick, 'demon-death-body', 55, 7, 7, {
-        atlas: 'Demon',
-        blendMode: 'normal',
+      spawnSpriteArray(work, actor, tick, 'demon-sprite-array', 401, 19, 1, {
+        frameVelocity: 0.25,
+        frameVelocityDamping: 0.995,
+        presentationOwner: 'pre-world-queue',
+        scale: 4,
       })
-      for (const delay of [0, 20, 40, 60, 80]) {
-        const phase = drawInteger(work, 32)
-        const displacement = randomRadialDisplacement(work, (100 - delay) / 20)
-        spawnSpriteArray(
-          work,
-          actor,
-          tick,
-          `demon-death-fire:${delay}`,
-          46 + phase,
-          32,
-          4,
-          {
-            atlas: 'DeadHawg',
-            blendMode: 'add',
-            kind: 'fire-array',
-            position: {
-              x: actor.position.x + displacement.x,
-              y: actor.position.y + displacement.y - 20,
-            },
-            spawnDelayTicks: delay,
-          },
-        )
-      }
-      const burstRotationDeg = drawUnit(work) * 360
-      const burstAngularMagnitude = 0.5 + drawUnit(work)
-      const burstAngularVelocityDeg = (drawInteger(work, 2) === 0 ? -1 : 1)
-        * burstAngularMagnitude
-      spawnSimpleDeathEffect(work, actor, tick, {
-        alpha: 0.5,
-        alphaLossPerTick: 0.5 * NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK / 4,
-        atlas: 'BadGuys',
-        blendMode: 'normal',
-        entry: 110,
-        kind: 'fade',
-        lifetimeTicks: NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
-        position: { x: actor.position.x, y: actor.position.y - 20 },
-        role: 'demon-death-fire-burst-glow',
-        scale: 10,
-        spawnDelayTicks: 95,
-        tint: 0xff8000,
-        velocity: { x: 0, y: -1 },
-      })
-      spawnSpriteArray(
-        work,
-        actor,
-        tick,
-        'demon-death-fire-burst-frame',
-        251,
-        4,
-        1 / NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
-        {
-          alphaLossPerTick: 0,
-          angularVelocityDeg: burstAngularVelocityDeg,
-          blendMode: 'add',
-          lifetimeTicks: NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
-          position: { x: actor.position.x, y: actor.position.y - 20 },
-          rotationDeg: burstRotationDeg,
-          scale: 2,
-          spawnDelayTicks: 95,
-          tint: 0xffffbf,
-          velocity: { x: 0, y: -1 },
-        },
-      )
       return
     case 'COFFIN': {
-      for (const entry of SKELETON_BASE_FRAGMENT_ENTRIES) {
-        spawnRadialBouncer(work, actor, tick, entry, 'coffin-bone')
-      }
-      spawnRadialBouncer(work, actor, tick, 1819 + drawInteger(work, 4), 'coffin-skull')
-      const mainCount = 40 + drawInteger(work, 11)
-      for (let index = 0; index < mainCount; index += 1) {
-        spawnRadialBouncer(
-          work,
-          actor,
-          tick,
-          2013 + drawInteger(work, 50),
-          'coffin-main-fragment',
-        )
-      }
-      const extraCount = 12 + drawInteger(work, 5)
-      for (let index = 0; index < extraCount; index += 1) {
-        const fragment = COFFIN_EXTRA_FRAGMENT_RECORDS[
-          drawInteger(work, COFFIN_EXTRA_FRAGMENT_RECORDS.length)
-        ]!
-        spawnRadialBouncer(
-          work,
-          actor,
-          tick,
-          fragment.entry,
-          'coffin-extra-fragment',
-          1,
-          fragment.atlas,
-        )
-      }
-      spawnUnbind(work, actor, tick)
+      spawnCoffinTerminalEffects(work, actor, tick)
     }
   }
+}
+
+const ZOMBIE_BASE_FRAGMENT_ENTRIES = Object.freeze([
+  2094, 2089, 2092, 2090, 2091,
+] as const)
+const ZOMBIE_ENHANCED_FRAGMENT_ENTRIES = Object.freeze([
+  2090, 2091, 2090, 2091, 2094,
+] as const)
+const ZOMBIE_FLYBLOWN_FRAGMENT_ENTRIES = Object.freeze([
+  2090, 2091, 2090, 2091, 2094,
+  2090, 2091, 2090, 2091, 2094,
+] as const)
+
+function spawnZombieTerminalEffects(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  tick: number,
+): void {
+  if (actor.config.enemyToken !== 'ZOMBIE') {
+    throw new Error('Zombie terminal effects require a Zombie actor')
+  }
+  if (actor.config.family.rotten) {
+    const splatCount = 6 + drawInteger(work, 5)
+    for (let index = 0; index < splatCount; index += 1) {
+      spawnZombieLateSplat(work, actor, tick, index)
+    }
+  }
+
+  const entries = [
+    ...ZOMBIE_BASE_FRAGMENT_ENTRIES,
+    ...ZOMBIE_ENHANCED_FRAGMENT_ENTRIES,
+    ...(actor.config.family.rotten ? ZOMBIE_FLYBLOWN_FRAGMENT_ENTRIES : []),
+    2093,
+    2093,
+  ]
+  for (let index = entries.length - 1; index > 0; index -= 1) {
+    const swap = drawInteger(work, index + 1)
+    ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
+  }
+  let angleDeg = drawUnit(work) * 360
+  const flyblownScale = actor.config.family.rotten ? 2 : 1
+  for (const entry of entries) {
+    spawnBouncer(work, actor, tick, entry, 'zombie-fragment', () => {
+      const direction = radialVector(angleDeg, 1)
+      const velocity = {
+        x: direction.x * 1.5 * 0.75 * flyblownScale,
+        y: direction.y * 0.75 * flyblownScale,
+      }
+      const distance = 5 + drawUnit(work) * 10
+      return {
+        position: {
+          x: actor.position.x + velocity.x * (distance + 2),
+          y: actor.position.y + velocity.y * distance,
+        },
+        velocity,
+      }
+    })
+    angleDeg += 72 + (drawUnit(work) * 20 - 10)
+  }
+
+  spawnBouncer(
+    work,
+    actor,
+    tick,
+    () => 2365 + drawInteger(work, 144),
+    'zombie-gait-fragment',
+    {
+      bounceRetention: 0.5,
+      velocity: radialVector(angleDeg, 2),
+    },
+  )
+  spawnUnbind(work, actor, tick)
+  const opacityTimer = 10
+  spawnSimpleDeathEffect(work, actor, tick, {
+    alpha: 0.6,
+    alphaLossPerTick: 0.01,
+    alphaMultiplier: 0.6,
+    atlas: 'DeadHawg',
+    blendMode: 'normal',
+    entry: 30,
+    kind: 'fade-perspective-clipped',
+    lifetimeTicks: 1_000,
+    opacityTimer,
+    role: 'zombie-clipped-fade',
+    rotationDeg: drawUnit(work) * 360,
+    scale: (1 + drawUnit(work) * 0.25) * 1.5,
+  })
+}
+
+function spawnZombieLateSplat(
+  work: WorkingStep,
+  actor: DeathEffectOwner,
+  tick: number,
+  index: number,
+): void {
+  const delayTicks = 25 + drawInteger(work, 76)
+  const opacityTimer = 3 + drawUnit(work) * 3
+  const rotationDeg = drawUnit(work) * 360
+  const scale = 0.75 + drawUnit(work) * 0.75
+  const distance = 75 + drawUnit(work) * 75
+  const offset = radialVector(drawUnit(work) * 360, distance)
+  spawnSimpleDeathEffect(work, actor, tick, {
+    alpha: Math.min(1, opacityTimer * 0.25),
+    alphaLossPerTick: 0.01,
+    atlas: 'DeadHawg',
+    blendMode: 'normal',
+    entry: 31,
+    kind: 'late-splat',
+    lifetimeTicks: Math.ceil(opacityTimer / 0.01),
+    opacityTimer,
+    position: {
+      x: actor.position.x + offset.x,
+      y: actor.position.y + offset.y,
+    },
+    presentationOwner: 'pre-world-queue',
+    role: `zombie-late-splat:${index}`,
+    rotationDeg,
+    scale,
+    spawnDelayTicks: delayTicks,
+  })
+}
+
+function spawnWraithTerminalEffects(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  tick: number,
+): void {
+  spawnWraithDissolve(work, actor, tick)
+
+  const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
+  for (let index = entries.length - 1; index > 0; index -= 1) {
+    const swap = drawInteger(work, index + 1)
+    ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
+  }
+  let angleDeg = actor.headingDeg
+  for (const entry of entries) {
+    spawnBouncer(work, actor, tick, entry, 'wraith-smoky-fragment', () => {
+      const direction = radialVector(angleDeg + signedUnit(drawUnit(work)) * 45, 1)
+      const velocity = { x: direction.x * 1.5, y: direction.y }
+      const distance = 15 + drawUnit(work) * 30
+      return {
+        kind: 'smoky-bouncer',
+        position: {
+          x: actor.position.x + velocity.x * (distance + 2),
+          y: actor.position.y + velocity.y * distance,
+        },
+        velocity,
+      }
+    })
+    angleDeg += 72 + signedUnit(drawUnit(work)) * 10
+  }
+
+  spawnBouncer(
+    work,
+    actor,
+    tick,
+    () => 1819 + drawInteger(work, 4),
+    'wraith-skull',
+    () => ({
+      bounceRetention: 0.7,
+      height: -(10 + drawUnit(work) * 10),
+      kind: 'smoky-bouncer',
+      velocity: radialVector(
+        actor.headingDeg + signedUnit(drawUnit(work)) * 10,
+        5,
+      ),
+    }),
+  )
+  spawnUnbind(work, actor, tick)
+}
+
+function spawnWraithDissolve(
+  work: WorkingStep,
+  actor: DeathEffectOwner,
+  tick: number,
+): void {
+  let angleDeg = drawUnit(work) * 360
+  for (let index = 0; index < 12; index += 1) {
+    const entry = drawInteger(work, 2) === 0 ? 11 : 10
+    const speed = 2 + drawUnit(work) * 2
+    const velocity = radialVector(
+      angleDeg + signedUnit(drawUnit(work)) * 10,
+      speed,
+    )
+    spawnSimpleDeathEffect(work, actor, tick, {
+      alpha: 1,
+      alphaLossPerTick: 0.025,
+      atlas: 'BadGuys',
+      blendMode: 'normal',
+      entry,
+      kind: 'move-fade',
+      lifetimeTicks: 40,
+      position: {
+        x: actor.position.x + velocity.x * 10,
+        y: actor.position.y + velocity.y * 10,
+      },
+      role: `wraith-dissolve-ray:${index}`,
+      rotationDeg: angleDeg,
+      scale: 1.5 + drawUnit(work) * 0.5,
+      velocity,
+      velocityDamping: 0.8,
+    })
+    angleDeg += 30
+  }
+  spawnSimpleDeathEffect(work, actor, tick, {
+    alpha: 1,
+    alphaLossPerTick: 0.1,
+    atlas: 'BadGuys',
+    blendMode: 'add',
+    entry: 20,
+    kind: 'fade-scale',
+    lifetimeTicks: 20,
+    opacityTimer: 2,
+    position: { x: actor.position.x + 1, y: actor.position.y - 15 },
+    role: 'wraith-dissolve-core',
+    scale: 1,
+    scaleMultiplier: 1.02,
+  })
+  for (let index = 0; index < 12; index += 1) {
+    spawnBouncer(work, actor, tick, 27, `wraith-dissolve-bouncer:${index}`, () => {
+      const direction = radialVector(angleDeg, 1)
+      const velocity = { x: direction.x * 1.5, y: direction.y }
+      const distance = 15 + drawUnit(work) * 10
+      return {
+        opacityTimer: 1.5,
+        position: {
+          x: actor.position.x + velocity.x * (distance + 2),
+          y: actor.position.y + velocity.y * distance,
+        },
+        velocity,
+      }
+    })
+    angleDeg += 30 + signedUnit(drawUnit(work)) * 10
+  }
+}
+
+function spawnCoffinTerminalEffects(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  tick: number,
+): void {
+  const entries = [...SKELETON_BASE_FRAGMENT_ENTRIES]
+  for (let index = entries.length - 1; index > 0; index -= 1) {
+    const swap = drawInteger(work, index + 1)
+    ;[entries[index], entries[swap]] = [entries[swap]!, entries[index]!]
+  }
+  let angleDeg = drawUnit(work) * 360
+  for (const entry of entries) {
+    spawnBouncer(work, actor, tick, entry, 'coffin-bone', () => {
+      const direction = radialVector(angleDeg, 1)
+      const velocity = { x: direction.x * 1.5, y: direction.y }
+      const distance = 15 + drawUnit(work) * 10
+      return {
+        position: {
+          x: actor.position.x + velocity.x * (distance + 2),
+          y: actor.position.y + velocity.y * distance,
+        },
+        velocity,
+      }
+    })
+    angleDeg += 72 + signedUnit(drawUnit(work)) * 10
+  }
+
+  const mainCount = 40 + drawInteger(work, 11)
+  for (let index = 0; index < mainCount; index += 1) {
+    spawnBouncer(
+      work,
+      actor,
+      tick,
+      () => 2013 + drawInteger(work, 50),
+      `coffin-main-fragment:${index}`,
+      () => {
+        const speed = 0.5 + drawUnit(work) * 0.5
+        const direction = radialVector(angleDeg, speed)
+        const velocity = { x: direction.x * 1.5, y: direction.y }
+        const distance = 15 + drawUnit(work) * 10
+        return {
+          bounceVelocityScale: 2,
+          position: {
+            x: actor.position.x + velocity.x * (distance + 2),
+            y: actor.position.y + velocity.y * distance,
+          },
+          velocity,
+        }
+      },
+    )
+    angleDeg += 72 + signedUnit(drawUnit(work)) * 10
+  }
+
+  const extraCount = 12 + drawInteger(work, 4)
+  for (let index = 0; index < extraCount; index += 1) {
+    let fragment: typeof COFFIN_EXTRA_FRAGMENT_RECORDS[number]
+    spawnBouncer(
+      work,
+      actor,
+      tick,
+      () => {
+        fragment = COFFIN_EXTRA_FRAGMENT_RECORDS[
+          drawInteger(work, COFFIN_EXTRA_FRAGMENT_RECORDS.length)
+        ]!
+        return fragment.entry
+      },
+      `coffin-extra-fragment:${index}`,
+      () => {
+        const speed = 1 + drawUnit(work)
+        const direction = radialVector(angleDeg, speed)
+        const velocity = { x: direction.x * 1.5, y: direction.y }
+        const distance = 15 + drawUnit(work) * 10
+        return {
+          atlas: fragment.atlas,
+          bounceVelocityScale: 2,
+          position: {
+            x: actor.position.x + velocity.x * (distance + 2),
+            y: actor.position.y + velocity.y * distance,
+          },
+          velocity,
+        }
+      },
+    )
+    angleDeg += 72 + signedUnit(drawUnit(work)) * 10
+  }
+
+  spawnBouncer(
+    work,
+    actor,
+    tick,
+    () => 1819 + drawInteger(work, 4),
+    'coffin-skull',
+    { velocity: radialVector(angleDeg, 2) },
+  )
+  spawnUnbind(work, actor, tick)
+}
+
+function spawnDemonDeathFires(
+  work: WorkingStep,
+  actor: DeathEffectOwner,
+  deathStartedTick: number,
+): void {
+  for (const delay of [0, 20, 40, 60, 80]) {
+    const phase = drawInteger(work, 32)
+    const displacement = randomRadialDisplacement(work, (100 - delay) / 20)
+    spawnSpriteArray(
+      work,
+      actor,
+      deathStartedTick,
+      `demon-death-fire:${delay}`,
+      46 + phase,
+      32,
+      4,
+      {
+        atlas: 'DeadHawg',
+        blendMode: 'add',
+        kind: 'fire-array',
+        position: {
+          x: actor.position.x + displacement.x,
+          y: actor.position.y + displacement.y - 20,
+        },
+        spawnDelayTicks: delay,
+      },
+    )
+  }
+}
+
+function spawnDemonDeathFireBurst(
+  work: WorkingStep,
+  actor: DeathEffectOwner,
+  tick: number,
+): void {
+  const rotationDeg = drawUnit(work) * 360
+  const angularMagnitude = 0.5 + drawUnit(work)
+  const angularVelocityDeg = (drawInteger(work, 2) === 0 ? -1 : 1)
+    * angularMagnitude
+  spawnSimpleDeathEffect(work, actor, tick, {
+    alpha: 0.5,
+    alphaLossPerTick: 0.5 * NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK / 4,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 110,
+    kind: 'fade',
+    lifetimeTicks: NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
+    position: { x: actor.position.x, y: actor.position.y - 20 },
+    presentationOwner: 'direct-post-world',
+    role: 'demon-death-fire-burst-glow',
+    scale: 10,
+    tint: 0xff8000,
+    velocity: { x: 0, y: -1 },
+  })
+  spawnSpriteArray(
+    work,
+    actor,
+    tick,
+    'demon-death-fire-burst-frame',
+    251,
+    4,
+    1 / NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
+    {
+      angularVelocityDeg,
+      blendMode: 'add',
+      lifetimeTicks: NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
+      position: { x: actor.position.x, y: actor.position.y - 20 },
+      presentationOwner: 'direct-post-world',
+      rotationDeg,
+      scale: 2,
+      tint: 0xffffbf,
+      velocity: { x: 0, y: -1 },
+    },
+  )
 }
 
 const SKELETON_BASE_FRAGMENT_ENTRIES = Object.freeze([
@@ -6205,8 +6592,6 @@ function emitEnemyDeathSounds(
       emitEnemyDeathSound(work, tick, actor, 'banshee-die', 0.8 + drawUnit(work) * 0.4)
       return
     case 'DEMON':
-      emitEnemyDeathSound(work, tick, actor, 'flash', 1)
-      emitEnemyDeathSound(work, tick, actor, 'demon-die', 1)
       emitEnemyDeathSound(work, tick, actor, 'firey-death', 0.8 + drawUnit(work) * 0.2)
       return
     case 'COFFIN':
@@ -6273,7 +6658,7 @@ function spawnSkeletonShatter(
     work,
     actor,
     tick,
-    1819 + drawInteger(work, 4),
+    () => 1819 + drawInteger(work, 4),
     'skeleton-skull',
     2,
   )
@@ -6297,9 +6682,9 @@ function spawnSkeletonEquipmentEffects(
         work,
         actor,
         tick,
-        firstEntry + drawInteger(work, 2),
+        () => firstEntry + drawInteger(work, 2),
         'skeleton-headgear-fragment',
-        drawUnit(work) * 360,
+        () => drawUnit(work) * 360,
         1.2,
       )
     }
@@ -6314,7 +6699,7 @@ function spawnSkeletonEquipmentEffects(
       tick,
       weaponEntry,
       'skeleton-weapon-fragment',
-      drawUnit(work) * 360,
+      () => drawUnit(work) * 360,
     )
   } else if (actor.config.family.weapon === 'pike') {
     spawnSimpleDeathEffect(work, actor, tick, {
@@ -6335,7 +6720,7 @@ function spawnSkeletonEquipmentEffects(
         tick,
         55,
         'skeleton-pike-fragment',
-        drawUnit(work) * 360,
+        () => drawUnit(work) * 360,
         1,
         1.5,
       )
@@ -6348,9 +6733,9 @@ function spawnSkeletonEquipmentEffects(
       work,
       actor,
       tick,
-      firstEntry + drawInteger(work, 2),
+      () => firstEntry + drawInteger(work, 2),
       'skeleton-armor-fragment',
-      drawUnit(work) * 360,
+      () => drawUnit(work) * 360,
     )
   }
   spawnSimpleDeathEffect(work, actor, tick, {
@@ -6387,23 +6772,28 @@ function spawnSkeletonFragmentBouncer(
   work: WorkingStep,
   actor: DeathEffectOwner,
   tick: number,
-  entry: number,
+  entry: number | (() => number),
   role: string,
-  angleDeg: number,
+  angleDeg: number | (() => number),
   scale = 1,
   opacityTimer = 10,
 ): void {
-  const velocity = radialVector(angleDeg, 1)
-  velocity.x *= 1.5
-  const distance = 15 + drawInteger(work, 11)
-  spawnBouncer(work, actor, tick, entry, role, {
-    opacityTimer,
-    position: {
-      x: actor.position.x + velocity.x * (distance + 2),
-      y: actor.position.y + velocity.y * distance,
-    },
-    scale,
-    velocity,
+  spawnBouncer(work, actor, tick, entry, role, () => {
+    const velocity = radialVector(
+      typeof angleDeg === 'function' ? angleDeg() : angleDeg,
+      1,
+    )
+    velocity.x *= 1.5
+    const distance = 15 + drawInteger(work, 11)
+    return {
+      opacityTimer,
+      position: {
+        x: actor.position.x + velocity.x * (distance + 2),
+        y: actor.position.y + velocity.y * distance,
+      },
+      scale,
+      velocity,
+    }
   })
 }
 
@@ -6411,65 +6801,94 @@ function spawnRadialBouncer(
   work: WorkingStep,
   actor: DeathEffectOwner,
   tick: number,
-  entry: number,
+  entry: number | (() => number),
   role: string,
   speed = 1,
   atlas: BoneyardEnemyDeathEffect['atlas'] = 'BadGuys',
 ): void {
-  spawnBouncer(work, actor, tick, entry, role, {
+  spawnBouncer(work, actor, tick, entry, role, () => ({
     atlas,
     velocity: radialVector(drawUnit(work) * 360, speed),
-  })
+  }))
+}
+
+type BouncerOptions = {
+  atlas?: BoneyardEnemyDeathEffect['atlas']
+  bounceRetention?: number
+  bounceVelocityScale?: number
+  kind?: 'bouncer' | 'smoky-bouncer'
+  opacityTimer?: number
+  position?: Readonly<BoneyardPoint>
+  height?: number
+  scale?: number
+  velocity?: Readonly<BoneyardPoint>
 }
 
 function spawnBouncer(
   work: WorkingStep,
   actor: DeathEffectOwner,
   tick: number,
-  entry: number,
+  entry: number | (() => number),
   role: string,
-  options: {
-    atlas?: BoneyardEnemyDeathEffect['atlas']
-    opacityTimer?: number
-    position?: Readonly<BoneyardPoint>
-    scale?: number
-    velocity?: Readonly<BoneyardPoint>
-  } = {},
+  options: BouncerOptions | (() => BouncerOptions) = {},
 ): void {
-  const verticalVelocity = -(drawInteger(work, 4) + 2)
-  const opacityTimer = options.opacityTimer ?? 10
+  const constructorVerticalVelocity = -(drawUnit(work) * 3 + 2)
+  const constructorHeight = -drawUnit(work) * 20
+  const rotationDeg = drawUnit(work) * 360
+  const angularVelocityDeg = drawUnit(work) * 10 + 1
+  const resolvedEntry = typeof entry === 'function' ? entry() : entry
+  const resolvedOptions = typeof options === 'function' ? options() : options
+  const verticalVelocity = constructorVerticalVelocity
+    * (resolvedOptions.bounceVelocityScale ?? 1)
+  const opacityTimer = resolvedOptions.opacityTimer ?? 10
   const effect: BoneyardEnemyDeathEffect = Object.freeze({
     ageTicks: 0,
     alpha: 1,
+    alphaMultiplier: 1,
     alphaLossPerTick: 0.015,
-    angularVelocityDeg: drawUnit(work) * 10 + 1,
-    atlas: options.atlas ?? 'BadGuys',
+    angularVelocityDeg,
+    atlas: resolvedOptions.atlas ?? 'BadGuys',
     blendMode: 'normal',
+    bounceRetention: resolvedOptions.bounceRetention ?? 0.65,
     bounceVelocity: verticalVelocity,
-    entry,
-    firstEntry: entry,
+    entry: resolvedEntry,
+    firstEntry: resolvedEntry,
     frameCount: 1,
+    framePhase: 0,
+    frameVelocity: 0,
+    frameVelocityDamping: 1,
     frameTicks: 1,
-    height: -drawInteger(work, 21),
+    height: resolvedOptions.height ?? constructorHeight,
     id: work.nextDeathEffectId,
-    kind: 'bouncer',
+    kind: resolvedOptions.kind ?? 'bouncer',
     lastStepTick: tick,
     lifetimeTicks: 1_000,
     opacityTimer,
     ownerActorId: actor.id,
     painterRegistration: work.registerWorldPainter('actor'),
-    position: Object.freeze({ ...(options.position ?? actor.position) }),
+    presentationOwner: 'world-sorted',
+    position: Object.freeze({ ...(resolvedOptions.position ?? actor.position) }),
     role,
-    rotationDeg: drawUnit(work) * 360,
-    scale: options.scale ?? 1,
+    rotationDeg,
+    scale: resolvedOptions.scale ?? 1,
+    scaleMultiplier: 1,
     shadow: true,
     spawnTick: tick,
     tint: 0xffffff,
     verticalVelocity,
-    velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),
+    velocity: Object.freeze({ ...(resolvedOptions.velocity ?? { x: 0, y: 0 }) }),
+    velocityDamping: 1,
   })
   work.nextDeathEffectId += 1
-  work.deathEffects.push(effect)
+  const stepped = stepBornBoneyardBouncer(
+    effect,
+    tick,
+    () => drawUnit(work),
+    work.nextDeathEffectId,
+    work.registerWorldPainter,
+  )
+  work.nextDeathEffectId = stepped.nextDeathEffectId
+  work.deathEffects.push(...stepped.effects)
 }
 
 function spawnUnbind(
@@ -6478,21 +6897,24 @@ function spawnUnbind(
   tick: number,
 ): void {
   const { alpha, alphaLossPerTick } = primaryOnlyUnbindClock(actor.config.enemyToken)
+  const rotationDeg = drawUnit(work) * 360
+  const angularOffsetDeg = drawUnit(work) * 2.5
   const clockwise = drawUnit(work) >= 0.5
   spawnSimpleDeathEffect(work, actor, tick, {
     alpha,
     alphaLossPerTick,
     angularVelocityDeg: clockwise
-      ? 5 + drawUnit(work) * 2.5
-      : -(2.5 + drawUnit(work) * 2.5),
+      ? 5 + angularOffsetDeg
+      : -5 + angularOffsetDeg,
     atlas: 'BadGuys',
-    blendMode: 'add',
+    blendMode: 'normal',
     entry: 86,
     kind: 'unbind',
     lifetimeTicks: Math.ceil(alpha / alphaLossPerTick),
-    position: { x: actor.position.x, y: actor.position.y - 15 },
+    position: { x: actor.position.x + 1, y: actor.position.y - 15 },
+    presentationOwner: 'direct-post-world',
     role: 'death-unbind-star',
-    rotationDeg: drawUnit(work) * 360,
+    rotationDeg,
     scale: 1,
   })
 }
@@ -6530,9 +6952,12 @@ function spawnSpriteArray(
     angularVelocityDeg?: number
     atlas?: BoneyardEnemyDeathEffect['atlas']
     blendMode?: BoneyardEnemyDeathEffect['blendMode']
+    frameVelocity?: number
+    frameVelocityDamping?: number
     kind?: 'fire-array' | 'sprite-array'
     lifetimeTicks?: number
     position?: Readonly<BoneyardPoint>
+    presentationOwner?: BoneyardEnemyDeathEffect['presentationOwner']
     rotationDeg?: number
     scale?: number
     spawnDelayTicks?: number
@@ -6542,21 +6967,23 @@ function spawnSpriteArray(
 ): void {
   spawnSimpleDeathEffect(work, actor, tick, {
     alpha: 1,
-    alphaLossPerTick: options.alphaLossPerTick
-      ?? (options.kind === 'fire-array' ? 0 : 1 / (frameCount * frameTicks)),
+    alphaLossPerTick: options.alphaLossPerTick ?? 0,
     angularVelocityDeg: options.angularVelocityDeg ?? 0,
     atlas: options.atlas ?? 'BadGuys',
     blendMode: options.blendMode ?? 'add',
     entry: firstEntry,
     firstEntry,
     frameCount,
+    frameVelocity: options.frameVelocity ?? 1 / frameTicks,
+    frameVelocityDamping: options.frameVelocityDamping ?? 1,
     frameTicks,
     kind: options.kind ?? 'sprite-array',
     lifetimeTicks: options.lifetimeTicks
       ?? (options.kind === 'fire-array'
         ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombFireTicks
-        : frameCount * frameTicks),
+        : 1_000),
     position: options.position,
+    presentationOwner: options.presentationOwner,
     role,
     rotationDeg: options.rotationDeg ?? 0,
     scale: options.scale ?? 1,
@@ -6572,6 +6999,7 @@ function spawnSimpleDeathEffect(
   tick: number,
   options: {
     alpha: number
+    alphaMultiplier?: number
     alphaLossPerTick: number
     angularVelocityDeg?: number
     atlas: BoneyardEnemyDeathEffect['atlas']
@@ -6579,49 +7007,65 @@ function spawnSimpleDeathEffect(
     entry: number
     firstEntry?: number
     frameCount?: number
+    framePhase?: number
+    frameVelocity?: number
+    frameVelocityDamping?: number
     frameTicks?: number
-    kind: Exclude<BoneyardEnemyDeathEffectKind, 'bouncer'>
+    kind: Exclude<BoneyardEnemyDeathEffectKind, 'bouncer' | 'smoky-bouncer'>
     lifetimeTicks: number
+    opacityTimer?: number
     position?: Readonly<BoneyardPoint>
+    presentationOwner?: BoneyardEnemyDeathEffect['presentationOwner']
     role: string
     rotationDeg?: number
     scale: number
+    scaleMultiplier?: number
     spawnDelayTicks?: number
     tint?: number
     velocity?: Readonly<BoneyardPoint>
+    velocityDamping?: number
   },
 ): void {
+  const presentationOwner = options.presentationOwner ?? 'world-sorted'
   work.deathEffects.push(Object.freeze({
     ageTicks: 0,
     alpha: options.alpha,
+    alphaMultiplier: options.alphaMultiplier ?? 1,
     alphaLossPerTick: options.alphaLossPerTick,
     angularVelocityDeg: options.angularVelocityDeg ?? 0,
     atlas: options.atlas,
     blendMode: options.blendMode,
+    bounceRetention: 0,
     bounceVelocity: 0,
     entry: options.entry,
     firstEntry: options.firstEntry ?? options.entry,
     frameCount: options.frameCount ?? 1,
+    framePhase: options.framePhase ?? 0,
+    frameVelocity: options.frameVelocity ?? 0,
+    frameVelocityDamping: options.frameVelocityDamping ?? 1,
     frameTicks: options.frameTicks ?? 1,
     height: 0,
     id: work.nextDeathEffectId,
     kind: options.kind,
     lastStepTick: tick,
     lifetimeTicks: options.lifetimeTicks,
-    opacityTimer: options.alpha,
+    opacityTimer: options.opacityTimer ?? options.alpha,
     ownerActorId: actor.id,
-    painterRegistration: options.role.startsWith('demon-death-fire-burst-')
-      ? null
-      : work.registerWorldPainter('actor'),
+    painterRegistration: presentationOwner === 'world-sorted'
+      ? work.registerWorldPainter('actor')
+      : null,
+    presentationOwner,
     position: Object.freeze({ ...(options.position ?? actor.position) }),
     role: options.role,
     rotationDeg: options.rotationDeg ?? 0,
     scale: options.scale,
+    scaleMultiplier: options.scaleMultiplier ?? 1,
     shadow: false,
     spawnTick: tick + (options.spawnDelayTicks ?? 0),
     tint: options.tint ?? 0xffffff,
     verticalVelocity: 0,
     velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),
+    velocityDamping: options.velocityDamping ?? 1,
   }))
   work.nextDeathEffectId += 1
 }
@@ -6654,6 +7098,12 @@ function randomIntegerFromUnit(random: () => number, count: number): number {
 
 function drawLocomotionPhase(work: WorkingStep): number {
   const draw = drawNativeFloat(work.locomotionRngState, 4)
+  work.locomotionRngState = draw.state
+  return draw.value
+}
+
+function drawLocomotionStridePhase(work: WorkingStep): number {
+  const draw = drawNativeFloat(work.locomotionRngState, 360)
   work.locomotionRngState = draw.state
   return draw.value
 }
@@ -6798,18 +7248,12 @@ function emitEvent(
 ): number {
   const eventId = work.nextEventId
   work.nextEventId += 1
-  const actor = work.actors.find(({ id }) => id === actorId)
-  const painterRegistration = type === 'attack-marker'
-    && actor?.config.enemyToken === 'IMP'
-    ? work.registerWorldPainter('transient')
-    : undefined
   work.events.push(Object.freeze({
     actorId,
     eventId,
     tick,
     type,
     ...patch,
-    ...(painterRegistration === undefined ? {} : { painterRegistration }),
   }))
   return eventId
 }

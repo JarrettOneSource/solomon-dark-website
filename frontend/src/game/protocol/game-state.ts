@@ -322,8 +322,14 @@ export interface BoneyardLootEventSnapshot {
 export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
   'banish',
   'bouncer',
+  'smoky-bouncer',
   'fade',
+  'fade-additive',
+  'fade-perspective',
+  'fade-perspective-clipped',
+  'fade-scale',
   'fire-array',
+  'late-splat',
   'move-fade',
   'sprite-array',
   'unbind',
@@ -331,6 +337,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS = [
   'direct-post-world',
+  'pre-world-queue',
   'world-sorted',
 ] as const
 
@@ -623,6 +630,7 @@ export interface BoneyardMaggotSnapshot {
   spawnTick: number
   state: typeof BONEYARD_MAGGOT_STATES[number]
   verticalOffset: number
+  visualScale: number
 }
 
 export type BoneyardEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
@@ -669,6 +677,7 @@ export interface BoneyardEnemyAnimationSnapshot {
   impEffectFrame: number
   maggots: readonly []
   state: BoneyardEnemyAnimationState
+  stridePhaseDeg: number
   verticalOffset: number
   zombieAngularOffsetDeg: number
   zombieAttackSide: 0 | 1
@@ -720,6 +729,7 @@ export interface BoneyardEnemySnapshot {
   maximumHealth: number
   nativeTypeId: number
   position: Vector2
+  scale: number
   shieldHealth: number
   shieldMaximumHealth: number
   spawnTick: number

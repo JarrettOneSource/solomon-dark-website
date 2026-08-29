@@ -40,7 +40,7 @@ export function nativeZombieBeatPose(
   if (!Number.isFinite(progress) || progress < 0) {
     throw new Error('native Zombie beat progress must be finite and non-negative')
   }
-  const selectedPose = progress < 50 ? 0 : progress < 100 ? 1 : 2
+  const selectedPose = progress < 50 ? 1 : progress < 100 ? 2 : 0
   return {
     complete: progress >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.completionProgress,
     frontArmPose: attackSide === 1 ? selectedPose : 0,
@@ -58,23 +58,23 @@ export function nativeZombieArticulationPose(
     if (label === 'actionActive' || label === 'attackSide') continue
     if (!Number.isFinite(value)) throw new RangeError(`Zombie ${label} must be finite`)
   }
-  const idleBodyRotationDeg = quantizedDegrees(
+  const idleBodyRotationDeg = truncatedDegrees(
     sinDegrees(input.bodyPhaseDeg) * 45,
     10,
   )
-  const headRotationDeg = quantizedDegrees(
+  const headRotationDeg = truncatedDegrees(
     sinDegrees(input.headPhaseDeg * 0.5) * 20,
     5,
   ) + input.headBaseRotationDeg
   const selectedArmSwingDeg = input.actionActive
-    ? quantizedDegrees(input.actionSwing, 10)
+    ? truncatedDegrees(input.actionSwing, 10)
     : 0
   const bodyLeanDeg = input.actionActive ? input.actionSwing / 3 : 0
   const bodyRotationDeg = idleBodyRotationDeg + (
     input.attackSide === 0 ? -bodyLeanDeg : bodyLeanDeg
   )
   return {
-    bodyRotationRadians: degreesToRadians(bodyRotationDeg),
+    bodyRotationRadians: degreesToRadians(bodyRotationDeg * 0.5),
     frontArmRotationRadians: degreesToRadians(
       input.frontArmBaseRotationDeg
         + (input.attackSide === 1 ? selectedArmSwingDeg : 0),
@@ -87,18 +87,8 @@ export function nativeZombieArticulationPose(
   }
 }
 
-function quantizedDegrees(value: number, increment: number): number {
-  return roundHalfToEven(value / increment) * increment
-}
-
-function roundHalfToEven(value: number): number {
-  const integer = Math.trunc(value)
-  const fraction = value - integer
-  const distance = Math.abs(fraction)
-  if (distance < 0.5) return integer
-  const direction = Math.sign(fraction)
-  if (distance > 0.5) return integer + direction
-  return Math.abs(integer % 2) === 0 ? integer : integer + direction
+function truncatedDegrees(value: number, increment: number): number {
+  return Math.trunc(value / increment) * increment
 }
 
 function sinDegrees(value: number): number {

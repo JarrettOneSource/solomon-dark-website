@@ -13,6 +13,7 @@ const deadHawgSpriteFiles = import.meta.glob([
   '../../assets/game/boneyard/deadhawg/019.png',
   '../../assets/game/boneyard/deadhawg/028.png',
   '../../assets/game/boneyard/deadhawg/030.png',
+  '../../assets/game/boneyard/deadhawg/031.png',
   '../../assets/game/boneyard/deadhawg/04[6-9].png',
   '../../assets/game/boneyard/deadhawg/05[0-9].png',
   '../../assets/game/boneyard/deadhawg/06[0-9].png',
@@ -73,7 +74,7 @@ const requiredBadGuysRanges = [
   [2293, 2364],
   [2365, 2508],
 ] as const
-const requiredDeadHawgRanges = [[0, 0], [19, 19], [28, 28], [30, 30], [46, 77], [114, 144]] as const
+const requiredDeadHawgRanges = [[0, 0], [19, 19], [28, 28], [30, 31], [46, 77], [114, 144]] as const
 const requiredDemonRanges = [[1, 115]] as const
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: badguys as AtlasManifest,

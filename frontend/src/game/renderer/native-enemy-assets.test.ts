@@ -10,7 +10,6 @@ import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
 import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
-  NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyIdleAnimationSample,
   type NativeEnemyActionProgramName,
 } from './native-enemy-animation.ts'
@@ -367,8 +366,7 @@ test('every live combat and Coffin child plan resolves through the runtime prelo
     }
   }
   for (const family of NATIVE_ENEMY_FAMILIES) {
-    const death = NATIVE_ENEMY_DEATH_PROGRAMS[family]
-    for (let deathTick = 0; deathTick <= death.durationTicks + 1; deathTick += 1) {
+    for (const deathTick of family === 'DEMON' ? [0, 50, 99] : [0]) {
       plans.push(nativeEnemyPresentationPlan({
         ...enemy(family, 8, 0, []),
         animation: nativeEnemyIdleAnimationSample({ deathTick, state: 'death' }),

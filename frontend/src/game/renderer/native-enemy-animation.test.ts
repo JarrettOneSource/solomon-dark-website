@@ -14,6 +14,7 @@ import {
   NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
   NATIVE_SKELETON_BODY_GAIT_POSES,
   advanceNativeEnemyLocomotionPhase,
+  advanceNativeEnemyStridePhase,
   nativeSkeletonBodyGaitPose,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import {
@@ -22,7 +23,6 @@ import {
 } from '../core-kernels/boneyard-mage-lightning.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
-  NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyActionFrame,
   nativeEnemyIdleAnimationSample,
   nativeZombieArticulationPose,
@@ -41,6 +41,7 @@ test('Badguy locomotion advances independent native gait and Skeleton body phase
   assert.equal(advanceNativeEnemyLocomotionPhase(3, 35, 1, 35, 4), 4)
   assert.equal(advanceNativeEnemyLocomotionPhase(4, 35, 1, 35, 4), 1)
   assert.equal(advanceNativeEnemyLocomotionPhase(0, 17.5, 2, 35, 4), 1)
+  assert.equal(advanceNativeEnemyStridePhase(90, 2, 4), 122)
 
   assert.deepEqual(
     [0, 1, 2, 3, 4].map(nativeSkeletonBodyGaitPose),
@@ -162,11 +163,11 @@ test('Zombie beat selects exactly one arm at native thresholds', () => {
     frontArmPose: 0,
     locomotionActive: true,
     markerReached: false,
-    rearArmPose: 0,
+    rearArmPose: 1,
   })
   assert.deepEqual(nativeZombieBeatPose(50, 1), {
     complete: false,
-    frontArmPose: 1,
+    frontArmPose: 2,
     locomotionActive: true,
     markerReached: false,
     rearArmPose: 0,
@@ -177,7 +178,7 @@ test('Zombie beat selects exactly one arm at native thresholds', () => {
     frontArmPose: 0,
     locomotionActive: false,
     markerReached: true,
-    rearArmPose: 2,
+    rearArmPose: 0,
   })
   assert.equal(nativeZombieBeatPose(125, 0).complete, true)
 })
@@ -227,7 +228,7 @@ test('Zombie renderer articulation preserves native quantization and attack side
     headPhaseDeg: 180,
     rearArmBaseRotationDeg: 10,
   })
-  assert.equal(idle.bodyRotationRadians, 40 * Math.PI / 180)
+  assert.equal(idle.bodyRotationRadians, 20 * Math.PI / 180)
   assert.equal(idle.headRotationRadians, 15 * Math.PI / 180)
   assert.equal(idle.rearArmRotationRadians, -10 * Math.PI / 180)
   assert.equal(idle.frontArmRotationRadians, 20 * Math.PI / 180)
@@ -242,8 +243,8 @@ test('Zombie renderer articulation preserves native quantization and attack side
     headPhaseDeg: 0,
     rearArmBaseRotationDeg: 7,
   })
-  assert.equal(attack.bodyRotationRadians, (26 / 3) * Math.PI / 180)
-  assert.equal(attack.frontArmRotationRadians, 35 * Math.PI / 180)
+  assert.equal(attack.bodyRotationRadians, (26 / 3) * 0.5 * Math.PI / 180)
+  assert.equal(attack.frontArmRotationRadians, 25 * Math.PI / 180)
   assert.equal(attack.rearArmRotationRadians, -7 * Math.PI / 180)
 })
 
@@ -257,27 +258,6 @@ test('Demon controller uses native idle joints, action lock, and vertical bob', 
   assert.equal(bomb.frontRotationRadians, 40 * Math.PI / 180)
   assert.equal(bomb.rearRotationRadians, -40 * Math.PI / 180)
   assert.equal(bomb.verticalOffset, idle.verticalOffset)
-})
-
-test('every family death has a named bounded terminal program', () => {
-  assert.deepEqual(
-    Object.values(NATIVE_ENEMY_DEATH_PROGRAMS).map((program) => program.name),
-    [
-      'skeleton-shatter',
-      'archer-shatter',
-      'mage-shatter',
-      'imp-split',
-      'zombie-collapse',
-      'wraith-dissolve',
-      'demon-split',
-      'coffin-break',
-    ],
-  )
-  assert.ok(Object.values(NATIVE_ENEMY_DEATH_PROGRAMS).every((program) => (
-    program.provenance === 'bounded-web' && program.durationTicks > 0
-  )))
-  assert.equal(NATIVE_ENEMY_DEATH_PROGRAMS.SKELETON.bodyRemovedAtTick, 0)
-  assert.equal(NATIVE_ENEMY_DEATH_PROGRAMS.ZOMBIE.bodyRemovedAtTick, null)
 })
 
 test('renderer animation samples have stable authoritative defaults', () => {

@@ -55,9 +55,7 @@ export function projectBoneyardEnemyDeathEffect(
     kind: effect.kind,
     ownerActorId: effect.ownerActorId,
     painterRegistration: effect.painterRegistration,
-    presentationOwner: effect.role.startsWith('demon-death-fire-burst-')
-      ? 'direct-post-world'
-      : 'world-sorted',
+    presentationOwner: effect.presentationOwner,
     position: { ...effect.position },
     rotationRadians: effect.rotationDeg * Math.PI / 180,
     scale: effect.scale,
@@ -86,6 +84,7 @@ export function projectBoneyardEnemies(
     maximumHealth: actor.config.maximumHealth,
     nativeTypeId: actor.config.nativeTypeId,
     position: { ...actor.position },
+    scale: actor.config.scale,
     shieldHealth: actor.shieldHealth,
     shieldMaximumHealth: actor.shieldMaximumHealth,
     spawnTick: actor.spawnTick,
@@ -204,6 +203,7 @@ export function projectBoneyardMaggots(
             ? 'emerging'
             : 'crawl',
       verticalOffset: maggotVerticalOffset(maggot),
+      visualScale: maggot.visualScale,
     }
   })
 }
@@ -247,8 +247,11 @@ function projectAnimation(
         NATIVE_DEMON_BOMB_CONTROLLER_POSES.length - 1,
       )]!
     : 0
+  const demonSampleTick = actor.lifeState === 'dying'
+    ? actor.deathStartedTick ?? tick
+    : tick
   const demonArticulation = demonBrain
-    ? nativeDemonArticulationSample(tick, actor.spawnTick, demonControllerPose)
+    ? nativeDemonArticulationSample(demonSampleTick, actor.spawnTick, demonControllerPose)
     : null
   return {
     action,
@@ -281,6 +284,7 @@ function projectAnimation(
     impEffectFrame: impBrain ? nativeImpEffectFrame(impBrain.effectPhase) : -1,
     maggots: [],
     state,
+    stridePhaseDeg: actor.stridePhaseDeg,
     verticalOffset: impBrain?.verticalOffset
       ?? zombieBrain?.verticalOffset
       ?? demonArticulation?.verticalOffset

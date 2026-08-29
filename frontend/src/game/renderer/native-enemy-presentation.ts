@@ -13,13 +13,11 @@ import {
 } from '../core-kernels/native-rng.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
-  NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyActionFrame,
   type NativeEnemyActionFrame,
   type NativeEnemyActionName,
   type NativeEnemyActionProgramName,
   type NativeEnemyAnimationSample,
-  type NativeEnemyDeathProgram,
   type NativeEnemyEffectSample,
   type NativeEnemySampleAtlas,
 } from './native-enemy-animation.ts'
@@ -50,6 +48,7 @@ export interface NativeEnemyVisualSnapshot {
   nativeTypeId: number
   lightRegistration: NativeWorldManagerRegistration
   position: Readonly<{ x: number; y: number }>
+  scale: number
   shieldHealth: number
   shieldMaximumHealth: number
   spawnTick: number
@@ -80,7 +79,6 @@ export interface NativeEnemySegmentLayer {
 
 export interface NativeEnemyPresentationPlan {
   actionFrame: NativeEnemyActionFrame | null
-  deathProgram: NativeEnemyDeathProgram | null
   facing: number
   family: NativeEnemyFamily
   layers: readonly NativeEnemySpriteLayer[]
@@ -187,11 +185,10 @@ export function nativeEnemyPresentationPlan(
     && isNativeEnemyActionProgramName(animation.action)
     ? nativeEnemyActionFrame(animation.action, animation.actionProgress)
     : null
-  const deathProgram = animation?.state === 'death'
-    ? NATIVE_ENEMY_DEATH_PROGRAMS[family]
-    : null
   const familyPresentation = animation?.state === 'death'
-    ? EMPTY_FAMILY_PRESENTATION
+    ? family === 'DEMON'
+      ? presentation(demonDeathLayers(enemy, animation))
+      : EMPTY_FAMILY_PRESENTATION
     : familyLayers(
         enemy,
         facing,
@@ -217,7 +214,6 @@ export function nativeEnemyPresentationPlan(
     : familyPresentation.segments
   return {
     actionFrame,
-    deathProgram,
     facing,
     family,
     layers,
@@ -684,7 +680,11 @@ function zombieLayers(
   const frontArmPose = animation?.zombieFrontArmPose ?? 0
   const bodyRotationRadians = animation?.zombieBodyRotationRadians ?? 0
   const bodyScale = bodyType === 3 ? 1.15 : 1
-  const bodyRootOffset = bodyType === 3 ? { x: 0, y: -8 } : { x: 0, y: 0 }
+  const headingRadians = enemy.headingDeg * Math.PI / 180
+  const forward = bodyType === 3
+    ? { x: Math.sin(headingRadians), y: -Math.cos(headingRadians) }
+    : { x: 0, y: 0 }
+  const bodyRootOffset = { x: 1, y: bodyType === 3 ? -8 : 0 }
   const bodyEntry = 2203 + bodyType * 18 + facing
   const bodyPoints = authoredPoints('BadGuys', bodyEntry)
   const transformBodyPoint = (point: Readonly<{ x: number; y: number }>) => {
@@ -704,7 +704,7 @@ function zombieLayers(
   const frontArmPoint = transformBodyPoint(
     requiredPoint(bodyPoints, 2, `Zombie body ${bodyEntry}`),
   )
-  const bodyShift = rotatePoint({ x: 0, y: -5 }, bodyRotationRadians)
+  const bodyShift = { x: forward.x * -5, y: forward.y * -5 }
   const bodyOffset = bodyType === 3
     ? {
         x: bodyRootOffset.x + bodyShift.x,
@@ -712,7 +712,15 @@ function zombieLayers(
       }
     : bodyRootOffset
   const layers = [
-    layer('BadGuys', 2365 + boundedPose(gaitPose, 7) * 18 + facing, 'zombie-base'),
+    layer('BadGuys', 2365 + boundedPose(gaitPose, 7) * 18 + facing, 'zombie-base', {
+      offset: {
+        x: forward.x * 4,
+        y: forward.y * 4 - Math.abs(Math.sin(
+          finiteOrZero(animation?.stridePhaseDeg ?? 0) * 0.5 * Math.PI / 180,
+        )),
+      },
+      scale: bodyType === 3 ? 2 : 1,
+    }),
     layer('BadGuys', bodyEntry, 'zombie-body', {
       offset: bodyOffset,
       rotationRadians: bodyRotationRadians,
@@ -740,7 +748,7 @@ function zombieLayers(
     ),
   ]
   if (bodyType === 3) {
-    const overlayShift = rotatePoint({ x: 0, y: -4 }, bodyRotationRadians)
+    const overlayShift = { x: forward.x * -4, y: forward.y * -4 }
     layers.push(
       layer('BadGuys', 2275 + facing, 'zombie-body-overlay-rear', {
         offset: {
@@ -795,6 +803,31 @@ function demonLayers(
     layer('Demon', 80 + facing, 'demon-front-joint', {
       offset: requiredPoint(points, 6, `Demon controller ${controllerEntry}`),
       rotationRadians: animation?.demonFrontJointRotationRadians ?? 0,
+    }),
+  ]
+}
+
+function demonDeathLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  animation: NativeEnemyAnimationSample,
+): NativeEnemySpriteLayer[] {
+  const facing = positiveModulo(Math.trunc((enemy.headingDeg + 26) / 52), 7)
+  const entry = 55 + facing
+  const fade = Math.max(0, 1 - finiteOrZero(animation.deathTick) / 100)
+  return [
+    layer('Demon', entry, 'demon-death-body', {
+      blendMode: 'add',
+      scale: 1.2,
+    }),
+    layer('Demon', entry, 'demon-death-additive', {
+      alpha: fade,
+      blendMode: 'add',
+      scale: 1.2,
+    }),
+    layer('Demon', entry, 'demon-death-alpha-pass', {
+      alpha: fade,
+      blendMode: 'add',
+      scale: 1.2,
     }),
   ]
 }
