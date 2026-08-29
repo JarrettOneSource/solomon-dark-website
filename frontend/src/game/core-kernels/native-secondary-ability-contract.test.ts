@@ -14,7 +14,7 @@ import { NATIVE_SECONDARY_AUDIO_CUES } from './native-secondary-abilities.ts'
 const EXPECTED = [
   [11, 'Call Leviathan', 'aimed-world-point', 'BadGuys:343..372', 'leviathan-roar'],
   [12, 'Planewalker', 'self', 'BadGuys:75', 'planewalker-on'],
-  [15, 'Phasing', 'aim-heading-forward-probe', 'BadGuys:53', 'phase'],
+  [15, 'Phasing', 'actor-heading-forward-probe', 'BadGuys:53', 'phase'],
   [21, 'Ring of Fire', 'caster-center', 'DeadHawg:46..77', 'big-fire'],
   [23, 'Firewalker', 'self-trail', 'DeadHawg:46..77', 'ignite'],
   [27, 'Magic Storm', 'aimed-world-point', 'BadGuys:0,11,78,84', 'magic-storm'],

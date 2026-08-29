@@ -191,7 +191,7 @@ export const NATIVE_SECONDARY_ABILITY_CONTRACTS: readonly NativeSecondaryAbility
     cleanup: 'Traversal art self-retires; rejected probes leave no persistent actor.',
     name: 'Phasing',
     skillId: 15,
-    targeting: 'aim-heading-forward-probe',
+    targeting: 'actor-heading-forward-probe',
     timing: { cooldown: 'mCooldown*100', probeLimit: 20 },
   }),
   define({

@@ -5,6 +5,7 @@ import {
   NATIVE_SECONDARY_ABILITY_IDS,
   type NativeSecondaryAbilityId,
 } from './native-secondary-ability-contract.ts'
+import { actorHeadingVector } from './actor-heading.ts'
 import {
   applyNativeSecondaryTargetEffect,
   applyNativeSecondaryGolemDamage,
@@ -684,10 +685,56 @@ test('neutral Golem rejects recasts for exactly 2,500 authoritative 100 Hz updat
   assert.deepEqual(ready.manaSpent, { player: 60 })
 })
 
+test('Phasing follows the wizard heading instead of an unrelated aim point', () => {
+  const source = context(15, 1, 0)
+  const authority = source.players.player!
+  let probedDirection = { x: Number.NaN, y: Number.NaN }
+  const result = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    {
+      ...source,
+      phasingDestination: (_playerId, origin, direction) => {
+        probedDirection = { ...direction }
+        return {
+          x: Math.fround(origin.x + direction.x * 80),
+          y: Math.fround(origin.y + direction.y * 80),
+        }
+      },
+      players: {
+        player: {
+          ...authority,
+          character: { ...authority.character, headingIndex: 0 },
+        },
+      },
+    },
+  )
+
+  assert.deepEqual(probedDirection, { x: 0, y: -1 })
+  assert.deepEqual(result.relocatedPlayers, { player: { x: 0, y: -80 } })
+  const streak = result.state.actors.find(({ kind }) => kind === 'phase-burst')!
+  assert.deepEqual(streak.position, { x: 0, y: -10 })
+  assert.equal(streak.rotationRadians, -Math.PI / 2)
+})
+
 test('Phasing preserves native accepted-failure and single traversal-streak semantics', () => {
+  const east = actorHeadingVector(6)
+  const expectedStreakPosition = {
+    x: Math.fround(east.x * 10),
+    y: Math.fround(east.y * 10),
+  }
+  const successfulContext = context(15, 1, 0)
+  const successfulAuthority = successfulContext.players.player!
   const successful = stepNativeSecondaryAbilities(
     createNativeSecondarySimulation(123),
-    context(15, 1, 0),
+    {
+      ...successfulContext,
+      players: {
+        player: {
+          ...successfulAuthority,
+          character: { ...successfulAuthority.character, headingIndex: 6 },
+        },
+      },
+    },
   )
   assert.deepEqual(successful.manaSpent, { player: 75 })
   assert.deepEqual(successful.relocatedPlayers, { player: { x: 20, y: 0 } })
@@ -704,14 +751,14 @@ test('Phasing preserves native accepted-failure and single traversal-streak sema
   }, {
     alpha: 1,
     lifetimeTicks: 20,
-    position: { x: 10, y: 0 },
-    rotationRadians: 0,
+    position: expectedStreakPosition,
+    rotationRadians: Math.atan2(east.y, east.x),
     scale: 2,
   })
   assert.deepEqual(
     successful.state.events.filter(({ screenFlash }) => screenFlash !== null)
       .map(({ position }) => position),
-    [{ x: 10, y: 0 }],
+    [expectedStreakPosition],
   )
   assert.equal(successful.state.events.filter(({ cue }) => cue === 'phase').length, 1)
 

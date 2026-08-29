@@ -11,15 +11,18 @@ import {
   NATIVE_SECONDARY_ABILITY_CONTRACTS,
   NATIVE_SECONDARY_ABILITY_IDS,
 } from '../src/game/core-kernels/native-secondary-ability-contract.ts'
+import { actorHeadingVector } from '../src/game/core-kernels/actor-heading.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   createEquipmentInventoryItem,
 } from '../src/game/core-kernels/hub-economy.ts'
+import { isHubRegionTraversable } from '../src/game/core-kernels/hub-regions.ts'
 import {
   nativeSecondaryCooldownCapacityTicks,
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { freezeNativeBelt } from '../src/game/core-kernels/native-belt.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import { createPrimarySpellSimulation } from '../src/game/core-kernels/primary-spells.ts'
 import {
   canPlaceBoneyardBody,
@@ -359,19 +362,22 @@ try {
     const castRequestedAtMs = performance.now()
     const castRequestedAtTick = host.state().tick
     const manaBeforeCast = playerProgression(host, playerId).currentMana
-    const positionBeforeCast = structuredClone(getPlayerCharacter(host.state(), playerId).position)
     let target
     let combatBaseline = null
+    let phasingSetup = null
     try {
-      const castTarget = await abilityCastTarget(
-        canvas,
-        host,
-        playerId,
-        contract.skillId,
-        requestedScene,
-      )
+      const castTarget = contract.skillId === 15
+        ? await preparePhasingDirectionMismatch(page, canvas, host, playerId)
+        : await abilityCastTarget(
+            canvas,
+            host,
+            playerId,
+            contract.skillId,
+            requestedScene,
+          )
       target = castTarget.pointer
       combatBaseline = castTarget.combatBaseline
+      phasingSetup = castTarget.phasingSetup ?? null
     } catch (error) {
       process.stderr.write(`${JSON.stringify({
         contract: { id: contract.skillId, name: contract.name },
@@ -381,6 +387,7 @@ try {
       }, null, 2)}\n`)
       throw error
     }
+    const positionBeforeCast = structuredClone(getPlayerCharacter(host.state(), playerId).position)
     const primaryOverlapReceipt = primaryOverlap
       ? await castSecondaryDuringHeldPrimary(
           page,
@@ -434,6 +441,15 @@ try {
     )))
     const teleport = contract.skillId === 48
       ? teleportReceipt(host.state(), playerId, events, positionBeforeCast, positionAfterCast)
+      : null
+    const phasing = contract.skillId === 15
+      ? phasingDirectionReceipt(
+          host.state(),
+          playerId,
+          phasingSetup,
+          positionBeforeCast,
+          positionAfterCast,
+        )
       : null
     const authoritativeCastTick = Math.min(...events.map(({ tick }) => tick))
     const expectedCooldownCapacity = nativeSecondaryCooldownCapacityTicks(
@@ -833,6 +849,7 @@ try {
       maximumPrimitiveCount: Math.max(...samples.map(({ primitiveCount }) => primitiveCount)),
       maximumSet,
       name: contract.name,
+      phasing,
       playerPresentation,
       quickbar: {
         cooldown: cooldownQuickbar,
@@ -1703,6 +1720,142 @@ function stabilizeBoneyardCooldownEnemies(host) {
   })
 }
 
+async function preparePhasingDirectionMismatch(page, canvas, host, playerId) {
+  let state = host.state()
+  const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
+    id === playerId
+  ))
+  assert.notEqual(playerIndex, -1)
+  const origin = state.playerEntities.locomotions[playerIndex].position
+  let headingInput = null
+  for (const candidate of [
+    { headingIndex: 0, keys: ['w'] },
+    { headingIndex: 3, keys: ['w', 'd'] },
+    { headingIndex: 6, keys: ['d'] },
+    { headingIndex: 9, keys: ['s', 'd'] },
+    { headingIndex: 12, keys: ['s'] },
+    { headingIndex: 15, keys: ['s', 'a'] },
+    { headingIndex: 18, keys: ['a'] },
+    { headingIndex: 21, keys: ['w', 'a'] },
+  ]) {
+    const headingDirection = actorHeadingVector(candidate.headingIndex)
+    const acceptedDistance = phasingAcceptedDistance(
+      state,
+      playerId,
+      origin,
+      headingDirection,
+    )
+    if (acceptedDistance !== null) {
+      headingInput = candidate
+      break
+    }
+  }
+  assert.ok(headingInput, 'Phasing acceptance could not find a collision-clear movement heading')
+
+  try {
+    for (const key of headingInput.keys) await page.keyboard.down(key)
+    await page.waitForTimeout(180)
+  } finally {
+    for (const key of [...headingInput.keys].reverse()) await page.keyboard.up(key)
+  }
+  await waitUntil(() => (
+    getPlayerCharacter(host.state(), playerId).headingIndex === headingInput.headingIndex
+  ), 'Phasing acceptance did not commit its movement-owned heading')
+  await waitUntil(() => {
+    const velocity = getPlayerCharacter(host.state(), playerId).velocity
+    return Math.hypot(velocity.x, velocity.y) < 0.1
+  }, 'Phasing acceptance movement lane did not settle')
+
+  state = host.state()
+  const settledOrigin = state.playerEntities.locomotions[playerIndex].position
+  const headingDirection = actorHeadingVector(headingInput.headingIndex)
+  const acceptedDistance = phasingAcceptedDistance(
+    state,
+    playerId,
+    settledOrigin,
+    headingDirection,
+  )
+  assert.notEqual(acceptedDistance, null)
+  const aimDirection = actorHeadingVector((headingInput.headingIndex + 6) % 24)
+  const phasingSetup = {
+    acceptedDistance,
+    aimDirection,
+    aimPoint: {
+      x: settledOrigin.x + aimDirection.x * 100,
+      y: settledOrigin.y + aimDirection.y * 100,
+    },
+    headingDirection,
+    headingIndex: headingInput.headingIndex,
+  }
+
+  let projection = null
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    projection = await canvas.evaluate((node, { direction, id }) => {
+      const bounds = node.getBoundingClientRect()
+      const frame = node.__sdrHubFrame ?? node.__sdrBoneyardFrame
+      if (!frame) throw new Error('Phasing acceptance has no renderer diagnostics')
+      const hubPosition = frame.playerScreenPositions?.[id]
+      const playerX = hubPosition?.x ?? frame.playerScreenX
+      const playerY = hubPosition?.y ?? frame.playerScreenY
+      const zoom = Number(node.dataset.cameraZoom || frame.cameraZoom)
+      const resolution = Number(node.dataset.resolution || 1)
+      const logicalWidth = node.width / resolution
+      const logicalHeight = node.height / resolution
+      if (![playerX, playerY, zoom, logicalWidth, logicalHeight].every(Number.isFinite)) {
+        throw new Error('Phasing acceptance has no finite player projection')
+      }
+      const logicalPointer = {
+        x: playerX + direction.x * 100 * zoom,
+        y: playerY + direction.y * 100 * zoom,
+      }
+      return {
+        headingIndex: frame.playerHeadingIndex,
+        pointer: {
+          x: bounds.left + logicalPointer.x * bounds.width / logicalWidth,
+          y: bounds.top + logicalPointer.y * bounds.height / logicalHeight,
+        },
+      }
+    }, { direction: phasingSetup.aimDirection, id: playerId })
+    if (projection.headingIndex === phasingSetup.headingIndex) break
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  assert.equal(projection.headingIndex, phasingSetup.headingIndex)
+
+  return {
+    combatBaseline: null,
+    phasingSetup,
+    pointer: projection.pointer,
+  }
+}
+
+function phasingCandidateClear(state, playerId, candidate) {
+  if (state.world.kind === 'hub') {
+    const region = state.world.participants[playerId]?.region
+    return region !== undefined && isHubRegionTraversable(
+      region,
+      candidate,
+      PLAYER_CHARACTER_RADIUS,
+    )
+  }
+  if (state.world.kind !== 'boneyard') return false
+  return canPlaceBoneyardBody(
+    candidate,
+    state.world.bounds,
+    withBoneyardGateCollision(state.world.collision, state.world.gateLeaves),
+    PLAYER_CHARACTER_RADIUS,
+  )
+}
+
+function phasingAcceptedDistance(state, playerId, origin, direction) {
+  for (let distance = 80; distance <= 270; distance += 10) {
+    if (phasingCandidateClear(state, playerId, {
+      x: origin.x + direction.x * distance,
+      y: origin.y + direction.y * distance,
+    })) return distance
+  }
+  return null
+}
+
 async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
   const fallback = await canvas.evaluate((node) => {
     const bounds = node.getBoundingClientRect()
@@ -2170,6 +2323,54 @@ function halfMaterialTint(tint) {
   assert.ok(Number.isInteger(tint) && tint >= 0 && tint <= 0xffffff)
   const half = (shift) => Math.round(((tint >> shift) & 0xff) * 0.5)
   return (half(16) << 16) | (half(8) << 8) | half(0)
+}
+
+function phasingDirectionReceipt(state, playerId, setup, source, destination) {
+  assert.ok(setup)
+  assert.equal(getPlayerCharacter(state, playerId).headingIndex, setup.headingIndex)
+  const displacement = {
+    x: destination.x - source.x,
+    y: destination.y - source.y,
+  }
+  const distance = Math.hypot(displacement.x, displacement.y)
+  const headingDot = displacement.x * setup.headingDirection.x
+    + displacement.y * setup.headingDirection.y
+  const headingCross = displacement.x * setup.headingDirection.y
+    - displacement.y * setup.headingDirection.x
+  const aimDot = displacement.x * setup.aimDirection.x
+    + displacement.y * setup.aimDirection.y
+  assert.ok(Math.abs(distance - setup.acceptedDistance) <= 0.001)
+  assert.ok(headingDot >= setup.acceptedDistance - 0.001)
+  assert.ok(Math.abs(headingCross) <= 0.001)
+  assert.ok(Math.abs(aimDot) <= 0.001)
+
+  const streak = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+    kind === 'phase-burst' && ownerId === playerId
+  ))
+  assert.ok(streak)
+  const expectedMarker = {
+    x: Math.fround(source.x + setup.headingDirection.x * 10),
+    y: Math.fround(source.y + setup.headingDirection.y * 10),
+  }
+  assert.ok(Math.abs(streak.position.x - expectedMarker.x) <= 0.001)
+  assert.ok(Math.abs(streak.position.y - expectedMarker.y) <= 0.001)
+  const expectedRotation = Math.atan2(
+    setup.headingDirection.y,
+    setup.headingDirection.x,
+  )
+  assert.ok(Math.abs(streak.rotationRadians - expectedRotation) <= 0.000001)
+
+  return {
+    acceptedDistance: setup.acceptedDistance,
+    aimDirection: setup.aimDirection,
+    aimPoint: setup.aimPoint,
+    destination,
+    distance,
+    headingDirection: setup.headingDirection,
+    headingIndex: setup.headingIndex,
+    marker: streak.position,
+    source,
+  }
 }
 
 function teleportReceipt(state, playerId, events, source, destination) {

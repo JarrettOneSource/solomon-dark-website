@@ -13,7 +13,7 @@ import {
   type PlayerCharacterState,
   type WizardElement,
 } from './player-character.ts'
-import { actorHeadingIndex } from './actor-heading.ts'
+import { actorHeadingIndex, actorHeadingVector } from './actor-heading.ts'
 import {
   activePlayerWeldBuildId,
   effectiveElementalPrimarySkillRankStats,
@@ -4003,8 +4003,9 @@ function castAbility(
         screenFlash: REGION_FLASH_PLANEWALKER,
       })
       break
-    case 15:
-      relocated = context.phasingDestination(playerId, origin, direction)
+    case 15: {
+      const phasingDirection = actorHeadingVector(authority.character.headingIndex)
+      relocated = context.phasingDestination(playerId, origin, phasingDirection)
       if (!relocated) {
         nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
         ;({ player: nextPlayer, state } = withCooldown(
@@ -4028,14 +4029,14 @@ function castAbility(
         }
       }
       const phaseMarker = {
-        x: Math.fround(origin.x + direction.x * 10),
-        y: Math.fround(origin.y + direction.y * 10),
+        x: Math.fround(origin.x + phasingDirection.x * 10),
+        y: Math.fround(origin.y + phasingDirection.y * 10),
       }
       spawnActor({
         kind: 'phase-burst',
         lifetimeTicks: 20,
         position: phaseMarker,
-        rotationRadians: Math.atan2(direction.y, direction.x),
+        rotationRadians: Math.atan2(phasingDirection.y, phasingDirection.x),
         scale: 2,
         skillId,
       })
@@ -4045,6 +4046,7 @@ function castAbility(
         screenFlash: REGION_FLASH_PHASING,
       })
       break
+    }
     case 21:
       for (let index = 0; index < 30; index += 1) {
         const phase = drawNativeFloat(state.rng, FIRE_FRAME_COUNT); state = { ...state, rng: phase.state }

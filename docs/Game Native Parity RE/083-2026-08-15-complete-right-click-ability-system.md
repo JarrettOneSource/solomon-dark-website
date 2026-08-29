@@ -841,3 +841,143 @@ No member is browser-blocked.
   `73855811bdce873fa3e1a29557e7ecad6324cb85c12c66b50daa20b06abe343b`.
 - The publication pass reruns the complete canonical gate after this receipt
   and the browser-harness regressions are recorded.
+
+## 2026-08-29 — Phasing facing-direction reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: Phasing sometimes moves the player in a direction
+  different from the direction the wizard is visibly facing.
+- Stock behavior to recover: Phasing must consume the caster's current heading,
+  probe only along that straight forward ray, and let static collision decide
+  whether any of the twenty destinations is accepted.
+- Reproduction: give the player a north-facing heading while retaining an east
+  world-aim point, then cast Phasing through the ordinary category-2 edge.
+- Falsifier: if stock Phasing consumes the aimed world point rather than actor
+  heading, the current Website direction owner is correct. The authored skill
+  description and recovered dispatcher/helper thread both refute that model.
+
+This secondary report reopens the earlier `exact-ported` claim. The 2026-08-15
+pass proved one successful aim-aligned cast and the effect lifecycle, but did
+not include a heading-versus-aim differential or enumerate mouse, keyboard,
+touch, and gamepad aim retention as independent input branches. That skipped
+cross-input membership allowed an aimed-secondary convenience lane to replace
+Phasing's actor-heading owner.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player report | 2026-08-29 report | The displacement direction can disagree with visible wizard heading; the expected path is straight forward unless collision rejects it. | high for the web symptom |
+| Authored retail data | retail `data/wizardskills/phasing.cfg`, SHA-256 `d2615aff242059299004ccd30bdb5cb90b029208742982319faf38748fb9bb39` | The stock description is "A quick and limited planar teleport in the direction you are facing." | high |
+| Retail identity | 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | The binary matches the established secondary-system oracle. | high |
+| Existing instruction recovery | dispatcher `0x0054CC50`, Phasing helper `0x0052A0B0`; Website ledger plus read-only Mod Loader report at revision `08bfba9ef367f7b863848030d0a289dc31e33192` | The dispatcher sends the cast heading to a helper that checks twenty forward destinations, commits the first clear point, and emits the traversal effect. | high |
+| Existing clean/runtime differential | read-only `multiplayer_secondary_behavior_harness.py::run_phasing` | The stock harness plants heading `0`, drives the actor forward, casts row 15, and requires at least 60 units of added displacement plus owner/observer position convergence. | medium; it proves forward displacement but does not independently vary pointer aim |
+| Current Website causal trace | `origin/main` `e7addc2b`; `native-secondary-abilities.ts`, `gameplay-input.ts`, `HubScene.tsx`, `BoneyardScene.tsx` | The common dispatcher computes `direction = unit(origin, input.aim)` and Phasing uses it for destination, streak position, and rotation. Default pointer-secondary input therefore overrides actor heading; keyboard and touch can reuse stale aim too. | high |
+
+The canonical Ghidra wrapper could not be freshly invoked from this Linux
+shell because Windows PowerShell interop is unavailable. No alternate project
+was created. The material direction contract is nevertheless closed by the
+matching retail binary and CFG plus the already-recorded instruction and stock
+harness evidence above.
+
+### System boundary and membership inventory
+
+Native system: **Phasing row-15 heading-owned relocation**, from the current
+authoritative player heading through collision probes, position commit,
+traversal presentation, replication, and retirement.
+
+| Member / branch | Native source | Disposition in this reopening | Proof contract |
+| --- | --- | --- | --- |
+| current actor heading | player facing lane; Phasing CFG; dispatcher `0x0054CC50` | `exact-ported` | mismatched aim cannot change the direction supplied to the helper |
+| right-mouse pointer aim enabled | shared belt input, Website browser extension | `out-of-system` for Phasing direction; aimed secondary rows still consume it | mouse aim east plus heading south phases south |
+| pointer aim disabled / facing projection | Website input extension | `verified-already-at-parity` | Phasing still consumes authoritative heading, not the projected world point |
+| keyboard quickbar with retained aim | native belt keys `1..7` plus Website input state | `exact-ported` at the common Phasing consumer | stale pointer aim cannot redirect the cast |
+| touch quickbar with retained/fallback aim | Website touch producer | `exact-ported` at the common Phasing consumer | touch cast follows the current replicated heading |
+| standard gamepad quickbar/right-stick aim | Website gamepad producer | `exact-ported` at the common Phasing consumer | right-stick aim cannot bypass the heading owner |
+| Hub Courtyard and four private rooms | Website shared-Hub combat seal | `verified-already-at-parity` Hub rejection | row 15 cannot spend mana, relocate, or emit presentation in the noncombat Hub; its dormant Region callback is not a live direction member |
+| Boneyard generated arenas | Arena bounds/static collision branch | `verified-already-at-parity` for collision; direction owner corrected | every accepted destination remains collinear with heading |
+| successful probe | helper `0x0052A0B0` | `exact-ported` | first accepted distance remains one of `80..270` in 10-unit steps |
+| all twenty probes blocked | helper `0x0052A0B0` | `verified-already-at-parity` | mana/action/cooldown remain accepted; no relocation, streak, cue, or flash |
+| traversal streak, `phase` cue, and Region flash | BadGuys `53`, source plus heading times 10 | `exact-ported` | position and rotation use the same heading vector as relocation |
+| host/observer snapshots and late join | authoritative player position plus semantic actor/event wire | `verified-already-at-parity` | host commits once; observers receive the same destination/effect |
+| other 22 category-2 rows | dispatcher `0x0054CC50` membership | `out-of-system` because their recovered aimed/self/caster targeting remains distinct | closed contract enumeration remains unchanged |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- Player movement/action logic owns the current facing before category-2
+  dispatch. Phasing reads that actor state; it does not derive a new heading
+  from the pointer or turn the wizard toward an aimed world point.
+- The Phasing helper owns twenty straight-ray candidates at distances
+  `80,90,...,270`. The active Arena callback decides whether each full
+  player-radius destination is clear and never synthesizes a sideways
+  fallback. Website's later shared-Hub policy rejects category-2 execution
+  before the otherwise retained Region callback can run.
+- Success commits the accepted point and creates one BadGuys-53 streak at
+  `oldPosition + heading * 10`, rotated along the same heading, with scale two
+  and the existing 20-tick fade. It also emits the existing `phase` cue and
+  cyan Region flash.
+- Failure after all probes preserves the already-paid cast, StaffCast2, row
+  cooldown capacity, and common cooldown behavior, while emitting no semantic
+  presentation edge.
+- Direction, collision, mana, cooldown, relocation, and actor IDs remain host
+  authoritative. Input-device aim is still transmitted for genuinely aimed
+  abilities but is not Phasing state.
+
+### Web implementation consequence and validation contract
+
+- `native-secondary-abilities.ts` must derive a Phasing-local vector from
+  `authority.character.headingIndex`; the shared `unit(origin, aim)` value
+  remains untouched for every aimed secondary sibling.
+- Destination probing, phase-marker placement, streak rotation, cue/flash,
+  cooldown, and replication must consume that one heading vector.
+- A focused red/green regression must set heading north and aim east, observe
+  the direction handed to `phasingDestination`, and assert northward
+  relocation/streak geometry while retaining accepted-failure coverage.
+- The existing closed 23-row contract tests must remain green so no aimed
+  sibling inherits the Phasing rule.
+- Real Mac Chrome must prove the Hub combat seal still rejects row 15, then
+  cast in Boneyard with deliberately orthogonal heading and pointer aim and
+  prove the accepted destination and streak are collinear with heading. The
+  focused kernel retains the all-probes-blocked cast contract. Both journeys
+  must retain empty page, console, response, protocol, and host-error lanes.
+
+### Implementation validation receipt
+
+- `native-secondary-abilities.ts` now derives row 15's one direction from
+  `authority.character.headingIndex` and uses it for the collision callback,
+  marker, and streak rotation. The shared aim vector remains the owner for the
+  aimed sibling rows. The checked contract now names row 15
+  `actor-heading-forward-probe`.
+- The focused regression first failed with `{x:1,y:0}` entering the helper
+  while a north-facing actor expected `{x:0,y:-1}`. It now passes and asserts
+  an 80-unit north relocation, a 10-unit north marker, and matching rotation.
+  The older success/failure test now declares its east-facing fixture instead
+  of silently relying on aim; the no-destination branch still spends mana and
+  arms its action/cooldowns without an actor, cue, or flash.
+- The exact Mac candidate ran the canonical validation gate successfully:
+  backend Release build and 29 contracts; clean formatting/lint/import
+  boundaries; frontend groups `61,10,47,12,320,7,1721,5,76,9,61,14,47,7,36,80,5`
+  all at zero failures; desktop tests; production frontend/game-host builds;
+  game bundle `80,327 / 134,144` gzip bytes; and media policy.
+- Mac Chrome/WebGL2 Boneyard acceptance used ordinary movement to make the
+  visible and authoritative heading index `0` (north), then right-clicked an
+  east aim point. Source `(1710.2249755859375,989.7750244140625)` moved exactly
+  80 units north to `(1710.2249755859375,909.7750244140625)`; the traversal
+  marker was exactly 10 units north at
+  `(1710.2249755859375,979.7750244140625)`. One phase actor, one `phase` cue,
+  cyan flash, native square cooldown, and 65 presented ticks were observed.
+  Page, console, and response error arrays were empty. Log SHA-256 is
+  `567bc7e4d39ae34ba929911478f718b7987a5f46e3ee3e22503b4098efb60df8`;
+  the main capture hash is
+  `0207a9db0c55d267e4bdfb334cb7d9d3c4b8c7315b365bb3bc1849f548cd3e6d`.
+- A separate Mac Chrome/WebGL2 Hub journey retained position
+  `(950.64,164.04)`, mana `100`, actor/event identities, and zero audio while
+  the HUD reported Phasing unavailable. Its page, console, and response error
+  arrays were empty. Log SHA-256 is
+  `c3d3c99a1d843e7f9611ae9031ca6eadaac0a140e5a2c2abe3753632de4008e3`;
+  capture hash is
+  `3fb09d372ac4d6e1a11c9a120fa9ae3afc73ff9af42c1c6e8e44f3c41f863ad5`.
+- No member is blocked by the browser platform and no approximation was added.
