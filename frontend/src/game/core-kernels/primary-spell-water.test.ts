@@ -117,27 +117,33 @@ test('deterministically preserves the native 75 percent Normal / 25 percent Over
 
 test('birth owns world-tick wiggle while radial jitter stays around the caster heading', () => {
   const emitter = { x: 100, y: 200 }
-  const first = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 0, 36, 2, 4)
-  const born = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 37, 2, 4)
-  const samePhase = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 9001, 2, 4)
-  const nativePi = Math.fround(Math.PI)
-  const firstHeading = Math.sin(3 * 65 * nativePi / 180) * nativePi / 180
-  const expectedHeading = Math.sin((3 + 32.5) * 65 * nativePi / 180) * nativePi / 180
+  const first = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 0, 36, 2, 4, 0)
+  const born = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 37, 2, 4, 0)
+  const samePhase = waterFrostJetEmission(
+    emitter,
+    { x: 0, y: -1 },
+    3,
+    1,
+    9001,
+    2,
+    4,
+    0,
+  )
+  const firstDirection = nativeFrostDirection(3, 0, 2, 0)
+  const expectedDirection = nativeFrostDirection(3, 1, 2, 0)
 
-  assert.equal(first.direction.x, Math.fround(Math.sin(firstHeading)))
-  assert.equal(first.direction.y, Math.fround(-Math.cos(firstHeading)))
-  assert.equal(born.direction.x, Math.fround(Math.sin(expectedHeading)))
-  assert.equal(born.direction.y, Math.fround(-Math.cos(expectedHeading)))
+  assert.deepEqual(first.direction, firstDirection)
+  assert.deepEqual(born.direction, expectedDirection)
   assert.notDeepEqual(first.direction, born.direction)
   assert.deepEqual(born.direction, samePhase.direction)
-  assert.ok(Math.abs(Math.atan2(first.direction.x, -first.direction.y)) <= Math.PI / 180)
-  assert.ok(Math.abs(Math.atan2(born.direction.x, -born.direction.y)) <= Math.PI / 180)
+  assert.ok(Math.abs(headingDegrees(first.direction)) <= 15.0001)
+  assert.ok(Math.abs(headingDegrees(born.direction)) <= 15.0001)
   const jitter = { x: born.origin.x - emitter.x, y: born.origin.y - emitter.y }
   assert.ok(Math.hypot(jitter.x, jitter.y) <= 10)
   assert.ok(Math.abs(Math.atan2(jitter.x, -jitter.y)) <= 45 * Math.PI / 180)
 })
 
-test('Cone density divides the native 65-unit phase across every emitted ordinal', () => {
+test('Cone density divides the native 65-unit phase across every widened ordinal', () => {
   const emitter = { x: 100, y: 200 }
   const count = WATER_FROST_MAX_PARTICLES_PER_TICK
   const emissions = Array.from({ length: count }, (_, ordinal) => waterFrostJetEmission(
@@ -148,21 +154,42 @@ test('Cone density divides the native 65-unit phase across every emitted ordinal
     100 + ordinal,
     count,
     10,
+    75,
   ))
-  const nativePi = Math.fround(Math.PI)
-  let expectedLastPhase = Math.fround(3)
-  const phaseStep = Math.fround(65 / count)
-  for (let ordinal = 0; ordinal < 9; ordinal += 1) {
-    expectedLastPhase = Math.fround(expectedLastPhase + phaseStep)
-  }
-  const expectedLastHeading = Math.sin(
-    expectedLastPhase * 65 * nativePi / 180,
-  ) * nativePi / 180
-  assert.equal(
-    emissions.at(-1)?.direction.x,
-    Math.fround(Math.sin(expectedLastHeading)),
-  )
+  assert.deepEqual(emissions.at(-1)?.direction, nativeFrostDirection(3, 9, count, 75))
   assert.notEqual(emissions.at(-1)?.direction.x, emissions[0]?.direction.x)
+  assert.ok(Math.max(...emissions.map(({ direction }) => (
+    Math.abs(headingDegrees(direction))
+  ))) > 85)
+})
+
+test('every cached Cone width owns its complete stock visual-heading envelope', () => {
+  const emitter = { x: 0, y: 0 }
+  const cachedWidths = [0, 15, 25, 35, 40, 45, 50, 55, 60, 65, 70, 75]
+  for (const widenHalfDegrees of cachedWidths) {
+    const particleCount = waterFrostJetParticleCount(widenHalfDegrees)
+    const speed = waterFrostJetSpeed(widenHalfDegrees)
+    let maximumOffset = 0
+    for (let tick = 0; tick < 100; tick += 1) {
+      for (let ordinal = 0; ordinal < particleCount; ordinal += 1) {
+        const emission = waterFrostJetEmission(
+          emitter,
+          { x: 0, y: -1 },
+          tick,
+          ordinal,
+          1000 + tick * particleCount + ordinal,
+          particleCount,
+          speed,
+          widenHalfDegrees,
+        )
+        maximumOffset = Math.max(maximumOffset, Math.abs(headingDegrees(emission.direction)))
+      }
+    }
+    assert.ok(
+      Math.abs(maximumOffset - (widenHalfDegrees + 15)) < 0.0001,
+      `cached width ${widenHalfDegrees} produced ${maximumOffset} degrees`,
+    )
+  }
 })
 
 test('Normal snapshots point and native distance, including the zero-distance immediate-splay quirk', () => {
@@ -415,3 +442,31 @@ test('pins Normal to the late ZAnim sort family and Over to post-world-queue', (
     queueFamily: null,
   })
 })
+
+function headingDegrees(direction: { x: number; y: number }): number {
+  return Math.atan2(direction.x, -direction.y) * 180 / Math.PI
+}
+
+function nativeFrostDirection(
+  tick: number,
+  ordinal: number,
+  particleCount: number,
+  widenHalfDegrees: number,
+): { x: number; y: number } {
+  const nativePi = Math.fround(Math.PI)
+  let phase = Math.fround(tick)
+  const phaseStep = Math.fround(65 / particleCount)
+  for (let index = 0; index < ordinal; index += 1) {
+    phase = Math.fround(phase + phaseStep)
+  }
+  const phaseDegrees = Math.fround(phase * 65)
+  const phaseRadians = Math.fround(phaseDegrees * nativePi / 180)
+  const wave = Math.fround(Math.sin(phaseRadians))
+  const amplitudeDegrees = Math.fround(widenHalfDegrees + 15)
+  const heading = Math.fround(wave * amplitudeDegrees)
+  const radians = Math.fround(nativePi * heading / 180)
+  return {
+    x: Math.fround(Math.sin(radians)),
+    y: Math.fround(-Math.cos(radians)),
+  }
+}

@@ -237,3 +237,179 @@ arrowGain = float32(Q*0.3199999928474426)
 - Browser constraints, inferred implementation facts, and remaining in-system
   omissions: none. Publication and deployment remain separate receipts; this
   entry records the pre-publication candidate.
+
+## 2026-08-28 — reopened Frost visual-heading amplitude and x87 recurrence
+
+### Reported smell and parity question
+
+- Reported web behavior: Frost Jet upgrades still do not affect the stream VFX
+  correctly, and the stream is missing native math that gives stock its shape.
+- Reproduced current behavior: base Frost and Cone rank 11 both cap their born
+  heading offset at approximately one degree. Cone changes only density and
+  speed, leaving the plume nearly axial.
+- Stock behavior to recover: the complete heading producer shared by Normal,
+  Over, underpowered, and Hail-allocating Frost births, including the cached
+  Cone operand, mutable phase, x87 float stores, direction helper, and rank
+  refresh owner.
+- Process failure in the earlier closure: the prior pass treated raw stack
+  offsets as stable across branch-local `PUSH` instructions. It therefore
+  resolved the heading multiply to the player-stat result at pre-push stack
+  `+0x68`. Both branches actually resolve to the cached `W + 15` value at
+  pre-push stack `+0x64`. The earlier browser proof asserted count and speed but
+  never measured born direction, so it could not falsify the one-degree path.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, preferred base `0x00400000`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Same retail image as the preceding Water closures. | high |
+| Raw instructions | canonical Ghidra 12.0.3 replica; handler `0x00543860`; operand store `0x0054394F..0x00543959`; Over heading `0x00543A86..0x00543AD6`; Normal heading `0x00543BA3..0x00543C5C`; Hail child heading `0x00544002..0x0054405D`; direction helper `0x00410500`; Mod Loader tool revision `08bfba9ef367f7b863848030d0a289dc31e33192` used read-only | `float32(player+0x290 + 15)` is stored at pre-push stack `+0x64`. Over pushes once before `FMUL [ESP+0x68]`; Normal pushes twice before `FMUL [ESP+0x6C]`; both therefore multiply by that same `W+15` value. Hail repeats the one-push form. | high |
+| Raw instructions | `0x00543895..0x005438B3`, `0x00544258..0x00544262` | The `FUN_00656580(class=3)` result stored at pre-push `+0x68` is the Water damage multiplier later applied to `player+0x28C`. It is not a visual cast-speed amplitude. | high |
+| Direction helper | `0x00410500..0x0041054C` | Heading is passed in degrees. The helper float32-stores `piFloat*heading/180`, then float32-stores `sin` and negative `cos`. | high |
+| Injected-loader diagnostic | task-owned PID `5520`, image base `0x00410000`, preferred/runtime trace target `0x00453800 -> 0x00463800`, Lua pipe `SolomonDarkFrostJet20260828Root`; loader DLL SHA-256 `43a87f813813d570521558f4880593d560f3a0d88824ba3ba2724ae2f321639f` | At cached width `W=0`, 256 constructor hits spanned `-15.000000..+15.022354` degrees around a steady aim; exact endpoints `-15/+15` recurred. After progression row 34 active/visible rank was set to 11, refresh held `W=75` and 256 hits spanned `-89.999954..+90.000000`. Normal runtime vtable was `0x00794E84` and Over was `0x00794EB4`, the same `+0x10000` ASLR delta as the traced function. | high supporting diagnostic |
+| Existing semantic/live ledger | read-only `docs/lua-memory-tooling.md`, April 29 Water trace | Level-one query observed total cone `30`, range `205`, and `actor+0x290=0`; the recovered field was already identified as the upgraded width owner. | high for query/cache ownership |
+| Current web differential | Website `5257a20ee62b95f4e4087de15637c348bb599ad1`; Mac arm64 direct kernel import | Across 100 ticks, both `W=0` and `W=75` maxed at `1.000000053` degrees. The instruction-derived stock envelopes were `15` and `90` degrees. | high |
+| Current browser baseline | isolated Mac Chrome Boneyard Chill/Cone journey; base screenshot SHA-256 `ca6732c264daae6485ff50883bb086d18d1c92fd7b93d12a13f93c1ff6d9761e`; Cone screenshot SHA-256 `925b22755e4bbc740ff5eeb24d28da43dadc8a4c939fd2ee50fe9eb067d6185e` | Rank 11 is denser and longer but remains a narrow axial beam. The journey had no page, response, wire, or console errors. | high for current pixels |
+
+The live run was diagnostic rather than clean stock because the loader owned
+the trace. Material conclusions are independently instruction-derived. The
+task altered only the disposable run's row-34 rank/cache, restored both rank
+fields to zero, disarmed the trace, and stopped the exact task process.
+
+### System boundary and membership inventory
+
+Native system: pure player Water rows 32..34 from rank refresh into the shared
+Frost heading producer, Normal/Over construction, optional Hail child velocity,
+replication, rendering, release, and expiry.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Frost Jet row 32 | handler `0x00543860` | `exact-ported` | base `W=0` envelope is exactly `+/-15` degrees; existing damage, mana, cold, audio, and lifetime remain unchanged |
+| Chill Wind row 33 | cache `player+0x294`, contact branch | `verified-already-at-parity` | no invented Frost sprite/math; normalized push and Arrow tumble contracts remain green |
+| Cone of Ice row 34, ranks 0..11 | refresh `0x00549CCF`, handler stack `+0x64` | `exact-ported` | all 12 cached widths own amplitudes `15,30,40,50,55,60,65,70,75,80,85,90` degrees in addition to existing density/speed/query effects |
+| Normal Frost | ctor `0x00453550`, vtable `0x00784E84` | `exact-ported` | raw Normal branch and live vtable/endpoint trace |
+| Over Frost | ctor `0x00453840`, vtable `0x00784EB4` | `exact-ported` | raw Over branch and live vtable/endpoint trace |
+| Underpowered Frost | weak reset `0x005438EC` | `exact-ported` | forced `W=0`, one Normal child, native `+/-15` degree amplitude |
+| Hail per-Frost allocation child | `0x00543F02..0x005440A0` | `exact-ported` | Hail horizontal velocity inherits the corrected Frost direction for every Cone-expanded child |
+| Enhanced Effects On | count divisor `-10` | `verified-already-at-parity` | existing all-row count table remains exact; direction coverage is added |
+| Enhanced Effects Off | count divisor `-20` | `verified-already-at-parity` as documented product branch | no Website setting owner; exact phase math remains parameterized by count |
+| Hub and Boneyard | common authoritative transient producer/renderer | `exact-ported` | both scenes consume the same born direction and painter lanes |
+| Multiplayer observer | existing Water transient direction field | `verified-already-at-parity` | strict protocol already carries the authoritative unit direction; no rank reconstruction or protocol bump |
+| Save/resume | existing Water transient direction snapshot | `verified-already-at-parity` | no new persistent field or migration; live children retain their born direction |
+| Water+Air Blizzard | `0x00541870` | `out-of-system` — separate welded handler/class | existing welded Frost contract |
+| Fire+Water Steam | `0x00542D20` | `out-of-system` — separate Steam actors and scalars | existing welded Steam contract |
+| Other `0x00453800` / `0x00641B10` callers | `0x00643CA0`, `0x005F6410`, `0x005F3B50` | `out-of-system` — shared direction/query utilities without pure-Frost cache ownership | xref census and focused negative coverage |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and corrected contract
+
+- Player refresh owns `W=float32(authoredWiden*0.5)` at `player+0x290`.
+  A one-shot live cache write is overwritten on the next refresh; changing row
+  34 rank makes the refreshed value persist. Presentation must therefore take
+  the profile's cached width, not a renderer-local rank lookup.
+- `0x0054394F..0x00543959` computes
+  `amplitude=float32(W+15)`. The same mutable float32 phase feeds Normal, Over,
+  and Hail construction.
+- The exact heading recurrence is:
+
+```text
+phase[0] = float32(worldTick)
+phaseStep = float32(65 / particleCount)
+phase[n+1] = float32(phase[n] + phaseStep)
+phaseDegrees = float32(phase[n] * 65)
+phaseRadians = float32(phaseDegrees * piFloat32 / 180)
+wave = float32(sin(phaseRadians))
+amplitudeDegrees = float32(W + 15)
+headingDegrees = float32(casterHeadingDegrees + wave * amplitudeDegrees)
+directionRadians = float32(piFloat32 * headingDegrees / 180)
+direction = (float32(sin(directionRadians)), float32(-cos(directionRadians)))
+```
+
+- Birth jitter remains independent: radius `U[0,10]` along caster heading plus
+  signed `U[0,45]` degrees. Cone width does not widen the jitter origin.
+- Existing Cone count, speed, gameplay half-angle, reach, contact, and Chill
+  formulas remain correct. This reopening changes only the falsified visual
+  heading model and its inherited Hail velocity.
+- Authority snapshots the resulting unit direction on every child. Clients
+  interpolate/copy it and never recompute the phase or current rank.
+
+### Web implementation consequence
+
+- Pass cached `widenHalfDegrees` into the authoritative Water birth helper.
+- Replace the rank-independent one-degree radian multiplier with the recovered
+  degree-space amplitude and intermediate float32 stores above.
+- Run birth jitter through the same degree-to-direction helper so both stock
+  heading paths share the recovered `0x00410500` recurrence.
+- Preserve every existing count, speed, obstruction, class split, painter,
+  audio, contact, protocol, save, and teardown branch. No schema or protocol
+  change is warranted.
+- Extend the existing browser proof to measure born angular offsets; count and
+  speed alone are no longer an acceptable Frost/Cone visual receipt.
+
+### Validation contract
+
+- Focused Water kernel: base and underpowered emissions hit the 15-degree
+  envelope; all 12 Cone rows pin amplitude, phase recurrence, and representative
+  float32 direction words; radial jitter remains within the independent
+  10-unit/45-degree bounds.
+- Spell integration: every Cone row continues to pin count/speed and now also
+  pins each born direction against its cached width; interleaved casters retain
+  the common world phase.
+- Hail: a successful per-child allocation inherits the corrected Frost unit
+  direction without changing RNG order.
+- Browser: the real Boneyard base cohort stays within `+/-15` degrees and max
+  Cone reaches the `+/-90` degree envelope while retaining ten speed-10
+  children, Normal/Over rendering, clean diagnostics, release, and expiry.
+- The exact candidate must pass focused tests and
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the isolated Mac worktree.
+
+### Implementation validation receipt
+
+- Implementation: `primary-spell-water.ts` now receives the authoritative
+  cached width, reproduces the degree-space phase/amplitude and float32
+  direction-helper stores, and keeps radial jitter on its independent
+  45-degree/10-unit lane. `primary-spells.ts` passes the cached width at birth;
+  existing replicated direction, Hail inheritance, renderer, collision,
+  protocol, save, and teardown owners remain unchanged.
+- Regression coverage: `primary-spell-water.test.ts` first failed at the exact
+  reported seam (`1.000000053` degrees instead of `15/90`), then passed all 19
+  Water contracts. The rebased focused system run passed `141/141`, covering
+  every Cone width, Normal/Over and underpowered construction, Hail inheritance,
+  spell integration, contact, and Chill branches.
+- Candidate identity: pre-receipt Website validation base
+  `6d71222742ef6a28d30d2be2b06fcf8bf9064028`; focused pre-receipt commit
+  `6de9084ac36133acbf1618e2058fe8cb55d502a0`. The detached Mac worktree at
+  `/Users/jarrett/codex-acceptance/frost-jet-vfx-math-20260828-root-r2/`
+  contained the same five-file patch; every changed-file SHA-256 matched the
+  local candidate before validation.
+- Complete Mac gate: macOS `26.6.2` arm64 passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`, including backend build and
+  integration, formatting, lint/import boundaries, generated-content checks,
+  all frontend and desktop suites, type checks, production frontend/game-host
+  builds, bundle budget, and media policy. The 17,013-line stdout SHA-256 was
+  `47ec5f0ffc0b33070d4dd198886e4d14a2b4a4ef1291aae73287b3227862fe77`.
+- Production browser environment: Google Chrome `151.0.7922.174`, production
+  frontend, isolated Boneyard host. The journey returned `status: ok` with
+  empty page errors, failed responses, and wire errors; stdout SHA-256
+  `a936e6c82d35189e6ffdb937219701bca83d75a2714503eced60d10d785623e5`.
+- Base Frost proof: birth IDs `3,4`, variants `0,1`, speeds `4,4`; measured
+  offsets `-14.999561,-10.139015` degrees and maximum absolute offset
+  `14.999561`. The matched rendered frame retained 26 live primary actors.
+- Cone rank-11 proof: birth IDs `179..188`, variants `0..9`, ten speed-`10`
+  children; measured offsets include `-90.000002` and `+89.231985` degrees.
+  The matched rendered frame retained 130 live primary actors.
+- Chill proof remained exact: Arrow accumulation reached
+  `0.9920001029968262`; replicated/rendered SpinAway used record `2` with
+  initial alpha `5.7998046875`, then retired from host and wire ownership.
+- Production screenshots: base Frost SHA-256
+  `cf42a7ff327a9176a86564fdb56766dec895bbee0ee3e63b18fe617a525b4453`;
+  Cone rank 11 SHA-256
+  `115fdca392535f7e08743d6e8ebe21953255f8177b12d1484c00354a9174c0f6`;
+  SpinAway SHA-256
+  `f767cc7eb48e9164dcfb8f10492fd0d4731a1ee658461b3e6a63e622330098f5`.
+- Unknowns and browser constraints: none. Publication and deployment were not
+  requested and remain separate from this validated local candidate. After
+  this receipt joins the candidate and any final non-overlapping rebase, the
+  exact final tree repeats the complete gate; those non-recursive identities
+  belong in the task completion receipt.

@@ -1177,7 +1177,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   let baseline = null
   await page.mouse.down({ button: 'left' })
   try {
-    baseline = await waitForWaterCohort(page, playerId, 2, 4)
+    baseline = await waitForWaterCohort(page, playerId, 2, 4, 15)
     await page.waitForTimeout(120)
     baseline = {
       ...baseline,
@@ -1322,7 +1322,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   await page.mouse.down({ button: 'left' })
   let cone
   try {
-    cone = await waitForWaterCohort(page, playerId, 10, 10)
+    cone = await waitForWaterCohort(page, playerId, 10, 10, 90)
     await page.waitForTimeout(120)
     cone = {
       ...cone,
@@ -1482,7 +1482,13 @@ function stagedStaffTargetDirection(state, playerId, targetId) {
   }
 }
 
-async function waitForWaterCohort(page, playerId, expectedCount, expectedSpeed) {
+async function waitForWaterCohort(
+  page,
+  playerId,
+  expectedCount,
+  expectedSpeed,
+  expectedAmplitudeDegrees,
+) {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
     const state = host.state()
@@ -1498,6 +1504,19 @@ async function waitForWaterCohort(page, playerId, expectedCount, expectedSpeed) 
       if (cohort.length !== expectedCount) continue
       cohort.sort((left, right) => left.variant - right.variant)
       if (!cohort.every(({ speed }) => speed === expectedSpeed)) continue
+      const aimDirection = getPlayerCharacter(state, playerId).primaryCast.aimDirection
+      const aimHeadingDegrees = directionHeadingDegrees(aimDirection)
+      const angularOffsetsDegrees = cohort.map(({ direction }) => signedHeadingDeltaDegrees(
+        aimHeadingDegrees,
+        directionHeadingDegrees(direction),
+      ))
+      const maximumAbsoluteAngularOffsetDegrees = Math.max(
+        ...angularOffsetsDegrees.map(Math.abs),
+      )
+      assert.ok(angularOffsetsDegrees.every((offset) => (
+        Math.abs(offset) <= expectedAmplitudeDegrees + 0.01
+      )))
+      if (maximumAbsoluteAngularOffsetDegrees < expectedAmplitudeDegrees - 0.1) continue
       const frame = await boneyardFrame(page)
       if (!frame.primarySpellKinds.includes('water')) continue
       assert.ok(frame.primarySpellCount >= expectedCount)
@@ -1506,7 +1525,10 @@ async function waitForWaterCohort(page, playerId, expectedCount, expectedSpeed) 
         Array.from({ length: expectedCount }, (_, index) => index),
       )
       return {
+        aimHeadingDegrees,
+        angularOffsetsDegrees,
         ids: cohort.map(({ id }) => id),
+        maximumAbsoluteAngularOffsetDegrees,
         maximumVariant: cohort.at(-1).variant,
         renderedPrimarySpellCount: frame.primarySpellCount,
         speeds: cohort.map(({ speed }) => speed),
@@ -1516,6 +1538,14 @@ async function waitForWaterCohort(page, playerId, expectedCount, expectedSpeed) 
     await page.waitForTimeout(1)
   }
   throw new Error(`Water cohort ${expectedCount}@${expectedSpeed} was not rendered`)
+}
+
+function directionHeadingDegrees(direction) {
+  return Math.atan2(direction.x, -direction.y) * 180 / Math.PI
+}
+
+function signedHeadingDeltaDegrees(from, to) {
+  return ((to - from + 540) % 360) - 180
 }
 
 async function proveStaffMeleeContact(page, navigation, smokeScreenshotPath) {

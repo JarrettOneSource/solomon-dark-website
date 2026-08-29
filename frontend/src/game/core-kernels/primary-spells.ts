@@ -2200,6 +2200,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 id,
                 particleCount,
                 speed,
+                widenHalfDegrees,
               )
               const obstruction = waterFrostJetObstruction(
                 born,

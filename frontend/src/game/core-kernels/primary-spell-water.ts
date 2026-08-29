@@ -7,10 +7,10 @@ export const WATER_FROST_MAX_PARTICLES_PER_TICK = 10
 export const WATER_FROST_MINIMUM_SPEED = 4
 export const WATER_FROST_MAXIMUM_SPEED = 10
 
-const DEGREES_TO_RADIANS = Math.fround(Math.PI) / 180
+const NATIVE_PI = Math.fround(Math.PI)
 const FROST_HEADING_MULTIPLIER = 65
-const FROST_CAST_SPEED = 1 * DEGREES_TO_RADIANS
-const FROST_JITTER_ANGLE = 45 * DEGREES_TO_RADIANS
+const FROST_BASE_AMPLITUDE_DEGREES = 15
+const FROST_JITTER_ANGLE_DEGREES = 45
 const FROST_JITTER_RADIUS = 10
 const FROST_SPEED = WATER_FROST_MINIMUM_SPEED
 const FROST_LIFETIME_BASE = 1.25
@@ -108,25 +108,34 @@ export function waterFrostJetEmission(
   id: number,
   particleCount: number,
   speed: number,
+  widenHalfDegrees: number,
 ): WaterFrostJetEmission {
-  const baseHeading = Math.atan2(baseDirection.x, -baseDirection.y)
+  const baseHeadingDegrees = Math.fround(
+    Math.atan2(baseDirection.x, -baseDirection.y) * 180 / Math.PI,
+  )
   const phaseStep = Math.fround(FROST_HEADING_MULTIPLIER / particleCount)
   let phase = Math.fround(tick)
   for (let index = 0; index < ordinal; index += 1) {
     phase = Math.fround(phase + phaseStep)
   }
-  const heading = baseHeading + Math.sin(
-    phase * FROST_HEADING_MULTIPLIER * DEGREES_TO_RADIANS,
-  ) * FROST_CAST_SPEED
-  const jitterHeading = baseHeading
-    + signedWaterFrostBoundedRandom(id, 2, FROST_JITTER_ANGLE)
+  const phaseDegrees = Math.fround(phase * FROST_HEADING_MULTIPLIER)
+  const phaseRadians = Math.fround(phaseDegrees * NATIVE_PI / 180)
+  const wave = Math.fround(Math.sin(phaseRadians))
+  const amplitudeDegrees = Math.fround(
+    widenHalfDegrees + FROST_BASE_AMPLITUDE_DEGREES,
+  )
+  const headingDegrees = Math.fround(baseHeadingDegrees + wave * amplitudeDegrees)
+  const jitterHeadingDegrees = Math.fround(
+    baseHeadingDegrees
+      + signedWaterFrostBoundedRandom(id, 2, FROST_JITTER_ANGLE_DEGREES),
+  )
   const jitterRadius = waterFrostBoundedRandom(id, 3, FROST_JITTER_RADIUS)
-  const jitter = unitForHeading(
-    jitterHeading,
+  const jitter = unitForHeadingDegrees(
+    jitterHeadingDegrees,
     jitterRadius,
   )
   return {
-    direction: float32Vector(unitForHeading(heading, 1)),
+    direction: unitForHeadingDegrees(headingDegrees, 1),
     jitterRadius,
     origin: {
       x: Math.fround(emitter.x + Math.fround(jitter.x)),
@@ -410,10 +419,13 @@ function waterFrostHash(id: number, salt: number): number {
   return (value ^ (value >>> 16)) >>> 0
 }
 
-function unitForHeading(heading: number, magnitude: number): Vector2 {
+function unitForHeadingDegrees(headingDegrees: number, magnitude: number): Vector2 {
+  const radians = Math.fround(NATIVE_PI * Math.fround(headingDegrees) / 180)
+  const x = Math.fround(Math.sin(radians))
+  const y = Math.fround(-Math.cos(radians))
   return {
-    x: Math.sin(heading) * magnitude,
-    y: -Math.cos(heading) * magnitude,
+    x: Math.fround(x * magnitude),
+    y: Math.fround(y * magnitude),
   }
 }
 
