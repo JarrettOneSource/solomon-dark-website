@@ -463,3 +463,160 @@ the behavioral oracle.
   `f4104902b7e28c36146f779419446e8dcec75818a7597944f05720bfd9713ee3`.
   Production acceptance requires this same member beneath the deployed
   `GameHost/` directory.
+
+## 2026-08-29 — authoritative Boneyard dynamic-population storage reopening
+
+### Reported smell and parity question
+
+- The collision broadphase removed the production path-query bottleneck, but
+  the surviving fixed-tick implementation still reconstructs rich immutable
+  objects for every enemy, Maggot, projectile, projectile effect, and death
+  effect. A recovered late-wave run can retain hundreds of those independent
+  actors at 100 Hz.
+- The long-term parity question is representation-only: can one deep
+  Boneyard-owned runtime keep native registration order, actor identity,
+  fixed-tick clocks, RNG order, family state, collision submission, semantic
+  events, replication, saves, pause, and teardown byte-equivalent while hot
+  scalar populations move from per-tick object graphs to stable dense slots?
+- This reopens the complete dynamic-population owner rather than optimizing one
+  visible effect class. A lane may be converted first for differential proof,
+  but no selectable legacy runtime, load threshold, or second authority model
+  may remain after the cutover.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Prior production and Mac evidence | production run and exact-tree receipts in the preceding 2026-08-28 section | The accepted collision change preserved the same wave transitions, 89 final enemies, 93 peak live enemies, and 583 peak dynamic actors through 62,500 ticks. | high-live/high |
+| Current deterministic replay | core files byte-identical between diagnostic `acad2d24` and current base `41ec3c8f`; Node 22.17.0; generated Arena 0; Ether/Body plus Water/Mind; invulnerable damage filter; 62,500 ticks | The current web model reproduced final stable hash `eef40ec5890ea1d4`, order-sensitive JSON hash `d4d73675c62f90eb:746170`, 87 peak live enemies, and 363 peak dynamic actors. Linux diagnostic timing was 0.980 ms mean / 5.419 ms p99 overall and 1.670 ms mean / 6.492 ms p99 for 70-plus live enemies. This is a design baseline, not a Mac completion receipt. | high-diagnostic |
+| Current named CPU profile | same replay with only the final hash sampled; Node `--cpu-prof --cpu-prof-interval=500` | GC owned 8.53% self time. `stepDeathEffect` was the hottest named gameplay function at 7.78%; `finishGameSimulationTick` was 5.50%; actor motion, world stepping, spell combat, navigation, and collision followed. `stepBoneyardEnemyStore` dispatch itself was only 0.84%, falsifying a parent-enemy-only rewrite. | high-diagnostic |
+| Current source audit | `boneyard-enemy-store.ts`, `boneyard-world.ts`, `boneyard-spell-combat.ts`, `native-secondary-world.ts`, projections, protocol, saves, Lua, and ML observers | Hot updates allocate arrays, maps, vectors, top-level records, nested family brains, and transient records. The same raw arrays are also read directly by combat, collision, projection, persistence, and developer consumers, so a single-lane private pool would be a shallow symptom patch. | high |
+| Existing native evidence | this file plus ledger entries 081, 091, 234, and 242 | Native behavior requires independent registered actors, exact fixed-tick clocks, stable submission/retirement order, host-owned RNG, parent-independent transient lifetime, and complete pause/reset teardown. Native pointer layout is incidental implementation debt; semantic order and state are not. | high |
+
+The first complete six-lane dense candidate was a required falsifier. It kept
+the exact final stable hash `8c0e14e77c940eb6`, order-sensitive JSON hash
+`568aade0bc2dbd60:746248`, 54 wave transitions, all four population sums, 87
+peak live enemies, and 363 peak dynamic actors, but changed Mac timing from
+0.460 to 0.717 ms mean and 2.867 to 4.161 ms p99. The 70-plus crowd window
+changed from 0.767/3.061 ms mean/p99 to 1.659/8.054 ms. Its profile proved why:
+heterogeneous parents and live projectiles were encoded into numeric buffers,
+then immediately materialized for their existing family/combat kernels. Two
+materializers owned about 3.9% self time and dense-store construction another
+1.5%, while GC remained 8.58%. Direct dense death-effect stepping fell from
+7.78% to 0.80% self time, so the homogeneous transient lane is validated while
+the convert-then-materialize parent layout is rejected.
+
+The follow-up immutable hybrid was also a required falsifier. Direct readers
+removed the 100-Hz presentation leak and flat births removed rich birth
+records, but copying every retained transient's 19/24 scalars into a new
+immutable buffer each tick still regressed an uncontended adjacent Mac control.
+The remaining native/web owner is therefore the live Arena runtime, matching
+the already accepted mutable Hub Student/runtime scratch ownership: dense
+transient lanes mutate only during their authoritative fixed-tick epoch, while
+snapshot/save/test projections are detached immutable records. Source audit
+found no previous/current consumer of raw death/projectile-effect arrays;
+ordered semantic events own births/retirements and every historical external
+consumer already crosses a projection seam.
+
+The mutable-dense follow-up then falsified the remaining ownership assumption.
+The current functional store is intentionally persistent: one authoritative
+state may be reused to evaluate two legal damage branches. Sharing a mutable
+transient runtime caused one Mage-shield branch's particles and fade clocks to
+contaminate the other, failing three lifecycle regressions. Copy-on-write or a
+version journal would restore correctness by reintroducing the same retained
+population copy plus substantially more interface complexity. No typed-array
+Boneyard population candidate therefore satisfies both performance and the
+existing branching contract. The accepted representation remains ordered
+persistent object arrays; the measured hot transient step is deepened and
+optimized within that representation.
+
+The 710-plus-ms diagnostic maximum remains the known synchronous headless
+NavMesh construction. Production builds the same meshes in the packaged
+loading worker and therefore this storage reopening neither attributes that
+spike to populations nor reopens navigation preparation.
+
+### System boundary and membership inventory
+
+Native/web system: the Arena-owned authoritative dynamic actor populations
+from construction through fixed-tick update, collision/target submission,
+semantic output, projection, persistence, pause, retirement, and world
+teardown. The internal representation is below behavior and is never a protocol
+or save-schema member.
+
+| Member / branch | Disposition | Required invariant |
+| --- | --- | --- |
+| Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon, and Coffin parents | `verified-already-at-parity`; representation reopened | Stable actor ID, native registration/cell order, all family brain fields, target/path state, action/RNG clocks, lighting, hit/death state, and terminal output remain exact. |
+| Coffin-owned Maggots | `verified-already-at-parity`; representation reopened | Parent identity, construction order, emergence/crawl/bite/death lanes, admission limits, route state, and parent teardown remain exact. |
+| Arrow, Firebolt, GuidedMissile, DemonBomb, and PoisonPool | `verified-already-at-parity`; representation reopened | Birth order, payload, motion, contact, light, parent identity, and retirement clocks remain exact. |
+| All ten reachable projectile-effect kinds | `verified-already-at-parity`; representation reopened | Descriptor-specific alpha bounds, authored art/blend/light data, parent-independent lifetime, stable IDs, keyframe/delta reconstruction, and teardown remain exact. |
+| Bouncer, fade, move-fade, banish, sprite-array, fire-array, and unbind death actors | `verified-already-at-parity`; representation reopened | Complete family recipe fan-out, host RNG order including every Bouncer ground draw, art/transforms/physics/blend/shadow, stable IDs, delayed birth, retirement, and late-join state remain exact. |
+| Mage lightning pulses | `verified-already-at-parity`; representation reopened | Direct-effect source/midpoint/endpoint/contact attachment, owner identity, seed, tick, and bounded retention remain exact. |
+| Per-tick semantic events, damage, knockback, rewards, spawns, and retirements | `verified-already-at-parity` | They remain ordered ephemeral outputs, not retained dense entities or inferred snapshot deltas. |
+| Player/Student/enemy dynamic collision bodies | `verified-already-at-parity` | Hostile populations project the same ordered closed `ActorPhysicsBody` rows into the existing broadphase and solver; no collision cadence or response changes. |
+| Primary, Staff, secondary, Lua, and ML target queries | `verified-already-at-parity`; consumer seam reopened | Every consumer observes the same active membership, stable order, IDs, positions, radii, flags, health, configs, and family state without constructing a second authority list. |
+| Entity replication and complete snapshots | `verified-already-at-parity` | Descriptor/sample contents, quantization, baseline recovery, event order, 20 Hz cadence, and protocol version remain unchanged. |
+| Browser saves and restored runs | `verified-already-at-parity` | Disk projection remains the existing plain schema and restores the same persistent object populations. No schema bump or typed-array serialization is allowed. |
+| Tutorial hostile hold, level-up/pause, Game Over, new run, and teardown | `verified-already-at-parity` | Held clocks and RNG remain unchanged; reset destroys every population; no slot, descriptor, transient, or scratch buffer crosses a run. |
+| GoodImp, player primary/secondary actors, and loot | `out-of-system` for storage ownership | They retain their existing separate owners; shared collision/target projections do not merge their state into the hostile runtime. |
+| Story-only enemy/projectile families listed in entry 091 | `out-of-system` | The Website factory still cannot construct them. Future reachability must add an explicit family row before exposure. |
+
+No member is blocked by the browser platform. The representation decision is a
+V8 performance and persistent-state contract, not a browser capability gap.
+
+### Recovered behavioral and representation contract
+
+- Population array order is native registration order. Removal retains every
+  survivor's relative order; later births append with new semantic IDs and
+  registration ordinals.
+- Each returned store owns persistent object arrays. A later tick or sibling
+  damage branch cannot mutate an earlier store, actor, vector, descriptor, or
+  transient record.
+- Family-specific brains and transient kinds remain closed discriminated rows
+  behind one deep hostile/transient interface. No consumer owns a second list.
+- Hot stepping may reuse an unchanged nested position/velocity reference, but
+  it must create a new top-level row for every authoritative scalar change.
+  TypeScript readonly ownership replaces redundant `Object.freeze` calls on
+  tick-local rows; save/snapshot projections remain detached where required.
+- The complete death/projectile transient system is one module. It owns every
+  kind's age, motion, opacity, frame, RNG callback, strict retirement edge, and
+  parent-independent lifetime rather than scattering one-off optimizations by
+  family.
+- All narrow-phase equations, target/path decisions, action clocks, movement
+  cadence, RNG calls, creation order, painter order, event order, and strict
+  retirement edges remain byte-equivalent. No culling, coalescing, lower-rate
+  crowd lane, alternate tick rate, or population threshold is allowed.
+
+### Web implementation consequence
+
+- Keep `BoneyardEnemyStore` as the persistent authoritative owner; do not add a
+  general ECS package, typed mirror, compatibility path, or mutable sidecar.
+- Extract one deep transient-step module for all seven death-effect and ten
+  projectile-effect kinds. Its interface accepts the ordered prior arrays,
+  tick, exact RNG callback, and native programs, then returns the next ordered
+  arrays.
+- Remove redundant hot-path freezes, avoid cloning stationary vectors, and
+  keep one closed explicit record construction per changed effect. Do not alter
+  births, RNG order, alpha/frame equations, IDs, or retirement.
+- Add a repository-owned two-player late-wave benchmark and phase/profile
+  reporting. Benchmarks are diagnostics; acceptance still requires the exact
+  Mac candidate and the real browser journey below.
+
+### Validation contract
+
+- Red/green transient contracts cover source immutability, sibling store
+  branching, every kind, delayed births, ground-contact RNG order, all strict
+  retirement edges, stationary-vector reuse, and exact JSON projection.
+- Differentially run the prior and deepened transient step over all ten
+  projectile-effect and seven death-effect kinds, including catch-up tick
+  ranges. Compare ordered states and RNG after every tick.
+- Re-run the exact 62,500-tick two-player replay on the Mac. Acceptance requires
+  identical wave transitions, final and checkpoint hashes, peak membership,
+  dynamic sums, and JSON projection. Mean, p99, GC self time, and the named hot
+  lanes must materially improve without regressing the non-population remainder.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact clean Mac
+  candidate.
+- Built Mac Chrome must enter a real Random Boneyard and observe opening
+  parents, movement/steering, an authored projectile plus transient, a terminal
+  death-effect handoff, snapshot continuity, save/restore, and clean new-run
+  teardown. Page, console, failed-response, wire, save, and host-error arrays
+  must be empty.

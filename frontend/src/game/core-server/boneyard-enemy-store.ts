@@ -88,6 +88,7 @@ import {
   NATIVE_BADGUY_NAVIGATION_CLEARANCE,
   NATIVE_DEMON_NAVIGATION_CLEARANCE,
 } from './boneyard-enemy-navigation.ts'
+import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 import {
   createNativeLightProviderOrder,
   type NativeLightManagerLane,
@@ -1796,8 +1797,15 @@ export function stepBoneyardEnemyStore(
     steeringRngState: source.steeringRngState,
     spawnedActorIds: [],
   }
-  stepDeathEffects(work, source.deathEffects, context.tick)
-  stepProjectileEffects(work, source.projectileEffects, context.tick)
+  const transients = stepBoneyardTransientEffects(
+    source.deathEffects,
+    source.projectileEffects,
+    context.tick,
+    () => drawUnit(work),
+    NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS,
+  )
+  work.deathEffects = transients.deathEffects
+  work.projectileEffects = transients.projectileEffects
   for (const actor of source.actors) {
     const timedActor = stepDamagePresentationTimers(
       actor,
@@ -5120,103 +5128,6 @@ function spawnProjectileEffect(
   work.nextProjectileEffectId += 1
 }
 
-function stepProjectileEffects(
-  work: WorkingStep,
-  sourceEffects: readonly BoneyardEnemyProjectileEffect[],
-  tick: number,
-): void {
-  for (const source of sourceEffects) {
-    const elapsedTicks = tick - source.lastStepTick
-    if (elapsedTicks <= 0) {
-      work.projectileEffects.push(source)
-      continue
-    }
-    const ageTicks = source.ageTicks + elapsedTicks
-    if (ageTicks >= source.lifetimeTicks) continue
-    let alpha = source.alpha - source.alphaLossPerTick * elapsedTicks
-    let entry = source.entry
-    const rotationDeg = source.rotationDeg + source.angularVelocityDeg * elapsedTicks
-    switch (source.kind) {
-      case 'arrow-tumble': {
-        let tumbleAlpha = source.alpha
-        let tumblePosition = { ...source.position }
-        let tumbleRotation = source.rotationDeg
-        let tumbleVelocity = { ...source.velocity }
-        for (let step = 0; step < elapsedTicks; step += 1) {
-          tumbleAlpha = Math.fround(tumbleAlpha - Math.fround(0.1))
-          tumblePosition = {
-            x: Math.fround(tumblePosition.x + tumbleVelocity.x),
-            y: Math.fround(tumblePosition.y + tumbleVelocity.y),
-          }
-          tumbleRotation = Math.fround(tumbleRotation + source.angularVelocityDeg)
-          tumbleVelocity = {
-            x: Math.fround(tumbleVelocity.x * Math.fround(0.98)),
-            y: Math.fround(tumbleVelocity.y * Math.fround(0.98)),
-          }
-        }
-        if (tumbleAlpha <= 0) break
-        work.projectileEffects.push(Object.freeze({
-          ...source,
-          ageTicks,
-          alpha: tumbleAlpha,
-          lastStepTick: tick,
-          position: Object.freeze(tumblePosition),
-          rotationDeg: tumbleRotation,
-          velocity: Object.freeze(tumbleVelocity),
-        }))
-        continue
-      }
-      case 'firebolt-trail':
-        break
-      case 'fire-burst-glow':
-        break
-      case 'fire-burst-frame':
-        entry = 251 + Math.min(3, Math.floor(ageTicks / 4))
-        break
-      case 'guided-impact-aura-one':
-      case 'guided-impact-aura-two':
-      case 'guided-impact-main':
-        break
-      case 'demon-fire':
-        entry = 46 + positiveModulo(
-          Math.floor(source.phaseOriginTicks + ageTicks * 0.25),
-          32,
-        )
-        break
-      case 'poison-pool-fade-inner': {
-        const fade = Math.max(
-          0,
-          1 - ageTicks * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolAlphaLossPerTick,
-        )
-        alpha = (Math.sin(
-          (source.phaseOriginTicks + ageTicks) * Math.PI / 180,
-        ) * 0.25 + 0.75) * fade
-        break
-      }
-      case 'poison-pool-fade-outer': {
-        alpha = 0.5 * Math.max(
-          0,
-          1 - ageTicks * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolAlphaLossPerTick,
-        )
-        break
-      }
-    }
-    if (alpha <= 0) continue
-    work.projectileEffects.push(Object.freeze({
-      ...source,
-      ageTicks,
-      alpha,
-      entry,
-      lastStepTick: tick,
-      position: Object.freeze({
-        x: source.position.x + source.velocity.x * elapsedTicks,
-        y: source.position.y + source.velocity.y * elapsedTicks,
-      }),
-      rotationDeg,
-    }))
-  }
-}
-
 function spawnProjectileTrails(
   work: WorkingStep,
   projectile: BoneyardEnemyProjectile,
@@ -6008,114 +5919,6 @@ function stepDyingActor(
   const eventId = emitEvent(work, tick, 'enemy-retired', source.id)
   work.retired.push(Object.freeze({ actorId: source.id, eventId }))
   return null
-}
-
-function stepDeathEffects(
-  work: WorkingStep,
-  source: readonly BoneyardEnemyDeathEffect[],
-  tick: number,
-): void {
-  for (const original of source) {
-    let effect: BoneyardEnemyDeathEffect | null = original
-    for (let stepTick = original.lastStepTick + 1; stepTick <= tick; stepTick += 1) {
-      const next = stepDeathEffect(work, effect, stepTick)
-      if (next === null) {
-        effect = null
-        break
-      }
-      effect = next
-    }
-    if (effect) work.deathEffects.push(effect)
-  }
-}
-
-function stepDeathEffect(
-  work: WorkingStep,
-  source: BoneyardEnemyDeathEffect,
-  tick: number,
-): BoneyardEnemyDeathEffect | null {
-  if (tick <= source.spawnTick) {
-    return { ...source, ageTicks: 0, lastStepTick: tick }
-  }
-  const ageTicks = Math.max(0, tick - source.spawnTick)
-  if (ageTicks >= source.lifetimeTicks) return null
-
-  if (source.kind === 'bouncer') {
-    if (source.height < 0 && tick % 3 === 0) {
-      return { ...source, ageTicks, lastStepTick: tick }
-    }
-    let position = {
-      x: source.position.x + source.velocity.x,
-      y: source.position.y + source.velocity.y,
-    }
-    let velocity = { ...source.velocity }
-    let height = source.height + source.verticalVelocity
-    let verticalVelocity = source.verticalVelocity + 0.4
-    let bounceVelocity = source.bounceVelocity
-    let angularVelocityDeg = source.angularVelocityDeg
-    let rotationDeg = source.rotationDeg + angularVelocityDeg
-    const opacityTimer = source.opacityTimer - source.alphaLossPerTick
-    if (height >= 0) {
-      height = 0
-      bounceVelocity *= 0.65
-      verticalVelocity = bounceVelocity
-      if (drawUnit(work) < 0.5) {
-        velocity = { x: velocity.x * 0.65, y: velocity.y * 0.65 }
-      }
-      if (verticalVelocity > -0.75) {
-        verticalVelocity = 0
-        angularVelocityDeg = 0
-        velocity = { x: 0, y: 0 }
-        position = { ...position }
-      }
-    }
-    if (opacityTimer <= 0) return null
-    return Object.freeze({
-      ...source,
-      ageTicks,
-      alpha: Math.min(1, opacityTimer),
-      angularVelocityDeg,
-      bounceVelocity,
-      height,
-      lastStepTick: tick,
-      opacityTimer,
-      position: Object.freeze(position),
-      rotationDeg,
-      verticalVelocity,
-      velocity: Object.freeze(velocity),
-    })
-  }
-
-  const opacityTimer = source.opacityTimer - source.alphaLossPerTick
-  if (opacityTimer <= 0) return null
-  const position = source.kind === 'move-fade'
-    || (source.kind === 'sprite-array'
-      && (source.velocity.x !== 0 || source.velocity.y !== 0))
-    ? {
-        x: source.position.x + source.velocity.x,
-        y: source.position.y + source.velocity.y,
-      }
-    : source.position
-  const frame = Math.min(
-    source.frameCount - 1,
-    Math.floor(ageTicks / source.frameTicks),
-  )
-  const entry = source.kind === 'sprite-array'
-    ? source.firstEntry + frame
-    : source.kind === 'fire-array'
-      ? 46 + positiveModulo(source.firstEntry - 46 + frame, 32)
-      : source.entry
-  return Object.freeze({
-    ...source,
-    ageTicks,
-    alpha: opacityTimer,
-    entry,
-    lastStepTick: tick,
-    opacityTimer,
-    position: Object.freeze({ ...position }),
-    rotationDeg: source.rotationDeg + source.angularVelocityDeg,
-    scale: source.kind === 'banish' ? source.scale * 1.025 : source.scale,
-  })
 }
 
 function spawnEnemyDeathEffects(

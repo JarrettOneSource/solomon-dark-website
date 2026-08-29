@@ -2045,3 +2045,30 @@ accepted primary cast advances the controller to stage 3 on the next 100-Hz
 tick; player and hostile movement then resume with no elapsed-time replay. This
 remains a solo Tutorial rule and adds no party-wide pause message or scheduler
 hold.
+
+## Persistent Boneyard populations and transient stepping
+
+`BoneyardEnemyStore` remains the sole persistent authoritative owner for parent
+enemies, Coffin-owned Maggots, live projectiles, projectile-owned transients,
+death-effect actors, and Mage-lightning pulses. Each returned store owns ordered
+object arrays; a later tick or sibling damage branch cannot mutate an earlier
+store or row. Stable semantic IDs and native registration order remain the
+interface.
+
+Measured all-dense and dense-transient prototypes were behaviorally exact but
+slower because V8 had to encode/materialize rows or copy 19/24 scalar fields per
+retained transient every 10 ms. A mutable dense prototype avoided copies but
+violated the required persistent branching contract. No general ECS package,
+typed mirror, mutable sidecar, population threshold, or alternate runtime ships.
+
+The complete projectile/death transient step is one deep in-process module. It
+accepts the ordered prior arrays, authoritative tick, exact RNG callback, and
+native programs, and returns the next ordered arrays for all seventeen kinds.
+It may reuse unchanged stationary position/velocity references and relies on
+the readonly internal contract instead of repeatedly freezing tick-local rows.
+It cannot alter birth order, RNG order, alpha/frame equations, parent identity,
+strict retirement, replication, save shape, pause, reset, or teardown.
+
+Snapshot/entity projection, save serialization, Web Lua/ML observation,
+diagnostics, and tests continue consuming the same rich records. Transport
+quantization and browser state never feed back into the 100 Hz simulation.
