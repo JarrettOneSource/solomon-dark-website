@@ -26,6 +26,18 @@ test('every stock Pixi application installs the shared native fixed-function sta
     source(`${rendererRoot}/game-webgl.ts`),
     /preserveBrowserCompositingAlpha: backgroundAlpha === 0/,
   )
+  const fixedFunctionPipeline = source(
+    `${rendererRoot}/native-fixed-function-render-pipeline.ts`,
+  )
+  const boneyardRenderer = source(`${rendererRoot}/boneyard-world-renderer.ts`)
+  assert.match(fixedFunctionPipeline, /class NativeFixedFunctionBatcher extends DefaultBatcher/)
+  assert.match(fixedFunctionPipeline, /executeNativeFixedFunctionMesh/)
+  assert.match(fixedFunctionPipeline, /textureAlpha \* vertexAlpha/)
+  assert.match(
+    boneyardRenderer,
+    /installNativeFixedFunctionRenderPipeline\(application\.renderer, \{[\s\S]*?installTextureAlphaShaders: false/,
+  )
+  assert.match(boneyardRenderer, /installNativeArenaRenderPipeline\(application\.renderer\)/)
 })
 
 test('stock pages and Website composites use distinct shared wrap sampling policies', () => {

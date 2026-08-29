@@ -597,7 +597,9 @@ export async function createBoneyardWorldRenderer(
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
     }
-    installNativeFixedFunctionRenderPipeline(application.renderer)
+    installNativeFixedFunctionRenderPipeline(application.renderer, {
+      installTextureAlphaShaders: false,
+    })
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)

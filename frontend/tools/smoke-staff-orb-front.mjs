@@ -13,6 +13,9 @@ import { startGameHost } from '../src/game/host/game-host.ts'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotRoot = process.env.SDR_HUB_COMBAT_SCREENSHOT_ROOT
   || join(tmpdir(), 'solomon-staff-orb-front')
+const hubOnly = process.env.SDR_STAFF_ORB_HUB_ONLY === '1'
+const staffElement = (process.env.SDR_STAFF_ORB_ELEMENT || 'fire').toLowerCase()
+const fixedPainterCounts = { air: 6, earth: 4, fire: 3, water: 4 }
 const credential = randomBytes(32).toString('base64url')
 
 await mkdir(screenshotRoot, { recursive: true })
@@ -45,12 +48,25 @@ try {
       SDR_GAME_SMOKE_URL: baseUrl,
       SDR_HUB_COMBAT_SCREENSHOT_ROOT: screenshotRoot,
     }),
-    unlockBoneyardCombat(host),
+    hubOnly ? Promise.resolve() : unlockBoneyardCombat(host),
   ])
   assert.equal(receipt.status, 'ok')
-  assert.equal(receipt.hubBefore.orbSpriteCount, 3)
-  assert.equal(receipt.hubBackFacingOrb.orbSpriteCount, 6)
-  assert.equal(receipt.boneyardSecondary.orbSpriteCount, 3)
+  assert.equal(receipt.hubOnly, hubOnly)
+  assert.equal(receipt.staffElement, staffElement)
+  const fixedPainterCount = fixedPainterCounts[staffElement]
+  if (fixedPainterCount === undefined) {
+    assert.ok(receipt.hubBefore.orbSpriteCount > 4)
+    assert.ok(receipt.hubBackFacingOrb.orbSpriteCount > receipt.hubBefore.orbSpriteCount)
+    if (!hubOnly) assert.ok(receipt.boneyardSecondary.orbSpriteCount > 4)
+  } else {
+    assert.equal(receipt.hubBefore.orbSpriteCount, fixedPainterCount)
+    assert.equal(receipt.hubBackFacingOrb.orbSpriteCount, fixedPainterCount * 2)
+    if (!hubOnly) assert.equal(receipt.boneyardSecondary.orbSpriteCount, fixedPainterCount)
+  }
+  if (hubOnly) {
+    assert.equal(receipt.boneyardCast, null)
+    assert.equal(receipt.boneyardSecondary, null)
+  }
   process.stdout.write(`${JSON.stringify({ receipt, screenshotRoot, status: 'ok' })}\n`)
 } finally {
   await Promise.all([host.close(), frontend.close()])

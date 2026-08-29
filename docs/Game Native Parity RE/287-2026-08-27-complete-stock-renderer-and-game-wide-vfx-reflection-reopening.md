@@ -463,3 +463,230 @@ modes, adjusted blend modes, exact source pages, and per-source policy.
   edges or neighboring-frame contamination. The screenshots and raw browser
   logs are task evidence and must be deleted after their measurements/hashes
   are recorded.
+
+## 2026-08-29 — Secondary report: straight-alpha draw opacity is squared
+
+### Reported smell and parity question
+
+- Reported web behavior: the recently updated Staff orbs look dull, flat, and
+  wrong; Fire's additive yellow center is replaced by a muted green-yellow
+  disk when the required half-alpha ordinary flame pass is present.
+- Stock behavior to recover: retain exact straight-alpha retail page sampling,
+  per-draw texture-factor RGBA, and selector `0/1/2` blending while applying
+  texture alpha and draw alpha exactly once.
+- Reproduction inputs/scenes: all five element painters in Create, Hub, Hub
+  Inventory, Memorial portraits, and Boneyard; ordinary/additive/multiply
+  draws; PMA Website composites; exact NPM native pages; batchable sprites and
+  meshes; opaque and browser-overlay targets.
+- Falsifiers: changing Staff scale, painter colors, painter order, source page
+  alpha mode, wrap/filter state, or native blend factors; applying the fix to
+  Fire only; changing the already-correct Arena shader; or accepting factor
+  tests without a rendered fractional-alpha pixel.
+
+This reopens the complete-renderer entry again. The original renderer closure
+verified blend-state factors but did not compose them with Pixi's generated
+batch shader. The derived-page correction then fixed page representation and
+edge sampling, but intentionally kept exact native pages NPM. Neither pass
+tested a straight-alpha texture with a fractional per-draw alpha through the
+complete shader-plus-blend equation.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail executable | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`, re-hashed 2026-08-29 | Sealed native renderer and painter oracle. | high |
+| Fire instructions | Ghidra 12.0.3 read-only replica, `FUN_005360C0`, raw `0x005361F9..0x0053636E`; wrapper revision `08bfba9ef367f7b863848030d0a289dc31e33192` | Fire submits core, enables additive for BadGuys `255..266`, disables additive, sets texture-factor alpha `0.5`, submits the same frame normally, then restores white/alpha one. | high |
+| Native constants | `0x007DE870 = 0.5`; `0x007DE918/0x00785860` form the `0.15 + 3.5` core scale terms; read-only `dump_floats_at.py` | The dimming normal pass is required native data, not a web opacity guess. | high |
+| Pixi 8.19 shader/blend | pinned `pixi.js/dist/pixi.mjs`: `colorBitGl`, `fragmentGlTemplate`, `getAdjustedBlendModeBlend`, `mapWebGLBlendModesToPixi` | Batch vertex RGB is multiplied by vertex alpha before `finalColor = outColor * vColor`; an NPM normal/add draw then uses `SRC_ALPHA`, multiplying fractional draw alpha into source RGB a second time. | high |
+| Current Website | `origin/main` `c3d10afca30b8d360bff69c6b79db1324535f3cc`; `native-fixed-function-render-pipeline.ts`, `native-element-vfx-view.ts`, exact BadGuys record cutover | Source policy, element records, painter programs, and blend maps are correct independently; the non-Arena default batch/mesh shader is the violating owner. | high |
+| Mac WebGL2 differential | Chrome `151.0.7922.174`, 1600x900 Hub, 24 Fire frames on current main versus parent `559d2a06736047d7dcc0cc29ac58e00ee6249fb2` of NPM cutover `eb7772d07017e77bebdb7bca50104f7c95e35fda` | Current maximum green was exactly `191` in all 24 frames with zero stock-bright yellow pixels; the parent reached `254..255` and stock-bright pixels in all 24. Removing only the half-alpha normal flame restored brightness; removing additive left the expected faint normal/core result. | high |
+| Clean stock corroboration | retained native Hub frame `Mod Loader/screenshots/hub_follow_20260417_194344_t00.png` | The stock Fire center reaches green `254` and visually agrees with the pre-cutover/additive-preserved result. | medium |
+
+The browser evidence is a rendered-pixel observation. The native order and
+constants are instruction/data evidence. The equation that identifies the
+double application is a direct consequence of the pinned Pixi shader and GL
+blend program, not an inferred color adjustment. Raw task captures remain
+disposable after their measurements are recorded.
+
+### System boundary and membership inventory
+
+Native system: **texture sample plus draw-color modulation through fixed-
+function selector blending** — from retail/PMA page representation and per-draw
+RGBA, through batched or mesh fragment output, selector `0/1/2`, render-target
+alpha, context restoration, and renderer teardown in every `/game` WebGL app.
+
+| Member family | Native/web source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Exact retail NPM pages and registered subtextures | native page loaders `0x00420140/0x00440F70`; current BadGuys/Clothes/College/Demon membership | `verified-already-at-parity` for bytes, wrap, filter, UV, and alpha representation | existing page/source/edge contracts remain unchanged |
+| Website PMA composite pages | Loader, Title, Create, Hub, player, and Solomon composite policies | `verified-already-at-parity` | corrected shader must reproduce the existing PMA output exactly |
+| Non-Arena batched Sprite/quad Mesh with NPM texture | Pixi default batch pipe in `game-webgl` and Hub | `exact-ported` by this correction | alpha-mode-aware batch shader and rendered fractional-alpha pixel |
+| Non-Arena standalone or unbatchable Mesh with NPM texture | Pixi mesh adaptor in `game-webgl` and Hub primary/secondary families | `exact-ported` by this correction | alpha-mode-selected mesh shader and source-equation tests |
+| Non-Arena PMA batch/mesh draw | Website composites and Texture.WHITE/UI geometry | `verified-already-at-parity` through the corrected shared shader | PMA path emits premultiplied RGB and one final alpha |
+| Arena NPM/PMA batch and mesh draw | `NativeArenaBatcher` and alpha-selected mesh shaders | `verified-already-at-parity`; existing shader already separates texture and vertex alpha | Arena contracts plus unchanged Boneyard visual receipts |
+| Arena NPM ParticleContainer | native weather particle shader | `verified-already-at-parity`; already emits raw RGB with combined alpha | existing weather pixel probe |
+| Selector 0 normal | `SRCALPHA/INVSRCALPHA`, no separate alpha | `exact-ported` with raw NPM or premultiplied PMA fragment representation | equation and pixel tests |
+| Selector 1 additive | `SRCALPHA/ONE`, no separate alpha | `exact-ported` with raw NPM or premultiplied PMA fragment representation | equation and pixel tests |
+| Selector 2 multiply | `ZERO/SRCCOLOR`, no separate alpha | `verified-already-at-parity`; NPM fragment RGB remains raw and independent of draw alpha | College Statue and Region multiply probes |
+| Transparent browser-overlay targets | final CSS-composited zero-alpha applications | `exact-ported` with existing Porter-Duff alpha exception and corrected fragment RGB | overlay alpha/pixel regression |
+| Ether painter | `0x00535A30`, records `110..112`, fractional normal/additive cores, sparks, rays | `exact-ported` through shared shader | plan membership plus browser capture |
+| Fire painter | `0x005360C0`, records `110`, `255..266`, additive then ordinary `0.5` | `exact-ported` through shared shader | 24-frame pixel threshold and stock frame comparison |
+| Air painter | `0x00536380`, records `110`, `1836..1839`, fractional additive layers | `exact-ported` through shared shader | plan membership plus browser capture |
+| Water painter | `0x005370D0`, records `110/112`, `271..282`, fractional additive/normal rays | `exact-ported` through shared shader | plan membership plus browser capture |
+| Earth painter | `0x005374C0`, records `110`, `238..245`, fractional additive ring/cores | `exact-ported` through shared shader | plan membership plus browser capture |
+| Selected-primary and all Weld Staff programs | dispatcher `0x00539B80` and the 15-row Weld switch already owned by entry 237 | `exact-ported` through the same five painter members | selected-primary swap and Weld contract coverage |
+| Create, Hub, Hub Inventory, Memorial, Boneyard Staff contexts | `NativeElementVfxView` callers and retained-view teardown | `exact-ported`; Boneyard remains on its Arena shader | context/source diagnostics, lifecycle tests, browser journeys |
+| Other NPM normal/add VFX consumers | complete class/atlas families already inventoried above: primary, secondary, enemy, loot, status, weather, Hub ambient, text | `exact-ported` by the shared non-Arena shader or `verified-already-at-parity` in Arena | canonical suites and representative pixel journeys per family |
+| DOM/CSS and mod-provided image composition | browser compositor or no retail member | `out-of-system` for this WebGL fixed-function correction | existing inactive-stock/mod policy |
+
+There is no browser-platform blocker. WebGL2 exposes the required shader output
+representation and all three native blend equations.
+
+### Native ownership thread and recovered behavioral contract
+
+- Native Graphics owns a straight-alpha texture sample, per-draw texture-factor
+  RGBA, selector state, and target. Texture alpha and draw alpha combine once
+  into source alpha; draw alpha does not separately attenuate RGB before the
+  selector applies source alpha.
+- For NPM input with sampled RGB `C`, sampled alpha `T`, tint RGB `V`, and draw
+  alpha `A`, the fragment must emit `(C*V, T*A)`. Normal/add blending then
+  contributes `C*V*T*A`; multiply consumes the raw `C*V` RGB.
+- For PMA input the fragment must first recover the represented straight color,
+  apply tint, combine alpha, then emit premultiplied RGB. Normal/add PMA factors
+  consume that output exactly once.
+- Pixi's default color bit instead emits vertex RGB already multiplied by `A`.
+  Pairing that with NPM `SRC_ALPHA = T*A` produces `C*V*T*A^2`. At Fire's
+  required `A=0.5`, the source term is one quarter instead of one half and the
+  final ordinary pass visibly suppresses the prior additive flame.
+- Arena's saturation shader already divides `vColor.rgb` by `vColor.a`, handles
+  PMA/NPM texture samples separately, and recombines one final alpha. The shared
+  correction must not wrap or replace that owner.
+- Context restoration must recreate both the exact blend maps and the corrected
+  batch/mesh shader owners. Renderer destruction owns their teardown. No
+  simulation, protocol, networking, input, audio, or save state changes.
+
+### Nearby-system findings
+
+- The 2026-08-28 exact-record/page cutover is correct and must remain: reverting
+  the element textures to PMA derived strips would hide the scalar-alpha defect
+  while reintroducing false edge sampling and losing authored hidden RGB.
+- The checked-in Staff journey does not dismiss the stock Tutorial offer, so a
+  fresh profile can time out before reaching the renderer. This is an
+  acceptance-harness defect and must be corrected alongside pixel assertions.
+
+### Confidence and open questions
+
+- Confirmed: native Fire order and `0.5`; Pixi shader and adjusted blend maps;
+  first bad commit; 24-frame differential; all five fractional-alpha painter
+  membership; current source policies; Arena's already-correct alpha shader.
+- Inferred: none used to select the renderer correction.
+- Unknown: none material. Performance and exact browser pixel thresholds are
+  validation measurements rather than missing native facts.
+
+### Web implementation consequence
+
+- Extend the shared fixed-function module with an alpha-mode-aware non-Arena
+  batch shader and mesh shaders. NPM fragments emit raw RGB plus combined alpha;
+  PMA fragments emit premultiplied RGB plus the same combined alpha.
+- Keep existing source policies, exact record textures, wrap/filter state,
+  selector factors, painter programs, scales, geometry, and ordering unchanged.
+- Make Boneyard explicitly delegate batch/mesh fragment ownership to the Arena
+  renderer so the two custom pipelines cannot replace one another.
+- Do not add Staff-specific colors, opacity transforms, square roots,
+  duplicated textures, or compatibility fallbacks.
+- Repair the focused Staff journey's Tutorial dismissal and add a rendered
+  Fire pixel receipt; retain its structural `3/6/3` submission assertions.
+
+### Validation contract
+
+- Focused unit tests must pin the NPM and PMA fragment equations, normal/add/
+  multiply results, shader ownership, context restoration, and Boneyard Arena
+  delegation. Tests must fail under the former `A^2` equation.
+- Existing plan tests must continue to enumerate every fractional-alpha member
+  of Ether, Fire, Air, Water, Earth and every selected-primary/Weld dispatch.
+- Mac Chrome must run the focused Staff journey from a fresh profile, produce
+  no page/console/response errors, preserve `3/6/3` Fire submission counts, and
+  show stock-bright Fire pixels across the animation rather than a `191` cap.
+- Browser captures must cover all five elements in Create/Hub and one Boneyard
+  Staff pulse, plus representative PMA composite, NPM additive, and NPM
+  multiply consumers. No painter-specific compensation is acceptable.
+- Run the complete Mac `./scripts/validate.sh` gate on the exact candidate and
+  repeat it after any publication rebase.
+
+### Implementation validation receipt
+
+- Implementation: `native-fixed-function-render-pipeline.ts` now installs a
+  per-texture-alpha-mode batch shader and matching PMA/NPM mesh shaders for
+  non-Arena WebGL applications. NPM fragments retain raw sampled/tinted RGB
+  and publish `textureAlpha*drawAlpha`; PMA fragments publish the same color
+  premultiplied by that one final alpha. Existing native blend maps, source
+  policies, wrap/filter state, and context-restoration replay are unchanged.
+  Boneyard explicitly disables this owner before installing its already-exact
+  Arena batch/mesh pipeline.
+- Regression coverage: the fixed-function tests reproduce the old squared-
+  alpha source term, prove the corrected NPM contribution equals PMA normal/
+  additive output, and retain raw RGB for multiply. Renderer contracts require
+  the new batch and mesh owners plus explicit Arena delegation. The Staff smoke
+  now dismisses the Tutorial offer, supports all five elements, captures Create
+  and Hub, retains Fire's full Boneyard journey, and samples twelve rendered
+  Fire frames instead of accepting sprite counts alone.
+- Red/green pixel receipt on Mac Chrome `151.0.7922.174`: unchanged current main
+  failed with `maximumGreenMinimum=191` and zero bright-yellow pixels across all
+  twelve Hub Fire samples. The candidate passed with
+  `maximumGreenMinimum=254` and at least `208` bright-yellow pixels per sample,
+  while preserving idle/overlap/pose-9 counts `3/6/3`, weapon scale one, and
+  empty page/console/failed-response arrays.
+- Five-element browser membership: Create and Hub passed with exact NPM source
+  diagnostics for Ether, Fire, Air, Water, and Earth. Ordinary/overlap counts
+  were Ether `26/54` in its variable-particle sample, Fire `3/6`, Air `6/12`,
+  Water `4/8`, and Earth `4/8`. Fire retained the required Boneyard pulse and
+  pose-9 proof; an additional Ether Boneyard run retained its variable painter
+  (`26` idle, `22` pose 9). All completed journeys had empty error arrays.
+- Selected-primary/mesh receipt: the existing Skill Book Chrome journey passed
+  Hub Ether/Fire/restored-Ether counts `19/3/25` and Boneyard Ether/Fire counts
+  `30/3`, including its NPM Skills-page Weld meshes, selectors, hotbar drags,
+  audio edges, and empty page/console/network arrays.
+- Visual inspection: all five Create/Hub effects retain their distinct stock
+  painter stacks; Fire again has the bright yellow additive center, Ether keeps
+  separated sparks, and Air/Water/Earth retain their authored cyan/green
+  layers. Fire Hub and Boneyard screenshots hash to
+  `5a99ca188c4a3db603cee382171177ad9779cef7a485bebaf9151e07be465cb1`
+  and `a530f524f255b2b42c75ead4aa215f87babd94548683037610c5379ab3a52a68`;
+  the complete element evidence manifest hashes to
+  `7bd17b6f07a9a93c8f0e69b7f8f0210e0a4cca5087ce099bdffadf03c2e9e7bb`.
+  The retained stock Hub capture hashes to
+  `0d636fbe09c21d6a8457b67d8e635a43c39c4f95ef3566f15dcf69b83f056a1`.
+- Pre-publication validation at base
+  `c3d10afca30b8d360bff69c6b79db1324535f3cc`: supported Mac lint passed;
+  the complete canonical gate passed backend build, `29/29` Website/backend
+  contracts, lint and architecture boundaries, every frontend group including
+  the central renderer/Boneyard set `1696/1696`, desktop tests, production
+  frontend/game-host builds, media policy, and CSP. Production game entry
+  `Game-W9ZCuyD3.js` measured `263161` raw / `79877` gzip bytes. Publication
+  still requires rebase onto the moving `origin/main` and a repeat of the exact
+  candidate gate/browser receipt.
+- Final rebased candidate: the focused commit was replayed without conflict on
+  `origin/main` base `d01cb94f2290ec33d4c3ed0cb459f358631c31ac`, preserving the intervening Frost
+  Jet and Solomon Dig painter corrections. Local/Mac SHA-256 manifests matched
+  for all eight changed files before validation.
+- Final exact-candidate browser proof repeated all five Create/Hub painters on
+  Chrome `151.0.7922.174` with NPM native-page diagnostics and empty error
+  arrays. Ether sampled `24/44`, Air `6/12`, Water `4/8`, Earth `4/8`, and Fire
+  `3/6`; Fire's full Boneyard journey retained pose-8/pose-9 counts `3/3`,
+  weapon scale one, and live primary/secondary actors. Its twelve-frame Hub
+  probe again held `maximumGreenMinimum=254` and at least `208` bright-yellow
+  pixels per frame. Final Fire Hub/Boneyard screenshots hash to
+  `3340b4d21155564f6c15ee9f76ce5bbeed8fd8d77bb3e5fdb99470af6f348acd`
+  and `0cefc2f8a81f1c76bbaa69eb95243042e5ab0710b977489e28c7c3b04982bd22`;
+  the final five-element evidence manifest hashes to
+  `a4c6a9cbf5091d0a8d506aac9612160ddba3a0864b0a19bbfcee16542f4b0c56`.
+- The rebased Skill Book journey also passed with Hub Ether/Fire/restored-Ether
+  counts `17/3/24` and Boneyard Ether/Fire `26/3`, proving the selected-primary
+  and NPM mesh paths with empty page/console/network arrays.
+- The complete final Mac gate passed backend build, `29/29` Website/backend
+  contracts, strict lint and architecture boundaries, every frontend group
+  including the central renderer/Boneyard set `1700/1700`, desktop tests,
+  production frontend/game-host builds, bundle budget, media policy, and CSP.
+  Production entry `Game-D8972pWC.js` measured `263161` raw / `79872` gzip
+  bytes. The complete gate log SHA-256 is
+  `e33a3bdb8010b8fc68d35ebcbb495a37537f492388a64ab83f1fd141d411f204`.
+  Publication remains a separate fast-forward and remote-identity receipt.

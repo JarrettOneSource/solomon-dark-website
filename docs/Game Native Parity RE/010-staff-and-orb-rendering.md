@@ -151,3 +151,23 @@ The 2026-08-28 Create element-ray cadence correction is the fresh raw-
 instruction authority for the corrected Ether `8` multiplier and the Create
 caller's free-running 100 Hz `App+0x28` phase. Water remains `11`; Staff and
 actor-owned callers retain their established 100 Hz/actor phase sources.
+
+## 2026-08-29 — Straight-alpha Staff painter correction
+
+The five painter programs, Staff submission counts, selected-primary dispatch,
+socket geometry, and `1+10*phase` caller scale remain authoritative. The
+reported dull/flat Staff orbs instead reopen the shared renderer: every painter
+contains at least one draw whose texture is an exact straight-alpha BadGuys
+record and whose texture-factor alpha is fractional. Pixi 8.19's default batch
+shader premultiplies that per-draw alpha into RGB, then its NPM blend mode
+multiplies the RGB by source alpha again. A native contribution proportional to
+`textureAlpha * drawAlpha` therefore became proportional to
+`textureAlpha * drawAlpha^2` outside the Arena renderer.
+
+Fresh clean-image Ghidra evidence for Fire painter `0x005360C0` confirms the
+required order is core, additive BadGuys `255..266`, then the same record under
+ordinary blend with texture-factor alpha `0.5` from `0x007DE870`; the normal
+pass must not be removed or retuned. The shared renderer correction and full
+context membership are owned by entry 287. Staff acceptance must cover Ether,
+Fire, Air, Water, Earth, selected-primary changes, Hub, Create, Hub Inventory,
+Memorial portraits, and Boneyard without changing painter data or Staff scale.

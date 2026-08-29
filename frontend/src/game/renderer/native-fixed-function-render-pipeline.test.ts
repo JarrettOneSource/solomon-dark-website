@@ -3,10 +3,12 @@ import test from 'node:test'
 
 import {
   NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
+  NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE,
   NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS,
   NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
   installNativeFixedFunctionRenderPipeline,
   nativeFixedFunctionAdditiveBlendFactors,
+  nativeFixedFunctionFragmentRgba,
   nativeFixedFunctionMultiplyBlendFactors,
   nativeFixedFunctionMultiplyRgb,
   nativeFixedFunctionNormalBlendFactors,
@@ -57,6 +59,39 @@ test('maps all three D3D selectors to exact RGB and non-separate alpha factors',
   )
 })
 
+test('straight texture and draw alpha combine once for NPM and PMA fragments', () => {
+  const straightTexture = [1, 0.75, 0.25, 0.5] as const
+  const premultipliedTexture = [0.5, 0.375, 0.125, 0.5] as const
+  const premultipliedVertex = [0.5, 0.25, 0.125, 0.5] as const
+  const npm = nativeFixedFunctionFragmentRgba(
+    straightTexture,
+    premultipliedVertex,
+    false,
+  )
+  const pma = nativeFixedFunctionFragmentRgba(
+    premultipliedTexture,
+    premultipliedVertex,
+    true,
+  )
+  const npmSourceContribution = npm.slice(0, 3).map(channel => channel * npm[3])
+
+  assert.deepEqual(npm, [1, 0.375, 0.0625, 0.25])
+  assert.deepEqual(pma, [0.25, 0.09375, 0.015625, 0.25])
+  assert.deepEqual(npmSourceContribution, pma.slice(0, 3))
+  assert.deepEqual(
+    nativeFixedFunctionMultiplyRgb([0.8, 0.5, 0.25], npm.slice(0, 3) as [number, number, number]),
+    [0.8, 0.1875, 0.015625],
+  )
+
+  const legacyNpmRgb = straightTexture.slice(0, 3).map((channel, index) => (
+    channel * premultipliedVertex[index]! * straightTexture[3] * premultipliedVertex[3]
+  ))
+  assert.deepEqual(legacyNpmRgb, [0.125, 0.046875, 0.0078125])
+  assert.notDeepEqual(legacyNpmRgb, npmSourceContribution)
+  assert.match(NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE, /vColor\.rgb \/ vertexAlpha/)
+  assert.match(NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE, /textureAlpha \* vertexAlpha/)
+})
+
 test('installs exact opaque-surface blend maps once and restores them after context loss', () => {
   const original = [9, 9, 9, 9]
   const listeners: Array<{ contextChange(gl: typeof gl): void }> = []
@@ -79,14 +114,18 @@ test('installs exact opaque-surface blend maps once and restores them after cont
       },
     },
   }
-  installNativeFixedFunctionRenderPipeline(renderer as never)
+  installNativeFixedFunctionRenderPipeline(renderer as never, {
+    installTextureAlphaShaders: false,
+  })
   assert.deepEqual(renderer.state.blendModesMap.multiply, [0, 0x0300, 0, 0x0302])
   assert.deepEqual(renderer.state.blendModesMap.normal, [1, 0x0303, 0x0302, 0x0303])
   assert.deepEqual(renderer.state.blendModesMap['normal-npm'], [0x0302, 0x0303, 0x0302, 0x0303])
   assert.deepEqual(renderer.state.blendModesMap.add, [1, 1, 0x0302, 1])
   assert.deepEqual(renderer.state.blendModesMap['add-npm'], [0x0302, 1, 0x0302, 1])
   const installed = renderer.state.blendModesMap.multiply
-  installNativeFixedFunctionRenderPipeline(renderer as never)
+  installNativeFixedFunctionRenderPipeline(renderer as never, {
+    installTextureAlphaShaders: false,
+  })
   assert.equal(renderer.state.blendModesMap.multiply, installed)
   assert.equal(listeners.length, 1)
 
@@ -119,6 +158,7 @@ test('transparent browser overlay surfaces preserve Porter-Duff alpha maps', () 
     },
   }
   installNativeFixedFunctionRenderPipeline(renderer as never, {
+    installTextureAlphaShaders: false,
     preserveBrowserCompositingAlpha: true,
   })
   assert.equal(renderer.state.blendModesMap.normal, originalNormal)

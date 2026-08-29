@@ -11,6 +11,12 @@ if (!endpointUrl || !endpointCredential) {
 
 const publicEndpointUrl = 'wss://smoke.invalid/game-hub'
 const screenshotRoot = process.env.SDR_HUB_COMBAT_SCREENSHOT_ROOT || '/tmp'
+const hubOnly = process.env.SDR_STAFF_ORB_HUB_ONLY === '1'
+const staffElement = (process.env.SDR_STAFF_ORB_ELEMENT || 'fire').toLowerCase()
+const fixedPainterCounts = { air: 6, earth: 4, fire: 3, water: 4 }
+if (!['air', 'earth', 'ether', 'fire', 'water'].includes(staffElement)) {
+  throw new Error(`Unsupported Staff-orb element ${staffElement}`)
+}
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -63,6 +69,11 @@ try {
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
@@ -70,9 +81,15 @@ try {
     .waitFor({ timeout: 30_000 })
   assert.equal(admissionRequests.length, 0)
 
-  await page.getByRole('button', { name: /fire/i }).click()
+  await page.getByRole('button', { name: new RegExp(staffElement, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]')
     .waitFor({ timeout: 15_000 })
+  const createNativeTextureAlpha = await page.locator('.create-menu-canvas')
+    .getAttribute('data-native-texture-alpha')
+  assert.equal(createNativeTextureAlpha, 'no-premultiply-alpha')
+  await page.screenshot({
+    path: `${screenshotRoot}/solomon-create-staff-orb-${staffElement}.png`,
+  })
   assert.equal(admissionRequests.length, 0)
   const admissionResponse = page.waitForResponse(response => (
     new URL(response.url()).pathname === '/api/game/hub'
@@ -94,7 +111,36 @@ try {
   const hubCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   const hubBefore = await frameReceipt(hubCanvas, 'hub')
   assert.equal(hubBefore.playerHeadingIndex, 12)
-  assert.equal(hubBefore.orbSpriteCount, 3)
+  const fixedPainterCount = fixedPainterCounts[staffElement]
+  if (fixedPainterCount === undefined) {
+    assert.ok(hubBefore.orbSpriteCount > 4)
+  } else {
+    assert.equal(hubBefore.orbSpriteCount, fixedPainterCount)
+  }
+  await page.screenshot({
+    path: evidencePath('solomon-hub-staff-orb-idle.png'),
+  })
+  let hubFirePixels = null
+  if (staffElement === 'fire') {
+    const samples = []
+    for (let sample = 0; sample < 12; sample += 1) {
+      samples.push(await staffOrbPixelReceipt(page, hubCanvas))
+      await page.waitForTimeout(50)
+    }
+    hubFirePixels = {
+      brightYellowPixelCountMinimum: Math.min(
+        ...samples.map(({ brightYellowPixelCount }) => brightYellowPixelCount),
+      ),
+      maximumGreenMinimum: Math.min(...samples.map(({ maximumGreen }) => maximumGreen)),
+      probe: samples[0],
+      samples: samples.length,
+    }
+    assert.ok(hubFirePixels.maximumGreenMinimum >= 245, JSON.stringify(hubFirePixels))
+    assert.ok(
+      hubFirePixels.brightYellowPixelCountMinimum > 0,
+      JSON.stringify(hubFirePixels),
+    )
+  }
   await page.keyboard.down('d')
   await page.waitForTimeout(350)
   await page.keyboard.up('d')
@@ -103,8 +149,13 @@ try {
   ))
   const hubBackFacingOrb = await frameReceipt(hubCanvas, 'hub')
   assert.equal(hubBackFacingOrb.playerHeadingIndex, 6)
-  assert.equal(hubBackFacingOrb.orbSpriteCount, 6)
-  await page.screenshot({ path: `${screenshotRoot}/solomon-hub-staff-orb-front.png` })
+  if (fixedPainterCount === undefined) {
+    assert.ok(hubBackFacingOrb.orbSpriteCount > hubBefore.orbSpriteCount)
+    assert.equal(hubBackFacingOrb.orbSpriteCount % 2, 0)
+  } else {
+    assert.equal(hubBackFacingOrb.orbSpriteCount, fixedPainterCount * 2)
+  }
+  await page.screenshot({ path: evidencePath('solomon-hub-staff-orb-front.png') })
   const hubManaBefore = await localMana(page)
   const disabledSecondarySlots = await page.locator(
     '.hub-hud-skill-quickbar[data-mode="hub"] .hub-hud-quickbar-slot:disabled',
@@ -140,54 +191,64 @@ try {
   const hubAfter = await frameReceipt(hubCanvas, 'hub')
   await page.screenshot({ path: `${screenshotRoot}/solomon-hub-noncombat-final.png` })
 
-  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
-  const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
-  await boneyardScene.waitFor({ timeout: 90_000 })
-  await page.locator('.match-loading-screen[data-flow="boneyard"]')
-    .waitFor({ state: 'detached', timeout: 30_000 })
-  const boneyardCanvas = page.locator(
-    '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
-  )
-  const boneyardBounds = await boneyardCanvas.boundingBox()
-  assert.ok(boneyardBounds)
-  const boneyardSampleStart = await page.evaluate(() => window.__sdrHubCombatSamples.length)
-  await page.mouse.move(
-    boneyardBounds.x + boneyardBounds.width * 0.7,
-    boneyardBounds.y + boneyardBounds.height * 0.4,
-  )
-  await page.mouse.down({ button: 'left' })
-  await page.waitForTimeout(300)
-  await page.mouse.up({ button: 'left' })
-  const castSampleHandle = await page.waitForFunction(start => (
-    window.__sdrHubCombatSamples.slice(start).find(sample => (
-      sample.scene === 'boneyard'
-      && sample.playerAttachmentPose === 8
-      && sample.playerElementEffectScale > 1
-    )) ?? null
-  ), boneyardSampleStart, { timeout: 10_000 })
-  const boneyardCast = await castSampleHandle.jsonValue()
-  await castSampleHandle.dispose()
-  assert.equal(boneyardCast.playerWeaponScale, 1)
-  assert.ok(boneyardCast.playerElementEffectScale > 1)
-  assert.ok(boneyardCast.primarySpellCount > 0)
-  await page.screenshot({ path: `${screenshotRoot}/solomon-boneyard-staff-scale-final.png` })
+  let boneyardCast = null
+  let boneyardSecondary = null
+  if (!hubOnly) {
+    await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+    const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+    await boneyardScene.waitFor({ timeout: 90_000 })
+    await page.locator('.match-loading-screen[data-flow="boneyard"]')
+      .waitFor({ state: 'detached', timeout: 30_000 })
+    const boneyardCanvas = page.locator(
+      '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
+    )
+    const boneyardBounds = await boneyardCanvas.boundingBox()
+    assert.ok(boneyardBounds)
+    const boneyardSampleStart = await page.evaluate(() => window.__sdrHubCombatSamples.length)
+    await page.mouse.move(
+      boneyardBounds.x + boneyardBounds.width * 0.7,
+      boneyardBounds.y + boneyardBounds.height * 0.4,
+    )
+    await page.mouse.down({ button: 'left' })
+    await page.waitForTimeout(300)
+    await page.mouse.up({ button: 'left' })
+    const castSampleHandle = await page.waitForFunction(start => (
+      window.__sdrHubCombatSamples.slice(start).find(sample => (
+        sample.scene === 'boneyard'
+        && sample.playerAttachmentPose === 8
+        && sample.playerElementEffectScale > 1
+      )) ?? null
+    ), boneyardSampleStart, { timeout: 10_000 })
+    boneyardCast = await castSampleHandle.jsonValue()
+    await castSampleHandle.dispose()
+    assert.equal(boneyardCast.playerWeaponScale, 1)
+    assert.ok(boneyardCast.playerElementEffectScale > 1)
+    assert.ok(boneyardCast.primarySpellCount > 0)
+    await page.screenshot({
+      path: evidencePath('solomon-boneyard-staff-scale-final.png'),
+    })
 
-  await page.waitForTimeout(500)
-  const secondarySampleStart = await page.evaluate(() => window.__sdrHubCombatSamples.length)
-  await page.mouse.down({ button: 'right' })
-  await page.waitForTimeout(250)
-  await page.mouse.up({ button: 'right' })
-  const secondarySampleHandle = await page.waitForFunction(start => (
-    window.__sdrHubCombatSamples.slice(start).find(sample => (
-      sample.scene === 'boneyard'
-      && sample.playerAttachmentPose === 9
-    )) ?? null
-  ), secondarySampleStart, { timeout: 10_000 })
-  const boneyardSecondary = await secondarySampleHandle.jsonValue()
-  await secondarySampleHandle.dispose()
-  assert.equal(boneyardSecondary.orbSpriteCount, 3)
-  assert.equal(boneyardSecondary.playerWeaponScale, 1)
-  assert.ok(boneyardSecondary.secondaryAbilityCount > 0)
+    await page.waitForTimeout(500)
+    const secondarySampleStart = await page.evaluate(() => window.__sdrHubCombatSamples.length)
+    await page.mouse.down({ button: 'right' })
+    await page.waitForTimeout(250)
+    await page.mouse.up({ button: 'right' })
+    const secondarySampleHandle = await page.waitForFunction(start => (
+      window.__sdrHubCombatSamples.slice(start).find(sample => (
+        sample.scene === 'boneyard'
+        && sample.playerAttachmentPose === 9
+      )) ?? null
+    ), secondarySampleStart, { timeout: 10_000 })
+    boneyardSecondary = await secondarySampleHandle.jsonValue()
+    await secondarySampleHandle.dispose()
+    if (fixedPainterCount === undefined) {
+      assert.ok(boneyardSecondary.orbSpriteCount > 4)
+    } else {
+      assert.equal(boneyardSecondary.orbSpriteCount, fixedPainterCount)
+    }
+    assert.equal(boneyardSecondary.playerWeaponScale, 1)
+    assert.ok(boneyardSecondary.secondaryAbilityCount > 0)
+  }
 
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
@@ -197,15 +258,19 @@ try {
     boneyardCast,
     boneyardSecondary,
     browserVersion: browser.version(),
+    createNativeTextureAlpha,
     consoleErrors,
     disabledSecondarySlots,
     failedResponses,
     hubAfter,
     hubBackFacingOrb,
     hubBefore,
+    hubFirePixels,
     hubManaBefore,
     hubSampleCount: hubSamples.length,
     pageErrors,
+    hubOnly,
+    staffElement,
     status: 'ok',
   }, null, 2)}\n`)
 } catch (error) {
@@ -224,6 +289,12 @@ try {
   await browser.close()
 }
 
+function evidencePath(filename) {
+  return `${screenshotRoot}/${staffElement === 'fire'
+    ? filename
+    : filename.replace(/\.png$/u, `-${staffElement}.png`)}`
+}
+
 async function frameReceipt(canvas, scene) {
   return canvas.evaluate((node, sceneName) => {
     const frame = sceneName === 'hub' ? node.__sdrHubFrame : node.__sdrBoneyardFrame
@@ -238,6 +309,56 @@ async function frameReceipt(canvas, scene) {
       tick: frame.tick,
     })
   }, scene)
+}
+
+async function staffOrbPixelReceipt(currentPage, canvas) {
+  const canvasBounds = await canvas.boundingBox()
+  assert.ok(canvasBounds)
+  const probe = await canvas.evaluate((node) => {
+    const frame = node.__sdrHubFrame
+    const player = frame.playerScreenPositions[frame.localPlayerId]
+    if (!player) throw new Error('Staff-orb pixel probe has no local player position')
+    const viewportWidth = Number(node.dataset.viewportWidth)
+    const viewportHeight = Number(node.dataset.viewportHeight)
+    return {
+      player,
+      viewport: { height: viewportHeight, width: viewportWidth },
+    }
+  })
+  const scaleX = canvasBounds.width / probe.viewport.width
+  const scaleY = canvasBounds.height / probe.viewport.height
+  const clip = {
+    height: Math.ceil(140 * scaleY),
+    width: Math.ceil(100 * scaleX),
+    x: canvasBounds.x + Math.max(0, (probe.player.x + 10) * scaleX),
+    y: canvasBounds.y + Math.max(0, (probe.player.y - 80) * scaleY),
+  }
+  const png = await currentPage.screenshot({ clip })
+  const pixelReceipt = await currentPage.evaluate(async (base64) => {
+    const response = await fetch(`data:image/png;base64,${base64}`)
+    const image = await createImageBitmap(await response.blob())
+    const copy = document.createElement('canvas')
+    copy.width = image.width
+    copy.height = image.height
+    const context = copy.getContext('2d', { willReadFrequently: true })
+    if (!context) throw new Error('Staff-orb screenshot probe has no 2D context')
+    context.drawImage(image, 0, 0)
+    image.close()
+    const pixels = context.getImageData(0, 0, copy.width, copy.height).data
+    let brightYellowPixelCount = 0
+    let maximumGreen = 0
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      const red = pixels[offset]
+      const green = pixels[offset + 1]
+      const blue = pixels[offset + 2]
+      if (red > 180 && green > 100 && blue < 140) {
+        maximumGreen = Math.max(maximumGreen, green)
+      }
+      if (red >= 245 && green >= 225 && blue < 140) brightYellowPixelCount += 1
+    }
+    return { brightYellowPixelCount, maximumGreen }
+  }, png.toString('base64'))
+  return { ...pixelReceipt, clip, ...probe }
 }
 
 async function localMana(currentPage) {
