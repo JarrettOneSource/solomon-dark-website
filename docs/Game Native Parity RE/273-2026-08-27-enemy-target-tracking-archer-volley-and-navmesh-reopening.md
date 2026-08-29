@@ -741,3 +741,45 @@ No member is blocked by the browser platform.
   tick advance, player/enemy motion, WebGL presentation, and clean page,
   console, failed-response, wire, host, and teardown arrays. Performance is
   reported separately from deterministic parity and may not waive any gate.
+
+### Final implementation and validation receipt
+
+- Runtime commit `29e50528befeb7a4f182fbf33f22fab02b39e7a7` is one focused
+  commit over current-main base
+  `7fbd6da48d282049f5727eddc41a7fcdf28e6007`. Rebase integration added
+  the current 28th death-effect field, `painterRegistration`, in exact
+  spawn-key order and corrected the older 27-key test fixture. The submitted
+  strong target-row cache was removed completely. Navigation reuses the
+  collision owner's sparse ordered grid; both collision and triangle indexes
+  retain oversized or unsafe finite boxes as bounded global fallback rows.
+- The complete Mac gate exited zero on the exact runtime candidate: all 28
+  backend contracts, lint and architecture checks, 1,747/1,747 Boneyard tests,
+  every other registered frontend/runtime/desktop suite, both production
+  builds, media policy, and bundle budget passed. The Game entry is 264,741
+  raw / 80,352 gzip bytes. Gate transcript SHA-256:
+  `e9acd3ce32feb4a92d1de39afa3dca5b21333db60b10e4d94409ba8992e9010a`.
+- Pristine base and candidate each ran 62,500 ticks with crowd threshold 70 in
+  generated Arenas 0/1/2 using seeds `1372610135`, `987654321`, and `42`.
+  Every pair retained all 125 checkpoint hashes, final stable and
+  order-sensitive JSON hashes, population sums, wave log, peak membership,
+  final tick, and geometry SHA-256. Final stable hashes were
+  `550975d233ce5053`, `b524f457e7512cff`, and `4e00abd5a5b60365`.
+  Mean tick cost changed `0.4983 -> 0.2171`, `0.6658 -> 0.3744`, and
+  `0.4346 -> 0.2046` ms (56.4%, 43.8%, and 52.9% lower; equal-Arena mean
+  50.2% lower). Arena-0 p99 changed `3.2018 -> 0.8540` ms; Arena-1 p99 was
+  noise-flat/slightly higher in this single pair (`7.1580 -> 7.3045`), so no
+  universal tail-latency claim is made.
+- Built production Mac Chrome completed two real deterministic-host journeys
+  with status `ok`. The opening journey crossed the Gate and Solomon sequence,
+  rendered WebGL, admitted eleven authored enemies, and observed all eleven
+  moving/steering with no outside-combat samples. Page, failed-response, and
+  wire error arrays were empty; receipt SHA-256:
+  `73781342f1b1adb791a4dc00951fd38c580d6b99187635884079348138be1680`.
+  The terminal journey killed a real Skeleton, retired its body, rendered 20
+  independent death effects, saved/rejoined, and restored 19 still-live
+  effects. Its page, failed-response, and wire error arrays were also empty;
+  receipt SHA-256:
+  `ff317bdaf7c5154efa3e4a5c0ba873697b882f1cfbf3201fab5bd38ba0bf6a91`.
+- No physical iOS device was attached, so this pass makes no fresh
+  physical-device claim. No protocol, snapshot, save schema, tick rate,
+  gameplay branch, renderer rule, or intentional browser difference changed.

@@ -122,3 +122,20 @@ general solver across blocked sweeps, rejected placements, player/enemy radii,
 coincident bodies, and crowded randomized worlds while proving source
 immutability. The complete fixed-tick replay must retain every checkpoint and
 order-sensitive JSON hash before publication.
+
+### Final validation receipt
+
+Runtime commit `29e50528befeb7a4f182fbf33f22fab02b39e7a7` is the focused
+candidate over current-main base
+`7fbd6da48d282049f5727eddc41a7fcdf28e6007`. The shared arithmetic
+owner now serves both entries. Focused coverage includes 120 randomized
+40-body differentials plus deterministic blocked-sweep, rejected-placement,
+coincident-center, exact-overlap, and just-inside-overlap cases; every source
+crowd remains unchanged.
+
+The three-Arena replay, complete Mac gate, and two built Chrome journeys are
+recorded in entry 273's final receipt. No physical iOS device was attached for
+this publication, so no fresh physical-device receipt is claimed. This change
+is server-side fixed-tick representation only; the built Mac Chrome journeys
+still prove the production WebGL client remained live against the exact host
+candidate.
