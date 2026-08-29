@@ -1,3 +1,8 @@
+import {
+  createMediaElementGain,
+  type MediaElementGain,
+} from '../lib/media-element-gain.ts'
+
 // Music and sound effects mute independently (the header's effects rail),
 // each persisted per device. Both start OFF: the site is the door to the
 // game, and the game owns its own audio. Only an explicit '0' (the rail
@@ -5,7 +10,13 @@
 const MUSIC_KEY = 'sdr:muted'
 const SFX_KEY = 'sdr:sfx-muted'
 
-const activeEffects = new Set<HTMLAudioElement>()
+export interface SiteMediaChannel {
+  readonly element: HTMLAudioElement
+  readonly output: MediaElementGain
+}
+
+const activeEffects = new Set<SiteMediaChannel>()
+let audioContext: AudioContext | null = null
 
 /** Music muted? (The jukebox handles its own fade/pause on toggle.) */
 export function isMuted(): boolean {
@@ -26,8 +37,9 @@ export function toggleSfxMuted(): boolean {
   localStorage.setItem(SFX_KEY, muted ? '1' : '0')
   if (muted) {
     for (const effect of activeEffects) {
-      effect.muted = true
-      effect.pause()
+      effect.element.muted = true
+      effect.element.pause()
+      effect.output.disconnect()
     }
     activeEffects.clear()
   }
@@ -37,17 +49,41 @@ export function toggleSfxMuted(): boolean {
 export function playEffect(src: string, volume: number) {
   if (isSfxMuted()) return
 
-  const effect = new Audio(src)
-  effect.volume = volume
+  const effect = createSiteMediaChannel(src)
+  effect.output.volume = volume
   activeEffects.add(effect)
+  unlockSiteAudio()
 
   const cleanup = () => {
-    effect.removeEventListener('ended', cleanup)
-    effect.removeEventListener('error', cleanup)
+    effect.element.removeEventListener('ended', cleanup)
+    effect.element.removeEventListener('error', cleanup)
     activeEffects.delete(effect)
+    effect.output.disconnect()
   }
 
-  effect.addEventListener('ended', cleanup)
-  effect.addEventListener('error', cleanup)
-  void effect.play().catch(cleanup)
+  effect.element.addEventListener('ended', cleanup)
+  effect.element.addEventListener('error', cleanup)
+  void effect.element.play().catch(cleanup)
+}
+
+export function createSiteMediaChannel(src: string): SiteMediaChannel {
+  const element = new Audio(src)
+  return {
+    element,
+    output: createMediaElementGain(siteAudioContext(), element),
+  }
+}
+
+export function unlockSiteAudio(): void {
+  const context = siteAudioContext()
+  if (context.state !== 'running' && context.state !== 'closed') {
+    void context.resume().catch(() => {})
+  }
+}
+
+function siteAudioContext(): AudioContext {
+  if (!audioContext || audioContext.state === 'closed') {
+    audioContext = new AudioContext({ latencyHint: 'interactive' })
+  }
+  return audioContext
 }

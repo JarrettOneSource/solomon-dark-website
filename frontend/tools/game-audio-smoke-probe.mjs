@@ -13,10 +13,12 @@ export function installGameAudioSmokeProbe({
   const mediaElements = []
   const gainDestinations = new WeakMap()
   const mediaChannels = new WeakMap()
+  const mediaOutputGains = new WeakMap()
   const nativeFetch = window.fetch
   const nativeDecode = BaseAudioContext.prototype.decodeAudioData
   const nativeCreateBufferSource = BaseAudioContext.prototype.createBufferSource
   const nativeCreateGain = BaseAudioContext.prototype.createGain
+  const nativeCreateMediaElementSource = AudioContext.prototype.createMediaElementSource
   const nativeMediaPause = HTMLMediaElement.prototype.pause
   const nativeMediaPlay = HTMLMediaElement.prototype.play
   let nextChannelId = 1
@@ -120,6 +122,15 @@ export function installGameAudioSmokeProbe({
     }
     return node
   }
+  AudioContext.prototype.createMediaElementSource = function (media) {
+    const node = nativeCreateMediaElementSource.call(this, media)
+    const nativeConnect = node.connect.bind(node)
+    node.connect = function (destination, ...args) {
+      if (destination instanceof GainNode) mediaOutputGains.set(media, destination)
+      return nativeConnect(destination, ...args)
+    }
+    return node
+  }
   HTMLMediaElement.prototype.pause = function () {
     events.push({
       at: performance.now(),
@@ -143,6 +154,7 @@ export function installGameAudioSmokeProbe({
       semanticFootstepTick: semanticFootstepTick(),
       src: this.currentSrc || this.src,
       type: 'play',
+      outputVolume: mediaOutputGains.get(this)?.gain.value ?? this.volume,
       volume: this.volume,
     }
     events.push(event)
@@ -176,6 +188,7 @@ export function installGameAudioSmokeProbe({
         currentTime: media.currentTime,
         loop: media.loop,
         muted: media.muted,
+        outputVolume: mediaOutputGains.get(media)?.gain.value ?? media.volume,
         paused: media.paused,
         src: media.currentSrc || media.src,
         volume: media.volume,

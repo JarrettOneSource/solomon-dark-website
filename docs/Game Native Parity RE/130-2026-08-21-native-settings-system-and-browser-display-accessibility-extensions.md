@@ -300,3 +300,34 @@ user must activate it again.
   footsteps, rainfall, Dig, and Teacher summon all retained their owners after
   the new master-gain seam. No push, deployment, or production restart was
   performed.
+
+## 2026-08-28 mobile effective-consumer reopening
+
+The owner report that `MUSIC VOL:` has no effect on mobile falsifies this
+entry's earlier effective-output claim. The input and storage owners are
+correct, but iOS does not apply `HTMLAudioElement.volume`; the prior acceptance
+stopped at the abstract channel property instead of measuring the platform
+sink. The full evidence, scene/crossfade/priming/mod/public-site membership,
+and correction contract are recorded in
+`019-native-audio-ownership-cues-and-clocks.md` under “2026-08-28 iPhone
+streamed-music gain reopening.”
+
+The renewed Settings membership is all five range controls (`SOUND VOL:`,
+`MUSIC VOL:`, Camera FOV, UI Scale, and Light Quality), their active and future
+consumers, the Performance toggles, root actions, scrolling, Back/Done, and the
+mobile fullscreen capability branch. Only Music and its streamed-audio
+siblings require an implementation change; the others are
+`verified-already-at-parity` only after a touch-driven Mac journey re-proves
+their live consumers. Automatic fullscreen re-entry remains the sole existing
+`blocked-by-platform` row and predicts the same user-activation difference
+documented above.
+
+The renewed journey is complete. At `896x414` with touch and an iPhone user
+agent, Sound, Music, FOV, UI Scale, and Light Quality each changed from a real
+touch before the final value was applied. The effective game music/sound gains
+were `0.40/0.65` with raw media fixed at one; Hub reported camera `0.96` and UI
+scale `1.5`; Boneyard reported camera `1.08`, light quality `0.06`, every tested
+Performance toggle Off, and zero complex-shadow records. Page, console, and
+failed-response arrays were empty. The desktop sibling journey and complete
+Mac validation gate also passed. The detailed output-graph and public-site
+audio receipt remains in entry 019; no physical-iPhone receipt is claimed.

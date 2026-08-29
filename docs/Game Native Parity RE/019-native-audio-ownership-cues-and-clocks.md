@@ -310,3 +310,124 @@ were observed. The browser receipt is reproducible with
 `npm run smoke:game-audio`. The separate game-runtime Chromium smoke also
 passed with authoritative player movement, all five walking poses, advancing
 robe and Teacher frames, and no page or console errors.
+
+## 2026-08-28 iPhone streamed-music gain reopening
+
+### Reported smell and process correction
+
+- Owner report: the `MUSIC VOL:` slider changes on mobile but has no audible
+  effect.
+- This reopens the audio system because the earlier Settings receipt proved the
+  stored scalar and the director's abstract channel value, but did not prove the
+  effective iPhone output sink. That skipped the platform branch in the
+  downstream-consumer sweep.
+- The parity question is therefore not one slider event. It is whether every
+  streamed-music gain producer reaches an output mechanism that iPhone Safari
+  can actually attenuate while retaining streamed residency, native scene
+  selection, transition clocks, and teardown.
+
+### Evidence and causal trace
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Reused retail audio evidence | retail `SolomonDark.exe` 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; `Music::Tick 0x00409610`, transition owner `0x00409CD0`, audio apply `0x005D8FC0 -> 0x00407340` | User music gain multiplies both active native music channels while the 100 Hz transition envelope continues independently. | high |
+| Current Website trace | Website `origin/main` `6220c5a7`; `GameSettingsDialog.tsx -> game-settings.ts -> MainMenuScene.tsx -> GameAudioDirector.setVolumes`; `game-audio-browser.ts` | Slider input and persistence reach the director. Sound uses a Web Audio master `GainNode`, but current/outgoing scene music, silent priming, and mod music all assign `HTMLAudioElement.volume`. | high |
+| Apple iOS platform contract | Apple, *Safari HTML5 Audio and Video Guide*, “iOS-Specific Considerations,” retrieved 2026-08-28, `https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/Using_HTML5_Audio_Video/Device-SpecificConsiderations/Device-SpecificConsiderations.html` | On iOS the media-element `volume` property is not settable and reads as `1`; a scalar can change in React while effective output remains full volume. | high |
+| Apple Web Audio path | Apple, *Playing Sounds with the Web Audio API*, retrieved 2026-08-28, `https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/Using_HTML5_Audio_Video/PlayingandSynthesizingSounds/PlayingandSynthesizingSounds.html` | Safari/iOS supports routing an existing media element through `createMediaElementSource()` and controlling a downstream `GainNode`. This retains streaming rather than decoding whole music tracks. | high |
+| Complete Website assignment census | `rg '\.volume\\s*=' frontend/src` at `6220c5a7` | The only production raw media-volume writers are game scene/mod music, the public-site jukebox fade, and public-site effects. No fourth production assignment family remains. | high |
+
+The proven causal chain is: touch input updates `musicVolumePercent`; the
+normalized scalar reaches `GameAudioDirector`; the director computes the right
+user gain and transition envelope; the browser adapter writes that result to a
+property iOS fixes at one. The fault is the final output adapter, not touch
+dispatch, persistence, React state, scene ownership, or the recovered native
+clock.
+
+### System boundary and complete membership
+
+System: every Website streamed `HTMLAudioElement` whose authored or live gain
+must work on iOS, plus all Settings siblings needed to falsify a broader mobile
+control failure. Resident game one-shots, loops, streams, and voices already
+use Web Audio buffers and remain a separate output lane.
+
+| Member | Disposition | Required result |
+| --- | --- | --- |
+| Title `solomondarktheme`, Create `selection`, Hub `academy`, Boneyard `prelude`, combat, and Game Over/death scene music | exact-ported | keep streamed media; route each element through a Web Audio gain; preserve scene choice, loop, current time, and native transition ticks |
+| Current/incoming and outgoing transition envelopes | exact-ported | both gains change live on iOS; no full-volume overlap or abrupt stop replaces the recovered crossfade |
+| Non-current music priming on the first permitted gesture | exact-ported | gain zero is effective before `play()`; no sibling song becomes audible while its reusable channel is armed |
+| User `MUSIC VOL:` over active, outgoing, future, and primed channels | exact-ported | `0..100%` changes effective output immediately without changing the envelope or restarting playback |
+| Web-mod `startAssetMusic` owners and authored gain | exact-ported | authored gain and user music gain multiply through the same effective output; stop/destroy disconnects task-owned media graphs |
+| `SOUND VOL:` over resident one-shots, keyed streams, and loops | verified-already-at-parity | existing Web Audio master gain changes live and independently; modal sound mute still restores the newest value |
+| Camera FOV, UI Scale, Light Quality range inputs | verified-already-at-parity | touch changes both displayed/stored values and the Hub/Boneyard renderer/HUD consumers |
+| Settings toggles/actions, scrolling, Back/Done, and mobile fullscreen capability branch | verified-already-at-parity | touch reaches the existing consumers; unsupported iPhone fullscreen remains honest install guidance, not a fake toggle |
+| Public-site jukebox start, fade-in/out, focus resume, mute, shuffle, and requested track | exact-ported as browser extension | the authored `0.09` gain and every fade use effective Web Audio gain; `/game` remains isolated from the site keys and lifecycle |
+| Public-site effects rail and all quiet UI/ambient one-shots | exact-ported as browser extension | every caller-supplied gain uses effective Web Audio gain; mute stops and disconnects every active effect |
+
+No member is `blocked-by-platform`: Web Audio media-element routing represents
+the required MP3 streaming and gain on Safari/iOS. The pre-existing fullscreen
+automatic-reentry platform limitation remains in the Settings ledger and is
+unrelated to audio.
+
+### Implementation and validation contract
+
+- Put the platform adaptation in one browser media-gain module. Do not add an
+  iPhone user-agent branch, duplicate slider callbacks, decode the long music
+  catalog into resident buffers, or change native transition timing.
+- The game browser adapter, site jukebox, and site effects must all consume that
+  module. Graph disconnection must be idempotent; a retained game music channel
+  must reconnect when reused after route teardown.
+- Focused tests must model iOS by keeping the underlying media element volume at
+  one while proving the routed gain follows zero, fractional, and full values;
+  they must cover disconnect/reconnect and the director's active/outgoing/mod
+  membership.
+- A Mac mobile-browser journey must touch every Settings range and the relevant
+  toggles, prove stored values and live Hub/Boneyard consumers, inspect the
+  effective music gain with raw media volume fixed at one, and report page,
+  console, and failed-response arrays. A public-site journey must prove the
+  jukebox and effects use routed gains under the same platform model.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the Mac mini. Physical-iPhone auditory proof remains separately labeled if
+  no device is attached; emulation is not upgraded into a device receipt.
+
+### Implementation and validation receipt
+
+- `media-element-gain.ts` is the one browser adaptation. It routes a streamed
+  media element through `MediaElementAudioSourceNode -> GainNode ->
+  AudioContext.destination`, clamps the effective gain, disconnects
+  idempotently, and reconnects on reuse. It never writes the media element's
+  platform volume.
+- `game-audio-browser.ts` wraps every retained scene channel and every mod music
+  channel in that output. `GameAudioDirector` preserves all recovered envelope
+  math and now disconnects mod channels on stop and retained channels on route
+  teardown. The site jukebox and effects rail use the same adapter through
+  their separate site-owned context; the `/game` and public-site preference
+  boundaries remain unchanged.
+- The focused red test first failed because the adapter was absent. The final
+  Mac run passed `47/47` audio tests, including an iOS model whose raw media
+  volume always reads one, zero/fractional/full effective gain,
+  disconnect/reconnect, every native crossfade/priming branch, and mod authored
+  gain plus cleanup.
+- On Apple arm64 macOS `26.6.2`, Chrome `151.0.7922.174`, a `896x414`, DPR 2,
+  touch-enabled iPhone-user-agent journey forced raw media volume to remain
+  `1`. Real touch moved all five ranges: Sound `100 -> 0`, Music `100 -> 0`,
+  FOV `100 -> 75`, UI Scale `100 -> 75`, and Light Quality `100 -> 24` before
+  setting the final test values. Effective game music was
+  `0.4000000059604645`, sound master `0.6499999761581421`, public-site music
+  `0.08932500332593918`, and its quiet effect `0.1599999964237213`, while every
+  corresponding raw media value stayed `1`.
+- The same journey proved Hub camera `0.96`, HUD scale `1.5`, Boneyard camera
+  `1.08`, light quality `0.05999999865889549`, Complex Lighting/Shadows/
+  Multiple Shadows Off, Zoom Effects Off, zero complex-shadow records, and
+  empty page, console, and failed-response arrays. The desktop sibling journey
+  passed the same Settings/Hub/Boneyard consumers with empty error arrays.
+- The exact byte-identical local/Mac candidate passed the complete supported
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate: backend Release build and
+  `28/28` contracts, lint/boundaries with only `17` pre-existing warnings,
+  generated-content checks, `1,686/1,686` broad game tests, `76/76` ML host
+  tests, the remaining focused frontend suites, `5/5` desktop tests,
+  production frontend/game-host builds, media policy, and the game bundle
+  budget (`262,692` raw / `79,676` gzip bytes).
+- No physical iPhone was attached to the Mac mini, so this is not labeled an
+  auditory device receipt. The platform cause is instruction-backed by Apple
+  and the fixed-volume browser model proves the corrected output graph; a later
+  physical listen is optional confirmation, not an undispositioned member.

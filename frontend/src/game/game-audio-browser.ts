@@ -1,7 +1,11 @@
 import { collectAssetSources } from './game-asset-readiness.ts'
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
-import { GameAudioDirector } from './game-audio-director.ts'
+import {
+  GameAudioDirector,
+  type GameMusicChannel,
+} from './game-audio-director.ts'
 import { createWebAudioPlayback } from './game-audio-web-playback.ts'
+import { createMediaElementGain } from '../lib/media-element-gain.ts'
 
 const GAME_BUFFERED_AUDIO_SOURCES = collectAssetSources({
   loops: GAME_AUDIO_SOURCES.loops,
@@ -18,13 +22,13 @@ const bufferedSources = new Set(GAME_BUFFERED_AUDIO_SOURCES)
 const musicSources = new Set(GAME_MUSIC_SOURCES)
 const bufferPromises = new Map<string, Promise<AudioBuffer>>()
 const buffers = new Map<string, AudioBuffer>()
-const musicPromises = new Map<string, Promise<HTMLAudioElement>>()
-const musicChannels = new Map<string, HTMLAudioElement>()
+const musicPromises = new Map<string, Promise<GameMusicChannel>>()
+const musicChannels = new Map<string, GameMusicChannel>()
 let audioContext: AudioContext | null = null
 
 export function loadGameAudioAsset(
   source: string,
-): Promise<AudioBuffer | HTMLAudioElement> {
+): Promise<AudioBuffer | GameMusicChannel> {
   if (bufferedSources.has(source)) return loadAudioBuffer(source)
   if (musicSources.has(source)) return loadMusicChannel(source)
   return Promise.reject(new Error(`unknown game audio asset: ${source}`))
@@ -39,7 +43,7 @@ export function createBrowserGameAudioDirector(): GameAudioDirector {
   return new GameAudioDirector(GAME_AUDIO_SOURCES, {
     createMusicChannel: (source) => {
       const channel = musicChannels.get(source)
-      return channel ?? new Audio(source)
+      return channel ?? createBrowserMusicChannel(context, new Audio(source))
     },
     playback: createWebAudioPlayback(context, buffers),
   })
@@ -65,11 +69,11 @@ function loadAudioBuffer(source: string): Promise<AudioBuffer> {
   return promise
 }
 
-function loadMusicChannel(source: string): Promise<HTMLAudioElement> {
+function loadMusicChannel(source: string): Promise<GameMusicChannel> {
   const cached = musicPromises.get(source)
   if (cached) return cached
 
-  const promise = new Promise<HTMLAudioElement>((resolve, reject) => {
+  const promise = new Promise<GameMusicChannel>((resolve, reject) => {
     const audio = new Audio(source)
     audio.preload = 'auto'
     const cleanup = () => {
@@ -78,8 +82,9 @@ function loadMusicChannel(source: string): Promise<HTMLAudioElement> {
     }
     const handleLoaded = () => {
       cleanup()
-      musicChannels.set(source, audio)
-      resolve(audio)
+      const channel = createBrowserMusicChannel(residentAudioContext(), audio)
+      musicChannels.set(source, channel)
+      resolve(channel)
     }
     const handleError = () => {
       cleanup()
@@ -91,6 +96,34 @@ function loadMusicChannel(source: string): Promise<HTMLAudioElement> {
   })
   musicPromises.set(source, promise)
   return promise
+}
+
+function createBrowserMusicChannel(
+  context: AudioContext,
+  media: HTMLAudioElement,
+): GameMusicChannel {
+  const output = createMediaElementGain(context, media)
+  return {
+    get currentTime() { return media.currentTime },
+    set currentTime(value) { media.currentTime = value },
+    disconnect: output.disconnect,
+    get loop() { return media.loop },
+    set loop(value) { media.loop = value },
+    get muted() { return media.muted },
+    set muted(value) { media.muted = value },
+    pause: () => media.pause(),
+    get paused() { return media.paused },
+    play: () => {
+      output.connect()
+      return media.play()
+    },
+    get preload() { return media.preload },
+    set preload(value) { media.preload = value },
+    get src() { return media.src },
+    set src(value) { media.src = value },
+    get volume() { return output.volume },
+    set volume(value) { output.volume = value },
+  }
 }
 
 function residentAudioContext(): AudioContext {

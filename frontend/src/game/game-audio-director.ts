@@ -19,7 +19,9 @@ export type GameMusicChannel = Pick<
   | 'preload'
   | 'src'
   | 'volume'
->
+> & Readonly<{
+  disconnect: () => void
+}>
 
 export interface GameAudioPlaybackOptions {
   loop?: boolean
@@ -218,6 +220,7 @@ export class GameAudioDirector {
     if (!entry) return
     this.assetMusic.delete(owner)
     this.stopAndReset(entry.channel)
+    entry.channel.disconnect()
   }
 
   playStream(cue: GameStreamCue, options: PlaySoundOptions = {}): void {
@@ -245,7 +248,10 @@ export class GameAudioDirector {
   destroy(): void {
     this.generation += 1
     this.cancelMusicFade()
-    for (const channel of this.musicChannels.values()) this.stopAndReset(channel)
+    for (const channel of this.musicChannels.values()) {
+      this.stopAndReset(channel)
+      channel.disconnect()
+    }
     this.currentMusic = null
     this.outgoingMusic = null
     this.musicScene = null

@@ -10,6 +10,7 @@ import {
 import type { GameAudioSources } from './game-audio-native.ts'
 import { NATIVE_TUTORIAL_CUES } from './core-kernels/native-tutorial.ts'
 import './game-audio-web-playback.test.ts'
+import '../lib/media-element-gain.test.ts'
 import './player-footstep-audio.test.ts'
 import './primary-spell-audio.test.ts'
 
@@ -190,6 +191,7 @@ const SOURCES = {
 
 class FakeAudio {
   currentTime = 0
+  disconnectCalls = 0
   loop = false
   muted = false
   pauseCalls = 0
@@ -202,6 +204,10 @@ class FakeAudio {
 
   constructor(source: string) {
     this.src = source
+  }
+
+  disconnect(): void {
+    this.disconnectCalls += 1
   }
 
   pause(): void {
@@ -434,6 +440,22 @@ test('temporarily mutes every non-music class without pausing music or losing th
   director.setSoundMuted(false)
   assert.equal(playback.masterVolumeUpdates.at(-1), 0.75)
   assert.equal(music.paused, false)
+})
+
+test('applies authored and user gain to mod music and disconnects its streamed channel', () => {
+  const { created, director } = fixture()
+  director.setVolumes(1, 0.5)
+  director.startAssetMusic('mod-scene', 'mod-music.mp3', 0.4)
+
+  assert.equal(created.length, 1)
+  assert.equal(created[0].loop, true)
+  assert.equal(created[0].playCalls, 1)
+  assert.equal(created[0].volume, 0.2)
+
+  director.stopAssetMusic('mod-scene')
+  assert.equal(created[0].paused, true)
+  assert.equal(created[0].currentTime, 0)
+  assert.equal(created[0].disconnectCalls, 1)
 })
 
 test('holds a blocked scene at its beginning and retries on unlock', async () => {

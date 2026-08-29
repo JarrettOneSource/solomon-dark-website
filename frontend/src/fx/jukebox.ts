@@ -13,7 +13,14 @@ import academyold from '../assets/music/academyold.mp3'
 import uiTick from '../assets/sounds/click.mp3'
 import uiThump from '../assets/sounds/backpack-close.mp3'
 import uiParchment from '../assets/sounds/parchment.mp3'
-import { isMuted, playEffect, setMuted } from './audio'
+import {
+  createSiteMediaChannel,
+  isMuted,
+  playEffect,
+  setMuted,
+  unlockSiteAudio,
+  type SiteMediaChannel,
+} from './audio'
 
 export { isMuted } from './audio'
 
@@ -28,6 +35,7 @@ export const TRACKS = [
 const MUSIC_VOLUME = 0.09
 
 let audio: HTMLAudioElement | null = null
+let audioOutput: SiteMediaChannel['output'] | null = null
 let trackName: string | null = null
 let unlocked = false
 let fadeRaf = 0
@@ -45,14 +53,14 @@ export function isHumming(): boolean {
 }
 
 function fadeTo(target: number, ms: number, then?: () => void) {
-  if (!audio) return
+  if (!audio || !audioOutput) return
   cancelAnimationFrame(fadeRaf)
-  const el = audio
-  const from = el.volume
+  const output = audioOutput
+  const from = output.volume
   const t0 = performance.now()
   const step = (t: number) => {
     const k = Math.max(0, Math.min((t - t0) / ms, 1))
-    el.volume = from + (target - from) * k
+    output.volume = from + (target - from) * k
     if (k < 1) fadeRaf = requestAnimationFrame(step)
     else then?.()
   }
@@ -61,8 +69,11 @@ function fadeTo(target: number, ms: number, then?: () => void) {
 
 function startMusic(track = TRACKS[Math.floor(Math.random() * TRACKS.length)]) {
   audio?.pause()
-  audio = new Audio(track.src)
-  audio.volume = 0
+  audioOutput?.disconnect()
+  const channel = createSiteMediaChannel(track.src)
+  audio = channel.element
+  audioOutput = channel.output
+  audioOutput.volume = 0
   trackName = track.name
   const el = audio
   // shuffle-loop: when a song ends, a different one takes the stand
@@ -90,6 +101,7 @@ function startMusic(track = TRACKS[Math.floor(Math.random() * TRACKS.length)]) {
       window.removeEventListener('keydown', unmute, true)
       if (pendingUnmute === unmute) pendingUnmute = null
       if (audio !== el || isMuted()) return
+      unlockSiteAudio()
       el.muted = false
       if (el.paused) void el.play().catch(() => {})
       fadeTo(MUSIC_VOLUME, 2000)
@@ -151,7 +163,9 @@ export function startJukeboxLifecycle(): () => void {
       audio.pause()
       audio.currentTime = 0
     }
+    audioOutput?.disconnect()
     audio = null
+    audioOutput = null
     trackName = null
     unlocked = false
     resumeOnFocus = false
@@ -161,6 +175,7 @@ export function startJukeboxLifecycle(): () => void {
 /** Call on the first user gesture: unlocks sfx and starts the music. */
 export function ensureStarted() {
   unlocked = true
+  unlockSiteAudio()
   if (!audio && !isMuted()) startMusic()
 }
 
@@ -171,10 +186,12 @@ export function toggleMuted(): boolean {
   if (muted) {
     fadeTo(0, 500, () => audio?.pause())
   } else if (audio) {
+    unlockSiteAudio()
     audio.muted = false
     void audio.play().catch(() => {})
     fadeTo(MUSIC_VOLUME, 1000)
   } else {
+    unlockSiteAudio()
     startMusic()
   }
   return muted

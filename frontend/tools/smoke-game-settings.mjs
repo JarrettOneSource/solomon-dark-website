@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
@@ -12,6 +13,7 @@ import { replacePlayerCharacter } from '../src/game/core-server/player-entity-st
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
+const mobile = process.env.SDR_GAME_SETTINGS_MOBILE === '1'
 const screenshots = {
   boneyard: process.env.SDR_GAME_SETTINGS_BONEYARD_SCREENSHOT
     || '/tmp/solomon-dark-settings-boneyard.png',
@@ -21,7 +23,10 @@ const screenshots = {
     || '/tmp/solomon-dark-settings-title.png',
 }
 const errors = []
+const failedResponses = []
 let darkCloudPaint = null
+let mobileAudio = null
+const rangeTouches = {}
 
 const vite = await createViteServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
@@ -55,15 +60,45 @@ const browser = await chromium.launch({
     : '/usr/bin/google-chrome'),
   headless: true,
 })
-const page = await browser.newPage({ viewport: { height: 900, width: 1600 } })
+const context = await browser.newContext(mobile ? {
+  deviceScaleFactor: 2,
+  hasTouch: true,
+  isMobile: true,
+  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) '
+    + 'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1',
+  viewport: { height: 414, width: 896 },
+} : { viewport: { height: 900, width: 1600 } })
+const page = await context.newPage()
 
 try {
   page.on('pageerror', (error) => errors.push(`page: ${error.message}`))
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console: ${message.text()}`)
   })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push({ status: response.status(), url: response.url() })
+    }
+  })
   await page.route('**/api/mods?**', (route) => route.fulfill({
     body: JSON.stringify({ items: [], page: 1, pageSize: 50, total: 0 }),
+    contentType: 'application/json',
+    status: 200,
+  }))
+  await page.route('**/api/mods/popular?**', (route) => route.fulfill({
+    body: JSON.stringify({ days: 30, items: [] }),
+    contentType: 'application/json',
+    status: 200,
+  }))
+  await page.route('**/api/stats', (route) => route.fulfill({
+    body: JSON.stringify({
+      downloadsTotal: 0,
+      enrolled: 0,
+      matchesLive: 0,
+      savesSynced: 0,
+      tomes: 0,
+      wizardsOnline: 0,
+    }),
     contentType: 'application/json',
     status: 200,
   }))
@@ -79,10 +114,19 @@ try {
     const revision = new URL(route.request().url()).searchParams.get('current')
     await route.fulfill({ json: { revision } })
   })
+  await page.addInitScript(installGameAudioSmokeProbe)
+  if (mobile) {
+    await page.addInitScript(emulateIosMediaVolume)
+    await page.addInitScript(() => {
+      localStorage.setItem('sdr:muted', '0')
+      localStorage.setItem('sdr:sfx-muted', '0')
+    })
+  }
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration
   }, runtime)
+  if (mobile) mobileAudio = await exercisePublicSiteAudio(page, baseUrl)
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
@@ -126,6 +170,27 @@ try {
   await setRange(dialog.getByRole('slider', { name: 'MUSIC VOL:' }), 40)
   await setRange(dialog.getByRole('slider', { name: 'CAMERA FOV' }), 125)
   await setRange(dialog.getByRole('slider', { name: 'UI SCALE' }), 150)
+  if (mobile) {
+    await page.waitForFunction(() => window.__sdrAudioMediaChannels?.().some((channel) => (
+      window.__sdrAudioSourceMatches(channel.src, 'solomondarktheme.mp3')
+        && channel.volume === 1
+        && Math.abs(channel.outputVolume - 0.4) < 0.001
+    )), undefined, { timeout: 5_000 })
+    await page.waitForFunction(() => (
+      window.__sdrAudioMasterVolumes?.('click').length > 0
+        && window.__sdrAudioMasterVolumes('click')
+          .every((volume) => Math.abs(volume - 0.65) < 0.001)
+    ))
+    mobileAudio = {
+      ...mobileAudio,
+      game: await page.evaluate(() => ({
+        music: window.__sdrAudioMediaChannels().find((channel) => (
+          window.__sdrAudioSourceMatches(channel.src, 'solomondarktheme.mp3')
+        )),
+        soundMaster: window.__sdrAudioMasterVolumes('click'),
+      })),
+    }
+  }
 
   const fullscreen = dialog.locator('[data-settings-fullscreen]')
   if (await fullscreen.getAttribute('aria-pressed') !== null) {
@@ -342,6 +407,7 @@ try {
   ))
 
   assert.deepEqual(errors, [])
+  assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
     boneyard: {
       cameraZoom: Number(await boneyardScene.getAttribute('data-camera-zoom')),
@@ -355,7 +421,10 @@ try {
     },
     darkCloudPaint,
     errors,
+    failedResponses,
     hub: hubReceipt,
+    mobileAudio,
+    rangeTouches,
     screenshots,
     status: 'ok',
   })}\n`)
@@ -366,6 +435,7 @@ try {
       nodes.map((node) => ({ ...node.dataset }))
     )),
     errors,
+    failedResponses,
     hub: await page.locator('.hub-scene').evaluateAll((nodes) => (
       nodes.map((node) => ({ ...node.dataset }))
     )),
@@ -380,7 +450,95 @@ try {
 }
 
 async function setRange(locator, value) {
+  if (mobile) {
+    await locator.scrollIntoViewIfNeeded()
+    const before = Number(await locator.inputValue())
+    const minimum = Number(await locator.getAttribute('min'))
+    const maximum = Number(await locator.getAttribute('max'))
+    const touchValue = before === minimum ? maximum : minimum
+    const box = await locator.boundingBox()
+    assert.ok(box)
+    const label = await locator.locator('xpath=preceding-sibling::span').innerText()
+    await locator.tap({
+      position: {
+        x: touchValue === minimum ? 1 : box.width - 1,
+        y: box.height / 2,
+      },
+    })
+    await page.waitForTimeout(100)
+    assert.equal(Number(await locator.inputValue()), touchValue)
+    assert.equal(
+      await locator.locator('xpath=following-sibling::output').innerText(),
+      `${touchValue}%`,
+    )
+    rangeTouches[label] = { before, touchValue }
+    if (label === 'SOUND VOL:') {
+      await page.waitForFunction(() => (
+        window.__sdrAudioMasterVolumes?.('click').length > 0
+          && window.__sdrAudioMasterVolumes('click').every((volume) => volume === 0)
+      ))
+    } else if (label === 'MUSIC VOL:') {
+      await page.waitForFunction(() => window.__sdrAudioMediaChannels?.().some((channel) => (
+        window.__sdrAudioSourceMatches(channel.src, 'solomondarktheme.mp3')
+          && channel.volume === 1
+          && channel.outputVolume === 0
+      )))
+    }
+  }
   await locator.fill(`${value}`)
+  assert.equal(Number(await locator.inputValue()), value)
+}
+
+async function exercisePublicSiteAudio(page, baseUrl) {
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded' })
+  const cursorEffects = page.getByRole('button', { name: /cursor effects/i })
+  await cursorEffects.waitFor()
+  await cursorEffects.tap()
+  await page.waitForFunction(() => window.__sdrAudioMediaChannels?.().some((channel) => (
+    ['prelude.mp3', 'solomondarktheme.mp3', 'academy.mp3', 'academyold.mp3']
+      .some((source) => window.__sdrAudioSourceMatches(channel.src, source))
+      && !channel.paused
+      && Math.abs(channel.outputVolume - 0.09) < 0.001
+      && channel.volume === 1
+  )), undefined, { timeout: 5_000 })
+  await page.getByRole('button', { name: 'Mute music' }).tap()
+  await page.waitForFunction(() => window.__sdrAudioMediaChannels?.().some((channel) => (
+    ['prelude.mp3', 'solomondarktheme.mp3', 'academy.mp3', 'academyold.mp3']
+      .some((source) => window.__sdrAudioSourceMatches(channel.src, source))
+      && channel.paused
+      && channel.outputVolume === 0
+      && channel.volume === 1
+  )), undefined, { timeout: 5_000 })
+  await page.getByRole('button', { name: 'Unmute music' }).tap()
+  await page.waitForFunction(() => window.__sdrAudioMediaChannels?.().some((channel) => (
+    ['prelude.mp3', 'solomondarktheme.mp3', 'academy.mp3', 'academyold.mp3']
+      .some((source) => window.__sdrAudioSourceMatches(channel.src, source))
+      && !channel.paused
+      && Math.abs(channel.outputVolume - 0.09) < 0.001
+      && channel.volume === 1
+  )), undefined, { timeout: 5_000 })
+  return page.evaluate(() => ({
+    effect: window.__sdrAudioEvents.findLast((event) => (
+      event.type === 'play'
+        && window.__sdrAudioSourceMatches(event.src, 'backpack-close.mp3')
+    )),
+    music: window.__sdrAudioMediaChannels().findLast((channel) => (
+      ['prelude.mp3', 'solomondarktheme.mp3', 'academy.mp3', 'academyold.mp3']
+        .some((source) => window.__sdrAudioSourceMatches(channel.src, source))
+        && !channel.paused
+        && channel.outputVolume > 0
+    )),
+  }))
+}
+
+function emulateIosMediaVolume() {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume')
+  Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
+    configurable: true,
+    enumerable: descriptor?.enumerable ?? true,
+    get: () => 1,
+    set: () => {},
+  })
 }
 
 async function enterCreateAfterCollegeAdmission(page, host) {

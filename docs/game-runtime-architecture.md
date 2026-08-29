@@ -564,8 +564,10 @@ first ready frame.
 
 The compiled game-audio registry has two browser output lanes. Resident
 `AudioBuffer` one-shots, keyed streams, voices, loops, and ambience share one
-Web Audio master gain; scene music and crossfades use independent music
-channels. User sound and music settings remain separate scalars. A local or
+Web Audio master gain; streamed scene-music media elements and crossfades use
+independent Web Audio gains so the music lane remains effective on iOS without
+decoding long tracks into resident buffers. User sound and music settings
+remain separate scalars. A local or
 authoritative Pause Menu, the compact primary/A/B HUD skill selector for its
 owner or a waiting peer, and a peer-only level-up cohort waiting surface
 temporarily multiply only the non-music master by zero. An owned
