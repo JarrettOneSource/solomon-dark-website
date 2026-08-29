@@ -13,7 +13,10 @@ import {
   GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
-import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
+import {
+  earthImpactFragmentCount,
+  earthImpactLifetimeTicks,
+} from '../core-kernels/primary-spell-earth.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
@@ -1079,8 +1082,9 @@ test('server welcome round-trips content, kernel, character, and world ownership
     },
   })), GameProtocolError)
   assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
+    deathWeaponPainterRegistration: null,
     driveActive: false,
-    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 25 },
     overlayEffectPhase: 0,
   })
   assert.deepEqual(welcome.snapshot.players['player-1'].belt, [
@@ -1296,6 +1300,10 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     id: 1,
     midpoint: { x: 75, y: 0 },
     ownerActorId: 1,
+    painterRegistrations: [
+      { managerLane: 'actor', registrationOrdinal: 20 },
+      { managerLane: 'actor', registrationOrdinal: 21 },
+    ],
     seed: 0x1234_5678,
     source: { x: 23, y: -16 },
     tick: snapshot.tick,
@@ -1311,6 +1319,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 22 },
     payload: 'poison',
     position: { x: 110, y: 100 },
     speed: 5,
@@ -1331,6 +1340,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     lifetimeTicks: 4,
     ownerActorId: 1,
     ownerProjectileId: 2,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 23 },
     phaseOriginTicks: 3,
     position: { x: 115, y: 100 },
     rotationRadians: 0.25,
@@ -1369,6 +1379,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     id: 4,
     kind: 'fade',
     ownerActorId: 1,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 24 },
     presentationOwner: 'world-sorted',
     position: { x: 130, y: 100 },
     rotationRadians: 0.5,
@@ -1694,8 +1705,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v105 carries addressed inventory slots, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 105)
+test('protocol v106 carries addressed inventory slots, world-painter registrations, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 106)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2139,6 +2150,10 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
     id: 1,
     midpoint: { x: 210, y: 250 },
     ownerActorId: 3,
+    painterRegistrations: [
+      { managerLane: 'actor', registrationOrdinal: 30 },
+      { managerLane: 'actor', registrationOrdinal: 31 },
+    ],
     seed: 0x1020_3040,
     source: { x: 120, y: 240 },
     tick: 20,
@@ -2762,6 +2777,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     kind: 'ether',
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
+    painterRegistrations: [ACTOR_LIGHT_REGISTRATION],
     phase: 'flight',
     piercesRemaining: 0,
     position: { x: 800, y: 400 },
@@ -2789,6 +2805,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     maximumCharge: 1,
     orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     ownerId: missile.ownerId,
+    painterRegistrations: [ACTOR_LIGHT_REGISTRATION],
     phase: 'held',
     position: missile.position,
     remainingDamage: missile.damage,
@@ -2806,6 +2823,13 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: null,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: Array.from(
+      { length: earthImpactFragmentCount(0.5) },
+      (_, registrationOrdinal) => ({
+        managerLane: 'actor' as const,
+        registrationOrdinal: registrationOrdinal + 20,
+      }),
+    ),
     worldKey: 'hub:courtyard',
   }
   const earthImpact = {
@@ -2835,6 +2859,10 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: null,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [{
+      managerLane: 'actor',
+      registrationOrdinal: 30,
+    }],
     position: { x: 800, y: 400 },
     worldKey: 'hub:courtyard',
   }
@@ -2848,6 +2876,10 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: null,
     lateralMagnitude: 3.25,
     ownerId: 'player-1',
+    painterRegistrations: [{
+      managerLane: 'actor',
+      registrationOrdinal: 31,
+    }],
     parentId: 1,
     position: { x: 760, y: 390 },
     rotation: 125,
@@ -2901,6 +2933,10 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     kind: 'ether-blast',
     origin: { x: 800, y: 300 },
     ownerId: 'player-1',
+    painterRegistrations: Array.from({ length: 108 }, (_, registrationOrdinal) => ({
+      managerLane: 'transient' as const,
+      registrationOrdinal: registrationOrdinal + 100,
+    })),
     presentationRng: createNativeRng(14),
     worldKey: 'hub:courtyard',
   }
@@ -2926,6 +2962,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: null,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 32 }],
     variant: nativeFireParticleVariant(1),
     worldKey: 'hub:courtyard',
   }
@@ -2936,6 +2973,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [TRANSIENT_LIGHT_REGISTRATION],
     worldKey: 'hub:courtyard',
   }
   const fireball = {
@@ -2953,6 +2991,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     kind: 'fire',
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
+    painterRegistrations: [ACTOR_LIGHT_REGISTRATION],
     phase: 'flight',
     position: { x: 800, y: 400 },
     privateSeed: 123_456,
@@ -2974,6 +3013,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     life: 3,
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
+    painterRegistrations: [ACTOR_LIGHT_REGISTRATION],
     phase: 2.5,
     position: { x: 800, y: 400 },
     spentEmber: { damage: 20, kind: 'immolate' },
@@ -2990,6 +3030,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [TRANSIENT_LIGHT_REGISTRATION],
     soundPitch: 1.05,
     visualScale: 1.9,
     worldKey: 'hub:courtyard',
@@ -3021,6 +3062,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
     nextTargetRefreshTick: 300,
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 3 }],
     path: createNativeEnemyPathState(createNativeRng(13)).state,
     position: { x: 800, y: 400 },
     remainingTicks: 299,
@@ -3042,6 +3084,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     life: 1.99,
     nativeType: 'fire',
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 33 }],
     position: { x: 800, y: 400 },
     scale: 1,
     shapeSample: 0.75,
@@ -3058,6 +3101,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [TRANSIENT_LIGHT_REGISTRATION],
     visualScale: 1,
     worldKey: 'hub:courtyard',
   }
@@ -3073,6 +3117,10 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     midpoint: { x: 800, y: 290 },
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [34, 35, 36].map(registrationOrdinal => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
     targetId: 'scenery:grave-7',
     underpowered: true,
     variant: 1,
@@ -3090,6 +3138,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     origin: { x: 800, y: 400 },
     outcome: 'normal',
     ownerId: 'player-1',
+    painterRegistrations: [],
     progress: 2.5,
     swooshPitch: Math.fround(
       (Math.fround(0.12) - 0.10000000149011612) + 1,
@@ -3105,6 +3154,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     origin: { x: 800, y: 400 },
     outcome: 'whirl',
     ownerId: 'player-1',
+    painterRegistrations: [],
     swooshPitch: 1,
     turnSign: -1,
     worldKey: 'hub:courtyard',
@@ -3116,6 +3166,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     origin: { x: 800, y: 380 },
     outcome: 'critical-hit',
     ownerId: 'player-1',
+    painterRegistrations: [],
     pikeBreakSoundIndexes: [0],
     procSound: 'critical-hit',
     procSoundPitches: [1.03],
@@ -3129,6 +3180,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     kind: 'player-staff-knockback',
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    painterRegistrations: [],
     remainingDistance: 110,
     targetIds: ['enemy:1'],
     worldKey: 'hub:courtyard',
@@ -3141,6 +3193,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     id: 5,
     kind: 'player-staff-smoke',
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 37 }],
     position: { x: 800, y: 375 },
     rotationDegrees: 5,
     scale: 8,
@@ -3153,6 +3206,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     id: 6,
     kind: 'player-staff-move-fade',
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 38 }],
     position: { x: 800, y: 375 },
     rotationDegrees: 10,
     scale: 0.5,
@@ -3168,6 +3222,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     id: 7,
     kind: 'player-staff-perspective-fade',
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 39 }],
     position: { x: 800, y: 400 },
     rotationDegrees: 270,
     scale: 3,
@@ -3179,6 +3234,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     id: 8,
     kind: 'player-staff-contact-knockback',
     ownerId: 'player-1',
+    painterRegistrations: [],
     remainingTicks: 3,
     targetId: 'enemy:1',
     worldKey: 'hub:courtyard',
@@ -3188,6 +3244,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     id: 9,
     kind: 'player-staff-pike-break',
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 40 }],
     position: { x: 800, y: 400 },
     presentationRng: createNativeRng(5),
     targetId: 'enemy:1',
@@ -3725,6 +3782,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 1,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -3747,6 +3805,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 1,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -3769,6 +3828,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 1,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -3791,6 +3851,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 1,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -3813,6 +3874,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 1,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -3835,6 +3897,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 1,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
@@ -3856,6 +3919,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         id: 2,
         kind: 'water',
         lightRegistration: null,
+        painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 44 }],
         obstructionDistance: 0,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -3955,6 +4019,7 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
         verticalOffset: index,
       })),
       ownerId: 'player-1',
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 40 }],
       phaseDegrees: 15,
       position: { x: 10, y: 20 },
       worldKey: 'hub:courtyard',
@@ -3969,6 +4034,7 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
       kind: 'water-aura',
       origin: { x: 10, y: 20 },
       ownerId: 'player-1',
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 41 }],
       rotationStepDegrees: 0.5,
       worldKey: 'hub:courtyard',
     },
@@ -3985,6 +4051,7 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
       kind: 'water-hail',
       life: Math.fround(1.7),
       ownerId: 'player-1',
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 42 }],
       position: { x: 10, y: 20 },
       rotationDegrees: 200,
       rotationStepDegrees: 4,
@@ -4238,6 +4305,7 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
     midpoint: { x: 0, y: 0 },
     miscLightAppendOrdinal: null,
     ownerId: 'player-1',
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 43 }],
     phase: 0,
     position: { x: 800, y: 400 },
     presentationRng: null,
@@ -4279,6 +4347,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
     managerLane: 'actor',
     registrationOrdinal: 0,
   }
+  continuousFrame.frame.secondaryAbilities.actors[0]!.painterRegistrations = [{
+    managerLane: 'transient',
+    registrationOrdinal: 43,
+  }]
   continuousFrame.frame.secondaryAbilities.actors[0]!.skillId = 50
   continuousFrame.frame.secondaryAbilities.actors[0]!.slowFactor = -1
   const continuousDecoded = decodeServerGameMessage(JSON.stringify(continuousFrame))
@@ -4292,6 +4364,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   flashActor.hitTargetIds = []
   flashActor.kind = 'flash-response-grow'
   flashActor.lifetimeTicks = 20
+  flashActor.painterRegistrations = [{
+    managerLane: 'transient',
+    registrationOrdinal: 43,
+  }]
   flashActor.scale = 1.5
   flashActor.skillId = 53
   const flashDecoded = decodeServerGameMessage(JSON.stringify(flashFrame))
@@ -4306,6 +4382,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
 
   const wrongFlashActor = JSON.parse(JSON.stringify(flashFrame))
   wrongFlashActor.frame.secondaryAbilities.actors[0]!.kind = 'earthquake'
+  wrongFlashActor.frame.secondaryAbilities.actors[0]!.painterRegistrations = [{
+    managerLane: 'actor',
+    registrationOrdinal: 43,
+  }]
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(wrongFlashActor)),
     /not a native secondary ability/,
@@ -4351,6 +4431,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
     registrationOrdinal: 4,
   }
   miscFrame.frame.secondaryAbilities.actors[0]!.miscLightAppendOrdinal = 0
+  miscFrame.frame.secondaryAbilities.actors[0]!.painterRegistrations = [{
+    managerLane: 'transient',
+    registrationOrdinal: 43,
+  }]
   miscFrame.frame.secondaryAbilities.actors[0]!.skillId = 49
   const miscDecoded = decodeServerGameMessage(JSON.stringify(miscFrame))
   assert.equal(miscDecoded.type, 'server-snapshot')
@@ -4368,6 +4452,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
     registrationOrdinal: 5,
   }
   etherBurn.miscLightAppendOrdinal = 0
+  etherBurn.painterRegistrations = [{
+    managerLane: 'transient',
+    registrationOrdinal: 43,
+  }]
   etherBurn.skillId = 14
   etherBurn.targetId = 7
   const etherBurnDecoded = decodeServerGameMessage(JSON.stringify(etherBurnFrame))
@@ -4407,6 +4495,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
 
   const wrongFireActor = JSON.parse(JSON.stringify(exceptionalFireFlameFrame))
   wrongFireActor.frame.secondaryAbilities.actors[0]!.kind = 'earthquake'
+  wrongFireActor.frame.secondaryAbilities.actors[0]!.painterRegistrations = [{
+    managerLane: 'actor',
+    registrationOrdinal: 43,
+  }]
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(wrongFireActor)),
     /not a native secondary ability/,
@@ -4452,6 +4544,10 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
 
   const sortedOwner = structuredClone(message)
   sortedOwner.frame.secondaryAbilities.actors[0]!.kind = 'shockwave'
+  sortedOwner.frame.secondaryAbilities.actors[0]!.painterRegistrations = [{
+    managerLane: 'transient',
+    registrationOrdinal: 43,
+  }]
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(sortedOwner)),
     /only Earthquake preserves pointer-list order/,
@@ -5487,6 +5583,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     kind: 'weld',
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
+    painterRegistrations: [ACTOR_LIGHT_REGISTRATION],
     phase: 'flight',
     position: { x: 800, y: 400 },
     presentationSeed: 42,
@@ -5825,7 +5922,13 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     toughness: 0,
     vector: [7, 2, 1, 0, 0.2, 0.5],
     widen: 0.5,
-  }]
+  }].map((actor, registrationOrdinal) => ({
+    ...actor,
+    painterRegistrations: [{
+      managerLane: 'actor' as const,
+      registrationOrdinal: registrationOrdinal + 100,
+    }],
+  }))
 
   const decodedProjectile = decodeFrame({
     nextId: 2,
@@ -5890,16 +5993,23 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     }), /secondaryPresentationPhaseDegrees|frostPresentationLanes/)
   }
 
-  const blizzardConstructorEndpoint = createNativeWeldBlizzardContactGlow({
-    direction: { x: 0, y: -1 },
-    id: 1,
-    ownerId: 'player-1',
-    position: { x: 800, y: 400 },
-    rng: createNativeRng(18827),
-    tick: 100,
-    vector: [8, 2, 1, 0.8, 0, 0, 0],
-    worldKey: 'hub:courtyard',
-  }).actor
+  const blizzardConstructorEndpoint = {
+    ...createNativeWeldBlizzardContactGlow({
+      direction: { x: 0, y: -1 },
+      id: 1,
+      ownerId: 'player-1',
+      position: { x: 800, y: 400 },
+      registerWorldPainter: (managerLane) => ({
+        managerLane,
+        registrationOrdinal: 124,
+      }),
+      rng: createNativeRng(18827),
+      tick: 100,
+      vector: [8, 2, 1, 0.8, 0, 0, 0],
+      worldKey: 'hub:courtyard',
+    }).actor,
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 124 }],
+  }
   assert.equal(blizzardConstructorEndpoint.rotationDegrees, 360)
   const decodedBlizzardConstructorEndpoint = decodeFrame({
     nextId: 2,

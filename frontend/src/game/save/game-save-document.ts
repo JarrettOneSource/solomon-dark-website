@@ -25,6 +25,10 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import {
+  createNativeWorldManagerOrder,
+  type NativeWorldManagerOrderState,
+} from '../core-kernels/native-world-manager-order.ts'
+import {
   NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   STOCK_TUTORIAL_BONEYARD_ID,
@@ -51,6 +55,12 @@ import {
   type PlayerSkillRuntimeComponent,
 } from '../core-kernels/player-skill-runtime.ts'
 import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
+import { earthImpactFragmentCount } from '../core-kernels/primary-spell-earth.ts'
+import { NATIVE_ETHER_BLAST_PARTICLE_COUNT } from '../core-kernels/native-ether-blast.ts'
+import {
+  nativeSecondaryPainterManagerLane,
+  type NativeSecondaryActorKind,
+} from '../core-kernels/native-secondary-abilities.ts'
 import {
   createHubCollegeIntroParticipantState,
   isHubRegionId,
@@ -60,6 +70,7 @@ import {
   type HubRegionId,
   type HubTransitionPhase,
 } from '../core-kernels/hub-regions.ts'
+import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import {
   NATIVE_HUB_HELP_ROW_COUNT,
   NATIVE_HUB_NPC_CATALOG,
@@ -144,7 +155,7 @@ const SIMULATION_KEYS = [
   'gameRng',
   'hallOfFameClockStartedAtTick',
   'levelUpBarrier',
-  'lightProviderOrder',
+  'worldManagerOrder',
   'modEffects',
   'nextLevelUpBarrierId',
   'nextModConsumableUseId',
@@ -544,9 +555,14 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
       0x40000000,
     )
     rawState.gameRng = hubSeed.state
+    const worldManagerOrder = createNativeWorldManagerOrder(
+      rawState.worldManagerOrder as NativeWorldManagerOrderState,
+    )
     world = createHubWorld([continuation.summary.playerId], {
+      registerWorldPainter: worldManagerOrder.register,
       traderAnimationSeed: hubSeed.value,
     })
+    rawState.worldManagerOrder = worldManagerOrder.state()
     world = {
       ...world,
       participants: { [continuation.summary.playerId]: participant },
@@ -671,17 +687,18 @@ function normalizeSimulation(
   const source = record(value, 'game save simulation')
   rejectUnexpectedKeys(source, 'game save simulation', [
     ...SIMULATION_KEYS,
+    ...(sourceSchemaVersion < 21 ? ['lightProviderOrder'] : []),
     'playerOfferRng',
   ])
   const gameRng = source.gameRng ?? source.playerOfferRng
   if (gameRng === undefined) throw new Error('game save simulation is missing its game RNG')
-  return {
+  const normalized = {
     accumulatorSeconds: source.accumulatorSeconds,
     combatRng: source.combatRng ?? createNativeRng(0),
     gameRng,
     hallOfFameClockStartedAtTick: source.hallOfFameClockStartedAtTick ?? 0,
     levelUpBarrier: source.levelUpBarrier,
-    lightProviderOrder: source.lightProviderOrder,
+    worldManagerOrder: source.worldManagerOrder ?? source.lightProviderOrder,
     modEffects: source.modEffects ?? [],
     nextLevelUpBarrierId: source.nextLevelUpBarrierId,
     nextModConsumableUseId: source.nextModConsumableUseId ?? 1,
@@ -692,6 +709,309 @@ function normalizeSimulation(
     tick: source.tick,
     world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
   }
+  return sourceSchemaVersion < 21
+    ? migrateLegacyWorldPainterState(normalized, loadedBoneyardValue)
+    : normalized
+}
+
+function migrateLegacyWorldPainterState(
+  input: Record<string, unknown>,
+  loadedBoneyardValue: unknown,
+): Record<string, unknown> {
+  const originalWorld = record(input.world, 'legacy game save world')
+  const hubActorOffset = originalWorld.kind === 'hub'
+    ? NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length
+    : 0
+  const shifted = shiftNativeActorRegistrations(input, hubActorOffset) as Record<string, unknown>
+  const order = record(shifted.worldManagerOrder, 'legacy world manager order')
+  const next = record(
+    order.nextRegistrationOrdinal,
+    'legacy world manager registration ordinals',
+  )
+  const nextOrdinal = {
+    actor: finiteNumber(next.actor, 'legacy actor registration ordinal'),
+    transient: finiteNumber(next.transient, 'legacy transient registration ordinal'),
+  }
+  nextOrdinal.actor += hubActorOffset
+  const register = (managerLane: 'actor' | 'transient') => ({
+    managerLane,
+    registrationOrdinal: nextOrdinal[managerLane]++,
+  })
+
+  const playerEntities = record(shifted.playerEntities, 'legacy game save players')
+  const progressions = array(playerEntities.progressions, 'legacy player progressions')
+  const lightings = array(playerEntities.lightings, 'legacy player lightings').map(
+    (value, index) => {
+      const lighting = record(value, `legacy player lighting ${index}`)
+      return {
+        ...lighting,
+        deathWeaponPainterRegistration:
+          record(progressions[index], `legacy player progression ${index}`).lifeState === 'dying'
+            ? register('actor')
+            : null,
+      }
+    },
+  )
+
+  const primarySpells = record(shifted.primarySpells, 'legacy primary spells')
+  const projectiles = array(primarySpells.projectiles, 'legacy primary projectiles').map(
+    (value) => withLegacyPainterRegistrations(record(value, 'legacy primary projectile'), {
+      count: 1,
+      managerLane: 'actor',
+    }, register),
+  )
+  const transients = array(primarySpells.transients, 'legacy primary transients').map(
+    (value) => {
+      const transient = record(value, 'legacy primary transient')
+      return withLegacyPainterRegistrations(
+        transient,
+        legacyPrimaryPainterContract(transient),
+        register,
+      )
+    },
+  )
+
+  const secondaryAbilities = record(
+    shifted.secondaryAbilities,
+    'legacy secondary abilities',
+  )
+  const secondaryActors = array(
+    secondaryAbilities.actors,
+    'legacy secondary actors',
+  ).map((value) => {
+    const actor = record(value, 'legacy secondary actor')
+    return actor.painterRegistrations === undefined
+      ? {
+          ...actor,
+          painterRegistrations: [register(nativeSecondaryPainterManagerLane(
+            actor.kind as NativeSecondaryActorKind,
+          ))],
+        }
+      : actor
+  })
+
+  const world = record(shifted.world, 'legacy game save world')
+  const normalizedWorld = world.kind === 'hub'
+    ? migrateLegacyHubPainterState(world, register)
+    : migrateLegacyBoneyardPainterState(world, loadedBoneyardValue, register)
+  return {
+    ...shifted,
+    playerEntities: { ...playerEntities, lightings },
+    primarySpells: { ...primarySpells, projectiles, transients },
+    secondaryAbilities: { ...secondaryAbilities, actors: secondaryActors },
+    world: normalizedWorld,
+    worldManagerOrder: {
+      nextRegistrationOrdinal: nextOrdinal,
+    },
+  }
+}
+
+function withLegacyPainterRegistrations(
+  source: Record<string, unknown>,
+  contract: Readonly<{ count: number; managerLane: 'actor' | 'transient' }>,
+  register: (lane: 'actor' | 'transient') => Readonly<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }>,
+): Record<string, unknown> {
+  if (source.painterRegistrations !== undefined) return source
+  const light = source.lightRegistration
+  const registrations = contract.count === 1
+    && isManagerRegistration(light, contract.managerLane)
+    ? [light]
+    : Array.from({ length: contract.count }, () => register(contract.managerLane))
+  return { ...source, painterRegistrations: registrations }
+}
+
+function legacyPrimaryPainterContract(
+  source: Record<string, unknown>,
+): Readonly<{ count: number; managerLane: 'actor' | 'transient' }> {
+  switch (source.kind) {
+    case 'air': return { count: 3, managerLane: 'actor' }
+    case 'earth-impact': return {
+      count: earthImpactFragmentCount(finiteNumber(source.charge, 'legacy Earth impact charge')),
+      managerLane: 'actor',
+    }
+    case 'ether-blast': return {
+      count: NATIVE_ETHER_BLAST_PARTICLE_COUNT,
+      managerLane: 'transient',
+    }
+    case 'ether-impact':
+    case 'ether-pierce-streak':
+    case 'fire-explosion':
+    case 'fire-impact':
+    case 'water':
+      return { count: 1, managerLane: 'transient' }
+    case 'player-staff-contact':
+    case 'player-staff-contact-knockback':
+    case 'player-staff-knockback':
+    case 'player-staff-melee':
+    case 'player-staff-spin':
+      return { count: 0, managerLane: 'actor' }
+    default:
+      return { count: 1, managerLane: 'actor' }
+  }
+}
+
+function migrateLegacyHubPainterState(
+  source: Record<string, unknown>,
+  register: (lane: 'actor' | 'transient') => Readonly<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }>,
+): Record<string, unknown> {
+  const studentPopulation = record(
+    source.studentPopulation,
+    'legacy Hub student population',
+  )
+  const students = array(studentPopulation.students, 'legacy Hub Students').map(
+    (value) => {
+      const student = record(value, 'legacy Hub Student')
+      return student.painterRegistration === undefined
+        ? { ...student, painterRegistration: register('actor') }
+        : student
+    },
+  )
+  return {
+    ...source,
+    studentPopulation: { ...studentPopulation, students },
+  }
+}
+
+function migrateLegacyBoneyardPainterState(
+  source: Record<string, unknown>,
+  loadedBoneyardValue: unknown,
+  register: (lane: 'actor' | 'transient') => Readonly<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }>,
+): Record<string, unknown> {
+  const enemies = record(source.enemies, 'legacy Boneyard enemies')
+  const projectiles = array(enemies.projectiles, 'legacy enemy projectiles').map(
+    (value) => {
+      const projectile = record(value, 'legacy enemy projectile')
+      return projectile.painterRegistration === undefined
+        ? { ...projectile, painterRegistration: register('actor') }
+        : projectile
+    },
+  )
+  const projectileEffects = array(
+    enemies.projectileEffects,
+    'legacy enemy projectile effects',
+  ).map((value) => {
+    const effect = record(value, 'legacy enemy projectile effect')
+    if (effect.painterRegistration !== undefined) return effect
+    const kind = String(effect.kind)
+    return {
+      ...effect,
+      painterRegistration: register(kind.startsWith('fire-burst-')
+        ? 'transient'
+        : 'actor'),
+    }
+  })
+  const deathEffects = array(enemies.deathEffects, 'legacy enemy death effects').map(
+    (value) => {
+      const effect = record(value, 'legacy enemy death effect')
+      if (effect.painterRegistration !== undefined) return effect
+      return {
+        ...effect,
+        painterRegistration: String(effect.role).startsWith('demon-death-fire-burst-')
+          ? null
+          : register('actor'),
+      }
+    },
+  )
+  const mageLightningPulses = array(
+    enemies.mageLightningPulses,
+    'legacy Mage lightning pulses',
+  ).map((value) => {
+    const pulse = record(value, 'legacy Mage lightning pulse')
+    if (pulse.painterRegistrations !== undefined) return pulse
+    const contact = record(pulse.contact, 'legacy Mage lightning contact')
+    return {
+      ...pulse,
+      painterRegistrations: Array.from(
+        { length: contact.kind === 'world' ? 3 : 2 },
+        () => register('actor'),
+      ),
+    }
+  })
+  const loot = record(source.loot, 'legacy Boneyard loot')
+  const lootActors = array(loot.actors, 'legacy loot actors').map((value) => {
+    const actor = record(value, 'legacy loot actor')
+    return actor.painterRegistration === undefined
+      ? { ...actor, painterRegistration: register('actor') }
+      : actor
+  })
+  const lootEffects = array(loot.effects, 'legacy loot effects').map((value) => {
+    const effect = record(value, 'legacy loot effect')
+    return effect.painterRegistration === undefined
+      ? { ...effect, painterRegistration: register('actor') }
+      : effect
+  })
+  const loaded = parseLoadedBoneyard(loadedBoneyardValue)
+  const sceneryOrder = new Map(loaded.scene.objects.map((object, index) => [
+    object.eid,
+    index,
+  ]))
+  const goodies = array(loot.goodies, 'legacy Goodies').map((value) => {
+    const goodie = record(value, 'legacy Goodie')
+    if (goodie.sceneryRegistrationOrdinal !== undefined) return goodie
+    const sceneryRegistrationOrdinal = sceneryOrder.get(String(goodie.eid))
+    if (sceneryRegistrationOrdinal === undefined) {
+      throw new Error(`legacy Goodie ${String(goodie.eid)} is absent from its Boneyard scene`)
+    }
+    return { ...goodie, sceneryRegistrationOrdinal }
+  })
+  return {
+    ...source,
+    enemies: {
+      ...enemies,
+      deathEffects,
+      mageLightningPulses,
+      projectileEffects,
+      projectiles,
+    },
+    loot: {
+      ...loot,
+      actors: lootActors,
+      effects: lootEffects,
+      goodies,
+    },
+    solomonPainterRegistration: source.encounter === null ? null : register('actor'),
+  }
+}
+
+function shiftNativeActorRegistrations(value: unknown, offset: number): unknown {
+  if (offset === 0) return value
+  if (Array.isArray(value)) {
+    return value.map((entry) => shiftNativeActorRegistrations(entry, offset))
+  }
+  if (value === null || typeof value !== 'object') return value
+  const source = value as Record<string, unknown>
+  if (
+    source.managerLane === 'actor'
+    && Number.isSafeInteger(source.registrationOrdinal)
+  ) {
+    return {
+      ...source,
+      registrationOrdinal: Number(source.registrationOrdinal) + offset,
+    }
+  }
+  return Object.fromEntries(Object.entries(source).map(([key, entry]) => [
+    key,
+    shiftNativeActorRegistrations(entry, offset),
+  ]))
+}
+
+function isManagerRegistration(
+  value: unknown,
+  managerLane: 'actor' | 'transient',
+): boolean {
+  if (value === null || typeof value !== 'object') return false
+  const source = value as Record<string, unknown>
+  return source.managerLane === managerLane
+    && Number.isSafeInteger(source.registrationOrdinal)
 }
 
 function normalizePlayerStore(

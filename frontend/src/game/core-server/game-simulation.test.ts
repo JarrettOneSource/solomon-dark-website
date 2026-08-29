@@ -51,10 +51,10 @@ import type {
   NativePlayerStaffSpinAction,
 } from '../core-kernels/native-player-staff-action.ts'
 import {
-  createDeferredNativeLightProviderRegistrations,
-  createNativeLightProviderOrder,
-  mergeNativeLightProviderOwners,
-} from '../core-kernels/native-light-provider-order.ts'
+  createDeferredNativeWorldManagerRegistrations,
+  createNativeWorldManagerOrder,
+  mergeNativeWorldManagerOwners,
+} from '../core-kernels/native-world-manager-order.ts'
 import {
   advanceNativeRngWords,
   createNativeRng,
@@ -164,7 +164,7 @@ function equipMindblowingRing(
 }
 
 test('native provider registration is lane-local and stable across grouped collectors', () => {
-  const order = createNativeLightProviderOrder()
+  const order = createNativeWorldManagerOrder()
   assert.deepEqual(order.register('actor'), {
     managerLane: 'actor',
     registrationOrdinal: 0,
@@ -178,7 +178,7 @@ test('native provider registration is lane-local and stable across grouped colle
     registrationOrdinal: 1,
   })
 
-  const deferred = createDeferredNativeLightProviderRegistrations()
+  const deferred = createDeferredNativeWorldManagerRegistrations()
   const enemyProjectile = deferred.register('actor')
   const playerProjectile = order.register('actor')
   deferred.commit(order)
@@ -191,7 +191,7 @@ test('native provider registration is lane-local and stable across grouped colle
     managerLane: 'actor' | 'transient',
     registrationOrdinal: number,
   ) => ({ label, lightRegistration: { managerLane, registrationOrdinal } })
-  const merged = mergeNativeLightProviderOwners([
+  const merged = mergeNativeWorldManagerOwners([
     [owner('player', 'actor', 2), owner('transient-a', 'transient', 0)],
     [
       owner('enemy-copy-0', 'actor', 0),
@@ -443,6 +443,10 @@ test('Boneyard entry registers players before Lantern and reconnect appends a fr
     managerLane: 'actor',
     registrationOrdinal: 2,
   })
+  assert.deepEqual(state.world.solomonPainterRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 3,
+  })
 
   state = removePlayerCharacter(state, 'first')
   state = addPlayerCharacter(state, 'first', {
@@ -452,7 +456,7 @@ test('Boneyard entry registers players before Lantern and reconnect appends a fr
   })
   assert.deepEqual(playerLightingAt(state.playerEntities, 'first')?.lightRegistration, {
     managerLane: 'actor',
-    registrationOrdinal: 3,
+    registrationOrdinal: 4,
   })
 })
 
@@ -466,7 +470,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
   } }), loaded)
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
 
-  const order = createNativeLightProviderOrder(state.lightProviderOrder)
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
   const player = getPlayerCharacter(state, 'caster')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
     firstProjectileWorldContact: () => null,
@@ -480,7 +484,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
         velocityPerTick: { x: 0, y: 0 },
       },
     },
-    registerLightProvider: order.register,
+    registerWorldPainter: order.register,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
       enemyToken: 'SKELETONMAGE',
@@ -498,7 +502,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
   if (mage.brain.family !== 'mage') throw new Error('expected Mage brain')
   state = {
     ...state,
-    lightProviderOrder: order.state(),
+    worldManagerOrder: order.state(),
     playerEntities: {
       ...state.playerEntities,
       primaryCasts: [{
@@ -548,10 +552,10 @@ test('same-tick player primary actors register before projectiles spawned by lat
   })
   assert.deepEqual(guided.lightRegistration, {
     managerLane: 'actor',
-    registrationOrdinal: 3,
+    registrationOrdinal: 4,
   })
-  assert.deepEqual(state.lightProviderOrder.nextRegistrationOrdinal, {
-    actor: 4,
+  assert.deepEqual(state.worldManagerOrder.nextRegistrationOrdinal, {
+    actor: 6,
     transient: 0,
   })
 })
@@ -612,15 +616,15 @@ test('same-tick wave actors register before player primary actors', () => {
     state.world.enemies.actors.map(({ lightRegistration }) => lightRegistration),
     Array.from({ length: openingCount }, (_, index) => ({
       managerLane: 'actor' as const,
-      registrationOrdinal: index + 2,
+      registrationOrdinal: index + 3,
     })),
   )
   assert.deepEqual(fire.lightRegistration, {
     managerLane: 'actor',
-    registrationOrdinal: openingCount + 2,
+    registrationOrdinal: openingCount + 3,
   })
-  assert.deepEqual(state.lightProviderOrder.nextRegistrationOrdinal, {
-    actor: openingCount + 3,
+  assert.deepEqual(state.worldManagerOrder.nextRegistrationOrdinal, {
+    actor: openingCount + 5,
     transient: 0,
   })
 })
@@ -1820,7 +1824,7 @@ test('Mindblowing Ring triggers only for the credited source and retains its uns
   })
   state = equipMindblowingRing(equipMindblowingRing(state, 'first'), 'second')
   const rng = state.secondaryAbilities.rng
-  const actorLightOrdinal = state.lightProviderOrder.nextRegistrationOrdinal.actor
+  const actorLightOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.actor
   state = grantGameSimulationPlayerExperience(state, 'first', 91)
   assert.equal(getPlayerProgression(state, 'first').level, 2)
   assert.equal(getPlayerProgression(state, 'second').level, 2)
@@ -1838,7 +1842,7 @@ test('Mindblowing Ring triggers only for the credited source and retains its uns
   assert.equal(state.secondaryAbilities.actors[0]!.presentationRng, rng)
   assert.deepEqual(state.secondaryAbilities.rng, advanceNativeRngWords(rng, 502))
   assert.equal(
-    state.lightProviderOrder.nextRegistrationOrdinal.actor,
+    state.worldManagerOrder.nextRegistrationOrdinal.actor,
     actorLightOrdinal + 1,
   )
 })

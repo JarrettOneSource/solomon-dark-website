@@ -1,5 +1,11 @@
 # 2026-08-15 — Air contact-light painter bias over struck targets
 
+> **2026-08-29 split-painter closure:** [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> leaves the independently registered contact root and `+50` bias closed, but
+> supersedes this file's former single-root disposition for the Air bolt body.
+> The `ZAnimSplit` body is now a clipped multi-root queue program rather than
+> one midpoint container.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the Air lightning contact light/corona can paint

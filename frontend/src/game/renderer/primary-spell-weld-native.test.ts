@@ -460,11 +460,15 @@ test('Weld presentation guard excludes unrelated primary actors', () => {
 })
 
 function projectile(buildId: 1000 | 1001 | 1002 | 1009) {
-  return spawnNativeWeldOneShot({
+  const projectile = spawnNativeWeldOneShot({
     aimDirection: { x: 1, y: 0 }, firstId: buildId, origin: { x: 0, y: 0 },
     ownerId: 'wizard', primarySkill: profile(buildId), rng: createNativeRng(buildId),
     targets: [], underpowered: false, worldKey: WORLD_KEY,
   }).projectiles[0]!
+  return {
+    ...projectile,
+    painterRegistrations: [projectile.lightRegistration],
+  }
 }
 
 function profile(buildId: 1000 | 1001 | 1002 | 1009): NativeWeldPrimarySkillProfile {

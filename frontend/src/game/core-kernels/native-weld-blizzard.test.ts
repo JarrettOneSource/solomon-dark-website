@@ -115,15 +115,18 @@ test('Blizzard terrain and root glows are independent variant-three one-frame ac
     id: 41,
     ownerId: 'wizard',
     position: { x: 100, y: 30 },
+    registerWorldPainter: (managerLane) => ({ managerLane, registrationOrdinal: 41 }),
     rng: sourceRng,
     tick: 8,
     vector: [8, 2, 1, 0.8, 0, 0, 0],
     worldKey: 'boneyard:1',
   })
   assert.deepEqual({
+    painterRegistrations: result.actor.painterRegistrations,
     position: result.actor.origin,
     variant: result.actor.variant,
   }, {
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 41 }],
     position: { x: 100, y: 10 },
     variant: 3,
   })
@@ -136,6 +139,7 @@ test('Blizzard terrain and root glows are independent variant-three one-frame ac
     id: 42,
     ownerId: 'wizard',
     position: { x: 100, y: 30 },
+    registerWorldPainter: (managerLane) => ({ managerLane, registrationOrdinal: 42 }),
     rng: createNativeRng(18827),
     tick: 8,
     vector: [8, 2, 1, 0.8, 0, 0, 0],

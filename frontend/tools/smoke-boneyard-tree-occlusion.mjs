@@ -177,7 +177,7 @@ try {
   assert.match(opaque.rendererName.toLowerCase(), /webgl/)
   assert.equal(opaque.context, 'webgl2')
   assert.equal(opaque.frame.treeCount, 1)
-  assert.equal(opaque.frame.treeForegroundResidentCount, 1)
+  assert.equal(opaque.frame.treeProxyResidentCount, 1)
   assert.equal(opaque.frame.fadedTreeCount, 0)
   assert.equal(opaque.frame.minTreeAlpha, 1)
   assert.equal(opaque.frame.treeAlphaMismatchCount, 0)

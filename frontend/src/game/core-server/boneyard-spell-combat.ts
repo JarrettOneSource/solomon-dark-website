@@ -4,6 +4,7 @@ import {
   createPrimarySpellFireDetonation,
   createPrimarySpellWeldBoulderTerminal,
   createPrimarySpellWeldFireDetonation,
+  nativePrimaryPainterRegistrationContract,
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
@@ -88,7 +89,11 @@ import {
   nativeWeldMeteorPulseRadius,
 } from '../core-kernels/native-weld-meteor.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
+import {
+  createNativeWorldManagerOrder,
+  registerNativeWorldPainterRoots,
+  type RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
 import {
   damageBoneyardEnemy,
   positionBoneyardEnemy,
@@ -203,7 +208,7 @@ export function resolveBoneyardSpellCombat(
   worldKey: string,
   sourceRng: NativeRngState = createNativeRng(0),
   firstWorldContact: BoneyardSpellWorldContact | null = null,
-  registerLightProvider?: RegisterNativeLightProvider,
+  registerWorldPainter?: RegisterNativeWorldPainter,
   damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
   primarySceneryTargets: readonly PrimarySpellTarget[] = [],
   lethalObserver?: BoneyardEnemyLethalObserver,
@@ -230,6 +235,33 @@ export function resolveBoneyardSpellCombat(
   const ownedTransients: PrimarySpellTransientState[] = []
   const pendingFireActorContacts = [...fireActorContacts]
   let nextSpellId = sourceSpells.nextId
+  const registerCombatPainter = registerWorldPainter ?? createNativeWorldManagerOrder({
+    nextRegistrationOrdinal: { actor: nextSpellId, transient: nextSpellId },
+  }).register
+  const enrollCombatActor = <T extends PrimarySpellTransientState>(actor: T): T => {
+    const contract = nativePrimaryPainterRegistrationContract(actor)
+    const existing = actor.painterRegistrations
+    if (existing !== undefined) {
+      if (
+        existing.length !== contract.count
+        || existing.some(({ managerLane }) => managerLane !== contract.managerLane)
+      ) throw new Error(`${actor.kind} changed native painter-manager membership`)
+      return actor
+    }
+    const lightRegistration = 'lightRegistration' in actor ? actor.lightRegistration : null
+    const painterRegistrations = contract.count === 1
+      && lightRegistration?.managerLane === contract.managerLane
+      ? Object.freeze([lightRegistration])
+      : registerNativeWorldPainterRoots(
+          registerCombatPainter,
+          contract.managerLane,
+          contract.count,
+        )
+    return Object.freeze({ ...actor, painterRegistrations }) as unknown as T
+  }
+  const enrollCombatActors = <T extends PrimarySpellTransientState>(
+    actors: readonly T[],
+  ): T[] => actors.map(enrollCombatActor)
   const queueBurn = (targetId: number, ownerId: string, damage: number): void => {
     if (damage <= 0) return
     burns.push(Object.freeze({ damage, ownerId, targetId }))
@@ -300,6 +332,7 @@ export function resolveBoneyardSpellCombat(
           amount,
           lethalObserver,
           sourcePlayerId: contact.ownerId,
+          registerWorldPainter,
           suppressHurtSound: damage.suppressHitSound,
           tick,
         })
@@ -378,6 +411,7 @@ export function resolveBoneyardSpellCombat(
         amount,
         lethalObserver,
         sourcePlayerId: effect.ownerId,
+        registerWorldPainter,
         tick,
       })
       if (!contact.accepted) continue
@@ -491,11 +525,11 @@ export function resolveBoneyardSpellCombat(
       rng,
       privateSeed.value,
       false,
-      registerLightProvider,
+      registerWorldPainter,
     )
     rng = detonation.rng
     pendingFireActorContacts.push(...detonation.contacts)
-    impactTransients.push(...detonation.transients)
+    impactTransients.push(...enrollCombatActors(detonation.transients))
     nextSpellId = detonation.nextId
   }
 
@@ -509,12 +543,12 @@ export function resolveBoneyardSpellCombat(
       origin,
       tick,
       rng,
-      registerLightProvider,
+      registerWorldPainter,
     )
     rng = impactProgram.rng
     const impact = impactProgram.impact
     if (!impact) return
-    impactTransients.push(impact)
+    impactTransients.push(enrollCombatActor(impact))
     nextSpellId += 1
   }
 
@@ -527,7 +561,7 @@ export function resolveBoneyardSpellCombat(
     const id = nextSpellId
     nextSpellId += 1
     if (!Number.isFinite(charge)) return
-    impactTransients.push(createPrimarySpellEarthBoulderBit({
+    impactTransients.push(enrollCombatActor(createPrimarySpellEarthBoulderBit({
       debris: program.debris[0]!,
       enhancedEffects: true,
       id,
@@ -535,7 +569,7 @@ export function resolveBoneyardSpellCombat(
       ownerId: projectile.ownerId,
       tick,
       worldKey: projectile.worldKey,
-    }))
+    })))
   }
 
   const publishWeldBoulderContactDebris = (effect: Readonly<{
@@ -555,7 +589,7 @@ export function resolveBoneyardSpellCombat(
     const id = nextSpellId
     nextSpellId += 1
     if (!Number.isFinite(effect.scale)) return
-    impactTransients.push(createNativeWeldBoulderDebrisActor({
+    impactTransients.push(enrollCombatActor(createNativeWeldBoulderDebrisActor({
       buildId: effect.buildId,
       debris: program.debris[0]!,
       direction: effect.direction,
@@ -565,7 +599,7 @@ export function resolveBoneyardSpellCombat(
       tick,
       vector: effect.vector,
       worldKey: effect.worldKey,
-    }))
+    })))
   }
 
   for (const projectile of [...sourceSpells.projectiles].sort(bySpellId)) {
@@ -615,6 +649,7 @@ export function resolveBoneyardSpellCombat(
           amount,
           lethalObserver,
           sourcePlayerId: projectile.ownerId,
+          registerWorldPainter,
           tick,
         })
         if (!damaged.accepted) continue
@@ -666,11 +701,11 @@ export function resolveBoneyardSpellCombat(
             rng,
             projectile.presentationSeed ?? 0,
             true,
-            registerLightProvider,
+            registerWorldPainter,
           )
           rng = detonation.rng
           pendingFireActorContacts.push(...detonation.contacts)
-          impactTransients.push(...detonation.transients)
+          impactTransients.push(...enrollCombatActors(detonation.transients))
           nextSpellId = detonation.nextId
         } else {
           publishContactImpact(projectile, projectile.position)
@@ -717,6 +752,7 @@ export function resolveBoneyardSpellCombat(
         actorId: actor.id,
         amount,
         sourcePlayerId: projectile.ownerId,
+        registerWorldPainter,
         tick,
       })
       if (!damaged.accepted) continue
@@ -745,6 +781,7 @@ export function resolveBoneyardSpellCombat(
             actorId: row.actor.id,
             amount: radialDamage,
             sourcePlayerId: projectile.ownerId,
+            registerWorldPainter,
             tick,
           })
           if (!radial.accepted) continue
@@ -772,11 +809,11 @@ export function resolveBoneyardSpellCombat(
           rng,
           projectile.presentationSeed ?? 0,
           true,
-          registerLightProvider,
+          registerWorldPainter,
         )
         rng = detonation.rng
         pendingFireActorContacts.push(...detonation.contacts)
-        impactTransients.push(...detonation.transients)
+        impactTransients.push(...enrollCombatActors(detonation.transients))
         nextSpellId = detonation.nextId
       } else {
         publishContactImpact(projectile, projectile.position)
@@ -816,6 +853,7 @@ export function resolveBoneyardSpellCombat(
           actorId: actor.id,
           amount,
           sourcePlayerId: projectile.ownerId,
+          registerWorldPainter,
           tick,
         })
         if (!damaged.accepted) continue
@@ -834,11 +872,11 @@ export function resolveBoneyardSpellCombat(
         projectile,
         projectile.position,
         rng,
-        registerLightProvider,
+        registerWorldPainter,
       )
       rng = detonation.rng
       pendingFireActorContacts.push(...detonation.contacts)
-      impactTransients.push(...detonation.transients)
+      impactTransients.push(...enrollCombatActors(detonation.transients))
       nextSpellId = detonation.nextId
       continue
     }
@@ -852,6 +890,7 @@ export function resolveBoneyardSpellCombat(
       amount,
       lethalObserver,
       sourcePlayerId: projectile.ownerId,
+      registerWorldPainter,
       tick,
     })
     if (!damaged.accepted) continue
@@ -867,16 +906,19 @@ export function resolveBoneyardSpellCombat(
       )
       updatedProjectiles.set(projectile.id, continuation.projectile)
       for (const origin of continuation.streakOrigins) {
-        impactTransients.push({
+        impactTransients.push(enrollCombatActor({
           ageTicks: 0,
           headingDegrees: projectile.headingDegrees,
           id: nextSpellId,
           kind: 'ether-pierce-streak',
           origin,
           ownerId: projectile.ownerId,
+          painterRegistrations: Object.freeze([
+            registerCombatPainter('transient'),
+          ]),
           visualScale: continuation.projectile.visualScale,
           worldKey: projectile.worldKey,
-        })
+        }))
         nextSpellId += 1
       }
       continue
@@ -921,6 +963,7 @@ export function resolveBoneyardSpellCombat(
           actorId: actor.id,
           amount: contact.damage,
           sourcePlayerId: effect.ownerId,
+          registerWorldPainter,
           tick,
         })
         if (!damaged.accepted) continue
@@ -956,9 +999,9 @@ export function resolveBoneyardSpellCombat(
           effect,
           tick,
           rng,
-          registerLightProvider,
+          registerWorldPainter,
         )
-        impactTransients.push(...terminal.transients)
+        impactTransients.push(...enrollCombatActors(terminal.transients))
         nextSpellId = terminal.nextId
         rng = terminal.rng
       }
@@ -1023,7 +1066,7 @@ export function resolveBoneyardSpellCombat(
               tick,
             })
             if (knockback) {
-              impactTransients.push(knockback)
+              impactTransients.push(enrollCombatActor(knockback))
               activeKnockbackTargetIds.add(targetKey)
               nextSpellId += 1
             }
@@ -1039,6 +1082,7 @@ export function resolveBoneyardSpellCombat(
             actorId: currentActor.id,
             amount,
             sourcePlayerId: effect.ownerId,
+            registerWorldPainter,
             tick,
           })
           if (!damaged.accepted) continue
@@ -1069,7 +1113,7 @@ export function resolveBoneyardSpellCombat(
               tick,
             })
             rng = presentation.rng
-            impactTransients.push(...presentation.actors)
+            impactTransients.push(...enrollCombatActors(presentation.actors))
             nextSpellId += presentation.actors.length
           }
           if (damaged.killed) break
@@ -1104,6 +1148,7 @@ export function resolveBoneyardSpellCombat(
         actorId: actor.id,
         amount: effect.damage,
         sourcePlayerId: effect.ownerId,
+        registerWorldPainter,
         tick,
       })
       if (!damaged.accepted) continue
@@ -1111,18 +1156,15 @@ export function resolveBoneyardSpellCombat(
       events.push(...damaged.events)
       hits.push(transientSpellHit(effect, actor.id, effect.damage, damaged.killed, tick))
       consumedTransientIds.add(effect.id)
-      impactTransients.push({
+      impactTransients.push(enrollCombatActor({
         ageTicks: 0,
         id: nextSpellId,
         kind: 'fire-impact',
-        lightRegistration: registerLightProvider?.('transient') ?? {
-          managerLane: 'transient',
-          registrationOrdinal: nextSpellId,
-        },
+        lightRegistration: registerCombatPainter('transient'),
         origin: { ...effect.position },
         ownerId: effect.ownerId,
         worldKey: effect.worldKey,
-      })
+      }))
       nextSpellId += 1
     }
   }
@@ -1149,6 +1191,7 @@ export function resolveBoneyardSpellCombat(
           actorId: row.actor.id,
           amount: pulse.amount,
           sourcePlayerId: effect.ownerId,
+          registerWorldPainter,
           tick,
         })
         if (!damaged.accepted) continue
@@ -1174,11 +1217,11 @@ export function resolveBoneyardSpellCombat(
       rng,
       effect.privateSeed,
       false,
-      registerLightProvider,
+      registerWorldPainter,
     )
     rng = detonation.rng
     pendingFireActorContacts.push(...detonation.contacts)
-    impactTransients.push(...detonation.transients)
+    impactTransients.push(...enrollCombatActors(detonation.transients))
     nextSpellId = detonation.nextId
   }
 
@@ -1197,6 +1240,7 @@ export function resolveBoneyardSpellCombat(
         actorId: actor.id,
         amount: effect.damage,
         sourcePlayerId: effect.ownerId,
+        registerWorldPainter,
         tick,
       })
       if (!damaged.accepted) continue
@@ -1235,6 +1279,7 @@ export function resolveBoneyardSpellCombat(
         actorId: actor.id,
         amount,
         sourcePlayerId: contact.ownerId,
+        registerWorldPainter,
         tick,
       })
       if (!damaged.accepted) continue
@@ -1251,18 +1296,15 @@ export function resolveBoneyardSpellCombat(
       })
       if (contact.kind === 'fire-ember') {
         consumedTransientIds.add(contact.spellId)
-        impactTransients.push({
+        impactTransients.push(enrollCombatActor({
           ageTicks: 0,
           id: nextSpellId,
           kind: 'fire-impact',
-          lightRegistration: registerLightProvider?.('transient') ?? {
-            managerLane: 'transient',
-            registrationOrdinal: nextSpellId,
-          },
+          lightRegistration: registerCombatPainter('transient'),
           origin: { ...contact.position },
           ownerId: contact.ownerId,
           worldKey: contact.worldKey,
-        })
+        }))
         nextSpellId += 1
         break
       }
@@ -1319,6 +1361,7 @@ export function resolveBoneyardSpellCombat(
           emission.ownerId,
           tick,
           disintegrate,
+          registerWorldPainter,
           lethalObserver,
         )
         enemies = contact.enemies
@@ -1339,7 +1382,7 @@ export function resolveBoneyardSpellCombat(
         if (hop > 0) {
           const direction = normalizedDifference(previousPoint, currentPoint)
           const geometry = airPrimaryBoltGeometry(previousPoint, direction, currentPoint)
-          ownedTransients.push({
+          ownedTransients.push(enrollCombatActor({
             ageTicks: 0,
             birthTick: tick,
             direction,
@@ -1347,10 +1390,7 @@ export function resolveBoneyardSpellCombat(
             hurricaneCharge: 0,
             id: nextSpellId,
             kind: 'air',
-            lightRegistration: registerLightProvider?.('transient') ?? {
-              managerLane: 'transient',
-              registrationOrdinal: nextSpellId,
-            },
+            lightRegistration: registerCombatPainter('transient'),
             midpoint: geometry.midpoint,
             origin: geometry.source,
             ownerId: emission.ownerId,
@@ -1358,7 +1398,7 @@ export function resolveBoneyardSpellCombat(
             underpowered: emission.underpowered,
             variant: nextSpellId % 4,
             worldKey,
-          })
+          }))
           nextSpellId += 1
         }
         previousPoint = currentPoint
@@ -1408,6 +1448,7 @@ export function resolveBoneyardSpellCombat(
               actorId: row.actor.id,
               amount,
               sourcePlayerId: emission.ownerId,
+              registerWorldPainter,
               tick,
             })
             if (damaged.accepted) {
@@ -1428,7 +1469,7 @@ export function resolveBoneyardSpellCombat(
                 worldKey,
               })
               rng = fade.rng
-              ownedTransients.push(fade.actor)
+              ownedTransients.push(enrollCombatActor(fade.actor))
               nextSpellId += 1
               const privateSeed = drawNativeInteger(rng, 1_000_000)
               rng = privateSeed.state
@@ -1447,11 +1488,11 @@ export function resolveBoneyardSpellCombat(
                 rng,
                 privateSeed.value,
                 false,
-                registerLightProvider,
+                registerWorldPainter,
               )
               rng = detonation.rng
               pendingFireActorContacts.push(...detonation.contacts)
-              ownedTransients.push(...detonation.transients)
+              ownedTransients.push(...enrollCombatActors(detonation.transients))
               nextSpellId = detonation.nextId
             }
             const currentPoint = primarySpellTargetPoint(row.target)
@@ -1462,7 +1503,7 @@ export function resolveBoneyardSpellCombat(
                 direction,
                 currentPoint,
               )
-              ownedTransients.push({
+              ownedTransients.push(enrollCombatActor({
                 ageTicks: 0,
                 birthTick: tick,
                 buildId: 1003,
@@ -1479,7 +1520,7 @@ export function resolveBoneyardSpellCombat(
                 variant: nextSpellId % 4,
                 vector: Object.freeze([...profile.vector.values]),
                 worldKey,
-              })
+              }))
               nextSpellId += 1
             }
             previousPoint = currentPoint
@@ -1514,13 +1555,14 @@ export function resolveBoneyardSpellCombat(
               id: nextSpellId,
               ownerId: emission.ownerId,
               position: emission.endpoint,
+              registerWorldPainter: registerCombatPainter,
               rng,
               tick,
               vector: profile.vector.values,
               worldKey,
             })
             rng = glow.rng
-            ownedTransients.push(glow.actor)
+            ownedTransients.push(enrollCombatActor(glow.actor))
             nextSpellId += 1
           }
           for (const root of roots) {
@@ -1534,6 +1576,7 @@ export function resolveBoneyardSpellCombat(
                 emission.direction,
                 tick,
                 rng,
+                registerWorldPainter,
               )
               enemies = tumbled.store
               rng = tumbled.rng
@@ -1546,13 +1589,14 @@ export function resolveBoneyardSpellCombat(
               id: nextSpellId,
               ownerId: emission.ownerId,
               position: root.position,
+              registerWorldPainter: registerCombatPainter,
               rng,
               tick,
               vector: profile.vector.values,
               worldKey,
             })
             rng = glow.rng
-            ownedTransients.push(glow.actor)
+            ownedTransients.push(enrollCombatActor(glow.actor))
             nextSpellId += 1
             if (row.kind !== 'enemy' || !nativePrimaryTargetEligible(root, 0x2)) continue
             queueTargetEffect(row.actor.id, {
@@ -1577,6 +1621,7 @@ export function resolveBoneyardSpellCombat(
               actorId: row.actor.id,
               amount,
               sourcePlayerId: emission.ownerId,
+              registerWorldPainter,
               tick,
             })
             if (damaged.accepted) {
@@ -1624,6 +1669,7 @@ export function resolveBoneyardSpellCombat(
                 direction,
                 firstId: nextSpellId,
                 ownerId: emission.ownerId,
+                registerWorldPainter: registerCombatPainter,
                 rng,
                 source: source.position,
                 tick,
@@ -1631,7 +1677,7 @@ export function resolveBoneyardSpellCombat(
                 worldKey,
               })
               rng = effects.rng
-              ownedTransients.push(...effects.actors)
+              ownedTransients.push(...enrollCombatActors(effects.actors))
               nextSpellId = effects.nextId
               queueTargetEffect(row.actor.id, {
                 coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
@@ -1653,6 +1699,7 @@ export function resolveBoneyardSpellCombat(
                 actorId: row.actor.id,
                 amount,
                 sourcePlayerId: emission.ownerId,
+                registerWorldPainter,
                 tick,
               })
               if (damaged.accepted) {
@@ -1751,6 +1798,7 @@ export function resolveBoneyardSpellCombat(
           emission.direction,
           tick,
           rng,
+          registerWorldPainter,
         )
         enemies = tumbled.store
         rng = tumbled.rng
@@ -1770,6 +1818,7 @@ export function resolveBoneyardSpellCombat(
         amount,
         lethalObserver,
         sourcePlayerId: emission.ownerId,
+        registerWorldPainter,
         tick,
       })
       if (damaged.accepted) {
@@ -1803,6 +1852,7 @@ export function resolveBoneyardSpellCombat(
               actorId: row.actor.id,
               amount: hailAmount,
               sourcePlayerId: emission.ownerId,
+              registerWorldPainter,
               tick,
             })
             if (hailContact.accepted) {
@@ -1864,6 +1914,8 @@ export function resolveBoneyardSpellCombat(
     }
     steppedTransients.push(updatedTransients.get(effect.id) ?? effect)
   }
+
+  assertCombatPainterMembership([...impactTransients, ...ownedTransients])
 
   const spells = consumedProjectileIds.size === 0
     && consumedTransientIds.size === 0
@@ -2042,6 +2094,7 @@ function applyDamageWithDisintegrate(
   ownerId: string,
   tick: number,
   disintegrate: boolean,
+  registerWorldPainter: RegisterNativeWorldPainter | undefined,
   lethalObserver: BoneyardEnemyLethalObserver | undefined,
 ): {
   readonly accepted: boolean
@@ -2055,6 +2108,7 @@ function applyDamageWithDisintegrate(
     actorId,
     amount,
     sourcePlayerId: ownerId,
+    registerWorldPainter,
     tick,
   })
   if (!ordinary.accepted || ordinary.killed || !disintegrate) {
@@ -2091,6 +2145,7 @@ function applyDamageWithDisintegrate(
     actorId,
     amount: executeAmount,
     sourcePlayerId: ownerId,
+    registerWorldPainter,
     tick,
   })
   return {
@@ -2496,4 +2551,22 @@ function validatedDamageMultiplier(multiplier: number): number {
     throw new RangeError('Boneyard spell damage multiplier must be finite and non-negative')
   }
   return multiplier
+}
+
+function assertCombatPainterMembership(
+  actors: readonly PrimarySpellTransientState[],
+): void {
+  for (const actor of actors) {
+    const contract = nativePrimaryPainterRegistrationContract(actor)
+    const registrations = actor.painterRegistrations
+    if (
+      registrations === undefined
+      || registrations.length !== contract.count
+      || registrations.some(({ managerLane }) => managerLane !== contract.managerLane)
+    ) {
+      throw new Error(
+        `Boneyard combat-born ${actor.kind}:${actor.id} lost native painter-manager membership`,
+      )
+    }
+  }
 }

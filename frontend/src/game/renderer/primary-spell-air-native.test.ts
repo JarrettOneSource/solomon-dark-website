@@ -380,11 +380,17 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
     birthTick: 80,
     direction: { x: 1, y: 0 },
     endpoint: { x: 255, y: 70 },
+    hurricaneCharge: 0,
     id: 31,
     kind: 'air',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 30 },
     midpoint: { x: 152.5, y: 70 },
     origin: { x: 50, y: 70 },
     ownerId: 'wizard',
+    painterRegistrations: [0, 1, 2].map((registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
     targetId: null,
     underpowered: false,
     variant: 0,
@@ -397,13 +403,16 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
     ribbon: Texture.EMPTY,
   })
 
-  assert.equal(view.containers.length, 3)
+  assert.ok(view.containers.length > 3)
   assert.equal(AIR_LIGHTNING_CONTACT_SORT_BIAS, 50)
   assert.ok(view.containers.every(({ parent }) => parent === null))
   assert.deepEqual(
     view.painterRoots().map(({ suffix }) => suffix),
     ['body', 'source', 'contact'],
   )
+  const body = view.painterRoots().find(({ suffix }) => suffix === 'body')!
+  assert.equal(body.visible, false)
+  assert.ok((body.insertions?.length ?? 0) > 1)
   assert.deepEqual(
     view.painterRoots().map(({ sortBias }) => sortBias),
     [0, 0, 50],
@@ -438,11 +447,17 @@ test('Air contact bias paints after struck enemies and Gravestones but stays in 
     birthTick: 80,
     direction: { x: 1, y: 0 },
     endpoint: { x: 250, y: 80 },
+    hurricaneCharge: 0,
     id: 31,
     kind: 'air',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 30 },
     midpoint: { x: 150, y: 90 },
     origin: { x: 50, y: 100 },
     ownerId: 'wizard',
+    painterRegistrations: [0, 1, 2].map((registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
     targetId: 'scenery:grave-target',
     underpowered: false,
     variant: 0,
@@ -465,16 +480,16 @@ test('Air contact bias paints after struck enemies and Gravestones but stays in 
       {
         id: 'enemy:7',
         queueFamily: 'ordinary-dynamic',
+        registration: { managerLane: 'actor', registrationOrdinal: 10 },
         worldY: 100,
         sortBias: 0,
-        sourceOrder: 0,
       },
       {
         id: 'primary-spell:31:contact',
         queueFamily: contact.queueFamily,
+        registration: state.painterRegistrations![2]!,
         worldY: contact.worldY,
         sortBias: contact.sortBias,
-        sourceOrder: 1,
       },
     ],
   })

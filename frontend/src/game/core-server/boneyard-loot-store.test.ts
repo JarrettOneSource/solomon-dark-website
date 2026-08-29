@@ -575,6 +575,7 @@ function lootSnapshot(actor: BoneyardLootActor): BoneyardLootSnapshot {
     nativeTypeId: actor.nativeTypeId,
     orbKind: actor.orbKind,
     orbValue: actor.orbValue,
+    painterRegistration: actor.painterRegistration,
     position: { ...actor.position },
     rotationDeg: actor.rotationDeg,
     scatterActive: actor.scatterActive,

@@ -4,7 +4,7 @@ import type {
 } from './game-state.ts'
 
 const POSITION_SCALE = 16
-const FRAME_LENGTH = 14
+const FRAME_LENGTH = 17
 
 export function boneyardMageLightningPulseFrame(
   pulse: BoneyardMageLightningPulseSnapshot,
@@ -28,6 +28,9 @@ export function boneyardMageLightningPulseFrame(
     quantize(contactPoint.x),
     quantize(contactPoint.y),
     contact.kind === 'target-attached' ? contact.targetPlayerId : null,
+    pulse.painterRegistrations[0]!.registrationOrdinal,
+    pulse.painterRegistrations[1]!.registrationOrdinal,
+    pulse.painterRegistrations[2]?.registrationOrdinal ?? -1,
   ]
 }
 
@@ -48,6 +51,11 @@ export function boneyardMageLightningPulseFrameIsValid(
       (frame[10] === 0 && frame[13] === null)
       || (frame[10] === 1 && validPlayerId(frame[13]))
     )
+    && nonnegativeInteger(frame[14])
+    && nonnegativeInteger(frame[15])
+    && (frame[10] === 0
+      ? nonnegativeInteger(frame[16])
+      : frame[16] === -1)
 }
 
 export function materializeBoneyardMageLightningPulse(
@@ -72,6 +80,13 @@ export function materializeBoneyardMageLightningPulse(
     id: frame[0],
     midpoint: { x: dequantize(frame[6]), y: dequantize(frame[7]) },
     ownerActorId: frame[1],
+    painterRegistrations: Object.freeze([
+      { managerLane: 'actor', registrationOrdinal: frame[14] },
+      { managerLane: 'actor', registrationOrdinal: frame[15] },
+      ...(frame[16] < 0
+        ? []
+        : [{ managerLane: 'actor' as const, registrationOrdinal: frame[16] }]),
+    ]),
     seed: frame[3],
     source: { x: dequantize(frame[4]), y: dequantize(frame[5]) },
     tick: frame[2],

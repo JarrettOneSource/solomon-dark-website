@@ -20,6 +20,7 @@ import {
   rollNativeEnemyLoot,
 } from '../src/game/core-kernels/native-loot.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import {
   activateBoneyardGoodie,
   createBoneyardLootStore,
@@ -148,6 +149,23 @@ try {
   const playerId = host.hostPlayerId()
   assert.ok(playerId, 'the browser player must own the authoritative host slot')
   assert.equal(host.state().world.kind, 'boneyard')
+  const goodiePainterRegistrations = await canvas.evaluate((node) => (
+    structuredClone(node.__sdrBoneyardFrame.goodiePainterRegistrations)
+  ))
+  assert.deepEqual(
+    goodiePainterRegistrations,
+    host.state().world.loot.goodies.map(({ id, sceneryRegistrationOrdinal }) => ({
+      id,
+      sceneryRegistrationOrdinal,
+    })),
+  )
+  assert.ok(goodiePainterRegistrations.length > 0)
+  assert.equal(
+    new Set(goodiePainterRegistrations.map(({ sceneryRegistrationOrdinal }) => (
+      sceneryRegistrationOrdinal
+    ))).size,
+    goodiePainterRegistrations.length,
+  )
   const guestPlayerId = host.state().playerEntities.identities
     .map(({ playerId: connectedPlayerId }) => connectedPlayerId)
     .find((connectedPlayerId) => connectedPlayerId !== playerId)
@@ -446,12 +464,12 @@ try {
     useBuiltFrontend,
   }, null, 2)}\n`)
 } finally {
-  await host.close()
   await Promise.all([
     hostContext.close(),
     guestContext.close(),
   ])
   await browser.close()
+  await host.close()
   await new Promise((resolve) => setImmediate(resolve))
   await vite.close()
 }
@@ -488,7 +506,7 @@ async function proveGoodieSackOpening({ host, page, playerId, position }) {
   assert.deepEqual(proofActor?.item?.contents?.map(({ nativeSubtype, quantity }) => (
     [nativeSubtype, quantity]
   )), [[0, 5]])
-  const spawned = spawnBoneyardLootSpecs({
+  const spawned = spawnAuthoritativeLootSpecs(state, {
     ...state.world.loot,
     nextItemId: materialized.nextItemId,
   }, [{
@@ -807,6 +825,13 @@ function forcedSharedRoll(input, sourcePosition, category, matches) {
   throw new Error(`Could not find a deterministic shared ${category} browser proof seed`)
 }
 
+function spawnAuthoritativeLootSpecs(state, source, specs, tick) {
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const result = spawnBoneyardLootSpecs(source, specs, tick, worldManagerOrder.register)
+  Object.assign(state, { worldManagerOrder: worldManagerOrder.state() })
+  return result
+}
+
 function spawnProofDrops(host, materialized) {
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
@@ -817,7 +842,12 @@ function spawnProofDrops(host, materialized) {
     nextItemId: materialized.nextItemId,
     sharedRng: materialized.sharedRng,
   }
-  const result = spawnBoneyardLootSpecs(prepared, materialized.drops, state.tick)
+  const result = spawnAuthoritativeLootSpecs(
+    state,
+    prepared,
+    materialized.drops,
+    state.tick,
+  )
   const actors = result.store.actors.slice(sourceActorCount)
   assert.equal(actors.length, 7)
   Object.assign(state, { world: { ...state.world, loot: result.store } })
@@ -884,7 +914,7 @@ async function proveCanonicalPickupContention({
     worldHasHealthPotionSack: false,
   }, { amount: 1, kind: 'drop-gold' })
   assert.equal(materialized.drops.length, 1)
-  const spawned = spawnBoneyardLootSpecs({
+  const spawned = spawnAuthoritativeLootSpecs(state, {
     ...state.world.loot,
     nextItemId: itemIds.peek(),
     sharedRng: materialized.sharedRng,
@@ -937,7 +967,7 @@ async function proveTerminalBonusFade({
   movePlayer(host, hostPlayerId, point(position, -250, 0))
   movePlayer(host, guestPlayerId, point(position, 250, 0))
   const spawnedAtTick = state.tick
-  const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
+  const spawned = spawnAuthoritativeLootSpecs(state, state.world.loot, [{
     activationDelayTicks: 0,
     bonusKind: 2,
     id: 0,

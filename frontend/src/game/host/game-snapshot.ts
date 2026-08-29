@@ -166,6 +166,7 @@ export function createGameSnapshot(
             id: goodie.id,
             phase: goodie.phase,
             position: { ...goodie.position },
+            sceneryRegistrationOrdinal: goodie.sceneryRegistrationOrdinal,
             subtype: goodie.subtype,
             timer: goodie.timer,
           })),
@@ -200,6 +201,7 @@ export function createGameSnapshot(
             nativeTypeId: actor.nativeTypeId,
             orbKind: actor.orbKind,
             orbValue: actor.orbValue,
+            painterRegistration: actor.painterRegistration,
             position: { ...actor.position },
             rotationDeg: actor.rotationDeg,
             scatterActive: actor.scatterActive,
@@ -215,6 +217,7 @@ export function createGameSnapshot(
             runId,
           })),
           runId,
+          solomonPainterRegistration: state.world.solomonPainterRegistration,
           tutorial: state.world.tutorial,
           waves: state.world.waves === null ? null : {
             interwaveDelayTicks: state.world.waves.interwaveDelayTicks,
@@ -245,6 +248,9 @@ function protocolBoneyardEnemyEvent(
     ...(event.deflectPitch === undefined ? {} : { deflectPitch: event.deflectPitch }),
     ...(event.gainScale === undefined ? {} : { gainScale: event.gainScale }),
     ...(event.output === undefined ? {} : { output: event.output }),
+    ...(event.painterRegistration === undefined
+      ? {}
+      : { painterRegistration: event.painterRegistration }),
     ...(event.pitch === undefined ? {} : { pitch: event.pitch }),
     ...(event.projectileId === undefined ? {} : { projectileId: event.projectileId }),
     ...(event.sound === undefined ? {} : { sound: event.sound }),
@@ -354,6 +360,7 @@ function protocolPlayerState(
       unforgeBonuses: { ...economy.unforgeBonuses },
     },
     lighting: {
+      deathWeaponPainterRegistration: lighting.deathWeaponPainterRegistration,
       driveActive: playerLightDriveActive(player.primaryCast, progression.lifeState),
       lightRegistration: lighting.lightRegistration,
       overlayEffectPhase: nativePlayerElementEffectPhase(
@@ -454,6 +461,7 @@ function protocolStudentState(
     heading: student.heading,
     headingIndex: student.headingIndex,
     id: student.id,
+    painterRegistration: student.painterRegistration,
     position: { ...student.position },
     props: student.props.map((prop) => ({ ...prop })),
     reading: student.reading,

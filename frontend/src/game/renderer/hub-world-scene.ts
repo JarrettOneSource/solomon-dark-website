@@ -35,6 +35,11 @@ import {
   type HubHagathaParticle,
 } from '../hub-presentation.ts'
 import {
+  applyNativeHubPainterOrder,
+  nativeHubFixedActorPainterRegistration,
+  type NativeHubPainterLayer,
+} from '../hub-painter-order.ts'
+import {
   HUB_TEACHER_CAST_ORIGIN,
   HUB_TEACHER_RUNE_ALPHA,
   HUB_TEACHER_RUNE_CENTER,
@@ -83,6 +88,7 @@ export class HubWorldScene {
   private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
   private readonly modTextures: ModPresentationTextures
   private readonly nonPlayerActors: Container[] = []
+  private readonly courtyardDepthProps: Array<{ actorY: number; sprite: Sprite }> = []
   private readonly fountain = new Map<number, Sprite>()
   private readonly liveFountainIds = new Set<number>()
   private readonly statueAura: Sprite
@@ -112,6 +118,7 @@ export class HubWorldScene {
   private markerEpochSeed = 0
   private markerEpochStartedAtTick = 0
   private lastLocalRegion: string | null = null
+  private lastPainterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[] = []
 
   constructor(
     textures: HubWorldTextures,
@@ -248,6 +255,7 @@ export class HubWorldScene {
       presentationFrame,
       pointGainAt,
     )
+    this.applyPainterOrder(snapshot, localPlayerId)
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       this.players.get(ownerId)?.container.zIndex
     ))
@@ -354,6 +362,10 @@ export class HubWorldScene {
 
   get secondaryAbilitySamples() {
     return this.secondaryAbilities.diagnosticSamples
+  }
+
+  get painterOrder() {
+    return this.lastPainterOrder
   }
 
   get visibleMarkerIds(): readonly NativeHubInteractionId[] {
@@ -480,7 +492,122 @@ export class HubWorldScene {
       sprite.zIndex = hubWorldDepthForActor(HUB_COURTYARD_DEPTH_PROPS[index].actorY)
       sprite.eventMode = 'none'
       this.world.addChild(sprite)
+      this.courtyardDepthProps.push({
+        actorY: HUB_COURTYARD_DEPTH_PROPS[index].actorY,
+        sprite,
+      })
     }
+  }
+
+  private applyPainterOrder(
+    snapshot: HubPresentationFrame,
+    localPlayerId: string,
+  ): void {
+    const referenceY = snapshot.players[localPlayerId]?.position.y ?? 0
+    const layers: NativeHubPainterLayer[] = []
+    const fixed = (
+      id: Parameters<typeof nativeHubFixedActorPainterRegistration>[0],
+      target: Container,
+      worldY: number,
+    ) => {
+      if (!target.visible) return
+      layers.push({
+        id: `fixed:${id}`,
+        registration: nativeHubFixedActorPainterRegistration(id),
+        sortBias: 0,
+        target,
+        worldY,
+      })
+    }
+    const annalist = this.nonPlayerActors[0]
+    if (annalist) fixed('annalist', annalist, annalist.position.y)
+    fixed('hagatha', this.hagatha.container, this.hagatha.container.position.y)
+    fixed('luthacus', this.luthacus.container, this.luthacus.container.position.y)
+    fixed('fomentius', this.potion.actor, this.potion.actor.position.y)
+    fixed('teacher', this.teacher.container, this.teacher.container.position.y)
+    fixed('skorcha', this.skorcha.container, this.skorcha.container.position.y)
+
+    for (const [index, prop] of this.courtyardDepthProps.entries()) {
+      layers.push({
+        id: `scenery:depth-prop:${index}`,
+        registration: { managerLane: 'scenery', registrationOrdinal: index },
+        sortBias: 0,
+        target: prop.sprite,
+        worldY: prop.actorY,
+      })
+    }
+    layers.push({
+      id: 'scenery:statue',
+      registration: {
+        managerLane: 'scenery',
+        registrationOrdinal: this.courtyardDepthProps.length,
+      },
+      sortBias: 0,
+      target: this.statueBody,
+      worldY: HUB_STATUE_ROOT.y,
+    })
+    for (const [playerId, view] of this.players) {
+      const player = snapshot.players[playerId]
+      if (!player) continue
+      layers.push({
+        id: `player:${playerId}`,
+        registration: player.lighting.lightRegistration,
+        sortBias: 0,
+        target: view.container,
+        worldY: player.position.y,
+      })
+    }
+    const studentById = new Map(snapshot.world.students.map((student) => [
+      student.id,
+      student,
+    ]))
+    for (const [studentId, view] of this.students) {
+      const student = studentById.get(studentId)
+      if (!student) continue
+      layers.push({
+        id: `student:${studentId}`,
+        registration: student.painterRegistration,
+        sortBias: 0,
+        target: view.container,
+        worldY: student.position.y,
+      })
+    }
+    for (const layer of this.primarySpells.painterLayers()) {
+      if (layer.lane !== 'world-sorted') continue
+      const insertionTargets = Object.fromEntries((layer.insertions ?? []).map((insertion) => [
+        insertion.id,
+        depthTarget((depth) => this.primarySpells.setDepth(insertion.id, depth)),
+      ]))
+      layers.push({
+        id: layer.id,
+        insertionTargets,
+        insertions: layer.insertions,
+        registration: layer.registration,
+        sortBias: layer.sortBias,
+        target: depthTarget((depth) => this.primarySpells.setDepth(layer.id, depth)),
+        visible: layer.visible,
+        worldY: layer.worldY,
+      })
+    }
+    for (const layer of this.secondaryAbilities.painterLayers()) {
+      if (layer.lane !== 'world-sorted' || layer.registration === null) continue
+      const insertionTargets = Object.fromEntries((layer.insertions ?? []).map((insertion) => [
+        insertion.id,
+        depthTarget((depth) => this.secondaryAbilities.setDepth(insertion.id, depth)),
+      ]))
+      layers.push({
+        id: layer.id,
+        insertionTargets,
+        insertions: layer.insertions,
+        registration: layer.registration,
+        sortBias: layer.sortBias,
+        target: depthTarget((depth) => this.secondaryAbilities.setDepth(layer.id, depth)),
+        visible: layer.visible,
+        worldY: layer.worldY,
+      })
+    }
+    this.lastPainterOrder = applyNativeHubPainterOrder(layers, referenceY)
+    this.statueAura.zIndex = this.statueBody.zIndex - 0.25
   }
 
   private worldLayer(
@@ -1057,4 +1184,15 @@ function colorTint(color: HubColor): number {
   const green = Math.round(color.green * 255)
   const blue = Math.round(color.blue * 255)
   return (red << 16) | (green << 8) | blue
+}
+
+function depthTarget(setDepth: (depth: number) => void): { zIndex: number } {
+  return {
+    get zIndex() {
+      return 0
+    },
+    set zIndex(depth: number) {
+      setDepth(depth)
+    },
+  }
 }

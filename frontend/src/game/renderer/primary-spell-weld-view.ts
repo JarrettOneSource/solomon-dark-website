@@ -4,6 +4,11 @@ import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { NATIVE_BROWSER_ENHANCED_EFFECTS } from '../game-settings.ts'
+import {
+  buildNativeZAnimSplitBands,
+  type NativeZAnimSplitBand,
+} from '../native-zanim-split.ts'
 import {
   isNativeWeldPresentationState,
   nativeWeldVisualPlan,
@@ -17,12 +22,19 @@ import type {
 
 interface WeldPainterRoot {
   readonly container: Container
+  readonly insertions?: readonly Readonly<{
+    sortBias: number
+    suffix: string
+    visible: boolean
+    worldY: number
+  }>[]
   readonly lane: 'world-sorted'
   readonly overlayOwnerId: string
   readonly queueFamily: 'ordinary-dynamic'
   readonly regionLightPoint: Readonly<{ x: number; y: number }> | null
   readonly sortBias: number
   readonly suffix: string
+  readonly visible?: boolean
   readonly worldY: number
 }
 
@@ -30,12 +42,18 @@ export class WeldPrimarySpellView {
   readonly container: Container
   readonly containers: readonly Container[]
   private readonly buildId: NativeWeldPresentationState['buildId']
+  private readonly bandContainers: readonly Container[]
+  private readonly bandContents: readonly Container[]
+  private readonly bandMasks: readonly Graphics[]
+  private readonly bands: readonly NativeZAnimSplitBand[]
+  private readonly boundsY: number
   private readonly initialKind: NativeWeldPresentationState['kind']
   private readonly lineGraphics: Graphics
   private readonly meshContainer: Container
   private readonly meshes: MeshSimple[] = []
   private plan: ReturnType<typeof nativeWeldVisualPlan>
   private readonly sprites: Sprite[] = []
+  private readonly split: boolean
   private state: NativeWeldPresentationState
   private readonly textures: PlayerWorldTextures['primarySpells']['weldActors']
 
@@ -53,10 +71,37 @@ export class WeldPrimarySpellView {
     this.lineGraphics.eventMode = 'none'
     this.meshContainer = new Container({ label: 'weld:meshes' })
     this.meshContainer.eventMode = 'none'
-    this.container.addChild(this.lineGraphics)
-    this.container.addChild(this.meshContainer)
-    this.containers = [this.container]
     this.plan = nativeWeldVisualPlan(state)
+    this.split = state.kind === 'weld-channel'
+      && (state.buildId === 1003 || state.buildId === 1004)
+    const bounds = weldPlanBounds(this.plan, textures)
+    this.boundsY = bounds.y
+    this.bands = this.split
+      ? buildNativeZAnimSplitBands(
+          `weld:${state.id}`,
+          bounds,
+          NATIVE_BROWSER_ENHANCED_EFFECTS,
+        )
+      : Object.freeze([])
+    this.bandMasks = this.bands.map((band) => new Graphics()
+      .rect(0, band.clip.y, band.clip.width, band.clip.height)
+      .fill(0xffffff))
+    this.bandContents = this.bands.map((_, index) => {
+      const content = new Container({ label: `weld:split-content:${index}` })
+      content.mask = this.bandMasks[index]!
+      return content
+    })
+    this.bandContainers = this.bands.map((_, index) => {
+      const root = new Container({ label: `weld:split-band:${index}` })
+      root.eventMode = 'none'
+      root.addChild(this.bandContents[index]!, this.bandMasks[index]!)
+      return root
+    })
+    if (!this.split) {
+      this.container.addChild(this.lineGraphics)
+      this.container.addChild(this.meshContainer)
+    }
+    this.containers = Object.freeze([this.container, ...this.bandContainers])
     this.update(state)
   }
 
@@ -73,6 +118,20 @@ export class WeldPrimarySpellView {
       || state.buildId !== this.buildId) return
     this.state = state
     this.plan = nativeWeldVisualPlan(state, presentationFrame)
+    if (this.split) {
+      this.container.position.set(this.plan.position.x, this.plan.position.y)
+      for (let index = 0; index < this.bandContainers.length; index += 1) {
+        const root = this.bandContainers[index]!
+        root.position.set(this.plan.position.x, this.plan.position.y)
+        this.bandMasks[index]!.position.x = -this.plan.position.x
+        renderWeldPlan(
+          this.bandContents[index]!,
+          this.plan,
+          this.textures,
+        )
+      }
+      return
+    }
     this.container.position.set(this.plan.position.x, this.plan.position.y)
     syncSprites(this.container, this.sprites, this.plan.sprites.length)
     for (let index = 0; index < this.plan.sprites.length; index += 1) {
@@ -99,6 +158,25 @@ export class WeldPrimarySpellView {
       && this.plan.meshes.length === 0
       && this.plan.lines.length === 0
     ) return []
+    if (this.split) {
+      return [{
+        container: this.container,
+        insertions: this.bands.map((band, index) => ({
+          sortBias: 0,
+          suffix: `band-${index}`,
+          visible: true,
+          worldY: this.plan.position.y + band.painterY,
+        })),
+        lane: 'world-sorted',
+        overlayOwnerId: this.state.ownerId,
+        queueFamily: 'ordinary-dynamic',
+        regionLightPoint: this.plan.regionLightPoint,
+        sortBias: 0,
+        suffix: '',
+        visible: false,
+        worldY: this.plan.position.y + this.boundsY,
+      }]
+    }
     return [{
       container: this.container,
       lane: 'world-sorted',
@@ -112,11 +190,22 @@ export class WeldPrimarySpellView {
   }
 
   setTint(_suffix: string, tint: number): void {
+    const band = this.painterContainer(_suffix)
+    if (band) {
+      band.tint = tint
+      return
+    }
     this.container.tint = tint
   }
 
+  painterContainer(suffix: string): Container | null {
+    if (!suffix.startsWith('band-')) return null
+    const index = Number(suffix.slice('band-'.length))
+    return Number.isSafeInteger(index) ? this.bandContainers[index] ?? null : null
+  }
+
   destroy(): void {
-    this.container.destroy({ children: true })
+    for (const container of this.containers) container.destroy({ children: true })
     this.sprites.length = 0
     this.meshes.length = 0
   }
@@ -147,6 +236,102 @@ export class WeldPrimarySpellView {
       this.meshContainer.addChild(mesh)
     }
   }
+}
+
+function renderWeldPlan(
+  container: Container,
+  plan: ReturnType<typeof nativeWeldVisualPlan>,
+  textures: PlayerWorldTextures['primarySpells']['weldActors'],
+): void {
+  for (const child of container.removeChildren()) child.destroy()
+  for (const draw of plan.sprites) {
+    const registered = textures[draw.atlas][draw.record]
+    if (!registered) throw new Error(`Missing native Weld texture ${draw.atlas}:${draw.record}`)
+    const sprite = new Sprite()
+    sprite.eventMode = 'none'
+    applySprite(sprite, registered, draw)
+    container.addChild(sprite)
+  }
+  if (plan.lines.length > 0) {
+    const graphics = new Graphics({ label: 'weld:split-lines' })
+    graphics.eventMode = 'none'
+    for (const draw of plan.lines) {
+      graphics
+        .moveTo(draw.start.x, draw.start.y)
+        .lineTo(draw.end.x, draw.end.y)
+        .stroke({ alpha: draw.alpha, color: draw.color, width: draw.width })
+    }
+    container.addChild(graphics)
+  }
+  for (const draw of plan.meshes) {
+    const registered = textures.BadGuys[draw.record]
+    if (!registered) throw new Error(`Missing native Weld mesh texture BadGuys:${draw.record}`)
+    const mesh = new MeshSimple({
+      indices: new Uint32Array(draw.indices),
+      texture: registered.texture,
+      topology: 'triangle-list',
+      uvs: new Float32Array(draw.uvs),
+      vertices: new Float32Array(draw.vertices),
+    })
+    mesh.alpha = draw.alpha
+    mesh.autoUpdate = false
+    mesh.blendMode = draw.blend
+    mesh.eventMode = 'none'
+    mesh.label = `${draw.role}:BadGuys:${draw.record}`
+    mesh.tint = draw.tint
+    container.addChild(mesh)
+  }
+}
+
+function weldPlanBounds(
+  plan: ReturnType<typeof nativeWeldVisualPlan>,
+  textures: PlayerWorldTextures['primarySpells']['weldActors'],
+): { height: number; y: number } {
+  const ys: number[] = []
+  for (const draw of plan.meshes) {
+    for (let index = 1; index < draw.vertices.length; index += 2) {
+      ys.push(draw.vertices[index]!)
+    }
+  }
+  for (const draw of plan.lines) {
+    const halfWidth = draw.width / 2
+    ys.push(draw.start.y - halfWidth, draw.start.y + halfWidth)
+    ys.push(draw.end.y - halfWidth, draw.end.y + halfWidth)
+  }
+  for (const draw of plan.sprites) {
+    const registered = textures[draw.atlas][draw.record]
+    if (!registered) continue
+    const corners = [
+      { x: -registered.anchorX, y: -registered.anchorY },
+      { x: registered.width - registered.anchorX, y: -registered.anchorY },
+      { x: -registered.anchorX, y: registered.height - registered.anchorY },
+      {
+        x: registered.width - registered.anchorX,
+        y: registered.height - registered.anchorY,
+      },
+    ]
+    for (const corner of corners) {
+      if (draw.matrix) {
+        ys.push(
+          draw.matrix.b * corner.x
+          + draw.matrix.d * corner.y
+          + draw.matrix.ty,
+        )
+        continue
+      }
+      const x = corner.x * draw.scaleX
+      const y = corner.y * draw.scaleY
+      ys.push(
+        draw.offset.y
+        + Math.sin(draw.rotationRadians) * x
+        + Math.cos(draw.rotationRadians) * y,
+      )
+    }
+  }
+  if (ys.length === 0) return { height: 0, y: 0 }
+  const minimum = Math.min(...ys)
+  const maximum = Math.max(...ys)
+  return { height: maximum - minimum, y: minimum }
 }
 
 function syncSprites(container: Container, sprites: Sprite[], count: number): void {

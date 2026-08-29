@@ -427,7 +427,7 @@ export class FireImpactSpellView {
     return [{
       container: this.container,
       lane: 'world-sorted',
-      queueFamily: 'ordinary-dynamic',
+      queueFamily: 'zanim',
       regionLightPoint: plan.regionLightPoint,
       sortBias: 0,
       suffix: '',

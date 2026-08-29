@@ -1,6 +1,7 @@
 import {
   damageBoneyardEnemy,
 } from '../core-server/boneyard-enemy-store.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import {
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
@@ -1318,14 +1319,20 @@ function applyDamage(
       : grantGameSimulationPlayerExperience(rewarded, sourcePlayerId, definition.experience)
   }
   if (source.world.kind !== 'boneyard') throw new Error('enemy damage requires an active Boneyard')
+  const worldManagerOrder = createNativeWorldManagerOrder(source.worldManagerOrder)
   const damaged = damageBoneyardEnemy(source.world.enemies, {
     actorId: descriptor.id,
     amount: outgoingAmount,
+    registerWorldPainter: worldManagerOrder.register,
     sourcePlayerId,
     tick: context.tick,
   })
   if (!damaged.accepted) throw new Error('enemy damage target is unavailable')
-  return { ...source, world: { ...source.world, enemies: damaged.store } }
+  return {
+    ...source,
+    worldManagerOrder: worldManagerOrder.state(),
+    world: { ...source.world, enemies: damaged.store },
+  }
 }
 
 function filterPlayerDamage(

@@ -51,6 +51,7 @@ test('Hurricane is one player-owned ECS actor that follows charge, position, and
     kind: 'air-hurricane',
     lanes: expectedBorn.program.lanes,
     ownerId: 'air',
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 4 }],
     phaseDegrees: 0,
     position: { x: 10, y: 20 },
     worldKey: 'boneyard:1',

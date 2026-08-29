@@ -18,6 +18,7 @@ import {
 } from './native-fence-geometry'
 import type { CompactSpriteLayer, MainLayer, ObjectSpriteLayer } from './native-render-plan'
 import { buildNativeRenderPlan } from './native-render-plan'
+import type { PositionedNativeRegionPainterLayer } from '../game/region-painter-order'
 import {
   FENCE_GRATE_TEXTURE,
   GROUND_TEXTURE,
@@ -148,8 +149,9 @@ interface RenderScene {
   compact: SpriteDrawable[]
   shadows: MainRenderItem[]
   main: MainRenderItem[]
-  foregroundLayers: ObjectSpriteLayer[]
-  foreground: SpriteDrawable[]
+  painterOrder: readonly PositionedNativeRegionPainterLayer[]
+  proxyLayers: readonly ObjectSpriteLayer[]
+  proxies: SpriteDrawable[]
 }
 
 function drawableForObject(layer: ObjectSpriteLayer): SpriteDrawable {
@@ -198,9 +200,17 @@ function renderSceneFor(doc: EditorDoc): RenderScene {
       underlays: plan.underlays.map(drawableForObject),
       compact: plan.compact.map(drawableForCompact),
       shadows: plan.shadows.map((layer) => owners.get(layer)!),
-      main: plan.main.map((layer) => owners.get(layer)!),
-      foregroundLayers: plan.foreground,
-      foreground: plan.foreground.map(drawableForObject),
+      main: plan.main.map((layer) => {
+        const owner = owners.get(layer)
+        if (owner) return owner
+        if (layer.kind !== 'object') {
+          throw new Error('native editor proxy is not object-owned')
+        }
+        return { kind: 'object' as const, layer, drawable: drawableForObject(layer) }
+      }),
+      painterOrder: plan.painterOrder,
+      proxyLayers: plan.proxies,
+      proxies: plan.proxies.map(drawableForObject),
     }
     renderSceneCache.set(doc, scene)
   }
@@ -219,7 +229,7 @@ function isPreMainWallItem(item: MainRenderItem): item is FenceRenderItem {
 }
 
 function actorOccludingMainItems(doc: EditorDoc): MainRenderItem[] {
-  return renderSceneFor(doc).main.filter(isActorOccludingMainItem)
+  return renderSceneFor(doc).shadows.filter(isActorOccludingMainItem)
 }
 
 /** Anchored draw rect in world units, scale applied. The sprite ref carries
@@ -547,6 +557,12 @@ export function drawStage(
   doc: EditorDoc,
   ui: StageUI,
 ) {
+  const scene = renderSceneFor(doc)
+  const canvas = ctx.canvas as HTMLCanvasElement & {
+    __sdrEditorPainterOrder?: readonly PositionedNativeRegionPainterLayer[]
+  }
+  canvas.__sdrEditorPainterOrder = scene.painterOrder
+  canvas.dataset.editorPainterLayerCount = `${scene.painterOrder.length}`
   const mode: SceneLayer['mode'] | null =
     ui.dragging && ui.selection.length > 0
       ? 'sans-selection'
@@ -621,10 +637,10 @@ export function nativeBoneyardPreMainWallLayers(
   return renderSceneFor(doc).main.filter(isPreMainWallItem).map((item) => item.layer)
 }
 
-export function nativeBoneyardForegroundLayers(
+export function nativeBoneyardProxyLayers(
   doc: EditorDoc,
 ): readonly ObjectSpriteLayer[] {
-  return renderSceneFor(doc).foregroundLayers
+  return renderSceneFor(doc).proxyLayers
 }
 
 export function drawNativeBoneyardBase(
@@ -717,24 +733,7 @@ export function drawNativeBoneyardPreMainWallBand(
   }
 }
 
-export function drawNativeBoneyardForeground(
-  ctx: CanvasRenderingContext2D,
-  cssW: number,
-  cssH: number,
-  cam: Camera,
-  doc: EditorDoc,
-) {
-  drawNativeBoneyardForegroundBand(
-    ctx,
-    cssW,
-    cssH,
-    cam,
-    doc,
-    renderSceneFor(doc).foreground.map((_, layerIndex) => layerIndex),
-  )
-}
-
-export function drawNativeBoneyardForegroundBand(
+export function drawNativeBoneyardProxyBand(
   ctx: CanvasRenderingContext2D,
   cssW: number,
   cssH: number,
@@ -744,9 +743,9 @@ export function drawNativeBoneyardForegroundBand(
 ) {
   ctx.clearRect(0, 0, cssW, cssH)
   ctx.imageSmoothingEnabled = true
-  const foreground = renderSceneFor(doc).foreground
+  const proxies = renderSceneFor(doc).proxies
   for (const layerIndex of layerIndexes) {
-    const drawable = foreground[layerIndex]
+    const drawable = proxies[layerIndex]
     if (!drawable) continue
     drawSprite(ctx, drawable, cam, cssW, cssH, false)
   }
@@ -823,7 +822,6 @@ function paintPlacementOutlines(
     ...scene.underlays,
     ...scene.compact,
     ...scene.main.flatMap((item) => item.kind === 'object' ? [item.drawable] : []),
-    ...scene.foreground,
   ]
   const bounds = new Map<string, { sel: SelEntry; x: number; y: number; w: number; h: number }>()
   for (const d of drawables) {
@@ -1046,12 +1044,6 @@ function paintPlacementPasses(
       drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
     } else {
       drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
-    }
-  }
-  if (mode === 'runtime-base') return
-  for (const drawable of scene.foreground) {
-    if (included(drawable.sel, filter)) {
-      drawSprite(ctx, drawable, cam, cssW, cssH, false)
     }
   }
 }
@@ -1697,12 +1689,6 @@ function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
 /** Topmost thing under the cursor, respecting draw order (later = on top). */
 export function pick(doc: EditorDoc, world: Vec2): SelEntry | null {
   const scene = renderSceneFor(doc)
-  for (let i = scene.foreground.length - 1; i >= 0; i--) {
-    const r = anchoredRect(scene.foreground[i])
-    if (world.x >= r.x && world.x <= r.x + r.w && world.y >= r.y && world.y <= r.y + r.h) {
-      return scene.foreground[i].sel
-    }
-  }
   for (let i = scene.main.length - 1; i >= 0; i--) {
     const item = scene.main[i]
     if (item.kind === 'object') {

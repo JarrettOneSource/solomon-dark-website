@@ -72,6 +72,10 @@ try {
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
+  await page.route('**/deployment.json*', (route) => {
+    const current = new URL(route.request().url()).searchParams.get('current')
+    return route.fulfill({ json: { revision: current } })
+  })
   if (runtime) {
     await page.addInitScript((configuration) => {
       window.solomonDarkRuntime = configuration
@@ -127,6 +131,7 @@ try {
     const roomPosition = await playerPosition(canvas)
     assert.equal(await scene.getAttribute('data-hub-region'), room.region)
     assert.match(await scene.getAttribute('aria-label') || '', new RegExp(room.region, 'i'))
+    const painter = await painterReceipt(canvas)
 
     const collision = room.region === 'office'
       ? await verifyOfficeInnerContour(page, canvas)
@@ -140,6 +145,7 @@ try {
       entryScreenshotPath: entryPath,
       ...(collision ? { collision } : {}),
       region: room.region,
+      painter,
       roomPosition,
       routeWaypoints,
       returned,
@@ -562,6 +568,27 @@ async function waitForSettledRegion(page, canvas, region) {
     { timeout: 15_000 },
   )
   assert.equal(await canvas.getAttribute('data-hub-region'), region)
+}
+
+async function painterReceipt(canvas) {
+  const frame = await canvas.evaluate((node) => structuredClone(node.__sdrHubFrame))
+  const order = frame.painterOrder
+  assert.ok(order.length > 0)
+  assert.deepEqual(
+    order.map(({ row }) => row),
+    order.map(({ row }) => row).toSorted((left, right) => left - right),
+  )
+  assert.equal(
+    order.find(({ id }) => id === `player:${frame.localPlayerId}`)?.row,
+    0,
+  )
+  assert.ok(order.some(({ id }) => id.startsWith('fixed:') || id.startsWith('scenery:')))
+  return {
+    first: order[0],
+    last: order.at(-1),
+    layerCount: order.length,
+    localPlayer: order.find(({ id }) => id === `player:${frame.localPlayerId}`),
+  }
 }
 
 async function syncKeys(page, pressed, requested) {

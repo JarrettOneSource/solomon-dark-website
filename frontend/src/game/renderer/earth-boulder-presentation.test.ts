@@ -18,6 +18,7 @@ import {
   earthBoulderPresentationPlan,
 } from './earth-boulder-presentation.ts'
 import {
+  earthImpactFragmentCount,
   earthImpactFragmentsAtAge,
   earthImpactLifetimeTicks,
 } from '../core-kernels/primary-spell-earth.ts'
@@ -380,7 +381,7 @@ test('Earth actors publish independent full-suffix painter and light roots', () 
   assert.equal(calledMain.scale.x, 0.2)
   const calledDepth = calledRoot.zIndex
   view.promoteOwnerOverlays((ownerId) => ownerId === 'wizard' ? 500 : undefined)
-  assert.equal(boulderRoot.zIndex, 1245)
+  assert.equal(boulderRoot.zIndex, 1122)
   assert.ok(boulderRoot.zIndex > 500)
   assert.equal(calledRoot.zIndex, calledDepth)
   view.setTint('primary-spell:2:fragment-0', 0x123456)
@@ -425,7 +426,13 @@ test('independent fragment roots interleave with unrelated global painter actors
     staticLayers: [],
     dynamicLayers: [
       ...fragments,
-      { id: 'enemy:test', sortBias: 0, sourceOrder: fragments.length, worldY: enemyY },
+      {
+        id: 'enemy:test',
+        queueFamily: 'ordinary-dynamic',
+        registration: { managerLane: 'actor', registrationOrdinal: 999 },
+        sortBias: 0,
+        worldY: enemyY,
+      },
     ],
   }).dynamicLayers.map(({ id }) => id)
   assert.ok(order.indexOf(low.id) < order.indexOf('enemy:test'))
@@ -447,9 +454,13 @@ function worldFixture(): PrimarySpellSimulationState {
       hitTargetIds: [],
       id: 1,
       kind: 'earth',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
       maximumCharge: 1,
       orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
       ownerId: 'wizard',
+      painterRegistrations: [
+        { managerLane: 'actor', registrationOrdinal: 0 },
+      ],
       phase: 'held',
       position: { x: 100, y: 200 },
       remainingDamage: 10,
@@ -462,9 +473,14 @@ function worldFixture(): PrimarySpellSimulationState {
       ageTicks: 0,
       ...impactSeed,
       kind: 'earth-impact',
+      lightRegistration: null,
       lifetimeTicks: earthImpactLifetimeTicks(impactSeed),
       origin: { x: 300, y: 400 },
       ownerId: 'wizard',
+      painterRegistrations: Array.from(
+        { length: earthImpactFragmentCount(impactSeed.charge) },
+        (_, index) => ({ managerLane: 'actor' as const, registrationOrdinal: 10 + index }),
+      ),
       worldKey: WORLD_KEY,
     }, {
       ageTicks: 4,
@@ -473,8 +489,12 @@ function worldFixture(): PrimarySpellSimulationState {
       height: -8,
       id: 3,
       kind: 'earth-called-rock',
+      lightRegistration: null,
       lateralMagnitude: 2,
       ownerId: 'wizard',
+      painterRegistrations: [
+        { managerLane: 'actor', registrationOrdinal: 100 },
+      ],
       parentId: 1,
       position: { x: 150, y: 250 },
       rotation: 45,

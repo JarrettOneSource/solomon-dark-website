@@ -54,26 +54,27 @@ export function nativeGoodiePresentationPlan(
 
 export function nativeLootPainterLayer(
   actor: BoneyardLootSnapshot,
-  sourceOrder: number,
 ): DynamicPainterLayer {
   return {
     id: `loot:${actor.id}`,
     queueFamily: 'ordinary-dynamic',
+    registration: actor.painterRegistration,
     sortBias: 0,
-    sourceOrder,
     worldY: actor.position.y,
   }
 }
 
 export function nativeGoodiePainterLayer(
   goodie: BoneyardGoodieSnapshot,
-  sourceOrder: number,
 ): DynamicPainterLayer {
   return {
     id: `goodie:${goodie.id}`,
-    queueFamily: 'ordinary-dynamic',
+    queueFamily: 'scenery',
+    registration: {
+      managerLane: 'scenery',
+      registrationOrdinal: goodie.sceneryRegistrationOrdinal,
+    },
     sortBias: 0,
-    sourceOrder,
     worldY: goodie.position.y,
   }
 }

@@ -1,5 +1,12 @@
 # Air primary cast presentation correction — 2026-08-14
 
+> **2026-08-29 split-painter closure:** [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> supersedes the single Air-body-root closure below. `ZAnimSplit::Render
+> 0x005E0230` emits multiple clipped `AnimPointer` queue roots in 25-unit bands
+> with Enhanced Effects or 50-unit bands without it. Source and contact roots,
+> geometry, clocks, art, and the contact bias remain valid; the body now uses
+> that exact clipped queue topology.
+
 Reported mismatch: the first five-primary browser slice represents Air as ten
 fading, fixed-width polylines. In retail Air is a short-lived pair of textured
 triangle ribbons plus independently owned source and contact coronas. Treating

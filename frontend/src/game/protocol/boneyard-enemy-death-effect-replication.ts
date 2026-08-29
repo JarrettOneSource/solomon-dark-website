@@ -13,7 +13,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID = 5
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
-const DESCRIPTOR_LENGTH = 9
+const DESCRIPTOR_LENGTH = 10
 const SAMPLE_LENGTH = 11
 const ATLASES = ['BadGuys', 'DeadHawg', 'Demon'] as const
 const BLEND_MODES = ['add', 'normal'] as const
@@ -35,6 +35,9 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
         descriptor[8],
         BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS.length,
       )
+      && (descriptor[8] === 1
+        ? nonnegativeInteger(descriptor[9])
+        : descriptor[9] === -1)
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -66,6 +69,7 @@ export function boneyardEnemyDeathEffectDescriptor(
       effect.presentationOwner,
       'death effect presentation owner',
     ),
+    effect.painterRegistration?.registrationOrdinal ?? -1,
   ]
 }
 
@@ -121,6 +125,9 @@ export function materializeBoneyardEnemyDeathEffect(
     id: descriptor[1],
     kind: BONEYARD_ENEMY_DEATH_EFFECT_KINDS[descriptor[3]]!,
     ownerActorId: descriptor[2],
+    painterRegistration: descriptor[9] < 0
+      ? null
+      : { managerLane: 'actor', registrationOrdinal: descriptor[9] },
     presentationOwner: BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS[descriptor[8]]!,
     position: {
       x: dequantize(sample[2], POSITION_SCALE),

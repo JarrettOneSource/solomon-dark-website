@@ -24,6 +24,10 @@ import {
   hubActorDepth,
 } from './hub-depth.ts'
 import {
+  NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS,
+  nativeHubFixedActorPainterRegistration,
+} from './hub-painter-order.ts'
+import {
   createHubAstronomerClock,
   hubAstronomerFrameAt,
   hubAstronomerLocalTick,
@@ -172,12 +176,34 @@ test('Hub run entry crossfades the exact compass and play layers on the native f
   )
 })
 
+test('reserves fixed Hub actor painters in native construction chronology', () => {
+  assert.deepEqual(NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS, [
+    'hagatha',
+    'annalist',
+    'fomentius',
+    'luthacus',
+    'skorcha',
+    'teacher',
+    'memorator',
+    'librarian',
+    'shlorio',
+    'arch-chancellor',
+    'polisher',
+  ])
+  assert.deepEqual(
+    NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((id) => (
+      nativeHubFixedActorPainterRegistration(id).registrationOrdinal
+    )),
+    NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((_, index) => index),
+  )
+})
+
 test('sorts each Useful Thyngs painter around PotionGuy', () => {
-  assert.equal(HUB_USEFUL_THYNGS_COUNTER_DEPTH, 1663)
-  assert.equal(hubActorDepth(664), 1664)
-  assert.equal(HUB_USEFUL_THYNGS_FRONT_DEPTH, 1700)
-  assert.equal(HUB_USEFUL_THYNGS_BALLOON_DEPTH, 1701)
-  assert.equal(HUB_USEFUL_THYNGS_MARKER_DEPTH, 1702)
+  assert.equal(HUB_USEFUL_THYNGS_COUNTER_DEPTH, 1331)
+  assert.equal(hubActorDepth(664), 1332)
+  assert.equal(HUB_USEFUL_THYNGS_FRONT_DEPTH, 1349.5)
+  assert.equal(HUB_USEFUL_THYNGS_BALLOON_DEPTH, 1350.5)
+  assert.equal(HUB_USEFUL_THYNGS_MARKER_DEPTH, 1351.5)
   assert.equal(HUB_USEFUL_THYNGS_SHADOW_DEPTH, 900)
   assert.ok(HUB_USEFUL_THYNGS_COUNTER_DEPTH < hubActorDepth(664))
   assert.ok(hubActorDepth(664) < HUB_USEFUL_THYNGS_FRONT_DEPTH)
@@ -186,11 +212,11 @@ test('sorts each Useful Thyngs painter around PotionGuy', () => {
 })
 
 test('submits the recovered southern Courtyard stack after every actor', () => {
-  assert.equal(HUB_COURTYARD_FOREGROUND_DEPTH, 4000)
-  assert.equal(HUB_SOUTHERN_FOREGROUND_DEPTH, 4001)
-  assert.equal(HUB_ASTRONOMER_DEPTH, 4002)
-  assert.equal(HUB_ASTRONOMER_TELESCOPE_DEPTH, 4003)
-  assert.equal(HUB_ASTRONOMER_FRONT_DEPTH, 4004)
+  assert.equal(HUB_COURTYARD_FOREGROUND_DEPTH, 2500)
+  assert.equal(HUB_SOUTHERN_FOREGROUND_DEPTH, 2501)
+  assert.equal(HUB_ASTRONOMER_DEPTH, 2502)
+  assert.equal(HUB_ASTRONOMER_TELESCOPE_DEPTH, 2503)
+  assert.equal(HUB_ASTRONOMER_FRONT_DEPTH, 2504)
   assert.ok(HUB_COURTYARD_FOREGROUND_DEPTH > hubActorDepth(1024))
   assert.ok(HUB_COURTYARD_FOREGROUND_DEPTH < HUB_SOUTHERN_FOREGROUND_DEPTH)
   assert.ok(HUB_SOUTHERN_FOREGROUND_DEPTH < HUB_ASTRONOMER_DEPTH)

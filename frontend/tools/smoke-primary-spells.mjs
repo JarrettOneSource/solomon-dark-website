@@ -137,9 +137,9 @@ if (maggotReplicationAcceptance && !replicationAcceptance) {
 }
 if (combatAdmissionAcceptance && (
   selectedSpells.length !== 1
-  || (selectedSpells[0].kind !== 'ether' && selectedSpells[0].kind !== 'air')
+  || !['air', 'blizzard', 'ether'].includes(selectedSpells[0].kind)
 )) {
-  throw new Error('Combat-admission acceptance requires Ether or Air')
+  throw new Error('Combat-admission acceptance requires Ether, Air, or Blizzard')
 }
 
 const browser = await chromium.launch({
@@ -824,9 +824,21 @@ async function enterBoneyard(page) {
   const enter = page.getByRole('button', { name: 'Enter the Boneyard' })
   await enter.waitFor({ timeout: 10_000 })
   await enter.click()
-  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
-    timeout: renderTimeout,
-  })
+  try {
+    await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+      timeout: renderTimeout,
+    })
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      body: document.body.innerText.slice(0, 2_000),
+      rendererState: document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-renderer-state') ?? null,
+      url: location.href,
+    }))
+    throw new Error(`Boneyard renderer did not become ready: ${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    })
+  }
   const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
   await canvas.waitFor({ timeout: renderTimeout })
   return canvas
@@ -839,6 +851,7 @@ async function castAirInBoneyard(page) {
   const combatAdmission = combatAdmissionAcceptance
     ? await enableSolomonCombat(page, scene)
     : null
+  await settleMovement(page)
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
   const frame = await boneyardFrame(page)
@@ -921,6 +934,11 @@ async function castAirInBoneyard(page) {
     assert.equal(targeted.playerTargetId, targeted.state.targetId)
     if (lowManaAcceptance) assert.equal(targeted.state.underpowered, true)
     const held = await waitForBoneyardSpell(page, 'air')
+    const splitBands = await waitForLivePrimaryPainterBandFamily(
+      page,
+      'body-band-',
+      2,
+    )
     assert.ok(
       held.lightProviderCandidateCount > frame.lightProviderCandidateCount,
       `expected Air to join the current light-provider frame: ${JSON.stringify({
@@ -952,6 +970,7 @@ async function castAirInBoneyard(page) {
         },
       },
       screenshotPath,
+      splitBands,
       targeted,
     }
   } finally {
@@ -963,6 +982,9 @@ async function castAirInBoneyard(page) {
 
 async function castBlizzardInBoneyard(page, observerPage = null) {
   const canvas = await enterBoneyard(page)
+  const combatAdmission = combatAdmissionAcceptance
+    ? await enableSolomonCombat(page, page.locator('.boneyard-scene'))
+    : null
   if (observerPage) {
     const renderTimeout = hostOpenedBoneyard ? 180_000 : BONEYARD_RENDER_TIMEOUT_MS
     await observerPage.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
@@ -998,6 +1020,11 @@ async function castBlizzardInBoneyard(page, observerPage = null) {
     const frame = await waitForBoneyardSpell(page, 'weld-blizzard-glow:1004')
     const wire = await latestWireSpell(page, 'weld-channel')
     assert.equal(wire.state.buildId, 1004)
+    const splitBands = await waitForPainterProxyPrefix(
+      page,
+      `primary-spell:${wire.state.id}:band-`,
+      2,
+    )
     const channelCount = frame.primarySpellKinds.filter((kind) => (
       kind === 'weld-channel:1004'
     )).length
@@ -1018,6 +1045,7 @@ async function castBlizzardInBoneyard(page, observerPage = null) {
     await page.screenshot({ path: screenshotPath })
     return {
       channelCount,
+      combatAdmission,
       frame,
       glowCount,
       aimWorld,
@@ -1033,6 +1061,7 @@ async function castBlizzardInBoneyard(page, observerPage = null) {
           }
         : null,
       screenshotPath,
+      splitBands,
       target: target.enemy,
       wire,
     }
@@ -1870,6 +1899,90 @@ async function boneyardFrame(page) {
   return page.locator('.boneyard-world-canvas').evaluate((node) => (
     structuredClone(node.__sdrBoneyardFrame)
   ))
+}
+
+async function waitForPainterProxyPrefix(page, prefix, minimumCount) {
+  try {
+    await page.waitForFunction(({ expectedPrefix, expectedMinimum }) => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      return (frame?.painterProxyOrder ?? []).filter(({ id }) => (
+        id.startsWith(expectedPrefix)
+      )).length >= expectedMinimum
+    }, { expectedMinimum: minimumCount, expectedPrefix: prefix }, { timeout: 10_000 })
+  } catch (error) {
+    const diagnostics = await page.evaluate((expectedPrefix) => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      return {
+        expectedPrefix,
+        latestWire: window.__primarySpellWireFrames.at(-1),
+        primarySpellKinds: frame?.primarySpellKinds ?? [],
+        primarySpellPainterDepths: frame?.primarySpellPainterDepths ?? {},
+        proxyLayers: (frame?.painterProxyOrder ?? []).filter(({ id }) => (
+          id.startsWith('primary-spell:')
+        )),
+      }
+    }, prefix)
+    throw new Error(`Primary spell painter proxy did not appear: ${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    })
+  }
+  const frame = await boneyardFrame(page)
+  const bands = frame.painterProxyOrder.filter(({ id }) => id.startsWith(prefix))
+  assert.ok(bands.length >= minimumCount)
+  assert.deepEqual(
+    bands.map(({ zIndex }) => zIndex),
+    bands.map(({ zIndex }) => zIndex).toSorted((left, right) => left - right),
+  )
+  assert.deepEqual(
+    bands.map(({ id }) => [id, frame.primarySpellPainterDepths[id]]),
+    bands.map(({ id, zIndex }) => [id, zIndex]),
+  )
+  return bands
+}
+
+async function waitForLivePrimaryPainterBandFamily(page, suffixPrefix, minimumCount) {
+  const handle = await page.waitForFunction(({ expectedMinimum, expectedSuffixPrefix }) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    if (!frame) return false
+    const families = new Map()
+    for (const layer of frame.painterProxyOrder ?? []) {
+      const parts = layer.id.split(':')
+      if (
+        parts.length !== 3
+        || parts[0] !== 'primary-spell'
+        || !parts[2].startsWith(expectedSuffixPrefix)
+      ) continue
+      const family = `${parts[0]}:${parts[1]}`
+      const layers = families.get(family) ?? []
+      layers.push(layer)
+      families.set(family, layers)
+    }
+    const family = [...families.entries()]
+      .filter(([, layers]) => layers.length >= expectedMinimum)
+      .toSorted(([left], [right]) => Number(right.split(':')[1]) - Number(left.split(':')[1]))
+      .at(0)
+    if (!family) return false
+    return {
+      bands: structuredClone(family[1]),
+      depths: structuredClone(frame.primarySpellPainterDepths),
+    }
+  }, {
+    expectedMinimum: minimumCount,
+    expectedSuffixPrefix: suffixPrefix,
+  }, { timeout: 10_000 })
+  const sample = await handle.jsonValue()
+  assert.ok(sample)
+  const { bands, depths } = sample
+  assert.ok(bands.length >= minimumCount)
+  assert.deepEqual(
+    bands.map(({ zIndex }) => zIndex),
+    bands.map(({ zIndex }) => zIndex).toSorted((left, right) => left - right),
+  )
+  assert.deepEqual(
+    bands.map(({ id }) => [id, depths[id]]),
+    bands.map(({ id, zIndex }) => [id, zIndex]),
+  )
+  return bands
 }
 
 async function visibleBoneyardEnemy(page, preferWeakest = false) {

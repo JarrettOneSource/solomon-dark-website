@@ -54,6 +54,7 @@ export function projectBoneyardEnemyDeathEffect(
     id: effect.id,
     kind: effect.kind,
     ownerActorId: effect.ownerActorId,
+    painterRegistration: effect.painterRegistration,
     presentationOwner: effect.role.startsWith('demon-death-fire-burst-')
       ? 'direct-post-world'
       : 'world-sorted',
@@ -105,6 +106,7 @@ export function projectBoneyardEnemyProjectiles(
     lifetimeTicks: projectile.lifetimeTicks,
     nativeTypeId: projectile.nativeTypeId,
     ownerActorId: projectile.ownerActorId,
+    painterRegistration: projectile.painterRegistration,
     payload: projectile.payload,
     position: { ...projectile.position },
     speed: projectile.speed,
@@ -130,6 +132,7 @@ export function projectBoneyardEnemyProjectileEffects(
     lifetimeTicks: effect.lifetimeTicks,
     ownerActorId: effect.ownerActorId,
     ownerProjectileId: effect.ownerProjectileId,
+    painterRegistration: effect.painterRegistration,
     phaseOriginTicks: effect.phaseOriginTicks,
     position: { ...effect.position },
     rotationRadians: effect.rotationDeg * Math.PI / 180,
@@ -160,6 +163,9 @@ function projectBoneyardMageLightningPulse(
     id: pulse.id,
     midpoint: { ...pulse.midpoint },
     ownerActorId: pulse.ownerActorId,
+    painterRegistrations: pulse.painterRegistrations.map((registration) => ({
+      ...registration,
+    })),
     seed: pulse.seed,
     source: { ...pulse.source },
     tick: pulse.tick,

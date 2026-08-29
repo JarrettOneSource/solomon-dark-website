@@ -35,8 +35,8 @@ function doc(objects: PlacedObject[], sprites: StaticSprite[] = [], fences: Poly
   }
 }
 
-test('uses the five recovered native placement passes', () => {
-  assert.deepEqual(NATIVE_PLACEMENT_PASSES, ['underlay', 'compact', 'shadow', 'main', 'foreground'])
+test('uses the four recovered native placement passes', () => {
+  assert.deepEqual(NATIVE_PLACEMENT_PASSES, ['underlay', 'compact', 'shadow', 'main'])
 })
 
 test('places Gravestone, Tree, and Building component art in their native passes', () => {
@@ -51,8 +51,10 @@ test('places Gravestone, Tree, and Building component art in their native passes
     ['grave', 99],
     ['tree', 265],
     ['building', 150],
+    ['tree', 243],
+    ['building', 154],
   ])
-  assert.deepEqual(plan.foreground.map((layer) => [layer.sel.eid, layer.atlasEntry]), [
+  assert.deepEqual(plan.proxies.map((layer) => [layer.sel.eid, layer.atlasEntry]), [
     ['tree', 243],
     ['building', 154],
   ])
@@ -76,10 +78,12 @@ test('enumerates every Building and Monument lighting member from authored rows'
   assert.deepEqual(plan.main.slice(0, 4).map((layer) => (
     layer.kind === 'object' ? layer.atlasEntry : null
   )), [148, 149, 150, 151])
-  assert.deepEqual(plan.foreground.map((layer) => layer.atlasEntry), [152, 153, 154, 155])
-  assert.deepEqual(plan.main.slice(4).map((layer) => (
+  assert.deepEqual(plan.main.slice(4, 25).map((layer) => (
     layer.kind === 'object' ? layer.atlasEntry : null
   )), Array.from({ length: 21 }, (_, variant) => 156 + variant))
+  assert.deepEqual(plan.main.slice(25).map((layer) => (
+    layer.kind === 'object' ? layer.atlasEntry : null
+  )), [152, 153, 154, 155])
 })
 
 test('interleaves every stock main-prop family with actors and keeps proxy art late', () => {
@@ -92,7 +96,7 @@ test('interleaves every stock main-prop family with actors and keeps proxy art l
   ]))
   const order = buildBoneyardPainterOrder({
     referenceY: 200,
-    staticLayers: plan.main.map((layer, layerIndex) => ({
+    staticLayers: plan.shadows.map((layer, layerIndex) => ({
       layerIndex,
       worldY: layer.worldY,
       sortBias: layer.sortBias,
@@ -101,22 +105,43 @@ test('interleaves every stock main-prop family with actors and keeps proxy art l
     dynamicLayers: [{
       id: 'player',
       queueFamily: 'ordinary-dynamic',
+      registration: { managerLane: 'actor', registrationOrdinal: 0 },
       worldY: 200,
       sortBias: 0,
-      sourceOrder: 0,
     }],
   })
   const player = order.dynamicLayers[0]
   const eidsAt = (predicate: (zIndex: number) => boolean) => order.bands
     .filter((band) => predicate(band.zIndex))
-    .flatMap((band) => band.layerIndexes.map((index) => plan.main[index].sel.eid))
+    .flatMap((band) => band.layerIndexes.map((index) => plan.shadows[index].sel.eid))
 
   assert.deepEqual(eidsAt((zIndex) => zIndex < player.zIndex), ['grave'])
   assert.deepEqual(eidsAt((zIndex) => zIndex > player.zIndex), [
     'tree', 'monument', 'goodie', 'building',
   ])
   assert.deepEqual(plan.underlays.map((layer) => layer.sel.eid), ['grave'])
-  assert.deepEqual(plan.foreground.map((layer) => layer.sel.eid), ['tree', 'building'])
+  assert.deepEqual(plan.main.map((layer) => layer.sel.eid), [
+    'grave',
+    'tree',
+    'monument',
+    'tree',
+    'goodie',
+    'building',
+    'building',
+  ])
+  assert.deepEqual(plan.painterOrder, [
+    { id: 'main:0', row: 50, zIndex: 1 },
+    { id: 'main:1', row: 150, zIndex: 2 },
+    { id: 'main:2', row: 200, zIndex: 3 },
+    { id: 'proxy:1', row: 200, zIndex: 4 },
+    { id: 'main:3', row: 250, zIndex: 5 },
+    { id: 'main:4', row: 300, zIndex: 6 },
+    { id: 'proxy:4', row: 400, zIndex: 7 },
+  ])
+  assert.deepEqual(plan.proxies.map((layer) => [layer.sel.eid, layer.worldY]), [
+    ['tree', 400],
+    ['building', 800],
+  ])
 })
 
 test('keeps compact sprites below shadows and uses each Puppet effective-Y bias', () => {
@@ -145,6 +170,8 @@ test('keeps compact sprites below shadows and uses each Puppet effective-Y bias'
     ['fence', 'post', 70],
     ['fence', 'post', 90],
     ['building', 'object', 100],
+    ['tree', 'object', 160],
+    ['building', 'object', 300],
   ])
 })
 
@@ -304,11 +331,11 @@ test('maps every record-7 source corner to the same Gate quad in Canvas2D', () =
   assert.deepEqual(apply(84, 96), leaf.p3)
 })
 
-test('suppresses the Tree foreground for native variants six and above', () => {
+test('suppresses the Tree proxy for native variants six and above', () => {
   const plan = buildNativeRenderPlan(doc([
     { eid: 'tree', typeId: NATIVE.tree, pos: { x: 0, y: 0 }, variant: 6 },
   ]))
-  assert.deepEqual(plan.foreground, [])
+  assert.deepEqual(plan.proxies, [])
 })
 
 test('reconstructs native logical-canvas registration from the crop origin', () => {
@@ -326,11 +353,14 @@ test('plans every retail story0 placement without mixing compact art into the ma
     if (object.typeId !== NATIVE.tree || (object.variant ?? 0) >= 6) return false
     return !('secondaryVisible' in object) || object.secondaryVisible !== false
   }).length
+  const buildingForegroundCount = story.objects.filter(
+    (object) => object.typeId === NATIVE.building,
+  ).length
   assert.equal(plan.underlays.length, 50)
   assert.equal(plan.compact.length, 133)
   assert.equal(plan.shadows.length, 160)
-  assert.equal(plan.main.length, 160)
+  assert.equal(plan.main.length, 160 + treeForegroundCount + buildingForegroundCount)
+  assert.equal(plan.proxies.length, treeForegroundCount + buildingForegroundCount)
   assert.equal(treeForegroundCount, 49)
-  assert.equal(plan.foreground.length, treeForegroundCount)
   assert.ok(plan.main.every((layer) => layer.kind !== 'object' || layer.sel.kind === 'object'))
 })

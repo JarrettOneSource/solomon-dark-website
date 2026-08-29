@@ -29,7 +29,7 @@ import type {
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
-import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
@@ -94,8 +94,9 @@ export interface ProtocolPlayerEconomy {
 }
 
 export interface ProtocolPlayerLighting {
+  deathWeaponPainterRegistration: NativeWorldManagerRegistration | null
   driveActive: boolean
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   overlayEffectPhase: number
 }
 
@@ -174,6 +175,7 @@ export interface ProtocolStudentState {
   heading: number
   headingIndex: number
   id: number
+  painterRegistration: NativeWorldManagerRegistration
   position: Vector2
   props: readonly ProtocolStudentProp[]
   reading: boolean
@@ -227,10 +229,11 @@ export interface BoneyardWorldSnapshot {
   goodies: readonly BoneyardGoodieSnapshot[]
   hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunSnapshot>>
   kind: 'boneyard'
-  lanternLightRegistration: NativeLightProviderRegistration | null
+  lanternLightRegistration: NativeWorldManagerRegistration | null
   loot: readonly BoneyardLootSnapshot[]
   lootEvents: readonly BoneyardLootEventSnapshot[]
   runId: string
+  solomonPainterRegistration: NativeWorldManagerRegistration | null
   tutorial: NativeTutorialState | null
   waves: BoneyardWaveSnapshot | null
 }
@@ -279,6 +282,7 @@ export interface BoneyardLootSnapshot {
   nativeTypeId: 2011 | 2012 | 2013 | 2038
   orbKind: 'health' | 'mana' | null
   orbValue: number
+  painterRegistration: NativeWorldManagerRegistration
   position: Vector2
   rotationDeg: number
   scatterActive: boolean
@@ -295,6 +299,7 @@ export interface BoneyardGoodieSnapshot {
   id: number
   phase: 0 | 1 | 2
   position: Vector2
+  sceneryRegistrationOrdinal: number
   subtype: number
   timer: number
 }
@@ -339,6 +344,7 @@ export interface BoneyardEnemyDeathEffectSnapshot {
   id: number
   kind: typeof BONEYARD_ENEMY_DEATH_EFFECT_KINDS[number]
   ownerActorId: number
+  painterRegistration: NativeWorldManagerRegistration | null
   presentationOwner: typeof BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS[number]
   position: Vector2
   rotationRadians: number
@@ -365,6 +371,7 @@ export interface BoneyardMageLightningPulseSnapshot {
   id: number
   midpoint: Vector2
   ownerActorId: number
+  painterRegistrations: readonly NativeWorldManagerRegistration[]
   seed: number
   source: Vector2
   tick: number
@@ -385,6 +392,9 @@ export type BoneyardMageLightningPulseFrame = readonly [
   contactX: number,
   contactY: number,
   targetPlayerId: string | null,
+  bodyRegistrationOrdinal: number,
+  sourceRegistrationOrdinal: number,
+  contactRegistrationOrdinal: number,
 ]
 
 export const BONEYARD_ENEMY_EVENT_TYPES = [
@@ -488,6 +498,7 @@ export interface BoneyardEnemyEventSnapshot {
   eventId: number
   gainScale?: number
   output?: BoneyardEnemyTerminalOutput
+  painterRegistration?: NativeWorldManagerRegistration
   pitch?: number
   projectileId?: number
   runId: string
@@ -523,10 +534,11 @@ export interface BoneyardEnemyProjectileSnapshot {
   homing: boolean
   id: number
   kind: BoneyardEnemyProjectileKind
-  lightRegistration: NativeLightProviderRegistration | null
+  lightRegistration: NativeWorldManagerRegistration | null
   lifetimeTicks: number
   nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   ownerActorId: number
+  painterRegistration: NativeWorldManagerRegistration
   payload: BoneyardEnemyProjectilePayload
   position: Vector2
   speed: number
@@ -575,10 +587,11 @@ export interface BoneyardEnemyProjectileEffectSnapshot {
   entry: number
   id: number
   kind: BoneyardEnemyProjectileEffectKind
-  lightRegistration: NativeLightProviderRegistration | null
+  lightRegistration: NativeWorldManagerRegistration | null
   lifetimeTicks: number
   ownerActorId: number
   ownerProjectileId: number
+  painterRegistration: NativeWorldManagerRegistration
   phaseOriginTicks: number
   position: Vector2
   rotationRadians: number
@@ -602,7 +615,7 @@ export interface BoneyardMaggotSnapshot {
   emergenceTick: number
   emergenceOrientation: number
   launchTrajectory: typeof BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[number]
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   maximumHealth: number
   ownerCoffinActorId: number
   pose: number
@@ -701,7 +714,7 @@ export interface BoneyardEnemySnapshot {
   flags: readonly string[]
   headingDeg: number
   id: number
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   lighting: BoneyardEnemyLightingSnapshot
   mageCloak: boolean
   maximumHealth: number
@@ -767,10 +780,11 @@ export interface BoneyardWorldSnapshotFrame {
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunSnapshot>>
   kind: 'boneyard'
-  lanternLightRegistration: NativeLightProviderRegistration | null
+  lanternLightRegistration: NativeWorldManagerRegistration | null
   lootEvents: readonly BoneyardLootEventSnapshot[]
   mageLightningPulses: readonly BoneyardMageLightningPulseFrame[]
   runId: string
+  solomonPainterRegistration: NativeWorldManagerRegistration | null
   tutorial: NativeTutorialState | null
   waves: BoneyardWaveSnapshot | null
 }

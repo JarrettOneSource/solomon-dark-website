@@ -86,6 +86,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(playerEntityId(store, 'second'), 2)
   assert.equal(playerEconomyAt(store, 'first')?.gold, 500)
   assert.deepEqual(playerLightingAt(store, 'second'), {
+    deathWeaponPainterRegistration: null,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     overlayEffectPhase: 0,
   })
@@ -764,6 +765,7 @@ test('new-run placement resets transient combat while retaining dense identity a
   assert.equal(playerEntityMovementScale(store, 'first'), 1)
   assert.equal(playerProgressionAt(store, 'first')?.currentMana, 100)
   assert.deepEqual(playerLightingAt(store, 'first'), {
+    deathWeaponPainterRegistration: null,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     overlayEffectPhase: 0,
   })

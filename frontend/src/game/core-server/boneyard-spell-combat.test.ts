@@ -207,6 +207,10 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 100 },
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
+    painterRegistrations: [{
+      managerLane: 'transient',
+      registrationOrdinal: 100,
+    }],
     worldKey: WORLD_KEY,
   }])
 
@@ -1021,6 +1025,10 @@ test('Ether contact uses its six-unit point query and publishes FadeMM at the ad
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 100 },
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
+    painterRegistrations: [{
+      managerLane: 'transient',
+      registrationOrdinal: 100,
+    }],
     visualScale: 1,
     worldKey: WORLD_KEY,
   }])
@@ -1323,6 +1331,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     lightRegistration: null,
     lifetimeTicks: 60,
     ownerActorId: 3,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     ownerProjectileId: 7,
     phaseOriginTicks: 8,
     position: { x: 50, y: 0 },
@@ -1721,9 +1730,17 @@ test('Blizzard root membership covers every survival family and excludes Coffin'
     2,
   )
   assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2, 3, 4, 5, 6, 7])
-  assert.equal(result.spells.transients.filter(({ kind }) => (
+  const glows = result.spells.transients.filter(({ kind }) => (
     kind === 'weld-blizzard-glow'
-  )).length, 7)
+  ))
+  assert.equal(glows.length, 7)
+  assert.equal(glows.every(({ painterRegistrations }) => (
+    painterRegistrations?.length === 1
+      && painterRegistrations[0]?.managerLane === 'actor'
+  )), true)
+  assert.equal(new Set(glows.map(({ painterRegistrations }) => (
+    painterRegistrations![0]!.registrationOrdinal
+  ))).size, glows.length)
 })
 
 test('Blizzard admits every flags-four scenery root for glow only', () => {
@@ -1755,7 +1772,9 @@ test('Blizzard admits every flags-four scenery root for glow only', () => {
   const glows = result.spells.transients.filter(({ kind }) => kind === 'weld-blizzard-glow')
   assert.equal(glows.length, 5)
   assert.ok(glows.every((glow) => glow.kind === 'weld-blizzard-glow'
-    && glow.variant === 3))
+    && glow.variant === 3
+    && glow.painterRegistrations?.length === 1
+    && glow.painterRegistrations[0]?.managerLane === 'actor'))
 })
 
 test('Blizzard mask 0x1086 tumbles Arrow through its fixed virtual branch', () => {
@@ -2797,6 +2816,7 @@ function enemyArrow(options: {
     nativeCellBindingOrder: options.id,
     nativeRegistrationOrder: options.id,
     ownerActorId: 3,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: options.id },
     payload: 'normal',
     poisonDamage: 0,
     poisonDuration: 0,

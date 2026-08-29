@@ -30,6 +30,11 @@ import {
   hubRoomFlameTransform,
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
+import {
+  applyNativeHubPainterOrder,
+  nativeHubFixedActorPainterRegistration,
+  type NativeHubPainterLayer,
+} from '../hub-painter-order.ts'
 import { HubMemorialPaintingView } from './hub-memorial-painting-view.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
@@ -56,12 +61,29 @@ const HUB_PRIVATE_ROOM_ASSETS: Readonly<Record<HubPrivateRoomAsset, string>> = {
 }
 const PRIVATE_HUB_REGIONS = ['mortuary', 'library', 'storeroom', 'office'] as const
 
+function depthTarget(setDepth: (depth: number) => void): { zIndex: number } {
+  return {
+    get zIndex() {
+      return 0
+    },
+    set zIndex(depth: number) {
+      setDepth(depth)
+    },
+  }
+}
+
 export class HubPrivateRoomScene {
   readonly world = new Container({ isRenderGroup: true, label: 'college-private-rooms' })
   private readonly rooms: Record<PrivateHubRegionId, Container>
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly nonPlayerActors: Record<PrivateHubRegionId, Container[]> = {
+    mortuary: [],
+    library: [],
+    storeroom: [],
+    office: [],
+  }
+  private readonly staticPainters: Record<PrivateHubRegionId, NativeHubPainterLayer[]> = {
     mortuary: [],
     library: [],
     storeroom: [],
@@ -89,6 +111,7 @@ export class HubPrivateRoomScene {
   private markerEpochSeed = 0
   private markerEpochStartedAtTick = 0
   private activeRegion: PrivateHubRegionId = 'mortuary'
+  private lastPainterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[] = []
 
   constructor(
     textures: HubWorldTextures,
@@ -177,6 +200,7 @@ export class HubPrivateRoomScene {
       storyOffice,
     )
     this.updateNpcMarkers(snapshot, markerSurface, storyOffice)
+    this.applyPainterOrder(snapshot, localPlayerId, localParticipant.region, storyOffice)
     const room = this.rooms[localParticipant.region]
     if (this.levelUp.container.parent !== room) {
       this.levelUp.container.parent?.removeChild(this.levelUp.container)
@@ -234,6 +258,10 @@ export class HubPrivateRoomScene {
     return this.secondaryAbilities[this.activeRegion].diagnosticSamples
   }
 
+  get painterOrder() {
+    return this.lastPainterOrder
+  }
+
   get visibleMarkerIds(): readonly NativeHubInteractionId[] {
     return [...this.markerSprites]
       .filter(([, marker]) => marker.visible && marker.parent?.visible !== false)
@@ -278,9 +306,16 @@ export class HubPrivateRoomScene {
     this.memoratorBody.eventMode = 'none'
     memorator.addChild(this.memoratorBody)
     this.nonPlayerActors.mortuary.push(memorator)
+    this.staticPainters.mortuary.push({
+      id: 'fixed:memorator',
+      registration: nativeHubFixedActorPainterRegistration('memorator'),
+      sortBias: 0,
+      target: memorator,
+      worldY: memoratorVisual.painterY,
+    })
     room.addChild(memorator)
     this.addNpcMarker(room, 'memorator', hub.rooms.mortuary.memoratorMarker)
-    this.addRoomProps(room, layout)
+    this.addRoomProps(room, layout, 'mortuary')
     this.addRoomFlames(room, 'mortuary', hub.rooms.mortuary.flame)
     return room
   }
@@ -292,7 +327,7 @@ export class HubPrivateRoomScene {
       HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
       0,
     ))
-    this.addRoomProps(room, layout)
+    this.addRoomProps(room, layout, 'library')
 
     const librarianVisual = layout.actors.librarian.visual
     const librarian = new Container({ label: 'college-library-librarian' })
@@ -313,6 +348,13 @@ export class HubPrivateRoomScene {
     librarianBody.zIndex = 1
     librarian.addChild(counter, librarianBody)
     this.nonPlayerActors.library.push(librarian)
+    this.staticPainters.library.push({
+      id: 'fixed:librarian',
+      registration: nativeHubFixedActorPainterRegistration('librarian'),
+      sortBias: 0,
+      target: librarian,
+      worldY: librarianVisual.painterY,
+    })
     room.addChild(librarian)
     this.addNpcMarker(room, 'librarian', hub.rooms.library.librarianMarker)
 
@@ -327,6 +369,13 @@ export class HubPrivateRoomScene {
     this.dowserBody.eventMode = 'none'
     dowser.addChild(this.dowserBody)
     this.nonPlayerActors.library.push(dowser)
+    this.staticPainters.library.push({
+      id: 'fixed:shlorio',
+      registration: nativeHubFixedActorPainterRegistration('shlorio'),
+      sortBias: 0,
+      target: dowser,
+      worldY: dowserVisual.painterY,
+    })
     room.addChild(dowser)
     this.addNpcMarker(room, 'shlorio', hub.rooms.library.dowserMarker)
     this.addRoomFlames(room, 'library', hub.rooms.library.flame)
@@ -354,7 +403,7 @@ export class HubPrivateRoomScene {
       HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
       0,
     ))
-    this.addRoomProps(room, layout)
+    this.addRoomProps(room, layout, 'storeroom')
     this.addRoomFlames(room, 'storeroom', hub.rooms.storeroom.flame)
     room.addChild(this.layer(
       hub.rooms.storeroom.foreground,
@@ -370,7 +419,7 @@ export class HubPrivateRoomScene {
       HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
       0,
     ))
-    this.addRoomProps(room, layout)
+    this.addRoomProps(room, layout, 'office')
     const archVisual = layout.actors['arch-chancellor'].visual
     const archChancellor = new Container({ label: 'college-office-arch-chancellor' })
     archChancellor.sortableChildren = true
@@ -390,6 +439,13 @@ export class HubPrivateRoomScene {
     archBody.zIndex = 1
     archChancellor.addChild(desk, archBody)
     this.nonPlayerActors.office.push(archChancellor)
+    this.staticPainters.office.push({
+      id: 'fixed:arch-chancellor',
+      registration: nativeHubFixedActorPainterRegistration('arch-chancellor'),
+      sortBias: 0,
+      target: archChancellor,
+      worldY: archVisual.painterY,
+    })
     room.addChild(archChancellor)
     this.addNpcMarker(room, 'arch-chancellor', hub.rooms.office.archChancellorMarker)
     const polisherDefinition = NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher
@@ -467,13 +523,16 @@ export class HubPrivateRoomScene {
   private addRoomProps(
     room: Container,
     layout: HubPrivateRoomLayoutDefinition,
+    region: PrivateHubRegionId,
   ): void {
     for (const prop of layout.props) {
       const visual = prop.visual
       if (!visual) continue
       const source = HUB_PRIVATE_ROOM_ASSETS[visual.asset]
       if (visual.kind === 'room-layer') {
-        room.addChild(this.layer(source, hubWorldDepthForActor(visual.painterY)))
+        const sprite = this.layer(source, hubWorldDepthForActor(visual.painterY))
+        room.addChild(sprite)
+        this.addStaticPainter(region, sprite, visual.painterY)
         continue
       }
 
@@ -487,6 +546,14 @@ export class HubPrivateRoomScene {
         dynamic.container.zIndex = hubWorldDepthForActor(visual.painterY)
         dynamic.container.visible = false
         room.addChild(dynamic.container)
+        this.addStaticPainter(
+          region,
+          depthTarget((depth) => {
+            sprite.zIndex = depth
+            dynamic.container.zIndex = depth
+          }),
+          visual.painterY,
+        )
         this.mortuaryStaticPaintings.push(sprite)
         this.mortuaryDynamicPaintings.push(dynamic)
         continue
@@ -495,7 +562,91 @@ export class HubPrivateRoomScene {
       sprite.zIndex = hubWorldDepthForActor(visual.painterY)
       sprite.eventMode = 'none'
       room.addChild(sprite)
+      this.addStaticPainter(region, sprite, visual.painterY)
     }
+  }
+
+  private addStaticPainter(
+    region: PrivateHubRegionId,
+    target: { zIndex: number },
+    worldY: number,
+  ): void {
+    const registrationOrdinal = this.staticPainters[region].filter(
+      ({ registration }) => registration.managerLane === 'scenery',
+    ).length
+    this.staticPainters[region].push({
+      id: `scenery:${region}:${registrationOrdinal}`,
+      registration: { managerLane: 'scenery', registrationOrdinal },
+      sortBias: 0,
+      target,
+      worldY,
+    })
+  }
+
+  private applyPainterOrder(
+    snapshot: HubPresentationFrame,
+    localPlayerId: string,
+    region: PrivateHubRegionId,
+    storyOffice: boolean,
+  ): void {
+    const localPlayer = snapshot.players[localPlayerId]
+    const layers: NativeHubPainterLayer[] = [...this.staticPainters[region]]
+    if (region === 'office' && storyOffice) {
+      layers.push({
+        id: 'fixed:polisher',
+        registration: nativeHubFixedActorPainterRegistration('polisher'),
+        sortBias: 0,
+        target: this.polisherBody,
+        worldY: NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher.geometry.position.y,
+      })
+    }
+    for (const [playerId, view] of this.players) {
+      const player = snapshot.players[playerId]
+      if (!player || snapshot.world.participants[playerId]?.region !== region) continue
+      layers.push({
+        id: `player:${playerId}`,
+        registration: player.lighting.lightRegistration,
+        sortBias: 0,
+        target: view.container,
+        worldY: player.position.y,
+      })
+    }
+    for (const layer of this.primarySpells[region].painterLayers()) {
+      if (layer.lane !== 'world-sorted') continue
+      layers.push({
+        id: layer.id,
+        insertionTargets: Object.fromEntries((layer.insertions ?? []).map((insertion) => [
+          insertion.id,
+          depthTarget((depth) => this.primarySpells[region].setDepth(insertion.id, depth)),
+        ])),
+        insertions: layer.insertions,
+        registration: layer.registration,
+        sortBias: layer.sortBias,
+        target: depthTarget((depth) => this.primarySpells[region].setDepth(layer.id, depth)),
+        visible: layer.visible,
+        worldY: layer.worldY,
+      })
+    }
+    for (const layer of this.secondaryAbilities[region].painterLayers()) {
+      if (layer.lane !== 'world-sorted' || layer.registration === null) continue
+      layers.push({
+        id: layer.id,
+        insertionTargets: Object.fromEntries((layer.insertions ?? []).map((insertion) => [
+          insertion.id,
+          depthTarget((depth) => this.secondaryAbilities[region].setDepth(insertion.id, depth)),
+        ])),
+        insertions: layer.insertions,
+        registration: layer.registration,
+        sortBias: layer.sortBias,
+        target: depthTarget((depth) => this.secondaryAbilities[region].setDepth(layer.id, depth)),
+        visible: layer.visible,
+        worldY: layer.worldY,
+      })
+    }
+    this.lastPainterOrder = applyNativeHubPainterOrder(
+      layers,
+      localPlayer?.position.y ?? 0,
+    )
   }
 
   private room(label: PrivateHubRegionId): Container {

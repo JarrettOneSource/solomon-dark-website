@@ -25,6 +25,11 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import {
+  createNativeWorldManagerOrder,
+  type NativeWorldManagerRegistration,
+  type RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
 import type { BoneyardEnemyDeathEffect } from './boneyard-enemy-store.ts'
 
 export const NATIVE_LOOT_WORLD_ID_MINIMUM = 1
@@ -77,6 +82,7 @@ export interface BoneyardLootActor {
   readonly nativeTypeId: 2011 | 2012 | 2013 | 2038
   readonly orbKind: NativeOrbKind | null
   readonly orbValue: number
+  readonly painterRegistration: NativeWorldManagerRegistration
   readonly position: Readonly<BoneyardPoint>
   readonly rotationDeg: number
   readonly scatterSeed: number
@@ -92,6 +98,7 @@ export interface BoneyardGoodieInput {
   readonly eid: string
   readonly position: Readonly<BoneyardPoint>
   readonly rewardSeed?: number
+  readonly sceneryRegistrationOrdinal?: number
   readonly subtype?: number
 }
 
@@ -103,6 +110,7 @@ export interface BoneyardGoodieState {
   readonly phase: 0 | 1 | 2
   readonly position: Readonly<BoneyardPoint>
   readonly rewardSeed: number
+  readonly sceneryRegistrationOrdinal: number
   readonly subtype: number
   readonly timer: number
 }
@@ -165,6 +173,7 @@ export interface BoneyardLootEvent {
 export interface BoneyardLootStoreStepContext {
   readonly participants: readonly BoneyardLootParticipant[]
   readonly placement: NativeLootPlacement
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly tick: number
 }
 
@@ -223,6 +232,7 @@ interface WorkingLootStep {
   nextKeyDropLevel: number
   pickups: BoneyardLootPickup[]
   rejectedCount: number
+  registerWorldPainter: RegisterNativeWorldPainter
   sharedRng: NativeRngState
   lastKeyNeededTick: number
 }
@@ -233,7 +243,7 @@ export function createBoneyardLootStore(
 ): BoneyardLootStore {
   let sharedRng = createNativeRng(seedBoneyardWaveRng(`${seed}:native-loot`))
   let nextGoodieId = 1
-  const goodies = sourceGoodies.map((source): BoneyardGoodieState => {
+  const goodies = sourceGoodies.map((source, sourceOrder): BoneyardGoodieState => {
     let rewardSeed = source.rewardSeed
     if (rewardSeed === undefined) {
       const draw = drawNativeInteger(sharedRng, 1_000)
@@ -247,6 +257,11 @@ export function createBoneyardLootStore(
     if (!Number.isInteger(subtype) || subtype < 0) {
       throw new RangeError('Goodie subtype must be a non-negative integer')
     }
+    const sceneryRegistrationOrdinal = source.sceneryRegistrationOrdinal ?? sourceOrder
+    if (!Number.isSafeInteger(sceneryRegistrationOrdinal)
+        || sceneryRegistrationOrdinal < 0) {
+      throw new RangeError('Goodie scenery registration ordinal must be non-negative')
+    }
     return Object.freeze({
       active: false,
       eid: source.eid,
@@ -255,6 +270,7 @@ export function createBoneyardLootStore(
       phase: 0,
       position: Object.freeze({ ...source.position }),
       rewardSeed,
+      sceneryRegistrationOrdinal,
       subtype,
       timer: 0,
     })
@@ -381,9 +397,10 @@ export function spawnBoneyardLootSpecs(
   source: BoneyardLootStore,
   specs: readonly NativeLootDropSpec[],
   tick: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): SpawnBoneyardLootResult {
   validateTick(tick)
-  const work = working(source)
+  const work = working(source, registerWorldPainter)
   spawnSpecs(work, specs, tick)
   return {
     rejectedCount: work.rejectedCount,
@@ -396,9 +413,10 @@ export function spawnBoneyardCustomLootItems(
   items: readonly HubInventoryItem[],
   position: Readonly<BoneyardPoint>,
   tick: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): SpawnBoneyardLootResult {
   validateTick(tick)
-  const work = working(source)
+  const work = working(source, registerWorldPainter)
   const specs = items.map((item): NativeLootDropSpec => ({
     activationDelayTicks: 0,
     id: 0,
@@ -419,6 +437,7 @@ export function spawnBoneyardCustomLootItems(
 export function materializeBoneyardEnemyLoot(
   source: BoneyardLootStore,
   input: BoneyardEnemyLootMaterializationInput,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): SpawnBoneyardLootResult {
   const itemIds = createNativeLootItemIds(source.nextItemId)
   const rolled = rollNativeEnemyLoot({
@@ -459,7 +478,7 @@ export function materializeBoneyardEnemyLoot(
     nextKeyDropLevel: rolled.nextKeyDropLevel,
     sharedRng: rolled.sharedRng,
   }
-  return spawnBoneyardLootSpecs(prepared, rolled.drops, input.tick)
+  return spawnBoneyardLootSpecs(prepared, rolled.drops, input.tick, registerWorldPainter)
 }
 
 export function stepBoneyardLootStore(
@@ -471,7 +490,7 @@ export function stepBoneyardLootStore(
     throw new RangeError('loot store ticks must advance monotonically')
   }
   validateParticipants(context.participants)
-  const work = working(source)
+  const work = working(source, context.registerWorldPainter)
   const firstTick = source.lastStepTick < 0 ? context.tick : source.lastStepTick + 1
   for (let tick = firstTick; tick <= context.tick; tick += 1) {
     stepLootEffects(work, context.placement, tick)
@@ -778,6 +797,7 @@ function createLootFadeEffect(
     lifetimeTicks: 100,
     opacityTimer: 1,
     ownerActorId: actor.id,
+    painterRegistration: work.registerWorldPainter('actor'),
     position: Object.freeze({ ...position }),
     role,
     rotationDeg: 0,
@@ -834,6 +854,7 @@ function spawnGoodieBreakEffects(
     lifetimeTicks: 100,
     opacityTimer: 1,
     ownerActorId: goodie.id,
+    painterRegistration: work.registerWorldPainter('actor'),
     position: Object.freeze({ x: goodie.position.x, y: goodie.position.y - 20 }),
     role: 'goodie-break-additive',
     rotationDeg: 0,
@@ -904,6 +925,7 @@ function createGoodieBouncer(
     lifetimeTicks: 1_000,
     opacityTimer: 2,
     ownerActorId: goodie.id,
+    painterRegistration: work.registerWorldPainter('actor'),
     position: Object.freeze({ ...goodie.position }),
     role,
     rotationDeg,
@@ -1191,6 +1213,7 @@ function spawnSpecs(
       nativeTypeId: spec.nativeTypeId,
       orbKind: spec.orbKind ?? null,
       orbValue: spec.value ?? 0,
+      painterRegistration: work.registerWorldPainter('actor'),
       position: Object.freeze({ ...spec.position }),
       rotationDeg: spec.rotationDeg ?? 0,
       scatterSeed: spec.scatterSeed ?? 0,
@@ -1256,7 +1279,19 @@ function emit(
   work.events.push(Object.freeze({ ...event, eventId: work.nextEventId++ }))
 }
 
-function working(source: BoneyardLootStore): WorkingLootStep {
+function working(
+  source: BoneyardLootStore,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+): WorkingLootStep {
+  const standaloneOrder = createNativeWorldManagerOrder({
+    nextRegistrationOrdinal: {
+      actor: source.actors.reduce(
+        (next, actor) => Math.max(next, actor.painterRegistration.registrationOrdinal + 1),
+        0,
+      ),
+      transient: 0,
+    },
+  })
   return {
     actors: [...source.actors],
     effects: [...source.effects],
@@ -1271,6 +1306,7 @@ function working(source: BoneyardLootStore): WorkingLootStep {
     nextKeyDropLevel: source.nextKeyDropLevel,
     pickups: [],
     rejectedCount: 0,
+    registerWorldPainter: registerWorldPainter ?? standaloneOrder.register,
     sharedRng: source.sharedRng,
     lastKeyNeededTick: source.lastKeyNeededTick,
   }

@@ -227,6 +227,9 @@ function interpolateSnapshot(
       ),
       maggots: interpolateMaggots(older.world.maggots, newer.world.maggots, blend),
       runId: newer.world.runId,
+      solomonPainterRegistration: copyLightRegistration(
+        (blend < 1 ? older : newer).world.solomonPainterRegistration,
+      ),
       tutorial: interpolateTutorial(
         older.world.tutorial,
         newer.world.tutorial,
@@ -278,6 +281,10 @@ function interpolatePlayer(
     )) % HEADING_COUNT,
     lighting: {
       ...discrete.lighting,
+      deathWeaponPainterRegistration:
+        discrete.lighting.deathWeaponPainterRegistration === null
+          ? null
+          : { ...discrete.lighting.deathWeaponPainterRegistration },
       lightRegistration: { ...discrete.lighting.lightRegistration },
       overlayEffectPhase: lerp(
         older.lighting.overlayEffectPhase,
@@ -418,6 +425,9 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       ),
       maggots: snapshot.world.maggots.map(copyMaggot),
       runId: snapshot.world.runId,
+      solomonPainterRegistration: copyLightRegistration(
+        snapshot.world.solomonPainterRegistration,
+      ),
       tutorial: copyTutorial(snapshot.world.tutorial),
       waves: copyWaves(snapshot.world.waves),
     },
@@ -506,7 +516,11 @@ function interpolateLoot(
 }
 
 function copyLoot(source: BoneyardLootSnapshot): BoneyardLootSnapshot {
-  return { ...source, position: { ...source.position } }
+  return {
+    ...source,
+    painterRegistration: { ...source.painterRegistration },
+    position: { ...source.position },
+  }
 }
 
 function copyGoodie(source: BoneyardGoodieSnapshot): BoneyardGoodieSnapshot {
@@ -733,6 +747,10 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     config: { ...player.config },
     lighting: {
       ...player.lighting,
+      deathWeaponPainterRegistration:
+        player.lighting.deathWeaponPainterRegistration === null
+          ? null
+          : { ...player.lighting.deathWeaponPainterRegistration },
       lightRegistration: { ...player.lighting.lightRegistration },
     },
     position: { ...player.position },
@@ -883,6 +901,7 @@ function copyEnemyProjectile(
   return {
     ...projectile,
     lightRegistration: copyLightRegistration(projectile.lightRegistration),
+    painterRegistration: { ...projectile.painterRegistration },
     position: { ...projectile.position },
   }
 }
@@ -901,6 +920,7 @@ function copyEnemyProjectileEffect(
     lightRegistration: effect.lightRegistration === null
       ? null
       : { ...effect.lightRegistration },
+    painterRegistration: { ...effect.painterRegistration },
     position: { ...effect.position },
   }
 }
@@ -908,7 +928,13 @@ function copyEnemyProjectileEffect(
 function copyEnemyDeathEffect(
   effect: BoneyardEnemyDeathEffectSnapshot,
 ): BoneyardEnemyDeathEffectSnapshot {
-  return { ...effect, position: { ...effect.position } }
+  return {
+    ...effect,
+    painterRegistration: effect.painterRegistration === null
+      ? null
+      : { ...effect.painterRegistration },
+    position: { ...effect.position },
+  }
 }
 
 function copyMaggot(maggot: BoneyardMaggotSnapshot): BoneyardMaggotSnapshot {
@@ -962,6 +988,9 @@ function copyMageLightningPulse(
         },
     endpoint: { ...pulse.endpoint },
     midpoint: { ...pulse.midpoint },
+    painterRegistrations: pulse.painterRegistrations.map((registration) => ({
+      ...registration,
+    })),
     source: { ...pulse.source },
   }
 }

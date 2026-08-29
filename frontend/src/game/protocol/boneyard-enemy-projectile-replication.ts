@@ -15,7 +15,7 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID = 3
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 12
+const DESCRIPTOR_LENGTH = 13
 const SAMPLE_LENGTH = 10
 
 const KINDS = [
@@ -50,12 +50,13 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION = {
       || !positiveInteger(descriptor[7])
       || (descriptor[8] !== 0 && descriptor[8] !== 1)
       || !arrayIndex(descriptor[9], BONEYARD_ENEMY_PROJECTILE_PAYLOADS.length)
+      || !nonnegativeInteger(descriptor[12])
     ) return false
     const kind = KINDS[descriptor[2]]!
     const payload = BONEYARD_ENEMY_PROJECTILE_PAYLOADS[descriptor[9]]!
     return NATIVE_TYPE_IDS[kind] === descriptor[3]
       && payloadMatchesKind(kind, payload)
-      && descriptor[10] === lightManagerLaneCode(kind, payload)
+      && descriptor[10] === painterManagerLaneCode(kind, payload)
       && (descriptor[10] === -1
         ? descriptor[11] === -1
         : nonnegativeInteger(descriptor[11]))
@@ -92,6 +93,7 @@ export function boneyardEnemyProjectileDescriptor(
       ? -1
       : projectile.lightRegistration.managerLane === 'actor' ? 0 : 1,
     projectile.lightRegistration?.registrationOrdinal ?? -1,
+    projectile.painterRegistration.registrationOrdinal,
   ]
 }
 
@@ -141,6 +143,10 @@ export function materializeBoneyardEnemyProjectile(
     lifetimeTicks: descriptor[6],
     nativeTypeId: descriptor[3] as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: descriptor[4],
+    painterRegistration: {
+      managerLane: 'actor',
+      registrationOrdinal: descriptor[12],
+    },
     payload: BONEYARD_ENEMY_PROJECTILE_PAYLOADS[descriptor[9]]!,
     position: {
       x: dequantize(sample[2], POSITION_SCALE),
@@ -167,7 +173,7 @@ function payloadMatchesKind(
   }
 }
 
-function lightManagerLaneCode(
+function painterManagerLaneCode(
   kind: BoneyardEnemyProjectileSnapshot['kind'],
   payload: BoneyardEnemyProjectilePayload,
 ): -1 | 0 | 1 {

@@ -4,6 +4,11 @@ import {
 } from '../core-kernels/actor-heading.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
+  createNativeWorldManagerOrder,
+  type NativeWorldManagerRegistration,
+  type RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
+import {
   COMPILED_HUB_STUDENT_SPLINES,
   evaluateHubStudentSpline,
 } from './hub-student-splines.ts'
@@ -33,6 +38,7 @@ export interface HubStudentState {
   pathCursor: number
   pathId: number
   pathStep: 1 | -1
+  painterRegistration: NativeWorldManagerRegistration
   position: Vector2
   profile: HubStudentPhysicalProfile
   props: readonly HubStudentProp[]
@@ -216,6 +222,7 @@ export function createHubStudentState(
   pathId: number,
   sourceState: number,
   desiredSpeed: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): HubStudentState {
   let state = sourceState
   const strength = randomFloat(state, 5)
@@ -242,6 +249,12 @@ export function createHubStudentState(
     pathCursor: 0,
     pathId,
     pathStep: 1,
+    painterRegistration: (
+      registerWorldPainter
+      ?? createNativeWorldManagerOrder({
+        nextRegistrationOrdinal: { actor: id, transient: 0 },
+      }).register
+    )('actor'),
     position,
     profile: {
       pushResistance: 1,
@@ -263,12 +276,14 @@ function spawnStudent(
   population: HubStudentPopulationState,
   pathId: number,
   desiredSpeed: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): HubStudentPopulationState {
   const student = createHubStudentState(
     population.nextId,
     pathId,
     population.rngState,
     desiredSpeed,
+    registerWorldPainter,
   )
   population.nextId += 1
   population.rngState = student.rngState
@@ -276,7 +291,9 @@ function spawnStudent(
   return population
 }
 
-export function createHubStudentPopulation(): HubStudentPopulationState {
+export function createHubStudentPopulation(
+  registerWorldPainter?: RegisterNativeWorldPainter,
+): HubStudentPopulationState {
   const population = new HubStudentPopulationState({
     nextId: 0,
     rarePathDenominator: NATIVE_RARE_PATH_DENOMINATOR,
@@ -298,7 +315,7 @@ export function createHubStudentPopulation(): HubStudentPopulationState {
         })
       })
       .filter((student) => !student.retired)
-    stepHubStudentPopulation(population, students)
+    stepHubStudentPopulation(population, students, registerWorldPainter)
   }
   return population
 }
@@ -311,6 +328,17 @@ export function hubStudentSnapshotStates(
   population: HubStudentPopulationState,
 ): HubStudentState[] {
   return population.store.states()
+}
+
+export function registerHubStudentPopulationPainters(
+  population: HubStudentPopulationState,
+  registerWorldPainter: RegisterNativeWorldPainter,
+): HubStudentPopulationState {
+  population.store.replaceOrderedStates(population.students.map((student) => ({
+    ...student,
+    painterRegistration: registerWorldPainter('actor'),
+  })))
+  return population
 }
 
 function studentSpeedFactor(
@@ -491,6 +519,7 @@ export function commitHubStudentRoute(
 export function stepHubStudentPopulation(
   source: HubStudentPopulationState,
   committedStudents: readonly HubStudentState[],
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): HubStudentPopulationState {
   const nextTickerCounter = source.spawnTickerCounter + 1
   const tickerElapsed = nextTickerCounter >= NATIVE_SPAWN_REQUEST_TICKS
@@ -531,6 +560,7 @@ export function stepHubStudentPopulation(
             population,
             pathRoll.value - 1,
             desiredSpeed,
+            registerWorldPainter,
           )
         }
       }

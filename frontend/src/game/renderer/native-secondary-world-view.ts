@@ -12,6 +12,11 @@ import type {
   NativeSecondaryActorState,
   NativeSecondarySimulationState,
 } from '../core-kernels/native-secondary-abilities.ts'
+import {
+  nativeWorldPainterRegistration,
+  type NativeWorldManagerRegistration,
+} from '../core-kernels/native-world-manager-order.ts'
+import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import {
   AirPrimarySpellView,
@@ -60,11 +65,14 @@ WHITE_ALPHA_MASK_FILTER.matrix = [
 
 export interface NativeSecondaryPainterLayer {
   readonly id: string
+  readonly insertions?: readonly NativeRegionPainterInsertion[]
   readonly lane: 'pre-world-queue' | 'world-sorted'
   readonly queueFamily: 'ordinary-dynamic' | 'zanim' | null
   readonly regionLightPoint: Readonly<{ x: number; y: number }> | null
+  readonly registration: NativeWorldManagerRegistration | null
   readonly sortBias: number
   readonly sourceOrder: number
+  readonly visible?: boolean
   readonly worldY: number
 }
 
@@ -101,6 +109,7 @@ class NativeSecondaryActorView {
   private readonly quadVertices: Float32Array[] = []
   private readonly renderer: Renderer
   private readonly sprites: Sprite[] = []
+  private state: NativeSecondaryActorState
   private readonly stormLightning: AirPrimarySpellView | null
   private stormWeather: NativeStormWeatherView | null = null
   private readonly textures: PlayerWorldTextures['secondary']
@@ -113,6 +122,7 @@ class NativeSecondaryActorView {
     renderer: Renderer,
     pointGain = 1,
   ) {
+    this.state = state
     this.birthPointGain = pointGain
     this.currentKind = state.kind
     this.textures = textures.secondary
@@ -145,6 +155,7 @@ class NativeSecondaryActorView {
     presentationFrame = state.ageTicks,
     pointGain = 1,
   ): void {
+    this.state = state
     this.currentKind = state.kind
     this.plan = nativeSecondaryPresentationPlan(
       state,
@@ -248,6 +259,7 @@ class NativeSecondaryActorView {
       lane: 'world-sorted',
       queueFamily: this.plan.queueFamily,
       regionLightPoint: this.regionLightPoint,
+      registration: nativeWorldPainterRegistration(this.state),
       sortBias: this.plan.sortBias,
       sourceOrder,
       worldY: this.plan.worldY,
@@ -261,13 +273,34 @@ class NativeSecondaryActorView {
         lane: 'pre-world-queue' as const,
         queueFamily: null,
         regionLightPoint: null,
+        registration: null,
         sortBias: 0,
         sourceOrder,
         worldY: this.plan.root.y,
       }]
       : []
-    const world = this.currentKind !== 'acid-rain' || this.plan.draws.length > 0
-      ? [this.painterLayer(id, sourceOrder + underlay.length)]
+    const proxyOwner = this.currentKind === 'acid-rain'
+      || this.currentKind === 'storm-cloud'
+    const world = this.plan.draws.length > 0 || this.currentKind !== 'acid-rain'
+      ? [proxyOwner
+          ? {
+              id: `secondary-owner:${id}`,
+              insertions: Object.freeze([Object.freeze({
+                id: `secondary:${id}`,
+                sortBias: this.plan.sortBias,
+                visible: true,
+                worldY: this.plan.worldY,
+              })]),
+              lane: 'world-sorted' as const,
+              queueFamily: 'ordinary-dynamic' as const,
+              regionLightPoint: this.regionLightPoint,
+              registration: nativeWorldPainterRegistration(this.state),
+              sortBias: 0,
+              sourceOrder: sourceOrder + underlay.length,
+              visible: false,
+              worldY: this.state.position.y,
+            }
+          : this.painterLayer(id, sourceOrder + underlay.length)]
       : []
     return [...underlay, ...world]
   }
@@ -591,12 +624,19 @@ export class NativeSecondaryWorldView {
   private readonly liveIds = new Set<number>()
   private readonly leviathanComposites = new Map<number, NativeLeviathanCompositeView>()
   private readonly root: Container
+  private readonly preWorldRoot: Container
   private readonly renderer: Renderer
   private readonly textures: PlayerWorldTextures
   private readonly views = new Map<number, NativeSecondaryActorView>()
 
-  constructor(root: Container, textures: PlayerWorldTextures, renderer: Renderer) {
+  constructor(
+    root: Container,
+    textures: PlayerWorldTextures,
+    renderer: Renderer,
+    options: { readonly preWorldRoot?: Container } = {},
+  ) {
     this.root = root
+    this.preWorldRoot = options.preWorldRoot ?? root
     this.textures = textures
     this.renderer = renderer
   }
@@ -621,7 +661,7 @@ export class NativeSecondaryWorldView {
           pointGainAt(actor.position),
         )
         this.views.set(actor.id, view)
-        if (view.underlayContainer) this.root.addChild(view.underlayContainer)
+        if (view.underlayContainer) this.preWorldRoot.addChild(view.underlayContainer)
         this.root.addChild(view.container)
       }
       view.update(actor, presentationFrame, pointGainAt(actor.position))

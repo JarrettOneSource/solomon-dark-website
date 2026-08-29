@@ -33,11 +33,16 @@ import {
 
 test('Blizzard chains own Frost fade and optional chaining-particle births without a beam', () => {
   const rng = createNativeRng(27)
+  let registrationOrdinal = 10
   const effects = createNativeWeldBlizzardChainEffects({
     castDirection: { x: 1, y: 0 },
     direction: { x: 1, y: 0 },
     firstId: 10,
     ownerId: 'wizard',
+    registerWorldPainter: (managerLane) => ({
+      managerLane,
+      registrationOrdinal: registrationOrdinal++,
+    }),
     rng,
     source: { x: 100, y: 20 },
     tick: 5,
@@ -49,6 +54,10 @@ test('Blizzard chains own Frost fade and optional chaining-particle births witho
   assert.ok(fade?.kind === 'weld-frost-fade')
   assert.equal(fade.buildId, 1004)
   assert.equal('position' in fade, false)
+  assert.deepEqual(fade.painterRegistrations, [{
+    managerLane: 'actor',
+    registrationOrdinal: 10,
+  }])
 
   let expected = drawNativeFloat(rng, 10).state
   expected = drawNativeInteger(expected, 100_001).state
@@ -60,6 +69,10 @@ test('Blizzard chains own Frost fade and optional chaining-particle births witho
     expected = drawNativeFloat(expected, 10).state
     expected = drawNativeFloat(expected, 2, true).state
     assert.equal(effects.actors[1]?.kind, 'weld-blizzard-chain-frost')
+    assert.deepEqual(effects.actors[1]?.painterRegistrations, [{
+      managerLane: 'actor',
+      registrationOrdinal: 11,
+    }])
   } else {
     assert.equal(effects.actors.length, 1)
   }

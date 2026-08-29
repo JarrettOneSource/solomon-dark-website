@@ -1,5 +1,12 @@
 # 2026-08-27 — Complete stock renderer and game-wide VFX reflection reopening
 
+> **2026-08-29 world-painter closure:** the low-level Graphics/D3D,
+> texture, shader, sampler, blend, and child-local painter results in this file
+> remain authoritative. [Entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> supersedes and completes its parent-root topology: Region manager chronology,
+> `PuppetPointer` insertion, `ZAnimSplit` clip slices, Goodie scenery ownership,
+> and direct pre/post-world composition are exact-ported by that entry.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Acid Rain improved after recovering the Arena shader,

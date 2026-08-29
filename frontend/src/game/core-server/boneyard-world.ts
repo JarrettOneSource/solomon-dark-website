@@ -69,9 +69,9 @@ import {
   type NativeBoneyardRadialLight,
 } from '../core-kernels/native-boneyard-lighting.ts'
 import type {
-  NativeLightProviderRegistration,
-  RegisterNativeLightProvider,
-} from '../core-kernels/native-light-provider-order.ts'
+  NativeWorldManagerRegistration,
+  RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
 import type {
   NativeSecondaryKnockbackContact,
   NativeSecondarySceneryTarget,
@@ -174,7 +174,7 @@ export interface BoneyardWorldState {
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
-  lanternLightRegistration: NativeLightProviderRegistration | null
+  lanternLightRegistration: NativeWorldManagerRegistration | null
   lanternPosition: Readonly<BoneyardPoint> | null
   hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunState>>
   loot: BoneyardLootStore
@@ -182,6 +182,7 @@ export interface BoneyardWorldState {
   playerOuchDeadlineTick: number
   runId: string
   scenerySpellTargets: readonly PrimarySpellTarget[]
+  solomonPainterRegistration: NativeWorldManagerRegistration | null
   spawn: { x: number; y: number; facingDeg: number }
   tutorial: NativeTutorialState | null
   tutorialProfileEconomy: HubEconomyState | null
@@ -209,7 +210,8 @@ export interface BoneyardPlayerMovementContact {
 
 export function createBoneyardWorld(
   loaded: LoadedBoneyard,
-  lanternLightRegistration: NativeLightProviderRegistration | null = null,
+  lanternLightRegistration: NativeWorldManagerRegistration | null = null,
+  solomonPainterRegistration: NativeWorldManagerRegistration | null = null,
 ): BoneyardWorldState {
   const tutorial = loaded.choice.id === STOCK_TUTORIAL_BONEYARD_ID
   const ownsRetailEncounter = loaded.choice.source === 'default'
@@ -261,13 +263,14 @@ export function createBoneyardWorld(
     hallOfFameRuns: {},
     loot: createBoneyardLootStore(
       loaded.seed,
-      loaded.scene.objects
-        .filter(({ typeId }) => typeId === 2061)
-        .map((object) => ({
+      loaded.scene.objects.flatMap((object, sceneryRegistrationOrdinal) => (
+        object.typeId === 2061 ? [{
           eid: object.eid,
           position: Object.freeze({ ...object.pos }),
+          sceneryRegistrationOrdinal,
           subtype: 0,
-        })),
+        }] : []
+      )),
     ),
     lootEvents: [],
     playerOuchDeadlineTick: 0,
@@ -287,6 +290,7 @@ export function createBoneyardWorld(
         registrationOrder,
       }] : []
     )),
+    solomonPainterRegistration,
     spawn: { ...loaded.scene.spawn },
     tutorial: tutorial
       ? createNativeTutorialState(loaded.scene.spawn, 0, loaded.seed)
@@ -404,8 +408,8 @@ export function stepBoneyardWorldTick(
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
   playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
   tick: number,
-  registerLightProvider?: RegisterNativeLightProvider,
-  registerProjectileLightProvider?: RegisterNativeLightProvider,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+  registerProjectileWorldPainter?: RegisterNativeWorldPainter,
   abilityEffects: Readonly<Record<number, NativeSecondaryTargetEffectState>> = {},
   summons: readonly BoneyardSummonTarget[] = [],
   externalSpawnIntents: readonly BoneyardEnemySpawnIntent[] = [],
@@ -567,6 +571,7 @@ export function stepBoneyardWorldTick(
   const lootStep = stepBoneyardLootStore(world.loot, {
     participants: lootParticipants,
     placement: lootPlacement,
+    registerWorldPainter,
     tick,
   })
   let loot = lootStep.store
@@ -813,8 +818,8 @@ export function stepBoneyardWorldTick(
       waves = result.director
       return [...external, ...result.spawnIntents]
     },
-    registerLightProvider,
-    registerProjectileLightProvider,
+    registerWorldPainter,
+    registerProjectileWorldPainter,
     retirementObserver: {
       onTerminalOutput: (output, outputCount) => {
         for (const intensity of nativeEnemyWorldFeedbackImpulses(output, outputCount)) {
@@ -871,7 +876,7 @@ export function stepBoneyardWorldTick(
         && item?.nativeTypeId === 7001
         && item.nativeSubtype === 0
       )),
-    })
+    }, registerWorldPainter)
     loot = materialized.store
     if (reward.lootSource.recipeUid === 10051 && tutorial?.itemDropArmed) {
       loot = spawnBoneyardCustomLootItems(
@@ -879,6 +884,7 @@ export function stepBoneyardWorldTick(
         [nativeTutorialAmuletItem()],
         reward.lootSource.position,
         tick,
+        registerWorldPainter,
       ).store
       tutorial = { ...tutorial, itemDropArmed: false }
     } else if (reward.lootSource.recipeUid === 10065 && tutorial !== null) {
@@ -887,6 +893,7 @@ export function stepBoneyardWorldTick(
         [nativeTutorialHealthPotionItem()],
         reward.lootSource.position,
         tick,
+        registerWorldPainter,
       ).store
     }
     const customItems = customLoot?.({
@@ -899,6 +906,7 @@ export function stepBoneyardWorldTick(
         customItems,
         reward.lootSource.position,
         tick,
+        registerWorldPainter,
       ).store
     }
   }

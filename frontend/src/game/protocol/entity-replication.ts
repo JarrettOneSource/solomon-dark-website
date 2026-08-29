@@ -89,7 +89,7 @@ export const REPLICATED_ENTITY_TYPES = {
 const POSITION_SCALE = 16
 const HEADING_SCALE = 64
 const FRAME_PHASE_SCALE = 1024
-const STUDENT_DESCRIPTOR_HEADER = 5
+const STUDENT_DESCRIPTOR_HEADER = 6
 const STUDENT_SAMPLE_LENGTH = 7
 
 export interface ReplicatedEntityBaseline {
@@ -124,6 +124,8 @@ const studentCodec: ReplicatedEntityCodec = {
       || !Number.isFinite(descriptor[2])
       || descriptor[2] <= 0
       || (descriptor[3] !== 0 && descriptor[3] !== 1)
+      || !isQuantizedInteger(descriptor[5])
+      || descriptor[5] < 0
     ) return false
     const propCount = descriptor[4]
     if (
@@ -161,6 +163,7 @@ const studentCodec: ReplicatedEntityCodec = {
       student.scale,
       Number(student.reading),
       student.props.length,
+      student.painterRegistration.registrationOrdinal,
       ...student.props.flatMap((prop) => [prop.angle, prop.paletteIndex, prop.radius]),
     ]
   },
@@ -199,6 +202,10 @@ const studentCodec: ReplicatedEntityCodec = {
       heading,
       headingIndex: actorHeadingIndex(heading),
       id: descriptor[1],
+      painterRegistration: {
+        managerLane: 'actor',
+        registrationOrdinal: descriptor[5],
+      },
       position: {
         x: dequantize(sample[2], POSITION_SCALE),
         y: dequantize(sample[3], POSITION_SCALE),
@@ -323,6 +330,7 @@ export function createGameSnapshotFrame(
       hallOfFameRuns: snapshot.world.hallOfFameRuns,
       kind: 'boneyard',
       lanternLightRegistration: snapshot.world.lanternLightRegistration,
+      solomonPainterRegistration: snapshot.world.solomonPainterRegistration,
       mageLightningPulses: snapshot.world.mageLightningPulses.map(
         boneyardMageLightningPulseFrame,
       ),
@@ -515,6 +523,7 @@ export class EntityReplicationReconstructor {
         hallOfFameRuns: frame.world.hallOfFameRuns,
         kind: 'boneyard',
         lanternLightRegistration: frame.world.lanternLightRegistration,
+        solomonPainterRegistration: frame.world.solomonPainterRegistration,
         loot,
         lootEvents: frame.world.lootEvents,
         mageLightningPulses: frame.world.mageLightningPulses.map(

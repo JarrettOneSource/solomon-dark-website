@@ -544,11 +544,12 @@ test('Coffin replays the native hidden, rise, hold, and open spawn states', () =
 })
 
 test('enemy roots enter the shared painter queue at actor Y', () => {
-  assert.deepEqual(nativeEnemyPainterLayer(enemy('COFFIN'), 12), {
+  const source = enemy('COFFIN')
+  assert.deepEqual(nativeEnemyPainterLayer(source), {
     id: 'enemy:7',
     queueFamily: 'ordinary-dynamic',
+    registration: source.lightRegistration,
     sortBias: 0,
-    sourceOrder: 12,
     worldY: 240,
   })
 })
@@ -1256,6 +1257,7 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     id: 41,
     kind: 'bouncer' as const,
     ownerActorId: 7,
+    painterRegistration: { managerLane: 'actor' as const, registrationOrdinal: 41 },
     presentationOwner: 'world-sorted' as const,
     position: { x: 125, y: 240 },
     rotationRadians: 0.5,
@@ -1289,11 +1291,11 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     scale: { x: 1.2, y: 0.9 },
     tint: 0,
   })
-  assert.deepEqual(nativeEnemyDeathEffectPainterLayer(effect, 3), {
+  assert.deepEqual(nativeEnemyDeathEffectPainterLayer(effect), {
     id: 'enemy-death-effect:41',
     queueFamily: 'ordinary-dynamic',
+    registration: effect.painterRegistration,
     sortBias: 0,
-    sourceOrder: 3,
     worldY: 240,
   })
   assert.equal(nativeEnemyDeathEffectPainterLane(effect), 'world-sorted')

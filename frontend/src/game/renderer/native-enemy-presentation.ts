@@ -1,4 +1,5 @@
 import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import {
   NATIVE_IMP_BODY_POSE_COUNT,
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
@@ -47,6 +48,7 @@ export interface NativeEnemyVisualSnapshot {
   lighting: Readonly<{ charge: number; glow: number; providerCopies: 0 | 1 | 2 }>
   mageCloak: boolean
   nativeTypeId: number
+  lightRegistration: NativeWorldManagerRegistration
   position: Readonly<{ x: number; y: number }>
   shieldHealth: number
   shieldMaximumHealth: number
@@ -226,13 +228,12 @@ export function nativeEnemyPresentationPlan(
 
 export function nativeEnemyPainterLayer(
   enemy: NativeEnemyVisualSnapshot,
-  sourceOrder: number,
 ): DynamicPainterLayer {
   return {
     id: `enemy:${enemy.id}`,
     queueFamily: 'ordinary-dynamic',
+    registration: enemy.lightRegistration,
     sortBias: 0,
-    sourceOrder,
     worldY: enemy.position.y,
   }
 }

@@ -35,10 +35,10 @@ import type {
 } from '../core-kernels/native-college-intro.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
-  NATIVE_LIGHT_MANAGER_LANES,
-  type NativeLightManagerLane,
-  type NativeLightProviderRegistration,
-} from '../core-kernels/native-light-provider-order.ts'
+  NATIVE_WORLD_MANAGER_LANES,
+  type NativeWorldManagerLane,
+  type NativeWorldManagerRegistration,
+} from '../core-kernels/native-world-manager-order.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
@@ -67,6 +67,7 @@ import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
   PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
+  nativePrimaryPainterRegistrationContract,
   primaryCastActionEndTick,
   type PrimarySpellEarthBoulderBitState,
   type PrimarySpellEarthProjectileState,
@@ -225,6 +226,7 @@ import {
   NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
   NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS,
   nativeSecondaryLightDisposition,
+  nativeSecondaryPainterManagerLane,
   type NativeSecondaryActorKind,
   type NativeSecondaryAudioCue,
   type NativeSecondaryEventKind,
@@ -398,7 +400,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 105
+export const GAME_PROTOCOL_VERSION = 106
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2530,22 +2532,22 @@ function vector(value: unknown, field: string): Vector2 {
   }
 }
 
-function nativeLightProviderRegistration(
+function nativeWorldManagerRegistration(
   value: unknown,
   field: string,
-  expectedLane: NativeLightManagerLane,
-): NativeLightProviderRegistration {
+  expectedLane: NativeWorldManagerLane,
+): NativeWorldManagerRegistration {
   const source = record(value, field)
   onlyKeys(source, field, ['managerLane', 'registrationOrdinal'])
   const managerLane = limitedString(source.managerLane, `${field}.managerLane`, 16)
-  if (!(NATIVE_LIGHT_MANAGER_LANES as readonly string[]).includes(managerLane)) {
+  if (!(NATIVE_WORLD_MANAGER_LANES as readonly string[]).includes(managerLane)) {
     throw new GameProtocolError(`${field}.managerLane is not supported`)
   }
   if (managerLane !== expectedLane) {
     throw new GameProtocolError(`${field}.managerLane must be ${expectedLane}`)
   }
   return {
-    managerLane: managerLane as NativeLightManagerLane,
+    managerLane: managerLane as NativeWorldManagerLane,
     registrationOrdinal: nonnegativeInteger(
       source.registrationOrdinal,
       `${field}.registrationOrdinal`,
@@ -2553,26 +2555,45 @@ function nativeLightProviderRegistration(
   }
 }
 
-function absentNativeLightProviderRegistration(value: unknown, field: string): null {
+function nativeWorldPainterRegistrations(
+  value: unknown,
+  field: string,
+  expectedLane: NativeWorldManagerRegistration['managerLane'],
+  expectedCount: number,
+): readonly NativeWorldManagerRegistration[] {
+  const registrations = limitedArray(value, field, 512).map((entry, index) => (
+    nativeWorldManagerRegistration(entry, `${field}[${index}]`, expectedLane)
+  ))
+  if (registrations.length !== expectedCount) {
+    throw new GameProtocolError(`${field} must contain exactly ${expectedCount} roots`)
+  }
+  if (new Set(registrations.map(({ registrationOrdinal }) => registrationOrdinal)).size
+      !== registrations.length) {
+    throw new GameProtocolError(`${field} contains duplicate manager registrations`)
+  }
+  return registrations
+}
+
+function absentNativeWorldManagerRegistration(value: unknown, field: string): null {
   if (value !== null) throw new GameProtocolError(`${field} must be null`)
   return null
 }
 
 function absentNativeActorLight(source: Record<string, unknown>, field: string): null {
-  return absentNativeLightProviderRegistration(
+  return absentNativeWorldManagerRegistration(
     source.lightRegistration,
     `${field}.lightRegistration`,
   )
 }
 
-function nullableNativeLightProviderRegistration(
+function nullableNativeWorldManagerRegistration(
   value: unknown,
   field: string,
-  expectedLane: NativeLightManagerLane,
-): NativeLightProviderRegistration | null {
+  expectedLane: NativeWorldManagerLane,
+): NativeWorldManagerRegistration | null {
   return value === null
     ? null
-    : nativeLightProviderRegistration(value, field, expectedLane)
+    : nativeWorldManagerRegistration(value, field, expectedLane)
 }
 
 function playerCharacterConfig(value: unknown, field: string): PlayerCharacterConfig {
@@ -3885,6 +3906,7 @@ function playerLighting(
 ): ProtocolPlayerState['lighting'] {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'deathWeaponPainterRegistration',
     'driveActive',
     'lightRegistration',
     'overlayEffectPhase',
@@ -3894,8 +3916,13 @@ function playerLighting(
     throw new GameProtocolError(`${field}.overlayEffectPhase is outside the native domain`)
   }
   return {
+    deathWeaponPainterRegistration: nullableNativeWorldManagerRegistration(
+      source.deathWeaponPainterRegistration,
+      `${field}.deathWeaponPainterRegistration`,
+      'actor',
+    ),
     driveActive: boolean(source.driveActive, `${field}.driveActive`),
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -4814,6 +4841,7 @@ function studentState(value: unknown, field: string): ProtocolStudentState {
     'heading',
     'headingIndex',
     'id',
+    'painterRegistration',
     'position',
     'props',
     'reading',
@@ -4840,6 +4868,11 @@ function studentState(value: unknown, field: string): ProtocolStudentState {
     heading: finite(source.heading, `${field}.heading`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
     id: nonnegativeInteger(source.id, `${field}.id`),
+    painterRegistration: nativeWorldManagerRegistration(
+      source.painterRegistration,
+      `${field}.painterRegistration`,
+      'actor',
+    ),
     position: vector(source.position, `${field}.position`),
     props,
     reading: boolean(source.reading, `${field}.reading`),
@@ -5621,7 +5654,7 @@ function nativeSecondaryActor(
     'ageTicks', 'alpha', 'damage', 'enhanced', 'endpoint', 'frame', 'freezeTicks',
     'golem', 'hitTargetIds', 'id', 'kind', 'lifetimeTicks', 'lightRegistration',
     'midpoint', 'miscLightAppendOrdinal', 'ownerId', 'phase', 'position', 'presentationRng',
-    'quantity', 'radius', 'rank', 'rotationRadians', 'scale', 'skillId',
+    'painterRegistrations', 'quantity', 'radius', 'rank', 'rotationRadians', 'scale', 'skillId',
     'slowFactor', 'targetId', 'variant', 'velocity', 'worldKey',
   ])
   const kind = memberString(
@@ -5710,11 +5743,17 @@ function nativeSecondaryActor(
   const lightDisposition = nativeSecondaryLightDisposition({ kind, variant })
   const lightRegistration = lightDisposition === 'none'
     ? absentNativeActorLight(source, field)
-    : nativeLightProviderRegistration(
+    : nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         lightDisposition === 'transient-provider' ? 'transient' : 'actor',
       )
+  const painterRegistrations = nativeWorldPainterRegistrations(
+    source.painterRegistrations,
+    `${field}.painterRegistrations`,
+    nativeSecondaryPainterManagerLane(kind),
+    1,
+  )
   let miscLightAppendOrdinal: number | null = null
   if (lightDisposition === 'misc') {
     miscLightAppendOrdinal = nonnegativeInteger(
@@ -5741,6 +5780,7 @@ function nativeSecondaryActor(
     midpoint: vector(source.midpoint, `${field}.midpoint`),
     miscLightAppendOrdinal,
     ownerId,
+    painterRegistrations,
     phase: finite(source.phase, `${field}.phase`),
     position: vector(source.position, `${field}.position`),
     presentationRng,
@@ -6322,7 +6362,35 @@ function primarySpellState(value: unknown, field: string): PrimarySpellSimulatio
   return { nextId, projectiles, transients }
 }
 
+type WithoutPainterRegistrations<T> = T extends unknown
+  ? Omit<T, 'painterRegistrations'>
+  : never
+
 function primarySpellProjectile(value: unknown, field: string): PrimarySpellProjectileState {
+  const source = record(value, field)
+  const {
+    painterRegistrations: painterRegistrationValue,
+    ...payload
+  } = source
+  const decoded = primarySpellProjectilePayload(payload, field)
+  const contract = nativePrimaryPainterRegistrationContract(
+    decoded as PrimarySpellProjectileState,
+  )
+  return {
+    ...decoded,
+    painterRegistrations: nativeWorldPainterRegistrations(
+      painterRegistrationValue,
+      `${field}.painterRegistrations`,
+      contract.managerLane,
+      contract.count,
+    ),
+  } as PrimarySpellProjectileState
+}
+
+function primarySpellProjectilePayload(
+  value: unknown,
+  field: string,
+): WithoutPainterRegistrations<PrimarySpellProjectileState> {
   const source = record(value, field)
   if (source.kind === 'weld') return primarySpellWeldProjectile(source, field)
   if (source.kind !== 'earth' && source.kind !== 'ether' && source.kind !== 'fire') {
@@ -6377,7 +6445,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
     id: positiveInteger(source.id, `${field}.id`),
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -6722,7 +6790,7 @@ function primarySpellWeldProjectile(
     hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
     id: positiveInteger(source.id, `${field}.id`),
     kind: 'weld',
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -6933,7 +7001,7 @@ function primarySpellWeldActor(
       impactSoundVariant,
       kind: 'weld-impact',
       lightRegistration: buildId === 1006
-        ? nativeLightProviderRegistration(
+        ? nativeWorldManagerRegistration(
             source.lightRegistration,
             `${field}.lightRegistration`,
             'transient',
@@ -7503,7 +7571,7 @@ function primarySpellWeldActor(
       impactThrowFirePitch,
       impactTicksRemaining,
       kind: 'weld-meteor',
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'actor',
@@ -7622,7 +7690,7 @@ function primarySpellWeldEtherealBoulder(
     flightTicks,
     hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
     kind: 'weld-persistent',
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -7796,7 +7864,7 @@ function primarySpellWeldHailstones(
     collisionRadius,
     damage: positiveFinite(source.damage, `${field}.damage`),
     kind: 'weld-persistent',
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -7887,6 +7955,30 @@ function primarySpellFireSpentEmber(
 }
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
+  const source = record(value, field)
+  const {
+    painterRegistrations: painterRegistrationValue,
+    ...payload
+  } = source
+  const decoded = primarySpellTransientPayload(payload, field)
+  const contract = nativePrimaryPainterRegistrationContract(
+    decoded as PrimarySpellTransientState,
+  )
+  return {
+    ...decoded,
+    painterRegistrations: nativeWorldPainterRegistrations(
+      painterRegistrationValue,
+      `${field}.painterRegistrations`,
+      contract.managerLane,
+      contract.count,
+    ),
+  } as PrimarySpellTransientState
+}
+
+function primarySpellTransientPayload(
+  value: unknown,
+  field: string,
+): WithoutPainterRegistrations<PrimarySpellTransientState> {
   const source = record(value, field)
   if (source.kind === 'earth-boulder-bit') {
     onlyKeys(source, field, [
@@ -8221,7 +8313,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'ether-impact',
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'transient',
@@ -8291,7 +8383,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-ember',
       life,
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'actor',
@@ -8327,7 +8419,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       ),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-explosion',
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'transient',
@@ -8436,7 +8528,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-good-imp',
       lightGlow,
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'actor',
@@ -8526,7 +8618,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       ageTicks,
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-impact',
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'transient',
@@ -8668,7 +8760,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       endpoint: vector(source.endpoint, `${field}.endpoint`),
       hurricaneCharge,
       kind: 'air',
-      lightRegistration: nativeLightProviderRegistration(
+      lightRegistration: nativeWorldManagerRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
         'transient',
@@ -9408,6 +9500,7 @@ function gameWorldSnapshot(
       'mageLightningPulses',
       'maggots',
       'runId',
+      'solomonPainterRegistration',
       'tutorial',
       'waves',
     ])
@@ -9580,7 +9673,7 @@ function gameWorldSnapshot(
       goodies,
       hallOfFameRuns,
       kind: 'boneyard',
-      lanternLightRegistration: nullableNativeLightProviderRegistration(
+      lanternLightRegistration: nullableNativeWorldManagerRegistration(
         source.lanternLightRegistration,
         `${field}.lanternLightRegistration`,
         'actor',
@@ -9590,6 +9683,11 @@ function gameWorldSnapshot(
       loot,
       lootEvents,
       runId,
+      solomonPainterRegistration: nullableNativeWorldManagerRegistration(
+        source.solomonPainterRegistration,
+        `${field}.solomonPainterRegistration`,
+        'actor',
+      ),
       tutorial,
       waves,
     }
@@ -9616,6 +9714,7 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
     'nativeTypeId',
     'orbKind',
     'orbValue',
+    'painterRegistration',
     'position',
     'rotationDeg',
     'scatterActive',
@@ -9722,6 +9821,11 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
     nativeTypeId: nativeTypeId as BoneyardLootSnapshot['nativeTypeId'],
     orbKind: orbKind as BoneyardLootSnapshot['orbKind'],
     orbValue,
+    painterRegistration: nativeWorldManagerRegistration(
+      source.painterRegistration,
+      `${field}.painterRegistration`,
+      'actor',
+    ),
     position: boneyardPoint(source.position, `${field}.position`),
     rotationDeg,
     scatterActive,
@@ -9803,7 +9907,8 @@ function validBoneyardLootDynamicIdentity(
 function boneyardGoodieSnapshot(value: unknown, field: string): BoneyardGoodieSnapshot {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'active', 'exhausted', 'id', 'phase', 'position', 'subtype', 'timer',
+    'active', 'exhausted', 'id', 'phase', 'position',
+    'sceneryRegistrationOrdinal', 'subtype', 'timer',
   ])
   const phase = integerWithin(source.phase, `${field}.phase`, 0, 2) as 0 | 1 | 2
   const timer = nonnegativeInteger(source.timer, `${field}.timer`)
@@ -9814,6 +9919,10 @@ function boneyardGoodieSnapshot(value: unknown, field: string): BoneyardGoodieSn
     id: positiveInteger(source.id, `${field}.id`),
     phase,
     position: boneyardPoint(source.position, `${field}.position`),
+    sceneryRegistrationOrdinal: nonnegativeInteger(
+      source.sceneryRegistrationOrdinal,
+      `${field}.sceneryRegistrationOrdinal`,
+    ),
     subtype: nonnegativeInteger(source.subtype, `${field}.subtype`),
     timer,
   }
@@ -9927,6 +10036,7 @@ function boneyardEnemyDeathEffectSnapshot(
     'id',
     'kind',
     'ownerActorId',
+    'painterRegistration',
     'presentationOwner',
     'position',
     'rotationRadians',
@@ -9982,6 +10092,16 @@ function boneyardEnemyDeathEffectSnapshot(
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as BoneyardEnemyDeathEffectSnapshot['kind'],
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
+    painterRegistration: presentationOwner === 'world-sorted'
+      ? nativeWorldManagerRegistration(
+          source.painterRegistration,
+          `${field}.painterRegistration`,
+          'actor',
+        )
+      : absentNativeWorldManagerRegistration(
+          source.painterRegistration,
+          `${field}.painterRegistration`,
+        ),
     presentationOwner:
       presentationOwner as BoneyardEnemyDeathEffectSnapshot['presentationOwner'],
     position: boneyardPoint(source.position, `${field}.position`),
@@ -10416,7 +10536,11 @@ function boneyardEnemyEvents(
     const type = rawType as BoneyardEnemyEventSnapshot['type']
     const payloadKeys = (() => {
       switch (type) {
-        case 'attack-marker': return ['deflectPitch', 'targetPlayerId']
+        case 'attack-marker': return [
+          'deflectPitch',
+          'painterRegistration',
+          'targetPlayerId',
+        ]
         case 'enemy-spawned':
         case 'reward': return ['targetPlayerId']
         case 'coffin-maggot-release': return ['count']
@@ -10489,7 +10613,20 @@ function boneyardEnemyEvents(
         if (deflect.deflectPitch !== undefined && targetPlayerId === null) {
           throw new GameProtocolError(`${eventField}.deflectPitch requires a targetPlayerId`)
         }
-        return { ...base, ...deflect, targetPlayerId }
+        return {
+          ...base,
+          ...deflect,
+          ...(source.painterRegistration === undefined
+            ? {}
+            : {
+                painterRegistration: nativeWorldManagerRegistration(
+                  source.painterRegistration,
+                  `${eventField}.painterRegistration`,
+                  'transient',
+                ),
+              }),
+          targetPlayerId,
+        }
       }
       case 'enemy-spawned':
       case 'reward': return {
@@ -10613,6 +10750,7 @@ function boneyardMageLightningPulses(
       'id',
       'midpoint',
       'ownerActorId',
+      'painterRegistrations',
       'seed',
       'source',
       'tick',
@@ -10651,6 +10789,12 @@ function boneyardMageLightningPulses(
       id: positiveInteger(source.id, `${pulseField}.id`),
       midpoint: vector(source.midpoint, `${pulseField}.midpoint`),
       ownerActorId: positiveInteger(source.ownerActorId, `${pulseField}.ownerActorId`),
+      painterRegistrations: nativeWorldPainterRegistrations(
+        source.painterRegistrations,
+        `${pulseField}.painterRegistrations`,
+        'actor',
+        contact.kind === 'world' ? 3 : 2,
+      ),
       seed,
       source: vector(source.source, `${pulseField}.source`),
       tick: nonnegativeInteger(source.tick, `${pulseField}.tick`),
@@ -10803,7 +10947,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     flags,
     headingDeg,
     id: positiveInteger(source.id, `${field}.id`),
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -10859,6 +11003,7 @@ function boneyardEnemyProjectileSnapshot(
     'lifetimeTicks',
     'nativeTypeId',
     'ownerActorId',
+    'painterRegistration',
     'payload',
     'position',
     'speed',
@@ -10925,6 +11070,11 @@ function boneyardEnemyProjectileSnapshot(
     lifetimeTicks,
     nativeTypeId: nativeTypeId as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
+    painterRegistration: nativeWorldManagerRegistration(
+      source.painterRegistration,
+      `${field}.painterRegistration`,
+      'actor',
+    ),
     payload: payload as BoneyardEnemyProjectilePayload,
     position: boneyardPoint(source.position, `${field}.position`),
     speed,
@@ -10952,6 +11102,7 @@ function boneyardEnemyProjectileEffectSnapshot(
     'lifetimeTicks',
     'ownerActorId',
     'ownerProjectileId',
+    'painterRegistration',
     'phaseOriginTicks',
     'position',
     'rotationRadians',
@@ -10992,7 +11143,7 @@ function boneyardEnemyProjectileEffectSnapshot(
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as BoneyardEnemyProjectileEffectSnapshot['kind'],
     lightRegistration: kind === 'fire-burst-glow'
-      ? nativeLightProviderRegistration(
+      ? nativeWorldManagerRegistration(
           source.lightRegistration,
           `${field}.lightRegistration`,
           'transient',
@@ -11003,6 +11154,11 @@ function boneyardEnemyProjectileEffectSnapshot(
     ownerProjectileId: positiveInteger(
       source.ownerProjectileId,
       `${field}.ownerProjectileId`,
+    ),
+    painterRegistration: nativeWorldManagerRegistration(
+      source.painterRegistration,
+      `${field}.painterRegistration`,
+      kind.startsWith('fire-burst-') ? 'transient' : 'actor',
     ),
     phaseOriginTicks: nonnegativeInteger(
       source.phaseOriginTicks,
@@ -11034,14 +11190,14 @@ function boneyardEnemyProjectileLightRegistration(
   field: string,
   kind: BoneyardEnemyProjectileKind,
   payload: BoneyardEnemyProjectilePayload,
-): NativeLightProviderRegistration | null {
+): NativeWorldManagerRegistration | null {
   if (kind === 'guided-missile' || kind === 'demon-bomb') {
-    return nativeLightProviderRegistration(value, field, 'actor')
+    return nativeWorldManagerRegistration(value, field, 'actor')
   }
   if (kind === 'firebolt' || (kind === 'arrow' && payload === 'fire')) {
-    return nativeLightProviderRegistration(value, field, 'transient')
+    return nativeWorldManagerRegistration(value, field, 'transient')
   }
-  return absentNativeLightProviderRegistration(value, field)
+  return absentNativeWorldManagerRegistration(value, field)
 }
 
 function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSnapshot {
@@ -11122,7 +11278,7 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     hitFlash,
     id: positiveInteger(source.id, `${field}.id`),
     launchTrajectory: launchTrajectory as BoneyardMaggotSnapshot['launchTrajectory'],
-    lightRegistration: nativeLightProviderRegistration(
+    lightRegistration: nativeWorldManagerRegistration(
       source.lightRegistration,
       `${field}.lightRegistration`,
       'actor',
@@ -11402,6 +11558,7 @@ function gameWorldSnapshotFrame(
       'lootEvents',
       'mageLightningPulses',
       'runId',
+      'solomonPainterRegistration',
       'tutorial',
       'waves',
     ])
@@ -11457,7 +11614,7 @@ function gameWorldSnapshotFrame(
         snapshotTick,
       ),
       kind: 'boneyard',
-      lanternLightRegistration: nullableNativeLightProviderRegistration(
+      lanternLightRegistration: nullableNativeWorldManagerRegistration(
         source.lanternLightRegistration,
         `${field}.lanternLightRegistration`,
         'actor',
@@ -11474,6 +11631,11 @@ function gameWorldSnapshotFrame(
         snapshotTick,
       ),
       runId,
+      solomonPainterRegistration: nullableNativeWorldManagerRegistration(
+        source.solomonPainterRegistration,
+        `${field}.solomonPainterRegistration`,
+        'actor',
+      ),
       tutorial,
       waves,
     }

@@ -103,6 +103,7 @@ interface HubFrameDiagnostics {
   playerMaterialTint: number
   playerMoving: boolean
   playerOrdinaryWeaponVisible: boolean
+  painterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[]
   playerPositions: Record<string, { x: number; y: number }>
   playerRobeFixedPose: number
   playerScreenPositions: Record<string, { x: number; y: number }>
@@ -351,6 +352,7 @@ export async function createHubWorldRenderer(
     playerMaterialTint: 0xffffff,
     playerMoving: false,
     playerOrdinaryWeaponVisible: false,
+    painterOrder: [],
     playerPositions: {},
     playerRobeFixedPose: 0,
     playerScreenPositions: {},
@@ -434,6 +436,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.secondaryAbilityKinds = currentScene.secondaryAbilityKinds
     frameDiagnostics.secondaryAbilityPrimitiveCount = currentScene.secondaryAbilityPrimitiveCount
     frameDiagnostics.secondaryAbilitySamples = currentScene.secondaryAbilitySamples
+    frameDiagnostics.painterOrder = currentScene.painterOrder
     frameDiagnostics.skorcha = snapshot.world.skorcha === null ? null : {
       dismissalIndex: snapshot.world.skorcha.dismissalIndex,
       gesture: snapshot.world.skorcha.gesture,

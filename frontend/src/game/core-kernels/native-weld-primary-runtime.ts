@@ -17,10 +17,11 @@ import {
 } from './primary-spell-targeting.ts'
 import type { Vector2 } from './vector.ts'
 import type { NativeWeldBuildId } from './native-weld-primary-profile.ts'
-import type {
-  NativeLightProviderRegistration,
-  RegisterNativeLightProvider,
-} from './native-light-provider-order.ts'
+import {
+  registerNativeWorldPainterRoots,
+  type NativeWorldManagerRegistration,
+  type RegisterNativeWorldPainter,
+} from './native-world-manager-order.ts'
 import { nativeEarthBoulderReleasedDamage } from './native-earth-boulder.ts'
 import {
   EARTH_BOULDER_IDENTITY_ORIENTATION,
@@ -126,7 +127,7 @@ export interface NativeWeldProjectileState {
   readonly groundSparkNativeAgeTicks: number | null
   readonly groundSparkTurnTicksRemaining: number | null
   readonly kind: 'weld'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly ownerId: string
   readonly phase: 'flight'
   readonly position: Vector2
@@ -175,7 +176,7 @@ export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
 
 interface NativeWeldPersistentActorBase extends NativeWeldOwnedActorBase {
   readonly kind: 'weld-persistent'
-  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lightRegistration: NativeWorldManagerRegistration | null
   readonly pulseSequence: number
 }
 
@@ -186,7 +187,7 @@ export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActo
   readonly flightTicks: number
   readonly hitTargetIds: readonly string[]
   readonly lifetimeTicksRemaining: number
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly maximumScale: number
   readonly orientation: EarthBoulderOrientation
   readonly phase: 'flight' | 'held'
@@ -215,7 +216,7 @@ export interface NativeWeldHailstonesState extends NativeWeldPersistentActorBase
   readonly buildId: 1008
   readonly collisionRadius: number
   readonly damage: number
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly maximumScale: number
   readonly phase: 'flight' | 'held'
   readonly pushback: number
@@ -255,7 +256,7 @@ export interface NativeWeldMeteorActorState extends NativeWeldOwnedActorBase {
   readonly impactThrowFirePitch: number | null
   readonly impactTicksRemaining: number
   readonly kind: 'weld-meteor'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly phase: 'fall' | 'impact'
   readonly position: Vector2
   readonly privateSeed: number
@@ -283,7 +284,7 @@ export interface NativeWeldImpactActorState extends NativeWeldOwnedActorBase {
   readonly impactSoundPitch: number | null
   readonly impactSoundVariant: number | null
   readonly kind: 'weld-impact'
-  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lightRegistration: NativeWorldManagerRegistration | null
   readonly position: Vector2
   readonly presentationRotationDegrees: number | null
   readonly presentationScale: number
@@ -353,7 +354,7 @@ export interface SpawnNativeWeldOneShotInput {
   readonly origin: Vector2
   readonly ownerId: string
   readonly primarySkill: NativeWeldPrimarySkillProfile
-  readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly rng: NativeRngState
   readonly targets: readonly PrimarySpellTarget[]
   readonly underpowered: boolean
@@ -400,6 +401,7 @@ export function createNativeWeldBlizzardChainEffects(input: Readonly<{
   direction: Vector2
   firstId: number
   ownerId: string
+  registerWorldPainter: RegisterNativeWorldPainter
   rng: NativeRngState
   source: Vector2
   tick: number
@@ -432,6 +434,10 @@ export function createNativeWeldBlizzardChainEffects(input: Readonly<{
       lightRegistration: null,
       origin: fadePosition,
       ownerId: input.ownerId,
+      painterRegistrations: registerNativeWorldPainterRoots(
+        input.registerWorldPainter,
+        'actor',
+      ),
       scale: Math.fround(fadeScale.value + 1),
       vector: Object.freeze([...input.vector]),
       worldKey: input.worldKey,
@@ -464,6 +470,10 @@ export function createNativeWeldBlizzardChainEffects(input: Readonly<{
       lightRegistration: null,
       origin: position,
       ownerId: input.ownerId,
+      painterRegistrations: registerNativeWorldPainterRoots(
+        input.registerWorldPainter,
+        'actor',
+      ),
       vector: Object.freeze([...input.vector]),
       worldKey: input.worldKey,
     }))
@@ -623,7 +633,7 @@ export function spawnNativeWeldOneShot(
       hitTargetIds: Object.freeze([]),
       id: input.firstId + index,
       kind: 'weld',
-      lightRegistration: input.registerLightProvider?.('actor') ?? Object.freeze({
+      lightRegistration: input.registerWorldPainter?.('actor') ?? Object.freeze({
         managerLane: 'actor',
         registrationOrdinal: input.firstId + index,
       }),
@@ -846,7 +856,7 @@ export function createNativeWeldPersistentActor(input: {
   readonly id: number
   readonly origin: Vector2
   readonly ownerId: string
-  readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly tick: number
   readonly vector: readonly number[]
   readonly worldKey: string
@@ -1134,7 +1144,7 @@ export function createNativeWeldGroundSparkFadeActor(input: {
 export function releaseNativeWeldPersistentActor(input: {
   readonly actor: NativeWeldPersistentActorState
   readonly firstChildId: number
-  readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly rng: NativeRngState
   readonly tick: number
 }): {
@@ -1204,7 +1214,7 @@ export function releaseNativeWeldPersistentActor(input: {
       id: index === 0 ? actor.id : input.firstChildId + index - 1,
       lightRegistration: index === 0
         ? actor.lightRegistration
-        : input.registerLightProvider?.('actor') ?? Object.freeze({
+        : input.registerWorldPainter?.('actor') ?? Object.freeze({
             managerLane: 'actor',
             registrationOrdinal: input.firstChildId + index - 1,
           }),
@@ -1270,7 +1280,7 @@ export function createNativeWeldMeteor(input: {
   readonly ownerId: string
   readonly position: Vector2
   readonly privateSeed: number
-  readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly tick: number
   readonly underpowered: boolean
   readonly vector: readonly number[]
@@ -1297,7 +1307,7 @@ export function createNativeWeldMeteor(input: {
     impactThrowFirePitch: null,
     impactTicksRemaining: input.impactTicks,
     kind: 'weld-meteor',
-    lightRegistration: input.registerLightProvider?.('actor') ?? Object.freeze({
+    lightRegistration: input.registerWorldPainter?.('actor') ?? Object.freeze({
       managerLane: 'actor',
       registrationOrdinal: input.id,
     }),
@@ -1711,9 +1721,9 @@ function underpoweredWeldVector(
 
 function weldActorLightRegistration(input: {
   readonly id: number
-  readonly registerLightProvider?: RegisterNativeLightProvider
-}): NativeLightProviderRegistration {
-  return input.registerLightProvider?.('actor') ?? Object.freeze({
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
+}): NativeWorldManagerRegistration {
+  return input.registerWorldPainter?.('actor') ?? Object.freeze({
     managerLane: 'actor',
     registrationOrdinal: input.id,
   })

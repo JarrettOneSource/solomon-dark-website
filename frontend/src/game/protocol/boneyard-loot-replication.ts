@@ -12,7 +12,7 @@ export const BONEYARD_LOOT_ENTITY_TYPE_ID = 7
 
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 14
+const DESCRIPTOR_LENGTH = 15
 const SAMPLE_LENGTH = 15
 const NATIVE_TYPES = [2038, 2012, 2011, 2013] as const
 const NATIVE_LOOT_WORLD_ID_MAXIMUM = 2_047
@@ -39,6 +39,7 @@ export const BONEYARD_LOOT_ENTITY_REGISTRATION = {
       || !Number.isSafeInteger(descriptor[11])
       || !nonnegativeInteger(descriptor[12])
       || !nonnegativeInteger(descriptor[13])
+      || !nonnegativeInteger(descriptor[14])
     ) return false
     const kind = BONEYARD_LOOT_KINDS[descriptor[2]]!
     if (descriptor[3] !== NATIVE_TYPES[descriptor[2]]) return false
@@ -100,6 +101,7 @@ export function boneyardLootDescriptor(
     contentId === null ? -1 : Number(contentId & 0xffff_ffffn),
     loot.spawnTick,
     loot.scatterSeed,
+    loot.painterRegistration.registrationOrdinal,
   ]
 }
 
@@ -160,6 +162,10 @@ export function materializeBoneyardLoot(
     nativeTypeId: descriptor[3] as BoneyardLootSnapshot['nativeTypeId'],
     orbKind: descriptor[5] < 0 ? null : descriptor[5] === 0 ? 'health' : 'mana',
     orbValue: dequantize(sample[12], VALUE_SCALE),
+    painterRegistration: {
+      managerLane: 'actor',
+      registrationOrdinal: descriptor[14],
+    },
     position: {
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE),

@@ -211,6 +211,12 @@ try {
           magicShieldVisible: frame.playerMagicShieldVisible,
           materialTint: frame.playerMaterialTint,
           observedAtMs: performance.now(),
+          painterOrder: (frame.painterOrder ?? [])
+            .filter(({ id }) => id.startsWith('secondary:'))
+            .map((layer) => ({ ...layer })),
+          painterProxyOrder: (frame.painterProxyOrder ?? [])
+            .filter(({ id }) => id.startsWith('secondary:'))
+            .map((layer) => ({ ...layer })),
           playerAttachmentPose: frame.playerAttachmentPose,
           primitiveCount: frame.secondaryAbilityPrimitiveCount,
           tick: frame.tick,
@@ -930,8 +936,8 @@ try {
     statusEffects,
   }, null, 2)}\n`)
 } finally {
-  await host.close()
   await browser.close()
+  await host.close()
   await vite?.close()
   await staticServer?.close()
 }
@@ -1542,15 +1548,34 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       ))
       const rendered = actorSamples.find(({ id }) => id === storm?.id)
       assert.ok(storm && rendered)
+      const proxyId = `secondary:${storm.id}`
+      const proxyLayers = samples.flatMap(({ painterOrder }) => (
+        painterOrder.filter(({ id }) => id === proxyId)
+      ))
+      assert.ok(proxyLayers.length > 0)
+      const positioned = samples.flatMap(({ actors, painterOrder, painterProxyOrder }) => {
+        const explicit = painterProxyOrder.find(({ id }) => id === proxyId)
+        const hub = painterOrder.find(({ id }) => id === proxyId)
+        const expectedDepth = explicit?.zIndex ?? (hub ? 1_000 + hub.zIndex : null)
+        const sample = actors.find(({ id }) => id === storm.id)
+        return expectedDepth === null || !sample ? [] : [{ ...sample, expectedDepth }]
+      })
+      assert.ok(positioned.length > 0)
+      assert.ok(positioned.every(({ depth, expectedDepth }) => depth === expectedDepth))
       assert.equal(rendered.worldX, storm.position.x)
-      assert.equal(rendered.worldY, storm.position.y)
+      assert.equal(rendered.worldY, storm.position.y + 350)
       const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
       const playerPosition = state.playerEntities.locomotions[index].position
       assert.ok(Math.hypot(
         storm.position.x - playerPosition.x,
         storm.position.y - playerPosition.y,
       ) > 10)
-      return { playerPosition, stormPosition: storm.position }
+      return {
+        painterRows: [...new Set(proxyLayers.map(({ row }) => row))],
+        playerPosition,
+        proxyWorldY: storm.position.y + 350,
+        stormPosition: storm.position,
+      }
     }
     case 35:
       assert.ok(actorSamples.some(({ kind, primitiveCount }) => (
@@ -1579,14 +1604,40 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       ))
       const rendered = actorSamples.filter(({ id }) => id === rain?.id)
       assert.ok(rain && rendered.length > 0)
+      const proxyId = `secondary:${rain.id}`
+      const proxyLayers = samples.flatMap(({ painterOrder }) => (
+        painterOrder.filter(({ id }) => id === proxyId)
+      ))
+      assert.ok(proxyLayers.length > 0)
+      const explicitProxyLayers = samples.flatMap(({ painterProxyOrder }) => (
+        painterProxyOrder.filter(({ id }) => id === proxyId)
+      ))
+      if (samples.some(({ painterProxyOrder }) => painterProxyOrder.length > 0)) {
+        assert.ok(explicitProxyLayers.length > 0)
+      }
       const withResidue = rendered.filter(({ underlayPrimitiveCount }) => (
         underlayPrimitiveCount === 1
       ))
+      const orderedResidue = samples.flatMap(({ actors, painterOrder, painterProxyOrder }) => {
+        const explicit = painterProxyOrder.find(({ id }) => id === proxyId)
+        const hub = painterOrder.find(({ id }) => id === proxyId)
+        const expectedDepth = explicit?.zIndex ?? (hub ? 1_000 + hub.zIndex : null)
+        return expectedDepth === null
+          ? []
+          : actors
+              .filter(({ id, underlayPrimitiveCount }) => (
+                id === rain.id && underlayPrimitiveCount === 1
+              ))
+              .map(actor => ({ ...actor, expectedDepth }))
+      })
       assert.ok(withResidue.length > 0)
+      assert.ok(orderedResidue.length > 0)
       assert.ok(rendered.every(({ sortBias }) => sortBias === 0))
       assert.ok(rendered.every(({ worldY }) => worldY === rain.position.y + 350))
       assert.ok(withResidue.every(({ underlayDepth }) => underlayDepth === 0.5))
-      assert.ok(withResidue.every(({ depth, underlayDepth }) => depth > underlayDepth))
+      assert.ok(orderedResidue.every(({ depth, expectedDepth, underlayDepth }) => (
+        depth === expectedDepth && depth > underlayDepth
+      )))
       assert.ok(rendered.every(({ mainDrawMembers, mainDrawOffsetsY }) => (
         mainDrawMembers.join('|') === [
           'BadGuys:78:normal',
@@ -1614,6 +1665,7 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
         groundResidueDepth: 0.5,
         groundResidueMembers: withResidue[0].underlayDrawMembers,
         groundResiduePrimitives: 1,
+        painterRows: [...new Set(proxyLayers.map(({ row }) => row))],
       }
     }
     default:

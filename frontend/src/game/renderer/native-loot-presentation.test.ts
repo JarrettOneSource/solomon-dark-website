@@ -132,8 +132,14 @@ test('Goodie phases and active indicator retain native art and painter ownership
     .map(({ entry }) => entry), [145, 33])
   assert.deepEqual(nativeGoodiePresentationPlan(goodie({ active: true, timer: 50 }), 20)
     .map(({ entry }) => entry), [145])
-  assert.equal(nativeLootPainterLayer(actor(), 4).id, 'loot:7')
-  assert.equal(nativeGoodiePainterLayer(goodie(), 5).id, 'goodie:9')
+  assert.equal(nativeLootPainterLayer(actor()).id, 'loot:7')
+  assert.deepEqual(nativeGoodiePainterLayer(goodie()), {
+    id: 'goodie:9',
+    queueFamily: 'scenery',
+    registration: { managerLane: 'scenery', registrationOrdinal: 4 },
+    sortBias: 0,
+    worldY: 200,
+  })
 })
 
 function actor(overrides: Partial<BoneyardLootSnapshot> = {}): BoneyardLootSnapshot {
@@ -153,6 +159,7 @@ function actor(overrides: Partial<BoneyardLootSnapshot> = {}): BoneyardLootSnaps
     nativeTypeId: 2011,
     orbKind: 'health',
     orbValue: 0.5,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 7 },
     position: { x: 100, y: 200 },
     rotationDeg: 0,
     scatterActive: false,
@@ -172,6 +179,7 @@ function goodie(overrides: Partial<BoneyardGoodieSnapshot> = {}): BoneyardGoodie
     id: 9,
     phase: 0,
     position: { x: 100, y: 200 },
+    sceneryRegistrationOrdinal: 4,
     subtype: 0,
     timer: 0,
     ...overrides,

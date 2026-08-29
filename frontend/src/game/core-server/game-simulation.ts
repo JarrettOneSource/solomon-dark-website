@@ -170,12 +170,13 @@ import {
   NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED,
 } from '../core-kernels/native-secondary-golem.ts'
 import {
-  createDeferredNativeLightProviderRegistrations,
-  createNativeLightProviderOrder,
-  type DeferredNativeLightProviderRegistrations,
-  type NativeLightProviderOrder,
-  type NativeLightProviderOrderState,
-} from '../core-kernels/native-light-provider-order.ts'
+  createDeferredNativeWorldManagerRegistrations,
+  createNativeWorldManagerOrder,
+  type DeferredNativeWorldManagerRegistrations,
+  type NativeWorldManagerOrder,
+  type NativeWorldManagerOrderState,
+} from '../core-kernels/native-world-manager-order.ts'
+import { reserveNativeHubFixedActorPainters } from '../hub-painter-order.ts'
 import {
   createPrimarySpellSimulation,
   removePrimarySpellOwner,
@@ -268,6 +269,7 @@ import {
   playerEntityCanCast,
   playerEntityIndex,
   playerEntityMovementScale,
+  playerLightingAt,
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
@@ -287,6 +289,7 @@ import {
   restorePlayerEntityMana,
   setPlayerEntityMana,
   setPlayerEntityMindstar,
+  setPlayerDeathWeaponPainterRegistration,
   selectPlayerEntityConcentrationSkill,
   selectPlayerEntityConcentrationSlot,
   setPlayerEntitySpectating,
@@ -295,6 +298,7 @@ import {
   tryDebitPlayerEntityMana,
   replacePlayerCharacter,
   replacePlayerLoadout,
+  replacePlayerPainterRegistration,
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
   respawnPlayerEntityAt,
@@ -335,7 +339,7 @@ export interface GameSimulationState {
   combatRng: NativeRngState
   hallOfFameClockStartedAtTick: number
   levelUpBarrier: PlayerLevelUpBarrierState | null
-  lightProviderOrder: NativeLightProviderOrderState
+  worldManagerOrder: NativeWorldManagerOrderState
   modEffects: readonly GameSimulationModEffect[]
   nextLevelUpBarrierId: number
   nextModConsumableUseId: number
@@ -446,8 +450,10 @@ export function createGameSimulation(
   },
   options: GameSimulationOptions = {},
 ): GameSimulationState {
-  const lightProviderOrder = createNativeLightProviderOrder()
+  const worldManagerOrder = createNativeWorldManagerOrder()
+  reserveNativeHubFixedActorPainters(worldManagerOrder)
   const world = createHubWorld(Object.keys(characters), {
+    registerWorldPainter: worldManagerOrder.register,
     skorchaHiddenTicks: options.hubSkorchaHiddenTicks,
     skorchaVisibleTicks: options.hubSkorchaVisibleTicks,
     studentPopulation: options.hubStudentPopulation,
@@ -464,7 +470,7 @@ export function createGameSimulation(
       config,
       createPlayerCharacter(config, hubSpawnPoint()),
       draw.seed,
-      lightProviderOrder.register('actor'),
+      worldManagerOrder.register('actor'),
     )
   }
   if (options.initialPlayerExperience !== undefined) {
@@ -504,7 +510,7 @@ export function createGameSimulation(
     combatRng: createNativeRng(options.combatRngSeed ?? 0),
     hallOfFameClockStartedAtTick: 0,
     levelUpBarrier,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     modEffects: Object.freeze([]),
     nextLevelUpBarrierId: levelUpBarrier === null ? 1 : 2,
     nextModConsumableUseId: 1,
@@ -534,18 +540,18 @@ export function addPlayerCharacter(
         },
       }
   const draw = drawNativePlayerCreationOfferSeed(state.gameRng)
-  const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
   const playerEntities = addPlayerEntity(
     state.playerEntities,
     playerId,
     config,
     spawnPlayerForWorld(state.world, config),
     draw.seed,
-    lightProviderOrder.register('actor'),
+    worldManagerOrder.register('actor'),
   )
   return {
     ...state,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     playerEntities,
     gameRng: draw.rng,
     run: synchronizeGameRunParticipants(
@@ -745,13 +751,13 @@ export function rejoinGameSimulationPlayer(
     ) throw new Error('active-run rejoin level milestone is inconsistent')
   }
 
-  const lightProviderOrder = createNativeLightProviderOrder(target.lightProviderOrder)
+  const worldManagerOrder = createNativeWorldManagerOrder(target.worldManagerOrder)
   let playerEntities = importPlayerEntity(
     target.playerEntities,
     detached.playerEntities,
     playerId,
     playerId,
-    lightProviderOrder.register('actor'),
+    worldManagerOrder.register('actor'),
     spawnPlayerCharacterInBoneyard(config, target.world),
   )
   let gameRng = target.gameRng
@@ -806,7 +812,7 @@ export function rejoinGameSimulationPlayer(
     ...target,
     gameRng: automatic.rng,
     levelUpBarrier,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     nextLevelUpBarrierId: existingBarrier === null && levelUpBarrier !== null
       ? target.nextLevelUpBarrierId + 1
       : target.nextLevelUpBarrierId,
@@ -938,7 +944,7 @@ export function mergeGameSimulationPlayersIntoHub(
   if (target.world.kind !== 'hub' || source.world.kind !== 'hub') {
     throw new Error('game simulation merge requires two Hub worlds')
   }
-  const lightProviderOrder = createNativeLightProviderOrder(target.lightProviderOrder)
+  const worldManagerOrder = createNativeWorldManagerOrder(target.worldManagerOrder)
   let playerEntities = target.playerEntities
   let world = target.world
   for (const { playerId } of source.playerEntities.identities) {
@@ -952,13 +958,13 @@ export function mergeGameSimulationPlayersIntoHub(
       source.playerEntities,
       playerId,
       playerId,
-      lightProviderOrder.register('actor'),
+      worldManagerOrder.register('actor'),
     )
     world = addHubParticipant(world, playerId, participant)
   }
   return {
     ...target,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     playerEntities,
     world,
   }
@@ -971,14 +977,20 @@ export function enterBoneyardWorld(
   if (state.levelUpBarrier !== null) {
     throw new Error('cannot enter a Boneyard during a level-up barrier')
   }
-  const lightProviderOrder = createNativeLightProviderOrder()
+  const worldManagerOrder = createNativeWorldManagerOrder()
   const playerLightRegistrations = Object.fromEntries(
     state.playerEntities.identities.map(({ playerId }) => [
       playerId,
-      lightProviderOrder.register('actor'),
+      worldManagerOrder.register('actor'),
     ]),
   )
   const baseWorld = createBoneyardWorld(loaded)
+  const lanternLightRegistration = loaded.scene.solomonDig === null
+    ? null
+    : worldManagerOrder.register('actor')
+  const solomonPainterRegistration = loaded.scene.solomonDig === null
+    ? null
+    : worldManagerOrder.register('actor')
   const tutorialProfileEconomy = baseWorld.tutorial === null
     ? null
     : playerEconomyAt(
@@ -991,9 +1003,8 @@ export function enterBoneyardWorld(
       playerId,
       createNativeHallOfFameRun(state.hallOfFameClockStartedAtTick),
     ])),
-    lanternLightRegistration: loaded.scene.solomonDig === null
-      ? null
-      : lightProviderOrder.register('actor'),
+    lanternLightRegistration,
+    solomonPainterRegistration,
     tutorialProfileEconomy: tutorialProfileEconomy === null
       ? null
       : tutorialProfileEconomy.collegeIntroPending
@@ -1026,13 +1037,13 @@ export function enterBoneyardWorld(
       playerEntities.identities[0]!.playerId,
       `boneyard:${world.runId}`,
       NATIVE_TUTORIAL_FIRES,
-      lightProviderOrder.register,
+      worldManagerOrder.register,
     )
   }
   return {
     ...state,
     levelUpBarrier: null,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
@@ -1048,15 +1059,19 @@ export function enterBoneyardWorld(
 
 export function returnGameSimulationToHub(state: GameSimulationState): GameSimulationState {
   const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const worldManagerOrder = createNativeWorldManagerOrder()
+  reserveNativeHubFixedActorPainters(worldManagerOrder)
   const world = createHubWorld(
     state.playerEntities.identities.map(({ playerId }) => playerId),
-    { traderAnimationSeed: hubSeed.value },
+    {
+      registerWorldPainter: worldManagerOrder.register,
+      traderAnimationSeed: hubSeed.value,
+    },
   )
-  const lightProviderOrder = createNativeLightProviderOrder()
   const playerLightRegistrations = Object.fromEntries(
     state.playerEntities.identities.map(({ playerId }) => [
       playerId,
-      lightProviderOrder.register('actor'),
+      worldManagerOrder.register('actor'),
     ]),
   )
   const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
@@ -1068,7 +1083,7 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
     gameRng: hubSeed.state,
     modEffects: Object.freeze([]),
     levelUpBarrier: null,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     playerEntities: clearPlayerEntityMindstars(resetPlayerEntitiesForNewRun(
       state.playerEntities,
       placements,
@@ -1089,15 +1104,19 @@ function enterPostRunLoadout(
     throw new Error('post-run loadout requires a completed Game Over fade')
   }
   const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const worldManagerOrder = createNativeWorldManagerOrder()
+  reserveNativeHubFixedActorPainters(worldManagerOrder)
   const world = createHubWorld(
     state.playerEntities.identities.map(({ playerId }) => playerId),
-    { traderAnimationSeed: hubSeed.value },
+    {
+      registerWorldPainter: worldManagerOrder.register,
+      traderAnimationSeed: hubSeed.value,
+    },
   )
-  const lightProviderOrder = createNativeLightProviderOrder()
   const playerLightRegistrations = Object.fromEntries(
     state.playerEntities.identities.map(({ playerId }) => [
       playerId,
-      lightProviderOrder.register('actor'),
+      worldManagerOrder.register('actor'),
     ]),
   )
   const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
@@ -1119,7 +1138,7 @@ function enterPostRunLoadout(
     gameRng: hubSeed.state,
     hallOfFameClockStartedAtTick: state.tick,
     levelUpBarrier: null,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
@@ -1832,7 +1851,7 @@ export function grantGameSimulationPlayerExperience(
   let next = grantSharedGameSimulationExperience(state, playerId, amount)
   const level = getPlayerProgression(next, playerId).level
   if (level <= previousLevel) return next
-  const lightProviderOrder = createNativeLightProviderOrder(next.lightProviderOrder)
+  const worldManagerOrder = createNativeWorldManagerOrder(next.worldManagerOrder)
   const triggered = triggerMindblowingRing(
     next.playerEntities,
     next.secondaryAbilities,
@@ -1840,11 +1859,11 @@ export function grantGameSimulationPlayerExperience(
     playerId,
     level,
     next.tick,
-    lightProviderOrder,
+    worldManagerOrder,
   )
   next = {
     ...next,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     secondaryAbilities: triggered.secondaryAbilities,
     world: triggered.world,
   }
@@ -1972,7 +1991,7 @@ export function stepGameSimulationTick(
     if (state.world.kind !== 'boneyard') {
       throw new Error('Game Over requires the terminal Boneyard world')
     }
-    const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
+    const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
     let playerEntities = stepPlayerEntityOverlayLightingTick(state.playerEntities)
     const combat = stepPlayerEntityCombatTick(
       playerEntities,
@@ -1996,7 +2015,7 @@ export function stepGameSimulationTick(
         world,
         playerId,
         tick,
-        lightProviderOrder,
+        worldManagerOrder,
       )
       secondaryAbilities = triggered.secondaryAbilities
       world = triggered.world
@@ -2043,7 +2062,7 @@ export function stepGameSimulationTick(
     const frozen = {
       ...state,
       gameRng,
-      lightProviderOrder: lightProviderOrder.state(),
+      worldManagerOrder: worldManagerOrder.state(),
       playerEntities,
       run,
       secondaryAbilities,
@@ -2053,7 +2072,7 @@ export function stepGameSimulationTick(
     return run.phase === 'loadout' ? enterPostRunLoadout(frozen, run) : frozen
   }
   if (state.levelUpBarrier !== null) return state
-  const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
   if (state.world.kind === 'boneyard' && state.world.tutorial !== null) {
     const tutorialPlayerId = state.playerEntities.identities[0]?.playerId
     const forcedVelocity = nativeTutorialForcedVelocity(state.world.tutorial)
@@ -2124,12 +2143,13 @@ export function stepGameSimulationTick(
             ? [playerId]
             : []
         ))),
+        worldManagerOrder.register,
       )
       return finishGameSimulationTick(
         state,
         result,
         activeInputs,
-        lightProviderOrder,
+        worldManagerOrder,
         null,
         options.extensions,
         options.attributionObserver,
@@ -2209,7 +2229,7 @@ export function stepGameSimulationTick(
         }
         tutorialSpawnIntents = tutorial.spawnIntents
       }
-      const deferredEnemyProjectileRegistrations = createDeferredNativeLightProviderRegistrations()
+      const deferredEnemyProjectileLightRegistrations = createDeferredNativeWorldManagerRegistrations()
       const result = stepBoneyardWorldTick(
         boneyardWorld,
         players,
@@ -2237,8 +2257,8 @@ export function stepGameSimulationTick(
           }]
         })),
         state.tick + 1,
-        lightProviderOrder.register,
-        deferredEnemyProjectileRegistrations.register,
+        worldManagerOrder.register,
+        deferredEnemyProjectileLightRegistrations.register,
         state.secondaryAbilities.targetEffects
           .filter(({ worldKey }) => worldKey === `boneyard:${boneyardWorld.runId}`)
           .reduce<Record<number, NativeSecondaryTargetEffectState>>(
@@ -2267,8 +2287,8 @@ export function stepGameSimulationTick(
         state,
         result,
         activeInputs,
-        lightProviderOrder,
-        deferredEnemyProjectileRegistrations,
+        worldManagerOrder,
+        deferredEnemyProjectileLightRegistrations,
         options.extensions,
         options.attributionObserver,
       )
@@ -2303,8 +2323,8 @@ function finishGameSimulationTick(
     world: GameWorldState
   },
   inputs: PlayerCharacterInputs,
-  lightProviderOrder: NativeLightProviderOrder,
-  deferredEnemyProjectileRegistrations: DeferredNativeLightProviderRegistrations | null,
+  worldManagerOrder: NativeWorldManagerOrder,
+  deferredEnemyProjectileLightRegistrations: DeferredNativeWorldManagerRegistrations | null,
   extensions?: GameSimulationExtensions,
   attributionObserver?: BoneyardEnemyAttributionObserver,
 ): GameSimulationState {
@@ -2316,6 +2336,13 @@ function finishGameSimulationTick(
       const before = previous.world.participants[playerId]
       const after = result.world.participants[playerId]
       const economy = playerEconomyAt(playerEntities, playerId)
+      if (before && after && before.region !== after.region) {
+        playerEntities = replacePlayerPainterRegistration(
+          playerEntities,
+          playerId,
+          worldManagerOrder.register('actor'),
+        )
+      }
       if (
         economy?.collegeIntroPending
         && before?.transition?.phase === 'incoming'
@@ -2647,7 +2674,7 @@ function finishGameSimulationTick(
         reward.playerId,
         level,
         tick,
-        lightProviderOrder,
+        worldManagerOrder,
         lethalObserver,
       )
       secondaryAbilities = triggered.secondaryAbilities
@@ -2818,6 +2845,7 @@ function finishGameSimulationTick(
       },
       playerEntities,
       players: resolvedPlayers,
+      registerWorldPainter: worldManagerOrder.register,
       rng: secondaryAbilities.rng,
       spells: spellsBeforePrimary,
       tick,
@@ -3160,7 +3188,7 @@ function finishGameSimulationTick(
         worldKey: gameWorldKey(world, playerId),
       }]
     })),
-    registerLightProvider: lightProviderOrder.register,
+    registerWorldPainter: worldManagerOrder.register,
     sceneryTargets: (worldKey, center, radius) => (
       world.kind === 'boneyard'
       && worldKey === `boneyard:${world.runId}`
@@ -3446,7 +3474,7 @@ function finishGameSimulationTick(
     inputs: primaryInputs,
     players: primaryPlayers,
     previousPlayers: primaryPreviousPlayers,
-    registerLightProvider: lightProviderOrder.register,
+    registerWorldPainter: worldManagerOrder.register,
     rng: previous.combatRng,
     spells: spellsBeforePrimary,
     tick,
@@ -3498,7 +3526,7 @@ function finishGameSimulationTick(
       `primary spell mana authority diverged for ${playerId}`,
     )
   }
-  deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
+  deferredEnemyProjectileLightRegistrations?.commit(worldManagerOrder)
   const airWaterVisualOwners = playerEntities.identities.flatMap(({ playerId }, index) => {
     const player = cast.players[playerId]
     const runtime = playerEntities.skillRuntimes[index]
@@ -3552,6 +3580,7 @@ function finishGameSimulationTick(
     tick,
     cast.rng,
     cast.channelEmissions,
+    worldManagerOrder.register,
   )
   let primarySpells = hurricaneVisuals.spells
   let combatRng = hurricaneVisuals.rng
@@ -3590,6 +3619,7 @@ function finishGameSimulationTick(
         actorId: reflection.actorId,
         amount: reflection.amount,
         lethalObserver,
+        registerWorldPainter: worldManagerOrder.register,
         sourcePlayerId: reflection.playerId,
         tick,
       })
@@ -3619,6 +3649,7 @@ function finishGameSimulationTick(
           ? 1
           : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId)
       },
+      worldManagerOrder.register,
     )
     world = {
       ...world,
@@ -3682,7 +3713,7 @@ function finishGameSimulationTick(
         collision,
         radius,
       ),
-      lightProviderOrder.register,
+      worldManagerOrder.register,
       (targetId, kind, ownerId) => {
         const prismatic = kind === 'air'
           && (nativeSecondaryTargetEffect(
@@ -3794,6 +3825,30 @@ function finishGameSimulationTick(
     playerCombatMutations(extensions, tick),
   )
   playerEntities = combat.store
+  for (const { playerId } of playerEntities.identities) {
+    const progression = playerProgressionAt(playerEntities, playerId)
+    const lighting = playerLightingAt(playerEntities, playerId)
+    if (!progression || !lighting) continue
+    if (
+      progression.lifeState === 'dying'
+      && lighting.deathWeaponPainterRegistration === null
+    ) {
+      playerEntities = setPlayerDeathWeaponPainterRegistration(
+        playerEntities,
+        playerId,
+        worldManagerOrder.register('actor'),
+      )
+    } else if (
+      progression.lifeState === 'alive'
+      && lighting.deathWeaponPainterRegistration !== null
+    ) {
+      playerEntities = setPlayerDeathWeaponPainterRegistration(
+        playerEntities,
+        playerId,
+        null,
+      )
+    }
+  }
   if (world.kind === 'boneyard') {
     for (const playerId of combat.lastWordBurstPlayerIds) {
       const triggered = triggerHagathaLastWord(
@@ -3802,7 +3857,7 @@ function finishGameSimulationTick(
         world,
         playerId,
         tick,
-        lightProviderOrder,
+        worldManagerOrder,
         lethalObserver,
       )
       secondaryAbilities = triggered.secondaryAbilities
@@ -3870,7 +3925,7 @@ function finishGameSimulationTick(
     combatRng,
     hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
     levelUpBarrier,
-    lightProviderOrder: lightProviderOrder.state(),
+    worldManagerOrder: worldManagerOrder.state(),
     modEffects: previous.modEffects,
     nextLevelUpBarrierId,
     nextModConsumableUseId: previous.nextModConsumableUseId,
@@ -4348,7 +4403,7 @@ function triggerHagathaLastWord(
   sourceWorld: BoneyardWorldState,
   playerId: PlayerId,
   tick: number,
-  lightProviderOrder: NativeLightProviderOrder,
+  worldManagerOrder: NativeWorldManagerOrder,
   lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   secondaryAbilities: NativeSecondarySimulationState
@@ -4360,9 +4415,10 @@ function triggerHagathaLastWord(
     directDamage: NATIVE_HAGATHA_LAST_WORD_DAMAGE,
     element: character.config.element,
     level: NATIVE_HAGATHA_LAST_WORD_DAMAGE * 2,
-    lightRegistration: lightProviderOrder.register('actor'),
+    lightRegistration: worldManagerOrder.register('actor'),
     ownerId: playerId,
     position: character.position,
+    registerWorldPainter: worldManagerOrder.register,
     presentationScale: NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE,
     worldKey: `boneyard:${sourceWorld.runId}`,
   })
@@ -4390,6 +4446,7 @@ function triggerHagathaLastWord(
       actorId: target.id,
       amount,
       lethalObserver,
+      registerWorldPainter: worldManagerOrder.register,
       sourcePlayerId: playerId,
       tick,
     })
@@ -4471,7 +4528,7 @@ function triggerMindblowingRing(
   playerId: PlayerId,
   level: number,
   tick: number,
-  lightProviderOrder: NativeLightProviderOrder,
+  worldManagerOrder: NativeWorldManagerOrder,
   lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   actorIds: readonly number[]
@@ -4491,9 +4548,10 @@ function triggerMindblowingRing(
   const triggered = triggerNativePlayerMindblast(secondaryAbilities, {
     element: character.config.element,
     level,
-    lightRegistration: lightProviderOrder.register('actor'),
+    lightRegistration: worldManagerOrder.register('actor'),
     ownerId: playerId,
     position: character.position,
+    registerWorldPainter: worldManagerOrder.register,
     worldKey: gameWorldKey(sourceWorld, playerId),
   })
   let world = sourceWorld
@@ -4513,6 +4571,7 @@ function triggerMindblowingRing(
         actorId: target.id,
         amount: triggered.directDamage,
         lethalObserver,
+        registerWorldPainter: worldManagerOrder.register,
         sourcePlayerId: playerId,
         tick,
       })

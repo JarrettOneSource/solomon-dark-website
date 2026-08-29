@@ -373,6 +373,10 @@ function interpolatePlayer(
     )) % HEADING_COUNT,
     lighting: {
       ...discrete.lighting,
+      deathWeaponPainterRegistration:
+        discrete.lighting.deathWeaponPainterRegistration === null
+          ? null
+          : { ...discrete.lighting.deathWeaponPainterRegistration },
       lightRegistration: { ...discrete.lighting.lightRegistration },
       overlayEffectPhase: lerp(
         older.lighting.overlayEffectPhase,
@@ -581,6 +585,10 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     config: { ...player.config },
     lighting: {
       ...player.lighting,
+      deathWeaponPainterRegistration:
+        player.lighting.deathWeaponPainterRegistration === null
+          ? null
+          : { ...player.lighting.deathWeaponPainterRegistration },
       lightRegistration: { ...player.lighting.lightRegistration },
     },
     position: { ...player.position },
@@ -604,6 +612,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
 function copyStudent(student: ProtocolStudentState): ProtocolStudentState {
   return {
     ...student,
+    painterRegistration: { ...student.painterRegistration },
     position: { ...student.position },
     props: student.props.map((prop) => ({ ...prop })),
   }

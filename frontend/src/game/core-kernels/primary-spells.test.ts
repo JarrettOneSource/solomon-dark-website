@@ -1484,6 +1484,7 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: missile.position,
     ownerId: PLAYER_ID,
+    painterRegistrations: result.transients[0]!.painterRegistrations,
     visualScale: 1,
     worldKey: 'hub:courtyard',
   }])
@@ -1542,6 +1543,7 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
     lightRegistration: null,
     origin: { ...fireball.position },
     ownerId: PLAYER_ID,
+    painterRegistrations: state.primarySpells.transients[0]!.painterRegistrations,
     variant: nativeFireParticleVariant(2),
     worldKey: 'boneyard:primary-spells-run',
   })
@@ -1612,6 +1614,7 @@ test('Fire blocked birth replaces the spawned actor before its first trail tick'
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: probes[0].to,
     ownerId: PLAYER_ID,
+    painterRegistrations: [TRANSIENT_LIGHT_REGISTRATION],
     worldKey: 'hub:courtyard',
   }])
 })
@@ -1668,6 +1671,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 100, y: 200 },
     ownerId: PLAYER_ID,
+    painterRegistrations: [TRANSIENT_LIGHT_REGISTRATION],
     worldKey: 'hub:courtyard',
   }])
 
@@ -2455,6 +2459,7 @@ test('Earth tests the advanced-to-next native capsule and breaks at the advanced
     lifetimeTicks: earthImpactLifetimeTicks(impact),
     origin: checked[0].from,
     ownerId: PLAYER_ID,
+    painterRegistrations: impact.painterRegistrations,
     worldKey: 'boneyard:primary-spells-run',
   })
 })

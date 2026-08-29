@@ -1453,7 +1453,7 @@ test('stationary Storm owns the exact three-pass render-target composite and whi
   const phase = drawNativeFloat(source.presentationRng!, 1, true).value
   const plan = nativeSecondaryPresentationPlan(source)
   assert.deepEqual(plan.root, source.position)
-  assert.equal(plan.worldY, source.position.y)
+  assert.equal(plan.worldY, source.position.y + 350)
   assert.equal(plan.stormComposite?.scale, 5)
   assert.deepEqual(plan.stormComposite?.offset, { x: 0, y: -175 })
   assert.deepEqual(plan.stormComposite?.draws.map(({ role }) => role), [

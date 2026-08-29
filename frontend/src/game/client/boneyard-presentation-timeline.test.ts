@@ -143,6 +143,7 @@ function enemyProjectileAt(x: number): BoneyardEnemyProjectileSnapshot {
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     payload: 'normal',
     position: { x, y: 475 },
     speed: x / 100,
@@ -187,6 +188,11 @@ function magePulse(tick: number): BoneyardMageLightningPulseSnapshot {
     id: tick,
     midpoint: { x: tick - 20, y: 10 },
     ownerActorId: 1,
+    painterRegistrations: [
+      { managerLane: 'actor', registrationOrdinal: tick * 3 },
+      { managerLane: 'actor', registrationOrdinal: tick * 3 + 1 },
+      { managerLane: 'actor', registrationOrdinal: tick * 3 + 2 },
+    ],
     seed: tick,
     source: { x: tick - 40, y: 0 },
     tick,
@@ -275,6 +281,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
       mageLightningPulses: [],
       maggots: [maggotAt(gateTipX + 100, tick >= 105 ? 1 : 0)],
       runId: 'run-1',
+      solomonPainterRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
       tutorial: null,
       waves: {
         interwaveDelayTicks: 0,
@@ -657,8 +664,7 @@ test('interpolates the shared player effect phase while keeping light ownership 
   assert.notEqual(midpoint, older.players.local.lighting)
   midpoint.overlayEffectPhase = 0
   assert.deepEqual(timeline.sample(75).players.local.lighting, {
-    driveActive: false,
-    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    ...older.players.local.lighting,
     overlayEffectPhase: 0.18,
   })
   assert.deepEqual(timeline.sample(100).players.local.lighting, newer.players.local.lighting)
@@ -709,6 +715,7 @@ test('interpolates independent death-effect transforms without rerolling art ide
     id: 9,
     kind: 'bouncer',
     ownerActorId: 1,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
     presentationOwner: 'world-sorted',
     position: { x: 100, y: 200 },
     rotationRadians: Math.PI * 1.9,
@@ -761,6 +768,7 @@ test('interpolates projectile-owned effects after their projectile has retired',
     lifetimeTicks: 12,
     ownerActorId: 1,
     ownerProjectileId: 9,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 12 },
     phaseOriginTicks: 20,
     position: { x: 100, y: 200 },
     rotationRadians: Math.PI * 1.9,

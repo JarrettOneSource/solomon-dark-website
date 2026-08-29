@@ -7,7 +7,7 @@ import type {
 export const BONEYARD_GOODIE_ENTITY_TYPE_ID = 8
 
 const POSITION_SCALE = 16
-const DESCRIPTOR_LENGTH = 3
+const DESCRIPTOR_LENGTH = 4
 const SAMPLE_LENGTH = 8
 
 export const BONEYARD_GOODIE_ENTITY_REGISTRATION = {
@@ -18,6 +18,7 @@ export const BONEYARD_GOODIE_ENTITY_REGISTRATION = {
       && descriptor[0] === BONEYARD_GOODIE_ENTITY_TYPE_ID
       && positiveInteger(descriptor[1])
       && nonnegativeInteger(descriptor[2])
+      && nonnegativeInteger(descriptor[3])
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -34,7 +35,12 @@ export const BONEYARD_GOODIE_ENTITY_REGISTRATION = {
 export function boneyardGoodieDescriptor(
   goodie: BoneyardGoodieSnapshot,
 ): ReplicatedEntityDescriptor {
-  return [BONEYARD_GOODIE_ENTITY_TYPE_ID, goodie.id, goodie.subtype]
+  return [
+    BONEYARD_GOODIE_ENTITY_TYPE_ID,
+    goodie.id,
+    goodie.subtype,
+    goodie.sceneryRegistrationOrdinal,
+  ]
 }
 
 export function boneyardGoodieSample(
@@ -71,6 +77,7 @@ export function materializeBoneyardGoodie(
     id: descriptor[1],
     phase: sample[6] as 0 | 1 | 2,
     position: { x: sample[2] / POSITION_SCALE, y: sample[3] / POSITION_SCALE },
+    sceneryRegistrationOrdinal: descriptor[3],
     subtype: descriptor[2],
     timer: sample[7],
   }

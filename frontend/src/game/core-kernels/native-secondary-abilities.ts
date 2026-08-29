@@ -63,11 +63,11 @@ import {
   nativeLeviathanPhase,
 } from './native-secondary-leviathan.ts'
 import {
-  createNativeLightProviderOrder,
-  type NativeLightManagerLane,
-  type NativeLightProviderRegistration,
-  type RegisterNativeLightProvider,
-} from './native-light-provider-order.ts'
+  createNativeWorldManagerOrder,
+  type NativeWorldManagerLane,
+  type NativeWorldManagerRegistration,
+  type RegisterNativeWorldPainter,
+} from './native-world-manager-order.ts'
 import type { Vector2 } from './vector.ts'
 import {
   createNativeFireDetonation,
@@ -173,10 +173,11 @@ export interface NativeSecondaryActorState {
   readonly id: number
   readonly kind: NativeSecondaryActorKind
   readonly lifetimeTicks: number
-  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lightRegistration: NativeWorldManagerRegistration | null
   readonly midpoint: Vector2
   readonly miscLightAppendOrdinal: number | null
   readonly ownerId: string
+  readonly painterRegistrations?: readonly NativeWorldManagerRegistration[]
   readonly phase: number
   readonly position: Vector2
   readonly presentationRng: NativeRngState | null
@@ -318,7 +319,7 @@ export interface NativeSecondarySimulationState {
 export interface NativeSecondaryTarget {
   readonly family: string
   readonly id: number
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly nativeFlags?: number
   readonly position: Vector2
   readonly radius: number
@@ -414,7 +415,7 @@ export interface NativeSecondaryTickContext {
     end: Vector2,
   ) => boolean
   readonly players: Readonly<Record<string, NativeSecondaryPlayerAuthority>>
-  readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly sceneryTargets?: (
     worldKey: string,
     center: Vector2,
@@ -880,19 +881,21 @@ export function spawnNativeScriptFires(
     position: Vector2
     radius: number
   }>[],
-  registerLightProvider: RegisterNativeLightProvider,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): NativeSecondarySimulationState {
   let state = source
   for (const fire of fires) {
     const phase = drawNativeFloat(state.rng, FIRE_FRAME_COUNT)
     const mirror = drawNativeSign(phase.state, 1)
+    const registration = registerWorldPainter('actor')
     state = spawn({ ...state, rng: mirror.state }, actorSeed({
       damage: fire.damage,
       enhanced: true,
       kind: 'fire-patch',
       lifetimeTicks: fire.lifetimeTicks,
-      lightRegistration: registerLightProvider('actor'),
+      lightRegistration: registration,
       ownerId,
+      painterRegistrations: Object.freeze([registration]),
       phase: phase.value,
       position: Object.freeze({ ...fire.position }),
       quantity: mirror.value,
@@ -5215,6 +5218,7 @@ function actorSeed(
     midpoint: ZERO,
     miscLightAppendOrdinal: null,
     ownerId,
+    painterRegistrations: [],
     phase: 0,
     position: ZERO,
     presentationRng: null,
@@ -5286,19 +5290,34 @@ function enrollNativeSecondaryLightOwners(
   source: NativeSecondarySimulationState,
   context: NativeSecondaryTickContext,
 ): NativeSecondarySimulationState {
-  const standaloneOrder = createNativeLightProviderOrder(
-    nativeSecondaryLightProviderOrderState(source),
+  const standaloneOrder = createNativeWorldManagerOrder(
+    nativeSecondaryWorldManagerOrderState(source),
   )
-  const register = context.registerLightProvider ?? standaloneOrder.register
+  const register = context.registerWorldPainter ?? standaloneOrder.register
   const nextModifierOrdinalByTarget = new Map<string, number>()
   const actors = source.actors.map((actor) => {
+    const painterLane = nativeSecondaryPainterManagerLane(actor.kind)
+    const existingPainterRegistrations = actor.painterRegistrations ?? []
+    const painterRegistrations = existingPainterRegistrations.length === 0
+      ? Object.freeze([register(painterLane)])
+      : existingPainterRegistrations
+    if (
+      painterRegistrations.length !== 1
+      || painterRegistrations[0]!.managerLane !== painterLane
+    ) {
+      throw new Error(`${actor.kind} changed native painter-manager ownership`)
+    }
+    const painterRegistration = painterRegistrations[0]!
+    const withPainter = actor.painterRegistrations === painterRegistrations
+      ? actor
+      : Object.freeze({ ...actor, painterRegistrations })
     const disposition = nativeSecondaryLightDisposition(actor)
     if (disposition === 'none') {
       if (actor.lightRegistration === null && actor.miscLightAppendOrdinal === null) {
-        return actor
+        return withPainter
       }
       return Object.freeze({
-        ...actor,
+        ...withPainter,
         lightRegistration: null,
         miscLightAppendOrdinal: null,
       })
@@ -5323,18 +5342,22 @@ function enrollNativeSecondaryLightOwners(
       if (
         actor.lightRegistration === lightRegistration
         && actor.miscLightAppendOrdinal === miscLightAppendOrdinal
-      ) return actor
+        && actor.painterRegistrations === painterRegistrations
+      ) return withPainter
       return Object.freeze({
-        ...actor,
+        ...withPainter,
         lightRegistration,
         miscLightAppendOrdinal,
       })
     }
 
-    const expectedLane: NativeLightManagerLane = disposition === 'transient-provider'
+    const expectedLane: NativeWorldManagerLane = disposition === 'transient-provider'
       ? 'transient'
       : 'actor'
-    const lightRegistration = actor.lightRegistration ?? register(expectedLane)
+    const lightRegistration = actor.lightRegistration
+      ?? (painterRegistration.managerLane === expectedLane
+        ? painterRegistration
+        : register(expectedLane))
     if (lightRegistration.managerLane !== expectedLane) {
       throw new Error(`${actor.kind} changed native light-manager lane`)
     }
@@ -5342,9 +5365,10 @@ function enrollNativeSecondaryLightOwners(
     if (
       actor.lightRegistration === lightRegistration
       && actor.miscLightAppendOrdinal === miscLightAppendOrdinal
-    ) return actor
+      && actor.painterRegistrations === painterRegistrations
+    ) return withPainter
     return Object.freeze({
-      ...actor,
+      ...withPainter,
       lightRegistration,
       miscLightAppendOrdinal,
     })
@@ -5354,11 +5378,14 @@ function enrollNativeSecondaryLightOwners(
     : { ...source, actors }
 }
 
-function nativeSecondaryLightProviderOrderState(
+function nativeSecondaryWorldManagerOrderState(
   source: NativeSecondarySimulationState,
 ) {
   const nextRegistrationOrdinal = { actor: 0, transient: 0 }
-  for (const registration of source.actors.map(({ lightRegistration }) => lightRegistration)) {
+  for (const registration of source.actors.flatMap((actor) => [
+    ...(actor.painterRegistrations ?? []),
+    actor.lightRegistration,
+  ])) {
     if (registration === null) continue
     nextRegistrationOrdinal[registration.managerLane] = Math.max(
       nextRegistrationOrdinal[registration.managerLane],
@@ -5366,6 +5393,27 @@ function nativeSecondaryLightProviderOrderState(
     )
   }
   return { nextRegistrationOrdinal }
+}
+
+export function nativeSecondaryPainterManagerLane(
+  kind: NativeSecondaryActorKind,
+): NativeWorldManagerLane {
+  switch (kind) {
+    case 'leviathan':
+    case 'leviathan-appendage':
+    case 'moving-fire':
+    case 'fire-patch':
+    case 'storm-cloud':
+    case 'storm-strike':
+    case 'earthquake':
+    case 'golem':
+    case 'golem-death':
+    case 'acid-rain':
+    case 'comet':
+      return 'actor'
+    default:
+      return 'transient'
+  }
 }
 
 function spawnFirewalkerPatch(
@@ -6147,10 +6195,11 @@ export function triggerNativePlayerMindblast(
     directDamage?: number
     element: WizardElement
     level: number
-    lightRegistration: NativeLightProviderRegistration
+    lightRegistration: NativeWorldManagerRegistration
     ownerId: string
     position: Readonly<Vector2>
     presentationScale?: number
+    registerWorldPainter?: RegisterNativeWorldPainter
     worldKey: string
   }>,
 ): NativePlayerMindblastTriggerResult {
@@ -6172,10 +6221,17 @@ export function triggerNativePlayerMindblast(
     rng: advanceNativeRngWords(source.rng, NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS),
   }
   const variant = wizardElementIndex(input.element)
+  let fallbackPainterOrdinal = source.nextActorId
+  const registerPainter = input.registerWorldPainter
+    ?? ((managerLane: NativeWorldManagerLane) => ({
+      managerLane,
+      registrationOrdinal: fallbackPainterOrdinal++,
+    }))
   state = spawn(state, actorSeed({
     kind: 'mindblast-burst',
     lifetimeTicks: NATIVE_MINDBLAST_BURST_LIFETIME_TICKS,
     ownerId: input.ownerId,
+    painterRegistrations: Object.freeze([registerPainter('transient')]),
     position: { ...input.position },
     presentationRng,
     rank: input.level,
@@ -6189,6 +6245,7 @@ export function triggerNativePlayerMindblast(
     lifetimeTicks: NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS,
     lightRegistration: input.lightRegistration,
     ownerId: input.ownerId,
+    painterRegistrations: Object.freeze([registerPainter('transient')]),
     phase: SHOCKWAVE_EXPLOSIVE_SHIELD_LIFE,
     position: { ...input.position },
     quantity: NATIVE_MINDBLAST_SHOCKWAVE_GROWTH,

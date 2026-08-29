@@ -1,5 +1,11 @@
 # 2026-08-24 — Acid Rain overhead cloud and residue painter reopening
 
+> **2026-08-29 queue-family closure:** [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> preserves the cloud's exact Y `+350` proxy and the residue's direct pre-world
+> ownership and supersedes their former physical integration. The cloud is now a
+> dynamically inserted `PuppetPointer`, not a `zanim` family member; the residue
+> is now a direct-pre-world child below the Region multiply composite.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the Acid Rain cloud is missing part of its VFX.

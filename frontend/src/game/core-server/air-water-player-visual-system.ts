@@ -21,6 +21,11 @@ import {
   waterFrostJetKind,
   waterFrostJetParticleCount,
 } from '../core-kernels/primary-spell-water.ts'
+import {
+  createNativeWorldManagerOrder,
+  registerNativeWorldPainterRoots,
+  type RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 
 export interface AirWaterPlayerVisualOwner {
@@ -49,6 +54,7 @@ export function synchronizeAirWaterPlayerVisualActors(
   tick: number,
   sourceRng: NativeRngState,
   channelEmissions: readonly PrimarySpellChannelEmission[] = [],
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): AirWaterPlayerVisualResult {
   if (!Number.isSafeInteger(tick) || tick < 0) {
     throw new RangeError('Air/Water visual actor tick must be a non-negative safe integer')
@@ -105,6 +111,10 @@ export function synchronizeAirWaterPlayerVisualActors(
 
   let nextId = source.nextId
   let rng = sourceRng
+  const standaloneOrder = createNativeWorldManagerOrder({
+    nextRegistrationOrdinal: { actor: nextId, transient: nextId },
+  })
+  const register = registerWorldPainter ?? standaloneOrder.register
   for (const owner of owners) {
     if (owner.hurricaneCharge <= 0) continue
     const existing = hurricaneByOwner.get(owner.ownerId)
@@ -145,6 +155,7 @@ export function synchronizeAirWaterPlayerVisualActors(
       kind: 'air-hurricane',
       lanes: created.program.lanes,
       ownerId: owner.ownerId,
+      painterRegistrations: registerNativeWorldPainterRoots(register, 'actor'),
       phaseDegrees: created.program.phaseDegrees,
       position: { ...owner.position },
       worldKey: owner.worldKey,

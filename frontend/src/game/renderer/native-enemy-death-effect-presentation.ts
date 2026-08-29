@@ -51,16 +51,18 @@ export function nativeEnemyDeathEffectPlan(
 
 export function nativeEnemyDeathEffectPainterLayer(
   effect: BoneyardEnemyDeathEffectSnapshot,
-  sourceOrder: number,
 ): DynamicPainterLayer {
   if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') {
     throw new Error('direct post-world death effect cannot enter the world-sorted painter')
   }
+  if (effect.painterRegistration === null) {
+    throw new Error('world-sorted death effect lost its painter registration')
+  }
   return {
     id: `enemy-death-effect:${effect.id}`,
     queueFamily: 'ordinary-dynamic',
+    registration: effect.painterRegistration,
     sortBias: 0,
-    sourceOrder,
     worldY: effect.position.y,
   }
 }

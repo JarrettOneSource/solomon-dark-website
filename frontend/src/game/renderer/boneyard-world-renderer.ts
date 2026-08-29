@@ -19,12 +19,12 @@ import {
 import { NATIVE, type EditorDoc, type SpriteRef, type Vec2 } from '../../editor/model.ts'
 import type { MainLayer, ObjectSpriteLayer } from '../../editor/native-render-plan.ts'
 import {
-  drawNativeBoneyardForegroundBand,
+  drawNativeBoneyardProxyBand,
   drawNativeBoneyardMainBand,
   drawNativeBoneyardPreMainWallBand,
   drawNativeBoneyardPostRoadBase,
   NATIVE_BONEYARD_POST_ROAD_TEXTURES,
-  nativeBoneyardForegroundLayers,
+  nativeBoneyardProxyLayers,
   nativeBoneyardMainLayers,
   nativeBoneyardPreMainWallLayers,
   type Camera,
@@ -44,6 +44,7 @@ import {
   type DynamicPainterLayer,
   type StaticPainterLayer,
 } from '../boneyard-painter-order.ts'
+import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
@@ -63,9 +64,9 @@ import {
   nativeTutorialCameraBounds,
 } from '../core-kernels/native-tutorial.ts'
 import {
-  mergeNativeLightProviderOwners,
-  type NativeLightProviderRegistration,
-} from '../core-kernels/native-light-provider-order.ts'
+  mergeNativeWorldManagerOwners,
+  type NativeWorldManagerRegistration,
+} from '../core-kernels/native-world-manager-order.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import {
   DEFAULT_GAME_SETTINGS,
@@ -317,6 +318,10 @@ interface BoneyardRendererFrameDiagnostics {
   foregroundZIndex: number
   gateLeafCount: number
   goodieCount: number
+  goodiePainterRegistrations: readonly Readonly<{
+    id: number
+    sceneryRegistrationOrdinal: number
+  }>[]
   cameraSubjectPlayerId: string | null
   cameraX: number
   cameraY: number
@@ -355,6 +360,8 @@ interface BoneyardRendererFrameDiagnostics {
   orbSpriteCount: number
   offCameraCleanupApplied: boolean
   painterBandCount: number
+  painterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[]
+  painterProxyOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[]
   playerAttachmentPose: number
   playerCount: number
   playerDamageX4Alpha: number
@@ -400,6 +407,7 @@ interface BoneyardRendererFrameDiagnostics {
     y: number
   }>[]
   primarySpellCount: number
+  primarySpellPainterDepths: Readonly<Record<string, number>>
   primarySpellKinds: readonly string[]
   playerScreenX: number
   playerScreenY: number
@@ -426,7 +434,7 @@ interface BoneyardRendererFrameDiagnostics {
   tick: number
   treeAlphaMismatchCount: number
   treeCount: number
-  treeForegroundResidentCount: number
+  treeProxyResidentCount: number
   treeTintMismatchCount: number
   residentCount: number
   retiredStaticResidentCount: number
@@ -524,7 +532,7 @@ interface WallResident {
 }
 
 interface TreeResidents {
-  foreground: ResidentTexture
+  proxy: ResidentTexture
   main: ResidentTexture
 }
 
@@ -532,7 +540,6 @@ interface StaticWorldBuild {
   activeResidents: ResidentTexture[]
   applyOffCameraCleanup(): void
   buildingResidents: ReadonlyMap<string, BuildingResidents>
-  foreground: Container
   mainResidents: ReadonlyMap<number, ResidentTexture>
   residents: ResidentTexture[]
   offCameraCleanupApplied: boolean
@@ -689,7 +696,6 @@ export async function createBoneyardWorldRenderer(
     textures,
     mainLayers,
     staticWorld.mainResidents,
-    staticWorld.foreground,
     staticWorld.shadowCasters,
     staticWorld.treeInputs,
     staticWorld.treeResidents,
@@ -805,6 +811,7 @@ export async function createBoneyardWorldRenderer(
     foregroundZIndex: 0,
     gateLeafCount: 0,
     goodieCount: 0,
+    goodiePainterRegistrations: [],
     cameraSubjectPlayerId: null,
     cameraX: Number.NaN,
     cameraY: Number.NaN,
@@ -843,6 +850,8 @@ export async function createBoneyardWorldRenderer(
     orbSpriteCount: 0,
     offCameraCleanupApplied: false,
     painterBandCount: 0,
+    painterOrder: [],
+    painterProxyOrder: [],
     playerAttachmentPose: 0,
     playerCount: 0,
     playerDamageX4Alpha: 0,
@@ -877,6 +886,7 @@ export async function createBoneyardWorldRenderer(
     playerRobeFixedPose: 0,
     playerSamples: [],
     primarySpellCount: 0,
+    primarySpellPainterDepths: {},
     primarySpellKinds: [],
     playerScreenX: Number.NaN,
     playerScreenY: Number.NaN,
@@ -903,7 +913,7 @@ export async function createBoneyardWorldRenderer(
     tick: options.initialSnapshot.tick,
     treeAlphaMismatchCount: 0,
     treeCount: staticWorld.treeInputs.length,
-    treeForegroundResidentCount: staticWorld.treeResidents.size,
+    treeProxyResidentCount: staticWorld.treeResidents.size,
     treeTintMismatchCount: 0,
     residentCount: staticWorld.activeResidents.length,
     retiredStaticResidentCount: 0,
@@ -1282,6 +1292,10 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
       frameDiagnostics.goodieCount = scene.goodieCount
+      frameDiagnostics.goodiePainterRegistrations = snapshot.world.goodies.map((goodie) => ({
+        id: goodie.id,
+        sceneryRegistrationOrdinal: goodie.sceneryRegistrationOrdinal,
+      }))
       frameDiagnostics.culledResidentCount = visibility.culledResidentCount
       frameDiagnostics.localPlayerDeathTick = player.progression.deathTick
       frameDiagnostics.localPlayerHealth = player.progression.currentHealth
@@ -1313,6 +1327,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.minTreeLightScalar = painter.minTreeLightScalar
       frameDiagnostics.monumentVisibleCount = painter.monumentVisibleCount
       frameDiagnostics.painterBandCount = painter.painterBandCount
+      frameDiagnostics.painterOrder = painter.painterOrder
+      frameDiagnostics.painterProxyOrder = painter.painterProxyOrder
       frameDiagnostics.playerCount = scene.playerCount
       frameDiagnostics.playerDeathBurstCount = scene.playerDeathBurstCount
       frameDiagnostics.playerDeathWeaponCount = scene.playerDeathWeaponCount
@@ -1326,6 +1342,7 @@ export async function createBoneyardWorldRenderer(
         y: sample.position.y,
       }))
       frameDiagnostics.primarySpellCount = scene.primarySpellCount
+      frameDiagnostics.primarySpellPainterDepths = scene.primarySpellPainterDepths
       frameDiagnostics.primarySpellKinds = scene.primarySpellKinds
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
         + viewport.width / 2
@@ -1438,7 +1455,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.tick = snapshot.tick
       frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
       frameDiagnostics.treeCount = painter.treeCount
-      frameDiagnostics.treeForegroundResidentCount = painter.treeForegroundResidentCount
+      frameDiagnostics.treeProxyResidentCount = painter.treeProxyResidentCount
       frameDiagnostics.treeTintMismatchCount = painter.treeTintMismatchCount
       frameDiagnostics.visibleMainLayerCount = visibility.visibleMainResidents.length
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
@@ -1633,11 +1650,13 @@ interface BoneyardPainterFrame {
   minTreeLightScalar: number
   monumentVisibleCount: number
   painterBandCount: number
+  painterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[]
+  painterProxyOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[]
   playerLightRadius: number
   playerLightRasterRadius: number
   treeAlphaMismatchCount: number
   treeCount: number
-  treeForegroundResidentCount: number
+  treeProxyResidentCount: number
   treeTintMismatchCount: number
   solomonPainterRow: number
   solomonZIndex: number
@@ -1649,7 +1668,7 @@ interface BoneyardPainterFrame {
 }
 
 interface RegisteredBoneyardLightProviderOwner {
-  registration: NativeLightProviderRegistration
+  registration: NativeWorldManagerRegistration
   sources: readonly NativeBoneyardLightSource[]
 }
 
@@ -1670,7 +1689,6 @@ class BoneyardDynamicScene {
   private readonly enemyDeathEffects: NativeEnemyDeathEffectViews
   private readonly enemyProjectileEffects: NativeEnemyProjectileEffectViews
   private readonly enemyProjectiles: NativeEnemyProjectileViews
-  private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gateShadowDepthOwners = new Map<string, ContainerChild>()
   private readonly gates: BoneyardGateViews
@@ -1716,7 +1734,6 @@ class BoneyardDynamicScene {
     textures: BoneyardWorldTextures,
     mainLayers: readonly MainLayer[],
     mainResidents: ReadonlyMap<number, ResidentTexture>,
-    foreground: Container,
     shadowCasters: readonly BoneyardComplexShadowStaticCaster[],
     treeInputs: readonly NativeTreeOcclusionInput[],
     treeResidents: ReadonlyMap<string, TreeResidents>,
@@ -1737,7 +1754,6 @@ class BoneyardDynamicScene {
     this.modTextures = modTextures
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
-    this.foreground = foreground
     this.complexShadows = new BoneyardComplexShadowPresentation(root, shadowCasters)
     this.treeOcclusion = new BoneyardTreeOcclusionPresentation(
       treeInputs,
@@ -1746,20 +1762,28 @@ class BoneyardDynamicScene {
     this.treeResidents = treeResidents
     this.buildingResidents = buildingResidents
     this.wallResidents = wallResidents
+    const preWorld = new Container({ label: 'boneyard-direct-pre-world' })
+    preWorld.eventMode = 'none'
+    preWorld.sortableChildren = true
+    preWorld.zIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX / 2
+    root.addChild(preWorld)
     this.primarySpells = new PrimarySpellWorldView(root, textures)
-    this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer)
+    this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer, {
+      preWorldRoot: preWorld,
+    })
     this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
       layerIndex,
       worldY: layer.worldY,
       sortBias: layer.sortBias,
       sourceOrder: layer.sourceOrder,
+      insertions: nativeStaticProxyInsertions(layer),
     }))
     this.movingGatePainterLayers = this.staticPainterLayers.filter((layer) => (
       isMovingGateBody(this.mainLayers[layer.layerIndex])
     ))
     this.gates = new BoneyardGateViews(root, textures)
     this.goodies = new NativeGoodieViews(root, textures)
-    this.enemies = new NativeEnemyViews(root, textures)
+    this.enemies = new NativeEnemyViews(root, textures, preWorld)
     this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures)
     this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
@@ -2145,7 +2169,7 @@ class BoneyardDynamicScene {
         sources: [lanternLight],
       })
     }
-    for (const owner of mergeNativeLightProviderOwners(
+    for (const owner of mergeNativeWorldManagerOwners(
       [lightProviderOwners],
       ({ registration }) => registration,
     )) {
@@ -2230,7 +2254,7 @@ class BoneyardDynamicScene {
       || first.birthTick - second.birthTick
       || first.id - second.id
     ))
-    for (const batch of mergeNativeLightProviderOwners(
+    for (const batch of mergeNativeWorldManagerOwners(
       [appendOrderedMiscBatches],
       ({ registration }) => registration,
     )) {
@@ -2349,12 +2373,12 @@ class BoneyardDynamicScene {
       const scalar = worldLightScalar(presentation.position)
       const tint = nativeBoneyardLightTint(scalar)
       tree.main.sprite.alpha = presentation.alpha
-      tree.foreground.sprite.alpha = presentation.alpha
+      tree.proxy.sprite.alpha = presentation.alpha
       tree.main.sprite.tint = tint
-      tree.foreground.sprite.tint = tint
+      tree.proxy.sprite.tint = tint
       const wobbleRadians = (earthquakeTreeWobbles.get(presentation.eid) ?? 0)
         * Math.PI / 180
-      for (const resident of [tree.main, tree.foreground]) {
+      for (const resident of [tree.main, tree.proxy]) {
         resident.sprite.pivot.set(
           presentation.position.x - resident.x,
           presentation.position.y - resident.y,
@@ -2368,10 +2392,10 @@ class BoneyardDynamicScene {
       if (presentation.alpha < 1) fadedTreeCount += 1
       minTreeAlpha = Math.min(minTreeAlpha, presentation.alpha)
       minTreeLightScalar = Math.min(minTreeLightScalar, scalar)
-      if (tree.main.sprite.alpha !== tree.foreground.sprite.alpha) {
+      if (tree.main.sprite.alpha !== tree.proxy.sprite.alpha) {
         treeAlphaMismatchCount += 1
       }
-      if (tree.main.sprite.tint !== tree.foreground.sprite.tint) {
+      if (tree.main.sprite.tint !== tree.proxy.sprite.tint) {
         treeTintMismatchCount += 1
       }
     }
@@ -2485,18 +2509,24 @@ class BoneyardDynamicScene {
       dynamicLayers.push({
         id: `player:${playerId}`,
         queueFamily: 'ordinary-dynamic',
+        registration: player.lighting.lightRegistration,
         worldY: player.position.y,
         sortBias: boneyardPlayerSortBias(player),
-        sourceOrder: dynamicLayers.length,
       })
     }
     for (const layer of this.playerDeathWeapons.painterLayers()) {
+      const playerId = layer.id.slice('player-death-weapon:'.length)
+      const registration = snapshot.players[playerId]
+        ?.lighting.deathWeaponPainterRegistration
+      if (!registration) {
+        throw new Error(`death weapon ${playerId} lost its painter registration`)
+      }
       dynamicLayers.push({
         id: layer.id,
         queueFamily: 'ordinary-dynamic',
+        registration,
         worldY: layer.worldY,
         sortBias: 0,
-        sourceOrder: dynamicLayers.length,
       })
     }
     for (const layer of this.primarySpells.painterLayers()) {
@@ -2504,80 +2534,97 @@ class BoneyardDynamicScene {
       dynamicLayers.push({
         ...layer,
         queueFamily: layer.queueFamily,
-        sourceOrder: dynamicLayers.length,
       })
     }
     for (const layer of mageLightningPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
+      if (layer.registration === null || layer.registration === undefined) {
+        throw new Error(`Mage lightning painter ${layer.id} lost its registration`)
+      }
       dynamicLayers.push({
         id: layer.id,
+        insertions: layer.insertions,
         queueFamily: layer.queueFamily,
+        registration: layer.registration,
         worldY: layer.worldY,
         sortBias: layer.sortBias,
-        sourceOrder: dynamicLayers.length,
+        visible: layer.visible,
       })
     }
     for (const layer of this.secondaryAbilities.painterLayers()) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
+      if (layer.registration === null || layer.registration === undefined) {
+        throw new Error(`secondary painter ${layer.id} lost its manager registration`)
+      }
       dynamicLayers.push({
-        ...layer,
+        id: layer.id,
+        insertions: layer.insertions,
         queueFamily: layer.queueFamily,
-        sourceOrder: dynamicLayers.length,
+        registration: layer.registration,
+        sortBias: layer.sortBias,
+        visible: layer.visible,
+        worldY: layer.worldY,
       })
     }
     for (const enemy of enemySnapshots) {
-      dynamicLayers.push(nativeEnemyPainterLayer(enemy, dynamicLayers.length))
+      dynamicLayers.push(nativeEnemyPainterLayer(enemy))
     }
     for (const actor of snapshot.world.loot) {
-      dynamicLayers.push(nativeLootPainterLayer(actor, dynamicLayers.length))
+      dynamicLayers.push(nativeLootPainterLayer(actor))
     }
     for (const goodie of snapshot.world.goodies) {
-      dynamicLayers.push(nativeGoodiePainterLayer(goodie, dynamicLayers.length))
+      dynamicLayers.push(nativeGoodiePainterLayer(goodie))
     }
-    dynamicLayers.push(...this.modEffects.painterLayers(snapshot, dynamicLayers.length))
     for (const effect of snapshot.world.deathEffects) {
       if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') continue
-      dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect, dynamicLayers.length))
+      dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect))
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
       dynamicLayers.push({
         id: `enemy-projectile:${projectile.id}`,
         queueFamily: 'ordinary-dynamic',
+        registration: projectile.painterRegistration,
         worldY: projectile.position.y,
         sortBias: 0,
-        sourceOrder: dynamicLayers.length,
       })
     }
     for (const effect of snapshot.world.enemyProjectileEffects) {
-      dynamicLayers.push(nativeEnemyProjectileEffectPainterLayer(
-        effect,
-        dynamicLayers.length,
-      ))
+      dynamicLayers.push(nativeEnemyProjectileEffectPainterLayer(effect))
     }
     for (const layer of enemyAuxiliaryPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
+      if (layer.registration === null) {
+        throw new Error(`enemy auxiliary painter ${layer.id} lost its registration`)
+      }
       dynamicLayers.push({
         id: layer.id,
         queueFamily: layer.queueFamily,
+        registration: layer.registration,
         worldY: layer.worldY,
         sortBias: layer.sortBias,
-        sourceOrder: dynamicLayers.length,
       })
     }
     for (const maggot of snapshot.world.maggots) {
       dynamicLayers.push({
         id: `maggot:${maggot.id}`,
         queueFamily: 'ordinary-dynamic',
+        registration: maggot.lightRegistration,
         worldY: maggot.position.y,
         sortBias: 0,
-        sourceOrder: dynamicLayers.length,
       })
     }
     if (dig) {
+      if (
+        snapshot.world.lanternLightRegistration === null
+        || snapshot.world.solomonPainterRegistration === null
+      ) {
+        throw new Error('Solomon set piece lost its native painter registrations')
+      }
       dynamicLayers.push(...boneyardSolomonPainterLayers(
         dig,
         snapshot.world.encounter,
-        dynamicLayers.length,
+        snapshot.world.lanternLightRegistration,
+        snapshot.world.solomonPainterRegistration,
       ))
     }
     const activeStaticPainterLayers = this.activeStaticPainterLayers
@@ -2587,6 +2634,10 @@ class BoneyardDynamicScene {
     for (const resident of visibleMainResidents) {
       const layerIndex = resident.mainLayerIndex
       if (layerIndex === null) continue
+      const mainLayer = this.mainLayers[layerIndex]
+      if (mainLayer.kind === 'object' && mainLayer.object.typeId === NATIVE.goodie) {
+        continue
+      }
       const layer = this.staticPainterLayers[layerIndex]!
       layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
       activeStaticPainterLayers.push(layer)
@@ -2631,6 +2682,20 @@ class BoneyardDynamicScene {
     for (const layer of order.dynamicLayers) {
       positionedDynamics.set(layer.id, layer)
       maxDynamicZIndex = Math.max(maxDynamicZIndex, layer.zIndex)
+      if (layer.id.startsWith('mage-lightning:')) {
+        this.mageLightningPulses.setDepth(layer.id, layer.zIndex)
+      }
+    }
+    for (const layer of order.proxyLayers) {
+      if (layer.id.startsWith('proxy:tree:')) {
+        const resident = this.treeResidents.get(layer.id.slice('proxy:tree:'.length))
+        if (resident) resident.proxy.sprite.zIndex = layer.zIndex
+      } else if (layer.id.startsWith('proxy:building:')) {
+        const resident = this.buildingResidents.get(
+          layer.id.slice('proxy:building:'.length),
+        )
+        if (resident) resident.roof.sprite.zIndex = layer.zIndex
+      }
     }
     for (const [id, view] of this.players) {
       const depth = positionedDynamics.get(`player:${id}`)?.zIndex ?? 1
@@ -2650,6 +2715,11 @@ class BoneyardDynamicScene {
         layer.lane === 'post-world-queue'
           ? order.foregroundZIndex + 0.5
           : positionedDynamics.get(layer.id)?.zIndex ?? 1,
+      )
+      applyInsertedPainterDepths(
+        layer.insertions,
+        positionedDynamics,
+        (id, depth) => this.primarySpells.setDepth(id, depth),
       )
     }
     const targetContactDepths = nativeMageLightningTargetContactDepths(
@@ -2674,6 +2744,11 @@ class BoneyardDynamicScene {
           ? 0.5
           : positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )
+      applyInsertedPainterDepths(
+        layer.insertions,
+        positionedDynamics,
+        (id, depth) => this.secondaryAbilities.setDepth(id, depth),
+      )
     }
     for (const enemy of enemySnapshots) {
       this.enemies.setDepth(
@@ -2685,7 +2760,7 @@ class BoneyardDynamicScene {
       const depth = layer.lane === 'pre-world-queue'
         ? 0.5
         : layer.lane === 'post-world-queue'
-          ? order.foregroundZIndex - 0.5
+          ? order.foregroundZIndex + 0.25
           : positionedDynamics.get(layer.id)?.zIndex ?? 1
       this.enemies.setAuxiliaryEffectDepth(layer.eventId, depth)
     }
@@ -2699,7 +2774,7 @@ class BoneyardDynamicScene {
       const id = modEffectId(effect)
       this.modEffects.setDepth(
         id,
-        positionedDynamics.get(id)?.zIndex ?? 1,
+        order.foregroundZIndex + 0.75,
       )
     }
     for (const goodie of snapshot.world.goodies) {
@@ -2712,7 +2787,7 @@ class BoneyardDynamicScene {
       this.enemyDeathEffects.setDepth(
         effect.id,
         nativeEnemyDeathEffectPainterLane(effect) === 'post-world-queue'
-          ? order.foregroundZIndex - 0.5
+          ? order.foregroundZIndex + 0.25
           : positionedDynamics.get(`enemy-death-effect:${effect.id}`)?.zIndex ?? 1,
       )
     }
@@ -2738,7 +2813,6 @@ class BoneyardDynamicScene {
     const lanternPainter = positionedDynamics.get('lantern')
     this.solomon?.setActorDepth(solomonPainter?.zIndex ?? 1)
     this.solomon?.setLanternDepth(lanternPainter?.zIndex ?? 1)
-    this.foreground.zIndex = order.foregroundZIndex
     const weatherLightingOrder = nativeBoneyardWeatherLightingOrder(
       order.foregroundZIndex,
       settings.complexLighting,
@@ -2798,11 +2872,13 @@ class BoneyardDynamicScene {
       minTreeLightScalar: treePresentations.length > 0 ? minTreeLightScalar : 0,
       monumentVisibleCount,
       painterBandCount: order.bands.length,
+      painterOrder: order.orderedLayers,
+      painterProxyOrder: order.proxyLayers,
       playerLightRadius: localPlayerLight?.radius ?? 0,
       playerLightRasterRadius: localPlayerLight?.rasterScale ?? 0,
       treeAlphaMismatchCount,
       treeCount: treePresentations.length,
-      treeForegroundResidentCount: this.treeResidents.size,
+      treeProxyResidentCount: this.treeResidents.size,
       treeTintMismatchCount,
       solomonPainterRow: solomonPainter?.row ?? Number.NaN,
       solomonZIndex: solomonPainter?.zIndex ?? Number.NaN,
@@ -2916,6 +2992,10 @@ class BoneyardDynamicScene {
 
   get primarySpellCount(): number {
     return this.primarySpells.count
+  }
+
+  get primarySpellPainterDepths() {
+    return this.primarySpells.painterDepths
   }
 
   get primarySpellKinds(): readonly string[] {
@@ -3374,9 +3454,8 @@ async function buildStaticWorld(
   cleanupBounds: Readonly<BoneyardBounds> | null,
 ): Promise<StaticWorldBuild> {
   const base = new Container({ label: 'boneyard-base' })
-  const foreground = new Container({ label: 'boneyard-foreground' })
   base.zIndex = 0
-  root.addChild(base, foreground)
+  root.addChild(base)
   const residents: ResidentTexture[] = []
   const activeResidents: ResidentTexture[] = []
   const visualBoundsBySource = new Map<string, BoneyardBounds>()
@@ -3497,10 +3576,10 @@ async function buildStaticWorld(
       if (layerIndex % 12 === 11) await nextFrame()
     }
 
-    const foregroundLayers = nativeBoneyardForegroundLayers(document)
-    for (let layerIndex = 0; layerIndex < foregroundLayers.length; layerIndex += 1) {
-      const layer = foregroundLayers[layerIndex]
-      const resident = buildForegroundLayerResident(
+    const proxyLayers = nativeBoneyardProxyLayers(document)
+    for (let layerIndex = 0; layerIndex < proxyLayers.length; layerIndex += 1) {
+      const layer = proxyLayers[layerIndex]
+      const resident = buildProxyLayerResident(
         document,
         layer,
         layerIndex,
@@ -3510,13 +3589,13 @@ async function buildStaticWorld(
       if (resident) {
         resident.cleanupSourceKey = `object:${layer.object.eid}`
         mergeCleanupSourceBounds(visualBoundsBySource, resident)
-        foreground.addChild(resident.sprite)
+        root.addChild(resident.sprite)
         residents.push(resident)
         activeResidents.push(resident)
         if (layer.object.typeId === NATIVE.tree) {
           const main = treeMainResidents.get(layer.object.eid)
           if (!main) {
-            throw new Error(`Tree ${layer.object.eid} has foreground art without main art.`)
+            throw new Error(`Tree ${layer.object.eid} has proxy art without main art.`)
           }
           const object = layer.object as typeof layer.object & {
             secondaryVariant?: number
@@ -3529,7 +3608,7 @@ async function buildStaticWorld(
             secondaryVariant: object.secondaryVariant ?? layer.atlasEntry - 243,
             secondaryVisible: object.secondaryVisible !== false,
           })
-          treeResidents.set(object.eid, { foreground: resident, main })
+          treeResidents.set(object.eid, { proxy: resident, main })
         }
         if (layer.object.typeId === NATIVE.building) {
           const main = buildingMainResidents.get(layer.object.eid)
@@ -3615,7 +3694,6 @@ async function buildStaticWorld(
       build.retiredStaticSourceCount = cleanupPlan.retiredSourceKeys.size
     },
     buildingResidents,
-    foreground,
     mainResidents,
     offCameraCleanupApplied: false,
     residents,
@@ -3802,7 +3880,7 @@ function buildPreMainWallResident(
   return resident
 }
 
-function buildForegroundLayerResident(
+function buildProxyLayerResident(
   document: EditorDoc,
   layer: ObjectSpriteLayer,
   layerIndex: number,
@@ -3811,8 +3889,8 @@ function buildForegroundLayerResident(
   const bounds = objectLayerCaptureBounds(layer)
   resizeCanvas(canvas, bounds.w, bounds.h)
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
-  if (!context) throw new Error('Boneyard foreground layer could not acquire Canvas2D.')
-  drawNativeBoneyardForegroundBand(
+  if (!context) throw new Error('Boneyard proxy layer could not acquire Canvas2D.')
+  drawNativeBoneyardProxyBand(
     context,
     bounds.w,
     bounds.h,
@@ -3840,7 +3918,7 @@ function objectLayerCaptureBounds(
 ): { h: number; w: number; x: number; y: number } {
   const ref = spriteRefFor(layer.atlas, layer.atlasEntry)
   if (!ref) {
-    throw new Error(`Missing ${layer.atlas}:${layer.atlasEntry} foreground art.`)
+    throw new Error(`Missing ${layer.atlas}:${layer.atlasEntry} proxy art.`)
   }
   return {
     x: Math.floor(layer.pos.x - ref.anchorX) - 1,
@@ -4018,8 +4096,48 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return true
 }
 
+function applyInsertedPainterDepths(
+  insertions: readonly NativeRegionPainterInsertion[] | undefined,
+  positioned: ReadonlyMap<string, { row: number; zIndex: number }>,
+  setDepth: (id: string, depth: number) => void,
+): void {
+  for (const insertion of insertions ?? []) {
+    const layer = positioned.get(insertion.id)
+    if (!layer) {
+      throw new Error(`inserted native painter ${insertion.id} lost its queue depth`)
+    }
+    setDepth(insertion.id, layer.zIndex)
+    applyInsertedPainterDepths(insertion.insertions, positioned, setDepth)
+  }
+}
+
 function isBuildingLayer(layer: MainLayer): boolean {
   return layer.kind === 'object' && layer.object.typeId === NATIVE.building
+}
+
+function nativeStaticProxyInsertions(layer: MainLayer) {
+  if (layer.kind !== 'object') return undefined
+  if (layer.object.typeId === NATIVE.tree) {
+    const object = layer.object as typeof layer.object & {
+      secondaryVisible?: boolean
+    }
+    if ((object.variant ?? 0) >= 6 || object.secondaryVisible === false) return undefined
+    return Object.freeze([Object.freeze({
+      id: `proxy:tree:${object.eid}`,
+      sortBias: 0,
+      visible: true,
+      worldY: layer.worldY + 100,
+    })])
+  }
+  if (layer.object.typeId === NATIVE.building) {
+    return Object.freeze([Object.freeze({
+      id: `proxy:building:${layer.object.eid}`,
+      sortBias: 0,
+      visible: true,
+      worldY: layer.worldY + 200,
+    })])
+  }
+  return undefined
 }
 
 function isMovingGateBody(layer: MainLayer | undefined): layer is Extract<MainLayer, { kind: 'fence' }> {
@@ -4129,9 +4247,9 @@ function visibleBoneyardPlayers(
 }
 
 function requiredLightRegistration(
-  registration: NativeLightProviderRegistration | null,
+  registration: NativeWorldManagerRegistration | null,
   owner: string,
-): NativeLightProviderRegistration {
+): NativeWorldManagerRegistration {
   if (registration === null) {
     throw new Error(`${owner} emitted a light without native manager registration`)
   }

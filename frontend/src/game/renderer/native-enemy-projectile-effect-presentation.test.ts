@@ -80,11 +80,11 @@ test('GuidedMissile impact retains the four-layer Anim_FadeGM compositor', () =>
 
 test('wrapped FireBurst children retain one native bias and bypass Region tint', () => {
   const source = effect('fire-burst-frame', 'BadGuys', 251, 'add')
-  assert.deepEqual(nativeEnemyProjectileEffectPainterLayer(source, 17), {
+  assert.deepEqual(nativeEnemyProjectileEffectPainterLayer(source), {
     id: `enemy-projectile-effect:${source.id}`,
     queueFamily: 'zanim',
+    registration: source.painterRegistration,
     sortBias: 50,
-    sourceOrder: 17,
     worldY: source.position.y,
   })
   assert.equal(nativeEnemyProjectileEffectBypassesWorldTint(source), true)
@@ -117,6 +117,10 @@ function effect(
     lifetimeTicks: 20,
     ownerActorId: 7,
     ownerProjectileId: 9,
+    painterRegistration: {
+      managerLane: kind.startsWith('fire-burst-') ? 'transient' : 'actor',
+      registrationOrdinal: entry + 1,
+    },
     phaseOriginTicks: 12,
     position: { x: 125, y: 240 },
     rotationRadians: 0.25,

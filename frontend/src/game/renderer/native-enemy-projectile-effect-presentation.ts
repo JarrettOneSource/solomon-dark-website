@@ -66,13 +66,12 @@ function deterministicUnit(id: number, tick: number): number {
 
 export function nativeEnemyProjectileEffectPainterLayer(
   effect: BoneyardEnemyProjectileEffectSnapshot,
-  sourceOrder: number,
 ): DynamicPainterLayer {
   return {
     id: `enemy-projectile-effect:${effect.id}`,
     queueFamily: effect.kind.startsWith('fire-burst-') ? 'zanim' : 'ordinary-dynamic',
+    registration: effect.painterRegistration,
     sortBias: effect.kind.startsWith('fire-burst-') ? 50 : 0,
-    sourceOrder,
     worldY: effect.position.y,
   }
 }

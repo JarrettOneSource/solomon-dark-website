@@ -13,7 +13,7 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID = 6
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
-const DESCRIPTOR_LENGTH = 12
+const DESCRIPTOR_LENGTH = 14
 const SAMPLE_LENGTH = 10
 const LIGHT_KIND_INDEX = BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS.indexOf('fire-burst-glow')
 const ALPHA_MAXIMUM = Math.max(
@@ -40,6 +40,8 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION = {
       && (descriptor[2] === LIGHT_KIND_INDEX
         ? descriptor[10] === 1 && nonnegativeInteger(descriptor[11])
         : descriptor[10] === -1 && descriptor[11] === -1)
+      && (descriptor[12] === 0 || descriptor[12] === 1)
+      && nonnegativeInteger(descriptor[13])
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -78,6 +80,8 @@ export function boneyardEnemyProjectileEffectDescriptor(
     effect.phaseOriginTicks,
     lightRegistration === null ? -1 : 1,
     lightRegistration?.registrationOrdinal ?? -1,
+    effect.painterRegistration.managerLane === 'actor' ? 0 : 1,
+    effect.painterRegistration.registrationOrdinal,
   ]
 }
 
@@ -130,6 +134,10 @@ export function materializeBoneyardEnemyProjectileEffect(
     lifetimeTicks: descriptor[8],
     ownerActorId: descriptor[3],
     ownerProjectileId: descriptor[4],
+    painterRegistration: {
+      managerLane: descriptor[12] === 0 ? 'actor' : 'transient',
+      registrationOrdinal: descriptor[13],
+    },
     phaseOriginTicks: descriptor[9],
     position: {
       x: dequantize(sample[2], POSITION_SCALE),

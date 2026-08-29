@@ -24,6 +24,7 @@ import {
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
@@ -39,6 +40,7 @@ import {
   materializeBoneyard,
   materializeStockTutorial,
 } from '../host/boneyard-catalog.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
@@ -72,7 +74,48 @@ const MOD_STATE = {
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
-test('schema 19 compact inventory roots migrate to schema 20 addressed slots', () => {
+test('current Hub restore allocates its reconstructed students after persisted owners', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const persistedNextActor = state.worldManagerOrder.nextRegistrationOrdinal.actor
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })).state
+  assert.equal(restored.world.kind, 'hub')
+  if (restored.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const studentRegistrations = restored.world.studentPopulation.students.map(
+    ({ painterRegistration }) => painterRegistration,
+  )
+  assert.ok(studentRegistrations.length > 0)
+  assert.equal(
+    studentRegistrations.every(({ managerLane, registrationOrdinal }) => (
+      managerLane === 'actor' && registrationOrdinal >= persistedNextActor
+    )),
+    true,
+  )
+  const actorRegistrations = [
+    ...NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((_, registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
+    restored.playerEntities.lightings[0]!.lightRegistration,
+    ...studentRegistrations,
+  ]
+  assert.equal(
+    new Set(actorRegistrations.map(({ registrationOrdinal }) => registrationOrdinal)).size,
+    actorRegistrations.length,
+  )
+  assert.ok(
+    restored.worldManagerOrder.nextRegistrationOrdinal.actor
+      > Math.max(...actorRegistrations.map(({ registrationOrdinal }) => registrationOrdinal)),
+  )
+})
+
+test('schema 19 compact inventory roots migrate to schema 21 addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -99,12 +142,97 @@ test('schema 19 compact inventory roots migrate to schema 20 addressed slots', (
     playerId: 'owner',
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 20)
+  assert.equal(current.schemaVersion, 21)
   assert.deepEqual(
     current.continuation.simulation.playerEntities.economies[0].backpack
       .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
     [0, 1],
   )
+})
+
+test('schema 20 restores complete Hub and Boneyard world-painter ownership', () => {
+  const hubState = createGameSimulation({ owner: OWNER })
+  const hubLegacy = downgradeWorldPainterDocumentToSchema20(JSON.parse(
+    createGameSaveDocument({
+      integrity: 'local-only',
+      loadedBoneyard: null,
+      mods: [],
+      modState: {},
+      playerId: 'owner',
+      state: hubState,
+    }),
+  ))
+  const restoredHub = restoreGameSaveDocument(JSON.stringify(hubLegacy))
+  assert.equal(restoredHub.state.world.kind, 'hub')
+  if (restoredHub.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const hubActorRegistrations = [
+    ...NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((_, registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
+    restoredHub.state.playerEntities.lightings[0]!.lightRegistration,
+    ...restoredHub.state.world.studentPopulation.students.map(
+      student => student.painterRegistration,
+    ),
+  ]
+  assert.equal(
+    hubActorRegistrations.every(registration => registration.managerLane === 'actor'),
+    true,
+  )
+  assert.equal(
+    new Set(hubActorRegistrations.map(registration => registration.registrationOrdinal)).size,
+    hubActorRegistrations.length,
+  )
+  assert.equal(
+    restoredHub.state.worldManagerOrder.nextRegistrationOrdinal.actor
+      > Math.max(...hubActorRegistrations.map(registration => registration.registrationOrdinal)),
+    true,
+  )
+  const reencodedHub = JSON.parse(createGameSaveDocument({
+    integrity: restoredHub.integrity,
+    loadedBoneyard: null,
+    mods: restoredHub.mods,
+    modState: restoredHub.modState,
+    playerId: restoredHub.playerId,
+    state: restoredHub.state,
+  }))
+  assert.equal(reencodedHub.schemaVersion, 21)
+  assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
+  assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
+
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 67),
+  )
+  assert.ok(loadedBoneyard)
+  const boneyardState = enterBoneyardWorld(hubState, loadedBoneyard)
+  const boneyardLegacy = downgradeWorldPainterDocumentToSchema20(JSON.parse(
+    createGameSaveDocument({
+      integrity: 'local-only',
+      loadedBoneyard,
+      mods: [],
+      modState: {},
+      playerId: 'owner',
+      state: boneyardState,
+    }),
+  ))
+  const restoredBoneyard = restoreGameSaveDocument(JSON.stringify(boneyardLegacy))
+  assert.equal(restoredBoneyard.state.world.kind, 'boneyard')
+  if (restoredBoneyard.state.world.kind !== 'boneyard') {
+    throw new Error('expected restored Boneyard')
+  }
+  assert.deepEqual(
+    restoredBoneyard.state.world.solomonPainterRegistration?.managerLane,
+    'actor',
+  )
+  for (const goodie of restoredBoneyard.state.world.loot.goodies) {
+    assert.equal(
+      goodie.sceneryRegistrationOrdinal,
+      loadedBoneyard.scene.objects.findIndex(object => object.eid === goodie.eid),
+    )
+  }
+  assert.doesNotThrow(() => createGameSnapshot(restoredBoneyard.state, 'owner'))
 })
 
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
@@ -128,7 +256,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 20)
+  assert.equal(encoded.schemaVersion, 21)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -1136,7 +1264,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 20)
+  assert.equal(encoded.schemaVersion, 21)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,
@@ -1622,6 +1750,35 @@ test('killing the current wizard scavenges carried items and removes only the co
   assert.deepEqual(retired.economy.storage, latent.economy.storage)
   assert.throws(() => restoreGameSaveDocument(retiredDocument), /no resumable continuation/)
 })
+
+function downgradeWorldPainterDocumentToSchema20(
+  document: Record<string, unknown>,
+): Record<string, unknown> {
+  const continuation = document.continuation as Record<string, unknown>
+  const simulation = continuation.simulation as Record<string, unknown>
+  document.schemaVersion = 20
+  simulation.lightProviderOrder = simulation.worldManagerOrder
+  delete simulation.worldManagerOrder
+  removeSchema21WorldPainterFields(simulation)
+  return document
+}
+
+function removeSchema21WorldPainterFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) removeSchema21WorldPainterFields(entry)
+    return
+  }
+  if (value === null || typeof value !== 'object') return
+  const source = value as Record<string, unknown>
+  for (const key of [
+    'deathWeaponPainterRegistration',
+    'painterRegistration',
+    'painterRegistrations',
+    'sceneryRegistrationOrdinal',
+    'solomonPainterRegistration',
+  ]) delete source[key]
+  for (const entry of Object.values(source)) removeSchema21WorldPainterFields(entry)
+}
 
 function legacyDocument(document: string, schemaVersion: number): string {
   const current = JSON.parse(document)

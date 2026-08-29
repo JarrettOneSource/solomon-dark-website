@@ -207,6 +207,7 @@ function projectile(
     lifetimeTicks: 1_000,
     nativeTypeId,
     ownerActorId: 2,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     payload: 'none',
     position: { x: 10, y: 20 },
     speed: 1,

@@ -1,6 +1,5 @@
 import { Container, Sprite, Texture } from 'pixi.js'
 
-import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
 import type { GameSnapshot, ProtocolModEffect } from '../protocol/game-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeLootSpriteRecord } from './native-loot-assets.ts'
@@ -48,19 +47,6 @@ export class ModConsumableEffectViews {
       view.destroy()
       this.#views.delete(id)
     }
-  }
-
-  painterLayers(snapshot: GameSnapshot, sourceOrder: number): readonly DynamicPainterLayer[] {
-    return snapshot.modEffects.flatMap(effect => {
-      const player = snapshot.players[effect.playerId]
-      return player ? [{
-        id: modConsumableEffectId(effect),
-        queueFamily: 'ordinary-dynamic' as const,
-        sortBias: 0,
-        sourceOrder: sourceOrder++,
-        worldY: player.position.y,
-      }] : []
-    })
   }
 
   setDepth(id: string, depth: number): void {

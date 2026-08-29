@@ -10,7 +10,7 @@ import {
   stepPlayerOverlayLighting,
   type PlayerLightingState,
 } from '../core-kernels/player-lighting.ts'
-import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
 import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
@@ -221,7 +221,7 @@ export function addPlayerEntity(
   config: PlayerCharacterConfig,
   character: PlayerCharacterState,
   offerSeed: number,
-  lightRegistration: NativeLightProviderRegistration = {
+  lightRegistration: NativeWorldManagerRegistration = {
     managerLane: 'actor',
     registrationOrdinal: source.nextEntityId - 1,
   },
@@ -279,7 +279,7 @@ export function importPlayerEntity(
   source: PlayerEntityStore,
   sourcePlayerId: string,
   targetPlayerId: string,
-  lightRegistration: NativeLightProviderRegistration,
+  lightRegistration: NativeWorldManagerRegistration,
   character?: PlayerCharacterState,
 ): PlayerEntityStore {
   if (playerEntityIndex(target, targetPlayerId) >= 0) return target
@@ -402,6 +402,33 @@ export function playerLightingAt(
 ): PlayerLightingState | null {
   const index = playerEntityIndex(source, playerId)
   return index < 0 ? null : source.lightings[index] ?? null
+}
+
+export function replacePlayerPainterRegistration(
+  source: PlayerEntityStore,
+  playerId: string,
+  lightRegistration: NativeWorldManagerRegistration,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) throw new Error(`player ${playerId} does not exist`)
+  const current = source.lightings[index]!
+  const lightings = [...source.lightings]
+  lightings[index] = Object.freeze({ ...current, lightRegistration })
+  return { ...source, lightings }
+}
+
+export function setPlayerDeathWeaponPainterRegistration(
+  source: PlayerEntityStore,
+  playerId: string,
+  deathWeaponPainterRegistration: NativeWorldManagerRegistration | null,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) throw new Error(`player ${playerId} does not exist`)
+  const current = source.lightings[index]!
+  if (current.deathWeaponPainterRegistration === deathWeaponPainterRegistration) return source
+  const lightings = [...source.lightings]
+  lightings[index] = Object.freeze({ ...current, deathWeaponPainterRegistration })
+  return { ...source, lightings }
 }
 
 export function playerSkillBookAt(
@@ -1444,7 +1471,7 @@ export function stepPlayerEntityOverlayLightingTick(
 export function resetPlayerEntitiesForNewRun(
   source: PlayerEntityStore,
   placements: Readonly<Record<string, PlayerCharacterState>>,
-  lightRegistrations: Readonly<Record<string, NativeLightProviderRegistration>> | null = null,
+  lightRegistrations: Readonly<Record<string, NativeWorldManagerRegistration>> | null = null,
   options: Readonly<{ preserveConcentrations?: boolean }> = {},
 ): PlayerEntityStore {
   const placementIds = Object.keys(placements)

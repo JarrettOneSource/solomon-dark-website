@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import {
   nativeEnemyRawFireBurstSample,
@@ -27,6 +28,7 @@ interface ManagedEnemyView {
 export interface NativeEnemyAuxiliaryPainterLayer extends NativeEnemyAuxiliaryPainterPolicy {
   readonly eventId: number
   readonly id: string
+  readonly registration: NativeWorldManagerRegistration | null
   readonly worldY: number
 }
 
@@ -42,11 +44,17 @@ export class NativeEnemyViews {
   private readonly auxiliaryEffects = new Map<number, NativeEnemyAuxiliaryEffectView>()
   private readonly liveIds = new Set<number>()
   private readonly root: Container
+  private readonly preWorldRoot: Container
   private readonly textures: BoneyardWorldTextures
   private readonly views = new Map<number, ManagedEnemyView>()
 
-  constructor(root: Container, textures: BoneyardWorldTextures) {
+  constructor(
+    root: Container,
+    textures: BoneyardWorldTextures,
+    preWorldRoot: Container = root,
+  ) {
     this.root = root
+    this.preWorldRoot = preWorldRoot
     this.textures = textures
   }
 
@@ -91,7 +99,7 @@ export class NativeEnemyViews {
       && event.sound?.startsWith('imp-vocal-')
     ) {
       this.auxiliaryEffects.set(event.eventId, new NativeImpLandingFlareView(
-        this.root,
+        this.preWorldRoot,
         this.textures,
         event.eventId,
         event.tick,
@@ -107,10 +115,14 @@ export class NativeEnemyViews {
     const position = kind === 'imp-contact'
       ? managed.view.impContactOrigin()
       : managed.view.demonBombMuzzleOrigin()
+    if (kind === 'imp-contact' && event.painterRegistration === undefined) {
+      throw new Error('Imp contact effect lost its transient painter registration')
+    }
     this.auxiliaryEffects.set(event.eventId, new NativeEnemyRawFireBurstView(
       this.root,
       this.textures,
       kind,
+      event.painterRegistration ?? null,
       event.eventId,
       event.tick,
       position,
@@ -311,6 +323,7 @@ class NativeEnemyRawFireBurstView {
   private readonly frame: Sprite
   private readonly glow: Sprite
   private readonly kind: NativeEnemyRawFireBurstKind
+  private readonly registration: NativeWorldManagerRegistration | null
   private readonly root: Container
   private readonly spawnTick: number
   private readonly textures: BoneyardWorldTextures
@@ -319,6 +332,7 @@ class NativeEnemyRawFireBurstView {
     root: Container,
     textures: BoneyardWorldTextures,
     kind: NativeEnemyRawFireBurstKind,
+    registration: NativeWorldManagerRegistration | null,
     eventId: number,
     spawnTick: number,
     position: Readonly<{ x: number; y: number }>,
@@ -327,6 +341,7 @@ class NativeEnemyRawFireBurstView {
     this.textures = textures
     this.eventId = eventId
     this.kind = kind
+    this.registration = registration
     this.spawnTick = spawnTick
     this.basePosition = { ...position }
     this.container = new Container({ label: `${kind}-fire-burst:${eventId}` })
@@ -373,6 +388,7 @@ class NativeEnemyRawFireBurstView {
     return {
       eventId: this.eventId,
       id: `enemy-auxiliary-effect:${this.eventId}`,
+      registration: this.registration,
       ...nativeEnemyRawFireBurstPainterPolicy(this.kind),
       worldY: this.container.position.y,
     }
@@ -441,6 +457,7 @@ class NativeImpLandingFlareView {
     return {
       eventId: this.eventId,
       id: `enemy-auxiliary-effect:${this.eventId}`,
+      registration: null,
       ...nativeImpLandingFlarePainterPolicy(),
       worldY: this.position.y,
     }

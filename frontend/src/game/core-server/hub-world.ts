@@ -31,6 +31,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   createHubAmbientState,
@@ -40,6 +41,7 @@ import {
 import {
   commitHubStudentRoute,
   createHubStudentPopulation,
+  registerHubStudentPopulationPainters,
   HUB_STUDENT_FIXED_TICK_SECONDS,
   planHubStudentRoute,
   stepHubStudentPopulation,
@@ -92,6 +94,7 @@ export interface HubWorldTickResult {
 
 export interface HubWorldOptions {
   memorial?: HubMemorialState
+  registerWorldPainter?: RegisterNativeWorldPainter
   skorcha?: HubSkorchaState | null
   skorchaHiddenTicks?: number
   skorchaVisibleTicks?: number
@@ -148,7 +151,14 @@ export function createHubWorld(
   playerIds: readonly string[] = [],
   options: HubWorldOptions = {},
 ): HubWorldState {
-  const studentPopulation = options.studentPopulation ?? createHubStudentPopulation()
+  const studentPopulation = options.studentPopulation === undefined
+    ? createHubStudentPopulation(options.registerWorldPainter)
+    : options.registerWorldPainter === undefined
+      ? options.studentPopulation
+      : registerHubStudentPopulationPainters(
+          options.studentPopulation,
+          options.registerWorldPainter,
+        )
   const traderAnimationSeed = options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED
   const initialPopulation = createHubSkorchaPopulation(traderAnimationSeed)
   const skorchaSchedule = scheduleHubSkorchaPopulation({
@@ -259,6 +269,7 @@ export function stepHubWorldTick(
   movementScales: Readonly<Record<string, number>>,
   collegeIntroReadyPlayerIds: ReadonlySet<string> | null = null,
   collegeIntroPendingPlayerIds: ReadonlySet<string> | null = null,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): HubWorldTickResult {
   const participants = reconcileParticipants(world.participants, players)
   const skorchaSchedule = stepHubSkorchaSchedule({
@@ -453,6 +464,7 @@ export function stepHubWorldTick(
   const studentPopulation = stepHubStudentPopulation(
     world.studentPopulation,
     students,
+    registerWorldPainter,
   )
   return {
     players: nextPlayers,

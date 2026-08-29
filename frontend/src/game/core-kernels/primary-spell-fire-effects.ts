@@ -17,6 +17,7 @@ import {
   type NativeEnemyPathState,
 } from './native-enemy-pathfinding.ts'
 import type { PrimarySpellTarget } from './primary-spell-targeting.ts'
+import type { NativeWorldManagerRegistration } from './native-world-manager-order.ts'
 import type { Vector2 } from './vector.ts'
 
 export const NATIVE_FIRE_BURN_TICKS = 200
@@ -59,6 +60,7 @@ export interface NativeFirePatchState {
   readonly life: number
   readonly nativeType: NativeFirePatchType
   readonly ownerId: string
+  readonly painterRegistrations: readonly NativeWorldManagerRegistration[]
   readonly position: Vector2
   readonly shapeSample: number
   readonly scale: number
@@ -218,6 +220,7 @@ export interface CreateNativeFirePatchOptions {
   readonly life?: number
   readonly nativeType: NativeFirePatchType
   readonly ownerId: string
+  readonly painterRegistration?: NativeWorldManagerRegistration
   readonly position: Readonly<Vector2>
   readonly scale?: number
   readonly supplementalContact?: boolean
@@ -319,6 +322,12 @@ export function createNativeFirePatch(
     life: Math.fround(life),
     nativeType: options.nativeType,
     ownerId: options.ownerId,
+    painterRegistrations: Object.freeze([
+      options.painterRegistration ?? Object.freeze({
+        managerLane: 'actor',
+        registrationOrdinal: options.id,
+      }),
+    ]),
     position: Object.freeze({ ...options.position }),
     scale: Math.fround(scale),
     shapeSample: Math.fround(shapeSample),

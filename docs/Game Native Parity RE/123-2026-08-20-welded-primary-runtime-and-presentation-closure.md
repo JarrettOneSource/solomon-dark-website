@@ -1,5 +1,13 @@
 # 2026-08-20 — Welded-primary runtime and presentation closure
 
+> **2026-08-29 split-painter closure:** the Region layering cutover in
+> [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> supersedes only the Flame Lash and Blizzard Beam parent-layer closure. Both
+> factories install `ZAnimSplit` and require clipped 25/50-unit
+> `AnimPointer` queue slices instead of the former single origin-root mesh.
+> Their recovered gameplay, geometry, art, timing, contact, and audio contracts
+> remain valid.
+
 ## Reopened parity boundary
 
 The first welded-primary integration correctly recovered the ten stat-vector

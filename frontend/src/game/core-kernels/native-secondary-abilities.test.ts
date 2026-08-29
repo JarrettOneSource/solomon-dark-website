@@ -1290,14 +1290,14 @@ test('actor-owned Region writes occur on the exact first-update and Circle thres
 
 test('secondary light enrollment preserves actor, transient, and target-action order', () => {
   const nextOrdinal = { actor: 10, transient: 20 }
-  const registerLightProvider = (managerLane: 'actor' | 'transient') => Object.freeze({
+  const registerWorldPainter = (managerLane: 'actor' | 'transient') => Object.freeze({
     managerLane,
     registrationOrdinal: nextOrdinal[managerLane]++,
   })
   const leviathanContext = context(11, 1, 0)
   const leviathanState = stepNativeSecondaryAbilities(
     createNativeSecondarySimulation(123),
-    { ...leviathanContext, registerLightProvider },
+    { ...leviathanContext, registerWorldPainter },
   ).state
   const leviathan = leviathanState.actors.find(({ kind }) => kind === 'leviathan')!
   assert.deepEqual(leviathan.lightRegistration, {
@@ -1319,6 +1319,7 @@ test('secondary light enrollment preserves actor, transient, and target-action o
       lifetimeTicks: 19,
       lightRegistration: null,
       miscLightAppendOrdinal: null,
+      painterRegistrations: [],
       scale: 2,
       slowFactor: Math.fround(0.1),
       variant: 1,
@@ -1328,7 +1329,7 @@ test('secondary light enrollment preserves actor, transient, and target-action o
   const fadeContext = context(11, 2, null)
   const fade = stepNativeSecondaryAbilities(fadeSource, {
     ...fadeContext,
-    registerLightProvider,
+    registerWorldPainter,
   }).state.actors[0]!
   assert.deepEqual(fade.lightRegistration, {
     managerLane: 'transient',
@@ -1356,6 +1357,7 @@ test('secondary light enrollment preserves actor, transient, and target-action o
         lifetimeTicks: 200,
         lightRegistration: TARGET_LIGHT_REGISTRATION,
         miscLightAppendOrdinal: null,
+        painterRegistrations: [],
         targetId: target.id,
       }),
       Object.freeze({
@@ -1367,6 +1369,7 @@ test('secondary light enrollment preserves actor, transient, and target-action o
         lifetimeTicks: 100,
         lightRegistration: TARGET_LIGHT_REGISTRATION,
         miscLightAppendOrdinal: null,
+        painterRegistrations: [],
         targetId: target.id,
       }),
     ],

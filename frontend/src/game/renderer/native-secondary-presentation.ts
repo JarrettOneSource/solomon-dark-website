@@ -653,7 +653,8 @@ export function nativeSecondaryPresentationPlan(
     case 'mindblast-burst':
       return plan(mindblastBurstDraws(actor, draw))
     case 'storm-cloud':
-      return plan(
+      return {
+        ...plan(
         [
           ...stormCloudDraws(actor, presentationFrame, draw),
           ...stormAuxiliaryDraws(actor, draw),
@@ -662,8 +663,10 @@ export function nativeSecondaryPresentationPlan(
         0,
         [],
         [],
-        stormWeatherComposite(actor, draw),
-      )
+          stormWeatherComposite(actor, draw),
+        ),
+        worldY: actor.position.y + 350,
+      }
     case 'storm-drop':
       return actor.phase < 0
         ? plan([], 'zanim', 0, [], [raindropGradient(actor, false)])

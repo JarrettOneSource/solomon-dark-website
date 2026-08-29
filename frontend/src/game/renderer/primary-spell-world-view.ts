@@ -6,6 +6,11 @@ import type {
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
+  nativeWorldPainterRegistration,
+  type NativeWorldManagerRegistration,
+} from '../core-kernels/native-world-manager-order.ts'
+import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
+import {
   EarthCalledRockView,
   EarthBoulderBitView,
   EarthBoulderImpactView,
@@ -42,11 +47,13 @@ import { isNativeWeldPresentationState } from './primary-spell-weld-native.ts'
 
 export interface PrimarySpellPainterLayer {
   id: string
+  insertions?: readonly NativeRegionPainterInsertion[]
   lane: 'post-world-queue' | 'world-sorted'
   queueFamily: 'ordinary-dynamic' | 'zanim' | null
   regionLightPoint: { x: number, y: number } | null
+  registration: NativeWorldManagerRegistration
   sortBias: number
-  sourceOrder: number
+  visible?: boolean
   worldY: number
 }
 
@@ -55,6 +62,7 @@ interface SpellView {
   readonly kind: string
   destroy(): void
   painterRoots(): readonly SpellPainterRoot[]
+  painterContainer?(suffix: string): Container | null
   setTint(suffix: string, tint: number): void
   update(
     state: PrimarySpellProjectileState | PrimarySpellTransientState,
@@ -65,12 +73,19 @@ interface SpellView {
 
 interface SpellPainterRoot {
   container: Container
+  insertions?: readonly Readonly<{
+    sortBias: number
+    suffix: string
+    visible: boolean
+    worldY: number
+  }>[]
   lane: 'post-world-queue' | 'world-sorted'
   overlayOwnerId?: string
   queueFamily: 'ordinary-dynamic' | 'zanim' | null
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   suffix: string
+  visible?: boolean
   worldY: number
 }
 
@@ -80,6 +95,10 @@ export class PrimarySpellWorldView {
   private readonly postWorldQueueDepth: number | null
   private readonly textures: PlayerWorldTextures
   private readonly views = new Map<number, SpellView>()
+  private readonly states = new Map<
+    number,
+    PrimarySpellProjectileState | PrimarySpellTransientState
+  >()
 
   constructor(
     root: Container,
@@ -107,6 +126,7 @@ export class PrimarySpellWorldView {
         && state.kind !== 'player-staff-pike-break'
       )) continue
       this.liveIds.add(state.id)
+      this.states.set(state.id, state)
       let view = this.views.get(state.id)
       if (!view) {
         if (isNativeWeldPresentationState(state)) {
@@ -192,6 +212,7 @@ export class PrimarySpellWorldView {
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
       this.views.delete(id)
+      this.states.delete(id)
       for (const container of view.containers) this.root.removeChild(container)
       view.destroy()
     }
@@ -200,16 +221,29 @@ export class PrimarySpellWorldView {
   painterLayers(): PrimarySpellPainterLayer[] {
     const layers: PrimarySpellPainterLayer[] = []
     for (const [id, view] of this.views) {
-      for (const painterRoot of view.painterRoots()) {
+      const state = this.states.get(id)
+      if (!state) throw new Error(`primary spell ${id} lost its painter state`)
+      for (const [rootIndex, painterRoot] of view.painterRoots().entries()) {
+        const layerId = painterRoot.suffix.length > 0
+          ? `primary-spell:${id}:${painterRoot.suffix}`
+          : `primary-spell:${id}`
         layers.push({
-          id: painterRoot.suffix.length > 0
-            ? `primary-spell:${id}:${painterRoot.suffix}`
-            : `primary-spell:${id}`,
+          id: layerId,
+          insertions: painterRoot.insertions?.map((insertion) => ({
+            id: `primary-spell:${id}:${insertion.suffix}`,
+            sortBias: insertion.sortBias,
+            visible: insertion.visible,
+            worldY: insertion.worldY,
+          })),
           lane: painterRoot.lane,
           queueFamily: painterRoot.queueFamily,
           regionLightPoint: painterRoot.regionLightPoint,
+          registration: nativeWorldPainterRegistration(
+            state,
+            primaryPainterRegistrationIndex(state, painterRoot.suffix, rootIndex),
+          ),
           sortBias: painterRoot.sortBias,
-          sourceOrder: layers.length,
+          visible: painterRoot.visible,
           worldY: painterRoot.worldY,
         })
       }
@@ -221,7 +255,8 @@ export class PrimarySpellWorldView {
     const parsed = parsePainterId(id)
     const view = this.views.get(parsed.numericId)
     const painterRoot = view?.painterRoots().find(({ suffix }) => suffix === parsed.suffix)
-    if (painterRoot) painterRoot.container.zIndex = depth
+    const container = painterRoot?.container ?? view?.painterContainer?.(parsed.suffix)
+    if (container) container.zIndex = depth
   }
 
   setTint(id: string, tint: number): void {
@@ -254,6 +289,24 @@ export class PrimarySpellWorldView {
     return [...this.views.values()].map((view) => view.kind)
   }
 
+  get painterDepths(): Readonly<Record<string, number>> {
+    const depths: Record<string, number> = {}
+    for (const [id, view] of this.views) {
+      for (const root of view.painterRoots()) {
+        const rootId = root.suffix.length > 0
+          ? `primary-spell:${id}:${root.suffix}`
+          : `primary-spell:${id}`
+        depths[rootId] = root.container.zIndex
+        for (const insertion of root.insertions ?? []) {
+          const insertionId = `primary-spell:${id}:${insertion.suffix}`
+          const container = view.painterContainer?.(insertion.suffix)
+          if (container) depths[insertionId] = container.zIndex
+        }
+      }
+    }
+    return depths
+  }
+
   fireExplosionPointGain(id: number): number | undefined {
     const view = this.views.get(id)
     return view instanceof FireExplosionSpellView
@@ -267,8 +320,26 @@ export class PrimarySpellWorldView {
       view.destroy()
     }
     this.views.clear()
+    this.states.clear()
     this.liveIds.clear()
   }
+}
+
+function primaryPainterRegistrationIndex(
+  state: PrimarySpellProjectileState | PrimarySpellTransientState,
+  suffix: string,
+  fallbackIndex: number,
+): number {
+  if (state.kind === 'air') {
+    if (suffix === 'body') return 0
+    if (suffix === 'source') return 1
+    if (suffix === 'contact') return 2
+  }
+  if (state.kind === 'earth-impact' && suffix.startsWith('fragment-')) {
+    const index = Number(suffix.slice('fragment-'.length))
+    if (Number.isSafeInteger(index) && index >= 0) return index
+  }
+  return fallbackIndex
 }
 
 function primarySpellPosition(

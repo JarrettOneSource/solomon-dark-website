@@ -1,5 +1,10 @@
 # 2026-08-26 — Player-reported Acid Rain, held pointer aim, and private skill-offer reopening
 
+> **2026-08-29 layering closure:** [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> retains the Acid cloud/residue geometry and clocks recovered here, but
+> closes the cloud as an actor-owned Puppet insertion and the residue before
+> the Region-light composite.
+
 ## Reported smell and parity questions
 
 - A player reported that Acid Rain looked different while its falling particles

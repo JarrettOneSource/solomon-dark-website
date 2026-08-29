@@ -21,6 +21,7 @@ export class HubStudentStore {
   pathCursor: Float64Array
   pathId: Uint32Array
   pathStep: Int8Array
+  painterRegistrationOrdinal: Float64Array
   positionX: Float64Array
   positionY: Float64Array
   propSets: Array<readonly HubStudentProp[] | undefined>
@@ -52,6 +53,7 @@ export class HubStudentStore {
     this.pathCursor = new Float64Array(this.capacity)
     this.pathId = new Uint32Array(this.capacity)
     this.pathStep = new Int8Array(this.capacity)
+    this.painterRegistrationOrdinal = new Float64Array(this.capacity)
     this.positionX = new Float64Array(this.capacity)
     this.positionY = new Float64Array(this.capacity)
     this.propSets = new Array(this.capacity)
@@ -180,6 +182,10 @@ export class HubStudentStore {
       pathCursor: this.pathCursor[slot],
       pathId: this.pathId[slot],
       pathStep: this.pathStep[slot] as 1 | -1,
+      painterRegistration: {
+        managerLane: 'actor',
+        registrationOrdinal: this.painterRegistrationOrdinal[slot],
+      },
       position: { x: this.positionX[slot], y: this.positionY[slot] },
       profile: {
         pushResistance: this.pushResistance[slot],
@@ -205,6 +211,10 @@ export class HubStudentStore {
     target.pathCursor = this.pathCursor[slot]
     target.pathId = this.pathId[slot]
     target.pathStep = this.pathStep[slot] as 1 | -1
+    target.painterRegistration = {
+      managerLane: 'actor',
+      registrationOrdinal: this.painterRegistrationOrdinal[slot],
+    }
     target.position.x = this.positionX[slot]
     target.position.y = this.positionY[slot]
     target.profile.pushResistance = this.pushResistance[slot]
@@ -235,6 +245,7 @@ export class HubStudentStore {
     this.pathCursor[slot] = state.pathCursor
     this.pathId[slot] = state.pathId
     this.pathStep[slot] = state.pathStep
+    this.painterRegistrationOrdinal[slot] = state.painterRegistration.registrationOrdinal
     this.positionX[slot] = state.position.x
     this.positionY[slot] = state.position.y
     if (!this.propSets[slot]) {
@@ -277,6 +288,7 @@ export class HubStudentStore {
     this.pathCursor = grow(this.pathCursor, capacity)
     this.pathId = grow(this.pathId, capacity)
     this.pathStep = grow(this.pathStep, capacity)
+    this.painterRegistrationOrdinal = grow(this.painterRegistrationOrdinal, capacity)
     this.positionX = grow(this.positionX, capacity)
     this.positionY = grow(this.positionY, capacity)
     this.propSets.length = capacity

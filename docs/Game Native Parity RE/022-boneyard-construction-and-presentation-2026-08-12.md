@@ -1,5 +1,13 @@
 # Boneyard construction and presentation — 2026-08-12
 
+> **2026-08-29 painter-topology closure:** the complete Region layering cutover
+> in [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> supersedes this file's claim that Tree/Building slot-`+0x24` art is one
+> unconditional foreground pass. Those members are now dynamically inserted
+> `PuppetPointer` roots at owner Y plus `100/200`; Goodie also remains in the
+> scenery family rather than becoming an ordinary actor. The base row formula,
+> Gate bias/root, and Solomon/Lantern correction below remain valid.
+
 ## Stock arena materialization
 
 The stock random Boneyard builder is the function at preferred address

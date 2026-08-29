@@ -2,6 +2,11 @@ import {
   drawNativeFloat,
   type NativeRngState,
 } from './native-rng.ts'
+import {
+  registerNativeWorldPainterRoots,
+  type NativeWorldPainterOwner,
+  type RegisterNativeWorldPainter,
+} from './native-world-manager-order.ts'
 import type { Vector2 } from './vector.ts'
 
 export const NATIVE_WELD_BLIZZARD_CORE_RECORD = 43
@@ -18,7 +23,7 @@ const BLIZZARD_PERPENDICULAR_SCALE = 25 * 0.908955
 const BLIZZARD_JITTER_RADIUS = 5
 const BLIZZARD_NORMAL_RED = Math.fround(0.5435550212860107)
 
-export interface NativeWeldBlizzardGlowState {
+export interface NativeWeldBlizzardGlowState extends NativeWorldPainterOwner {
   readonly ageTicks: number
   readonly birthTick: number
   readonly buildId: 1004
@@ -102,6 +107,7 @@ export function createNativeWeldBlizzardContactGlow(input: Readonly<{
   id: number
   ownerId: string
   position: Vector2
+  registerWorldPainter: RegisterNativeWorldPainter
   rng: NativeRngState
   tick: number
   vector: readonly number[]
@@ -127,6 +133,10 @@ export function createNativeWeldBlizzardContactGlow(input: Readonly<{
       lightRegistration: null,
       origin: position,
       ownerId: input.ownerId,
+      painterRegistrations: registerNativeWorldPainterRoots(
+        input.registerWorldPainter,
+        'actor',
+      ),
       rotationDegrees: rotation.value,
       scale: Math.fround(scale.value + 1),
       variant: 3,

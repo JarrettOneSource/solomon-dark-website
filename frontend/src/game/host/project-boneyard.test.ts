@@ -169,6 +169,7 @@ test('projects only Demon raw FireBurst death layers into the direct post-world 
     lifetimeTicks: 22,
     opacityTimer: 0,
     ownerActorId: 7,
+    painterRegistration: null,
     position: { x: 100, y: 200 },
     role: 'demon-death-fire-burst-frame',
     rotationDeg: 90,

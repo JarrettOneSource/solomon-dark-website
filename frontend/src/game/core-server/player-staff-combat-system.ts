@@ -25,6 +25,7 @@ import {
   stepNativeStaffContactEvent,
   stepNativeStaffKnockback,
   type NativePlayerStaffAction,
+  type NativePlayerStaffTransient,
   type NativeStaffTarget,
 } from '../core-kernels/native-player-staff-action.ts'
 import {
@@ -38,6 +39,12 @@ import type {
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import {
+  createNativeWorldManagerOrder,
+  registerNativeWorldPainterRoots,
+  type NativeWorldPainterOwner,
+  type RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
 import {
   applyBoneyardStaffDisable,
   applyBoneyardStaffImpactVerticalVelocity,
@@ -74,6 +81,7 @@ export interface PlayerStaffCombatSystemContext {
   readonly playerEntities: PlayerEntityStore
   readonly players: Readonly<Record<string, PlayerCharacterState>>
   readonly rng: NativeRngState
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly spells: PrimarySpellSimulationState
   readonly tick: number
   readonly worldKey: string
@@ -121,6 +129,10 @@ export function stepPlayerStaffCombatSystem(
   let players: Readonly<Record<string, PlayerCharacterState>> = context.players
   let rng = context.rng
   let nextId = context.spells.nextId
+  const standaloneOrder = createNativeWorldManagerOrder({
+    nextRegistrationOrdinal: { actor: nextId, transient: nextId },
+  })
+  const registerWorldPainter = context.registerWorldPainter ?? standaloneOrder.register
   const retained: PrimarySpellTransientState[] = []
   const spawned: PrimarySpellTransientState[] = []
   const displacements: Array<{ actorId: number; delta: Readonly<Vector2> }> = []
@@ -262,13 +274,13 @@ export function stepPlayerStaffCombatSystem(
               position: Object.freeze({ ...target.position }),
               worldKey: stepped.sample.worldKey,
             }))
-            spawned.push(createNativeStaffPikeBreakVfx(
+            spawned.push(registerStaffTransient(createNativeStaffPikeBreakVfx(
               nextId,
               stepped.sample,
               target,
               impact.pikeBreakPresentationRng,
               target.headingDegrees,
-            ))
+            ), registerWorldPainter))
             nextId += 1
           }
         }
@@ -277,7 +289,7 @@ export function stepPlayerStaffCombatSystem(
             playerEntities,
             stepped.sample.ownerId,
           )?.pushStrengthFactor ?? 1
-          spawned.push(createNativeStaffContactKnockback(
+          spawned.push(registerStaffTransient(createNativeStaffContactKnockback(
             nextId,
             stepped.sample,
             impact.targetId,
@@ -285,7 +297,7 @@ export function stepPlayerStaffCombatSystem(
               x: Math.fround(impact.contactKnockbackDelta.x * pushStrengthFactor),
               y: Math.fround(impact.contactKnockbackDelta.y * pushStrengthFactor),
             },
-          ))
+          ), registerWorldPainter))
           nextId += 1
         }
       }
@@ -295,6 +307,7 @@ export function stepPlayerStaffCombatSystem(
         stepped.sample,
         selected.targets,
         context.tick,
+        registerWorldPainter,
         context.lethalObserver,
       )
       enemies = contact.enemies
@@ -318,7 +331,7 @@ export function stepPlayerStaffCombatSystem(
           )?.pushStrengthFactor ?? 1,
         )
         if (knockback !== null) {
-          spawned.push(knockback)
+          spawned.push(registerStaffTransient(knockback, registerWorldPainter))
           nextId += 1
         }
       }
@@ -334,7 +347,13 @@ export function stepPlayerStaffCombatSystem(
       )
       rng = presentation.rng
       nextId = presentation.nextId
-      spawned.push(...presentation.vfx, presentation.event)
+      spawned.push(
+        ...presentation.vfx.map((effect) => registerStaffTransient(
+          effect,
+          registerWorldPainter,
+        )),
+        registerStaffTransient(presentation.event, registerWorldPainter),
+      )
     }
     if (stepped.action !== null) retained.push(stepped.action)
   }
@@ -377,7 +396,7 @@ export function stepPlayerStaffCombatSystem(
     }, rng)
     rng = action.rng
     nextId += 1
-    spawned.push(action.action)
+    spawned.push(registerStaffTransient(action.action, registerWorldPainter))
     actingPlayerIds.add(playerId)
     if (action.action.kind === 'player-staff-melee') {
       playerEntities = setPlayerEntitySkillRuntime(
@@ -413,6 +432,7 @@ function applyStaffContact(
   action: NativePlayerStaffAction,
   targets: readonly StaffCombatTarget[],
   tick: number,
+  registerWorldPainter: RegisterNativeWorldPainter,
   lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   enemies: BoneyardEnemyStore
@@ -449,6 +469,7 @@ function applyStaffContact(
         target.nativeTypeId,
       ),
       lethalObserver,
+      registerWorldPainter,
       sourcePlayerId: action.ownerId,
       tick,
     })
@@ -537,6 +558,22 @@ function parseEnemyTargetId(targetId: string): number | null {
   if (!targetId.startsWith('enemy:')) return null
   const actorId = Number(targetId.slice('enemy:'.length))
   return Number.isSafeInteger(actorId) && actorId > 0 ? actorId : null
+}
+
+function registerStaffTransient<T extends NativePlayerStaffTransient>(
+  transient: T,
+  registerWorldPainter: RegisterNativeWorldPainter,
+): T & NativeWorldPainterOwner {
+  const visible = transient.kind === 'player-staff-pike-break'
+    || transient.kind === 'player-staff-smoke'
+    || transient.kind === 'player-staff-move-fade'
+    || transient.kind === 'player-staff-perspective-fade'
+  return Object.freeze({
+    ...transient,
+    painterRegistrations: visible
+      ? registerNativeWorldPainterRoots(registerWorldPainter, 'actor')
+      : Object.freeze([]),
+  }) as unknown as T & NativeWorldPainterOwner
 }
 
 function normalizedHeadingIndex(headingDegrees: number): number {

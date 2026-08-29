@@ -38,6 +38,7 @@ import {
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import {
   NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
 } from '../src/game/core-kernels/native-starter-equipment.ts'
@@ -61,6 +62,7 @@ import {
   nativeTutorialEnemySpawnPositionIsAllowed,
 } from '../src/game/core-kernels/native-tutorial.ts'
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
+import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../src/game/hub-painter-order.ts'
 import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
@@ -474,8 +476,17 @@ async function tutorialSurfaceReceipt(host, page) {
   })
   assert.ok(receipt.orbSpriteCount > 0)
   assert.ok(receipt.roadActiveMeshCount > 0 && receipt.roadActiveMeshCount <= receipt.roadMeshCount)
+  const painterOrder = await page.locator('.boneyard-world-canvas').evaluate(
+    node => structuredClone(node.__sdrBoneyardFrame.painterOrder),
+  )
+  assert.deepEqual(
+    painterOrder.map(({ row }) => row),
+    painterOrder.map(({ row }) => row).toSorted((left, right) => left - right),
+  )
+  assert.equal(painterOrder.find(({ id }) => id === `player:${playerId}`)?.row, 0)
   return {
     ...receipt,
+    painterLayerCount: painterOrder.length,
     primaryTint: expected.primaryTint,
     secondaryTint: expected.secondaryTint,
   }
@@ -1146,8 +1157,8 @@ async function exerciseTutorialGroundDrop(host, page, screenshotPath) {
     ({ nativeSubtype, nativeTypeId }) => nativeTypeId === 7001 && nativeSubtype === 0,
   )
   assert.ok(healthPotion)
-  const spawned = spawnBoneyardCustomLootItems(
-    state.world.loot,
+  const spawned = spawnAuthoritativeTutorialLoot(
+    state,
     [healthPotion],
     { x: player.position.x + 90, y: player.position.y },
     state.tick,
@@ -1329,6 +1340,16 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   await waitForHostCollegeState(host, playerId, null)
   const acknowledgedSave = await waitForLocalCollegeSave(page, playerId, null)
   assert.equal(acknowledgedSave.starterTint, title9Wizard.primaryTint)
+  assert.ok(
+    acknowledgedSave.playerPainterRegistration.registrationOrdinal
+      >= NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length,
+    `saved College player collided with the fixed actor reservation: ${JSON.stringify(acknowledgedSave)}`,
+  )
+  assert.ok(
+    acknowledgedSave.nextActorRegistrationOrdinal
+      > acknowledgedSave.playerPainterRegistration.registrationOrdinal,
+    `saved College allocator did not advance past its player: ${JSON.stringify(acknowledgedSave)}`,
+  )
   await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
   const acknowledgedChrome = await collegeAdmissionChromeReceipt(page)
   assertCollegeAdmissionChromeHidden(acknowledgedChrome, true, 'acknowledged Office')
@@ -1342,7 +1363,46 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     '.hub-scene[data-hub-region="office"][data-gameplay-hud="hidden"]',
   )
   await restoredOffice.waitFor({ timeout: 90_000 })
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  try {
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => {
+      const scene = document.querySelector('.hub-scene')
+      return {
+        body: document.body.innerText.slice(0, 2_000),
+        scene: scene instanceof HTMLElement ? { ...scene.dataset } : null,
+        url: location.href,
+      }
+    })
+    const live = host.state()
+    const painterState = {
+      nextRegistrationOrdinal: live.worldManagerOrder.nextRegistrationOrdinal,
+      players: live.playerEntities.identities.map(({ playerId: id }, index) => ({
+        id,
+        registration: live.playerEntities.lightings[index]?.lightRegistration ?? null,
+      })),
+      primary: [...live.primarySpells.projectiles, ...live.primarySpells.transients].map(
+        ({ id, kind, painterRegistrations }) => ({ id, kind, painterRegistrations }),
+      ),
+      secondary: live.secondaryAbilities.actors.map(({ id, kind, painterRegistrations }) => ({
+        id,
+        kind,
+        painterRegistrations,
+      })),
+      students: live.world.kind === 'hub'
+        ? live.world.studentPopulation.students.map(({ id, painterRegistration }) => ({
+            id,
+            painterRegistration,
+          }))
+        : [],
+    }
+    throw new Error(`restored College renderer did not become ready: ${JSON.stringify({
+      ...diagnostics,
+      painterState,
+    })}`, {
+      cause: error,
+    })
+  }
   assert.equal(await restoredOffice.getAttribute('data-college-intro'), null)
   assert.equal(await page.getByRole('dialog', { name: 'Talking to The Archchancellor' }).count(), 0)
   const restoredOfficeChrome = await collegeAdmissionChromeReceipt(page)
@@ -1998,10 +2058,20 @@ async function waitForLocalCollegeSave(page, playerId, phase) {
         if (
           restored.state.world.kind === 'hub'
           && (restored.state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
-        ) return {
-          schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
-          starterTint: getPlayerEconomy(restored.state, playerId)
-            .equipment.hat?.iconTints?.[0] ?? null,
+        ) {
+          const ownerIndex = restored.state.playerEntities.identities.findIndex(
+            ({ playerId: id }) => id === playerId,
+          )
+          assert.notEqual(ownerIndex, -1)
+          return {
+            nextActorRegistrationOrdinal:
+              restored.state.worldManagerOrder.nextRegistrationOrdinal.actor,
+            playerPainterRegistration:
+              restored.state.playerEntities.lightings[ownerIndex].lightRegistration,
+            schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
+            starterTint: getPlayerEconomy(restored.state, playerId)
+              .equipment.hat?.iconTints?.[0] ?? null,
+          }
         }
       } catch (error) {
         lastReceipt = {
@@ -2296,8 +2366,8 @@ function stageTutorialCameraSack(host) {
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
   const position = { x: 1100, y: 1300 }
-  const spawned = spawnBoneyardCustomLootItems(
-    state.world.loot,
+  const spawned = spawnAuthoritativeTutorialLoot(
+    state,
     [nativeTutorialAmuletItem()],
     position,
     state.tick,
@@ -2309,6 +2379,20 @@ function stageTutorialCameraSack(host) {
     world: { ...state.world, loot: spawned.store },
   })
   return { id: actor.id, position }
+}
+
+function spawnAuthoritativeTutorialLoot(state, items, position, tick) {
+  assert.equal(state.world.kind, 'boneyard')
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const spawned = spawnBoneyardCustomLootItems(
+    state.world.loot,
+    items,
+    position,
+    tick,
+    worldManagerOrder.register,
+  )
+  Object.assign(state, { worldManagerOrder: worldManagerOrder.state() })
+  return spawned
 }
 
 function clearTutorialCameraSack(host, actorId) {

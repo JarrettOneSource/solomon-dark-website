@@ -18,6 +18,7 @@ import {
   stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { grantPlayerEntityWeldBuild } from '../src/game/core-server/player-entity-store.ts'
 
@@ -48,22 +49,23 @@ const host = await startGameHost({
   snapshotRate: 20,
 })
 
+const browserRun = runFocusedSmoke({
+  ...process.env,
+  SDR_GAME_SMOKE_CREDENTIAL: credential,
+  SDR_GAME_SMOKE_ENDPOINT: host.address.url,
+  SDR_GAME_SMOKE_URL: baseUrl,
+  SDR_PRIMARY_SPELL_BLIZZARD_COLLISION_ACCEPTANCE: '1',
+  SDR_PRIMARY_SPELL_BONEYARD_ONLY: '1',
+  SDR_PRIMARY_SPELL_COMBAT_ADMISSION: '1',
+  SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD: '1',
+  SDR_PRIMARY_SPELL_KIND: 'blizzard',
+  SDR_PRIMARY_SPELL_REPLICATION_ACCEPTANCE: '1',
+  SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
+})
 try {
-  const browserReceipt = runFocusedSmoke({
-    ...process.env,
-    SDR_GAME_SMOKE_CREDENTIAL: credential,
-    SDR_GAME_SMOKE_ENDPOINT: host.address.url,
-    SDR_GAME_SMOKE_URL: baseUrl,
-    SDR_PRIMARY_SPELL_BLIZZARD_COLLISION_ACCEPTANCE: '1',
-    SDR_PRIMARY_SPELL_BONEYARD_ONLY: '1',
-    SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD: '1',
-    SDR_PRIMARY_SPELL_KIND: 'blizzard',
-    SDR_PRIMARY_SPELL_REPLICATION_ACCEPTANCE: '1',
-    SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
-  })
   const fixture = await prepareBlizzardRun(host, maggotReplicationAcceptance)
   const [receipt, combat, maggot] = await Promise.all([
-    browserReceipt,
+    browserRun.result,
     observeBlizzardContact(host, fixture),
     fixture.maggot === null
       ? Promise.resolve(null)
@@ -103,6 +105,8 @@ try {
   assert.deepEqual(receipt.errors, [])
   process.stdout.write(`${JSON.stringify({ combat, maggot, receipt, screenshotRoot, status: 'ok' })}\n`)
 } finally {
+  browserRun.cancel()
+  await Promise.allSettled([browserRun.result])
   await Promise.all([host.close(), frontend.close()])
 }
 
@@ -111,6 +115,7 @@ async function prepareBlizzardRun(host, includeMaggotEndpoint) {
   while (Date.now() < deadline) {
     const state = host.state()
     if (state.world.kind === 'boneyard') {
+      const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
       const playerId = state.playerEntities.identities[0]?.playerId
       if (!playerId) throw new Error('Blizzard browser journey has no player')
       const granted = grantPlayerEntityWeldBuild(
@@ -128,6 +133,7 @@ async function prepareBlizzardRun(host, includeMaggotEndpoint) {
           firstProjectileWorldContact: () => null,
           paused: true,
           players: {},
+          registerWorldPainter: worldManagerOrder.register,
           resolveMovement: ({ requestedPosition }) => requestedPosition,
           resolveSpawnIntents: () => fixture.positions.map((position, index) => ({
             enemyToken: 'DEMON',
@@ -151,12 +157,18 @@ async function prepareBlizzardRun(host, includeMaggotEndpoint) {
         player.position,
       )
       const endpoint = includeMaggotEndpoint
-        ? attachMaggotEndpoint(spawned.store, state.tick, endpointPosition)
+        ? attachMaggotEndpoint(
+            spawned.store,
+            state.tick,
+            endpointPosition,
+            worldManagerOrder.register,
+          )
         : { maggot: null, store: spawned.store }
       Object.assign(state, {
         combatRng: createNativeRng(18827),
         playerEntities: granted.store,
         secondaryAbilities: { ...state.secondaryAbilities, targetEffects: [] },
+        worldManagerOrder: worldManagerOrder.state(),
         world: {
           ...state.world,
           arenaTransition: null,
@@ -193,7 +205,7 @@ function farthestArenaCorner(bounds, source) {
   ))[0]
 }
 
-function attachMaggotEndpoint(store, tick, position) {
+function attachMaggotEndpoint(store, tick, position, registerWorldPainter) {
   const source = endpointMaggotStore()
   const sourceCoffin = source.actors[0]
   const sourceMaggot = source.maggots.find(({ id }) => id === 4)
@@ -205,6 +217,8 @@ function attachMaggotEndpoint(store, tick, position) {
   const coffinId = store.nextActorId
   const maggotId = coffinId + 1
   const registration = store.nextNativeRegistrationOrder
+  const coffinPainterRegistration = registerWorldPainter('actor')
+  const maggotPainterRegistration = registerWorldPainter('actor')
   const shift = {
     x: position.x - sourceCoffin.position.x,
     y: position.y - sourceCoffin.position.y,
@@ -218,7 +232,7 @@ function attachMaggotEndpoint(store, tick, position) {
       phaseTicksRemaining: Number.MAX_SAFE_INTEGER,
     },
     id: coffinId,
-    lightRegistration: { managerLane: 'actor', registrationOrdinal: registration },
+    lightRegistration: coffinPainterRegistration,
     nativeCellBindingOrder: store.nextNativeCellBindingOrder,
     nativeRegistrationOrder: registration,
     position: { x: position.x, y: position.y },
@@ -229,7 +243,7 @@ function attachMaggotEndpoint(store, tick, position) {
     ...sourceMaggot,
     emergenceTick: 10_000,
     id: maggotId,
-    lightRegistration: { managerLane: 'actor', registrationOrdinal: registration + 1 },
+    lightRegistration: maggotPainterRegistration,
     nativeCellBindingOrder: store.nextNativeCellBindingOrder + 1,
     nativeRegistrationOrder: registration + 1,
     nextAttackTick: tick + 10,
@@ -503,8 +517,9 @@ function mergeContactReceipt(target, sample) {
 }
 
 function runFocusedSmoke(env) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['tools/smoke-primary-spells.mjs'], {
+  let child
+  const result = new Promise((resolve, reject) => {
+    child = spawn(process.execPath, ['tools/smoke-primary-spells.mjs'], {
       cwd: frontendRoot,
       env,
       stdio: ['ignore', 'pipe', 'inherit'],
@@ -525,4 +540,10 @@ function runFocusedSmoke(env) {
       }
     })
   })
+  return {
+    cancel() {
+      if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+    },
+    result,
+  }
 }

@@ -135,6 +135,7 @@ function actorFixture(): PrimarySpellSimulationState {
     enhancedEffects: true,
     id: 1,
     kind: 'air-hurricane',
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 1 }],
     lanes: hurricaneLanes(),
     phaseDegrees: 10,
     position: { x: 10, y: 20 },
@@ -146,6 +147,7 @@ function actorFixture(): PrimarySpellSimulationState {
     initialRotationDegrees: 90,
     kind: 'water-aura',
     origin: { x: 70, y: 80 },
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 2 }],
     rotationStepDegrees: 0.5,
   }, {
     ...common,
@@ -158,6 +160,7 @@ function actorFixture(): PrimarySpellSimulationState {
     id: 3,
     kind: 'water-hail',
     life: 1.5,
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 3 }],
     position: { x: 80, y: 90 },
     rotationDegrees: 45,
     rotationStepDegrees: 2,

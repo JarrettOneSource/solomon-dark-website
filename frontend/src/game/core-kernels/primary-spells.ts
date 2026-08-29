@@ -34,6 +34,7 @@ import {
   waterFrostJetSpeed,
 } from './primary-spell-water.ts'
 import {
+  earthImpactFragmentCount,
   earthImpactLifetimeTicks,
   earthVisualRandomInt,
   earthVisualUnitRandom,
@@ -88,10 +89,12 @@ import {
   type PrimarySpellTarget,
 } from './primary-spell-targeting.ts'
 import {
-  createNativeLightProviderOrder,
-  type NativeLightProviderRegistration,
-  type RegisterNativeLightProvider,
-} from './native-light-provider-order.ts'
+  createNativeWorldManagerOrder,
+  registerNativeWorldPainterRoots,
+  type NativeWorldPainterOwner,
+  type NativeWorldManagerRegistration,
+  type RegisterNativeWorldPainter,
+} from './native-world-manager-order.ts'
 import {
   createNativeWeldChannelActor,
   createNativeWeldBoulderDebrisActor,
@@ -142,6 +145,7 @@ import {
   createNativeEtherBlastParticleProgram,
   nativeEtherBlastPulseOrigin,
   nativeEtherBlastReleaseCharges,
+  NATIVE_ETHER_BLAST_PARTICLE_COUNT,
   NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
   NATIVE_ETHER_BLAST_WEAPON_PULSE,
   NATIVE_PLAYER_WEAPON_PULSE_DECAY,
@@ -185,14 +189,14 @@ export type PrimarySpellTransientKind =
   | 'weld-steam'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
-interface PrimarySpellProjectileBaseState {
+interface PrimarySpellProjectileBaseState extends NativeWorldPainterOwner {
   ageTicks: number
   charge: number
   damage: number
   direction: Vector2
   flightTicks: number
   id: number
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   ownerId: string
   phase: PrimarySpellProjectilePhase
   position: Vector2
@@ -237,17 +241,18 @@ export interface PrimarySpellFireProjectileState extends PrimarySpellProjectileB
   underpowered: boolean
 }
 
-export type PrimarySpellProjectileState =
+export type PrimarySpellProjectileState = (
   | PrimarySpellEarthProjectileState
   | PrimarySpellEtherProjectileState
   | PrimarySpellFireProjectileState
   | NativeWeldProjectileState
+) & NativeWorldPainterOwner
 
-interface PrimarySpellChannelTransientBase {
+interface PrimarySpellChannelTransientBase extends NativeWorldPainterOwner {
   ageTicks: number
   direction: Vector2
   id: number
-  lightRegistration: NativeLightProviderRegistration | null
+  lightRegistration: NativeWorldManagerRegistration | null
   origin: Vector2
   ownerId: string
   underpowered: boolean
@@ -260,7 +265,7 @@ export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransi
   endpoint: Vector2
   hurricaneCharge: number
   kind: 'air'
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   midpoint: Vector2
   targetId: string | null
 }
@@ -296,7 +301,7 @@ export interface PrimarySpellChannelEmission {
   worldKey: string
 }
 
-interface PrimarySpellOwnedTransientBase {
+interface PrimarySpellOwnedTransientBase extends NativeWorldPainterOwner {
   ageTicks: number
   birthTick: number
   id: number
@@ -382,7 +387,7 @@ export interface PrimarySpellWaterHailState extends PrimarySpellOwnedTransientBa
   verticalVelocity: number
 }
 
-export interface PrimarySpellEarthImpactState {
+export interface PrimarySpellEarthImpactState extends NativeWorldPainterOwner {
   ageTicks: number
   birthTick: number
   charge: number
@@ -395,7 +400,7 @@ export interface PrimarySpellEarthImpactState {
   worldKey: string
 }
 
-export interface PrimarySpellEarthBoulderBitState {
+export interface PrimarySpellEarthBoulderBitState extends NativeWorldPainterOwner {
   ageTicks: number
   birthTick: number
   debris: NativeWeldBoulderDebrisParticleState
@@ -408,7 +413,7 @@ export interface PrimarySpellEarthBoulderBitState {
   worldKey: string
 }
 
-export interface PrimarySpellEarthCalledRockState {
+export interface PrimarySpellEarthCalledRockState extends NativeWorldPainterOwner {
   ageTicks: number
   fallVelocity: number
   falling: boolean
@@ -429,7 +434,7 @@ export interface PrimarySpellEarthCalledRockState {
   worldKey: string
 }
 
-export interface PrimarySpellFireParticleState {
+export interface PrimarySpellFireParticleState extends NativeWorldPainterOwner {
   ageTicks: number
   direction: Vector2
   id: number
@@ -441,19 +446,19 @@ export interface PrimarySpellFireParticleState {
   worldKey: string
 }
 
-export interface PrimarySpellEtherImpactState {
+export interface PrimarySpellEtherImpactState extends NativeWorldPainterOwner {
   ageTicks: number
   birthTick: number
   id: number
   kind: 'ether-impact'
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   origin: Vector2
   ownerId: string
   visualScale: number
   worldKey: string
 }
 
-export interface PrimarySpellEtherPierceStreakState {
+export interface PrimarySpellEtherPierceStreakState extends NativeWorldPainterOwner {
   ageTicks: number
   headingDegrees: number
   id: number
@@ -464,7 +469,7 @@ export interface PrimarySpellEtherPierceStreakState {
   worldKey: string
 }
 
-export interface PrimarySpellEtherBlastState {
+export interface PrimarySpellEtherBlastState extends NativeWorldPainterOwner {
   ageTicks: number
   birthTick: number
   charges: number
@@ -476,37 +481,40 @@ export interface PrimarySpellEtherBlastState {
   worldKey: string
 }
 
-export interface PrimarySpellFireImpactState {
+export interface PrimarySpellFireImpactState extends NativeWorldPainterOwner {
   ageTicks: number
   id: number
   kind: 'fire-impact'
-  lightRegistration: NativeLightProviderRegistration
+  lightRegistration: NativeWorldManagerRegistration
   origin: Vector2
   ownerId: string
   worldKey: string
 }
 
-export interface PrimarySpellFireEmberState extends NativeFireEmberState {
+export interface PrimarySpellFireEmberState
+  extends NativeFireEmberState, NativeWorldPainterOwner {
   readonly kind: 'fire-ember'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
 }
 
-export interface PrimarySpellFireExplosionState extends NativeFireExplosionState {
+export interface PrimarySpellFireExplosionState
+  extends NativeFireExplosionState, NativeWorldPainterOwner {
   readonly ageTicks: number
   readonly id: number
   readonly kind: 'fire-explosion'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly soundPitch: number
 }
 
-export interface PrimarySpellFireGoodImpState extends NativeFireGoodImpState {
+export interface PrimarySpellFireGoodImpState
+  extends NativeFireGoodImpState, NativeWorldPainterOwner {
   readonly kind: 'fire-good-imp'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
 }
 
 export type PrimarySpellFirePatchState = NativeFirePatchState
 
-export type PrimarySpellTransientState =
+export type PrimarySpellTransientState = (
   | PrimarySpellChannelTransientState
   | PrimarySpellAirHurricaneState
   | PrimarySpellEarthBoulderBitState
@@ -525,6 +533,7 @@ export type PrimarySpellTransientState =
   | PrimarySpellWaterAuraState
   | PrimarySpellWaterHailState
   | NativeWeldWorldActor
+) & NativeWorldPainterOwner
 
 export interface PrimarySpellSimulationState {
   nextId: number
@@ -568,7 +577,7 @@ export interface PrimarySpellTickContext {
   ) => boolean
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
-  registerLightProvider?: RegisterNativeLightProvider
+  registerWorldPainter?: RegisterNativeWorldPainter
   rng: NativeRngState
   spells: PrimarySpellSimulationState
   tick: number
@@ -813,14 +822,98 @@ export function createPrimarySpellSimulation(): PrimarySpellSimulationState {
   return { nextId: 1, projectiles: [], transients: [] }
 }
 
-function standalonePrimaryLightProviderOrderState(source: PrimarySpellSimulationState) {
+export function nativePrimaryPainterRegistrationContract(
+  state: PrimarySpellProjectileState | PrimarySpellTransientState,
+): Readonly<{ count: number; managerLane: 'actor' | 'transient' }> {
+  if (
+    state.kind === 'earth'
+    || state.kind === 'ether'
+    || (state.kind === 'fire' && 'phase' in state)
+    || state.kind === 'weld'
+  ) return { count: 1, managerLane: 'actor' }
+  switch (state.kind) {
+    case 'air':
+      return { count: 3, managerLane: 'actor' }
+    case 'earth-impact':
+      return {
+        count: earthImpactFragmentCount(state.charge),
+        managerLane: 'actor',
+      }
+    case 'ether-blast':
+      return {
+        count: NATIVE_ETHER_BLAST_PARTICLE_COUNT,
+        managerLane: 'transient',
+      }
+    case 'ether-impact':
+    case 'ether-pierce-streak':
+    case 'fire-explosion':
+    case 'fire-impact':
+    case 'water':
+      return { count: 1, managerLane: 'transient' }
+    case 'player-staff-contact':
+    case 'player-staff-contact-knockback':
+    case 'player-staff-knockback':
+    case 'player-staff-melee':
+    case 'player-staff-spin':
+      return { count: 0, managerLane: 'actor' }
+    default:
+      return { count: 1, managerLane: 'actor' }
+  }
+}
+
+export function enrollPrimarySpellPainterRegistrations(
+  source: PrimarySpellSimulationState,
+  registerWorldPainter: RegisterNativeWorldPainter,
+): PrimarySpellSimulationState {
+  const enroll = <T extends PrimarySpellProjectileState | PrimarySpellTransientState>(
+    state: T,
+  ): T => {
+    const contract = nativePrimaryPainterRegistrationContract(state)
+    const existing = 'painterRegistrations' in state
+      ? state.painterRegistrations
+      : undefined
+    if (existing !== undefined && (
+      existing.length !== contract.count
+      || existing.some(({ managerLane }) => managerLane !== contract.managerLane)
+    )) {
+      throw new Error(`${state.kind} changed native painter-manager membership`)
+    }
+    if (existing !== undefined) return state
+    const lightRegistration = 'lightRegistration' in state
+      ? state.lightRegistration
+      : null
+    const painterRegistrations = contract.count === 1
+      && lightRegistration?.managerLane === contract.managerLane
+      ? Object.freeze([lightRegistration])
+      : registerNativeWorldPainterRoots(
+          registerWorldPainter,
+          contract.managerLane,
+          contract.count,
+        )
+    return Object.freeze({ ...state, painterRegistrations }) as unknown as T
+  }
+  const projectiles = source.projectiles.map(enroll)
+  const transients = source.transients.map(enroll)
+  return projectiles.every((state, index) => state === source.projectiles[index])
+    && transients.every((state, index) => state === source.transients[index])
+    ? source
+    : { ...source, projectiles, transients }
+}
+
+function standalonePrimaryWorldManagerOrderState(source: PrimarySpellSimulationState) {
   const nextRegistrationOrdinal = { actor: 0, transient: 0 }
   for (const registration of [
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
+    ...source.projectiles.flatMap((projectile) => (
+      'painterRegistrations' in projectile ? projectile.painterRegistrations ?? [] : []
+    )),
     ...source.transients.flatMap((transient) => (
       'lightRegistration' in transient && transient.lightRegistration !== undefined
         ? [transient.lightRegistration]
         : []
+    )),
+    ...source.transients.flatMap((transient) => (
+      'painterRegistrations' in transient ? transient.painterRegistrations ?? [] : []
     )),
   ]) {
     if (registration === null) continue
@@ -924,11 +1017,11 @@ export function playerStaffAttachmentOffset(
 }
 
 export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpellTickResult {
-  const standaloneLightProviderOrder = createNativeLightProviderOrder(
-    standalonePrimaryLightProviderOrderState(context.spells),
+  const standaloneWorldManagerOrder = createNativeWorldManagerOrder(
+    standalonePrimaryWorldManagerOrderState(context.spells),
   )
-  const registerLightProvider = context.registerLightProvider
-    ?? standaloneLightProviderOrder.register
+  const registerWorldPainter = context.registerWorldPainter
+    ?? standaloneWorldManagerOrder.register
   let nextId = context.spells.nextId
   let rng = context.rng
   let transients: PrimarySpellTransientState[] = []
@@ -1026,7 +1119,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           stepped.terrainContact,
           context.tick,
           rng,
-          registerLightProvider,
+          registerWorldPainter,
         )
         nextId = terminal.nextId
         rng = terminal.rng
@@ -1091,6 +1184,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ...stepped.goodImp,
           kind: 'fire-good-imp',
           lightRegistration: effect.lightRegistration,
+          painterRegistrations: effect.painterRegistrations,
         })
       } else if (stepped.releaseFire) {
         const patchSpawn = spawnNativeFirePatch({
@@ -1099,6 +1193,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           id: nextId,
           nativeType: 'fire',
           ownerId: effect.ownerId,
+          painterRegistration: registerWorldPainter('actor'),
           position: stepped.releasePosition,
           worldKey: effect.worldKey,
         }, rng)
@@ -1126,7 +1221,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             ember.position,
             ember.ownerId,
             ember.worldKey,
-            registerLightProvider('transient'),
+            registerWorldPainter('transient'),
           ))
           nextId += 1
         }
@@ -1138,7 +1233,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ageTicks: 0,
           id: nextId,
           kind: 'fire-explosion',
-          lightRegistration: registerLightProvider('transient'),
+          lightRegistration: registerWorldPainter('transient'),
           soundPitch: Math.fround(1 + soundPitch.value),
         })
         nextId += 1
@@ -1153,10 +1248,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           worldKey: stepped.retirement.worldKey,
         }, rng)
         rng = goodImpSpawn.rng
+        const goodImpRegistration = registerWorldPainter('actor')
         transients.push({
           ...goodImpSpawn.goodImp,
           kind: 'fire-good-imp',
-          lightRegistration: registerLightProvider('actor'),
+          lightRegistration: goodImpRegistration,
+          painterRegistrations: Object.freeze([goodImpRegistration]),
         })
         nextId += 1
         const patchSpawn = spawnNativeFirePatch({
@@ -1165,6 +1262,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           id: nextId,
           nativeType: 'fire',
           ownerId: stepped.retirement.ownerId,
+          painterRegistration: registerWorldPainter('actor'),
           position: stepped.retirement.position,
           worldKey: stepped.retirement.worldKey,
         }, rng)
@@ -1202,7 +1300,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           spell,
           spell.position,
           rng,
-          registerLightProvider,
+          registerWorldPainter,
         )
         rng = detonation.rng
         fireActorContacts.push(...detonation.contacts)
@@ -1213,7 +1311,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextId,
           spell,
           context.tick,
-          registerLightProvider('transient'),
+          registerWorldPainter('transient'),
         )]
         nextId += 1
       } else if (spell.buildId === 1000) {
@@ -1225,7 +1323,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           rng,
           spell.presentationSeed ?? 0,
           true,
-          registerLightProvider,
+          registerWorldPainter,
         )
         rng = detonation.rng
         fireActorContacts.push(...detonation.contacts)
@@ -1253,7 +1351,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         advanced.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
       )
     ) {
-      transients = [...transients, earthImpact(nextId, advanced, context.tick)]
+      transients = [
+        ...transients,
+        earthImpact(nextId, advanced, context.tick, registerWorldPainter),
+      ]
       nextId += 1
       continue
     }
@@ -1266,7 +1367,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
 
   for (const spell of projectiles) {
     if (spell.kind !== 'fire' && !(spell.kind === 'weld' && spell.buildId === 1000)) continue
-    transients = [...transients, createFireParticle(nextId, spell)]
+    transients = [...transients, createFireParticle(
+      nextId,
+      spell,
+      registerWorldPainter,
+    )]
     nextId += 1
   }
 
@@ -1477,6 +1582,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 y: Math.fround(aimDirection.y * 3),
               }
             : { x: 0, y: 0 }
+          const painterRegistration = registerWorldPainter('actor')
           projectiles = [...projectiles, {
             ageTicks: 1,
             assemblyCharge: surged ? initialCharge : PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
@@ -1487,7 +1593,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             hitTargetIds: [],
             id: nextId,
             kind: 'earth',
-            lightRegistration: registerLightProvider('actor'),
+            lightRegistration: painterRegistration,
             maximumCharge: earthSkill.maximumCharge,
             orientation: surged
               ? earthBoulderFlightOrientationStep(
@@ -1498,6 +1604,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               )
               : [...EARTH_BOULDER_IDENTITY_ORIENTATION],
             ownerId: playerId,
+            painterRegistrations: Object.freeze([painterRegistration]),
             phase: surged ? 'flight' : 'held',
             position,
             remainingDamage: surged
@@ -1561,6 +1668,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               kind: 'ether-blast',
               origin: nativeEtherBlastPulseOrigin(nextPlayer.position, aimDirection),
               ownerId: playerId,
+              painterRegistrations: registerNativeWorldPainterRoots(
+                registerWorldPainter,
+                'transient',
+                NATIVE_ETHER_BLAST_PARTICLE_COUNT,
+              ),
               presentationRng,
               worldKey,
             }))
@@ -1576,7 +1688,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             origin: primarySpellEmitter(nextPlayer, castClockElement),
             ownerId: playerId,
             primarySkill: authority.primarySkill,
-            registerLightProvider,
+            registerWorldPainter,
             rng,
             targets: context.spellTargets(playerId),
             underpowered,
@@ -1592,7 +1704,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             context.spellTargets(playerId),
             rng,
             underpowered,
-            registerLightProvider,
+            registerWorldPainter,
           )
       rng = birth.rng
       nextId += birth.projectiles.length
@@ -1620,7 +1732,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           if (initialClear && firstLookaheadClear) {
             const spell = advanceProjectileWithPresentation(born, [])
             projectiles = [...projectiles, spell]
-            transients = [...transients, createFireParticle(nextId, spell)]
+            transients = [...transients, createFireParticle(
+              nextId,
+              spell,
+              registerWorldPainter,
+            )]
             nextId += 1
           } else {
             const detonation = createPrimarySpellFireDetonation(
@@ -1628,7 +1744,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               born,
               born.position,
               rng,
-              registerLightProvider,
+              registerWorldPainter,
             )
             rng = detonation.rng
             fireActorContacts.push(...detonation.contacts)
@@ -1665,7 +1781,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               nextId,
               born,
               context.tick,
-              registerLightProvider('transient'),
+              registerWorldPainter('transient'),
             )]
             nextId += 1
           }
@@ -1695,7 +1811,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             )
             projectiles = [...projectiles, spell]
             if (spell.kind === 'weld' && spell.buildId === 1000) {
-              transients = [...transients, createFireParticle(nextId, spell)]
+              transients = [...transients, createFireParticle(
+                nextId,
+                spell,
+                registerWorldPainter,
+              )]
               nextId += 1
             }
           } else if (born.buildId === 1000) {
@@ -1707,7 +1827,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               rng,
               born.presentationSeed ?? 0,
               true,
-              registerLightProvider,
+              registerWorldPainter,
             )
             rng = detonation.rng
             fireActorContacts.push(...detonation.contacts)
@@ -1962,7 +2082,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   id: nextId,
                   origin: emitter,
                   ownerId: playerId,
-                  registerLightProvider,
+                  registerWorldPainter,
                   tick: context.tick,
                   vector: authority.primarySkill.vector.values,
                   worldKey,
@@ -2019,7 +2139,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               const releasedActor = releaseNativeWeldPersistentActor({
                 actor,
                 firstChildId: nextId,
-                registerLightProvider,
+                registerWorldPainter,
                 rng,
                 tick: context.tick,
               })
@@ -2078,7 +2198,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 ownerId: playerId,
                 position: spawn.position,
                 privateSeed: spawn.privateSeed,
-                registerLightProvider,
+                registerWorldPainter,
                 tick: context.tick,
                 underpowered,
                 vector,
@@ -2131,6 +2251,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             underpowered,
             worldKey,
           })
+          const painterRegistrations = registerNativeWorldPainterRoots(
+            registerWorldPainter,
+            'actor',
+            3,
+          )
           transients = [...transients, {
             ageTicks: 0,
             birthTick: context.tick,
@@ -2139,10 +2264,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             hurricaneCharge: 0,
             id: nextId,
             kind: 'air',
-            lightRegistration: registerLightProvider('transient'),
+            lightRegistration: registerWorldPainter('transient'),
             midpoint: air.midpoint,
             origin: emitter,
             ownerId: playerId,
+            painterRegistrations,
             targetId: air.targetId,
             underpowered,
             variant: nextId % 4,
@@ -2219,6 +2345,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 obstructionPoint: obstruction?.point ?? null,
                 origin: born.origin,
                 ownerId: playerId,
+                painterRegistrations: registerNativeWorldPainterRoots(
+                  registerWorldPainter,
+                  'transient',
+                ),
                 speed: born.speed,
                 underpowered,
                 variant,
@@ -2305,6 +2435,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             transients = [...transients, createEarthCalledRock(
               nextId,
               heldBoulder,
+              registerWorldPainter,
             )]
             nextId += 1
           }
@@ -2334,6 +2465,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           context.canTraverseProjectile,
           context.tick,
           nextId,
+          registerWorldPainter,
         )
         projectiles = released.projectiles
         transients = [...transients, ...released.impacts]
@@ -2361,7 +2493,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           transients,
           playerId,
           nextId,
-          registerLightProvider,
+          registerWorldPainter,
           rng,
           context.tick,
         )
@@ -2388,6 +2520,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   }
   transients = advancedTransients
 
+  const registeredSpells = enrollPrimarySpellPainterRegistrations(
+    { nextId, projectiles, transients },
+    registerWorldPainter,
+  )
   return {
     channelEmissions,
     fireActorContacts,
@@ -2395,7 +2531,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     manaSpent,
     players,
     rng,
-    spells: { nextId, projectiles, transients },
+    spells: registeredSpells,
   }
 }
 
@@ -2403,7 +2539,7 @@ function releaseOwnedNativeWeldPersistentActors(
   source: readonly PrimarySpellTransientState[],
   ownerId: string,
   sourceNextId: number,
-  registerLightProvider: RegisterNativeLightProvider,
+  registerWorldPainter: RegisterNativeWorldPainter,
   sourceRng: NativeRngState,
   tick: number,
 ): {
@@ -2443,7 +2579,7 @@ function releaseOwnedNativeWeldPersistentActors(
     const released = releaseNativeWeldPersistentActor({
       actor: effect,
       firstChildId: nextId,
-      registerLightProvider,
+      registerWorldPainter,
       rng,
       tick,
     })
@@ -2461,6 +2597,7 @@ function releaseHeldEarthProjectiles(
   canTraverseProjectile: PrimarySpellTickContext['canTraverseProjectile'],
   tick: number,
   sourceNextId: number,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): {
   impacts: readonly PrimarySpellEarthImpactState[]
   nextId: number
@@ -2516,7 +2653,7 @@ function releaseHeldEarthProjectiles(
     )) {
       releasedProjectiles.push(releasedSpell)
     } else {
-      impacts.push(earthImpact(nextId, releasedSpell, tick))
+      impacts.push(earthImpact(nextId, releasedSpell, tick, registerWorldPainter))
       nextId += 1
     }
   }
@@ -2653,7 +2790,7 @@ function createOneShotProjectiles(
   targets: readonly PrimarySpellTarget[],
   sourceRng: NativeRngState,
   underpowered: boolean,
-  registerLightProvider: RegisterNativeLightProvider,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): { projectiles: readonly (PrimarySpellEtherProjectileState | PrimarySpellFireProjectileState)[], rng: NativeRngState } {
   if (primarySkill.kind !== kind) {
     throw new Error(`primary profile ${primarySkill.kind} cannot create ${kind}`)
@@ -2674,6 +2811,7 @@ function createOneShotProjectiles(
       x: emitter.x + aimDirection.x * 20,
       y: emitter.y + 10 + aimDirection.y * 20,
     }
+    const painterRegistration = registerWorldPainter('actor')
     return {
       projectiles: [{
         ageTicks: 0,
@@ -2688,8 +2826,9 @@ function createOneShotProjectiles(
         flightTicks: 0,
         id: firstId,
         kind: 'fire',
-        lightRegistration: registerLightProvider('actor'),
+        lightRegistration: painterRegistration,
         ownerId,
+        painterRegistrations: Object.freeze([painterRegistration]),
         phase: 'flight',
         position: spawn,
         privateSeed: privateSeed.seed,
@@ -2716,6 +2855,7 @@ function createOneShotProjectiles(
       origin: spawn,
       targets,
     })
+    const painterRegistration = registerWorldPainter('actor')
     return {
       ageTicks: 0,
       charge: 1,
@@ -2726,8 +2866,9 @@ function createOneShotProjectiles(
       headingDegrees,
       id: firstId + index,
       kind: 'ether' as const,
-      lightRegistration: registerLightProvider('actor'),
+      lightRegistration: painterRegistration,
       ownerId,
+      painterRegistrations: Object.freeze([painterRegistration]),
       phase: 'flight' as const,
       piercesRemaining: underpowered ? 0 : primarySkill.pierces,
       position: spawn,
@@ -3006,7 +3147,7 @@ export function createPrimarySpellWeldBoulderTerminal(
   actor: NativeWeldEtherealBoulderState,
   birthTick: number,
   sourceRng: NativeRngState,
-  registerLightProvider?: RegisterNativeLightProvider,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): Readonly<{
   nextId: number
   rng: NativeRngState
@@ -3024,7 +3165,7 @@ export function createPrimarySpellWeldBoulderTerminal(
     impactSoundPitch: null,
     impactSoundVariant: null,
     kind: 'weld-impact',
-    lightRegistration: registerLightProvider?.('transient') ?? Object.freeze({
+    lightRegistration: registerWorldPainter?.('transient') ?? Object.freeze({
       managerLane: 'transient',
       registrationOrdinal: impactId,
     }),
@@ -3082,7 +3223,7 @@ export function createPrimarySpellWeldFireDetonation(
   sourceRng: NativeRngState,
   privateSeed = 0,
   includeImpact = true,
-  registerLightProvider?: RegisterNativeLightProvider,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): Readonly<{
   contacts: readonly NativeFireEmberContact[]
   nextId: number
@@ -3119,10 +3260,10 @@ export function createPrimarySpellWeldFireDetonation(
     : null
   const impact = impactProgram === null ? [] : [impactProgram.impact]
   const impactRng = impactProgram?.rng ?? sourceRng
-  const fallbackOrder = createNativeLightProviderOrder({
+  const fallbackOrder = createNativeWorldManagerOrder({
     nextRegistrationOrdinal: { actor: sourceNextId, transient: sourceNextId },
   })
-  const register = registerLightProvider ?? fallbackOrder.register
+  const register = registerWorldPainter ?? fallbackOrder.register
   const firstEffectId = sourceNextId + impact.length
   const explosionOffset = payload.explodeRadius > 0 && payload.explodeDamage > 0 ? 1 : 0
   const detonation = createNativeFireDetonation(
@@ -3160,7 +3301,7 @@ function etherImpact(
   id: number,
   spell: PrimarySpellProjectileState,
   birthTick: number,
-  lightRegistration: NativeLightProviderRegistration,
+  lightRegistration: NativeWorldManagerRegistration,
 ): PrimarySpellEtherImpactState {
   if (spell.kind !== 'ether') throw new Error('Ether impact requires an Ether projectile')
   return {
@@ -3171,6 +3312,7 @@ function etherImpact(
     lightRegistration,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
+    painterRegistrations: Object.freeze([lightRegistration]),
     visualScale: spell.visualScale,
     worldKey: spell.worldKey,
   }
@@ -3180,6 +3322,7 @@ function earthImpact(
   id: number,
   spell: PrimarySpellEarthProjectileState,
   birthTick: number,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): PrimarySpellEarthImpactState {
   const seed = {
     ageTicks: 0,
@@ -3191,6 +3334,11 @@ function earthImpact(
     lifetimeTicks: 0,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
+    painterRegistrations: registerNativeWorldPainterRoots(
+      registerWorldPainter,
+      'actor',
+      earthImpactFragmentCount(spell.charge),
+    ),
     worldKey: spell.worldKey,
   } satisfies PrimarySpellEarthImpactState
   return { ...seed, lifetimeTicks: earthImpactLifetimeTicks(seed) }
@@ -3202,6 +3350,7 @@ export function createPrimarySpellEarthBoulderBit(input: {
   readonly id: number
   readonly origin: Vector2
   readonly ownerId: string
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly tick: number
   readonly worldKey: string
 }): PrimarySpellEarthBoulderBitState {
@@ -3217,6 +3366,13 @@ export function createPrimarySpellEarthBoulderBit(input: {
     lightRegistration: null,
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
+    painterRegistrations: registerNativeWorldPainterRoots(
+      input.registerWorldPainter
+        ?? createNativeWorldManagerOrder({
+          nextRegistrationOrdinal: { actor: input.id, transient: input.id },
+        }).register,
+      'actor',
+    ),
     position: Object.freeze({ ...input.origin }),
     worldKey: input.worldKey,
   })
@@ -3225,7 +3381,7 @@ export function createPrimarySpellEarthBoulderBit(input: {
 function fireImpact(
   id: number,
   spell: PrimarySpellProjectileState,
-  lightRegistration: NativeLightProviderRegistration,
+  lightRegistration: NativeWorldManagerRegistration,
 ): PrimarySpellFireImpactState {
   return fireImpactAt(
     id,
@@ -3241,7 +3397,7 @@ function fireImpactAt(
   origin: Readonly<Vector2>,
   ownerId: string,
   worldKey: string,
-  lightRegistration: NativeLightProviderRegistration,
+  lightRegistration: NativeWorldManagerRegistration,
 ): PrimarySpellFireImpactState {
   return {
     ageTicks: 0,
@@ -3250,6 +3406,7 @@ function fireImpactAt(
     lightRegistration,
     origin: { ...origin },
     ownerId,
+    painterRegistrations: Object.freeze([lightRegistration]),
     worldKey,
   }
 }
@@ -3259,17 +3416,17 @@ export function createPrimarySpellFireDetonation(
   spell: PrimarySpellFireProjectileState,
   origin: Readonly<Vector2>,
   sourceRng: NativeRngState,
-  registerLightProvider?: RegisterNativeLightProvider,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): Readonly<{
   contacts: readonly NativeFireEmberContact[]
   nextId: number
   rng: NativeRngState
   transients: readonly PrimarySpellTransientState[]
 }> {
-  const fallbackOrder = createNativeLightProviderOrder({
+  const fallbackOrder = createNativeWorldManagerOrder({
     nextRegistrationOrdinal: { actor: sourceNextId, transient: sourceNextId },
   })
-  const register = registerLightProvider ?? fallbackOrder.register
+  const register = registerWorldPainter ?? fallbackOrder.register
   const impact = fireImpactAt(
     sourceNextId,
     origin,
@@ -3288,19 +3445,27 @@ export function createPrimarySpellFireDetonation(
   )
   const explosion = detonation.explosion === null
     ? []
-    : [{
+    : (() => {
+        const registration = register('transient')
+        return [{
         ...detonation.explosion,
         ageTicks: 0,
         id: sourceNextId + 1,
         kind: 'fire-explosion' as const,
-        lightRegistration: register('transient'),
+        lightRegistration: registration,
+        painterRegistrations: Object.freeze([registration]),
         soundPitch: detonation.soundPitch,
       }]
-  const embers = detonation.embers.map((ember): PrimarySpellFireEmberState => ({
-    ...ember,
-    kind: 'fire-ember',
-    lightRegistration: register('actor'),
-  }))
+      })()
+  const embers = detonation.embers.map((ember): PrimarySpellFireEmberState => {
+    const registration = register('actor')
+    return {
+      ...ember,
+      kind: 'fire-ember',
+      lightRegistration: registration,
+      painterRegistrations: Object.freeze([registration]),
+    }
+  })
   return Object.freeze({
     contacts: detonation.contacts,
     nextId: detonation.nextId,
@@ -3315,7 +3480,7 @@ export function createPrimarySpellContactImpact(
   origin: Readonly<Vector2>,
   birthTick: number,
   sourceRng: NativeRngState,
-  registerLightProvider: RegisterNativeLightProvider = (managerLane) => ({
+  registerWorldPainter: RegisterNativeWorldPainter = (managerLane) => ({
     managerLane,
     registrationOrdinal: id,
   }),
@@ -3326,11 +3491,14 @@ export function createPrimarySpellContactImpact(
 }> {
   const contactSpell = { ...spell, position: { ...origin } }
   if (contactSpell.kind === 'earth') {
-    return { impact: earthImpact(id, contactSpell, birthTick), rng: sourceRng }
+    return {
+      impact: earthImpact(id, contactSpell, birthTick, registerWorldPainter),
+      rng: sourceRng,
+    }
   }
   if (contactSpell.kind === 'ether') {
     return {
-      impact: etherImpact(id, contactSpell, birthTick, registerLightProvider('transient')),
+      impact: etherImpact(id, contactSpell, birthTick, registerWorldPainter('transient')),
       rng: sourceRng,
     }
   }
@@ -3339,7 +3507,7 @@ export function createPrimarySpellContactImpact(
   }
   return {
     impact: contactSpell.kind === 'fire'
-      ? fireImpact(id, contactSpell, registerLightProvider('transient'))
+      ? fireImpact(id, contactSpell, registerWorldPainter('transient'))
       : null,
     rng: sourceRng,
   }
@@ -3356,6 +3524,7 @@ function earthCalledRockEmits(
 function createEarthCalledRock(
   id: number,
   boulder: PrimarySpellEarthProjectileState,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): PrimarySpellEarthCalledRockState {
   const angle = earthVisualUnitRandom(id, 0x4000) * Math.PI * 2
   const spawnRadius = earthVisualUnitRandom(id, 0x5000)
@@ -3371,6 +3540,10 @@ function createEarthCalledRock(
     lateralMagnitude: Math.fround(earthVisualUnitRandom(id, 0x6000) * 4),
     ownerId: boulder.ownerId,
     parentId: boulder.id,
+    painterRegistrations: registerNativeWorldPainterRoots(
+      registerWorldPainter,
+      'actor',
+    ),
     position: {
       x: Math.fround(boulder.position.x + Math.cos(angle) * spawnRadius),
       y: Math.fround(boulder.position.y + Math.sin(angle) * spawnRadius),
@@ -3445,6 +3618,7 @@ function advanceEarthCalledRock(
 function createFireParticle(
   id: number,
   fireball: PrimarySpellProjectileState,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): PrimarySpellFireParticleState {
   return {
     ageTicks: 0,
@@ -3454,6 +3628,10 @@ function createFireParticle(
     lightRegistration: null,
     origin: { ...fireball.position },
     ownerId: fireball.ownerId,
+    painterRegistrations: registerNativeWorldPainterRoots(
+      registerWorldPainter,
+      'actor',
+    ),
     variant: nativeFireParticleVariant(id),
     worldKey: fireball.worldKey,
   }

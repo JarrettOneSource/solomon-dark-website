@@ -1,6 +1,7 @@
 import type { SolomonDigState } from '../core-kernels/boneyard.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
 import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 
 export type BoneyardSolomonBodyBank = 'dig' | 'dialogue' | 'walk'
 
@@ -29,22 +30,23 @@ const WALK_POSE_COUNT = 6
 export function boneyardSolomonPainterLayers(
   dig: SolomonDigState,
   encounter: BoneyardSolomonSnapshot | null,
-  sourceOrder: number,
+  lanternRegistration: NativeWorldManagerRegistration,
+  solomonRegistration: NativeWorldManagerRegistration,
 ): readonly DynamicPainterLayer[] {
   const layers: DynamicPainterLayer[] = [{
     id: 'lantern',
     queueFamily: 'ordinary-dynamic',
+    registration: lanternRegistration,
     worldY: dig.lanternPosition.y,
     sortBias: 0,
-    sourceOrder,
   }]
   if (encounter?.phase !== 'gone') {
     layers.push({
       id: 'solomon-actor',
       queueFamily: 'ordinary-dynamic',
+      registration: solomonRegistration,
       worldY: encounter?.position.y ?? dig.position.y,
       sortBias: 0,
-      sourceOrder: sourceOrder + 1,
     })
   }
   return layers

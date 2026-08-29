@@ -1,16 +1,28 @@
+import {
+  buildNativeRegionPainterOrder,
+  nativeRegionPainterRow,
+  type NativeRegionManagerLane,
+  type NativeRegionPainterEntry,
+  type NativeRegionPainterInsertion,
+  type NativeRegionPainterRegistration,
+} from './region-painter-order.ts'
+
 export interface StaticPainterLayer {
   layerIndex: number
   worldY: number
   sortBias: number
   sourceOrder: number
+  insertions?: readonly NativeRegionPainterInsertion[]
 }
 
 export interface DynamicPainterLayer {
   id: string
-  queueFamily: 'ordinary-dynamic' | 'zanim'
+  insertions?: readonly NativeRegionPainterInsertion[]
+  queueFamily: 'ordinary-dynamic' | 'scenery' | 'zanim'
+  registration: NativeRegionPainterRegistration
+  visible?: boolean
   worldY: number
   sortBias: number
-  sourceOrder: number
 }
 
 export interface StaticPainterBand {
@@ -30,23 +42,12 @@ export interface BoneyardPainterOrder {
   bands: StaticPainterBand[]
   dynamicLayers: PositionedDynamicLayer[]
   foregroundZIndex: number
+  orderedLayers: readonly PositionedDynamicLayer[]
+  proxyLayers: PositionedDynamicLayer[]
 }
-
-interface StaticEntry extends StaticPainterLayer {
-  kind: 'static'
-  row: number
-}
-
-interface DynamicEntry extends DynamicPainterLayer {
-  kind: 'ordinary-dynamic' | 'zanim'
-  row: number
-}
-
-type PainterEntry = StaticEntry | DynamicEntry
 
 export function nativePainterRow(worldY: number, sortBias: number, referenceY: number): number {
-  const relative = Math.trunc(worldY) + Math.trunc(sortBias) - Math.trunc(referenceY)
-  return Math.trunc(relative / 2)
+  return nativeRegionPainterRow(worldY, sortBias, referenceY)
 }
 
 export function buildBoneyardPainterOrder({
@@ -58,26 +59,48 @@ export function buildBoneyardPainterOrder({
   staticLayers: readonly StaticPainterLayer[]
   dynamicLayers: readonly DynamicPainterLayer[]
 }): BoneyardPainterOrder {
-  const entries: PainterEntry[] = [
-    ...dynamicLayers.map((layer): DynamicEntry => ({
-      ...layer,
-      kind: layer.queueFamily,
-      row: nativePainterRow(layer.worldY, layer.sortBias, referenceY),
-    })),
-    ...staticLayers.map((layer): StaticEntry => ({
-      ...layer,
-      kind: 'static',
-      row: nativePainterRow(layer.worldY, layer.sortBias, referenceY),
-    })),
-  ]
-  entries.sort((left, right) => (
-    left.row - right.row
-    || painterFamilyOrder(left.kind) - painterFamilyOrder(right.kind)
-    || left.sourceOrder - right.sourceOrder
-  ))
+  const staticById = new Map<string, StaticPainterLayer>(staticLayers.map((layer) => [
+    `static:${layer.layerIndex}`,
+    layer,
+  ] as const))
+  const dynamicById = new Map<string, DynamicPainterLayer>(
+    dynamicLayers.map((layer) => [layer.id, layer] as const),
+  )
+  const insertionIds = new Set<string>()
+  const collectInsertionIds = (
+    insertions: readonly NativeRegionPainterInsertion[] = [],
+  ): void => {
+    for (const insertion of insertions) {
+      insertionIds.add(insertion.id)
+      collectInsertionIds(insertion.insertions)
+    }
+  }
+  for (const layer of dynamicLayers) collectInsertionIds(layer.insertions)
+  const order = buildNativeRegionPainterOrder({
+    referenceY,
+    entries: [
+      ...staticLayers.map((layer): NativeRegionPainterEntry => ({
+        id: `static:${layer.layerIndex}`,
+        registration: registration('scenery', layer.sourceOrder),
+        insertions: layer.insertions,
+        sortBias: layer.sortBias,
+        visible: true,
+        worldY: layer.worldY,
+      })),
+      ...dynamicLayers.map((layer): NativeRegionPainterEntry => ({
+        id: layer.id,
+        insertions: layer.insertions,
+        registration: layer.registration,
+        sortBias: layer.sortBias,
+        visible: layer.visible ?? true,
+        worldY: layer.worldY,
+      })),
+    ],
+  })
 
   const bands: StaticPainterBand[] = []
   const positionedDynamics: PositionedDynamicLayer[] = []
+  const positionedProxies: PositionedDynamicLayer[] = []
   let pendingStatic: StaticPainterBand | null = null
   let zIndex = 1
 
@@ -88,20 +111,32 @@ export function buildBoneyardPainterOrder({
     zIndex += 1
   }
 
-  for (const entry of entries) {
-    if (entry.kind === 'static') {
+  for (const positioned of order.orderedLayers) {
+    const staticLayer = staticById.get(positioned.id)
+    if (staticLayer) {
       pendingStatic ??= {
         id: `static-${bands.length}`,
         layerIndexes: [],
-        row: entry.row,
+        row: positioned.row,
         zIndex,
       }
-      pendingStatic.layerIndexes.push(entry.layerIndex)
+      pendingStatic.layerIndexes.push(staticLayer.layerIndex)
       continue
     }
 
     flushStatic()
-    positionedDynamics.push({ id: entry.id, row: entry.row, zIndex })
+    if (!dynamicById.has(positioned.id) && !insertionIds.has(positioned.id)) {
+      if (!positioned.id.startsWith('proxy:')) {
+        throw new Error(`unknown Boneyard dynamic painter ${positioned.id}`)
+      }
+      positionedProxies.push({ id: positioned.id, row: positioned.row, zIndex })
+      zIndex += 1
+      continue
+    }
+    if (insertionIds.has(positioned.id)) {
+      positionedProxies.push({ id: positioned.id, row: positioned.row, zIndex })
+    }
+    positionedDynamics.push({ id: positioned.id, row: positioned.row, zIndex })
     zIndex += 1
   }
   flushStatic()
@@ -110,13 +145,14 @@ export function buildBoneyardPainterOrder({
     bands,
     dynamicLayers: positionedDynamics,
     foregroundZIndex: zIndex,
+    orderedLayers: order.orderedLayers,
+    proxyLayers: positionedProxies,
   }
 }
 
-function painterFamilyOrder(kind: PainterEntry['kind']): number {
-  switch (kind) {
-    case 'ordinary-dynamic': return 0
-    case 'static': return 1
-    case 'zanim': return 2
-  }
+function registration(
+  managerLane: NativeRegionManagerLane,
+  registrationOrdinal: number,
+) {
+  return { managerLane, registrationOrdinal }
 }

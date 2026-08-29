@@ -244,6 +244,17 @@ try {
   const telescopeFrames = new Set(presentationSamples.map(({ telescopeFrame }) => (
     telescopeFrame
   )))
+  assert.ok(finalFrame.painterOrder.some(({ id }) => id.startsWith('fixed:')))
+  assert.ok(finalFrame.painterOrder.some(({ id }) => id === `player:${finalFrame.localPlayerId}`))
+  assert.ok(finalFrame.painterOrder.some(({ id }) => id.startsWith('student:')))
+  assert.deepEqual(
+    finalFrame.painterOrder.map(({ row }) => row),
+    finalFrame.painterOrder.map(({ row }) => row).toSorted((left, right) => left - right),
+  )
+  assert.equal(
+    finalFrame.painterOrder.find(({ id }) => id === `player:${finalFrame.localPlayerId}`)?.row,
+    0,
+  )
   if (telescopeFrames.size === 1) {
     const initialTelescopeFrame = presentationSamples[0].telescopeFrame
     const changedTelescopeFrame = await page.waitForFunction(
@@ -842,6 +853,8 @@ async function boneyardPainterReceipt(page) {
       maxMainLightScalar: diagnostics?.maxMainLightScalar,
       maxMainZIndex: diagnostics?.maxMainZIndex,
       minMainLightScalar: diagnostics?.minMainLightScalar,
+      painterOrder: diagnostics?.painterOrder,
+      painterProxyOrder: diagnostics?.painterProxyOrder,
       regionLightComposite: canvas?.getAttribute('data-region-light-composite'),
       regionLightCompositeZIndex: diagnostics?.regionLightCompositeZIndex,
       regionLightEntry: canvas?.getAttribute('data-region-light-entry'),
@@ -871,6 +884,13 @@ async function boneyardPainterReceipt(page) {
   assert.ok(receipt.visibleResidentCount > 0)
   assert.equal(receipt.visibleResidentCount + receipt.culledResidentCount, receipt.residentCount)
   assert.equal(receipt.localPlayerRow, 0)
+  assert.deepEqual(
+    receipt.painterOrder.map(({ row }) => row),
+    receipt.painterOrder.map(({ row }) => row).toSorted((left, right) => left - right),
+  )
+  assert.ok(receipt.painterProxyOrder.every(({ zIndex }) => (
+    zIndex < receipt.foregroundZIndex
+  )))
   assert.equal(receipt.mainBelowLocal, true)
   assert.equal(receipt.mainAboveLocal, true)
   assert.ok(receipt.lightSourceCount >= 1)

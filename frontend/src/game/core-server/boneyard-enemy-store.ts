@@ -90,11 +90,11 @@ import {
 } from './boneyard-enemy-navigation.ts'
 import { stepBoneyardTransientEffects } from './boneyard-transient-effects.ts'
 import {
-  createNativeLightProviderOrder,
-  type NativeLightManagerLane,
-  type NativeLightProviderRegistration,
-  type RegisterNativeLightProvider,
-} from '../core-kernels/native-light-provider-order.ts'
+  createNativeWorldManagerOrder,
+  type NativeWorldManagerLane,
+  type NativeWorldManagerRegistration,
+  type RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
 
 export type BoneyardEnemyActorId = number
 export type BoneyardEnemyDeathEffectId = number
@@ -388,7 +388,7 @@ export interface BoneyardEnemyActor {
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
   readonly lifeState: 'alive' | 'dying'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly lighting: Readonly<BoneyardEnemyLightingState>
   readonly lootSeed: number
   readonly nextMovementTick: number
@@ -443,13 +443,14 @@ export interface BoneyardEnemyProjectile {
   readonly id: BoneyardEnemyProjectileId
   readonly kind: BoneyardEnemyProjectileKind
   readonly lastStepTick: number
-  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lightRegistration: NativeWorldManagerRegistration | null
   readonly lifetimeTicks: number
   readonly minimumSpeed: number
   readonly nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   readonly nativeCellBindingOrder: number
   readonly nativeRegistrationOrder: number
   readonly ownerActorId: BoneyardEnemyActorId
+  readonly painterRegistration: NativeWorldManagerRegistration
   readonly payload: BoneyardEnemyProjectilePayload
   readonly poisonDamage: number
   readonly poisonDuration: number
@@ -487,10 +488,11 @@ export interface BoneyardEnemyProjectileEffect {
   readonly id: BoneyardEnemyProjectileEffectId
   readonly kind: BoneyardEnemyProjectileEffectKind
   readonly lastStepTick: number
-  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lightRegistration: NativeWorldManagerRegistration | null
   readonly lifetimeTicks: number
   readonly ownerActorId: BoneyardEnemyActorId
   readonly ownerProjectileId: BoneyardEnemyProjectileId
+  readonly painterRegistration: NativeWorldManagerRegistration
   readonly phaseOriginTicks: number
   readonly position: Readonly<BoneyardPoint>
   readonly rotationDeg: number
@@ -525,7 +527,7 @@ export interface BoneyardMaggotActor {
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
   readonly lifeState: 'alive' | 'dying'
-  readonly lightRegistration: NativeLightProviderRegistration
+  readonly lightRegistration: NativeWorldManagerRegistration
   readonly maximumHealth: number
   readonly nextAttackTick: number
   readonly nextMovementTick: number
@@ -575,6 +577,7 @@ export interface BoneyardEnemyDeathEffect {
   readonly lifetimeTicks: number
   readonly ownerActorId: BoneyardEnemyActorId
   readonly opacityTimer: number
+  readonly painterRegistration: NativeWorldManagerRegistration | null
   readonly position: Readonly<BoneyardPoint>
   readonly role: string
   readonly rotationDeg: number
@@ -603,6 +606,7 @@ export interface BoneyardMageLightningPulse {
   readonly id: BoneyardMageLightningPulseId
   readonly midpoint: Readonly<BoneyardPoint>
   readonly ownerActorId: BoneyardEnemyActorId
+  readonly painterRegistrations: readonly NativeWorldManagerRegistration[]
   readonly seed: number
   readonly source: Readonly<BoneyardPoint>
   readonly tick: number
@@ -698,6 +702,7 @@ export interface BoneyardEnemySemanticEvent {
   readonly eventId: BoneyardEnemyEventId
   readonly gainScale?: number
   readonly output?: BoneyardEnemyTerminalOutput
+  readonly painterRegistration?: NativeWorldManagerRegistration
   readonly pitch?: number
   readonly projectileId?: BoneyardEnemyProjectileId
   readonly sound?: BoneyardCombatSound
@@ -892,8 +897,8 @@ export interface BoneyardEnemyStoreStepContext {
   readonly navigation?: BoneyardEnemyNavigation
   readonly paused?: boolean
   readonly players: BoneyardEnemyTargets
-  readonly registerLightProvider?: RegisterNativeLightProvider
-  readonly registerProjectileLightProvider?: RegisterNativeLightProvider
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
+  readonly registerProjectileWorldPainter?: RegisterNativeWorldPainter
   readonly retirementObserver?: BoneyardEnemyRetirementObserver
   readonly rollLootSeed?: () => number
   readonly resolveMovement: ResolveBoneyardEnemyMovement
@@ -920,6 +925,7 @@ export interface DamageBoneyardEnemyRequest {
   readonly attributionObserver?: BoneyardEnemyAttributionObserver
   readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly sourcePlayerId: string | null
+  readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly suppressHurtSound?: boolean
   readonly tick: number
 }
@@ -962,6 +968,7 @@ interface DamagePresentationWork {
   events: BoneyardEnemySemanticEvent[]
   nextDeathEffectId: number
   nextEventId: number
+  registerWorldPainter: RegisterNativeWorldPainter
   rngState: number
 }
 
@@ -1001,8 +1008,8 @@ interface WorkingStep {
   pathStatusFactors: Map<BoneyardEnemyActorId, number>
   projectiles: BoneyardEnemyProjectile[]
   projectileEffects: BoneyardEnemyProjectileEffect[]
-  registerLightProvider: RegisterNativeLightProvider
-  registerProjectileLightProvider: RegisterNativeLightProvider
+  registerWorldPainter: RegisterNativeWorldPainter
+  registerProjectileWorldPainter: RegisterNativeWorldPainter
   retired: BoneyardEnemyRetirement[]
   rewards: BoneyardEnemyReward[]
   rngState: number
@@ -1100,7 +1107,7 @@ function wizardOuchGain(currentHealth: number): number {
   return 0.25 + 0.75 * (1 - healthScalar)
 }
 
-function standaloneEnemyLightProviderOrderState(source: BoneyardEnemyStore) {
+function standaloneEnemyWorldManagerOrderState(source: BoneyardEnemyStore) {
   const nextRegistrationOrdinal = { actor: 0, transient: 0 }
   for (const registration of [
     ...source.actors.map(({ lightRegistration }) => lightRegistration),
@@ -1120,7 +1127,7 @@ function standaloneEnemyLightProviderOrderState(source: BoneyardEnemyStore) {
 function enemyProjectileLightManagerLane(
   kind: BoneyardEnemyProjectileKind,
   payload: BoneyardEnemyProjectilePayload,
-): NativeLightManagerLane | null {
+): NativeWorldManagerLane | null {
   switch (kind) {
     case 'arrow': return payload === 'fire' ? 'transient' : null
     case 'firebolt': return 'transient'
@@ -1158,6 +1165,8 @@ export function damageBoneyardEnemy(
     events: [],
     nextDeathEffectId: source.nextDeathEffectId,
     nextEventId: source.nextEventId,
+    registerWorldPainter: request.registerWorldPainter
+      ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register,
     rngState: source.rngState,
   }
   if (actor.shieldHealth > 0) {
@@ -1511,6 +1520,7 @@ export function tumbleBoneyardArrow(
   direction: Readonly<BoneyardPoint>,
   tick: number,
   sourceRng: NativeRngState,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): TumbleBoneyardArrowResult {
   validateTick(tick)
   if (tick < source.lastStepTick) {
@@ -1552,6 +1562,10 @@ export function tumbleBoneyardArrow(
     lifetimeTicks: 60,
     ownerActorId: projectile.ownerActorId,
     ownerProjectileId: projectile.id,
+    painterRegistration: (
+      registerWorldPainter
+      ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
+    )('actor'),
     phaseOriginTicks: projectile.ageTicks,
     position: Object.freeze({ ...projectile.position }),
     rotationDeg: rotation.value,
@@ -1728,6 +1742,7 @@ function spawnShieldBreakParticles(
       lifetimeTicks: Math.ceil(alpha / 0.05),
       opacityTimer: alpha,
       ownerActorId: actor.id,
+      painterRegistration: work.registerWorldPainter('actor'),
       position: Object.freeze({ x: actor.position.x, y: actor.position.y - 30 }),
       role: 'shield-break-particle',
       rotationDeg,
@@ -1757,8 +1772,8 @@ export function stepBoneyardEnemyStore(
     throw new RangeError('enemy store ticks must advance monotonically')
   }
   if (context.paused) return stepPausedBoneyardEnemyStore(source, context)
-  const standaloneLightProviderOrder = createNativeLightProviderOrder(
-    standaloneEnemyLightProviderOrderState(source),
+  const standaloneWorldManagerOrder = createNativeWorldManagerOrder(
+    standaloneEnemyWorldManagerOrderState(source),
   )
   const work: WorkingStep = {
     actors: [],
@@ -1786,11 +1801,11 @@ export function stepBoneyardEnemyStore(
     pathStatusFactors: new Map(),
     projectiles: [...source.projectiles],
     projectileEffects: [],
-    registerLightProvider: context.registerLightProvider
-      ?? standaloneLightProviderOrder.register,
-    registerProjectileLightProvider: context.registerProjectileLightProvider
-      ?? context.registerLightProvider
-      ?? standaloneLightProviderOrder.register,
+    registerWorldPainter: context.registerWorldPainter
+      ?? standaloneWorldManagerOrder.register,
+    registerProjectileWorldPainter: context.registerProjectileWorldPainter
+      ?? context.registerWorldPainter
+      ?? standaloneWorldManagerOrder.register,
     retired: [],
     rewards: [],
     rngState: source.rngState,
@@ -1852,8 +1867,8 @@ function stepPausedBoneyardEnemyStore(
   source: BoneyardEnemyStore,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyStoreStepResult {
-  const standaloneLightProviderOrder = createNativeLightProviderOrder(
-    standaloneEnemyLightProviderOrderState(source),
+  const standaloneWorldManagerOrder = createNativeWorldManagerOrder(
+    standaloneEnemyWorldManagerOrderState(source),
   )
   const work: WorkingStep = {
     actors: [...source.actors],
@@ -1879,11 +1894,11 @@ function stepPausedBoneyardEnemyStore(
     playerKnockbacks: [],
     projectiles: [...source.projectiles],
     projectileEffects: [...source.projectileEffects],
-    registerLightProvider: context.registerLightProvider
-      ?? standaloneLightProviderOrder.register,
-    registerProjectileLightProvider: context.registerProjectileLightProvider
-      ?? context.registerLightProvider
-      ?? standaloneLightProviderOrder.register,
+    registerWorldPainter: context.registerWorldPainter
+      ?? standaloneWorldManagerOrder.register,
+    registerProjectileWorldPainter: context.registerProjectileWorldPainter
+      ?? context.registerWorldPainter
+      ?? standaloneWorldManagerOrder.register,
     retired: [],
     rewards: [],
     rngState: source.rngState,
@@ -2040,7 +2055,7 @@ function materializeSpawnIntents(
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
-      lightRegistration: work.registerLightProvider('actor'),
+      lightRegistration: work.registerWorldPainter('actor'),
       lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
       lootSeed: nextLootSeed(work, context),
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
@@ -3685,7 +3700,7 @@ function spawnCoffinMaggots(
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
-      lightRegistration: work.registerLightProvider('actor'),
+      lightRegistration: work.registerWorldPainter('actor'),
       maximumHealth: family.maggotHealth,
       movementPhase: 'emerging',
       nextAttackTick: context.tick + NATIVE_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
@@ -4940,6 +4955,11 @@ function stepMageLightningPulse(
       y: (actor.position.y + targetPosition.y) * 0.5,
     }),
     ownerActorId: actor.id,
+    painterRegistrations: Object.freeze([
+      work.registerWorldPainter('actor'),
+      work.registerWorldPainter('actor'),
+      ...(clearTarget ? [] : [work.registerWorldPainter('actor')]),
+    ]),
     seed,
     source: Object.freeze({ ...source }),
     tick: context.tick,
@@ -4985,7 +5005,7 @@ function spawnProjectile(
   const program = BOUNDED_ENEMY_PROJECTILE_PROGRAMS[kind]
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
   const payload = options.payload ?? (kind === 'poison-pool' ? 'poison' : 'none')
-  const lightManagerLane = enemyProjectileLightManagerLane(kind, payload)
+  const painterManagerLane = enemyProjectileLightManagerLane(kind, payload)
   const constructedSettledTicksRemaining = kind === 'demon-bomb'
     ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombSettledCountdownMinimum
       + drawInteger(
@@ -5037,15 +5057,16 @@ function spawnProjectile(
     id: work.nextProjectileId,
     kind,
     lastStepTick: tick,
-    lightRegistration: lightManagerLane === null
+    lightRegistration: painterManagerLane === null
       ? null
-      : work.registerProjectileLightProvider(lightManagerLane),
+      : work.registerProjectileWorldPainter(painterManagerLane),
     lifetimeTicks,
     minimumSpeed,
     nativeTypeId: projectileNativeTypeId(kind),
     nativeCellBindingOrder: work.nextNativeCellBindingOrder,
     nativeRegistrationOrder: work.nextNativeRegistrationOrder,
     ownerActorId: actor.id,
+    painterRegistration: work.registerProjectileWorldPainter('actor'),
     payload,
     poisonDamage: kind === 'poison-pool' ? damage : (options.poisonDamage ?? 0),
     poisonDuration: kind === 'poison-pool'
@@ -5086,7 +5107,7 @@ interface SpawnProjectileEffectOptions {
   readonly blendMode?: BoneyardEnemyProjectileEffect['blendMode']
   readonly entry: number
   readonly lifetimeTicks: number
-  readonly lightRegistration?: NativeLightProviderRegistration
+  readonly lightRegistration?: NativeWorldManagerRegistration
   readonly phaseOriginTicks?: number
   readonly rotationDeg?: number
   readonly scale?: number
@@ -5117,6 +5138,10 @@ function spawnProjectileEffect(
     lifetimeTicks: options.lifetimeTicks,
     ownerActorId: projectile.ownerActorId,
     ownerProjectileId: projectile.id,
+    painterRegistration: options.lightRegistration
+      ?? work.registerProjectileWorldPainter(
+        kind.startsWith('fire-burst-') ? 'transient' : 'actor',
+      ),
     phaseOriginTicks: options.phaseOriginTicks ?? projectile.ageTicks,
     position: Object.freeze({ ...position }),
     rotationDeg: options.rotationDeg ?? 0,
@@ -5180,7 +5205,7 @@ function spawnFireBurst(
     ? 0.5 + scaleMagnitude
     : 0.75 + (drawInteger(work, 2) === 0 ? -scaleMagnitude : scaleMagnitude)
   const burstPosition = Object.freeze({ x: position.x, y: position.y - 10 })
-  const lightRegistration = work.registerProjectileLightProvider('transient')
+  const lightRegistration = work.registerProjectileWorldPainter('transient')
   spawnProjectileEffect(work, projectile, tick, burstPosition, 'fire-burst-glow', {
     alpha: 0.5,
     alphaLossPerTick: 0.5 / NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
@@ -6432,6 +6457,7 @@ function spawnBouncer(
     lifetimeTicks: 1_000,
     opacityTimer,
     ownerActorId: actor.id,
+    painterRegistration: work.registerWorldPainter('actor'),
     position: Object.freeze({ ...(options.position ?? actor.position) }),
     role,
     rotationDeg: drawUnit(work) * 360,
@@ -6584,6 +6610,9 @@ function spawnSimpleDeathEffect(
     lifetimeTicks: options.lifetimeTicks,
     opacityTimer: options.alpha,
     ownerActorId: actor.id,
+    painterRegistration: options.role.startsWith('demon-death-fire-burst-')
+      ? null
+      : work.registerWorldPainter('actor'),
     position: Object.freeze({ ...(options.position ?? actor.position) }),
     role: options.role,
     rotationDeg: options.rotationDeg ?? 0,
@@ -6769,7 +6798,19 @@ function emitEvent(
 ): number {
   const eventId = work.nextEventId
   work.nextEventId += 1
-  work.events.push(Object.freeze({ actorId, eventId, tick, type, ...patch }))
+  const actor = work.actors.find(({ id }) => id === actorId)
+  const painterRegistration = type === 'attack-marker'
+    && actor?.config.enemyToken === 'IMP'
+    ? work.registerWorldPainter('transient')
+    : undefined
+  work.events.push(Object.freeze({
+    actorId,
+    eventId,
+    tick,
+    type,
+    ...patch,
+    ...(painterRegistration === undefined ? {} : { painterRegistration }),
+  }))
   return eventId
 }
 

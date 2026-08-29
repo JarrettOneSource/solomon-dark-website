@@ -13,6 +13,7 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import {
   damageBoneyardEnemy,
   type BoneyardEnemyLethalObserver,
@@ -260,6 +261,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   tick: number,
   lethalObserver?: BoneyardEnemyLethalObserver,
   damageMultiplier: (targetId: number, ownerId: string) => number = () => 1,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): BoneyardSecondaryCombatResult {
   const removedProjectileIds = new Set(result.removedProjectileIds)
   let enemies = removedProjectileIds.size === 0
@@ -277,6 +279,7 @@ export function resolveBoneyardNativeSecondaryCombat(
       actorId: actor.id,
       amount: actor.shieldHealth,
       lethalObserver,
+      registerWorldPainter,
       sourcePlayerId: null,
       tick,
     })
@@ -291,6 +294,7 @@ export function resolveBoneyardNativeSecondaryCombat(
       tick,
       lethalObserver,
       damageMultiplier(contact.targetId, contact.ownerId),
+      registerWorldPainter,
     )
     enemies = damaged.enemies
     events.push(...damaged.events)
@@ -351,6 +355,7 @@ function applyContact(
   tick: number,
   lethalObserver?: BoneyardEnemyLethalObserver,
   damageMultiplier = 1,
+  registerWorldPainter?: RegisterNativeWorldPainter,
 ): BoneyardSecondaryCombatResult {
   if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
     throw new RangeError('secondary damage multiplier must be finite and non-negative')
@@ -359,6 +364,7 @@ function applyContact(
     actorId: contact.targetId,
     amount: contact.amount * damageMultiplier,
     lethalObserver,
+    registerWorldPainter,
     sourcePlayerId: contact.ownerId,
     tick,
   })

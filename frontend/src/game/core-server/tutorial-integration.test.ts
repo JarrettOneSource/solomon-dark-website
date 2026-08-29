@@ -65,20 +65,23 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
     kind: actor.kind,
     lifetimeTicks: actor.lifetimeTicks,
     lightRegistration: actor.lightRegistration,
+    painterRegistrations: actor.painterRegistrations,
     position: actor.position,
   })), [
     {
       damage: 1,
       kind: 'fire-patch',
       lifetimeTicks: 1_000,
-      lightRegistration: { managerLane: 'actor', registrationOrdinal: 2 },
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 3 }],
       position: { x: 1766.1005859375, y: 147.63815307617188 },
     },
     {
       damage: 1,
       kind: 'fire-patch',
       lifetimeTicks: 1_000,
-      lightRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 4 },
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 4 }],
       position: { x: 1852.1005859375, y: 199.63815307617188 },
     },
   ])

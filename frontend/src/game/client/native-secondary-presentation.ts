@@ -98,6 +98,9 @@ function copyActor(
       ? null
       : { ...actor.lightRegistration },
     midpoint: { ...actor.midpoint },
+    painterRegistrations: actor.painterRegistrations?.map((registration) => ({
+      ...registration,
+    })),
     position: { ...actor.position },
     presentationRng: actor.presentationRng === null
       ? null

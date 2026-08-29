@@ -1,6 +1,8 @@
 import { Container } from 'pixi.js'
 
 import type { BoneyardMageLightningPulseSnapshot } from '../protocol/game-state.ts'
+import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
+import type { NativeRegionPainterInsertion } from '../region-painter-order.ts'
 import {
   nativeMageLightningPulsePlan,
   type NativeMageLightningPulseInput,
@@ -18,11 +20,14 @@ export const NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_Z_SPAN = 0.125
 
 export interface NativeMageLightningPainterRoot {
   readonly container: Container
+  readonly insertions?: readonly NativeRegionPainterInsertion[]
   readonly lane: 'post-main-overlay' | 'world-sorted'
   readonly queueFamily: 'ordinary-dynamic' | null
   readonly regionLightPoint: null
+  readonly registration?: NativeWorldManagerRegistration | null
   readonly sortBias: 0
   readonly suffix: 'body' | 'contact' | 'source'
+  readonly visible?: boolean
   readonly worldY: number
 }
 
@@ -103,6 +108,7 @@ export class NativeMageLightningPulseView {
       `mage-lightning:${input.seed}:body`,
       construction.body,
       textures,
+      false,
     )
     this.source = new NativeAirCoronaView(
       `mage-lightning:${input.seed}:source`,
@@ -113,7 +119,7 @@ export class NativeMageLightningPulseView {
       textures,
     )
     this.containers = [
-      this.body.container,
+      ...this.body.containers,
       this.source.container,
       this.contact.container,
     ]
@@ -129,7 +135,7 @@ export class NativeMageLightningPulseView {
       for (const container of this.containers) container.visible = false
       return false
     }
-    this.body.container.position.set(plan.source.x, plan.source.y)
+    this.body.setOrigin(plan.source)
     this.body.update(plan.body)
     this.source.update(plan.sourceCorona, plan.source)
     const contactOrigin = { x: 0, y: 0 }
@@ -179,6 +185,10 @@ export class NativeMageLightningPulseView {
     }
     this.currentPlan = null
   }
+
+  painterContainer(suffix: string): Container | null {
+    return this.body.bandContainer(suffix)
+  }
 }
 
 /** Owns the replicated pulse set without folding its three native painters. */
@@ -186,6 +196,10 @@ export class NativeMageLightningPulseViews {
   private readonly activePathLightBatches: NativeMageLightningPathLightBatch[] = []
   private readonly liveIds = new Set<number>()
   private readonly orderedIds: number[] = []
+  private readonly painterRegistrations = new Map<
+    number,
+    readonly NativeWorldManagerRegistration[]
+  >()
   private readonly root: Container
   private readonly targetWorldY = new Map<number, number>()
   private readonly textures: NativeAirVfxTextures
@@ -243,6 +257,16 @@ export class NativeMageLightningPulseViews {
         }
       }
       this.liveIds.add(pulse.id)
+      this.painterRegistrations.set(
+        pulse.id,
+        pulse.painterRegistrations ?? Object.freeze(Array.from(
+          { length: pulse.contact.kind === 'world' ? 3 : 2 },
+          (_, index) => Object.freeze({
+            managerLane: 'actor' as const,
+            registrationOrdinal: pulse.id * 3 + index,
+          }),
+        )),
+      )
       this.orderedIds.push(pulse.id)
       const sources = view.pathLights
       if (sources.length > 0) {
@@ -258,6 +282,7 @@ export class NativeMageLightningPulseViews {
       if (this.liveIds.has(id)) continue
       view.destroy()
       this.views.delete(id)
+      this.painterRegistrations.delete(id)
       this.targetWorldY.delete(id)
     }
   }
@@ -266,12 +291,21 @@ export class NativeMageLightningPulseViews {
     return this.orderedIds.flatMap((id) => {
       const view = this.views.get(id)
       if (!view) return []
+      const registrations = this.painterRegistrations.get(id)
+      if (!registrations) return []
       const layers: NativeMageLightningPulsePainterLayer[] = view.painterRoots().map(
         (painter) => ({
           ...painter,
           id: `mage-lightning:${id}:${painter.suffix}`,
+          insertions: painter.insertions?.map((insertion) => ({
+            ...insertion,
+            id: `mage-lightning:${id}:${insertion.id}`,
+          })),
           pulseId: id,
           pulseTick: view.birthTick,
+          registration: registrations[
+            painter.suffix === 'body' ? 0 : painter.suffix === 'source' ? 1 : 2
+          ] ?? null,
           targetPlayerId: null,
         }),
       )
@@ -286,6 +320,7 @@ export class NativeMageLightningPulseViews {
           pulseTick: view.birthTick,
           queueFamily: null,
           regionLightPoint: null,
+          registration: null,
           sortBias: 0,
           suffix: 'contact',
           targetPlayerId: attachment.targetPlayerId,
@@ -294,6 +329,17 @@ export class NativeMageLightningPulseViews {
       }
       return layers
     })
+  }
+
+  setDepth(id: string, depth: number): void {
+    if (!id.startsWith('mage-lightning:')) return
+    const parts = id.split(':')
+    const pulseId = Number(parts[1])
+    const suffix = parts.slice(2).join(':')
+    const view = this.views.get(pulseId)
+    const root = view?.painterRoots().find((candidate) => candidate.suffix === suffix)
+    const container = root?.container ?? view?.painterContainer(suffix)
+    if (container) container.zIndex = depth
   }
 
   get pathLights(): readonly NativeAirPathLightPlan[] {
@@ -317,6 +363,7 @@ export class NativeMageLightningPulseViews {
   destroy(): void {
     for (const view of this.views.values()) view.destroy()
     this.views.clear()
+    this.painterRegistrations.clear()
     this.liveIds.clear()
     this.orderedIds.length = 0
     this.activePathLightBatches.length = 0

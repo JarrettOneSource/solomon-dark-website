@@ -215,7 +215,7 @@ test('static Boneyard residents keep native unpremultiplied linear pixels', () =
   )
   assert.match(
     boneyardRenderer,
-    /buildForegroundLayerResident\([\s\S]*?residentScratch,[\s\S]*?\)/,
+    /buildProxyLayerResident\([\s\S]*?residentScratch,[\s\S]*?\)/,
   )
   assert.doesNotMatch(boneyardRenderer, /sourceCanvas:/)
   assert.doesNotMatch(boneyardRenderer, /Texture\.from\(canvas/)
@@ -352,16 +352,31 @@ test('secondary rain streaks use true four-corner native vertex colors', () => {
 test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () => {
   assert.match(secondaryWorldView, /id: `secondary-underlay:\$\{id\}`/)
   assert.match(secondaryWorldView, /lane: 'pre-world-queue'/)
-  assert.match(secondaryWorldView, /this\.root\.addChild\(view\.underlayContainer\)/)
   assert.match(
     secondaryWorldView,
-    /this\.currentKind !== 'acid-rain' \|\| this\.plan\.draws\.length > 0/,
+    /this\.preWorldRoot\.addChild\(view\.underlayContainer\)/,
+  )
+  assert.match(
+    secondaryWorldView,
+    /this\.plan\.draws\.length > 0 \|\| this\.currentKind !== 'acid-rain'/,
   )
   assert.match(
     boneyardRenderer,
     /layer\.lane !== 'world-sorted' \|\| layer\.queueFamily === null/,
   )
   assert.match(boneyardRenderer, /layer\.lane === 'pre-world-queue'\s*\? 0\.5/)
+})
+
+test('Boneyard applies every causal proxy and split-band queue depth to its visible child', () => {
+  assert.match(
+    boneyardRenderer,
+    /applyInsertedPainterDepths\([\s\S]*?this\.primarySpells\.setDepth/,
+  )
+  assert.match(
+    boneyardRenderer,
+    /applyInsertedPainterDepths\([\s\S]*?this\.secondaryAbilities\.setDepth/,
+  )
+  assert.match(boneyardRenderer, /inserted native painter .* lost its queue depth/)
 })
 
 test('secondary rain paints native top-to-bottom vertex quads instead of Canvas gradients', () => {
@@ -567,14 +582,16 @@ test('selected-primary -1 owns complete fallback, scroll, and plain-Staff pixels
   }
 })
 
-test('Tree foreground stays per-object and shares native alpha and root tint', () => {
-  assert.match(editorRenderer, /export function nativeBoneyardForegroundLayers/)
-  assert.match(editorRenderer, /export function drawNativeBoneyardForegroundBand/)
-  assert.doesNotMatch(boneyardRenderer, /drawNativeBoneyardForeground\(context/)
+test('Tree and Building proxies stay per-object outside runtime base bands', () => {
+  assert.match(editorRenderer, /export function nativeBoneyardProxyLayers/)
+  assert.match(editorRenderer, /export function drawNativeBoneyardProxyBand/)
+  assert.match(editorRenderer, /return renderSceneFor\(doc\)\.proxyLayers/)
+  assert.match(editorRenderer, /return renderSceneFor\(doc\)\.shadows\.filter/)
+  assert.doesNotMatch(boneyardRenderer, /drawNativeBoneyardForeground/)
   assert.match(boneyardRenderer, /tree\.main\.sprite\.alpha = presentation\.alpha/)
-  assert.match(boneyardRenderer, /tree\.foreground\.sprite\.alpha = presentation\.alpha/)
+  assert.match(boneyardRenderer, /tree\.proxy\.sprite\.alpha = presentation\.alpha/)
   assert.match(boneyardRenderer, /tree\.main\.sprite\.tint = tint/)
-  assert.match(boneyardRenderer, /tree\.foreground\.sprite\.tint = tint/)
+  assert.match(boneyardRenderer, /tree\.proxy\.sprite\.tint = tint/)
 })
 
 test('Building base and roof share retained packed vertex lighting while Monument stays root-lit', () => {

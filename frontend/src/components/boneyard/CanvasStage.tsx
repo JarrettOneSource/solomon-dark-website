@@ -626,7 +626,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden border-y border-gold/15 bg-[#07060a]">
       <canvas
         ref={canvasRef}
-        className="block touch-none"
+        className="boneyard-editor-canvas block touch-none"
         style={{ cursor }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

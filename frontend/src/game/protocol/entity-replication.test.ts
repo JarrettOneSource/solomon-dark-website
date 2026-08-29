@@ -111,12 +111,17 @@ function boneyardSnapshot(runId: string): GameSnapshot {
         id: 1,
         midpoint: { x: 75, y: 0 },
         ownerActorId: 7,
+        painterRegistrations: [
+          { managerLane: 'actor', registrationOrdinal: 10 },
+          { managerLane: 'actor', registrationOrdinal: 11 },
+        ],
         seed: 0xffff_ffff,
         source: { x: 23, y: -16 },
         tick: 0,
       }],
       maggots: [],
       runId,
+      solomonPainterRegistration: null,
       tutorial: null,
       waves: null,
     },
@@ -395,7 +400,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.ok(Math.abs(enemy.position.x - 123.45) <= 1 / 16)
   assert.ok(Math.abs(enemy.animation.gaitPose - 2.75) <= 1 / 1024)
   assert.deepEqual(reconstructed.world.enemyEvents, initial.world.enemyEvents)
-  assert.equal(frame.world.mageLightningPulses[0]?.length, 14)
+  assert.equal(frame.world.mageLightningPulses[0]?.length, 17)
   assert.deepEqual(
     reconstructed.world.mageLightningPulses,
     initial.world.mageLightningPulses,
@@ -597,12 +602,14 @@ test('Boneyard enemy projectiles replicate motion and exact spawn-retire identit
       payloadIndex,
       laneCode,
       laneCode === -1 ? -1 : 4,
+      5,
     ] as ReplicatedEntityDescriptor
     assert.equal(projectileRegistration.descriptorIsValid(semanticDescriptor), true)
     assert.equal(projectileRegistration.descriptorIsValid([
       ...semanticDescriptor.slice(0, 10),
       laneCode === -1 ? 0 : -1,
       laneCode === -1 ? 4 : -1,
+      5,
     ] as unknown as ReplicatedEntityDescriptor), false)
   }
 
@@ -616,9 +623,9 @@ test('Boneyard enemy projectiles replicate motion and exact spawn-retire identit
   const descriptor = keyframe.world.entities.spawned.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile
   ))!
-  assert.equal(descriptor.length, 12)
+  assert.equal(descriptor.length, 13)
   assert.equal(descriptor[9], 3)
-  assert.deepEqual(descriptor.slice(10), [-1, -1])
+  assert.deepEqual(descriptor.slice(10), [-1, -1, 4])
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(keyframe, 1)
@@ -659,7 +666,7 @@ test('enemy projectile effects replicate after their owner projectile retires', 
   const sample = keyframe.world.entities.samples.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect
   ))!
-  assert.equal(descriptor.length, 12)
+  assert.equal(descriptor.length, 14)
   assert.equal(sample.length, 10)
 
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
@@ -941,7 +948,7 @@ test('enemy death effects replicate independent motion and exact retirement iden
   const sample = keyframe.world.entities.samples.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
   ))!
-  assert.equal(descriptor.length, 9)
+  assert.equal(descriptor.length, 10)
   assert.equal(sample.length, 11)
 
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
@@ -1024,6 +1031,7 @@ test('loot and Goodies replicate compact state, ordered events, and retirement',
     nativeTypeId: 2012,
     orbKind: null,
     orbValue: 0,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 41 },
     position: { x: 1500, y: 1750 },
     rotationDeg: -7.5,
     scatterActive: false,
@@ -1039,6 +1047,7 @@ test('loot and Goodies replicate compact state, ordered events, and retirement',
     id: 2,
     phase: 1,
     position: { x: 400, y: 500 },
+    sceneryRegistrationOrdinal: 0,
     subtype: 0,
     timer: 100,
   }]
@@ -1096,6 +1105,7 @@ test('loot registration rejects cross-kind descriptor and sample identities', ()
     nativeTypeId: 2012,
     orbKind: null,
     orbValue: 0,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 41 },
     position: { x: 100, y: 200 },
     rotationDeg: -7.5,
     scatterActive: false,
@@ -1283,6 +1293,7 @@ function enemyProjectileEffectSnapshot(): BoneyardEnemyProjectileEffectSnapshot 
     lifetimeTicks: 20,
     ownerActorId: 7,
     ownerProjectileId: 4,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 10 },
     phaseOriginTicks: 3,
     position: { x: 128.5, y: 456.75 },
     rotationRadians: 0.25,
@@ -1304,6 +1315,7 @@ function enemyProjectileSnapshot(): BoneyardEnemyProjectileSnapshot {
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 7,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 4 },
     payload: 'normal',
     position: { x: 128, y: 456.75 },
     speed: 5,
@@ -1325,6 +1337,7 @@ function enemyDeathEffectSnapshot(): BoneyardEnemyDeathEffectSnapshot {
     id: 9,
     kind: 'bouncer',
     ownerActorId: 7,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
     presentationOwner: 'world-sorted',
     position: { x: 133.5, y: 463.25 },
     rotationRadians: 0.5,

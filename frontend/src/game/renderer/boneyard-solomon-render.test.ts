@@ -85,19 +85,24 @@ test('uses the native 15-way 24-degree direction selector', () => {
 })
 
 test('registers the Lantern before Solomon with exact roots and zero biases', () => {
-  assert.deepEqual(boneyardSolomonPainterLayers(DIG, ENCOUNTER, 7), [
+  assert.deepEqual(boneyardSolomonPainterLayers(
+    DIG,
+    ENCOUNTER,
+    { managerLane: 'actor', registrationOrdinal: 7 },
+    { managerLane: 'actor', registrationOrdinal: 8 },
+  ), [
     {
       id: 'lantern',
       queueFamily: 'ordinary-dynamic',
+      registration: { managerLane: 'actor', registrationOrdinal: 7 },
       sortBias: 0,
-      sourceOrder: 7,
       worldY: 93,
     },
     {
       id: 'solomon-actor',
       queueFamily: 'ordinary-dynamic',
+      registration: { managerLane: 'actor', registrationOrdinal: 8 },
       sortBias: 0,
-      sourceOrder: 8,
       worldY: 133,
     },
   ])
@@ -107,7 +112,9 @@ test('preserves the stock Lantern-then-Solomon order on an exact painter-row tie
   const layers = boneyardSolomonPainterLayers(DIG, {
     ...ENCOUNTER,
     position: { x: ENCOUNTER.position.x, y: DIG.lanternPosition.y },
-  }, 0)
+  },
+  { managerLane: 'actor', registrationOrdinal: 0 },
+  { managerLane: 'actor', registrationOrdinal: 1 })
   const order = buildBoneyardPainterOrder({
     dynamicLayers: layers,
     referenceY: 0,
@@ -124,11 +131,13 @@ test('keeps the independent Lantern resident after Solomon is gone', () => {
   assert.deepEqual(boneyardSolomonPainterLayers(DIG, {
     ...ENCOUNTER,
     phase: 'gone',
-  }, 3), [{
+  },
+  { managerLane: 'actor', registrationOrdinal: 3 },
+  { managerLane: 'actor', registrationOrdinal: 4 }), [{
     id: 'lantern',
     queueFamily: 'ordinary-dynamic',
+    registration: { managerLane: 'actor', registrationOrdinal: 3 },
     sortBias: 0,
-    sourceOrder: 3,
     worldY: 93,
   }])
 })

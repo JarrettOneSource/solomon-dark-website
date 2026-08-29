@@ -1,5 +1,9 @@
 # 2026-08-26 — Acid Rain cloud/drop visual correction after comparison falsifier
 
+> **2026-08-29 layering closure:** [entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
+> leaves this file's art, transforms, alpha, and child clocks intact, but
+> closes the parent cloud proxy family and direct residue/composite order.
+
 ## Reported smell and parity question
 
 - The labeled stock/web comparison visibly contradicts the preceding

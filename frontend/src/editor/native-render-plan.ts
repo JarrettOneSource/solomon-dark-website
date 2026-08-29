@@ -1,8 +1,12 @@
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, StaticSprite, Vec2 } from './model.ts'
 import { NATIVE } from './model.ts'
 import { nativeGateLeaves, nativeGatePainterRoot } from './native-fence-geometry.ts'
+import {
+  buildNativeRegionPainterOrder,
+  type PositionedNativeRegionPainterLayer,
+} from '../game/region-painter-order.ts'
 
-export const NATIVE_PLACEMENT_PASSES = ['underlay', 'compact', 'shadow', 'main', 'foreground'] as const
+export const NATIVE_PLACEMENT_PASSES = ['underlay', 'compact', 'shadow', 'main'] as const
 
 interface NativePlacedObject extends PlacedObject {
   atlasEntry?: number
@@ -64,7 +68,8 @@ export interface NativeRenderPlan {
   compact: CompactSpriteLayer[]
   shadows: MainLayer[]
   main: MainLayer[]
-  foreground: ObjectSpriteLayer[]
+  painterOrder: readonly PositionedNativeRegionPainterLayer[]
+  proxies: readonly ObjectMainLayer[]
 }
 
 function objectEntry(object: NativePlacedObject): number | undefined {
@@ -110,13 +115,28 @@ function underlayFor(object: NativePlacedObject): ObjectSpriteLayer | null {
   return objectLayer(object, object.overlayAtlasEntry ?? 88 + (object.overlayVariant ?? 0))
 }
 
-function foregroundFor(object: NativePlacedObject): ObjectSpriteLayer | null {
+function proxyFor(
+  object: NativePlacedObject,
+  sourceOrder: number,
+): ObjectMainLayer | null {
   if (object.typeId === NATIVE.tree) {
     if (object.secondaryVisible === false || (object.variant ?? 0) >= 6) return null
-    return objectLayer(object, object.secondaryAtlasEntry ?? 243 + (object.secondaryVariant ?? 0))
+    return {
+      ...objectLayer(object, object.secondaryAtlasEntry ?? 243 + (object.secondaryVariant ?? 0)),
+      sortBias: 0,
+      sortKey: object.pos.y + 100,
+      sourceOrder,
+      worldY: object.pos.y + 100,
+    }
   }
   if (object.typeId === NATIVE.building) {
-    return objectLayer(object, object.atlasEntries?.[1] ?? 152 + (object.variant ?? 0))
+    return {
+      ...objectLayer(object, object.atlasEntries?.[1] ?? 152 + (object.variant ?? 0)),
+      sortBias: 0,
+      sortKey: object.pos.y + 200,
+      sourceOrder,
+      worldY: object.pos.y + 200,
+    }
   }
   return null
 }
@@ -149,7 +169,7 @@ function pointKey(point: Vec2): string {
 /**
  * Build the retail placement passes recovered from Arena::Render. Roads and
  * terrain are structural passes owned by the canvas; this plan starts with
- * Puppet +0x2c underlays and ends with Puppet +0x24 foreground art.
+ * Puppet +0x2c underlays and includes causal Puppet +0x24 proxy art.
  */
 export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
   const objects = doc.objects as NativePlacedObject[]
@@ -227,10 +247,49 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     sourceOrder: bodySourceOrder + fenceIndex * 2 + pieceIndex,
   })))
   const shadows = [...objectMain, ...fencePosts, ...fenceBodies]
-  const main = [...shadows].sort((left, right) => left.sortKey - right.sortKey || left.sourceOrder - right.sourceOrder)
-  const foreground = objects.flatMap((object) => {
-    const layer = foregroundFor(object)
-    return layer ? [layer] : []
+  const proxyByOwnerId = new Map<string, ObjectMainLayer>()
+  for (const layer of objectMain) {
+    const proxy = proxyFor(layer.object, layer.sourceOrder)
+    if (proxy) proxyByOwnerId.set(`main:${layer.sourceOrder}`, proxy)
+  }
+  const byId = new Map<string, MainLayer>()
+  const entries = shadows.map((layer) => {
+    const id = `main:${layer.sourceOrder}`
+    byId.set(id, layer)
+    const proxy = proxyByOwnerId.get(id)
+    if (proxy) byId.set(`proxy:${layer.sourceOrder}`, proxy)
+    return {
+      id,
+      insertions: proxy
+        ? [{
+            id: `proxy:${layer.sourceOrder}`,
+            sortBias: proxy.sortBias,
+            visible: true,
+            worldY: proxy.worldY,
+          }]
+        : undefined,
+      registration: {
+        managerLane: 'scenery' as const,
+        registrationOrdinal: layer.sourceOrder,
+      },
+      sortBias: layer.sortBias,
+      visible: true,
+      worldY: layer.worldY,
+    }
   })
-  return { underlays, compact, shadows, main, foreground }
+  const order = buildNativeRegionPainterOrder({ entries, referenceY: 0 })
+  const main = order.orderedLayers.map(({ id }) => {
+    const layer = byId.get(id)
+    if (!layer) throw new Error(`native editor painter ${id} lost its layer`)
+    return layer
+  })
+  const proxies = [...proxyByOwnerId.values()]
+  return {
+    underlays,
+    compact,
+    shadows,
+    main,
+    painterOrder: order.orderedLayers,
+    proxies,
+  }
 }
