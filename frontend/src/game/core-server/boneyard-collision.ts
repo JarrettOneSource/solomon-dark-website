@@ -20,7 +20,10 @@ import {
 } from '../core-kernels/native-rng.ts'
 import type { BoneyardSpawnPositionPolicy } from '../core-kernels/boneyard-wave-timeline.ts'
 import { NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK } from '../core-kernels/primary-spell-targeting.ts'
-import { BoneyardCollisionBroadphase } from './boneyard-collision-broadphase.ts'
+import {
+  BoneyardCollisionBroadphase,
+  type CollisionBroadphaseSelection,
+} from './boneyard-collision-broadphase.ts'
 
 export interface BoneyardCollisionPolygon {
   nativeLineMask?: number
@@ -158,6 +161,38 @@ export function createBoneyardCollisionWorldAllPairsOracle(
 
 export function boneyardCollisionGeometryIdentity(world: BoneyardCollisionWorld): object {
   return collisionGeometryIdentities.get(world) ?? world
+}
+
+/**
+ * Ordered static-collision candidates whose primitive bounds overlap a query
+ * box. `null` preserves the complete all-pairs oracle. Dynamic Gate segments
+ * are unindexed overlays and remain after the indexed base segment order.
+ */
+export function boneyardCollisionCandidatesInBounds(
+  world: BoneyardCollisionWorld,
+  minimumX: number,
+  minimumY: number,
+  maximumX: number,
+  maximumY: number,
+): CollisionBroadphaseSelection | null {
+  const view = collisionBroadphaseViewOrNull(world)
+  if (view === null) return null
+  const selected = view.broadphase.selectBounds(
+    minimumX,
+    minimumY,
+    maximumX,
+    maximumY,
+  )
+  if (view.indexedSegmentCount >= world.segments.length) return selected
+  const segmentIndices = [...selected.segmentIndices]
+  for (let index = view.indexedSegmentCount; index < world.segments.length; index += 1) {
+    segmentIndices.push(index)
+  }
+  return {
+    circleIndices: selected.circleIndices,
+    polygonIndices: selected.polygonIndices,
+    segmentIndices,
+  }
 }
 
 function materializeBoneyardCollisionWorld(scene: BoneyardScene): BoneyardCollisionWorld {

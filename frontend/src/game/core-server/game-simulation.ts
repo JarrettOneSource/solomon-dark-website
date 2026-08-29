@@ -20,6 +20,7 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   nativePrimaryViewBounds,
   nativePrimaryViewRayEndpoint,
+  type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import {
@@ -3335,9 +3336,7 @@ function finishGameSimulationTick(
       : input,
   ]))
   const boulderGravestoneSourceIds = result.world.kind === 'boneyard'
-    ? new Set(result.world.scenerySpellTargets
-        .filter(({ kind }) => kind === 'gravestone')
-        .map(({ id }) => id))
+    ? gravestoneSourceIds(result.world.scenerySpellTargets)
     : undefined
   const entityPlayers = playerCharacterRecords(playerEntities)
   const primaryPlayers: Record<PlayerId, PlayerCharacterState> = Object.fromEntries(
@@ -4330,6 +4329,29 @@ function hubServiceAvailable(
   if (state.run.phase !== 'hub' || state.world.kind !== 'hub') return false
   const participant = state.world.participants[playerId]
   return participant !== undefined && participant.transition === null
+}
+
+const GRAVESTONE_SOURCE_IDS = new WeakMap<
+  readonly PrimarySpellTarget[],
+  ReadonlySet<string>
+>()
+
+/**
+ * Gravestone source ids that Earth boulders and Weld build 1006 ignore while
+ * traversing. The scenery list only changes identity when scenery is
+ * destroyed or retired, so the set is memoized per list instead of rebuilt
+ * every tick.
+ */
+function gravestoneSourceIds(
+  scenery: readonly PrimarySpellTarget[],
+): ReadonlySet<string> {
+  const cached = GRAVESTONE_SOURCE_IDS.get(scenery)
+  if (cached) return cached
+  const ids: ReadonlySet<string> = new Set(scenery
+    .filter(({ kind }) => kind === 'gravestone')
+    .map(({ id }) => id))
+  GRAVESTONE_SOURCE_IDS.set(scenery, ids)
+  return ids
 }
 
 function retainBoneyardEnemyEvents(

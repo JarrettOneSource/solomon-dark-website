@@ -680,3 +680,64 @@ V8 performance and persistent-state contract, not a browser capability gap.
   claiming the general all-purpose journey passed.
 - This receipt is the sole post-validation documentation write. No runtime,
   test, benchmark, build, asset, protocol, or browser byte changed afterward.
+
+## 2026-08-29 — exact fixed-tick hot-path representation closure
+
+### Reported smell and parity question
+
+The accepted persistent object runtime remained dominated by several exact but
+representation-heavy operations: frozen death-effect spreads, full-crowd
+non-pushing enemy motion, endpoint-triangle full scans, repeated static
+clearance scans, sorted point contacts, and unchanged scenery-derived sets.
+The parity question is representation-only. Protocol, snapshot/save schema,
+100 Hz authority, 20 Hz projection, RNG, actor registration, collision and
+target order, strict numeric edges, gameplay output, and teardown are not
+reopened.
+
+An initial Mac candidate over base `e7addc2b` supplied useful diagnostic
+evidence: three 62,500-tick generated-Arena replays retained all 125 checkpoint
+hashes, final stable and order-sensitive JSON hashes, population sums, wave
+logs, and geometry hashes. That candidate is not the publication receipt. Code
+review found two representation falsifiers that the normal-coordinate replay
+could not expose:
+
+- a dense navigation array sized from global coordinate extrema could throw or
+  exhaust memory for finite, widely separated mod geometry; it was rejected in
+  favor of the collision owner's sparse ordered broadphase plus bounded global
+  fallback rows;
+- a two-slot strong target-row cache retained prior hostile populations beyond
+  run teardown while measuring neutral within noise; the cache and the entire
+  spell-combat stage were removed rather than adding lifecycle machinery.
+
+### System boundary and membership inventory
+
+| Member / branch | Disposition | Required invariant |
+| --- | --- | --- |
+| All seven death-effect kinds | `exact-ported` explicit closed-row clone | Same 28 keys and canonical key order, values, vector identity policy, painter registration, RNG, clocks, opacity/frame equations, and retirement; no unknown field or second transient owner. |
+| NavMesh endpoint containment | `exact-ported` sparse triangle lookup | Candidate cells are an exact superset of the epsilon-inclusive test; slivers, large boxes, unsafe coordinates, and out-of-extent points fall back without omission. Ranking remains containment, edge distance, then triangle id. |
+| Polygon/circle/segment route clearance | `exact-ported` through the existing collision broadphase | Query the padded segment box, retain original family/source order and dynamic overlays, then run the unchanged pure predicates. All-pairs worlds remain the oracle. |
+| Out-of-bounds route endpoints | `verified-already-at-parity` early rejection | This is the first check already performed by every prior endpoint-to-center clearance attempt. |
+| Primary point-contact winner | `exact-ported` linear minimum | Lowest cell-binding order wins; strict replacement preserves the stable-sort winner on ties. Eligibility, cell, radius, and strict contact checks are unchanged. |
+| Sealed-arena scenery cleanup | `exact-ported` identity-preserving filter | Return the source array only when every row survives; otherwise return the same ordered survivors as `filter`. No consumer mutates the arrays or rows. |
+| Gravestone traversal-source set | `exact-ported` weak identity memo | The set contents derive only from the immutable scenery array. Weak ownership cannot retain a retired run. |
+| Strong per-store target-row cache | `rejected representation` | Removed: bounded size did not satisfy world teardown and had no reliable performance value. |
+| Protocol, saves, snapshots, hashes, tick rates, gameplay and renderer | `verified-already-at-parity` | No field, cadence, branch, or presentation contract changes. |
+
+No member is blocked by the browser platform.
+
+### Validation contract
+
+- Focused oracles must prove the non-pushing mover against the general solver,
+  triangle and blocker candidate supersets (including widely separated finite
+  geometry), unchanged transient JSON projection, and all existing targeting,
+  collision, navigation, combat, pause, save, and teardown contracts.
+- Compare pristine current main and the final rebased candidate over the same
+  62,500-tick, crowd-70 replay for generated Arena indexes 0, 1, and 2. All 125
+  checkpoint hashes, final hashes, population sums, wave logs, and geometry
+  hashes must match in each pair.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact final Mac
+  candidate.
+- Built Mac Chrome must enter a real Random Boneyard and prove authoritative
+  tick advance, player/enemy motion, WebGL presentation, and clean page,
+  console, failed-response, wire, host, and teardown arrays. Performance is
+  reported separately from deterministic parity and may not waive any gate.

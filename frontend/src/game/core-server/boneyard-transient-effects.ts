@@ -48,14 +48,20 @@ function stepDeathEffect(
   drawUnit: () => number,
 ): BoneyardEnemyDeathEffect | null {
   if (tick <= source.spawnTick) {
-    return { ...source, ageTicks: 0, lastStepTick: tick }
+    const waiting = cloneDeathEffect(source)
+    waiting.ageTicks = 0
+    waiting.lastStepTick = tick
+    return waiting
   }
   const ageTicks = Math.max(0, tick - source.spawnTick)
   if (ageTicks >= source.lifetimeTicks) return null
 
   if (source.kind === 'bouncer') {
     if (source.height < 0 && tick % 3 === 0) {
-      return { ...source, ageTicks, lastStepTick: tick }
+      const resting = cloneDeathEffect(source)
+      resting.ageTicks = ageTicks
+      resting.lastStepTick = tick
+      return resting
     }
     const position = {
       x: source.position.x + source.velocity.x,
@@ -85,20 +91,19 @@ function stepDeathEffect(
       }
     }
     if (opacityTimer <= 0) return null
-    return {
-      ...source,
-      ageTicks,
-      alpha: Math.min(1, opacityTimer),
-      angularVelocityDeg,
-      bounceVelocity,
-      height,
-      lastStepTick: tick,
-      opacityTimer,
-      position,
-      rotationDeg,
-      verticalVelocity,
-      velocity: { x: velocityX, y: velocityY },
-    }
+    const bounced = cloneDeathEffect(source)
+    bounced.ageTicks = ageTicks
+    bounced.alpha = Math.min(1, opacityTimer)
+    bounced.angularVelocityDeg = angularVelocityDeg
+    bounced.bounceVelocity = bounceVelocity
+    bounced.height = height
+    bounced.lastStepTick = tick
+    bounced.opacityTimer = opacityTimer
+    bounced.position = position
+    bounced.rotationDeg = rotationDeg
+    bounced.verticalVelocity = verticalVelocity
+    bounced.velocity = { x: velocityX, y: velocityY }
+    return bounced
   }
 
   const opacityTimer = source.opacityTimer - source.alphaLossPerTick
@@ -134,16 +139,59 @@ function stepDeathEffect(
     : source.kind === 'fire-array'
       ? 46 + positiveModulo(source.firstEntry - 46 + frame, 32)
       : source.entry
+  const faded = cloneDeathEffect(source)
+  faded.ageTicks = ageTicks
+  faded.alpha = opacityTimer
+  faded.entry = entry
+  faded.lastStepTick = tick
+  faded.opacityTimer = opacityTimer
+  faded.position = position
+  faded.rotationDeg = source.rotationDeg + source.angularVelocityDeg
+  faded.scale = source.kind === 'banish' ? source.scale * 1.025 : source.scale
+  return faded
+}
+
+type MutableDeathEffect = {
+  -readonly [Key in keyof BoneyardEnemyDeathEffect]: BoneyardEnemyDeathEffect[Key]
+}
+
+/**
+ * Explicit field-by-field copy in the spawn-site key order. Spawned records
+ * are frozen, and V8 falls off its fast object-spread path for frozen
+ * sources, so `{ ...source }` costs several times more than this literal for
+ * the ~130 death effects stepped every tick. The property order matches the
+ * spawn literals, so stepped rows serialize identically to spread rows.
+ */
+function cloneDeathEffect(source: BoneyardEnemyDeathEffect): MutableDeathEffect {
   return {
-    ...source,
-    ageTicks,
-    alpha: opacityTimer,
-    entry,
-    lastStepTick: tick,
-    opacityTimer,
-    position,
-    rotationDeg: source.rotationDeg + source.angularVelocityDeg,
-    scale: source.kind === 'banish' ? source.scale * 1.025 : source.scale,
+    ageTicks: source.ageTicks,
+    alpha: source.alpha,
+    alphaLossPerTick: source.alphaLossPerTick,
+    angularVelocityDeg: source.angularVelocityDeg,
+    atlas: source.atlas,
+    blendMode: source.blendMode,
+    bounceVelocity: source.bounceVelocity,
+    entry: source.entry,
+    firstEntry: source.firstEntry,
+    frameCount: source.frameCount,
+    frameTicks: source.frameTicks,
+    height: source.height,
+    id: source.id,
+    kind: source.kind,
+    lastStepTick: source.lastStepTick,
+    lifetimeTicks: source.lifetimeTicks,
+    opacityTimer: source.opacityTimer,
+    ownerActorId: source.ownerActorId,
+    painterRegistration: source.painterRegistration,
+    position: source.position,
+    role: source.role,
+    rotationDeg: source.rotationDeg,
+    scale: source.scale,
+    shadow: source.shadow,
+    spawnTick: source.spawnTick,
+    tint: source.tint,
+    verticalVelocity: source.verticalVelocity,
+    velocity: source.velocity,
   }
 }
 

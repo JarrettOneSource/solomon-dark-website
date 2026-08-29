@@ -1,6 +1,7 @@
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import {
   resolveActorMotion,
+  resolveUnpushedMoverMotion,
   type ActorPhysicsBody,
 } from '../core-kernels/actor-physics.ts'
 import type {
@@ -638,11 +639,29 @@ export function stepBoneyardWorldTick(
     && waves.phase !== 'dormant'
     ? arenaTransition.combatBounds
     : activeBounds
-  const dynamicBodies = boneyardCombatBodies(
+  const dynamicBodies = [...boneyardCombatBodies(
     nextPlayers,
     collisionResolvedEnemies,
     playerCombat,
-  )
+  ).values()]
+  const dynamicBodyIndices = new Map(dynamicBodies.map((body, index) => [body.id, index]))
+  const enemyPhysicsWorld = {
+    canPlace: (_bodyId: string, candidate: BoneyardPoint, candidateRadius: number) => (
+      canPlaceBoneyardBody(candidate, activeBounds, collision, candidateRadius)
+    ),
+    move: (
+      _bodyId: string,
+      current: BoneyardPoint,
+      movement: BoneyardPoint,
+      movementRadius: number,
+    ) => resolveBoneyardMovement(
+      current,
+      { x: current.x + movement.x, y: current.y + movement.y },
+      activeBounds,
+      collision,
+      movementRadius,
+    ),
+  }
   const spawnLightSources = boneyardSpawnLightSources(
     world,
     nextPlayers,
@@ -744,35 +763,22 @@ export function stepBoneyardWorldTick(
         )
       }
       const moverId = `enemy-${actorId}`
-      if (!dynamicBodies.has(moverId)) {
-        dynamicBodies.set(moverId, enemyCollisionBody(moverId, position, radius))
+      let moverIndex = dynamicBodyIndices.get(moverId)
+      if (moverIndex === undefined) {
+        moverIndex = dynamicBodies.length
+        dynamicBodies.push(enemyCollisionBody(moverId, position, radius))
+        dynamicBodyIndices.set(moverId, moverIndex)
       }
-      const resolved = resolveActorMotion(
-        [...dynamicBodies.values()].map((body) => ({
-          ...body,
-          delta: body.id === moverId ? { ...delta } : { x: 0, y: 0 },
-          driven: body.id === moverId,
-        })),
-        {
-          canPlace: (_bodyId, candidate, candidateRadius) => canPlaceBoneyardBody(
-            candidate,
-            activeBounds,
-            collision,
-            candidateRadius,
-          ),
-          move: (_bodyId, current, movement, movementRadius) => resolveBoneyardMovement(
-            current,
-            { x: current.x + movement.x, y: current.y + movement.y },
-            activeBounds,
-            collision,
-            movementRadius,
-          ),
-        },
-        () => true,
+      // Enemy bodies never push, so the shared solver reduces to one swept root
+      // move plus ascending pair separation. The kernel fast path keeps that
+      // arithmetic while skipping the per-move crowd clone.
+      const mover = dynamicBodies[moverIndex]!
+      mover.position = resolveUnpushedMoverMotion(
+        dynamicBodies,
+        moverIndex,
+        delta,
+        enemyPhysicsWorld,
       )
-      for (const body of resolved) dynamicBodies.set(body.id, body)
-      const mover = dynamicBodies.get(moverId)
-      if (!mover) throw new Error(`Boneyard collision lost enemy actor ${actorId}`)
       return mover.position
     },
     resolveSpawnPlacement: ({ actorId: _actorId, position, positionPolicy, radius, rngState }) => (
@@ -929,19 +935,13 @@ export function stepBoneyardWorldTick(
   }
   const earthquakeSceneryTargets = cleanupBounds === null
     ? world.earthquakeSceneryTargets
-    : world.earthquakeSceneryTargets.filter(({ position }) => (
-        pointInsideBounds(position, cleanupBounds)
-      ))
+    : retainInsideBounds(world.earthquakeSceneryTargets, cleanupBounds)
   const primarySceneryTargets = cleanupBounds === null
     ? world.primarySceneryTargets
-    : world.primarySceneryTargets.filter(({ position }) => (
-        pointInsideBounds(position, cleanupBounds)
-      ))
+    : retainInsideBounds(world.primarySceneryTargets, cleanupBounds)
   const scenerySpellTargets = cleanupBounds === null
     ? world.scenerySpellTargets
-    : world.scenerySpellTargets.filter(({ position }) => (
-        pointInsideBounds(position, cleanupBounds)
-      ))
+    : retainInsideBounds(world.scenerySpellTargets, cleanupBounds)
   return {
     enemyEvents: enemyStep.events,
     lootEvents: lootStep.events,
@@ -1413,6 +1413,26 @@ function commitBoneyardEnemyCollisionPositions(
         : { ...maggot, position: Object.freeze({ ...position }) }
     }),
   }
+}
+
+/**
+ * `filter` for the per-tick scenery cleanup that hands back the source array
+ * when every row survives, so the sealed arena stops re-allocating three
+ * scenery lists per tick and downstream identity caches can hit.
+ */
+function retainInsideBounds<Row extends { readonly position: Readonly<BoneyardPoint> }>(
+  rows: readonly Row[],
+  bounds: Readonly<BoneyardBounds>,
+): readonly Row[] {
+  let index = 0
+  while (index < rows.length && pointInsideBounds(rows[index]!.position, bounds)) index += 1
+  if (index === rows.length) return rows
+  const retained = rows.slice(0, index)
+  for (index += 1; index < rows.length; index += 1) {
+    const row = rows[index]!
+    if (pointInsideBounds(row.position, bounds)) retained.push(row)
+  }
+  return retained
 }
 
 function enemyCollisionBody(

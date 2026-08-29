@@ -13,7 +13,7 @@ interface PrimitiveBounds {
   readonly minimumY: number
 }
 
-interface CollisionBroadphaseSelection {
+export interface CollisionBroadphaseSelection {
   circleIndices: readonly number[]
   polygonIndices: readonly number[]
   segmentIndices: readonly number[]
@@ -30,6 +30,7 @@ interface PrimitiveCell {
 }
 
 const COLLISION_BROADPHASE_CELL_SIZE = 128
+const MAXIMUM_INDEXED_CELLS_PER_PRIMITIVE = 4_096
 const EMPTY_INDICES: readonly number[] = Object.freeze([])
 
 /**
@@ -59,11 +60,39 @@ export class BoneyardCollisionBroadphase {
     this.selection.segmentIndices = this.segments.select(center, radius)
     return this.selection
   }
+
+  selectBounds(
+    minimumX: number,
+    minimumY: number,
+    maximumX: number,
+    maximumY: number,
+  ): CollisionBroadphaseSelection {
+    this.selection.circleIndices = this.circles.selectBounds(
+      minimumX,
+      minimumY,
+      maximumX,
+      maximumY,
+    )
+    this.selection.polygonIndices = this.polygons.selectBounds(
+      minimumX,
+      minimumY,
+      maximumX,
+      maximumY,
+    )
+    this.selection.segmentIndices = this.segments.selectBounds(
+      minimumX,
+      minimumY,
+      maximumX,
+      maximumY,
+    )
+    return this.selection
+  }
 }
 
 class PrimitiveCellGrid {
   private readonly columns = new Map<number, Map<number, PrimitiveCell>>()
   private epoch = 0
+  private readonly globalIndices: number[] = []
   private readonly marks: Uint32Array
   private readonly scratch: number[] = []
 
@@ -73,27 +102,55 @@ class PrimitiveCellGrid {
   }
 
   select(center: Readonly<BoneyardPoint>, radius: number): readonly number[] {
-    const minimumCellX = cellCoordinate(center.x - radius)
-    const maximumCellX = cellCoordinate(center.x + radius)
-    const minimumCellY = cellCoordinate(center.y - radius)
-    const maximumCellY = cellCoordinate(center.y + radius)
-    if (minimumCellX === maximumCellX && minimumCellY === maximumCellY) {
+    return this.selectCells(
+      cellCoordinate(center.x - radius),
+      cellCoordinate(center.y - radius),
+      cellCoordinate(center.x + radius),
+      cellCoordinate(center.y + radius),
+    )
+  }
+
+  selectBounds(
+    minimumX: number,
+    minimumY: number,
+    maximumX: number,
+    maximumY: number,
+  ): readonly number[] {
+    return this.selectCells(
+      cellCoordinate(minimumX),
+      cellCoordinate(minimumY),
+      cellCoordinate(maximumX),
+      cellCoordinate(maximumY),
+    )
+  }
+
+  private selectCells(
+    minimumCellX: number,
+    minimumCellY: number,
+    maximumCellX: number,
+    maximumCellY: number,
+  ): readonly number[] {
+    if (
+      this.globalIndices.length === 0
+      && minimumCellX === maximumCellX
+      && minimumCellY === maximumCellY
+    ) {
       return this.cell(minimumCellX, minimumCellY)?.indices ?? EMPTY_INDICES
     }
 
     this.advanceEpoch()
     this.scratch.length = 0
-    for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
-      const column = this.columns.get(cellX)
-      if (!column) continue
-      for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
-        const cell = column.get(cellY)
-        if (!cell) continue
-        for (const index of cell.indices) {
-          if (this.marks[index] === this.epoch) continue
-          this.marks[index] = this.epoch
-          this.scratch.push(index)
-        }
+    for (const index of this.globalIndices) this.append(index)
+    const columnSpan = maximumCellX - minimumCellX + 1
+    if (columnSpan <= this.columns.size) {
+      for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
+        const column = this.columns.get(cellX)
+        if (column) this.selectColumn(column, minimumCellY, maximumCellY)
+      }
+    } else {
+      for (const [cellX, column] of this.columns) {
+        if (cellX < minimumCellX || cellX > maximumCellX) continue
+        this.selectColumn(column, minimumCellY, maximumCellY)
       }
     }
     this.scratch.sort(ascendingNumber)
@@ -111,11 +168,55 @@ class PrimitiveCellGrid {
     return this.columns.get(cellX)?.get(cellY)
   }
 
+  private selectColumn(
+    column: ReadonlyMap<number, PrimitiveCell>,
+    minimumCellY: number,
+    maximumCellY: number,
+  ): void {
+    const rowSpan = maximumCellY - minimumCellY + 1
+    if (rowSpan <= column.size) {
+      for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
+        const cell = column.get(cellY)
+        if (cell) this.appendCell(cell)
+      }
+      return
+    }
+    for (const [cellY, cell] of column) {
+      if (cellY >= minimumCellY && cellY <= maximumCellY) this.appendCell(cell)
+    }
+  }
+
+  private appendCell(cell: PrimitiveCell): void {
+    for (const index of cell.indices) this.append(index)
+  }
+
+  private append(index: number): void {
+    if (this.marks[index] === this.epoch) return
+    this.marks[index] = this.epoch
+    this.scratch.push(index)
+  }
+
   private insert(index: number, bounds: PrimitiveBounds): void {
     const minimumCellX = cellCoordinate(bounds.minimumX)
     const maximumCellX = cellCoordinate(bounds.maximumX)
     const minimumCellY = cellCoordinate(bounds.minimumY)
     const maximumCellY = cellCoordinate(bounds.maximumY)
+    const columnSpan = maximumCellX - minimumCellX + 1
+    const rowSpan = maximumCellY - minimumCellY + 1
+    if (
+      !Number.isSafeInteger(minimumCellX)
+      || !Number.isSafeInteger(maximumCellX)
+      || !Number.isSafeInteger(minimumCellY)
+      || !Number.isSafeInteger(maximumCellY)
+      || columnSpan <= 0
+      || rowSpan <= 0
+      || columnSpan > MAXIMUM_INDEXED_CELLS_PER_PRIMITIVE
+      || rowSpan > MAXIMUM_INDEXED_CELLS_PER_PRIMITIVE
+      || columnSpan * rowSpan > MAXIMUM_INDEXED_CELLS_PER_PRIMITIVE
+    ) {
+      this.globalIndices.push(index)
+      return
+    }
     for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
       let column = this.columns.get(cellX)
       if (!column) {

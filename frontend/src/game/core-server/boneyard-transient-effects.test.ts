@@ -275,6 +275,7 @@ function deathEffect(
     lifetimeTicks: 20,
     opacityTimer: 1,
     ownerActorId: 3,
+    painterRegistration: null,
     position: Object.freeze({ x: 10, y: 20 }),
     role: 'transient-test',
     rotationDeg: 5,

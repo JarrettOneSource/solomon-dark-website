@@ -1,5 +1,6 @@
 import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
+  boneyardCollisionCandidatesInBounds,
   boneyardCollisionGeometryIdentity,
   canPlaceBoneyardBody,
   type BoneyardCollisionWorld,
@@ -734,6 +735,26 @@ function appendDistinctRoutePoint(
   route.push(Object.freeze({ ...point }))
 }
 
+interface EndpointTriangleCandidate {
+  readonly distance: number
+  readonly id: number
+}
+
+function byEndpointDistanceThenId(
+  left: EndpointTriangleCandidate,
+  right: EndpointTriangleCandidate,
+): number {
+  return left.distance - right.distance || left.id - right.id
+}
+
+/**
+ * Selects the first triangle, ranked by containment, then edge distance, then
+ * id, whose center the endpoint can reach. Containing triangles come from the
+ * lookup grid (an exact superset of every triangle whose epsilon-inclusive
+ * test can pass), so the common case never touches the rest of the mesh; the
+ * remaining triangles are ranked exactly as before only when none of the
+ * containing triangles is reachable.
+ */
 function resolveEndpointTriangle(
   mesh: BoneyardNavigationMeshData,
   point: Readonly<BoneyardPoint>,
@@ -742,26 +763,68 @@ function resolveEndpointTriangle(
   radius: number,
   ignoredSourceIds?: ReadonlySet<string>,
 ): number | null {
-  const ranked = mesh.triangles.map((triangle) => {
-    const vertices = triangle.vertices.map((vertex) => mesh.points[vertex]!)
-    return {
-      contains: pointInTriangle(point, vertices),
-      distance: pointTriangleDistanceSquared(point, vertices),
-      id: triangle.id,
+  // Every candidate check starts with pathIsClear(point, ...), which rejects a
+  // start point outside the navigation bounds before looking at geometry.
+  if (!pointInsideNavigationBounds(point, bounds, radius)) return null
+  const containing: EndpointTriangleCandidate[] = []
+  for (const id of selectNavigationTriangleCandidates(mesh, point)) {
+    const vertices = navigationTriangleVertices(mesh, id)
+    if (pointInTriangle(point, vertices)) {
+      containing.push({ distance: pointTriangleDistanceSquared(point, vertices), id })
     }
-  }).sort((left, right) => (
-    Number(right.contains) - Number(left.contains)
-    || left.distance - right.distance
-    || left.id - right.id
-  ))
-  return ranked.find(({ id }) => pathIsClear(
+  }
+  containing.sort(byEndpointDistanceThenId)
+  for (const { id } of containing) {
+    if (endpointTriangleReachable(mesh, id, point, bounds, world, radius, ignoredSourceIds)) {
+      return id
+    }
+  }
+  const containingIds = new Set(containing.map(({ id }) => id))
+  const remaining: EndpointTriangleCandidate[] = []
+  for (const triangle of mesh.triangles) {
+    if (containingIds.has(triangle.id)) continue
+    remaining.push({
+      distance: pointTriangleDistanceSquared(
+        point,
+        navigationTriangleVertices(mesh, triangle.id),
+      ),
+      id: triangle.id,
+    })
+  }
+  remaining.sort(byEndpointDistanceThenId)
+  for (const { id } of remaining) {
+    if (endpointTriangleReachable(mesh, id, point, bounds, world, radius, ignoredSourceIds)) {
+      return id
+    }
+  }
+  return null
+}
+
+function endpointTriangleReachable(
+  mesh: BoneyardNavigationMeshData,
+  id: number,
+  point: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  ignoredSourceIds?: ReadonlySet<string>,
+): boolean {
+  return pathIsClear(
     point,
     mesh.triangles[id]!.center,
     bounds,
     world,
     radius,
     ignoredSourceIds,
-  ))?.id ?? null
+  )
+}
+
+function navigationTriangleVertices(
+  mesh: BoneyardNavigationMeshData,
+  id: number,
+): readonly Readonly<BoneyardPoint>[] {
+  const [first, second, third] = mesh.triangles[id]!.vertices
+  return [mesh.points[first]!, mesh.points[second]!, mesh.points[third]!]
 }
 
 function findTrianglePath(
@@ -894,37 +957,293 @@ function pathIsClear(
 ): boolean {
   if (!pointInsideNavigationBounds(start, bounds, radius)) return false
   if (!pointInsideNavigationBounds(end, bounds, radius)) return false
-  for (const polygon of world.polygons) {
+  // Only primitives whose padded boxes reach the padded segment box can block
+  // it. The collision owner's sparse broadphase returns that superset in the
+  // original primitive-family order before the unchanged clearance checks.
+  const reach = radius + NAVIGATION_BLOCKER_LOOKUP_MARGIN
+  const minX = Math.min(start.x, end.x) - reach
+  const minY = Math.min(start.y, end.y) - reach
+  const maxX = Math.max(start.x, end.x) + reach
+  const maxY = Math.max(start.y, end.y) + reach
+  const candidates = boneyardCollisionCandidatesInBounds(
+    world,
+    minX,
+    minY,
+    maxX,
+    maxY,
+  )
+  const polygonIndices = candidates?.polygonIndices
+  for (let candidate = 0; candidate < (polygonIndices?.length ?? world.polygons.length); candidate += 1) {
+    const polygon = world.polygons[polygonIndices?.[candidate] ?? candidate]!
     if (polygon.sourceId !== undefined && ignoredSourceIds?.has(polygon.sourceId)) continue
-    if (pointInNavigationPolygon(start, polygon.points)) return false
-    if (pointInNavigationPolygon(end, polygon.points)) return false
-    for (let index = 0; index < polygon.points.length; index += 1) {
-      const distanceSquared = segmentDistanceSquared(
-        start,
-        end,
-        polygon.points[index]!,
-        polygon.points[(index + 1) % polygon.points.length]!,
-      )
-      if (navigationSeparationBlocks(distanceSquared, radius)) return false
-    }
+    if (navigationPolygonBlocks(polygon, start, end, radius)) return false
   }
-  for (const circle of world.circles) {
+  const circleIndices = candidates?.circleIndices
+  for (let candidate = 0; candidate < (circleIndices?.length ?? world.circles.length); candidate += 1) {
+    const circle = world.circles[circleIndices?.[candidate] ?? candidate]!
     if (circle.sourceId !== undefined && ignoredSourceIds?.has(circle.sourceId)) continue
-    const required = radius + circle.radius
-    if (navigationSeparationBlocks(
-      pointSegmentDistanceSquared(circle.center, start, end),
-      required,
-    )) return false
+    if (navigationCircleBlocks(circle, start, end, radius)) return false
   }
-  for (const segment of world.segments) {
+  const segmentIndices = candidates?.segmentIndices
+  for (let candidate = 0; candidate < (segmentIndices?.length ?? world.segments.length); candidate += 1) {
+    const segment = world.segments[segmentIndices?.[candidate] ?? candidate]!
     if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
-    const required = radius + segment.radius
-    if (navigationSeparationBlocks(
-      segmentDistanceSquared(start, end, segment.start, segment.end),
-      required,
-    )) return false
+    if (navigationSegmentBlocks(segment, start, end, radius)) return false
   }
   return true
+}
+
+/** Test oracle hook: the unchanged per-polygon clearance check. */
+export function navigationPolygonBlocks(
+  polygon: BoneyardCollisionWorld['polygons'][number],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  if (pointInNavigationPolygon(start, polygon.points)) return true
+  if (pointInNavigationPolygon(end, polygon.points)) return true
+  for (let index = 0; index < polygon.points.length; index += 1) {
+    const distanceSquared = segmentDistanceSquared(
+      start,
+      end,
+      polygon.points[index]!,
+      polygon.points[(index + 1) % polygon.points.length]!,
+    )
+    if (navigationSeparationBlocks(distanceSquared, radius)) return true
+  }
+  return false
+}
+
+/** Test oracle hook: the unchanged per-circle clearance check. */
+export function navigationCircleBlocks(
+  circle: BoneyardCollisionWorld['circles'][number],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  const required = radius + circle.radius
+  return navigationSeparationBlocks(
+    pointSegmentDistanceSquared(circle.center, start, end),
+    required,
+  )
+}
+
+/** Test oracle hook: the unchanged per-segment clearance check. */
+export function navigationSegmentBlocks(
+  segment: BoneyardCollisionWorld['segments'][number],
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  const required = radius + segment.radius
+  return navigationSeparationBlocks(
+    segmentDistanceSquared(start, end, segment.start, segment.end),
+    required,
+  )
+}
+
+// --- Lookup grids ----------------------------------------------------------
+
+const NAVIGATION_TRIANGLE_LOOKUP_CELL = 250
+const NAVIGATION_TRIANGLE_LOOKUP_MARGIN = 1
+const NAVIGATION_BLOCKER_LOOKUP_MARGIN = 1
+const MAXIMUM_TRIANGLE_LOOKUP_CELLS = 4_096
+const EMPTY_NAVIGATION_LOOKUP_ITEMS: readonly number[] = Object.freeze([])
+/**
+ * Unit roundoff of doubles. Each `triangleSide` cross product of coordinates
+ * bounded by M is within 32 * M^2 * ROUNDING_UNIT of its exact value (four
+ * rounded differences, two rounded products, one rounded subtraction), so the
+ * triangle grid budgets twice that on top of TRIANGLE_EPSILON.
+ */
+const ROUNDING_UNIT = Number.EPSILON / 2
+
+/**
+ * Sparse grid over triangle boxes (minX, minY, maxX, maxY per item). A NaN
+ * box is handled by the caller's exact fallback list; a very large finite box
+ * is returned for every point rather than expanding across unbounded cells.
+ */
+class NavigationLookupGrid {
+  private readonly cells = new Map<number, Map<number, number[]>>()
+  private readonly cellSize: number
+  private readonly globalItems: number[] = []
+
+  constructor(boxes: Float64Array, cellSize: number) {
+    const count = boxes.length / 4
+    this.cellSize = cellSize
+    for (let item = 0; item < count; item += 1) {
+      if (Number.isNaN(boxes[item * 4])) continue
+      const firstColumn = Math.floor(boxes[item * 4]! / cellSize)
+      const firstRow = Math.floor(boxes[item * 4 + 1]! / cellSize)
+      const lastColumn = Math.floor(boxes[item * 4 + 2]! / cellSize)
+      const lastRow = Math.floor(boxes[item * 4 + 3]! / cellSize)
+      const columnSpan = lastColumn - firstColumn + 1
+      const rowSpan = lastRow - firstRow + 1
+      if (
+        !Number.isSafeInteger(firstColumn)
+        || !Number.isSafeInteger(lastColumn)
+        || !Number.isSafeInteger(firstRow)
+        || !Number.isSafeInteger(lastRow)
+        || columnSpan <= 0
+        || rowSpan <= 0
+        || columnSpan > MAXIMUM_TRIANGLE_LOOKUP_CELLS
+        || rowSpan > MAXIMUM_TRIANGLE_LOOKUP_CELLS
+        || columnSpan * rowSpan > MAXIMUM_TRIANGLE_LOOKUP_CELLS
+      ) {
+        this.globalItems.push(item)
+        continue
+      }
+      for (let column = firstColumn; column <= lastColumn; column += 1) {
+        let rows = this.cells.get(column)
+        if (!rows) {
+          rows = new Map()
+          this.cells.set(column, rows)
+        }
+        for (let row = firstRow; row <= lastRow; row += 1) {
+          const items = rows.get(row)
+          if (items) items.push(item)
+          else rows.set(row, [item])
+        }
+      }
+    }
+  }
+
+  /** Items registered in the point cell plus any exact global fallbacks. */
+  itemsAt(x: number, y: number): readonly number[] {
+    const local = this.cells
+      .get(Math.floor(x / this.cellSize))
+      ?.get(Math.floor(y / this.cellSize))
+      ?? EMPTY_NAVIGATION_LOOKUP_ITEMS
+    if (this.globalItems.length === 0) return local
+    if (local.length === 0) return this.globalItems
+    return [...this.globalItems, ...local]
+  }
+}
+
+interface NavigationTriangleIndex {
+  readonly grid: NavigationLookupGrid
+  /** Largest absolute vertex coordinate the rounding budget was derived from. */
+  readonly magnitude: number
+  /** Triangles whose inclusive region the margin cannot bound (degenerate or sliver). */
+  readonly unbounded: readonly number[]
+}
+
+const NAVIGATION_TRIANGLE_INDEXES = new WeakMap<BoneyardNavigationMeshData, NavigationTriangleIndex>()
+
+function navigationTriangleIndex(mesh: BoneyardNavigationMeshData): NavigationTriangleIndex {
+  const cached = NAVIGATION_TRIANGLE_INDEXES.get(mesh)
+  if (cached) return cached
+  let magnitude = 1
+  for (const point of mesh.points) {
+    magnitude = Math.max(magnitude, Math.abs(point.x), Math.abs(point.y))
+  }
+  const tolerance = TRIANGLE_EPSILON + 64 * ROUNDING_UNIT * magnitude * magnitude
+  const boxes = new Float64Array(mesh.triangles.length * 4)
+  const unbounded: number[] = []
+  for (const [index, triangle] of mesh.triangles.entries()) {
+    const [first, second, third] = navigationTriangleVertices(mesh, triangle.id)
+    const area2 = Math.abs(cross(
+      second!.x - first!.x,
+      second!.y - first!.y,
+      third!.x - first!.x,
+      third!.y - first!.y,
+    ))
+    const longestEdge = Math.max(
+      Math.hypot(second!.x - first!.x, second!.y - first!.y),
+      Math.hypot(third!.x - second!.x, third!.y - second!.y),
+      Math.hypot(first!.x - third!.x, first!.y - third!.y),
+    )
+    // The epsilon-inclusive triangle is the triangle scaled about its centroid
+    // by (1 + 3 tolerance / area2); its vertices move at most
+    // 2 * tolerance * longestEdge / area2 from the original vertices, and the
+    // opposite-sign branch of pointInTriangle is empty once area2 exceeds
+    // three tolerances. Requiring four tolerances and half the margin leaves
+    // room for the rounding of area2 itself.
+    const expansion = 2 * tolerance * longestEdge / area2
+    if (
+      !(area2 > 4 * tolerance)
+      || !(expansion <= NAVIGATION_TRIANGLE_LOOKUP_MARGIN / 2)
+    ) {
+      unbounded.push(triangle.id)
+      boxes[index * 4] = Number.NaN
+      boxes[index * 4 + 1] = Number.NaN
+      boxes[index * 4 + 2] = Number.NaN
+      boxes[index * 4 + 3] = Number.NaN
+      continue
+    }
+    boxes[index * 4] = Math.min(first!.x, second!.x, third!.x) - NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+    boxes[index * 4 + 1] = Math.min(first!.y, second!.y, third!.y) - NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+    boxes[index * 4 + 2] = Math.max(first!.x, second!.x, third!.x) + NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+    boxes[index * 4 + 3] = Math.max(first!.y, second!.y, third!.y) + NAVIGATION_TRIANGLE_LOOKUP_MARGIN
+  }
+  const index: NavigationTriangleIndex = {
+    grid: new NavigationLookupGrid(boxes, NAVIGATION_TRIANGLE_LOOKUP_CELL),
+    magnitude,
+    unbounded,
+  }
+  NAVIGATION_TRIANGLE_INDEXES.set(mesh, index)
+  return index
+}
+
+/**
+ * Test oracle hook: every triangle whose `pointInTriangle` test can pass for
+ * the point is among the returned ids.
+ */
+export function selectNavigationTriangleCandidates(
+  mesh: BoneyardNavigationMeshData,
+  point: Readonly<BoneyardPoint>,
+): readonly number[] {
+  const index = navigationTriangleIndex(mesh)
+  // The rounding budget only covers points within the mesh extent; anything
+  // further out (never a bounds-checked endpoint) falls back to the full list.
+  if (!(Math.abs(point.x) <= index.magnitude && Math.abs(point.y) <= index.magnitude)) {
+    return mesh.triangles.map(({ id }) => id)
+  }
+  const candidates = index.grid.itemsAt(point.x, point.y).map((item) => mesh.triangles[item]!.id)
+  return index.unbounded.length === 0 ? candidates : [...index.unbounded, ...candidates]
+}
+
+/** Test oracle hook: the unchanged epsilon-inclusive containment test. */
+export function navigationTriangleContainsPoint(
+  mesh: BoneyardNavigationMeshData,
+  id: number,
+  point: Readonly<BoneyardPoint>,
+): boolean {
+  return pointInTriangle(point, navigationTriangleVertices(mesh, id))
+}
+
+/**
+ * Test oracle hook: every primitive that can block the padded segment is among
+ * the returned indices.
+ */
+export function selectNavigationBlockerCandidates(
+  world: BoneyardCollisionWorld,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  radius: number,
+): { circles: number[]; polygons: number[]; segments: number[] } {
+  const reach = radius + NAVIGATION_BLOCKER_LOOKUP_MARGIN
+  const minX = Math.min(start.x, end.x) - reach
+  const minY = Math.min(start.y, end.y) - reach
+  const maxX = Math.max(start.x, end.x) + reach
+  const maxY = Math.max(start.y, end.y) + reach
+  const selected = boneyardCollisionCandidatesInBounds(
+    world,
+    minX,
+    minY,
+    maxX,
+    maxY,
+  )
+  return {
+    circles: selected === null
+      ? world.circles.map((_, index) => index)
+      : [...selected.circleIndices],
+    polygons: selected === null
+      ? world.polygons.map((_, index) => index)
+      : [...selected.polygonIndices],
+    segments: selected === null
+      ? world.segments.map((_, index) => index)
+      : [...selected.segmentIndices],
+  }
 }
 
 function pointInsideNavigationBounds(

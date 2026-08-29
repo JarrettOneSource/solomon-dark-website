@@ -80,3 +80,45 @@ to pass opaque fields through the physics boundary.
 - Re-run the same fresh-session idle/move/shoot/combined matrix. Acceptance is
   restored authoritative cadence without a browser-frame regression, followed
   by the full element/UI/enemy/restoration matrix and physical iPhone proof.
+
+## 2026-08-29 — non-pushing Boneyard mover specialization
+
+### Reported smell and boundary
+
+The late-wave replay still invoked the general persistent-body solver once per
+enemy movement callback. Each invocation cloned the complete player/enemy
+crowd even though Boneyard enemy collision bodies have `pushEnabled === false`,
+only the requested enemy is driven, every dynamic pair is eligible, and that
+native branch can correct only the mover. The representation question is
+whether that closed branch can avoid the crowd clone without creating a second
+collision law or changing any body, order, sweep, placement, or contact result.
+
+The shared actor-response owner remains `core-kernels/actor-physics.ts`.
+Membership and dispositions are:
+
+| Member | Disposition | Required invariant |
+| --- | --- | --- |
+| Hub actors, Boneyard players, knockbacks, pushing and filtered pairs | `verified-already-at-parity` | Continue through the general movement epoch, broadphase, recipient recursion, and root-contact observer. |
+| Ordinary Boneyard enemy movement callback | `exact-ported` specialized representation | One swept root move, then ascending-index unweighted separation against the complete current crowd with full-candidate placement. Only the mover position may change. |
+| Newly admitted enemy during the same store step | `exact-ported` | Append once in native registration order and participate in every later callback that tick. |
+| Pause, death, run reset, Game Over, and teardown | `verified-already-at-parity` | The per-tick crowd remains local; no solver result or cache crosses the movement epoch or run. |
+
+### Shared representation contract
+
+- General and specialized entries use the same separation and placement
+  primitives, including the strict overlap edge, coincident-center rejection,
+  `+0.1` separation epsilon, arithmetic order, swept world move, and
+  `canPlace` acceptance.
+- The specialized entry rejects any mover whose `pushEnabled` is not exactly
+  false. Its caller supplies the same complete ordered body list and the prior
+  all-pairs collision predicate.
+- The source crowd is not cloned or mutated by the kernel. The Boneyard owner
+  commits only the returned mover position into its tick-local body row.
+- The optimization is not legal for player movement, knockback, pushing,
+  filtered collision pairs, root-contact observation, or recursive recipients.
+
+Focused differential coverage must compare the specialized result to the
+general solver across blocked sweeps, rejected placements, player/enemy radii,
+coincident bodies, and crowded randomized worlds while proving source
+immutability. The complete fixed-tick replay must retain every checkpoint and
+order-sensitive JSON hash before publication.

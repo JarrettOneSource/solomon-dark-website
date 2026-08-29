@@ -246,7 +246,13 @@ export function firstNativePrimaryPointContact(
 ): PrimarySpellTarget | null {
   const cellX = nativePrimaryCellCoordinate(query.position.x)
   const cellY = nativePrimaryCellCoordinate(query.position.y)
-  for (const target of nativeCellBindingOrder(query.targets)) {
+  // The stock walk visits the cell binding list in binding order and stops at
+  // the first contact. Scanning once and keeping the lowest binding order
+  // (earliest registration wins ties, as the stable sort did) selects the same
+  // target without sorting the whole target list per query.
+  let selected: PrimarySpellTarget | null = null
+  for (const target of query.targets) {
+    if (selected !== null && target.cellBindingOrder >= selected.cellBindingOrder) continue
     if (!nativePrimaryTargetEligible(target, query.actorMask)) continue
     if (
       nativePrimaryCellCoordinate(target.position.x) !== cellX
@@ -254,10 +260,10 @@ export function firstNativePrimaryPointContact(
     ) continue
     const radius = query.queryRadius + target.bodyRadius
     if (squaredLength(subtract(target.position, query.position)) < radius * radius) {
-      return target
+      selected = target
     }
   }
-  return null
+  return selected
 }
 
 export function firstNativeFireballPointContact(
@@ -561,14 +567,6 @@ function nativeRegistrationOrder(
 ): PrimarySpellTarget[] {
   return [...targets].sort((left, right) => (
     left.registrationOrder - right.registrationOrder
-  ))
-}
-
-function nativeCellBindingOrder(
-  targets: readonly PrimarySpellTarget[],
-): PrimarySpellTarget[] {
-  return [...targets].sort((left, right) => (
-    left.cellBindingOrder - right.cellBindingOrder
   ))
 }
 

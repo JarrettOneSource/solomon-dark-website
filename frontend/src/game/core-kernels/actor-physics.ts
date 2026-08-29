@@ -38,18 +38,23 @@ const NATIVE_WEIGHT_RANGE = 0.99
 const NATIVE_PUSH_FACTOR_MINIMUM = 0
 const NATIVE_PUSH_FACTOR_MAXIMUM = 1
 
-function separation(
-  mover: Readonly<ActorPhysicsBody>,
-  other: Readonly<ActorPhysicsBody>,
+function actorSeparation(
+  position: Readonly<Vector2>,
+  radius: number,
+  otherPosition: Readonly<Vector2>,
+  otherRadius: number,
   weighted: boolean,
+  output: Vector2 = { x: 0, y: 0 },
 ): Vector2 {
-  const dx = mover.position.x - other.position.x
-  const dy = mover.position.y - other.position.y
+  const dx = position.x - otherPosition.x
+  const dy = position.y - otherPosition.y
   const distanceSquared = dx * dx + dy * dy
-  const radiusSum = mover.radius + other.radius
+  const radiusSum = radius + otherRadius
   const radiusSumSquared = radiusSum * radiusSum
   if (distanceSquared >= radiusSumSquared || distanceSquared === 0) {
-    return { x: 0, y: 0 }
+    output.x = 0
+    output.y = 0
+    return output
   }
 
   const distance = Math.sqrt(distanceSquared)
@@ -58,10 +63,24 @@ function separation(
     ? (distanceSquared / radiusSumSquared) ** 4 * NATIVE_WEIGHT_RANGE
       + NATIVE_WEIGHT_MINIMUM
     : 1
-  return {
-    x: dx / distance * overlap * weight,
-    y: dy / distance * overlap * weight,
+  output.x = dx / distance * overlap * weight
+  output.y = dy / distance * overlap * weight
+  return output
+}
+
+function placedActorCorrection(
+  bodyId: string,
+  position: Readonly<Vector2>,
+  radius: number,
+  correction: Readonly<Vector2>,
+  world: ActorPhysicsWorld,
+): Vector2 | null {
+  if (correction.x === 0 && correction.y === 0) return null
+  const candidate = {
+    x: position.x + correction.x,
+    y: position.y + correction.y,
   }
+  return world.canPlace(bodyId, candidate, radius) ? candidate : null
 }
 
 function applyCorrection(
@@ -72,12 +91,14 @@ function applyCorrection(
   bodies: readonly ActorPhysicsBody[],
   broadphase?: ActorMotionBroadphase,
 ): boolean {
-  if (correction.x === 0 && correction.y === 0) return false
-  const candidate = {
-    x: body.position.x + correction.x,
-    y: body.position.y + correction.y,
-  }
-  if (!world.canPlace(body.id, candidate, body.radius)) return false
+  const candidate = placedActorCorrection(
+    body.id,
+    body.position,
+    body.radius,
+    correction,
+    world,
+  )
+  if (candidate === null) return false
   body.position = candidate
   broadphase?.update(bodyIndex, bodies)
   return true
@@ -128,7 +149,13 @@ export function resolveActorMotion(
         const contacted = applyCorrection(
           bodyIndex,
           mover,
-          separation(mover, other, false),
+          actorSeparation(
+            mover.position,
+            mover.radius,
+            other.position,
+            other.radius,
+            false,
+          ),
           world,
           bodies,
           broadphase,
@@ -137,7 +164,13 @@ export function resolveActorMotion(
         return
       }
 
-      const otherCorrection = separation(other, mover, true)
+      const otherCorrection = actorSeparation(
+        other.position,
+        other.radius,
+        mover.position,
+        mover.radius,
+        true,
+      )
       if (otherCorrection.x !== 0 || otherCorrection.y !== 0) {
         if (!recursive) observeRootContact?.(mover.id, other.id)
         const pushFactor = Math.min(
@@ -155,7 +188,20 @@ export function resolveActorMotion(
           y: otherCorrection.y * pushFactor,
         }, epochRecipients, true)
       }
-      applyCorrection(bodyIndex, mover, separation(mover, other, true), world, bodies, broadphase)
+      applyCorrection(
+        bodyIndex,
+        mover,
+        actorSeparation(
+          mover.position,
+          mover.radius,
+          other.position,
+          other.radius,
+          true,
+        ),
+        world,
+        bodies,
+        broadphase,
+      )
     }
 
     if (!broadphase) {
@@ -191,6 +237,51 @@ export function resolveActorMotion(
     moveBody(bodyIndex, bodies[bodyIndex].delta, new Set(), false)
   }
   return bodies
+}
+
+/**
+ * Single non-pushing root move. Equivalent to `resolveActorMotion` over
+ * `bodies` when only `bodies[moverIndex]` is driven by `delta`, that mover has
+ * `pushEnabled === false`, and every pair collides: the root move is swept,
+ * then every other body separates the mover in ascending index order with the
+ * same unweighted correction and full-candidate placement. Returns the resolved
+ * mover position without cloning or mutating the crowd. Both the general and
+ * specialized entries use the same separation and placement primitives.
+ */
+export function resolveUnpushedMoverMotion(
+  bodies: readonly Readonly<ActorPhysicsBody>[],
+  moverIndex: number,
+  delta: Readonly<Vector2>,
+  world: ActorPhysicsWorld,
+): Vector2 {
+  const mover = bodies[moverIndex]
+  if (mover === undefined) throw new RangeError('mover index is outside the crowd')
+  if (mover.pushEnabled !== false) {
+    throw new TypeError('unpushed mover motion requires pushEnabled === false')
+  }
+  const radius = mover.radius
+  let position = world.move(mover.id, mover.position, delta, radius)
+  const correction = { x: 0, y: 0 }
+  for (let otherIndex = 0; otherIndex < bodies.length; otherIndex += 1) {
+    if (otherIndex === moverIndex) continue
+    const other = bodies[otherIndex]!
+    const candidate = placedActorCorrection(
+      mover.id,
+      position,
+      radius,
+      actorSeparation(
+        position,
+        radius,
+        other.position,
+        other.radius,
+        false,
+        correction,
+      ),
+      world,
+    )
+    if (candidate !== null) position = candidate
+  }
+  return position
 }
 
 function cloneActorPhysicsBody(source: Readonly<ActorPhysicsBody>): ActorPhysicsBody {

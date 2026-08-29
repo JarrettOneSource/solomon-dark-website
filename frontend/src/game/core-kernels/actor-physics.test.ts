@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolveActorMotion, type ActorPhysicsBody } from './actor-physics.ts'
+import {
+  resolveActorMotion,
+  resolveUnpushedMoverMotion,
+  type ActorPhysicsBody,
+  type ActorPhysicsWorld,
+} from './actor-physics.ts'
 import { DynamicActorGrid } from './dynamic-actor-grid.ts'
 
 const freePhysicsWorld = {
@@ -155,4 +160,164 @@ test('dynamic grid is an exact all-pairs oracle over deterministic mixed crowds'
   function randomSigned(maximum: number): number {
     return (random() * 2 - 1) * maximum
   }
+})
+
+test('unpushed mover fast path is an exact single-driver oracle over crowded worlds', () => {
+  let randomState = 0x2f6e2b1d
+  const blockedWorld = {
+    canPlace: (_bodyId: string, position: { x: number; y: number }) => (
+      Math.abs(position.x) < 180 || position.y > -40
+    ),
+    move: (
+      _bodyId: string,
+      position: { x: number; y: number },
+      delta: { x: number; y: number },
+    ) => ({
+      x: Math.max(-320, Math.min(320, position.x + delta.x)),
+      y: Math.max(-200, Math.min(200, position.y + delta.y)),
+    }),
+  }
+  let contactedTrials = 0
+  for (let trial = 0; trial < 120; trial += 1) {
+    const bodies: ActorPhysicsBody[] = []
+    for (let index = 0; index < 40; index += 1) {
+      const player = index < 2
+      const body: ActorPhysicsBody = {
+        delta: { x: 0, y: 0 },
+        driven: false,
+        id: player ? `player-${index}` : `enemy-${index}`,
+        position: { x: randomSigned(160), y: randomSigned(120) },
+        pushResistance: player ? 10 : 0,
+        pushStrength: player ? 12 : 0,
+        radius: player ? 25 : 8 + random() * 24,
+      }
+      if (!player) body.pushEnabled = false
+      bodies.push(body)
+    }
+    const moverIndex = 2 + Math.floor(random() * (bodies.length - 2))
+    const delta = { x: randomSigned(14), y: randomSigned(14) }
+    const reference = resolveActorMotion(
+      bodies.map((body) => ({
+        ...body,
+        delta: body === bodies[moverIndex] ? { ...delta } : { x: 0, y: 0 },
+        driven: body === bodies[moverIndex],
+      })),
+      blockedWorld,
+      allBodiesCollide,
+    )[moverIndex]!.position
+    const before = structuredClone(bodies)
+    const resolved = resolveUnpushedMoverMotion(bodies, moverIndex, delta, blockedWorld)
+    assert.deepEqual(resolved, reference, `trial ${trial}`)
+    assert.deepEqual(bodies, before, `trial ${trial} mutated the crowd`)
+    const mover = bodies[moverIndex]!
+    if (
+      resolved.x !== mover.position.x + delta.x
+      || resolved.y !== mover.position.y + delta.y
+    ) contactedTrials += 1
+  }
+  assert.ok(contactedTrials > 40, `only ${contactedTrials} trials separated the mover`)
+
+  function random(): number {
+    randomState ^= randomState << 13
+    randomState ^= randomState >>> 17
+    randomState ^= randomState << 5
+    randomState >>>= 0
+    return randomState / 0x1_0000_0000
+  }
+
+  function randomSigned(maximum: number): number {
+    return (random() * 2 - 1) * maximum
+  }
+})
+
+test('unpushed mover fast path preserves blocked and strict response edges', () => {
+  const crowd = (otherX: number): ActorPhysicsBody[] => [
+    {
+      delta: { x: 0, y: 0 },
+      driven: false,
+      id: 'mover',
+      position: { x: 0, y: 0 },
+      pushEnabled: false,
+      pushResistance: 0,
+      pushStrength: 0,
+      radius: 10,
+    },
+    {
+      delta: { x: 0, y: 0 },
+      driven: false,
+      id: 'other',
+      position: { x: otherX, y: 0 },
+      pushResistance: 10,
+      pushStrength: 12,
+      radius: 10,
+    },
+  ]
+  const reference = (
+    bodies: readonly ActorPhysicsBody[],
+    delta: Readonly<{ x: number; y: number }>,
+    world: ActorPhysicsWorld,
+  ) => resolveActorMotion(
+    bodies.map((body, index) => ({
+      ...body,
+      delta: index === 0 ? { ...delta } : { x: 0, y: 0 },
+      driven: index === 0,
+    })),
+    world,
+    allBodiesCollide,
+  )[0]!.position
+  const assertEquivalent = (
+    label: string,
+    bodies: ActorPhysicsBody[],
+    delta: Readonly<{ x: number; y: number }>,
+    world: ActorPhysicsWorld,
+  ) => assert.deepEqual(
+    resolveUnpushedMoverMotion(bodies, 0, delta, world),
+    reference(bodies, delta, world),
+    label,
+  )
+
+  const blockedSweepWorld: ActorPhysicsWorld = {
+    canPlace: () => true,
+    move: (_bodyId, position, delta) => ({
+      x: delta.x > 0 ? position.x : position.x + delta.x,
+      y: position.y + delta.y,
+    }),
+  }
+  const blocked = crowd(100)
+  assertEquivalent('blocked sweep', blocked, { x: 5, y: 0 }, blockedSweepWorld)
+  assert.deepEqual(
+    resolveUnpushedMoverMotion(blocked, 0, { x: 5, y: 0 }, blockedSweepWorld),
+    { x: 0, y: 0 },
+  )
+
+  const rejectedPlacementWorld: ActorPhysicsWorld = {
+    canPlace: () => false,
+    move: freePhysicsWorld.move,
+  }
+  const rejected = crowd(15)
+  assertEquivalent('rejected placement', rejected, { x: 0, y: 0 }, rejectedPlacementWorld)
+  assert.deepEqual(
+    resolveUnpushedMoverMotion(rejected, 0, { x: 0, y: 0 }, rejectedPlacementWorld),
+    { x: 0, y: 0 },
+  )
+
+  const coincident = crowd(0)
+  assertEquivalent('coincident centers', coincident, { x: 0, y: 0 }, freePhysicsWorld)
+  assert.deepEqual(
+    resolveUnpushedMoverMotion(coincident, 0, { x: 0, y: 0 }, freePhysicsWorld),
+    { x: 0, y: 0 },
+  )
+
+  const exactEdge = crowd(20)
+  assertEquivalent('strict overlap edge', exactEdge, { x: 0, y: 0 }, freePhysicsWorld)
+  assert.deepEqual(
+    resolveUnpushedMoverMotion(exactEdge, 0, { x: 0, y: 0 }, freePhysicsWorld),
+    { x: 0, y: 0 },
+  )
+  const overlapping = crowd(19.999)
+  assertEquivalent('inside strict overlap edge', overlapping, { x: 0, y: 0 }, freePhysicsWorld)
+  assert.notDeepEqual(
+    resolveUnpushedMoverMotion(overlapping, 0, { x: 0, y: 0 }, freePhysicsWorld),
+    { x: 0, y: 0 },
+  )
 })
