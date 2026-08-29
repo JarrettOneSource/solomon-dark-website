@@ -444,3 +444,22 @@ the behavioral oracle.
   publish, and deployment owners. Re-run the complete Mac gate, push normally,
   and prove the live release contains a nonempty worker before any gameplay
   claim.
+- Exact correction candidate
+  `80fe1b678df34189a97d5e5bac2f8540c0613646` is one focused commit over
+  current-main parent `1ec8b1f3674a4b3c138f8450c735cc4b836eeaef`.
+  The new deployment contract first failed on the absent Boneyard worker, then
+  passed after the .NET content link and both guarded release lists named it.
+  The existing active-rejoin integration now waits for the host-authoritative
+  disconnect edge before requesting its capability, removing a socket-close
+  scheduling race without changing runtime behavior.
+- The complete Mac Website gate exited zero on the exact candidate, including
+  all 29 backend contracts, 1,696/1,696 Boneyard tests, every remaining suite,
+  both production builds, bundle budget, and media policy. The Game entry is
+  263,161 raw / 79,873 gzip bytes. Gate log SHA-256:
+  `656baf7c6581915900e29e62e132a4fc6e06ed385e8dd823a2295944893cdfd1`.
+- A clean Mac `dotnet publish --no-restore` produced nonempty
+  `GameHost/boneyard-navigation-worker.mjs` beside the supervisor and ML
+  worker. The built Boneyard worker is 34 KiB with SHA-256
+  `f4104902b7e28c36146f779419446e8dcec75818a7597944f05720bfd9713ee3`.
+  Production acceptance requires this same member beneath the deployed
+  `GameHost/` directory.
