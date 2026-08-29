@@ -83,10 +83,11 @@ test('does not synthesize an opening Solomon set piece without an eligible grave
   assert.equal(materializeOpeningSolomonSetPiece(scene).solomonDig, null)
 })
 
-test('clears only transformed ground clutter covering the opening Solomon root', () => {
+test('clears ground clutter at Solomon and only rocks at the opening grave root', () => {
   const root = { x: 13, y: 117 }
+  const graveRoot = { x: 3, y: 4 }
   const scene = solomonSelectionScene([
-    { eid: 'grave', typeId: 2029, overlayVariant: 8, pos: { x: 3, y: 4 } },
+    { eid: 'grave', typeId: 2029, overlayVariant: 8, pos: graveRoot },
   ], [
     compactSprite('covering-large-dirt', 6, root),
     compactSprite('covering-dark-dirt', 7, root),
@@ -96,6 +97,13 @@ test('clears only transformed ground clutter covering the opening Solomon root',
     compactSprite('covering-rock-23', 23, { x: root.x, y: root.y + 36 }, 0, 90),
     compactSprite('covering-rock-24', 24, root),
     { ...compactSprite('covering-direct-record', 0, root), deadHawgEntry: 121 },
+    compactSprite('grave-root-rock-21', 21, graveRoot),
+    compactSprite('grave-root-rock-22', 22, graveRoot),
+    compactSprite('grave-root-rock-23', 23, graveRoot),
+    compactSprite('grave-root-rock-24', 24, graveRoot),
+    { ...compactSprite('grave-root-direct-record', 0, graveRoot), deadHawgEntry: 135 },
+    compactSprite('grave-root-dirt', 8, graveRoot),
+    compactSprite('outside-grave-rock', 21, { x: graveRoot.x + 40, y: graveRoot.y }),
     compactSprite('covering-foliage', 0, root),
     compactSprite('outside-dark-dirt', 7, { x: root.x + 60, y: root.y }),
     compactSprite('outside-flipped-dark-dirt', 7, { x: root.x + 40, y: root.y }, 1),
@@ -104,6 +112,8 @@ test('clears only transformed ground clutter covering the opening Solomon root',
   assert.deepEqual(
     materializeOpeningSolomonSetPiece(scene).sprites.map(({ eid }) => eid),
     [
+      'grave-root-dirt',
+      'outside-grave-rock',
       'covering-foliage',
       'outside-dark-dirt',
       'outside-flipped-dark-dirt',

@@ -24,6 +24,7 @@ const OPENING_SOLOMON_GROUND_CLUTTER_SIZES = new Map<number, readonly [number, n
   [23, [80, 62]],
   [24, [69, 59]],
 ])
+const OPENING_SOLOMON_ROCK_ENTRIES = new Set([21, 22, 23, 24])
 
 export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
   const spawn = doc.geometry.playerSpawn
@@ -93,9 +94,9 @@ export function materializeOpeningSolomonSetPiece(scene: BoneyardScene): Boneyar
     solomonDig,
     sprites: solomonDig === null
       ? scene.sprites
-      : scene.sprites.filter((sprite) => !openingSolomonGroundClutterContains(
-          sprite,
-          solomonDig.position,
+      : scene.sprites.filter((sprite) => (
+          !openingSolomonGroundClutterContains(sprite, solomonDig.position)
+          && !openingSolomonGraveRockContains(sprite, solomonDig.gravePosition)
         )),
   }
 }
@@ -155,6 +156,17 @@ function openingSolomonGroundClutterContains(
   const localY = -dx * Math.sin(rotation) + dy * Math.cos(rotation)
   return Math.abs(localX) <= size[0] * scaleX / 2
     && Math.abs(localY) <= size[1] * scaleY / 2
+}
+
+function openingSolomonGraveRockContains(
+  sprite: BoneyardScene['sprites'][number],
+  point: Readonly<BoneyardPoint>,
+): boolean {
+  const compactEntry = sprite.deadHawgEntry === undefined
+    ? sprite.atlasEntry
+    : sprite.deadHawgEntry - 114
+  return OPENING_SOLOMON_ROCK_ENTRIES.has(compactEntry)
+    && openingSolomonGroundClutterContains(sprite, point)
 }
 
 function compact<T extends object>(

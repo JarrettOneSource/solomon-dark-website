@@ -371,3 +371,139 @@ ground-clutter rectangle covers the opening Solomon root.
   sealed stock-generated files, not a retail-parity claim. No browser member is
   blocked and no placement unknown remains. Publication/deployment were not
   requested or performed.
+
+## 2026-08-28 — Opening grave-root rock clearance, second reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: Solomon Dig still has a rock inside his grave and it
+  creates visual glitches. The user requires that rock to be removed.
+- This reopens the same generated-ground-clutter system. The earlier pass tested
+  every dirt/rock rectangle only against Solomon's actor root at
+  `grave+(10,113)`. A literal rock can overlap the selected grave anchor without
+  containing that lower actor point, so the previous predicate could never see
+  the reported member.
+- The complete twelve-template sweep identifies the missed row: template 7
+  source `e62e5e84...a430`, `sprite-54`, compact entry `21` / DeadHawg record
+  `135`, at `grave+(-23.499359130859375,+6.0404052734375)`. Its exact rotated
+  `64 x 56` rectangle contains the grave root and does not contain Solomon's
+  root.
+- Stock retains this generated rock. Its removal is an explicit Website
+  readability policy, not a retail-parity claim.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Current projected-bank causal trace | Website `6220c5a7`; all twelve `NATIVE_GENERATED_BONEYARDS` | The existing filter removes compact ground clutter only when `openingSolomonGroundClutterContains(sprite, solomonDig.position)` is true. Template 7 `sprite-54` is therefore retained. | high |
+| Exact stock-generated data | source SHA-256 `e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430`; selected grave `(479.4227600097656,1156.5286865234375)` | `sprite-54` is compact entry 21 at `(455.92340087890625,1162.569091796875)`, rotation `-12.013599395751953`, scale `0.9854859709739685`, flags `0`. The grave root is inside its transformed footprint; Solomon `(489.4227600097656,1269.5286865234375)` is outside. | high |
+| Asset/data | DeadHawg records `135..138`; exact centered sizes `64x56`, `70x58`, `80x62`, `69x59` | All four authored rows are literal compact rocks. Record 135 is the missed grave-root member. | high |
+| Full membership sweep | exact rock rows across all twelve retained templates | Only template 7 `sprite-54` contains the selected grave root. Template 6 record 137 was already removed because it contains Solomon's actor root. Every other rock row contains neither protected root. | high |
+| Current Mac reproduction | production Chrome 151, template 0, 1600x900 | The diagnostic journey proves record 13, the type-2029 grave/record-96 pit, Flydirt, Lantern, body/dialogue, and escape are separate healthy owners. It does not reproduce template 7's missed rock and is not acceptance for this correction. | high |
+| User product direction | explicit 2026-08-28 secondary report | Remove the rock in Solomon's grave. | authoritative |
+
+### System boundary and membership inventory
+
+Native/product system: **opening Solomon generated-ground-clutter clearance**,
+from exact grave selection through transformed dirt/rock membership at the
+grave and actor roots.
+
+| Member / branch | Source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| compact dirt entries `6/7/8`, records `120/121/122` covering Solomon root | exact footprint table | `out-of-system` (existing Website readability policy) | unchanged actor-root predicate |
+| compact rock entry `21`, record `135` covering grave root | template 7 `sprite-54` | `out-of-system` (explicit product removal) | removed by transformed grave-root containment |
+| compact rock entries `22/23/24`, records `136/137/138` covering a grave root | exact footprint table | `exact-ported` Website policy | per-row synthetic coverage; removed under the same shared predicate if authored there |
+| compact rock record 137 covering Solomon root | template 6 prior receipt | `out-of-system` (existing Website readability policy) | remains removed by actor-root containment |
+| dirt/rock entries covering neither grave nor Solomon root | complete twelve-template bank | `verified-already-at-parity` | rows remain identity-equal, including nearby nonoverlapping rocks |
+| compact foliage `0..5` and environment `25..28` | generator census | `verified-already-at-parity` | never admitted to the rock filter |
+| selected type-2029 grave base and record-96 underlay | grave object, overlay 8 | `verified-already-at-parity` | object, underlay, collision, shadow, spell target, and painter rows unchanged |
+| Solomon-local DeadHawg record 13 | `0x004902C0/0x00490420` | `verified-already-at-parity` | one pass digging/dialogue, zero running |
+| Solomon/Lantern roots, Flydirt, body/mouth, audio, encounter, collision, replication | established set-piece owners | `verified-already-at-parity` | no source or semantic change |
+| templates 0..6 and 8..11 | exact retained bank | `verified-already-at-parity` | geometry hash and sprite arrays unchanged by this reopening |
+| template 7 | source `e62e5e84...a430` | `exact-ported` Website policy | removes exactly `sprite-54`; every other row and root remains |
+| custom projected Boneyards with an opening grave | projection boundary | `exact-ported` Website policy | geometry predicate; no template hash or EID branch |
+| zero eligible grave | existing null branch | `verified-already-at-parity` | no clearance without a set-piece owner |
+
+No member is blocked by the browser platform.
+
+### Recovered/product contract and implementation consequence
+
+- Keep the existing exact inverse-rotation, `s1` scale, and flags-bit X-scale
+  transform.
+- Ground clutter covering Solomon's actor root remains excluded exactly as
+  before. Additionally, compact rock entries `21..24` are excluded when their
+  transformed rectangle contains the selected grave root.
+- Do not apply the grave-root rule to dirt entries `6..8`, use a distance
+  radius, inspect alpha pixels, key on template/source/EID, remove the grave
+  object or record-96 pit, or alter actor presentation.
+- Rebuild the twelve-template bank from the same read-only source files. Only
+  template 7 may gain one fewer sprite and a new geometry hash in this pass.
+
+### Confidence and open questions
+
+- Confirmed: exact missed sprite, all four rock variants and dimensions, full
+  bank membership, transform semantics, and requested disposition.
+- Inferred: none used for implementation.
+- Unknown: none material to the correction.
+
+### Validation contract
+
+- Red/green projection tests must cover all four rock rows at the grave root,
+  prove dirt at the grave root remains, distinguish grave-root from actor-root
+  containment, preserve a nearby nonoverlapping rock, and retain zero-candidate
+  behavior.
+- The complete bank test must prove exactly template 7 removes `sprite-54`,
+  templates 0..6/8..11 remain identity-equal to the prior projected bank, all
+  twelve source hashes and Solomon/grave/Lantern roots remain fixed, and every
+  geometry hash matches its scene.
+- Mac Chrome must deterministically select template 7, prove `sprite-54` is
+  absent from the served scene and grave frame while the type-2029 grave,
+  record-96 pit, record 13, Flydirt, Lantern, body/dialogue, and escape remain.
+  Page, console, wire, and failed-response arrays must be empty.
+- The exact final candidate must pass `/opt/homebrew/bin/bash
+  ./scripts/validate.sh` on the Mac mini.
+
+### Implementation validation receipt
+
+- `materializeOpeningSolomonSetPiece` retains the existing transformed
+  actor-root ground-clutter clearance and adds one shared grave-root branch for
+  compact rock entries `21..24`. It uses the same exact rotation, scale, and
+  flags-bit X transform and contains no template hash, source hash, EID, radius,
+  renderer exception, or scene-specific coordinate.
+- Focused projection coverage removes all four rock variants and direct record
+  135 at the grave root, retains dirt at that root, retains a nearby rock,
+  preserves all existing actor-root rows, and keeps the no-grave branch inert.
+  The complete bank contract proves no remaining actor-root ground clutter or
+  grave-root rock in any of the twelve templates.
+- The bank was regenerated on the Mac from the same twelve exact read-only
+  `play.boneyard` sources. All source SHA-256 values, object arrays,
+  Solomon/grave/Lantern roots, and templates `0..6/8..11` remain unchanged.
+  Template 7 removes only `sprite-54`, retains `sprite-53/55`, changes from 254
+  to 253 sprites, and changes geometry SHA-256 from
+  `112fd9e3aa76187735852738345a0054bbefe3805f75e6fb46807d2760d8ed9a`
+  to `489bbe3f9e4e7b365691245035923a1cc67ba1a9018f4c35bd37f1b2ac2b230e`.
+- After rebasing onto current `origin/main`
+  `5257a20ee62b95f4e4087de15637c348bb599ad1`, the exact Mac candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build/tests,
+  formatting and frontend lint, all 1,686 Boneyard tests, every remaining
+  frontend and desktop suite, production frontend/game-host builds, bundle
+  budget, and CSP media policy.
+- Google Chrome `151.0.7922.174` ran the rebased built production frontend at
+  `1600 x 900` with deterministic template 7 source
+  `e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430`.
+  The served scene omitted `sprite-54`, retained `sprite-53/55`, and retained
+  selected grave `object-90` with record-96 underlay. Record-13 passes remained
+  `1/1/0` for digging/speaking/run; Flydirt emitted two passes and retired;
+  Lantern light measured `0.6029379963874817`; dialogue, escape, and the
+  17-enemy opening completed. Page, failed-response, wire-error, and
+  outside-combat-enemy arrays were empty.
+- Reviewed temporary frames are dirt SHA-256
+  `884d1cda7454dbc74db57664ee2b3f915feeac0098d6f586e9cb13e3a42667bd`,
+  speaking `12429392bd624d6a2323d7708565d2dfb279f0ba13104711dd611f8ea02747ac`,
+  and escape `c88193dc26ccf487624ee007266f2f66c2d9b7798cac79a268d70ace664daa5b`.
+  The grave frame retains the authored pit, gravestone, record 13, Lantern,
+  Solomon, and Flydirt without the overlapping compact record-135 rock.
+- This remains an explicit Website readability difference from the sealed
+  stock-generated source. No browser member is blocked, no implementation
+  unknown remains, and no commit, push, deployment, or production cutover was
+  requested or performed.

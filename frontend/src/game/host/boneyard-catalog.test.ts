@@ -96,12 +96,14 @@ test('native default bank retains the complete stock generator output-family cen
   assert.deepEqual([...environmentModes].sort((a, b) => a - b), [0, 1, 2])
 })
 
-test('native default openings contain no transformed dirt or rock beneath Solomon', () => {
+test('native default openings contain no ground clutter beneath Solomon or rock in his grave', () => {
   const overlaps = NATIVE_GENERATED_BONEYARDS.flatMap((template, templateIndex) => {
-    const position = template.scene.solomonDig?.position
-    if (!position) return []
+    const dig = template.scene.solomonDig
+    if (!dig) return []
     return template.scene.sprites.flatMap((sprite) => (
-      openingGroundClutterContains(sprite, position)
+      openingGroundClutterContains(sprite, dig.position)
+        || (OPENING_ROCK_ENTRIES.has(sprite.atlasEntry)
+          && openingGroundClutterContains(sprite, dig.gravePosition))
         ? [{ entry: sprite.atlasEntry, sprite: sprite.eid, templateIndex }]
         : []
     ))
@@ -193,6 +195,7 @@ const OPENING_GROUND_CLUTTER_SIZES = new Map<number, readonly [number, number]>(
   [23, [80, 62]],
   [24, [69, 59]],
 ])
+const OPENING_ROCK_ENTRIES = new Set([21, 22, 23, 24])
 
 const OPENING_CLEARANCE_RECEIPTS = new Map([
   ['2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f', {
@@ -206,6 +209,10 @@ const OPENING_CLEARANCE_RECEIPTS = new Map([
   ['624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123', {
     geometrySha256: 'a026e733247fe03510a517288a6f04f47f41bec54cf16ecbf1926303a529d2b6',
     spriteCount: 303,
+  }],
+  ['e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430', {
+    geometrySha256: '489bbe3f9e4e7b365691245035923a1cc67ba1a9018f4c35bd37f1b2ac2b230e',
+    spriteCount: 253,
   }],
 ])
 
