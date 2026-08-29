@@ -31,6 +31,9 @@ const variantsScreenshotPath = process.env.SDR_SKILL_PICKER_VARIANTS_SMOKE_SCREE
   || screenshotPath.replace(/\.png$/i, '-variants.png')
 const chatScreenshotPath = process.env.SDR_SKILL_PICKER_CHAT_SMOKE_SCREENSHOT
   || screenshotPath.replace(/\.png$/i, '-chat.png')
+const touchDetailsOnly = process.env.SDR_SKILL_PICKER_TOUCH_DETAILS_ONLY === '1'
+const touchDetailsScreenshotPath = process.env.SDR_SKILL_PICKER_TOUCH_DETAILS_SCREENSHOT
+  || screenshotPath.replace(/\.png$/i, '-touch-details.png')
 const credential = randomBytes(32).toString('base64url')
 const pageErrors = []
 const consoleErrors = []
@@ -59,7 +62,10 @@ const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
-const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+const page = await browser.newPage({
+  ...(touchDetailsOnly ? { hasTouch: true, isMobile: true } : {}),
+  viewport: touchDetailsOnly ? { width: 844, height: 390 } : { width: 1600, height: 900 },
+})
 
 try {
   page.on('pageerror', (error) => pageErrors.push(error.message))
@@ -217,6 +223,24 @@ try {
     { height: 900, width: 1600 },
   )
 
+  if (touchDetailsOnly) {
+    const touchDetailReceipt = await touchSkillPickerDetailReceipt(
+      page,
+      picker,
+      host,
+      playerId,
+      touchDetailsScreenshotPath,
+    )
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({
+      failedResponses,
+      pickerRenderer,
+      touchDetailReceipt,
+      touchDetailsScreenshotPath,
+    })}\n`)
+  } else {
   const chat = page.getByLabel('Game chat')
   const pickerOfferSequence = Number(await picker.locator('.skill-picker-stage').getAttribute(
     'data-offer-sequence',
@@ -290,6 +314,43 @@ try {
     && rootTint === SKILL_PICKER_ROOT_TINTS[root].toString(16).padStart(6, '0')
   )))
   assert.equal(new Set(actionReceipt.map(({ skillId }) => skillId)).size, 3)
+  const detailActions = picker.locator('.skill-picker-info-action')
+  assert.equal(await detailActions.count(), 3)
+  const detailActionReceipt = []
+  for (let index = 0; index < 3; index += 1) {
+    const bounds = await detailActions.nth(index).boundingBox()
+    assert.ok(bounds)
+    detailActionReceipt.push({
+      centerX: bounds.x + bounds.width / 2,
+      centerY: bounds.y + bounds.height / 2,
+      height: bounds.height,
+      skillId: Number(await detailActions.nth(index).getAttribute('data-skill-id')),
+      width: bounds.width,
+    })
+  }
+  assert.deepEqual(detailActionReceipt.map(({ centerX }) => centerX), [600, 800, 1000])
+  assert.deepEqual(detailActionReceipt.map(({ centerY }) => centerY), [382.5, 382.5, 382.5])
+  assert.deepEqual(detailActionReceipt.map(({ height, width }) => ({ height, width })), [
+    { height: 88, width: 87 },
+    { height: 88, width: 87 },
+    { height: 88, width: 87 },
+  ])
+
+  const detailedSkillId = detailActionReceipt[1].skillId
+  await detailActions.nth(1).hover()
+  await picker.locator('.skill-picker-stage').locator(
+    `xpath=self::*[@data-detail-choice-index="1"][@data-detail-skill-id="${detailedSkillId}"]`,
+  ).waitFor()
+  assert.equal(await pickerCanvas.getAttribute('data-native-detail-skill-id'), `${detailedSkillId}`)
+  assert.equal(await detailActions.nth(1).getAttribute('aria-pressed'), 'true')
+  const desktopDetailReceipt = {
+    choiceIndex: await picker.locator('.skill-picker-stage').getAttribute('data-detail-choice-index'),
+    skillId: await pickerCanvas.getAttribute('data-native-detail-skill-id'),
+  }
+  await actions.nth(1).hover({ position: { x: 100, y: 250 } })
+  await picker.locator('.skill-picker-stage')
+    .locator('xpath=self::*[@data-detail-choice-index=""]')
+    .waitFor()
 
   const beforeChoice = getPlayerProgression(host.state(), playerId)
   assert.equal(beforeChoice.level, 4)
@@ -311,7 +372,7 @@ try {
   )
 
   const pickSkillCountBeforeFocus = await soundCount(page, 'pickskill')
-  await actions.nth(1).hover()
+  await actions.nth(1).hover({ position: { x: 100, y: 250 } })
   await page.waitForFunction(() => (
     document.querySelectorAll('.skill-picker-action')[1]?.getAttribute('aria-pressed') === 'true'
   ), undefined, { timeout: 5_000 })
@@ -351,6 +412,10 @@ try {
     return stage?.dataset.pickerPhase === 'settled'
       && Number(stage.dataset.offerSequence) !== previousSequence
   }, rerollSequence, { timeout: 10_000 })
+  assert.equal(
+    await picker.locator('.skill-picker-stage').getAttribute('data-detail-choice-index'),
+    '',
+  )
   const rerolled = getPlayerProgression(host.state(), playerId)
   assert.deepEqual(host.state().gameRng, advanceNativeRngWords(rerollRngBefore, 4))
   assertUniquePendingOffer(rerolled, 'rerolled Hub offer')
@@ -633,6 +698,22 @@ try {
   assert.equal(variantReceipt[2].label?.startsWith('Flame Lash, ARCANE.'), true)
   assert.equal(variantReceipt[2].description, 'Welded Lighting + Fireball')
   assert.equal(variantReceipt[3].description, 'boosts health recovery')
+  const variantDetailActions = boneyardPicker.locator('.skill-picker-info-action')
+  assert.equal(await variantDetailActions.count(), 4)
+  const variantDetailReceipt = []
+  for (let index = 0; index < 4; index += 1) {
+    const expectedSkillId = variantReceipt[index].skillId
+    await variantDetailActions.nth(index).hover()
+    await boneyardPicker.locator('.skill-picker-stage').locator(
+      `xpath=self::*[@data-detail-choice-index="${index}"][@data-detail-skill-id="${expectedSkillId}"]`,
+    ).waitFor()
+    variantDetailReceipt.push({
+      choiceIndex: index,
+      skillId: Number(await boneyardPicker.locator('.skill-picker-canvas')
+        .getAttribute('data-native-detail-skill-id')),
+    })
+  }
+  assert.deepEqual(variantDetailReceipt.map(({ skillId }) => skillId), [21, 72, 52, 79])
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => (
     requestAnimationFrame(resolve)
   ))))
@@ -650,6 +731,8 @@ try {
     boneyardPickerHeldTick,
     chatPickerReceipt,
     chatScreenshotPath,
+    desktopDetailReceipt,
+    detailActionReceipt,
     boneyardPresentationReceipt,
     boneyardRevealAlphas,
     boneyardScreenshotPath,
@@ -670,8 +753,10 @@ try {
     levelUpSoundRates,
     unlockSkillSoundRates,
     variantReceipt,
+    variantDetailReceipt,
     variantsScreenshotPath,
   })}\n`)
+  }
 } catch (error) {
   process.stderr.write(`${JSON.stringify({
     body: (await page.locator('body').innerText()).slice(0, 2_000),
@@ -685,6 +770,59 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function touchSkillPickerDetailReceipt(page, picker, host, playerId, screenshotPath) {
+  const stage = picker.locator('.skill-picker-stage')
+  const details = picker.locator('.skill-picker-info-action')
+  assert.equal(await details.count(), 3)
+  const icon = details.first()
+  const card = picker.locator('.skill-picker-action').first()
+  const [iconBox, cardBox] = await Promise.all([icon.boundingBox(), card.boundingBox()])
+  assert.ok(iconBox)
+  assert.ok(cardBox)
+  assert.ok(iconBox.x >= cardBox.x && iconBox.x + iconBox.width <= cardBox.x + cardBox.width)
+  assert.ok(iconBox.y >= cardBox.y && iconBox.y + iconBox.height <= cardBox.y + cardBox.height)
+
+  const before = getPlayerProgression(host.state(), playerId)
+  assert.ok(before.pendingOffer)
+  const option = before.pendingOffer.options[0]
+  const rankBefore = getPlayerSkillBook(host.state(), playerId).permanentRanks[option.skillId]
+  const pickSkillCountBefore = await soundCount(page, 'pickskill')
+  await page.touchscreen.tap(iconBox.x + iconBox.width / 2, iconBox.y + iconBox.height / 2)
+  await stage.locator(
+    `xpath=self::*[@data-detail-choice-index="0"][@data-detail-skill-id="${option.skillId}"]`,
+  ).waitFor()
+  assert.equal(await picker.locator('.skill-picker-canvas')
+    .getAttribute('data-native-detail-skill-id'), `${option.skillId}`)
+  assert.equal(await icon.getAttribute('aria-pressed'), 'true')
+  assert.equal(await soundCount(page, 'pickskill'), pickSkillCountBefore)
+  assert.equal(getPlayerProgression(host.state(), playerId).pendingOffer?.sequence, before.pendingOffer.sequence)
+  assert.equal(
+    getPlayerSkillBook(host.state(), playerId).permanentRanks[option.skillId],
+    rankBefore,
+  )
+  assert.equal(await stage.getAttribute('data-picker-phase'), 'settled')
+  await page.screenshot({ path: screenshotPath })
+
+  await page.touchscreen.tap(
+    cardBox.x + cardBox.width / 2,
+    cardBox.y + cardBox.height - Math.max(2, cardBox.height * 0.05),
+  )
+  await page.waitForFunction(() => (
+    document.querySelector('.skill-picker-stage')?.getAttribute('data-picker-phase') === 'closing'
+  ), undefined, { timeout: 5_000 })
+  await waitForHost(() => (
+    getPlayerSkillBook(host.state(), playerId).permanentRanks[option.skillId] === rankBefore + 1
+  ), 'touch card-body skill selection')
+  assert.equal(await soundCount(page, 'pickskill'), pickSkillCountBefore + 1)
+  assert.equal(await stage.getAttribute('data-detail-choice-index'), '')
+  return {
+    cardBox,
+    iconBox,
+    offerSequence: before.pendingOffer.sequence,
+    skillId: option.skillId,
+  }
 }
 
 function assertUniquePendingOffer(progression, label) {

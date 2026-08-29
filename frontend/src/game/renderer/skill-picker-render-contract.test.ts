@@ -23,6 +23,8 @@ import {
   SKILL_PICKER_ROOT_TINTS,
   SKILL_PICKER_SIZE,
   skillPickerCardPresentation,
+  skillPickerDetailPresentation,
+  skillPickerIconBounds,
   skillPickerInsightAlpha,
   skillPickerPanelBounds,
   skillPickerSpecialActionBounds,
@@ -63,6 +65,17 @@ test('the picker keeps the sealed 1600x900 stock card geometry and records', () 
     reroll: { height: 100, left: 1270, top: 322.5, width: 255 },
     save: { height: 100, left: 230, top: 322.5, width: 255 },
   })
+  assert.deepEqual(skillPickerIconBounds(3), [
+    { height: 88, left: 556.5, top: 338.5, width: 87 },
+    { height: 88, left: 756.5, top: 338.5, width: 87 },
+    { height: 88, left: 956.5, top: 338.5, width: 87 },
+  ])
+  assert.deepEqual(skillPickerIconBounds(4), [
+    { height: 88, left: 456.5, top: 338.5, width: 87 },
+    { height: 88, left: 656.5, top: 338.5, width: 87 },
+    { height: 88, left: 856.5, top: 338.5, width: 87 },
+    { height: 88, left: 1_056.5, top: 338.5, width: 87 },
+  ])
 })
 
 test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlases', () => {
@@ -185,6 +198,55 @@ test('all ten Welding cards use their synthetic card domain and preserve Insight
       card.glowTints,
       build.colorRoots.map((root) => SKILL_PICKER_ROOT_TINTS[root]),
       build.syntheticName,
+    )
+  }
+})
+
+test('every public picker option projects complete authored SkillScreen detail at its offered rank', () => {
+  let ordinaryCount = 0
+  let concentrationCount = 0
+  for (const skill of NATIVE_SKILL_CATALOG.filter(({ id }) => id >= 8 && id <= 79)) {
+    if (skill.id === 52) continue
+    ordinaryCount += 1
+    const detail = skillPickerDetailPresentation({ skillId: skill.id, targetRank: 1 })
+    assert.equal(detail.row.id, skill.id, skill.name)
+    assert.equal(detail.row.effectiveRank, 1, skill.name)
+    assert.equal(detail.row.permanentRank, 1, skill.name)
+    assert.ok(detail.lines.length >= 5, `${skill.name} lost its detailed body`)
+    assert.equal(
+      detail.lines.some(({ text }) => /%[DFNXdfnx]:/.test(text)),
+      false,
+      `${skill.name} retained an unresolved native stat token`,
+    )
+    if (detail.row.category === 3) {
+      concentrationCount += 1
+      assert.ok(
+        detail.lines.some(({ kind }) => kind === 'bonus'),
+        `${skill.name} lost its concentration bonus`,
+      )
+    }
+  }
+  assert.equal(ordinaryCount, 71)
+  assert.equal(concentrationCount, 14)
+
+  const ranked = skillPickerDetailPresentation({ insight: true, skillId: 21, targetRank: 3 })
+  assert.equal(ranked.row.effectiveRank, 3)
+  assert.match(ranked.lines.find(({ kind }) => kind === 'title')?.text ?? '', /3\/5/)
+})
+
+test('every Welding picker detail keeps its synthetic build identity and pair description', () => {
+  for (const build of NATIVE_WELD_BUILDS) {
+    const detail = skillPickerDetailPresentation({
+      skillId: 52,
+      targetRank: 1,
+      weldBuildId: build.id,
+    })
+    assert.equal(detail.row.name, build.syntheticName)
+    assert.equal(detail.row.iconRecord, build.skillScreenIconRecord)
+    assert.equal(detail.row.weldBuildId, build.id)
+    assert.equal(
+      detail.lines.find(({ kind }) => kind === 'description')?.text,
+      build.pairDescription,
     )
   }
 })

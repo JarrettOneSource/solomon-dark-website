@@ -497,3 +497,131 @@ No member is blocked by the browser platform.
   builds, bundle budget, and media policy. Mod Loader remained read-only
   evidence tooling and was not a validation or publication target.
 - Publication and deployment were not requested and were not performed.
+
+## 2026-08-28 — SkillPicker icon-owned detailed information projection
+
+### Reported smell and parity question
+
+- Reported behavior: the mandatory SkillPicker exposes each whole card as one
+  selection button. Hovering the painted skill icon has no distinct information
+  behavior, and a mobile tap on that icon immediately picks the skill.
+- Requested behavior: desktop hover or keyboard focus on the painted icon, and
+  a deliberate mobile tap on that icon, display the skill's detailed catalog
+  metadata. A mobile icon tap must not submit the authoritative choice; the
+  remainder of the card remains the pick target.
+- Falsifiers: an icon tap sends `selectSkill`, an icon-sized action uses guessed
+  geometry, metadata omits authored `mStats`/category-3 `mBonus`, card-body taps
+  stop selecting, focus/hover changes play selection audio, or offer rebuilds
+  retain stale details from the prior option.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Beta 0.72.5 `SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; size/hash reverified 2026-08-28 | Canonical image and extracted catalog remain unchanged. | high |
+| Native LevelupScreen | card painter/hit family already recovered above; icon frame `87 x 88` centered at card X / Y `382.5` | Stock cards expose quick descriptions on their face and whole-card activation. Stock does not supply this second icon-popup interaction. | high |
+| Shared native detail owner | SkillScreen `HoverButton +0x98 -> 0x00656CE0`, line builder `0x0066B990`, formatters `0x0065D7F0/0x0065DEF0`, shared `HoverBox` `0x005C38F0/0x005C3A60/0x005AB060` | The Website already owns complete native title/category/description/rank/`mStats`/`mBonus` metadata and the native bitmap HoverBox visual. It can be reused without inventing a second catalog or tooltip language. | high |
+| Current web causal trace | Website `origin/main` `6220c5a7`; `SkillPicker.tsx`, `skill-picker.css`, `skill-picker-renderer.ts` | One transparent `200 x 295` `.skill-picker-action` spans each card and directly calls `choose(index)`. No icon action or detail state exists; touch therefore resolves to the selection owner. | high |
+
+This explicit Website interaction request supersedes only ledger 229's earlier
+"no second invented popup" product disposition. The stock first-frame quick
+description remains exact and visible; the new detail surface reuses extracted
+native SkillScreen data and rendering and is labeled as a browser extension,
+not misreported as stock LevelupScreen behavior.
+
+### System boundary and membership inventory
+
+Native/web system: mandatory LevelupScreen card presentation and input, extended
+with an icon-owned read-only projection of the already recovered native skill
+detail catalog and HoverBox visual.
+
+| Member | Native/web source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| three-card icon hit rectangles | exact card centers plus Skills frame `87 x 88` / Y `382.5` | exact-ported geometry for requested extension | all three independent icon actions align with painted frames |
+| four-card icon hit rectangles | same shared table | exact-ported geometry for requested extension | all four align and remain inside card actions |
+| ordinary rows `8..79` except Welding | immutable catalog, `mStats`, native formatter | exact-ported into requested detail projection | complete row sweep, target-rank values, no unresolved tokens |
+| category-3 concentration rows | fourteen authored `mBonus` arrays | exact-ported | bonuses follow stats in native order |
+| Welding builds `1000..1009` | synthetic names/icons/pair copy plus row-52 catalog | exact-ported shared data into requested projection | every build shows its identity without stale ordinary details |
+| Creativity Insight option | existing authoritative option flag/target rank | verified-already-at-parity with detail extension | detail uses offered target rank; gold pass remains unchanged |
+| desktop icon enter/leave | pointer-capable Website projection | exact requested extension | enter shows and silently selects visual card; leave clears details |
+| keyboard icon focus/blur | semantic browser focus projection | exact requested extension | focus shows read-only details; activation never chooses |
+| coarse-pointer icon tap | browser has no durable hover | exact requested extension | tap pins details and does not call `onSelect` or play `pickskill` |
+| ordinary card body mouse/touch/keyboard activation | LevelupScreen card action | verified-already-at-parity | still chooses exactly once and runs existing close/audio/authority path |
+| Reroll, Save, automatic choice | existing modal branches | verified-already-at-parity | details clear on rebuild/close; automatic path remains timer-owned |
+| queued offer/reconnect replacement | authoritative offer sequence | exact-ported lifecycle extension | stale detail index is cleared before new content appears |
+| full metadata visual | shared native SkillScreen HoverBox | exact-ported as explicit cross-owner Website extension | same bitmap fonts, wrapping, tints, margins, flip/clamp, and authored lines |
+| protocol, host, save, replication | authoritative `selectSkill` family | verified-already-at-parity and unchanged | detail state remains client-local presentation only |
+| rows 80/81 and reserve 82 | offer exclusion | out-of-system (never public SkillPicker options) | existing domain assertion |
+
+No member is blocked by the browser platform.
+
+### Recovered/requested behavioral contract and implementation consequence
+
+- Split each card's transparent input geometry into the existing full card
+  selection action plus an icon-sized read-only action layered exactly over the
+  painted `87 x 88` frame. Sibling buttons, not nested controls, preserve valid
+  semantics and ensure the icon wins pointer hit testing.
+- The icon action owns only local detail/focus state. Desktop enter/focus also
+  updates the silent visual selection; mobile activation pins the detail. It
+  never calls `choose`, `onSelect`, `beginClose`, or selection audio.
+- Reuse the shared native HoverBox drawing seam and catalog line builder. Do not
+  duplicate metadata in React, fabricate property labels, or replace the
+  existing card quick description.
+- Reset details on offer commit, Reroll/Save/choice close, automatic choice,
+  queued replacement, and unmount. Card-body activation and all authoritative
+  state transitions remain unchanged.
+
+### Validation contract
+
+- Focused tests must pin all icon rectangles, all 71 ordinary public rows, all
+  fourteen concentration bonus families, all ten Welding builds, target ranks,
+  exact shared HoverBox input, and the absence of unresolved format tokens.
+- Mac Chrome desktop journey: hover/focus each icon, observe the matching
+  detail identity and WebGL HoverBox, leave/blur to clear, then select through
+  the card body with one existing audio/authority transition.
+- Mac Chrome `844 x 390` touch journey: tap an icon and prove the same offer
+  sequence, pending choice, open phase, and `pickskill` count remain unchanged;
+  then tap the same card outside the icon and prove one selection/close.
+- Repeat an offer rebuild and a four-card/Welding/Insight presentation, require
+  no stale detail, WebGL2, empty page/console/failed-response arrays, focused
+  suites, and the complete supported Website gate.
+- Implementation, browser, gate, publication, and deployment receipts remain
+  pending below this investigation entry.
+
+### Implementation validation receipt
+
+- `SkillPicker` now layers one exact `87 x 88` semantic information action over
+  each painted icon while retaining the existing `200 x 295` card-body choice
+  action. Icon hover/focus/tap owns only local detail state; card-body activation
+  still owns the unchanged sound, authority, close, queue, and resume path.
+- `native-skill-hover-box.ts` is now the single shared bitmap HoverBox renderer
+  for SkillScreen and SkillPicker. `skillPickerDetailPresentation` projects the
+  offered target rank through the complete catalog formatter, all authored
+  `mStats`, all fourteen concentration `mBonus` families, and all ten synthetic
+  Welding identities/pair descriptions. Offer rebuild, Reroll, Save, choice,
+  automatic choice, and teardown clear the local detail.
+- The table-driven contract covers exact three/four-card icon bounds, every
+  ordinary public row, unresolved-token absence, offered rank/Insight, all
+  concentration bonuses, and all Welding builds. The complete supported Mac
+  gate passed these contracts and all existing picker/SkillScreen/runtime
+  suites on current-main base `5257a20e`.
+- Mac Chrome `151.0.7922.174` at `844 x 390` tapped a real icon whose browser
+  bounds were `37.70 x 38.13` inside its scaled card. The WebGL HoverBox showed
+  the matching skill identity and authored detail while offer sequence, rank,
+  settled phase, and `pickskill` count remained unchanged. A later tap near the
+  bottom of that same card selected exactly once and cleared detail. Its visual
+  receipt SHA-256 was
+  `b0df6a85524eb6a2002d6581438f0925baf657a1cb38480ed5d1206f17ed50fc`.
+- Desktop Chrome proved exact native icon centers `(600|800|1000, 382.5)` and
+  `87 x 88` bounds, hover/detail identity, silent selection focus, clear-on-leave,
+  queued reset, and the four-card Ring of Fire / Insight Acid Rain / Welding
+  Flame Lash / Regenerate matrix. The inspected four-card receipt SHA-256 was
+  `89e5b7a7ae15ebafc3bf2033e617bddab77b4b0ad2c86c235b89c5772b05e3eb`;
+  desktop and touch log SHA-256 values were
+  `874b9c7190b1e1b613fe47879c7868e2143137cd5a548324b1f386d464f34cb9`
+  and `58a4ef8392b8f7877384903f23e1d2ca27ec11907aa24a3222ee18bfc37ea39e`.
+- All browser journeys used WebGL2 with empty page, console, and failed-response
+  arrays. The detail popup remains an explicit Website interaction extension;
+  the stock first-frame quick description and every native picker lifecycle
+  member remain unchanged. Publication and deployment were not requested and
+  were not performed.

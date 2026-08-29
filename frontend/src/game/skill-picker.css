@@ -51,6 +51,20 @@
 
 .skill-picker-action:disabled { cursor: default; }
 
+.skill-picker-info-action {
+  position: absolute;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: help;
+}
+
+.skill-picker-info-action:focus { outline: none; }
+
+.skill-picker-info-action:disabled { cursor: default; }
+
 .skill-picker-special-action {
   position: absolute;
   padding: 0;
@@ -72,6 +86,18 @@
   color: #d8d4c8;
   font: 18px serif;
   transform: translateX(-50%);
+}
+
+.skill-picker-detail-semantic {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .skill-picker-waiting {

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -24,8 +25,11 @@ import {
 import {
   skillPickerCardCenters,
   skillPickerCardPresentation,
+  skillPickerDetailPresentation,
+  skillPickerIconBounds,
   skillPickerSpecialActionBounds,
 } from './renderer/skill-picker-render-contract.ts'
+import { nativeSkillExactTextRuns } from './renderer/skill-book-render-contract.ts'
 import './skill-picker.css'
 
 type SkillPickerPhase =
@@ -78,6 +82,7 @@ export default function SkillPicker({
   const closeStartedAtRef = useRef<number | null>(null)
   const displayedAvailabilityRef = useRef(sorcerorsCharmAvailable)
   const displayedOfferRef = useRef(initialOfferRef.current)
+  const detailIndexRef = useRef<number | null>(null)
   const latestAvailabilityRef = useRef(sorcerorsCharmAvailable)
   const latestOfferRef = useRef(offer)
   const onClosingChangeRef = useRef(onClosingChange)
@@ -92,6 +97,7 @@ export default function SkillPicker({
   const submittingRef = useRef(false)
   const chooseRef = useRef<(index: number, automatic?: boolean) => void>(() => undefined)
   const [displayedOffer, setDisplayedOffer] = useState(initialOfferRef.current)
+  const [detailIndex, setDetailIndex] = useState<number | null>(null)
   const [phase, setPhase] = useState<SkillPickerPhase>('opening')
   const [rendererState, setRendererState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [revealReady, setRevealReady] = useState(false)
@@ -104,6 +110,12 @@ export default function SkillPicker({
   latestOfferRef.current = offer
   latestAvailabilityRef.current = sorcerorsCharmAvailable
   onClosingChangeRef.current = onClosingChange
+
+  const updateDetail = (index: number | null) => {
+    detailIndexRef.current = index
+    setDetailIndex(index)
+    rendererRef.current?.setDetailOption(index)
+  }
 
   useEffect(() => {
     if (openPanelPresentationRef.current === presentationId) return
@@ -132,6 +144,7 @@ export default function SkillPicker({
         displayedOfferRef.current,
         displayedAvailabilityRef.current,
       )
+      created.setDetailOption(detailIndexRef.current)
       created.setContentVisible(phaseRef.current !== 'queued-wait')
       host.replaceChildren(created.canvas)
       setRendererState('ready')
@@ -145,6 +158,7 @@ export default function SkillPicker({
     ) => {
       displayedOfferRef.current = nextOffer
       displayedAvailabilityRef.current = nextAvailability
+      updateDetail(null)
       selectedIndexRef.current = 0
       submittingRef.current = false
       revealReadyRef.current = true
@@ -158,6 +172,7 @@ export default function SkillPicker({
     }
 
     const startQueuedRebuild = (nowMs: number) => {
+      updateDetail(null)
       queuedStartedAtRef.current = nowMs
       phaseRef.current = 'queued-wait'
       rendererRef.current?.setContentVisible(false)
@@ -289,6 +304,7 @@ export default function SkillPicker({
   }
 
   const beginClose = (direction: NativeSkillPickerCloseDirection) => {
+    updateDetail(null)
     submittingRef.current = true
     revealReadyRef.current = false
     closeDirectionRef.current = direction
@@ -335,6 +351,7 @@ export default function SkillPicker({
       || !displayedAvailabilityRef.current
       || displayedOfferRef.current.automaticChoiceIndex !== undefined
     ) return
+    updateDetail(null)
     submittingRef.current = true
     displayedAvailabilityRef.current = false
     rerollStartedAtRef.current = performance.now()
@@ -381,10 +398,17 @@ export default function SkillPicker({
   }
 
   const centers = skillPickerCardCenters(displayedOffer.options.length)
+  const iconBounds = skillPickerIconBounds(displayedOffer.options.length)
   const specialBounds = skillPickerSpecialActionBounds(displayedOffer.options.length)
   const automaticChoice = displayedOffer.automaticChoiceIndex !== undefined
   const disabled = automaticChoice || submitting || !revealReady || phase !== 'settled'
   const offerContentVisible = phase !== 'queued-wait'
+  const detailOption = detailIndex === null ? undefined : displayedOffer.options[detailIndex]
+  const detailText = detailOption
+    ? skillPickerDetailPresentation(detailOption).lines.map(({ text }) => (
+      nativeSkillExactTextRuns(text).map(({ text: runText }) => runText).join('')
+    )).join(' ')
+    : ''
   return (
     <div
       className="skill-picker-overlay"
@@ -403,43 +427,88 @@ export default function SkillPicker({
         data-offer-sequence={displayedOffer.sequence}
         data-automatic-choice-index={displayedOffer.automaticChoiceIndex ?? ''}
         data-picker-phase={phase}
+        data-detail-choice-index={detailIndex ?? ''}
+        data-detail-skill-id={detailOption?.skillId ?? ''}
         data-presentation-id={presentationId}
         data-renderer-state={rendererState}
         data-reveal-interactive={revealReady}
       >
         <div ref={hostRef} className="skill-picker-renderer" aria-hidden />
-        <div className="skill-picker-actions">
+        <div
+          className="skill-picker-actions"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) updateDetail(null)
+          }}
+        >
           {offerContentVisible ? displayedOffer.options.map((option, index) => {
             const card = skillPickerCardPresentation(option)
             const insightDetail = option.insight === true
               ? ' Insight Bonus: Skill +2.'
               : ''
             return (
-              <button
-                key={`${index}-${option.skillId}-${option.weldBuildId ?? 0}`}
-                ref={(button) => { buttonRefs.current[index] = button }}
-                type="button"
-                className="skill-picker-action"
-                style={{ left: centers[index] }}
-                aria-label={`${option.insight === true ? 'Insight. ' : ''}${card.name}, ${card.familyLabel.trim()}. ${card.quickDescription}${insightDetail}`}
-                aria-pressed={selectedIndex === index}
-                data-choice-index={index}
-                data-description={card.quickDescription}
-                data-insight={option.insight === true}
-                data-root={card.root}
-                data-root-tint={card.rootTint.toString(16).padStart(6, '0')}
-                data-skill-id={option.skillId}
-                disabled={disabled}
-                onClick={() => choose(index)}
-                onFocus={() => {
-                  if (!revealReadyRef.current || selectedIndexRef.current === index) return
-                  setSelection(index)
-                }}
-                onPointerEnter={() => {
-                  if (!revealReadyRef.current || selectedIndexRef.current === index) return
-                  setSelection(index)
-                }}
-              />
+              <Fragment key={`${index}-${option.skillId}-${option.weldBuildId ?? 0}`}>
+                <button
+                  ref={(button) => { buttonRefs.current[index] = button }}
+                  type="button"
+                  className="skill-picker-action"
+                  style={{ left: centers[index] }}
+                  aria-label={`${option.insight === true ? 'Insight. ' : ''}${card.name}, ${card.familyLabel.trim()}. ${card.quickDescription}${insightDetail}`}
+                  aria-pressed={selectedIndex === index}
+                  data-choice-index={index}
+                  data-description={card.quickDescription}
+                  data-insight={option.insight === true}
+                  data-root={card.root}
+                  data-root-tint={card.rootTint.toString(16).padStart(6, '0')}
+                  data-skill-id={option.skillId}
+                  disabled={disabled}
+                  onClick={() => choose(index)}
+                  onFocus={() => {
+                    updateDetail(null)
+                    if (!revealReadyRef.current || selectedIndexRef.current === index) return
+                    setSelection(index)
+                  }}
+                  onPointerEnter={() => {
+                    updateDetail(null)
+                    if (!revealReadyRef.current || selectedIndexRef.current === index) return
+                    setSelection(index)
+                  }}
+                />
+                <button
+                  type="button"
+                  className="skill-picker-info-action"
+                  style={iconBounds[index]}
+                  aria-label={`Show details for ${card.name}`}
+                  aria-pressed={detailIndex === index}
+                  data-detail-choice-index={index}
+                  data-skill-id={option.skillId}
+                  disabled={disabled}
+                  onBlur={() => {
+                    if (detailIndexRef.current === index) updateDetail(null)
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (disabled) return
+                    setSelection(index)
+                    updateDetail(index)
+                  }}
+                  onFocus={() => {
+                    if (disabled) return
+                    setSelection(index)
+                    updateDetail(index)
+                  }}
+                  onPointerEnter={() => {
+                    if (disabled) return
+                    setSelection(index)
+                    updateDetail(index)
+                  }}
+                  onPointerLeave={(event) => {
+                    if (event.pointerType === 'mouse' && detailIndexRef.current === index) {
+                      updateDetail(null)
+                    }
+                  }}
+                />
+              </Fragment>
             )
           }) : null}
           {offerContentVisible && specialActionsAvailable ? (
@@ -451,6 +520,7 @@ export default function SkillPicker({
                 aria-label="Save Skill"
                 data-level-up-action="save"
                 disabled={disabled}
+                onFocus={() => updateDetail(null)}
                 onClick={save}
               />
               <button
@@ -460,6 +530,7 @@ export default function SkillPicker({
                 aria-label="Roll Again"
                 data-level-up-action="reroll"
                 disabled={disabled}
+                onFocus={() => updateDetail(null)}
                 onClick={reroll}
               />
             </>
@@ -467,6 +538,11 @@ export default function SkillPicker({
         </div>
         {rendererState === 'error' ? (
           <p className="skill-picker-error" role="alert">Skill picker renderer unavailable.</p>
+        ) : null}
+        {detailText ? (
+          <p className="skill-picker-detail-semantic" role="status" aria-live="polite">
+            {detailText}
+          </p>
         ) : null}
       </div>
     </div>

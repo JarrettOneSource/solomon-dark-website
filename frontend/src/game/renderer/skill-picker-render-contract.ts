@@ -1,10 +1,17 @@
 import {
   NATIVE_SKILL_CATALOG,
   SPELL_WELDING_SKILL_ID,
+  nativeSkillCategory,
   nativeSkillColorRoot,
+  nativeSkillDependencies,
   nativeWeldBuild,
 } from '../core-kernels/player-progression.ts'
 import type { ProtocolPlayerSkillOfferOption } from '../protocol/game-state.ts'
+import {
+  nativeSkillBookTooltipLines,
+  type NativeSkillBookRow,
+  type NativeSkillBookTooltipLine,
+} from '../skill-book-model.ts'
 import {
   nativeSkillPageTextHeight,
   nativeSkillPageWrappedLines,
@@ -78,6 +85,11 @@ export interface SkillPickerCardPresentation {
   readonly textShadowOffset: number
 }
 
+export interface SkillPickerDetailPresentation {
+  readonly lines: readonly NativeSkillBookTooltipLine[]
+  readonly row: NativeSkillBookRow
+}
+
 export interface SkillPickerPanelBounds {
   readonly height: number
   readonly left: number
@@ -93,6 +105,15 @@ export interface SkillPickerSpecialActionBounds {
 export function skillPickerCardCenters(optionCount: number): readonly number[] {
   if (optionCount === 3 || optionCount === 4) return SKILL_PICKER_CARD_CENTERS[optionCount]
   throw new RangeError('native skill picker requires three or four options')
+}
+
+export function skillPickerIconBounds(optionCount: number): readonly SkillPickerPanelBounds[] {
+  return Object.freeze(skillPickerCardCenters(optionCount).map((centerX) => Object.freeze({
+    height: SKILL_PICKER_CARD_FRAME.height,
+    left: centerX - SKILL_PICKER_CARD_FRAME.width / 2,
+    top: SKILL_PICKER_CARD_FRAME.y - SKILL_PICKER_CARD_FRAME.height / 2,
+    width: SKILL_PICKER_CARD_FRAME.width,
+  })))
 }
 
 export function skillPickerRootTint(root: number | null): number {
@@ -148,6 +169,38 @@ export function skillPickerCardPresentation(
     rootTint,
     textShadowOffset: SKILL_PICKER_CARD_TEXT.textShadowOffset,
   })
+}
+
+export function skillPickerDetailPresentation(
+  option: ProtocolPlayerSkillOfferOption,
+): SkillPickerDetailPresentation {
+  const skill = NATIVE_SKILL_CATALOG[option.skillId]
+  if (!skill) throw new RangeError(`skill picker has no catalog row ${option.skillId}`)
+  const category = nativeSkillCategory(option.skillId)
+  if (category === null) {
+    throw new RangeError(`skill picker row ${option.skillId} has no native category`)
+  }
+  const card = skillPickerCardPresentation(option)
+  const weldBuild = option.skillId === SPELL_WELDING_SKILL_ID
+    ? nativeWeldBuild(option.weldBuildId ?? Number.NaN)
+    : null
+  const row = Object.freeze({
+    category,
+    dependencyIds: nativeSkillDependencies(option.skillId),
+    description: card.quickDescription,
+    effectiveRank: option.targetRank,
+    iconRecord: card.iconRecord,
+    id: option.skillId,
+    name: weldBuild?.syntheticName ?? skill.name,
+    permanentRank: option.targetRank,
+    weldBuildId: weldBuild?.id ?? null,
+  })
+  const lines = nativeSkillBookTooltipLines(row).map((line) => (
+    weldBuild && line.kind === 'description'
+      ? Object.freeze({ ...line, text: weldBuild.pairDescription })
+      : line
+  ))
+  return Object.freeze({ lines: Object.freeze(lines), row })
 }
 
 export function skillPickerInsightAlpha(ageTicks: number): number {

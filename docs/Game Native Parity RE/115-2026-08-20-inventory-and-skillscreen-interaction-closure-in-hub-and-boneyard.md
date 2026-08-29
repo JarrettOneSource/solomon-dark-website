@@ -262,3 +262,113 @@ No member is browser-blocked.
   These hashes record the result; task-owned copies are disposable after the
   exact-tree acceptance rerun.
 - Publication and deployment were not requested and were not performed.
+
+## 2026-08-28 — Responsive opaque SkillScreen root reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: opening Skills in the Hub does not produce a proper
+  full-screen surface. On a browser whose aspect ratio differs from `16:9`,
+  the fixed `1600 x 900` SkillScreen occupies only the contained native stage
+  while the Hub remains exposed around it.
+- Stock behavior to preserve: SkillScreen is one opaque full-screen optional
+  actor-owned screen. Its authored `1600 x 900` composition remains fixed,
+  but no world pixel is visible outside that composition while the screen owns
+  input.
+- Reproduction: open Skills from the Hub HUD at `1600 x 900`, `844 x 390`, and
+  a tall viewport; sample the complete browser surface during opening,
+  settlement, replacement, and closing. Repeat the same shared owner in the
+  Boneyard.
+- Falsifiers: stretching the native stage, a black rectangle limited to the
+  native stage, exposed world pixels in the aspect-ratio gutters, an immediate
+  black cut that ignores the 40-tick envelope, or an input-active gutter.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Beta 0.72.5 `SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; size/hash reverified 2026-08-28 | Canonical native image remains identical to the earlier complete SkillScreen investigation. | high |
+| Clean stock and instructions | existing clean capture `skill-screen.png`; root `0x0065B550`, tick `0x006567E0`, close `0x006568E0` | The root curtain is opaque at settlement and follows the same `+/-0.025` screen progress as the fixed composition. Hub and Boneyard share the owner. | high |
+| Current web causal trace | Website `origin/main` `6220c5a7`; `MainMenuScene`, `SkillBook`, `skill-book.css`, `fixedGameViewportLayout` | `SkillBook` mounts only `.main-menu-native-stage.skill-book-stage`. At `844 x 390`, contain scaling yields a roughly `693 x 390` stage, leaving approximately 75 px on both sides with no SkillScreen-owned curtain or input surface. Inventory already owns the correct viewport-sized `.hub-native-ui-overlay`. | high |
+| Mac baseline attempt | detached exact-base worktree; Chrome 151; existing mobile Inventory/Skills smoke | The current harness was intercepted by the separately owned Tutorial startup prompt before Hub entry. It is a harness drift receipt only and is not counted as visual evidence for or against this report. | high |
+
+### System boundary and membership inventory
+
+Native system: the optional actor-owned SkillScreen root projection from its
+screen-progress curtain through the fixed authored stage, input surface, both
+gameplay-scene consumers, reciprocal Inventory overlap, and teardown.
+
+| Member | Native/web source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| full-browser opaque backing surface | SkillScreen root curtain; responsive Website projection | exact-ported | viewport bounds equal the complete stage at every tested aspect ratio |
+| curtain alpha during opening/closing | `0x006567E0/0x006568E0` | exact-ported | backing opacity equals `openProgress` across the 40-tick envelope |
+| fixed `1600 x 900` authored composition | `0x0065B550` and complete UI/Skills/Fonts inventory above | verified-already-at-parity | remains centered and uniformly contained; never stretched or cropped |
+| transparent semantic/hit stage | native SkillScreen pointer owner | verified-already-at-parity, enclosed by corrected viewport owner | icon, drag, HUD, close, and reciprocal controls retain native coordinates |
+| aspect-ratio gutters | browser-only projection around fixed stock stage | exact-ported as opaque continuation of the root curtain | no Hub/Boneyard pixels and no world input leak |
+| Hub consumer | gameplay `+0x1664`, opener `0x005CA640` | exact-ported by this reopening | HUD/key open and complete viewport coverage |
+| Boneyard consumer | same actor-owned screen pointer | exact-ported by the shared correction | matching coverage and local suspension |
+| Skills -> Inventory overlap | sibling controller recovered above | verified-already-at-parity beneath corrected root owner | retiring Skills curtain and incoming Inventory overlay leave no visible/input gap |
+| ordinary close and teardown | 40-tick close/destroy | exact-ported by this reopening | viewport surface retires only with the SkillScreen owner |
+| service/dialogue Inventory overlays | separate Shop/Chat owners | out-of-system (not SkillScreen root consumers) | existing viewport owners remain unchanged |
+| mandatory level-up SkillPicker | separate `LevelupScreen` modal | out-of-system (its responsive curtain is owned in ledger 245) | unchanged by this root correction |
+
+No member is blocked by the browser platform.
+
+### Recovered behavioral contract and implementation consequence
+
+- One viewport-sized SkillScreen owner blocks pointer input and paints black at
+  the same live `openProgress` as the fixed native root. The WebGL canvas,
+  semantic buttons, drag coordinates, and renderer backing store remain exactly
+  `1600 x 900` inside the existing contained transform.
+- The viewport owner belongs inside `SkillBook`, not to the Hub scene, so Hub,
+  Boneyard, Tutorial, keyboard/HUD entry, reciprocal replacement, and teardown
+  cannot drift. Inventory's already-correct viewport overlay is the sibling
+  model, not a CSS exception.
+- Background pointer input clears presentation-local skill details but never
+  reaches the world. No simulation, protocol, save, audio, or authority change
+  is required.
+
+### Validation contract
+
+- Focused source/render coverage must pin one viewport owner, progress-driven
+  opacity, fixed-stage containment, pointer blocking, and unchanged native
+  canvas dimensions.
+- Mac Chrome must open Skills in Hub and Boneyard at desktop and `844 x 390`
+  touch viewports, assert overlay bounds equal the viewport, stage bounds remain
+  contained, gutter pixels are opaque black, world input stays blocked, and
+  reciprocal replacement/close remain gap-free.
+- Require WebGL2, empty page/console/failed-response arrays, the focused
+  SkillScreen/optional-book suites, and the complete supported Website gate.
+- Implementation, browser, gate, publication, and deployment receipts remain
+  pending below this investigation entry.
+
+### Implementation validation receipt
+
+- `SkillBook` now owns one viewport-sized `.skill-book-overlay` and black
+  curtain whose opacity is the existing `openProgress`. The unchanged
+  `1600 x 900` WebGL stage remains centered and uniformly contained inside it.
+  The overlay owns gutter input and retires with the same opening, reciprocal
+  replacement, close, and teardown lifecycle in Hub and Boneyard.
+- The maintained Inventory/SkillScreen smoke now covers the startup prompt,
+  deployment-revision fixture, full overlay geometry, curtain style, contained
+  native stage, both replacement directions, Potion use, and empty
+  page/console/failed-response arrays on desktop and touch viewports.
+- On the exact current-main base `5257a20e`, Mac Chrome `151.0.7922.174`
+  measured Hub and Boneyard overlays at exactly `844 x 390`, with the native
+  stage at `693.3333 x 390` and `75.3333`-pixel side gutters. The settled
+  curtain was opaque black at alpha one and the mobile visual receipt SHA-256
+  was `29b2023b90590e065d5f49bfebdfb94b52d16343510885dddad742892406153b`.
+- The matching desktop journey measured both overlays and stages at exactly
+  `1600 x 900`. All four Skills/Inventory replacement edges retained their
+  overlapping progress owners, and both desktop and mobile receipts had empty
+  browser-error arrays. Browser log SHA-256 values were
+  `0aef14fec032dbd7e9701253e906ecbaeee6d527ad513ff31e8d4ac74b2cf468`
+  and `2226fdbadb4b1e7c7116e2c765031b38c01220d8c14c07d12f616552844164a1`.
+- The exact source candidate passed the complete supported Mac gate with Node
+  `22.17.0` / npm `10.9.2`, all broad runtime suites including `1,688` Boneyard
+  tests, desktop tests, production builds, bundle budget (`262,749` raw /
+  `79,696` gzip), and media policy. This receipt is the sole tracked edit after
+  that pass; a no-later-edit exact-tree repeat is the final handoff gate.
+- No member is browser-blocked and no protocol, simulation, save, audio, or
+  multiplayer-authority path changed. Publication and deployment were not
+  requested and were not performed.

@@ -313,129 +313,145 @@ export default function SkillBook({
 
   return (
     <div
-      ref={rootRef}
-      className="main-menu-native-stage skill-book-stage"
-      style={style}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Skills"
-      inert={inputSuspended || phase === 'closing' || undefined}
-      tabIndex={-1}
-      data-transition-phase={phase}
-      data-transition-target={phase === 'closing' ? closeTargetRef.current : ''}
+      className="skill-book-overlay"
       data-open-progress={openProgress}
-      data-dragged-skill-id={drag?.skillId ?? ''}
-      data-drag-position-x={drag?.position.x ?? ''}
-      data-drag-position-y={drag?.position.y ?? ''}
-      data-hovered-skill-id={hoveredSkillId ?? ''}
-      data-input-suspended={inputSuspended}
-      data-renderer-state={rendererState}
-      onKeyDown={handleKeyDown}
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) setHoveredSkillId(null)
+      }}
     >
-      <div ref={hostRef} className="skill-book-renderer" aria-hidden />
-      <h2 className="skill-book-semantic-title">SKILLS</h2>
-      <button
-        type="button"
-        className="skill-book-inventory-action"
-        aria-label="Open inventory"
-        data-skill-book-inventory="true"
-        style={{ height: backpack.height, left: backpack.x, top: backpack.y, width: backpack.width }}
-        onClick={() => beginClose('inventory')}
+      <div
+        className="skill-book-curtain"
+        style={{ opacity: openProgress }}
+        aria-hidden
       />
-      <button
-        type="button"
-        className="skill-book-close-action"
-        aria-label="Close skills"
-        data-skill-book-resume="true"
-        data-game-back="true"
-        style={{ height: tome.height, left: tome.x, top: tome.y, width: tome.width }}
-        onClick={() => beginClose()}
-      />
-      <div className="skill-book-pages" aria-label="Learned skill dependency pages">
-        {placements.map(({ page, x, y }) => (
-          <section
-            key={page.rootSkillId}
-            className="skill-book-page-actions"
-            data-root-skill-id={page.rootSkillId}
-            style={{ height: page.height, left: x, top: y, width: page.width }}
-          >
-            {page.rows.map((row, index) => (
-              <SkillBookEntry
-                key={row.id}
-                index={index}
-                row={row}
-                selected={row.id === progression.selectedPrimarySkillId
-                  || progression.concentrationSkillIds.includes(row.id)}
-                nativePointForClient={nativePointForClient}
-                onDragEnd={() => {
-                  setDrag(null)
-                  setTargetQuickbarSlot(null)
-                }}
-                onDragMove={(skillId, position) => {
-                  setHoveredSkillId(null)
-                  setDrag({ position, skillId })
-                  setTargetQuickbarSlot(nativeSkillQuickbarDropSlot(position, belt))
-                }}
-                onHover={setHoveredSkillId}
-                onPointerDrop={(skillId, position) => {
-                  const slot = nativeSkillQuickbarDropSlot(position, belt)
-                  if (slot !== null) assign(skillId, slot)
-                  else {
+      <div
+        ref={rootRef}
+        className="main-menu-native-stage skill-book-stage"
+        style={style}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Skills"
+        inert={inputSuspended || phase === 'closing' || undefined}
+        tabIndex={-1}
+        data-transition-phase={phase}
+        data-transition-target={phase === 'closing' ? closeTargetRef.current : ''}
+        data-open-progress={openProgress}
+        data-dragged-skill-id={drag?.skillId ?? ''}
+        data-drag-position-x={drag?.position.x ?? ''}
+        data-drag-position-y={drag?.position.y ?? ''}
+        data-hovered-skill-id={hoveredSkillId ?? ''}
+        data-input-suspended={inputSuspended}
+        data-renderer-state={rendererState}
+        onKeyDown={handleKeyDown}
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) setHoveredSkillId(null)
+        }}
+      >
+        <div ref={hostRef} className="skill-book-renderer" aria-hidden />
+        <h2 className="skill-book-semantic-title">SKILLS</h2>
+        <button
+          type="button"
+          className="skill-book-inventory-action"
+          aria-label="Open inventory"
+          data-skill-book-inventory="true"
+          style={{ height: backpack.height, left: backpack.x, top: backpack.y, width: backpack.width }}
+          onClick={() => beginClose('inventory')}
+        />
+        <button
+          type="button"
+          className="skill-book-close-action"
+          aria-label="Close skills"
+          data-skill-book-resume="true"
+          data-game-back="true"
+          style={{ height: tome.height, left: tome.x, top: tome.y, width: tome.width }}
+          onClick={() => beginClose()}
+        />
+        <div className="skill-book-pages" aria-label="Learned skill dependency pages">
+          {placements.map(({ page, x, y }) => (
+            <section
+              key={page.rootSkillId}
+              className="skill-book-page-actions"
+              data-root-skill-id={page.rootSkillId}
+              style={{ height: page.height, left: x, top: y, width: page.width }}
+            >
+              {page.rows.map((row, index) => (
+                <SkillBookEntry
+                  key={row.id}
+                  index={index}
+                  row={row}
+                  selected={row.id === progression.selectedPrimarySkillId
+                    || progression.concentrationSkillIds.includes(row.id)}
+                  nativePointForClient={nativePointForClient}
+                  onDragEnd={() => {
                     setDrag(null)
                     setTargetQuickbarSlot(null)
-                  }
-                }}
-                onSelectConcentration={() => {
-                  onSelectConcentration(row.id)
-                  audio.playSound('click')
-                  audio.playSound('concentrate')
-                }}
-                onSelectPrimary={() => {
-                  onSelectPrimarySkill(row.id)
-                  audio.playSound('click')
-                }}
-                concentrationLocked={progression.mindChugTicksRemaining > 0}
-              />
-            ))}
-          </section>
-        ))}
-      </div>
-      <span className="skill-book-semantic-help">
-        Hover over a skill icon for more information about a skill.
-        Skills with a gold or green border can be dragged into your belt.
-      </span>
-      <SkillQuickbarEditor
-        beltEntries={beltEntries}
-        beltRects={belt}
-        draggedSkillId={drag?.skillId ?? null}
-        economy={economy}
-        nativePointForClient={nativePointForClient}
-        onPullOff={(slot) => {
-          onUnassignQuickbarSkill(slot)
-          audio.playSound('poof')
-          setPullOffBurst((current) => ({ sequence: (current?.sequence ?? 0) + 1, slot }))
-          setTargetQuickbarSlot(null)
-        }}
-        onTarget={setTargetQuickbarSlot}
-        targetSlot={targetQuickbarSlot}
-      />
-      <ModSkillBook session={session} />
-      {pullOffBurst ? (
-        <NativeBeltPullOffBurst
-          key={pullOffBurst.sequence}
-          className="skill-book-pull-off-burst"
-          onComplete={() => setPullOffBurst((current) => (
-            current?.sequence === pullOffBurst.sequence ? null : current
+                  }}
+                  onDragMove={(skillId, position) => {
+                    setHoveredSkillId(null)
+                    setDrag({ position, skillId })
+                    setTargetQuickbarSlot(nativeSkillQuickbarDropSlot(position, belt))
+                  }}
+                  onHover={setHoveredSkillId}
+                  onPointerDrop={(skillId, position) => {
+                    const slot = nativeSkillQuickbarDropSlot(position, belt)
+                    if (slot !== null) assign(skillId, slot)
+                    else {
+                      setDrag(null)
+                      setTargetQuickbarSlot(null)
+                    }
+                  }}
+                  onSelectConcentration={() => {
+                    onSelectConcentration(row.id)
+                    audio.playSound('click')
+                    audio.playSound('concentrate')
+                  }}
+                  onSelectPrimary={() => {
+                    onSelectPrimarySkill(row.id)
+                    audio.playSound('click')
+                  }}
+                  concentrationLocked={progression.mindChugTicksRemaining > 0}
+                />
+              ))}
+            </section>
           ))}
-          style={{
-            left: belt[pullOffBurst.slot]!.x + belt[pullOffBurst.slot]!.width / 2,
-            top: belt[pullOffBurst.slot]!.y + belt[pullOffBurst.slot]!.height / 2,
+        </div>
+        <span className="skill-book-semantic-help">
+          Hover over a skill icon for more information about a skill.
+          Skills with a gold or green border can be dragged into your belt.
+        </span>
+        <SkillQuickbarEditor
+          beltEntries={beltEntries}
+          beltRects={belt}
+          draggedSkillId={drag?.skillId ?? null}
+          economy={economy}
+          nativePointForClient={nativePointForClient}
+          onPullOff={(slot) => {
+            onUnassignQuickbarSkill(slot)
+            audio.playSound('poof')
+            setPullOffBurst((current) => ({ sequence: (current?.sequence ?? 0) + 1, slot }))
+            setTargetQuickbarSlot(null)
           }}
+          onTarget={setTargetQuickbarSlot}
+          targetSlot={targetQuickbarSlot}
         />
-      ) : null}
-      {rendererState === 'error' ? (
-        <p className="skill-book-error" role="alert">Skills renderer unavailable.</p>
-      ) : null}
+        <ModSkillBook session={session} />
+        {pullOffBurst ? (
+          <NativeBeltPullOffBurst
+            key={pullOffBurst.sequence}
+            className="skill-book-pull-off-burst"
+            onComplete={() => setPullOffBurst((current) => (
+              current?.sequence === pullOffBurst.sequence ? null : current
+            ))}
+            style={{
+              left: belt[pullOffBurst.slot]!.x + belt[pullOffBurst.slot]!.width / 2,
+              top: belt[pullOffBurst.slot]!.y + belt[pullOffBurst.slot]!.height / 2,
+            }}
+          />
+        ) : null}
+        {rendererState === 'error' ? (
+          <p className="skill-book-error" role="alert">Skills renderer unavailable.</p>
+        ) : null}
+      </div>
     </div>
   )
 }

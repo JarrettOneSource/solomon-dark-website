@@ -21,10 +21,14 @@ const page = await browser.newPage({
 })
 const consoleErrors = []
 const pageErrors = []
+const failedResponses = []
 page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text())
 })
 page.on('pageerror', (error) => pageErrors.push(error.message))
+page.on('response', (response) => {
+  if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
+})
 await page.addInitScript(bypassStartupAudioPreload)
 await page.addInitScript(({ key, settings }) => {
   localStorage.setItem(key, JSON.stringify(settings))
@@ -56,11 +60,16 @@ await page.addInitScript(() => {
     }, { capture: true })
   }
 })
+await page.route('**/deployment.json?*', async (route) => {
+  const revision = new URL(route.request().url()).searchParams.get('current')
+  await route.fulfill({ json: { revision } })
+})
 
 try {
   await enterHub(page)
 
   const optionalBookReceipts = []
+  const skillBookViewportReceipts = []
 
   await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 10_000 })
   await activate(page, page.getByRole('button', { name: /Open inventory/ }))
@@ -74,6 +83,7 @@ try {
   await hubSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
     timeout: 10_000,
   })
+  skillBookViewportReceipts.push(await skillBookViewportReceipt(page, hubSkills, 'Hub'))
   await hubInventory.waitFor({ state: 'hidden', timeout: 10_000 })
   await page.screenshot({ path: `${screenshotRoot}-hub-skills.png` })
   const skillsToInventory = observeOptionalBookOverlap(page, 'inventory')
@@ -121,6 +131,11 @@ try {
   await matchSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
     timeout: 10_000,
   })
+  skillBookViewportReceipts.push(await skillBookViewportReceipt(
+    page,
+    matchSkills,
+    'Boneyard',
+  ))
   await matchInventory.waitFor({ state: 'hidden', timeout: 10_000 })
   const matchSkillsToInventory = observeOptionalBookOverlap(page, 'inventory')
   await page.keyboard.press('b')
@@ -160,9 +175,11 @@ try {
   await boneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
 
   assert.deepEqual(pageErrors, [])
-  assert.deepEqual(consoleErrors, [])
+  assert.deepEqual(consoleErrors, [], JSON.stringify(failedResponses))
+  assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
     consoleErrors,
+    failedResponses,
     hubInventory: true,
     matchInventory: true,
     matchInventoryPotionConsumed: true,
@@ -170,6 +187,7 @@ try {
     optionalBookReceipts,
     pageErrors,
     pointerEvents: await page.evaluate(() => window.__sdrInventoryPointerEvents),
+    skillBookViewportReceipts,
   })}\n`)
 } finally {
   await browser.close()
@@ -178,6 +196,10 @@ try {
 async function enterHub(target) {
   await target.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await target.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialPrompt = target.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await target.evaluate(() => window.__sdrRestoreAudioPreload?.())
   await target.getByRole('button', { name: 'Play' }).click()
   await target.getByRole('button', { name: 'New Game' }).click()
@@ -212,6 +234,56 @@ async function observeOptionalBookOverlap(page, target) {
     }
   }, target, { timeout: 5_000 })
   return receipt.jsonValue()
+}
+
+async function skillBookViewportReceipt(page, book, scene) {
+  const overlay = page.locator('.skill-book-overlay').filter({ has: book })
+  assert.equal(await overlay.count(), 1, `${scene} Skills has no viewport owner`)
+  const [overlayBox, stageBox, curtainStyle] = await Promise.all([
+    overlay.boundingBox(),
+    book.boundingBox(),
+    overlay.locator('.skill-book-curtain').evaluate((curtain) => {
+      const style = getComputedStyle(curtain)
+      return {
+        backgroundColor: style.backgroundColor,
+        opacity: Number(style.opacity),
+        pointerEvents: style.pointerEvents,
+      }
+    }),
+  ])
+  assert.ok(overlayBox, `${scene} Skills viewport owner has no geometry`)
+  assert.ok(stageBox, `${scene} Skills native stage has no geometry`)
+  const viewport = page.viewportSize()
+  assert.ok(viewport)
+  assert.deepEqual({
+    height: Math.round(overlayBox.height),
+    width: Math.round(overlayBox.width),
+    x: Math.round(overlayBox.x),
+    y: Math.round(overlayBox.y),
+  }, {
+    height: viewport.height,
+    width: viewport.width,
+    x: 0,
+    y: 0,
+  })
+  assert.equal(curtainStyle.backgroundColor, 'rgb(0, 0, 0)')
+  assert.equal(curtainStyle.opacity, 1)
+  assert.equal(curtainStyle.pointerEvents, 'none')
+  assert.ok(stageBox.width <= overlayBox.width)
+  assert.ok(stageBox.height <= overlayBox.height)
+  if (viewport.width / viewport.height !== 16 / 9) {
+    assert.ok(
+      stageBox.width < overlayBox.width || stageBox.height < overlayBox.height,
+      `${scene} Skills native stage unexpectedly stretched to the viewport`,
+    )
+  }
+  return {
+    curtainStyle,
+    overlay: overlayBox,
+    scene,
+    stage: stageBox,
+    viewport,
+  }
 }
 
 async function activate(page, target) {

@@ -1,5 +1,22 @@
-.main-menu-native-stage.skill-book-stage {
+.skill-book-overlay {
+  position: absolute;
   z-index: 75;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.skill-book-curtain {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.main-menu-native-stage.skill-book-stage {
+  z-index: 1;
   overflow: hidden;
   outline: none;
   pointer-events: auto;

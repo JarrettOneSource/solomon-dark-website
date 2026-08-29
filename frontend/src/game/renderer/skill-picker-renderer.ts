@@ -28,10 +28,12 @@ import {
   SKILL_PICKER_SIZE,
   skillPickerCardPresentation,
   skillPickerCardCenters,
+  skillPickerDetailPresentation,
   skillPickerInsightAlpha,
   skillPickerPanelBounds,
   skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
+import { drawNativeSkillHoverBox } from './native-skill-hover-box.ts'
 import type { NativeSkillPickerReveal } from './level-up-presentation.ts'
 import { nativeUiRecord } from '../native-ui/native-ui-catalog.ts'
 import {
@@ -62,6 +64,7 @@ export interface SkillPickerRenderer {
     reveal: NativeSkillPickerReveal,
   ): void
   setContentVisible(visible: boolean): void
+  setDetailOption(index: number | null): void
   setOffer(offer: ProtocolPlayerSkillOffer, specialActionsAvailable: boolean): void
 }
 
@@ -98,11 +101,13 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   const panelLayer = new Container()
   const chromeLayer = new Container()
   const offerLayer = new Container()
+  const detailLayer = new Container()
   ambient.alpha = 0
   panelLayer.alpha = 0
   chromeLayer.alpha = 0
   offerLayer.alpha = 0
-  root.addChild(ambient, panelLayer, chromeLayer, offerLayer)
+  detailLayer.alpha = 0
+  root.addChild(ambient, panelLayer, chromeLayer, offerLayer, detailLayer)
   application.stage.addChild(root)
 
   const arcSprites: Sprite[] = []
@@ -137,6 +142,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   let insightCardTreatments: InsightCardTreatment[] = []
   let insightPanels: NineSliceSprite[] = []
   let selectionPanels: NineSliceSprite[] = []
+  let displayedOffer: ProtocolPlayerSkillOffer | null = null
   const nativeScreenStartedAtMs = performance.now()
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let destroyed = false
@@ -156,6 +162,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       panelLayer.alpha = reveal.panelAlpha
       chromeLayer.alpha = reveal.panelAlpha
       offerLayer.alpha = reveal.panelAlpha
+      detailLayer.alpha = reveal.panelAlpha
       const phase = reducedMotion ? 0 : nowMs / 1000
       for (let index = 0; index < arcSprites.length; index += 1) {
         arcSprites[index]!.rotation = index * Math.PI / 4 + phase * 0.08
@@ -188,12 +195,33 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
     },
     setContentVisible(visible) {
       offerLayer.visible = visible
+      detailLayer.visible = visible
       for (const treatment of insightCardTreatments) {
         insightPanels[treatment.cardIndex]!.visible = visible
       }
       application.renderer.render(application.stage)
     },
+    setDetailOption(index) {
+      detailLayer.removeChildren().forEach((child) => child.destroy({ children: true }))
+      const option = index === null ? undefined : displayedOffer?.options[index]
+      gpu.canvas.dataset.nativeDetailChoiceIndex = option ? `${index}` : ''
+      gpu.canvas.dataset.nativeDetailSkillId = option ? `${option.skillId}` : ''
+      if (option && index !== null && displayedOffer) {
+        const detail = skillPickerDetailPresentation(option)
+        drawNativeSkillHoverBox(detailLayer, resources, {
+          lines: detail.lines,
+          row: detail.row,
+          sourceX: skillPickerCardCenters(displayedOffer.options.length)[index]!,
+          sourceY: SKILL_PICKER_CARD_FRAME.y,
+        })
+      }
+      application.renderer.render(application.stage)
+    },
     setOffer(offer, specialActionsAvailable) {
+      displayedOffer = offer
+      detailLayer.removeChildren().forEach((child) => child.destroy({ children: true }))
+      gpu.canvas.dataset.nativeDetailChoiceIndex = ''
+      gpu.canvas.dataset.nativeDetailSkillId = ''
       const panel = rebuildPanel(panelLayer, resources, offer.options.length)
       animatedCorners = panel.corners
       insightPanels = panel.insightCards
