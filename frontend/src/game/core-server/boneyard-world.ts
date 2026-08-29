@@ -125,7 +125,13 @@ import {
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
-import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
+import {
+  boneyardNavigationMeshIsPrepared,
+  findBoneyardEnemyRoute,
+  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
+  NATIVE_DEMON_NAVIGATION_CLEARANCE,
+  prepareBoneyardNavigationMesh,
+} from './boneyard-enemy-navigation.ts'
 import {
   createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
@@ -287,6 +293,40 @@ export function createBoneyardWorld(
       : null,
     tutorialProfileEconomy: null,
     waves: ownsRetailEncounter ? createBoneyardWaveDirector(loaded.seed) : null,
+  }
+}
+
+export interface BoneyardWorldNavigationPreparation {
+  readonly bounds: Readonly<BoneyardBounds>
+  readonly clearance: number
+}
+
+export function boneyardWorldNavigationPreparations(
+  world: BoneyardWorldState,
+): readonly BoneyardWorldNavigationPreparation[] {
+  const hostileBounds = world.arenaTransition?.combatBounds ?? world.bounds
+  const preparations: BoneyardWorldNavigationPreparation[] = [
+    { bounds: hostileBounds, clearance: NATIVE_BADGUY_NAVIGATION_CLEARANCE },
+    { bounds: hostileBounds, clearance: NATIVE_DEMON_NAVIGATION_CLEARANCE },
+  ]
+  if (world.encounter !== null) {
+    preparations.push({
+      bounds: solomonEscapeTraversalBounds(world.bounds),
+      clearance: NATIVE_SOLOMON_NAVIGATION_CLEARANCE,
+    })
+  }
+  return Object.freeze(preparations)
+}
+
+export function boneyardWorldNavigationIsPrepared(world: BoneyardWorldState): boolean {
+  return boneyardWorldNavigationPreparations(world).every(({ bounds, clearance }) => (
+    boneyardNavigationMeshIsPrepared(bounds, world.collision, clearance)
+  ))
+}
+
+export function prepareBoneyardWorldNavigation(world: BoneyardWorldState): void {
+  for (const { bounds, clearance } of boneyardWorldNavigationPreparations(world)) {
+    prepareBoneyardNavigationMesh(bounds, world.collision, clearance)
   }
 }
 

@@ -12,6 +12,7 @@ await build({
   },
   bundle: true,
   entryPoints: {
+    'boneyard-navigation-worker': 'src/game/host/boneyard-navigation-worker.ts',
     'game-host': 'src/game/host/run-game-host.ts',
     'game-session-supervisor': 'src/game/host/run-game-session-supervisor.ts',
     'ml-bot-policy-worker': 'src/game/host/ml-bot-policy-worker.ts',

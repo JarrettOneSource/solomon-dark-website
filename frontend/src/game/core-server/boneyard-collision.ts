@@ -20,6 +20,7 @@ import {
 } from '../core-kernels/native-rng.ts'
 import type { BoneyardSpawnPositionPolicy } from '../core-kernels/boneyard-wave-timeline.ts'
 import { NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK } from '../core-kernels/primary-spell-targeting.ts'
+import { BoneyardCollisionBroadphase } from './boneyard-collision-broadphase.ts'
 
 export interface BoneyardCollisionPolygon {
   nativeLineMask?: number
@@ -99,6 +100,15 @@ const GOODIE_POLYGON = rectangle(-25.125, -8.625, 25.875, 16.875)
 const FENCE_POST_RADIUS = 10
 const GOODIE_RADIUS = 8
 
+interface CollisionBroadphaseView {
+  readonly broadphase: BoneyardCollisionBroadphase
+  readonly indexedSegmentCount: number
+}
+
+const collisionBroadphaseViews = new WeakMap<BoneyardCollisionWorld, CollisionBroadphaseView>()
+const collisionGeometryIdentities = new WeakMap<BoneyardCollisionWorld, object>()
+const allPairsCollisionWorlds = new WeakSet<BoneyardCollisionWorld>()
+
 export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK =
   NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
 
@@ -127,6 +137,30 @@ export interface NativeBoneyardSpawnPlacementResult {
 }
 
 export function createBoneyardCollisionWorld(scene: BoneyardScene): BoneyardCollisionWorld {
+  const world = materializeBoneyardCollisionWorld(scene)
+  collisionGeometryIdentities.set(world, scene)
+  collisionBroadphaseViews.set(world, {
+    broadphase: new BoneyardCollisionBroadphase(world),
+    indexedSegmentCount: world.segments.length,
+  })
+  return world
+}
+
+/** Deterministic test/benchmark oracle for the unchanged complete narrow phase. */
+export function createBoneyardCollisionWorldAllPairsOracle(
+  scene: BoneyardScene,
+): BoneyardCollisionWorld {
+  const world = materializeBoneyardCollisionWorld(scene)
+  collisionGeometryIdentities.set(world, scene)
+  allPairsCollisionWorlds.add(world)
+  return world
+}
+
+export function boneyardCollisionGeometryIdentity(world: BoneyardCollisionWorld): object {
+  return collisionGeometryIdentities.get(world) ?? world
+}
+
+function materializeBoneyardCollisionWorld(scene: BoneyardScene): BoneyardCollisionWorld {
   const polygons: BoneyardCollisionPolygon[] = []
   const circles: BoneyardCollisionCircle[] = []
   const segments: BoneyardCollisionSegment[] = []
@@ -176,7 +210,7 @@ export function withBoneyardGateCollision(
   gateLeaves: readonly BoneyardGateLeafSnapshot[],
 ): BoneyardCollisionWorld {
   if (gateLeaves.length === 0) return world
-  return {
+  const dynamicWorld = {
     ...world,
     segments: [
       ...world.segments,
@@ -188,6 +222,13 @@ export function withBoneyardGateCollision(
       })),
     ],
   }
+  if (allPairsCollisionWorlds.has(world)) {
+    allPairsCollisionWorlds.add(dynamicWorld)
+  } else {
+    collisionBroadphaseViews.set(dynamicWorld, collisionBroadphaseView(world))
+  }
+  collisionGeometryIdentities.set(dynamicWorld, boneyardCollisionGeometryIdentity(world))
+  return dynamicWorld
 }
 
 export function touchingBoneyardGateLeaves(
@@ -240,13 +281,19 @@ export function boneyardBodyCollisionSourceIds(
   radius: number,
 ): readonly string[] {
   const sourceIds = new Set<string>()
-  for (const polygon of world.polygons) {
+  const view = collisionBroadphaseViewOrNull(world)
+  const selection = view?.broadphase.select(position, radius)
+  const polygonIndices = selection?.polygonIndices
+  for (let candidate = 0; candidate < (polygonIndices?.length ?? world.polygons.length); candidate += 1) {
+    const polygon = world.polygons[polygonIndices?.[candidate] ?? candidate]!
     if (
       polygon.sourceId !== undefined
       && polygonContact(position, radius, polygon.points, position) !== null
     ) sourceIds.add(polygon.sourceId)
   }
-  for (const segment of world.segments) {
+  const segmentIndices = selection?.segmentIndices
+  for (let candidate = 0; candidate < (segmentIndices?.length ?? world.segments.length); candidate += 1) {
+    const segment = world.segments[segmentIndices?.[candidate] ?? candidate]!
     if (
       segment.sourceId !== undefined
       && segmentContact(
@@ -258,7 +305,24 @@ export function boneyardBodyCollisionSourceIds(
       ) !== null
     ) sourceIds.add(segment.sourceId)
   }
-  for (const circle of world.circles) {
+  if (view) {
+    for (let index = view.indexedSegmentCount; index < world.segments.length; index += 1) {
+      const segment = world.segments[index]!
+      if (
+        segment.sourceId !== undefined
+        && segmentContact(
+          position,
+          radius + segment.radius,
+          segment.start,
+          segment.end,
+          position,
+        ) !== null
+      ) sourceIds.add(segment.sourceId)
+    }
+  }
+  const circleIndices = selection?.circleIndices
+  for (let candidate = 0; candidate < (circleIndices?.length ?? world.circles.length); candidate += 1) {
+    const circle = world.circles[circleIndices?.[candidate] ?? candidate]!
     if (circle.sourceId === undefined) continue
     const dx = position.x - circle.center.x
     const dy = position.y - circle.center.y
@@ -709,12 +773,18 @@ function firstContact(
   previous: BoneyardPoint,
   ignoredSourceIds?: ReadonlySet<string>,
 ): CollisionContact | null {
-  for (const polygon of world.polygons) {
+  const view = collisionBroadphaseViewOrNull(world)
+  const selection = view?.broadphase.select(center, radius)
+  const polygonIndices = selection?.polygonIndices
+  for (let candidate = 0; candidate < (polygonIndices?.length ?? world.polygons.length); candidate += 1) {
+    const polygon = world.polygons[polygonIndices?.[candidate] ?? candidate]!
     if (polygon.sourceId !== undefined && ignoredSourceIds?.has(polygon.sourceId)) continue
     const contact = polygonContact(center, radius, polygon.points, previous)
     if (contact) return contact
   }
-  for (const segment of world.segments) {
+  const segmentIndices = selection?.segmentIndices
+  for (let candidate = 0; candidate < (segmentIndices?.length ?? world.segments.length); candidate += 1) {
+    const segment = world.segments[segmentIndices?.[candidate] ?? candidate]!
     if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
     const contact = segmentContact(
       center,
@@ -725,7 +795,23 @@ function firstContact(
     )
     if (contact) return contact
   }
-  for (const circle of world.circles) {
+  if (view) {
+    for (let index = view.indexedSegmentCount; index < world.segments.length; index += 1) {
+      const segment = world.segments[index]!
+      if (segment.sourceId !== undefined && ignoredSourceIds?.has(segment.sourceId)) continue
+      const contact = segmentContact(
+        center,
+        radius + segment.radius,
+        segment.start,
+        segment.end,
+        previous,
+      )
+      if (contact) return contact
+    }
+  }
+  const circleIndices = selection?.circleIndices
+  for (let candidate = 0; candidate < (circleIndices?.length ?? world.circles.length); candidate += 1) {
+    const circle = world.circles[circleIndices?.[candidate] ?? candidate]!
     if (circle.sourceId !== undefined && ignoredSourceIds?.has(circle.sourceId)) continue
     const dx = center.x - circle.center.x
     const dy = center.y - circle.center.y
@@ -734,6 +820,23 @@ function firstContact(
     return { normal: normalized(dx, dy, previous.x - center.x, previous.y - center.y) }
   }
   return null
+}
+
+function collisionBroadphaseView(world: BoneyardCollisionWorld): CollisionBroadphaseView {
+  let view = collisionBroadphaseViews.get(world)
+  if (view) return view
+  view = {
+    broadphase: new BoneyardCollisionBroadphase(world),
+    indexedSegmentCount: world.segments.length,
+  }
+  collisionBroadphaseViews.set(world, view)
+  return view
+}
+
+function collisionBroadphaseViewOrNull(
+  world: BoneyardCollisionWorld,
+): CollisionBroadphaseView | null {
+  return allPairsCollisionWorlds.has(world) ? null : collisionBroadphaseView(world)
 }
 
 function polygonContact(

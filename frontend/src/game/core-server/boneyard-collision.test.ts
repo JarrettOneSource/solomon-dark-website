@@ -13,10 +13,12 @@ import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import {
   boneyardBodyCollides,
+  boneyardBodyCollisionSourceIds,
   boneyardSpawnPositionIsOffscreen,
   canPlaceBoneyardBody,
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
+  createBoneyardCollisionWorldAllPairsOracle,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
   NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
@@ -546,6 +548,158 @@ test('projectile sweeps report the first static-world contact along the path', (
 
   assert.ok(progress !== null)
   assert.ok(progress > 0.44 && progress < 0.46)
+})
+
+test('static broadphase is an exact all-pairs oracle across every generated Arena', () => {
+  let randomState = 0x8d27_51c3
+  for (const [templateIndex, template] of NATIVE_GENERATED_BONEYARDS.entries()) {
+    const gateLeaves = createBoneyardGateLeaves(
+      template.scene.fences,
+      `broadphase-oracle-${templateIndex}`,
+    )
+    const indexed = withBoneyardGateCollision(
+      createBoneyardCollisionWorld(template.scene),
+      gateLeaves,
+    )
+    const allPairs = withBoneyardGateCollision(
+      createBoneyardCollisionWorldAllPairsOracle(template.scene),
+      gateLeaves,
+    )
+    const bounds = template.scene.bounds
+    const sourceIds = [
+      ...indexed.polygons,
+      ...indexed.segments,
+      ...indexed.circles,
+    ].flatMap(({ sourceId }) => sourceId === undefined ? [] : [sourceId])
+
+    for (let trial = 0; trial < 72; trial += 1) {
+      const radius = [0, 1, 8, 13.5, 25, 50][trial % 6]!
+      const point = {
+        x: bounds.x - 64 + random() * (bounds.w + 128),
+        y: bounds.y - 64 + random() * (bounds.h + 128),
+      }
+      const ignoredSourceIds = sourceIds.length > 0 && trial % 4 === 0
+        ? new Set([sourceIds[trial % sourceIds.length]!])
+        : undefined
+      assert.equal(
+        boneyardBodyCollides(point, indexed, radius, ignoredSourceIds),
+        boneyardBodyCollides(point, allPairs, radius, ignoredSourceIds),
+        `body contact template ${templateIndex} trial ${trial}`,
+      )
+      assert.equal(
+        canPlaceBoneyardBody(point, bounds, indexed, radius, ignoredSourceIds),
+        canPlaceBoneyardBody(point, bounds, allPairs, radius, ignoredSourceIds),
+        `placement template ${templateIndex} trial ${trial}`,
+      )
+      assert.deepEqual(
+        boneyardBodyCollisionSourceIds(point, indexed, radius),
+        boneyardBodyCollisionSourceIds(point, allPairs, radius),
+        `source ids template ${templateIndex} trial ${trial}`,
+      )
+
+      const movementRadius = [1, 8, 13.5, 25, 50][trial % 5]!
+      const start = {
+        x: bounds.x + movementRadius + random() * Math.max(1, bounds.w - movementRadius * 2),
+        y: bounds.y + movementRadius + random() * Math.max(1, bounds.h - movementRadius * 2),
+      }
+      const requested = {
+        x: start.x + randomSigned(96),
+        y: start.y + randomSigned(96),
+      }
+      assert.deepEqual(
+        resolveBoneyardMovement(
+          start,
+          requested,
+          bounds,
+          indexed,
+          movementRadius,
+          ignoredSourceIds,
+        ),
+        resolveBoneyardMovement(
+          start,
+          requested,
+          bounds,
+          allPairs,
+          movementRadius,
+          ignoredSourceIds,
+        ),
+        `movement template ${templateIndex} trial ${trial}`,
+      )
+
+      if (trial % 12 === 0) {
+        const end = {
+          x: bounds.x + random() * bounds.w,
+          y: bounds.y + random() * bounds.h,
+        }
+        assert.equal(
+          firstBoneyardPathBlockProgress(
+            start,
+            end,
+            bounds,
+            indexed,
+            radius,
+            ignoredSourceIds,
+          ),
+          firstBoneyardPathBlockProgress(
+            start,
+            end,
+            bounds,
+            allPairs,
+            radius,
+            ignoredSourceIds,
+          ),
+          `path progress template ${templateIndex} trial ${trial}`,
+        )
+      }
+    }
+  }
+
+  function random(): number {
+    randomState ^= randomState << 13
+    randomState ^= randomState >>> 17
+    randomState ^= randomState << 5
+    randomState >>>= 0
+    return randomState / 0x1_0000_0000
+  }
+
+  function randomSigned(maximum: number): number {
+    return (random() * 2 - 1) * maximum
+  }
+})
+
+test('static broadphase preserves negative-cell and overlapping first-contact order', () => {
+  const scene = makeScene()
+  scene.bounds = { x: -400, y: -400, w: 800, h: 800 }
+  scene.objects = [
+    {
+      eid: 'left', typeId: 2001, pos: { x: -128, y: -128 },
+      variant: 1, secondaryVariant: 0, secondaryVisible: false,
+    },
+    {
+      eid: 'right', typeId: 2001, pos: { x: -104, y: -128 },
+      variant: 1, secondaryVariant: 0, secondaryVisible: false,
+    },
+  ]
+  scene.fences = [{
+    eid: 'negative-fence',
+    points: [{ x: -256, y: -300 }, { x: -256, y: 100 }],
+    segmentCode: 0,
+    typeId: 3005,
+  }]
+  const indexed = createBoneyardCollisionWorld(scene)
+  const allPairs = createBoneyardCollisionWorldAllPairsOracle(scene)
+  const bounds = scene.bounds
+
+  for (const [start, requested, radius] of [
+    [{ x: -180, y: -128 }, { x: -100, y: -128 }, 25],
+    [{ x: -300, y: -200 }, { x: -220, y: -100 }, 25],
+    [{ x: -128, y: -180 }, { x: -128, y: -100 }, 0],
+  ] as const) {
+    assert.deepEqual(
+      resolveBoneyardMovement(start, requested, bounds, indexed, radius),
+      resolveBoneyardMovement(start, requested, bounds, allPairs, radius),
+    )
+  }
 })
 
 function makeScene(): BoneyardScene {

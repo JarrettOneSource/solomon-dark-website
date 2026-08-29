@@ -462,6 +462,16 @@ The browser supervisor owns one shared-Hub host for its process lifetime and a
 bounded set of single-use admission tickets. The host owns a shared Hub simulation plus zero or more
 party-scoped Boneyard simulations. Each socket receives snapshots only for its
 current world instance, while party-control messages remain session-wide.
+Before a newly created or restored Boneyard is exposed to its participants,
+the host's loading owner prepares the immutable ordinary, Demon, and Solomon
+NavMeshes in a server-only worker thread. The worker receives only collision
+geometry and mesh requests; it cannot tick or mutate a simulation. The host
+installs the returned mesh data into a module-private cache keyed by immutable
+geometry identity, then releases the existing renderer/readiness and resume
+barriers. Repeated runs of the same authored geometry reuse that cache. Static
+mesh construction therefore cannot consume an authoritative 100 Hz tick or
+block the shared host event loop; movement, route selection, collision, saves,
+snapshots, and protocol state remain on the owning game-host thread.
 The shared Hub world also owns one ten-slot Memoratorium archive. When any
 party run crosses the authoritative Hall archive edge, the world coordinator
 adds each completed participant whose current effective Submit Runs preference

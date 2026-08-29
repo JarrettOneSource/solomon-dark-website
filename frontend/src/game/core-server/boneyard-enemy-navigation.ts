@@ -1,5 +1,6 @@
 import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
+  boneyardCollisionGeometryIdentity,
   canPlaceBoneyardBody,
   type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
@@ -27,16 +28,21 @@ export interface FindBoneyardEnemyRouteRequest {
   readonly world: BoneyardCollisionWorld
 }
 
-interface NativeNavMesh {
+export interface BoneyardNavigationMeshData {
   readonly points: readonly Readonly<BoneyardPoint>[]
-  readonly triangles: readonly NativeNavTriangle[]
+  readonly triangles: readonly BoneyardNavigationTriangleData[]
 }
 
-interface NativeNavTriangle {
+export interface BoneyardNavigationTriangleData {
   readonly center: Readonly<BoneyardPoint>
   readonly id: number
   readonly neighbors: readonly number[]
   readonly vertices: readonly [number, number, number]
+}
+
+export interface PreparedBoneyardNavigationMesh {
+  readonly key: string
+  readonly mesh: BoneyardNavigationMeshData
 }
 
 interface MutableNavTriangle {
@@ -63,9 +69,36 @@ interface OpenTriangle {
 }
 
 const NAV_MESH_CACHE = new WeakMap<
-  BoneyardCollisionWorld,
-  Map<string, NativeNavMesh>
+  object,
+  Map<string, BoneyardNavigationMeshData>
 >()
+
+function navigationMeshEntries(
+  world: BoneyardCollisionWorld,
+): Map<string, BoneyardNavigationMeshData> | undefined {
+  return NAV_MESH_CACHE.get(boneyardCollisionGeometryIdentity(world))
+}
+
+function navigationMeshKey(
+  bounds: Readonly<BoneyardBounds>,
+  clearance: number,
+): string {
+  return [bounds.x, bounds.y, bounds.w, bounds.h, clearance].join(':')
+}
+
+function freezeNavigationMesh(
+  source: BoneyardNavigationMeshData,
+): BoneyardNavigationMeshData {
+  return Object.freeze({
+    points: Object.freeze(source.points.map(point => Object.freeze({ ...point }))),
+    triangles: Object.freeze(source.triangles.map(triangle => Object.freeze({
+      center: Object.freeze({ ...triangle.center }),
+      id: triangle.id,
+      neighbors: Object.freeze([...triangle.neighbors]),
+      vertices: Object.freeze([...triangle.vertices]) as readonly [number, number, number],
+    }))),
+  })
+}
 
 /**
  * Ports the stock Arena-owned NavMesh service: clearance-expanded collision
@@ -144,16 +177,61 @@ export function findBoneyardEnemyRoute(
   ))
 }
 
+export function prepareBoneyardNavigationMesh(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): void {
+  if (!Number.isFinite(clearance) || clearance <= 0) {
+    throw new RangeError('enemy navigation clearance must be positive and finite')
+  }
+  nativeNavMesh(bounds, world, clearance)
+}
+
+export function boneyardNavigationMeshIsPrepared(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): boolean {
+  return navigationMeshEntries(world)?.has(navigationMeshKey(bounds, clearance)) ?? false
+}
+
+export function buildPreparedBoneyardNavigationMesh(
+  bounds: Readonly<BoneyardBounds>,
+  world: BoneyardCollisionWorld,
+  clearance: number,
+): PreparedBoneyardNavigationMesh {
+  if (!Number.isFinite(clearance) || clearance <= 0) {
+    throw new RangeError('enemy navigation clearance must be positive and finite')
+  }
+  return {
+    key: navigationMeshKey(bounds, clearance),
+    mesh: buildNativeNavMesh(bounds, world, clearance),
+  }
+}
+
+export function installPreparedBoneyardNavigationMesh(
+  world: BoneyardCollisionWorld,
+  prepared: PreparedBoneyardNavigationMesh,
+): void {
+  let entries = navigationMeshEntries(world)
+  if (!entries) {
+    entries = new Map()
+    NAV_MESH_CACHE.set(boneyardCollisionGeometryIdentity(world), entries)
+  }
+  entries.set(prepared.key, freezeNavigationMesh(prepared.mesh))
+}
+
 function nativeNavMesh(
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   clearance: number,
-): NativeNavMesh {
-  const key = [bounds.x, bounds.y, bounds.w, bounds.h, clearance].join(':')
-  let entries = NAV_MESH_CACHE.get(world)
+): BoneyardNavigationMeshData {
+  const key = navigationMeshKey(bounds, clearance)
+  let entries = navigationMeshEntries(world)
   if (!entries) {
     entries = new Map()
-    NAV_MESH_CACHE.set(world, entries)
+    NAV_MESH_CACHE.set(boneyardCollisionGeometryIdentity(world), entries)
   }
   const cached = entries.get(key)
   if (cached) return cached
@@ -166,7 +244,7 @@ function buildNativeNavMesh(
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   clearance: number,
-): NativeNavMesh {
+): BoneyardNavigationMeshData {
   const navigationWorld = withoutNativeNavMeshExcludedCollision(world)
   const constraints = navigationConstraints(navigationWorld, clearance)
   const candidates: Readonly<BoneyardPoint>[] = []
@@ -524,7 +602,7 @@ function connectTriangles(
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
   clearance: number,
-): NativeNavMesh {
+): BoneyardNavigationMeshData {
   const retained: MutableNavTriangle[] = triangles.map(({ vertices }, id) => ({
     center: Object.freeze(triangleCenter(vertices.map((vertex) => points[vertex]!))),
     id,
@@ -657,7 +735,7 @@ function appendDistinctRoutePoint(
 }
 
 function resolveEndpointTriangle(
-  mesh: NativeNavMesh,
+  mesh: BoneyardNavigationMeshData,
   point: Readonly<BoneyardPoint>,
   bounds: Readonly<BoneyardBounds>,
   world: BoneyardCollisionWorld,
@@ -687,7 +765,7 @@ function resolveEndpointTriangle(
 }
 
 function findTrianglePath(
-  mesh: NativeNavMesh,
+  mesh: BoneyardNavigationMeshData,
   start: number,
   end: number,
 ): readonly number[] | null {
@@ -735,7 +813,10 @@ function reconstructTrianglePath(
   return Object.freeze(reversed.reverse())
 }
 
-function triangleHeuristic(left: NativeNavTriangle, right: NativeNavTriangle): number {
+function triangleHeuristic(
+  left: BoneyardNavigationTriangleData,
+  right: BoneyardNavigationTriangleData,
+): number {
   return Math.hypot(
     right.center.x - left.center.x,
     right.center.y - left.center.y,
@@ -743,8 +824,8 @@ function triangleHeuristic(left: NativeNavTriangle, right: NativeNavTriangle): n
 }
 
 function sharedPortal(
-  left: NativeNavTriangle,
-  right: NativeNavTriangle,
+  left: BoneyardNavigationTriangleData,
+  right: BoneyardNavigationTriangleData,
 ): readonly [number, number] | null {
   const shared = left.vertices.filter((vertex) => right.vertices.includes(vertex))
   if (shared.length !== 2) return null

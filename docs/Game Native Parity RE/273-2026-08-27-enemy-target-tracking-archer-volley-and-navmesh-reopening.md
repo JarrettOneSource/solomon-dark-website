@@ -285,3 +285,91 @@ simplification and final movement collision.
   clearance query. This receipt is the sole post-validation documentation
   write; no runtime, test, build, asset, protocol, or browser byte changed
   afterward.
+
+## 2026-08-28 — production static-collision broadphase performance reopening
+
+### Reported smell and parity question
+
+- Reported production behavior: one ordinary two-player Random Boneyard became
+  visibly laggy during its active run and reached repeated authoritative
+  `simulation.tick_lag` recovery drops before both players died on wave 13.
+- The parity question is representation-only: can the recovered zero-width
+  direct-path query, fixed one-unit sampling, strict contacts, primitive order,
+  gate overlays, and final movement collision remain byte-equivalent while the
+  Website restores the native system's spatial lookup beneath point contacts?
+- This is a secondary report in the system closed above. The prior pass
+  recovered that native NavMesh and Region collision own spatial lookup cells,
+  but its Website adapter validated route outcomes without profiling the
+  authoritative 100 Hz loop under a 70-plus-enemy survival population. It left
+  every sampled point scanning the complete Arena primitive inventory.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Production runtime | deployed Website `6220c5a703a5bb922f14f892923baa1fe58d9e89`; shared run `cf0144334ad25fa3aff51db26e760402`; 2026-08-29 `01:55:02.553..02:08:00.885Z` | The two-player run reached wave 13 and emitted 18 rate-limited tick-lag warnings. The logged remainder total was 2,116 ms, maximum 836 ms; each warning occurs only after 25 catch-up ticks, so the maximum original debt was at least 1,086 ms. The process reached 109.05% CPU with stable 384..400 MiB resident memory, zero service restarts, and ample machine RAM/CPU outside the single event-loop lane. | high-live |
+| Exact-tree Mac replay | detached `6220c5a7`, Node 22.23.2, generated Arena index 0, matching Ether/Body plus Water/Mind players, real wave director through wave 13 | At 70 live enemies, the unchanged simulation measured 3.499 ms mean, 10.848 ms p95, and 14.576 ms p99 per fixed tick on the M2 Mac; p95/p99 already exceed the 10 ms production tick budget before shared-Hub and snapshot work. | high |
+| Named CPU profile | same replay, Node `--cpu-prof` at 500 microseconds | `boneyard-collision.ts` owns 52.18% of sampled self time. `firstContact` owns 49.98% self time; the direct-path `firstBoneyardPathBlockProgress` branch owns 39.47% inclusive time. Garbage collection owns another 8.38%. | high |
+| Single-variable diagnostic | same wave-13 state, interleaved 500-tick branches, only static collision removed in the diagnostic branch | Normal collision measured 3.499 ms mean / 14.576 ms p99; the collision-free branch measured 0.920 ms mean / 1.387 ms p99, a 3.804x speedup while ending with 86 versus 85 live enemies. This is causal localization, not a legal implementation. | high |
+| Host-work falsifier | same wave-13 state, two player projections | Both 20 Hz snapshot projections/frames/encodes cost 0.511 ms mean per broadcast. Both periodic save documents/encodes cost 12.166 ms once per 30 seconds. They can amplify a slow tick but do not own the sustained one-core saturation. | high |
+| Current source audit | `boneyard-collision.ts::firstBoneyardPathBlockProgress -> canPlaceBoneyardBody -> firstContact`; all 12 generated Arena templates on `6d712227` | A path of `ceil(distance)` samples calls `firstContact` once per unit. Each call linearly visits all polygons, segments, and circles until contact; generated Arenas contain 419..542 primitives, including 386..503 circles. The hot collision/path files are byte-identical between the observed deployment and current main. | high |
+| Existing native evidence | route/Region findings already recorded above: `0x005DD3A0/0x005DFF90`, `0x00524180`, `0x00525800`; spatial lookup cells and stable narrow-phase behavior | Spatial lookup is native ownership. Cell partition size is an internal broadphase representation and cannot change candidate order, contact equations, route decisions, or movement results. | high |
+
+The simultaneous replication-baseline losses generally follow server tick-lag
+events. Catch-up processes up to 25 ticks and emits every five-tick snapshot in
+one callback, so slow simulation creates snapshot bursts; baseline recovery is
+a downstream symptom and modest amplifier, not the root owner.
+
+### System boundary and membership inventory
+
+Native/web system: immutable Arena static-collision spatial lookup beneath all
+authoritative point/body contact queries. The all-pairs narrow phase remains
+the behavioral oracle.
+
+| Member / branch | Disposition | Required invariant |
+| --- | --- | --- |
+| Polygon, capsule-segment, and circle base primitives | `exact-ported` | Candidate pruning may remove only primitives whose AABB cannot touch the query circle; retained candidates keep original kind and source-array order. |
+| Moving Gate leaf segments | `exact-ported` | Per-tick overlays remain after base segments and before circles; no stale leaf root or cached pose. |
+| Direct zero-width enemy LOS | `exact-ported` | Keep `ceil(distance)` samples, strict bounds/contact comparisons, first blocked sample, and ten-step fractional refinement exactly. |
+| Player/enemy movement and eight-step sweep/slide | `verified-already-at-parity` | Same first contact and normal, same binary sweep candidates, same accepted root. |
+| Spawn placement and four-direction mobility probe | `verified-already-at-parity` | Same ring/RNG/policy sequence and first legal candidate. |
+| Weather and secondary point/body queries | `verified-already-at-parity` | Bounds-free collision semantics and ignored-source behavior remain unchanged. |
+| Gravestone/scenery source filtering | `exact-ported` | Both circle and optional polygon for an ignored source remain excluded, without excluding siblings. |
+| All 12 generated Arenas, Tutorial, mod-authored Boneyards, and restored saves | `exact-ported` | Index builds from the actual primitive arrays, lazily when no constructor-owned cache exists; no scene-specific inventory or seed assumption. |
+| Line-ray obstruction for spells/projectiles | `verified-already-at-parity` and outside this point-query optimization | Nearest obstruction and native mask order remain the existing analytic owner. |
+| Snapshots, save schema, hashes, and protocol | `verified-already-at-parity` | The broadphase is module-private, weakly owned by collision-world identity, and never serialized or replicated. |
+
+### Recovered behavioral and representation contract
+
+- Preserve polygon-before-segment-before-circle traversal and ascending source
+  index inside each family. First-contact identity is authoritative because its
+  normal drives movement slide.
+- Partition immutable primitive AABBs into deterministic internal cells.
+  Query every cell touched by `center +/- radius`, deduplicate candidates, and
+  restore source-array order before the unchanged narrow phase.
+- A cell extent is a representation tuning value, not a native gameplay
+  constant. It must not appear in state, saves, snapshots, hashes, or protocol.
+- Reuse the immutable base index across moving-Gate views. Test the live Gate
+  segments as ordered overlays so their current endpoints remain authoritative.
+- Keep a complete all-pairs oracle and prove indexed/all-pairs equivalence for
+  contact booleans, source IDs, path-block progress, and final movement roots.
+- Rebuild lazily for restored or hand-constructed collision worlds; constructor
+  paths may prewarm the same cache before the first combat tick.
+
+### Web implementation consequence and validation contract
+
+- Add one module-private static collision grid inside
+  `core-server/boneyard-collision.ts`; do not change path cadence, skip samples,
+  replace collision with NavMesh containment, coalesce enemies, lower tick rate,
+  or add crowd thresholds.
+- Add a deterministic all-pairs constructor/test seam. Randomized differentials
+  must cover negative/cell-edge coordinates, radii including zero, every
+  primitive family, overlapping first contacts, ignored source IDs, moving Gate
+  overlays, all generated Arenas, path progress, and movement output.
+- Re-run the exact two-player wave-13 replay and named CPU profile on the Mac.
+  Acceptance requires identical deterministic final state, no p99 regression in
+  the non-collision remainder, and a material reduction from the 3.499 ms
+  high-crowd mean / 14.576 ms p99 baseline.
+- Run the complete Mac Website gate, then a built Mac Chrome Random Boneyard
+  journey that records authoritative tick advance, enemy motion, page/console/
+  response/wire errors, and confirms no combat-bound crossing.

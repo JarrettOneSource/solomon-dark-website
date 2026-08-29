@@ -102,6 +102,7 @@ import {
   type ServerDisconnectMessage,
 } from '../protocol/game-protocol.ts'
 import { createGameSnapshot } from './game-snapshot.ts'
+import { prepareBoneyardWorldNavigationAsync } from './boneyard-navigation-preparer.ts'
 import {
   createGameSnapshotFrame,
   createReplicatedEntityBaseline,
@@ -694,6 +695,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     : null
   let state = sharedWorlds?.hub ?? createInitialSimulation(options.createSimulation)
   let gameplayPause: GameplayPauseState | null = null
+  let privateNavigationPreparation: Promise<void> | null = null
   const sharedGameplayPauses = new Map<string, GameplayPauseState>()
   let gameplayResumeGrace: HostGameplayResumeGrace | null = null
   const sharedGameplayResumeGraces = new Map<string, HostGameplayResumeGrace>()
@@ -1434,6 +1436,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             } else if (!rejoinedParty) {
               state = restoredState
               loadedBoneyard = restoredBoneyard
+              void preparePrivateNavigation(state)
               nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
             }
           }
@@ -1546,11 +1549,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             : null
           if (restoredBoneyard && restoredParty) {
             startingPartyIds.add(restoredParty.id)
-            void ensurePartyModRuntimes(
-              restoredParty.id,
-              authenticated.content,
-              stateForPlayer(playerId),
-            ).then((scope) => {
+            const restoredState = stateForPlayer(playerId)
+            void Promise.all([
+              ensurePartyModRuntimes(
+                restoredParty.id,
+                authenticated.content,
+                restoredState,
+              ),
+              restoredState.world.kind === 'boneyard'
+                ? prepareBoneyardWorldNavigationAsync(restoredState.world)
+                : Promise.resolve(),
+            ]).then(([scope]) => {
               const current = loadedBoneyardForPlayer(playerId)
               scope.runtime.activateBoneyard(current
                 ? webLuaBoneyardContentId(playerId, current)
@@ -3144,42 +3153,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           void beginSharedPartyRun(client.playerId, selected, socket)
           return
         }
-        for (const connected of clients.values()) connected.hubActivity = null
-        const privatePartyId = privateParties?.parties[0]?.id ?? null
-        if (privatePartyId) client.socialConnection?.revokeCollegeInvitations(privatePartyId)
-        loadedBoneyard = selected
-        const previousState = state
-        state = enterBoneyardWorld(state, selected)
-        for (const connected of clients.values()) {
-          connected.socialConnection?.refreshCollegeInvitationAvailability()
-        }
-        if (selected.choice.id !== 'stock-tutorial') {
-          publishPlayerActivity(client, 'searching-solomon')
-        }
-        const beganLoadingGrace = beginRunLoadingResumeGrace(
-          client.playerId,
-          'game-started',
-          null,
-          false,
-        )
-        privateModHost?.activateBoneyard(webLuaBoneyardContentId(client.playerId, selected))
-        if (privateModHost) armBoneyardRendererReadiness(state)
-        armPartyRejoinSlotsForState(privatePartyId, state)
-        logGameActivity(previousState, state, selected, null)
-        taintIneligibleClientRuns()
-        if (privateModHost || activePrivateLuaRuntimes().length > 0) {
-          pendingLuaEvents.push(...deriveWebLuaEvents(
-            previousState,
-            state,
-            name => privateModHost !== null
-              || activePrivateLuaRuntimes().some(runtime => runtime.wantsEvent(name)),
-          ))
-        }
-        broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
-        if (privateParties) broadcastPartyState()
-        broadcastSnapshot()
-        if (beganLoadingGrace) broadcastGameplayResumeGrace()
-        publishSaveCheckpoint('boneyard-entry')
+        void beginPrivateBoneyardRun(client, selected, socket, false)
         return
       }
       if (message.type === 'client-ready-college-intro') {
@@ -3240,26 +3214,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           void beginSharedPartyRun(client.playerId, selected, socket)
           return
         }
-        loadedBoneyard = selected
-        state = enterBoneyardWorld(state, selected)
-        const privatePartyId = privateParties?.parties[0]?.id ?? null
-        if (privatePartyId) client.socialConnection?.revokeCollegeInvitations(privatePartyId)
-        for (const connected of clients.values()) {
-          connected.socialConnection?.refreshCollegeInvitationAvailability()
-        }
-        const beganLoadingGrace = beginRunLoadingResumeGrace(
-          client.playerId,
-          'game-started',
-          null,
-          false,
-        )
-        armPartyRejoinSlotsForState(privatePartyId, state)
-        stopAllClientInputs()
-        broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
-        if (privateParties) broadcastPartyState()
-        broadcastSnapshot()
-        if (beganLoadingGrace) broadcastGameplayResumeGrace()
-        publishSaveCheckpoint('tutorial-entry')
+        void beginPrivateBoneyardRun(client, selected, socket, true)
         return
       }
       if (message.type === 'client-tutorial-action') {
@@ -3575,7 +3530,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     if (
       !sharedWorlds
-      && (gameplayPause !== null || gameplayResumeGrace !== null)
+      && (
+        gameplayPause !== null
+        || gameplayResumeGrace !== null
+        || privateNavigationPreparation !== null
+      )
     ) {
       resetNextTickDeadline()
       return
@@ -4225,6 +4184,89 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ? [[client.playerId, client.hubActivity] as const]
         : []
     )))
+  }
+
+  async function beginPrivateBoneyardRun(
+    client: HostClient,
+    selected: LoadedBoneyard,
+    socket: WebSocket,
+    tutorial: boolean,
+  ): Promise<void> {
+    if (sharedWorlds || privateNavigationPreparation !== null) return
+    if (!tutorial) {
+      for (const connected of clients.values()) connected.hubActivity = null
+    }
+    const privatePartyId = privateParties?.parties[0]?.id ?? null
+    if (privatePartyId) client.socialConnection?.revokeCollegeInvitations(privatePartyId)
+    loadedBoneyard = selected
+    const previousState = state
+    state = enterBoneyardWorld(state, selected)
+    if (!await preparePrivateNavigation(state)) return
+    if (closed || !clients.has(socket) || loadedBoneyard?.runId !== selected.runId) return
+
+    for (const connected of clients.values()) {
+      connected.socialConnection?.refreshCollegeInvitationAvailability()
+    }
+    if (!tutorial && selected.choice.id !== 'stock-tutorial') {
+      publishPlayerActivity(client, 'searching-solomon')
+    }
+    const beganLoadingGrace = beginRunLoadingResumeGrace(
+      client.playerId,
+      'game-started',
+      null,
+      false,
+    )
+    armPartyRejoinSlotsForState(privatePartyId, state)
+    if (tutorial) {
+      stopAllClientInputs()
+    } else {
+      privateModHost?.activateBoneyard(webLuaBoneyardContentId(client.playerId, selected))
+      if (privateModHost) armBoneyardRendererReadiness(state)
+      logGameActivity(previousState, state, selected, null)
+      taintIneligibleClientRuns()
+      if (privateModHost || activePrivateLuaRuntimes().length > 0) {
+        pendingLuaEvents.push(...deriveWebLuaEvents(
+          previousState,
+          state,
+          name => privateModHost !== null
+            || activePrivateLuaRuntimes().some(runtime => runtime.wantsEvent(name)),
+        ))
+      }
+    }
+    broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
+    if (privateParties) broadcastPartyState()
+    broadcastSnapshot()
+    if (beganLoadingGrace) broadcastGameplayResumeGrace()
+    publishSaveCheckpoint(tutorial ? 'tutorial-entry' : 'boneyard-entry')
+  }
+
+  async function preparePrivateNavigation(activeState: GameSimulationState): Promise<boolean> {
+    if (sharedWorlds || activeState.world.kind !== 'boneyard') return true
+    const preparation = prepareBoneyardWorldNavigationAsync(activeState.world)
+    privateNavigationPreparation = preparation
+    try {
+      await preparation
+      return true
+    } catch (error) {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'error',
+        'navigation.preparation_failed',
+        'The Boneyard navigation meshes could not be prepared.',
+        logDetails(gameServerErrorDetails(error)),
+      )
+      for (const socket of clients.keys()) {
+        disconnectCauses.set(socket, {
+          reason: 'Boneyard navigation preparation failed',
+          source: 'server-error',
+        })
+        socket.close(1011, 'server error')
+      }
+      return false
+    } finally {
+      if (privateNavigationPreparation === preparation) privateNavigationPreparation = null
+    }
   }
 
   function stateForPlayer(playerId: string): GameSimulationState {
@@ -6906,7 +6948,34 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (leader && selected.choice.id !== 'stock-tutorial') {
         publishPlayerActivity(leader, 'searching-solomon')
       }
-      const run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
+      let run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
+      if (run.state.world.kind !== 'boneyard') {
+        throw new Error('started party run did not enter a Boneyard')
+      }
+      try {
+        await prepareBoneyardWorldNavigationAsync(run.state.world)
+      } catch (error) {
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          'error',
+          'navigation.preparation_failed',
+          'The Boneyard navigation meshes could not be prepared.',
+          logDetails({ partyId: party.id, ...gameServerErrorDetails(error) }),
+        )
+        const partyPlayerIds = new Set(party.memberPlayerIds)
+        for (const [partySocket, connected] of clients) {
+          if (!partyPlayerIds.has(connected.playerId)) continue
+          disconnectCauses.set(partySocket, {
+            reason: 'Boneyard navigation preparation failed',
+            source: 'server-error',
+          })
+          partySocket.close(1011, 'server error')
+        }
+        return
+      }
+      if (!sharedWorlds || closed || !clients.has(socket)) return
+      run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
       const beganLoadingGrace = beginRunLoadingResumeGrace(
         leaderPlayerId,
         'game-started',
