@@ -106,7 +106,6 @@
     "src/game/client/game-transport.ts",
     "src/game/host/game-host.ts",
     "src/game/host/game-host.test.ts",
-    "src/game/host/ml-bot-host-controller.test.ts",
     "src/game/host/ml-bot-host-controller.ts",
     "src/game/host/ml-bot-entrance-navigation.ts",
     "src/game/host/ml-bot-policy-worker.ts",

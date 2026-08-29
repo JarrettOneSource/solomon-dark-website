@@ -121,13 +121,6 @@ decoded from the current loadout row at each decision, not slot-only counters.
 
 ## Run and continue training on the Mac
 
-Run the packaged selected bot through the real GameHost integration:
-
-```sh
-cd /Users/jarrett/codex-acceptance/ml-bot-v6-20260823/final/frontend
-npm run smoke:game:ml-bot -- --duration-ms 90000
-```
-
 Start a new isolated ten-update PPO experiment from the selected checkpoint:
 
 ```sh

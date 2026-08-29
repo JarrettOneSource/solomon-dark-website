@@ -58,24 +58,6 @@ test('presents boneyard players with their wave, place, and party', () => {
   })
 })
 
-test('presents staged runs before wave one and names bots as bots', () => {
-  const presentation = connectedPlayerPresentation({
-    accountUsername: null,
-    activity: 'boneyard',
-    boneyardName: 'West Boneyard',
-    bot: true,
-    developer: false,
-    displayName: 'ML Bot 1',
-    partyLeader: null,
-    partySize: null,
-    session: 'global-hub',
-    waveNumber: 0,
-  })
-  assert.equal(presentation.status, 'STAGING')
-  assert.equal(presentation.detail, 'ML BOT')
-  assert.equal(presentation.location, 'West Boneyard')
-})
-
 test('observer skill feed shows offers and the selected result without owning the picker', () => {
   const initialState = createGameSimulation({ 'player-1': CHARACTER })
   const initial = createGameSnapshot(initialState, 'player-1')

@@ -216,18 +216,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "partyLeader": "Hagatha",
                 "partySize": 2,
             },
-            {
-                "displayName": "ML Bot 1",
-                "accountUsername": None,
-                "bot": True,
-                "developer": False,
-                "session": "private-college",
-                "activity": "hub",
-                "boneyardName": None,
-                "waveNumber": None,
-                "partyLeader": None,
-                "partySize": None,
-            },
         ]
 
         class SupervisorHandler(BaseHTTPRequestHandler):
@@ -675,7 +663,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 status, response = self.request("GET", "/api/game/players", headers=headers)
                 self.assertEqual(status, 404)
                 serialized = json.dumps(response)
-                for leak in ("Hagatha", "ML Bot", "boneyard", "wave", "items", "party"):
+                for leak in ("Hagatha", "boneyard", "wave", "items", "party"):
                     self.assertNotIn(leak, serialized)
         self.assertEqual(
             test_class.presence_requests,

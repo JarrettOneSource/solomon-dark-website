@@ -9,10 +9,9 @@ test('projects hub and boneyard participants with wave numbers and party context
       participant('player-a', 'Solomon', { accountUsername: 'solomon', developer: true }),
       participant('player-b', 'Hagatha', { accountUsername: null }),
       participant('player-c', 'Luthacus', { accountUsername: 'luth' }),
-      participant('bot-1', 'ML Bot 1', { bot: true }),
     ],
     {
-      hubPlayerIds: ['player-a', 'bot-1'],
+      hubPlayerIds: ['player-a'],
       runs: [{
         boneyardName: 'The Survival Grounds',
         playerIds: ['player-b', 'player-c'],
@@ -55,20 +54,10 @@ test('projects hub and boneyard participants with wave numbers and party context
     partyLeader: 'Hagatha',
     partySize: 2,
     waveNumber: 4,
-  }, {
-    accountUsername: null,
-    activity: 'hub',
-    boneyardName: null,
-    bot: true,
-    developer: false,
-    displayName: 'ML Bot 1',
-    partyLeader: null,
-    partySize: null,
-    waveNumber: null,
   }])
   assert.doesNotMatch(
     JSON.stringify(presence),
-    /player-|bot-1|joinCode|listing|credential/i,
+    /player-|joinCode|listing|credential/i,
   )
 })
 

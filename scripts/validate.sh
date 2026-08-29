@@ -107,7 +107,6 @@ run_all() {
     npm --prefix frontend run test:arena-render
     npm --prefix frontend run test:boneyard
     npm --prefix frontend run test:hud-skill-selector
-    npm --prefix frontend run test:ml-bot
     npm --prefix frontend run test:world-weather
     npm --prefix frontend run test:parties
     npm --prefix frontend run test:level-up

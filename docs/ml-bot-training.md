@@ -60,23 +60,9 @@ python3 -m venv /path/to/ml-bot-venv
 ```
 
 The pinned campaign stack is Python 3.12, NumPy 2.5.2, and PyTorch 2.13.0.
-Run the boundary test before training:
-
-```sh
-/path/to/ml-bot-venv/bin/python tools/train_bot_policy.py self-test
-```
-
-That test crosses the TypeScript spec, compact checkpoint codec, PyTorch
-inference, BC, main PPO, choice SMDP PPO, Node worker bridge, expert action,
-externally selected learned offers, live-host choice dispatch, and
-selective-reset boundaries.
-
-The pinned gate can also be invoked as:
-
-```sh
-ML_BOT_PYTHON=/path/to/ml-bot-venv/bin/python \
-  ./scripts/validate-ml-bot-training.sh
-```
+The Website no longer ships an ML-specific automated test or smoke gate.
+Training, evaluation, checkpoint validation, and runtime commands remain
+available, but none is part of the canonical Website test suite.
 
 ## Bootstrap and training
 

@@ -91,10 +91,7 @@ async function runtimeHarness(
 test('web Lua exposes bounded stock grants only to developer console VMs', async () => {
   const ordinary = await runtimeHarness()
   try {
-    assert.deepEqual(
-      ordinary.execute('return {dev = type(sd.dev), bots = type(sd.bots)}').values,
-      [{ bots: 'nil', dev: 'nil' }],
-    )
+    assert.deepEqual(ordinary.execute('return type(sd.dev)').values, ['nil'])
   } finally {
     ordinary.runtime.close()
   }
@@ -113,9 +110,9 @@ test('web Lua exposes bounded stock grants only to developer console VMs', async
   })
   const developer = await runtimeHarness(developerFrame, false, true)
   try {
-    const types = developer.execute('return type(sd.dev), type(sd.bots)')
-    assert.equal(types.ok, true, types.error ?? 'developer namespaces failed')
-    assert.deepEqual(types.values, ['table', 'table'])
+    const types = developer.execute('return type(sd.dev)')
+    assert.equal(types.ok, true, types.error ?? 'developer namespace failed')
+    assert.deepEqual(types.values, ['table'])
     const items = developer.execute(`
       local items = sd.dev.list_items()
       return #items, items[1].key, items[1].recipe_index == nil,

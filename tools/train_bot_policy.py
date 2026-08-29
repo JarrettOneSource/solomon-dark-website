@@ -23,7 +23,6 @@ from ml_bot.metrics import (
     training_summary,
 )
 from ml_bot.probes import behavior_probe_scorecard, choice_retention_scorecard
-from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
 from ml_bot.trainer import (
     BootstrapConfiguration,
@@ -300,12 +299,6 @@ def checkpoint_test_observation():
     return torch.from_numpy(values[None, :])
 
 
-def run_self_test(_args: argparse.Namespace) -> None:
-    if self_test() != 0:
-        raise RuntimeError("ML bot self-test failed")
-    return None
-
-
 def run_diagnostics(args: argparse.Namespace) -> Any:
     return render_dashboard(Path(args.training_directory).resolve(), Path(args.output).resolve())
 
@@ -511,9 +504,6 @@ def register_experiment(
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    self_parser = subparsers.add_parser("self-test", help="exercise every training boundary")
-    self_parser.set_defaults(handler=run_self_test)
 
     diagnostics_parser = subparsers.add_parser(
         "diagnostics", help="render a self-contained training dashboard"

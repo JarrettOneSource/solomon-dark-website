@@ -130,17 +130,11 @@ aggregate train/holdout consistency was weaker.
   and paired comparison
   `aa961a96eadbbe87fd6dc75f2f4c3840080743a3fd034c354a37b1f6983caa3e`.
 
-## Run it on the Mac mini
+## Continue on the Mac mini
 
-Run any pure-primary character through the real GameHost integration:
-
-```sh
-cd /Users/jarrett/codex-acceptance/ml-bot-v6-current-main-20260823/final-v7/frontend
-npm run smoke:game:ml-bot -- --duration-ms 90000 --bot-element air
-```
-
-Accepted elements are `ether`, `fire`, `air`, `water`, and `earth`. In the
-developer console, summon a live character directly:
+The repository no longer ships an ML-specific automated test or smoke harness.
+For manual runtime use, the developer console can summon a live character
+directly:
 
 ```lua
 return sd.bots.summon({ element = "water", discipline = "arcane" })
@@ -172,3 +166,16 @@ At this selection cutoff, remote `main`, public Git, the production checkpoint,
 upload, and deployment were unchanged. This receipt records model selection;
 publication and deployment require their own explicit authorization and live
 receipts.
+
+## Test-surface maintenance, 2026-08-29
+
+- The Website's ML-specific unit, integration, training self-test, and live
+  smoke harnesses were removed. Shared suites no longer contain bot-only cases.
+- Runtime policy code, headless training code, packaged checkpoints, and
+  deployment behavior were not removed or changed.
+- A read-only Mac audit found no live ML process. The clean detached v7
+  acceptance tree was at `6a5432ea14d402c7c8a549ea7be8c309e50a47ff` and its
+  selected checkpoint remained 7,086,446 bytes with SHA-256
+  `85edda9d6bd7f7f08eca209fb9790c8d4d5e570e20b8ff8d5bb08284b3dd055c`.
+- No training, evaluation, checkpoint promotion, publication, deployment, or
+  live-production change was performed for this maintenance work.
