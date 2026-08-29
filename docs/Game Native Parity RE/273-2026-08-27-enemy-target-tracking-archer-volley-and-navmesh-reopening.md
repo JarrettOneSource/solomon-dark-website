@@ -373,3 +373,53 @@ the behavioral oracle.
 - Run the complete Mac Website gate, then a built Mac Chrome Random Boneyard
   journey that records authoritative tick advance, enemy motion, page/console/
   response/wire errors, and confirms no combat-bound crossing.
+
+### Implementation validation receipt
+
+- Exact runtime candidate `ca87fac9a5962ab108f0e335e40554ab7e96946e`
+  is one focused commit over current-main parent
+  `f50a41c7663463d68cf4943ac783098f03d2ef02`. The collision owner now keeps a
+  module-private ordered static grid and complete all-pairs oracle. The existing
+  one-unit direct query, narrow-phase formulas, primitive-family order, moving
+  Gate overlays, source filtering, path cadence, route state, snapshots, saves,
+  and protocol bytes are unchanged.
+- Arena-owned ordinary, Demon, and Solomon meshes now build in the packaged
+  `boneyard-navigation-worker` during the existing match-loading barrier. The
+  worker receives immutable geometry and preparation requests only; the host
+  freezes and installs its returned mesh data before exposing the Boneyard.
+  A fresh three-mesh Mac probe took 1,483.915 ms off-thread while a two-ms main
+  loop completed 587 turns with a 2.892 ms maximum gap. Repeated worlds sharing
+  the same authored scene identity reuse the installed cache.
+- The exact Mac collision benchmark covers four clear paths in each of all 12
+  generated Arenas, five repetitions, and identical checksum 240. All-pairs
+  direct queries measured 4,363.475 microseconds each; indexed queries measured
+  108.197 microseconds, a 40.329x speedup. Receipt SHA-256:
+  `88e840d44d15ebb7f7a007b0633bc52f2a0eac2be29d9ecc14fd0d979ae3e681`.
+- The exact two-player Ether/Body plus Water/Mind replay retained the same wave
+  transition ticks, final 89 enemies, maximum 93 live enemies, and maximum 583
+  dynamic actors through 62,500 ticks. Against the observed-tree baseline,
+  mean fixed-tick cost changed `1.429 -> 0.492 ms` (65.6% lower, 2.91x faster),
+  p99 changed `12.099 -> 3.128 ms` (74.1% lower, 3.87x faster), and total wall
+  time changed `92.219 -> 32.233 s` (65.0% lower, 2.86x faster). In the
+  interleaved 70-plus-enemy wave-13 window, mean changed
+  `3.499 -> 1.237 ms` (64.7% lower, 2.83x faster) and p99 changed
+  `14.576 -> 4.310 ms` (70.4% lower, 3.38x faster). Receipt SHA-256:
+  `c0cad078f19f43b9906e9281afd4728af5eb9bd84bd645807ba295a99a7099b0`.
+- The complete Mac Website gate exited zero on the exact candidate: all 28
+  backend contracts, lint/architecture/generated checks, every registered
+  frontend/runtime/ML/desktop suite, both production builds, media policy, and
+  bundle budget passed. The Boneyard lane passed 1,689/1,689. The production
+  Game entry is 262,749 raw / 79,697 gzip bytes under both caps, and the
+  packaged navigation worker is present. Gate log SHA-256:
+  `5a31d494686de88ca87fbc4fc2bcbad1c3bc273a2829ebbd2367ace766bb78f7`.
+- Built Mac Chrome completed the deterministic Random Boneyard opening with
+  status `ok`: Solomon Dig/dialogue/escape, `8 + 3` authored opening births,
+  eleven independently moving/steering enemies, 1,605 snapshot sequences, no
+  outside-combat enemy sample, and empty page, response, and wire error arrays.
+  Receipt SHA-256:
+  `18b4212a5a9d484c6baf48833ad3e87889c7e6a75ac17a6da28b9cfc11f326a7`;
+  inspected combat frame SHA-256:
+  `6768809cb06b6b68a0fe13655fb541448ff98a60a2fa38065c31a3e7a1dd3587`.
+- No browser constraint or intentional behavior difference remains. This
+  receipt is the sole post-validation documentation write; no runtime, test,
+  build, asset, protocol, or browser byte changed afterward.
