@@ -1,5 +1,6 @@
 import type { SolomonDigState } from '../core-kernels/boneyard.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
+import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
 
 export type BoneyardSolomonBodyBank = 'dig' | 'dialogue' | 'walk'
 
@@ -24,6 +25,30 @@ const DIALOGUE_MOUTH_RECORD = 228
 const DIG_RECORD = 2
 const WALK_RECORD = 95
 const WALK_POSE_COUNT = 6
+
+export function boneyardSolomonPainterLayers(
+  dig: SolomonDigState,
+  encounter: BoneyardSolomonSnapshot | null,
+  sourceOrder: number,
+): readonly DynamicPainterLayer[] {
+  const layers: DynamicPainterLayer[] = [{
+    id: 'lantern',
+    queueFamily: 'ordinary-dynamic',
+    worldY: dig.lanternPosition.y,
+    sortBias: 0,
+    sourceOrder,
+  }]
+  if (encounter?.phase !== 'gone') {
+    layers.push({
+      id: 'solomon-actor',
+      queueFamily: 'ordinary-dynamic',
+      worldY: encounter?.position.y ?? dig.position.y,
+      sortBias: 0,
+      sourceOrder: sourceOrder + 1,
+    })
+  }
+  return layers
+}
 
 export function nativeSolomonDirection(headingDeg: number): number {
   const normalized = ((headingDeg % 360) + 360) % 360

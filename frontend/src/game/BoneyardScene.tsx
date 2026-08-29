@@ -159,6 +159,8 @@ interface BoneyardSceneProps {
 
 interface BoneyardFrameDiagnostics {
   frameCount: number
+  lanternPainterRow: number
+  lanternZIndex: number
   modEffectCount: number
   painterBandCount: number
   playerScreenX: number
@@ -173,6 +175,8 @@ interface BoneyardFrameDiagnostics {
   solomonDirtX: number
   solomonDirtY: number
   solomonFrame: number
+  solomonPainterRow: number
+  solomonZIndex: number
   staticPaintCount: number
 }
 
@@ -1325,8 +1329,12 @@ function publishSceneDiagnostics(
   scene.dataset.gateState = gateState(snapshot.world.gateLeaves)
   if (diagnostics) scene.dataset.painterBandCount = `${diagnostics.painterBandCount}`
   if (diagnostics) {
+    scene.dataset.lanternPainterRow = `${diagnostics.lanternPainterRow}`
+    scene.dataset.lanternZIndex = `${diagnostics.lanternZIndex}`
     scene.dataset.localPlayerScreenX = `${diagnostics.playerScreenX}`
     scene.dataset.localPlayerScreenY = `${diagnostics.playerScreenY}`
+    scene.dataset.solomonPainterRow = `${diagnostics.solomonPainterRow}`
+    scene.dataset.solomonZIndex = `${diagnostics.solomonZIndex}`
   }
   if (player) {
     scene.dataset.localPlayerX = `${player.position.x}`

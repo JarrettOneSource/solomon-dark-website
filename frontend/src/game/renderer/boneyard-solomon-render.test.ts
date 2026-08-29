@@ -5,7 +5,9 @@ import test from 'node:test'
 
 import type { SolomonDigState } from '../core-kernels/boneyard.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
+import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
 import {
+  boneyardSolomonPainterLayers,
   boneyardSolomonVisualState,
   nativeSolomonDirection,
 } from './boneyard-solomon-render.ts'
@@ -13,8 +15,8 @@ import {
 const DIG: SolomonDigState = {
   frameProgram: [0, 3, 17],
   gravePosition: { x: 10, y: 20 },
-  lanternPosition: { x: 30, y: 40 },
-  position: { x: 50, y: 60 },
+  lanternPosition: { x: -45, y: 93 },
+  position: { x: 20, y: 133 },
   ticksPerFrame: 5,
 }
 
@@ -31,7 +33,7 @@ const ENCOUNTER: BoneyardSolomonSnapshot = {
   motion: 0,
   phase: 'digging',
   phaseTicksRemaining: 0,
-  position: { x: 50, y: 60 },
+  position: { x: 20, y: 133 },
   runEventId: 0,
   targetPlayerId: null,
   transitionOffsetY: 0,
@@ -80,6 +82,55 @@ test('uses the native 15-way 24-degree direction selector', () => {
   assert.equal(nativeSolomonDirection(12), 1)
   assert.equal(nativeSolomonDirection(348), 0)
   assert.equal(nativeSolomonDirection(359.999), 0)
+})
+
+test('registers the Lantern before Solomon with exact roots and zero biases', () => {
+  assert.deepEqual(boneyardSolomonPainterLayers(DIG, ENCOUNTER, 7), [
+    {
+      id: 'lantern',
+      queueFamily: 'ordinary-dynamic',
+      sortBias: 0,
+      sourceOrder: 7,
+      worldY: 93,
+    },
+    {
+      id: 'solomon-actor',
+      queueFamily: 'ordinary-dynamic',
+      sortBias: 0,
+      sourceOrder: 8,
+      worldY: 133,
+    },
+  ])
+})
+
+test('preserves the stock Lantern-then-Solomon order on an exact painter-row tie', () => {
+  const layers = boneyardSolomonPainterLayers(DIG, {
+    ...ENCOUNTER,
+    position: { x: ENCOUNTER.position.x, y: DIG.lanternPosition.y },
+  }, 0)
+  const order = buildBoneyardPainterOrder({
+    dynamicLayers: layers,
+    referenceY: 0,
+    staticLayers: [],
+  })
+
+  assert.deepEqual(order.dynamicLayers.map(({ id, row }) => ({ id, row })), [
+    { id: 'lantern', row: 46 },
+    { id: 'solomon-actor', row: 46 },
+  ])
+})
+
+test('keeps the independent Lantern resident after Solomon is gone', () => {
+  assert.deepEqual(boneyardSolomonPainterLayers(DIG, {
+    ...ENCOUNTER,
+    phase: 'gone',
+  }, 3), [{
+    id: 'lantern',
+    queueFamily: 'ordinary-dynamic',
+    sortBias: 0,
+    sourceOrder: 3,
+    worldY: 93,
+  }])
 })
 
 test('selects exact native dig, dialogue body, and mouth records', () => {

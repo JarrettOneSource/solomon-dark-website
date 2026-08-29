@@ -139,6 +139,17 @@ try {
   assert.equal(initialFrame.solomonGraveMarkPassCount, 1)
   assert.equal(initialFrame.retiredStaticResidentCount, 0)
   assert.equal(initialFrame.retiredStaticSourceCount, 0)
+  const initialPainter = {
+    lanternRow: initialFrame.lanternPainterRow,
+    lanternZIndex: initialFrame.lanternZIndex,
+    solomonRow: initialFrame.solomonPainterRow,
+    solomonZIndex: initialFrame.solomonZIndex,
+  }
+  assert.ok(Number.isInteger(initialPainter.lanternRow))
+  assert.ok(Number.isInteger(initialPainter.solomonRow))
+  assert.equal(initialPainter.solomonRow - initialPainter.lanternRow, 20)
+  assert.ok(initialPainter.lanternZIndex > 0)
+  assert.ok(initialPainter.solomonZIndex > initialPainter.lanternZIndex)
   const loadedBoneyard = await waitForWireValue(
     page,
     wire,
@@ -349,6 +360,7 @@ try {
       runCombatAdmission,
       solomonEscape,
       initialGraveMarkPassCount: initialFrame.solomonGraveMarkPassCount,
+      initialPainter,
       speakingGraveMarkPassCount,
       runEdgeGraveMarkPassCount,
       speakingCombatAdmission,
@@ -502,6 +514,7 @@ try {
     hello,
     loadoutScreenshotPath,
     locomotion,
+    initialPainter,
     mouthPoses: [...new Set(mouthPoses)],
     nearDigAudio,
     nearSolomon,

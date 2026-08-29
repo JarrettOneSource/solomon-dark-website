@@ -80,7 +80,10 @@ import type {
   ProtocolPlayerState,
 } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
-import { boneyardSolomonVisualState } from './boneyard-solomon-render.ts'
+import {
+  boneyardSolomonPainterLayers,
+  boneyardSolomonVisualState,
+} from './boneyard-solomon-render.ts'
 import {
   NATIVE_SOLOMON_DIRT_DRAW_PASSES,
   NATIVE_SOLOMON_DIRT_VISIBLE_TICKS,
@@ -320,6 +323,8 @@ interface BoneyardRendererFrameDiagnostics {
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
+  lanternPainterRow: number
+  lanternZIndex: number
   levelUpParticleCount: number
   lightMiscTailCandidateCount: number
   lightActiveBucketCount: number
@@ -400,6 +405,8 @@ interface BoneyardRendererFrameDiagnostics {
   solomonDirtY: number
   solomonFrame: number
   solomonGraveMarkPassCount: number
+  solomonPainterRow: number
+  solomonZIndex: number
   staticLayerCount: number
   staticPaintCount: number
   tick: number
@@ -777,6 +784,8 @@ export async function createBoneyardWorldRenderer(
     localPlayerPainterRow: 0,
     localPlayerZIndex: 0,
     lanternLightIntensity: 0,
+    lanternPainterRow: Number.NaN,
+    lanternZIndex: Number.NaN,
     levelUpParticleCount: 0,
     lightMiscTailCandidateCount: 0,
     lightActiveBucketCount: 0,
@@ -846,6 +855,8 @@ export async function createBoneyardWorldRenderer(
     solomonDirtY: Number.NaN,
     solomonFrame: 0,
     solomonGraveMarkPassCount: 0,
+    solomonPainterRow: Number.NaN,
+    solomonZIndex: Number.NaN,
     staticLayerCount: mainLayers.length,
     staticPaintCount: staticWorld.staticPaintCount,
     tick: options.initialSnapshot.tick,
@@ -1233,6 +1244,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.localPlayerPainterRow = painter.localPlayerPainterRow
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
       frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
+      frameDiagnostics.lanternPainterRow = painter.lanternPainterRow
+      frameDiagnostics.lanternZIndex = painter.lanternZIndex
       frameDiagnostics.levelUpParticleCount = scene.levelUpParticleCount
       frameDiagnostics.lightMiscTailCandidateCount = painter.lightMiscTailCandidateCount
       frameDiagnostics.lightActiveBucketCount = painter.lightActiveBucketCount
@@ -1352,6 +1365,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.solomonDirtY = solomonDirt?.state.position.y ?? Number.NaN
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.solomonGraveMarkPassCount = scene.solomonGraveMarkPassCount
+      frameDiagnostics.solomonPainterRow = painter.solomonPainterRow
+      frameDiagnostics.solomonZIndex = painter.solomonZIndex
       frameDiagnostics.tick = snapshot.tick
       frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
       frameDiagnostics.treeCount = painter.treeCount
@@ -1523,6 +1538,8 @@ interface BoneyardPainterFrame {
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
+  lanternPainterRow: number
+  lanternZIndex: number
   lightMiscTailCandidateCount: number
   lightActiveBucketCount: number
   lightAllocatedBucketCount: number
@@ -1545,6 +1562,8 @@ interface BoneyardPainterFrame {
   treeCount: number
   treeForegroundResidentCount: number
   treeTintMismatchCount: number
+  solomonPainterRow: number
+  solomonZIndex: number
   weatherLightingOrder: NativeBoneyardWeatherLightingOrder
 }
 
@@ -2444,22 +2463,11 @@ class BoneyardDynamicScene {
       })
     }
     if (dig) {
-      if (snapshot.world.encounter?.phase !== 'gone') {
-        dynamicLayers.push({
-          id: 'solomon-actor',
-          queueFamily: 'ordinary-dynamic',
-          worldY: snapshot.world.encounter?.position.y ?? dig.position.y,
-          sortBias: 0,
-          sourceOrder: dynamicLayers.length,
-        })
-      }
-      dynamicLayers.push({
-        id: 'lantern',
-        queueFamily: 'ordinary-dynamic',
-        worldY: dig.lanternPosition.y,
-        sortBias: 0,
-        sourceOrder: dynamicLayers.length,
-      })
+      dynamicLayers.push(...boneyardSolomonPainterLayers(
+        dig,
+        snapshot.world.encounter,
+        dynamicLayers.length,
+      ))
     }
     const activeStaticPainterLayers = this.activeStaticPainterLayers
     activeStaticPainterLayers.length = 0
@@ -2615,8 +2623,10 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`maggot:${maggot.id}`)?.zIndex ?? 1,
       )
     }
-    this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
-    this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
+    const solomonPainter = positionedDynamics.get('solomon-actor')
+    const lanternPainter = positionedDynamics.get('lantern')
+    this.solomon?.setActorDepth(solomonPainter?.zIndex ?? 1)
+    this.solomon?.setLanternDepth(lanternPainter?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
     const weatherLightingOrder = nativeBoneyardWeatherLightingOrder(
       order.foregroundZIndex,
@@ -2659,6 +2669,8 @@ class BoneyardDynamicScene {
       localPlayerPainterRow: localPainter?.row ?? 0,
       localPlayerZIndex,
       lanternLightIntensity: lanternLight?.intensity ?? 0,
+      lanternPainterRow: lanternPainter?.row ?? Number.NaN,
+      lanternZIndex: lanternPainter?.zIndex ?? Number.NaN,
       lightMiscTailCandidateCount,
       lightActiveBucketCount: this.lightIndex.activeBucketCount,
       lightAllocatedBucketCount: this.lightIndex.allocatedBucketCount,
@@ -2681,6 +2693,8 @@ class BoneyardDynamicScene {
       treeCount: treePresentations.length,
       treeForegroundResidentCount: this.treeResidents.size,
       treeTintMismatchCount,
+      solomonPainterRow: solomonPainter?.row ?? Number.NaN,
+      solomonZIndex: solomonPainter?.zIndex ?? Number.NaN,
       weatherLightingOrder,
     }
   }

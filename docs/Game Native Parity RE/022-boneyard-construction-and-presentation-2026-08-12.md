@@ -714,3 +714,159 @@ frames over `10 ms`, and 430 distinct moving player positions. The renderer's
 `523` one-time painter operations remained unchanged across both samples. This
 is the deployment acceptance receipt for the combined performance and native
 occlusion implementation.
+
+## 2026-08-28 — Solomon Dig and Lantern parent painter order reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: Solomon Dig appears to have an incorrect Z order or
+  placement. The requested contract is the complete stock set-piece placement
+  and painter relationship, not a numeric browser-only Z-index adjustment.
+- This reopens the set-piece row in the shared actor/scenery painter system.
+  The earlier closure proved the two-unit row formula and each resident root,
+  but did not record or test the native main-actor-list order between the
+  Lantern and Solomon.
+- Reproduction scenes: retail `testrun` before contact and through every
+  Solomon state; Website generated Boneyards with and without a qualifying
+  overlay-8 grave; and an exact-row tie between the two set-piece residents.
+- Falsifiers: a nonzero `+0xA0` bias on either resident; a separate Solomon
+  painter lane; a root other than grave `+(10,113)` or `+(-55,73)`; record 13
+  owning a separate parent depth; or Solomon preceding the Lantern in the
+  native main actor list.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail executable | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000` | Canonical 0.72.5 image for every preferred address below. | high |
+| Instructions | canonical Ghidra 12.0.3 replica; `Arena::Render 0x0046EC80`, insertion `0x0068C3B0`, flush `0x0068C480`, Puppet dispatcher `0x00624B40`, Solomon/Lantern vtables `0x00786984/0x0079C854` | Arena gathers its main actor list before scenery; insertion truncates `+0xA0` and `+0x1C`, preserves insertion order inside a two-unit row, and flushes slot `+0x0C`. Solomon reaches `0x004A2610` through slot `+0x1C`; Lantern owns slot `+0x0C` at `0x005E61D0`. | high |
+| Instructions | Puppet constructor `0x006287D0`; Solomon constructor `0x00481C20`; Lantern constructor `0x005E1120`; builder `0x00465920`; state painters `0x004902C0/0x00490420/0x00490640/0x00490790` | Both residents retain Puppet sort bias `+0xA0 = 0`. Builder roots are grave `+(10,113)` and `+(-55,73)`. Dig/dialogue paint body or body/mouth, then record 13; walk states omit record 13. | high |
+| Injected live diagnostic | isolated staged PID `14040`, executable `.../solomon-dig-painter-live-re-20260828-root.Ooom7q/stage/SolomonDark.exe`, loader tool revision `08bfba9e`, process image base `0x00660000`, ASLR delta `+0x00260000` | Stable `testrun` main actor list at Arena `0x19936DA8 +0x318/+0x324` was exactly player `0x19905800`, Lantern `0x02E77940`, Solomon `0x02DA33F0`. Lantern was slot 2 at `(1592.344971,826.100464)`; Solomon was slot 3 at `(1657.344971,866.100464)`; both live `+0xA0` values were `0`. | high-supporting |
+| Current Website source | `boneyard-world-renderer.ts` at base `6d712227`; `buildBoneyardPainterOrder` | The browser appends `solomon-actor` before `lantern`. The shared stable sorter therefore gives the Lantern the later draw on an exact row tie, reversing the observed stock list. | high |
+
+The loader-backed process is supporting runtime evidence, not clean-stock
+pixel evidence. The static instructions and retail binary identity own the
+native claim. The read-only wrapper was
+`scripts/Invoke-GhidraHeadless.ps1` SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+
+### System boundary and membership inventory
+
+Native system: **opening Solomon set-piece painter registration**, from the
+selected grave root through Lantern/Solomon main-list membership, per-state
+child order, row quantization, and teardown.
+
+| Member / branch | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| qualifying type-2029 overlay-8 grave and zero-candidate branch | mode-10 owner and existing projection | `verified-already-at-parity` | strict-nearest first-wins selection; `solomonDig: null` remains inert |
+| grave root and ordinary base/overlay painters | type 2029; shared scenery manager | `verified-already-at-parity` | serialized root and existing static painter rows unchanged |
+| Lantern type 5010 root, bias, record 34, light, and lifetime | `0x00465920`, `0x005E1120`, `0x005E61D0` | `exact-ported` with parent order corrected | grave `+(-55,73)`, bias `0`, independent actor depth, submitted before Solomon |
+| Solomon_Dig type 5009 root, bias, and parent painter | `0x00465920`, `0x00481C20`, `0x004A2610` | `exact-ported` with parent order corrected | grave `+(10,113)`, bias `0`, submitted after Lantern |
+| state 0 body -> record 13 -> Flydirt children | `0x004902C0`, `0x004A2610 -> 0x00483350` | `verified-already-at-parity` | one co-rooted record-13 pass and Solomon-owned dirt children |
+| states 1/2 and state-3 hold body/mouth -> record 13 -> children | `0x00490420`, hold branch in `0x00490640` | `verified-already-at-parity` | mouth remains between body and record 13; same parent depth |
+| state-3 acceleration and state-4 escape | `0x00490640/0x00490790` | `verified-already-at-parity` | moving body uses current world Y; record 13 is absent |
+| exact two-unit row tie | `0x0068C3B0 -> 0x0068C090` | `exact-ported` by this reopening | Lantern draws first and Solomon draws second |
+| different-row ordering against scenery and players | shared queue `0x0068C3B0/0x0068C480` | `verified-already-at-parity` | effective Y remains authoritative; no fixed Z constant |
+| Solomon gone/owner teardown | state/lifetime owner | `verified-already-at-parity` | Solomon leaves the dynamic queue; Lantern retains its independent owner |
+| record 13 as a standalone root or depth | no native producer | `out-of-system` (duplicate Website invention already removed) | remains nested after body/mouth only |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- Mode 10 selects one qualifying grave. Builder `0x00465920` creates the two
+  residents at fixed offsets; it does not derive placement from the player or
+  from browser viewport geometry.
+- The Arena main actor list is the parent painter owner. Live slot/list order
+  is player, Lantern, Solomon. Both set-piece residents have bias zero and use
+  their own current world Y in the exact queue formula already recorded above.
+- A same-row tie is stable list order: Lantern first, Solomon second. CSS/Pixi
+  Z values are only the browser realization of that list; there is no stock
+  `z-index` constant to tune.
+- Solomon's state painter owns body, optional mouth, record 13, and Flydirt in
+  that order under one parent key. Record 13 does not sort at the grave root
+  independently even though its pixels are placed there.
+- State-3 acceleration/state 4 move the Solomon parent key with his actor.
+  Gone removes that parent; the separately owned Lantern remains.
+
+### Nearby-system findings
+
+- The runtime actor list independently re-confirms that the fixed placement is
+  correct: subtracting the recovered offsets from both live residents yields
+  the same grave root `(1647.344971,753.100464)`.
+- The live list order is not interchangeable with class declaration or React
+  construction order. Any future actor-pair closure that depends on an exact
+  same-row tie must record the native manager order explicitly.
+
+### Confidence and open questions
+
+- Confirmed: executable identity; queue functions/formula/tie behavior;
+  vtable lanes; both biases; both roots; live actor slots/list order; all
+  Solomon state-painter branches; current web reversal.
+- Inferred: none used for implementation.
+- Unknown: none inside the declared set-piece painter boundary.
+
+### Web implementation consequence
+
+- Keep all selection and coordinates unchanged.
+- Submit the Lantern before Solomon in the shared ordinary-dynamic actor
+  family, then let effective Y continue to decide all non-ties.
+- Keep record 13 and Flydirt inside Solomon's actor root. Do not add a fixed
+  Z-index, a grave-root parent, an offset nudge, a scene exception, or a
+  compatibility path.
+
+### Validation contract
+
+- Focused tests must pin Lantern then Solomon source order, zero biases, exact
+  roots, exact-row tie order, non-tie effective-Y order, every Solomon phase,
+  zero-candidate behavior, and child order.
+- Mac Chrome must render a generated stock Boneyard, prove the served roots,
+  parent depths, record-13 phase matrix, Flydirt ownership, and Lantern
+  lifetime, with empty page/console/failed-response arrays.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the Mac mini.
+
+### Implementation validation receipt
+
+- `boneyard-solomon-render.ts` now owns the complete two-resident painter
+  membership. It emits Lantern first with bias zero, then the live Solomon
+  parent with bias zero and current actor Y; the gone branch retains only the
+  independently owned Lantern. `boneyard-world-renderer.ts` consumes that one
+  plan instead of recreating the two rows in reverse order.
+- `BoneyardScene` and the WebGL frame diagnostics publish the two parent rows
+  and depths for browser acceptance. No visual constant, root, child order,
+  simulation state, protocol field, or collision owner changed.
+- The focused contract was installed first on Mac base `f50a41c7`. The
+  supported gate produced the intended red receipt at
+  `boneyard-solomon-render.test.ts(10,3)`: the new painter-membership export did
+  not exist. After implementation, the tests pin fixed roots, zero biases,
+  Lantern-before-Solomon membership, exact-row tie order, and the gone branch,
+  while the existing phase/asset/child tests remain green.
+- The six changed files were byte-identical between the local isolated
+  worktree and the detached Mac worktree. On that candidate,
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` exited `0`: backend build and
+  tests, formatting, lint/boundaries, every frontend suite including the
+  Boneyard contracts, five desktop tests, production frontend/game-host builds,
+  bundle budget, and CSP media policy all passed.
+- Google Chrome `151.0.7922.174` ran the built production frontend at
+  `1600 x 900` through `smoke-boneyard-waves.mjs --opening-only`. The initial
+  parent receipt was Lantern row `1044`, Z `7`; Solomon row `1064`, Z `8`.
+  That is the exact 20-row separation implied by the 40-world-Y resident-root
+  difference, with Solomon later in the native parent order. The functional
+  exact-row contract separately proves Lantern then Solomon on a tie.
+- The journey crossed the real generated entry Gate, reached Solomon, retained
+  one record-13 pass while digging and speaking and zero at the run edge,
+  rendered two Flydirt passes through sampled ages `5..28` and retired them,
+  retained Lantern intensity `0.6556060314`, advanced Solomon through speaking
+  and escape to gone, and reached the 11-enemy opening. Page errors, failed
+  responses, wire errors, and outside-combat enemy samples were all empty.
+- Visually inspected `1600 x 900` dirt, speaking, escape, and combat frames had
+  SHA-256 values `1b74aae640e51057a53e5f20cd4cbba9d6e045c3fb87ceb773bca45e69fb20da`,
+  `85e74c480c00475c76da542759efd873afe28013cf60b4948deb189c6b3776e2`,
+  `5f0fa2042cb6b385056c82da612a060f7bab7ee14b3a3aa8fffba950a97d14c8`,
+  and `db812f259c006241194064dfec3a367bec364554cd9dbe5dfee7c950d98ef0f2`.
+  They retain the selected grave, record 13, Lantern, body/mouth, and Flydirt
+  at their recovered roots; the escape frame retains the Lantern after Solomon
+  leaves.
+- No browser-platform blocker or material unknown remains. No commit, push,
+  deployment, or production cutover was requested or performed.
