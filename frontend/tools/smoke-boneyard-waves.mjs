@@ -10,6 +10,10 @@ import {
 
 import { actorHeadingIndex } from '../src/game/core-kernels/actor-heading.ts'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
+import {
+  NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
+  NATIVE_LANTERN_LIGHT_FLICKER,
+} from '../src/game/core-kernels/native-boneyard-lighting.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { nativeSolomonDirtStateAt } from '../src/game/renderer/boneyard-solomon-dirt-presentation.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
@@ -47,6 +51,7 @@ const cleanupOnly = process.argv.includes('--cleanup-only')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
+const deathEffectsOnly = process.argv.includes('--death-effects-only')
 const productionFrontend = process.env.SDR_GAME_WAVES_SMOKE_PRODUCTION === '1'
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
@@ -195,8 +200,20 @@ try {
     digAudio.events.length,
   )
   const nearSolomonFrame = await boneyardFrame(page)
-  assert.ok(nearSolomonFrame.lanternLightIntensity >= 0.55)
-  assert.ok(nearSolomonFrame.lanternLightIntensity <= 0.75)
+  const lanternLightMinimum = Math.fround(
+    NATIVE_LANTERN_LIGHT_BASE_INTENSITY - NATIVE_LANTERN_LIGHT_FLICKER,
+  )
+  const lanternLightMaximum = Math.fround(
+    NATIVE_LANTERN_LIGHT_BASE_INTENSITY + NATIVE_LANTERN_LIGHT_FLICKER,
+  )
+  assert.ok(
+    nearSolomonFrame.lanternLightIntensity >= lanternLightMinimum,
+    JSON.stringify({ lanternLightMinimum, nearSolomonFrame }),
+  )
+  assert.ok(
+    nearSolomonFrame.lanternLightIntensity <= lanternLightMaximum,
+    JSON.stringify({ lanternLightMaximum, nearSolomonFrame }),
+  )
   await installSolomonSpeakingProbe(page)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
@@ -301,6 +318,7 @@ try {
         opening.liveEnemies,
       )
   const entranceRetirement = openingOnly || staffMeleeOnly || chillArrowOnly
+    || deathEffectsOnly
     ? null
     : await proveRetiredEntry(
         page,
@@ -383,6 +401,40 @@ try {
   }, undefined, { timeout: 30_000 })
   combat.enemyTerminalOutput = await scene.getAttribute('data-last-enemy-event-output')
   await page.screenshot({ path: combatScreenshotPath })
+  const transientDeathFrame = await boneyardFrame(page)
+  assert.ok(
+    transientDeathFrame.enemyDeathEffectCount > 0,
+    'the terminal enemy did not hand off to a rendered death effect',
+  )
+  if (deathEffectsOnly) {
+    const restoredDeathFrame = await restoreBoneyardDeathEffects(
+      page,
+      transientDeathFrame.runId,
+    )
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({
+      combat,
+      combatScreenshotPath,
+      deathEffectsOnly,
+      errors,
+      failedResponses,
+      productionFrontend,
+      restoredDeathFrame: {
+        enemyDeathEffectCount: restoredDeathFrame.enemyDeathEffectCount,
+        runId: restoredDeathFrame.runId,
+        tick: restoredDeathFrame.tick,
+      },
+      status: 'ok',
+      transientDeathFrame: {
+        enemyDeathEffectCount: transientDeathFrame.enemyDeathEffectCount,
+        enemyDeathEffectSamples: transientDeathFrame.enemyDeathEffectSamples,
+        tick: transientDeathFrame.tick,
+      },
+      wire: wireSummary(wire),
+    })}\n`)
+  } else {
   const locomotion = await kiteUntilSolomonTaunt(page, combatNavigation)
   const taunt = await encounterReceipt(scene)
   assert.equal(taunt.voiceCue, 'solomon-get-him-boys')
@@ -539,6 +591,7 @@ try {
     surface,
     taunt,
   })}\n`)
+  }
   }
 } catch (error) {
   await page.screenshot({ path: screenshotPath.replace(/(\.[^.]+)?$/, '-failure$1') })
@@ -2948,6 +3001,29 @@ async function enterBoneyard(page) {
     return frame?.runPhase === 'active'
       && scene?.getAttribute('data-solomon-phase') === 'digging'
   }, undefined, { timeout: 90_000 })
+}
+
+async function restoreBoneyardDeathEffects(page, runId) {
+  await page.locator('.boneyard-scene').focus()
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.waitFor({ timeout: 10_000 })
+  await pause.getByRole('button', { name: 'LEAVE GAME' }).click()
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'Play' }).click()
+  const lastGame = page.getByRole('button', { name: 'Last game' })
+  assert.equal(await lastGame.isEnabled(), true)
+  await lastGame.click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]')
+    .waitFor({ timeout: 90_000 })
+  await page.waitForFunction((expectedRunId) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.runId === expectedRunId && frame.enemyDeathEffectCount > 0
+  }, runId, { timeout: 30_000 })
+  const frame = await boneyardFrame(page)
+  assert.equal(frame.runId, runId)
+  assert.ok(frame.enemyDeathEffectCount > 0)
+  return frame
 }
 
 async function enterCreateAfterCollegeOffice(page) {
