@@ -690,7 +690,7 @@ export async function createBoneyardWorldRenderer(
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.arenaSaturation = 'native-fragment-0.65'
-  canvas.dataset.arenaTextureAlpha = 'mixed-native-unpremultiplied'
+  canvas.dataset.arenaTextureAlpha = 'native-npm+composite-pma'
   canvas.dataset.arenaBaseRenderer = 'retail-editor-field-capture+native-road-layout'
   canvas.dataset.arenaGroundRenderer = 'retail-editor-field-capture-web-override'
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
@@ -710,6 +710,9 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.staticCulling = 'exact-world-bounds'
   canvas.dataset.staticOffCameraCleanup = 'pending'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
+  canvas.dataset.playerTextureAlpha = textures.players.air.robe[0]![0]!.source.alphaMode
+  canvas.dataset.solomonTextureAlpha = textures.solomonDig[0]!.source.alphaMode
+  canvas.dataset.combatTextureAlpha = textures.levelUpSparkle.source.alphaMode
   canvas.dataset.weatherSplashAsset = 'DeadHawg:24'
   canvas.dataset.weatherSplashBlend = 'add'
   canvas.dataset.weatherStreakRenderer = 'pixi-particle-batch'

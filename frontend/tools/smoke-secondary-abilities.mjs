@@ -867,14 +867,30 @@ try {
     }
   }
 
+  const browserReceipt = await canvas.evaluate((node) => ({
+    context: (node.getContext('webgl2') || node.getContext('webgl'))?.constructor.name,
+    rendererName: node.dataset.rendererName,
+    textureAlpha: {
+      combat: node.dataset.combatTextureAlpha,
+      hubVisual: node.dataset.hubVisualTextureAlpha,
+      player: node.dataset.playerTextureAlpha,
+      solomon: node.dataset.solomonTextureAlpha,
+      statueAura: node.dataset.statueAuraTextureAlpha,
+    },
+  }))
+  assert.equal(browserReceipt.textureAlpha.player, 'premultiply-alpha-on-upload')
+  assert.equal(browserReceipt.textureAlpha.combat, 'no-premultiply-alpha')
+  if (requestedScene === 'hub') {
+    assert.equal(browserReceipt.textureAlpha.hubVisual, 'premultiply-alpha-on-upload')
+    assert.equal(browserReceipt.textureAlpha.statueAura, 'no-premultiply-alpha')
+  } else {
+    assert.equal(browserReceipt.textureAlpha.solomon, 'premultiply-alpha-on-upload')
+  }
   assert.deepEqual(pageErrors, [])
   assert.deepEqual({ consoleErrors, responseErrors }, { consoleErrors: [], responseErrors: [] })
   process.stdout.write(`${JSON.stringify({
     belt: beltReceipt,
-    browser: await canvas.evaluate((node) => ({
-      context: (node.getContext('webgl2') || node.getContext('webgl'))?.constructor.name,
-      rendererName: node.dataset.rendererName,
-    })),
+    browser: browserReceipt,
     consoleErrors,
     insufficientMana: insufficientManaReceipt,
     pageErrors,

@@ -46,7 +46,10 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
-import { CREATE_GAME_ASSET_SOURCES } from '../game-assets.ts'
+import {
+  CREATE_COMPOSITED_ASSET_SOURCES,
+  CREATE_GAME_ASSET_SOURCES,
+} from '../game-assets.ts'
 import {
   fixedGamePresentationResolution,
   fixedGameStageBounds,
@@ -54,6 +57,11 @@ import {
 } from './game-viewport.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { createNativeElementVfxTextures } from './world-player-textures.ts'
+import {
+  BONEYARD_COMBAT_ATLAS_SOURCES,
+  boneyardCombatAtlasSourceIsPacked,
+  createBoneyardCombatAtlas,
+} from './boneyard-combat-atlas.ts'
 
 export type CreateMenuAction = 'back' | WizardElement | WizardDiscipline
 export type CreateMenuPhase = 'discipline' | 'element'
@@ -110,7 +118,13 @@ const HAND_SOURCE: Readonly<Record<CreateHandPose, string>> = {
 export async function createCreateMenuRenderer(
   options: CreateMenuRendererOptions,
 ): Promise<CreateMenuRenderer> {
-  const textures = await loadGameTextureMap(CREATE_GAME_ASSET_SOURCES)
+  const sources = [
+    ...CREATE_GAME_ASSET_SOURCES,
+    BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
+  ]
+  const textures = await loadGameTextureMap(sources, {
+    compositedSources: CREATE_COMPOSITED_ASSET_SOURCES,
+  })
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
     options.viewport.displayScale,
@@ -130,8 +144,13 @@ export async function createCreateMenuRenderer(
 
   const { application, canvas } = gpu
   const texture = (source: string) => textureFrom(textures.textures, source)
-  const vfxTextures = createNativeElementVfxTextures(texture)
+  const combatAtlas = createBoneyardCombatAtlas(texture)
+  const vfxTextures = createNativeElementVfxTextures((source) => (
+    boneyardCombatAtlasSourceIsPacked(source) ? combatAtlas.single(source) : texture(source)
+  ))
   canvas.dataset.textureSources = JSON.stringify(textures.sources)
+  canvas.dataset.compositedTextureAlpha = texture(createMenu.handCupped).source.alphaMode
+  canvas.dataset.nativeTextureAlpha = vfxTextures.fire[0]!.source.alphaMode
 
   const root = new Container({ label: 'create-menu' })
   root.eventMode = 'none'
@@ -373,8 +392,9 @@ export async function createCreateMenuRenderer(
       for (const gradient of gradients) gradient.destroy()
       for (const glyphTexture of name.glyphTextures.values()) glyphTexture.destroy(false)
       for (const frames of Object.values(vfxTextures)) {
-        for (const frame of frames ?? []) frame.destroy(false)
+        for (const frame of frames) frame.destroy(false)
       }
+      combatAtlas.destroy()
       textures.destroy()
       application.destroy({ removeView: true })
       canvas.remove()

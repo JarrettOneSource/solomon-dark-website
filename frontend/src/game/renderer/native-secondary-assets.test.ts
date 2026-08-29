@@ -77,7 +77,13 @@ test('the stock right-click atlas membership is complete and every row is regist
     for (const source of hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES) {
       assert.equal(hubSources.has(source), true, `Hub omitted compact visual page ${source}`)
     }
+    const loadedOriginals = hubVisualAtlas.HUB_VISUAL_ATLAS_ORIGINAL_SOURCES.filter((source) => (
+      hubSources.has(source)
+    ))
+    assert.equal(loadedOriginals.length, 1)
+    assert.match(loadedOriginals[0]!, /hub-prop-statue-aura/)
     for (const source of hubVisualAtlas.HUB_VISUAL_ATLAS_ORIGINAL_SOURCES) {
+      if (source === loadedOriginals[0]) continue
       assert.equal(hubSources.has(source), false, `Hub still requests padded visual ${source}`)
     }
     for (const source of module.NATIVE_SECONDARY_ASSET_SOURCES) {

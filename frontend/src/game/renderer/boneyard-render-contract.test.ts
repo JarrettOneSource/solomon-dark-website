@@ -222,7 +222,7 @@ test('static Boneyard residents keep native unpremultiplied linear pixels', () =
   assert.doesNotMatch(boneyardRenderer, /documentNodeCanvas\(bounds\.w, bounds\.h\)/)
   assert.doesNotMatch(editorRenderer, /filterLift|brightness\(1\.12\)/)
   assert.match(editorRenderer, /ctx\.imageSmoothingEnabled = true/)
-  assert.match(boneyardTextures, /loadGameTextureEntries\(sources\)/)
+  assert.match(boneyardTextures, /loadGameTextureEntries\(sources, \{/)
   assert.doesNotMatch(boneyardTextures, /createElement\('canvas'\)|BufferImageSource/)
 })
 
@@ -292,7 +292,7 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(boneyardTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(
     boneyardTextures,
-    /const loaded = await loadGameTextureEntries\(sources\)/,
+    /const loaded = await loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:/,
   )
   assert.doesNotMatch(boneyardTextures, /clamp-to-edge|combatPageSources/)
   assert.match(boneyardTextures, /createBoneyardCombatAtlas\(texture\)/)
@@ -320,6 +320,25 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(playerTextures, /collectAssetSources\([\s\S]*?\.map\(boneyardCombatAssetSource\)/)
   assert.match(playerTextures, /resolveTexture\(boneyardCombatAssetSource\(source\)\)/)
   assert.match(boneyardTextures, /base\[boneyardCombatAssetSource\(source\)\]/)
+})
+
+test('Website-composed player and Solomon pages never impersonate native straight-alpha pages', () => {
+  assert.match(playerTextures, /playerWorldCompositedAssetSources/)
+  assert.match(playerTextures, /PLAYER_CHARACTER_ATLAS_SOURCES/)
+  assert.match(
+    boneyardTextures,
+    /compositedSources:[\s\S]*?playerWorldCompositedAssetSources\(\)[\s\S]*?solomonEncounterSource[\s\S]*?boneyard\.solomonDig/,
+  )
+})
+
+test('element and Fire frame families use exact BadGuys page records, not derived strips', () => {
+  assert.match(playerTextures, /NATIVE_ELEMENT_VFX_RECORDS/)
+  assert.match(playerTextures, /nativeEnemySpriteRecord\('BadGuys', entry\)\.source/)
+  assert.match(playerTextures, /integerRange\(251, 254\)\.map/)
+  assert.match(playerTextures, /integerRange\(267, 270\)\.map/)
+  assert.doesNotMatch(playerTextures, /texture\(primarySpells\.fire\.impact\)/)
+  assert.doesNotMatch(playerTextures, /texture\(primarySpells\.fire\.particles\)/)
+  assert.doesNotMatch(playerTextures, /stripFrames\([\s\S]*?metrics\.count/)
 })
 
 test('secondary rain streaks use true four-corner native vertex colors', () => {

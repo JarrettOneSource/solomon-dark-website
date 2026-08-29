@@ -40,7 +40,7 @@ export function boneyardCombatAtlasSourceIsPacked(source: string): boolean {
 export function createBoneyardCombatAtlas(
   texture: (source: string) => Texture,
 ): BoneyardCombatAtlas {
-  const pages = BONEYARD_COMBAT_ATLAS_SOURCES.map(texture)
+  const pages = new Map<number, Texture>()
   const frames = new Map<string, Texture>()
   return {
     destroy() {
@@ -54,7 +54,15 @@ export function createBoneyardCombatAtlas(
       if (packed === undefined) {
         throw new RangeError(`Missing packed Boneyard combat source ${source}`)
       }
-      const frame = packedCombatTexture(pages, packed, source)
+      const frame = packedCombatTexture((page) => {
+        const cachedPage = pages.get(page)
+        if (cachedPage) return cachedPage
+        const pageSource = BONEYARD_COMBAT_ATLAS_SOURCES[page]
+        if (!pageSource) throw new RangeError(`Missing Boneyard combat atlas page ${page}`)
+        const loadedPage = texture(pageSource)
+        pages.set(page, loadedPage)
+        return loadedPage
+      }, packed, source)
       frames.set(source, frame)
       return frame
     },
@@ -62,7 +70,7 @@ export function createBoneyardCombatAtlas(
 }
 
 function packedCombatTexture(
-  pages: readonly Texture[],
+  pageTexture: (page: number) => Texture,
   packed: BoneyardCombatPackedFrame,
   source: string,
 ): Texture {
@@ -80,12 +88,11 @@ function packedCombatTexture(
     trimX,
     trimY,
   ] = packed
-  const pageTexture = pages[page]
-  if (!pageTexture) throw new RangeError(`Missing Boneyard combat atlas page ${page}`)
+  const pageSource = pageTexture(page)
   return new Texture({
     frame: new Rectangle(x, y, width, height),
     orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
-    source: pageTexture.source,
+    source: pageSource.source,
     trim: new Rectangle(trimX, trimY, width, height),
   })
 }

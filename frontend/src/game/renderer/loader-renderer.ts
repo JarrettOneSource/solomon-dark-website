@@ -1,7 +1,10 @@
 import { Container, Graphics, Sprite, type Application, type Texture } from 'pixi.js'
 
 import { loader } from '../../lib/assets.ts'
-import { LOADER_ASSET_SOURCES } from '../game-assets.ts'
+import {
+  LOADER_ASSET_SOURCES,
+  LOADER_COMPOSITED_ASSET_SOURCES,
+} from '../game-assets.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
@@ -39,7 +42,9 @@ interface LoaderRendererOptions {
 export async function createLoaderRenderer(
   options: LoaderRendererOptions,
 ): Promise<LoaderRenderer> {
-  const textures = await loadGameTextureMap(LOADER_ASSET_SOURCES)
+  const textures = await loadGameTextureMap(LOADER_ASSET_SOURCES, {
+    compositedSources: LOADER_COMPOSITED_ASSET_SOURCES,
+  })
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
     options.viewport.displayScale,
@@ -59,6 +64,7 @@ export async function createLoaderRenderer(
 
   const { application, canvas } = gpu
   const texture = (source: string) => textureFrom(textures.textures, source)
+  canvas.dataset.compositedTextureAlpha = texture(loader.logo).source.alphaMode
   const root = new Container({ label: 'native-loader' })
   root.eventMode = 'none'
   root.sortableChildren = true

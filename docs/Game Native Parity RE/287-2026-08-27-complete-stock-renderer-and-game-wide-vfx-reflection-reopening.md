@@ -261,3 +261,205 @@ shader, primitive, sampler, target, and blend equation.
 - Publication is authorized but remains a separate SHA receipt until the
   post-receipt exact gate and remote fast-forward proof complete. Deployment
   was not requested and is not part of this closure.
+
+## 2026-08-28 — Secondary report: derived-page straight-alpha edge sampling
+
+### Reported smell and parity question
+
+- Reported web behavior: sprite and image boundaries are intermittently or
+  persistently visible. The symptom follows camera/subpixel phase and is not
+  confined to one actor or scene.
+- Stock behavior to recover: preserve the retail renderer's linear/wrap
+  sampling while giving every sampled page the alpha representation its pixels
+  actually encode. Retail pages remain unpremultiplied; Website-precomposed
+  pages must not masquerade as retail straight-alpha pages after their hidden
+  transparent RGB has been discarded.
+- Reproduction inputs/scenes: Loader, Title, Create, Hub, player portraits,
+  Hub ambient actors, Boneyard players/Solomon/VFX, normal/additive/multiply
+  passes, fractional camera translation, non-integral scale, and mirrored or
+  rotated sprites.
+- Falsifiers: changing native linear or wrap state; pixel snapping the world;
+  applying one alpha policy to both original retail pages and Website-composed
+  pages; allowing a premultiplied page into native `ZERO/SRCCOLOR` multiply;
+  retaining a derived animation strip where the exact native atlas records are
+  already resident; or accepting interior/hash tests without a transformed
+  edge sample.
+
+This reopens the complete-renderer entry. The prior reflection pass verified
+page identity, blend selectors, and scene membership, but it did not inventory
+the alpha representation of Website-generated pages or sample their borders at
+fractional transforms. Its "zero actionable render/VFX residuals" conclusion
+therefore did not cover the reported behavior.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail executable | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed renderer oracle as the complete pipeline recovery. | high |
+| Retail pages | original `Clothes.png` `eaa1feb70362cf6dbc2068036f9cc9f77001d888e26cbd218c6144ebe63d6ac1`, `College.png` `34c10e60d30590b6211c678152d47cc30033679db5c986dc615d9923a71c43bd`, `BadGuys.png` `af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e`, and `Demon.png` `0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4` | Transparent texels adjacent to visible texels retain non-black source RGB on `340,694/340,715` Clothes pairs and `449,566/454,210` BadGuys pairs. This is the authored straight-alpha bleed consumed by native linear sampling. | high |
+| Current Website pages | Website `6d712227`; player/hub packers, generated pages, Pixi texture frames | All `6,059/6,059` player rectangles and `572/572` Hub rectangles meet zero-RGBA gutters. Player pages have zero non-black transparent edge neighbors; Hub pages are overwhelmingly zero-RGB at derived edges. | high |
+| Current sampling path | PixiJS 8.19.0 `TextureUvs`, `native-fixed-function-render-pipeline.ts`, Hub/Boneyard camera roots | Pixi emits exact frame-edge UVs without a half-texel inset; `roundPixels:false`, fractional camera positions, zoom feedback, rotation, and CSS scaling make bilinear samples cross the frame edge. | high |
+| Blend equations | recovered selector `0/1/2`; Pixi PMA/NPM adjusted modes; Arena alpha-mode shader bit | With a black transparent neighbor, NPM normal/additive attenuates sampled RGB before source-alpha blending; native multiply ignores alpha and exposes the black sample directly. A PMA upload is algebraically equivalent for a Website-precomposed normal/additive surface, while multiply still requires raw NPM RGB. | high |
+| Exact registered alternatives | BadGuys records `14/15/28/30/32/53/67/84/86/110..112/168..171/238..282/1836..1839/2002..2010` on the already resident native page | Current element, Fire impact/particle, Earth, Frost, shadow, and Hurricane assets need not use black-backed registered strips/canvases; exact native record textures already exist. | high |
+
+The page pixel census is static-content evidence. No injected runtime or stale
+ASLR address is used. The sampler/blend ownership remains instruction-derived
+from the addresses already closed above.
+
+### System boundary and membership inventory
+
+Native system: **stock page representation through transformed sprite
+sampling** — from an image's retail or Website-composed pixel ownership,
+through Pixi source alpha mode and subtexture UVs, to normal/additive/multiply
+blend and page teardown in every `/game` scene.
+
+| Member family | Native/web source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Original retail atlas and loose pages | renderer uploads `0x00420140/0x00440F70`; 28 atlases/12 loose images | `verified-already-at-parity` as NPM, linear, wrap | pinned page/hash and source-policy tests |
+| BadGuys/Demon combat pages and every registered subtexture | exact retail pages plus bundle rectangles | `verified-already-at-parity` as NPM | all record frames retain page source and native UVs |
+| Native UI/font/inventory/skill/title page sources | exact tracked retail pages | `verified-already-at-parity`; ExactText point variants remain NPM | source identity and point/linear sibling tests |
+| Loader composed logo/frame/fill/URL | Website registered/composed outputs | `exact-ported` as PMA linear composites | source policy plus scaled Loader capture |
+| Title clouds, graves, Solomon layers, buttons, and labels | Website registered/composed outputs; native UI siblings remain exact pages | `exact-ported` as PMA linear composites | fractional backdrop/Solomon capture and NPM native-page negative assertion |
+| Create hands, stars, element/discipline art, and name pieces | Website registered/composed outputs | `exact-ported` as PMA linear composites | entry/selection capture at non-integral display scale |
+| Create element VFX | exact BadGuys registered families | `exact-ported` from the native BadGuys page, not derived strips | all five elements, frame membership, NPM page diagnostic |
+| Hub compact visual pages | Website precomposed backgrounds, NPCs, props, students, particles | `exact-ported` as PMA linear composites | all 87 source families remain owned; fractional Hub capture |
+| College Statue multiply aura | College registered art and selector `2` | `exact-ported` from a dedicated NPM loose source; never the PMA compact page | raw source/multiply diagnostic and perimeter pixel probe |
+| Compact player pages in Hub/Boneyard | Website precolored/precomposed logical layers | `exact-ported` as PMA linear composites | all 84 sheets/8,563 frames; moving/fractional player and portrait captures |
+| Element/Fire/Earth/Frost/selected-primary registered art in Hub/Boneyard | exact BadGuys records already resident in combat page | `exact-ported` from native record textures; derived runtime strips retired | record-by-record source and VFX matrix |
+| Solomon Dig/dialogue/walk composite sheets | Website registered composites from Solomon records | `exact-ported` as PMA linear composites | Dig, dialogue, clipped hold, escape, and teardown capture |
+| DeadHawg, Solomon Flydirt, roads, field textures, and other exact loose/crop sources | original page pixels or exact native crop | `verified-already-at-parity` as NPM | source-policy negatives and representative Boneyard samples |
+| Region/Storm/Leviathan/weather/generated Buffer and RenderTexture sources | existing generated-target owners | `verified-already-at-parity` under their explicit alpha modes | existing target/weather contracts |
+| DOM/CSS player portraits and other browser images | browser compositor | `verified-already-at-parity`; browser performs PMA interpolation before CSS composition | player-card/Hall/ally-chip capture |
+| Mod-provided images | no retail source | `out-of-system` under the existing mod-image policy | stock path remains inactive when no mod is loaded |
+
+There is no browser-platform blocker. WebGL2 and Pixi expose both alpha upload
+modes, adjusted blend modes, exact source pages, and per-source policy.
+
+### Native ownership thread and recovered behavioral contract
+
+- Retail page loading owns unpremultiplied PNG RGB, including RGB beneath
+  alpha zero. The renderer owns wrap/linear state globally; sprite records own
+  only their frame UV and registration.
+- Website extractors sometimes register, tint, resize, or alpha-composite
+  several native records into one new bitmap. Those operations preserve the
+  visible composite but erase the retail pages' hidden transparent RGB. Such a
+  bitmap is a new precomposed surface, not an original retail page.
+- PMA upload makes linear interpolation and normal/additive blending operate on
+  the precomposed surface's coverage exactly once. Arena's existing per-texture
+  alpha bit unpremultiplies the sample before the native saturation equation
+  and premultiplies the final output again, preserving the recovered shader.
+- Native multiply is the exception: `ZERO/SRCCOLOR` consumes raw RGB and
+  ignores source alpha. The College Statue aura therefore remains NPM and must
+  not share the PMA compact-page source used by ordinary Hub composites.
+- Exact BadGuys records supersede registered strips/canvases wherever the
+  native page is already a runtime resident. This removes both cross-frame
+  sampling and duplicate decoded art without changing frame, registration,
+  tint, blend, timing, or teardown.
+- Source policy is fixed at page creation and ends when the owning scene
+  destroys that source. It is presentation-local: no simulation, protocol,
+  multiplayer, input, audio, or save state participates.
+
+### Nearby-system findings
+
+- The player compact pages decode to `34,889,728` bytes, over four times the
+  original Clothes page. Replacing all precomposed player layers with live
+  Clothes records remains a separate deep-module opportunity; it is not
+  required to correct their current composite sampling and must not be mixed
+  into this edge fix without its own complete player-painter migration.
+- Create currently loads derived element strips even though the full native
+  BadGuys page is the exact page/UV oracle. Using the resident page improves
+  sampling truth but introduces a scene-local decoded-page cost that must be
+  measured during acceptance.
+
+### Confidence and open questions
+
+- Confirmed: retail hidden-RGB representation; current compact-page zero-RGB
+  borders; Pixi UV endpoints and alpha-mode routing; native blend equations;
+  exact record membership; all current scene owners and teardown paths.
+- Inferred: none used to choose the alpha policy.
+- Unknown: none material to implementation. Create peak memory and frame pacing
+  are validation measurements, not missing native facts.
+
+### Web implementation consequence
+
+- Add a named PMA-linear source policy beside the existing stock NPM-linear and
+  point policies. Callers must opt in only for Website-precomposed sources.
+- Route Loader, Title, Create, Hub visual pages, player pages, and Solomon
+  composite sheets through that policy; keep exact native pages NPM.
+- Keep the College Statue aura on a dedicated NPM loose source before assigning
+  native multiply.
+- Replace derived element/Fire/Earth/Frost/selected-primary runtime strips and
+  logical canvases with their exact BadGuys record textures where already
+  resident. Remove their preload/destruction ownership from the derived-frame
+  path.
+- Do not change filtering, wrap, camera rounding, sprite geometry, blend
+  equations, native saturation, or browser UI scale.
+
+### Validation contract
+
+- Focused contracts must pin all three source policies, every scene's complete
+  PMA/NPM membership, exact BadGuys record rows, absence of retired derived
+  runtime strips, Statue multiply isolation, and teardown ownership.
+- Pixel-formula tests must show a transformed transparent edge contributes the
+  same RGB/alpha under retail straight-alpha-with-hidden-RGB and PMA composite
+  sampling, and show why the PMA sample is illegal for multiply.
+- Mac Chrome must render Loader, Title, Create, Hub, player portrait, moving
+  Hub/Boneyard player, Hub Statue, Solomon, and representative normal/additive
+  VFX at fractional positions/scales. Every journey records page, console, and
+  failed-response arrays; all must be empty.
+- Edge probes compare perimeter pixels across at least two subpixel phases and
+  reject black/different-frame contamination outside the member's authored
+  silhouette. Create and dense Hub/Boneyard journeys also record decoded source
+  policy, p95/p99/max frame gaps, long tasks, and source counts.
+- Run the exact candidate through the complete Mac `./scripts/validate.sh`
+  gate, then repeat after any rebase required for publication.
+
+### Implementation validation receipt
+
+- Source ownership: `native-fixed-function-render-pipeline.ts` now defines the
+  distinct PMA-linear composite policy beside unchanged NPM-linear retail and
+  NPM-point text policies. `game-webgl.ts` applies it only to caller-declared
+  composite sources. Loader, Title, Create, Hub, Hub Inventory, and Boneyard
+  declare complete source membership; their canvases publish the effective
+  alpha modes for browser proof.
+- Exact record cutover: element VFX, Fire impact/particle, player shadow, and
+  registered Earth/Frost/selected-primary rows resolve from the original
+  BadGuys page. `nativeEnemyRegisteredFrame` restores logical origin/trim with
+  tie-to-even registration. The combat-page owner resolves pages lazily so
+  Create and Hub Inventory load only BadGuys, while Hub/Boneyard retain their
+  established complete pages and teardown.
+- Multiply isolation: Hub keeps exactly one loose original from the compact
+  visual census, `hub-prop-statue-aura.png`, and uses it as NPM before native
+  `ZERO/SRCCOLOR`. All other 86 Hub source families remain on the PMA compact
+  pages; player pages are PMA in Hub, Hub Inventory, and Boneyard; Solomon Dig
+  and encounter sheets are PMA only in Boneyard.
+- Focused Mac contracts passed `92/92`, including all three source policies,
+  all affected renderer families, exact record selection/registration, compact
+  page ownership, and the multiply exception. The strengthened right-click
+  atlas ownership test also passed independently.
+- The pre-receipt canonical Mac gate passed backend build and `28/28`
+  integration/contract tests, strict lint and architecture boundaries, every
+  frontend suite including `1,693/1,693` Boneyard tests, desktop tests,
+  production frontend/game-host builds, bundle budget, media policy, and CSP.
+  Production entry `Game-Bm3WuAyc.js` measured `263,161` raw / `79,870` gzip
+  bytes. Publication still requires the final exact-candidate gate after this
+  receipt update.
+- Built Mac Chrome/WebGL2 Hub proof traversed startup, Title, Create, and Hub,
+  then proved `hubVisual/player = premultiply-alpha-on-upload` and
+  `combat/statueAura = no-premultiply-alpha`. Acid remained authoritatively
+  blocked in Hub; page, console, and response arrays were empty. Inspected
+  screenshot SHA-256 is
+  `d5373ebac9d1b84cd4b91777434f7e3171b819478d64e7bd9adddf04071399d1`.
+- Built Mac Chrome/WebGL2 Boneyard proof proved
+  `player/Solomon = premultiply-alpha-on-upload` and
+  `combat = no-premultiply-alpha`, then naturally rendered Acid cloud, 174
+  maximum actors, and 222 maximum primitives across 287 observed ticks. The
+  three-second sample held 181 frames with p95 `16.7 ms`, p99/max `16.8 ms`,
+  and zero long tasks. Page, console, and response arrays were empty; inspected
+  screenshot SHA-256 is
+  `9f75c1408a46ab120e75a93ac8dfb88bb7693d9ea219461875d40f8bf518f163`.
+- Visual review of both retained native-viewport frames found clean player,
+  spell, NPC, Statue-aura, and Acid silhouettes without black rectangular page
+  edges or neighboring-frame contamination. The screenshots and raw browser
+  logs are task evidence and must be deleted after their measurements/hashes
+  are recorded.

@@ -5,7 +5,7 @@ import {
   Texture,
 } from 'pixi.js'
 
-import { elementVfx, hub, skillPicker } from '../../lib/assets.ts'
+import { hub, skillPicker } from '../../lib/assets.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   NATIVE_DYE_SWATCHES,
@@ -72,6 +72,11 @@ import {
   loadModPresentationTextures,
   type ModPresentationTextures,
 } from './mod-presentation-assets.ts'
+import {
+  BONEYARD_COMBAT_ATLAS_SOURCES,
+  boneyardCombatAtlasSourceIsPacked,
+  createBoneyardCombatAtlas,
+} from './boneyard-combat-atlas.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
@@ -299,12 +304,11 @@ export async function createHubInventoryRenderer(
         hub.trader.skillsAtlas,
         hub.trader.uiAtlas,
         skillPicker.fontsAtlas,
-        ...Object.values(elementVfx.common),
-        ...Object.values(elementVfx.frames),
-        elementVfx.special.aura,
-        ...elementVfx.special.steam,
+        BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
         ...PLAYER_CHARACTER_ATLAS_SOURCES,
-      ]),
+      ], {
+        compositedSources: PLAYER_CHARACTER_ATLAS_SOURCES,
+      }),
       loadModPresentationTextures(modAssets),
     ])
   } catch (error) {
@@ -347,10 +351,17 @@ export async function createHubInventoryRenderer(
   let previousNoticeTitle: string | null = null
   let currentModel: HubInventoryRendererModel | null = null
 
-  const elementVfxTextures = createNativeElementVfxTextures((source) => textureFrom(textures.textures, source))
-  const playerCharacterAtlas = createPlayerCharacterAtlas((source) => (
-    textureFrom(textures.textures, source)
+  const texture = (source: string) => textureFrom(textures.textures, source)
+  const combatAtlas = createBoneyardCombatAtlas(texture)
+  const elementVfxTextures = createNativeElementVfxTextures((source) => (
+    boneyardCombatAtlasSourceIsPacked(source) ? combatAtlas.single(source) : texture(source)
   ))
+  const playerCharacterAtlas = createPlayerCharacterAtlas((source) => (
+    texture(source)
+  ))
+  gpu.canvas.dataset.playerTextureAlpha = playerCharacterAtlas
+    .frame(PLAYER_CHARACTER_SHEETS.robeDynamic.air, 0, 0).source.alphaMode
+  gpu.canvas.dataset.nativeTextureAlpha = elementVfxTextures.fire[0]!.source.alphaMode
 
   const context: RenderContext = {
     elementVfxTextures,
@@ -370,6 +381,7 @@ export async function createHubInventoryRenderer(
       for (const frames of Object.values(elementVfxTextures)) {
         for (const texture of frames) texture.destroy(false)
       }
+      combatAtlas.destroy()
       textures.destroy()
       modTextures.destroy()
     },

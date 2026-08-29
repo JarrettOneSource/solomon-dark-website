@@ -10,6 +10,7 @@ import {
 import { mapAssetSources } from '../game-asset-readiness.ts'
 import {
   installNativeFixedFunctionRenderPipeline,
+  nativeCompositedTextureFromImage,
   nativeStockPointTextureFromImage,
   nativeStockTextureFromImage,
 } from './native-fixed-function-render-pipeline.ts'
@@ -31,6 +32,11 @@ interface GameWebGlApplicationOptions {
   height: number
   resolution: number
   width: number
+}
+
+interface GameTextureLoadOptions {
+  compositedSources?: readonly string[]
+  pointSources?: readonly string[]
 }
 
 export async function createGameWebGlApplication({
@@ -80,9 +86,10 @@ export async function createGameWebGlApplication({
 
 export async function loadGameTextureMap(
   requestedSources: readonly string[],
+  options: GameTextureLoadOptions = {},
 ): Promise<GameTextureMap> {
   const sources = [...new Set(requestedSources)]
-  const entries = await loadGameTextureEntries(sources)
+  const entries = await loadGameTextureEntries(sources, options)
   const textures = Object.fromEntries(entries) as Record<string, Texture>
   let destroyed = false
   return {
@@ -98,19 +105,21 @@ export async function loadGameTextureMap(
 
 export async function loadGameTextureEntries(
   requestedSources: readonly string[],
-  createTexture: (source: string, image: HTMLImageElement) => Texture = (
-    source,
-    image,
-  ) => source === hub.hud.fontAtlas
-    ? nativeStockPointTextureFromImage(image)
-    : nativeStockTextureFromImage(image),
+  options: GameTextureLoadOptions = {},
 ): Promise<Array<readonly [string, Texture]>> {
   const sources = [...new Set(requestedSources)]
+  const compositedSources = new Set(options.compositedSources ?? [])
+  const pointSources = new Set([hub.hud.fontAtlas, ...(options.pointSources ?? [])])
   const entries: Array<readonly [string, Texture]> = []
   try {
     await mapAssetSources(sources, async (source) => {
       try {
-        const texture = createTexture(source, await loadGameImage(source))
+        const image = await loadGameImage(source)
+        const texture = pointSources.has(source)
+          ? nativeStockPointTextureFromImage(image)
+          : compositedSources.has(source)
+            ? nativeCompositedTextureFromImage(image)
+            : nativeStockTextureFromImage(image)
         const entry = [source, texture] as const
         entries.push(entry)
         return entry

@@ -37,7 +37,10 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
-import { TITLE_GAME_ASSET_SOURCES } from '../game-assets.ts'
+import {
+  TITLE_COMPOSITED_ASSET_SOURCES,
+  TITLE_GAME_ASSET_SOURCES,
+} from '../game-assets.ts'
 import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
 import {
   planTitleMenuPrompt,
@@ -101,7 +104,9 @@ const MAIN_BUTTON_HEIGHT = 69
 export async function createTitleMenuRenderer(
   options: TitleMenuRendererOptions,
 ): Promise<TitleMenuRenderer> {
-  const textures = await loadGameTextureMap(TITLE_GAME_ASSET_SOURCES)
+  const textures = await loadGameTextureMap(TITLE_GAME_ASSET_SOURCES, {
+    compositedSources: TITLE_COMPOSITED_ASSET_SOURCES,
+  })
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
     options.viewport.displayScale,
@@ -124,6 +129,8 @@ export async function createTitleMenuRenderer(
   canvas.dataset.textureSources = JSON.stringify(textures.sources)
   const texture = (source: string) => textureFrom(textures.textures, source)
   const nativeUi = createNativeUiPixiAdapter(textures)
+  canvas.dataset.compositedTextureAlpha = texture(menuSolomon.body).source.alphaMode
+  canvas.dataset.nativeTextureAlpha = texture(hub.hud.fontAtlas).source.alphaMode
   const root = new Container({ label: 'title-menu' })
   root.sortableChildren = true
   root.eventMode = 'none'

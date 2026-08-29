@@ -1,6 +1,5 @@
 import {
   createMenu,
-  elementVfx,
   hub,
   loader,
   mainMenu,
@@ -19,6 +18,11 @@ import {
 } from './game-asset-readiness.ts'
 
 export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
+export const LOADER_COMPOSITED_ASSET_SOURCES = LOADER_ASSET_SOURCES
+export const TITLE_COMPOSITED_ASSET_SOURCES = collectAssetSources({
+  mainMenu,
+  menuSolomon,
+})
 export const TITLE_GAME_ASSET_SOURCES = collectAssetSources({
   mainMenu,
   menuSolomon,
@@ -28,9 +32,9 @@ export const TITLE_GAME_ASSET_SOURCES = collectAssetSources({
 })
 export const CREATE_GAME_ASSET_SOURCES = collectAssetSources({
   createMenu,
-  elementVfx,
   nameFont: hub.hud.fontAtlas,
 })
+export const CREATE_COMPOSITED_ASSET_SOURCES = collectAssetSources(createMenu)
 export const MATCH_LOADING_GAME_ASSET_SOURCES = collectAssetSources(matchLoading)
 export const GAME_STARTUP_IMAGE_SOURCES = collectAssetSources([
   LOADER_ASSET_SOURCES,

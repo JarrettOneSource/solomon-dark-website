@@ -186,6 +186,77 @@ test('every reachable projectile and welded painter record is selected for prelo
   }
 })
 
+test('every shared element and selected-primary record resolves from the native page', async () => {
+  const server = await createServer({
+    appType: 'custom',
+    logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)),
+    server: { middlewareMode: true },
+  })
+  try {
+    const assetModule = await server.ssrLoadModule(
+      '/src/game/renderer/native-enemy-assets.ts',
+    ) as {
+      nativeEnemyRegisteredFrame(
+        atlas: NativeEnemyAtlas,
+        entry: number,
+        logicalWidth: number,
+        logicalHeight: number,
+      ): {
+        readonly height: number
+        readonly logicalHeight: number
+        readonly logicalWidth: number
+        readonly trimX: number
+        readonly trimY: number
+        readonly width: number
+      }
+      nativeEnemySpriteRecord(
+        atlas: NativeEnemyAtlas,
+        entry: number,
+      ): { readonly source: string }
+    }
+    const records = [
+      14, 15, 28, 30, 32, 53, 67, 84, 86, 110, 111, 112,
+      ...integerRange(168, 171),
+      ...integerRange(238, 282),
+      ...integerRange(1_836, 1_839),
+      ...integerRange(2_002, 2_010),
+    ]
+    for (const entry of records) {
+      assert.match(
+        assetModule.nativeEnemySpriteRecord('BadGuys', entry).source,
+        new RegExp(`^boneyard-combat:BadGuys:${entry}$`),
+      )
+    }
+    assert.deepEqual(assetModule.nativeEnemyRegisteredFrame('BadGuys', 1_836, 55, 59), {
+      height: 56,
+      logicalHeight: 59,
+      logicalWidth: 55,
+      trimX: 2,
+      trimY: 2,
+      width: 45,
+    })
+    assert.deepEqual(assetModule.nativeEnemyRegisteredFrame('BadGuys', 251, 80, 80), {
+      height: 60,
+      logicalHeight: 80,
+      logicalWidth: 80,
+      trimX: 7,
+      trimY: 11,
+      width: 69,
+    })
+    assert.deepEqual(assetModule.nativeEnemyRegisteredFrame('BadGuys', 14, 92, 91), {
+      height: 63,
+      logicalHeight: 91,
+      logicalWidth: 92,
+      trimX: 11,
+      trimY: 3,
+      width: 63,
+    })
+  } finally {
+    await server.close()
+  }
+})
+
 test('representative enemy records retain native registration and joints', () => {
   const archer = manifests.BadGuys.entries[451]
   const wraith = manifests.BadGuys.entries[2070]
@@ -425,6 +496,10 @@ function atlasRecordKeys(
   return Array.from({ length: last - first + 1 }, (_, offset) => (
     `${atlas}:${first + offset}`
   ))
+}
+
+function integerRange(first: number, last: number): number[] {
+  return Array.from({ length: last - first + 1 }, (_, offset) => first + offset)
 }
 
 function enemy(

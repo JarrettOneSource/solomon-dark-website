@@ -2,7 +2,6 @@ import { Rectangle, Texture } from 'pixi.js'
 
 import deathHatAnchors from '../../assets/game/player-character-death-hat-anchors.json'
 import {
-  elementVfx,
   hub,
   primarySpells,
 } from '../../lib/assets.ts'
@@ -11,6 +10,7 @@ import {
   type WizardElement,
 } from '../core-kernels/player-character.ts'
 import {
+  NATIVE_ELEMENT_VFX_RECORDS,
   NATIVE_ELEMENT_VFX_SPRITES,
   type NativeElementVfxSprite,
 } from '../element-vfx-native.ts'
@@ -22,7 +22,10 @@ import {
   nativeSecondarySpriteKey,
   nativeSecondarySpriteRecord,
 } from './native-secondary-assets.ts'
-import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import {
+  nativeEnemyRegisteredFrame,
+  nativeEnemySpriteRecord,
+} from './native-enemy-assets.ts'
 import type { NativeEnemySpriteRegistration } from './native-enemy-sprite-registration.ts'
 import {
   PLAYER_CHARACTER_ATLAS_SOURCES,
@@ -179,7 +182,9 @@ export interface PlayerWorldTextures {
 
 export function playerWorldAssetSources(): string[] {
   return [...new Set(collectAssetSources({
-    elementVfx,
+    elementVfx: Object.values(NATIVE_ELEMENT_VFX_RECORDS).flat().map((entry) => (
+      nativeEnemySpriteRecord('BadGuys', entry).source
+    )),
     fontAtlas: hub.hud.fontAtlas,
     fireActors: {
       badGuys: NATIVE_FIRE_ACTOR_BADGUYS_RECORDS.map((entry) => (
@@ -190,8 +195,18 @@ export function playerWorldAssetSources(): string[] {
       )),
     },
     playerAtlas: PLAYER_CHARACTER_ATLAS_SOURCES,
-    playerShadow: hub.npcs.teacher.shadow,
-    primarySpells,
+    playerShadow: nativeEnemySpriteRecord('BadGuys', 67).source,
+    primarySpells: {
+      air: primarySpells.air,
+      airWaterActors: primarySpells.airWaterActors,
+      earth: primarySpells.earth,
+      etherPierceStreak: primarySpells.etherPierceStreak,
+      frost: primarySpells.frost,
+    },
+    primaryFire: [
+      ...integerRange(251, 254),
+      ...integerRange(267, 270),
+    ].map((entry) => nativeEnemySpriteRecord('BadGuys', entry).source),
     weldActors: {
       badGuys: NATIVE_WELD_BADGUYS_RECORDS.map((entry) => (
         nativeEnemySpriteRecord('BadGuys', entry).source
@@ -202,6 +217,10 @@ export function playerWorldAssetSources(): string[] {
     },
     secondary: NATIVE_SECONDARY_ASSET_SOURCES,
   }).map(boneyardCombatAssetSource))]
+}
+
+export function playerWorldCompositedAssetSources(): readonly string[] {
+  return PLAYER_CHARACTER_ATLAS_SOURCES
 }
 
 export function createPlayerWorldTextures(
@@ -372,7 +391,7 @@ export function createPlayerWorldTextures(
       badGuys: nativeRecordTextures(texture, 'BadGuys', NATIVE_FIRE_ACTOR_BADGUYS_RECORDS),
       deadHawg: nativeRecordTextures(texture, 'DeadHawg', NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS),
     },
-    playerShadow: texture(hub.npcs.teacher.shadow),
+    playerShadow: texture(nativeEnemySpriteRecord('BadGuys', 67).source),
     players,
     primarySpells: {
       etherBlast: Object.freeze(Object.fromEntries([11, 45].map((entry) => {
@@ -404,28 +423,20 @@ export function createPlayerWorldTextures(
         rocks: primarySpells.earth.rocks.map(texture),
       },
       fire: {
-        core: texture(primarySpells.fire.core),
+        core: texture(nativeEnemySpriteRecord('BadGuys', 110).source),
         frames: elementTextures.fire,
-        impacts: stripFrames(
-          texture(primarySpells.fire.impact),
-          4,
-          80,
-          80,
-          'horizontal',
-        ),
-        particles: stripFrames(
-          texture(primarySpells.fire.particles),
-          4,
-          25,
-          25,
-          'horizontal',
-        ),
+        impacts: integerRange(251, 254).map((entry) => (
+          nativeRegisteredRecordTexture(texture, entry, 80, 80)
+        )),
+        particles: integerRange(267, 270).map((entry) => (
+          nativeRegisteredRecordTexture(texture, entry, 25, 25)
+        )),
       },
       frost: {
         core: texture(primarySpells.frost.core),
-        extra: texture(primarySpells.frost.extra),
-        over: texture(primarySpells.frost.over),
-        spark: texture(primarySpells.frost.spark),
+        extra: nativeRegisteredRecordTexture(texture, 32, 29, 30),
+        over: nativeRegisteredRecordTexture(texture, 28, 10, 11),
+        spark: nativeRegisteredRecordTexture(texture, 14, 92, 91),
       },
       weldActors: Object.freeze({
         BadGuys: Object.freeze(Object.fromEntries(
@@ -455,19 +466,18 @@ export function createNativeElementVfxTextures(
   texture: (source: string) => Texture,
 ): Readonly<Record<NativeElementVfxSprite, readonly Texture[]>> {
   const frames = (sprite: NativeElementVfxSprite): readonly Texture[] => {
-    if (sprite === 'aura') return [texture(elementVfx.special.aura)]
-    if (sprite === 'steam') return elementVfx.special.steam.map(texture)
-    const metrics = NATIVE_ELEMENT_VFX_SPRITES[sprite]
-    const source = sprite === 'core' || sprite === 'ray' || sprite === 'spark'
-      ? elementVfx.common[sprite]
-      : elementVfx.frames[sprite]
-    return stripFrames(
-      texture(source),
-      metrics.count,
-      metrics.width,
-      metrics.height,
-      'horizontal',
-    )
+    const metrics = sprite === 'aura' || sprite === 'steam'
+      ? null
+      : NATIVE_ELEMENT_VFX_SPRITES[sprite]
+    return NATIVE_ELEMENT_VFX_RECORDS[sprite].map((entry) => {
+      if (metrics === null) return nativeRawRecordTexture(texture, entry)
+      return nativeRegisteredRecordTexture(
+        texture,
+        entry,
+        metrics.width,
+        metrics.height,
+      )
+    })
   }
   return {
     air: frames('air'),
@@ -525,6 +535,11 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
   Object.values(textures.elementVfx).forEach(add)
   add(textures.primarySpells.fire.impacts)
   add(textures.primarySpells.fire.particles)
+  add([
+    textures.primarySpells.frost.extra,
+    textures.primarySpells.frost.over,
+    textures.primarySpells.frost.spark,
+  ])
   for (const texture of derived) texture.destroy(false)
 }
 
@@ -589,4 +604,42 @@ function nativeRecordTextures(
     entry,
     texture(nativeEnemySpriteRecord(atlas, entry).source),
   ])))
+}
+
+function nativeRegisteredRecordTexture(
+  texture: (source: string) => Texture,
+  entry: number,
+  logicalWidth: number,
+  logicalHeight: number,
+): Texture {
+  const record = nativeEnemySpriteRecord('BadGuys', entry)
+  const registration = nativeEnemyRegisteredFrame(
+    'BadGuys',
+    entry,
+    logicalWidth,
+    logicalHeight,
+  )
+  const source = texture(record.source)
+  return new Texture({
+    frame: new Rectangle(source.frame.x, source.frame.y, source.frame.width, source.frame.height),
+    orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
+    source: source.source,
+    trim: new Rectangle(
+      registration.trimX,
+      registration.trimY,
+      registration.width,
+      registration.height,
+    ),
+  })
+}
+
+function nativeRawRecordTexture(
+  texture: (source: string) => Texture,
+  entry: number,
+): Texture {
+  const source = texture(nativeEnemySpriteRecord('BadGuys', entry).source)
+  return new Texture({
+    frame: new Rectangle(source.frame.x, source.frame.y, source.frame.width, source.frame.height),
+    source: source.source,
+  })
 }

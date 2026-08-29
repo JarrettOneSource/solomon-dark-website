@@ -14,6 +14,7 @@ import {
   destroyPlayerWorldTextureFrames,
   gridFrames,
   playerWorldAssetSources,
+  playerWorldCompositedAssetSources,
   stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
@@ -69,7 +70,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
     ...NATIVE_LOOT_ASSET_SOURCES,
-    boneyard.lantern,
+    boneyardCombatAssetSource(boneyard.lantern),
     boneyardCombatAssetSource(boneyard.levelUpSparkle),
     boneyard.solomonDig,
     boneyard.solomonFlydirt,
@@ -84,7 +85,13 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
   ]
-  const loaded = await loadGameTextureEntries(sources)
+  const loaded = await loadGameTextureEntries(sources, {
+    compositedSources: [
+      ...playerWorldCompositedAssetSources(),
+      solomonEncounterSource,
+      boneyard.solomonDig,
+    ],
+  })
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {
     const result = base[boneyardCombatAssetSource(source)]

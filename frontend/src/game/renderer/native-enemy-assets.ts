@@ -28,8 +28,7 @@ const requiredBadGuysRanges = [
   [5, 5],
   [6, 6],
   [10, 11],
-  [15, 15],
-  [16, 16],
+  [14, 16],
   [18, 18],
   [20, 20],
   [21, 21],
@@ -40,23 +39,20 @@ const requiredBadGuysRanges = [
   [35, 35],
   [43, 45],
   [46, 46],
-  [49, 49],
-  [50, 50],
-  [51, 51],
-  [54, 56],
+  [49, 51],
+  [53, 56],
   [65, 65],
   [67, 67],
   [69, 69],
   [70, 70],
   [71, 71],
   [76, 76],
-  [86, 86],
-  [87, 87],
+  [84, 84],
+  [86, 87],
   [92, 121],
   [168, 171],
   [175, 187],
-  [202, 237],
-  [251, 282],
+  [202, 282],
   [285, 342],
   [375, 376],
   [381, 392],
@@ -70,7 +66,7 @@ const requiredBadGuysRanges = [
   [1117, 1332],
   [1333, 1566],
   [1585, 1839],
-  [2008, 2010],
+  [2002, 2010],
   [2013, 2069],
   [2070, 2202],
   [2203, 2292],
@@ -118,6 +114,15 @@ export interface NativeEnemySpriteRecord extends NativeEnemySpriteGeometry {
   source: string
 }
 
+export interface NativeEnemyRegisteredFrame {
+  height: number
+  logicalHeight: number
+  logicalWidth: number
+  trimX: number
+  trimY: number
+  width: number
+}
+
 export const NATIVE_ENEMY_ASSET_SOURCES = [...new Set(selectedSources.values())]
 
 export function nativeEnemySpriteGeometry(
@@ -152,10 +157,34 @@ export function nativeEnemySpriteRecord(
   return { ...geometry, source }
 }
 
+export function nativeEnemyRegisteredFrame(
+  atlas: NativeEnemyAtlas,
+  entry: number,
+  logicalWidth: number,
+  logicalHeight: number,
+): NativeEnemyRegisteredFrame {
+  const record = nativeEnemySpriteGeometry(atlas, entry)
+  return {
+    height: record.height,
+    logicalHeight,
+    logicalWidth,
+    trimX: roundToNearestEven(logicalWidth / 2 - record.anchorX),
+    trimY: roundToNearestEven(logicalHeight / 2 - record.anchorY),
+    width: record.width,
+  }
+}
+
 function expandRanges(
   ranges: readonly (readonly [number, number])[],
 ): number[] {
   return ranges.flatMap(([first, last]) => (
     Array.from({ length: last - first + 1 }, (_, index) => first + index)
   ))
+}
+
+function roundToNearestEven(value: number): number {
+  const floor = Math.floor(value)
+  const fraction = value - floor
+  if (fraction !== 0.5) return Math.round(value)
+  return floor % 2 === 0 ? floor : floor + 1
 }

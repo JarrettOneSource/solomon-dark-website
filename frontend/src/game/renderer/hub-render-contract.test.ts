@@ -88,6 +88,12 @@ test('Hub renderer loads compact pages and releases derived frames before page o
   )
   assert.match(hubTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(hubTextures, /createBoneyardCombatAtlas\(texture\)/)
+  assert.match(
+    hubTextures,
+    /loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:[\s\S]*?HUB_VISUAL_ATLAS_SOURCES/,
+  )
+  assert.match(hubTextures, /playerWorldCompositedAssetSources\(\)/)
+  assert.match(hubTextures, /if \(source === hub\.props\.statue\.aura\) continue/)
   assert.ok(
     hubTextures.indexOf('textures.combatAtlas.destroy()')
       < hubTextures.indexOf('for (const source of textures.assetSources)'),
@@ -110,7 +116,7 @@ test('scripted Hub presentation locks rendered facing to visible travel', () => 
   assert.match(hubWorldRenderer, /playerHeadingIndex = playerView\.headingIndex/)
 })
 
-test('every Hub sheet and logical crop is owned by the compact atlas', () => {
+test('every ordinary Hub crop uses the PMA compact atlas while multiply keeps raw RGB', () => {
   assert.match(hubPrivateRoomScene, /this\.textures\.visualAtlas\.strip\(/)
   assert.match(hubPrivateRoomScene, /this\.textures\.visualAtlas\.frame\(/)
   assert.doesNotMatch(hubPrivateRoomScene, /new Texture\(/)
@@ -118,6 +124,8 @@ test('every Hub sheet and logical crop is owned by the compact atlas', () => {
   assert.match(hubWorldScene, /this\.textures\.visualAtlas\.subframe\(/)
   assert.doesNotMatch(hubWorldScene, /new Texture\(/)
   assert.doesNotMatch(hubWorldScene, /layerFrameTextures/)
+  assert.match(hubWorldScene, /textures\.base\[hub\.props\.statue\.aura\]/)
+  assert.match(hubWorldScene, /this\.statueAura\.blendMode = 'multiply'/)
 })
 
 test('native painter boundaries sort actors around Courtyard props and tent faces', () => {

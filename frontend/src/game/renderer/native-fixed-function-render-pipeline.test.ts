@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
   NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS,
   NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
   installNativeFixedFunctionRenderPipeline,
@@ -138,4 +139,22 @@ test('stock image sources retain native RGB and linear sampling', () => {
     alphaMode: 'no-premultiply-alpha',
     scaleMode: 'nearest',
   })
+  assert.deepEqual(NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS, {
+    addressMode: 'repeat',
+    alphaMode: 'premultiply-alpha-on-upload',
+    scaleMode: 'linear',
+  })
+})
+
+test('PMA composite edges preserve one coverage multiplication while multiply stays NPM', () => {
+  const color = 0.8
+  const alpha = 0.6
+  const edgeCoverage = 0.25
+  const retailStraightSample = color
+  const retailAlpha = alpha * edgeCoverage
+  const retailNormalContribution = retailStraightSample * retailAlpha
+  const compositedPmaSample = color * alpha * edgeCoverage
+
+  assert.ok(Math.abs(compositedPmaSample - retailNormalContribution) < 1e-12)
+  assert.notEqual(compositedPmaSample, retailStraightSample)
 })

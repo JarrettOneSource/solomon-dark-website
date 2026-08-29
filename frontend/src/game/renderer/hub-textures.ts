@@ -4,6 +4,7 @@ import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
   playerWorldAssetSources,
+  playerWorldCompositedAssetSources,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
 import {
@@ -90,6 +91,7 @@ export function hubWorldAssetSources(): readonly string[] {
   const requestedSources = hubRequestedAssetSources()
   return [...new Set([
     ...HUB_VISUAL_ATLAS_SOURCES,
+    hub.props.statue.aura,
     ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
   ])]
@@ -98,7 +100,12 @@ export function hubWorldAssetSources(): readonly string[] {
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   const packedSources = hubRequestedAssetSources().filter(boneyardCombatAtlasSourceIsPacked)
   const sources = hubWorldAssetSources()
-  const loaded = await loadGameTextureEntries(sources)
+  const loaded = await loadGameTextureEntries(sources, {
+    compositedSources: [
+      ...HUB_VISUAL_ATLAS_SOURCES,
+      ...playerWorldCompositedAssetSources(),
+    ],
+  })
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string) => {
     const result = base[boneyardCombatAssetSource(source)]
@@ -109,6 +116,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   for (const source of packedSources) base[source] = combatAtlas.single(source)
   const visualAtlas = createHubVisualAtlas(texture)
   for (const source of HUB_VISUAL_ATLAS_ORIGINAL_SOURCES) {
+    if (source === hub.props.statue.aura) continue
     if (hubVisualAtlasSourceIsSingle(source)) base[source] = visualAtlas.single(source)
   }
 

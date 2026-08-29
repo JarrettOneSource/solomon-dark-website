@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  NATIVE_ELEMENT_VFX_RECORDS,
   NATIVE_ELEMENT_VFX_SCALE,
   nativeElementVfxPlan,
   nativeElementVfxPlanAtPhase,
@@ -11,6 +12,20 @@ import { NATIVE_APPLICATION_TICK_MS } from './native-application-tick.ts'
 
 test('uses the native Create and equipped-staff scale inputs', () => {
   assert.deepEqual(NATIVE_ELEMENT_VFX_SCALE, { held: 6, picker: 2, staff: 1 })
+})
+
+test('every element frame names its exact shared BadGuys record bank', () => {
+  assert.deepEqual(NATIVE_ELEMENT_VFX_RECORDS, {
+    air: [1836, 1837, 1838, 1839],
+    aura: [15],
+    core: [110],
+    earth: [238, 239, 240, 241, 242, 243, 244, 245],
+    fire: [255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266],
+    ray: [112],
+    spark: [111],
+    steam: [2002, 2003, 2004, 2005, 2006, 2007],
+    water: [271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282],
+  })
 })
 
 test('core pulses use the recovered 0.15 native breathing amplitude', () => {

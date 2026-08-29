@@ -53,3 +53,14 @@ test('Create element painters consume the free-running 100 Hz application tick',
   assert.doesNotMatch(createMenuRenderer, /sceneElapsedMs \* 60 \/ 1000/)
   assert.match(createMenuRenderer, /diagnostics\.applicationTick = tick/)
 })
+
+test('Create separates composed menu art from exact native element records', () => {
+  assert.match(
+    createMenuRenderer,
+    /loadGameTextureMap\(sources, \{[\s\S]*?compositedSources: CREATE_COMPOSITED_ASSET_SOURCES/,
+  )
+  assert.match(createMenuRenderer, /createBoneyardCombatAtlas\(texture\)/)
+  assert.match(createMenuRenderer, /combatAtlas\.single\(source\)/)
+  assert.match(createMenuRenderer, /combatAtlas\.destroy\(\)/)
+  assert.doesNotMatch(createMenuRenderer, /createNativeElementVfxTextures\(texture\)/)
+})

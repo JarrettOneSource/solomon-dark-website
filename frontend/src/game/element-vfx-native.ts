@@ -49,6 +49,18 @@ export const NATIVE_ELEMENT_VFX_SPRITES: Readonly<Record<NativeElementVfxStripSp
   water: { count: 12, height: 36, width: 38 },
 }
 
+export const NATIVE_ELEMENT_VFX_RECORDS: Readonly<Record<NativeElementVfxSprite, readonly number[]>> = Object.freeze({
+  air: Object.freeze([1836, 1837, 1838, 1839]),
+  aura: Object.freeze([15]),
+  core: Object.freeze([110]),
+  earth: Object.freeze([238, 239, 240, 241, 242, 243, 244, 245]),
+  fire: Object.freeze([255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266]),
+  ray: Object.freeze([112]),
+  spark: Object.freeze([111]),
+  steam: Object.freeze([2002, 2003, 2004, 2005, 2006, 2007]),
+  water: Object.freeze([271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282]),
+})
+
 export const NATIVE_SELECTED_PRIMARY_VFX_RECORDS = Object.freeze({
   airCompanion: Object.freeze([1836, 1837, 1838, 1839]),
   aura: 15,

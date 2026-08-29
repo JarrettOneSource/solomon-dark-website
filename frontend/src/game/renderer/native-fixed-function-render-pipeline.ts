@@ -13,6 +13,10 @@ export const NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS = Object.freeze({
   ...NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
   scaleMode: 'nearest' as const,
 })
+export const NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS = Object.freeze({
+  ...NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
+  alphaMode: 'premultiply-alpha-on-upload' as const,
+})
 
 type NativeBlendFactors = readonly [
   sourceRgb: number,
@@ -132,11 +136,21 @@ export function nativeStockPointTextureFromImage(
   )
 }
 
+export function nativeCompositedTextureFromImage(
+  image: HTMLImageElement,
+): Texture {
+  return nativeStockTextureFromImageWithOptions(
+    image,
+    NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
+  )
+}
+
 function nativeStockTextureFromImageWithOptions(
   image: HTMLImageElement,
   options:
     | typeof NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS
-    | typeof NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS,
+    | typeof NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS
+    | typeof NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
 ): Texture {
   return new Texture({
     source: new ImageSource({
