@@ -68,6 +68,11 @@ import {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
+  decodeServerGameMessage,
+  encodeGameMessage,
+} from '../protocol/game-protocol.ts'
+import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
+import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
   armGameSimulationCollegeIntro,
@@ -113,6 +118,7 @@ import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
   damagePlayerEntity,
   dazzlePlayerEntity,
+  grantPlayerEntityWeldBuild,
   playerCharacterRecords,
   playerLightingAt,
   playerSkillDerivedStatsAt,
@@ -4245,6 +4251,95 @@ test('a primary quickbar edge selects the learned primary before cast authority 
   assert.equal(getPlayerSkillBook(state).primarySkillId, 16)
   assert.deepEqual(getPlayerBelt(state)[7], { kind: 'skill', skillId: 16 })
   assert.equal(getPlayerCharacter(state).primaryCast.selectedPrimaryId, 16)
+})
+
+test('a primary quickbar edge keeps the selection reset through the authoritative snapshot', () => {
+  let state = createGameSimulation()
+  const granted = grantPlayerEntityWeldBuild(
+    state.playerEntities,
+    'local-player',
+    1002,
+    createNativeRng(17),
+  )
+  state = withPlayerSkillRank(
+    { ...state, playerEntities: granted.store },
+    'local-player',
+    16,
+    1,
+  )
+  const welded = getPlayerCharacter(state)
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'local-player', {
+      ...welded,
+      primaryCast: {
+        ...welded.primaryCast,
+        actionTick: 12,
+        castSequence: 1,
+        emissionSequence: 1,
+        held: true,
+        lastWeldPlaybackRate: 1.25,
+        lastWeldSoundVariant: 1,
+        oneShotAttackPoseHeld: true,
+        selectedPrimaryAgeTicks: 19,
+        selectedPrimaryId: 1002,
+        underpowered: true,
+      },
+    }),
+  }
+  const bound = bindGameSimulationPlayerSkillQuickbar(state, 'local-player', 16, 7)
+  assert.ok(bound)
+  const before = getPlayerCharacter(bound)
+
+  state = stepGameSimulationTick(bound, {
+    'local-player': {
+      aim: null,
+      cast: { primary: false, quickbar: 7 },
+      movement: { x: 1, y: 0 },
+      viewportHeight: 900,
+      viewportWidth: 1_600,
+    },
+  })
+
+  const selected = getPlayerCharacter(state)
+  assert.equal(getPlayerSkillBook(state).primarySkillId, 16)
+  assert.ok(selected.position.x > before.position.x)
+  assert.deepEqual({
+    actionTick: selected.primaryCast.actionTick,
+    channelActive: selected.primaryCast.channelActive,
+    held: selected.primaryCast.held,
+    lastWeldPlaybackRate: selected.primaryCast.lastWeldPlaybackRate,
+    lastWeldSoundVariant: selected.primaryCast.lastWeldSoundVariant,
+    oneShotAttackPoseHeld: selected.primaryCast.oneShotAttackPoseHeld,
+    selectedPrimaryAgeTicks: selected.primaryCast.selectedPrimaryAgeTicks,
+    selectedPrimaryId: selected.primaryCast.selectedPrimaryId,
+    targetId: selected.primaryCast.targetId,
+    underpowered: selected.primaryCast.underpowered,
+  }, {
+    actionTick: -1,
+    channelActive: false,
+    held: false,
+    lastWeldPlaybackRate: null,
+    lastWeldSoundVariant: null,
+    oneShotAttackPoseHeld: false,
+    selectedPrimaryAgeTicks: 1,
+    selectedPrimaryId: 16,
+    targetId: null,
+    underpowered: false,
+  })
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(createGameSnapshot(state, 'local-player'), 0, undefined, true),
+    sequence: 1,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+  const invalid = JSON.parse(encodeGameMessage(message))
+  invalid.frame.players['local-player'].primaryCast.lastWeldPlaybackRate = 1.25
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalid)),
+    /lastWeldPlaybackRate does not match the active build/,
+  )
 })
 
 test('Teleport reaches the active-run kernel through a real belt slot and remains gated in College', () => {

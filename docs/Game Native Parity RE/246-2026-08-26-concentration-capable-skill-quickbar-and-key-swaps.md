@@ -190,3 +190,193 @@ No member is blocked by the browser platform.
   report stays unchanged because category-3 drag is explicitly a Website
   convenience extension over already-settled retail routing. The work is
   local and uncommitted; nothing is pushed or deployed.
+
+## 2026-08-28 — Same-tick primary-selection cast reset reopening
+
+### Reported smell and parity question
+
+- Production diagnostic row `71`, captured at `2026-08-28T23:46:32Z` on
+  deployed Website `4204d3cccd43982fb1bbb851daf442b92b65c861`, records a
+  protocol-105 shared-Hub client closing with code `4008` because
+  `primaryCast.lastWeldPlaybackRate does not match the active build`.
+  Website and game services remained active with `NRestarts=0`.
+- The player had resumed the same Tutorial run across the deployment, opened
+  the selected-skill, inventory, and SkillScreen modal owners, then remained
+  connected for more than four minutes before the invalid frame. The failure
+  is therefore a live selection/cast-state transition, not handshake or
+  archive corruption.
+- Stock behavior already recovered here and in the welded-primary ledger:
+  every category-1 selection atomically changes the selected row/build and
+  resets the incompatible Staff Cast 1/Constant state. Weld pitch and variant
+  are retained only across the one authoritative cast edge that produced
+  them; they do not survive selection of another primary.
+- Falsifiers: every authoritative selection path reaches the shared reset and
+  the reset survives the rest of the same fixed tick; a legal weld pitch lies
+  outside `[0.5,1.5]`; save/rejoin alone reproduces the mismatch; or a current
+  full-simulation snapshot accepts a quickbar switch away from a retained weld
+  edge without additional synchronization.
+
+This is a secondary report against the category-1 quickbar reset ownership
+recorded above. The earlier component-level proof stopped at
+`selectPlayerEntityPrimarySkill`; it did not follow that reset through the
+remaining fixed-tick player projections and final snapshot. Production rows
+`51/52` (`primaryCast.targetId is only valid for Air`) are the same omitted
+membership class: another selection-owned cast field can outlive the selected
+primary when a stale tick projection overwrites the reset.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Production diagnostic | NFO `/var/lib/solomon-dark-revived/sdr.db`, `DiagnosticLogs.Id=71`; protocol 105; current deployed SHA above | The client decoded one authoritative frame whose selected progression/build and retained weld pitch were mutually invalid, then closed cleanly with `4008`. | high-live |
+| Production lifecycle | `solomon-dark-game.service` journal `2026-08-28T23:41:56Z..23:46:34Z` | The player resumed after the intentional deployment restart, used modal skill owners, then disconnected on the protocol reason; the host did not crash. | high-live |
+| Existing native ownership | category-1 BeltButton/selector routing `0x005D8120`; welded `Sound::Play(pitch,gain) 0x00407CD0`; existing quickbar and welded-primary ledgers | Selection and incompatible action-state teardown are one owner; retained weld pitch/variant belong only to their producing cast edge. | high |
+| Current web causal trace | `finishGameSimulationTick`, `selectPlayerEntityPrimarySkill`, `resetSelectedPlayerPrimaryCast`, `stepPrimarySpells`, `createGameSnapshot` at `4204d3cc` | The player store clears every selection-owned cast field, but `secondaryPlayers` is rebuilt later from the pre-selection `resolvedPlayers` projection. Final character replacement writes the stale cast component back beside the new skill book. | high |
+| Existing range tests | welded one-shot and retained-rock constructor tests | Every native producer stays inside the current legal pitch lane: one-shots are `.75`, `[1,1.5]`, or weak Ground `[.76,.84]`; retained-rock starts are `[1,1.5]`. Range widening cannot repair the cross-owner state. | high |
+
+No new native extraction is required. The pinned retail executable remains
+0.72.5, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`; the existing quickbar and welded-primary
+entries already own the complete selection and audio contracts.
+
+### System boundary and membership inventory
+
+Native/web system: **category-1 primary selection and atomic selected-cast
+state replacement**, from every authoritative selection producer through the
+remaining fixed tick, spell authority, snapshot projection, strict player and
+observer decode, save/rejoin, and teardown.
+
+| Member / branch | Owner | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Pure primary rows `8/16/24/32/40` | category-1 selection | `verified-already-at-parity`; tick projection reopened | switching from any weld retains the new row and the reset cast component in the same snapshot |
+| Spell Welding row `52`, builds `1000..1009` | category-1 selection plus active build | `verified-already-at-parity`; tick projection reopened | switching into Weld resolves its current build with no pure-row action residue |
+| One-shot welds `1000/1001/1002/1009` | Cast 1 edge | `verified-already-at-parity` producer; reset `exact-ported` by this correction | playback rate and variants remain for their producing edge, then clear atomically on selection |
+| Channel welds `1003/1004/1005` | Staff Constant | `verified-already-at-parity` producer; reset `exact-ported` | held/channel/target state cannot cross to another row |
+| Persistent welds `1006/1007/1008` | retained actor/channel owner | `verified-already-at-parity` producer; reset `exact-ported` | randomized rock-start pitch and held state cannot cross selection; actor release/teardown stays independent |
+| Reset-owned fields | `resetSelectedPlayerPrimaryCast` | `exact-ported` through final projection | `actionTick`, `channelActive`, `held`, weld pitch/variant, one-shot pose, selected age/id, target, and weak state survive no stale overwrite |
+| SkillScreen and selected-HUD selector requests | host mutation between ticks | `verified-already-at-parity` | shared reset remains present on the next tick and snapshot |
+| Keyboard/mouse/touch/controller quickbar row | same-tick `cast.quickbar` path | `exact-ported` by this correction | selection reset is the primary-spell input on that same fixed tick |
+| Skill acquisition, automatic selection, Weld grant/rebuild, and mod replacement | player-skill refresh owner | `exact-ported` at the shared tick boundary | any primary/build change before spell stepping supplies its refreshed cast component |
+| locomotion, Staff-facing, Deflect-facing, and secondary relocation | independent character lanes | `verified-already-at-parity` | refreshing primary cast does not overwrite current position, heading, gait, or secondary relocation |
+| player, peer/observer, keyframe, late join, checkpoint/rejoin | shared strict snapshot | `exact-ported` by the same authoritative correction | every recipient sees one coherent selection/cast pair; genuine invalid combinations still fail closed |
+| release, death, disconnect, run replacement, and title return | existing lifecycle owners | `verified-already-at-parity` | no retained cast field or spell actor crosses its established teardown boundary |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- Category-1 selection owns one indivisible selected-row/build plus cast-state
+  transition. Fixed-tick spell authority may consume that pair only after both
+  halves have changed.
+- `resolvedPlayers` owns the current locomotion/Staff-facing projection for the
+  tick. `PlayerEntityStore.primaryCasts` owns primary selection resets. Merging
+  the former wholesale after a selection reintroduces stale cast state; the
+  spell input must take the current cast component without replacing unrelated
+  movement and facing lanes.
+- Weld pitch and sound variant remain authoritative because a projectile may
+  collide on its birth tick. Their legal ranges and audio playback stay
+  unchanged. Clearing them outside their producing selection is teardown, not
+  normalization or decoder leniency.
+- Save/rejoin, player/observer decoding, and invalid-frame closure remain
+  strict. The fix makes the host stop producing an impossible combination; it
+  does not catch, clamp, omit, or reinterpret it.
+
+### Confidence and open questions
+
+- Confirmed: exact current production symptom and lifecycle, legal pitch
+  ranges, shared reset helper, stale-projection overwrite path, complete reset
+  field membership, and every selection producer that can reach the fixed-tick
+  boundary.
+- Inferred: the live trigger was a quickbar primary switch after the player's
+  SkillScreen interaction. The bounded diagnostic does not archive the input
+  message, but the same-tick path deterministically produces the exact invalid
+  selection/cast pair while between-tick selectors do not.
+- Unknown material to implementation: none. A full-simulation red test can
+  distinguish the same-tick path without reconstructing the private input
+  sequence.
+
+### Web implementation consequence
+
+- Before secondary and primary spell stepping, combine the tick-current
+  locomotion projection with the current player-store primary-cast component.
+  Keep the player store as the sole owner of selection reset state.
+- Do not widen the weld playback lane, clear fields in the decoder, add a
+  build-specific exception, or reset unrelated locomotion/presentation state.
+- Keep protocol 105 and the save schema unchanged: the legal wire shape and
+  validation domain do not change; the authority stops emitting an already-
+  illegal combination.
+
+### Validation contract
+
+- Red/green full-simulation test: start with a valid retained weld playback
+  rate/variant/target/action state, select each pure primary through a bound
+  quickbar edge without casting, and require the complete reset component in
+  the resulting player state and strict snapshot.
+- Sibling test: preserve current movement/heading while the cast component is
+  refreshed, and retain an ordinary same-row weld edge when selection does not
+  change.
+- Protocol negative: manually reintroducing a weld playback rate beside a
+  pure primary must still throw the production error.
+- Mac browser: in a real generated Boneyard/Tutorial-capable session, cast a
+  randomized-pitch weld, switch to a pure primary from the painted quickbar,
+  and remain connected through player and observer snapshots. Require empty
+  page, console, failed-response, protocol-close, and host-error arrays.
+- Exact candidate: run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the
+  byte-identical Mac worktree.
+
+### Implementation validation receipt
+
+- Root cause: `selectPlayerEntityPrimarySkill` correctly reset the component,
+  but `finishGameSimulationTick` later supplied `stepPrimarySpells` with the
+  pre-selection `resolvedPlayers` cast and prior-tick cast baseline. The spell
+  result then replaced `PlayerEntityStore.primaryCasts`, restoring the stale
+  weld pitch/variant beside the newly selected pure primary. The same omitted
+  boundary explains the earlier production `targetId is only valid for Air`
+  sibling reports.
+- Implementation: immediately before primary-spell stepping,
+  `game-simulation.ts` combines the tick-current movement/Staff/secondary
+  projection with the player store's current `primaryCast`. When that selected
+  primary identity differs from the prior tick, the reset cast is also the
+  primary kernel's previous-state baseline for this tick. No other character
+  lane is overwritten. Protocol 105, save schema 20, pitch ranges, strict
+  decoder errors, audio, spell constructors, and renderer paths are unchanged.
+- Regression: the full-simulation test starts from a legal Ball Lightning
+  Cast 1 edge with non-null pitch and variant, selects Fireball through a bound
+  quickbar while moving, and requires the complete selection reset plus a
+  strict snapshot round trip. It then deliberately reintroduces the production
+  illegal combination and proves the decoder still rejects it with
+  `lastWeldPlaybackRate does not match the active build`.
+- Red Mac receipt: on exact base `4204d3cc`, the new full-simulation test was
+  the sole failure in the Boneyard group (`1683/1684` passed). The actual state
+  retained `actionTick=13`, playback rate `1.25`, sound variant `1`, held pose,
+  and weak state after progression had already selected Fireball, reproducing
+  the production owner mismatch. The first corrected run showed that the
+  freshly reset selected-primary age advances to one on the same native fixed
+  tick; the final assertion records that clock rather than freezing it at zero.
+- Canonical Mac gate: the byte-identical corrected candidate passes
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend Release build with
+  zero warnings/errors; all `28/28` Website/backend contracts; formatting,
+  lint, architecture, generated-content checks; corrected Boneyard/host group
+  `1684/1684`; all ML, weather, party, level-up, Tutorial, diagnostic, Hall,
+  Hub, desktop, and remaining registered suites; production frontend and game
+  host builds; media policy; and bundle budget. The production Game entry is
+  `262,499` raw / `79,617` gzip bytes against `524,288` / `134,144`.
+- Built Mac Chrome receipt: Chrome served the canonical production
+  `backend/wwwroot` bundle, connected one real protocol-105 player, and
+  consumed a valid authoritative Ball Lightning edge with
+  `actionTick=64`, `emissionSequence=2`, randomized playback rate
+  `1.1767849922180176`, and sound variant `1`. Clicking the painted Fireball
+  quickbar produced selected primary `16`, cleared both retained weld fields,
+  returned action tick `-1`, and remained connected. Page, console, request,
+  response, protocol-close, and host-error arrays were empty.
+- Supplemental Mac Chrome scene receipt: the repository's real SkillScreen and
+  quickbar journey entered an active Boneyard on the same exact source tree,
+  switched the authoritative primary from Magic Missile `8` to Fireball `16`
+  through the Boneyard selector, and observed the local and replicated orb
+  programs agree at both edges. It also exercised the Boneyard SkillScreen /
+  Inventory replacement lifecycle and a concentration hotbar selection. Page,
+  console, request, and response error arrays were empty.
+- No platform block or material unknown remains. The browser can represent
+  the native state exactly, and no Mod Loader file or duplicated native report
+  changed.

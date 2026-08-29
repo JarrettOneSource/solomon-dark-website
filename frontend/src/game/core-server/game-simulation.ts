@@ -3308,6 +3308,28 @@ function finishGameSimulationTick(
         .filter(({ kind }) => kind === 'gravestone')
         .map(({ id }) => id))
     : undefined
+  const entityPlayers = playerCharacterRecords(playerEntities)
+  const primaryPlayers: Record<PlayerId, PlayerCharacterState> = Object.fromEntries(
+    Object.entries(secondaryPlayers).map(([playerId, player]) => [
+      playerId,
+      entityPlayers[playerId] === undefined
+        ? player
+        : { ...player, primaryCast: entityPlayers[playerId].primaryCast },
+    ]),
+  )
+  const previousPrimaryPlayers = playerCharacterRecords(previous.playerEntities)
+  const primaryPreviousPlayers: Record<PlayerId, PlayerCharacterState> = Object.fromEntries(
+    Object.entries(previousPrimaryPlayers).map(([playerId, player]) => {
+      const current = primaryPlayers[playerId]
+      return [
+        playerId,
+        current !== undefined
+          && current.primaryCast.selectedPrimaryId !== player.primaryCast.selectedPrimaryId
+          ? { ...player, primaryCast: current.primaryCast }
+          : player,
+      ]
+    }),
+  )
   const cast = stepPrimarySpells({
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
@@ -3419,8 +3441,8 @@ function finishGameSimulationTick(
       ] as const]
     })),
     inputs: primaryInputs,
-    players: secondaryPlayers,
-    previousPlayers: playerCharacterRecords(previous.playerEntities),
+    players: primaryPlayers,
+    previousPlayers: primaryPreviousPlayers,
     registerLightProvider: lightProviderOrder.register,
     rng: previous.combatRng,
     spells: spellsBeforePrimary,
