@@ -36,17 +36,6 @@ export interface HallOfFameEntry {
   wizardName: string
 }
 
-export const HALL_OF_FAME_CLASS_NAMES: Readonly<Record<
-  WizardElement,
-  Readonly<Record<WizardDiscipline, string>>
->> = {
-  ether: { body: 'Sage', mind: 'Seer', arcane: 'Occultist' },
-  fire: { body: 'Warlock', mind: 'Pyromancer', arcane: 'Fire Mage' },
-  air: { body: 'Stormcaller', mind: 'Astrologer', arcane: 'Storm Mage' },
-  water: { body: 'Icebinder', mind: 'Thaumaturge', arcane: 'Frost Mage' },
-  earth: { body: 'Ritualist', mind: 'Channeler', arcane: 'Earth Mage' },
-} as const
-
 const BOARD_VALUE: Readonly<Record<
   HallOfFameBoard,
   (entry: HallOfFameEntry) => number
@@ -92,11 +81,4 @@ export function formatHallOfFameTime(elapsedTicks: number): string {
 
 export function isHallOfFameBoard(value: string): value is HallOfFameBoard {
   return HALL_OF_FAME_BOARDS.some((board) => board === value)
-}
-
-export function hallOfFameClassName(
-  element: WizardElement,
-  discipline: WizardDiscipline,
-): string {
-  return HALL_OF_FAME_CLASS_NAMES[element][discipline]
 }

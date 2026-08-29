@@ -12,12 +12,12 @@ import { mainMenu, skillPicker } from '../lib/assets.ts'
 import {
   HALL_OF_FAME_BOARDS,
   formatHallOfFameTime,
-  hallOfFameClassName,
   rankHallOfFameEntries,
   type HallOfFameBoard,
   type HallOfFameEntry,
   type HallOfFameSkill,
 } from './core-kernels/hall-of-fame.ts'
+import { nativeWizardClassTitle } from './core-kernels/native-wizard-class.ts'
 import { nativeSkillColorRoot } from './core-kernels/player-progression.ts'
 import { HallNineSlice, HallSprite, HallText, HallWizard } from './HallOfFamePrimitives.tsx'
 import {
@@ -395,7 +395,7 @@ function HallRow({
 }) {
   const { current, entry, expanded } = row
   const rankText = `${rank}`
-  const levelText = `Level ${entry.level} ${hallOfFameClassName(entry.element, entry.discipline).toUpperCase()}`
+  const levelText = `Level ${entry.level} ${nativeWizardClassTitle(entry.element, entry.discipline)}`
   const awesomenessText = `Awesomeness: ${entry.awesomeness}`
   const layout = hallRowLayout(
     rowTop,

@@ -9,11 +9,9 @@ import {
   type NativeHubNpcState,
 } from './core-kernels/native-hub-npc.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
-import {
-  formatHallOfFameTime,
-  hallOfFameClassName,
-} from './core-kernels/hall-of-fame.ts'
+import { formatHallOfFameTime } from './core-kernels/hall-of-fame.ts'
 import type { HubMemorialPortrait } from './core-kernels/hub-memorial.ts'
+import { wizardClassDisplayTitle } from './core-kernels/native-wizard-class.ts'
 import {
   hubInteractionDialogue,
   type HubInteractionId,
@@ -107,7 +105,7 @@ export function hubMemorialInspectionLines(
     : `${portrait.config.displayName} (@${portrait.accountUsername})`
   const monsterLabel = portrait.monstersKilled === 1 ? 'monster' : 'monsters'
   return [
-    `${identity}, Level ${portrait.level} ${hallOfFameClassName(
+    `${identity}, Level ${portrait.level} ${wizardClassDisplayTitle(
       portrait.config.element,
       portrait.config.discipline,
     )}.`,

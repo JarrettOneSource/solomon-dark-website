@@ -23,7 +23,11 @@ import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   nativeTutorialAmuletIdentityMatches,
 } from '../core-kernels/native-tutorial.ts'
-import type { WizardElement } from '../core-kernels/player-character.ts'
+import { nativeWizardClassTitle } from '../core-kernels/native-wizard-class.ts'
+import type {
+  WizardDiscipline,
+  WizardElement,
+} from '../core-kernels/player-character.ts'
 
 export const HUB_NATIVE_UI_SIZE = { height: 900, width: 1600 } as const
 
@@ -319,6 +323,14 @@ export const HUB_INVENTORY_STATS_PAGES = {
   standaloneClipRect: [50, 89, 320, 320] as const,
   standaloneIndicatorX: 338,
 } as const
+
+export function hubInventoryWizardIdentityText(
+  level: number,
+  element: WizardElement,
+  discipline: WizardDiscipline,
+): string {
+  return `LEVEL ${level}\n${nativeWizardClassTitle(element, discipline)}`
+}
 
 export const HUB_INVENTORY_ATTRIBUTES_PAGE = {
   attributesBodyRect: [86, 475, 227, 109] as const,

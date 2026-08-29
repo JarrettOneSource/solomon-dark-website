@@ -126,6 +126,7 @@ import {
   hubInventoryPrimarySpellLines,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
+  hubInventoryWizardIdentityText,
   hubNativeLabeledControlPresentation,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
@@ -1095,8 +1096,19 @@ function addStats(
   )
   addInset(content, 86 + contentShift, 330, 227, 54)
   addBitmapText(context, content, model.config.displayName.toUpperCase(), 'menu', 96 + contentShift, 136, { align: 'left', tint: 0xffffff })
-  addBitmapText(context, content, `LEVEL ${model.progression.level}`, 'medium', 96 + contentShift, 159, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, content, `${model.config.element.toUpperCase()} ${model.config.discipline.toUpperCase()}`, 'medium', 96 + contentShift, 175, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(
+    context,
+    content,
+    hubInventoryWizardIdentityText(
+      model.progression.level,
+      model.config.element,
+      model.config.discipline,
+    ),
+    'medium',
+    96 + contentShift,
+    159,
+    { align: 'left', tint: 0xe4c56d },
+  )
   addBitmapText(context, content, 'MELEE DAMAGE', 'medium', 96 + contentShift, 348, { align: 'left', tint: 0xe4c56d })
   addBitmapText(context, content, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, {
     align: 'left',

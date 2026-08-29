@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'react'
 
 import { art, skillIcons } from '../lib/assets.ts'
-import { HALL_OF_FAME_CLASS_NAMES } from './core-kernels/hall-of-fame.ts'
+import { nativeWizardClassTitle } from './core-kernels/native-wizard-class.ts'
 import type {
   WizardDiscipline,
   WizardElement,
@@ -44,7 +44,7 @@ export default function PlayerCardDialog({
   const dialogRef = useRef<HTMLElement>(null)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
-  const className = HALL_OF_FAME_CLASS_NAMES[player.element][player.discipline]
+  const className = nativeWizardClassTitle(player.element, player.discipline)
   useEffect(() => {
     dialogRef.current?.focus({ preventScroll: true })
     const closeOnEscape = (event: KeyboardEvent) => {

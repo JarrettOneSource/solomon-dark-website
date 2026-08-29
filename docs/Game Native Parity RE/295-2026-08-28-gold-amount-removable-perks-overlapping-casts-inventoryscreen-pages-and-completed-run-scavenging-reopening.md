@@ -1,5 +1,164 @@
 # 2026-08-28 — Gold amount, removable perks, overlapping casts, InventoryScreen pages, and completed-run scavenging reopening
 
+## 2026-08-28 — Assigned wizard class-title secondary-report reopening
+
+### Reported smell and parity question
+
+- A player reports that InventoryScreen's top-left wizard identity prints raw
+  pairs such as `AIR ARCANE` or `ETHER BODY`, while stock assigns one title to
+  each element/discipline combination.
+- This reopens the page-0 identity row below, which was called
+  `verified-already-at-parity`. The skipped rule was to follow the renderer's
+  direct native callee: the 2026-08-28 implementation reconstructed a label
+  from the two web enum names even though `InventoryScreen` calls the shared
+  class-title lookup and the complete lookup had already been extracted for
+  Hall of Fame.
+- The report recalls examples including Gypsy, Astronomer, and Clairvoyant.
+  Those recollections are falsifiers, not source data: the byte-verified retail
+  title table and executable string census must decide the shipped names.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same executable and canonical analyzed program as the existing Hall and Inventory ledgers. | high |
+| Instructions and complete static table | `WizardClassTitle 0x00658B40` | Element ids `0..4` are Ether, Fire, Air, Water, Earth; discipline ids `5..7` are Body, Mind, Arcane. The function returns all 15 titles enumerated below and `WIZARD` only for an invalid pair. | high |
+| Complete xref sweep | all references to `0x00658B40` in canonical Ghidra program `SolomonDark.exe` | Exactly two native consumers exist: `InventoryScreen::Render 0x00562520` at `0x00562C51` and Hall loading `0x005A13A0` at `0x005A1B46`. | high |
+| Inventory instructions | `0x00562C2A..0x00562DB3`; format string `Level %d\n%s` at `0x00795144` | Inventory reads the live wizard's element at `+0x82C`, discipline at `+0x830`, and level at `+0x30`; calls the lookup; formats the level and assigned title as one two-line string; and draws it with medium Fonts group 1 at `Fonts + 0x4D530`. | high |
+| Executable string census | retail file offsets `0x39EA00..0x39EAA8` | The contiguous authored bank is `WIZARD`, then the exact 15 strings below. `GYPSY` and `CLAIRVOYANT` are absent. `ASTRONOMER` occurs only as RTTI for the separate Courtyard ambient class; the wizard title is `ASTROLOGER`. | high |
+| Current web causal trace | Website base `213d34d6`; `hub-inventory-renderer.ts`, `hall-of-fame.ts`, `HallOfFameScene.tsx`, `PlayerCardDialog.tsx`, and `hub-npc-dialogue.ts` | Hall, the Website player-card extension, and memorial inspection consume the extracted table, but Inventory page 0 bypasses it and paints ``${element.toUpperCase()} ${discipline.toUpperCase()}``. The table is incorrectly owned by the Hall module rather than shared wizard identity. | high |
+
+The instruction queries used the canonical read-only replica workflow and the
+existing Mod Loader checkout only as tooling: tool revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`, wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`,
+`decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+and `refs_to_addr_decompile.py` SHA-256
+`c6844b842ccd87aa70d290ae34553d874a8f90866eb234425f7c51fd8a438c4b`.
+
+### System boundary and membership inventory
+
+Native system: the pure wizard class-title lookup from a valid creation
+element and discipline, plus every native and Website presentation surface
+that claims to show that assigned title.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Ether + Body = `SAGE` | `0x00658B40`, ids `0/5` | `exact-ported` | complete shared-table assertion |
+| Ether + Mind = `SEER` | `0x00658B40`, ids `0/6` | `exact-ported` | complete shared-table assertion |
+| Ether + Arcane = `OCCULTIST` | `0x00658B40`, ids `0/7` | `exact-ported` | complete shared-table assertion |
+| Fire + Body = `WARLOCK` | `0x00658B40`, ids `1/5` | `exact-ported` | complete shared-table assertion |
+| Fire + Mind = `PYROMANCER` | `0x00658B40`, ids `1/6` | `exact-ported` | complete shared-table assertion |
+| Fire + Arcane = `FIRE MAGE` | `0x00658B40`, ids `1/7` | `exact-ported` | complete shared-table assertion |
+| Air + Body = `STORMCALLER` | `0x00658B40`, ids `2/5` | `exact-ported` | complete shared-table assertion |
+| Air + Mind = `ASTROLOGER` | `0x00658B40`, ids `2/6` | `exact-ported` | complete shared-table assertion |
+| Air + Arcane = `STORM MAGE` | `0x00658B40`, ids `2/7` | `exact-ported` | complete shared-table assertion |
+| Water + Body = `ICEBINDER` | `0x00658B40`, ids `3/5` | `exact-ported` | complete shared-table assertion |
+| Water + Mind = `THAUMATURGE` | `0x00658B40`, ids `3/6` | `exact-ported` | complete shared-table assertion |
+| Water + Arcane = `FROST MAGE` | `0x00658B40`, ids `3/7` | `exact-ported` | complete shared-table assertion |
+| Earth + Body = `RITUALIST` | `0x00658B40`, ids `4/5` | `exact-ported` | complete shared-table assertion |
+| Earth + Mind = `CHANNELER` | `0x00658B40`, ids `4/6` | `exact-ported` | complete shared-table assertion |
+| Earth + Arcane = `EARTH MAGE` | `0x00658B40`, ids `4/7` | `exact-ported` | complete shared-table assertion |
+| Invalid-pair `WIZARD` fallback | final branch of `0x00658B40` | `out-of-system` — Website character configuration is strictly decoded to the five elements and three disciplines before presentation | type/codec coverage retains the closed domain; no invented fallback title |
+| InventoryScreen page-0 identity | `0x00562520`, xref `0x00562C51`, `Level %d\n%s` | `exact-ported` by this corrective pass | Air/Arcane and Ether/Body identity assertions plus real Inventory browser capture |
+| Hall of Fame row title | `0x005A13A0`, xref `0x005A1B46`; row renderer `0x005A2C80` | `verified-already-at-parity` | existing populated-row and complete-table coverage, now using the shared owner |
+| Website player-card class | Website social extension | `exact-ported` extension | same shared lookup; no second title table |
+| Website memorial-inspection class | Website social/memorial extension | `exact-ported` extension | same shared lookup; no Hall-owned wrapper |
+| Create element/discipline selectors | no lookup xref in Create | `out-of-system` — this is the input surface for the two components, before an assigned-title consumer | Create continues to expose the actual choices |
+| Native save-transfer preview | Website import/export extension | `out-of-system` — intentionally reports serialized component values, not a stock class-title surface | no change to portability diagnostics |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- Creation and save state own the element/discipline pair. The lookup is pure,
+  immutable, and has no clock, random, audio, input, destruction, or teardown
+  state. All consumers derive the title when rendering; no title is serialized
+  or replicated separately.
+- InventoryScreen and Hall are the only native xrefs. Inventory uses one
+  newline-separated `Level %d\n%s` medium-font value; Hall uses the same title
+  in its row-specific `Level %d %s` string. Raw component names are never a
+  class-title fallback for a valid retail wizard.
+- Website authority already replicates the same typed character configuration
+  to Inventory, Hall records, and player cards. The correction is therefore a
+  shared presentation lookup, not a protocol, save, or host-state change.
+- The top-left Inventory page geometry, clipping, tint, medium font, and
+  16-pixel native line height were already correct. Only the content owner was
+  wrong; replacing it must not disturb the three-page SwipePages lifecycle.
+
+### Nearby-system findings
+
+- The player's examples correctly identify the kind of missing feature but do
+  not match retail 0.72.5 data. In particular, `ASTRONOMER` names a Courtyard
+  ambient class; `ASTROLOGER` is the shipped Air/Mind wizard title. Adding
+  Gypsy, Astronomer, or Clairvoyant would create a new table rather than restore
+  stock behavior.
+- Housing the table under Hall of Fame allowed the later Inventory port to miss
+  it. Assigned wizard identity belongs in a shared core kernel consumed by Hall,
+  Inventory, and explicit Website extensions.
+
+### Web implementation consequence
+
+- Move the complete exact-uppercase table and lookup into a shared
+  `native-wizard-class.ts` owner. Delete the Hall-owned duplicate and wrapper;
+  all class-title consumers import the shared function directly.
+- Make Inventory page 0 build the exact two-line `LEVEL <n>\n<TITLE>` value
+  through a tested render-contract function and submit it as one medium-font
+  text node. Remove the raw element/discipline label path completely.
+- Preserve Create and save-transfer component labels because they do not claim
+  to be assigned-title consumers.
+
+### Validation contract
+
+- Exhaustively assert every one of the 15 table rows and the two reported
+  combinations: Air/Arcane must be `STORM MAGE`; Ether/Body must be `SAGE`.
+- Assert Inventory's exact multiline value, medium-font line geometry, and no
+  raw component fallback; retain Hall populated-row coverage and player-card
+  type coverage through the same shared import.
+- On the Mac mini, run focused native-UI and Hall suites, the canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`, and a real production-bundle
+  Chrome journey from Create into Hub Inventory. The capture must visibly show
+  the assigned title and return empty page, console, failed-response, WebGL,
+  and host-error arrays.
+
+### Implementation validation receipt
+
+- `native-wizard-class.ts` now owns the exact uppercase 15-row table and the
+  single typed lookup. Hall, Inventory, player cards, and memorial inspection
+  consume that owner directly; the Hall-owned table/wrapper and Inventory's raw
+  element/discipline concatenation were removed. Inventory submits one
+  `LEVEL <n>\n<TITLE>` medium-font node at the existing native baseline, so the
+  default 16-pixel group-1 line height preserves the recovered geometry.
+- The Mac red pass failed exactly at the two new seams: Hall could not resolve
+  `native-wizard-class.ts`, and native UI could not import
+  `hubInventoryWizardIdentityText`. After implementation, focused Mac suites
+  passed Hall `36/36`, native UI `55/55`, and Hub UI `80/80`. The complete
+  table assertion covers every authored row; focused Inventory assertions pin
+  Air/Arcane to `LEVEL 7\nSTORM MAGE` and Ether/Body to `LEVEL 3\nSAGE`.
+- The first canonical run encountered one transient failure in the broad
+  1,684-test Boneyard process after 1,683 siblings passed. The unchanged exact
+  suite immediately reran `1,684/1,684`; no product edit was made. A clean
+  second canonical `/opt/homebrew/bin/bash ./scripts/validate.sh` then passed:
+  28 backend contracts, lint with 17 existing warnings and zero errors, every
+  frontend suite including Hall `36/36` and Hub UI `80/80`, desktop `5/5`,
+  Release backend and production frontend/game-host builds, bundle budget, and
+  media policy. The production Game entry was 262,618 raw / 79,651 gzip bytes
+  under 524,288 / 134,144. Pre-receipt full-gate log SHA-256 was
+  `37e131c19d24b81958b1b1f03de0342cc8947c47b382fb329575207c71e80c8a`.
+  The final post-receipt run uses this exact documented tree as its candidate.
+- A real Mac Chrome journey used the built production bundle and built
+  authoritative host, selected Air then Arcane through Create, entered the
+  Hub, and opened settled Inventory. Visual inspection shows `STORM MAGE`
+  directly below `LEVEL 1`; no raw `AIR ARCANE` label remains. Page errors,
+  console errors, failed responses, request failures, WebGL context losses, and
+  structured host errors were all empty. Full-stage and identity-crop SHA-256
+  values were `086fedae458cde24bc485667260bafad293b898f3d123b85bf2baff4d354bc8c`
+  and `21d5e4be8c6745ab02c39e1ac14498c71a4006d67f7b92c2c65b9b414821bac3`.
+- No protocol, save-schema, authority, timing, input, or platform adaptation was
+  required. No material in-system unknown or `blocked-by-platform` member
+  remains.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Gold piles appear capped at 8 while Gold Charm is

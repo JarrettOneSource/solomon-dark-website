@@ -68,6 +68,7 @@ import {
   hubDyeSwatchRect,
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
+  hubInventoryWizardIdentityText,
   hubInventoryStatsArrowRect,
   hubInventoryStatsPage,
   hubInventoryItemInfoText,
@@ -690,6 +691,11 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
   assert.deepEqual(hubInventoryStatsArrowRect(1, 'up', true), [373, 101, 36, 36])
   assert.deepEqual(hubInventoryStatsArrowRect(1, 'down', true), [373, 361, 36, 36])
   assert.equal(hubInventoryStatsArrowRect(2, 'down', false), null)
+})
+
+test('InventoryScreen assigns the retail class title instead of exposing its component pair', () => {
+  assert.equal(hubInventoryWizardIdentityText(7, 'air', 'arcane'), 'LEVEL 7\nSTORM MAGE')
+  assert.equal(hubInventoryWizardIdentityText(3, 'ether', 'body'), 'LEVEL 3\nSAGE')
 })
 
 test('shop and dowsing screens use the recovered stock grids without invented pages', () => {

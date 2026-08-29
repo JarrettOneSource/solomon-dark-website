@@ -2,9 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  HALL_OF_FAME_CLASS_NAMES,
   formatHallOfFameTime,
-  hallOfFameClassName,
   rankHallOfFameEntries,
   type HallOfFameEntry,
 } from './hall-of-fame.ts'
@@ -34,17 +32,6 @@ test('supports Website-global boards with Awesomeness as the secondary rank', ()
 test('formats the populated native sample time from the 100 Hz clock', () => {
   assert.equal(formatHallOfFameTime(33_950), '0:05:39')
   assert.equal(formatHallOfFameTime(366_100), '1:01:01')
-})
-
-test('drains the complete native five-element by three-discipline title table', () => {
-  assert.deepEqual(HALL_OF_FAME_CLASS_NAMES, {
-    ether: { body: 'Sage', mind: 'Seer', arcane: 'Occultist' },
-    fire: { body: 'Warlock', mind: 'Pyromancer', arcane: 'Fire Mage' },
-    air: { body: 'Stormcaller', mind: 'Astrologer', arcane: 'Storm Mage' },
-    water: { body: 'Icebinder', mind: 'Thaumaturge', arcane: 'Frost Mage' },
-    earth: { body: 'Ritualist', mind: 'Channeler', arcane: 'Earth Mage' },
-  })
-  assert.equal(hallOfFameClassName('ether', 'mind'), 'Seer')
 })
 
 function entry(patch: Partial<HallOfFameEntry>): HallOfFameEntry {
