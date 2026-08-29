@@ -277,6 +277,7 @@ if [[ -z "$artifact_checksum" ]]; then
         Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
+        GameHost/boneyard-navigation-worker.mjs \
         GameHost/game-session-supervisor.mjs \
         GameHost/lua54.wasm \
         GameHost/ml-bot-policy-v7-selected.sdml \
@@ -581,6 +582,7 @@ for required_file in \
     Deploy/solomon-dark-game.service \
     Deploy/solomon-dark-revived.caddy \
     Server.dll \
+    GameHost/boneyard-navigation-worker.mjs \
     GameHost/game-session-supervisor.mjs \
     GameHost/lua54.wasm \
     GameHost/ml-bot-policy-v7-selected.sdml \

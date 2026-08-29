@@ -580,21 +580,31 @@ test('game session supervisor admits independent players to one shared Hub and r
     .continuation.summary.partyRejoinToken as string
   const secondPlayerId = second.welcome.playerId
   await closeSocket(second.socket)
-  const rejoinResponse = await fetch(`${supervisor.address.url}/admin/rejoin`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${ADMIN_SECRET}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      content: EMPTY_CONTENT,
-      developerAccess: false,
-      leaderboardUserId: 43,
-      save: secondCheckpoint.save,
-      token: rejoinToken,
-    }),
+  let rejoinResponse: Response | null = null
+  await waitFor(async () => {
+    const candidate = await fetch(`${supervisor.address.url}/admin/rejoin`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${ADMIN_SECRET}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: EMPTY_CONTENT,
+        developerAccess: false,
+        leaderboardUserId: 43,
+        save: secondCheckpoint.save,
+        token: rejoinToken,
+      }),
+    })
+    if (candidate.status === 201) {
+      rejoinResponse = candidate
+      return true
+    }
+    assert.equal(candidate.status, 409, await candidate.text())
+    return false
   })
-  assert.equal(rejoinResponse.status, 201)
+  assert.ok(rejoinResponse)
+  assert.equal(rejoinResponse.status, 201, await rejoinResponse.clone().text())
   const rejoinEndpoint = await rejoinResponse.json() as ProvisionedEndpoint
   second = await joinSaved(
     supervisor.address.url,

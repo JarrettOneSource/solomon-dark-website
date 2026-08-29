@@ -423,3 +423,24 @@ the behavioral oracle.
 - No browser constraint or intentional behavior difference remains. This
   receipt is the sole post-validation documentation write; no runtime, test,
   build, asset, protocol, or browser byte changed afterward.
+
+### 2026-08-28 — navigation-worker release packaging correction
+
+- Live deployment of `bce83468` proved that the preceding receipt's
+  "packaged navigation worker is present" statement was too broad. The
+  frontend build did emit `dist-game-host/boneyard-navigation-worker.mjs`, but
+  `backend/Server.csproj` did not link it into `GameHost/` and both guarded
+  release manifests named only the existing ML worker. Production therefore
+  reached the new revision healthy while the first Boneyard start would have
+  failed to spawn its navigation worker. No player entered during this window.
+- This is a publication-contract failure, not a navigation-model failure. The
+  complete worker membership is the build entry, .NET publish content link,
+  artifact required-file list, staged-release required-file list, and deployed
+  `GameHost/` member. Every row must name
+  `boneyard-navigation-worker.mjs`; successful compilation alone is not a
+  deployment receipt.
+- Add one backend content row, both guarded release-manifest rows, and a
+  validation contract that enumerates both server workers across build,
+  publish, and deployment owners. Re-run the complete Mac gate, push normally,
+  and prove the live release contains a nonempty worker before any gameplay
+  claim.

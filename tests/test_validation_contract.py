@@ -229,6 +229,21 @@ class ValidationContractTests(unittest.TestCase):
         self.assertNotIn("SDR_GAME_REVISION", deploy)
         self.assertNotIn("ml-bot-policy-v5-selected.sdml", nfo_readme)
 
+    def test_main_deployment_packages_every_game_worker(self) -> None:
+        build = (ROOT / "frontend/tools/build-game-host.mjs").read_text()
+        project = (ROOT / "backend/Server.csproj").read_text()
+        deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
+
+        workers = {
+            "boneyard-navigation-worker.mjs": "boneyard-navigation-worker",
+            "ml-bot-policy-worker.mjs": "ml-bot-policy-worker",
+        }
+        for artifact, entrypoint in workers.items():
+            with self.subTest(artifact=artifact):
+                self.assertIn(f"'{entrypoint}':", build)
+                self.assertIn(f"dist-game-host/{artifact}", project)
+                self.assertGreaterEqual(deploy.count(f"GameHost/{artifact}"), 2)
+
     def test_main_deployment_owns_game_systemd_unit(self) -> None:
         deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
         unit = (ROOT / "ops/nfo/solomon-dark-game.service").read_text()
