@@ -337,6 +337,7 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(playerCharacterStaffIsFront(5), true)
   assert.equal(playerCharacterStaffIsFront(16), true)
   assert.equal(playerCharacterStaffIsFront(17), false)
+  assert.equal(playerCharacterStaffIsFront(18, 9), true)
 
   assert.equal(playerCharacterRobePose(4.999), 4)
   closeTo(playerCharacterFixedRobeOffset(90).x, Math.SQRT1_2)

@@ -212,6 +212,11 @@ No member is blocked by the browser platform.
 - Entry 237 remains authoritative for the independent selected-primary orb.
   This branch reuses its atomic selected identity but not its painter stack or
   orb scale.
+- The complete 240-frame depth comparison found one stale analytic sibling:
+  pose 9, heading 18 has primary-hand point 0 Y `12.5`, so it belongs to the
+  front attachment pass. Pose 9 now owns a distinct Cast-2 depth table while
+  poses 7/8 retain the authored back member at that heading; every other
+  analytic pose/heading result already matches the extracted Clothes row.
 
 ### Confidence and open questions
 

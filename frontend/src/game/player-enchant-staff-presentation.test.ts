@@ -12,6 +12,7 @@ import {
   nativeEnchantStaffGlowTint,
   nativeEnchantStaffWeldGlowTint,
 } from './player-enchant-staff-presentation.ts'
+import { playerCharacterStaffIsFront } from './player-character-presentation.ts'
 
 const learned = (
   permanentRank: number,
@@ -107,6 +108,14 @@ test('every heading and attachment pose consumes the extracted native point/dept
       assert.deepEqual(draw.start, extracted.start, `${pose}:${headingIndex}:start`)
       assert.deepEqual(draw.end, extracted.end, `${pose}:${headingIndex}:end`)
       assert.equal(draw.front, extracted.front, `${pose}:${headingIndex}:depth`)
+      assert.equal(
+        draw.front,
+        playerCharacterStaffIsFront(
+          headingIndex,
+          pose as Parameters<typeof playerCharacterStaffIsFront>[1],
+        ),
+        `${pose}:${headingIndex}:shared-depth`,
+      )
       assert.equal(draw.vertices.length, 8, `${pose}:${headingIndex}:vertices`)
       assert.ok(draw.vertices.every(Number.isFinite), `${pose}:${headingIndex}:finite`)
     }

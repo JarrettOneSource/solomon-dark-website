@@ -38,6 +38,13 @@ const CAST_STAFF_FRONT: readonly boolean[] = [
   false, false, false, false, false, false,
 ]
 
+const CAST_TWO_STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, false,
+  false, true, true, true, true, true,
+  true, true, true, true, true, true,
+  true, false, false, false, false, false,
+]
+
 const MELEE_ALT_STAFF_FRONT: readonly boolean[] = [
   false, false, false, false, false, false,
   false, true, true, true, true, true,
@@ -213,9 +220,11 @@ export function playerCharacterStaffIsFront(
   headingIndex: number,
   attachmentPose: PlayerStaffAttachmentPose = 0,
 ): boolean {
-  const bank = attachmentPose === 7 || attachmentPose === 8 || attachmentPose === 9
-    ? CAST_STAFF_FRONT
-    : attachmentPose === 4
+  const bank = attachmentPose === 9
+    ? CAST_TWO_STAFF_FRONT
+    : attachmentPose === 7 || attachmentPose === 8
+      ? CAST_STAFF_FRONT
+      : attachmentPose === 4
         || attachmentPose === 5
         || attachmentPose === 6
       ? MELEE_ALT_STAFF_FRONT
