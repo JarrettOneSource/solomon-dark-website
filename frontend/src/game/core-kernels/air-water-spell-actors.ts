@@ -43,6 +43,7 @@ export const NATIVE_HAIL_BOUNCE_RESTITUTION = Math.fround(0.65)
 export const NATIVE_HAIL_STOP_VELOCITY = Math.fround(-0.75)
 export const NATIVE_HAIL_BASE_SPEED = Math.fround(4)
 export const NATIVE_HAIL_ANGLE_DIVISIONS = 100_000
+export const NATIVE_HAIL_MINIMUM_HEIGHT = -80
 export const NATIVE_WATER_AURA_INITIAL_ALPHA = Math.fround(0.5)
 export const NATIVE_WATER_AURA_ALPHA_RADIUS_FACTOR = Math.fround(0.15)
 export const NATIVE_WATER_AURA_SCALE_FACTOR = 1.0149999856948853
@@ -285,7 +286,7 @@ export function createNativeWaterHailActor(
   ownerId: string,
   worldKey: string,
   birthTick: number,
-  frostPosition: Readonly<Vector2>,
+  frostEmitter: Readonly<Vector2>,
   frostDirection: Readonly<Vector2>,
   sourceRng: NativeRngState,
 ): NativeWaterHailBirthResult {
@@ -327,8 +328,8 @@ export function createNativeWaterHailActor(
       life: NATIVE_HAIL_INITIAL_LIFE,
       ownerId,
       position: {
-        x: Math.fround(frostPosition.x + radial.x),
-        y: Math.fround(frostPosition.y + radial.y),
+        x: Math.fround(frostEmitter.x + radial.x),
+        y: Math.fround(frostEmitter.y + radial.y),
       },
       rotationDegrees: rotation.value,
       rotationStepDegrees: Math.fround(1 + rotationStep.value),
@@ -345,6 +346,15 @@ export function stepNativeWaterHailActor(
   source: PrimarySpellWaterHailState,
   sourceRng: NativeRngState,
 ): NativeWaterHailTickResult {
+  if (source.height === 0) {
+    const life = Math.fround(source.life - NATIVE_HAIL_LIFE_PER_TICK)
+    return {
+      actor: life <= 0
+        ? null
+        : { ...source, ageTicks: source.ageTicks + 1, life },
+      rng: sourceRng,
+    }
+  }
   let rng = sourceRng
   let bounceProgress = Math.min(
     1,

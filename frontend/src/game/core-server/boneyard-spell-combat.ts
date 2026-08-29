@@ -21,11 +21,8 @@ import {
   type NativeFireActorContact,
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
-  createNativeWaterAuraActor,
-  createNativeWaterHailActor,
   drawNativeDisintegratePercentile,
   drawNativeSpellDamage,
-  stepNativeWaterHailActor,
 } from '../core-kernels/air-water-spell-actors.ts'
 import {
   createNativeRng,
@@ -39,10 +36,7 @@ import {
   nativeHurricaneOrbitForce,
   NATIVE_HURRICANE_CONTACT_COOLDOWN,
 } from '../core-kernels/native-hurricane.ts'
-import {
-  waterFrostJetParticleCount,
-  waterFrostJetPlan,
-} from '../core-kernels/primary-spell-water.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
 import {
   nativeEtherBlastDamage,
   NATIVE_ETHER_BLAST_CONTACT_RADIUS,
@@ -219,7 +213,6 @@ export function resolveBoneyardSpellCombat(
   ),
   steamedPulses: readonly NativeSecondarySteamedPulse[] = [],
   fireballHostileCorridorLength: (ownerId: string) => number = () => 1_600,
-  pushStrengthMultiplier: (ownerId: string) => number = () => 1,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -1597,7 +1590,7 @@ export function resolveBoneyardSpellCombat(
                 row.actor.id,
                 root.actorFlags,
                 emission.queryOrigin,
-                profile.vector.values[5]! * pushStrengthMultiplier(emission.ownerId),
+                profile.vector.values[5]!,
                 tick,
                 resolveEnemyMovement,
               )
@@ -1697,7 +1690,7 @@ export function resolveBoneyardSpellCombat(
               enemies,
               row.actor,
               emission.queryOrigin,
-              pushback * pushStrengthMultiplier(emission.ownerId),
+              pushback,
               205 + 4 * widen,
               1,
               resolveEnemyMovement,
@@ -1715,62 +1708,9 @@ export function resolveBoneyardSpellCombat(
       throw new Error('Water channel emission does not own a Water skill payload')
     }
     const profile = emission.primarySkill
-    if (!emission.underpowered && profile.hailThreshold > 0) {
-      for (const frost of waterEmissionTransients(
-        sourceSpells,
-        emission,
-        waterFrostJetParticleCount(profile.widenHalfDegrees),
-      )) {
-        const visualGate = drawNativeInteger(rng, 250)
-        rng = visualGate.state
-        if (visualGate.value >= profile.hailThreshold) continue
-        const plan = waterFrostJetPlan(frost)
-        const hail = createNativeWaterHailActor(
-          nextSpellId,
-          emission.ownerId,
-          worldKey,
-          tick,
-          plan.position,
-          frost.direction,
-          rng,
-        )
-        rng = hail.rng
-        ownedTransients.push(hail.actor)
-        nextSpellId += 1
-      }
-    }
-    if (!emission.underpowered && profile.auraRadius > 0) {
-      for (const row of nativePrimaryRootTargetRows(
-        enemies,
-        emission.queryOrigin,
-        profile.auraRadius,
-        0x2,
-      )) {
-        queueTargetEffect(row.actor.id, {
-          coldSlowFactor: profile.auraMovementFactor,
-          coldSlowMaterial: true,
-          coldSlowTicks: profile.coldDurationTicks,
-        })
-      }
-      if (tick % 6 === 0) {
-        const aura = createNativeWaterAuraActor(
-          nextSpellId,
-          emission.ownerId,
-          worldKey,
-          tick,
-          emission.queryOrigin,
-          profile.auraRadius,
-          rng,
-        )
-        rng = aura.rng
-        ownedTransients.push(aura.actor)
-        nextSpellId += 1
-      }
-    }
-
     const pushbackFactor = emission.underpowered
       ? 0
-      : Math.fround(profile.pushbackFactor * pushStrengthMultiplier(emission.ownerId))
+      : profile.pushbackFactor
     const rows = primaryWaterTargetRows(enemies)
     const contacts = nativePrimaryConeTargets({
       actorMask: emission.underpowered
@@ -1822,17 +1762,6 @@ export function resolveBoneyardSpellCombat(
         coldSlowMaterial: true,
         coldSlowTicks: emission.underpowered ? 25 : profile.coldDurationTicks,
       })
-      if (pushbackFactor > 0) {
-        enemies = applyWaterPushback(
-          enemies,
-          row.actor,
-          emission.queryOrigin,
-          pushbackFactor,
-          profile.reach,
-          nativeWaterPushTargetFactor(target.actorFlags),
-          resolveEnemyMovement,
-        )
-      }
       const amount = emission.damage * validatedDamageMultiplier(
         damageMultiplier(row.actor.id, 'water', emission.ownerId),
       )
@@ -1843,48 +1772,87 @@ export function resolveBoneyardSpellCombat(
         sourcePlayerId: emission.ownerId,
         tick,
       })
-      if (!damaged.accepted) continue
-      enemies = damaged.store
-      events.push(...damaged.events)
-      hits.push({
-        actorId: row.actor.id,
-        amount,
-        killed: damaged.killed,
-        ownerId: emission.ownerId,
-        spellId: emission.id,
-        spellKind: 'water',
-        tick,
-      })
+      if (damaged.accepted) {
+        enemies = damaged.store
+        events.push(...damaged.events)
+        hits.push({
+          actorId: row.actor.id,
+          amount,
+          killed: damaged.killed,
+          ownerId: emission.ownerId,
+          spellId: emission.id,
+          spellKind: 'water',
+          tick,
+        })
 
-      if (emission.underpowered || profile.hailThreshold <= 0) continue
-      const hail = drawNativeInteger(rng, 3_000)
-      rng = hail.state
-      if (hail.value >= profile.hailThreshold) continue
-      const hailDamage = drawNativeSpellDamage(
-        rng,
-        profile.hailDamageMinimum,
-        profile.hailDamageMaximum,
-      )
-      rng = hailDamage.rng
-      const hailContact = damageBoneyardEnemy(enemies, {
-        lethalObserver,
-        actorId: row.actor.id,
-        amount: hailDamage.value,
-        sourcePlayerId: emission.ownerId,
-        tick,
-      })
-      if (!hailContact.accepted) continue
-      enemies = hailContact.store
-      events.push(...hailContact.events)
-      hits.push({
-        actorId: row.actor.id,
-        amount: hailDamage.value,
-        killed: hailContact.killed,
-        ownerId: emission.ownerId,
-        spellId: emission.id,
-        spellKind: 'water-hail',
-        tick,
-      })
+        if (!emission.underpowered && profile.hailThreshold > 0) {
+          const hail = drawNativeInteger(rng, 3_000)
+          rng = hail.state
+          if (hail.value < profile.hailThreshold) {
+            const hailDamage = drawNativeSpellDamage(
+              rng,
+              profile.hailDamageMinimum,
+              profile.hailDamageMaximum,
+            )
+            rng = hailDamage.rng
+            const hailAmount = hailDamage.value * validatedDamageMultiplier(
+              damageMultiplier(row.actor.id, 'water-hail', emission.ownerId),
+            )
+            const hailContact = damageBoneyardEnemy(enemies, {
+              lethalObserver,
+              actorId: row.actor.id,
+              amount: hailAmount,
+              sourcePlayerId: emission.ownerId,
+              tick,
+            })
+            if (hailContact.accepted) {
+              enemies = hailContact.store
+              events.push(...hailContact.events)
+              hits.push({
+                actorId: row.actor.id,
+                amount: hailAmount,
+                killed: hailContact.killed,
+                ownerId: emission.ownerId,
+                spellId: emission.id,
+                spellKind: 'water-hail',
+                tick,
+              })
+            }
+          }
+        }
+      }
+
+      const liveActor = boneyardSpellTargetById(enemies, row.actor.id)
+      if (
+        pushbackFactor > 0
+        && liveActor !== null
+        && !frostJetPushBlocked(enemies, liveActor, emission.origin)
+      ) {
+        enemies = applyWaterPushback(
+          enemies,
+          liveActor,
+          emission.origin,
+          pushbackFactor,
+          profile.reach,
+          nativeWaterPushTargetFactor(target.actorFlags),
+          resolveEnemyMovement,
+        )
+      }
+    }
+
+    if (!emission.underpowered && profile.auraRadius > 0) {
+      for (const row of nativePrimaryRootTargetRows(
+        enemies,
+        emission.queryOrigin,
+        profile.auraRadius,
+        0x2,
+      )) {
+        queueTargetEffect(row.actor.id, {
+          coldSlowFactor: profile.auraMovementFactor,
+          coldSlowMaterial: true,
+          coldSlowTicks: profile.coldDurationTicks,
+        })
+      }
     }
   }
 
@@ -1892,16 +1860,6 @@ export function resolveBoneyardSpellCombat(
   for (const effect of sourceSpells.transients) {
     if (effect.worldKey !== worldKey) {
       steppedTransients.push(effect)
-      continue
-    }
-    if (effect.kind === 'water-hail') {
-      if (effect.birthTick === tick) {
-        steppedTransients.push(effect)
-        continue
-      }
-      const stepped = stepNativeWaterHailActor(effect, rng)
-      rng = stepped.rng
-      if (stepped.actor) steppedTransients.push(stepped.actor)
       continue
     }
     steppedTransients.push(updatedTransients.get(effect.id) ?? effect)
@@ -1955,23 +1913,6 @@ export function nativeWeldFrostRadialRadius(pushScalar: number): number {
 
 export function nativeWaterPushTargetFactor(actorFlags: number): number {
   return (actorFlags & 0x40) !== 0 ? Math.fround(0.10000000149011612) : 1
-}
-
-function waterEmissionTransients(
-  spells: PrimarySpellSimulationState,
-  emission: PrimarySpellChannelEmission,
-  particleCount: number,
-): readonly Extract<PrimarySpellTransientState, { kind: 'water' }>[] {
-  return spells.transients.filter((effect): effect is Extract<
-    PrimarySpellTransientState,
-    { kind: 'water' }
-  > => (
-    effect.kind === 'water'
-    && effect.ownerId === emission.ownerId
-    && effect.worldKey === emission.worldKey
-    && effect.id >= emission.id
-    && effect.id < emission.id + particleCount
-  )).sort(bySpellId)
 }
 
 function continuePiercingEtherProjectile(
@@ -2045,6 +1986,8 @@ const NATIVE_CHILL_BASE_REACH_OFFSET = 25
 const NATIVE_CHILL_OUTER_RADIUS_FACTOR = 0.75
 const NATIVE_CHILL_INNER_RADIUS_FACTOR = 0.5
 const NATIVE_CHILL_IMPULSE_FACTOR = 2.5
+const NATIVE_CHILL_FORWARD_BLOCKER_OFFSET = Math.fround(PLAYER_CHARACTER_RADIUS + 0.5)
+const NATIVE_CHILL_FORWARD_BLOCKER_RADIUS = Math.fround(PLAYER_CHARACTER_RADIUS / 3)
 const NATIVE_BLIZZARD_WEAK_COLD_SLOW_FACTOR = 0.75
 const NATIVE_BLIZZARD_PUSH_FORWARD_OFFSET = 30
 const NATIVE_BLIZZARD_PUSH_QUERY_RADIUS = 25 / 3
@@ -2201,6 +2144,36 @@ function applyWaterPushback(
     targetBodyRadius(actor),
   )
   return positionBoneyardEnemy(source, actor.id, resolved).store
+}
+
+function frostJetPushBlocked(
+  source: BoneyardEnemyStore,
+  actor: BoneyardSpellTarget,
+  origin: Readonly<Vector2>,
+): boolean {
+  const distanceSquared = Math.fround(squaredDistance(origin, actor.position))
+  if (distanceSquared <= 0) return false
+  const distance = Math.fround(Math.sqrt(distanceSquared))
+  const direction = {
+    x: Math.fround((actor.position.x - origin.x) / distance),
+    y: Math.fround((actor.position.y - origin.y) / distance),
+  }
+  const probe = {
+    x: Math.fround(
+      actor.position.x + Math.fround(direction.x * NATIVE_CHILL_FORWARD_BLOCKER_OFFSET),
+    ),
+    y: Math.fround(
+      actor.position.y + Math.fround(direction.y * NATIVE_CHILL_FORWARD_BLOCKER_OFFSET),
+    ),
+  }
+  return firstNativePrimaryPointContact({
+    actorMask: 0x2,
+    position: probe,
+    queryRadius: NATIVE_CHILL_FORWARD_BLOCKER_RADIUS,
+    targets: primaryTargetRows(source)
+      .map(({ target }) => target)
+      .filter(({ id }) => id !== `enemy:${actor.id}`),
+  }) !== null
 }
 
 function applyBlizzardPushback(

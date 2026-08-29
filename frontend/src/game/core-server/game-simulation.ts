@@ -201,7 +201,10 @@ import {
 } from './boneyard-collision.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
-import { synchronizeAirWaterPlayerVisualActors } from './air-water-player-visual-system.ts'
+import {
+  finalizeAirWaterPlayerVisualActors,
+  synchronizeAirWaterPlayerVisualActors,
+} from './air-water-player-visual-system.ts'
 import {
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
@@ -3496,57 +3499,59 @@ function finishGameSimulationTick(
     )
   }
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
+  const airWaterVisualOwners = playerEntities.identities.flatMap(({ playerId }, index) => {
+    const player = cast.players[playerId]
+    const runtime = playerEntities.skillRuntimes[index]
+    const skillBook = playerEntities.skillBooks[index]
+    const statBook = playerEntities.statBooks[index]
+    const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
+    if (!player || !runtime || !skillBook || !statBook || !derived) return []
+    const hurricane = nativeHurricaneChargeTick(
+      runtime.hurricaneCharge,
+      runtime.hurricaneRefreshed,
+      runtime.hurricaneEnabled,
+      player.primaryCast.channelActive
+        && skillBook.primarySkillId === 24
+        && !player.primaryCast.underpowered,
+    )
+    return [{
+      hurricaneCharge: hurricane.nextCharge,
+      hurricaneContactCharge: hurricane.contactCharge,
+      hurricaneDamageMaximum: resolveNativeSkillDamageValue(
+        29,
+        effectiveSkillNumericValue(skillBook, statBook, 29, 'mDamage2'),
+        {
+          damage: derived.offensiveDamageFactor,
+          equipment: runtime.equipmentModifiers,
+          globalFlatDamage: derived.offensiveDamageFlat,
+          globalManaReduction: derived.offensiveManaCostReduction,
+          manaCost: derived.offensiveManaCostFactor,
+        },
+      ),
+      hurricaneDamageMinimum: resolveNativeSkillDamageValue(
+        29,
+        effectiveSkillNumericValue(skillBook, statBook, 29, 'mDamage1'),
+        {
+          damage: derived.offensiveDamageFactor,
+          equipment: runtime.equipmentModifiers,
+          globalFlatDamage: derived.offensiveDamageFlat,
+          globalManaReduction: derived.offensiveManaCostReduction,
+          manaCost: derived.offensiveManaCostFactor,
+        },
+      ),
+      ownerId: playerId,
+      position: player.position,
+      worldKey: result.world.kind === 'hub'
+        ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
+        : `boneyard:${result.world.runId}`,
+    }]
+  })
   const hurricaneVisuals = synchronizeAirWaterPlayerVisualActors(
     cast.spells,
-    playerEntities.identities.flatMap(({ playerId }, index) => {
-      const player = cast.players[playerId]
-      const runtime = playerEntities.skillRuntimes[index]
-      const skillBook = playerEntities.skillBooks[index]
-      const statBook = playerEntities.statBooks[index]
-      const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
-      if (!player || !runtime || !skillBook || !statBook || !derived) return []
-      const hurricane = nativeHurricaneChargeTick(
-        runtime.hurricaneCharge,
-        runtime.hurricaneRefreshed,
-        runtime.hurricaneEnabled,
-        player.primaryCast.channelActive
-          && skillBook.primarySkillId === 24
-          && !player.primaryCast.underpowered,
-      )
-      return [{
-        hurricaneCharge: hurricane.nextCharge,
-        hurricaneContactCharge: hurricane.contactCharge,
-        hurricaneDamageMaximum: resolveNativeSkillDamageValue(
-          29,
-          effectiveSkillNumericValue(skillBook, statBook, 29, 'mDamage2'),
-          {
-            damage: derived.offensiveDamageFactor,
-            equipment: runtime.equipmentModifiers,
-            globalFlatDamage: derived.offensiveDamageFlat,
-            globalManaReduction: derived.offensiveManaCostReduction,
-            manaCost: derived.offensiveManaCostFactor,
-          },
-        ),
-        hurricaneDamageMinimum: resolveNativeSkillDamageValue(
-          29,
-          effectiveSkillNumericValue(skillBook, statBook, 29, 'mDamage1'),
-          {
-            damage: derived.offensiveDamageFactor,
-            equipment: runtime.equipmentModifiers,
-            globalFlatDamage: derived.offensiveDamageFlat,
-            globalManaReduction: derived.offensiveManaCostReduction,
-            manaCost: derived.offensiveManaCostFactor,
-          },
-        ),
-        ownerId: playerId,
-        position: player.position,
-        worldKey: result.world.kind === 'hub'
-          ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
-          : `boneyard:${result.world.runId}`,
-      }]
-    }),
+    airWaterVisualOwners,
     tick,
     cast.rng,
+    cast.channelEmissions,
   )
   let primarySpells = hurricaneVisuals.spells
   let combatRng = hurricaneVisuals.rng
@@ -3708,10 +3713,6 @@ function finishGameSimulationTick(
       secondaryResult.steamedPulses,
       (ownerId) => primaryInputs[ownerId]?.viewportWidth
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
-      (ownerId) => playerSkillDerivedStatsAt(
-        playerEntities,
-        ownerId,
-      )?.pushStrengthFactor ?? 1,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
@@ -3757,6 +3758,14 @@ function finishGameSimulationTick(
       )
     }
   }
+  const finalizedAirWaterVisuals = finalizeAirWaterPlayerVisualActors(
+    primarySpells,
+    cast.channelEmissions,
+    tick,
+    combatRng,
+  )
+  primarySpells = finalizedAirWaterVisuals.spells
+  combatRng = finalizedAirWaterVisuals.rng
   const players: Record<PlayerId, PlayerCharacterState> = { ...cast.players }
   if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL === 0) {
     for (const [playerId, player] of Object.entries(cast.players)) {

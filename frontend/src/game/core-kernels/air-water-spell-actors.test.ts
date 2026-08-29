@@ -10,6 +10,7 @@ import {
   drawNativeDisintegratePercentile,
   drawNativeStormInitialHeading,
   NATIVE_FREEZE_WAVE_INITIAL_RADIUS,
+  NATIVE_HAIL_MINIMUM_HEIGHT,
   NATIVE_STORM_FADE_TICKS,
   resetNativeStormStrikeDelay,
   stepNativeAirStormActor,
@@ -180,6 +181,46 @@ test('Hail owns Bouncer motion, bounce RNG, audio sequence, and 134-tick life', 
     ticks += 1
   }
   assert.equal(ticks, 134)
+})
+
+test('Hail preserves native settled-zero and full airborne height lifecycle', () => {
+  const born = createNativeWaterHailActor(
+    9,
+    'water',
+    'boneyard:run',
+    44,
+    { x: 100, y: 200 },
+    { x: 1, y: 0 },
+    createNativeRng(41),
+  )
+  const settled = {
+    ...born.actor,
+    bounceProgress: 0.7,
+    height: 0,
+    life: 1,
+  }
+  const stationary = stepNativeWaterHailActor(settled, born.rng)
+  assert.ok(stationary.actor)
+  assert.deepEqual(stationary.rng, born.rng)
+  assert.deepEqual(stationary.actor.position, settled.position)
+  assert.equal(stationary.actor.bounceProgress, settled.bounceProgress)
+  assert.equal(stationary.actor.height, 0)
+
+  let airborne = {
+    ...born.actor,
+    height: Math.fround(-0.0002),
+    savedBounceVelocity: -5,
+  }
+  let rng = born.rng
+  let minimumHeight = airborne.height
+  while (airborne) {
+    const stepped = stepNativeWaterHailActor(airborne, rng)
+    airborne = stepped.actor!
+    rng = stepped.rng
+    if (airborne) minimumHeight = Math.min(minimumHeight, airborne.height)
+  }
+  assert.ok(minimumHeight < -20)
+  assert.ok(minimumHeight >= NATIVE_HAIL_MINIMUM_HEIGHT)
 })
 
 test('Prismatic owns a 100-tick spray actor independent of modifier duration', () => {

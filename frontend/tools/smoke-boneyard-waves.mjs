@@ -63,6 +63,7 @@ const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-m
 const staffSmokeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-smoke$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
 const chillArrowScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-chill-arrow$1')
+const frostAuraHailScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-frost-aura-hail$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
 const gameOverScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-game-over$1')
 const loadoutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-loadout$1')
@@ -1163,6 +1164,10 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   assert.equal(state.levelUpBarrier, null)
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
+  const auraTargetTemplate = state.world.enemies.actors.find((actor) => (
+    actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+  ))
+  assert.ok(auraTargetTemplate, 'opening wave had no Cold Aura target template')
   learnChillWind(state, playerId)
   Object.assign(state, {
     world: {
@@ -1345,7 +1350,15 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   } finally {
     await page.mouse.up({ button: 'left' })
   }
+  const auraHail = await proveFrostAuraHailContact(
+    page,
+    wire,
+    playerId,
+    auraTargetTemplate,
+    frostAuraHailScreenshotPath,
+  )
   return {
+    auraHail,
     arrowId,
     baseline,
     baselineScreenshotPath,
@@ -1359,6 +1372,168 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
     renderedEffectIds: renderedFrame.enemyProjectileEffectIds,
     retirementTick: finalState.tick,
     tumbleTick: hostEffect.spawnTick,
+  }
+}
+
+async function proveFrostAuraHailContact(
+  page,
+  wire,
+  playerId,
+  targetTemplate,
+  screenshotPath,
+) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  learnWaterSkill(state, playerId, 37, 1)
+  learnWaterSkill(state, playerId, 38, 10)
+  learnWaterSkill(state, playerId, 39, 1)
+  const player = getPlayerCharacter(state, playerId)
+  const aim = player.primaryCast.aimDirection
+  const targetPosition = {
+    x: player.position.x - aim.x * 300,
+    y: player.position.y - aim.y * 300,
+  }
+  const target = {
+    ...targetTemplate,
+    config: { ...targetTemplate.config, maximumHealth: 1_000_000 },
+    currentHealth: 1_000_000,
+    nextAttackTick: Number.MAX_SAFE_INTEGER,
+    nextMovementTick: Number.MAX_SAFE_INTEGER,
+    nextTargetRefreshTick: Number.MAX_SAFE_INTEGER,
+    position: targetPosition,
+    targetPlayerId: null,
+  }
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        actors: Object.freeze([target]),
+        maggots: Object.freeze([]),
+        projectileEffects: Object.freeze([]),
+        projectiles: Object.freeze([]),
+      },
+    },
+  })
+
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds)
+  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.5)
+  let receipt = null
+  await page.mouse.down({ button: 'left' })
+  try {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline && receipt === null) {
+      const current = host.state()
+      const aura = [...current.primarySpells.transients].reverse().find((effect) => (
+        effect.kind === 'water-aura' && effect.ownerId === playerId
+      ))
+      const hail = [...current.primarySpells.transients].reverse().find((effect) => (
+        effect.kind === 'water-hail' && effect.ownerId === playerId
+      ))
+      const effect = current.secondaryAbilities.targetEffects.find((candidate) => (
+        candidate.targetId === target.id && candidate.worldKey === `boneyard:${current.world.runId}`
+      ))
+      const frame = await boneyardFrame(page)
+      const wireAura = wire.latestSnapshot?.primarySpells.transients.find((candidate) => (
+        candidate.kind === 'water-aura' && candidate.ownerId === playerId
+      ))
+      const wireHail = wire.latestSnapshot?.primarySpells.transients.find((candidate) => (
+        candidate.kind === 'water-hail' && candidate.ownerId === playerId
+      ))
+      if (
+        aura?.kind === 'water-aura'
+        && hail?.kind === 'water-hail'
+        && effect?.coldSlowFactor === Math.fround(Math.fround(0.6) / Math.fround(1.5))
+        && effect.coldSlowTicks === 200
+        && wireAura?.kind === 'water-aura'
+        && wireHail?.kind === 'water-hail'
+        && frame.primarySpellKinds.includes('water-aura')
+        && frame.primarySpellKinds.includes('water-hail')
+      ) receipt = { aura, effect, frame, hail, wireAura, wireHail }
+      else await page.waitForTimeout(5)
+    }
+    assert.ok(receipt, 'Boneyard never resolved distant Aura/Permafrost and Hail')
+    await page.screenshot({ path: screenshotPath })
+  } finally {
+    await page.mouse.up({ button: 'left' })
+  }
+
+  const pushState = host.state()
+  assert.equal(pushState.world.kind, 'boneyard')
+  const pushPlayer = getPlayerCharacter(pushState, playerId)
+  const pushTarget = pushState.world.enemies.actors.find(({ id }) => id === target.id)
+  assert.ok(pushTarget)
+  const pushHealthStart = pushTarget.currentHealth
+  const pushStart = {
+    x: pushPlayer.position.x + pushPlayer.primaryCast.aimDirection.x * 80,
+    y: pushPlayer.position.y + pushPlayer.primaryCast.aimDirection.y * 80,
+  }
+  Object.assign(pushState, {
+    secondaryAbilities: {
+      ...pushState.secondaryAbilities,
+      targetEffects: pushState.secondaryAbilities.targetEffects.filter((effect) => (
+        effect.targetId !== target.id
+      )),
+    },
+    world: {
+      ...pushState.world,
+      enemies: {
+        ...pushState.world.enemies,
+        actors: pushState.world.enemies.actors.map((actor) => (
+          actor.id === pushTarget.id ? { ...actor, position: pushStart } : actor
+        )),
+      },
+    },
+  })
+  let pushReceipt = null
+  await page.mouse.down({ button: 'left' })
+  try {
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline && pushReceipt === null) {
+      const current = host.state()
+      if (current.world.kind === 'boneyard') {
+        const actor = current.world.enemies.actors.find(({ id }) => id === target.id)
+        const cold = current.secondaryAbilities.targetEffects.find((effect) => (
+          effect.targetId === target.id
+          && effect.worldKey === `boneyard:${current.world.runId}`
+        ))
+        if (
+          actor
+          && actor.currentHealth < pushHealthStart
+          && Math.hypot(actor.position.x - pushStart.x, actor.position.y - pushStart.y) > 0.05
+          && cold?.coldSlowFactor === Math.fround(1 / 3)
+          && cold.coldSlowTicks === 200
+        ) {
+          pushReceipt = { actor, cold }
+        }
+      }
+      if (pushReceipt === null) await page.waitForTimeout(5)
+    }
+  } finally {
+    await page.mouse.up({ button: 'left' })
+  }
+  assert.ok(pushReceipt, 'Frost contact did not apply damage, Cold, and Chill displacement')
+  return {
+    auraFactor: receipt.effect.coldSlowFactor,
+    auraId: receipt.aura.id,
+    auraTicks: receipt.effect.coldSlowTicks,
+    baseColdFactor: pushReceipt.cold.coldSlowFactor,
+    baseColdTicks: pushReceipt.cold.coldSlowTicks,
+    damage: pushHealthStart - pushReceipt.actor.currentHealth,
+    hailId: receipt.hail.id,
+    pushDelta: {
+      x: pushReceipt.actor.position.x - pushStart.x,
+      y: pushReceipt.actor.position.y - pushStart.y,
+    },
+    renderedKinds: [...new Set(receipt.frame.primarySpellKinds.filter((kind) => (
+      kind === 'water-aura' || kind === 'water-hail'
+    )))],
+    screenshotPath,
+    targetDistance: 300,
+    wireAuraId: receipt.wireAura.id,
+    wireHailId: receipt.wireHail.id,
   }
 }
 

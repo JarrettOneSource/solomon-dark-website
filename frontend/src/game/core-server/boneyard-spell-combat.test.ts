@@ -149,7 +149,6 @@ function resolveCombatWithAuthority(
     fireActorContacts?: readonly NativeFireActorContact[]
     fireballCorridorLength?: number
     primarySceneryTargets?: readonly PrimarySpellTarget[]
-    pushStrengthMultiplier?: number
     rngSeed?: number
     steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
@@ -170,7 +169,6 @@ function resolveCombatWithAuthority(
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
     options.steamedPulses ?? [],
     () => options.fireballCorridorLength ?? 1_600,
-    () => options.pushStrengthMultiplier ?? 1,
   )
 }
 
@@ -1410,7 +1408,7 @@ test('Chill Wind excludes Firebolt and Guided Missile projectile families', () =
 test('Chill Wind drains every authored percent through the normalized near-target impulse', () => {
   for (const authoredPushback of [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]) {
     const enemies = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
-    const water = emission({ id: 11, kind: 'water' })
+    const water = emission({ id: 11, kind: 'water', origin: { x: 0, y: 0 } })
     assert.equal(water.primarySkill.kind, 'water')
     const pushbackFactor = Math.fround(authoredPushback * 0.009999999776482582)
     const result = resolveCombatWithAuthority(
@@ -1432,27 +1430,22 @@ test('Chill Wind drains every authored percent through the normalized near-targe
 test('Chill Wind keeps the native squared-distance taper and movement collision owner', () => {
   assert.equal(nativeWaterPushTargetFactor(0x2), 1)
   assert.equal(nativeWaterPushTargetFactor(0x42), Math.fround(0.10000000149011612))
-  const enemies = spawnEnemies([
-    { position: { x: 100, y: 0 }, token: 'SKELETON' },
-    { position: { x: 140, y: 0 }, token: 'SKELETON' },
-    { position: { x: 160, y: 0 }, token: 'SKELETON' },
-  ])
-  const water = emission({ id: 11, kind: 'water' })
+  const water = emission({ id: 11, kind: 'water', origin: { x: 0, y: 0 } })
   assert.equal(water.primarySkill.kind, 'water')
   const profile = { ...water.primarySkill, pushbackFactor: 1 }
-  const result = resolveCombatWithAuthority(
-    enemies,
+  const displaced = [100, 140, 160].map((position) => resolveCombatWithAuthority(
+    spawnEnemies([{ position: { x: position, y: 0 }, token: 'SKELETON' }]),
     spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
     [{ ...water, primarySkill: profile }],
     1,
     { resolveMovement: (_actorId, _start, requested) => requested },
-  )
+  ).enemies.actors[0]!.position.x)
   const outerSquared = Math.fround(Math.fround(180 * 180) * 0.75)
   const innerSquared = Math.fround(outerSquared * 0.5)
   const taper = Math.fround((outerSquared - Math.fround(140 * 140)) / (
     outerSquared - innerSquared
   ))
-  assert.deepEqual(result.enemies.actors.map(({ position }) => position.x), [
+  assert.deepEqual(displaced, [
     Math.fround(102.5),
     Math.fround(140 + Math.fround(2.5 * taper)),
     160,
@@ -1467,45 +1460,72 @@ test('Chill Wind keeps the native squared-distance taper and movement collision 
   )
   assert.equal(blocked.enemies.actors[0]?.position.x, 100)
 
-  const boosted = resolveCombatWithAuthority(
-    spawnEnemies([{ position: { x: 100, y: 0 }, token: 'SKELETON' }]),
-    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
-    [{ ...water, primarySkill: profile }],
-    1,
-    {
-      pushStrengthMultiplier: 2,
-      resolveMovement: (_actorId, _start, requested) => requested,
-    },
-  )
-  assert.equal(boosted.enemies.actors[0]?.position.x, 105)
 })
 
-test('Cone-expanded Frost runs Hail allocation for every emitted visual child', () => {
-  const water = emission({ id: 11, kind: 'water' })
-  assert.equal(water.primarySkill.kind, 'water')
+test('Chill Wind measures from the Staff emitter and a forward hostile blocks displacement', () => {
   const profile = {
-    ...water.primarySkill,
-    hailChance: 100,
-    hailDamageMaximum: 1,
-    hailDamageMinimum: 1,
-    hailThreshold: 3_000,
-    halfAngleDegrees: 52.5,
-    reach: 505,
-    widenHalfDegrees: 75,
+    ...emission({ id: 11, kind: 'water' }).primarySkill,
+    pushbackFactor: 1,
   }
-  const frost = Array.from({ length: 10 }, (_, variant) => transient({
-    id: 11 + variant,
-    kind: 'water',
-    speed: 10,
-    variant,
-  }))
-  const result = resolveCombatWithAuthority(
-    spawnEnemies([]),
-    spellState({ transients: frost }),
-    [{ ...water, primarySkill: profile }],
+  assert.equal(profile.kind, 'water')
+  const angled = resolveCombatWithAuthority(
+    spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }]),
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [emission({
+      id: 11,
+      kind: 'water',
+      origin: { x: 0, y: 20 },
+      primarySkill: profile,
+    })],
     1,
   )
-  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'water-hail').length, 10)
+  const distance = Math.fround(Math.sqrt(Math.fround(50 * 50 + -20 * -20)))
+  assert.deepEqual(angled.enemies.actors[0]?.position, {
+    x: Math.fround(50 + Math.fround(Math.fround(50 / distance) * 2.5)),
+    y: Math.fround(Math.fround(-20 / distance) * 2.5),
+  })
+
+  const blocked = resolveCombatWithAuthority(
+    spawnEnemies([
+      { position: { x: 50, y: 0 }, token: 'SKELETON' },
+      { position: { x: 75.5, y: 0 }, token: 'SKELETON' },
+    ]),
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [emission({
+      id: 11,
+      kind: 'water',
+      origin: { x: 0, y: 0 },
+      primarySkill: profile,
+    })],
+    1,
+  )
+  assert.equal(blocked.enemies.actors[0]?.position.x, 50)
+})
+
+test('Hail damage consumes the owning Frost contact target multiplier', () => {
+  const source = emission({ id: 11, kind: 'water', origin: { x: 0, y: 0 } })
+  assert.equal(source.primarySkill.kind, 'water')
+  const result = resolveCombatWithAuthority(
+    spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }]),
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{
+      ...source,
+      damage: 1,
+      primarySkill: {
+        ...source.primarySkill,
+        hailChance: 100,
+        hailDamageMaximum: 1,
+        hailDamageMinimum: 1,
+        hailThreshold: 3_000,
+      },
+    }],
+    1,
+    { damageMultiplier: (_actorId, kind) => kind === 'water-hail' ? 3 : 1 },
+  )
+  assert.deepEqual(result.hits.map(({ amount, spellKind }) => ({ amount, spellKind })), [
+    { amount: 1, spellKind: 'water' },
+    { amount: 3, spellKind: 'water-hail' },
+  ])
 })
 
 test('underpowered Water carries half damage through the narrow actor-mask lane', () => {
@@ -2393,7 +2413,13 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
   const result = resolveCombatWithAuthority(
     enemies,
     spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
-    [emission({ damage: 1, id: 11, kind: 'water', primarySkill: profile })],
+    [emission({
+      damage: 1,
+      id: 11,
+      kind: 'water',
+      origin: { x: 0, y: 0 },
+      primarySkill: profile,
+    })],
     6,
     {
       resolveMovement: (_actorId, _start, requested) => {
@@ -2413,12 +2439,16 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
   assert.equal(result.enemies.actors[0]?.position.x, Math.fround(50.1))
   assert.deepEqual(movementRequests, [{ x: Math.fround(50.1), y: 0 }])
   assert.deepEqual(result.targetEffects, [
-    { patch: { coldSlowFactor: 0.4, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
     { patch: { coldSlowFactor: 0.25, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
     { patch: { coldSlowFactor: 0.25, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 2, worldKey: WORLD_KEY },
+    { patch: { coldSlowFactor: 0.4, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
   ])
   assert.equal(result.enemies.actors[1]?.currentHealth, 3, 'Cone of Ice widens the acquired wedge')
-  assert.equal(result.spells.transients.some(({ kind }) => kind === 'water-aura'), true)
+  assert.equal(
+    result.spells.transients.some(({ kind }) => kind === 'water-aura'),
+    false,
+    'shared visual synchronization owns Aura birth outside Boneyard combat',
+  )
 })
 
 test('world-mismatched spells remain live without touching Boneyard actors', () => {
@@ -2592,6 +2622,7 @@ function transient(options: {
   direction?: Readonly<{ x: number; y: number }>
   id: number
   kind: 'air' | 'water'
+  origin?: Readonly<{ x: number; y: number }>
   speed?: number
   targetId?: string | null
   variant?: number
@@ -2602,7 +2633,7 @@ function transient(options: {
     ageTicks: options.ageTicks ?? 0,
     direction,
     id: options.id,
-    origin: { x: 0, y: 0 },
+    origin: { ...(options.origin ?? { x: 0, y: 0 }) },
     ownerId: 'wizard',
     underpowered: false,
     variant: options.variant ?? 0,
@@ -2637,6 +2668,7 @@ function emission(options: {
   endpoint?: Readonly<{ x: number; y: number }> | null
   id: number
   kind: PrimarySpellChannelEmission['kind']
+  origin?: Readonly<{ x: number; y: number }>
   underpowered?: boolean
   primarySkill?: PrimarySpellChannelEmission['primarySkill']
   worldKey?: string
@@ -2648,7 +2680,7 @@ function emission(options: {
     id: options.id,
     kind: options.kind,
     manaCost: options.kind === 'air' ? 0.12 : 0.125,
-    origin: { x: -10, y: -10 },
+    origin: { ...(options.origin ?? { x: -10, y: -10 }) },
     ownerId: 'wizard',
     primarySkill: options.primarySkill ?? (options.kind === 'air'
       ? {

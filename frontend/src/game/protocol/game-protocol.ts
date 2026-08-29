@@ -77,6 +77,7 @@ import {
 } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_HAIL_INITIAL_LIFE,
+  NATIVE_HAIL_MINIMUM_HEIGHT,
 } from '../core-kernels/air-water-spell-actors.ts'
 import {
   NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
@@ -8060,7 +8061,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       throw new GameProtocolError(`${field}.bounce sound fields must both be null or present`)
     }
     const height = finite(source.height, `${field}.height`)
-    if (height < -20 || height > 0) {
+    if (height < NATIVE_HAIL_MINIMUM_HEIGHT || height > 0) {
       throw new GameProtocolError(`${field}.height is outside the native Bouncer range`)
     }
     const life = finite(source.life, `${field}.life`)

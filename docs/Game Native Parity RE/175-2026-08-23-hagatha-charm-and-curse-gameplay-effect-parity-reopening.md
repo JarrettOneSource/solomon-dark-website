@@ -76,7 +76,7 @@ disposition.
 | 23 Arcane Attractor | magical-upgrade bound `*= 0.800000011920929` | verified working | seeded powerup branch |
 | 24 Serendipity | active byte `+0x73C`; spell damage `*= 3` until positive remaining damage clears it | missing | fresh/hurt/save/replication |
 | 25 Reverie | active byte `+0x73D`; offensive mana factor becomes zero until the same hurt edge | missing | free cast/hurt/save/replication |
-| 26 Brute's | melee damage `*= 3`; actor push strength `*= 2` | missing | Staff contact and Hub/Boneyard collision |
+| 26 Brute's | melee damage `*= 3`; Player `+0x2C` actor-push strength `*= 2`; direct spell handlers do not read that field | missing | Staff contact, Hub/Boneyard player physics, and negative sustained-spell push coverage |
 | 27 Tonic | capacity `+3`, maximum 9, exactly two purchases | verified working | `3 -> 6 -> 9`, third rejection |
 
 No member is blocked by the browser platform.
@@ -152,8 +152,9 @@ No member is blocked by the browser platform.
   protocol/save normalization and equality rather than hiding state in a
   renderer or host-only side map.
 - Separate spell damage from melee damage in derived stats. Feed player push
-  strength into both Hub and Boneyard actor physics. Apply incoming Glass before
-  defenses and clear until-hurt state after defenses.
+  strength only into native consumers of Player `+0x2C`; direct Water, Steam,
+  and Blizzard handler push operands remain authored spell values. Apply
+  incoming Glass before defenses and clear until-hurt state after defenses.
 - Reuse the existing Mindblast actors, renderer, lighting, and audio for Last
   Word with recovered overrides. Add an owner-local retained Seeker view; do
   not replicate visual phase or spend gameplay RNG.
@@ -165,7 +166,8 @@ No member is blocked by the browser platform.
 - One table-driven contract row per selector 0..27, plus bundle composition,
   Tonics, and Perky exclusion.
 - Derived matrix: neutral/charmed/composed factors; armed/unarmed Bare Hands;
-  spell versus melee Glass/Serendipity/Brute; Hub/Boneyard push contacts.
+  spell versus melee Glass/Serendipity/Brute; Hub/Boneyard player-push contacts;
+  negative Water/Steam/Blizzard direct-handler push cases.
 - Runtime matrix: direct/poison/shielded hurt, Drinker-before-Cheat, spent flags,
   save/restore, and two-owner isolation.
 - Progression matrix: Revelation increment/set/concentration purchase, all ten
@@ -213,11 +215,11 @@ documents fail closed on malformed charges or Weld caches.
 | 19 Disfiguring | verified retained | third ring equip/unequip and persistence remain gated by selector 19 |
 | 20 Bare Hands | verified implemented | no-weapon damage/mana factors are `1.15/0.85`; Staff and Wand both disable them |
 | 21 Split Mind | verified retained | independent A/B concentration, transition, protocol, and save tests remain green |
-| 22 Curse Bosses | verified implemented | IDs 1008..1011 are tripled at primary, secondary, Staff, and Last Word damage seams; nonbosses remain one |
+| 22 Curse Bosses | verified implemented after the 2026-08-29 Frost reopening | IDs 1008..1011 are tripled at primary and learned-primary child contacts (including Hail), secondary, Staff, and Last Word damage seams; nonbosses remain one |
 | 23 Arcane Attractor | verified retained | seeded magical-upgrade bound |
 | 24 Serendipity | verified implemented | accepted purchase arms triple spell damage; zero/shielded damage preserves it and positive remaining damage clears it |
 | 25 Reverie | verified implemented | accepted purchase arms free offensive casts and shares the same defended hurt edge |
-| 26 Brute's | verified implemented | Staff damage consumes factor three and Staff/primary/secondary pushes consume factor two |
+| 26 Brute's | verified implemented after the 2026-08-29 Frost reopening | Staff damage consumes factor three and Player `+0x2C` push consumers use factor two; direct Water/Steam/Blizzard handler operands do not |
 | 27 Tonic | verified retained | exact `3 -> 6 -> 9` capacity and third-purchase rejection |
 
 Residual source sweeps found no obtainable selector left as ownership-only and

@@ -17,6 +17,8 @@ import {
 
 export type { NativeOffensiveSpellFactors } from './native-offensive-resolution.ts'
 
+export const NATIVE_WATER_AURA_WORLD_UNITS_PER_FOOT = 120
+
 interface NativePrimarySkillProfileBase {
   readonly damageMaximum: number
   readonly damageMinimum: number
@@ -251,25 +253,30 @@ export function nativePrimarySkillProfile(
         rankedOr(statBook, 33, 'mPushback', chillRank, 0)
           * 0.009999999776482582,
       )
-      const slowdownScale = 1 + rankedOr(
+      const slowdownScale = Math.fround(1 + rankedOr(
         statBook,
         39,
         'mSlowdown',
         permafrostRank,
         0,
-      ) / 100
+      ) / 100)
       const minimumColdDurationTicks = permafrostRank > 0 ? 200 : 0
-      const auraSlowFactor = 1 - rankedOr(statBook, 37, 'mPercent', auraRank, 0) / 100
+      const auraSlowFactor = Math.fround(
+        1 - rankedOr(statBook, 37, 'mPercent', auraRank, 0) / 100,
+      )
       const hailChance = rankedOr(statBook, 38, 'mToHit', hailRank, 0)
       return Object.freeze({
         ...common,
         armorMaximum: rankedOr(statBook, 36, 'mMaxArmor', hardenRank, 0),
         armorPerSecond: rankedOr(statBook, 36, 'mArmorPlus', hardenRank, 0),
-        auraRadius: rankedOr(statBook, 37, 'mRadius', auraRank, 0),
-        auraMovementFactor: auraSlowFactor,
+        auraRadius: Math.fround(
+          rankedOr(statBook, 37, 'mRadius', auraRank, 0)
+            * NATIVE_WATER_AURA_WORLD_UNITS_PER_FOOT,
+        ),
+        auraMovementFactor: Math.fround(auraSlowFactor / slowdownScale),
         auraSlowFactor,
         coldDurationTicks: Math.max(25, minimumColdDurationTicks),
-        coldMovementFactor: 0.5 / slowdownScale,
+        coldMovementFactor: Math.fround(Math.fround(0.5) / slowdownScale),
         hailChance,
         hailDamageMaximum: rankedOr(statBook, 38, 'mDamage2', hailRank, 0)
           * factors.damage,

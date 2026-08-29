@@ -3954,6 +3954,11 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
   const decoded = decodeEffects(effects)
   assert.equal(decoded.type, 'server-snapshot')
   assert.deepEqual(decoded.frame.primarySpells.transients, effects)
+  assert.doesNotThrow(() => decodeEffects([{ ...effects[2], height: -79.45 }]))
+  assert.throws(
+    () => decodeEffects([{ ...effects[2], height: -80.01 }]),
+    /native Bouncer range/,
+  )
   assert.throws(() => decodeEffects([{ ...effects[0], charge: 0 }]), /charge must be within/)
   assert.throws(() => decodeEffects([{ ...effects[1], ageTicks: 2_400 }]), /native lifetime/)
   assert.throws(() => decodeEffects([{ ...effects[2], ageTicks: 134 }]), /Hail lifecycle/)

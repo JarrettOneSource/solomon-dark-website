@@ -413,3 +413,223 @@ direction = (float32(sin(directionRadians)), float32(-cos(directionRadians)))
   this receipt joins the candidate and any final non-overlapping rebase, the
   exact final tree repeats the complete gate; those non-recursive identities
   belong in the task completion receipt.
+
+## 2026-08-29 — complete Frost Jet damage, control, and child-lifecycle audit
+
+### Reported smell and parity question
+
+- Requested audit: verify the complete Frost Jet cast rather than another
+  presentation-only slice: ranked damage/mana, ColdSlow, Chill displacement
+  and Arrow tumble, Cone geometry, Normal/Over Frost, Harden, Cold Aura, Hail,
+  Permafrost, audio, multiplayer authority, both gameplay scenes, release, and
+  teardown.
+- Process failure in the earlier closures: the 2026-08-15 learned-Water pass
+  documented Cold Aura's `mRadius*120`, Permafrost division, and parent-follow
+  contract but its tests supplied a hand-authored world radius instead of
+  exercising the production profile. The 2026-08-28 pass stopped at Cone/Chill
+  cache writers, asserted that every Frost child owned the Hail gate, and did
+  not inspect the Over branch's direct jump to the particle-loop tail. The
+  Hagatha pass then applied one generic push multiplier to direct spell
+  operands without checking the concrete handlers.
+- Falsifiers: raw authored Aura radius reaching a world query; Aura slow not
+  divided by Permafrost; an Aura actor retaining its birth point after its
+  owner moves; Over Frost consuming a Hail allocation; Hail spawning from a
+  moved Frost particle instead of the Staff emitter; Chill measuring from the
+  player root or moving through a forward hostile blocker; Brute changing the
+  direct Water/Steam/Blizzard push operands; or Hail damage bypassing the same
+  target-specific boss multiplier as its owning Frost contact.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed 0.72.5 image as every preceding Water entry. | high |
+| Handler instructions | canonical Ghidra 12.0.3 replica; Water handler `0x00543860`; Mod Loader tool revision `08bfba9ef367f7b863848030d0a289dc31e33192` used read-only | Recovered the complete order: Frost/Hail visual births, cone query and LOS, base Cold/damage, gameplay Hail, Chill blocker/displacement, Aura query/birth, Harden, and weak cleanup. | high |
+| Aura instructions | `0x0054478A..0x00544A25`; constant QWORD `0x0078E470=120`; `Anim_ColdAura` constructor/update `0x0045AF20/0x0045AFB0`; vtable `0x00785540` | Query radius is authored feet times 120; Cold factor is cached Aura factor divided by Permafrost scale; the actor resolves and follows its owner every tick and deletes on failed owner lookup. | high |
+| Chill instructions | emitter writer `0x0053B830`; displacement `0x00544523..0x0054473B`; point query `0x00641220`; movement `0x00525800` | Distance/direction start at the current Staff socket. A mask-2 point query at `target + direction*(playerRadius+.5)`, radius `playerRadius/3`, excluding the target, suppresses displacement before world movement. Damage and Hail precede the displacement. | high |
+| Hail instructions | Over branch `0x00543A24..0x00543B9E`; Normal/Hail branch `0x00543BA3..0x005440A0`; gameplay branch `0x005443B6..0x00544468` | Over jumps directly to the loop tail. Only Normal Frost reaches the per-child Hail gate. Hail uses the Staff-emitter stack position plus its own radial draw, inherits the Frost heading, and later gameplay Hail uses the common target-contact path. | high |
+| Hail Bouncer instructions and live protocol falsifier | `Anim_Hail` vtable `0x0078501C`; shared Bouncer tick `0x00458D80`; Mac Chrome dev journey `job_20260829T141547Z_d2e60502c9` | Tick advances height by twice the old vertical velocity, accelerates from the `+0x50` progress word twice, and can reach about `-79.45` after an early first contact. Exact settled height zero skips physics and RNG. The web instead kept stepping zero and rejected every height below the constructor-only `-20` floor, disconnecting the client during ordinary Hail life. | high |
+| Hagatha/cache instructions | selector refresh `0x0067C360`; push cache `progression+0x818`; player copy `0x0065FFD1..0x0065FFD7`; complete Water instruction census | Brute doubles `progression+0x818`, copied to Player `+0x2C`. Water reads `+0x294` for Chill and `+0x30` for blocker geometry and never reads `+0x2C`; its actor push and Arrow tumble therefore retain authored Chill strength. The same direct-operand exclusion holds for Steam and Blizzard handlers. | high |
+| Authored data | Website-owned `native-skill-catalog.json` rows 32..39 | Drains all Frost, Chill, Cone, Harden, Aura, Hail, and Permafrost rank rows. Ring of Ice remains a separate paid secondary. | high |
+| Current web differential | `origin/main` `d01cb94f`; production profile/combat/visual systems, protocol, and tests | Aura uses raw `6..12` instead of `720..1440`, ignores Permafrost strength, is born only in Boneyard, remains at its birth point, and expires 120 times too quickly. Hail visual birth is Boneyard-only, gates Over children, starts from the advanced Frost plan, keeps advancing after native settled height zero, and the protocol rejects its reachable negative arc below `-20`. Chill uses the player root, has no forward blocker, runs before damage/Hail, and is incorrectly doubled by Brute. Hail damage omits the target-specific damage callback. | high |
+
+An unrelated direct-stock process was already active from
+`%LOCALAPPDATA%\Temp\sdr-lighting-stage-20260829-root`; it was not focused,
+modified, or stopped. The new conclusions are instruction/data facts and do
+not depend on injected runtime evidence. Existing clean-stock base Frost
+captures remain the visible reference for records 30/28 and the ice audio.
+
+### System boundary and pre-code membership sweep
+
+Native system: pure player Water primary row 32 and every row whose behavior is
+executed by that held handler (33, 34, 36, 37, 38, and 39), from rank refresh
+and debit through VFX/contact/modifier/RNG ownership to release and teardown.
+
+| Member | Native source | Current web finding | Required closure |
+| --- | --- | --- | --- |
+| Frost Jet row 32, ranks 1..25 | cache `0x00549C60`, handler `0x00543860` | damage/mana cadence and base contact already match | drain every authored rank and preserve 100 Hz normal/weak damage |
+| base ColdSlow / weak ColdSlow | `0x005442DD..0x005443A5` | `.5`/25 and weak `.75`/25 already match; Permafrost result needs final float32 store | exact factor/duration/material and expiry |
+| Chill Wind rows 0..10 | cache `0x00549D30`, Arrow `0x0054420A`, displacement `0x00544523..0x0054473B` | normalized scalar/taper are present; emitter origin, blocker, post-contact order, and Brute exclusion are missing | all rows, Arrow strict threshold, actor blocker/world movement, no Brute scaling |
+| Cone of Ice rows 0..11 | cache `0x00549CCF`, handler query/birth loops | count, speed, heading, aperture, reach, and LOS already match | retain all-row contracts |
+| Normal Frost | `0x00453550/0x00453670/0x00457720` | core/glint recurrence, wall splay, and world-sorted lane already match | preserve |
+| Over Frost | `0x00453840/0x00453670/0x00457A00` | draw/update lane matches; web wrongly admits its children to Hail allocation | exclude Over from Hail without changing its Frost painter |
+| underpowered Water | weak branch `0x005438EC` and cleanup `0x00529840` | one Normal quarter-opacity child, half damage, `.75` Cold, mask 2, loop gain `.5`, learned suppression, and Harden reset match | preserve |
+| Harden rows 0..10 | `0x00544A57..0x00544C3C`, cleanup `0x00529840` | accrual/cap, persistent release state, flat damage consumer, and weak cleanup match | all-row regression |
+| Cold Aura rows 0..10 | `0x0054478A..0x00544A25`, `0x0045AF20/0x0045AFB0` | raw radius, unscaled factor, pre-contact query, Boneyard-only birth, fixed origin, and short lifetime violate stock | world radius, post-contact query, Permafrost factor, shared Hub/Boneyard birth, owner follow/teardown |
+| Hail rows 0..10 visual branch | `0x00543F02..0x005440A0`, Bouncer tick `0x00458D80` | every child is gated from a moved Frost position and only Boneyard owns the actor; settled-zero and protocol height bounds break the native lifecycle | Normal-only gate, Staff-emitter origin, shared scene owner, exact RNG/order/bounce/settlement/protocol lifecycle |
+| Hail rows 0..10 gameplay branch | `0x005443B6..0x00544468` | chance/range/draw order match; target-specific boss multiplier is bypassed | all rows and common target multiplier |
+| Permafrost row 39 | cache `+0x8B4`; Cold/Aura divisions | base Frost duration/strength largely match; Aura strength does not | float32 base/Aura factors and 200-tick minimum |
+| Enhanced Effects On | `0x00B3BCAD`, divisor `-10` | shipped browser policy and all Cone counts match | preserve |
+| Enhanced Effects Off | divisor `-20` | product-wide fixed-On policy remains the documented multiplayer boundary | `out-of-system` under settings entry 130; retain exact parameterized count helper |
+| enemy/Maggot roots | masks 2/`0x1082`, cell traversal | admitted and Cold/damage consumers already match | per-family contact and blocker coverage |
+| Coffin root | constructor clears queried hostile flags | already excluded | `out-of-system` for Frost contact with negative proof |
+| hostile Arrow | flag `0x80`, vslot `+0x64` | accumulation/SpinAway lifecycle match except Brute scaling | exact threshold and no Brute scaling |
+| Firebolt/Guided Missile | flag `0x100` | already excluded | `out-of-system` by mask/branch |
+| Hub and Boneyard state owners | shared primary-spell authority/presentation; separate Hub combat seal | Hail/Aura actor lifecycle is Boneyard-only even though the state type is shared | one shared lifecycle owner; natural Hub primary admission remains `out-of-system` under the documented noncombat product policy |
+| multiplayer observer/save | semantic Frost/Hail/Aura state and existing protocol/save shapes | fields exist; Aura origin is not refreshed | authoritative IDs/RNG/origin, late snapshots, resume, owner/world teardown |
+| ice start/loop and Hail bounce audio | registries 44/161 and Hail samples | existing assets, loop edge/gain, and bounce fields match | preserve and browser-observe |
+| Curse Bosses selector 22 | common target damage path | base Frost is multiplied; learned Hail damage is not | apply the same native boss factor to Hail contact |
+| Brute selector 26 | progression `+0x818` -> Player `+0x2C` | web incorrectly scales pure/welded direct spell pushes | remove from direct Water/Steam/Blizzard operands; retain proven Staff/player-physics consumers |
+| Ring of Ice 35 / Call Comet 76 | separate secondary actors and FreezeWave | no Frost-handler ownership | `out-of-system`; existing secondary closure remains authoritative |
+| welded Frost/Steam/Hail families | concrete handlers/classes | separate gameplay/VFX owners; only the falsified generic Brute injection is shared | `out-of-system` except direct-handler Brute exclusion |
+
+No member is blocked by the browser platform. The complete Frost handler,
+modifier clocks, point query, actor following, registered sprite/audio assets,
+and multiplayer state are representable by the existing fixed-tick authority.
+
+### Corrected native ownership and behavioral contract
+
+- Player refresh owns all ranked scalars. The held Water handler debits and
+  emits once per 100 Hz authority tick. Weak selection is post-debit and keeps
+  emitting at zero mana.
+- Frost visual birth occurs before target acquisition. Only a Normal-class
+  Frost child reaches Hail's `Integer(250)` allocation. Hail base position is
+  the current Staff emitter, not the Frost child's jittered or advanced
+  position; its horizontal direction is the corresponding Frost heading.
+- The ordered cone queries strict roots from the player position with mask
+  `0x1082` (mask 2 weak), a 30-back angular apex, strict reach, and per-root
+  LOS. Each hostile contact applies Cold and base damage, then tests/applies
+  gameplay Hail, then evaluates Chill displacement.
+- Chill displacement measures from the Staff emitter. Before movement it point
+  queries mask 2 at the forward probe described above, excluding the current
+  target. A blocker cancels displacement. Otherwise the squared-distance taper
+  and target flag factor produce the requested delta, and the world movement
+  owner resolves static collision. Brute's Player `+0x2C` is not an operand.
+- After all Frost contacts/pushes, Cold Aura queries the target's new root
+  position with strict radius `float32(authoredFeet*120)`. Its factor is
+  `float32(float32(1-percent/100)/permafrostScale)`. The six-tick visual actor
+  is born after that query, follows the owner every tick, and retains its
+  independent alpha/scale/rotation life under the shared Hub/Boneyard state
+  owner. Natural Hub primary admission remains sealed by product policy.
+- Permafrost uses float32 scale `1.5`, turns base `.5` Cold into float32 `1/3`,
+  turns each Aura factor through the same division, and raises the minimum
+  Cold duration to 200 ticks. Weak Water suppresses it.
+- Hail's target damage uses the same attacker/target contact modifiers as the
+  owning Frost damage, including Curse Bosses. Its shared Bouncer tick admits
+  the full native negative arc (bounded conservatively at `-80`), and exact
+  height zero advances only life/age: no motion, bounce draws, or sound draws.
+- Release stops new query/child/audio-loop ownership immediately. Existing
+  Frost, Hail, and Aura actors finish their native lives; owner/world teardown
+  removes them without replay.
+
+### Web implementation consequence
+
+- Put Hail/Aura child birth and Hail stepping in the shared Air/Water visual
+  actor system so Hub and Boneyard consume one authoritative lifecycle. Keep
+  gameplay target effects/damage in Boneyard combat.
+- Refresh live Aura origins from their owner row and retire invalid ownership.
+  No protocol or save version is needed because the authoritative origin,
+  duration, and alpha fields already exist.
+- Correct the production Water profile's Aura world units and Permafrost
+  float32 divisions. Drain every authored row in profile tests rather than
+  supplying hand-built values to combat tests.
+- Restore native contact order and the Staff-emitter/blocker Chill model.
+  Remove the refuted generic Brute multiplier from direct sustained spell
+  operands and add the missing Hail target multiplier.
+- Remove Boneyard-only Hail/Aura birth/step ownership and the stale every-child
+  Hail tests. Preserve base Frost renderer/audio/collision code that the fresh
+  audit verified.
+
+### Validation contract
+
+- Failing-first Mac contracts: production Aura ranks must resolve to
+  `720..1440`, Permafrost must scale both base and Aura factors with float32
+  words, Aura query must occur after push, Aura actors must follow owners, Over
+  must consume no Hail gate, Hail must start at the Staff emitter in both
+  scenes, and Hail damage must consume the target multiplier.
+- Chill matrix: all 11 authored rows; Staff-root versus player-root geometry;
+  forward blocker same-cell/strict-radius/equality/cross-cell cases; outer and
+  inner taper; target `0x40`; static world collision; post-Hail movement; Arrow
+  strict accumulator; Brute negative.
+- Rank/membership matrix: Frost 1..25, Cone 0..11, Harden/Aura/Hail 0..10,
+  Permafrost 0/1, normal/Over/weak, enemies/Maggots/Coffin/Arrow, Hub/Boneyard,
+  release, owner/world teardown, protocol/save, and audio nonregression.
+- Browser: one real Mac Chrome Water run must show base/Cone Frost, Chill actor
+  displacement and Arrow SpinAway, distant Cold Aura contact, owner-following
+  record 14, Normal-only record-32 Hail in Boneyard, Permafrost factor
+  and expiry, balanced ice loop, observer state, and empty page/console/
+  failed-response/wire-error arrays.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the isolated Mac worktree.
+
+### Implementation validation receipt
+
+Status: **closed locally on the isolated Website candidate**. Publication and
+deployment were not requested and remain separate receipts.
+
+Final implementation dispositions:
+
+| Member | Final disposition | Receipt |
+| --- | --- | --- |
+| ranked Frost damage/mana, weak damage, base ColdSlow | `verified-already-at-parity` plus all-row regression | rows 32 ranks 1..25 and weak/full contact contracts pass |
+| Chill Wind and Arrow tumble | `exact-ported` | Staff-emitter origin, native blocker, post-damage/Hail order, all 11 rows, strict Arrow threshold, and Brute negative pass |
+| Cone of Ice | `verified-already-at-parity` | all 12 rows retain authored width/count/speed/heading and LOS |
+| Normal/Over/weak Frost presentation | `exact-ported` | Normal-only Hail gate; Over exclusion; weak suppression retained |
+| Harden | `verified-already-at-parity` | all 11 rows, cap, release persistence, flat mitigation, and weak cleanup pass |
+| Cold Aura and Permafrost | `exact-ported` | `720..1440` world radius, float32 factor division, 200-tick minimum, post-contact query, owner follow, and shared lifecycle pass |
+| Hail visual/gameplay lifecycle | `exact-ported` | Staff emitter, RNG order, common target multiplier, full Bouncer arc/settlement, audio fields, protocol, render, and retirement pass |
+| ice start/loop audio and existing Frost painters | `verified-already-at-parity` | preserved registries, loop edge/gain, render records, and captured production frames |
+| separate Stun | `out-of-system` with negative proof | stock Frost Jet applies ColdSlow and Chill displacement; it does not install the Air/Lightning Stun modifier |
+| Enhanced Effects Off | `out-of-system` | fixed-On multiplayer policy under settings entry 130; parameterized count helper remains exact |
+| natural Hub primary casting | `out-of-system` | documented noncombat Hub seal; shared actor-state lifecycle remains covered without reopening combat admission |
+| Coffin, Firebolt/Guided Missile, Ring of Ice/Call Comet, welded families | `out-of-system` | mask, branch, or separate-handler ownership proven above |
+
+Evidence receipts:
+
+- Failing-first Mac candidate `job_20260829T134001Z_2842173892`, combined-log
+  SHA-256 `863fcc5aa9b63408fe51b7b6511a14dacf6c99e080c1f8dd0593f118903b197f`:
+  1,696/1,704 passed and exactly eight new Frost contracts failed across
+  production Aura/Permafrost, actor following, Normal-only Hail/emitter,
+  Staff/blocker Chill, target multiplier, and post-contact order.
+- The first implementation candidate passed its then-complete Mac gate as
+  `job_20260829T135208Z_bd5d57c439`, combined-log SHA-256
+  `fb140b22f45b904cd434952c7906f47de07f77890b5627ca5f71aa24663e2387`.
+  The later browser lifecycle extension then correctly invalidated that as the
+  final receipt by exposing Hail's protocol floor.
+- Live Hail falsifier `job_20260829T141547Z_d2e60502c9`, combined-log SHA-256
+  `c55f08aa4fbc1515b952cdadcbf880e588c6d21ed25552b1bea6bf5b3de1254c`:
+  ordinary Hail disconnected at `height is outside the native Bouncer range`.
+  Fresh `0x00458D80` instructions proved the reachable `~-79.45` arc and the
+  exact settled-zero no-physics/no-RNG branch. The focused corrected kernel and
+  protocol run then passed 47/47.
+- Exact rebased production build `job_20260829T143818Z_9365029379`, combined-log
+  SHA-256 `157cf2537848e86e2f305f88b180e08da7daa9b18924c6253dda94cfdc57fb94`:
+  `Game-5ocQNTe2.js` is 263,459 raw / 79,944 gzip bytes, within both budgets.
+- Exact production-preview Mac Chrome journey
+  `job_20260829T143842Z_34266eddd9`, combined-log SHA-256
+  `553ce2347d31a9fcaef577aa36d38950f76e79138d6d60a9e1bfb94d3da3af1`:
+  status `ok`; empty page-error, failed-response, and wire-error arrays; base
+  two-child Frost at speed 4; rank-11 Cone ten children at speed 10; Arrow
+  accumulator `0.9920001029968262` and retirement; target damage `0.05`;
+  Permafrost base Cold `0.3333333432674408`/200 ticks; Aura Cold
+  `0.4000000059604645`/200 ticks at distance 300; nonzero Chill displacement;
+  and replicated/rendered `water-aura` plus `water-hail`.
+- Visually inspected production screenshots: base Frost SHA-256
+  `4d856ce9fd2c7339f98f6b25903313828696b1084cd0dc5f6091960a1b5f7cd9`;
+  rank-11 Cone `dc880c05d8829b6d28f613e537576270cf4ab2584fe626b3297016abf35125b9`;
+  Arrow/SpinAway `e9ffee4c354f69f32f9865d08f5be404e8e6c623bc703703d37ff6053c311a52`;
+  Aura/Hail `a4d8cf0aa101ebc9ce172b30b44d737b844b11c850a117d92eb60d2c567daa4c`.
+
+The exact receipt-bearing tree repeats the canonical Mac gate after this
+ledger update. Its non-self-referential job/hash belongs in the task handoff;
+no implementation or ledger change may follow that gate.
