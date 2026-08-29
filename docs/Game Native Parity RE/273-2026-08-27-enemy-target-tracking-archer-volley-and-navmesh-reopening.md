@@ -620,3 +620,63 @@ V8 performance and persistent-state contract, not a browser capability gap.
   death-effect handoff, snapshot continuity, save/restore, and clean new-run
   teardown. Page, console, failed-response, wire, save, and host-error arrays
   must be empty.
+
+### Implementation and validation receipt
+
+- Exact runtime commit `5fd901b5144989f6a018b7a7e37998c904f0b386`
+  and focused browser-smoke commit
+  `0f16f23dab1f9f7461c860036e0d355c53da7655` sit directly above current-main
+  base `9f26f3eb538867cad5b4c3959ee7da63fd805ba6`. The runtime commit extracts
+  every death/projectile-effect step into `boneyard-transient-effects.ts`,
+  removes redundant freezes, reuses stationary vectors, and leaves the store,
+  save, projection, protocol, IDs, order, RNG, and tick model unchanged.
+- Seven focused contracts cover source immutability, sibling branches,
+  Bouncer RNG/settling, Arrow float32 motion, all seven death kinds, all ten
+  projectile-effect kinds, catch-up ranges, delayed birth, and strict lifetime
+  edges. The repository-owned replay additionally hashes the complete state and
+  order-sensitive JSON while recording every dynamic population and wave phase.
+- Three uncontended interleaved Mac pairs ran 62,500 ticks each against exact
+  main and the runtime candidate. All six ended with stable hash
+  `8c0e14e77c940eb6`, JSON hash `568aade0bc2dbd60:746248`, 54 phase
+  transitions, 87 peak live enemies, 363 peak dynamic actors, and identical
+  population sums. The paired-median gains were 2.79% wall time, 2.81% mean
+  tick, 4.06% p50, and 1.62% p90; the 70-plus-enemy window improved 1.60% mean,
+  2.57% p50, and 0.74% p90. P99 remained noise-flat: paired medians improved
+  0.51% overall and 0.46% in the crowd window, while paired means changed
+  -0.24% and -0.75%. No tail-latency gain is claimed.
+- The matched named profile explains the bulk improvement: `stepDeathEffect`
+  self samples fell `4,726 -> 3,810` (19.4%) and its population wrapper fell
+  `173 -> 83`. One GC sample moved `2,458 -> 2,597`, so no GC improvement is
+  claimed. Pre-sized survivor arrays were separately rejected: they were 1.5%
+  faster in an isolated step loop but created holey arrays and did not improve
+  the full-system paired runs reliably. The provisional requirement above that
+  p99 and GC must both materially improve was therefore falsified, not silently
+  counted as passed; neither is a parity requirement, and neither showed a
+  reliable system regression.
+- The exact final commit passed `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the Mac: all 29 backend contracts, 1,720/1,720 Boneyard tests, every other
+  registered suite, both production builds, bundle budget, and media policy
+  passed. `Game-DG5nKRQx.js` is 264,578 raw / 80,327 gzip bytes. Gate-log
+  SHA-256: `e5db808b2340254215067d1fade6ad1dc313691095e99f0c8fb2d83570496f02`.
+- Built production Mac Chrome completed two target-specific real-host journeys
+  with empty page, failed-response, and wire error arrays. The death journey
+  retired a naturally damaged Skeleton, rendered its Bouncer/Unbind handoff,
+  left through the real save path, opened Last Game, reconnected, restored the
+  same run, and retained all 19 effects live at capture. Receipt SHA-256:
+  `02ad2ab7d008bbc1b37ec4b3541eb657297e3f82192621ed87b858560b079a8e`;
+  combat frame SHA-256:
+  `f5f1ecc1d1e8aabe4c4f90ea37f7da746961ab11e93a80f1a45e94158eec8354`.
+  The projectile journey tumbled a real hostile Arrow into effect ID 1 at
+  alpha 6, replicated/rendered it, and proved host/wire retirement. Receipt
+  SHA-256: `028c79f90b8e9360bd6b1f3e8154f2f85a3cde5f860ad187bce629e7bad27d50`;
+  frame SHA-256:
+  `1a51f64d491a8483ba897b3bb6d2835d2ec2776c8f87ba0c47cf54fd9ab7e783`.
+- Browser diagnosis also found that the general smoke required Lantern
+  intensity `0.55..0.75` even though the authoritative signed flicker is
+  `0.35..0.75`; production legitimately sampled `0.403342`. The smoke now
+  derives both bounds from the native constants. Its independent retired-entry
+  movement assertion remains outside this storage reopening, so the new
+  death-effect lane skips that check explicitly instead of weakening it or
+  claiming the general all-purpose journey passed.
+- This receipt is the sole post-validation documentation write. No runtime,
+  test, benchmark, build, asset, protocol, or browser byte changed afterward.
