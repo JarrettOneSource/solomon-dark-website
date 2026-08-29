@@ -141,6 +141,33 @@ test('installs exact opaque-surface blend maps once and restores them after cont
   assert.deepEqual(renderer.state.blendModesMap['add-npm'], [0x0302, 1, 0x0302, 1])
 })
 
+test('Sprite-only renderers install native batching without requiring a mesh pipe', () => {
+  const original = [9, 9, 9, 9]
+  const batch = {
+    _batchersByInstructionSet: {},
+    buildStart() {},
+  }
+  const originalBuildStart = batch.buildStart
+  const renderer = {
+    gl,
+    limits: { maxBatchableTextures: 16 },
+    renderPipes: { batch },
+    runners: { contextChange: { add() {} } },
+    state: {
+      blendModesMap: {
+        add: original,
+        'add-npm': original,
+        multiply: original,
+        normal: original,
+        'normal-npm': original,
+      },
+    },
+  }
+
+  assert.doesNotThrow(() => installNativeFixedFunctionRenderPipeline(renderer as never))
+  assert.notEqual(batch.buildStart, originalBuildStart)
+})
+
 test('transparent browser overlay surfaces preserve Porter-Duff alpha maps', () => {
   const originalNormal = [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA]
   const originalAdd = [gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE]

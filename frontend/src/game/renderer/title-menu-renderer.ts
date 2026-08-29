@@ -8,7 +8,7 @@ import {
   type Application,
 } from 'pixi.js'
 
-import { hub, mainMenu, menuSolomon } from '../../lib/assets.ts'
+import { hub, mainMenu } from '../../lib/assets.ts'
 import {
   TITLE_BUILD_REVISION,
   layoutTitleBuildRevisionLabel,
@@ -22,6 +22,7 @@ import {
   TITLE_CLOUD_HEIGHT,
   TITLE_CLOUD_WIDTH,
   TITLE_GRAVE_REGISTRATION,
+  TITLE_MAIN_MENU_ATLAS_RECORDS,
   TITLE_RENDER_HEIGHT,
   TITLE_RENDER_WIDTH,
   TITLE_SOLOMON_LAYER_Z,
@@ -129,8 +130,14 @@ export async function createTitleMenuRenderer(
   canvas.dataset.textureSources = JSON.stringify(textures.sources)
   const texture = (source: string) => textureFrom(textures.textures, source)
   const nativeUi = createNativeUiPixiAdapter(textures)
-  canvas.dataset.compositedTextureAlpha = texture(menuSolomon.body).source.alphaMode
+  const titleTexture = (record: number) => (
+    nativeUi.slice('Title', record, [0, 0, 1, 1])
+  )
+  canvas.dataset.compositedTextureAlpha = texture(mainMenu.logo).source.alphaMode
   canvas.dataset.nativeTextureAlpha = texture(hub.hud.fontAtlas).source.alphaMode
+  canvas.dataset.titleTextureAlpha = titleTexture(
+    TITLE_MAIN_MENU_ATLAS_RECORDS.solomonBody,
+  ).source.alphaMode
   const root = new Container({ label: 'title-menu' })
   root.sortableChildren = true
   root.eventMode = 'none'
@@ -161,16 +168,28 @@ export async function createTitleMenuRenderer(
   background.zIndex = 0
   backdrop.addChild(background)
 
-  const cloudBase = tiledSprites(texture(mainMenu.cloudBase), 3, 1)
-  const cloudDetail = tiledSprites(texture(mainMenu.cloudDetail), 3, 3)
-  const cloudShadow = tiledSprites(texture(mainMenu.cloudShadow), 3, 4)
-  const horizon = tiledSprites(texture(mainMenu.horizon), 4, 5)
-  const grass = tiledSprites(texture(mainMenu.grass), 4, 15)
+  const cloudBase = tiledSprites(
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.cloudBase), 3, 1,
+  )
+  const cloudDetail = tiledSprites(
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.cloudDetail), 3, 3,
+  )
+  const cloudShadow = tiledSprites(
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.cloudShadow), 3, 4,
+  )
+  const horizon = tiledSprites(
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.horizon), 4, 5,
+  )
+  const grass = tiledSprites(titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.grass), 4, 15)
   backdrop.addChild(cloudBase.container)
-  backdrop.addChild(stageSprite(texture(mainMenu.moon), 1304, 101.5, 192, 192, 2))
+  backdrop.addChild(stageSprite(
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.moon), 1304, 101.5, 192, 192, 2,
+  ))
   backdrop.addChild(cloudDetail.container, cloudShadow.container, horizon.container)
 
-  const graveTextures = mainMenu.graves.map(texture)
+  const graveTextures = TITLE_MAIN_MENU_ATLAS_RECORDS.graves.map(
+    (record) => titleTexture(record),
+  )
   const graveWidths = graveTextures.map((graveTexture) => graveTexture.width)
   const graveSimulation = createTitleGraveRows(
     graveWidths,
@@ -203,7 +222,7 @@ export async function createTitleMenuRenderer(
     grass.container,
   )
 
-  const solomon = createSolomonView(texture)
+  const solomon = createSolomonView(titleTexture)
   solomon.container.zIndex = 20
   solomonStage.addChild(solomon.container)
   centerStage.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
@@ -592,15 +611,17 @@ function syncGraveRow(
   }
 }
 
-function createSolomonView(texture: (source: string) => Texture) {
+function createSolomonView(titleTexture: (record: number) => Texture) {
   const container = new Container({ label: 'title-solomon' })
   container.position.set(0, 300)
   container.sortableChildren = true
   const body = stageSprite(
-    texture(menuSolomon.body), 48, 106, 208, 498, TITLE_SOLOMON_LAYER_Z.body,
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.solomonBody),
+    48, 106, 208, 498, TITLE_SOLOMON_LAYER_Z.body,
   )
   const eyes = stageSprite(
-    texture(menuSolomon.eyes), 50, 230, 171, 30, TITLE_SOLOMON_LAYER_Z.eyes,
+    titleTexture(TITLE_MAIN_MENU_ATLAS_RECORDS.solomonEyes),
+    50, 230, 171, 30, TITLE_SOLOMON_LAYER_Z.eyes,
   )
   const cloaks = Array.from({ length: 4 }, () => {
     const sprite = new Sprite()
@@ -608,7 +629,9 @@ function createSolomonView(texture: (source: string) => Texture) {
     sprite.zIndex = TITLE_SOLOMON_LAYER_Z.cloak
     return sprite
   })
-  const cloakTextures = menuSolomon.cloak.map(texture)
+  const cloakTextures = TITLE_MAIN_MENU_ATLAS_RECORDS.solomonCloaks.map(
+    (record) => titleTexture(record),
+  )
   container.addChild(body, eyes, ...cloaks)
   return { cloakTextures, cloaks, container, eyes }
 }

@@ -162,17 +162,32 @@ try {
 
 async function promptReceipt(page, kind, viewport) {
   const expected = fixedGameViewportLayout(viewport.width, viewport.height)
-  await page.waitForFunction(({ height, kind: promptKind, width }) => {
-    const canvas = document.querySelector('.title-menu-canvas')
-    const frame = canvas?.__sdrTitleFrame
-    return canvas?.getAttribute('data-prompt') === promptKind
-      && Math.abs(frame.viewportWidth - width) < 0.01
-      && Math.abs(frame.viewportHeight - height) < 0.01
-  }, {
-    height: expected.height,
-    kind,
-    width: expected.width,
-  }, { timeout: 15_000 })
+  try {
+    await page.waitForFunction(({ height, kind: promptKind, width }) => {
+      const canvas = document.querySelector('.title-menu-canvas')
+      const frame = canvas?.__sdrTitleFrame
+      return canvas?.getAttribute('data-prompt') === promptKind
+        && Math.abs(frame.viewportWidth - width) < 0.01
+        && Math.abs(frame.viewportHeight - height) < 0.01
+    }, {
+      height: expected.height,
+      kind,
+      width: expected.width,
+    }, { timeout: 15_000 })
+  } catch (error) {
+    const diagnostic = await page.evaluate(() => {
+      const canvas = document.querySelector('.title-menu-canvas')
+      return {
+        bodyText: document.body.textContent?.slice(0, 500),
+        canvasPresent: canvas instanceof HTMLCanvasElement,
+        frame: canvas?.__sdrTitleFrame ? structuredClone(canvas.__sdrTitleFrame) : null,
+        prompt: canvas?.getAttribute('data-prompt') ?? null,
+      }
+    })
+    throw new Error(`title prompt did not settle: ${JSON.stringify(diagnostic)}`, {
+      cause: error,
+    })
+  }
 
   const receipt = await page.evaluate((promptKind) => {
     const canvas = document.querySelector('.title-menu-canvas')
@@ -191,6 +206,7 @@ async function promptReceipt(page, kind, viewport) {
         width: bounds.width,
       }
     }
+    const textureSources = JSON.parse(canvas.dataset.textureSources || '[]')
     return {
       actions: [...dialog.querySelectorAll('.stock-prompt-action')].map(rect),
       canvas: rect(canvas),
@@ -198,10 +214,30 @@ async function promptReceipt(page, kind, viewport) {
       frame: structuredClone(canvas.__sdrTitleFrame),
       prompt: canvas.dataset.prompt,
       stage: rect(stage),
+      textureAlpha: {
+        composited: canvas.dataset.compositedTextureAlpha,
+        native: canvas.dataset.nativeTextureAlpha,
+        title: canvas.dataset.titleTextureAlpha,
+      },
+      textureSources: {
+        count: textureSources.length,
+        exactTitle: textureSources.some((source) => source.includes('native-ui-title-atlas')),
+        looseTitleCrop: textureSources.some((source) => (
+          /menu-solomon-|main-menu-(?:cloud-(?:base|detail|shadow)|grass|grave-|horizon|moon)/
+            .test(source)
+        )),
+      },
     }
   }, kind)
   assert.ok(receipt)
   assert.equal(receipt.prompt, kind)
+  assert.deepEqual(receipt.textureAlpha, {
+    composited: 'premultiply-alpha-on-upload',
+    native: 'no-premultiply-alpha',
+    title: 'no-premultiply-alpha',
+  })
+  assert.equal(receipt.textureSources.exactTitle, true)
+  assert.equal(receipt.textureSources.looseTitleCrop, false)
   close(receipt.canvas.width, viewport.width, `${kind} canvas width`)
   close(receipt.canvas.height, viewport.height, `${kind} canvas height`)
   const physicalStageWidth = 1_600 * expected.displayScale

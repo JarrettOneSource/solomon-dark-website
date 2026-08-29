@@ -690,3 +690,76 @@ representation and all three native blend equations.
   bytes. The complete gate log SHA-256 is
   `e33a3bdb8010b8fc68d35ebcbb495a37537f492388a64ab83f1fd141d411f204`.
   Publication remains a separate fast-forward and remote-identity receipt.
+
+## 2026-08-29 — Secondary correction: a record crop is not a wrapped page
+
+The Title Solomon seam reported after the PMA correction falsifies one member
+classification in the 2026-08-28 report. Title records 0..6, 8, 11..24 are
+exact frames of the retail `Title.png` page, not Website-precomposed pages.
+Uploading each tight crop as its own repeat-addressed source changes the wrap
+domain: every cloak's mostly opaque dark left column becomes the bilinear
+neighbor of its translucent right column. At the stock two-times scale this
+produces the reproduced one-pixel line at x `325/326`.
+
+The corrected ownership is recorded in
+`006-2026-08-14-title-solomon-eye-and-hood-painter-order.md`. MainMenu now
+requires the byte-identical full Title page as NPM/linear/wrap and exact record
+frames into that page. This does not change the three global source policies:
+retail pages remain NPM/wrap, genuine Website composites remain PMA/wrap, and
+point fonts remain NPM/nearest/wrap. It also does not authorize clamp, invented
+padding, geometry changes, or removal of native duplicate painter passes.
+
+Acceptance must cover every active MainMenu Title record, all five cloak
+frames and wrap, the exact right-edge interval, responsive Title layouts, empty
+browser error arrays, and the canonical Mac gate. The earlier Title row that
+classified these exact record crops as PMA composites is superseded by this
+correction; Website-authored logo/chrome/labels remain PMA composites.
+
+Implementation and acceptance are complete in the Title-system receipt. The
+live built source census reports the exact Title page present, loose Title
+crops absent, retail NPM and Website-composite PMA simultaneously active, and
+empty errors across stock/mobile/ultrawide/tall journeys. The measured seam
+collapsed from `5.7772/5.7089` adjacent-column RGB delta to
+`0.4467/0.4539`, without changing the shared wrap policy or another scene.
+
+### Publication-rebase finding: Sprite-only applications have no mesh pipe
+
+Rebasing the Title correction onto `acad2d24` exposed a separate lifecycle
+assumption in that commit's new non-Arena alpha shader installer. Built Chrome
+reproduced the failure twice before mounting the Title canvas:
+`Native fixed-function rendering requires Pixi WebGL batch and mesh owners.`
+The DOM prompt remained, but the renderer error surface replaced the canvas.
+
+Pixi installs render pipes from the renderable extensions present in an
+application's module graph. Loader and Title are Sprite/Graphics applications;
+they require the corrected texture-alpha batcher but do not own or submit a
+Mesh pipe. Create/Hub contexts that import Mesh do own the adaptor. Requiring a
+mesh adaptor from a renderer that cannot submit meshes is therefore a false
+lifecycle invariant, not a missing native painter member.
+
+The shared installer must always require and install the batch owner when
+texture-alpha shaders are enabled. It must install the mesh owner when that
+pipe exists, remain strict if an existing mesh pipe lacks its shader, and do
+nothing mesh-specific when the application has no mesh pipe. This is capability
+membership, not a fallback: no Mesh draw is admitted without a Mesh pipe, and
+all existing Create/Hub mesh paths keep the corrected PMA/NPM shaders.
+
+Acceptance adds a Sprite-only renderer-owner regression, repeats the built
+Loader/Title journey with the exact Title source assertions, preserves the
+upstream batch/mesh/Arena contracts, and reruns the canonical Mac gate after
+the publication rebase.
+
+Implementation keeps the corrected batch owner mandatory and returns before
+mesh installation only when the renderer has no Mesh pipe. A present mesh pipe
+still requires its initialized shader and receives the upstream PMA/NPM mesh
+owners unchanged. The focused Sprite-only regression passes, and the rebased
+complete Mac gate remains green through all contracts, frontend/desktop tests,
+builds, budget, media, and CSP.
+
+The rebased production Chrome journey now mounts Loader and Title across stock,
+mobile, ultrawide, tall, and live-resize layouts with empty errors. Every live
+receipt reports exact Title present, loose Title crops absent, Title/native NPM,
+and Website-composite PMA. The right-edge measurement remains collapsed at
+`0.4817/0.4106`, so the renderer-lifecycle correction does not reopen the
+sampling fix. Exact post-receipt validation and remote SHA identity remain the
+publication boundary.

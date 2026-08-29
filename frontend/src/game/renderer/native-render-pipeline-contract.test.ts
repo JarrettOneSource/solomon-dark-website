@@ -31,6 +31,7 @@ test('every stock Pixi application installs the shared native fixed-function sta
   )
   const boneyardRenderer = source(`${rendererRoot}/boneyard-world-renderer.ts`)
   assert.match(fixedFunctionPipeline, /class NativeFixedFunctionBatcher extends DefaultBatcher/)
+  assert.match(fixedFunctionPipeline, /const meshAdaptor[\s\S]*?if \(!meshAdaptor\) return/)
   assert.match(fixedFunctionPipeline, /executeNativeFixedFunctionMesh/)
   assert.match(fixedFunctionPipeline, /textureAlpha \* vertexAlpha/)
   assert.match(
@@ -58,6 +59,7 @@ test('stock pages and Website composites use distinct shared wrap sampling polic
   ])
 
   const gameWebGl = source(`${rendererRoot}/game-webgl.ts`)
+  const gameAssets = source(`${gameRoot}/game-assets.ts`)
   const boneyardTextures = source(`${rendererRoot}/boneyard-textures.ts`)
   const hubTextures = source(`${rendererRoot}/hub-textures.ts`)
   const hubInventoryRenderer = source(`${rendererRoot}/hub-inventory-renderer.ts`)
@@ -75,6 +77,10 @@ test('stock pages and Website composites use distinct shared wrap sampling polic
   assert.match(hubTextures, /loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:/)
   assert.match(loaderRenderer, /loadGameTextureMap\(LOADER_ASSET_SOURCES, \{[\s\S]*?compositedSources:/)
   assert.match(titleRenderer, /loadGameTextureMap\(TITLE_GAME_ASSET_SOURCES, \{[\s\S]*?compositedSources:/)
+  assert.match(gameAssets, /nativeTitle: NATIVE_UI_ATLAS_SOURCES\.Title/)
+  assert.doesNotMatch(gameAssets, /menuSolomon/)
+  assert.match(titleRenderer, /nativeUi\.slice\('Title', record, \[0, 0, 1, 1\]\)/)
+  assert.doesNotMatch(titleRenderer, /menuSolomon/)
   assert.match(createRenderer, /loadGameTextureMap\(sources, \{[\s\S]*?compositedSources:/)
   assert.match(
     hubInventoryRenderer,

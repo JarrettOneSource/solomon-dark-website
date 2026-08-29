@@ -371,10 +371,9 @@ class NativeFixedFunctionBatcher extends DefaultBatcher {
 function installNativeTextureAlphaShaders(renderer: Renderer): void {
   const nativeRenderer = renderer as unknown as NativeTextureAlphaRendererInternals
   const batchPipe = nativeRenderer.renderPipes?.batch
-  const meshAdaptor = nativeRenderer.renderPipes?.mesh?._adaptor
   const maxTextures = nativeRenderer.limits?.maxBatchableTextures
-  if (!batchPipe?._batchersByInstructionSet || !meshAdaptor?._shader || !maxTextures) {
-    throw new Error('Native fixed-function rendering requires Pixi WebGL batch and mesh owners.')
+  if (!batchPipe?._batchersByInstructionSet || !maxTextures) {
+    throw new Error('Native fixed-function rendering requires a Pixi WebGL batch owner.')
   }
 
   const originalBuildStart = batchPipe.buildStart
@@ -393,6 +392,11 @@ function installNativeTextureAlphaShaders(renderer: Renderer): void {
     originalBuildStart.call(this, instructionSet)
   }
 
+  const meshAdaptor = nativeRenderer.renderPipes?.mesh?._adaptor
+  if (!meshAdaptor) return
+  if (!meshAdaptor._shader) {
+    throw new Error('Native fixed-function rendering requires the Pixi WebGL mesh shader owner.')
+  }
   const premultipliedMeshShader = createNativeFixedFunctionMeshShader(true)
   const unpremultipliedMeshShader = createNativeFixedFunctionMeshShader(false)
   const originalMeshShader = meshAdaptor._shader

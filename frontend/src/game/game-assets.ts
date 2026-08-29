@@ -4,7 +4,6 @@ import {
   loader,
   mainMenu,
   matchLoading,
-  menuSolomon,
 } from '../lib/assets.ts'
 import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/native-ui-assets.ts'
 import {
@@ -20,12 +19,18 @@ import {
 export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
 export const LOADER_COMPOSITED_ASSET_SOURCES = LOADER_ASSET_SOURCES
 export const TITLE_COMPOSITED_ASSET_SOURCES = collectAssetSources({
-  mainMenu,
-  menuSolomon,
+  button: mainMenu.button,
+  buttonCorner: mainMenu.buttonCorner,
+  buttonHover: mainMenu.buttonHover,
+  buttonRail: mainMenu.buttonRail,
+  flourish: mainMenu.flourish,
+  hallOfFameBackground: mainMenu.hallOfFameBackground,
+  logo: mainMenu.logo,
+  text: mainMenu.text,
 })
 export const TITLE_GAME_ASSET_SOURCES = collectAssetSources({
-  mainMenu,
-  menuSolomon,
+  composites: TITLE_COMPOSITED_ASSET_SOURCES,
+  nativeTitle: NATIVE_UI_ATLAS_SOURCES.Title,
   promptFonts: NATIVE_UI_ATLAS_SOURCES.Fonts,
   promptUi: NATIVE_UI_ATLAS_SOURCES.UI,
   revisionFont: hub.hud.fontAtlas,

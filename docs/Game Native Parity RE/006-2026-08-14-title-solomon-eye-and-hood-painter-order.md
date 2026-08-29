@@ -208,3 +208,155 @@ with no speculative title production change.
   this disproves a current renderer defect on both supported GPU paths. No
   speculative title behavior was changed. The publication pass still reruns
   the complete canonical gate after this receipt is recorded.
+
+## 2026-08-29 — Right-edge seam correction: cropped records changed the wrap domain
+
+### Reported smell and parity question
+
+- Reported web behavior: the looming Solomon on the `/game` main menu has a
+  visible black vertical line along his right edge even after the general
+  precomposed-page alpha correction.
+- Stock behavior to recover: retain the retail Title page's linear/wrap
+  sampling domain around records 3, 8, and 11..15. A record crop is geometry,
+  not a new texture page whose opposite edge may become the record's neighbor.
+- Reproduction: current `origin/main` `d01cb94f8697d26731a633b6a85cefbaac0ecfd6`,
+  production Chrome `151.0.7922.174` through ANGLE Metal on Apple M2 at
+  `1600 x 900`. The prompt-darkened root frame shows a one-pixel seam at
+  canvas x `325`; columns 325/326 have mean adjacent RGB deltas
+  `5.7772/5.7089`, while columns 318..324 and 327..331 remain below `0.84`.
+  Page, console, and failed-response arrays are empty. Screenshot SHA-256 is
+  `65d2e06d41d6c5120504c554a5cac8a9f0f15e7430fe4f185dee3e2affe2ba62`.
+- Falsifiers: changing global native wrap state, clamping a cropped record,
+  padding with invented colors, changing Solomon geometry or duplicate cloak
+  passes, or fixing only one cloak frame while sibling Title records keep the
+  same false crop-page ownership.
+
+The 2026-08-28 black-box revalidation above looked for a black rectangle,
+missing texture, or hard animation discontinuity. It did not measure the
+stable one-column silhouette seam, so its sampler falsifier and no-defect
+conclusion do not cover this report.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Clean retail page | `Title.png`, SHA-256 `86b8bb40b3f7ece277cf0d1038b118bf095b8489bdc344738b2fe8cbe1160ff2`; `Title.bundle` records 3, 8, 11..15 | The Website's `native-ui-title-atlas.png` is byte-identical to retail. The texel immediately right of every cloak record has alpha zero and retained bleed RGB. | high |
+| Website loose crops | `menu-solomon-{body,eyes,cloak-0..4}.png`; exact hashes match the pixel-verified Mod Loader artifacts | Every cloak crop's left column has 318 nonzero-alpha texels, including 279 or 280 opaque dark texels; its right column has only 13..16 translucent texels. | high |
+| Web source policy | `TITLE_COMPOSITED_ASSET_SOURCES`, `nativeCompositedTextureFromImage`, PixiJS frame UVs | The prior correction uploads each tight crop as PMA but retains `addressMode: repeat`, so the crop's opaque left column becomes the right edge's bilinear neighbor. | high |
+| Sampling equation | 183-source-pixel cloak drawn 366 pixels wide; WebGL pixel-center linear sampling | The final destination pixel samples source coordinate `182.25`: 75% record-right texel plus 25% wrapped crop-left texel. The two intentional cloak submissions compound the dark coverage. Native instead samples Title atlas column 355/539, whose alpha is zero. | high |
+| Built browser | receipt above | The resulting stable line is visible at the exact drawn right boundary `-40 + 366 = 326`. | high |
+
+This is static retail data and a clean browser build. No injected runtime or
+stale ASLR address participates.
+
+### System boundary and membership inventory
+
+Native system: **active MainMenu consumers of the Title texture page** — exact
+record frames and their adjacent atlas texels through the existing title
+painter, animation, and teardown.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| cloud base/shadow/detail | Title 0..2 | `exact-ported` from the complete retail page | record frames, source identity, tiling capture |
+| Solomon body and eyes | Title 3/8 | `exact-ported` from the complete retail page | geometry/order and perimeter capture |
+| grass, horizon, moon | Title 4..6 | `exact-ported` from the complete retail page | record frames and scaled Title capture |
+| Solomon cloak frames and `4 -> 0` wrap | Title 11..15 | `exact-ported` from the complete retail page | all five frames, duplicate passes, right-edge probe |
+| three grave-row variants | Title 16..24 | `exact-ported` from the complete retail page | all nine records and fractional/scaled capture |
+| College title strip | Title 7 | `out-of-system` for MainMenu; separately owned by the College title lifecycle | existing College contract |
+| stock gold logo | Title 9 | `out-of-system` under the approved Website branding override | ledger 004 |
+| dormant 3x3 record | Title 10 | `out-of-system`; no compiled stock selector | existing exhaustive record census |
+| Website logo, UI-button pieces, labels, and Hall background | no active Title-page record under this boundary | `verified-already-at-parity` under their existing PMA-composite policy | unchanged source membership and Title journey |
+
+### Recovered contract and implementation consequence
+
+- Native wrap belongs to the complete `2048 x 1024` Title page. Each record
+  supplies frame UVs into that page; it does not create a standalone repeating
+  image.
+- The Title renderer must load the byte-identical `native-ui-title-atlas.png`
+  as an NPM/linear/wrap stock source and derive active record textures from
+  that source. Existing crop rectangles, logical geometry, painter order,
+  phase, opacity, fixed tick, and teardown remain unchanged.
+- All active MainMenu Title records sharing the false crop-page assumption move
+  together. The Website logo, UI-derived chrome, rendered labels, and Hall
+  background remain explicit PMA composites.
+- Do not introduce clamp-to-edge or alter the shared stock/composite alpha
+  policies. Retire the loose Title-record crops from `/game` startup and
+  renderer ownership; the marketing-page Canvas2D Solomon is outside this
+  `/game` renderer boundary.
+
+### Validation contract
+
+- Focused tests pin the complete active record map, exact Title atlas source,
+  NPM/linear/wrap policy, absence of loose Solomon/background crops from the
+  `/game` Title source sets, and unchanged cloak order/geometry/animation.
+- Built Mac Chrome repeats stock, mobile, ultrawide, tall, and live-resize Title
+  journeys with empty error arrays. A dedicated stock-size root capture must
+  expose the Title source policy and show no dark column at x `325` or any
+  sibling record boundary.
+- Compare the exact before/after right-edge interval and inspect all five cloak
+  frames plus `4 -> 0`. Run the final exact candidate through the canonical Mac
+  `./scripts/validate.sh` gate.
+
+### Implementation validation receipt
+
+- Source ownership: `game-assets.ts` now loads the byte-identical native Title
+  page and limits the Title PMA set to Website-authored logo/chrome/labels/Hall
+  art. `title-menu-renderer.ts` derives cloud 0..2, Solomon 3/8/11..15,
+  grass/horizon/moon 4..6, and graves 16..24 as exact frames of that NPM stock
+  source. The renderer no longer loads or references loose Title-record crops.
+- Geometry and lifecycle: the existing crop rectangles, grave registrations,
+  body/eye/cloak painter depths, four cloak submissions, five-frame phase,
+  fixed 60 Hz update, responsive stage, and destroy path are unchanged.
+  `TITLE_MAIN_MENU_ATLAS_RECORDS` gives every active member one reviewed row.
+- Focused coverage: the Mac suite passed the new complete record-map test as
+  frontend test `1681`, the unchanged Solomon order test as `1682`, and the
+  source-policy contract as `1626`. The production smoke now asserts exact
+  Title-page presence, loose-crop absence, and live alpha modes at every stock,
+  mobile, ultrawide, tall, and live-resize prompt state.
+- Pre-receipt canonical gate: the complete Mac `./scripts/validate.sh` run
+  passed backend build, all 29 Website/backend integration contracts, strict
+  frontend lint and architecture checks, every frontend suite (including the
+  `1,701/1,701` Boneyard group), five desktop tests, both production builds,
+  bundle budget, media policy, and CSP. Production entry `Game-BQ3QRwwu.js`
+  measured `263,459` raw / `79,942` gzip bytes. Combined-log SHA-256 is
+  `2ee79eb95454f3c8c9426336700700f617f0d1b7d5a6dda2d4ba037073bef07f`.
+- Built browser proof: Chrome `151.0.7922.174` through ANGLE Metal on Apple M2
+  passed all four viewport journeys with empty page, console, and failed-
+  response arrays. Every receipt reported the Title/native sources as
+  `no-premultiply-alpha`, Website composites as
+  `premultiply-alpha-on-upload`, exact Title present, loose Title crop absent,
+  and 19 decoded Title-scene sources.
+  Smoke-log SHA-256 is
+  `a1920e0f3018864835ab20c3746cfa8ce741ea9308b674d43c8e5c4eb1d8f4ac`.
+- Pixel/visual proof: at the same prompt-darkened `1600 x 900` frame, mean
+  adjacent RGB deltas at x 325/326 fell from `5.7772/5.7089` to
+  `0.4467/0.4539`; the neighboring 322..324/327..328 interval is
+  `0.4178..0.5789`. The former isolated edge no longer exists. The inspected
+  candidate screenshot SHA-256 is
+  `790fc6b5d8e86136c33aa542cbe50becf47905a77c11089e16f7591469fb35e5`.
+  Static source census covers every cloak 0..4: each now samples its true
+  alpha-zero retained-RGB atlas neighbor rather than the crop's dark left edge.
+- Publication-rebase integration: upstream `acad2d24` initially prevented the
+  Sprite-only Title application from mounting by requiring a Mesh pipe it does
+  not own. The shared fixed-function installer now requires and installs its
+  corrected batch owner for every application, installs the mesh shader only
+  when a Mesh pipe exists, and remains strict when an existing mesh pipe lacks
+  its shader. The new Sprite-only regression passes without weakening
+  Create/Hub mesh or Boneyard Arena ownership.
+- Rebased pre-final gate: the complete Mac gate passed again with all 29
+  Website/backend contracts, strict lint/architecture checks, the central
+  `1,701/1,701` frontend group, five desktop tests, both production builds,
+  budget/media/CSP gates, and the Sprite-only regression. Production entry
+  `Game-DvRi6pYb.js` measured `263,459` raw / `79,948` gzip bytes; combined-log
+  SHA-256 is
+  `8a10f0af23912a7baa66e48de253adbb8382ae9242efb92d8b0addf659ad4646`.
+- Rebased browser proof: the same four viewport/live-resize journeys passed
+  with exact Title present, loose crops absent, correct PMA/NPM policies, and
+  empty page/console/response arrays. The former seam interval remained clean
+  at `0.4817/0.4106` versus baseline `5.7772/5.7089`. Smoke-log SHA-256 is
+  `b2eed90ee03a13457afb7629a35758c847f5fb7a27caf38b84dd84ab0e9a509d`;
+  inspected screenshot SHA-256 is
+  `b6fc9f4a5f0360a8ad5ec5a41d4bf17cb8b54d12c9e7c83c0cca4a146f8dd7df`.
+- Screenshots and raw browser logs are task evidence and must be deleted after
+  the recorded hashes and measurements. Publication, if authorized, still
+  requires the exact post-receipt gate and separate remote SHA proof.

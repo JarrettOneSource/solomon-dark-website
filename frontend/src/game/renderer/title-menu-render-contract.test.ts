@@ -6,6 +6,7 @@ import { Container } from 'pixi.js'
 import {
   TITLE_CLOUD_WIDTH,
   TITLE_GRAVE_ROWS,
+  TITLE_MAIN_MENU_ATLAS_RECORDS,
   TITLE_SOLOMON_LAYER_Z,
   createTitleGraveRows,
   stepTitleGraveRow,
@@ -13,6 +14,21 @@ import {
   titleBackdropOffsetsAt,
   titleSolomonCloakPasses,
 } from './title-menu-render-contract.ts'
+
+test('title menu keeps every active retail Title record on the shared atlas page', () => {
+  assert.deepEqual(TITLE_MAIN_MENU_ATLAS_RECORDS, {
+    cloudBase: 0,
+    cloudShadow: 1,
+    cloudDetail: 2,
+    solomonBody: 3,
+    grass: 4,
+    horizon: 5,
+    moon: 6,
+    solomonEyes: 8,
+    solomonCloaks: [11, 12, 13, 14, 15],
+    graves: [16, 17, 18, 19, 20, 21, 22, 23, 24],
+  })
+})
 
 test('title Solomon keeps every cloak pass painter-above the eyes', () => {
   const parent = new Container({ label: 'title-solomon' })

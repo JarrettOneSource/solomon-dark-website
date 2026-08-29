@@ -7,6 +7,18 @@ export const TITLE_DETAIL_PHASE = 0.384
 export const TITLE_SHADOW_PHASE = 0.075
 export const TITLE_HORIZON_OFFSET = 356
 export const TITLE_GRASS_OFFSET = 385
+export const TITLE_MAIN_MENU_ATLAS_RECORDS = {
+  cloudBase: 0,
+  cloudShadow: 1,
+  cloudDetail: 2,
+  solomonBody: 3,
+  grass: 4,
+  horizon: 5,
+  moon: 6,
+  solomonEyes: 8,
+  solomonCloaks: [11, 12, 13, 14, 15],
+  graves: [16, 17, 18, 19, 20, 21, 22, 23, 24],
+} as const
 export const TITLE_SOLOMON_LAYER_Z = {
   body: 0,
   eyes: 1,
