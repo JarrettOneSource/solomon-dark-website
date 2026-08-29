@@ -297,9 +297,10 @@ No member is blocked by the browser platform.
   endpoints, alpha/gradient, every color row, painter order, negative owners,
   material tint isolation, fixed/Arena vertex colors, diagnostics, atlas
   census, and extraction ownership.
-- After `origin/main` advanced, the uncommitted task was rebased onto current
-  remote commit `8702fb2908fc9ea8746ff09a7a03c5d9f2484a78`; upstream Phasing,
-  skill-picker, and targetless Staff-proc changes remained intact. Final
+- After `origin/main` advanced, the task was rebased onto current remote commit
+  `b4239a26c9f7887ac44bf76eb20d63ea2e5f5897`; upstream Phasing,
+  skill-picker, targetless Staff-proc, and ML-test-removal changes remained
+  intact. Final
   byte-identical Mac mini gate on macOS 26.6.2 arm64, pinned Node
   `22.17.0`, npm `10.9.2`, and .NET `10.0.302` passed
   `/opt/homebrew/bin/bash ./scripts/validate.sh`: 29 Website/backend contracts,
@@ -315,11 +316,31 @@ No member is blocked by the browser platform.
   isolated shaft crop changed 1,561 pixels / 118,815 RGB-channel units. Weld
   1000 recolored it to `#7F5D6C`; the addressed remote player reported the
   same Weld tint/row; selecting Fire restored `#998077`; Boneyard retained the
-  active row-11 glow. Page, console, failed-request, host-error, and failed-response arrays were
-  empty. The visually inspected disposable Boneyard frame had SHA-256
+  active row-11 glow. Page, console, failed-request, host-error, and
+  failed-response arrays were empty. The visually inspected disposable
+  Boneyard frame had SHA-256
   `087a84494992eb67c2ec7ea5fa2ed1468a60b696152455edde8b0799704e6c38`.
-- No browser-platform exception or material unknown remains. The task is
-  uncommitted, unpushed, and undeployed; publication was not requested.
+- The complete 240-row integration audit then found the pose-9/heading-18
+  depth mismatch recorded above. Follow-up implementation `e080d3dd` is one
+  local commit above current `origin/main` `ceaabf28`, which contains the
+  published glow commit `cc8ce796`. Byte-identical Mac candidate `112ce1af`
+  passed TypeScript plus 24/24 focused tests, including every extracted row
+  against the shared live compositor, and the canonical gate: 16 test groups /
+  2,470 tests / zero failures, production build, bundle budget, and CSP media
+  policy. The Game entry is `264597` raw / `80328` gzip bytes; canonical log
+  SHA-256 is
+  `c99318db877e27272387480547a1dbeda0dd6de4a78493f292dff4873178a715`.
+- Chrome `151.0.7922.174`, protocol `solomon-dark/106`, on that exact follow-up
+  kept rank zero inactive; rank 65 active with aura row 11; Fire `#998077`;
+  Weld and the remote player `#7F5D6C`; and Boneyard Fire active. The shaft
+  crop changed 1,560 pixels / 81,010 RGB-channel units, and every
+  page/console/host/request error array
+  was empty. The visually inspected frame SHA-256 is
+  `f88f5c46e262f04ec89b965f910b87d34a9c946e3ccb56f96a5d26a825012a22`.
+- No browser-platform exception or material unknown remains. The primary glow
+  implementation is published on `origin/main` as `cc8ce796`; the validated
+  pose-depth follow-up is committed separately from deployment, which is not
+  part of this receipt. This receipt is the sole post-validation change.
 
 ## Element orb painters
 
