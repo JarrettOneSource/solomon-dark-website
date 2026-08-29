@@ -59,7 +59,9 @@ export async function createGameplayPauseRenderer(
         resolution: 1,
         width: STAGE_WIDTH,
       }),
-      loadGameTextureMap([skillPicker.fontsAtlas, skillPicker.uiAtlas]),
+      loadGameTextureMap({
+        stock: [skillPicker.fontsAtlas, skillPicker.uiAtlas],
+      }),
     ])
   } catch (error) {
     gpu?.application.destroy({ removeView: true })

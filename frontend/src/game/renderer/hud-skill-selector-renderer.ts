@@ -44,10 +44,12 @@ export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelector
         resolution: 1,
         width: 1_600,
       }),
-      loadGameTextureMap([
-        skillPicker.fontsAtlas,
-        skillPicker.skillsAtlas,
-      ]),
+      loadGameTextureMap({
+        stock: [
+          skillPicker.fontsAtlas,
+          skillPicker.skillsAtlas,
+        ],
+      }),
     ])
   } catch (error) {
     gpu?.application.destroy({ removeView: true })

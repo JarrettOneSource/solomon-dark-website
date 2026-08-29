@@ -86,6 +86,41 @@ try {
   const elementApplicationTickStartedAt = performance.now()
   const elementApplicationTickStart = await createApplicationTick(page)
   const elementPicker = await measureScene(page, sampleMs, '.create-menu-scene')
+  const createTexturePolicy = await page.locator('.create-menu-canvas').evaluate((canvas) => {
+    const sources = JSON.parse(canvas.dataset.textureSources || '[]')
+    return {
+      address: {
+        composited: canvas.dataset.compositedTextureAddress,
+        create: canvas.dataset.createTextureAddress,
+        native: canvas.dataset.nativeTextureAddress,
+      },
+      alpha: {
+        composited: canvas.dataset.compositedTextureAlpha,
+        create: canvas.dataset.createTextureAlpha,
+        native: canvas.dataset.nativeTextureAlpha,
+      },
+      exactCreate: sources.some((source) => source.includes('native-ui-create-atlas')),
+      exactUi: sources.some((source) => source.includes('skill-picker-ui-atlas')),
+      looseCreateRecord: sources.some((source) => (
+        /create-(?:arcane-wheel|back-skull|choose-|dice|discipline-|element-|hand-|name-(?:end|rail)|star-)/
+          .test(source)
+      )),
+      sourceCount: sources.length,
+    }
+  })
+  assert.deepEqual(createTexturePolicy.address, {
+    composited: 'clamp-to-edge',
+    create: 'repeat',
+    native: 'repeat',
+  })
+  assert.deepEqual(createTexturePolicy.alpha, {
+    composited: 'premultiply-alpha-on-upload',
+    create: 'no-premultiply-alpha',
+    native: 'no-premultiply-alpha',
+  })
+  assert.equal(createTexturePolicy.exactCreate, true)
+  assert.equal(createTexturePolicy.exactUi, true)
+  assert.equal(createTexturePolicy.looseCreateRecord, false)
   const elementApplicationTickEnd = await createApplicationTick(page)
   const elementApplicationTickElapsedMs = performance.now() - elementApplicationTickStartedAt
   const elementApplicationTickDelta = elementApplicationTickEnd - elementApplicationTickStart
@@ -115,6 +150,7 @@ try {
   process.stdout.write(`${JSON.stringify({
     browserFrameLimitDisabled,
     disciplinePicker,
+    createTexturePolicy,
     elementApplicationTickDelta,
     elementApplicationTickElapsedMs: round(elementApplicationTickElapsedMs),
     elementPicker,

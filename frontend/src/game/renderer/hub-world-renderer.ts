@@ -287,6 +287,10 @@ export async function createHubWorldRenderer(
   canvas.dataset.playerTextureAlpha = textures.players.air.robe[0]![0]!.source.alphaMode
   canvas.dataset.statueAuraTextureAlpha = textures.base[hub.props.statue.aura].source.alphaMode
   canvas.dataset.combatTextureAlpha = textures.levelUpSparkle.source.alphaMode
+  canvas.dataset.hubVisualTextureAddress = textures.base[hub.courtyard].source.addressMode
+  canvas.dataset.playerTextureAddress = textures.players.air.robe[0]![0]!.source.addressMode
+  canvas.dataset.statueAuraTextureAddress = textures.base[hub.props.statue.aura].source.addressMode
+  canvas.dataset.combatTextureAddress = textures.levelUpSparkle.source.addressMode
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`
   canvas.dataset.viewportHeight = `${viewport.height}`

@@ -325,3 +325,103 @@ restores Air's eight-tick fork bank to 80 ms, corrects Ether record-112 opacity
 to `8` degrees per tick, and retains Water's separate `11`-degree row.
 Geometry, scale, assets, pass count, blend, and painter order above remain
 authoritative.
+
+## 2026-08-29 — Create hand page-boundary sampling reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: after the Title Solomon edge correction, the Create
+  loadout hands still expose straight texture boundaries.
+- Stock behavior to recover: each pose is an ordered draw of exact
+  `Create.png` records on the shared retail page. The logical `420 x 469` hand
+  canvas is placement metadata; it is not a new repeating texture page.
+- Reproduction: Website `41ec3c8f38899b8da88fd11d66bbbb03858ce20d`,
+  production Chrome `151.0.7922.174` through ANGLE Metal on Apple M2,
+  `1600 x 900`, settled element and Fire-discipline screens. The element frame
+  visibly contains a straight line at the raised left-hand top boundary.
+- Falsifiers: changing hand centers, scale, mirror, pose clocks, pose painter
+  order, or masking the line; fixing raised while fist/cupped retain the same
+  flattened repeating-page path; or accepting source-policy assertions without
+  the matching built frame.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail data | byte-identical `native-ui-create-atlas.png`, Create atlas SHA-256 `9c629ccd3d859384446363ac50e90c19e55f8d5ef8cd17d25604f5a67f3d08eb`; records 14..23 | Fist is ordered records 14/15, cupped is 16..19, raised is 20..23. Every record owns logical size `420 x 469` and exact trim placement. | high |
+| Website extractor | `compose_logical_records` in `tools/extract-main-menu-assets.py` | The web flattens each pose onto a new transparent `420 x 469` bitmap, discarding the retail page neighborhood. | high |
+| Pixel census | `create-hand-{fist,cupped,raised}.png` at `41ec3c8f` | Fist/cupped top rows have zero alpha while their bottom rows contain 169/180 nonzero-alpha pixels; raised has 3 top and 170 bottom. Opposite-edge PMA deltas reach 255. | high |
+| Web renderer | `create-menu-renderer.ts`, `CREATE_COMPOSITED_ASSET_SOURCES`, PMA/linear/repeat source policy | Every pose is drawn as one `420 x 469` repeating source at scale `1.5`; bilinear samples at the logical top can read the unrelated bottom sleeve/skin edge. | high |
+| Built browser | `/tmp/texture-edge-net-baseline-element.png`, SHA-256 `1d57845ccdfd39beabb13b69079dc681037401f41dd8d85213c2f43af39f4302` | Rows 211/212 across the left-hand bounds have mean adjacent RGB deltas `5.4619/5.8683`; surrounding rows remain below `1`. Page/console arrays were empty. | high |
+
+No injected runtime or stale address is used. Native record membership and
+draw order were already instruction/data-closed above; this report adds the
+missing page-domain evidence.
+
+### System boundary and membership inventory
+
+Native system: **Create page records through hand-pose assembly** — every
+active Create atlas record, the two UI records used by Create chrome, pose
+selection, left/right submission, reflection, and scene teardown.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Arcane/Body/Mind, prompts, stars, dice, wheel, five element glyphs | Create 0..13 | `exact-ported` from the complete Create page | exact frame map and element/discipline captures |
+| fist | Create 14/15 | `exact-ported` as two ordered page-record sprites | entry and inactive-right capture |
+| cupped | Create 16..19 | `exact-ported` as four ordered page-record sprites | left close/right open threshold captures |
+| raised | Create 20..23 | `exact-ported` as four ordered page-record sprites | settled element/discipline captures |
+| left and mirrored right consumers | `0x0059AD40`, left scale `+1.5`, right X scale `-1.5` | `verified-already-at-parity` after shared record cutover | both hands, all poses, exact centers and mirror |
+| Back skull and name frame/end/rail | UI 42/80 and record-80 rightmost-column slice | `exact-ported` from the complete UI page | exact source/frame and responsive capture |
+| rendered `WIZARD NAME` and clear glyph | Fonts group 1 Website-composed labels | `verified-already-at-parity` as true PMA composites | composite clamp policy and name-field capture |
+| five element VFX painters | exact BadGuys records | `verified-already-at-parity`; separate page owner | existing all-five Create VFX receipt |
+
+### Recovered contract and implementation consequence
+
+- Load the exact Create and UI pages for the scene. Records 0..13 remain
+  ordinary page subtextures. Each hand owns four reusable child sprites;
+  switching pose assigns the ordered record row and hides unused children.
+- Every hand child uses its record's native logical size/trim, shares the hand
+  center, and receives the existing container scale/mirror. This reproduces the
+  native multi-record painter without changing motion or geometry.
+- Retire loose Create-record crops from active `/game` source membership.
+  Only the two genuinely rendered text labels remain Website composites.
+- The renderer source-policy contract, not a hand-specific mask, owns the
+  broader prevention rule documented in renderer ledger 287.
+
+### Validation contract
+
+- Focused tests pin all 24 Create records, the three hand rows, UI 42/80,
+  complete pose order, logical size, left/right mirror, and absence of loose
+  hand/Create crops from active scene sources.
+- Built Mac Chrome captures entry fist, cupped transitions, settled raised,
+  inactive right fist, and mirrored right cupped/raised. The former row-211/212
+  interval must agree with neighboring rows and every error array must be empty.
+- Repeat the element and all three discipline screens at stock and non-integral
+  responsive scale, then run the canonical Mac gate on the exact candidate.
+
+### Implementation and browser receipt
+
+- Create now loads the complete Create and UI pages. Records 0..13 and UI
+  42/80 are framed from those pages, while each hand is a four-child container
+  that submits the exact ordered pose row: fist 14/15, cupped 16..19, raised
+  20..23. Pose thresholds, `420 x 469` logical size, centers, `1.5` scale,
+  right-hand reflection, motion clocks, and painter order are unchanged.
+- Active Create WebGL source membership is closed at six pages: exact Create, exact
+  UI, exact combat page 0, exact point-font page, and the two rendered name
+  labels. No loose Create record or flattened hand source is loaded.
+- The production responsive journey passed in Chrome `151.0.7922.174` at
+  `1600 x 900`, `896 x 414`, `2560 x 1080`, and `1200 x 1000`, covering both
+  settled element and Fire-discipline hand poses. Every receipt reports Create
+  and native pages as repeat/NPM, rendered labels as clamp/PMA, and empty
+  page/console/response error arrays.
+- In the former stock left-hand seam interval x `85..714`, the row-211 adjacent
+  RGB delta fell from `5.4619` with `228` pixels over threshold to `0.0079`
+  with none; row 212 fell from `5.8683` to `0.4042`. The baseline image hashes
+  to `1d57845ccdfd39beabb13b69079dc681037401f41dd8d85213c2f43af39f4302`;
+  corrected stock element/discipline images hash to
+  `f3ddb8c4896663c9dbaf3e4cf6025d7147e13550d2dfeca112209bd79727ee57`
+  and `814ae0362309da89aeaa6622bb029422ed5b238edc53ac93ae0e3b90d2a4900e`.
+- Fractional/aspect coverage is independently retained by the mobile element
+  image `8b3575eef4a279ba2e26c75cc5435bccb333c02cbe9764ccb215cdcb6a5dce90`
+  and tall discipline image
+  `bc0af8c0f91db52907871b20cfdbf3d5bebe4fac5ec05227b732ab508dccbb6c`.

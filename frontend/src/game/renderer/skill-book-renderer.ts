@@ -102,16 +102,18 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
         resolution: 1,
         width: NATIVE_SKILL_SCREEN_SIZE.width,
       }),
-      loadGameTextureMap([
-        hub.hud.backpack,
-        hub.hud.tome,
-        hub.hud.xpFill,
-        hub.hud.xpFrame,
-        hub.trader.inventoryAtlas,
-        skillPicker.fontsAtlas,
-        skillPicker.skillsAtlas,
-        skillPicker.uiAtlas,
-      ]),
+      loadGameTextureMap({
+        stock: [
+          hub.hud.backpack,
+          hub.hud.tome,
+          hub.hud.xpFill,
+          hub.hud.xpFrame,
+          hub.trader.inventoryAtlas,
+          skillPicker.fontsAtlas,
+          skillPicker.skillsAtlas,
+          skillPicker.uiAtlas,
+        ],
+      }),
     ])
   } catch (error) {
     gpu?.application.destroy({ removeView: true })

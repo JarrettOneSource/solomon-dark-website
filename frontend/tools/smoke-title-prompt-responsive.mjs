@@ -108,7 +108,19 @@ try {
     assert.equal(await page.locator('.create-menu-scene').count(), 0)
     await page.getByRole('button', { exact: true, name: 'Play' }).click()
     await page.getByRole('button', { exact: true, name: 'New game' }).click()
-    await page.locator('.create-menu-scene').waitFor({ state: 'visible', timeout: 10_000 })
+    await page.locator(
+      '.create-menu-scene[data-phase="element"][data-motion-settled="true"]',
+    ).waitFor({ state: 'visible', timeout: 30_000 })
+    const createElement = await createReceipt(page, 'element')
+    const createElementScreenshot = `${screenshotRoot}-${viewport.name}-create-element.png`
+    await page.screenshot({ path: createElementScreenshot })
+    await page.getByRole('button', { name: /fire/i }).click()
+    await page.locator(
+      '.create-menu-scene[data-phase="discipline"][data-motion-settled="true"]',
+    ).waitFor({ state: 'visible', timeout: 30_000 })
+    const createDiscipline = await createReceipt(page, 'discipline')
+    const createDisciplineScreenshot = `${screenshotRoot}-${viewport.name}-create-discipline.png`
+    await page.screenshot({ path: createDisciplineScreenshot })
     const declineFlow = {
       createVisible: await page.locator('.create-menu-scene').isVisible(),
       collegeVisible: await page.locator('.hub-scene[data-region="courtyard"]').count(),
@@ -135,6 +147,10 @@ try {
     assert.deepEqual(failedResponses, [])
     receipts.push({
       consoleErrors,
+      createDiscipline,
+      createDisciplineScreenshot,
+      createElement,
+      createElementScreenshot,
       declineFlow,
       failedResponses,
       kill: killReceipt,
@@ -158,6 +174,55 @@ try {
 } finally {
   await browser.close()
   await vite.close()
+}
+
+async function createReceipt(page, phase) {
+  const receipt = await page.locator('.create-menu-canvas').evaluate((canvas) => {
+    const sources = JSON.parse(canvas.dataset.textureSources || '[]')
+    return {
+      frame: structuredClone(canvas.__sdrCreateFrame),
+      textureAddress: {
+        composited: canvas.dataset.compositedTextureAddress,
+        create: canvas.dataset.createTextureAddress,
+        native: canvas.dataset.nativeTextureAddress,
+      },
+      textureAlpha: {
+        composited: canvas.dataset.compositedTextureAlpha,
+        create: canvas.dataset.createTextureAlpha,
+        native: canvas.dataset.nativeTextureAlpha,
+      },
+      textureSources: {
+        combatAtlas: sources.some((source) => source.includes('boneyard-combat-atlas-0')),
+        count: sources.length,
+        exactCreate: sources.some((source) => source.includes('native-ui-create-atlas')),
+        exactUi: sources.some((source) => source.includes('skill-picker-ui-atlas')),
+        looseCreateRecord: sources.some((source) => (
+          /create-(?:arcane-wheel|back-skull|choose-|dice|discipline-|element-|hand-|name-(?:end|rail)|star-)/
+            .test(source)
+        )),
+      },
+    }
+  })
+  assert.ok(receipt.frame)
+  assert.equal(receipt.frame.phase, phase)
+  assert.deepEqual(receipt.textureAddress, {
+    composited: 'clamp-to-edge',
+    create: 'repeat',
+    native: 'repeat',
+  })
+  assert.deepEqual(receipt.textureAlpha, {
+    composited: 'premultiply-alpha-on-upload',
+    create: 'no-premultiply-alpha',
+    native: 'no-premultiply-alpha',
+  })
+  assert.deepEqual(receipt.textureSources, {
+    combatAtlas: true,
+    count: 6,
+    exactCreate: true,
+    exactUi: true,
+    looseCreateRecord: false,
+  })
+  return receipt
 }
 
 async function promptReceipt(page, kind, viewport) {
@@ -219,6 +284,11 @@ async function promptReceipt(page, kind, viewport) {
         native: canvas.dataset.nativeTextureAlpha,
         title: canvas.dataset.titleTextureAlpha,
       },
+      textureAddress: {
+        composited: canvas.dataset.compositedTextureAddress,
+        native: canvas.dataset.nativeTextureAddress,
+        title: canvas.dataset.titleTextureAddress,
+      },
       textureSources: {
         count: textureSources.length,
         exactTitle: textureSources.some((source) => source.includes('native-ui-title-atlas')),
@@ -235,6 +305,11 @@ async function promptReceipt(page, kind, viewport) {
     composited: 'premultiply-alpha-on-upload',
     native: 'no-premultiply-alpha',
     title: 'no-premultiply-alpha',
+  })
+  assert.deepEqual(receipt.textureAddress, {
+    composited: 'clamp-to-edge',
+    native: 'repeat',
+    title: 'repeat',
   })
   assert.equal(receipt.textureSources.exactTitle, true)
   assert.equal(receipt.textureSources.looseTitleCrop, false)

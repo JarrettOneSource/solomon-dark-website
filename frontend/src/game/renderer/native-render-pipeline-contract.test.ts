@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const gameRoot = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/, '')
 const rendererRoot = fileURLToPath(new URL('./', import.meta.url)).replace(/\/$/, '')
+const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url)).replace(/\/$/, '')
 
 test('every stock Pixi application installs the shared native fixed-function state', () => {
   const applicationOwners = sourceFiles(gameRoot).filter((path) => (
@@ -41,7 +42,7 @@ test('every stock Pixi application installs the shared native fixed-function sta
   assert.match(boneyardRenderer, /installNativeArenaRenderPipeline\(application\.renderer\)/)
 })
 
-test('stock pages and Website composites use distinct shared wrap sampling policies', () => {
+test('every image source has one explicit stock, point, or composite policy', () => {
   const gameSources = sourceFiles(gameRoot).filter((path) => !isTestSource(path))
   const directImageSources = gameSources.filter((path) => (
     source(path).includes('new ImageSource(')
@@ -60,10 +61,10 @@ test('stock pages and Website composites use distinct shared wrap sampling polic
 
   const gameWebGl = source(`${rendererRoot}/game-webgl.ts`)
   const gameAssets = source(`${gameRoot}/game-assets.ts`)
-  const boneyardTextures = source(`${rendererRoot}/boneyard-textures.ts`)
-  const hubTextures = source(`${rendererRoot}/hub-textures.ts`)
+  const sourcePolicy = source(`${rendererRoot}/game-texture-source-policy.ts`)
+  const hubAtlasPacker = source(`${repoRoot}/tools/pack-hub-visual-atlas.py`)
+  const playerAtlasPacker = source(`${repoRoot}/tools/pack-player-character-atlas.py`)
   const hubInventoryRenderer = source(`${rendererRoot}/hub-inventory-renderer.ts`)
-  const loaderRenderer = source(`${rendererRoot}/loader-renderer.ts`)
   const titleRenderer = source(`${rendererRoot}/title-menu-renderer.ts`)
   const createRenderer = source(`${rendererRoot}/create-menu-renderer.ts`)
   const domBitmapText = source(`${gameRoot}/native-ui/NativeBitmapText.tsx`)
@@ -71,27 +72,67 @@ test('stock pages and Website composites use distinct shared wrap sampling polic
   const quickbar = source(`${gameRoot}/SkillQuickbar.tsx`)
   assert.match(
     gameWebGl,
-    /pointSources\.has\(source\)[\s\S]*?nativeStockPointTextureFromImage\(image\)[\s\S]*?compositedSources\.has\(source\)[\s\S]*?nativeCompositedTextureFromImage\(image\)[\s\S]*?nativeStockTextureFromImage\(image\)/,
+    /policy === 'stock-point'[\s\S]*?nativeStockPointTextureFromImage\(image\)[\s\S]*?policy === 'composited'[\s\S]*?nativeCompositedTextureFromImage\(image\)[\s\S]*?nativeStockTextureFromImage\(image\)/,
   )
-  assert.match(boneyardTextures, /loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:/)
-  assert.match(hubTextures, /loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:/)
-  assert.match(loaderRenderer, /loadGameTextureMap\(LOADER_ASSET_SOURCES, \{[\s\S]*?compositedSources:/)
-  assert.match(titleRenderer, /loadGameTextureMap\(TITLE_GAME_ASSET_SOURCES, \{[\s\S]*?compositedSources:/)
-  assert.match(gameAssets, /nativeTitle: NATIVE_UI_ATLAS_SOURCES\.Title/)
+  assert.match(sourcePolicy, /classified as both \$\{existing\} and \$\{policy\}/)
+  assert.match(sourcePolicy, /add\('stock'[\s\S]*?add\('stock-point'[\s\S]*?add\('composited'/)
+  for (const packer of [hubAtlasPacker, playerAtlasPacker]) {
+    assert.match(packer, /rectangle\.x = shelf\.used_width \+ 1/)
+    assert.match(packer, /rectangle\.x = 1/)
+  }
+  const textureLoadOwners = gameSources.filter((path) => (
+    path !== `${rendererRoot}/game-webgl.ts`
+    && /loadGameTexture(?:Map|Entries)\(/.test(source(path))
+  ))
+  assert.deepEqual(textureLoadOwners.map(relativeToGame).sort(), [
+    'native-ui/native-ui-workbench.ts',
+    'renderer/boneyard-textures.ts',
+    'renderer/create-menu-renderer.ts',
+    'renderer/gameplay-pause-renderer.ts',
+    'renderer/hub-inventory-renderer.ts',
+    'renderer/hub-textures.ts',
+    'renderer/hud-skill-selector-renderer.ts',
+    'renderer/loader-renderer.ts',
+    'renderer/skill-book-renderer.ts',
+    'renderer/skill-picker-renderer.ts',
+    'renderer/title-menu-renderer.ts',
+  ])
+  for (const path of textureLoadOwners) {
+    assert.match(source(path), /loadGameTexture(?:Map|Entries)\(\{/, relativeToGame(path))
+    assert.doesNotMatch(
+      source(path),
+      /compositedSources|pointSources|loadGameTextureMap\(\[|loadGameTextureEntries\(sources/,
+      relativeToGame(path),
+    )
+  }
+  assert.match(gameAssets, /TITLE_STOCK_ASSET_SOURCES = \[[\s\S]*?NATIVE_UI_ATLAS_SOURCES\.Title/)
+  assert.match(
+    gameAssets,
+    /TITLE_STOCK_POINT_ASSET_SOURCES = \[NATIVE_UI_ATLAS_SOURCES\.Fonts\]/,
+  )
+  assert.match(
+    gameAssets,
+    /CREATE_STOCK_POINT_ASSET_SOURCES = \[NATIVE_UI_ATLAS_SOURCES\.Fonts\]/,
+  )
   assert.doesNotMatch(gameAssets, /menuSolomon/)
   assert.match(titleRenderer, /nativeUi\.slice\('Title', record, \[0, 0, 1, 1\]\)/)
   assert.doesNotMatch(titleRenderer, /menuSolomon/)
-  assert.match(createRenderer, /loadGameTextureMap\(sources, \{[\s\S]*?compositedSources:/)
-  assert.match(
-    hubInventoryRenderer,
-    /loadGameTextureMap\(\[[\s\S]*?BONEYARD_COMBAT_ATLAS_SOURCES\[0\]![\s\S]*?\], \{[\s\S]*?compositedSources: PLAYER_CHARACTER_ATLAS_SOURCES/,
-  )
+  assert.doesNotMatch(titleRenderer, /hub\.hud\.fontAtlas/)
+  assert.match(createRenderer, /nativeUi\.texture\('Create', record\)/)
+  assert.doesNotMatch(createRenderer, /createMenu\.hand(?:Cupped|Fist|Raised)/)
+  assert.doesNotMatch(createRenderer, /hub\.hud\.fontAtlas/)
+  assert.match(hubInventoryRenderer, /composited: PLAYER_CHARACTER_ATLAS_SOURCES/)
   assert.match(hubInventoryRenderer, /createBoneyardCombatAtlas\(texture\)/)
   assert.match(nativeUiPixi, /source = nativeStockPointTextureFromImage\(image\)/)
   assert.match(nativeUiPixi, /for \(const item of pointFilteredAtlases\.values\(\)\) item\.destroy\(true\)/)
   assert.match(domBitmapText, /imageRendering: 'pixelated'/)
   assert.match(quickbar, /imageRendering: 'pixelated'/)
+  assert.match(
+    source(`${rendererRoot}/native-fixed-function-render-pipeline.ts`),
+    /NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS[\s\S]*?addressMode: 'clamp-to-edge'/,
+  )
   for (const path of gameSources) {
+    if (path === `${rendererRoot}/native-fixed-function-render-pipeline.ts`) continue
     assert.doesNotMatch(source(path), /clamp-to-edge/, relativeToGame(path))
   }
 })

@@ -1,6 +1,5 @@
 import {
   createMenu,
-  hub,
   loader,
   mainMenu,
   matchLoading,
@@ -28,18 +27,30 @@ export const TITLE_COMPOSITED_ASSET_SOURCES = collectAssetSources({
   logo: mainMenu.logo,
   text: mainMenu.text,
 })
+export const TITLE_STOCK_ASSET_SOURCES = [
+  NATIVE_UI_ATLAS_SOURCES.Title,
+  NATIVE_UI_ATLAS_SOURCES.UI,
+] as const
+export const TITLE_STOCK_POINT_ASSET_SOURCES = [NATIVE_UI_ATLAS_SOURCES.Fonts] as const
 export const TITLE_GAME_ASSET_SOURCES = collectAssetSources({
   composites: TITLE_COMPOSITED_ASSET_SOURCES,
-  nativeTitle: NATIVE_UI_ATLAS_SOURCES.Title,
-  promptFonts: NATIVE_UI_ATLAS_SOURCES.Fonts,
-  promptUi: NATIVE_UI_ATLAS_SOURCES.UI,
-  revisionFont: hub.hud.fontAtlas,
+  point: TITLE_STOCK_POINT_ASSET_SOURCES,
+  stock: TITLE_STOCK_ASSET_SOURCES,
 })
+export const CREATE_COMPOSITED_ASSET_SOURCES = collectAssetSources({
+  nameCaption: createMenu.textNameCaption,
+  nameClear: createMenu.textNameClear,
+})
+export const CREATE_STOCK_ASSET_SOURCES = [
+  NATIVE_UI_ATLAS_SOURCES.Create,
+  NATIVE_UI_ATLAS_SOURCES.UI,
+] as const
+export const CREATE_STOCK_POINT_ASSET_SOURCES = [NATIVE_UI_ATLAS_SOURCES.Fonts] as const
 export const CREATE_GAME_ASSET_SOURCES = collectAssetSources({
-  createMenu,
-  nameFont: hub.hud.fontAtlas,
+  composites: CREATE_COMPOSITED_ASSET_SOURCES,
+  point: CREATE_STOCK_POINT_ASSET_SOURCES,
+  stock: CREATE_STOCK_ASSET_SOURCES,
 })
-export const CREATE_COMPOSITED_ASSET_SOURCES = collectAssetSources(createMenu)
 export const MATCH_LOADING_GAME_ASSET_SOURCES = collectAssetSources(matchLoading)
 export const GAME_STARTUP_IMAGE_SOURCES = collectAssetSources([
   LOADER_ASSET_SOURCES,

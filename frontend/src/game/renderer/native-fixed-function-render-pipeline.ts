@@ -25,8 +25,9 @@ export const NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS = Object.freeze({
   scaleMode: 'nearest' as const,
 })
 export const NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS = Object.freeze({
-  ...NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
+  addressMode: 'clamp-to-edge' as const,
   alphaMode: 'premultiply-alpha-on-upload' as const,
+  scaleMode: 'linear' as const,
 })
 
 type NativeBlendFactors = readonly [

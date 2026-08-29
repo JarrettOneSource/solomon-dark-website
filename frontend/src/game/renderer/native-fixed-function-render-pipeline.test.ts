@@ -207,7 +207,7 @@ test('stock image sources retain native RGB and linear sampling', () => {
     scaleMode: 'nearest',
   })
   assert.deepEqual(NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS, {
-    addressMode: 'repeat',
+    addressMode: 'clamp-to-edge',
     alphaMode: 'premultiply-alpha-on-upload',
     scaleMode: 'linear',
   })

@@ -100,11 +100,17 @@ export function hubWorldAssetSources(): readonly string[] {
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   const packedSources = hubRequestedAssetSources().filter(boneyardCombatAtlasSourceIsPacked)
   const sources = hubWorldAssetSources()
-  const loaded = await loadGameTextureEntries(sources, {
-    compositedSources: [
-      ...HUB_VISUAL_ATLAS_SOURCES,
-      ...playerWorldCompositedAssetSources(),
-    ],
+  const composited = [
+    ...HUB_VISUAL_ATLAS_SOURCES,
+    ...playerWorldCompositedAssetSources(),
+  ]
+  const compositedSet = new Set(composited)
+  const loaded = await loadGameTextureEntries({
+    composited,
+    stock: sources.filter((source) => (
+      source !== hub.hud.fontAtlas && !compositedSet.has(source)
+    )),
+    stockPoint: [hub.hud.fontAtlas],
   })
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string) => {

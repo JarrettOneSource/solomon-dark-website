@@ -2,7 +2,6 @@
 import 'pixi.js/unsafe-eval'
 import { Application, Texture } from 'pixi.js'
 
-import { hub } from '../../lib/assets.ts'
 import {
   loadGameImage,
   releaseGameImages,
@@ -14,6 +13,12 @@ import {
   nativeStockPointTextureFromImage,
   nativeStockTextureFromImage,
 } from './native-fixed-function-render-pipeline.ts'
+import {
+  planGameTextureSources,
+  type GameTextureSourceGroups,
+  type GameTextureSourcePlan,
+  type GameTextureSourcePolicy,
+} from './game-texture-source-policy.ts'
 
 export interface GameWebGlApplication {
   application: Application
@@ -21,6 +26,7 @@ export interface GameWebGlApplication {
 }
 
 export interface GameTextureMap {
+  policies: Readonly<Record<string, GameTextureSourcePolicy>>
   sources: readonly string[]
   textures: Readonly<Record<string, Texture>>
   destroy(): void
@@ -32,11 +38,6 @@ interface GameWebGlApplicationOptions {
   height: number
   resolution: number
   width: number
-}
-
-interface GameTextureLoadOptions {
-  compositedSources?: readonly string[]
-  pointSources?: readonly string[]
 }
 
 export async function createGameWebGlApplication({
@@ -85,15 +86,15 @@ export async function createGameWebGlApplication({
 }
 
 export async function loadGameTextureMap(
-  requestedSources: readonly string[],
-  options: GameTextureLoadOptions = {},
+  groups: GameTextureSourceGroups,
 ): Promise<GameTextureMap> {
-  const sources = [...new Set(requestedSources)]
-  const entries = await loadGameTextureEntries(sources, options)
+  const plan = planGameTextureSources(groups)
+  const entries = await loadGameTextureEntriesFromPlan(plan)
   const textures = Object.fromEntries(entries) as Record<string, Texture>
   let destroyed = false
   return {
-    sources,
+    policies: plan.policies,
+    sources: plan.sources,
     textures,
     destroy() {
       if (destroyed) return
@@ -104,20 +105,23 @@ export async function loadGameTextureMap(
 }
 
 export async function loadGameTextureEntries(
-  requestedSources: readonly string[],
-  options: GameTextureLoadOptions = {},
+  groups: GameTextureSourceGroups,
 ): Promise<Array<readonly [string, Texture]>> {
-  const sources = [...new Set(requestedSources)]
-  const compositedSources = new Set(options.compositedSources ?? [])
-  const pointSources = new Set([hub.hud.fontAtlas, ...(options.pointSources ?? [])])
+  return loadGameTextureEntriesFromPlan(planGameTextureSources(groups))
+}
+
+async function loadGameTextureEntriesFromPlan(
+  plan: GameTextureSourcePlan,
+): Promise<Array<readonly [string, Texture]>> {
   const entries: Array<readonly [string, Texture]> = []
   try {
-    await mapAssetSources(sources, async (source) => {
+    await mapAssetSources(plan.sources, async (source) => {
       try {
         const image = await loadGameImage(source)
-        const texture = pointSources.has(source)
+        const policy = plan.policies[source]!
+        const texture = policy === 'stock-point'
           ? nativeStockPointTextureFromImage(image)
-          : compositedSources.has(source)
+          : policy === 'composited'
             ? nativeCompositedTextureFromImage(image)
             : nativeStockTextureFromImage(image)
         const entry = [source, texture] as const
@@ -129,7 +133,7 @@ export async function loadGameTextureEntries(
     })
   } catch (error) {
     for (const [, texture] of entries) texture.destroy(true)
-    releaseGameImages(sources)
+    releaseGameImages(plan.sources)
     throw error
   }
   return entries

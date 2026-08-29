@@ -8,7 +8,7 @@ import {
   type Application,
 } from 'pixi.js'
 
-import { createMenu, hub } from '../../lib/assets.ts'
+import { createMenu } from '../../lib/assets.ts'
 import {
   CREATE_ENTRY_ANIMATION_MS,
   CREATE_SELECTION_ANIMATION_MS,
@@ -30,13 +30,16 @@ import {
 } from '../create-wizard-name.ts'
 import { NATIVE_ELEMENT_VFX_SCALE } from '../element-vfx-native.ts'
 import {
+  CREATE_ATLAS_RECORDS,
   CREATE_DISCIPLINES,
   CREATE_DISCIPLINE_SIZE,
   CREATE_ELEMENTS,
   CREATE_ELEMENT_SIZE,
   CREATE_HAND_CENTERS,
+  CREATE_HAND_LOGICAL_SIZE,
   CREATE_HAND_SIZE,
   CREATE_STARS,
+  CREATE_UI_ATLAS_RECORDS,
   createEntryFlashAlpha,
   createSelectionFlashAlpha,
   createStarPresentation,
@@ -48,8 +51,10 @@ import {
 } from './game-webgl.ts'
 import {
   CREATE_COMPOSITED_ASSET_SOURCES,
-  CREATE_GAME_ASSET_SOURCES,
+  CREATE_STOCK_ASSET_SOURCES,
+  CREATE_STOCK_POINT_ASSET_SOURCES,
 } from '../game-assets.ts'
+import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
 import {
   fixedGamePresentationResolution,
   fixedGameStageBounds,
@@ -109,21 +114,22 @@ interface CreateNameView {
   valueName: string | null
 }
 
-const HAND_SOURCE: Readonly<Record<CreateHandPose, string>> = {
-  cupped: createMenu.handCupped,
-  fist: createMenu.handFist,
-  raised: createMenu.handRaised,
+interface HandView {
+  container: Container
+  pose: CreateHandPose | null
+  sprites: Sprite[]
 }
 
 export async function createCreateMenuRenderer(
   options: CreateMenuRendererOptions,
 ): Promise<CreateMenuRenderer> {
-  const sources = [
-    ...CREATE_GAME_ASSET_SOURCES,
-    BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
-  ]
-  const textures = await loadGameTextureMap(sources, {
-    compositedSources: CREATE_COMPOSITED_ASSET_SOURCES,
+  const textures = await loadGameTextureMap({
+    composited: CREATE_COMPOSITED_ASSET_SOURCES,
+    stock: [
+      ...CREATE_STOCK_ASSET_SOURCES,
+      BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
+    ],
+    stockPoint: CREATE_STOCK_POINT_ASSET_SOURCES,
   })
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
@@ -144,12 +150,29 @@ export async function createCreateMenuRenderer(
 
   const { application, canvas } = gpu
   const texture = (source: string) => textureFrom(textures.textures, source)
+  const nativeUi = createNativeUiPixiAdapter(textures)
+  const createTexture = (record: number) => (
+    nativeUi.slice('Create', record, [0, 0, 1, 1])
+  )
+  const createLogicalTexture = (record: number) => nativeUi.texture('Create', record)
   const combatAtlas = createBoneyardCombatAtlas(texture)
   const vfxTextures = createNativeElementVfxTextures((source) => (
     boneyardCombatAtlasSourceIsPacked(source) ? combatAtlas.single(source) : texture(source)
   ))
   canvas.dataset.textureSources = JSON.stringify(textures.sources)
-  canvas.dataset.compositedTextureAlpha = texture(createMenu.handCupped).source.alphaMode
+  canvas.dataset.compositedTextureAddress = texture(
+    createMenu.textNameCaption,
+  ).source.addressMode
+  canvas.dataset.compositedTextureAlpha = texture(
+    createMenu.textNameCaption,
+  ).source.alphaMode
+  canvas.dataset.createTextureAddress = createTexture(
+    CREATE_ATLAS_RECORDS.hands.raised[0],
+  ).source.addressMode
+  canvas.dataset.createTextureAlpha = createTexture(
+    CREATE_ATLAS_RECORDS.hands.raised[0],
+  ).source.alphaMode
+  canvas.dataset.nativeTextureAddress = vfxTextures.fire[0]!.source.addressMode
   canvas.dataset.nativeTextureAlpha = vfxTextures.fire[0]!.source.alphaMode
 
   const root = new Container({ label: 'create-menu' })
@@ -184,13 +207,17 @@ export async function createCreateMenuRenderer(
     nativeDiceStage,
   )
 
-  const wheel = centeredSprite(texture(createMenu.arcaneWheel), 800, 800, 276, 276, 1)
+  const wheel = centeredSprite(
+    createTexture(CREATE_ATLAS_RECORDS.arcaneWheel), 800, 800, 276, 276, 1,
+  )
   wheel.scale.set(3)
   wheel.alpha = 0.05
   nativeActionStage.addChild(wheel)
 
   const starSprites = CREATE_STARS.map((star) => {
-    const starTexture = texture(star.large ? createMenu.stars.large : createMenu.stars.small)
+    const starTexture = createTexture(
+      star.large ? CREATE_ATLAS_RECORDS.stars.large : CREATE_ATLAS_RECORDS.stars.small,
+    )
     const sprite = new Sprite(starTexture)
     sprite.eventMode = 'none'
     sprite.position.set(star.x, star.y)
@@ -200,16 +227,16 @@ export async function createCreateMenuRenderer(
     return sprite
   })
 
-  const leftHand = handSprite(texture(createMenu.handFist), false)
-  leftHand.zIndex = 3
-  nativeActionStage.addChild(leftHand)
+  const leftHand = createHandView(createLogicalTexture, false)
+  leftHand.container.zIndex = 3
+  nativeActionStage.addChild(leftHand.container)
 
   const elementViews = Object.fromEntries(CREATE_ELEMENTS.map((element) => {
     const container = new Container({ label: `create-element-${element}` })
     container.eventMode = 'none'
     container.zIndex = 4
     const vfx = new NativeElementVfxView(element, vfxTextures)
-    const glyphTexture = texture(createMenu.elements[element])
+    const glyphTexture = createTexture(CREATE_ATLAS_RECORDS.elements[element])
     const glyph = centeredSprite(glyphTexture, 0, 0, CREATE_ELEMENT_SIZE[element].width,
       CREATE_ELEMENT_SIZE[element].height, 1)
     const highlight = centeredSprite(glyphTexture, 0, 0, CREATE_ELEMENT_SIZE[element].width,
@@ -227,15 +254,15 @@ export async function createCreateMenuRenderer(
   nativeActionStage.addChild(heldVfxContainer)
   const heldVfxViews: Partial<Record<WizardElement, NativeElementVfxView>> = {}
 
-  const rightHand = handSprite(texture(createMenu.handFist), true)
-  rightHand.zIndex = 5
-  nativeActionStage.addChild(rightHand)
+  const rightHand = createHandView(createLogicalTexture, true)
+  rightHand.container.zIndex = 5
+  nativeActionStage.addChild(rightHand.container)
 
   const disciplineViews = Object.fromEntries(CREATE_DISCIPLINES.map((discipline) => {
     const container = new Container({ label: `create-discipline-${discipline}` })
     container.eventMode = 'none'
     container.zIndex = 6
-    const disciplineTexture = texture(createMenu.disciplines[discipline])
+    const disciplineTexture = createTexture(CREATE_ATLAS_RECORDS.disciplines[discipline])
     const size = CREATE_DISCIPLINE_SIZE[discipline]
     const glyph = centeredSprite(disciplineTexture, 0, 0, size.width, size.height, 0)
     const highlight = centeredSprite(disciplineTexture, 0, 0, size.width, size.height, 1)
@@ -246,19 +273,33 @@ export async function createCreateMenuRenderer(
     return [discipline, { container, highlight }] as const
   })) as Record<WizardDiscipline, DisciplineView>
 
-  const elementPrompt = stageSprite(texture(createMenu.chooseElement), 620, 793, 361, 92, 7)
-  const disciplinePrompt = stageSprite(texture(createMenu.chooseDiscipline), 620, 793, 361, 87, 7)
+  const elementPrompt = stageSprite(
+    createTexture(CREATE_ATLAS_RECORDS.chooseElement), 620, 793, 361, 92, 7,
+  )
+  const disciplinePrompt = stageSprite(
+    createTexture(CREATE_ATLAS_RECORDS.chooseDiscipline), 620, 793, 361, 87, 7,
+  )
   nativeActionStage.addChild(elementPrompt, disciplinePrompt)
-  const name = createNameView(texture, gradients, texture(hub.hud.fontAtlas))
+  const name = createNameView(
+    texture,
+    nativeUi,
+    gradients,
+    texture(CREATE_STOCK_POINT_ASSET_SOURCES[0]),
+  )
   name.container.zIndex = 8
   nativeNameStage.addChild(name.container)
-  const back = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 8)
+  const backTexture = nativeUi.slice(
+    'UI', CREATE_UI_ATLAS_RECORDS.backSkull, [0, 0, 1, 1],
+  )
+  const back = stageSprite(backTexture, 10, 9, 31, 33, 8)
   back.alpha = 0.76
-  const backHighlight = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 9)
+  const backHighlight = stageSprite(backTexture, 10, 9, 31, 33, 9)
   backHighlight.blendMode = 'add'
   backHighlight.alpha = 0
   nativeBackStage.addChild(back, backHighlight)
-  nativeDiceStage.addChild(stageSprite(texture(createMenu.dice), 1520, 0, 80, 54, 8))
+  nativeDiceStage.addChild(stageSprite(
+    createTexture(CREATE_ATLAS_RECORDS.dice), 1520, 0, 80, 54, 8,
+  ))
   const flash = new Graphics().rect(
     0, 0, options.viewport.width, options.viewport.height,
   ).fill(0xffffff)
@@ -313,11 +354,11 @@ export async function createCreateMenuRenderer(
 
       wheel.rotation = (frame.reducedMotion ? 0 : frame.sceneElapsedMs / 1000 * 10)
         * Math.PI / 180
-      updateHand(leftHand, motion.leftPose, false, texture, {
+      updateHand(leftHand, motion.leftPose, createLogicalTexture, {
         x: CREATE_HAND_CENTERS.left.x + motion.leftOffset.x + motion.leftImpulse.x + idle.x,
         y: CREATE_HAND_CENTERS.left.y + motion.leftOffset.y + motion.leftImpulse.y + idle.y,
       })
-      updateHand(rightHand, motion.rightPose, true, texture, {
+      updateHand(rightHand, motion.rightPose, createLogicalTexture, {
         x: CREATE_HAND_CENTERS.right.x + motion.rightOffset.x + motion.rightImpulse.x + idle.x,
         y: CREATE_HAND_CENTERS.right.y + motion.rightOffset.y + motion.rightImpulse.y + idle.y,
       })
@@ -395,6 +436,7 @@ export async function createCreateMenuRenderer(
         for (const frame of frames) frame.destroy(false)
       }
       combatAtlas.destroy()
+      nativeUi.destroy()
       textures.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
@@ -549,37 +591,50 @@ function updateStars(
   }
 }
 
-function handSprite(texture: Texture, flipped: boolean): Sprite {
-  const sprite = new Sprite(texture)
-  sprite.anchor.set(0.5)
-  sprite.eventMode = 'none'
-  setHandScale(sprite, flipped)
-  return sprite
+function createHandView(
+  texture: (record: number) => Texture,
+  flipped: boolean,
+): HandView {
+  const container = new Container({
+    label: flipped ? 'create-hand-right' : 'create-hand-left',
+  })
+  container.eventMode = 'none'
+  const scaleX = CREATE_HAND_SIZE.width / CREATE_HAND_LOGICAL_SIZE.width
+  const scaleY = CREATE_HAND_SIZE.height / CREATE_HAND_LOGICAL_SIZE.height
+  container.scale.set(flipped ? -scaleX : scaleX, scaleY)
+  const sprites = CREATE_ATLAS_RECORDS.hands.raised.map((record) => {
+    const sprite = new Sprite(texture(record))
+    sprite.anchor.set(0.5)
+    sprite.eventMode = 'none'
+    sprite.visible = false
+    container.addChild(sprite)
+    return sprite
+  })
+  return { container, pose: null, sprites }
 }
 
 function updateHand(
-  sprite: Sprite,
+  view: HandView,
   pose: CreateHandPose,
-  flipped: boolean,
-  texture: (source: string) => Texture,
+  texture: (record: number) => Texture,
   position: { x: number; y: number },
 ): void {
-  if (sprite.texture !== texture(HAND_SOURCE[pose])) {
-    sprite.texture = texture(HAND_SOURCE[pose])
-    setHandScale(sprite, flipped)
+  if (view.pose !== pose) {
+    const records = CREATE_ATLAS_RECORDS.hands[pose]
+    for (let index = 0; index < view.sprites.length; index += 1) {
+      const sprite = view.sprites[index]
+      const record = records.at(index)
+      sprite.visible = record !== undefined
+      if (record !== undefined) sprite.texture = texture(record)
+    }
+    view.pose = pose
   }
-  sprite.position.set(position.x, position.y)
-}
-
-function setHandScale(sprite: Sprite, flipped: boolean): void {
-  sprite.scale.set(
-    (flipped ? -1 : 1) * CREATE_HAND_SIZE.width / sprite.texture.width,
-    CREATE_HAND_SIZE.height / sprite.texture.height,
-  )
+  view.container.position.set(position.x, position.y)
 }
 
 function createNameView(
   texture: (source: string) => Texture,
+  nativeUi: ReturnType<typeof createNativeUiPixiAdapter>,
   gradients: FillGradient[],
   fontAtlas: Texture,
 ): CreateNameView {
@@ -597,9 +652,15 @@ function createNameView(
   })
   gradients.push(fieldGradient)
   const field = new Graphics().rect(50, 12, 384, 49).fill(fieldGradient)
-  const rail = stageSprite(texture(createMenu.nameRail), 72, 0, 340, 76, 1)
-  const leftEnd = stageSprite(texture(createMenu.nameEnd), 0, 0, 72, 76, 2)
-  const rightEnd = stageSprite(texture(createMenu.nameEnd), 484, 0, 72, 76, 2)
+  const nameEndTexture = nativeUi.slice(
+    'UI', CREATE_UI_ATLAS_RECORDS.nameEnd, [0, 0, 1, 1],
+  )
+  const nameRailTexture = nativeUi.slice(
+    'UI', CREATE_UI_ATLAS_RECORDS.nameEnd, [71 / 72, 0, 1, 1],
+  )
+  const rail = stageSprite(nameRailTexture, 72, 0, 340, 76, 1)
+  const leftEnd = stageSprite(nameEndTexture, 0, 0, 72, 76, 2)
+  const rightEnd = stageSprite(nameEndTexture, 484, 0, 72, 76, 2)
   rightEnd.scale.x = -1
   const caption = stageSprite(texture(createMenu.textNameCaption), 174, -10, 136, 15, 3)
   const value = new Container({ label: 'create-name-value' })

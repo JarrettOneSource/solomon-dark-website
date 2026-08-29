@@ -56,28 +56,8 @@ import mainMenuTextResume from '../assets/game/main-menu-text-resume.png'
 import mainMenuTextSettings from '../assets/game/main-menu-text-settings.png'
 import mainMenuTextBack from '../assets/game/main-menu-text-back.png'
 import hallOfFameBackground from '../assets/game/hall-of-fame-background.png'
-import createArcaneWheel from '../assets/game/create-arcane-wheel.png'
-import createBackSkull from '../assets/game/create-back-skull.png'
-import createChooseDiscipline from '../assets/game/create-choose-discipline.png'
-import createChooseElement from '../assets/game/create-choose-element.png'
-import createDisciplineArcane from '../assets/game/create-discipline-arcane.png'
-import createDisciplineBody from '../assets/game/create-discipline-body.png'
-import createDisciplineMind from '../assets/game/create-discipline-mind.png'
-import createDice from '../assets/game/create-dice.png'
-import createElementAir from '../assets/game/create-element-air.png'
-import createElementEarth from '../assets/game/create-element-earth.png'
-import createElementEther from '../assets/game/create-element-ether.png'
-import createElementFire from '../assets/game/create-element-fire.png'
-import createElementWater from '../assets/game/create-element-water.png'
-import createHandCupped from '../assets/game/create-hand-cupped.png'
-import createHandFist from '../assets/game/create-hand-fist.png'
-import createHandRaised from '../assets/game/create-hand-raised.png'
-import createNameEnd from '../assets/game/create-name-end.png'
-import createNameRail from '../assets/game/create-name-rail.png'
 import createTextNameCaption from '../assets/game/create-text-name-caption.png'
 import createTextNameClear from '../assets/game/create-text-name-caret.png'
-import createStarLarge from '../assets/game/create-star-large.png'
-import createStarSmall from '../assets/game/create-star-small.png'
 import hubCourtyard from '../assets/game/hub-courtyard.png'
 import hubSealCorePulse from '../assets/game/hub-seal-core-pulse.png'
 import hubSealPulse from '../assets/game/hub-seal-pulse.png'
@@ -454,36 +434,10 @@ export const mainMenu = {
   },
 }
 
-/** Native CreateWizardMenu layers from Create.bundle and UI.bundle. */
+/** Website-rendered bitmap labels used beside exact native Create/UI pages. */
 export const createMenu = {
-  arcaneWheel: createArcaneWheel,
-  backSkull: createBackSkull,
-  chooseDiscipline: createChooseDiscipline,
-  chooseElement: createChooseElement,
-  dice: createDice,
-  disciplines: {
-    arcane: createDisciplineArcane,
-    body: createDisciplineBody,
-    mind: createDisciplineMind,
-  },
-  elements: {
-    air: createElementAir,
-    earth: createElementEarth,
-    ether: createElementEther,
-    fire: createElementFire,
-    water: createElementWater,
-  },
-  handCupped: createHandCupped,
-  handFist: createHandFist,
-  handRaised: createHandRaised,
-  nameEnd: createNameEnd,
-  nameRail: createNameRail,
   textNameCaption: createTextNameCaption,
   textNameClear: createTextNameClear,
-  stars: {
-    large: createStarLarge,
-    small: createStarSmall,
-  },
 }
 
 /** BadGuys.bundle layers shared by the five stock element renderers. */

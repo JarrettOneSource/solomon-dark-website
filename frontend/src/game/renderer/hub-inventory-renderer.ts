@@ -299,15 +299,15 @@ export async function createHubInventoryRenderer(
         resolution: 1,
         width: HUB_NATIVE_UI_SIZE.width,
       }),
-      loadGameTextureMap([
-        hub.trader.inventoryAtlas,
-        hub.trader.skillsAtlas,
-        hub.trader.uiAtlas,
-        skillPicker.fontsAtlas,
-        BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
-        ...PLAYER_CHARACTER_ATLAS_SOURCES,
-      ], {
-        compositedSources: PLAYER_CHARACTER_ATLAS_SOURCES,
+      loadGameTextureMap({
+        composited: PLAYER_CHARACTER_ATLAS_SOURCES,
+        stock: [
+          hub.trader.inventoryAtlas,
+          hub.trader.skillsAtlas,
+          hub.trader.uiAtlas,
+          skillPicker.fontsAtlas,
+          BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
+        ],
       }),
       loadModPresentationTextures(modAssets),
     ])
@@ -361,6 +361,9 @@ export async function createHubInventoryRenderer(
   ))
   gpu.canvas.dataset.playerTextureAlpha = playerCharacterAtlas
     .frame(PLAYER_CHARACTER_SHEETS.robeDynamic.air, 0, 0).source.alphaMode
+  gpu.canvas.dataset.playerTextureAddress = playerCharacterAtlas
+    .frame(PLAYER_CHARACTER_SHEETS.robeDynamic.air, 0, 0).source.addressMode
+  gpu.canvas.dataset.nativeTextureAddress = elementVfxTextures.fire[0]!.source.addressMode
   gpu.canvas.dataset.nativeTextureAlpha = elementVfxTextures.fire[0]!.source.alphaMode
 
   const context: RenderContext = {

@@ -877,14 +877,26 @@ try {
       solomon: node.dataset.solomonTextureAlpha,
       statueAura: node.dataset.statueAuraTextureAlpha,
     },
+    textureAddress: {
+      combat: node.dataset.combatTextureAddress,
+      hubVisual: node.dataset.hubVisualTextureAddress,
+      player: node.dataset.playerTextureAddress,
+      solomon: node.dataset.solomonTextureAddress,
+      statueAura: node.dataset.statueAuraTextureAddress,
+    },
   }))
   assert.equal(browserReceipt.textureAlpha.player, 'premultiply-alpha-on-upload')
   assert.equal(browserReceipt.textureAlpha.combat, 'no-premultiply-alpha')
+  assert.equal(browserReceipt.textureAddress.player, 'clamp-to-edge')
+  assert.equal(browserReceipt.textureAddress.combat, 'repeat')
   if (requestedScene === 'hub') {
     assert.equal(browserReceipt.textureAlpha.hubVisual, 'premultiply-alpha-on-upload')
     assert.equal(browserReceipt.textureAlpha.statueAura, 'no-premultiply-alpha')
+    assert.equal(browserReceipt.textureAddress.hubVisual, 'clamp-to-edge')
+    assert.equal(browserReceipt.textureAddress.statueAura, 'repeat')
   } else {
     assert.equal(browserReceipt.textureAlpha.solomon, 'premultiply-alpha-on-upload')
+    assert.equal(browserReceipt.textureAddress.solomon, 'clamp-to-edge')
   }
   assert.deepEqual(pageErrors, [])
   assert.deepEqual({ consoleErrors, responseErrors }, { consoleErrors: [], responseErrors: [] })

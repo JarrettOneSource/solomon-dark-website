@@ -222,7 +222,7 @@ test('static Boneyard residents keep native unpremultiplied linear pixels', () =
   assert.doesNotMatch(boneyardRenderer, /documentNodeCanvas\(bounds\.w, bounds\.h\)/)
   assert.doesNotMatch(editorRenderer, /filterLift|brightness\(1\.12\)/)
   assert.match(editorRenderer, /ctx\.imageSmoothingEnabled = true/)
-  assert.match(boneyardTextures, /loadGameTextureEntries\(sources, \{/)
+  assert.match(boneyardTextures, /loadGameTextureEntries\(\{/)
   assert.doesNotMatch(boneyardTextures, /createElement\('canvas'\)|BufferImageSource/)
 })
 
@@ -292,7 +292,7 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(boneyardTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(
     boneyardTextures,
-    /const loaded = await loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:/,
+    /const loaded = await loadGameTextureEntries\(\{[\s\S]*?composited,[\s\S]*?stock:/,
   )
   assert.doesNotMatch(boneyardTextures, /clamp-to-edge|combatPageSources/)
   assert.match(boneyardTextures, /createBoneyardCombatAtlas\(texture\)/)
@@ -327,7 +327,7 @@ test('Website-composed player and Solomon pages never impersonate native straigh
   assert.match(playerTextures, /PLAYER_CHARACTER_ATLAS_SOURCES/)
   assert.match(
     boneyardTextures,
-    /compositedSources:[\s\S]*?playerWorldCompositedAssetSources\(\)[\s\S]*?solomonEncounterSource[\s\S]*?boneyard\.solomonDig/,
+    /const composited = \[[\s\S]*?playerWorldCompositedAssetSources\(\)[\s\S]*?solomonEncounterSource[\s\S]*?boneyard\.solomonDig/,
   )
 })
 

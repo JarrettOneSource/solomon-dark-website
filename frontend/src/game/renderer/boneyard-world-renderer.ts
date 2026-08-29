@@ -744,6 +744,9 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.playerTextureAlpha = textures.players.air.robe[0]![0]!.source.alphaMode
   canvas.dataset.solomonTextureAlpha = textures.solomonDig[0]!.source.alphaMode
   canvas.dataset.combatTextureAlpha = textures.levelUpSparkle.source.alphaMode
+  canvas.dataset.playerTextureAddress = textures.players.air.robe[0]![0]!.source.addressMode
+  canvas.dataset.solomonTextureAddress = textures.solomonDig[0]!.source.addressMode
+  canvas.dataset.combatTextureAddress = textures.levelUpSparkle.source.addressMode
   canvas.dataset.weatherSplashAsset = 'DeadHawg:24'
   canvas.dataset.weatherSplashBlend = 'add'
   canvas.dataset.weatherStreakRenderer = 'pixi-particle-batch'

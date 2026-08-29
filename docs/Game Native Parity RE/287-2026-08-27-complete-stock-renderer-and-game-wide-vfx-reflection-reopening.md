@@ -763,3 +763,122 @@ and Website-composite PMA. The right-edge measurement remains collapsed at
 `0.4817/0.4106`, so the renderer-lifecycle correction does not reopen the
 sampling fix. Exact post-receipt validation and remote SHA identity remain the
 publication boundary.
+
+## 2026-08-29 — Third edge report: artificial page addressing and source-policy net
+
+### Reported smell and process failure
+
+- Reported web behavior: Create hands retain visible straight edges after the
+  Title Solomon correction. The user explicitly asks to turn the known examples
+  into a net for unknown members.
+- Stock behavior to recover: wrap belongs to complete retail pages. A Website-
+  created bitmap or packed page has an artificial boundary and must not sample
+  its unrelated opposite edge.
+- Skipped rule: the 2026-08-28 pass separated PMA from NPM but copied retail
+  wrap into the PMA composite policy. The Title correction removed one exact-
+  crop family from that policy, but did not falsify composite `repeat` globally
+  or remove the loader's implicit unclassified-stock default.
+- Reproduction and falsifiers: the Create evidence in ledger 007; any composite
+  source still reporting repeat; any requested source silently receiving a
+  default policy; any source belonging to multiple policies; any active exact
+  Create/UI record still loaded as a loose page; or any browser scene with a
+  straight page-boundary residual.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Native sampler | reset/address census already closed above | Retail NPM pages remain linear/repeat. No finding changes native state. | high |
+| Create asset/data | exact Create page and records 0..23; Website pose composites; pixel census in ledger 007 | The second reported seam is produced by opposite edges that exist only because the web manufactured a new repeating page. | high |
+| Web policy | `NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS` at `41ec3c8f` | PMA upload is correct, but `addressMode: repeat` still folds artificial page edges together. | high |
+| Web loader API | `loadGameTextureMap/Entries(requestedSources, options)` | Stock is an implicit fallback; composite/point sets are optional and overlaps are not rejected. A future source can silently enter the wrong policy. | high |
+| Packed pages | Hub/player packers place every trimmed rectangle with a one-pixel zero-RGBA gutter | Internal composite-frame sampling is coverage-safe under PMA; clamp is required only at the artificial outer page boundary. | high |
+
+### System boundary and membership inventory
+
+Native/web system: **declared WebGL texture provenance through source construction**
+— every `/game` WebGL image source must enter exactly one policy before decode/upload;
+every scene consumes the resulting page and destroys it at its existing owner.
+
+| Source family | Required policy/disposition | Proof contract |
+| --- | --- | --- |
+| complete retail linear pages | NPM, linear, repeat; `verified-already-at-parity` | exact hashes and full-page source identity |
+| complete retail point-font views | NPM, nearest, repeat; `verified-already-at-parity` | exact font page plus point sibling |
+| true Website composites and packed pages | PMA, linear, clamp-to-edge; `exact-ported` by this correction | policy equation, page-boundary capture, packer gutter contract |
+| exact native record users | frame of the owning complete retail page; `exact-ported` | Title and Create/UI record maps; no loose-page runtime source |
+| Loader composed/rotated art | true composite clamp | Loader scaled journey |
+| Title Website logo/chrome/labels/Hall art | true composite clamp | Title policy and responsive journeys |
+| Create rendered name labels | true composite clamp | Create name field and hand journeys |
+| Hub visual pages and compact player pages | packed composite clamp | Hub rooms/player movement/portrait journeys |
+| Boneyard player and Solomon composite pages | packed composite clamp | moving player/Solomon journeys |
+| exact BadGuys/DeadHawg/College/Demon/native-UI pages | retail repeat | existing VFX/UI/multiply receipts |
+| generated RenderTexture/Buffer resources | explicit owner policy, outside image-source classifier | existing Arena/Region contracts |
+| mod-provided images | `out-of-system`; separate mod loader | inactive stock path and mod contracts |
+
+### Recovered contract and implementation consequence
+
+- Replace the optional-set loader with an explicit source-group plan. `stock`,
+  `stockPoint`, and `composited` are a closed partition: duplicate membership
+  throws, and there is no unclassified fallback.
+- Keep stock policies unchanged. Define the composite policy independently as
+  PMA/linear/clamp; it must not spread the stock repeat option.
+- Migrate every loader caller in one cutover. A future asset cannot load until
+  its owner chooses one provenance group, making wrong or missing membership a
+  failing construction rather than a latent visual smell.
+- Migrate all active Create and UI records to their complete native pages and
+  assemble hands from exact record sprites. Do not solve the known line by
+  masking, snapping, or padding invented colors.
+- Publish per-scene policy diagnostics and strengthen menu/world browser
+  journeys to require native repeat, composite clamp, zero policy conflicts,
+  and the expected source-family counts.
+
+### Validation contract
+
+- Pure source-plan tests reject duplicate membership, preserve deterministic
+  ordering, and prove every policy maps to the exact alpha/filter/address tuple.
+- Static contracts enumerate every `loadGameTextureMap/Entries` owner and reject
+  the former array-plus-optional-options API, implicit point source, composite
+  repeat, and direct ImageSource bypasses.
+- Per-member tests pin Create 0..23/UI 42/80, packed-page one-pixel gutters, and
+  all Loader/Title/Create/Hub/Hub Inventory/Boneyard/skill-screen source groups.
+- Built Mac browser acceptance covers Loader, Title, both Create phases, Hub,
+  player portrait/movement, College Statue, Boneyard player/Solomon, and at
+  least two fractional display scales. Error arrays and policy conflicts must
+  be empty; known edge intervals must match their neighbors.
+- Run the exact candidate through the canonical Mac gate, repeat browser
+  acceptance after any publication rebase, then prove local/tracking/remote
+  identities separately from deployment.
+
+### Implementation and game-wide acceptance receipt
+
+- `planGameTextureSources` now requires an explicit closed partition of
+  `stock`, `stockPoint`, and `composited` sources. Empty plans, empty members,
+  duplicate members, and cross-policy membership throw before image decode;
+  no source receives a fallback policy.
+- All eleven WebGL image-loading owners were migrated in the same cutover: Native UI
+  workbench, Loader, Title, Create, Hub, Boneyard, gameplay pause, Hub
+  inventory, HUD skill selector, Skill Book, and Skill Picker. Static coverage
+  enumerates that owner list and rejects the former optional-set API or direct
+  unclassified `ImageSource` construction.
+- Stock linear and point pages remain NPM/repeat. The independently declared
+  composite policy is now PMA/linear/clamp. The Hub and player atlas packers'
+  one-pixel zero-RGBA gutters remain pinned so internal packed-frame filtering
+  cannot pull a neighboring member.
+- The first optimized-production journey proved the classifier itself: Vite
+  content-deduplicated the byte-identical Hub and native Fonts PNGs to one URL,
+  and Title failed closed when that URL appeared under both stock and point
+  policies. Title and Create now consume the one canonical exact Fonts page as
+  point/NPM/repeat; a contract forbids reintroducing the duplicate loose font
+  source in either renderer.
+- Production Chrome `151.0.7922.174` passed Title and both Create phases across
+  four layouts with exact Title/Create/UI pages, no loose record crops,
+  composite clamp, stock repeat, and empty error arrays. Title reports 19
+  sources; Create reports its closed six-source membership.
+- A production Hub journey reports player and Hub visual pages as
+  clamp/PMA while combat and College Statue aura pages remain repeat/NPM. Its
+  inspected screenshot hashes to
+  `2d22545ebef8363c3368c9cecf95cd8beb68ec7d77789bf8820d4d7df7be959e`.
+  A production Boneyard journey reports player and Solomon pages as clamp/PMA
+  while the combat page remains repeat/NPM; its inspected Ring of Ice frame
+  hashes to `514fb09505e7afc333db1911feb54789cd8fc84b8853c25643fd0d89ec721077`.
+  Both journeys used WebGL2 and had empty page/console/response error arrays.

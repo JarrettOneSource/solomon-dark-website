@@ -60,7 +60,7 @@ async function start(): Promise<void> {
       resolution: 1,
       width: WIDTH,
     }),
-    loadGameTextureMap(Object.values(NATIVE_UI_ATLAS_SOURCES)),
+    loadGameTextureMap({ stock: Object.values(NATIVE_UI_ATLAS_SOURCES) }),
   ])
   const nativeUi = createNativeUiPixiAdapter(textures)
   const root = new Container({ label: 'native-ui-workbench' })

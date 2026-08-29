@@ -8,7 +8,7 @@ import {
   type Application,
 } from 'pixi.js'
 
-import { hub, mainMenu } from '../../lib/assets.ts'
+import { mainMenu } from '../../lib/assets.ts'
 import {
   TITLE_BUILD_REVISION,
   layoutTitleBuildRevisionLabel,
@@ -40,7 +40,8 @@ import {
 } from './game-webgl.ts'
 import {
   TITLE_COMPOSITED_ASSET_SOURCES,
-  TITLE_GAME_ASSET_SOURCES,
+  TITLE_STOCK_ASSET_SOURCES,
+  TITLE_STOCK_POINT_ASSET_SOURCES,
 } from '../game-assets.ts'
 import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
 import {
@@ -105,8 +106,10 @@ const MAIN_BUTTON_HEIGHT = 69
 export async function createTitleMenuRenderer(
   options: TitleMenuRendererOptions,
 ): Promise<TitleMenuRenderer> {
-  const textures = await loadGameTextureMap(TITLE_GAME_ASSET_SOURCES, {
-    compositedSources: TITLE_COMPOSITED_ASSET_SOURCES,
+  const textures = await loadGameTextureMap({
+    composited: TITLE_COMPOSITED_ASSET_SOURCES,
+    stock: TITLE_STOCK_ASSET_SOURCES,
+    stockPoint: TITLE_STOCK_POINT_ASSET_SOURCES,
   })
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
@@ -133,8 +136,14 @@ export async function createTitleMenuRenderer(
   const titleTexture = (record: number) => (
     nativeUi.slice('Title', record, [0, 0, 1, 1])
   )
+  canvas.dataset.compositedTextureAddress = texture(mainMenu.logo).source.addressMode
   canvas.dataset.compositedTextureAlpha = texture(mainMenu.logo).source.alphaMode
-  canvas.dataset.nativeTextureAlpha = texture(hub.hud.fontAtlas).source.alphaMode
+  const fontAtlas = texture(TITLE_STOCK_POINT_ASSET_SOURCES[0])
+  canvas.dataset.nativeTextureAddress = fontAtlas.source.addressMode
+  canvas.dataset.nativeTextureAlpha = fontAtlas.source.alphaMode
+  canvas.dataset.titleTextureAddress = titleTexture(
+    TITLE_MAIN_MENU_ATLAS_RECORDS.solomonBody,
+  ).source.addressMode
   canvas.dataset.titleTextureAlpha = titleTexture(
     TITLE_MAIN_MENU_ATLAS_RECORDS.solomonBody,
   ).source.alphaMode
@@ -226,7 +235,7 @@ export async function createTitleMenuRenderer(
   solomon.container.zIndex = 20
   solomonStage.addChild(solomon.container)
   centerStage.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
-  const buildRevision = createTitleBuildRevisionView(texture(hub.hud.fontAtlas))
+  const buildRevision = createTitleBuildRevisionView(fontAtlas)
   versionStage.addChild(buildRevision.container)
   centerStage.addChild(stageSprite(texture(mainMenu.flourish), 601, 440, 67, 262, 23))
   const rightFlourish = stageSprite(texture(mainMenu.flourish), 1102, 440, 67, 262, 23)

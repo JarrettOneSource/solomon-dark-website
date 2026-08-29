@@ -6,6 +6,7 @@ import type {
 export const CREATE_RENDER_WIDTH = 1600
 export const CREATE_RENDER_HEIGHT = 900
 
+export const CREATE_HAND_LOGICAL_SIZE = { height: 469, width: 420 } as const
 export const CREATE_HAND_SIZE = { height: 703.5, width: 630 } as const
 export const CREATE_HAND_CENTERS = {
   left: { x: 400, y: 560 },
@@ -14,6 +15,26 @@ export const CREATE_HAND_CENTERS = {
 
 export const CREATE_ELEMENTS = ['earth', 'ether', 'fire', 'water', 'air'] as const
 export const CREATE_DISCIPLINES = ['arcane', 'body', 'mind'] as const
+
+export const CREATE_ATLAS_RECORDS = {
+  arcaneWheel: 7,
+  chooseDiscipline: 2,
+  chooseElement: 3,
+  dice: 6,
+  disciplines: { arcane: 0, body: 1, mind: 5 },
+  elements: { air: 11, earth: 13, ether: 9, fire: 10, water: 12 },
+  hands: {
+    cupped: [16, 17, 18, 19],
+    fist: [14, 15],
+    raised: [20, 21, 22, 23],
+  },
+  stars: { large: 4, small: 8 },
+} as const
+
+export const CREATE_UI_ATLAS_RECORDS = {
+  backSkull: 42,
+  nameEnd: 80,
+} as const
 
 export const CREATE_ELEMENT_SIZE: Readonly<Record<WizardElement, {
   height: number

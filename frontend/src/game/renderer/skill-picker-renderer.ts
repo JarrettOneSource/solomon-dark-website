@@ -82,11 +82,13 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         resolution: 1,
         width: SKILL_PICKER_SIZE.width,
       }),
-      loadGameTextureMap([
-        skillPicker.fontsAtlas,
-        skillPicker.skillsAtlas,
-        skillPicker.uiAtlas,
-      ]),
+      loadGameTextureMap({
+        stock: [
+          skillPicker.fontsAtlas,
+          skillPicker.skillsAtlas,
+          skillPicker.uiAtlas,
+        ],
+      }),
     ])
   } catch (error) {
     gpu?.application.destroy({ removeView: true })

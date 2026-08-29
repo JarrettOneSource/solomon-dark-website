@@ -3,7 +3,7 @@ import type { Texture } from 'pixi.js'
 import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
 import { GROUND_TEXTURE, ROAD_TEXTURES } from '../../editor/textures.ts'
-import { boneyard } from '../../lib/assets.ts'
+import { boneyard, hub } from '../../lib/assets.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
 import {
   NATIVE_REGION_LIGHT_ATLAS,
@@ -81,16 +81,22 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     weatherSplashSource,
   ])]
   const packedSources = requestedSources.filter(boneyardCombatAtlasSourceIsPacked)
-  const sources = [
+  const sources = [...new Set([
     ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
+  ])]
+  const composited = [
+    ...playerWorldCompositedAssetSources(),
+    solomonEncounterSource,
+    boneyard.solomonDig,
   ]
-  const loaded = await loadGameTextureEntries(sources, {
-    compositedSources: [
-      ...playerWorldCompositedAssetSources(),
-      solomonEncounterSource,
-      boneyard.solomonDig,
-    ],
+  const compositedSet = new Set(composited)
+  const loaded = await loadGameTextureEntries({
+    composited,
+    stock: sources.filter((source) => (
+      source !== hub.hud.fontAtlas && !compositedSet.has(source)
+    )),
+    stockPoint: [hub.hud.fontAtlas],
   })
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {

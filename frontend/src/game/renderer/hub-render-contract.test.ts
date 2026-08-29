@@ -90,7 +90,7 @@ test('Hub renderer loads compact pages and releases derived frames before page o
   assert.match(hubTextures, /createBoneyardCombatAtlas\(texture\)/)
   assert.match(
     hubTextures,
-    /loadGameTextureEntries\(sources, \{[\s\S]*?compositedSources:[\s\S]*?HUB_VISUAL_ATLAS_SOURCES/,
+    /const composited = \[[\s\S]*?HUB_VISUAL_ATLAS_SOURCES[\s\S]*?loadGameTextureEntries\(\{[\s\S]*?composited/,
   )
   assert.match(hubTextures, /playerWorldCompositedAssetSources\(\)/)
   assert.match(hubTextures, /if \(source === hub\.props\.statue\.aura\) continue/)
