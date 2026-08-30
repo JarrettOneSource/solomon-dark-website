@@ -1345,6 +1345,14 @@ test('exhaustively projects every modeled enemy provider family and duplicate en
     Math.fround(1 - value * 0.1)
   )))
   assert.ok(coffinIntensities.every((intensity) => nativeCoffinDomain.has(intensity)))
+
+  const portal = nativeEnemyLightSources(enemy('PORTAL', {
+    animation: { alpha: 0.6 },
+    lighting: { charge: 0.6, glow: 0.6, providerCopies: 1 },
+  }), 12, true)
+  assert.equal(portal[0]!.radius, Math.fround(0.6))
+  assert.ok(portal[0]!.intensity >= 0.54 && portal[0]!.intensity <= 0.75)
+  assert.equal(portal[0]!.castsDirectionalShadow, true)
 })
 
 test('keeps projectile provider randomness presentation-owned and lane ordering explicit', () => {

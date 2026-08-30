@@ -207,6 +207,7 @@ export function nativeHallOfFameEnemyName(
       poison: 'Skeleton Poisoncaster',
     }[enemy.family.element]
     case 'IMP': return 'Imp'
+    case 'PORTAL': return enemy.recipeName ?? 'Deep Portal'
     case 'ZOMBIE': return enemy.family.rotten ? 'Rotten Zombie' : 'Zombie'
     case 'WRAITH': return 'Wraith'
     case 'DEMON': return enemy.family.splitCount < 1

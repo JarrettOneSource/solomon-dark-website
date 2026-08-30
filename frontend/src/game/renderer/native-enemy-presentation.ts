@@ -27,6 +27,7 @@ export const NATIVE_ENEMY_FAMILIES = [
   'SKELETONARCHER',
   'SKELETONMAGE',
   'IMP',
+  'PORTAL',
   'ZOMBIE',
   'WRAITH',
   'DEMON',
@@ -111,6 +112,7 @@ const ACTIONS_BY_FAMILY: Readonly<
   SKELETONARCHER: ['archer-shot'],
   SKELETONMAGE: ['mage-cast-short', 'mage-cast-long'],
   IMP: [],
+  PORTAL: [],
   ZOMBIE: ['zombie-beat'],
   WRAITH: ['wraith-drain'],
   DEMON: ['demon-bomb'],
@@ -148,7 +150,7 @@ export function nativeEnemyFacingBucket(
   family: NativeEnemyFamily,
   headingDeg: number,
 ): number {
-  if (family === 'COFFIN') return 0
+  if (family === 'COFFIN' || family === 'PORTAL') return 0
   if (!Number.isFinite(headingDeg)) throw new Error('native facing value must be finite')
   if (family === 'IMP') {
     return positiveModulo(Math.trunc((headingDeg + 15) / 30), 12)
@@ -204,7 +206,7 @@ export function nativeEnemyPresentationPlan(
     ? applyAuthoritativeSample(
         familyPresentation,
         effectLayers(animation.effects),
-        animation,
+        family === 'PORTAL' ? { ...animation, hitFlash: 0 } : animation,
       )
     : [
         ...familyPresentation.before,
@@ -274,6 +276,7 @@ function familyLayers(
       authoredPoints,
     )
     case 'IMP': return presentation(impLayers(enemy, facing, animation))
+    case 'PORTAL': return presentation(portalLayers(animation))
     case 'ZOMBIE': return zombiePresentation(
       enemy,
       facing,
@@ -301,6 +304,45 @@ function familyLayers(
       ? coffinSampleLayers(animation)
       : coffinSpawnLayers(enemy, spawnAgeTicks))
   }
+}
+
+function portalLayers(
+  animation: NativeEnemyAnimationSample | undefined,
+): NativeEnemySpriteLayer[] {
+  if (!animation || animation.alpha <= 0) return []
+  const alpha = animation.alpha
+  const fixedScale = Math.max(0, animation.stridePhaseDeg)
+  const bodyEntry = 46 + positiveModulo(Math.floor(animation.bodyPose), 32)
+  const auraEntry = 180 + positiveModulo(Math.floor(animation.gaitPose), 20)
+  const layers = [
+    layer('DeadHawg', 18, 'portal-outer', {
+      alpha: 0.5,
+      blendMode: 'add',
+      scale: fixedScale * (1 + alpha),
+    }),
+    layer('DeadHawg', auraEntry, 'portal-aura', {
+      blendMode: 'add',
+      scale: fixedScale,
+    }),
+    layer('DeadHawg', bodyEntry, 'portal-body', {
+      scale: fixedScale,
+      scaleX: fixedScale,
+      scaleY: 1 + alpha * 2,
+    }),
+    layer('DeadHawg', 22, 'portal-core', {
+      blendMode: 'add',
+      scale: fixedScale,
+    }),
+  ]
+  if (animation.hitFlash > 0) {
+    layers.push(layer(
+      'BadGuys',
+      401 + Math.min(18, Math.floor((1 - boundedUnit(animation.hitFlash)) * 19)),
+      'portal-hurt',
+      { blendMode: 'add', scale: 2 },
+    ))
+  }
+  return layers
 }
 
 function presentation(

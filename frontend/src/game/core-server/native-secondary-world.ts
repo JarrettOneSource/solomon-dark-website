@@ -16,6 +16,7 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import {
   boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
   damageBoneyardEnemy,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
@@ -191,7 +192,7 @@ export function boneyardNativeSecondaryTargets(
         && (boneyardEnemyActorFlags(actor) & 0x2) === 0
       ) return false
       if (!('config' in actor) && !actor.combatActive) return false
-      const bodyRadius = 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius
+      const bodyRadius = 'config' in actor ? boneyardEnemyCollisionRadius(actor) : actor.collisionRadius
       return Math.hypot(actor.position.x - center.x, actor.position.y - center.y)
         <= radius + bodyRadius
     })
@@ -202,7 +203,7 @@ export function boneyardNativeSecondaryTargets(
       lightRegistration: actor.lightRegistration,
       nativeFlags: 0x2,
       position: Object.freeze({ ...actor.position }),
-      radius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
+      radius: 'config' in actor ? boneyardEnemyCollisionRadius(actor) : actor.collisionRadius,
       scale: 'config' in actor ? actor.config.scale : 1,
       shieldHealth: 'config' in actor ? actor.shieldHealth : 0,
     }))
@@ -225,7 +226,7 @@ export function boneyardNativeSecondaryTarget(
     lightRegistration: actor.lightRegistration,
     nativeFlags: 0x2,
     position: Object.freeze({ ...actor.position }),
-    radius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
+    radius: 'config' in actor ? boneyardEnemyCollisionRadius(actor) : actor.collisionRadius,
     scale: 'config' in actor ? actor.config.scale : 1,
     shieldHealth: 'config' in actor ? actor.shieldHealth : 0,
   })

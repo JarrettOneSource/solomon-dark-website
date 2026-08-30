@@ -33,6 +33,7 @@ const FAMILIES = [
   'WRAITH',
   'DEMON',
   'COFFIN',
+  'PORTAL',
 ] as const
 
 const ACTIONS: readonly (BoneyardEnemyAction | null)[] = [

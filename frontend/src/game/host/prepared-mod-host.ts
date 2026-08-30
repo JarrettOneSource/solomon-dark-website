@@ -100,7 +100,9 @@ import {
 const MAXIMUM_PRESENTATION_INTENTS = 1_024
 const SPAWN_ID_BASE = 0x5000_0000
 const SPAWN_ID_RANGE = 0x0fff_ffff
-const enemyTokens = new Set<string>(Object.keys(BONEYARD_WAVE_ENEMY_TYPES))
+const enemyTokens = new Set<string>(Object.keys(BONEYARD_WAVE_ENEMY_TYPES).filter((token) => (
+  token !== 'PORTAL'
+)))
 
 export interface PreparedModHostStateAccess {
   read(): GameSimulationState

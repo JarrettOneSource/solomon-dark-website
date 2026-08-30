@@ -4,6 +4,7 @@ import type {
   BoneyardMaggotActor,
   BoneyardEnemyStore,
 } from '../boneyard-enemy-store.ts'
+import { boneyardEnemyCollisionRadius } from '../boneyard-enemy-store.ts'
 import { ML_BOT_POLICY_ENEMY_TOKEN_SPECIES } from './closed-unions.ts'
 import { ML_BOT_POLICY_SCALES } from './spec.ts'
 
@@ -144,7 +145,7 @@ function enemyRow(
     headingDeg: actor.headingDeg,
     maximumHealth: actor.config.maximumHealth,
     options,
-    radius: actor.config.collisionRadius,
+    radius: boneyardEnemyCollisionRadius(actor),
     species: ML_BOT_POLICY_ENEMY_TOKEN_SPECIES[actor.config.enemyToken],
     targetPlayerId: actor.targetPlayerId,
   }, nextPositions)

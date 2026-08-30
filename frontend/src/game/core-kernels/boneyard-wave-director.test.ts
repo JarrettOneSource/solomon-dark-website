@@ -29,17 +29,100 @@ interface DirectorHarness {
   state: BoneyardWaveDirectorState
 }
 
-test('all eight retail wave enemy tokens map to their native type ids', () => {
+test('all retail and Portal enemy tokens map to their native type ids', () => {
   assert.deepEqual(BONEYARD_WAVE_ENEMY_TYPES, {
     COFFIN: 1013,
     DEMON: 1009,
     IMP: 1004,
+    PORTAL: 5021,
     SKELETON: 1001,
     SKELETONARCHER: 1002,
     SKELETONMAGE: 1003,
     WRAITH: 1007,
     ZOMBIE: 1006,
   })
+})
+
+test('Deep Portal holds the timeline, births three bosses, and polls only bosses', () => {
+  const sourceSha256 = '9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9'
+  let state: BoneyardWaveDirectorState = {
+    ...createBoneyardWaveDirector('portal-barrier', [wave({ next: [0] })], {
+      sourceSha256,
+    }),
+    phase: 'spawning' as const,
+    waveOrdinal: 24,
+  }
+  const spawnIntents: BoneyardEnemySpawnIntent[] = []
+  const step = (tick: number, liveBossCount: number) => {
+    const result = stepBoneyardWaveDirector(state, {
+      bounds: BOUNDS,
+      liveBossCount,
+      liveEnemyCount: 20,
+      liveZombieCount: 0,
+      players: PLAYERS,
+      tick,
+    })
+    state = result.director
+    spawnIntents.push(...result.spawnIntents)
+  }
+
+  step(0, 0)
+  assert.equal(state.portalScriptPhase, 'intro')
+  assert.equal(state.portalTicksRemaining, 150)
+  assert.equal(state.portalTimelinePaused, true)
+  for (let tick = 1; tick < 150; tick += 1) step(tick, 0)
+  assert.equal(spawnIntents.length, 0)
+  step(150, 0)
+  assert.equal(spawnIntents.length, 1)
+  for (let tick = 151; tick < 175; tick += 1) step(tick, 1)
+  step(175, 1)
+  for (let tick = 176; tick < 200; tick += 1) step(tick, 2)
+  step(200, 2)
+
+  assert.equal(spawnIntents.length, 3)
+  assert.ok(spawnIntents.every((intent) => (
+    intent.enemyToken === 'PORTAL'
+    && intent.nativeTypeId === 5021
+    && intent.placementRadius === 45
+    && intent.reachabilityRadius === 25
+    && intent.positionPolicy === 'light'
+    && intent.authoredRecipe?.classification === 'multiple-boss'
+  )))
+  assert.equal(state.portalScriptPhase, 'boss-wait')
+  assert.equal(state.portalTicksRemaining, 100)
+
+  state = { ...state, portalTicksRemaining: 1 }
+  step(201, 1)
+  assert.equal(state.portalTicksRemaining, 200)
+  assert.equal(state.portalTimelinePaused, true)
+  state = { ...state, portalTicksRemaining: 1 }
+  step(202, 0)
+  assert.equal(state.portalTimelinePaused, false)
+  assert.equal(state.portalPhaseIndex, 1)
+  assert.equal(state.portalScriptPhase, 'idle')
+  assert.equal(state.waveOrdinal, 25)
+})
+
+test('later Deep Portal phases run alongside the ordinary timeline', () => {
+  const sourceSha256 = '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f'
+  const source = {
+    ...createBoneyardWaveDirector('portal-concurrent', [wave({})], { sourceSha256 }),
+    phase: 'wave-threshold' as const,
+    populationThreshold: 1,
+    waveOrdinal: 42,
+  }
+  const result = stepBoneyardWaveDirector(source, {
+    bounds: BOUNDS,
+    liveBossCount: 0,
+    liveEnemyCount: 2,
+    liveZombieCount: 0,
+    players: PLAYERS,
+    tick: 50,
+  })
+  assert.equal(result.spawnIntents.filter(({ enemyToken }) => enemyToken === 'PORTAL').length, 1)
+  assert.equal(result.director.portalTimelinePaused, false)
+  assert.equal(result.director.portalTicksRemaining, 25)
+  assert.equal(result.director.phase, 'wave-threshold')
 })
 
 test('Solomon run emits its generated weakened Skeleton opening through tick 900', () => {

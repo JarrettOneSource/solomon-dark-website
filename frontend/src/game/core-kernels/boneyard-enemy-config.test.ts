@@ -203,7 +203,7 @@ test('periodic and 25-stall recovery preserve their native winning rolls', () =>
   assert.ok(reroute.state.flankTicksRemaining <= 400)
 })
 
-test('all eight wave families materialize immutable recovered defaults', () => {
+test('all eight ordinary wave families materialize immutable recovered defaults', () => {
   const expected = {
     COFFIN: [100, null, 1, 1, 200, 45, 0.75],
     DEMON: [400, 20, 1, 1, 800, 35, 0.75],
@@ -213,9 +213,12 @@ test('all eight wave families materialize immutable recovered defaults', () => {
     SKELETONMAGE: [5, 3, 0.8, 1, 10, 25, (1.25 + 0.5) * 1.25 ** 2 * 0.75 * 0.65],
     WRAITH: [2, 4, 1, 1, 4, 20, 1],
     ZOMBIE: [105, 35, 1, 1, 210, 21, 0.85],
-  } satisfies Record<BoneyardWaveEnemyToken, readonly (number | null)[]>
+  } satisfies Record<Exclude<BoneyardWaveEnemyToken, 'PORTAL'>, readonly (number | null)[]>
 
-  for (const enemyToken of Object.keys(expected) as BoneyardWaveEnemyToken[]) {
+  for (const enemyToken of Object.keys(expected) as Exclude<
+    BoneyardWaveEnemyToken,
+    'PORTAL'
+  >[]) {
     const config = evaluateBoneyardEnemyConfig(enemyToken, {
       random: { baseSpeedUnit: 0.5, collisionRadiusUnit: 0.5 },
     })

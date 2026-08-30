@@ -124,6 +124,9 @@ function enemyClock(actor: BoneyardEnemyActor): EnemyClockObservation {
     case 'imp': return brain.phase === 'death'
       ? passiveClock('recover')
       : passiveClock('approach')
+    case 'portal': return brain.phase === 'death'
+      ? passiveClock('recover')
+      : passiveClock('dormant')
     case 'zombie':
       if (brain.phase === 'approach') return passiveClock('approach', brain.phaseTicksRemaining)
       if (brain.phase === 'knockback') return passiveClock('knockback', brain.impactStateTicksRemaining)

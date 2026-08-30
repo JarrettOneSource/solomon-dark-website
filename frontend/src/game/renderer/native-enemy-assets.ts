@@ -58,7 +58,7 @@ const requiredBadGuysRanges = [
   [2293, 2364],
   [2365, 2508],
 ] as const
-const requiredDeadHawgRanges = [[0, 0], [19, 19], [28, 28], [30, 31], [46, 77], [114, 144]] as const
+const requiredDeadHawgRanges = [[0, 0], [18, 19], [22, 22], [28, 28], [30, 31], [46, 77], [114, 144], [180, 199]] as const
 const requiredDemonRanges = [[1, 115]] as const
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: badguys as AtlasManifest,

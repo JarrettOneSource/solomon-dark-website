@@ -42,6 +42,10 @@ import {
   NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS,
   stepBoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
+import {
+  findBoneyardEnemyRoute,
+  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
+} from './boneyard-enemy-navigation.ts'
 import { canPlaceBoneyardBody, resolveBoneyardMovement } from './boneyard-collision.ts'
 import { spawnBoneyardCustomLootItems } from './boneyard-loot-store.ts'
 
@@ -1186,6 +1190,51 @@ test('direct spawn materialization escapes the captured object-213 grave with a 
     player.position.x - firstActor.position.x,
     player.position.y - firstActor.position.y,
   ))
+})
+
+test('spawn materialization rejects a locally mobile root disconnected from every player', () => {
+  const template = NATIVE_GENERATED_BONEYARDS[9]!
+  const loaded: LoadedBoneyard = {
+    choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+    geometrySha256: template.geometrySha256,
+    runId: 'disconnected-spawn-root',
+    scene: template.scene,
+    seed: '00'.repeat(16),
+    sourceSha256: template.sourceSha256,
+  }
+  const created = createBoneyardWorld(loaded)
+  const world = { ...created, encounter: null, waves: null }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Connected Spawn Target',
+      element: 'fire',
+    }, world),
+    position: { x: 1686.970947265625, y: 982.4320068359375 },
+  }
+  const disconnectedRoot = { x: 2205, y: 41.25 }
+  const result = stepWorld(world, { player }, {}, 0, [{
+    enemyToken: 'IMP',
+    flags: [],
+    id: 9001,
+    locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
+    position: disconnectedRoot,
+    positionPolicy: 'direct',
+    spawnTick: 0,
+    waveOrdinal: 1,
+  }])
+  const actor = result.world.enemies.actors[0]
+  assert.ok(actor)
+  assert.notDeepEqual(actor.position, disconnectedRoot)
+  assert.ok(findBoneyardEnemyRoute({
+    bodyRadius: actor.config.collisionRadius,
+    bounds: result.world.bounds,
+    clearance: NATIVE_BADGUY_NAVIGATION_CLEARANCE,
+    end: player.position,
+    start: actor.position,
+    world: result.world.collision,
+  }))
 })
 
 test('authoritative offscreen placement materializes the logged Tutorial policy with and without a living player', () => {

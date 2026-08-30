@@ -293,6 +293,29 @@ test('Skeleton-family constructor height and stride sine articulate limbs, body,
   }
 })
 
+test('Portal renders the recovered body, aura, inline passes, and damage row', () => {
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('PORTAL'),
+    animation: nativeEnemyIdleAnimationSample({
+      alpha: 0.5,
+      bodyPose: 3.75,
+      gaitPose: 5.5,
+      hitFlash: 0.5,
+      stridePhaseDeg: 1.5,
+    }),
+  }, 120)
+  assert.deepEqual(plan.layers.map(({ atlas, entry, role }) => ({ atlas, entry, role })), [
+    { atlas: 'DeadHawg', entry: 18, role: 'portal-outer' },
+    { atlas: 'DeadHawg', entry: 185, role: 'portal-aura' },
+    { atlas: 'DeadHawg', entry: 49, role: 'portal-body' },
+    { atlas: 'DeadHawg', entry: 22, role: 'portal-core' },
+    { atlas: 'BadGuys', entry: 410, role: 'portal-hurt' },
+  ])
+  assert.deepEqual(plan.layers.map(({ alpha }) => alpha), [0.25, 0.5, 0.5, 0.5, 0.5])
+  assert.equal(plan.layers[2]?.scaleX, 1.5)
+  assert.equal(plan.layers[2]?.scaleY, 2)
+})
+
 test('Imp uses four native 12-facing bodies and the registered upper effect', () => {
   const plan = nativeEnemyPresentationPlan(enemy('IMP'), 100)
   assert.equal(plan.layers.length, 2)
@@ -1182,6 +1205,7 @@ test('common native hit redraw covers every survival family body membership', ()
     COFFIN: 1,
     DEMON: 5,
     IMP: 2,
+    PORTAL: 0,
     SKELETON: 3,
     SKELETONARCHER: 3,
     SKELETONMAGE: 3,

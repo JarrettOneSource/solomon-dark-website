@@ -120,6 +120,7 @@ import {
 } from './boneyard-collision.ts'
 import {
   boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
   type BoneyardEnemyPlayerDamage,
@@ -360,7 +361,7 @@ export function boneyardPrimarySpellTargets(
       active: enemy.lifeState === 'alive',
       actorFlags: boneyardEnemyActorFlags(enemy),
       attachment: { x: 0, y: 0 },
-      bodyRadius: enemy.config.collisionRadius,
+      bodyRadius: boneyardEnemyCollisionRadius(enemy),
       cellBindingOrder: enemy.nativeCellBindingOrder,
       headingDeg: enemy.headingDeg,
       id: `enemy:${enemy.id}`,
@@ -627,7 +628,7 @@ export function stepBoneyardWorldTick(
         .filter((actor) => boneyardEnemyActorFlags(actor) !== 0)
         .map((actor) => ({
           position: actor.position,
-          radius: actor.config.collisionRadius,
+          radius: boneyardEnemyCollisionRadius(actor),
         })),
       ...collisionResolvedEnemies.maggots.map((maggot) => ({
         position: maggot.position,
@@ -675,11 +676,18 @@ export function stepBoneyardWorldTick(
     nextPlayers,
     collisionResolvedEnemies,
   )
-  const spawnPolicyFocuses = Object.values(livingPlayers).map(({ position }) => position)
+  const spawnPolicyFocuses = Object.values(livingPlayers)
+    .map(({ position }) => position)
+    .filter((position) => (
+      position.x >= spawnBounds.x
+      && position.y >= spawnBounds.y
+      && position.x <= spawnBounds.x + spawnBounds.w
+      && position.y <= spawnBounds.y + spawnBounds.h
+    ))
   if (spawnPolicyFocuses.length === 0) {
     spawnPolicyFocuses.push({
-      x: activeBounds.x + activeBounds.w / 2,
-      y: activeBounds.y + activeBounds.h / 2,
+      x: spawnBounds.x + spawnBounds.w / 2,
+      y: spawnBounds.y + spawnBounds.h / 2,
     })
   }
   const spawnCameraBounds = tutorial === null
@@ -789,7 +797,15 @@ export function stepBoneyardWorldTick(
       )
       return mover.position
     },
-    resolveSpawnPlacement: ({ actorId: _actorId, position, positionPolicy, radius, rngState }) => (
+    resolveSpawnPlacement: ({
+      actorId: _actorId,
+      navigationClearance,
+      position,
+      positionPolicy,
+      radius,
+      reachabilityRadius,
+      rngState,
+    }) => (
       resolveNativeBoneyardSpawnPosition(
         { ...position },
         spawnBounds,
@@ -798,7 +814,20 @@ export function stepBoneyardWorldTick(
         positionPolicy ?? 'direct',
         rngState,
         {
-          ...(tutorialSpawnDomain === null ? {} : { acceptsDomain: tutorialSpawnDomain }),
+          acceptsDomain: (candidate, candidateRadius) => (
+            (tutorialSpawnDomain === null
+              || tutorialSpawnDomain(candidate, candidateRadius))
+            && spawnPolicyFocuses.some((focus) => (
+              findBoneyardEnemyRoute({
+                bodyRadius: reachabilityRadius,
+                bounds: spawnBounds,
+                clearance: navigationClearance,
+                end: focus,
+                start: candidate,
+                world: collision,
+              }) !== null
+            ))
+          ),
           isOffscreen: (candidate) => boneyardSpawnPositionIsOffscreen(
             candidate,
             spawnCameraBounds,
@@ -814,16 +843,18 @@ export function stepBoneyardWorldTick(
         },
       )
     ),
-    resolveSpawnIntents: (liveEnemyCount, liveZombieCount) => {
+    resolveSpawnIntents: (liveEnemyCount, liveZombieCount, liveBossCount) => {
       const external = pendingExternalSpawnIntents
       pendingExternalSpawnIntents = []
       if (
         waves === null
         || encounter === null
+        || hostileScenePaused
       ) return external
       const context = {
         bounds: spawnBounds,
         liveEnemyCount,
+        liveBossCount,
         liveZombieCount,
         players: livingPlayers,
         tick,
@@ -1181,6 +1212,7 @@ function boneyardSpawnLightSources(
     const radius = (() => {
       switch (actor.config.enemyToken) {
         case 'IMP': return 0.35
+        case 'PORTAL': return actor.brain.family === 'portal' ? actor.brain.alpha : 0
         case 'DEMON': return 1.75
         case 'COFFIN': return 0.65
         case 'SKELETON':
@@ -1210,7 +1242,7 @@ function createNativeLootPlacement(
     })),
     ...enemies.actors.map((actor) => ({
       position: actor.position,
-      radius: actor.config.collisionRadius,
+      radius: boneyardEnemyCollisionRadius(actor),
     })),
     ...enemies.maggots.map((actor) => ({
       position: actor.position,
@@ -1394,7 +1426,7 @@ function boneyardEnemyBodies(
       .filter((actor) => boneyardEnemyActorFlags(actor) !== 0)
       .map((actor) => {
         const id = `enemy-${actor.id}`
-        return enemyCollisionBody(id, actor.position, actor.config.collisionRadius)
+        return enemyCollisionBody(id, actor.position, boneyardEnemyCollisionRadius(actor))
       }),
     ...enemies.maggots
       .filter((maggot) => maggot.lifeState === 'alive')

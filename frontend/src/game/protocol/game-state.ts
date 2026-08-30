@@ -439,6 +439,8 @@ export const BONEYARD_ENEMY_ACTION_SOUNDS = [
   'imp-vocal-6',
   'imp-vocal-7',
   'imp-vocal-8',
+  'fireball-hit',
+  'portal-open',
   'shoot-arrow',
 ] as const
 
@@ -446,6 +448,7 @@ export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
   'bone-crack',
   'hit-shield',
   'pop-shield',
+  'portal-hurt',
   'zombie-ouch',
 ] as const
 
@@ -461,6 +464,7 @@ export const BONEYARD_ENEMY_DEATH_SOUNDS = [
   'maggot-squish-1',
   'maggot-squish-2',
   'maggot-squish-3',
+  'portal-die',
   'skeleton-die',
   'zombie-die',
   'zombie-die-groan',
@@ -490,6 +494,7 @@ export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
   'demon-split',
   'imp-split',
   'mage-shatter',
+  'portal-break',
   'skeleton-shatter',
   'wraith-fragments',
   'zombie-collapse',
@@ -725,7 +730,7 @@ export interface BoneyardEnemySnapshot {
   animation: BoneyardEnemyAnimationSnapshot
   armored: boolean
   currentHealth: number
-  enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN'
+  enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN' | 'PORTAL'
   flags: readonly string[]
   headingDeg: number
   id: number

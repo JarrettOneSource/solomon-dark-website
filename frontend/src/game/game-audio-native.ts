@@ -101,6 +101,9 @@ export type GameSoundCue =
   | 'poof'
   | 'nuke'
   | 'phase'
+  | 'portal-die'
+  | 'portal-hurt'
+  | 'portal-open'
   | 'pop-shield'
   | 'pickup-bag'
   | 'pickup-coin'
@@ -348,6 +351,21 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x540,
     sourceName: 'sounds\\fireballhit',
     sourceSha256: '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
+  },
+  'portal-open': {
+    registryOffset: 0xb44,
+    sourceName: 'sounds\\OpenPortal',
+    sourceSha256: '35fdf971613d33f5ffd62d94c7fbb07a9f1ae5882c5506bb55f4354cf71156ae',
+  },
+  'portal-hurt': {
+    registryOffset: 0x77c,
+    sourceName: 'sounds\\hurtportal',
+    sourceSha256: '978ed68db122a4b86440449d07be7301de95d5f103008eb7f3b2561eecbca4cb',
+  },
+  'portal-die': {
+    registryOffset: 0xcfc,
+    sourceName: 'sounds\\PortalDie',
+    sourceSha256: '6818eabb201771662c20860cd326e28266f94a1aa588153912333589adbc758a',
   },
   'firey-death': {
     registryOffset: 0x56c,

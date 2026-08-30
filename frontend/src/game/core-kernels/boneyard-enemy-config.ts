@@ -6,6 +6,7 @@ import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.
 import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
 import type { NativeLootPolicies } from './native-loot.ts'
 import type { NativeSurvivalOnDeathProgram } from './native-survival-miniboss.ts'
+import type { NativePortalFrequency } from './native-survival-portal.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_HPUP',
@@ -126,6 +127,7 @@ export type BoneyardEnemyClassification = 'boss' | 'miniboss' | 'multiple-boss' 
 
 export type AuthoredBoneyardEnemyFamilyRecipe =
   | Readonly<{ kind: 'default' }>
+  | Readonly<{ frequency: NativePortalFrequency; kind: 'portal' }>
   | Readonly<{
       bodyType: 0 | 1
       flyblown: boolean
@@ -238,12 +240,18 @@ export interface BoneyardCoffinConfig extends BoneyardEnemyConfigBase {
   }>
 }
 
+export interface BoneyardPortalConfig extends BoneyardEnemyConfigBase {
+  enemyToken: 'PORTAL'
+  family: Readonly<{ frequency: NativePortalFrequency }>
+}
+
 export type EvaluatedBoneyardEnemyConfig =
   | BoneyardArcherConfig
   | BoneyardCoffinConfig
   | BoneyardDemonConfig
   | BoneyardImpConfig
   | BoneyardMageConfig
+  | BoneyardPortalConfig
   | BoneyardSkeletonConfig
   | BoneyardWraithConfig
   | BoneyardZombieConfig
@@ -273,6 +281,7 @@ const BASE_STATS: Readonly<Record<BoneyardWaveEnemyToken, Readonly<{
   COFFIN: Object.freeze({ chaseSpeed: 1, experience: 200, health: 100, primaryDamage: null }),
   DEMON: Object.freeze({ chaseSpeed: 1, experience: 800, health: 400, primaryDamage: 20 }),
   IMP: Object.freeze({ chaseSpeed: 1, experience: 2, health: 1, primaryDamage: 3 }),
+  PORTAL: Object.freeze({ chaseSpeed: 1, experience: 2, health: 1, primaryDamage: 2 }),
   SKELETON: Object.freeze({ chaseSpeed: 1, experience: 10, health: 5, primaryDamage: 3 }),
   SKELETONARCHER: Object.freeze({ chaseSpeed: 1, experience: 10, health: 5, primaryDamage: 4 }),
   SKELETONMAGE: Object.freeze({ chaseSpeed: 0.8, experience: 10, health: 5, primaryDamage: 3 }),
@@ -311,6 +320,7 @@ interface MutableConfig {
   poisonDuration: number
   poisonPoolDamage: number
   poisonPunchDamage: number
+  portalFrequency: NativePortalFrequency
   rotten: boolean
   maggotDamage: number
   maggotHealth: number
@@ -358,6 +368,7 @@ export function evaluateBoneyardEnemyConfig(
     poisonDuration: 0,
     poisonPoolDamage: 0,
     poisonPunchDamage: 0,
+    portalFrequency: 0,
     primaryDamage: base.primaryDamage ?? 0,
     rangeMode: 0,
     rotten: false,
@@ -450,6 +461,11 @@ export function evaluateBoneyardEnemyConfig(
       },
     })
     case 'IMP': return frozen({ ...common, enemyToken, family: { splitDepth: config.splitCount } })
+    case 'PORTAL': return frozen({
+      ...common,
+      enemyToken,
+      family: { frequency: config.portalFrequency },
+    })
     case 'ZOMBIE': return frozen({
       ...common,
       enemyToken,
@@ -529,6 +545,15 @@ function validateAuthoredFamily(
   family: AuthoredBoneyardEnemyFamilyRecipe,
 ): void {
   if (family.kind === 'default') return
+  if (family.kind === 'portal') {
+    if (enemyToken !== 'PORTAL') {
+      throw new Error('authored Portal family is only valid for PORTAL')
+    }
+    if (!Number.isSafeInteger(family.frequency) || family.frequency < 0 || family.frequency > 5) {
+      throw new RangeError('authored Portal frequency must be within 0..5')
+    }
+    return
+  }
   if (enemyToken !== 'ZOMBIE') {
     throw new Error('authored Zombie family is only valid for ZOMBIE')
   }
@@ -552,6 +577,13 @@ function applyAuthoredFamily(
   family: AuthoredBoneyardEnemyFamilyRecipe,
 ): void {
   if (family.kind === 'default') return
+  if (family.kind === 'portal') {
+    if (enemyToken !== 'PORTAL') {
+      throw new Error('authored Portal family is only valid for PORTAL')
+    }
+    config.portalFrequency = family.frequency
+    return
+  }
   if (enemyToken !== 'ZOMBIE') {
     throw new Error('authored Zombie family is only valid for ZOMBIE')
   }
@@ -637,6 +669,9 @@ function assertImplementedPayloads(
   }
   const authoredZombie = enemyToken === 'ZOMBIE'
     && authoredRecipe?.family.kind === 'zombie'
+  if (enemyToken === 'PORTAL' && authoredRecipe?.family.kind !== 'portal') {
+    throw new Error('Portal requires an authored Portal recipe')
+  }
   if (!authoredZombie && (config.tertiaryDamage !== 0 || config.extraDamage !== 0)) {
     throw new Error('unsupported dormant tertiary/extra enemy damage payload')
   }
@@ -803,6 +838,7 @@ function constructorBaseSpeed(token: BoneyardWaveEnemyToken, unit: number): numb
     case 'SKELETONARCHER': return skeleton * 0.75
     case 'SKELETONMAGE': return skeleton * 0.75 * 0.65
     case 'IMP': return 4.5
+    case 'PORTAL': return 1
     case 'ZOMBIE': return 0.85
     case 'WRAITH': return 1
     case 'DEMON':
@@ -816,6 +852,7 @@ function constructorCollisionRadius(token: BoneyardWaveEnemyToken, unit: number)
     case 'SKELETONARCHER': return 20
     case 'SKELETONMAGE': return 25
     case 'IMP': return 10 - unit * 2.5
+    case 'PORTAL': return 5
     case 'ZOMBIE': return 25 - unit * 8
     case 'WRAITH': return BOUNDED_WRAITH_COLLISION_RADIUS
     case 'DEMON': return 35

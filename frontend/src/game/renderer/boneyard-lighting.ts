@@ -586,6 +586,21 @@ export function nativeEnemyLightSources(
           radius: 0.65,
         })
         break
+      case 'PORTAL':
+        result.push({
+          castsDirectionalShadow: multipleShadows,
+          intensity: Math.fround(
+            Math.fround(enemy.animation.alpha)
+            * Math.fround(0.9 + presentationRandom(
+              presentationFrame,
+              salt ^ 0x47bed0,
+              0.35,
+            )),
+          ),
+          position: { ...enemy.position },
+          radius: Math.fround(enemy.animation.alpha),
+        })
+        break
       default:
         assertNever(enemy.enemyToken)
     }

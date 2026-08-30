@@ -67,6 +67,7 @@ export const ML_BOT_POLICY_ENEMY_PHASE_MAP = Object.freeze({
     death: null,
     flight: 'approach',
   }),
+  portal: Object.freeze({ active: 'dormant', death: null }),
   mage: Object.freeze({ cast: 'clocked-attack', death: null, 'range-control': 'range-control' }),
   skeleton: Object.freeze({ approach: 'approach', attack: 'clocked-attack', death: null }),
   wraith: Object.freeze({
@@ -88,6 +89,7 @@ export const ML_BOT_POLICY_ENEMY_TOKEN_SPECIES = Object.freeze({
   COFFIN: 'coffin',
   DEMON: 'demon',
   IMP: 'imp',
+  PORTAL: 'coffin',
   SKELETON: 'skeleton',
   SKELETONARCHER: 'archer',
   SKELETONMAGE: 'mage',

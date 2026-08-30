@@ -364,6 +364,15 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
     'audio/sfx/fireball-hit.wav': {
       sha256: '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
     },
+    'audio/sfx/portal-open.wav': {
+      sha256: '35fdf971613d33f5ffd62d94c7fbb07a9f1ae5882c5506bb55f4354cf71156ae',
+    },
+    'audio/sfx/portal-hurt.wav': {
+      sha256: '978ed68db122a4b86440449d07be7301de95d5f103008eb7f3b2561eecbca4cb',
+    },
+    'audio/sfx/portal-die.wav': {
+      sha256: '6818eabb201771662c20860cd326e28266f94a1aa588153912333589adbc758a',
+    },
     'audio/sfx/fizzle.wav': {
       sha256: '938420950d859ebc00a9b1a37e548c7c2183a8504689b32aab3de3c683899e76',
     },

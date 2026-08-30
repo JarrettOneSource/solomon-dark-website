@@ -31,19 +31,28 @@ import {
   createBoneyardCollisionWorld,
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
+  resolveBoneyardSpawnPosition,
 } from '../src/game/core-server/boneyard-collision.ts'
 import {
   boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
   damageBoneyardEnemy,
   stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
+import {
+  findBoneyardEnemyRoute,
+  NATIVE_BADGUY_NAVIGATION_CLEARANCE,
+} from '../src/game/core-server/boneyard-enemy-navigation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   getPlayerEconomy,
   getPlayerCharacter,
   getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import {
+  replacePlayerCharacter,
+  replacePlayerEconomy,
+} from '../src/game/core-server/player-entity-store.ts'
 import {
   EntityReplicationReconstructor,
   REPLICATED_ENTITY_TYPES,
@@ -53,15 +62,17 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
-const deterministicSeedBytes = Buffer.alloc(16)
-const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const chillArrowOnly = process.argv.includes('--chill-arrow-only')
 const cleanupOnly = process.argv.includes('--cleanup-only')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
+const portalOnly = process.argv.includes('--portal-only')
 const slumpgutOnly = process.argv.includes('--slumpgut-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
 const deathEffectsOnly = process.argv.includes('--death-effects-only')
+const deterministicSeedBytes = Buffer.alloc(16)
+if (portalOnly) deterministicSeedBytes.writeUInt32BE(1)
+const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const productionFrontend = process.env.SDR_GAME_WAVES_SMOKE_PRODUCTION === '1'
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
@@ -75,6 +86,7 @@ const dirtScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-dirt$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
 const retiredEntryScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-retired-entry$1')
 const slumpgutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-slumpgut$1')
+const portalScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-portal$1')
 const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-melee$1')
 const staffSmokeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-smoke$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
@@ -145,7 +157,21 @@ await page.addInitScript((runtime) => {
 await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
-  if (slumpgutOnly) {
+  if (portalOnly) {
+    const portal = await provePortalBrowser(page, portalScreenshotPath, wire)
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({
+      errors,
+      failedResponses,
+      portal,
+      productionFrontend,
+      screenshotPath: portalScreenshotPath,
+      status: 'ok',
+      wire: wireSummary(wire),
+    })}\n`)
+  } else if (slumpgutOnly) {
     const slumpgut = await proveSlumpgutBrowser(page, slumpgutScreenshotPath)
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])
@@ -668,6 +694,347 @@ try {
     host.close(),
     vite.close(),
   ])
+}
+
+async function provePortalBrowser(page, screenshotPath, wire) {
+  await enterBoneyard(page)
+  await page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame !== undefined
+  ))
+  let state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.waves?.portalProgram)
+  assert.ok(state.world.arenaTransition)
+  assert.equal(
+    wire.loadedBoneyard?.sourceSha256,
+    '9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9',
+  )
+  const program = state.world.waves.portalProgram
+  const firstPhase = program.phases[0]
+  const laterPhase = program.phases[1]
+  assert.equal(firstPhase?.name, 'Deep Portal')
+  assert.ok(laterPhase)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const transition = state.world.arenaTransition
+  const combatBounds = transition.combatBounds
+  const playerPosition = resolveBoneyardSpawnPosition({
+    x: combatBounds.x + combatBounds.w / 2,
+    y: combatBounds.y + combatBounds.h / 2,
+  }, combatBounds, state.world.collision, PLAYER_CHARACTER_RADIUS)
+  const player = getPlayerCharacter(state, playerId)
+  state.playerEntities = replacePlayerCharacter(state.playerEntities, playerId, {
+    ...player,
+    position: playerPosition,
+  })
+  state.world = {
+    ...state.world,
+    arenaTransition: {
+      ...transition,
+      blendFactor: 1,
+      cameraBounds: { ...combatBounds },
+      phase: 'sealed',
+      sealTicksRemaining: 0,
+    },
+    enemies: { ...state.world.enemies, actors: [], maggots: [] },
+    waves: {
+      ...state.world.waves,
+      phase: 'wave-threshold',
+      populationThreshold: 0,
+      portalPhaseIndex: 0,
+      portalScriptPhase: 'idle',
+      portalSpawnRemaining: 0,
+      portalTicksRemaining: 0,
+      portalTimelinePaused: false,
+      waveOrdinal: firstPhase.startWave,
+    },
+  }
+
+  await waitForHostTick(page, state.tick + 1)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.waves?.portalScriptPhase, 'intro')
+  assert.ok((state.world.waves?.portalTicksRemaining ?? 0) >= 1)
+  assert.ok((state.world.waves?.portalTicksRemaining ?? 0) <= 150)
+  assert.equal(state.world.waves?.portalTimelinePaused, true)
+  state.world = {
+    ...state.world,
+    waves: { ...state.world.waves, portalTicksRemaining: 1 },
+  }
+  const firstSpawnBoundary = state.tick + 1
+  await waitForHostTick(page, firstSpawnBoundary + 52)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  let portals = state.world.enemies.actors
+    .filter(({ config }) => config.enemyToken === 'PORTAL')
+    .toSorted((left, right) => left.spawnTick - right.spawnTick)
+  assert.equal(portals.length, firstPhase.spawnCount)
+  assert.deepEqual(portals.map(({ spawnTick }) => spawnTick - portals[0].spawnTick), [0, 25, 50])
+  assert.ok(portals.every(({ config }) => (
+    config.classification === 'multiple-boss'
+    && config.recipeName === 'Deep Portal'
+    && config.primaryDamage === 2
+  )))
+  assert.equal(state.world.waves?.portalScriptPhase, 'boss-wait')
+  assert.equal(state.world.waves?.portalTimelinePaused, true)
+  await waitForHostTick(page, state.tick + 12)
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    const portals = frame?.enemySamples.filter(({ enemyToken }) => enemyToken === 'PORTAL')
+    return portals?.length === 3 && portals.every(({ bodyEntry }) => (
+      bodyEntry >= 46 && bodyEntry <= 77
+    ))
+  }, undefined, { timeout: 10_000 })
+  const openedFrame = await boneyardFrame(page)
+  const renderedPortals = openedFrame.enemySamples.filter(({ enemyToken }) => (
+    enemyToken === 'PORTAL'
+  ))
+  assert.equal(renderedPortals.length, 3)
+  assert.ok(renderedPortals.every(({ bodyEntry, renderedScale }) => (
+    bodyEntry >= 46 && bodyEntry <= 77 && renderedScale !== null
+  )))
+
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const ejectionPortal = state.world.enemies.actors.find(({ config }) => (
+    config.enemyToken === 'PORTAL'
+  ))
+  assert.ok(ejectionPortal)
+  assert.equal(ejectionPortal.brain.family, 'portal')
+  state.world = {
+    ...state.world,
+    enemies: {
+      ...state.world.enemies,
+      actors: state.world.enemies.actors.map((actor) => (
+        actor.id === ejectionPortal.id && actor.brain.family === 'portal'
+          ? { ...actor, brain: { ...actor.brain, ticksUntilEjection: 1 } }
+          : actor
+      )),
+    },
+  }
+  const ejectionTick = state.tick + 1
+  await waitForHostTick(page, ejectionTick)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const ejectedImp = state.world.enemies.actors.find(({ config, spawnTick }) => (
+    config.enemyToken === 'IMP' && spawnTick === ejectionTick
+  ))
+  assert.ok(ejectedImp)
+  assert.equal(ejectedImp.config.primaryDamage, 2)
+  assert.equal(ejectedImp.brain.family, 'imp')
+  assert.equal(ejectedImp.brain.family === 'imp' ? ejectedImp.brain.horizontalSpeed : null, 6.75)
+  assert.ok(findBoneyardEnemyRoute({
+    bodyRadius: boneyardEnemyCollisionRadius(ejectedImp),
+    bounds: combatBounds,
+    clearance: NATIVE_BADGUY_NAVIGATION_CLEARANCE,
+    end: playerPosition,
+    start: ejectedImp.position,
+    world: state.world.collision,
+  }))
+
+  state.world = {
+    ...state.world,
+    enemies: {
+      ...state.world.enemies,
+      actors: state.world.enemies.actors
+        .filter(({ id }) => id !== ejectedImp.id)
+        .map((actor) => (
+          actor.brain.family === 'portal'
+            ? {
+                ...actor,
+                brain: { ...actor.brain, ticksUntilEjection: Number.MAX_SAFE_INTEGER },
+              }
+            : actor
+        )),
+    },
+  }
+  portals = state.world.enemies.actors.filter(({ config }) => config.enemyToken === 'PORTAL')
+  const victim = portals[0]
+  assert.ok(victim)
+  const hurt = damageBoneyardEnemy(state.world.enemies, {
+    actorId: victim.id,
+    amount: 1,
+    sourcePlayerId: null,
+    tick: state.tick,
+  })
+  assert.equal(hurt.accepted, true)
+  assert.equal(hurt.killed, false)
+  assert.ok(hurt.events.some(({ sound }) => sound === 'portal-hurt'))
+  state.world = {
+    ...state.world,
+    enemies: hurt.store,
+    enemyEvents: [...state.world.enemyEvents, ...hurt.events],
+  }
+  await page.waitForFunction((actorId) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.enemySamples.some(({ hitFlash, id }) => (
+      id === actorId && hitFlash > 0
+    )) === true
+  }, victim.id, { timeout: 10_000 })
+  const hurtFrame = await boneyardFrame(page)
+  assert.ok(hurtFrame.enemySamples.some(({ hitFlash, id }) => (
+    id === victim.id && hitFlash > 0
+  )))
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const liveVictim = state.world.enemies.actors.find(({ id }) => id === victim.id)
+  assert.ok(liveVictim)
+  const lethal = damageBoneyardEnemy(state.world.enemies, {
+    actorId: victim.id,
+    amount: liveVictim.currentHealth,
+    sourcePlayerId: null,
+    tick: state.tick,
+  })
+  assert.equal(lethal.killed, true)
+  state.world = {
+    ...state.world,
+    enemies: lethal.store,
+    enemyEvents: [...state.world.enemyEvents, ...lethal.events],
+  }
+  const combat = {
+    healthDamage: lethal.healthDamage,
+    hurtTick: hurtFrame.tick,
+    targetId: victim.id,
+  }
+  await waitForHostTick(page, state.tick + 2)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.enemies.actors.filter(({ config }) => (
+    config.enemyToken === 'PORTAL'
+  )).length, 2)
+  assert.equal(state.world.waves?.portalTimelinePaused, true)
+  state.world = {
+    ...state.world,
+    waves: { ...state.world.waves, portalTicksRemaining: 1 },
+  }
+  await waitForHostTick(page, state.tick + 1)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.waves?.portalTicksRemaining, 200)
+
+  let enemies = state.world.enemies
+  for (const actor of enemies.actors.filter(({ config }) => config.enemyToken === 'PORTAL')) {
+    enemies = damageBoneyardEnemy(enemies, {
+      actorId: actor.id,
+      amount: actor.currentHealth,
+      sourcePlayerId: null,
+      tick: state.tick,
+    }).store
+  }
+  state.world = {
+    ...state.world,
+    enemies,
+    waves: { ...state.world.waves, portalTicksRemaining: 1 },
+  }
+  await waitForHostTick(page, state.tick + 2)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.enemies.actors.some(({ config }) => (
+    config.enemyToken === 'PORTAL'
+  )), false)
+  assert.equal(state.world.waves?.portalTimelinePaused, false)
+  assert.equal(state.world.waves?.portalPhaseIndex, 1)
+  assert.equal(state.world.waves?.waveOrdinal, firstPhase.startWave + 1)
+
+  state.world = {
+    ...state.world,
+    enemies: { ...state.world.enemies, actors: [], maggots: [] },
+    waves: {
+      ...state.world.waves,
+      phase: 'wave-threshold',
+      populationThreshold: 0,
+      portalPhaseIndex: 1,
+      portalScriptPhase: 'idle',
+      portalSpawnRemaining: 0,
+      portalTicksRemaining: 0,
+      portalTimelinePaused: false,
+      waveOrdinal: laterPhase.startWave,
+    },
+  }
+  const laterStartTick = state.tick + 1
+  await waitForHostTick(
+    page,
+    laterStartTick + (laterPhase.spawnCount - 1) * 25 + 12,
+  )
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const laterPortals = state.world.enemies.actors.filter(({ config }) => (
+    config.recipeName === laterPhase.name
+  ))
+  assert.equal(laterPortals.length, laterPhase.spawnCount)
+  assert.equal(state.world.waves?.portalTimelinePaused, false)
+  assert.ok(laterPortals.every(({ position }) => (
+    position.x >= combatBounds.x
+    && position.y >= combatBounds.y
+    && position.x <= combatBounds.x + combatBounds.w
+    && position.y <= combatBounds.y + combatBounds.h
+  )))
+  const displayedPortal = laterPortals[0]
+  assert.ok(displayedPortal)
+  const displayedPosition = resolveBoneyardSpawnPosition({
+    x: playerPosition.x + 120,
+    y: playerPosition.y,
+  }, combatBounds, state.world.collision, 5)
+  state.world = {
+    ...state.world,
+    enemies: {
+      ...state.world.enemies,
+      actors: laterPortals.map((actor) => ({
+        ...actor,
+        brain: actor.brain.family === 'portal'
+          ? { ...actor.brain, ticksUntilEjection: Number.MAX_SAFE_INTEGER }
+          : actor.brain,
+        position: actor.id === displayedPortal.id
+          ? displayedPosition
+          : actor.position,
+      })),
+    },
+    waves: {
+      ...state.world.waves,
+      activeBursts: [],
+      activeBurstIndex: null,
+      pendingSpawnBudget: 0,
+      spawnCountdown: 0,
+      spawnDelayTicks: 0,
+    },
+  }
+  await page.waitForFunction(({ actorId, x, y }) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.enemySamples.some((enemy) => (
+      enemy.id === actorId
+      && Math.abs(enemy.x - x) < 0.1
+      && Math.abs(enemy.y - y) < 0.1
+    )) === true
+  }, { actorId: displayedPortal.id, ...displayedPosition }, { timeout: 10_000 })
+  const laterFrame = await boneyardFrame(page)
+  assert.equal(laterFrame.enemyOutsideCombatBoundsCount, 0)
+  assert.equal(laterFrame.enemySamples.filter(({ enemyToken }) => (
+    enemyToken === 'PORTAL'
+  )).length, laterPhase.spawnCount)
+  await page.waitForFunction(() => {
+    const sources = window.__sdrAudioPlaySources ?? []
+    return ['portal-open', 'fireball-hit', 'portal-hurt', 'portal-die']
+      .every((cue) => sources.some((source) => source.includes(cue)))
+  }, undefined, { timeout: 10_000 })
+  await page.screenshot({ path: screenshotPath })
+  const audioSources = await page.evaluate(() => window.__sdrAudioPlaySources ?? [])
+  assert.deepEqual(wire.outsideCombatEnemySamples, [])
+  return {
+    audioSources: audioSources.filter((source) => (
+      source.includes('portal') || source.includes('fireball-hit')
+    )),
+    combat,
+    ejectedImpId: ejectedImp.id,
+    firstPhase: {
+      name: firstPhase.name,
+      spawnTicks: portals.map(({ spawnTick }) => spawnTick),
+    },
+    laterPhase: {
+      name: laterPhase.name,
+      spawnCount: laterPortals.length,
+    },
+    renderedPortals,
+  }
 }
 
 async function proveSlumpgutBrowser(page, screenshotPath) {

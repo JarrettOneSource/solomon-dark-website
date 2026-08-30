@@ -1847,7 +1847,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v113 carries Tonic-inclusive Hagatha capacity, addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, retained gameplay state, and Slumpgut trigger state', () => {
+test('protocol v113 carries Portal objectives, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 113)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',

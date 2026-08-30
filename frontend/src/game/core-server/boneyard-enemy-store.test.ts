@@ -26,6 +26,11 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
+import {
+  nativePortalChildPosition,
+  nativePortalProgram,
+  nativePortalRecipe,
+} from '../core-kernels/native-survival-portal.ts'
 import type {
   NativeSecondaryMovementModifierKind,
   NativeSecondaryTargetEffectPatch,
@@ -66,6 +71,7 @@ import {
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
   boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
   boneyardEnemyLiveCount,
   applyBoneyardStaffDisable,
   createBoneyardEnemyStore,
@@ -84,7 +90,9 @@ import {
   type BoneyardEnemyTargets,
 } from './boneyard-enemy-store.ts'
 
-const TOKENS = Object.keys(BONEYARD_WAVE_ENEMY_TYPES) as BoneyardWaveEnemyToken[]
+const TOKENS = Object.keys(BONEYARD_WAVE_ENEMY_TYPES).filter((token) => (
+  token !== 'PORTAL'
+)) as Exclude<BoneyardWaveEnemyToken, 'PORTAL'>[]
 const FAR_PLAYERS: BoneyardEnemyTargets = {
   player: {
     alive: true,
@@ -4294,6 +4302,129 @@ function verifySkeletonProgram(
   assert.equal(result.store.actors[0]!.gaitPose, initialGaitPose)
 }
 
+test('Portal materializes 45 to 5 and admits its native Imp ejection through placement', () => {
+  const placementRadii: number[] = []
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('portal-ejection'), {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnPlacement: (request) => {
+      placementRadii.push(request.radius)
+      assert.equal(request.navigationClearance, 25)
+      assert.equal(request.reachabilityRadius, 25)
+      return { position: request.position, rngState: request.rngState }
+    },
+    resolveSpawnIntents: () => [portalIntent(1, { x: 0, y: 0 })],
+    tick: 0,
+  })
+  assert.equal(result.store.actors.length, 1)
+  assert.equal(placementRadii[0], 45)
+  assert.equal(boneyardEnemyCollisionRadius(result.store.actors[0]!), 45)
+
+  for (let tick = 1; tick <= 10; tick += 1) {
+    result = step(result.store, tick, FAR_PLAYERS)
+  }
+  const portal = result.store.actors[0]!
+  assert.equal(portal.brain.family, 'portal')
+  assert.equal(boneyardEnemyCollisionRadius(portal), 5)
+  assert.deepEqual(
+    result.events.filter(({ type }) => type === 'enemy-action-sound').map(({ sound, gainScale }) => ({
+      gainScale,
+      sound,
+    })),
+    [{ gainScale: 0.5, sound: 'portal-open' }],
+  )
+
+  if (portal.brain.family !== 'portal') throw new Error('expected Portal brain')
+  result = withActorBrain(result, 0, { ...portal.brain, ticksUntilEjection: 1 })
+  result = stepBoneyardEnemyStore(result.store, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnPlacement: (request) => ({
+      position: request.position,
+      rngState: request.rngState,
+    }),
+    resolveSpawnIntents: () => [],
+    tick: 11,
+  })
+
+  assert.equal(result.store.actors.length, 2)
+  const parent = result.store.actors[0]!
+  const child = result.store.actors[1]!
+  assert.equal(child.config.enemyToken, 'IMP')
+  assert.equal(child.config.primaryDamage, 2)
+  assert.equal(child.brain.family, 'imp')
+  if (child.brain.family !== 'imp') throw new Error('expected Portal child Imp')
+  assert.equal(child.brain.baseHorizontalSpeed, 4.5)
+  assert.equal(child.brain.horizontalSpeed, 6.75)
+  assert.equal(child.brain.verticalOffset, -0.1)
+  assert.ok(child.brain.verticalVelocity <= -10 && child.brain.verticalVelocity >= -15)
+  assert.deepEqual(
+    child.position,
+    nativePortalChildPosition(
+      parent.position,
+      parent.headingDeg,
+      child.headingDeg,
+      child.config.collisionRadius,
+    ),
+  )
+  assert.ok(result.events.some(({ sound }) => sound === 'fireball-hit'))
+})
+
+test('Portal damage and death emit their direct cues, effects, reward, and retirement', () => {
+  let spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('portal-terminal'), {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [portalIntent(1, { x: 12, y: 34 })],
+    tick: 0,
+  })
+  const actor = spawned.store.actors[0]!
+  const hurt = damageBoneyardEnemy(spawned.store, {
+    actorId: actor.id,
+    amount: 1,
+    sourcePlayerId: 'player',
+    tick: 0,
+  })
+  assert.ok(hurt.events.some(({ sound, type }) => (
+    type === 'enemy-damage-sound' && sound === 'portal-hurt'
+  )))
+  const hurtBrain = hurt.store.actors[0]!.brain
+  assert.equal(hurtBrain.family, 'portal')
+  if (hurtBrain.family !== 'portal') throw new Error('expected damaged Portal brain')
+  assert.ok(hurtBrain.hurtTicksRemaining >= 10 && hurtBrain.hurtTicksRemaining <= 24)
+  const killed = damageBoneyardEnemy(hurt.store, {
+    actorId: actor.id,
+    amount: actor.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 20,
+  })
+  spawned = step(killed.store, 21, FAR_PLAYERS)
+  assert.equal(spawned.store.actors.length, 0)
+  assert.ok(spawned.events.some(({ sound, type }) => (
+    type === 'enemy-death-sound' && sound === 'portal-die'
+  )))
+  assert.ok(spawned.events.some(({ output }) => output === 'portal-break'))
+  assert.equal(spawned.rewards.length, 1)
+  assert.equal(spawned.retired.length, 1)
+  assert.ok(spawned.store.deathEffects.some(({ role }) => role === 'portal-terminal-array'))
+  assert.ok(spawned.store.deathEffects.some(({ role }) => role === 'portal-black-smoke'))
+  assert.equal(
+    spawned.store.deathEffects.filter(({ role }) => role === 'portal-decal').length,
+    2,
+  )
+  assert.deepEqual(
+    spawned.store.deathEffects
+      .filter(({ role }) => role === 'portal-decal')
+      .map(({ entry }) => entry),
+    [120, 144],
+  )
+})
+
 function spawnOne(
   seed: string,
   token: BoneyardWaveEnemyToken,
@@ -4577,5 +4708,24 @@ function intent(
     position: { ...position },
     spawnTick: 0,
     waveOrdinal: 1,
+  }
+}
+
+function portalIntent(
+  id: number,
+  position: Readonly<{ x: number; y: number }>,
+): BoneyardEnemySpawnIntent {
+  const phase = nativePortalProgram(
+    '9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9',
+  ).phases[0]!
+  return {
+    ...intent('PORTAL', id, position),
+    authoredRecipe: nativePortalRecipe(phase),
+    flanking: true,
+    navigationClearance: 25,
+    pathfindingMode: 2,
+    placementRadius: 45,
+    positionPolicy: phase.placementPolicy,
+    reachabilityRadius: 25,
   }
 }

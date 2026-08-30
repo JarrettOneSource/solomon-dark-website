@@ -51,6 +51,7 @@ import {
   boneyardEnemyActorFlags,
   breakBoneyardSkeletonPike,
   damageBoneyardEnemy,
+  boneyardEnemyCollisionRadius,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
@@ -518,7 +519,7 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
       (boneyardEnemyActorFlags(actor) & 0x2) !== 0
         ? [{
             actorId: actor.id,
-            collisionRadius: actor.config.collisionRadius,
+            collisionRadius: boneyardEnemyCollisionRadius(actor),
             headingDegrees: actor.headingDeg,
             id: `enemy:${actor.id}`,
             nativeTypeId: actor.config.nativeTypeId,

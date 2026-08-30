@@ -25,6 +25,12 @@ import {
   nativeSlumpgutRecipeForUid,
 } from './native-survival-slumpgut.ts'
 import {
+  NATIVE_PORTAL_ACTOR_PROGRAM,
+  nativePortalProgram,
+  nativePortalRecipe,
+  type NativePortalProgramDefinition,
+} from './native-survival-portal.ts'
+import {
   createNativeRng,
   drawNativeFloat,
   drawNativeInteger,
@@ -65,14 +71,28 @@ export interface BoneyardEnemySpawnIntent {
   locationPolicy: BoneyardSpawnLocationPolicy
   /** Custom MonsterRecipe lane; omitted by the retail wave director. */
   mageCloak?: boolean
+  /** Direct native Portal child construction payload. */
+  portalEjection?: Readonly<{
+    childHeadingDeg: number
+    inheritedPrimaryDamage: number
+    parentHeadingDeg: number
+    parentPosition: Readonly<BoneyardPoint>
+    verticalVelocity: number
+  }>
   nativeTypeId: number
+  /** Override for stationary or constructor-sized authored actors. */
+  navigationClearance?: number
   /** Custom MonsterRecipe lane; defaults to native mode 1. */
   pathfindingMode?: 0 | 1 | 2 | 3
   /** One native UIDGroup call may reuse its first final placement. */
   placementGroupId?: number
+  /** Constructor-sized placement body when it differs from the active body. */
+  placementRadius?: number
   position: BoneyardPoint
   /** Non-TimeLine callers use direct placement when omitted. */
   positionPolicy?: BoneyardSpawnPositionPolicy
+  /** Radius used to prove that the accepted component reaches a player. */
+  reachabilityRadius?: number
   spawnTick: number
   waveOrdinal: number
   /** Custom MonsterSetup BODY TYPE lane; retail survival waves leave it zero. */
@@ -97,6 +117,12 @@ export interface BoneyardWaveDirectorState {
   openingReleaseThreshold: number
   pendingSpawnBudget: number
   phase: BoneyardWaveDirectorPhase
+  portalPhaseIndex: number
+  portalProgram: NativePortalProgramDefinition | null
+  portalScriptPhase: 'boss-wait' | 'idle' | 'intro' | 'retired' | 'spawning'
+  portalSpawnRemaining: number
+  portalTicksRemaining: number
+  portalTimelinePaused: boolean
   populationThreshold: number
   rngState: NativeRngState
   schedule: readonly WaveDef[]
@@ -117,6 +143,7 @@ export type BoneyardWavePlayers = Readonly<
 
 export interface BoneyardWaveDirectorTickContext {
   bounds: BoneyardBounds
+  liveBossCount?: number
   liveEnemyCount: number
   liveZombieCount: number
   players: BoneyardWavePlayers
@@ -162,6 +189,14 @@ export function createBoneyardWaveDirector(
     openingReleaseThreshold: opening.releaseThreshold,
     pendingSpawnBudget: 0,
     phase: 'dormant',
+    portalPhaseIndex: 0,
+    portalProgram: options.sourceSha256 === undefined
+      ? null
+      : nativePortalProgram(options.sourceSha256),
+    portalScriptPhase: options.sourceSha256 === undefined ? 'retired' : 'idle',
+    portalSpawnRemaining: 0,
+    portalTicksRemaining: 0,
+    portalTimelinePaused: false,
     populationThreshold: 0,
     rngState: createNativeRng(seedBoneyardWaveRng(`${seed}:wave-runtime`)),
     schedule,
@@ -197,14 +232,147 @@ export function stepBoneyardWaveDirector(
 ): BoneyardWaveDirectorTickResult {
   validateLiveEnemyCount(context.liveEnemyCount)
   validateLiveEnemyCount(context.liveZombieCount)
+  if (context.liveBossCount !== undefined) validateLiveEnemyCount(context.liveBossCount)
   const slumpgut = stepBoneyardSlumpgutTrigger(source, context)
-  const state = slumpgut.director.phase === 'dormant'
-    ? slumpgut.director
-    : stepArenaLowPopulationTimer(slumpgut.director, context.liveEnemyCount)
-  const waves = stepOrdinaryWaves(state, context)
+  const portals = stepBoneyardPortalProgram(slumpgut.director, context)
+  const timelineHeld = slumpgut.director.portalTimelinePaused
+    || portals.director.portalTimelinePaused
+  const state = portals.director.phase === 'dormant' || timelineHeld
+    ? portals.director
+    : stepArenaLowPopulationTimer(portals.director, context.liveEnemyCount)
+  const waves = timelineHeld
+    ? tickResult(state)
+    : stepOrdinaryWaves(state, context)
   return {
     director: waves.director,
-    spawnIntents: [...slumpgut.spawnIntents, ...waves.spawnIntents],
+    spawnIntents: [
+      ...slumpgut.spawnIntents,
+      ...portals.spawnIntents,
+      ...waves.spawnIntents,
+    ],
+  }
+}
+
+export function stepBoneyardPortalProgram(
+  source: BoneyardWaveDirectorState,
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
+  if (source.portalScriptPhase === 'retired' || source.portalProgram === null) {
+    return tickResult(source)
+  }
+  if (source.portalScriptPhase === 'idle') {
+    const phase = source.portalProgram.phases[source.portalPhaseIndex]
+    if (!phase) {
+      return tickResult({ ...source, portalScriptPhase: 'retired' })
+    }
+    if (source.waveOrdinal < phase.startWave) return tickResult(source)
+    if (phase.name === 'Deep Portal') {
+      return tickResult({
+        ...source,
+        portalScriptPhase: 'intro',
+        portalSpawnRemaining: phase.spawnCount,
+        portalTicksRemaining: 150,
+        portalTimelinePaused: true,
+      })
+    }
+    return emitPortalSpawn({
+      ...source,
+      portalScriptPhase: 'spawning',
+      portalSpawnRemaining: phase.spawnCount,
+      portalTicksRemaining: 0,
+    }, context, phase)
+  }
+  if (source.portalScriptPhase === 'intro') {
+    if (source.portalTicksRemaining > 1) {
+      return tickResult({
+        ...source,
+        portalTicksRemaining: source.portalTicksRemaining - 1,
+      })
+    }
+    const phase = source.portalProgram.phases[source.portalPhaseIndex]
+    if (!phase) throw new Error('Portal intro has no authored phase')
+    return emitPortalSpawn({
+      ...source,
+      portalScriptPhase: 'spawning',
+      portalTicksRemaining: 0,
+    }, context, phase)
+  }
+  if (source.portalScriptPhase === 'spawning') {
+    if (source.portalTicksRemaining > 1) {
+      return tickResult({
+        ...source,
+        portalTicksRemaining: source.portalTicksRemaining - 1,
+      })
+    }
+    const phase = source.portalProgram.phases[source.portalPhaseIndex]
+    if (!phase) throw new Error('Portal spawner has no authored phase')
+    return emitPortalSpawn(source, context, phase)
+  }
+  if (source.portalTicksRemaining > 1) {
+    return tickResult({
+      ...source,
+      portalTicksRemaining: source.portalTicksRemaining - 1,
+    })
+  }
+  if ((context.liveBossCount ?? 0) > 0) {
+    return tickResult({ ...source, portalTicksRemaining: 200 })
+  }
+  const released = {
+    ...source,
+    portalPhaseIndex: source.portalPhaseIndex + 1,
+    portalScriptPhase: 'idle' as const,
+    portalTicksRemaining: 0,
+    portalTimelinePaused: false,
+  }
+  const selected = selectNextScheduleRow(released)
+  return tickResult(beginScheduleRow(
+    selected,
+    selected.nextScheduleIndex ?? selected.scheduleIndex,
+  ))
+}
+
+function emitPortalSpawn(
+  source: BoneyardWaveDirectorState,
+  context: BoneyardWaveDirectorTickContext,
+  phase: NonNullable<BoneyardWaveDirectorState['portalProgram']>['phases'][number],
+): BoneyardWaveDirectorTickResult {
+  if (source.portalSpawnRemaining <= 0) {
+    throw new Error('Portal spawner has no remaining authored births')
+  }
+  const placed = placeEnemy(source.rngState, 'anywhere', context.players, context.bounds)
+  const remaining = source.portalSpawnRemaining - 1
+  const firstBarrier = phase.name === 'Deep Portal'
+  return {
+    director: {
+      ...source,
+      nextSpawnIntentId: source.nextSpawnIntentId + 1,
+      portalPhaseIndex: remaining === 0 && !firstBarrier
+        ? source.portalPhaseIndex + 1
+        : source.portalPhaseIndex,
+      portalScriptPhase: remaining > 0
+        ? 'spawning'
+        : firstBarrier ? 'boss-wait' : 'idle',
+      portalSpawnRemaining: remaining,
+      portalTicksRemaining: remaining > 0 ? 25 : firstBarrier ? 100 : 0,
+      rngState: placed.rngState,
+    },
+    spawnIntents: [Object.freeze({
+      authoredRecipe: nativePortalRecipe(phase),
+      enemyToken: 'PORTAL',
+      flags: Object.freeze([]),
+      flanking: true,
+      id: source.nextSpawnIntentId,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.PORTAL,
+      navigationClearance: 25,
+      pathfindingMode: 2,
+      placementRadius: NATIVE_PORTAL_ACTOR_PROGRAM.placementCollisionRadius,
+      position: Object.freeze({ ...placed.position }),
+      positionPolicy: phase.placementPolicy,
+      reachabilityRadius: 25,
+      spawnTick: context.tick,
+      waveOrdinal: source.waveOrdinal,
+    })],
   }
 }
 

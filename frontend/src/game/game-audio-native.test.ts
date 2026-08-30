@@ -184,6 +184,9 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     NATIVE_SOUND_MANIFEST['fireball-hit'].sourceSha256,
     '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   )
+  assert.equal(NATIVE_SOUND_MANIFEST['portal-open'].registryOffset, 0xb44)
+  assert.equal(NATIVE_SOUND_MANIFEST['portal-hurt'].registryOffset, 0x77c)
+  assert.equal(NATIVE_SOUND_MANIFEST['portal-die'].registryOffset, 0xcfc)
   assert.equal(NATIVE_SOUND_MANIFEST['flame-lash-start'].registryOffset, 0x5c4)
   assert.equal(NATIVE_SOUND_MANIFEST['frost-missile'].registryOffset, 0x6a0)
   assert.equal(NATIVE_SOUND_MANIFEST['shock-1'].registryOffset, 0x21d4)
@@ -236,6 +239,40 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_STREAM_MANIFEST.dye.registryOffset, 0x1374)
   assert.equal(NATIVE_STREAM_MANIFEST['pike-break'].registryOffset, 0x13e4)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
+})
+
+test('pins all three direct Portal cues and preserves the half-gain opening edge', () => {
+  const files = {
+    'portal-die': 'portal-die.wav',
+    'portal-hurt': 'portal-hurt.wav',
+    'portal-open': 'portal-open.wav',
+  } as const
+  for (const [cue, filename] of Object.entries(files)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue as keyof typeof files].sourceSha256,
+    )
+  }
+  assert.deepEqual(nativeEnemyEventSoundRequest({
+    actorId: 5,
+    eventId: 8,
+    gainScale: 0.5,
+    pitch: 1,
+    runId: 'run-1',
+    sound: 'portal-open',
+    sourcePosition: { x: 10, y: 20 },
+    tick: 99,
+    type: 'enemy-action-sound',
+  }), {
+    cue: 'portal-open',
+    playbackRate: 1,
+    sourcePosition: { x: 10, y: 20 },
+    volume: 0.5,
+  })
 })
 
 test('pins the first story Office voice and Polisher loop to stock PCM', () => {
@@ -592,6 +629,7 @@ test('pins every checked-in enemy death cue to its untouched stock WAV', () => {
     'maggot-squish-1': 'maggot-squish-1.wav',
     'maggot-squish-2': 'maggot-squish-2.wav',
     'maggot-squish-3': 'maggot-squish-3.wav',
+    'portal-die': 'portal-die.wav',
     'skeleton-die': 'skeleton-die.wav',
     'zombie-die': 'zombie-die.wav',
     'zombie-die-groan': 'zombie-die-groan.wav',
@@ -614,6 +652,7 @@ test('pins every checked-in enemy damage cue to its untouched stock WAV', () => 
     'bone-crack': 'bone-crack.wav',
     'hit-shield': 'hit-shield.wav',
     'pop-shield': 'pop-shield.wav',
+    'portal-hurt': 'portal-hurt.wav',
     'zombie-ouch': 'zombie-ouch.wav',
   } as const
   for (const [cue, filename] of Object.entries(filenames)) {

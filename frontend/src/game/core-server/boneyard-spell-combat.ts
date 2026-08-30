@@ -96,6 +96,7 @@ import {
 } from '../core-kernels/native-world-manager-order.ts'
 import {
   boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
   damageBoneyardEnemy,
   positionBoneyardEnemy,
   setBoneyardArrowChillTumbleAccumulator,
@@ -2325,7 +2326,7 @@ function targetMaximumHealth(target: BoneyardSpellTarget): number {
 }
 
 function targetBodyRadius(target: BoneyardSpellTarget): number {
-  return 'config' in target ? target.config.collisionRadius : target.collisionRadius
+  return 'config' in target ? boneyardEnemyCollisionRadius(target) : target.collisionRadius
 }
 
 function normalizedDifference(
@@ -2383,7 +2384,7 @@ function primaryTargetRows(
         && ('config' in actor || actor.combatActive),
       actorFlags: 'config' in actor ? boneyardEnemyActorFlags(actor) : 0x2,
       attachment: { x: 0, y: 0 },
-      bodyRadius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
+      bodyRadius: 'config' in actor ? boneyardEnemyCollisionRadius(actor) : actor.collisionRadius,
       cellBindingOrder: actor.nativeCellBindingOrder,
       id: `enemy:${actor.id}`,
       kind: 'enemy',

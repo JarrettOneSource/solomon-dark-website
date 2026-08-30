@@ -256,7 +256,7 @@ function projectAnimation(
   return {
     action,
     actionProgress: actionProgress(actor.brain),
-    alpha: 1,
+    alpha: actor.brain.family === 'portal' ? actor.brain.alpha : 1,
     bodyPose: impBrain
       ? impBrain.bodyVariant
       : demonBrain
@@ -278,7 +278,9 @@ function projectAnimation(
     effects: projectEnemyEffects(actor, tick),
     gaitPose,
     headFacingOffset: actor.headFacingOffset,
-    hitFlash: nativeEnemyHitOverlay(actor.lastDamageTick, tick),
+    hitFlash: actor.brain.family === 'portal'
+      ? Math.min(1, actor.brain.hurtTicksRemaining / 24)
+      : nativeEnemyHitOverlay(actor.lastDamageTick, tick),
     impBodyRotationRadians: (impBrain?.bodyRotationDeg ?? 0) * Math.PI / 180,
     impEffectAlpha: impBrain?.effectAlpha ?? 0,
     impEffectFrame: impBrain ? nativeImpEffectFrame(impBrain.effectPhase) : -1,
@@ -344,6 +346,7 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
       ? brain.castProgram === 'long' ? 'mage-cast-long' : 'mage-cast-short'
       : null
     case 'imp': return null
+    case 'portal': return null
     case 'zombie': return brain.phase === 'swipe' ? 'zombie-beat' : null
     case 'wraith': return brain.phase === 'drain' ? 'wraith-drain' : null
     case 'demon': return brain.phase === 'bomb' ? 'demon-bomb' : null
@@ -357,6 +360,7 @@ function actionProgress(brain: BoneyardEnemyBrain): number {
     case 'archer':
     case 'mage': return brain.actionProgress
     case 'imp': return 0
+    case 'portal': return 0
     case 'wraith': return brain.actionTick
     case 'zombie':
     case 'demon': return brain.actionProgress

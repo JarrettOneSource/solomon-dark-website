@@ -509,3 +509,226 @@ No member is `blocked-by-platform`.
   that exact actor, observe one script-owned Gold-or-item reward at its death
   focus, and record empty page/console/failed-response arrays. The exact
   candidate must then pass `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+
+## 2026-08-30 — Deep Portal phases, Portal-ejected Imps, and reachable placement reopening
+
+### Reported smell and parity question
+
+- Player report: Imps can occasionally appear outside the playable Boneyard;
+  during the Hell/Deep Portal phase an unreachable Portal can prevent the wave
+  from continuing. In the reported sample the affected actors appeared inside
+  the visible bounds but remained stuck. The player also reports the defect in
+  the original native game.
+- Current Website behavior at base `a554ea73`: default survival has no type-5021
+  Portal factory row, no Deep Portal start-wave triggers, no Portal actor or
+  Portal-ejected Imp path, and therefore cannot yet reproduce or complete the
+  phase. The new Slumpgut work intentionally dispositioned all seven Portal
+  rows out of that smaller high-Zombie-trigger system.
+- Native questions: recover every generated Portal recipe/trigger/script row,
+  the first-phase timeline barrier, Portal construction/tick/render/light/
+  damage/death/audio state, child-Imp construction and ejection geometry,
+  boss-count ownership, save/replication/reset boundaries, and which stock
+  placement omissions explain the reported exterior and stuck actors.
+- Falsifiers: Portal children use the generic enemy placement retry; active
+  Portal radius remains 45; Portal heading is fixed rather than target-owned;
+  the phase waits on ordinary Imps; every collision-valid root is connected to
+  a player; dark placement remains inside the post-entrance combat target; or a
+  corrected child root changes already-valid native births.
+
+This is another secondary report in the wave/enemy-placement system. Entry 51
+left hard-coded boss and Portal programs adjacent. Entry 72 added local
+collision validity and a half-unit mobility probe but did not prove
+player-connected reachability. Entry 95 already proved the stock dark-policy
+camera-target exception but no Portal consumer existed. Entry 273 recovered
+the NavMesh, yet placement still accepted a valid root in a disconnected
+component. Those incomplete dispositions are reopened together here.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Solomon Dark Beta 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000`, re-hashed 2026-08-30 | Same canonical executable as the accepted enemy, wave, collision, and Slumpgut evidence. | high |
+| Portal constructor/config | `Portal::Ctor 0x0047BD60`; generic config `0x00462790`; common init `0x00483480`; vtable `0x007868CC` | Native type `5021/0x139D`; construction radius 45; target-owned initial heading (random 0..360 only with no target); active radius rewrites to 5 on materialization tick 9; recipe `specialSpawnMode=2` contributes to global boss count. | high |
+| Portal tick and child construction | `Portal::Tick 0x00489CC0`; `Imp::Tick 0x00485DC0`; registration `0x0063F6D0` | The first ten ticks materialize. Active portals decrement a frequency countdown, then build type-1004 Imp directly. Child root is `portal + heading(child)*30 + heading(portal)*(5 + childRadius)`, with child radius 7.5..10. The child gets horizontal speed 6.75, base speed 4.5, vertical offset `-0.1`, vertical velocity `-(10+U(5))`, inherits team and Portal primary damage, and is registered without any bounds, collision, mobility, or connectivity placement call. | high |
+| Portal frequency table | `0x00462790`, `0x00489CC0`; all six editor/config enum rows | Seconds/tick ranges are Very Low `8..10` / `800..1000`, Low `6..8` / `600..800`, Normal `3..4` / `300..400`, High `2..3` / `200..300`, Very High `1..2` / `100..200`, You Will Die `.25..0.5` / `25..50`. Initial countdown is `450 + Integer(upper/3)`. Ordinary reset is inclusive lower..upper; a separate `Integer(8)==1` branch replaces it with `Integer(upper)`. | high |
+| Portal presentation/light | main `0x004A1B30`; alternate `0x004A1CB0`; light provider `0x0047BED0`; DeadHawg builder map | `+0x220` grows by `.025` to one. `+0x214` advances by `.15+U(.15)` over DeadHawg 46..77; `+0x210` advances by `.05+U(.2)` over 180..199; fixed scale is `1.25+U(.5)`. The alternate pass also consumes inline DeadHawg 18 and 22. Light radius is the live `+0x220`; intensity is `+0x220*(.9+U(.35))`; Multiple Shadows owns the containment flag. | high |
+| Damage/death/audio | damage presenter `0x0048C370`; death `0x004A1FA0`; audio registry singleton `DAT_008199D8` | Materialization tick 9 plays `OpenPortal.wav` at half gain. Each Imp ejection plays `fireballhit.wav`. Accepted Portal damage plays `hurtportal.wav` at `1+SignedFloat(.1)` and owns a 10..24-tick presentation latch using BadGuys 401..419. Death plays `PortalDie.wav`, consumes BadGuys 1823..1833, twelve BadGuys-27 black-smoky bouncers, and exactly two DeadHawg decals: array index 6 / record 120 and the final row / record 144, before common reward/drop retirement. | high |
+| Phase script and gate | `WaveData_Parse 0x00632730`; CodeLine runtime `0x00689750`; condition builder/runtime `0x004D1C30/0x00681930`; Arena advance `0x00465C00` | Optional first `Deep Portal` trigger pauses the main timeline manually, preserves the recovered Solomon-command/sleep envelope, spawns three light Portals at 25-tick intervals, then polls `BOSS MONSTER COUNT > 0` every 200 ticks. Only after it reaches zero does the script start the next wave and unpause. Child Imps are ordinary monster-count members, not boss-count members. Later Portal 2..7 start-wave scripts run concurrently, select dark placement, and emit their authored counts at 25-tick intervals. | high |
+| Authored source corpus | twelve `Mod Loader/runtime/instances/*/stage/sandbox/play.boneyard` sources whose SHA-256 values are pinned by `native-generated-boneyards.ts`; parsed read-only with Website's native SyncBuffer parser | Eight sources contain all seven phases; four omit optional phase 1 but contain phases 2..7. Across 80 Portal recipe rows, type, family, policies, frequency band, UIDs, HP, trigger wave, and loop count are extractable. No canonical-random stand-in is needed. | high |
+| Corrected Mac geometry loop | exact Website `6063da56`; all twelve generated geometry templates; Portal placement radius 45, active radius 5, Imp radii 7.5/8.75/10, target-facing Portal heading, 40-unit legal-root lattice, 24 child headings | Among 2,201,112 native-form child roots, 4,624 were inside combat bounds but collision-invalid and 4,032 could move zero of four half-unit probes. A deterministic correction retained all 2,196,488 valid roots byte-identically and projected all 4,624 invalid roots to valid/mobile positions with zero failures. This is a reachability matrix, not a native frequency estimate. | high |
+| Connectivity falsifier | same exact Mac templates and accepted clearance-25 NavMesh | Four of 7,926 collision-valid Portal roots were disconnected from a valid central player component. Six of 90,709 collision-valid child roots crossed into a disconnected component even though their Portal root was player-connected. The NavMesh correctly returned no route; the missing predicate is placement ownership, not an A* defect. | high |
+| Exterior-stock branch | existing entry 95 static trace of `0x00463D30/0x00463BE0`; Portal 2..7 scripts use policy 0 (`IN THE DARK`) | Native dark placement can accept a collision-free raw point before camera-target containment and bypasses the retry rectangle until its fallback transition. A Portal and all children can therefore remain in the retired entrance/full-Arena strip that players perceive as out of bounds. Website already declares the stricter combat-bound domain and must route every new Portal/child through it. | high |
+
+Ghidra used canonical read-only project `SolomonDark` through replicas 3 and 4.
+The read-only Mod Loader wrapper revision was
+`08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 was
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+No Mod Loader file changed.
+
+An earlier diagnostic matrix incorrectly kept Portal's constructor radius 45
+in the child offset and enumerated arbitrary Portal headings. Static
+instructions falsified both assumptions: active radius is 5 and common init
+faces an available target. Its resulting 35,464 exterior-root count is not
+used. The corrected matrix above is the only implementation evidence.
+
+### Complete authored phase census
+
+Each bracket is ordered by the phases present in that source. `waves` are
+type-2 trigger labels, `counts` are script-loop Portal births, `freq` is the
+Portal frequency enum, and `recipe UIDs` are the exact referenced rows. The
+Website runtime catalog must additionally retain every exact float32 HP and
+script/trigger UID from these same 80 rows.
+
+| Source SHA-256 | Present phases | waves | counts | freq | recipe UIDs |
+| --- | --- | --- | --- | --- | --- |
+| `2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f` | 2..7 | `42,51,62,67,77,81` | `6,8,7,10,10,10` | `2,2,3,3,4,4` | `36822,36826,36830,36834,36838,36842` |
+| `9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9` | 1..7 | `24,41,50,57,66,75,81` | `3,6,5,8,7,9,12` | `3,2,2,3,3,4,4` | `36814,36829,36833,36837,36841,36845,36849` |
+| `bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb` | 1..7 | `22,50,59,64,70,78,86` | `3,4,5,8,8,8,10` | `3,2,2,3,3,4,4` | `35010,35027,35031,35035,35039,35043,35047` |
+| `8c2f97d2ed54431987e3cb54b7ae3c1098bf1c4517f59ade6aea57759187adb0` | 2..7 | `46,51,62,69,75,89` | `5,7,8,8,9,10` | `2,2,3,3,4,4` | `37334,37338,37342,37346,37350,37354` |
+| `bec9377cf539bb193e8af6ad72fa78a5e47e44206a1fef4d6bf3bfbda3f04a08` | 1..7 | `23,40,54,57,64,72,84` | `3,4,8,7,10,8,12` | `3,2,2,3,3,4,4` | `36828,36845,36849,36853,36857,36861,36865` |
+| `ec2b27a1415c944c233158da8c21324760cd896e1228143aa18d262f65fa2a45` | 1..7 | `24,42,49,59,65,74,86` | `3,4,5,9,9,8,9` | `3,2,2,3,3,4,4` | `37383,37400,37404,37408,37412,37416,37420` |
+| `624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123` | 2..7 | `46,54,64,69,80,83` | `6,6,8,10,8,11` | `2,2,3,3,4,4` | `37403,37407,37411,37415,37419,37423` |
+| `e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430` | 1..7 | `28,46,53,61,72,76,84` | `3,7,6,6,7,10,11` | `3,2,2,3,3,4,4` | `37383,37400,37404,37408,37412,37416,37420` |
+| `506200e6f89dd26150c7fcc76f5cddfdb321412657ac979ea5924b567b4a2933` | 1..7 | `26,51,59,61,73,83,86` | `3,4,5,9,7,8,10` | `3,2,2,3,3,4,4` | `37471,37488,37492,37496,37500,37504,37508` |
+| `cd4d1ba948ca6624fffb967b02b7c93a6d00cbf9b5ec2c4541330b0616a1c239` | 1..7 | `27,48,53,59,71,79,85` | `3,7,8,8,7,10,9` | `3,2,2,3,3,4,4` | `37361,37376,37380,37384,37388,37392,37396` |
+| `efa240ce741df0f781228206d024bb1903c7210d1163eccf80c87e835365422f` | 2..7 | `48,51,63,73,80,83` | `4,8,8,8,11,9` | `2,2,3,3,4,4` | `37348,37352,37356,37360,37364,37368` |
+| `1be4c308ccd442d70060cc66e3daa7b073faf035fd92d6b49fad4c33a91ef0c1` | 1..7 | `22,42,54,58,67,77,88` | `3,6,5,6,7,8,11` | `3,2,2,3,3,4,4` | `37397,37416,37420,37424,37428,37432,37436` |
+
+### System boundary and membership inventory
+
+Native/web system: **default-survival Deep Portal objectives and their owned
+Imp ejections**, from generated type-2 trigger admission through script timing,
+Portal recipe/materialization, child creation, objective count, damage/death,
+render/light/audio, save/replication, phase release, and run teardown.
+
+| Member / branch | Native source | Disposition required by this pass | Proof contract |
+| --- | --- | --- | --- |
+| 80 generated Portal recipe rows | twelve-source SyncBuffer census; serializer `0x0063E890` | `exact-ported` | exact source SHA, name, recipe/script/trigger UID, float32 HP, frequency, start wave, count, policies, damage, drops, classification, and family fields |
+| Optional phase-1 presence | generator branch `0x006365AF..0x0063694B` | `exact-ported` per source | eight sources include phase 1; four do not synthesize it |
+| phase-1 manual timeline barrier | commands `0x42D`, `0x3EA`, `0x408/409`, `0x3EE`, `0x435/436`, `0x434`, `0x3EB` | `exact-ported` for Portal timing/count/release | pause before ordinary burst, exact 100/50/25/100/200-tick waits, three light births, boss-count polling, next-wave start, and unpause |
+| Solomon_Dig cleanup and Solomon_DriveBy command | commands `0x43C/43D/43B`; DriveBy type 5020 | `out-of-system`: separate Solomon NPC/navigation/presentation system | preserve command envelope timing; do not describe omission of the flyby actor/`SAY_SOLOMON_TROUBLELAUGH` as Portal parity |
+| phases 2..7 | source-specific type-2 triggers and six scripts | `exact-ported` | exact trigger labels; dark placement; exact counts and 25-tick cadence; ordinary timeline continues |
+| Portal constructor/materialization | `0x0047BD60`, `0x00483480`, tick `<10` | `exact-ported` | radius 45 placement, target heading, tick-9 radius 5 rewrite, OpenPortal cue, active boundary |
+| all six frequency presets | config/tick table | `exact-ported` | integer tick endpoints, initial offset, inclusive reset, and one-in-eight fast reset draw order |
+| Portal child Imp | `0x00489CC0 -> 0x005B7080/0x0063F6D0` | `exact-ported` plus named safety correction | exact raw geometry, inherited damage/team, flight values, identity placement when valid, corrected domain/collision/connectivity only when invalid |
+| Portal body render and light | `0x004A1B30`, `0x004A1CB0`, `0x0047BED0` | `exact-ported` | DeadHawg 18,22,46..77,180..199; exact phases, scales, alpha, light radius/intensity/flag |
+| Portal damage presentation | `0x0048C370` | `exact-ported` | hurt cue pitch, latch, BadGuys 401..419, hit overlay, no movement/action invention |
+| Portal terminal presentation | `0x004A1FA0` | `exact-ported` | PortalDie cue, BadGuys 27 and 1823..1833, DeadHawg records 120/144, reward/drop, boss-count decrement, retirement order |
+| boss-count gate | `DAT_00819850`, `0x00681930`; common ctor/dtor writers | `exact-ported` | Portal classification increments/decrements; child Imps never contribute; no timeout or auto-kill |
+| general spawn connectivity | entries 72/273 plus corrected Mac falsifiers | `exact-ported` Website safety invariant for every materialized hostile | valid root remains identity; invalid/disconnected root retries through the same world-owned resolver and actor clearance; no symptom-only Portal exception |
+| generated combat-bound confinement | entry 95 active-region owner | `verified-already-at-parity`, now consumed by Portal/children | no parent or child enters retired entrance strip after transition start |
+| protocol, late join, save/restore | authoritative store and entity replication | `exact-ported` | Portal actor/brain, countdown, phases, emitted child IDs, trigger cursor, pause state, and boss wait survive snapshots/continuation; clients never schedule |
+| pause, level-up barrier, Game Over, new run, disconnect/rejoin | existing world lifecycle | `exact-ported` | every Portal/script/child clock holds with authority and no state crosses world replacement |
+| Portal native boss-prefix HUD | separate guarded HUD owner already dispositioned in entry 132 | `out-of-system`: featured-enemy UI is not the Portal producer or phase gate | no invented Portal-only DOM badge |
+| PortalGroan grouped variants | audio registry rows 201/202, no Portal method reference in the recovered call graph | `out-of-system`: dormant for this actor path | direct cues remain OpenPortal, fireballhit, hurtportal, PortalDie |
+| custom/mod TriggerControl bytecode | opaque authored section 1 | `out-of-system`: general Bonedit interpreter remains separate | default extracted programs only; no inferred mod triggers |
+
+No member is blocked by the browser platform.
+
+### Recovered behavioral contract and correction
+
+- Start-wave triggers are source-authored one-shots. They are independent of
+  player level and of the 42 parsed `wave.txt` rows. The optional first phase
+  is a real timeline barrier; later phases are concurrent scripted bursts.
+- Portals are stationary bosses. Their initial 45-unit body is the placement
+  body; tick 9 rewrites the active/contact body to 5. The boss count, not total
+  monster count, releases the first phase. An unreachable Portal must never be
+  hidden by auto-retirement, a watchdog, or counting its children instead.
+- Native child ejection is preserved through the raw-root computation. The
+  executable's missing post-ejection placement is incidental stock debt that
+  the browser must not preserve: accept the raw root byte-identically only when
+  it is within the authoritative combat domain, collision-valid, half-unit
+  mobile, and connected to at least one eligible player/fallback focus.
+  Otherwise perform the existing deterministic actor-radius placement retry.
+- The same connectivity predicate applies to ordinary wave, terminal-child,
+  custom-recipe, Coffin, Slumpgut, Portal, and Portal-child materialization.
+  The report falsified local mobility as a complete shared admission contract.
+  Demon uses clearance 50; ordinary mobile actors use 25; stationary Portal
+  objectives prove player-radius-25 access to their accepted component.
+- Existing active-region policy remains intentionally stricter than stock dark
+  placement. It prevents a Portal root in the retired entrance strip before a
+  child exists. This is the recovered cause class for the native exterior
+  report; it is not evidence for clamping arbitrary live actors afterward.
+- Valid placement consumes no correction RNG and changes no identity, target,
+  heading, recipe, actor/event ID, or creation order. Invalid placement may
+  consume the established placement RNG but may not drop an accepted Portal or
+  child, advance the phase, or rewrite its authored recipe.
+
+### Web implementation and validation contract
+
+- Check in one complete source-SHA-keyed Portal catalog and closed kernel for
+  phase triggers, script clocks, recipes, frequency state, raw ejection, and
+  exact child flight initialization. Missing source SHA or missing authored row
+  fails closed.
+- Add Portal as a closed enemy family through config, store, renderer, assets,
+  audio, protocol, save, Lua/ML observers, targeting, damage, rewards, and
+  teardown. Do not special-case the reported scene in React or the camera.
+- Red/green coverage must pin all 80 recipe rows and every trigger/count;
+  optional phase-1 membership; pause/release and boss-only count; all six
+  frequencies and reset branches; radius `45 -> 5`; target/no-target heading;
+  Portal damage/death/audio/render/light; child inherited damage and flight;
+  parent/child identity placement; all twelve geometry templates; disconnected
+  Portal and child roots; every sibling spawn path; save/restore, late join,
+  pause, Game Over, and new-run teardown.
+- On the exact Mac candidate, rerun the corrected 2,201,112-root matrix and a
+  source-catalog phase replay. The candidate must retain every valid raw root,
+  correct every invalid/disconnected root, and never cross combat bounds.
+- Built Mac Chrome must trigger one authentic source's optional first phase,
+  observe timeline suspension, three rendered/lighted Portals, OpenPortal and
+  fireballhit cues, independently replicated ejected Imps, damage/hurt audio,
+  one Portal death/PortalDie path, boss-count release only after all three die,
+  resumed ordinary waves, and empty page/console/response/wire arrays. It must
+  then exercise one later dark multi-Portal phase and record no exterior or
+  disconnected parent/child samples.
+- The exact candidate must pass
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`. Push, deployment, and live
+  production proof remain separately authorized receipts.
+
+### Website implementation and validation receipts
+
+- Implemented on the isolated Website branch
+  `codex/imp-bounds-portal-wave-20260830-root`, rebased onto current
+  `origin/main` `375b229d657a9151e0a4db0d792bd85d97577cf3`. Mod Loader remained
+  read-only.
+- The source-SHA catalog retains all twelve generated programs, 80 exact phase
+  rows, eight optional first phases, six frequency presets, and canonical JSON
+  SHA-256 `9cc23e2bf95af4779ce835c4199ab018483aa0259f046c8c067a94f3db9ea7f9`.
+- Website runtime now owns type 5021 as a stationary multiple-boss family,
+  the first-phase timeline barrier and later concurrent phases, boss-only
+  release counting, 45-to-5 materialization, exact Imp frequency/reset state,
+  raw child geometry and flight inheritance, reachable placement admission,
+  Portal render/light/hurt/death state, exact stock WAVs, compact replication,
+  save continuation, and protocol 113.
+- A final read-only static spot-check of `0x004A1FA0` corrected the terminal
+  decal census to exactly DeadHawg records 120 and 144. The twelve
+  BadGuys-27 black-smoky bouncers and BadGuys 1823..1833 array remain separate
+  native children.
+- The final rebased candidate was staged byte-for-byte between the local
+  commit and
+  `/Users/jarrett/codex-acceptance/imp-portal-push-main2-20260830-root/Website`
+  before the complete validation gate.
+- The final 2,201,112-combination Mac geometry replay observed 30,571 legal
+  Portal roots, 4,624 collision-invalid child roots, 4,032 roots immobile on
+  all four half-unit probes, zero exterior roots, 2,196,488 byte-identical
+  accepted roots, 4,624 corrected roots, and zero correction failures.
+- Focused Mac typecheck, Portal kernel/store/director/world, audio, renderer,
+  lighting, replication, save, and mod-host tests passed. The strict lint,
+  architecture boundary, ML schema, and generated Web Lua checks passed with
+  no errors.
+- On the exact Mac candidate,
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` completed successfully through
+  backend build, 28 Python contracts, every frontend/desktop suite, production
+  frontend and game-host builds, the game bundle budget, and production media
+  policy.
+- Built-Chrome acceptance selected source
+  `9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9`.
+  `Deep Portal` produced three bosses exactly 25 ticks apart, held the ordinary
+  timeline while any boss lived, ejected one independently replicated
+  damage-2 Imp with a valid route, played `portal-open`, `fireball-hit`,
+  `portal-hurt`, and `portal-die`, released after the final Portal despite the
+  ordinary child class, then produced all six authored `Deep Portal 2` bosses
+  without pausing. Page errors, failed responses, wire decode errors, and
+  outside-combat enemy samples were all empty.
+- This candidate is locally committed and validated. Publication is recorded
+  separately by Git history and the task handoff; deployment and
+  live-production proof remain separately authorized receipts.

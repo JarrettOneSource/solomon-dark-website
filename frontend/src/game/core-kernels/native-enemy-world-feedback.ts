@@ -7,6 +7,7 @@ export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
   demonIntensity: 0.2,
   impSplitIntensity: 0.05,
   impTerminalIntensity: 0.1,
+  portalIntensity: 0.2,
   magnitudeCutoff: 0.001,
   magnitudeRetentionPerTick: 0.94,
   skeletonIntensity: 0.1,
@@ -20,6 +21,7 @@ export type NativeEnemyWorldFeedbackOutput =
   | 'demon-split'
   | 'imp-split'
   | 'mage-shatter'
+  | 'portal-break'
   | 'skeleton-shatter'
   | 'wraith-fragments'
   | 'zombie-collapse'
@@ -96,5 +98,6 @@ export function nativeEnemyWorldFeedbackImpulses(
       ]
     case 'coffin-break': return [NATIVE_ENEMY_WORLD_FEEDBACK.coffinIntensity]
     case 'demon-split': return [NATIVE_ENEMY_WORLD_FEEDBACK.demonIntensity]
+    case 'portal-break': return [NATIVE_ENEMY_WORLD_FEEDBACK.portalIntensity]
   }
 }

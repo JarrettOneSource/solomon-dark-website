@@ -19,6 +19,7 @@ test('covers every web death presenter and its exact native pulse requests', () 
   assert.deepEqual(nativeEnemyWorldFeedbackImpulses('wraith-fragments'), [0.1, 0.1])
   assert.deepEqual(nativeEnemyWorldFeedbackImpulses('demon-split'), [0.2])
   assert.deepEqual(nativeEnemyWorldFeedbackImpulses('coffin-break'), [0.2])
+  assert.deepEqual(nativeEnemyWorldFeedbackImpulses('portal-break'), [0.2])
 })
 
 test('shares the exact float32 accumulator transition used by score and presentation', () => {

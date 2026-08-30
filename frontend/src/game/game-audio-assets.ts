@@ -111,6 +111,9 @@ import openPanel from '../assets/game/audio/sfx/openpanel.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
 import poof from '../assets/game/audio/sfx/poof.wav'
 import popShield from '../assets/game/audio/sfx/pop-shield.wav'
+import portalDie from '../assets/game/audio/sfx/portal-die.wav'
+import portalHurt from '../assets/game/audio/sfx/portal-hurt.wav'
+import portalOpen from '../assets/game/audio/sfx/portal-open.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
 import shovel1 from '../assets/game/audio/sfx/shovel-1.wav'
 import shovel2 from '../assets/game/audio/sfx/shovel-2.wav'
@@ -284,6 +287,9 @@ export const GAME_AUDIO_SOURCES = {
     nuke,
     phase,
     'pop-shield': popShield,
+    'portal-die': portalDie,
+    'portal-hurt': portalHurt,
+    'portal-open': portalOpen,
     'pickup-bag': pickupBag,
     'pickup-coin': pickupCoin,
     'rock-hit': rockHit,

@@ -219,6 +219,7 @@ import {
 } from './native-secondary-world.ts'
 import {
   boneyardEnemyActorFlags,
+  boneyardEnemyCollisionRadius,
   damageBoneyardEnemy,
   applyBoneyardStaffHeadingPerturbation,
   emitBoneyardPlayerDamageSound,
@@ -2209,7 +2210,7 @@ export function stepGameSimulationTick(
           cameraLockSafetyClear: nativeTutorialCameraLockSafetyClear([
             ...boneyardWorld.enemies.actors.map((actor) => ({
               position: actor.position,
-              radius: actor.config.collisionRadius,
+              radius: boneyardEnemyCollisionRadius(actor),
             })),
             ...boneyardWorld.enemies.maggots.map((maggot) => ({
               position: maggot.position,
@@ -2546,7 +2547,7 @@ function finishGameSimulationTick(
               PLAYER_CHARACTER_RADIUS,
               damageSource.position,
               'config' in damageSource
-                ? damageSource.config.collisionRadius
+                ? boneyardEnemyCollisionRadius(damageSource)
                 : damageSource.collisionRadius,
             ),
           secondaryAbilities.rng,
@@ -3248,7 +3249,7 @@ function finishGameSimulationTick(
             boneyardEnemyActorFlags(actor) !== 0
               ? [{
                   position: actor.position,
-                  radius: actor.config.collisionRadius,
+                  radius: boneyardEnemyCollisionRadius(actor),
                 }]
               : []
           )),

@@ -1813,6 +1813,14 @@ function normalizeWorld(
           ...waves,
           openingBursts: waves.openingBursts ?? [],
           openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
+          portalPhaseIndex: waves.portalPhaseIndex ?? 0,
+          portalProgram: waves.portalProgram ?? defaults.waves?.portalProgram ?? null,
+          portalScriptPhase: waves.portalScriptPhase
+            ?? defaults.waves?.portalScriptPhase
+            ?? 'retired',
+          portalSpawnRemaining: waves.portalSpawnRemaining ?? 0,
+          portalTicksRemaining: waves.portalTicksRemaining ?? 0,
+          portalTimelinePaused: waves.portalTimelinePaused ?? false,
           slumpgutPhase: waves.slumpgutPhase ?? defaults.waves?.slumpgutPhase ?? 'eligible',
           slumpgutPollCursor: waves.slumpgutPollCursor ?? 0,
           slumpgutRecipeUid: waves.slumpgutRecipeUid ?? defaults.waves?.slumpgutRecipeUid ?? null,

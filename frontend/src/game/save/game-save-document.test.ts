@@ -1226,6 +1226,11 @@ test('host save documents retain the active Boneyard and its authoritative run i
         ? null
         : {
             ...state.world.waves,
+            portalPhaseIndex: 0,
+            portalScriptPhase: 'boss-wait',
+            portalSpawnRemaining: 0,
+            portalTicksRemaining: 123,
+            portalTimelinePaused: true,
             slumpgutPhase: 'script-sleep',
             slumpgutTicksRemaining: 731,
           },
@@ -1270,6 +1275,13 @@ test('host save documents retain the active Boneyard and its authoritative run i
   assert.deepEqual(restored.state.world.encounter?.escapeTarget, { x: 980, y: 3000 })
   assert.equal(restored.state.world.waves?.slumpgutPhase, 'script-sleep')
   assert.equal(restored.state.world.waves?.slumpgutTicksRemaining, 731)
+  assert.equal(restored.state.world.waves?.portalScriptPhase, 'boss-wait')
+  assert.equal(restored.state.world.waves?.portalTicksRemaining, 123)
+  assert.equal(restored.state.world.waves?.portalTimelinePaused, true)
+  assert.deepEqual(
+    restored.state.world.waves?.portalProgram,
+    state.world.kind === 'boneyard' ? state.world.waves?.portalProgram : null,
+  )
   assert.deepEqual(restored.state.world.hallOfFameRuns, state.world.kind === 'boneyard'
     ? state.world.hallOfFameRuns
     : {})

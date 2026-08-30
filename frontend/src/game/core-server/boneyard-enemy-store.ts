@@ -29,6 +29,14 @@ import {
   drawNativeSign,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import {
+  NATIVE_PORTAL_ACTOR_PROGRAM,
+  createNativePortalState,
+  nativePortalChildPosition,
+  nativePortalCollisionRadius,
+  stepNativePortalState,
+  type NativePortalState,
+} from '../core-kernels/native-survival-portal.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   evaluateBoneyardEnemyConfig,
@@ -159,6 +167,7 @@ export const BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE = 10
 export const BOUNDED_ENEMY_ATTACK_REACH = Object.freeze({
   COFFIN: 0,
   DEMON: 180,
+  PORTAL: 0,
   SKELETON: 36,
   SKELETONARCHER: 240,
   SKELETONMAGE: 220,
@@ -345,12 +354,19 @@ export interface BoneyardCoffinBrain {
   readonly phaseTicksRemaining: number
 }
 
+export interface BoneyardPortalBrain extends NativePortalState {
+  readonly family: 'portal'
+  readonly hurtTicksRemaining: number
+  readonly phase: 'active' | 'death'
+}
+
 export type BoneyardEnemyBrain =
   | BoneyardArcherBrain
   | BoneyardCoffinBrain
   | BoneyardDemonBrain
   | BoneyardImpBrain
   | BoneyardMageBrain
+  | BoneyardPortalBrain
   | BoneyardSkeletonBrain
   | BoneyardWraithBrain
   | BoneyardZombieBrain
@@ -645,6 +661,7 @@ export type BoneyardEnemyDeathSound =
   | 'maggot-squish-1'
   | 'maggot-squish-2'
   | 'maggot-squish-3'
+  | 'portal-die'
   | 'skeleton-die'
   | 'zombie-die'
   | 'zombie-die-groan'
@@ -654,6 +671,7 @@ export type BoneyardEnemyDamageSound =
   | 'bone-crack'
   | 'hit-shield'
   | 'pop-shield'
+  | 'portal-hurt'
   | 'zombie-ouch'
 
 export type BoneyardPlayerDamageSound =
@@ -673,6 +691,8 @@ export type BoneyardEnemyActionSound =
   | 'imp-vocal-6'
   | 'imp-vocal-7'
   | 'imp-vocal-8'
+  | 'fireball-hit'
+  | 'portal-open'
   | 'shoot-arrow'
 
 const NATIVE_IMP_VOCAL_SOUNDS = Object.freeze([
@@ -857,9 +877,11 @@ export type ResolveBoneyardEnemyMovement = (
 
 export interface BoneyardEnemySpawnPlacementRequest {
   readonly actorId: BoneyardEnemyActorId
+  readonly navigationClearance: number
   readonly position: Readonly<BoneyardPoint>
   readonly positionPolicy: BoneyardEnemySpawnIntent['positionPolicy']
   readonly radius: number
+  readonly reachabilityRadius: number
   readonly rngState: NativeRngState
 }
 
@@ -926,6 +948,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly resolveSpawnIntents: (
     liveEnemyCount: number,
     liveZombieCount: number,
+    liveBossCount: number,
   ) => readonly BoneyardEnemySpawnIntent[]
   readonly tick: number
 }
@@ -1027,6 +1050,7 @@ interface WorkingStep {
   playerDamage: BoneyardEnemyPlayerDamage[]
   playerKnockbacks: BoneyardEnemyPlayerKnockback[]
   pathStatusFactors: Map<BoneyardEnemyActorId, number>
+  pendingSpawnIntents: BoneyardEnemySpawnIntent[]
   projectiles: BoneyardEnemyProjectile[]
   projectileEffects: BoneyardEnemyProjectileEffect[]
   registerWorldPainter: RegisterNativeWorldPainter
@@ -1167,6 +1191,12 @@ export function boneyardEnemyLiveCount(source: BoneyardEnemyStore): number {
   return source.actors.length
 }
 
+export function boneyardEnemyCollisionRadius(actor: BoneyardEnemyActor): number {
+  return actor.brain.family === 'portal'
+    ? nativePortalCollisionRadius(actor.brain)
+    : actor.config.collisionRadius
+}
+
 export function damageBoneyardEnemy(
   source: BoneyardEnemyStore,
   request: DamageBoneyardEnemyRequest,
@@ -1227,13 +1257,14 @@ export function damageBoneyardEnemy(
   }
 
   const hurtSound = enemyHurtSound(actor)
+  const hurtPresentationReady = actor.brain.family === 'portal'
+    ? actor.brain.hurtTicksRemaining === 0
+    : actor.lastDamageTick === null
+      || request.tick - actor.lastDamageTick >= NATIVE_ENEMY_HIT_LATCH_TICKS
   if (
     hurtSound !== null
     && request.suppressHurtSound !== true
-    && (
-      actor.lastDamageTick === null
-      || request.tick - actor.lastDamageTick >= NATIVE_ENEMY_HIT_LATCH_TICKS
-    )
+    && hurtPresentationReady
   ) {
     emitDamageSound(
       work,
@@ -1243,6 +1274,12 @@ export function damageBoneyardEnemy(
       0.9 + drawDamageUnit(work) * 0.2,
     )
   }
+  const damageBrain = actor.brain.family === 'portal' && hurtPresentationReady
+    ? {
+        ...actor.brain,
+        hurtTicksRemaining: 10 + Math.min(14, Math.floor(drawDamageUnit(work) * 15)),
+      }
+    : actor.brain
 
   const currentHealth = actor.currentHealth - request.amount
   const healthDamage = Math.min(Math.max(actor.currentHealth, 0), request.amount)
@@ -1250,7 +1287,7 @@ export function damageBoneyardEnemy(
   const nextActor: BoneyardEnemyActor = killed
     ? {
         ...actor,
-        brain: deathBrain(actor.brain),
+        brain: deathBrain(damageBrain),
         currentHealth,
         deathEpoch: source.nextDeathEpoch,
         deathStartedTick: request.tick,
@@ -1273,6 +1310,7 @@ export function damageBoneyardEnemy(
       }
     : {
         ...actor,
+        brain: damageBrain,
         currentHealth,
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
@@ -1711,6 +1749,8 @@ function enemyHurtSound(
       return 'bone-crack'
     case 'ZOMBIE':
       return 'zombie-ouch'
+    case 'PORTAL':
+      return 'portal-hurt'
     case 'COFFIN':
     case 'DEMON':
     case 'IMP':
@@ -1832,6 +1872,7 @@ export function stepBoneyardEnemyStore(
     playerDamage: [],
     playerKnockbacks: [],
     pathStatusFactors: new Map(),
+    pendingSpawnIntents: [],
     projectiles: [...source.projectiles],
     projectileEffects: [],
     registerWorldPainter: context.registerWorldPainter
@@ -1876,6 +1917,7 @@ export function stepBoneyardEnemyStore(
       work.impActorCount -= 1
     }
   }
+  work.actors.push(...materializeSpawnIntents(work, context, work.pendingSpawnIntents))
   stepMageShields(work, context)
   const maggotsBeforeStep = new Map(work.maggots.map((maggot) => [maggot.id, maggot]))
   stepMaggots(work, context, context.tick - source.lastStepTick)
@@ -1895,6 +1937,7 @@ export function stepBoneyardEnemyStore(
   const spawnIntents = context.resolveSpawnIntents(
     work.actors.length,
     liveZombieCount(work.actors),
+    liveBossCount(work.actors),
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
   return finishBoneyardEnemyStoreStep(work, context.tick)
@@ -1927,6 +1970,7 @@ function stepPausedBoneyardEnemyStore(
     nextProjectileEffectId: source.nextProjectileEffectId,
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
     pathStatusFactors: new Map(),
+    pendingSpawnIntents: [],
     playerDamage: [],
     playerKnockbacks: [],
     projectiles: [...source.projectiles],
@@ -1945,6 +1989,7 @@ function stepPausedBoneyardEnemyStore(
   const spawnIntents = context.resolveSpawnIntents(
     work.actors.length,
     liveZombieCount(work.actors),
+    liveBossCount(work.actors),
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
   work.events = []
@@ -1992,6 +2037,10 @@ function liveZombieCount(actors: readonly BoneyardEnemyActor[]): number {
   return actors.filter(({ config }) => config.enemyToken === 'ZOMBIE').length
 }
 
+function liveBossCount(actors: readonly BoneyardEnemyActor[]): number {
+  return actors.filter(({ config }) => config.classification !== 'normal').length
+}
+
 function materializeSpawnIntents(
   work: WorkingStep,
   context: BoneyardEnemyStoreStepContext,
@@ -2027,13 +2076,25 @@ function materializeSpawnIntents(
       waveOrdinal: intent.waveOrdinal,
       zombieBodyType: intent.zombieBodyType,
     })
-    const config = impSplitDepthOverride === null
+    const inheritedConfig = impSplitDepthOverride === null
       ? evaluatedConfig
       : withImpSplitDepth(evaluatedConfig, impSplitDepthOverride)
+    const config = intent.portalEjection === undefined
+      ? inheritedConfig
+      : withPortalEjectionDamage(inheritedConfig, intent.portalEjection)
     if (
       config.enemyToken === 'IMP'
+      && intent.portalEjection === undefined
       && work.impActorCount >= NATIVE_IMP_CONSTRUCTION_MAXIMUM
     ) continue
+    const rawPosition = intent.portalEjection === undefined
+      ? intent.position
+      : nativePortalChildPosition(
+          intent.portalEjection.parentPosition,
+          intent.portalEjection.parentHeadingDeg,
+          intent.portalEjection.childHeadingDeg,
+          config.collisionRadius,
+        )
     const placementGroupId = intent.placementGroupId
     if (
       placementGroupId !== undefined
@@ -2048,19 +2109,25 @@ function materializeSpawnIntents(
     } else {
       const placement = context.resolveSpawnPlacement?.({
         actorId: work.nextActorId,
-        position: intent.position,
+        navigationClearance: intent.navigationClearance ?? (
+          config.enemyToken === 'DEMON'
+            ? NATIVE_DEMON_NAVIGATION_CLEARANCE
+            : NATIVE_BADGUY_NAVIGATION_CLEARANCE
+        ),
+        position: rawPosition,
         positionPolicy: intent.positionPolicy ?? 'direct',
-        radius: config.collisionRadius,
+        radius: intent.placementRadius ?? config.collisionRadius,
+        reachabilityRadius: intent.reachabilityRadius ?? config.collisionRadius,
         rngState: work.steeringRngState,
       })
       if (placement) work.steeringRngState = placement.rngState
       position = placement?.position ?? context.resolveMovement({
         actorId: work.nextActorId,
         delta: { x: 0, y: 0 },
-        position: intent.position,
+        position: rawPosition,
         purpose: 'spawn-placement',
-        radius: config.collisionRadius,
-        requestedPosition: intent.position,
+        radius: intent.placementRadius ?? config.collisionRadius,
+        requestedPosition: rawPosition,
       })
       if (placementGroupId !== undefined) {
         placementGroups.set(placementGroupId, Object.freeze({ ...position }))
@@ -2075,7 +2142,10 @@ function materializeSpawnIntents(
     const bodyGaitPhase = drawLocomotionPhase(work)
     const path = createNativeEnemyPathState(work.steeringRngState)
     work.steeringRngState = path.rngState
-    const brain = createBrain(work, config)
+    const createdBrain = createBrain(work, config)
+    const brain = intent.portalEjection === undefined
+      ? createdBrain
+      : withPortalEjectionFlight(createdBrain, intent.portalEjection)
     const restBodyPose = config.enemyToken === 'SKELETONMAGE'
       ? drawLocomotionInteger(work, 2)
       : 0
@@ -2094,7 +2164,8 @@ function materializeSpawnIntents(
       deathTick: 0,
       gaitPose,
       headFacingOffset: 0,
-      headingDeg: targetHeading(position, targetPlayerId, context.players),
+      headingDeg: intent.portalEjection?.childHeadingDeg
+        ?? targetHeading(position, targetPlayerId, context.players),
       hurricaneContactCooldown,
       id: work.nextActorId,
       lastDamagedByPlayerId: null,
@@ -2153,6 +2224,53 @@ function withImpSplitDepth(
     ...config,
     family: Object.freeze({ ...config.family, splitDepth }),
   })
+}
+
+function withPortalEjectionDamage(
+  config: EvaluatedBoneyardEnemyConfig,
+  ejection: NonNullable<BoneyardEnemySpawnIntent['portalEjection']>,
+): EvaluatedBoneyardEnemyConfig {
+  if (config.enemyToken !== 'IMP') {
+    throw new Error('only an Imp can consume a Portal ejection payload')
+  }
+  validatePortalEjection(ejection)
+  return Object.freeze({
+    ...config,
+    primaryDamage: ejection.inheritedPrimaryDamage,
+  })
+}
+
+function withPortalEjectionFlight(
+  brain: BoneyardEnemyBrain,
+  ejection: NonNullable<BoneyardEnemySpawnIntent['portalEjection']>,
+): BoneyardImpBrain {
+  if (brain.family !== 'imp') {
+    throw new Error('only an Imp brain can consume a Portal ejection payload')
+  }
+  return {
+    ...brain,
+    baseHorizontalSpeed: NATIVE_PORTAL_ACTOR_PROGRAM.childBaseHorizontalSpeed,
+    horizontalSpeed: NATIVE_PORTAL_ACTOR_PROGRAM.childInitialHorizontalSpeed,
+    verticalOffset: NATIVE_PORTAL_ACTOR_PROGRAM.childVerticalOffset,
+    verticalVelocity: ejection.verticalVelocity,
+  }
+}
+
+function validatePortalEjection(
+  source: NonNullable<BoneyardEnemySpawnIntent['portalEjection']>,
+): void {
+  validatePoint(source.parentPosition, 'Portal ejection parent position')
+  for (const [field, value] of Object.entries({
+    childHeadingDeg: source.childHeadingDeg,
+    inheritedPrimaryDamage: source.inheritedPrimaryDamage,
+    parentHeadingDeg: source.parentHeadingDeg,
+    verticalVelocity: source.verticalVelocity,
+  })) {
+    if (!Number.isFinite(value)) throw new RangeError(`Portal ejection ${field} must be finite`)
+  }
+  if (source.inheritedPrimaryDamage < 0 || source.verticalVelocity >= 0) {
+    throw new RangeError('Portal ejection damage and vertical velocity are invalid')
+  }
 }
 
 function createBrain(
@@ -2226,6 +2344,12 @@ function createBrain(
         phase: 'flight',
         visualRngState: work.rngState,
       }
+    }
+    case 'PORTAL': return {
+      ...createNativePortalState(config.family.frequency, () => drawUnit(work)),
+      family: 'portal',
+      hurtTicksRemaining: 0,
+      phase: 'active',
     }
     case 'ZOMBIE': {
       const bodyPhaseDeg = drawUnit(work) * 360
@@ -2388,6 +2512,7 @@ function canReceiveNativeMageAllyShield(actor: BoneyardEnemyActor): boolean {
       return true
     case 'SKELETONMAGE':
     case 'IMP':
+    case 'PORTAL':
     case 'WRAITH':
     case 'DEMON':
     case 'COFFIN':
@@ -2443,7 +2568,14 @@ function stepLivingActor(
   const affected = effect === undefined
     ? source
     : withNativeSecondaryTickScalars(source, effect)
-  const actor = refreshTarget(affected, context)
+  const actor = affected.brain.family === 'portal'
+    ? affected
+    : refreshTarget(affected, context)
+  if (actor.brain.family === 'portal') {
+    return (effect?.timeScale ?? 1) === 0
+      ? stepEnemyLighting(actor)
+      : stepEnemyLighting(stepPortal(work, actor, actor.brain, context))
+  }
   if ((effect?.disruptedTicks ?? 0) > 0) {
     const interrupted = clearSkeletonFamilyHeadFacing(
       interruptNativeSecondaryAction(actor),
@@ -2497,6 +2629,7 @@ function stepLivingActor(
       case 'skeleton': return stepSkeleton(work, articulated, articulated.brain, context)
       case 'archer': return stepArcher(work, articulated, articulated.brain, context)
       case 'imp': return stepImp(work, articulated, articulated.brain, context)
+      case 'portal': return stepPortal(work, articulated, articulated.brain, context)
       case 'zombie': return advanceZombieVisual(
         articulated,
         stepZombie(work, articulated, articulated.brain, context),
@@ -2507,6 +2640,56 @@ function stepLivingActor(
     }
   })()
   return stepEnemyLighting(finalizeSkeletonFamilyHeadFacing(articulated, stepped))
+}
+
+function stepPortal(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  brain: BoneyardPortalBrain,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
+  const stepped = stepNativePortalState(
+    brain,
+    actor.config.enemyToken === 'PORTAL' ? actor.config.family.frequency : 0,
+    () => drawUnit(work),
+  )
+  if (stepped.opened) {
+    emitEnemyActionSound(work, context.tick, actor, 'portal-open', 1, 0.5)
+  }
+  if (stepped.ejection !== null) {
+    emitEnemyActionSound(work, context.tick, actor, 'fireball-hit', 1)
+    work.pendingSpawnIntents.push(Object.freeze({
+      enemyToken: 'IMP',
+      flags: Object.freeze([]),
+      id: work.nextSyntheticSpawnIntentId,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
+      portalEjection: Object.freeze({
+        childHeadingDeg: stepped.ejection.childHeadingDeg,
+        inheritedPrimaryDamage: actor.config.primaryDamage ?? 0,
+        parentHeadingDeg: actor.headingDeg,
+        parentPosition: Object.freeze({ ...actor.position }),
+        verticalVelocity: stepped.ejection.verticalVelocity,
+      }),
+      position: Object.freeze({ ...actor.position }),
+      positionPolicy: 'direct',
+      spawnTick: context.tick,
+      waveOrdinal: actor.waveOrdinal,
+    }))
+    work.nextSyntheticSpawnIntentId += 1
+  }
+  return {
+    ...actor,
+    bodyPose: stepped.state.bodyPhase,
+    brain: {
+      ...stepped.state,
+      family: 'portal',
+      hurtTicksRemaining: Math.max(0, brain.hurtTicksRemaining - 1),
+      phase: 'active',
+    },
+    gaitPose: stepped.state.auraPhase,
+    stridePhaseDeg: stepped.state.fixedScale,
+  }
 }
 
 function rollSkeletonFamilyHeadFacing(
@@ -2614,6 +2797,12 @@ function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
         providerCopies: active ? 1 : 0,
       })
     }
+    case 'PORTAL':
+      return withEnemyLighting(actor, {
+        charge: actor.brain.family === 'portal' ? actor.brain.alpha : prior.charge,
+        glow: actor.brain.family === 'portal' ? actor.brain.alpha : prior.glow,
+        providerCopies: active ? 1 : 0,
+      })
     case 'WRAITH': {
       const burning = actor.config.burning
       return withEnemyLighting(actor, {
@@ -4595,6 +4784,7 @@ function interruptNativeSecondaryAction(
     case 'archer': return resetArcher(actor, actor.brain)
     case 'mage': return resetMage(actor, actor.brain)
     case 'imp': return actor
+    case 'portal': return actor
     case 'zombie': return resetZombie(actor, actor.brain)
     case 'wraith': return resetWraith(actor, actor.brain)
     case 'demon': return resetDemon(actor, actor.brain)
@@ -6108,6 +6298,9 @@ function spawnEnemyDeathEffects(
         })
       }
       return
+    case 'PORTAL':
+      spawnPortalTerminalEffects(work, actor, tick)
+      return
     case 'ZOMBIE':
       spawnZombieTerminalEffects(work, actor, tick)
       return
@@ -6137,6 +6330,38 @@ function spawnEnemyDeathEffects(
     case 'COFFIN': {
       spawnCoffinTerminalEffects(work, actor, tick)
     }
+  }
+}
+
+function spawnPortalTerminalEffects(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  tick: number,
+): void {
+  spawnSpriteArray(work, actor, tick, 'portal-terminal-array', 1823, 11, 1, {
+    frameVelocity: 0.5,
+    presentationOwner: 'pre-world-queue',
+    scale: 2,
+  })
+  for (let index = 0; index < 12; index += 1) {
+    spawnBouncer(work, actor, tick, 27, 'portal-black-smoke', {
+      kind: 'smoky-bouncer',
+      tint: 0,
+      velocity: radialVector(index / 12 * 360, 1),
+    })
+  }
+  for (const entry of [120, 144]) {
+    spawnSimpleDeathEffect(work, actor, tick, {
+      alpha: 0.75,
+      alphaLossPerTick: 0.025,
+      atlas: 'DeadHawg',
+      blendMode: 'normal',
+      entry,
+      kind: 'fade-scale',
+      lifetimeTicks: 30,
+      role: 'portal-decal',
+      scale: 1,
+    })
   }
 }
 
@@ -6582,6 +6807,9 @@ function emitEnemyDeathSounds(
         emitEnemyDeathSound(work, tick, actor, 'firey-death', 0.8 + drawUnit(work) * 0.2)
       }
       return
+    case 'PORTAL':
+      emitEnemyDeathSound(work, tick, actor, 'portal-die', 1)
+      return
     case 'ZOMBIE':
       if (actor.config.family.rotten) {
         for (let index = 0; index < 3; index += 1) {
@@ -6639,9 +6867,10 @@ function emitEnemyActionSound(
   actor: DeathEffectOwner,
   sound: BoneyardEnemyActionSound,
   pitch: number,
+  gainScale = 1,
 ): void {
   emitEvent(work, tick, 'enemy-action-sound', actor.id, {
-    gainScale: 1,
+    gainScale,
     pitch,
     sound,
     sourcePosition: { ...actor.position },
@@ -6839,6 +7068,7 @@ type BouncerOptions = {
   position?: Readonly<BoneyardPoint>
   height?: number
   scale?: number
+  tint?: number
   velocity?: Readonly<BoneyardPoint>
 }
 
@@ -6892,7 +7122,7 @@ function spawnBouncer(
     scaleMultiplier: 1,
     shadow: true,
     spawnTick: tick,
-    tint: 0xffffff,
+    tint: resolvedOptions.tint ?? 0xffffff,
     verticalVelocity,
     velocity: Object.freeze({ ...(resolvedOptions.velocity ?? { x: 0, y: 0 }) }),
     velocityDamping: 1,
@@ -6946,6 +7176,7 @@ function primaryOnlyUnbindClock(
     case 'SKELETONMAGE':
       return { alpha: 0.75, alphaLossPerTick: 0.0225 }
     case 'IMP':
+    case 'PORTAL':
     case 'WRAITH':
       return { alpha: 1, alphaLossPerTick: 0.025 }
     case 'ZOMBIE':
@@ -7231,6 +7462,7 @@ function terminalOutput(token: EvaluatedBoneyardEnemyConfig['enemyToken']): Bone
     case 'SKELETONARCHER': return 'archer-shatter'
     case 'SKELETONMAGE': return 'mage-shatter'
     case 'IMP': return 'imp-split'
+    case 'PORTAL': return 'portal-break'
     case 'ZOMBIE': return 'zombie-collapse'
     case 'WRAITH': return 'wraith-fragments'
     case 'DEMON': return 'demon-split'
