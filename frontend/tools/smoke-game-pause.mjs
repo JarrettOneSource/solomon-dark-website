@@ -12,6 +12,10 @@ import {
   gameSimulationPlayerRecords,
 } from '../src/game/core-server/game-simulation.ts'
 import {
+  grantPlayerEntitySkillRanks,
+  selectPlayerEntityConcentrationSlot,
+} from '../src/game/core-server/player-entity-store.ts'
+import {
   HUB_INTERACTION_GEOMETRY,
   HUB_TRADER_GEOMETRY,
 } from '../src/game/hub-inventory-presentation.ts'
@@ -737,6 +741,23 @@ try {
     'skill-selector-closed',
   )
 
+  const concentrationState = host.state()
+  const concentrationGrant = grantPlayerEntitySkillRanks(
+    concentrationState.playerEntities,
+    host.hostPlayerId(),
+    57,
+    1,
+    concentrationState.gameRng,
+  )
+  Object.assign(concentrationState, {
+    gameRng: concentrationGrant.rng,
+    playerEntities: selectPlayerEntityConcentrationSlot(
+      concentrationGrant.store,
+      host.hostPlayerId(),
+      57,
+      0,
+    ),
+  })
   await largeBoneyard.getByRole('button', {
     name: /^Select concentration A, current /,
   }).click()
