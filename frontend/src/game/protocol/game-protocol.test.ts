@@ -1847,7 +1847,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v113 carries Portal objectives, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
+test('protocol v113 carries Portal objectives, Steam detonation presentation, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 113)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
@@ -3173,6 +3173,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
     painterRegistrations: [TRANSIENT_LIGHT_REGISTRATION],
+    presentation: 'fire',
     soundPitch: 1.05,
     visualScale: 1.9,
     worldKey: 'hub:courtyard',

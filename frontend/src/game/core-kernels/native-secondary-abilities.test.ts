@@ -243,6 +243,69 @@ test('secondary mana underflow is strict: cost greater than mana fails, exact ze
   assert.equal(exact.manaSpent.player, 75)
 })
 
+test('Steamed pulses for exactly ten native ticks and merges the strongest stored payload', () => {
+  const target = {
+    family: 'SKELETON',
+    id: 7,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 4, y: 5 },
+    radius: 10,
+    scale: 1,
+    shieldHealth: 0,
+  }
+  let state = applyNativeSecondaryTargetEffect(
+    createNativeSecondarySimulation(123),
+    'boneyard:test',
+    target.id,
+    { steamed: {
+      damagePerTick: 2,
+      emberDamage: 3,
+      emberFragments: 1,
+      explodeDamage: 4,
+      explodeRadius: 12,
+      ownerId: 'first',
+      sourceActorId: 10,
+      ticks: 10,
+    } },
+  )
+  state = applyNativeSecondaryTargetEffect(state, 'boneyard:test', target.id, {
+    steamed: {
+      damagePerTick: 3,
+      emberDamage: 2,
+      emberFragments: 2,
+      explodeDamage: 5,
+      explodeRadius: 11,
+      ownerId: 'strongest',
+      sourceActorId: 11,
+      ticks: 8,
+    },
+  })
+  assert.deepEqual(state.targetEffects[0]!.steamed, {
+    damagePerTick: 3,
+    emberDamage: 3,
+    emberFragments: 2,
+    explodeDamage: 5,
+    explodeRadius: 12,
+    ownerId: 'strongest',
+    sourceActorId: 11,
+    ticks: 10,
+  })
+
+  for (let tick = 1; tick <= 10; tick += 1) {
+    const result = stepNativeSecondaryAbilities(state, {
+      ...context(11, tick, null),
+      target: (_worldKey, targetId) => targetId === target.id ? target : null,
+    })
+    assert.equal(result.steamedPulses.length, 1, `tick ${tick}`)
+    state = result.state
+  }
+  const expired = stepNativeSecondaryAbilities(state, {
+    ...context(11, 11, null),
+    target: () => target,
+  })
+  assert.deepEqual(expired.steamedPulses, [])
+})
+
 test('Mindblowing Ring births its exact burst and actor-light Shockwave from 502 RNG words', () => {
   const source = createNativeSecondarySimulation(0x52a220)
   const lightRegistration = { managerLane: 'actor' as const, registrationOrdinal: 7 }

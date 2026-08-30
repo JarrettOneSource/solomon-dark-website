@@ -1968,8 +1968,31 @@ test('Steam particle contact installs its ten-tick Steamed payload on a risen Co
       worldKey: WORLD_KEY,
     }] },
   )
-  assert.equal(pulsed.spells.transients.some(({ kind }) => kind === 'fire-explosion'), true)
-  assert.equal(pulsed.spells.transients.filter(({ kind }) => kind === 'fire-ember').length, 3)
+  const explosion = pulsed.spells.transients.find(({ kind }) => kind === 'fire-explosion')
+  assert.equal(explosion?.kind === 'fire-explosion' && explosion.presentation, 'steam')
+  assert.equal(pulsed.spells.transients.some(({ kind }) => kind === 'fire-ember'), false)
+  const fragments = pulsed.spells.transients.filter(({ kind }) => kind === 'weld-steam')
+  assert.equal(fragments.length, 9)
+  assert.equal(fragments.every(({ vector }) => vector.every((value) => value === 0)), true)
+  assert.equal(fragments.every(({ contactDamage }) => contactDamage === Math.fround(2 / 100)), true)
+
+  const noExplosion = resolveCombatWithAuthority(
+    applied.enemies,
+    spellState({}),
+    [],
+    3,
+    { steamedPulses: [{
+      emberDamage: 2,
+      emberFragments: 3,
+      explodeDamage: 4,
+      explodeRadius: 0,
+      position: actor.position,
+      sourcePlayerId: 'wizard',
+      targetId: actor.id,
+      worldKey: WORLD_KEY,
+    }] },
+  )
+  assert.deepEqual(noExplosion.spells.transients, [])
 })
 
 test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pulse', () => {

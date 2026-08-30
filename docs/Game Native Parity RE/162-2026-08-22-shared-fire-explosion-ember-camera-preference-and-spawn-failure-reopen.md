@@ -70,7 +70,8 @@ presentation, lights/audio, replication, interpolation, and teardown.
 | Ember actor light | `0x005E5960` | exact-port | per-actor registration, radius/intensity/no-shadow |
 | Embers to Imps | row 19 | verified-already-at-parity; revalidate shared Ember retirement | four fragments, GoodImp/Fire sibling ownership |
 | Immolate | row 20; spent mode one | exact-port via same explosion stack | scale one, no fragments, damage/audio/VFX/light |
-| FireMissile and web weld builds 1000/1003/1005/1007 | caller `0x005E4CA0` and welded vectors | exact-port via shared view/protocol/audio | per-build detonation fixture |
+| FireMissile and web weld builds 1000/1003/1007 | caller `0x005E4CA0` and welded vectors | exact-port via shared view/protocol/audio | per-build detonation fixture |
+| Steam Jet build 1005 | `Mod_Steamed::Tick 0x00625F40`, event type 2, `0x00643CA0` | `out-of-system` — the 2026-08-30 corrective trace proves this is the separate gray Steam-detonation family in entry 123, not shared helper `0x00642BF0` | negative shared-helper caller census plus Steam-family fixtures |
 | Burning Man Ring contact | Shockwave `0x005FF8C0`, scale 1.5, three Embers | exact-port; replace one-core surrogate and simplified fragments | mechanics, three-layer stack, three exact Embers, cue pair, lights |
 | scripted `DO EXPLOSION AT` | action 1060, `0x00466BC0` | out-of-system — Website does not execute the native timeline action family | negative producer census, durable native record retained |
 | special enemy-death mode | `0x00477020` | out-of-system — no supported web enemy recipe currently emits this stock mode | negative producer census |
@@ -184,9 +185,12 @@ combat rectangle but still centers a finite search on the exterior point.
   and sampled signed hit pitch. The primary view admits `fire-explosion`
   explicitly, so the submitted diagnostics' per-display-frame exception loop
   and subsequent code-4008 parser close no longer have a reachable state.
-- The shared Fire implementation now serves Fireball, FireMissile/welded Fire,
-  Immolate, and Burning Man Ring from the same three-child explosion clocks,
-  cue pair, Ember physics/contact program, light ownership, and teardown. The
+- The shared Fire implementation now serves Fireball, FireMissile/welded Fire
+  builds 1000/1003/1007, Immolate, and Burning Man Ring from the same
+  three-child explosion clocks, cue pair, Ember physics/contact program, light
+  ownership, and teardown. The 2026-08-30 Steam correction in entry 123 removes
+  build 1005 from this family: its event-type-2 detonation has gray overlays,
+  one `explodesteam` cue, and `Anim_SteamJetEffect` children. The
   registration-time ten-tick Ember loop publishes every contact query and
   consumes the child on its first accepted target.
 - Ember interpolation moves forward through the four-frame wrap. Its renderer

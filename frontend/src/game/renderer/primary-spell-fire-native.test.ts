@@ -263,6 +263,7 @@ test('projects all three shared explosion children through their independent nat
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 3 },
     origin: { x: 100, y: 200 },
     ownerId: 'caster',
+    presentation: 'fire',
     soundPitch: 1.05,
     visualScale: Math.fround(1.9),
     worldKey: 'boneyard:test',
@@ -281,6 +282,12 @@ test('projects all three shared explosion children through their independent nat
     { offset: { x: 0, y: 0 }, scale: Math.fround(explosion.visualScale * 2) },
     { offset: { x: 0, y: Math.fround(explosion.visualScale * -15) }, scale: 2 },
   ])
+  assert.deepEqual(atBirth.draws.map(({ tint }) => tint), [0xffffff, 0xffffff, 0xffffff])
+  assert.deepEqual(
+    nativeFireExplosionPlan({ ...explosion, presentation: 'steam' }).draws
+      .map(({ tint }) => tint),
+    [0xffffff, 0xcccccc, 0xcccccc],
+  )
   const afterCore = nativeFireExplosionPlan({ ...explosion, ageTicks: 10 })
   assert.deepEqual(afterCore.draws.map(({ role }) => role), [
     'explosion-array',

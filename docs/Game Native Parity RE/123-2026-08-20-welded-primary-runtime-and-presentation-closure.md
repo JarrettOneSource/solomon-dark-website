@@ -771,3 +771,134 @@ No member is `blocked-by-platform`.
   capture).
 - The same exact candidate passed the complete Mac gate recorded in entry 051,
   including the broad Boneyard/runtime suite and production bundle budget.
+
+## 2026-08-30 — Steam Jet learned-Fire detonation corrective reopening
+
+### Reported smell and parity question
+
+- A player reported that holding Steam Jet after learning Explosion creates
+  overwhelming rapid audio and a visually distracting wall of explosions in
+  the web port. The submitted 11.041-second H.264/AAC capture is
+  `SDB - Bug Rapid Steam explosion fire example 2.mp4`, SHA-256
+  `5a30faf413f42a1878262fbf2da6ec9f48f4a3e0ced167b751bdc0d1f49bc900`,
+  at `1854x1080` and `179/6` FPS.
+- The web causal path exported one pulse for every live `Steamed` modifier tick,
+  then incorrectly passed every pulse to the ordinary Fire helper. That born
+  `fire-explosion` used two Fire cues and could create ordinary Fire Embers on
+  every pulse.
+- The falsifiable native questions were whether `Mod_Steamed` really ticks for
+  ten updates, whether it calls shared Fire helper `0x00642BF0`, whether stock
+  owns a recurrence/cooldown outside the modifier clock, and which VFX, audio,
+  child, collision, and teardown family consumes its stored Fire vector.
+
+This is a secondary report in a system previously called closed. The earlier
+pass followed the Steam particle into `Mod_Steamed` but stopped before the
+damage event's type-2 consumer. It therefore treated the stored Fire vector as
+an ordinary `0x00642BF0` payload and skipped the sibling helper, audio registry
+member, color-overlay class, child factory, and non-recursive contact branch.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Submitted web capture | player capture above, received 2026-08-30 | A sustained target contact keeps large ordinary Fire stacks resident while the report identifies intolerable repeated audio. | high-web |
+| Retail image | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Source of every address and constant below. | high |
+| Steam actor and modifier | `Anim_SteamJetEffect::Tick 0x0045B940`; `Mod_Steamed` RTTI/vtable `0x0079E3C0`, type `0x1B6C`, constructor `0x006232F0`, tick `0x00625F40`, merge `0x00625C80` | Normal non-weak particles install a ten-tick target modifier. Each live modifier tick dispatches Fire damage and writes special event type 2 when stored Explosion radius is positive. | high |
+| Event producer/consumer census | all five `DAT_0081C70C` xrefs; type-2 write `0x00625FDA`; receiver branch `0x0047704D..0x004770B7`; sole `0x00643CA0` xref at `0x004770B7` | Steam does not call shared Fire helper `0x00642BF0`. Type 2 has exactly one consumer: the distinct Steam detonation helper `0x00643CA0`. | high |
+| Steam detonation instructions | `0x00643CA0..0x0064445D`; `Anim_SpriteArray_ColorOverlay::Draw 0x0045DA80`; `Anim_SteamJetEffect` constructor/tick/draw `0x00453CE0/0x0045B940/0x00458550` | The burst has the shared three visual clocks but gray overlays and optional normal Steam-particle children, not ordinary Embers. | high |
+| Audio registry and call | `0x00643D35..0x00643D86`; registry offset `+0x4BC`, index 27, `sounds\\explodesteam`; source SHA-256 `f93fca2917072811b96f4ec4c3c864c66f0bb785f05c6113e1931661471df090` | Each Steam detonation birth requests only `explodesteam` with signed `Float(.1)+1` pitch and doubled point gain. It does not request `fireballhit` or `throwfire`. | high |
+| Current Website source | `native-secondary-abilities.ts`, `boneyard-spell-combat.ts`, `primary-spell-fire-effects.ts`, `primary-spell-audio.ts` at base `b023703c` | Correct modifier cadence and values are present, but every exported pulse is materialized as ordinary Fire VFX/audio/Embers. | high |
+
+Ghidra ran read-only through the canonical replica wrapper at Mod Loader revision
+`08bfba9e`, wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+No runtime/ASLR address is used in this entry.
+
+### System boundary and membership inventory
+
+Native system: **Steam Jet contact through target-owned `Mod_Steamed`, event
+type 2, Steam detonation, learned-Fire Steam children, audio, replication, and
+teardown**.
+
+| Member / branch | Native source | Required disposition in this pass | Proof contract |
+| --- | --- | --- | --- |
+| normal full-power Steam particle | `0x00453CE0`, `0x0045B940` | `exact-ported` | random `Integer(10)` contact clock, ten-tick recurrence, target query, modifier install |
+| Over Steam particle | constructor/handler Over branch | `verified-already-at-parity` | no `Mod_Steamed` contact lane |
+| underpowered normal particle | handler weak branch | `verified-already-at-parity` | quarter alpha and no `Mod_Steamed` contact lane |
+| target-owned `Mod_Steamed` lifetime/tick | `0x006232F0`, `0x00625F40` | `exact-ported` | ten ticks, per-tick direct Fire damage, owner/source identity |
+| repeated modifier merge | `0x00625C80` | `exact-ported` | maximum duration, damage, radius, fragment count, and fragment damage; strongest source ownership |
+| Explosion radius zero | `0x00625FCE` strict positive gate | `exact-ported` | direct Steam damage only; no type-2 VFX, audio, or learned fragments |
+| Explosion radius positive | type-2 event plus `0x00643CA0` | `exact-ported` | one Steam detonation birth per live modifier tick; no guessed cooldown |
+| orange record-15 core | `0x00643D8B..0x00643E3D`, BadGuys 15 | `verified-already-at-parity` through shared clock | ages 0..9, scale `visualScale*6`, alpha loss `.1` |
+| gray first array | BadGuys 401..419, `Anim_SpriteArray_ColorOverlay` | `exact-ported` | tint `(.8,.8,.8,1)`, additive, `.75*.98^n`, ages 0..34 |
+| gray rising lit array | BadGuys 420..433 plus `ZAnimLit` | `exact-ported` | tint `(.8,.8,.8,1)`, `.625*.97^n`, rise, ages 0..36, same provider light |
+| Steam detonation audio | registry 27 at `MyApp + 0x4BC` | `exact-ported` | `explode-steam` only, signed `.1` pitch, doubled point gain, once per birth |
+| learned fragment fan | `0x0064418D..0x00644438` | `exact-ported` | private `Float(360)` start; three normal Steam children per configured count; complete nine-word program per child |
+| learned fragment motion | same range | `exact-ported` | signed `Float(25)` heading, `Float(10)` birth offset, speed `4*.9*1.5*(.9+Float(.1))`, Y times `.8`, stretch times `.6` |
+| learned fragment contact | `0x006443B7..0x006443F2` | `exact-ported` | damage `fragmentDamage/100`, zero Explosion/fragment payload, non-recursive ten-tick `Steamed` install |
+| ordinary shared Fire helper | `0x00642BF0` callers | `out-of-system` for build 1005; still exact for 1000/1003/1007 and Fire-family callers | negative 1005 caller test and unchanged ordinary fixtures |
+| Hub/private rooms and Boneyard | Region helper and shared primary world view | `exact-ported` | same authoritative state, point gain, painter/light, and audio semantics in every world key |
+| host, observers, late join | primary transient and secondary target-effect snapshots | `exact-ported` | strict protocol round-trip and no observer-side RNG/rerouting |
+| expiry, target death, owner disconnect, world reset | modifier/transient owner removal and existing teardown | `exact-ported` | no retained modifier, child, view, light, or audio replay after owner/world removal |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- Only a normal, full-power Steam particle owns the contact clock. Its first
+  clock is `Integer(10)` and each due edge resets to ten while life remains
+  above `.5`. Over and weak particles cannot install the modifier.
+- `Mod_Steamed` begins with duration ten. Its tick sends direct Fire damage,
+  then, only when stored Explosion radius is positive, writes event type 2 with
+  visual scale `float32((radius-10)*.180000007+1)`, Explosion damage, fragment
+  count/damage, source slot, and a private `Integer(1,000,000)` seed.
+- Re-contact merges into the resident modifier. This is the stock recurrence
+  control; there is no additional cooldown. A continuously contacted target may
+  remain steamed, but it must run the Steam detonation family rather than birth
+  ordinary Fire explosions.
+- The type-2 receiver creates the same record-15 core and 401..433 clocks used
+  by Fire, but both sprite arrays use `Anim_SpriteArray_ColorOverlay` with
+  gray RGB `.8`. Explosion area damage is half the stored damage inside radius
+  `visualScale*55`; the lit array owns the existing transient light.
+- Each birth requests one positional `explodesteam` one-shot. The ordinary Fire
+  pair (`fireballhit`, then `throwfire`) is unreachable from this branch.
+- When the stored learned-fragment count is positive, the helper creates three
+  normal `Anim_SteamJetEffect` children per count. Constructor and private fan
+  RNG remain authoritative. Their payload fields are zero, so their later
+  contacts may deal the stored fragment damage through `Mod_Steamed` but cannot
+  recursively create another Explosion or fragment fan.
+- Target/modifier state is host-owned. Explosion and child actors are stable
+  replicated identities; clients render and play each birth edge once, then
+  retire it on the fixed clocks. Owner/world teardown removes the whole family.
+
+### Confidence and open questions
+
+- Confirmed: owner, producer/consumer census, event discriminator, duration,
+  merge fields, gate, area formula, full VFX records/classes/clocks, audio asset
+  and call arguments, complete child RNG/motion/contact program, authority, and
+  teardown consequence.
+- No mechanism remains inferred. A clean-stock matched-loadout capture remains
+  useful as a final visual/audio comparison receipt, but it cannot change the
+  instruction-derived state model.
+
+### Web implementation consequence and validation contract
+
+- Keep `Mod_Steamed` and its per-tick pulse in the authoritative secondary
+  kernel. Replace only the false pulse consumer with a cohesive Steam
+  detonation factory in `native-weld-steam.ts`.
+- Add a replicated Fire-explosion presentation variant so the shared clock,
+  area mechanics, registration, and light remain one deep module while Steam
+  owns gray array tint and `explode-steam` audio. Remove build 1005 from the
+  ordinary Fire cue pair.
+- Replace ordinary Fire Ember births on Steam pulses with the exact
+  three-per-count normal Steam child program. Gate the whole detonation/fragment
+  family on positive Explosion radius and preserve zero-payload non-recursion.
+- Focused tests must cover normal/Over/weak contacts, all ten modifier ticks,
+  merge/re-contact, radius-zero negative behavior, ten consecutive Explosion
+  births without Fire cues, gray plans at all three lifetime boundaries,
+  one/count/multiple fragment fans and RNG, fragment contact non-recursion,
+  area damage, protocol/copy/interpolation, both scenes, and teardown.
+- Mac Chrome acceptance must reproduce the reported held Steam+Explosion
+  contact, record per-cue/per-kind birth counts, prove no `fireball-hit` or
+  `throw-fire` request from this branch, show the gray stock family rather than
+  an ordinary Fire wall, and return empty page/console/failed-response arrays.

@@ -855,6 +855,7 @@ test('orders the shared Fire explosion hit and throw cues after the ordinary imp
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
     origin: position,
     ownerId: PLAYER_ID,
+    presentation: 'fire',
     soundPitch: 1.05,
     visualScale: 1.5,
     worldKey: AUDIO_WORLD_KEY,
@@ -881,6 +882,41 @@ test('orders the shared Fire explosion hit and throw cues after the ordinary imp
     { playbackRate: 1.05, volume: 2 },
     { playbackRate: Math.fround(0.8), volume: 2 },
   ])
+  synchronizer.destroy()
+})
+
+test('plays only the native Steam detonation cue for a Steam Explosion birth', () => {
+  const initial = simulation('fire')
+  const position = { ...getPlayerCharacter(initial, PLAYER_ID).position }
+  const explosion = {
+    ageTicks: 0,
+    burnDamage: 0,
+    damage: 6,
+    footprintDimension: 165,
+    id: 2,
+    kind: 'fire-explosion',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+    origin: position,
+    ownerId: PLAYER_ID,
+    presentation: 'steam',
+    soundPitch: 1.05,
+    visualScale: 1.5,
+    worldKey: AUDIO_WORLD_KEY,
+  } as const
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(initial, PLAYER_ID),
+  )
+  const detonated = createGameSnapshot({
+    ...initial,
+    primarySpells: { nextId: 3, projectiles: [], transients: [explosion] },
+  }, PLAYER_ID)
+  synchronizer.update(detonated)
+  synchronizer.update(detonated)
+  assert.deepEqual(audio.sounds, ['explode-steam'])
+  assert.deepEqual(audio.soundOptions, [{ playbackRate: 1.05, volume: 2 }])
   synchronizer.destroy()
 })
 
