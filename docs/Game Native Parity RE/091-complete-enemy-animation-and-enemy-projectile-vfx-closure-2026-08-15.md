@@ -357,7 +357,8 @@ MonsterSetup_Parse 0x004AFBC0
 - Config `+0x74` is also the surviving composite render scale. The Website
   previously used it for movement and collision but dropped it at host
   projection, so every authored non-unit Skeleton, Imp, Zombie, Wraith,
-  Demon, or Coffin remained visually unit-sized. Protocol 107 now carries
+  Demon, or Coffin remained visually unit-sized. Protocol 107 in this entry,
+  retained by the combined protocol 108 cutover, carries
   that immutable construction result and the renderer applies it once at the
   complete articulated root; family-local scales remain relative to it.
 - Render is read-only. Continuous phases, discrete selectors, death clocks,
@@ -502,7 +503,7 @@ Website's per-object inbound Region tint.
   selectors and articulation transforms, the body-3 root/leg/overlay geometry,
   independent flyblown auxiliaries, factory-applied composite scale, surviving
   Maggot constructor scale, and protocol 107 authority through interpolation
-  and rendering.
+  and rendering. Combined protocol 108 retains that enemy wire unchanged.
 - Terminal authority now models all thirteen reachable concrete effect kinds:
   Banish, Bouncer, SmokyBouncer, Fade, FadeAdditive, FadePerspective,
   FadePerspectiveClipped, FadeScale, FireArray, LateSplat, MoveFade,

@@ -164,6 +164,16 @@ try {
     'the first loaded Boneyard',
   )
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
+  assert.deepEqual(initialFrame.solomonClipRectWorld, {
+    height: 100,
+    width: 200,
+    x: loadedBoneyard.scene.solomonDig.position.x - 100,
+    y: loadedBoneyard.scene.solomonDig.position.y - 100,
+  })
+  assert.ok(initialFrame.solomonBodyOffsetY >= 5)
+  assert.ok(initialFrame.solomonBodyOffsetY <= 15)
+  assert.equal(initialFrame.solomonBodyTint, 0xffffff)
+  assert.equal(initialFrame.solomonGraveMarkTint, 0xffffff)
   assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
   const openingSpriteIds = new Set(loadedBoneyard.scene.sprites.map(({ eid }) => eid))
   assert.equal(openingSpriteIds.has('sprite-196'), false)
@@ -217,8 +227,14 @@ try {
   await installSolomonSpeakingProbe(page)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
-  const speakingGraveMarkPassCount = (await boneyardFrame(page)).solomonGraveMarkPassCount
+  const speakingFrame = await boneyardFrame(page)
+  const speakingGraveMarkPassCount = speakingFrame.solomonGraveMarkPassCount
   assert.equal(speakingGraveMarkPassCount, 1)
+  assert.equal(speakingFrame.solomonClipRectWorld?.width, 2_000)
+  assert.equal(speakingFrame.solomonClipRectWorld?.height, 1_000)
+  assert.ok(speakingFrame.solomonBodyOffsetY >= 5)
+  assert.equal(speakingFrame.solomonBodyTint, 0xffffff)
+  assert.equal(speakingFrame.solomonGraveMarkTint, 0xffffff)
   const digAudioEventIdAtContact = Number(
     await scene.getAttribute('data-solomon-dig-audio-event-id'),
   )
@@ -379,8 +395,22 @@ try {
       runCombatAdmission,
       solomonEscape,
       initialGraveMarkPassCount: initialFrame.solomonGraveMarkPassCount,
+      initialSolomonPresentation: {
+        bodyOffsetY: initialFrame.solomonBodyOffsetY,
+        bodyTint: initialFrame.solomonBodyTint,
+        clipRectWorld: initialFrame.solomonClipRectWorld,
+        dirtTint: initialFrame.solomonDirtTint,
+        graveMarkTint: initialFrame.solomonGraveMarkTint,
+      },
       initialPainter,
       speakingGraveMarkPassCount,
+      speakingSolomonPresentation: {
+        bodyOffsetY: speakingFrame.solomonBodyOffsetY,
+        bodyTint: speakingFrame.solomonBodyTint,
+        clipRectWorld: speakingFrame.solomonClipRectWorld,
+        dirtTint: speakingFrame.solomonDirtTint,
+        graveMarkTint: speakingFrame.solomonGraveMarkTint,
+      },
       runEdgeGraveMarkPassCount,
       speakingCombatAdmission,
       screenshotPath: staffMeleeOnly

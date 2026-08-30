@@ -133,15 +133,26 @@ existing G13 transition fixture.
 
 ## Fixed-room world, collision, population, and painter ownership
 
+> **2026-08-29 actor-ownership correction:** the earlier table's “ten Painting
+> actor passes” conflated two paired classes. Mortuary registers Memorator,
+> then ten radius-15 `Painting` interaction actors at the talk roots, then ten
+> radius-40 `CustomObject` selectors `0..9` at the same X and `y-2`, then
+> players. `Painting::Present 0x00518280` normally contributes no portrait;
+> the CustomObject Region callback `0x00518620` draws easel, portrait, front,
+> and marker. StoreRoom shelf rows, Library table rows (including collision-only
+> selector `100`), and Office prop 5 are likewise CustomObject actor roots, not
+> scenery-manager entries. Entry 297's second reopening is authoritative for
+> their complete manager chronology.
+
 The fixed interiors construct their own region bounds, static collision, and
 camera; they do not reuse Courtyard geometry:
 
 | Room | Native world bounds | Centered primary-art bounds | Fixed normal population |
 | --- | --- | --- | --- |
-| Mortuary | `1024 x 1024` | `970 x 910` at `(27,57)` | Memorator plus ten Painting actors |
-| Library | `1024 x 1024` | `992 x 819` at `(16,102.5)` | Librarian, Dowser, four solid props |
-| StoreRoom | `1075 x 800` | `1075 x 655` at `(0,72.5)` | three solid shelving props |
-| Office | `1024 x 1024` | `819 x 819` at `(102.5,102.5)` | Arch Chancellor plus one solid prop |
+| Mortuary | `1024 x 1024` | `970 x 910` at `(27,57)` | Memorator, ten Painting interaction actors, ten CustomObject visual/solid actors |
+| Library | `1024 x 1024` | `992 x 819` at `(16,102.5)` | four CustomObjects, Librarian, Dowser |
+| StoreRoom | `1075 x 800` | `1075 x 655` at `(0,72.5)` | three CustomObject shelving actors |
+| Office | `1024 x 1024` | `819 x 819` at `(102.5,102.5)` | one CustomObject, Arch Chancellor |
 
 Each room builder registers an authored contour chain from the static native
 segment tables: 11 records for Mortuary, 27 for Library, 34 for StoreRoom, and
@@ -177,7 +188,7 @@ ownership that the earlier atlas-consumer inventory could not distinguish:
 
 | Room | Before actors | Depth-sorted entries | After actors |
 | --- | --- | --- | --- |
-| Mortuary | Memoratorium 0 | directional Memorator pair `28+i` + `44+2i`; ten filled Painting actor passes | additive room-effect records remain effect-owned |
+| Mortuary | Memoratorium 0 | directional Memorator pair `28+i` + `44+2i`; ten normally invisible Painting interaction roots; ten filled CustomObject portrait passes | additive room-effect records remain effect-owned |
 | StoreRoom | tiled Storage 1; centered 5; registered 13..26 | shelf rows 2, 3, 4 at native centers `(538,324)`, `(537.5,434)`, `(536,542.5)` | Storage 11..12 |
 | Library | Library 0; extended return corridor 5 | table records 9, 10, 11; Dowser 21; Librarian counter/rails 29..32 plus body 25 | Library 1..2, the native late-effect pass, then two black exit masks |
 | Office | Office 1; extended return corridor 4 | solid prop 5; Arch desk 3 plus actor pair 7+10 | Office 17..22 |
@@ -359,9 +370,17 @@ build, production frontend and game-host builds, and production media policy.
 
 ## Open questions carried forward
 
-- The semantic name of the outgoing region vtable `+0xC8` post-switch callback
-  is still unknown, although its position, argument, and lifecycle effect are
-  bounded.
+- **Resolved by the 2026-08-29 layering reopening:** outgoing vtable `+0xC8`
+  is a room-specific post-switch presentation callback, not actor-manager
+  detachment. Courtyard `0x00500660` clears player sort bias `+0xA0` and local
+  presentation state; private callbacks `0x00500D20/0x00500FB0/0x005013C0`
+  clear local transition presentation, while Office `0x00504AD0` additionally
+  owns its story helper. Common `+0xD4 -> 0x00641130 -> 0x0063F600` removes the
+  player from the outgoing `PuppetManager`; `+0xD0 -> 0x00641090` appends
+  target-region players on wake. `+0xF0 -> 0x0063E510` drains both manager
+  lists and the spatial lookup bank while sleeping. A live Courtyard manager
+  changed from `25` entries to `0` on Mortuary entry, and Mortuary rebuilt its
+  `21` fixed roots before the player.
 - Dialogue, shop, books, dowsing, eulogy, and story-variant room populations
   remain their own parity slices. This room-system change must preserve their
   actor and collision seams without fabricating their UI behavior.

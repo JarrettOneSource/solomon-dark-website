@@ -33,9 +33,11 @@ import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import {
   applyNativeHubPainterOrder,
   nativeHubFixedActorPainterRegistration,
+  type NativeHubFixedActorPainterId,
   type NativeHubPainterLayer,
 } from '../hub-painter-order.ts'
 import { HubMemorialPaintingView } from './hub-memorial-painting-view.ts'
+import { HUB_NPC_MARKER_TAIL_OFFSET } from '../hub-depth.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
@@ -260,6 +262,12 @@ export class HubPrivateRoomScene {
 
   get painterOrder() {
     return this.lastPainterOrder
+  }
+
+  get markerZIndexes(): Readonly<Record<string, number>> {
+    return Object.fromEntries(
+      [...this.markerSprites].map(([interactionId, marker]) => [interactionId, marker.zIndex]),
+    )
   }
 
   get visibleMarkerIds(): readonly NativeHubInteractionId[] {
@@ -532,7 +540,7 @@ export class HubPrivateRoomScene {
       if (visual.kind === 'room-layer') {
         const sprite = this.layer(source, hubWorldDepthForActor(visual.painterY))
         room.addChild(sprite)
-        this.addStaticPainter(region, sprite, visual.painterY)
+        this.addStaticPainter(region, prop.painterId, sprite, visual.painterY)
         continue
       }
 
@@ -548,6 +556,7 @@ export class HubPrivateRoomScene {
         room.addChild(dynamic.container)
         this.addStaticPainter(
           region,
+          prop.painterId,
           depthTarget((depth) => {
             sprite.zIndex = depth
             dynamic.container.zIndex = depth
@@ -562,21 +571,19 @@ export class HubPrivateRoomScene {
       sprite.zIndex = hubWorldDepthForActor(visual.painterY)
       sprite.eventMode = 'none'
       room.addChild(sprite)
-      this.addStaticPainter(region, sprite, visual.painterY)
+      this.addStaticPainter(region, prop.painterId, sprite, visual.painterY)
     }
   }
 
   private addStaticPainter(
     region: PrivateHubRegionId,
+    id: NativeHubFixedActorPainterId,
     target: { zIndex: number },
     worldY: number,
   ): void {
-    const registrationOrdinal = this.staticPainters[region].filter(
-      ({ registration }) => registration.managerLane === 'scenery',
-    ).length
     this.staticPainters[region].push({
-      id: `scenery:${region}:${registrationOrdinal}`,
-      registration: { managerLane: 'scenery', registrationOrdinal },
+      id: `fixed:${id}`,
+      registration: nativeHubFixedActorPainterRegistration(id),
       sortBias: 0,
       target,
       worldY,
@@ -647,6 +654,27 @@ export class HubPrivateRoomScene {
       layers,
       localPlayer?.position.y ?? 0,
     )
+    const markerTargets: readonly Readonly<[
+      NativeHubInteractionId,
+      { zIndex: number } | undefined,
+    ]>[] = region === 'mortuary'
+      ? [['memorator', this.nonPlayerActors.mortuary[0]]]
+      : region === 'library'
+        ? [
+            ['librarian', this.nonPlayerActors.library[0]],
+            ['shlorio', this.nonPlayerActors.library[1]],
+          ]
+        : region === 'office'
+          ? [['arch-chancellor', this.nonPlayerActors.office[0]]]
+          : []
+    for (const [interactionId, target] of markerTargets) {
+      const marker = this.markerSprites.get(interactionId)
+      if (marker && target) marker.zIndex = target.zIndex + HUB_NPC_MARKER_TAIL_OFFSET
+    }
+    if (storyOffice) {
+      this.polisherMarker.zIndex = this.polisherBody.zIndex
+        + HUB_NPC_MARKER_TAIL_OFFSET
+    }
   }
 
   private room(label: PrivateHubRegionId): Container {
@@ -713,9 +741,6 @@ export class HubPrivateRoomScene {
       marker.visible = frame.visible
       marker.alpha = frame.alpha
       marker.position.copyFrom(frame.position)
-      marker.zIndex = hubWorldDepthForActor(
-        NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry.position.y,
-      ) + 0.1
     }
     const polisher = hubStoryOfficePolisherMarkerFrame(
       Math.max(0, snapshot.tick - this.markerEpochStartedAtTick),
@@ -725,9 +750,6 @@ export class HubPrivateRoomScene {
     this.polisherMarker.visible = storyOffice && polisher.visible
     this.polisherMarker.alpha = polisher.alpha
     this.polisherMarker.position.copyFrom(polisher.position)
-    this.polisherMarker.zIndex = hubWorldDepthForActor(
-      NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher.geometry.position.y,
-    ) + 0.1
   }
 
   private updateRoomPresentation(

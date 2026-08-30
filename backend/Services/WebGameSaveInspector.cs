@@ -8,8 +8,8 @@ public sealed record WebGameSaveInspection(int FormatVersion, long Size, string 
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 21;
-    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+    public const int FormatVersion = 22;
+    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
     public const int MaxDocumentBytes = 16 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 

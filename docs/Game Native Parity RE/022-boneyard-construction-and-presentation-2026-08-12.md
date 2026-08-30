@@ -8,6 +8,16 @@
 > scenery family rather than becoming an ordinary actor. The base row formula,
 > Gate bias/root, and Solomon/Lantern correction below remain valid.
 
+> **2026-08-29 Solomon presentation reopening:** the parent Lantern/Solomon
+> manager order remains correct, but the earlier presentation closure missed
+> class-local clip ownership and the planted `+5` body offset. State 0 clips
+> only the body to `(x-100,y-100,200,100)`, restores, then draws record 13
+> outside the clip. Dialogue/hold uses the `2000 x 1000` rectangle ending at
+> actor Y; negative retreat acceleration uses the stored retreat root. The
+> Region-light scalar installed by `0x004A2610` owns Flydirt only, not the
+> already-painted body/mouth/record 13. Entry 297's second reopening contains
+> the complete corrected state table.
+
 ## Stock arena materialization
 
 The stock random Boneyard builder is the function at preferred address
@@ -82,6 +92,11 @@ Implementation consequence: the resident loader extracts records `2..19`
 into a registration-preserving sheet and the Boneyard scene advances the
 program on the shared fixed clock. Solomon Dig exists immediately when the
 arena is loaded and keeps animating while combat and waves remain absent.
+
+The sheet is not drawn as an unbounded `200 x 200` cell. State 0 wraps the body
+draw in the exact `200 x 100` grave clip, and the body Y includes constructor
+field `+0x21C=5` in addition to the state-0 bob. DeadHawg record 13 remains an
+unclipped sibling at `(-10,-113)`.
 
 Evidence: read-only headless decompilation of `0x004A2610`, `0x004902C0`, and
 `0x004ED980`, together with the recovered constructor sequence and Solomon

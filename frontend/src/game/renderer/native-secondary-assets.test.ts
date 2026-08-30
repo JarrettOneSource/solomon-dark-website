@@ -71,7 +71,7 @@ test('the stock right-click atlas membership is complete and every row is regist
     )
     assert.ok(module.NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane.includes('etherplane.png'))
     const hubSources = new Set(hubTextures.hubWorldAssetSources())
-    assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_DECODED_BYTES, 42_229_760)
+    assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_DECODED_BYTES, 44_408_832)
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES.length, 3)
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_ORIGINAL_SOURCES.length, 87)
     for (const source of hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES) {

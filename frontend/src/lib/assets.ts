@@ -67,7 +67,7 @@ import hubSouthernPlatformEast from '../assets/game/hub-southern-platform-east.p
 import hubSouthernPlatformWest from '../assets/game/hub-southern-platform-west.png'
 import hubSouthernSeam from '../assets/game/hub-southern-seam.png'
 import hubSouthernTower from '../assets/game/hub-southern-tower.png'
-import hubCourtyardDepthProps from '../assets/game/hub-courtyard-depth-props.png'
+import hubCourtyardObstacles from '../assets/game/hub-courtyard-depth-props.png'
 import hubAstronomerAssistants from '../assets/game/hub-astronomer-assistants.png'
 import hubAstronomerGreenGesture from '../assets/game/hub-astronomer-green-gesture.png'
 import hubAstronomerGreenIdle from '../assets/game/hub-astronomer-green-idle.png'
@@ -566,8 +566,8 @@ export const hub = {
   },
   foreground: {
     courtyard: hubCourtyardForeground,
-    depthProps: hubCourtyardDepthProps,
   },
+  obstacles: hubCourtyardObstacles,
   southern: {
     battlement: hubSouthernBattlement,
     platformEast: hubSouthernPlatformEast,

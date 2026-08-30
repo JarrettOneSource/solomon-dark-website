@@ -124,6 +124,18 @@ shader, primitive, sampler, target, and blend equation.
   `0x0063E5B0` at `teacher.y+15`, and core is in post-world manager
   `Region+0x22C`. Courtyard renders those lanes around queue flush `0x0068C480`;
   a single Teacher-child container is not stock-equivalent.
+
+#### 2026-08-29 Region-queue follow-through
+
+The complete layering residual sweep found that the browser still used that
+forbidden single container: `worldRelease` had a raw row-derived Z and never
+entered `applyNativeHubPainterOrder`. Fresh `0x00505560` decompilation confirms
+two distinct `0x0063E5B0` calls—column/ZAnimLit first, SpriteArray wrapper
+second. The correction moves their birth/order into authoritative Hub ambient
+state as two transient registrations, presents them as two queue roots at
+`teacher.y+15`, and drives the release from a Hub-local construction clock.
+The already-correct flare/core direct lanes and every child formula/blend stay
+unchanged.
 - The column is structurally wrapped by `ZAnimLit`, but its light is dormant in
   Courtyard: reset/restore/composite `0x0057D4E0/0x0057D5E0/0x0057D670` and
   initializer `0x0057DF20` are Arena-only. The web Hub must not invent a radial

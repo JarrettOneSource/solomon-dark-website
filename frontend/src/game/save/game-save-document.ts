@@ -709,9 +709,82 @@ function normalizeSimulation(
     tick: source.tick,
     world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
   }
-  return sourceSchemaVersion < 21
-    ? migrateLegacyWorldPainterState(normalized, loadedBoneyardValue)
+  if (sourceSchemaVersion < 21) {
+    return migrateLegacyWorldPainterState(normalized, loadedBoneyardValue)
+  }
+  return sourceSchemaVersion === 21
+    ? migrateSchema21HubPainterState(normalized)
     : normalized
+}
+
+const SCHEMA_21_HUB_FIXED_ACTOR_PAINTER_COUNT = 11
+
+function migrateSchema21HubPainterState(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const world = record(input.world, 'schema 21 game save world')
+  if (world.kind !== 'hub') return input
+  const fixedOffset = NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length
+    - SCHEMA_21_HUB_FIXED_ACTOR_PAINTER_COUNT
+  const shifted = shiftNativeActorRegistrations(input, fixedOffset) as Record<string, unknown>
+  const shiftedPlayers = record(shifted.playerEntities, 'schema 21 Hub players')
+  const playerOrdinals = array(shiftedPlayers.lightings, 'schema 21 Hub player lightings')
+    .map((value, index) => registrationOrdinal(
+      record(value, `schema 21 Hub player lighting ${index}`).lightRegistration,
+      `schema 21 Hub player lighting ${index}`,
+    ))
+  const firstPlayerOrdinal = Math.min(...playerOrdinals)
+  const initialPlayerOrdinals: number[] = []
+  for (const ordinal of [...playerOrdinals].sort((left, right) => left - right)) {
+    if (ordinal !== firstPlayerOrdinal + initialPlayerOrdinals.length) break
+    initialPlayerOrdinals.push(ordinal)
+  }
+  const shiftedWorld = record(shifted.world, 'schema 21 Hub world')
+  const population = record(
+    shiftedWorld.studentPopulation,
+    'schema 21 Hub student population',
+  )
+  const initialStudentOrdinals = array(population.students, 'schema 21 Hub Students')
+    .map((value, index) => registrationOrdinal(
+      record(value, `schema 21 Hub Student ${index}`).painterRegistration,
+      `schema 21 Hub Student ${index}`,
+    ))
+    .filter(ordinal => ordinal < firstPlayerOrdinal)
+    .sort((left, right) => left - right)
+  const remap = new Map<number, number>()
+  for (const [index, ordinal] of initialPlayerOrdinals.entries()) {
+    remap.set(ordinal, NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length + index)
+  }
+  for (const [index, ordinal] of initialStudentOrdinals.entries()) {
+    remap.set(
+      ordinal,
+      NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length + initialPlayerOrdinals.length + index,
+    )
+  }
+  const migrated = remapNativeActorRegistrations(shifted, remap) as Record<string, unknown>
+  const order = record(migrated.worldManagerOrder, 'schema 21 Hub world manager order')
+  const next = record(
+    order.nextRegistrationOrdinal,
+    'schema 21 Hub world manager registration ordinals',
+  )
+  return {
+    ...migrated,
+    worldManagerOrder: {
+      nextRegistrationOrdinal: {
+        actor: finiteNumber(next.actor, 'schema 21 Hub actor registration ordinal')
+          + fixedOffset,
+        transient: next.transient,
+      },
+    },
+  }
+}
+
+function registrationOrdinal(value: unknown, field: string): number {
+  const registration = record(value, `${field} registration`)
+  if (registration.managerLane !== 'actor') {
+    throw new Error(`${field} must use the actor manager`)
+  }
+  return finiteNumber(registration.registrationOrdinal, `${field} registration ordinal`)
 }
 
 function migrateLegacyWorldPainterState(
@@ -1001,6 +1074,32 @@ function shiftNativeActorRegistrations(value: unknown, offset: number): unknown 
   return Object.fromEntries(Object.entries(source).map(([key, entry]) => [
     key,
     shiftNativeActorRegistrations(entry, offset),
+  ]))
+}
+
+function remapNativeActorRegistrations(
+  value: unknown,
+  ordinals: ReadonlyMap<number, number>,
+): unknown {
+  if (ordinals.size === 0) return value
+  if (Array.isArray(value)) {
+    return value.map(entry => remapNativeActorRegistrations(entry, ordinals))
+  }
+  if (value === null || typeof value !== 'object') return value
+  const source = value as Record<string, unknown>
+  if (
+    source.managerLane === 'actor'
+    && Number.isSafeInteger(source.registrationOrdinal)
+  ) {
+    const registrationOrdinal = Number(source.registrationOrdinal)
+    return {
+      ...source,
+      registrationOrdinal: ordinals.get(registrationOrdinal) ?? registrationOrdinal,
+    }
+  }
+  return Object.fromEntries(Object.entries(source).map(([key, entry]) => [
+    key,
+    remapNativeActorRegistrations(entry, ordinals),
   ]))
 }
 
@@ -1309,6 +1408,18 @@ function normalizeWorld(
   sourceSchemaVersion: number,
 ): unknown {
   const source = record(value, 'game save world')
+  if (source.kind === 'hub') {
+    if (sourceSchemaVersion >= 22) return source
+    const ambient = record(source.ambient, 'legacy game save Hub ambient state')
+    return {
+      ...source,
+      ambient: {
+        ...ambient,
+        teacherTick: 0,
+        teacherWorldRelease: null,
+      },
+    }
+  }
   if (source.kind !== 'boneyard') return source
   const loadedBoneyard = parseLoadedBoneyard(loadedBoneyardValue)
   const defaults = createBoneyardWorld(loadedBoneyard)

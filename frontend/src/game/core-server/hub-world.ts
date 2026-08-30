@@ -469,7 +469,7 @@ export function stepHubWorldTick(
   return {
     players: nextPlayers,
     world: {
-      ambient: stepHubAmbient(world.ambient),
+      ambient: stepHubAmbient(world.ambient, registerWorldPainter),
       collisionRngState,
       kind: 'hub',
       memorial: world.memorial,

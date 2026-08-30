@@ -5,10 +5,17 @@ import type { NativeWorldManagerRegistration } from '../core-kernels/native-worl
 
 export type BoneyardSolomonBodyBank = 'dig' | 'dialogue' | 'walk'
 
+export interface BoneyardSolomonClipRect {
+  height: number
+  width: number
+  x: number
+  y: number
+}
+
 export interface BoneyardSolomonVisualState {
   bodyBank: BoneyardSolomonBodyBank
   bodyPose: number
-  clipBottomWorldY: number | null
+  clipRectWorld: BoneyardSolomonClipRect | null
   direction: number
   mouthPose: number | null
   nativeBodyRecord: number
@@ -26,6 +33,7 @@ const DIALOGUE_MOUTH_RECORD = 228
 const DIG_RECORD = 2
 const WALK_RECORD = 95
 const WALK_POSE_COUNT = 6
+const PLANTED_BODY_OFFSET_Y = 5
 
 export function boneyardSolomonPainterLayers(
   dig: SolomonDigState,
@@ -70,12 +78,12 @@ export function boneyardSolomonVisualState(
     return {
       bodyBank: 'dig',
       bodyPose,
-      clipBottomWorldY: null,
+      clipRectWorld: clipRect(encounter.position, 100, 100, 200, 100),
       direction,
       mouthPose: null,
       nativeBodyRecord: DIG_RECORD + bodyPose,
       nativeMouthRecord: null,
-      offsetY: encounter.digBodyOffsetY,
+      offsetY: PLANTED_BODY_OFFSET_Y + encounter.digBodyOffsetY,
       graveMarkVisible: true,
       visible: true,
     }
@@ -86,14 +94,14 @@ export function boneyardSolomonVisualState(
     return {
       bodyBank: 'dialogue',
       bodyPose: 0,
-      clipBottomWorldY: dig.position.y,
+      clipRectWorld: clipRect(encounter.position, 1000, 1000, 2000, 1000),
       direction,
       mouthPose: encounter.mouthPose,
       nativeBodyRecord: DIALOGUE_BODY_RECORD + direction,
       nativeMouthRecord: DIALOGUE_MOUTH_RECORD
         + encounter.mouthPose * DIRECTION_COUNT
         + direction,
-      offsetY: encounter.transitionOffsetY + encounter.motion,
+      offsetY: PLANTED_BODY_OFFSET_Y + encounter.transitionOffsetY + encounter.motion,
       graveMarkVisible: true,
       visible: true,
     }
@@ -103,7 +111,9 @@ export function boneyardSolomonVisualState(
       direction,
       0,
       encounter.motion,
-      encounter.acceleration < 0 ? dig.position.y : null,
+      encounter.acceleration < 0
+        ? clipRect(dig.position, 1000, 1000, 2000, 1000)
+        : null,
     )
   }
   if (encounter.phase === 'escaping') {
@@ -117,7 +127,7 @@ export function boneyardSolomonVisualState(
   return {
     bodyBank: 'walk',
     bodyPose: 0,
-    clipBottomWorldY: null,
+    clipRectWorld: null,
     direction,
     mouthPose: null,
     nativeBodyRecord: WALK_RECORD + direction,
@@ -132,12 +142,12 @@ function walkVisual(
   direction: number,
   bodyPose: number,
   offsetY: number,
-  clipBottomWorldY: number | null,
+  clipRectWorld: BoneyardSolomonClipRect | null,
 ): BoneyardSolomonVisualState {
   return {
     bodyBank: 'walk',
     bodyPose,
-    clipBottomWorldY,
+    clipRectWorld,
     direction,
     mouthPose: null,
     nativeBodyRecord: WALK_RECORD + bodyPose * DIRECTION_COUNT + direction,
@@ -145,5 +155,20 @@ function walkVisual(
     offsetY,
     graveMarkVisible: false,
     visible: true,
+  }
+}
+
+function clipRect(
+  position: Readonly<{ x: number; y: number }>,
+  offsetX: number,
+  offsetY: number,
+  width: number,
+  height: number,
+): BoneyardSolomonClipRect {
+  return {
+    height,
+    width,
+    x: position.x - offsetX,
+    y: position.y - offsetY,
   }
 }

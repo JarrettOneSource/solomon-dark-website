@@ -113,7 +113,10 @@ test('Solomon owns exactly one co-rooted record-13 pass after body and mouth', (
     boneyardRenderer,
     /this\.actorRoot\.addChild\([\s\S]*?this\.body,[\s\S]*?this\.mouth,[\s\S]*?this\.graveMark,[\s\S]*?this\.dirtRoot/,
   )
-  assert.match(boneyardRenderer, /this\.graveMark\.tint = lighting\.digRootTint/)
+  assert.match(boneyardRenderer, /this\.graveMark\.tint = lighting\.bodyTint/)
+  assert.match(boneyardRenderer, /solomonClipRectWorld: BoneyardSolomonClipRect \| null/)
+  assert.match(boneyardRenderer, /frameDiagnostics\.solomonBodyOffsetY = scene\.solomonBodyOffsetY/)
+  assert.match(boneyardRenderer, /frameDiagnostics\.solomonDirtTint = scene\.solomonDirtTint/)
   assert.match(boneyardRenderer, /this\.graveMark\.visible = visual\.graveMarkVisible/)
   assert.match(boneyardRenderer, /solomonGraveMarkPassCount/)
 })

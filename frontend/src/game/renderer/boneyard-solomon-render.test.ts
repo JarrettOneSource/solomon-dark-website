@@ -147,7 +147,10 @@ test('selects exact native dig, dialogue body, and mouth records', () => {
   assert.equal(digging.bodyPose, 17)
   assert.equal(digging.nativeBodyRecord, 19)
   assert.equal(digging.nativeMouthRecord, null)
-  assert.equal(digging.offsetY, 7.5)
+  assert.equal(digging.offsetY, 12.5)
+  assert.deepEqual(digging.clipRectWorld, {
+    height: 100, width: 200, x: -80, y: 33,
+  })
   assert.equal(digging.graveMarkVisible, true)
 
   const dialogue = boneyardSolomonVisualState({
@@ -157,7 +160,9 @@ test('selects exact native dig, dialogue body, and mouth records', () => {
     phase: 'speaking',
   }, DIG, 0)
   assert.equal(dialogue.direction, 2)
-  assert.equal(dialogue.clipBottomWorldY, DIG.position.y)
+  assert.deepEqual(dialogue.clipRectWorld, {
+    height: 1000, width: 2000, x: -980, y: -867,
+  })
   assert.equal(dialogue.nativeBodyRecord, 215)
   assert.equal(dialogue.nativeMouthRecord, 260)
 })
@@ -169,8 +174,10 @@ test('preserves the native emergence offset under the fixed ground-line clip', (
     transitionOffsetY: 6,
   }, DIG, 0)
 
-  assert.equal(dialogue.offsetY, 6)
-  assert.equal(dialogue.clipBottomWorldY, DIG.position.y)
+  assert.equal(dialogue.offsetY, 11)
+  assert.deepEqual(dialogue.clipRectWorld, {
+    height: 1000, width: 2000, x: -980, y: -867,
+  })
 })
 
 test('holds the dialogue body aloft, then selects walk pose zero during retreat', () => {
@@ -180,7 +187,7 @@ test('holds the dialogue body aloft, then selects walk pose zero during retreat'
     phase: 'retreat-hold',
   }, DIG, 0)
   assert.equal(hold.bodyBank, 'dialogue')
-  assert.equal(hold.offsetY, 10)
+  assert.equal(hold.offsetY, 15)
 
   const retreat = boneyardSolomonVisualState({
     ...ENCOUNTER,
@@ -193,7 +200,9 @@ test('holds the dialogue body aloft, then selects walk pose zero during retreat'
   assert.equal(retreat.bodyPose, 0)
   assert.equal(retreat.nativeBodyRecord, 99)
   assert.equal(retreat.offsetY, -14)
-  assert.equal(retreat.clipBottomWorldY, DIG.position.y)
+  assert.deepEqual(retreat.clipRectWorld, {
+    height: 1000, width: 2000, x: -980, y: -867,
+  })
   assert.equal(retreat.graveMarkVisible, false)
 
   const descending = boneyardSolomonVisualState({
@@ -201,7 +210,7 @@ test('holds the dialogue body aloft, then selects walk pose zero during retreat'
     acceleration: 0,
     phase: 'retreat-accelerating',
   }, DIG, 0)
-  assert.equal(descending.clipBottomWorldY, null)
+  assert.equal(descending.clipRectWorld, null)
 })
 
 test('selects the six-pose escape bank and hides Solomon only after expiry', () => {

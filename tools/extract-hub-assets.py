@@ -574,10 +574,10 @@ def build_courtyard(atlas: Image.Image, records: list[SpriteRecord]) -> Image.Im
 
     # Native presentation order keeps College[19, 30, 31, 21, 22] out of this
     # flattened background. Courtyard::Present submits that foreground bank
-    # after actors. College[20, 23, 24, 25] belong to depth-sorted obstacle
-    # actors; record 2 is pre-actor base art. College[7] belongs to the
-    # still-later southern architecture.
-    scenery = [2, 6, *range(26, 30)]
+    # after actors. CollegeObstacle selectors own records 20, 23..25, 27..29,
+    # and the 148..159 composite; record 2 is pre-actor base art. College[7]
+    # belongs to the still-later southern architecture.
+    scenery = [2, 6, 26]
     for index in scenery:
         paste_registered(world, atlas, records[index])
 
@@ -1716,10 +1716,19 @@ def main() -> int:
         "hub-seal-core-pulse",
     )
     save(
-        build_registered_cropped_strip(
+        build_registered_composite_strip(
             college,
             college_records,
-            (23, 24, 20, 25),
+            (
+                tuple(range(148, 160)),
+                (25,),
+                (23,),
+                (28,),
+                (29,),
+                (27,),
+                (20,),
+                (24,),
+            ),
         ),
         output_dir,
         "hub-courtyard-depth-props",

@@ -400,7 +400,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 107
+export const GAME_PROTOCOL_VERSION = 108
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4882,6 +4882,46 @@ function studentState(value: unknown, field: string): ProtocolStudentState {
 
 function ambientState(value: unknown, field: string): ProtocolAmbientState {
   const source = record(value, field)
+  onlyKeys(source, field, [
+    'fountainParticles',
+    'nextFountainParticleId',
+    'rngState',
+    'sealCorePhase',
+    'sealGlyphPhase',
+    'statuePhaseDegrees',
+    'teacherTick',
+    'teacherWorldRelease',
+  ])
+  const teacherWorldRelease = source.teacherWorldRelease === null
+    ? null
+    : (() => {
+        const release = record(source.teacherWorldRelease, `${field}.teacherWorldRelease`)
+        onlyKeys(release, `${field}.teacherWorldRelease`, [
+          'painterRegistrations',
+          'releaseIndex',
+        ])
+        const painterRegistrations = limitedArray(
+          release.painterRegistrations,
+          `${field}.teacherWorldRelease.painterRegistrations`,
+          2,
+        ).map((registration, index) => nativeWorldManagerRegistration(
+          registration,
+          `${field}.teacherWorldRelease.painterRegistrations[${index}]`,
+          'transient',
+        ))
+        if (painterRegistrations.length !== 2) {
+          throw new GameProtocolError(
+            `${field}.teacherWorldRelease.painterRegistrations must contain two roots`,
+          )
+        }
+        return {
+          painterRegistrations,
+          releaseIndex: nonnegativeInteger(
+            release.releaseIndex,
+            `${field}.teacherWorldRelease.releaseIndex`,
+          ),
+        }
+      })()
   return {
     fountainParticles: limitedArray(
       source.fountainParticles,
@@ -4909,6 +4949,8 @@ function ambientState(value: unknown, field: string): ProtocolAmbientState {
     sealCorePhase: finite(source.sealCorePhase, `${field}.sealCorePhase`),
     sealGlyphPhase: finite(source.sealGlyphPhase, `${field}.sealGlyphPhase`),
     statuePhaseDegrees: finite(source.statuePhaseDegrees, `${field}.statuePhaseDegrees`),
+    teacherTick: nonnegativeInteger(source.teacherTick, `${field}.teacherTick`),
+    teacherWorldRelease,
   }
 }
 

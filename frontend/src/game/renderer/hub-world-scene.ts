@@ -49,14 +49,17 @@ import {
 } from '../hub-teacher.ts'
 import { HubPlayerView, HubStudentView, actorSprite } from './hub-actors.ts'
 import {
-  HUB_COURTYARD_DEPTH_PROP_FRAME,
-  HUB_COURTYARD_DEPTH_PROPS,
+  HUB_COURTYARD_OBSTACLES,
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
   hubWorldDepthForActor,
   hubStudentIntersectsView,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
+import {
+  NATIVE_HUB_COLLEGE_STATUE,
+  nativeCourtyardPlayerSortBias,
+} from '../core-kernels/native-hub-world-membership.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
@@ -75,6 +78,10 @@ import {
   courtyardMarkerSource,
   HubWalkToTalkView,
 } from './hub-npc-marker-view.ts'
+import {
+  HUB_NPC_MARKER_TAIL_OFFSET,
+  HUB_USEFUL_THYNGS_CHILD_DEPTH,
+} from '../hub-depth.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
@@ -88,11 +95,18 @@ export class HubWorldScene {
   private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
   private readonly modTextures: ModPresentationTextures
   private readonly nonPlayerActors: Container[] = []
-  private readonly courtyardDepthProps: Array<{ actorY: number; sprite: Sprite }> = []
+  private readonly courtyardObstacles: Array<{
+    obstacle: typeof HUB_COURTYARD_OBSTACLES[number]
+    sprite: Sprite
+  }> = []
   private readonly fountain = new Map<number, Sprite>()
   private readonly liveFountainIds = new Set<number>()
   private readonly statueAura: Sprite
   private readonly statueBody: Sprite
+  private readonly usefulThyngsBack: Sprite
+  private readonly usefulThyngsFront: Sprite
+  private readonly usefulThyngsShadow: Sprite
+  private readonly usefulThyngsStack = new Container({ label: 'useful-thyngs-stack' })
   private readonly astronomer: HubAstronomerView
   private readonly hagatha: HubHagathaView
   private readonly luthacus: HubCommonTraderView
@@ -147,8 +161,12 @@ export class HubWorldScene {
     this.sealCore = this.worldLayer(hub.seals.core, HUB_WORLD_DEPTH.sealCore, HUB_WORLD_LAYER_BOUNDS.sealCore)
     this.sealCore.blendMode = 'add'
     this.world.addChild(this.sealGlyphs, this.sealCore)
-    this.world.addChild(this.worldLayer(hub.tent.shadow, HUB_WORLD_DEPTH.usefulThyngsShadow, HUB_WORLD_LAYER_BOUNDS.usefulThyngsShadow))
-    this.world.addChild(this.worldLayer(hub.tent.back, HUB_WORLD_DEPTH.usefulThyngsBack, HUB_WORLD_LAYER_BOUNDS.usefulThyngsBack))
+    this.usefulThyngsShadow = this.worldLayer(
+      hub.tent.shadow,
+      HUB_WORLD_DEPTH.usefulThyngsShadow,
+      HUB_WORLD_LAYER_BOUNDS.usefulThyngsShadow,
+    )
+    this.world.addChild(this.usefulThyngsShadow)
 
     this.statueAura = new Sprite(textures.base[hub.props.statue.aura])
     this.statueAura.position.set(HUB_STATUE_ROOT.x - 24, HUB_STATUE_ROOT.y - 166)
@@ -168,13 +186,32 @@ export class HubWorldScene {
     this.world.addChild(this.hagatha.container, this.luthacus.container)
 
     this.potion = new HubPotionTraderView(textures)
-    this.world.addChild(this.potion.actor, this.potion.balloons)
+    this.usefulThyngsStack.sortableChildren = true
+    this.usefulThyngsStack.eventMode = 'none'
+    this.usefulThyngsBack = this.worldLayer(
+      hub.tent.back,
+      HUB_USEFUL_THYNGS_CHILD_DEPTH.counter,
+      HUB_WORLD_LAYER_BOUNDS.usefulThyngsBack,
+    )
+    this.usefulThyngsFront = this.worldLayer(
+      hub.tent.front,
+      HUB_USEFUL_THYNGS_CHILD_DEPTH.front,
+      HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront,
+    )
+    this.usefulThyngsStack.addChild(
+      this.usefulThyngsBack,
+      this.potion.actor,
+      this.usefulThyngsFront,
+      this.potion.balloons,
+    )
+    this.world.addChild(this.usefulThyngsStack)
 
     this.teacher = new HubTeacherView(textures, 576.5, 710.5, traderAnimationSeed ^ 5008)
     this.world.addChild(
       this.teacher.preWorld,
       this.teacher.container,
-      this.teacher.worldRelease,
+      this.teacher.worldColumn,
+      this.teacher.worldFrames,
       this.teacher.postWorld,
     )
 
@@ -186,13 +223,12 @@ export class HubWorldScene {
       textures.fontAtlas,
       textures.base[hub.markers.onboarding.walkToTalkArrow],
     )
-    this.walkToTalk.container.zIndex = hubWorldDepthForActor(455.5) + 0.2
+    this.walkToTalk.container.zIndex = HUB_WORLD_DEPTH.courtyardOnboarding
     this.world.addChild(this.walkToTalk.container)
 
     this.astronomer = new HubAstronomerView(textures, createdAtTick)
 
-    this.addCourtyardDepthProps()
-    this.world.addChild(this.worldLayer(hub.tent.front, HUB_WORLD_DEPTH.usefulThyngsFront, HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront))
+    this.addCourtyardObstacles()
     this.world.addChild(this.worldLayer(
       hub.foreground.courtyard,
       HUB_WORLD_DEPTH.courtyardForeground,
@@ -238,7 +274,7 @@ export class HubWorldScene {
     this.potion.update(snapshot.tick)
     this.hagatha.update(snapshot.tick)
     this.luthacus.update(snapshot.tick)
-    this.teacher.update(snapshot.tick / 100)
+    this.teacher.update(snapshot.world.ambient.teacherTick / 100)
     this.skorcha.update(snapshot.world.skorcha)
     this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
@@ -281,6 +317,37 @@ export class HubWorldScene {
 
   get studentCount(): number {
     return this.students.size
+  }
+
+  get collegeObstacleCount(): number {
+    return this.courtyardObstacles.length
+  }
+
+  get markerZIndexes(): Readonly<Record<string, number>> {
+    return Object.fromEntries(
+      [...this.markerSprites].map(([interactionId, marker]) => [interactionId, marker.zIndex]),
+    )
+  }
+
+  get usefulThyngsChildDepths(): readonly number[] {
+    return [
+      this.usefulThyngsBack.zIndex,
+      this.potion.actor.zIndex,
+      this.usefulThyngsFront.zIndex,
+      this.potion.balloons.zIndex,
+    ]
+  }
+
+  get usefulThyngsMarkerZIndex(): number {
+    return this.markerSprites.get('fomentius')?.zIndex ?? Number.NaN
+  }
+
+  get usefulThyngsShadowZIndex(): number {
+    return this.usefulThyngsShadow.zIndex
+  }
+
+  get usefulThyngsStackZIndex(): number {
+    return this.usefulThyngsStack.zIndex
   }
 
   get pooledStudentViewCount(): number {
@@ -460,13 +527,6 @@ export class HubWorldScene {
       marker.visible = frame.visible
       marker.alpha = frame.alpha
       marker.position.copyFrom(frame.position)
-      marker.zIndex = interactionId === 'fomentius'
-        ? HUB_WORLD_DEPTH.usefulThyngsMarker
-        : hubWorldDepthForActor(
-            interactionId === 'skorcha'
-              ? snapshot.world.skorcha?.position.y ?? frame.position.y + 60
-              : NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry.position.y,
-          ) + 0.1
       marker.texture = this.textures.base[courtyardMarkerSource(frame.style, frame.side)]
     }
     this.walkToTalk.container.visible = Boolean(
@@ -477,25 +537,19 @@ export class HubWorldScene {
     )
   }
 
-  private addCourtyardDepthProps(): void {
-    for (let index = 0; index < HUB_COURTYARD_DEPTH_PROPS.length; index += 1) {
+  private addCourtyardObstacles(): void {
+    for (let index = 0; index < HUB_COURTYARD_OBSTACLES.length; index += 1) {
+      const obstacle = HUB_COURTYARD_OBSTACLES[index]
       const texture = this.textures.visualAtlas.frame(
-        hub.foreground.depthProps,
+        hub.obstacles,
         index,
         0,
       )
       const sprite = new Sprite(texture)
-      sprite.position.set(
-        HUB_COURTYARD_DEPTH_PROP_FRAME.x,
-        HUB_COURTYARD_DEPTH_PROP_FRAME.y,
-      )
-      sprite.zIndex = hubWorldDepthForActor(HUB_COURTYARD_DEPTH_PROPS[index].actorY)
+      sprite.zIndex = hubWorldDepthForActor(obstacle.position.y)
       sprite.eventMode = 'none'
       this.world.addChild(sprite)
-      this.courtyardDepthProps.push({
-        actorY: HUB_COURTYARD_DEPTH_PROPS[index].actorY,
-        sprite,
-      })
+      this.courtyardObstacles.push({ obstacle, sprite })
     }
   }
 
@@ -514,7 +568,7 @@ export class HubWorldScene {
       layers.push({
         id: `fixed:${id}`,
         registration: nativeHubFixedActorPainterRegistration(id),
-        sortBias: 0,
+        sortBias: id === 'fomentius' ? -5 : 0,
         target,
         worldY,
       })
@@ -523,28 +577,25 @@ export class HubWorldScene {
     if (annalist) fixed('annalist', annalist, annalist.position.y)
     fixed('hagatha', this.hagatha.container, this.hagatha.container.position.y)
     fixed('luthacus', this.luthacus.container, this.luthacus.container.position.y)
-    fixed('fomentius', this.potion.actor, this.potion.actor.position.y)
+    fixed('fomentius', this.usefulThyngsStack, this.potion.actor.position.y)
     fixed('teacher', this.teacher.container, this.teacher.container.position.y)
     fixed('skorcha', this.skorcha.container, this.skorcha.container.position.y)
 
-    for (const [index, prop] of this.courtyardDepthProps.entries()) {
+    for (const { obstacle, sprite } of this.courtyardObstacles) {
       layers.push({
-        id: `scenery:depth-prop:${index}`,
-        registration: { managerLane: 'scenery', registrationOrdinal: index },
-        sortBias: 0,
-        target: prop.sprite,
-        worldY: prop.actorY,
+        id: `fixed:${obstacle.id}`,
+        registration: nativeHubFixedActorPainterRegistration(obstacle.id),
+        sortBias: obstacle.sortBias,
+        target: sprite,
+        worldY: obstacle.position.y,
       })
     }
     layers.push({
-      id: 'scenery:statue',
-      registration: {
-        managerLane: 'scenery',
-        registrationOrdinal: this.courtyardDepthProps.length,
-      },
-      sortBias: 0,
+      id: `fixed:${NATIVE_HUB_COLLEGE_STATUE.id}`,
+      registration: nativeHubFixedActorPainterRegistration(NATIVE_HUB_COLLEGE_STATUE.id),
+      sortBias: NATIVE_HUB_COLLEGE_STATUE.sortBias,
       target: this.statueBody,
-      worldY: HUB_STATUE_ROOT.y,
+      worldY: NATIVE_HUB_COLLEGE_STATUE.position.y,
     })
     for (const [playerId, view] of this.players) {
       const player = snapshot.players[playerId]
@@ -552,7 +603,7 @@ export class HubWorldScene {
       layers.push({
         id: `player:${playerId}`,
         registration: player.lighting.lightRegistration,
-        sortBias: 0,
+        sortBias: nativeCourtyardPlayerSortBias(player.position, player.headingIndex),
         target: view.container,
         worldY: player.position.y,
       })
@@ -571,6 +622,27 @@ export class HubWorldScene {
         target: view.container,
         worldY: student.position.y,
       })
+    }
+    const teacherRelease = snapshot.world.ambient.teacherWorldRelease
+    if (teacherRelease) {
+      if (this.teacher.worldColumn.visible) {
+        layers.push({
+          id: `teacher-column:${teacherRelease.releaseIndex}`,
+          registration: teacherRelease.painterRegistrations[0]!,
+          sortBias: 0,
+          target: this.teacher.worldColumn,
+          worldY: this.teacher.releaseY,
+        })
+      }
+      if (this.teacher.worldFrames.visible) {
+        layers.push({
+          id: `teacher-frames:${teacherRelease.releaseIndex}`,
+          registration: teacherRelease.painterRegistrations[1]!,
+          sortBias: 0,
+          target: this.teacher.worldFrames,
+          worldY: this.teacher.releaseY,
+        })
+      }
     }
     for (const layer of this.primarySpells.painterLayers()) {
       if (layer.lane !== 'world-sorted') continue
@@ -608,6 +680,19 @@ export class HubWorldScene {
     }
     this.lastPainterOrder = applyNativeHubPainterOrder(layers, referenceY)
     this.statueAura.zIndex = this.statueBody.zIndex - 0.25
+    for (const [interactionId, target] of [
+      ['hagatha', this.hagatha.container],
+      ['annalist', annalist],
+      ['fomentius', this.usefulThyngsStack],
+      ['luthacus', this.luthacus.container],
+      ['skorcha', this.skorcha.container],
+      ['teacher', this.teacher.container],
+    ] as const) {
+      const marker = this.markerSprites.get(interactionId)
+      if (marker && target) {
+        marker.zIndex = target.zIndex + HUB_NPC_MARKER_TAIL_OFFSET
+      }
+    }
   }
 
   private worldLayer(
@@ -1061,7 +1146,7 @@ class HubPotionTraderView {
   constructor(textures: HubWorldTextures) {
     this.textures = textures
     this.actor.position.set(1397, 664)
-    this.actor.zIndex = hubWorldDepthForActor(664)
+    this.actor.zIndex = HUB_USEFUL_THYNGS_CHILD_DEPTH.trader
     this.actor.eventMode = 'none'
     this.sprite = new Sprite(textures.potion.actor[0])
     this.sprite.position.set(-12, -46)
@@ -1070,7 +1155,7 @@ class HubPotionTraderView {
 
     this.balloons = new Sprite(textures.potion.balloons[0])
     this.balloons.position.set(1320, 516)
-    this.balloons.zIndex = HUB_WORLD_DEPTH.usefulThyngsBalloons
+    this.balloons.zIndex = HUB_USEFUL_THYNGS_CHILD_DEPTH.balloons
     this.balloons.eventMode = 'none'
 
   }
@@ -1087,7 +1172,9 @@ class HubTeacherView {
   readonly container = new Container({ label: 'teacher' })
   readonly postWorld = new Container({ label: 'teacher-release-post-world' })
   readonly preWorld = new Container({ label: 'teacher-release-pre-world' })
-  readonly worldRelease = new Container({ label: 'teacher-release-world-sorted' })
+  readonly worldColumn = new Container({ label: 'teacher-release-column' })
+  readonly worldFrames = new Container({ label: 'teacher-release-frames' })
+  readonly releaseY: number
   private readonly rune: Sprite
   private readonly actor: Sprite
   private readonly column: Sprite
@@ -1109,12 +1196,14 @@ class HubTeacherView {
     this.container.eventMode = 'none'
     const releaseX = x + HUB_TEACHER_CAST_ORIGIN.x
     const releaseY = y + HUB_TEACHER_CAST_ORIGIN.y
+    this.releaseY = releaseY
     this.preWorld.position.set(releaseX, releaseY)
     this.preWorld.zIndex = HUB_WORLD_DEPTH.teacherPreWorld
     this.preWorld.eventMode = 'none'
-    this.worldRelease.position.set(releaseX, releaseY)
-    this.worldRelease.zIndex = hubWorldDepthForActor(releaseY)
-    this.worldRelease.eventMode = 'none'
+    this.worldColumn.position.set(releaseX, releaseY)
+    this.worldColumn.eventMode = 'none'
+    this.worldFrames.position.set(releaseX, releaseY)
+    this.worldFrames.eventMode = 'none'
     this.postWorld.position.set(releaseX, releaseY)
     this.postWorld.zIndex = HUB_WORLD_DEPTH.teacherPostWorld
     this.postWorld.eventMode = 'none'
@@ -1130,7 +1219,8 @@ class HubTeacherView {
     this.frames = centered(textures.teacher.burst[0])
     this.frames.blendMode = 'add'
     this.preWorld.addChild(this.flare)
-    this.worldRelease.addChild(this.column, this.frames)
+    this.worldColumn.addChild(this.column)
+    this.worldFrames.addChild(this.frames)
     this.postWorld.addChild(this.core)
     this.container.addChild(this.rune, shadow, this.actor)
   }
@@ -1141,7 +1231,8 @@ class HubTeacherView {
     const burst = hubTeacherBurstAt(elapsedSeconds, this.seed)
     this.currentBurst = burst
     this.preWorld.visible = burst.flare.visible
-    this.worldRelease.visible = burst.column.visible || burst.frames.visible
+    this.worldColumn.visible = burst.column.visible
+    this.worldFrames.visible = burst.frames.visible
     this.postWorld.visible = burst.core.visible
     if (!burst.visible) return
     this.column.visible = burst.column.visible

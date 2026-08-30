@@ -1,5 +1,14 @@
 # 2026-08-24 — Solomon Dig dirt actor and state-0 presentation closure
 
+> **2026-08-29 correction:** the Flydirt ownership conclusion survives, but
+> the parent presentation and lighting descriptions were incomplete. State 0
+> clips the body to `(actor.x-100,actor.y-100,200,100)`, applies planted field
+> `+0x21C=5` plus the bob, restores the clip, and only then draws record 13.
+> `0x004A2610` installs the scalar sampled at `(x-22,y-62)` after those parent
+> children, so it tints Flydirt only. The former body/grave/mouth tint and the
+> phrase “body/shadow under the source-root multiplier” are refuted. See entry
+> 297's second reopening for all five Solomon states.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Solomon Dig performs the digging animation and plays
@@ -51,7 +60,7 @@ authoritative cursor through Solomon body bob, throw-dirt semantic event,
 | 29-sample flight/fade/retirement | `0x00453AC0`, vtable remove slot `+0x18` | exact-ported | fixed-tick golden at ages 0/1/28/29 |
 | Solomon record 0 | builder destination `+0x38`, renderer `0x00458300` | exact-ported | source hashes, `28x46` geometry, exact PNG hash |
 | two identical source-over passes | two calls in `0x00458300` | exact-ported | render plan/view contains exactly two co-transformed sprites |
-| source-root Region lighting | `0x004A2610` query at `(x-22,y-62)` | exact-ported | separate body/dirt/lantern tint samples and complex-lighting-off white branch |
+| Flydirt-manager Region lighting | `0x004A2610` query at `(x-22,y-62)`, installed after state renderer | exact-ported after 2026-08-29 correction | body/mouth/record 13 remain white in this local scope; dirt receives the sampled scalar; Lantern remains independently lit |
 | ordinary connected host/client | semantic state-0 event | exact-ported | replicated birth tick and age-corrected peer plan |
 | muted/disabled audio | Sound gate is downstream of semantic event; child call is unconditional | verified-already-at-parity | mute suppresses playback only; dirt event/view still advances |
 | late join/hydration | child manager is not in serializer `0x00473C40` | exact-ported | history initializes cursor without replay; future dirt appears once |
@@ -79,8 +88,9 @@ multiplicative tint, fixed lifetime, and owner-local teardown.
   `f32(sin(pi*((cursor-3)/12))*amplitude)` for `3 < cursor <= 15`, zero outside.
   The dirt child owns position, heading, speed, and alpha only.
 - Downstream: manager update advances existing children before state 0, so a
-  new dirt child renders at age zero. Solomon's main render draws body/shadow,
-  installs Region scalar sampled at `(x-22,y-62)`, then renders the child list.
+  new dirt child renders at age zero. Solomon's main render draws the clipped
+  body and unclipped record 13, installs the Region scalar sampled at
+  `(x-22,y-62)`, then renders the child list and restores draw state.
 - Interruption/teardown: contact prevents future births but does not kill the
   current child. Alpha retirement removes it before render on update 29. Owner
   destruction clears every remaining child.

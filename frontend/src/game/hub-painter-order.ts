@@ -7,23 +7,15 @@ import {
   type NativeRegionPainterInsertion,
   type NativeRegionPainterRegistration,
 } from './region-painter-order.ts'
+import {
+  NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS,
+  type NativeHubFixedActorPainterId,
+} from './core-kernels/native-hub-world-membership.ts'
 
-export const NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS = Object.freeze([
-  'hagatha',
-  'annalist',
-  'fomentius',
-  'luthacus',
-  'skorcha',
-  'teacher',
-  'memorator',
-  'librarian',
-  'shlorio',
-  'arch-chancellor',
-  'polisher',
-] as const)
-
-export type NativeHubFixedActorPainterId =
-  typeof NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS[number]
+export {
+  NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS,
+  type NativeHubFixedActorPainterId,
+} from './core-kernels/native-hub-world-membership.ts'
 
 const FIXED_ACTOR_REGISTRATIONS = new Map(
   NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((id, registrationOrdinal) => [

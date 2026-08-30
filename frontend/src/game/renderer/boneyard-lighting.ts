@@ -67,7 +67,7 @@ export type NativeBoneyardLightSamples =
   | NativeBoneyardLightLookup
 
 export interface NativeSolomonSetPieceLighting {
-  digRootTint: number
+  bodyTint: number
   dirtTint: number
   lanternTint: number
 }
@@ -910,9 +910,7 @@ export function nativeSolomonSetPieceLighting(
   sources: NativeBoneyardLightSamples,
 ): NativeSolomonSetPieceLighting {
   return {
-    digRootTint: nativeBoneyardLightTint(
-      nativeBoneyardLightScalar(digPosition, sources),
-    ),
+    bodyTint: 0xffffff,
     dirtTint: nativeBoneyardLightTint(
       nativeBoneyardLightScalar(nativeSolomonDirtOrigin(digPosition), sources),
     ),

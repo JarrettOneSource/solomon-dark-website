@@ -72,6 +72,7 @@ import {
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
+import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -208,6 +209,88 @@ test('native provider registration is lane-local and stable across grouped colle
     'transient-a',
     'transient-b',
   ])
+})
+
+test('initial Hub registers every fixed actor, then players, then Students', () => {
+  const state = createGameSimulation({
+    first: { discipline: 'arcane', displayName: 'First', element: 'fire' },
+    second: { discipline: 'mind', displayName: 'Second', element: 'air' },
+  })
+  assert.equal(state.world.kind, 'hub')
+  if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+  const fixedCount = NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length
+  assert.deepEqual(
+    state.playerEntities.lightings.map(({ lightRegistration }) => lightRegistration),
+    [
+      { managerLane: 'actor', registrationOrdinal: fixedCount },
+      { managerLane: 'actor', registrationOrdinal: fixedCount + 1 },
+    ],
+  )
+  const studentOrdinals = state.world.studentPopulation.students.map(
+    ({ painterRegistration }) => painterRegistration.registrationOrdinal,
+  )
+  assert.ok(studentOrdinals.length > 0)
+  assert.deepEqual(
+    studentOrdinals,
+    studentOrdinals.map((_, index) => fixedCount + 2 + index),
+  )
+})
+
+test('shared Hub region reattachment appends the moving player after live Students', () => {
+  let state = createGameSimulation({
+    resident: { discipline: 'arcane', displayName: 'Resident', element: 'fire' },
+    traveler: { discipline: 'mind', displayName: 'Traveler', element: 'air' },
+  })
+  const playerOrdinal = () => (
+    playerLightingAt(state.playerEntities, 'traveler')!.lightRegistration.registrationOrdinal
+  )
+  const maximumStudentOrdinal = () => {
+    if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+    return Math.max(...state.world.studentPopulation.students.map(
+      ({ painterRegistration }) => painterRegistration.registrationOrdinal,
+    ))
+  }
+  const coverTransition = (
+    sourceRegion: 'courtyard' | 'mortuary',
+    destination: 'courtyard' | 'mortuary',
+  ) => {
+    if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+    const participant = state.world.participants.traveler!
+    state = {
+      ...state,
+      world: {
+        ...state.world,
+        participants: {
+          ...state.world.participants,
+          traveler: {
+            ...participant,
+            region: sourceRegion,
+            transition: {
+              alpha: 1,
+              destination,
+              phase: 'outgoing',
+              scriptedSpeed: 1,
+              scriptedTarget: { x: 0, y: 0 },
+              sourceRegion,
+            },
+          },
+        },
+      },
+    }
+    state = stepGameSimulationTick(state, {})
+  }
+
+  assert.ok(playerOrdinal() < maximumStudentOrdinal())
+
+  coverTransition('courtyard', 'mortuary')
+  if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+  assert.equal(state.world.participants.traveler?.region, 'mortuary')
+  assert.ok(playerOrdinal() > maximumStudentOrdinal())
+
+  coverTransition('mortuary', 'courtyard')
+  if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+  assert.equal(state.world.participants.traveler?.region, 'courtyard')
+  assert.ok(playerOrdinal() > maximumStudentOrdinal())
 })
 
 test('loadout confirmation consumes onboarding before the ordinary Courtyard return', () => {

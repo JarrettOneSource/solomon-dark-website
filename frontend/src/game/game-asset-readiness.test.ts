@@ -186,7 +186,7 @@ test('keeps recovered Hub parity art at its native registrations', () => {
     'hub-room-storeroom-flame.png': [10, 26],
     'hub-room-storeroom-foreground.png': [1075, 800],
     'hub-room-storeroom-props.png': [3225, 800],
-    'hub-courtyard-depth-props.png': [2032, 263],
+    'hub-courtyard-depth-props.png': [16000, 1000],
     'hub-southern-battlement.png': [209, 126],
     'hub-southern-platform-east.png': [530, 415],
     'hub-southern-platform-west.png': [365, 407],

@@ -58,6 +58,11 @@ export interface ProtocolAmbientState {
   sealCorePhase: number
   sealGlyphPhase: number
   statuePhaseDegrees: number
+  teacherTick: number
+  teacherWorldRelease: {
+    painterRegistrations: readonly NativeWorldManagerRegistration[]
+    releaseIndex: number
+  } | null
 }
 
 export interface ProtocolPlayerState extends PlayerCharacterState {

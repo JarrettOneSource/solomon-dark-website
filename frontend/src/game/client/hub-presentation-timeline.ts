@@ -499,6 +499,10 @@ function interpolateAmbient(
       blend,
       FULL_CIRCLE,
     ),
+    teacherTick: blend < 1 ? older.teacherTick : newer.teacherTick,
+    teacherWorldRelease: blend < 1
+      ? older.teacherWorldRelease
+      : newer.teacherWorldRelease,
   }
 }
 

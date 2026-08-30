@@ -1,7 +1,18 @@
+import type {
+  NativeWorldManagerRegistration,
+  RegisterNativeWorldPainter,
+} from '../core-kernels/native-world-manager-order.ts'
+import { HUB_TEACHER_TICKS_PER_SECOND, hubTeacherBurstAt } from '../hub-teacher.ts'
+
 export interface HubFountainParticleState {
   id: number
   remaining: number
   scale: number
+}
+
+export interface HubTeacherWorldReleaseState {
+  painterRegistrations: readonly NativeWorldManagerRegistration[]
+  releaseIndex: number
 }
 
 export interface HubAmbientState {
@@ -11,6 +22,8 @@ export interface HubAmbientState {
   sealCorePhase: number
   sealGlyphPhase: number
   statuePhaseDegrees: number
+  teacherTick: number
+  teacherWorldRelease: HubTeacherWorldReleaseState | null
 }
 
 const FOUNTAIN_INITIAL_SCALE = 0.02
@@ -54,10 +67,15 @@ export function createHubAmbientState(): HubAmbientState {
     sealCorePhase: 0,
     sealGlyphPhase: 0,
     statuePhaseDegrees: 0,
+    teacherTick: 0,
+    teacherWorldRelease: null,
   }
 }
 
-export function stepHubAmbient(source: HubAmbientState): HubAmbientState {
+export function stepHubAmbient(
+  source: HubAmbientState,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+): HubAmbientState {
   let rngState = source.rngState
   const fountainRoll = randomInteger(rngState, 80)
   rngState = fountainRoll.state
@@ -90,6 +108,24 @@ export function stepHubAmbient(source: HubAmbientState): HubAmbientState {
   const glyphIncrement = randomUnsigned(rngState, 0.019)
   rngState = glyphIncrement.state
 
+  const teacherTick = source.teacherTick + 1
+  const teacherBurst = hubTeacherBurstAt(
+    teacherTick / HUB_TEACHER_TICKS_PER_SECOND,
+  )
+  const teacherWorldRelease = teacherBurst.column.visible || teacherBurst.frames.visible
+    ? source.teacherWorldRelease?.releaseIndex === teacherBurst.releaseIndex
+      ? source.teacherWorldRelease
+      : {
+          painterRegistrations: Object.freeze([0, 1].map((index) => (
+            registerWorldPainter?.('transient') ?? Object.freeze({
+              managerLane: 'transient' as const,
+              registrationOrdinal: teacherBurst.releaseIndex * 2 + index,
+            })
+          ))),
+          releaseIndex: teacherBurst.releaseIndex,
+        }
+    : null
+
   return {
     fountainParticles,
     nextFountainParticleId,
@@ -99,5 +135,7 @@ export function stepHubAmbient(source: HubAmbientState): HubAmbientState {
     sealGlyphPhase: (source.sealGlyphPhase + (glyphIncrement.value + 0.001) * 0.5)
       % SEAL_TRACK_LENGTH,
     statuePhaseDegrees: (source.statuePhaseDegrees + 0.5) % 360,
+    teacherTick,
+    teacherWorldRelease,
   }
 }

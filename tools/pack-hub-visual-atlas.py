@@ -33,7 +33,7 @@ SHEET_LAYOUTS: dict[str, tuple[int, int, int, int]] = {
     "hub-astronomer-red-idle.png": (4, 1, 450, 450),
     "hub-astronomer-red-transition.png": (3, 1, 450, 450),
     "hub-astronomer-telescope.png": (5, 1, 374, 292),
-    "hub-courtyard-depth-props.png": (4, 1, 508, 263),
+    "hub-courtyard-depth-props.png": (8, 1, 2000, 1000),
     "hub-npc-items-frames.png": (4, 1, 200, 200),
     "hub-npc-perk-witch-crossfades.png": (4, 1, 25, 25),
     "hub-npc-perk-witch-frames.png": (8, 1, 150, 150),

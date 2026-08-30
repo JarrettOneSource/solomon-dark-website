@@ -126,23 +126,37 @@ Confidence: high for record membership, camera ownership, and painter order.
 
 ### StoreRoom entrance obstacle ownership correction
 
-A later normal live scene ledger disproved the remaining “spawn roof” group.
-College record 2 is base art submitted before the resident world list. Records
-23, 24, 20, and 25 belong to four separate `CollegeObstacle` actors at,
-respectively, `(749.5,162.5)`, `(956,169)`, `(628,215)`, and `(955.5,239.5)`.
-With the local player captured at `(602.408875,243.011703)`, stock drew all four
-obstacles first and the player afterward. The web instead baked record 24 into
-the background and grouped 2/20/23/25 at one `y=320` layer, which made record
-20 at the StoreRoom doorway cover the player from the wrong side.
+> **2026-08-29 second correction:** the four-object conclusion below was still
+> incomplete. Fresh initializer and class-renderer tracing found all eight
+> `CollegeObstacle` selectors plus the following `CollegeStatue`. Entry 297's
+> second reopening is authoritative.
 
-Implementation consequence: keep record 2 in the base Courtyard, remove record
-24 from that base, and submit 23/24/20/25 as four independent registered
-sprites at their native actor-center depths. There is no monolithic spawn-roof
-asset or depth boundary in this entrance system.
+College record 2 is base art submitted before the resident world list. Native
+`Courtyard::Init 0x00514EE0` constructs `CollegeObstacle` type `2007`
+selectors `0..7` in order at:
 
-Evidence: clean normal stock `courtyard-storeroom-entry` scene ledger, exact
-`CollegeObstacle` object centers/type ids, registered College record metadata,
-and the matching native screenshot. Confidence: high.
+| Selector | Actor root | College records |
+| ---: | ---: | --- |
+| `0` | `(1458.5,320.5)` | `148..159` composite |
+| `1` | `(955.5,239.5)` | `25` |
+| `2` | `(749.5,162.5)` | `23` |
+| `3` | `(1893,490)` | `28` |
+| `4` | `(1746,534)` | `29` |
+| `5` | `(1840,715)` | `27` |
+| `6` | `(628,215)` | `20` |
+| `7` | `(956,169)` | `24` |
+
+Every obstacle has `sortBias=0`, shared world-object radius `40`, category/mask
+`4`, and flags `16`; those fields do not enroll it in the Hub actor push solver.
+The statue then registers at `(961,834)`, bias `0`, world-object radius `50`.
+Players register after those nine roots, and Students after players. Records
+`27..29` must be removed from the flattened base; selector 0's twelve records
+must be composed into one registration-preserving actor frame. The earlier
+four-frame `23/24/20/25` strip and scenery-lane implementation are refuted.
+
+Evidence: clean normal scene ledgers; read-only decompilation of
+`0x00514EE0`, `0x005013F0`, `0x0051AB20`, and `0x00501440`; selector fields,
+registered College metadata, and live actor roots. Confidence: high.
 
 ## Courtyard camera-space ownership
 
@@ -429,6 +443,26 @@ Confidence: high for actor identity, both source banks, registration, offsets,
 painter order, pulse formulas, and endpoint holds. The web visual RNG seed is
 intentionally deterministic rather than an attempt to reproduce the stock
 process-wide RNG stream.
+
+### 2026-08-29 world-painter residual correction
+
+The complete Region layering reopening found that this section's visual order
+was implemented with fixed row-derived global depths. That representation
+stopped being valid when the shared Region queue moved to compact sequential
+Z values: Fomentius resolved near `1000 + queue index`, while counter/front/
+balloons stayed at `1331/1349.5/1350.5`. The relative inequalities in the old
+unit test therefore passed without proving that the four pieces still belonged
+to the same native callback.
+
+Fresh read-only decompilation reconfirms the ownership boundary:
+`0x0051C1A0` submits record 34, the `160..164` actor frame, record 32, and the
+`54..58` balloon frame contiguously; only `0x00502420` owns the separate
+record-33 shadow. The corrected browser structure is one Fomentius queue root
+with internal depths `counter=0`, `actor=1`, `front=2`, `balloons=3`; the
+shadow remains pre-queue and College-61's interaction marker is the immediate
+root-level sibling after the complete stack. Regression and browser receipts
+must compare the resolved Fomentius painter depth to the actual stack depth,
+not compare unrelated hard-coded row numbers.
 
 ## Create-menu element and discipline reveal trajectories
 

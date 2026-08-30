@@ -86,6 +86,7 @@ import { PlayerWorldView } from './hub-actors.ts'
 import {
   boneyardSolomonPainterLayers,
   boneyardSolomonVisualState,
+  type BoneyardSolomonClipRect,
 } from './boneyard-solomon-render.ts'
 import {
   NATIVE_SOLOMON_DIRT_DRAW_PASSES,
@@ -427,7 +428,12 @@ interface BoneyardRendererFrameDiagnostics {
   solomonDirtPassCount: number
   solomonDirtX: number
   solomonDirtY: number
+  solomonBodyOffsetY: number
+  solomonBodyTint: number
+  solomonClipRectWorld: BoneyardSolomonClipRect | null
+  solomonDirtTint: number
   solomonFrame: number
+  solomonGraveMarkTint: number
   solomonGraveMarkPassCount: number
   solomonPainterRow: number
   solomonZIndex: number
@@ -906,7 +912,12 @@ export async function createBoneyardWorldRenderer(
     solomonDirtPassCount: 0,
     solomonDirtX: Number.NaN,
     solomonDirtY: Number.NaN,
+    solomonBodyOffsetY: 0,
+    solomonBodyTint: 0xffffff,
+    solomonClipRectWorld: null,
+    solomonDirtTint: 0xffffff,
     solomonFrame: 0,
+    solomonGraveMarkTint: 0xffffff,
     solomonGraveMarkPassCount: 0,
     solomonPainterRow: Number.NaN,
     solomonZIndex: Number.NaN,
@@ -1452,7 +1463,12 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.solomonDirtPassCount = scene.solomonDirtPassCount
       frameDiagnostics.solomonDirtX = solomonDirt?.state.position.x ?? Number.NaN
       frameDiagnostics.solomonDirtY = solomonDirt?.state.position.y ?? Number.NaN
+      frameDiagnostics.solomonBodyOffsetY = scene.solomonBodyOffsetY
+      frameDiagnostics.solomonBodyTint = scene.solomonBodyTint
+      frameDiagnostics.solomonClipRectWorld = scene.solomonClipRectWorld
+      frameDiagnostics.solomonDirtTint = scene.solomonDirtTint
       frameDiagnostics.solomonFrame = scene.solomonFrame
+      frameDiagnostics.solomonGraveMarkTint = scene.solomonGraveMarkTint
       frameDiagnostics.solomonGraveMarkPassCount = scene.solomonGraveMarkPassCount
       frameDiagnostics.solomonPainterRow = painter.solomonPainterRow
       frameDiagnostics.solomonZIndex = painter.solomonZIndex
@@ -2496,7 +2512,7 @@ class BoneyardDynamicScene {
             dig.lanternPosition,
             this.lightIndex,
           )
-        : { digRootTint: 0xffffff, dirtTint: 0xffffff, lanternTint: 0xffffff })
+        : { bodyTint: 0xffffff, dirtTint: 0xffffff, lanternTint: 0xffffff })
     }
 
     const gateLeaves = this.gateLeaves
@@ -3041,6 +3057,26 @@ class BoneyardDynamicScene {
     return this.solomon?.frame ?? 0
   }
 
+  get solomonBodyOffsetY(): number {
+    return this.solomon?.bodyOffsetY ?? 0
+  }
+
+  get solomonBodyTint(): number {
+    return this.solomon?.bodyTint ?? 0xffffff
+  }
+
+  get solomonClipRectWorld(): BoneyardSolomonClipRect | null {
+    return this.solomon?.clipRectWorld ?? null
+  }
+
+  get solomonDirtTint(): number {
+    return this.solomon?.dirtTint ?? 0xffffff
+  }
+
+  get solomonGraveMarkTint(): number {
+    return this.solomon?.graveMarkTint ?? 0xffffff
+  }
+
   get solomonGraveMarkPassCount(): number {
     return this.solomon?.graveMarkPassCount ?? 0
   }
@@ -3096,6 +3132,7 @@ class BoneyardSolomonView {
   private readonly root: Container
   private readonly textures: BoneyardWorldTextures
   private currentFrame = 2
+  private currentClipRectWorld: BoneyardSolomonClipRect | null = null
   private lastDigEventId: number | null = null
 
   constructor(
@@ -3148,16 +3185,23 @@ class BoneyardSolomonView {
       this.body.texture = this.textures.solomonDig[frame]
       this.actorRoot.position.set(this.digState.position.x, this.digState.position.y)
       this.actorRoot.visible = true
-      this.body.position.y = 0
-      this.body.mask = null
+      this.body.position.y = 5
+      this.currentClipRectWorld = {
+        height: 100,
+        width: 200,
+        x: this.digState.position.x - 100,
+        y: this.digState.position.y - 100,
+      }
+      this.clipMask.clear().rect(-100, -100, 200, 100).fill(0xffffff)
+      this.body.mask = this.clipMask
       this.mouth.mask = null
-      this.clipMask.clear()
       this.mouth.visible = false
       this.graveMark.visible = true
       return
     }
     this.updateDirt(encounter, tick)
     const visual = boneyardSolomonVisualState(encounter, this.digState, tick)
+    this.currentClipRectWorld = visual.clipRectWorld
     this.currentFrame = visual.nativeBodyRecord
     this.actorRoot.position.set(
       encounter.position.x,
@@ -3167,14 +3211,19 @@ class BoneyardSolomonView {
     if (!visual.visible) return
     this.body.position.y = visual.offsetY
     this.mouth.position.y = visual.offsetY
-    if (visual.clipBottomWorldY === null) {
+    if (visual.clipRectWorld === null) {
       this.body.mask = null
       this.mouth.mask = null
       this.clipMask.clear()
     } else {
-      const clipLeft = this.digState.position.x - encounter.position.x - 1000
-      const clipTop = visual.clipBottomWorldY - encounter.position.y - 1000
-      this.clipMask.clear().rect(clipLeft, clipTop, 2000, 1000).fill(0xffffff)
+      const clipLeft = visual.clipRectWorld.x - encounter.position.x
+      const clipTop = visual.clipRectWorld.y - encounter.position.y
+      this.clipMask.clear().rect(
+        clipLeft,
+        clipTop,
+        visual.clipRectWorld.width,
+        visual.clipRectWorld.height,
+      ).fill(0xffffff)
       this.body.mask = this.clipMask
       this.mouth.mask = this.clipMask
     }
@@ -3194,6 +3243,26 @@ class BoneyardSolomonView {
 
   get frame(): number {
     return this.currentFrame
+  }
+
+  get bodyOffsetY(): number {
+    return this.body.position.y
+  }
+
+  get bodyTint(): number {
+    return this.body.tint
+  }
+
+  get clipRectWorld(): BoneyardSolomonClipRect | null {
+    return this.currentClipRectWorld
+  }
+
+  get dirtTint(): number {
+    return this.dirtRoot.tint
+  }
+
+  get graveMarkTint(): number {
+    return this.graveMark.tint
   }
 
   get dirtCount(): number {
@@ -3233,10 +3302,10 @@ class BoneyardSolomonView {
   }
 
   setLighting(lighting: NativeSolomonSetPieceLighting): void {
-    this.body.tint = lighting.digRootTint
-    this.graveMark.tint = lighting.digRootTint
+    this.body.tint = lighting.bodyTint
+    this.graveMark.tint = lighting.bodyTint
     this.dirtRoot.tint = lighting.dirtTint
-    this.mouth.tint = lighting.digRootTint
+    this.mouth.tint = lighting.bodyTint
     this.lantern.tint = lighting.lanternTint
   }
 

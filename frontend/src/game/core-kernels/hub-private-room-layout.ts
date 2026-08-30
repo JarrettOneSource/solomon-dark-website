@@ -1,4 +1,5 @@
 import type { HubSegment } from './hub-collision.ts'
+import type { NativeHubFixedActorPainterId } from './native-hub-world-membership.ts'
 import type { Vector2 } from './vector.ts'
 
 export const HUB_PRIVATE_ROOM_IDS = [
@@ -71,6 +72,7 @@ export type HubRoomPropVisual =
 export interface HubRoomPropDefinition {
   collider: HubRoomCircleCollider
   id: string
+  painterId: NativeHubFixedActorPainterId
   visual: HubRoomPropVisual | null
 }
 
@@ -281,12 +283,13 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
     props: MORTUARY_PAINTINGS.map(({ marker, portraitId, x, y }) => ({
       collider: circle(x, y - 2, 40),
       id: `painting-${portraitId}`,
+      painterId: `mortuary-custom-${portraitId}` as const,
       visual: {
         asset: 'mortuary-paintings' as const,
         frameIndex: portraitId,
         kind: 'portrait' as const,
         marker,
-        painterY: y + 5,
+        painterY: y - 2,
         position: { x, y: y + 5 },
       },
     })),
@@ -326,6 +329,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(239.5, 788, 40),
         id: 'library-prop-0',
+        painterId: 'library-custom-0',
         visual: {
           asset: 'library-props', frameIndex: 0, kind: 'room-frame', painterY: 788,
         },
@@ -333,6 +337,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(258.5, 678.5, 40),
         id: 'library-prop-1',
+        painterId: 'library-custom-1',
         visual: {
           asset: 'library-props', frameIndex: 1, kind: 'room-frame', painterY: 678.5,
         },
@@ -340,6 +345,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(762, 732.5, 40),
         id: 'library-prop-2',
+        painterId: 'library-custom-2',
         visual: {
           asset: 'library-props', frameIndex: 2, kind: 'room-frame', painterY: 732.5,
         },
@@ -347,6 +353,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(831, 620.5, 40),
         id: 'library-prop-3',
+        painterId: 'library-custom-100',
         // Native collision object with no matching ordinary prop-atlas selector.
         visual: null,
       },
@@ -370,6 +377,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(538, 324, 40),
         id: 'storeroom-prop-0',
+        painterId: 'storeroom-custom-0',
         visual: {
           asset: 'storeroom-props', frameIndex: 0, kind: 'room-frame', painterY: 324,
         },
@@ -377,6 +385,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(537.5, 434, 40),
         id: 'storeroom-prop-1',
+        painterId: 'storeroom-custom-1',
         visual: {
           asset: 'storeroom-props', frameIndex: 1, kind: 'room-frame', painterY: 434,
         },
@@ -384,6 +393,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(536, 542.5, 40),
         id: 'storeroom-prop-2',
+        painterId: 'storeroom-custom-2',
         visual: {
           asset: 'storeroom-props', frameIndex: 2, kind: 'room-frame', painterY: 542.5,
         },
@@ -417,6 +427,7 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       {
         collider: circle(517.5, 681, 40),
         id: 'office-prop-0',
+        painterId: 'office-custom-0',
         visual: { asset: 'office-prop', kind: 'room-layer', painterY: 681 },
       },
     ],

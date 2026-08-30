@@ -115,7 +115,61 @@ test('current Hub restore allocates its reconstructed students after persisted o
   )
 })
 
-test('schema 19 compact inventory roots migrate to schema 21 addressed slots', () => {
+test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  assert.equal(state.world.kind, 'hub')
+  if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const simulation = document.continuation.simulation
+  const studentCount = simulation.world.studentPopulation.students.length
+  const currentFixedCount = NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length
+  const fixedDelta = currentFixedCount - 11
+  const currentPlayerOrdinal = currentFixedCount
+  const currentStudentStart = currentPlayerOrdinal + 1
+  const downgradeRegistration = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(downgradeRegistration)
+    if (value === null || typeof value !== 'object') return value
+    const source = value as Record<string, unknown>
+    if (source.managerLane === 'actor' && Number.isSafeInteger(source.registrationOrdinal)) {
+      const ordinal = Number(source.registrationOrdinal)
+      return {
+        ...source,
+        registrationOrdinal: ordinal === currentPlayerOrdinal
+          ? 11 + studentCount
+          : ordinal >= currentStudentStart && ordinal < currentStudentStart + studentCount
+            ? 11 + ordinal - currentStudentStart
+            : ordinal - fixedDelta,
+      }
+    }
+    return Object.fromEntries(Object.entries(source).map(([key, entry]) => [
+      key,
+      downgradeRegistration(entry),
+    ]))
+  }
+  document.continuation.simulation = downgradeRegistration(simulation)
+  document.continuation.simulation.worldManagerOrder.nextRegistrationOrdinal.actor -= fixedDelta
+  document.schemaVersion = 21
+
+  const restored = restoreGameSaveDocument(JSON.stringify(document)).state
+  assert.equal(restored.world.kind, 'hub')
+  if (restored.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.deepEqual(restored.playerEntities.lightings[0]!.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: currentFixedCount,
+  })
+  assert.ok(restored.world.studentPopulation.students.every(({ painterRegistration }) => (
+    painterRegistration.registrationOrdinal > currentFixedCount
+  )))
+})
+
+test('schema 19 compact inventory roots migrate to schema 22 addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -142,7 +196,7 @@ test('schema 19 compact inventory roots migrate to schema 21 addressed slots', (
     playerId: 'owner',
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 21)
+  assert.equal(current.schemaVersion, 22)
   assert.deepEqual(
     current.continuation.simulation.playerEntities.economies[0].backpack
       .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
@@ -196,7 +250,7 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
     playerId: restoredHub.playerId,
     state: restoredHub.state,
   }))
-  assert.equal(reencodedHub.schemaVersion, 21)
+  assert.equal(reencodedHub.schemaVersion, 22)
   assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
   assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
 
@@ -256,7 +310,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 21)
+  assert.equal(encoded.schemaVersion, 22)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -1264,7 +1318,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 21)
+  assert.equal(encoded.schemaVersion, 22)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,

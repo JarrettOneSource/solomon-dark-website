@@ -667,6 +667,36 @@ test('protocol v80 carries authoritative present Skorcha population and animatio
   assert.throws(() => decodeServerGameMessage(JSON.stringify(malformed)), /hatFrame/)
 })
 
+test('protocol v108 carries the two Teacher transient roots at their release edge', () => {
+  let state = createGameSimulation({ 'player-1': CHARACTER })
+  for (let tick = 0; tick < 268; tick += 1) state = stepGameSimulationTick(state, {})
+  const snapshot = createGameSnapshot(state, 'player-1')
+  assert.equal(snapshot.world.kind, 'hub')
+  if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  assert.equal(snapshot.world.ambient.teacherTick, 268)
+  assert.deepEqual(snapshot.world.ambient.teacherWorldRelease, {
+    painterRegistrations: [
+      { managerLane: 'transient', registrationOrdinal: 0 },
+      { managerLane: 'transient', registrationOrdinal: 1 },
+    ],
+    releaseIndex: 0,
+  })
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence: 1,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const malformed = JSON.parse(encodeGameMessage(message))
+  malformed.frame.world.ambient.teacherWorldRelease.painterRegistrations[1].managerLane = 'actor'
+  assert.throws(() => decodeServerGameMessage(JSON.stringify(malformed)), /transient/)
+  const missingTick = JSON.parse(encodeGameMessage(message))
+  delete missingTick.frame.world.ambient.teacherTick
+  assert.throws(() => decodeServerGameMessage(JSON.stringify(missingTick)), /teacherTick/)
+})
+
 test('server welcome round-trips content, kernel, character, and world ownership', () => {
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
@@ -1084,7 +1114,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
     deathWeaponPainterRegistration: null,
     driveActive: false,
-    lightRegistration: { managerLane: 'actor', registrationOrdinal: 25 },
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 48 },
     overlayEffectPhase: 0,
   })
   assert.deepEqual(welcome.snapshot.players['player-1'].belt, [
@@ -1716,8 +1746,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v107 carries addressed inventory slots, world-painter registrations, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 107)
+test('protocol v108 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 108)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

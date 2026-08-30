@@ -242,7 +242,10 @@ import {
   stepHubWorldTick,
   type HubWorldState,
 } from './hub-world.ts'
-import type { HubStudentPopulationState } from './hub-students.ts'
+import {
+  registerHubStudentPopulationPainters,
+  type HubStudentPopulationState,
+} from './hub-students.ts'
 import {
   addPlayerEntity,
   applyPlayerEntityDamageX4Bonus,
@@ -453,8 +456,7 @@ export function createGameSimulation(
 ): GameSimulationState {
   const worldManagerOrder = createNativeWorldManagerOrder()
   reserveNativeHubFixedActorPainters(worldManagerOrder)
-  const world = createHubWorld(Object.keys(characters), {
-    registerWorldPainter: worldManagerOrder.register,
+  let world = createHubWorld(Object.keys(characters), {
     skorchaHiddenTicks: options.hubSkorchaHiddenTicks,
     skorchaVisibleTicks: options.hubSkorchaVisibleTicks,
     studentPopulation: options.hubStudentPopulation,
@@ -473,6 +475,13 @@ export function createGameSimulation(
       draw.seed,
       worldManagerOrder.register('actor'),
     )
+  }
+  world = {
+    ...world,
+    studentPopulation: registerHubStudentPopulationPainters(
+      world.studentPopulation,
+      worldManagerOrder.register,
+    ),
   }
   if (options.initialPlayerExperience !== undefined) {
     for (const { playerId } of playerEntities.identities) {
@@ -1062,10 +1071,9 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
   const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
   const worldManagerOrder = createNativeWorldManagerOrder()
   reserveNativeHubFixedActorPainters(worldManagerOrder)
-  const world = createHubWorld(
+  let world = createHubWorld(
     state.playerEntities.identities.map(({ playerId }) => playerId),
     {
-      registerWorldPainter: worldManagerOrder.register,
       traderAnimationSeed: hubSeed.value,
     },
   )
@@ -1075,6 +1083,13 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
       worldManagerOrder.register('actor'),
     ]),
   )
+  world = {
+    ...world,
+    studentPopulation: registerHubStudentPopulationPainters(
+      world.studentPopulation,
+      worldManagerOrder.register,
+    ),
+  }
   const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
     const config = state.playerEntities.configs[index]!
     return [playerId, createPlayerCharacter(config, hubSpawnPoint())]
@@ -1107,10 +1122,9 @@ function enterPostRunLoadout(
   const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
   const worldManagerOrder = createNativeWorldManagerOrder()
   reserveNativeHubFixedActorPainters(worldManagerOrder)
-  const world = createHubWorld(
+  let world = createHubWorld(
     state.playerEntities.identities.map(({ playerId }) => playerId),
     {
-      registerWorldPainter: worldManagerOrder.register,
       traderAnimationSeed: hubSeed.value,
     },
   )
@@ -1120,6 +1134,13 @@ function enterPostRunLoadout(
       worldManagerOrder.register('actor'),
     ]),
   )
+  world = {
+    ...world,
+    studentPopulation: registerHubStudentPopulationPainters(
+      world.studentPopulation,
+      worldManagerOrder.register,
+    ),
+  }
   const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
     const config = state.playerEntities.configs[index]!
     return [playerId, createPlayerCharacter(config, hubSpawnPoint())]

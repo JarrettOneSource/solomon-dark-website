@@ -76,6 +76,13 @@ No member is blocked by the browser platform.
   scale. `0x00518280` chooses `style*2 + (scale<0)`, roots the bubble at
   `(actor.x + sign(scale)*30, actor.y-60)`, and applies
   `sin(phase*pi/180)*0.25+0.75` alpha.
+- **2026-08-29 layering follow-through:** `0x00518280` is the tail of the
+  owning NPC presentation callback. Once Region queue roots moved to compact
+  sequential Z values, the Website's raw `hubWorldDepthForActor(actorY)+0.1`
+  marker siblings stopped following their actors. All ten named markers now
+  take the resolved actor/stack depth and occupy its immediate sub-root tail;
+  same-row next actors remain later. Onboarding callouts/directional arrows
+  retain their separate Courtyard/screen-space ownership.
 - Provokatus, Fomentius, Luthacus, Skorcha, Shlorio, Semicus, Declarius, and
   the Archchancellor advance phase one degree per 100-Hz tick. Hagatha and
   Machinimbus retain their randomized construction phase.
@@ -92,6 +99,11 @@ No member is blocked by the browser platform.
   `WALK INTO WIZARDS\nTO TALK TO THEM` at `(15,-115)`, Fonts group 1, black
   outline radii 1/3 at 20-degree steps, foreground RGBA
   `(0.85,0.73,0.44,1)`.
+- **2026-08-29 direct-lane correction:** complete Courtyard render order places
+  this card after the world queue, player-attached pass, and College
+  `19/30/31/21/22`, then before southern architecture. The former actor-row Z
+  is replaced by that explicit foreground-to-southern interval. The later
+  clamped hints remain screen-space UI projections.
 - After row 0 clears, live rows 1/2 blink when `tick%80>40`, use UI 88, and
   point/clamp from `(Fomentius +32,-62)` or `(Luthacus -32,-62)` to the current
   viewport.

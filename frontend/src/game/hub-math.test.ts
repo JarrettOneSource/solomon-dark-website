@@ -15,11 +15,10 @@ import {
   HUB_ASTRONOMER_FRONT_DEPTH,
   HUB_ASTRONOMER_TELESCOPE_DEPTH,
   HUB_COURTYARD_FOREGROUND_DEPTH,
+  HUB_COURTYARD_ONBOARDING_DEPTH,
   HUB_SOUTHERN_FOREGROUND_DEPTH,
-  HUB_USEFUL_THYNGS_BALLOON_DEPTH,
-  HUB_USEFUL_THYNGS_COUNTER_DEPTH,
-  HUB_USEFUL_THYNGS_FRONT_DEPTH,
-  HUB_USEFUL_THYNGS_MARKER_DEPTH,
+  HUB_USEFUL_THYNGS_CHILD_DEPTH,
+  HUB_NPC_MARKER_TAIL_OFFSET,
   HUB_USEFUL_THYNGS_SHADOW_DEPTH,
   hubActorDepth,
 } from './hub-depth.ts'
@@ -27,6 +26,11 @@ import {
   NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS,
   nativeHubFixedActorPainterRegistration,
 } from './hub-painter-order.ts'
+import {
+  NATIVE_HUB_NORTH_ARCH_BIAS_RECT,
+  nativeCourtyardPlayerSortBias,
+} from './core-kernels/native-hub-world-membership.ts'
+import { createNativeWorldManagerOrder } from './core-kernels/native-world-manager-order.ts'
 import {
   createHubAstronomerClock,
   hubAstronomerFrameAt,
@@ -179,14 +183,51 @@ test('Hub run entry crossfades the exact compass and play layers on the native f
 test('reserves fixed Hub actor painters in native construction chronology', () => {
   assert.deepEqual(NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS, [
     'hagatha',
-    'annalist',
     'fomentius',
+    'annalist',
     'luthacus',
     'skorcha',
     'teacher',
+    'college-obstacle-0',
+    'college-obstacle-1',
+    'college-obstacle-2',
+    'college-obstacle-3',
+    'college-obstacle-4',
+    'college-obstacle-5',
+    'college-obstacle-6',
+    'college-obstacle-7',
+    'college-statue',
     'memorator',
+    'mortuary-painting-0',
+    'mortuary-painting-1',
+    'mortuary-painting-100',
+    'mortuary-painting-3',
+    'mortuary-painting-4',
+    'mortuary-painting-5',
+    'mortuary-painting-6',
+    'mortuary-painting-7',
+    'mortuary-painting-8',
+    'mortuary-painting-9',
+    'mortuary-custom-0',
+    'mortuary-custom-1',
+    'mortuary-custom-2',
+    'mortuary-custom-3',
+    'mortuary-custom-4',
+    'mortuary-custom-5',
+    'mortuary-custom-6',
+    'mortuary-custom-7',
+    'mortuary-custom-8',
+    'mortuary-custom-9',
+    'library-custom-0',
+    'library-custom-1',
+    'library-custom-2',
+    'library-custom-100',
     'librarian',
     'shlorio',
+    'storeroom-custom-0',
+    'storeroom-custom-1',
+    'storeroom-custom-2',
+    'office-custom-0',
     'arch-chancellor',
     'polisher',
   ])
@@ -198,22 +239,44 @@ test('reserves fixed Hub actor painters in native construction chronology', () =
   )
 })
 
+test('applies the strict Courtyard north-arch player bias from heading', () => {
+  assert.deepEqual(NATIVE_HUB_NORTH_ARCH_BIAS_RECT, {
+    bottom: 181, left: 874, right: 1031, top: 34,
+  })
+  const inside = { x: 900, y: 100 }
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 0), -20)
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 1), 20)
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 11), 20)
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 12), -20)
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 13), 20)
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 22), 20)
+  assert.equal(nativeCourtyardPlayerSortBias(inside, 23), -20)
+  for (const position of [
+    { x: 874, y: 100 },
+    { x: 1031, y: 100 },
+    { x: 900, y: 34 },
+    { x: 900, y: 181 },
+  ]) assert.equal(nativeCourtyardPlayerSortBias(position, 1), 0)
+})
+
 test('sorts each Useful Thyngs painter around PotionGuy', () => {
-  assert.equal(HUB_USEFUL_THYNGS_COUNTER_DEPTH, 1331)
-  assert.equal(hubActorDepth(664), 1332)
-  assert.equal(HUB_USEFUL_THYNGS_FRONT_DEPTH, 1349.5)
-  assert.equal(HUB_USEFUL_THYNGS_BALLOON_DEPTH, 1350.5)
-  assert.equal(HUB_USEFUL_THYNGS_MARKER_DEPTH, 1351.5)
+  assert.deepEqual(HUB_USEFUL_THYNGS_CHILD_DEPTH, {
+    balloons: 3,
+    counter: 0,
+    front: 2,
+    trader: 1,
+  })
+  assert.equal(HUB_NPC_MARKER_TAIL_OFFSET, 0.1)
   assert.equal(HUB_USEFUL_THYNGS_SHADOW_DEPTH, 900)
-  assert.ok(HUB_USEFUL_THYNGS_COUNTER_DEPTH < hubActorDepth(664))
-  assert.ok(hubActorDepth(664) < HUB_USEFUL_THYNGS_FRONT_DEPTH)
-  assert.ok(HUB_USEFUL_THYNGS_FRONT_DEPTH < HUB_USEFUL_THYNGS_BALLOON_DEPTH)
-  assert.ok(HUB_USEFUL_THYNGS_BALLOON_DEPTH < HUB_USEFUL_THYNGS_MARKER_DEPTH)
+  assert.ok(HUB_USEFUL_THYNGS_SHADOW_DEPTH < hubActorDepth(664))
 })
 
 test('submits the recovered southern Courtyard stack after every actor', () => {
   assert.equal(HUB_COURTYARD_FOREGROUND_DEPTH, 2500)
+  assert.equal(HUB_COURTYARD_ONBOARDING_DEPTH, 2500.5)
   assert.equal(HUB_SOUTHERN_FOREGROUND_DEPTH, 2501)
+  assert.ok(HUB_COURTYARD_FOREGROUND_DEPTH < HUB_COURTYARD_ONBOARDING_DEPTH)
+  assert.ok(HUB_COURTYARD_ONBOARDING_DEPTH < HUB_SOUTHERN_FOREGROUND_DEPTH)
   assert.equal(HUB_ASTRONOMER_DEPTH, 2502)
   assert.equal(HUB_ASTRONOMER_TELESCOPE_DEPTH, 2503)
   assert.equal(HUB_ASTRONOMER_FRONT_DEPTH, 2504)
@@ -451,6 +514,41 @@ test('Courtyard ambient painters share the recovered native fixed update', () =>
   closeTo(statue.aura.y, Math.sqrt(3) * 0.8)
   assert.ok(ambient.sealCorePhase > 0 && ambient.sealCorePhase < 3)
   assert.ok(ambient.sealGlyphPhase > 0 && ambient.sealGlyphPhase < 3)
+})
+
+test('Teacher release registers column then frames in the transient manager', () => {
+  const order = createNativeWorldManagerOrder()
+  let ambient = createHubAmbientState()
+  for (let tick = 0; tick < 267; tick += 1) {
+    ambient = stepHubAmbient(ambient, order.register)
+  }
+  assert.equal(ambient.teacherTick, 267)
+  assert.equal(ambient.teacherWorldRelease, null)
+
+  ambient = stepHubAmbient(ambient, order.register)
+  assert.equal(ambient.teacherTick, 268)
+  assert.deepEqual(ambient.teacherWorldRelease, {
+    painterRegistrations: [
+      { managerLane: 'transient', registrationOrdinal: 0 },
+      { managerLane: 'transient', registrationOrdinal: 1 },
+    ],
+    releaseIndex: 0,
+  })
+
+  while (ambient.teacherWorldRelease !== null && ambient.teacherTick < 400) {
+    ambient = stepHubAmbient(ambient, order.register)
+  }
+  assert.equal(ambient.teacherWorldRelease, null)
+  while (ambient.teacherWorldRelease === null && ambient.teacherTick < 1_200) {
+    ambient = stepHubAmbient(ambient, order.register)
+  }
+  assert.deepEqual(ambient.teacherWorldRelease, {
+    painterRegistrations: [
+      { managerLane: 'transient', registrationOrdinal: 2 },
+      { managerLane: 'transient', registrationOrdinal: 3 },
+    ],
+    releaseIndex: 1,
+  })
 })
 
 test('fountain particles are finite native sprite transients', () => {

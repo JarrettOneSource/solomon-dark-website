@@ -73,12 +73,14 @@ interface HubFrameDiagnostics {
   astronomerRenderable: boolean
   astronomerTelescopeFrame: number
   cameraRenderGroupCount: number
+  collegeObstacleCount: number
   collegePathCursor: number | null
   frameCount: number
   fadeAlpha: number
   hostPlayerId: string | null
   localPlayerId: string
   levelUpParticleCount: number
+  npcMarkerZIndexes: Readonly<Record<string, number>>
   orbSpriteCount: number
   playerCount: number
   playerAttachmentPose: number
@@ -122,6 +124,10 @@ interface HubFrameDiagnostics {
   secondaryAbilitySamples: readonly NativeSecondaryDiagnosticSample[]
   secondaryScreenFlashAlpha: number
   secondaryScreenFlashColor: number
+  usefulThyngsChildDepths: readonly number[]
+  usefulThyngsMarkerZIndex: number
+  usefulThyngsShadowZIndex: number
+  usefulThyngsStackZIndex: number
   skorcha: {
     dismissalIndex: number
     gesture: number
@@ -146,6 +152,7 @@ interface HubFrameDiagnostics {
     flareAlpha: number
     frame: number
     frameAlpha: number
+    releaseIndex: number
     visible: boolean
   }
   teacherFrame: number
@@ -321,6 +328,7 @@ export async function createHubWorldRenderer(
     astronomerTelescopeFrame: 0,
     cameraRenderGroupCount: courtyardScene.cameraRenderGroupCount
       + Number(privateRoomScene.world.isRenderGroup),
+    collegeObstacleCount: courtyardScene.collegeObstacleCount,
     collegePathCursor: options.initialSnapshot.world.participants[options.playerId]
       ?.collegeIntro?.pathCursor ?? null,
     frameCount: 0,
@@ -328,6 +336,7 @@ export async function createHubWorldRenderer(
     hostPlayerId: options.initialSnapshot.hostPlayerId,
     localPlayerId: options.playerId,
     levelUpParticleCount: 0,
+    npcMarkerZIndexes: courtyardScene.markerZIndexes,
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
@@ -371,6 +380,10 @@ export async function createHubWorldRenderer(
     secondaryAbilitySamples: [],
     secondaryScreenFlashAlpha: 0,
     secondaryScreenFlashColor: 0xffffff,
+    usefulThyngsChildDepths: courtyardScene.usefulThyngsChildDepths,
+    usefulThyngsMarkerZIndex: courtyardScene.usefulThyngsMarkerZIndex,
+    usefulThyngsShadowZIndex: courtyardScene.usefulThyngsShadowZIndex,
+    usefulThyngsStackZIndex: courtyardScene.usefulThyngsStackZIndex,
     skorcha: options.initialSnapshot.world.skorcha === null ? null : {
       dismissalIndex: options.initialSnapshot.world.skorcha.dismissalIndex,
       gesture: options.initialSnapshot.world.skorcha.gesture,
@@ -424,11 +437,17 @@ export async function createHubWorldRenderer(
     frameDiagnostics.frameCount = frameCount
     frameDiagnostics.fadeAlpha = participant?.transition?.alpha ?? 0
     frameDiagnostics.collegePathCursor = participant?.collegeIntro?.pathCursor ?? null
+    frameDiagnostics.collegeObstacleCount = courtyardScene.collegeObstacleCount
+    frameDiagnostics.usefulThyngsChildDepths = courtyardScene.usefulThyngsChildDepths
+    frameDiagnostics.usefulThyngsMarkerZIndex = courtyardScene.usefulThyngsMarkerZIndex
+    frameDiagnostics.usefulThyngsShadowZIndex = courtyardScene.usefulThyngsShadowZIndex
+    frameDiagnostics.usefulThyngsStackZIndex = courtyardScene.usefulThyngsStackZIndex
     frameDiagnostics.hostPlayerId = snapshot.hostPlayerId
     frameDiagnostics.playerCount = Object.keys(snapshot.players).length
     const currentScene = participant?.region === 'courtyard'
       ? courtyardScene
       : privateRoomScene
+    frameDiagnostics.npcMarkerZIndexes = currentScene.markerZIndexes
     frameDiagnostics.primarySpellCount = currentScene.primarySpellCount
     frameDiagnostics.primarySpellKinds = currentScene.primarySpellKinds
     frameDiagnostics.levelUpParticleCount = currentScene.levelUpParticleCount
@@ -979,6 +998,7 @@ function teacherBurstDiagnostics(scene: HubWorldScene): HubFrameDiagnostics['tea
     flareAlpha: burst.flare.alpha,
     frame: burst.frames.frame,
     frameAlpha: burst.frames.alpha,
+    releaseIndex: burst.releaseIndex,
     visible: burst.visible,
   }
 }

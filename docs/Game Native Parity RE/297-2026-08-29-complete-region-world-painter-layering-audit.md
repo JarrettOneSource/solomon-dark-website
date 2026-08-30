@@ -1,5 +1,413 @@
 # 2026-08-29 — Complete Region world-painter layering audit
 
+> **2026-08-29 second reopening — prior closure refuted.** The user-visible
+> Solomon Dig burial error and a Courtyard arch painting below Students prove
+> that this entry's earlier “complete” census was not complete. It recovered
+> the shared queue machinery but did not enumerate every concrete Region's
+> actual actor-manager contents, class-local clip scopes, or collision/query
+> classification. The final-closure and “no remaining discrepancy” statements later
+> in this historical entry are superseded by the reopening below.
+
+## Second reopening: concrete manager membership, clip, and collision
+
+### Why the first audit missed both reported failures
+
+The first pass started at `Region::Present`, counted the three manager lanes,
+and followed proxy insertion. It did not walk backward through every Region
+initializer and population callback to recover the objects stored in those
+lanes. Consequently, it accepted Website labels such as `scenery` and
+`depth-prop` as evidence of native ownership. It also treated a parent actor's
+queue row as sufficient proof even though a class renderer can clip only some
+children inside that root. Both assumptions are false:
+
+- `CollegeObstacle` and `CollegeStatue` are ordinary actor-manager objects.
+  Several of their visual records were flattened into the Courtyard base or
+  omitted, making any later actor—including a Student—paint above that art
+  regardless of world Y.
+- Solomon's parent queue root was correct, but state 0 clips only the body to a
+  `200 x 100` grave rectangle and then draws DeadHawg record 13 outside the
+  clip. The Website drew the entire `200 x 200` body sheet.
+
+This reopening therefore treats the concrete object list, actor fields,
+class-local draw program, collision/query classification, and
+construction/destruction path as one layering contract.
+
+### Fresh evidence
+
+| Evidence | Exact source | Result | Confidence |
+| --- | --- | --- | --- |
+| Canonical image | retail 0.72.5 `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Same sealed executable as the first audit. | high |
+| Courtyard population and player bias | `0x0050B720`, `Courtyard::Tick 0x0050C970`, writes `0x0050D2F8/0x0050D3CE` | Fomentius receives `sortBias=-5`. Each live player is reset to zero, then receives `+20/-20` only inside the strict north-arch rectangle. | high |
+| Courtyard fixed objects | `Courtyard::Init 0x00514EE0`; `CollegeObstacle` ctor/render `0x005013F0/0x0051AB20`; `CollegeStatue` ctor `0x00501440` | Eight obstacle actors are constructed in selector order `0..7`, then the statue, before players and Students. | high |
+| Private rooms | initializers `0x00515290`, `0x00517A30`, `0x00517F60`, `0x00517D50`; Painting/CustomObject renderers `0x00518280/0x00505E50` | Mortuary has ten Painting interaction actors followed by ten distinct CustomObject visual actors. StoreRoom, Library, and Office props are also CustomObject actor roots. | high |
+| Ordinary region reattachment | `Gameplay_SwitchRegion 0x005CDDD0`; `Region +0xD0/+0xD4 -> 0x00641090/0x00641130`; `Region::ClearLive 0x0063E510`; `PuppetManager` add/remove `0x004013C0/0x00402450`; isolated live manager census | `+0xD4` removes a player from the outgoing `PuppetManager`; sleep then drains both live manager lists. Wake rebuilds the incoming fixed population and `+0xD0` adds target-region player slots in slot order. | high |
+| Fomentius child painter stack | `PotionGuy::Present 0x0051C1A0`; shadow callback `0x00502420`; records `34`, `160..164`, `32`, `54..58`; Website residual scan | One Fomentius queue callback paints counter, body, front, and balloons contiguously. The shadow is the separate pre-queue callback. Row-derived global depths became invalid once actor roots moved to sequential queue depths. | high |
+| Teacher dynamic roots | release `0x00505560`; two calls to transient registration helper `0x0063E5B0`; Region transient manager `+0x8B70`; Website residual scan | Column/ZAnimLit registers first, SpriteArray wrapper registers second, both at `teacher.y+15`. Flare/core remain direct pre/post-world roots. The browser's one raw-row container was outside the shared queue. | high |
+| NPC marker tails | common marker renderer `0x00518280`; ten named marker actors from entry 201; Website residual scan | Each ordinary marker is painted at the tail of its NPC callback. Raw row-derived sibling depths separated markers from their resolved sequential actor roots. | high |
+| Pristine walk-to-talk card | Courtyard render `0x0051EB60`, call block `0x00520012..0x0052032D`; Website residual scan | Direct Courtyard UI is submitted after queue/player/foreground records and before southern architecture, not at Provokatus's actor row. | high |
+| Solomon state painters | `0x004902C0`, `0x00490420`, `0x00490640`, `0x00490790`; clip save/set/restore `0x00427300/0x00420EC0/0x00421380` | State-specific body clips, planted offset, grave-mark interval, and retreat-root ownership are exact. | high |
+| Solomon state/lifecycle | ctor `0x00481C20`; state ticks `0x0047D0F0/0x0047D450/0x0047D570`; render dispatcher `0x004A2610` | `+0x21C` begins at `5`, becomes `15` for retreat hold, resets to zero for acceleration, and `+0x210/+0x214` retain the retreat clip root. | high |
+| Isolated live checks | task-owned retail process; write watch on player `+0xA0`; Solomon field sample/contact | Heading `90` wrote `+20`, heading `359` wrote `-20`; state-0 Solomon sampled `+0x21C=5`, and contact copied the current actor position into `+0x210/+0x214`. | high-supporting |
+
+### Exact Courtyard actor-manager chronology
+
+The active survival branch constructs and registers:
+
+1. Hagatha, type `5001`;
+2. Fomentius/PotionGuy, type `5004`, with `Puppet+0xA0=-5`;
+3. Annalist/Provokatus, type `5003`;
+4. Luthacus/ItemsGuy, type `5005`;
+5. optional Skorcha/Tyrannia, type `5007`, when the population draw succeeds;
+6. Teacher/Machinimbus, type `5008`;
+7. `CollegeObstacle` type `2007`, selectors `0..7` in ascending order;
+8. `CollegeStatue` type `2008`;
+9. current player slots in slot order; and
+10. the live Student population in construction order.
+
+The Website prefix previously used Hagatha, Annalist, Fomentius, Luthacus,
+Skorcha, Teacher, then unrelated private-room NPCs. It also warmed and
+registered Students before creating the initial player. Both stable-tie orders
+are false. Skorcha's later 20–40 minute shared-Hub schedule remains the
+explicit user-directed Website policy recorded in entry 194; when she is
+visible, her painter occupies the recovered optional-population position.
+
+The eight obstacles are:
+
+| Selector | Root `(x,y)` | College record program | Radius | Bias |
+| ---: | ---: | --- | ---: | ---: |
+| `0` | `(1458.5,320.5)` | `148..159`, one twelve-piece composite | `40` | `0` |
+| `1` | `(955.5,239.5)` | `25` | `40` | `0` |
+| `2` | `(749.5,162.5)` | `23` | `40` | `0` |
+| `3` | `(1893,490)` | `28` | `40` | `0` |
+| `4` | `(1746,534)` | `29` | `40` | `0` |
+| `5` | `(1840,715)` | `27` | `40` | `0` |
+| `6` | `(628,215)` | `20` | `40` | `0` |
+| `7` | `(956,169)` | `24` | `40` | `0` |
+
+Selector 0 is the large east Courtyard tower/arch/banner composition implicated
+by the report. Records `27..29` were irreversibly flattened into the Website
+base, and records `148..159` had no actor root at all. The correct extraction
+is eight registration-preserving `2000 x 1000` College logical frames, with records
+`27..29` removed from the base. `CollegeStatue` follows at `(961,834)`, radius
+`50`, bias `0`; its visual body and aura remain children of that one actor root.
+The Courtyard's 129 static contour segments remain the movement collision bank.
+Although the obstacle/statue constructors carry shared world-object radii and
+category fields, the native Hub motion census includes only the five named
+fixed Courtyard actors, optional Skorcha, and conditional Polisher. The eight
+obstacles and statue do **not** enter the player/Student push solver. Adding
+their radii as movement bodies overlaps the stock spawn, blocks the StoreRoom
+portal, changes Student collision RNG, and deadlocks the College spline at the
+selector-7 arch. Their radii remain class/query metadata; their required fix in
+this system is actor-manager painter ownership, not phantom movement collision.
+
+### Contextual Courtyard player bias
+
+`Courtyard::Tick` first writes player `+0xA0=0`. It then uses the stock strict
+rectangle predicate (`0x00403DA0`) for:
+
+```text
+x > 874 && x < 1031 && y > 34 && y < 181
+```
+
+Inside that rectangle, heading selects:
+
+```text
+-20  when heading <= 0, heading == 180, or heading >= 345
++20  when 0 < heading < 180 or 180 < heading < 345
+```
+
+The Website stores 24-way heading indices, so the exact representable mapping
+is `-20` for indices `0`, `12`, and `23`, and `+20` for every other index.
+Outside the rectangle the bias is zero. This is a Courtyard tick rule, not a
+global PlayerWizard constructor value and not a fixed doorway overlay.
+
+### Ordinary switch teardown, wake, and shared-Hub adaptation
+
+The manager chronology above describes a newly active Courtyard. Ordinary
+native switches additionally have a destructive live-registry lifecycle:
+
+1. `Gameplay_SwitchRegion` calls outgoing slot `+0xD4` for the player. Common
+   `0x00641130 -> 0x0063F600` removes it from the Region's `PuppetManager`.
+2. `Region::GoToSleep 0x00649F90` serializes the cache and calls slot `+0xF0`.
+   Common clear `0x0063E510` repeats detach for all four player slots, drains
+   both live object managers through `0x00402220`, clears the spatial grid,
+   and zeros the actor lookup bank.
+3. Incoming wake/create rebuilds that Region's fixed population. After attach
+   and UI binding, `0x005CBA00` calls slot `+0xD0` for target-region players in
+   slot order. Common `0x00641090` appends each nonduplicate player to the
+   `PuppetManager` and restores its Region/spatial bindings.
+4. Courtyard Students subsequently join through their already recovered
+   transient ticker lifecycle. The constructor's asserted first request and
+   the covered transition mean a first visible sample can contain one or two
+   Students on either side of the player; this is timing, not a fixed roster.
+
+The isolated retail census made the list mutation concrete. A fresh settled
+Courtyard contained `14` fixed actors, the player at index `14`, then `10`
+Students. After switching to Mortuary, the Courtyard manager count was `0` and
+Mortuary contained its `21` fixed actor roots followed by the player at index
+`21`. On return, one early sample contained the `14` fixed roots, two live
+Students, the player, then later Students; after those two route lifetimes
+ended, list compaction placed the player immediately after the fixed roots and
+new Students remained later. Absolute Student count/order is deliberately
+transient, while add/remove ordering is deterministic.
+
+The Website's multi-participant Hub has an explicit policy difference already
+recorded in entries 024 and 180: the shared Courtyard keeps simulating while a
+participant visits a private room, because another participant may remain
+there. It therefore must not destructively clear the shared Student population
+on one participant's switch. Instead, the moving player's actor registration
+is replaced at the covered region edge; on return it appends after the still
+live Courtyard Students. This is an explicit shared-Hub extension of the
+native per-process sleep boundary, not an accidental stock-parity claim.
+Whole-world return from a Boneyard still rebuilds fixed actors, players, then
+the newly warmed Student lifecycle. Regression coverage pins both branches.
+
+### Residual child-stack correction: Useful Thyngs
+
+The recursive renderer scan found one additional actionable layering defect.
+The first world-painter cutover correctly made Region queue Z values a compact
+sequential order, but Useful Thyngs retained older row-derived global depths
+`1331/1349.5/1350.5`. Fomentius itself now received a sequential depth near
+`1000 + queue index`, so those values no longer bracketed his actor root.
+They could force record 34, record 32, and balloons into unrelated global
+intervals even though their native producer is one actor callback.
+
+`PotionGuy::Present 0x0051C1A0` submits College record 34, the selected
+`160..164` actor frame, College record 32, then the selected `54..58` balloon
+frame without returning to the Region queue. They are one painter root with
+internal child order `0/1/2/3`. The `0x00502420` record-33 shadow callback is
+separate and remains in the pre-queue interval. The interaction marker remains
+a sibling immediately after the completed Fomentius stack, not a child hidden
+by record 32 and not a fixed global row. The Website must therefore target the
+whole stack with Fomentius's actor registration and `-5` bias, then place the
+marker at that resolved root depth plus a sub-root offset.
+
+### Residual dynamic-root correction: Teacher release
+
+The same root-level scan found that Teacher's `worldRelease` still assigned
+`hubWorldDepthForActor(releaseY)` directly. That is another obsolete raw-row Z
+value and, more importantly, collapses two native transient-manager objects
+into one browser container. The complete `0x00505560` release sequence is:
+
+1. core `Anim_Fade` enters direct post-world manager `Region+0x22C`;
+2. flare `Anim_Fade` enters direct pre-world manager `Region+0x278`;
+3. the column is wrapped by `ZAnimLit` and registered through `0x0063E5B0`;
+4. the additive frame bank is wrapped separately and registered through a
+   second `0x0063E5B0` call.
+
+The two shared-world roots have the same point `teacher.y+15`, zero bias, and
+stable transient order column then frames. Their registrations are born at the
+release tick and never collapse into the Teacher actor registration. The
+authoritative Hub ambient state must therefore own a Hub-local Teacher tick
+plus two transient registrations for the live release. Protocol/interpolation
+carry that discrete ownership; the renderer submits two queue targets. Hub
+construction/load resets the clock, while the explicitly continuously live
+shared Courtyard keeps advancing it during participant-local room visits.
+
+### Residual child-tail correction: NPC markers
+
+All ten ordinary NPC bubbles shared the same stale-depth problem. Native common
+marker renderer `0x00518280` runs from the owning NPC presentation callback;
+the body/prop stack and its bubble complete before the Region queue advances
+to the next same-row actor. The Website instead kept marker sprites as root
+siblings at `hubWorldDepthForActor(actorY)+0.1`, which no longer tracks compact
+queue Z values.
+
+Courtyard Hagatha, Annalist, Fomentius, Luthacus, Skorcha, and Teacher markers,
+plus Mortuary Memorator, Library Librarian/Shlorio, and Office Archchancellor,
+must resolve from their actual actor/stack target each frame and use the
+immediate sub-root interval after that target. Story Polisher follows the same
+rule only while materialized. Painting roots still have no ordinary marker.
+The pristine walk-to-talk card and clamped directional arrows are separate
+Courtyard/screen-space onboarding producers and do not inherit this actor-tail
+change.
+
+The pristine walk-to-talk card has its own direct ordering. Fresh Courtyard
+render decompilation places the block after queue flush, player embedded
+passes, and the five authored Courtyard foreground records, but before the
+southern battlement/Astronomer bank. Its Website root therefore occupies the
+bounded interval between Courtyard foreground and southern architecture. The
+two follow-up arrows remain the already-dispositioned clamped screen-space UI
+projection; they do not enter the Region world queue.
+
+### Private-room actor lists and visual ownership
+
+- Mortuary: Memorator; ten Painting type-`5018` actors at the authored talk
+  roots with radius `15`; ten CustomObject type-`2041` selectors `0..9` at the
+  same X and `y-2`, radius `40`; then players. `Painting::Present 0x00518280`
+  normally draws no portrait—it owns the contextual interaction animation.
+  The CustomObject Region callback `0x00518620` draws the easel, portrait,
+  front, and marker. The Website portrait compositor therefore belongs to the
+  CustomObject's `y-2` painter row, while the Painting remains a separate
+  interaction root.
+- StoreRoom: CustomObject selectors `0..2` at `(538,324)`, `(537.5,434)`, and
+  `(536,542.5)`, then players.
+- Library: CustomObject selectors `0..2` at `(239.5,788)`, `(258.5,678.5)`, and
+  `(762,732.5)`; population selector `100` at `(831,620.5)`; Librarian at
+  `(512,595)`; Shlorio at `(900,642.5)`; then players.
+- Office: CustomObject selector `0` at `(517.5,681)`; Archchancellor at
+  `(514,467)`; then players. The Website story Polisher remains a separately
+  dispositioned story-policy actor.
+
+Every listed CustomObject is actor-lane, bias zero, radius `40`. Treating room
+props as scenery changed same-row precedence and hid the Painting/CustomObject
+pairing. Room flames, Library black masks, and room foreground fragments retain
+their recovered direct post-queue ownership; this reopening found no change in
+their counts or lane.
+
+### Exact Solomon child program
+
+- State 0 saves the renderer clip, sets
+  `(actor.x-100, actor.y-100, 200, 100)`, draws the dig body at
+  `actor.y + bodyBob + actor+0x21C`, restores the clip, then draws DeadHawg
+  record 13 at `actor+(-10,-113)` outside it.
+- States 1/2 and the state-3 hold use
+  `(actor.x-1000, actor.y-1000, 2000, 1000)` for body/mouth, restore, then draw
+  record 13.
+- State 3 acceleration retains the `2000 x 1000` clip only while acceleration
+  is negative, using stored retreat root `+0x210/+0x214`; it omits record 13
+  after the hold branch.
+- State 4 has no clip and no record 13.
+- Constructor field `+0x21C` is exactly `5`. It stays `5` while planted,
+  becomes `15` during retreat hold after state 2 adds `10`, resets to `0` when
+  acceleration begins, and stays movement-owned afterward.
+- `Solomon_Dig::Render 0x004A2610` paints body/mouth/record 13 before installing
+  the Region multiplier sampled at `(x-22,y-62)`. That multiplier owns only
+  the embedded Flydirt manager; the Website's Solomon-local tint on body,
+  mouth, and grave mark is false. Lantern lighting remains independently
+  sampled by its own actor renderer.
+
+### Required closure for this reopening
+
+The authoritative docs, extraction, painter catalog, collision catalog
+(including the obstacle/statue movement exclusion),
+initial registration chronology, private-room actor ownership, Solomon clip
+rectangles/offset/lighting, and browser diagnostics must all change together.
+Acceptance must put players and Students on both sides of every obstacle row,
+exercise both player-bias signs and the zero branch, traverse all private-room
+CustomObjects, and capture Solomon in state 0 plus dialogue/retreat clipping.
+Unit-only or a screenshot taken away from the reported crossings is not a
+closure receipt.
+
+### Second-reopening implementation disposition
+
+- The Courtyard now owns all eight `CollegeObstacle` callbacks and the
+  `CollegeStatue` as fixed actor-manager roots in their recovered constructor
+  order. The new eight-frame `hub-courtyard-depth-props.png` removes records
+  `27..29` from the flat base and restores selector 0's complete `148..159`
+  tower/arch composition. The extraction and atlas packers reproduce the
+  checked-in bytes deterministically; `pack-hub-visual-atlas.py --check`
+  reports `582` frames, `87` sources, and `3` pages.
+- Courtyard fixed registration is now Hagatha, Fomentius, Annalist, Luthacus,
+  optional Skorcha, Teacher, obstacles `0..7`, statue, players, then Students.
+  Every obstacle remains excluded from the movement-body census. Player rows
+  apply the strict north-arch rectangle and the exact `-20/+20/0` heading
+  branches instead of a global or visual-only doorway layer.
+- Solomon's state-0 body uses only the recovered `200 x 100` grave clip;
+  dialogue/retreat use the distinct `2000 x 1000` clip and retreat-root rules.
+  The planted body offset is `+5`. Body, mouth, and grave mark remain white;
+  only the Flydirt manager consumes Solomon's local multiplier, while the
+  lantern remains an independently registered actor/light owner.
+- All `48` fixed Hub roots now have explicit actor registrations, including
+  Mortuary's separate Painting interaction and CustomObject visual roots and
+  every StoreRoom, Library, and Office CustomObject. Region reattachment
+  replaces the moving player registration. The shared-Hub extension preserves
+  live Courtyard Students during participant-local room visits and appends the
+  returning player after that live population; whole-world construction keeps
+  fixed actors, players, then newly warmed Students.
+- The recursive residual sweep also corrected four non-reported members that
+  shared the same broken seam: Useful Thyngs is one Fomentius queue callback
+  with local child order `0/1/2/3` and a separate pre-queue shadow; Teacher's
+  release owns two same-row transient roots in column-then-frame registration
+  order; all ten ordinary NPC markers follow the resolved actor/stack tail;
+  and the pristine walk-to-talk card occupies its recovered direct interval
+  between the Courtyard foreground and southern architecture.
+- Combined protocol `108` carries both the Teacher release clock/two transient
+  registrations and the concurrently landed protocol-107 enemy construction,
+  scale, and death-owner fields. Save schema `22` persists the corrected
+  registration ownership and migrates schema `21` without inferring painter
+  authority from renderer cadence. Backend inspection, interpolation, reconnect, region-edge,
+  and shared-Hub reattachment contracts were updated with the same cutover.
+
+### Second-reopening acceptance and residual closure
+
+- The first Mac runs (`job_20260829T234041Z_08e5a82a44`,
+  `job_20260829T235452Z_1b3cac929f`,
+  `job_20260829T234848Z_ee81b44e88`, and
+  `job_20260829T235128Z_ccf6e3bde2`) remain useful implementation-stage
+  evidence, but they are not the final exact-tree receipt. A whole-worktree
+  manifest check discovered that candidate was detached at ancestor
+  `ceaabf2863581e9c5e2659bc1afcbbd67e3fa4df` while the Linux worktree used
+  `13d5987966a58a31f362ac047ef126e21912ae78`. Acceptance was reopened rather
+  than treating a changed-file overlay as whole-tree equality.
+- During that reopening, current `origin/main`
+  `8044e97eca6baa6a867d33aa7cee9cdae1dbf398` landed the enemy construction and
+  death-presentation closure. It adds world-sorted death registrations and had
+  independently consumed protocol `107`; the Teacher branch had also consumed
+  `107`. The one textual fixture conflict was resolved by preserving both
+  field families and advancing the combined strict wire to protocol `108`.
+  Enemy transient/death roots continue through the same shared manager order;
+  no new direct or queue lane escaped the original census.
+- The final current-main candidate proved exact Linux/Mac identity at HEAD
+  `8044e97e`: its `43` non-documentation code/asset files have manifest
+  SHA-256
+  `a5d00b67fe037aabf37bcbacb4f8b640321afa6b0f95becaa073cf79e4874f91`
+  (`job_20260830T002508Z_721b386fae`); the eight authoritative document edits
+  were synchronized separately. TypeScript plus `344` focused protocol,
+  save, enemy-owner, Solomon, Hub, Teacher, atlas, and simulation tests passed
+  in `job_20260830T001020Z_3d5a354588`.
+- The complete supported validation entrypoint passed the exact integrated
+  source in `job_20260830T001050Z_4d49f6ab6e` (exit `0`): backend contracts,
+  strict lint, both TypeScript builds, the complete frontend and desktop test
+  corpus, production build, bundle budget, and media policy. Node test-file
+  concurrency was serialized by a task-owned wrapper because unrelated Mac
+  evaluation jobs were consuming the machine and caused unchanged ten-second
+  WebSocket fixtures to miss readiness deadlines when run in parallel.
+- The authoritative current-main Hub Chrome journey passed in
+  `job_20260830T001844Z_b6fb036dc4` (exit `0`). It sampled a Student above and
+  below every one of the eight obstacle rows, including selector 0's reported
+  east arch; exercised player biases `-20`, `+20`, and `0`; asserted the
+  Useful Thyngs root and all child/tail depths; captured Teacher's two
+  consecutive same-row roots; entered and returned from all four private
+  rooms; and found empty console, page, response, and request-error sets. The
+  selector-0 screenshots are SHA-256
+  `2aead11b7e8a5179bae557d14b022ef23f16c98deb446eec142184fe22cdb438`
+  above and
+  `d58a1c29d8d34f2adbfa912440d3c17575c02509a462c31027946ea1fed2240f`
+  below. The Teacher receipt is
+  `80e4c3308c5b6ec54d36fdf8d109e49b0b92edf6d401b179ccfd161a0b016072`.
+- The authoritative current-main Solomon Chrome journey passed in
+  `job_20260830T002110Z_f8e0c597da` (exit `0`). The lantern occupied queue
+  slot `41` and Solomon slot `42`; digging and speaking each retained exactly
+  one grave-mark pass, while retirement retained none. State-specific clips,
+  planted offset, dirt retirement, lighting ownership, and combat suppression
+  all passed with empty browser, response, and wire errors. The state-0 dirt
+  and speaking screenshots are SHA-256
+  `b944f5f87b90856d34995df4ccbb5e7509856e8c651d09f731f4dc970b9e1bbc`
+  and
+  `c136bab68974c58e8a633a76a74c1fb44ce6f3e47320bd9c3d33e25189ac3e85`.
+- The first final Hub attempt correctly stopped on an acceptance-tool error:
+  a new assertion compared absolute Pixi depth to the queue's intentionally
+  relative diagnostic `zIndex`. Inspection proved a constant `1000` domain
+  difference rather than a renderer defect. Every stack and marker assertion
+  now converts through the shared painter base, and the complete journey above
+  passed afterward.
+- The first current-main Hub rerun stopped after the arch assertions because
+  its fixed 15-unit A* began `0.2` units inside a collision-expanded grid edge
+  left by the preceding bias probe. The target itself was traversable and no
+  Hub collision source changed. The independent Teacher proof now stages its
+  verified traversable point authoritatively, as the same tool already does
+  for bias and Student samples; all four room seams still use real movement.
+- A post-implementation search walked every recovered Region builder,
+  registration lane, class-local callback, direct pre/post owner, proxy/split
+  insertion, marker tail, transition edge, protocol/save carrier, renderer
+  target, diagnostic, extraction source, and acceptance tool. No additional
+  actionable discrepancy remains inside the concrete Website world-painter
+  boundary. RainOfBones and Faculty lightning remain the same explicitly
+  absent gameplay owners recorded by the first audit, not hidden layers of a
+  currently implemented actor. This disposition does not claim publication,
+  deployment, or live-production acceptance.
+
 ## Reported smell and parity question
 
 - Reported request: audit the stock game's complete layering system and identify

@@ -73,6 +73,12 @@ test('onboarding ignores only player and Student dynamic pairs in both mover ord
   assert.equal(hubDynamicActorPairCollides(peer, student, onboarding, pending), true)
   assert.equal(hubDynamicActorPairCollides(sirmin, teacher, onboarding, pending), true)
   assert.equal(hubDynamicActorPairCollides(
+    { ...sirmin, region: 'office' },
+    { id: 'story-office-polisher', region: 'office' },
+    onboarding,
+    pending,
+  ), true)
+  assert.equal(hubDynamicActorPairCollides(
     sirmin,
     { ...peer, region: 'office' },
     onboarding,
@@ -357,6 +363,28 @@ test('private-room architecture and props own their native colliders', () => {
     }
   }
   assert.deepEqual(collisionOnlyProps, ['library:library-prop-3'])
+  assert.deepEqual(
+    HUB_PRIVATE_ROOM_IDS.flatMap(region => (
+      HUB_PRIVATE_ROOM_LAYOUTS[region].props.map(({ painterId }) => painterId)
+    )),
+    [
+      'mortuary-custom-0', 'mortuary-custom-1', 'mortuary-custom-2',
+      'mortuary-custom-3', 'mortuary-custom-4', 'mortuary-custom-5',
+      'mortuary-custom-6', 'mortuary-custom-7', 'mortuary-custom-8',
+      'mortuary-custom-9',
+      'library-custom-0', 'library-custom-1', 'library-custom-2',
+      'library-custom-100',
+      'storeroom-custom-0', 'storeroom-custom-1', 'storeroom-custom-2',
+      'office-custom-0',
+    ],
+  )
+  for (const prop of HUB_PRIVATE_ROOM_LAYOUTS.mortuary.props) {
+    assert.equal(prop.visual?.painterY, prop.collider.position.y)
+    assert.equal(prop.visual?.kind, 'portrait')
+    if (prop.visual?.kind === 'portrait') {
+      assert.equal(prop.visual.position.y, prop.collider.position.y + 7)
+    }
+  }
 })
 
 test('portal contact includes the native circle boundary without weakening wall overlap', () => {
@@ -459,6 +487,13 @@ test('locks recovered fixed collision bodies in every private room', () => {
       ['arch-chancellor', 'office', 514, 467, 55],
       ['office-prop-0', 'office', 517.5, 681, 40],
     ],
+  )
+})
+
+test('keeps CollegeObstacle and CollegeStatue radii out of the actor push solver', () => {
+  assert.equal(
+    HUB_FIXED_ACTOR_COLLISION_LAYOUT.some(({ id }) => id.startsWith('college-')),
+    false,
   )
 })
 
