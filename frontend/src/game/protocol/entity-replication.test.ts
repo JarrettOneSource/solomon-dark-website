@@ -621,6 +621,82 @@ test('Boneyard enemy projectiles replicate motion and exact spawn-retire identit
     ] as unknown as ReplicatedEntityDescriptor), false)
   }
 
+  const visualScaleRows = [
+    {
+      invalid: [0, 5.1],
+      kind: 'arrow',
+      lightRegistration: null,
+      nativeTypeId: 0x7da,
+      payload: 'normal',
+      visualScale: 5,
+    },
+    {
+      invalid: [0.5, 1.5],
+      kind: 'demon-bomb',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 4 },
+      nativeTypeId: 0x7f7,
+      payload: 'none',
+      visualScale: 1,
+    },
+    {
+      invalid: [0.5, 1.5],
+      kind: 'firebolt',
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 4 },
+      nativeTypeId: 0x7eb,
+      payload: 'fire',
+      visualScale: 1,
+    },
+    {
+      invalid: [0.8, 1.2],
+      kind: 'guided-missile',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 4 },
+      nativeTypeId: 0x7ec,
+      payload: 'cold',
+      visualScale: 0.9,
+    },
+    {
+      invalid: [0.9, 1.7],
+      kind: 'poison-pool',
+      lightRegistration: null,
+      nativeTypeId: 0x806,
+      payload: 'poison',
+      visualScale: 1.6,
+    },
+  ] as const
+  for (const [index, row] of visualScaleRows.entries()) {
+    const { invalid: invalidScales, ...projectileRow } = row
+    const scaleSnapshot = boneyardSnapshot(`projectile-scale-${row.kind}`)
+    if (scaleSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    scaleSnapshot.world.enemyProjectiles = [{
+      ...enemyProjectileSnapshot(),
+      ...projectileRow,
+      homing: row.kind === 'guided-missile',
+      id: 100 + index,
+    }]
+    const keyframe = createGameSnapshotFrame(scaleSnapshot, 0, undefined, true)
+    const reconstructed = new EntityReplicationReconstructor().apply(keyframe, 1)
+    if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.equal(reconstructed.world.enemyProjectiles[0]?.kind, row.kind)
+    assert.ok(
+      Math.abs(reconstructed.world.enemyProjectiles[0]!.visualScale - row.visualScale)
+        <= 1 / 1024,
+      row.kind,
+    )
+    for (const visualScale of invalidScales) {
+      const invalid = cloneSnapshotFrame(keyframe)
+      if (invalid.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const sample = invalid.world.entities.samples.find((entry) => (
+        entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile
+      ))!
+      Reflect.set(sample, 9, Math.round(visualScale * 1024))
+      assert.throws(
+        () => new EntityReplicationReconstructor().apply(invalid, 1),
+        /visual scale|invalid registered sample shape|missing its descriptor/,
+        `${row.kind}:${visualScale}`,
+      )
+    }
+  }
+
   const initial = boneyardSnapshot('projectile-run')
   if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
   initial.world.enemyProjectiles = [enemyProjectileSnapshot()]

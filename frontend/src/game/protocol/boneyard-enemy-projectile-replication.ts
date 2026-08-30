@@ -72,6 +72,7 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION = {
       && sample[7] <= 0
       && cyclic(sample[8], 720, ANGLE_SCALE)
       && nonnegativeInteger(sample[9])
+      && sample[9] <= 5 * VALUE_SCALE
   },
 }
 
@@ -127,13 +128,18 @@ export function materializeBoneyardEnemyProjectile(
   if (descriptor[1] !== sample[1]) {
     throw new Error('Boneyard enemy projectile sample identity does not match its descriptor')
   }
+  const kind = KINDS[descriptor[2]]!
+  const visualScale = dequantize(sample[9], VALUE_SCALE)
+  if (!boneyardEnemyProjectileVisualScaleIsValid(kind, visualScale)) {
+    throw new Error('Boneyard enemy projectile visual scale is outside its native kind range')
+  }
   return {
     ageTicks: sample[5],
     contactRadius: dequantize(descriptor[7], VALUE_SCALE),
     headingDeg: dequantize(sample[4], ANGLE_SCALE),
     homing: descriptor[8] === 1,
     id: descriptor[1],
-    kind: KINDS[descriptor[2]]!,
+    kind,
     lightRegistration: descriptor[10] === -1
       ? null
       : {
@@ -156,7 +162,22 @@ export function materializeBoneyardEnemyProjectile(
     spawnTick: descriptor[5],
     verticalOffset: dequantize(sample[7], VALUE_SCALE),
     visualPhaseDeg: dequantize(sample[8], ANGLE_SCALE),
-    visualScale: dequantize(sample[9], VALUE_SCALE),
+    visualScale,
+  }
+}
+
+export function boneyardEnemyProjectileVisualScaleIsValid(
+  kind: BoneyardEnemyProjectileSnapshot['kind'],
+  visualScale: number,
+): boolean {
+  if (!Number.isFinite(visualScale)) return false
+  switch (kind) {
+    case 'arrow': return visualScale > 0 && visualScale <= 5
+    case 'demon-bomb':
+    case 'firebolt':
+      return visualScale === 1
+    case 'guided-missile': return visualScale >= 0.9 && visualScale <= 1.1
+    case 'poison-pool': return visualScale >= 1 && visualScale <= 1.6
   }
 }
 

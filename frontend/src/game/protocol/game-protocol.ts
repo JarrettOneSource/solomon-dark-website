@@ -306,6 +306,7 @@ import {
   boneyardMageLightningPulseFrameIsValid,
   materializeBoneyardMageLightningPulse,
 } from './boneyard-mage-lightning-replication.ts'
+import { boneyardEnemyProjectileVisualScaleIsValid } from './boneyard-enemy-projectile-replication.ts'
 import {
   BONEYARD_ENEMY_EFFECT_ROLES,
   BONEYARD_ENEMY_ACTION_SOUNDS,
@@ -400,7 +401,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 109
+export const GAME_PROTOCOL_VERSION = 110
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -6123,7 +6124,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
   ))) {
     throw new GameProtocolError(`${field}.cooldownTicksBySkill exceeds a capacity`)
   }
-  const globalCooldownTicks = nonnegativeInteger(
+  const globalCooldownTicks = nonnegativeFinite(
     source.globalCooldownTicks,
     `${field}.globalCooldownTicks`,
   )
@@ -11081,8 +11082,11 @@ function boneyardEnemyProjectileSnapshot(
     throw new GameProtocolError(`${field}.verticalOffset must be non-positive`)
   }
   const visualScale = finite(source.visualScale, `${field}.visualScale`)
-  if (visualScale < 1 || visualScale > 1.25) {
-    throw new GameProtocolError(`${field}.visualScale must be within [1,1.25]`)
+  if (!boneyardEnemyProjectileVisualScaleIsValid(
+    kind as BoneyardEnemyProjectileKind,
+    visualScale,
+  )) {
+    throw new GameProtocolError(`${field}.visualScale is outside its native kind range`)
   }
   const visualPhaseDeg = finite(source.visualPhaseDeg, `${field}.visualPhaseDeg`)
   if (visualPhaseDeg < 0 || visualPhaseDeg >= 720) {

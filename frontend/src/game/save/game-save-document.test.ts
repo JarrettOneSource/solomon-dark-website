@@ -5,6 +5,12 @@ import { createIdlePlayerCharacterInput } from '../core-kernels/player-character
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import {
+  createNativeWaterAuraActor,
+  createNativeWaterHailActor,
+} from '../core-kernels/air-water-spell-actors.ts'
+import type { BoneyardEnemyDeathEffect } from '../core-server/boneyard-enemy-store.ts'
 import {
   applyGameSimulationHubAction,
   armGameSimulationCollegeIntro,
@@ -41,6 +47,7 @@ import {
   materializeStockTutorial,
 } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
 import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
@@ -169,7 +176,7 @@ test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix
   )))
 })
 
-test('schema 19 compact inventory roots migrate to schema 22 addressed slots', () => {
+test('schema 19 compact inventory roots migrate to schema 23 addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -196,7 +203,7 @@ test('schema 19 compact inventory roots migrate to schema 22 addressed slots', (
     playerId: 'owner',
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 22)
+  assert.equal(current.schemaVersion, 23)
   assert.deepEqual(
     current.continuation.simulation.playerEntities.economies[0].backpack
       .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
@@ -250,7 +257,7 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
     playerId: restoredHub.playerId,
     state: restoredHub.state,
   }))
-  assert.equal(reencodedHub.schemaVersion, 22)
+  assert.equal(reencodedHub.schemaVersion, 23)
   assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
   assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
 
@@ -289,6 +296,212 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
   assert.doesNotThrow(() => createGameSnapshot(restoredBoneyard.state, 'owner'))
 })
 
+test('schema 22 restores late Water painters and every native death-effect owner', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 83),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(
+    createGameSimulation({ owner: { ...OWNER, element: 'water' } }),
+    loadedBoneyard,
+  )
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+
+  const painterOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const deathEffect = (
+    id: number,
+    kind: BoneyardEnemyDeathEffect['kind'],
+    role: string,
+    presentationOwner: BoneyardEnemyDeathEffect['presentationOwner'],
+  ): BoneyardEnemyDeathEffect => ({
+    ageTicks: 0,
+    alpha: 1,
+    alphaMultiplier: 1,
+    alphaLossPerTick: 0.025,
+    angularVelocityDeg: 0,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    bounceRetention: 0,
+    bounceVelocity: 0,
+    entry: 86,
+    firstEntry: 86,
+    frameCount: 1,
+    framePhase: 0,
+    frameVelocity: 0,
+    frameVelocityDamping: 1,
+    frameTicks: 1,
+    height: 0,
+    id,
+    kind,
+    lastStepTick: 0,
+    lifetimeTicks: 40,
+    opacityTimer: 1,
+    ownerActorId: 1,
+    painterRegistration: presentationOwner === 'world-sorted'
+      ? painterOrder.register('actor')
+      : null,
+    presentationOwner,
+    position: { x: 200, y: 150 },
+    role,
+    rotationDeg: 0,
+    scale: 1,
+    scaleMultiplier: 1,
+    shadow: false,
+    spawnTick: 0,
+    tint: 0xffffff,
+    verticalVelocity: 0,
+    velocity: { x: 0, y: 0 },
+    velocityDamping: 1,
+  })
+  const enemyDeathEffects = [
+    deathEffect(1, 'bouncer', 'skeleton-bone', 'world-sorted'),
+    deathEffect(2, 'unbind', 'death-unbind-star', 'direct-post-world'),
+    deathEffect(3, 'sprite-array', 'imp-sprite-array', 'pre-world-queue'),
+    deathEffect(4, 'late-splat', 'zombie-late-splat:0', 'pre-world-queue'),
+    deathEffect(5, 'fire-array', 'demon-death-fire:0', 'pre-world-queue'),
+    deathEffect(6, 'fade', 'demon-death-fire-burst-glow', 'direct-post-world'),
+    deathEffect(
+      7,
+      'sprite-array',
+      'demon-death-fire-burst-frame',
+      'direct-post-world',
+    ),
+  ]
+  const lootDeathEffect = deathEffect(8, 'bouncer', 'goodie-break-particle-0', 'world-sorted')
+  const aura = createNativeWaterAuraActor(
+    100,
+    'owner',
+    `boneyard:${loadedBoneyard.runId}`,
+    0,
+    { x: 200, y: 150 },
+    720,
+    createNativeRng(1),
+  )
+  const hail = createNativeWaterHailActor(
+    101,
+    'owner',
+    `boneyard:${loadedBoneyard.runId}`,
+    0,
+    { x: 200, y: 150 },
+    { x: 1, y: 0 },
+    aura.rng,
+  )
+  state = {
+    ...state,
+    primarySpells: {
+      nextId: 102,
+      projectiles: [],
+      transients: [
+        { ...aura.actor, painterRegistrations: [painterOrder.register('actor')] },
+        { ...hail.actor, painterRegistrations: [painterOrder.register('actor')] },
+      ],
+    },
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        deathEffects: enemyDeathEffects,
+        lastStepTick: 0,
+        nextDeathEffectId: 9,
+      },
+      loot: {
+        ...state.world.loot,
+        effects: [lootDeathEffect],
+        nextEffectId: 9,
+      },
+    },
+    worldManagerOrder: painterOrder.state(),
+  }
+
+  const legacy = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  legacy.schemaVersion = 22
+  for (const transient of legacy.continuation.simulation.primarySpells.transients) {
+    delete transient.painterRegistrations
+  }
+  const legacyEnemyEffects = legacy.continuation.simulation.world.enemies.deathEffects
+  const legacyLootEffects = legacy.continuation.simulation.world.loot.effects
+  for (const effect of [...legacyEnemyEffects, ...legacyLootEffects]) {
+    delete effect.presentationOwner
+  }
+  legacyEnemyEffects[2].painterRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 999_999,
+  }
+
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(
+    restored.state.primarySpells.transients.map(({ painterRegistrations }) => (
+      painterRegistrations?.map(({ managerLane }) => managerLane)
+    )),
+    [['actor'], ['actor']],
+  )
+  assert.deepEqual(
+    restored.state.world.enemies.deathEffects.map((effect) => ({
+      owner: effect.presentationOwner,
+      registration: effect.painterRegistration?.managerLane ?? null,
+      role: effect.role,
+    })),
+    [
+      { owner: 'world-sorted', registration: 'actor', role: 'skeleton-bone' },
+      { owner: 'direct-post-world', registration: null, role: 'death-unbind-star' },
+      { owner: 'pre-world-queue', registration: null, role: 'imp-sprite-array' },
+      { owner: 'pre-world-queue', registration: null, role: 'zombie-late-splat:0' },
+      { owner: 'pre-world-queue', registration: null, role: 'demon-death-fire:0' },
+      {
+        owner: 'direct-post-world',
+        registration: null,
+        role: 'demon-death-fire-burst-glow',
+      },
+      {
+        owner: 'direct-post-world',
+        registration: null,
+        role: 'demon-death-fire-burst-frame',
+      },
+    ],
+  )
+  assert.equal(restored.state.world.loot.effects[0]?.presentationOwner, 'world-sorted')
+  assert.equal(restored.state.world.loot.effects[0]?.painterRegistration?.managerLane, 'actor')
+  assert.doesNotThrow(() => createReplicatedEntityBaseline(
+    createGameSnapshot(restored.state, 'owner'),
+  ))
+
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: restored.integrity,
+    loadedBoneyard,
+    mods: restored.mods,
+    modState: restored.modState,
+    playerId: restored.playerId,
+    state: restored.state,
+  }))
+  assert.equal(current.schemaVersion, 23)
+  const missingOwner = structuredClone(current)
+  delete missingOwner.continuation.simulation.world.enemies.deathEffects[0]
+    .presentationOwner
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingOwner)),
+    /presentation owner/,
+  )
+  const missingPainters = structuredClone(current)
+  delete missingPainters.continuation.simulation.primarySpells.transients[0]
+    .painterRegistrations
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingPainters)),
+    /painter registrations/,
+  )
+})
+
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
     hubTraderAnimationSeed: 2,
@@ -310,7 +523,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 22)
+  assert.equal(encoded.schemaVersion, 23)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -1186,6 +1399,10 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
   }))
   const simulation = document.continuation.simulation
   const worldKey = `boneyard:${loadedBoneyard.runId}`
+  const painterRegistration = {
+    managerLane: 'transient',
+    registrationOrdinal: simulation.worldManagerOrder.nextRegistrationOrdinal.transient++,
+  }
   simulation.primarySpells = {
     nextId: 2,
     projectiles: [],
@@ -1199,6 +1416,7 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
       obstructionPoint: null,
       origin: { x: 250, y: 250 },
       ownerId: 'owner',
+      painterRegistrations: [painterRegistration],
       speed: 4,
       underpowered: false,
       variant: 0,
@@ -1261,6 +1479,7 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
 
   const legacy = structuredClone(document)
   legacy.schemaVersion = 18
+  delete legacy.continuation.simulation.primarySpells.transients[0].painterRegistrations
   delete legacy.continuation.simulation.primarySpells.transients[0].speed
   delete legacy.continuation.simulation.world.enemies.projectiles[0].chillTumbleAccumulator
   const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
@@ -1318,7 +1537,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 22)
+  assert.equal(encoded.schemaVersion, 23)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,

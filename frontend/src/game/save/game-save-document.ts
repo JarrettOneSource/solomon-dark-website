@@ -709,12 +709,12 @@ function normalizeSimulation(
     tick: source.tick,
     world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
   }
-  if (sourceSchemaVersion < 21) {
-    return migrateLegacyWorldPainterState(normalized, loadedBoneyardValue)
-  }
-  return sourceSchemaVersion === 21
-    ? migrateSchema21HubPainterState(normalized)
-    : normalized
+  const migrated = sourceSchemaVersion < 21
+    ? migrateLegacyWorldPainterState(normalized, loadedBoneyardValue)
+    : sourceSchemaVersion === 21
+      ? migrateSchema21HubPainterState(normalized)
+      : normalized
+  return normalizeWorldPainterOwnership(migrated, sourceSchemaVersion < 23)
 }
 
 const SCHEMA_21_HUB_FIXED_ACTOR_PAINTER_COUNT = 11
@@ -894,6 +894,170 @@ function withLegacyPainterRegistrations(
     ? [light]
     : Array.from({ length: contract.count }, () => register(contract.managerLane))
   return { ...source, painterRegistrations: registrations }
+}
+
+function normalizeWorldPainterOwnership(
+  input: Record<string, unknown>,
+  migrateMissing: boolean,
+): Record<string, unknown> {
+  const order = record(input.worldManagerOrder, 'game save world manager order')
+  const next = record(
+    order.nextRegistrationOrdinal,
+    'game save world manager registration ordinals',
+  )
+  const nextRegistrationOrdinal = {
+    actor: finiteNumber(next.actor, 'game save actor registration ordinal'),
+    transient: finiteNumber(next.transient, 'game save transient registration ordinal'),
+  }
+  const register = (managerLane: 'actor' | 'transient') => ({
+    managerLane,
+    registrationOrdinal: nextRegistrationOrdinal[managerLane]++,
+  })
+
+  const primarySpells = record(input.primarySpells, 'game save primary spells')
+  const projectiles = array(primarySpells.projectiles, 'game save primary projectiles').map(
+    (value, index) => normalizePrimaryPainterOwnership(
+      record(value, `game save primary projectile ${index}`),
+      { count: 1, managerLane: 'actor' },
+      register,
+      migrateMissing,
+      `game save primary projectile ${index}`,
+    ),
+  )
+  const transients = array(primarySpells.transients, 'game save primary transients').map(
+    (value, index) => {
+      const transient = record(value, `game save primary transient ${index}`)
+      return normalizePrimaryPainterOwnership(
+        transient,
+        legacyPrimaryPainterContract(transient),
+        register,
+        migrateMissing,
+        `game save primary transient ${index}`,
+      )
+    },
+  )
+
+  const world = record(input.world, 'game save world')
+  const normalizedWorld = world.kind === 'boneyard'
+    ? normalizeBoneyardDeathEffectOwnership(world, register, migrateMissing)
+    : world
+  return {
+    ...input,
+    primarySpells: { ...primarySpells, projectiles, transients },
+    world: normalizedWorld,
+    worldManagerOrder: { nextRegistrationOrdinal },
+  }
+}
+
+function normalizePrimaryPainterOwnership(
+  source: Record<string, unknown>,
+  contract: Readonly<{ count: number; managerLane: 'actor' | 'transient' }>,
+  register: (lane: 'actor' | 'transient') => Readonly<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }>,
+  migrateMissing: boolean,
+  field: string,
+): Record<string, unknown> {
+  const existing = source.painterRegistrations
+  if (existing !== undefined) {
+    if (
+      !Array.isArray(existing)
+      || existing.length !== contract.count
+      || existing.some(registration => (
+        !isManagerRegistration(registration, contract.managerLane)
+      ))
+    ) throw new Error(`${field} painter registrations are invalid`)
+    return source
+  }
+  if (!migrateMissing) throw new Error(`${field} painter registrations are missing`)
+  const light = source.lightRegistration
+  const painterRegistrations = contract.count === 1
+    && isManagerRegistration(light, contract.managerLane)
+    ? [light]
+    : Array.from({ length: contract.count }, () => register(contract.managerLane))
+  return { ...source, painterRegistrations }
+}
+
+function normalizeBoneyardDeathEffectOwnership(
+  source: Record<string, unknown>,
+  register: (lane: 'actor' | 'transient') => Readonly<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }>,
+  migrateMissing: boolean,
+): Record<string, unknown> {
+  const enemies = record(source.enemies, 'game save Boneyard enemies')
+  const deathEffects = array(enemies.deathEffects, 'game save enemy death effects').map(
+    (value, index) => normalizeDeathEffectOwnership(
+      record(value, `game save enemy death effect ${index}`),
+      register,
+      migrateMissing,
+      `game save enemy death effect ${index}`,
+    ),
+  )
+  const loot = record(source.loot, 'game save Boneyard loot')
+  const lootEffects = array(loot.effects, 'game save loot effects').map(
+    (value, index) => normalizeDeathEffectOwnership(
+      record(value, `game save loot effect ${index}`),
+      register,
+      migrateMissing,
+      `game save loot effect ${index}`,
+    ),
+  )
+  return {
+    ...source,
+    enemies: { ...enemies, deathEffects },
+    loot: { ...loot, effects: lootEffects },
+  }
+}
+
+function normalizeDeathEffectOwnership(
+  source: Record<string, unknown>,
+  register: (lane: 'actor' | 'transient') => Readonly<{
+    managerLane: 'actor' | 'transient'
+    registrationOrdinal: number
+  }>,
+  migrateMissing: boolean,
+  field: string,
+): Record<string, unknown> {
+  const expectedOwner = nativeDeathEffectPresentationOwner(source)
+  const presentationOwner = source.presentationOwner === undefined && migrateMissing
+    ? expectedOwner
+    : source.presentationOwner
+  if (presentationOwner !== expectedOwner) {
+    throw new Error(`${field} presentation owner is invalid`)
+  }
+  if (presentationOwner === 'world-sorted') {
+    const painterRegistration = source.painterRegistration
+    if (isManagerRegistration(painterRegistration, 'actor')) {
+      return { ...source, presentationOwner }
+    }
+    if (!migrateMissing) throw new Error(`${field} painter registration is invalid`)
+    return {
+      ...source,
+      painterRegistration: register('actor'),
+      presentationOwner,
+    }
+  }
+  if (source.painterRegistration !== null && !migrateMissing) {
+    throw new Error(`${field} direct presentation must not retain a painter registration`)
+  }
+  return { ...source, painterRegistration: null, presentationOwner }
+}
+
+function nativeDeathEffectPresentationOwner(
+  source: Record<string, unknown>,
+): 'direct-post-world' | 'pre-world-queue' | 'world-sorted' {
+  const kind = String(source.kind)
+  const role = String(source.role)
+  if (kind === 'unbind' || role.startsWith('demon-death-fire-burst-')) {
+    return 'direct-post-world'
+  }
+  if (kind === 'fire-array' || kind === 'late-splat' || kind === 'sprite-array') {
+    return 'pre-world-queue'
+  }
+  return 'world-sorted'
 }
 
 function legacyPrimaryPainterContract(

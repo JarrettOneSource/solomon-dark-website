@@ -187,7 +187,10 @@ export function synchronizeAirWaterPlayerVisualActors(
         rng,
       )
       rng = hail.rng
-      transients.push(Object.freeze(hail.actor))
+      transients.push(Object.freeze({
+        ...hail.actor,
+        painterRegistrations: registerNativeWorldPainterRoots(register, 'actor'),
+      }))
       nextId += 1
     }
   }
@@ -211,6 +214,7 @@ export function finalizeAirWaterPlayerVisualActors(
   channelEmissions: readonly PrimarySpellChannelEmission[],
   tick: number,
   sourceRng: NativeRngState,
+  registerWorldPainter: RegisterNativeWorldPainter,
 ): AirWaterPlayerVisualResult {
   if (!Number.isSafeInteger(tick) || tick < 0) {
     throw new RangeError('Air/Water visual actor tick must be a non-negative safe integer')
@@ -236,7 +240,13 @@ export function finalizeAirWaterPlayerVisualActors(
         rng,
       )
       rng = aura.rng
-      withAura.push(Object.freeze(aura.actor))
+      withAura.push(Object.freeze({
+        ...aura.actor,
+        painterRegistrations: registerNativeWorldPainterRoots(
+          registerWorldPainter,
+          'actor',
+        ),
+      }))
       nextId += 1
     }
   }

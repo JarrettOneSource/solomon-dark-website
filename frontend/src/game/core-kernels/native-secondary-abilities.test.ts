@@ -938,6 +938,21 @@ test('Focus drains every row and the progression-wide cooldown at the stock rate
   assert.equal(stepped.state.players.player?.cooldownTicksBySkill[15], 0)
   assert.equal(stepped.state.players.player?.globalCooldownTicks, 148)
 
+  const fractionalContext = context(15, 2, null)
+  const fractional = stepNativeSecondaryAbilities(castResult.state, {
+    ...fractionalContext,
+    players: {
+      player: {
+        ...fractionalContext.players.player!,
+        secondaryRechargeFactor: 1.1,
+      },
+    },
+  })
+  assert.ok(
+    Math.abs(fractional.state.players.player!.globalCooldownTicks - 148.9)
+      < Number.EPSILON * 150,
+  )
+
   let state = castResult.state
   for (let tick = 2; tick <= 76; tick += 1) {
     state = stepNativeSecondaryAbilities(

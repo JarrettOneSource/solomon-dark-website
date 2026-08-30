@@ -18,6 +18,7 @@ import {
   createNativeRng,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
 import {
   finalizeAirWaterPlayerVisualActors,
@@ -183,6 +184,7 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
     transients: frost,
   }
   const initialRng = createNativeRng(0)
+  const painterOrder = createNativeWorldManagerOrder()
   let expectedRng = initialRng
   let expectedId = source.nextId
   const expectedHail: PrimarySpellTransientState[] = []
@@ -201,7 +203,13 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
     )
     expectedRng = hail.rng
     expectedId += 1
-    expectedHail.push(hail.actor)
+    expectedHail.push({
+      ...hail.actor,
+      painterRegistrations: [{
+        managerLane: 'actor',
+        registrationOrdinal: expectedHail.length,
+      }],
+    })
   }
 
   const result = synchronizeAirWaterPlayerVisualActors(
@@ -210,16 +218,22 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
     1,
     initialRng,
     [emission],
+    painterOrder.register,
   )
   assert.deepEqual(
     result.spells.transients.filter(({ kind }) => kind === 'water-hail'),
     expectedHail,
   )
   assert.deepEqual(result.rng, expectedRng)
+  assert.equal(
+    painterOrder.state().nextRegistrationOrdinal.actor,
+    expectedHail.length,
+  )
 })
 
 test('shared Water finalization creates Aura after contact and advances Hail in Hub', () => {
   const emission = waterEmission({ auraRadius: 720 })
+  const painterOrder = createNativeWorldManagerOrder()
   const hailBirth = createNativeWaterHailActor(
     1,
     emission.ownerId,
@@ -229,17 +243,25 @@ test('shared Water finalization creates Aura after contact and advances Hail in 
     { x: 1, y: 0 },
     createNativeRng(3),
   )
-  const expectedHail = stepNativeWaterHailActor(hailBirth.actor, hailBirth.rng)
+  const registeredHail = {
+    ...hailBirth.actor,
+    painterRegistrations: [painterOrder.register('actor')],
+  }
+  const expectedHail = stepNativeWaterHailActor(registeredHail, hailBirth.rng)
   const result = finalizeAirWaterPlayerVisualActors({
     nextId: 2,
     projectiles: [],
-    transients: [hailBirth.actor],
-  }, [emission], 6, hailBirth.rng)
+    transients: [registeredHail],
+  }, [emission], 6, hailBirth.rng, painterOrder.register)
   const aura = result.spells.transients.find(({ kind }) => kind === 'water-aura')
   assert.ok(aura?.kind === 'water-aura')
   assert.equal(aura.alphaDecay, Math.fround(0.15 / 720))
   assert.equal(aura.durationTicks, 2_400)
   assert.deepEqual(aura.origin, emission.queryOrigin)
+  assert.deepEqual(aura.painterRegistrations, [{
+    managerLane: 'actor',
+    registrationOrdinal: 1,
+  }])
   assert.deepEqual(
     result.spells.transients.find(({ kind }) => kind === 'water-hail'),
     expectedHail.actor,

@@ -1455,6 +1455,77 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
 
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+
+  const projectileScaleRows = [
+    {
+      invalid: [0, 5.001],
+      kind: 'arrow',
+      lightRegistration: null,
+      nativeTypeId: 0x7da,
+      payload: 'normal',
+      visualScale: 5,
+    },
+    {
+      invalid: [0.999, 1.001],
+      kind: 'demon-bomb',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 22 },
+      nativeTypeId: 0x7f7,
+      payload: 'none',
+      visualScale: 1,
+    },
+    {
+      invalid: [0.999, 1.001],
+      kind: 'firebolt',
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 22 },
+      nativeTypeId: 0x7eb,
+      payload: 'fire',
+      visualScale: 1,
+    },
+    {
+      invalid: [0.899, 1.101],
+      kind: 'guided-missile',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 22 },
+      nativeTypeId: 0x7ec,
+      payload: 'cold',
+      visualScale: 0.9,
+    },
+    {
+      invalid: [0.999, 1.601],
+      kind: 'poison-pool',
+      lightRegistration: null,
+      nativeTypeId: 0x806,
+      payload: 'poison',
+      visualScale: 1.6,
+    },
+  ] as const
+  for (const row of projectileScaleRows) {
+    const legal = JSON.parse(encodeGameMessage(welcome))
+    Object.assign(legal.snapshot.world.enemyProjectiles[0], row, {
+      homing: row.kind === 'guided-missile',
+    })
+    delete legal.snapshot.world.enemyProjectiles[0].invalid
+    assert.deepEqual(decodeServerGameMessage(JSON.stringify(legal)), legal, row.kind)
+    for (const visualScale of row.invalid) {
+      const invalid = structuredClone(legal)
+      invalid.snapshot.world.enemyProjectiles[0].visualScale = visualScale
+      assert.throws(
+        () => decodeServerGameMessage(JSON.stringify(invalid)),
+        /visualScale/,
+        `${row.kind}:${visualScale}`,
+      )
+    }
+  }
+
+  const fractionalGlobalCooldown = JSON.parse(encodeGameMessage(welcome))
+  fractionalGlobalCooldown.snapshot.secondaryAbilities.players['player-1'] = {
+    ...createNativeSecondaryPlayerState(),
+    globalCooldownTicks: 148.75,
+  }
+  assert.deepEqual(
+    decodeServerGameMessage(JSON.stringify(fractionalGlobalCooldown)),
+    fractionalGlobalCooldown,
+  )
+
   const fullEffectFrame = {
     acknowledgedInputSequence: 0,
     frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
@@ -1749,8 +1820,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v109 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 109)
+test('protocol v110 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 110)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

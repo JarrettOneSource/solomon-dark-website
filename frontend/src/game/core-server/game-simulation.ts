@@ -3814,6 +3814,7 @@ function finishGameSimulationTick(
     cast.channelEmissions,
     tick,
     combatRng,
+    worldManagerOrder.register,
   )
   primarySpells = finalizedAirWaterVisuals.spells
   combatRng = finalizedAirWaterVisuals.rng
