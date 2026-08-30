@@ -917,7 +917,7 @@ No member is blocked by the browser platform.
 - `native-weld-steam.ts` now owns the type-2 Steam detonation constructor and
   its complete private fragment program. The combat bridge no longer admits
   build 1005 to the ordinary Fire helper. Shared explosion state carries an
-  explicit `fire|steam` presentation family through protocol 112, render plans,
+  explicit `fire|steam` presentation family through protocol 113, render plans,
   interpolation/copy, audio, and all ordinary Fire/Ring callers.
 - Steam births render the stock orange record-15 core plus gray
   `Anim_SpriteArray_ColorOverlay` 401..419 and 420..433 banks, retain the native
@@ -926,29 +926,34 @@ No member is blocked by the browser platform.
   modifier fields survive zero-payload child refresh exactly as
   `0x00625C80` specifies.
 - The first held-contact browser run falsified the decimal parser ceiling: a
-  valid signed pitch reached float32 `1.100000023841858`. Protocol 112 now
-  accepts the exact inclusive float32 interval
+  valid signed pitch reached float32 `1.100000023841858`. The Steam change
+  first landed in protocol 112; current protocol 113 retains the exact
+  inclusive float32 interval
   `0.8999999761581421..1.100000023841858` and rejects `1.1001`.
-- The exact code candidate `333257a14bc81aed4ace83847d0b66a0daa23bc5`,
-  tree `d9202bf4cc0811f0b68082a397e7110e4086496f`, rebased on
-  `78c51c36195e5cdc57d1f7e033560a33f40aa84a`, was byte-identical across
+- The exact code candidate `3f8257ade8c7d07f58ba2ec6b9b4e70d7252aa3a`,
+  tree `1e6e91430dc25e23e4d836fe9757238390efe25e`, rebased on
+  `0bbd37fd491875f98463f1f96759c43955aea7f5`, was byte-identical across
   the local and detached Mac worktrees. On Apple M2/macOS 26.6.2 with Node
-  22.17.0 and .NET 10.0.302, `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  22.17.0 and .NET 10.0.302, `./scripts/validate.sh`
   exited zero: 28 backend/repository contracts; frontend groups 61, 10, 49,
-  18, 334, 7, 1,793, 5, 5, 9, 60, 17, 47, 7, 36, and 86; desktop 5; formatting,
-  lint/import boundaries, production frontend/game-host builds, bundle budget
-  (`266527` raw / `81004` gzip), and CSP media policy. The complete log
+  18, 340, 7, 1,802, 6, 5, 5, 9, 60, 17, 47, 7, 36, and 86; desktop 5;
+  formatting, lint/import boundaries, production frontend/game-host builds,
+  bundle budget (`266594` raw / `81020` gzip), and CSP media policy. The
+  complete captured gate log
   SHA-256 is
-  `7c86a3d3807ef7101001ecbcbc67195d5955c3c186263f528481df0ec4893bb5`.
+  `65d4321f14d169366e6de213578afb0773be84d1087dd774dc137ed03defda19`.
 - Chrome 151.0.7922.174 then held Steam+Explosion on the same final tree. Its
-  wire observed 81 distinct Steam explosions and 972 learned Steam children,
-  with zero ordinary Fire explosions and zero Fire Embers. Audio observed 146
+  wire observed 69 distinct Steam explosions and 828 learned Steam children,
+  with zero ordinary Fire explosions and zero Fire Embers. Audio observed 134
   `explode-steam` births at pitch `0.9023119807243347..1.098647952079773`,
   zero `fireball-hit`, and zero `throw-fire`. Release cleared the cast latch;
   target removal stopped refresh and the complete explosion/particle family
   retired. Page, console, failed-response, and runtime-error arrays were empty.
-  The inspected `1600x900` capture SHA-256 is
-  `d61abbc6ca26c191941673e46663567befd0b46109f5036ae7526769004d7726`.
+  The browser log SHA-256 is
+  `053ba1de66f0f55d5485945482140ffd713a745eeddbfc98ea99631ed1d2e506`.
+  The inspected `1600x900` capture
+  `/tmp/solomon-steam-explosion-native-family-final5.png` has SHA-256
+  `c736fd1f50ae2fbdc2c8de601aa391d88c34d0fe6ac2d5fb75c1db019d924974`.
 - The correct `explode-steam.wav` is `-16.6 LUFS`, replacing the simultaneous
   wrong `fireball-hit` (`-13.4 LUFS`) and `throw-fire` (`-15.7 LUFS`) pair on
   every birth. Stock recurrence is preserved; the fix removes the falsely loud
