@@ -191,6 +191,44 @@ the requested policy directly without timing or platform approximation.
 
 ### Implementation validation receipt
 
+- Protocol 109 removes only the pending-only `game-started` restriction. The
+  existing strict reason, sequence, duration cap, nullable readiness phase,
+  client input/prediction gates, and save boundary remain unchanged.
+- The run host now sends fresh Arena all-ready through the ordinary two-second
+  deadline path. The source-qualified surface owner admits Pause, Inventory,
+  and full Skill Screen grace in standalone and multiplayer Arenas. Compact
+  primary/concentration selectors still map to direct release, and
+  `skill-picker-closed` remains a nullable close-only hold that cannot project
+  progress.
+- The test-only Mac candidate first failed exactly at the intended protocol
+  assertion (`108 !== 109`) after all backend/contracts and 323 unrelated
+  prerequisite tests passed. The implemented byte-identical candidate then
+  passed the complete canonical gate: zero-warning backend build, all 28
+  Website/backend contracts, lint/generated/boundary checks, every registered
+  frontend/host/UI/desktop group, production builds, bundle budget, and media
+  policy. The final exact-tree repetition is the publication gate below.
+- Mac Chrome 151 completed one continuous shared/solo journey. Fresh Arena
+  renderer readiness showed `Waiting on players ...`, then positive
+  `game-started` progress while the authoritative tick remained held.
+  Inventory, full Skills, multiplayer Pause, and solo Pause each showed the
+  same held two-second progress. Compact primary and concentration-A selectors
+  released directly with no grace surface. Pause owner disconnect remained
+  direct, and active-save restart retained positive `game-restarted` progress.
+  Example held ticks were multiplayer Pause `3689`, peer-owned Pause `3699`,
+  and restart `3716`; every no-catch-up bound passed.
+- A separate real Boneyard LevelupScreen journey retained the complete world,
+  particles, enemy, audio, and close presentation at tick `1393`, selected a
+  real offer, mounted zero `skill-picker-closed` progress surfaces, and resumed
+  within the elapsed-wall-time no-catch-up bound. Page, console, response, and
+  host error arrays were empty in both browser journeys.
+- The inspected Arena waiting and progress frames have SHA-256
+  `a12fc3f1da553fc3fe7968dc28f145f343ce1ed43d789544c29b0ed749cc598e`
+  and `b4c4d6afb6e114d9ccc60e8bad10bbbae01d860151f221c3c562abfa167331e2`.
+  No browser-platform exception, unresolved native fact, or material unknown
+  remains. Push to `main` is authorized; deployment is not implied.
+
+### Implementation validation receipt
+
 - Protocol 104 combines upstream pending-only `game-started`, addressed
   inventory slots and effective secondary costs with removal of
   `skill-selector-closed` and rejection of any positive

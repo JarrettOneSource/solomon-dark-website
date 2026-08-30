@@ -452,3 +452,37 @@ No member is blocked by the browser platform.
   colors, reveal/fade frames, text, and audio using the pinned retail contract.
 - Exact candidate: byte-identical Mac worktree and canonical
   `/opt/homebrew/bin/bash ./scripts/validate.sh` before completion.
+
+### Notebox implementation validation receipt
+
+- `NativeNotebox` now owns the shared stock presentation contract: UI.64
+  mirrored nine-slice, exact group-3 bitmap text, native `(800,250)` center and
+  35-pixel expansion, normal gold versus `(1,0.25,0.25)` failure tint,
+  100-ms reveal, 10.2/5.2-second automatic lifetimes, 200-ms fade, and optional
+  panel-local pointer shortening. The full-screen `alertdialog`, `OKAY` button,
+  invented CSS panel, and both scene modal/input flags are removed.
+- A newly observed Boast failure restarts the resident
+  `sounds\\buzzer__stream` channel at registry offset `0x133C`. The tracked
+  `buzzer.wav` is byte-identical to retail at SHA-256
+  `19c010bb56690b3f7808a0f71ae639ab8d033e0ea1e31637ac688da957f3e844`;
+  the extraction script and registered test pin that identity. Existing
+  sequence baselining prevents save/rejoin replay.
+- Focused contracts cover exact geometry/envelope/colors, UI/font/audio rows,
+  all four existing failure producers, the automatic/success negatives, and
+  source scans that forbid reintroducing a blocking callback, dialog, button,
+  or full-screen hit surface. The registered Hub UI group and complete
+  canonical Mac gate pass with the new test and binary asset.
+- Mac Chrome 151 selected potion Boast 0 through Provokatus, closed Chat, and
+  rendered the standard Notebox while Hub tick, presentation, movement, and
+  the interaction prompt remained live. It expired without a click. The same
+  wizard entered a real Arena, drank the starter potion, rendered the red
+  `FAILED` Notebox, restarted the exact buzzer buffer once, accepted ordinary
+  gameplay input, advanced the authoritative world throughout, and expired
+  automatically. Page, console, failed-response, and host-error arrays were
+  empty.
+- Visual inspection confirms the compact stock-style panels over retained
+  worlds with no curtain or modal chrome. Instruction/failure frame SHA-256
+  values are `ad3eb65108ba0b7cf1f4a990af64b9cd23949474702a5a44aa0389cb313ccd60`
+  and `8aa6f509e45512a195c119674529326039fcfa181edc5821547d18175e99b5ee`.
+  Every Notebox/Boast member is dispositioned; no platform exception or open
+  question remains. Push to `main` is authorized; deployment is not implied.
