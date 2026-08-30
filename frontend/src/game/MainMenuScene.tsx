@@ -54,6 +54,7 @@ import {
   recordLocalHallOfFame,
 } from './hall-of-fame-store.ts'
 import { installGameLuaConsole } from './game-lua-console.ts'
+import { gameCheatMenuAvailable } from './cheat-menu-contract.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
   gameCheatsEnabled,
@@ -74,6 +75,7 @@ import {
 } from './hud-skill-selector.ts'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import {
+  CHEAT_PAUSE_MENU_ROWS,
   NATIVE_DARK_CLOUD_GUEST_MENU_ROWS,
   NATIVE_DARK_CLOUD_MENU_ROWS,
   nativePauseMenuStagePlacement,
@@ -172,6 +174,7 @@ const loadGameplayResumeProgress = () => import('./GameplayResumeProgress.tsx')
 const GameplayResumeProgress = lazy(loadGameplayResumeProgress)
 const loadGameplayPauseMenu = () => import('./GameplayPauseMenu.tsx')
 const GameplayPauseMenu = lazy(loadGameplayPauseMenu)
+const CheatMenu = lazy(() => import('./CheatMenu.tsx'))
 const ModMinimap = lazy(() => import('./mod-ui/ModMinimap.tsx'))
 const ModEnemies = lazy(() => import('./mod-ui/ModEnemies.tsx'))
 const ModAudio = lazy(() => import('./mod-ui/ModAudio.tsx'))
@@ -413,6 +416,10 @@ export default function MainMenuScene({
     useState<GameplayResumeGraceState | null>(null)
   const [hubPauseMenuOpen, setHubPauseMenuOpen] = useState(false)
   const [gameplayPauseMenuGeneration, setGameplayPauseMenuGeneration] = useState(0)
+  const [cheatMenuOpen, setCheatMenuOpen] = useState(false)
+  const [pendingCheatMenuOpen, setPendingCheatMenuOpen] = useState(false)
+  const cheatMenuOpenRef = useRef(cheatMenuOpen)
+  cheatMenuOpenRef.current = cheatMenuOpen
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
   const partyInvitationAudioCursorRef = useRef<PartyInvitationAudioCursor | null>(null)
   const collegeInvitationAudioCursorRef = useRef<PartyInvitationAudioCursor | null>(null)
@@ -751,9 +758,11 @@ export default function MainMenuScene({
       setRuntimeProgression((current) => (
         sameRuntimeProgression(current, progression) ? current : progression
       ))
-      setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot, session.playerId)
-        ? current
-        : snapshot)
+      setRuntimeSnapshot((current) => (
+        !cheatMenuOpenRef.current && sameRuntimeScene(current, snapshot, session.playerId)
+          ? current
+          : snapshot
+      ))
     })
     const removeBoneyard = session.onBoneyard((nextBoneyard) => {
       const enteringRun = loadedBoneyardRunRef.current !== nextBoneyard.runId
@@ -986,6 +995,15 @@ export default function MainMenuScene({
   const darkCloudPauseStageStyle = placedStageStyle(
     nativePauseMenuStagePlacement(fixedViewport, darkCloudMenuRows),
   )
+  const cheatMenuAvailable = session !== null && gameCheatMenuAvailable({
+    cheatsEnabled: sessionCheatsEnabled,
+    developerAccess: session.developerAccess,
+    isHost: session.isHost,
+  })
+  const gameplayPauseRows = cheatMenuAvailable ? CHEAT_PAUSE_MENU_ROWS : undefined
+  const gameplayPauseStageStyle = cheatMenuAvailable
+    ? placedStageStyle(nativePauseMenuStagePlacement(fixedViewport, CHEAT_PAUSE_MENU_ROWS))
+    : nativeStageStyle
 
   const beginCreate = (
     admission: BrowserGameAdmission,
@@ -1283,6 +1301,8 @@ export default function MainMenuScene({
     setGameplayPause(nextSession.getGameplayPause())
     setGameplayResumeGrace(nextSession.getGameplayResumeGrace())
     setHubPauseMenuOpen(false)
+    setCheatMenuOpen(false)
+    setPendingCheatMenuOpen(false)
     if (snapshot.world.kind === 'hub') advanceLoading('materializing_participants')
     if (!preserveScreen) setScreen('hub')
   }
@@ -1513,6 +1533,8 @@ export default function MainMenuScene({
     setGameplayPause(null)
     setGameplayResumeGrace(null)
     setHubPauseMenuOpen(false)
+    setCheatMenuOpen(false)
+    setPendingCheatMenuOpen(false)
     setPartyState(null)
     setPartyActionError(null)
     setWhisperRequest(null)
@@ -1598,10 +1620,12 @@ export default function MainMenuScene({
     ))
   const chatDisabled = loading !== null
     || tutorialSession
+    || cheatMenuOpen
     || gameplaySettingsOpen
     || gameplayResumeGrace !== null
     || socialModalOpen
   const sceneInputBlocked = chatOpen
+    || cheatMenuOpen
     || loading !== null
     || levelUpModalActive
     || skillBookOpen
@@ -1611,6 +1635,7 @@ export default function MainMenuScene({
     || gameplayResumeGrace !== null
     || socialModalOpen
   const sceneModalDisabled = loading !== null
+    || cheatMenuOpen
     || levelUpModalActive
     || skillBookOpen
     || hudSkillSelector !== null
@@ -1633,7 +1658,8 @@ export default function MainMenuScene({
       ? null
       : hubPauseMenuOpen
         ? 'paused'
-        : chatOpen
+        : cheatMenuOpen
+          || chatOpen
           || socialModalOpen
           || skillBookOpen
           || hudSkillSelector !== null
@@ -1641,6 +1667,126 @@ export default function MainMenuScene({
           || hubSceneOccupied
           ? 'occupied'
           : null
+  const closeCheatMenu = useCallback(() => setCheatMenuOpen(false), [])
+
+  useEffect(() => {
+    if (
+      cheatMenuAvailable
+      && screen === 'hub'
+      && session
+      && runtimeSnapshot
+      && !collegeAdmissionHudHidden
+    ) return
+    setCheatMenuOpen(false)
+    setPendingCheatMenuOpen(false)
+  }, [
+    cheatMenuAvailable,
+    collegeAdmissionHudHidden,
+    runtimeSnapshot,
+    screen,
+    session,
+  ])
+
+  useEffect(() => {
+    if (!cheatMenuOpen) return
+    if (
+      loading !== null
+      || levelUpModalActive
+      || gameplayPause !== null
+      || gameplayResumeGrace !== null
+      || socialModalOpen
+      || skillBookOpen
+      || hudSkillSelector !== null
+      || inventoryScreenOpen
+    ) setCheatMenuOpen(false)
+  }, [
+    cheatMenuOpen,
+    gameplayPause,
+    gameplayResumeGrace,
+    hudSkillSelector,
+    inventoryScreenOpen,
+    levelUpModalActive,
+    loading,
+    skillBookOpen,
+    socialModalOpen,
+  ])
+
+  useEffect(() => {
+    if (!pendingCheatMenuOpen) return
+    if (!cheatMenuAvailable || screen !== 'hub' || !session || !runtimeSnapshot) {
+      setPendingCheatMenuOpen(false)
+      return
+    }
+    if (hubPauseMenuOpen || gameplayPause !== null || gameplayResumeGrace !== null) return
+    if (loading !== null || levelUpModalActive || socialModalOpen) {
+      setPendingCheatMenuOpen(false)
+      return
+    }
+    setPendingCheatMenuOpen(false)
+    setCheatMenuOpen(true)
+  }, [
+    cheatMenuAvailable,
+    gameplayPause,
+    gameplayResumeGrace,
+    hubPauseMenuOpen,
+    levelUpModalActive,
+    loading,
+    pendingCheatMenuOpen,
+    runtimeSnapshot,
+    screen,
+    session,
+    socialModalOpen,
+  ])
+
+  useEffect(() => {
+    if (!session || screen !== 'hub' || !runtimeSnapshot) return
+    const toggleCheatMenu = (event: KeyboardEvent) => {
+      if (
+        event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || event.code !== gameSettings.controls.openCheats
+      ) return
+      if (cheatMenuOpen) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        audio.playSound('click')
+        setCheatMenuOpen(false)
+        return
+      }
+      if (
+        !cheatMenuAvailable
+        || collegeAdmissionHudHidden
+        || chatOpen
+        || gameplaySettingsOpen
+        || sceneModalDisabled
+        || inventoryScreenOpen
+        || hubSceneOccupied
+      ) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      audio.playSound('click')
+      setCheatMenuOpen(true)
+    }
+    window.addEventListener('keydown', toggleCheatMenu, { capture: true })
+    return () => window.removeEventListener('keydown', toggleCheatMenu, { capture: true })
+  }, [
+    audio,
+    chatOpen,
+    cheatMenuAvailable,
+    cheatMenuOpen,
+    collegeAdmissionHudHidden,
+    gameSettings.controls.openCheats,
+    gameplaySettingsOpen,
+    hubSceneOccupied,
+    inventoryScreenOpen,
+    runtimeSnapshot,
+    sceneModalDisabled,
+    screen,
+    session,
+  ])
+
   const openSkillBook = useCallback(() => {
     if (
       !session
@@ -1752,6 +1898,7 @@ export default function MainMenuScene({
     <div
       className="main-menu-page"
       data-chat-open={chatOpen}
+      data-cheat-menu-open={cheatMenuOpen}
       data-college-loadout-active={collegeLoadoutActive || undefined}
       data-game-scene={gameScene}
       data-gameplay-resume-grace={gameplayResumeGrace?.reason ?? 'none'}
@@ -2230,6 +2377,11 @@ export default function MainMenuScene({
                 if (leaving) return
                 if (action === 'leave') void leaveGameplay()
                 else if (action === 'settings') setGameplaySettingsOpen(true)
+                else if (action === 'cheats' && cheatMenuAvailable) {
+                  setPendingCheatMenuOpen(true)
+                  if (localHubPause) setHubPauseMenuOpen(false)
+                  else session.requestGameplayPause(null)
+                }
                 else if (action === 'resume') {
                   if (localHubPause) setHubPauseMenuOpen(false)
                   else session.requestGameplayPause(null)
@@ -2237,7 +2389,8 @@ export default function MainMenuScene({
               }}
               pause={displayedGameplayPause}
               playerId={session.playerId}
-              style={nativeStageStyle}
+              rows={gameplayPauseRows}
+              style={gameplayPauseStageStyle}
             />
           </Suspense>
         ) : null}
@@ -2257,6 +2410,17 @@ export default function MainMenuScene({
               settings={gameSettings}
             />
           ) : null}
+
+        {session && runtimeSnapshot && cheatMenuOpen && cheatMenuAvailable ? (
+          <Suspense fallback={null}>
+            <CheatMenu
+              onClose={closeCheatMenu}
+              openKeyCode={gameSettings.controls.openCheats}
+              session={session}
+              snapshot={runtimeSnapshot}
+            />
+          </Suspense>
+        ) : null}
         </>}
 
         {(preparing || leaving || resolvingPlayerCard || connectionError) && (

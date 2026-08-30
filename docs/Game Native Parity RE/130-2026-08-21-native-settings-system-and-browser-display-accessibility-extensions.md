@@ -331,3 +331,16 @@ Performance toggle Off, and zero complex-shadow records. Page, console, and
 failed-response arrays were empty. The desktop sibling journey and complete
 Mac validation gate also passed. The detailed output-graph and public-site
 audio receipt remains in entry 019; no physical-iPhone receipt is claimed.
+
+## 2026-08-29 Website Open Cheats binding extension
+
+The live debugging menu adds one second browser-only input identity beside
+Chat: `Open Cheats`, defaulting to physical `Backquote`. It participates in the
+same persisted uniqueness and conflict-swap contract as every other keyboard
+row, but its consumer is admitted only for an authoritative ordinary cheat
+host or a sealed developer connection. Every deployed complete-controls record
+is migrated by adding Backquote, or the first free `F1..F3` fallback if a user
+already assigned Backquote; corrupt, partial, or duplicate records still fail
+closed. This is a designed Website extension, not a newly attributed retail
+setting. The complete input membership is now the fifteen native identities,
+browser Chat, and browser Open Cheats.

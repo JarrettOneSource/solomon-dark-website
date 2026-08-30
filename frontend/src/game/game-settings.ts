@@ -18,6 +18,7 @@ export const GAME_BINDING_ACTIONS = Object.freeze([
   'openInventory',
   'openSkills',
   'openChat',
+  'openCheats',
   'belt1',
   'belt2',
   'belt3',
@@ -75,6 +76,7 @@ export const DEFAULT_GAME_CONTROL_BINDINGS: GameControlBindings = Object.freeze(
   openMenu: 'Escape',
   openSkills: 'KeyK',
   openChat: 'KeyT',
+  openCheats: 'Backquote',
 })
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = Object.freeze({
@@ -277,26 +279,29 @@ function parseGameSettings(serialized: string | null): GameSettings {
     if (!sameKeys(Object.keys(migrated).sort(), GAME_SETTINGS_KEYS)) {
       return DEFAULT_GAME_SETTINGS
     }
+    const controls = migrateGameControls(migrated.controls)
+    if (!controls) return DEFAULT_GAME_SETTINGS
+    const complete: Record<string, unknown> = { ...migrated, controls }
     if (
-      typeof migrated.castSecondariesAtMouse !== 'boolean'
-      || typeof migrated.complexLighting !== 'boolean'
-      || typeof migrated.complexShadows !== 'boolean'
-      || typeof migrated.enableActivityMessages !== 'boolean'
-      || typeof migrated.enableCheats !== 'boolean'
-      || typeof migrated.enableGlobalChat !== 'boolean'
-      || typeof migrated.enableOnlineFeatures !== 'boolean'
-      || typeof migrated.enableSharedHub !== 'boolean'
-      || typeof migrated.multipleShadows !== 'boolean'
-      || typeof migrated.submitRunsToServer !== 'boolean'
-      || typeof migrated.zoomEffects !== 'boolean'
-      || !integerInRange(migrated.cameraFovPercent, CAMERA_FOV_MIN_PERCENT, CAMERA_FOV_MAX_PERCENT)
-      || !integerInRange(migrated.lightQualityPercent, LIGHT_QUALITY_MIN_PERCENT, LIGHT_QUALITY_MAX_PERCENT)
-      || !integerInRange(migrated.musicVolumePercent, 0, 100)
-      || !integerInRange(migrated.soundVolumePercent, 0, 100)
-      || !integerInRange(migrated.uiScalePercent, UI_SCALE_MIN_PERCENT, UI_SCALE_MAX_PERCENT)
-      || !validControls(migrated.controls)
+      typeof complete.castSecondariesAtMouse !== 'boolean'
+      || typeof complete.complexLighting !== 'boolean'
+      || typeof complete.complexShadows !== 'boolean'
+      || typeof complete.enableActivityMessages !== 'boolean'
+      || typeof complete.enableCheats !== 'boolean'
+      || typeof complete.enableGlobalChat !== 'boolean'
+      || typeof complete.enableOnlineFeatures !== 'boolean'
+      || typeof complete.enableSharedHub !== 'boolean'
+      || typeof complete.multipleShadows !== 'boolean'
+      || typeof complete.submitRunsToServer !== 'boolean'
+      || typeof complete.zoomEffects !== 'boolean'
+      || !integerInRange(complete.cameraFovPercent, CAMERA_FOV_MIN_PERCENT, CAMERA_FOV_MAX_PERCENT)
+      || !integerInRange(complete.lightQualityPercent, LIGHT_QUALITY_MIN_PERCENT, LIGHT_QUALITY_MAX_PERCENT)
+      || !integerInRange(complete.musicVolumePercent, 0, 100)
+      || !integerInRange(complete.soundVolumePercent, 0, 100)
+      || !integerInRange(complete.uiScalePercent, UI_SCALE_MIN_PERCENT, UI_SCALE_MAX_PERCENT)
+      || !validControls(complete.controls)
     ) return DEFAULT_GAME_SETTINGS
-    return normalizedGameSettings(migrated as unknown as GameSettings)
+    return normalizedGameSettings(complete as unknown as GameSettings)
   } catch {
     return DEFAULT_GAME_SETTINGS
   }
@@ -347,6 +352,24 @@ function validControls(value: unknown): value is GameControlBindings {
   if (!record(value) || !sameKeys(Object.keys(value).sort(), GAME_BINDING_ACTIONS)) return false
   const codes = GAME_BINDING_ACTIONS.map((action) => value[action])
   return codes.every(validBindingCode) && new Set(codes).size === codes.length
+}
+
+const PRE_CHEAT_MENU_BINDING_ACTIONS = GAME_BINDING_ACTIONS.filter((action) => (
+  action !== 'openCheats'
+))
+
+function migrateGameControls(value: unknown): GameControlBindings | null {
+  if (validControls(value)) return value
+  if (
+    !record(value)
+    || !sameKeys(Object.keys(value).sort(), PRE_CHEAT_MENU_BINDING_ACTIONS)
+  ) return null
+  const codes = PRE_CHEAT_MENU_BINDING_ACTIONS.map((action) => value[action])
+  if (!codes.every(validBindingCode) || new Set(codes).size !== codes.length) return null
+  const used = new Set(codes)
+  const openCheats = ['Backquote', 'F1', 'F2', 'F3'].find((code) => !used.has(code))
+  if (!openCheats) return null
+  return Object.freeze({ ...value, openCheats }) as unknown as GameControlBindings
 }
 
 function validBindingCode(value: unknown): value is string {

@@ -11,6 +11,7 @@ import { WebSocket } from 'ws'
 
 import staffProgram from '../src/assets/game/player-staff-attachment-program.json' with { type: 'json' }
 
+import { CHEAT_MENU_CATALOG_QUERY } from '../src/game/cheat-menu-contract.ts'
 import { EntityReplicationReconstructor } from '../src/game/protocol/entity-replication.ts'
 import {
   GAME_PROTOCOL_NAME,
@@ -124,6 +125,32 @@ try {
   await page.locator('.hub-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 30_000 })
   await page.waitForFunction(() => window.solomonDark?.lua)
+  const directCatalog = await executeLua(page, CHEAT_MENU_CATALOG_QUERY)
+  assert.equal(directCatalog.ok, true, directCatalog.error ?? 'direct cheat catalog failed')
+  assert.equal(directCatalog.values.length, 4)
+  await page.keyboard.press('Backquote')
+  const cheatMenu = page.getByRole('dialog', { name: 'Cheat menu' })
+  await cheatMenu.waitFor()
+  const itemCatalog = cheatMenu.getByLabel('ITEM', { exact: true })
+  const skillCatalog = cheatMenu.getByLabel('SKILL', { exact: true })
+  const weldCatalog = cheatMenu.getByLabel('WELD', { exact: true })
+  await waitForCheatCatalog(cheatMenu, 'ITEM')
+  assert.equal(await itemCatalog.locator('option').count(), 58)
+  assert.equal(await skillCatalog.locator('option').count(), 71)
+  assert.equal(await weldCatalog.locator('option').count(), 10)
+  assert.equal(await cheatMenu.getByRole('button', { name: 'SUMMON BOT' }).isEnabled(), true)
+  await itemCatalog.selectOption('health-potion')
+  await cheatMenu.getByRole('button', { name: 'GRANT ITEM' }).click()
+  await cheatMenu.locator('.cheat-menu-receipt[data-tone="ok"]', { hasText: 'Item granted' }).waitFor()
+  await cheatMenu.getByRole('tab', { name: 'CONSOLE' }).click()
+  await cheatMenu.getByRole('textbox', { exact: true, name: 'LUA' })
+    .fill('return #sd.dev.list_items(), #sd.dev.list_skills(), #sd.dev.list_welds()')
+  await cheatMenu.getByRole('button', { name: 'RUN LUA' }).click()
+  const menuCatalogReceipt = cheatMenu.locator('[data-console-result="ok"]').first()
+  await menuCatalogReceipt.waitFor()
+  assert.match(await menuCatalogReceipt.textContent(), /58\s+72\s+10/)
+  await cheatMenu.getByRole('button', { name: 'Close cheat menu' }).click()
+  await cheatMenu.waitFor({ state: 'detached' })
   const hubCanvas = page.locator('.hub-world-canvas')
   const hubBaselineFrame = await hubCanvas.evaluate(node => structuredClone(node.__sdrHubFrame))
   const localPlayerId = hubBaselineFrame.localPlayerId
@@ -545,6 +572,16 @@ async function stopChild(child) {
     })
     child.kill('SIGTERM')
   })
+}
+
+async function waitForCheatCatalog(menu, label) {
+  const option = menu.getByLabel(label, { exact: true }).locator('option').first()
+  const error = menu.locator('.cheat-menu-receipt[data-tone="error"]').first()
+  await Promise.race([
+    option.waitFor({ state: 'attached' }),
+    error.waitFor({ state: 'attached' }),
+  ])
+  if (await error.count()) throw new Error(await error.textContent())
 }
 
 async function waitFor(predicate, timeoutMs) {

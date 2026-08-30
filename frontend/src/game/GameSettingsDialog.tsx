@@ -43,6 +43,8 @@ import {
   type MobileUiSize,
 } from './mobile-ui-layout.ts'
 import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
+import NativePanelArt from './native-ui/NativePanelArt.tsx'
+
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
 type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
 
@@ -76,11 +78,14 @@ const BINDING_GROUPS = Object.freeze([
       ['openInventory', 'OPEN INVENTORY'],
       ['openSkills', 'OPEN SKILLS'],
       ['openChat', 'OPEN CHAT'],
+      ['openCheats', 'OPEN CHEATS'],
     ] as const),
   }),
   Object.freeze({
     label: 'BELT HOTKEYS',
-    rows: Object.freeze(GAME_BINDING_ACTIONS.slice(8).map((action, index) => (
+    rows: Object.freeze(GAME_BINDING_ACTIONS.filter((action) => (
+      action.startsWith('belt')
+    )).map((action, index) => (
       [action, `BELT SLOT ${index + 1}`] as const
     ))),
   }),
@@ -402,7 +407,8 @@ function RootSettings({
         />
         {settings.enableCheats ? (
           <p className="game-settings-console-help" role="status">
-            Host console: <code>solomonDark.lua.help()</code>
+            Debug menu: <strong>{gameBindingLabel(settings.controls.openCheats)}</strong>
+            <br />DevTools: <code>solomonDark.lua.help()</code>
           </p>
         ) : null}
       </SettingsGroup>
@@ -647,19 +653,6 @@ function FullscreenSetting() {
         <small role="status">Install this page as a web app for fullscreen on iPhone or iPad.</small>
       ) : null}
       {error ? <small role="alert">{error}</small> : null}
-    </div>
-  )
-}
-
-function NativePanelArt() {
-  return (
-    <div className="game-settings-native-art" aria-hidden>
-      <i className="game-settings-frame-corner top-left" />
-      <i className="game-settings-frame-corner top-right" />
-      <i className="game-settings-frame-corner bottom-left" />
-      <i className="game-settings-frame-corner bottom-right" />
-      <i className="game-settings-frame-flourish left" />
-      <i className="game-settings-frame-flourish right" />
     </div>
   )
 }

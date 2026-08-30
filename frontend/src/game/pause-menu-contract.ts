@@ -8,7 +8,7 @@ export type NativePauseAction = 'leave' | 'resume' | 'settings'
  * (dispatcher `0x005A5530`, the same `SimpleMenu` chrome) adds SIGN OUT and
  * labels its title exit MAIN MENU, which still leaves through `'leave'`.
  */
-export type NativeSimpleMenuAction = NativePauseAction | 'sign-out'
+export type NativeSimpleMenuAction = NativePauseAction | 'cheats' | 'sign-out'
 export type NativePausePhase = 'closing' | 'opening'
 
 export interface NativeSimpleMenuRow {
@@ -114,6 +114,14 @@ export const PAUSE_MENU_ACTION_BOUNDS = Object.freeze({
 /** Gameplay's pause rows, exactly as `0x0058EA50` authors them. */
 export const NATIVE_PAUSE_MENU_ROWS: readonly NativeSimpleMenuRow[] = Object.freeze([
   Object.freeze({ action: 'resume', label: 'RESUME GAME' }),
+  Object.freeze({ action: 'settings', label: 'GAME SETTINGS' }),
+  Object.freeze({ action: 'leave', label: 'LEAVE GAME' }),
+] as const)
+
+/** Gameplay's native rows plus the explicit Website debugging extension. */
+export const CHEAT_PAUSE_MENU_ROWS: readonly NativeSimpleMenuRow[] = Object.freeze([
+  Object.freeze({ action: 'resume', label: 'RESUME GAME' }),
+  Object.freeze({ action: 'cheats', label: 'CHEAT MENU' }),
   Object.freeze({ action: 'settings', label: 'GAME SETTINGS' }),
   Object.freeze({ action: 'leave', label: 'LEAVE GAME' }),
 ] as const)

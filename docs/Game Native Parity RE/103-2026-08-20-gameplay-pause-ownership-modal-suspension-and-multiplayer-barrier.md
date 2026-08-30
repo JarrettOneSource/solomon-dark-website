@@ -299,3 +299,17 @@ waiting surface.
   SHA-256 `856774f67ccb6a48a9d7e18a832fcec17433011b09aaf97333cfa4b1f3bdc570`.
 - Remaining implementation explicitly out of scope: native parity for the
   independently owned gameplay Settings contents after the now-enabled handoff.
+
+## 2026-08-29 Website cheat-menu entry extension
+
+The requested live debugging panel does not join the authoritative pause
+owner: both the client and host deliberately reject Lua during Pause and resume
+grace, while the panel must execute its commands immediately. Gameplay keeps
+the exact native three-row menu when cheats are unavailable. An authoritative
+ordinary cheat host or sealed developer admission instead authors one explicit
+Website row, `CHEAT MENU`, between Resume and Settings through the already
+validated variable-row `SimpleMenu` plan. Selecting it completes the native
+close animation, releases Pause normally, and opens the input-blocking live
+panel. The four-row geometry is the same shared plan already proved by the Dark
+Cloud's native four-row menu; no native Pause row, action result, atlas member,
+timing constant, or authority rule is reinterpreted.

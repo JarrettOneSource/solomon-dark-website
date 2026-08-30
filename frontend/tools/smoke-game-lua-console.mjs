@@ -111,6 +111,56 @@ try {
     .waitFor({ timeout: 30_000 })
   await page.waitForFunction(() => window.solomonDark?.lua)
 
+  await page.keyboard.press('Backquote')
+  const cheatMenu = page.getByRole('dialog', { name: 'Cheat menu' })
+  await cheatMenu.waitFor()
+  await waitForCheatCatalog(cheatMenu, 'ENEMY')
+  assert.equal(await cheatMenu.getByRole('tab', { name: 'CHEATS' }).getAttribute('aria-selected'), 'true')
+  await cheatMenu.getByRole('tab', { name: 'CONSOLE' }).click()
+  const editor = cheatMenu.getByRole('textbox', { exact: true, name: 'LUA' })
+  await editor.fill("print('menu-console')\nreturn 6 * 7")
+  await editor.press('Control+Enter')
+  const consoleResult = cheatMenu.locator('[data-console-result="ok"]').first()
+  await consoleResult.waitFor()
+  assert.match(await consoleResult.textContent(), /menu-console/)
+  assert.match(await consoleResult.textContent(), /42/)
+  await editor.fill("error('menu failure')")
+  await cheatMenu.getByRole('button', { name: 'RUN LUA' }).click()
+  const menuError = cheatMenu.locator('[data-console-result="error"]').first()
+  await menuError.waitFor()
+  assert.match(await menuError.textContent(), /menu failure/)
+  await cheatMenu.getByRole('tab', { name: 'CHEATS' }).click()
+  await cheatMenu.getByLabel('GOLD').fill('2468')
+  await cheatMenu.getByRole('button', { name: 'SET GOLD' }).click()
+  await cheatMenu.locator('.cheat-menu-receipt[data-tone="ok"]', { hasText: 'Gold set' }).waitFor()
+  await page.keyboard.press('Backquote')
+  await cheatMenu.waitFor({ state: 'detached' })
+
+  const menuGold = await executeLua(page, 'return sd.player.get_state().gold')
+  assert.deepEqual(menuGold.values, [2468])
+
+  await page.keyboard.press('Escape')
+  const pauseMenu = page.getByRole('dialog', { name: 'Game paused' })
+  await pauseMenu.waitFor()
+  await pauseMenu.getByRole('button', { name: 'CHEAT MENU' }).click()
+  await cheatMenu.waitFor()
+  assert.equal(await cheatMenu.getByRole('tab').count(), 2)
+  await cheatMenu.getByRole('button', { name: 'Close cheat menu' }).click()
+  await cheatMenu.waitFor({ state: 'detached' })
+
+  await page.setViewportSize({ width: 844, height: 390 })
+  await page.keyboard.press('Backquote')
+  await cheatMenu.waitFor()
+  const compactBounds = await cheatMenu.boundingBox()
+  assert.ok(compactBounds)
+  assert.ok(compactBounds.x >= 0 && compactBounds.y >= 0, JSON.stringify(compactBounds))
+  assert.ok(compactBounds.x + compactBounds.width <= 844, JSON.stringify(compactBounds))
+  assert.ok(compactBounds.y + compactBounds.height <= 390, JSON.stringify(compactBounds))
+  assert.equal(await cheatMenu.getByRole('tab').count(), 2)
+  await page.keyboard.press('Backquote')
+  await cheatMenu.waitFor({ state: 'detached' })
+  await page.setViewportSize({ width: 1600, height: 900 })
+
   const identity = await executeLua(page, `
     print('web-lua', _VERSION)
     return _VERSION, sd.runtime.api_version, sd.state.is_authority(),
@@ -190,6 +240,36 @@ try {
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
   await boneyard.waitFor({ timeout: 30_000 })
+  await page.keyboard.press('Backquote')
+  await cheatMenu.waitFor()
+  const enemySelect = cheatMenu.getByLabel('ENEMY', { exact: true })
+  await waitForCheatCatalog(cheatMenu, 'ENEMY')
+  const enemyOptions = await enemySelect.locator('option').allTextContents()
+  assert.deepEqual(enemyOptions, [
+    'Coffin',
+    'Demon',
+    'Imp',
+    'Skeleton',
+    'Skeleton Archer',
+    'Skeleton Mage',
+    'Wraith',
+    'Zombie',
+  ])
+  await cheatMenu.getByRole('button', { name: 'RESTORE HEALTH' }).click()
+  for (const enemy of enemyOptions) {
+    await enemySelect.selectOption({ label: enemy })
+    await cheatMenu.getByRole('button', { name: 'SPAWN' }).click()
+    await page.waitForTimeout(35)
+  }
+  await cheatMenu.getByRole('tab', { name: 'CONSOLE' }).click()
+  await cheatMenu.getByRole('textbox', { exact: true, name: 'LUA' })
+    .fill("print('boneyard-console')\nreturn sd.world.get_state().enemy_count")
+  await cheatMenu.getByRole('button', { name: 'RUN LUA' }).click()
+  const boneyardConsoleResult = cheatMenu.locator('[data-console-result="ok"]').first()
+  await boneyardConsoleResult.waitFor()
+  assert.match(await boneyardConsoleResult.textContent(), /boneyard-console/)
+  await cheatMenu.getByRole('button', { name: 'Close cheat menu' }).click()
+  await cheatMenu.waitFor({ state: 'detached' })
   const seeded = await executeLua(page, `
     local scene = sd.scene.get_state()
     sd.events.on('enemy.spawned', function(event)
@@ -202,7 +282,7 @@ try {
   assert.equal(seeded.ok, true, seeded.error)
   assert.equal(seeded.values[0], 42)
   assert.equal(seeded.values[1], `0000002a${'00'.repeat(12)}`)
-  assert.equal(seeded.values[2], 1)
+  assert.equal(seeded.values[2], enemyOptions.length + 1)
   await page.waitForTimeout(100)
   const spawnReceipt = await executeLua(page, `
     local enemies = 0
@@ -225,6 +305,8 @@ try {
   }, GAME_SETTINGS_STORAGE_KEY)
   await page.waitForFunction(() => window.solomonDark === undefined)
   assert.equal(await page.evaluate(() => window.solomonDark), undefined)
+  await page.keyboard.press('Backquote')
+  assert.equal(await page.getByRole('dialog', { name: 'Cheat menu' }).count(), 0)
 
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(requestFailures.filter((failure) => (
@@ -303,6 +385,16 @@ function finiteEnvironmentNumber(name, fallback) {
 
 function delay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds))
+}
+
+async function waitForCheatCatalog(menu, label) {
+  const option = menu.getByLabel(label, { exact: true }).locator('option').first()
+  const error = menu.locator('.cheat-menu-receipt[data-tone="error"]').first()
+  await Promise.race([
+    option.waitFor({ state: 'attached' }),
+    error.waitFor({ state: 'attached' }),
+  ])
+  if (await error.count()) throw new Error(await error.textContent())
 }
 
 async function waitFor(predicate, timeoutMs) {

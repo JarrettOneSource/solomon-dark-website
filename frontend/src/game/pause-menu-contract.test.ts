@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import nativeUiAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
+  CHEAT_PAUSE_MENU_ROWS,
   NATIVE_PAUSE_ART_COUNTS,
   NATIVE_PAUSE_ART_RECORDS,
   NATIVE_PAUSE_CHROME_ART_SIZES,
@@ -336,6 +337,18 @@ test('the Dark Cloud authors the native four rows and the plan grows around them
     nativePauseMenuRenderPlan(1, null, NATIVE_DARK_CLOUD_GUEST_MENU_ROWS).rows.map((row) => row.bounds),
     nativePauseMenuRenderPlan(1, null).rows.map((row) => row.bounds),
   )
+})
+
+test('cheat-enabled gameplay adds one explicit Website row to the shared SimpleMenu', () => {
+  assert.deepEqual(CHEAT_PAUSE_MENU_ROWS.map((row) => [row.action, row.label]), [
+    ['resume', 'RESUME GAME'],
+    ['cheats', 'CHEAT MENU'],
+    ['settings', 'GAME SETTINGS'],
+    ['leave', 'LEAVE GAME'],
+  ])
+  const plan = nativePauseMenuRenderPlan(1, null, CHEAT_PAUSE_MENU_ROWS)
+  assert.deepEqual(plan.rows.map((row) => row.bounds), nativeSimpleMenuRowBounds(4))
+  assert.equal(plan.rows[1]!.action, 'cheats')
 })
 
 test('phone hosts fit the taller Dark Cloud menu by its own extent', () => {

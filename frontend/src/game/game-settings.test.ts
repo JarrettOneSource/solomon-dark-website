@@ -61,7 +61,7 @@ test('complete Settings defaults retain native presentation and enable online ex
   })
   assert.deepEqual(GAME_BINDING_ACTIONS, [
     'moveUp', 'moveDown', 'moveLeft', 'moveRight',
-    'openMenu', 'openInventory', 'openSkills', 'openChat',
+    'openMenu', 'openInventory', 'openSkills', 'openChat', 'openCheats',
     'belt1', 'belt2', 'belt3', 'belt4', 'belt5', 'belt6', 'belt7', 'belt8',
   ])
 })
@@ -97,6 +97,33 @@ test('complete Settings persist exactly and migrate every deployed record shape'
   ].includes(key)))
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(deployedComplete))
   assert.deepEqual(readGameSettings(storage), changed)
+
+  const deployedBeforeCheatMenu = {
+    ...changed,
+    controls: Object.fromEntries(Object.entries(changed.controls).filter(([key]) => (
+      key !== 'openCheats'
+    ))),
+  }
+  storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(deployedBeforeCheatMenu))
+  assert.deepEqual(readGameSettings(storage), changed)
+
+  const backquoteAlreadyUsed = rebindGameControl(
+    DEFAULT_GAME_CONTROL_BINDINGS,
+    'moveUp',
+    'Backquote',
+  )
+  storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
+    ...changed,
+    controls: Object.fromEntries(Object.entries(backquoteAlreadyUsed).filter(([key]) => (
+      key !== 'openCheats'
+    ))),
+  }))
+  assert.deepEqual(readGameSettings(storage).controls, {
+    ...Object.fromEntries(Object.entries(backquoteAlreadyUsed).filter(([key]) => (
+      key !== 'openCheats'
+    ))),
+    openCheats: 'F1',
+  })
 
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, '{"enableCheats":true,"extra":1}')
   assert.deepEqual(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
@@ -146,7 +173,7 @@ test('FOV, UI scale, volume, and light quality preserve their exact boundaries',
   assert.equal(gameLightQuality({ lightQualityPercent: 100 }), 0.25)
 })
 
-test('key rebinding swaps conflicts across fifteen native inputs and browser chat', () => {
+test('key rebinding swaps conflicts across fifteen native inputs and two browser extensions', () => {
   assert.equal(DEFAULT_GAME_CONTROL_BINDINGS.belt4, 'Digit3')
   assert.equal(DEFAULT_GAME_CONTROL_BINDINGS.belt5, 'Digit4')
   const rebound = rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'moveUp', 'KeyI')
@@ -159,6 +186,9 @@ test('key rebinding swaps conflicts across fifteen native inputs and browser cha
   const chatSwap = rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'openSkills', 'KeyT')
   assert.equal(chatSwap.openSkills, 'KeyT')
   assert.equal(chatSwap.openChat, 'KeyK')
+  const cheatSwap = rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'openCheats', 'KeyI')
+  assert.equal(cheatSwap.openCheats, 'KeyI')
+  assert.equal(cheatSwap.openInventory, 'Backquote')
   assert.deepEqual([
     gameBindingLabel('Mouse2'),
     gameBindingLabel('KeyW'),
