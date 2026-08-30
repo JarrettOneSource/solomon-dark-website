@@ -101,10 +101,6 @@ test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlase
   assert.deepEqual(nativeAssets.atlases.Skills.records['90'].logicalSize, [44, 24])
   assert.deepEqual(
     NATIVE_WELD_BUILDS.map(({ skillsAtlasIconRecord }) => skillsAtlasIconRecord),
-    [81, 82, 83, 84, 85, 86, 87, 88, 89, 90],
-  )
-  assert.deepEqual(
-    NATIVE_WELD_BUILDS.map(({ skillScreenIconRecord }) => skillScreenIconRecord),
     [108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
   )
   const skillScreenRecords = [
@@ -190,7 +186,7 @@ test('all ten Welding cards use their synthetic card domain and preserve Insight
       weldBuildId: build.id,
     })
     assert.equal(card.frameRecord, 14, build.syntheticName)
-    assert.equal(card.iconRecord, build.skillScreenIconRecord, build.syntheticName)
+    assert.equal(card.iconRecord, build.skillsAtlasIconRecord, build.syntheticName)
     assert.equal(card.name, build.syntheticName, build.syntheticName)
     assert.equal(card.familyLabel, 'ARCANE ', build.syntheticName)
     assert.equal(card.quickDescription, build.pairDescription, build.syntheticName)
@@ -242,7 +238,7 @@ test('every Welding picker detail keeps its synthetic build identity and pair de
       weldBuildId: build.id,
     })
     assert.equal(detail.row.name, build.syntheticName)
-    assert.equal(detail.row.iconRecord, build.skillScreenIconRecord)
+    assert.equal(detail.row.iconRecord, build.skillsAtlasIconRecord)
     assert.equal(detail.row.weldBuildId, build.id)
     assert.equal(
       detail.lines.find(({ kind }) => kind === 'description')?.text,

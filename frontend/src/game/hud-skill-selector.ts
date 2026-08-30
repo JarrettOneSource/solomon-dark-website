@@ -1,7 +1,7 @@
 import {
   NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
-  nativeWeldBuild,
+  nativeSkillIconRecord,
 } from './core-kernels/player-progression.ts'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
@@ -66,9 +66,8 @@ export function nativeHudSkillSelectorOptions(
     .map(([skillId]) => {
       const skill = NATIVE_SKILL_CATALOG[skillId]
       if (!skill) throw new RangeError(`native selector skill ${skillId} is absent`)
-      const weld = skillId === 52 ? nativeWeldBuild(progression.weldBuildId!) : null
       return Object.freeze({
-        iconRecord: weld?.skillsAtlasIconRecord ?? skill.skills_atlas_icon_record,
+        iconRecord: nativeSkillIconRecord(skillId, progression.weldBuildId),
         name: skill.name,
         skillId,
       })

@@ -437,9 +437,10 @@ No member is blocked by the browser platform.
 - Root is `nativeSkillColorRoot(skillId)`, not catalog family; advanced rows
   `72..79` therefore inherit Air, Fire, Ether, Earth, Water, Arcane, Mind, and
   Body respectively.
-- Welding uses `skillScreenIconRecord` `108..117`, frame 14, split-color Skills
+- Welding uses authored Skills records `108..117`, frame 14, split-color Skills
   164, synthetic Title Case name, exact `Welded ...` pair description, and
-  `ARCANE `. `skillsAtlasIconRecord` `81..90` belongs another display domain.
+  `ARCANE `. The native compact-display alias `81..90` is deliberately not a
+  second Website icon domain after the user-reported correction in entry 171.
 - Preserve the existing Insight second pass, special actions, authority,
   selection, queue, and close lifecycle; repair the shared base card rather
   than adding report-specific DOM copy.

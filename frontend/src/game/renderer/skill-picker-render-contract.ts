@@ -4,6 +4,7 @@ import {
   nativeSkillCategory,
   nativeSkillColorRoot,
   nativeSkillDependencies,
+  nativeSkillIconRecord,
   nativeWeldBuild,
 } from '../core-kernels/player-progression.ts'
 import type { ProtocolPlayerSkillOfferOption } from '../protocol/game-state.ts'
@@ -160,7 +161,7 @@ export function skillPickerCardPresentation(
     glowTints: Object.freeze(weldBuild
       ? weldBuild.colorRoots.map(skillPickerRootTint)
       : [rootTint]),
-    iconRecord: weldBuild?.skillScreenIconRecord ?? skill.skills_atlas_icon_record,
+    iconRecord: nativeSkillIconRecord(option.skillId, weldBuild?.id ?? null),
     name,
     nameBaselineY: SKILL_PICKER_CARD_TEXT.nameBaselineY,
     nameLines,

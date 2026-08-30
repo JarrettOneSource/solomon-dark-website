@@ -47,7 +47,14 @@ test('selects every pure primary in numeric order and resolves all ten Weld buil
       { ...progression, weldBuildId: build.id },
       nativeHudSkillSelectorTarget(12),
     ).at(-1)!.iconRecord),
-    [81, 82, 83, 84, 85, 86, 87, 88, 89, 90],
+    [108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
+  )
+  assert.equal(
+    nativeHudSkillSelectorOptions(
+      { ...progression, weldBuildId: 1005 },
+      nativeHudSkillSelectorTarget(12),
+    ).at(-1)!.iconRecord,
+    113,
   )
 })
 

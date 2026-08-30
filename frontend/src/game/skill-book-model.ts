@@ -2,6 +2,7 @@ import {
   NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
   nativeSkillDependencies,
+  nativeSkillIconRecord,
 } from './core-kernels/player-progression.ts'
 import type { NativeHudPoint, NativeHudRect } from './native-hud-layout.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
@@ -219,16 +220,17 @@ export function nativeSkillBookPages(
     if (!skill) return []
     const category = nativeSkillCategory(id)
     if (category === null) return []
+    const weldBuildId = id === 52 ? progression.weldBuildId : null
     return [Object.freeze({
       category,
       dependencyIds: nativeSkillDependencies(id),
       description: skill.config?.mQDescription ?? skill.config?.mDescription ?? '',
       effectiveRank,
-      iconRecord: skill.skills_atlas_icon_record,
+      iconRecord: nativeSkillIconRecord(id, weldBuildId),
       id,
       name: skill.name,
       permanentRank,
-      weldBuildId: id === 52 ? progression.weldBuildId : null,
+      weldBuildId,
     })]
   })
   const byId = new Map(learnedRows.map((row) => [row.id, row] as const))

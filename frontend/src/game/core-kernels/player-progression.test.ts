@@ -38,6 +38,7 @@ import {
   increaseRandomLearnedSkill,
   nativeSkillCategory,
   nativeSkillDependencies,
+  nativeSkillIconRecord,
   nativeSkillMinimumLevel,
   nativeSkillPassesOfferEligibility,
   playerExperienceProgress,
@@ -1087,14 +1088,22 @@ test('the stock forced prefix is bookkeeping and consumes all three ordinary slo
   assert.deepEqual(new Set(offer.options.map(({ skillId }) => skillId)), new Set([64, 56, 67]))
 })
 
-test('Spell Welding uses the ten recovered synthetic builds and native icon rows', () => {
+test('Spell Welding uses the ten authored build icons without aliasing ordinary skills', () => {
   assert.deepEqual(
     NATIVE_WELD_BUILDS.map(({ id, skillsAtlasIconRecord }) => [id, skillsAtlasIconRecord]),
     [
-      [1000, 81], [1001, 82], [1002, 83], [1003, 84], [1004, 85],
-      [1005, 86], [1006, 87], [1007, 88], [1008, 89], [1009, 90],
+      [1000, 108], [1001, 109], [1002, 110], [1003, 111], [1004, 112],
+      [1005, 113], [1006, 114], [1007, 115], [1008, 116], [1009, 117],
     ],
   )
+  assert.deepEqual(
+    NATIVE_WELD_BUILDS.map(({ id }) => nativeSkillIconRecord(52, id)),
+    [108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
+  )
+  assert.equal(nativeSkillIconRecord(52), 79, 'generic Welding retains its catalog icon')
+  assert.equal(nativeSkillIconRecord(59), 86, 'Battle Mage retains record 86')
+  assert.notEqual(nativeSkillIconRecord(52, 1005), nativeSkillIconRecord(59))
+  assert.throws(() => nativeSkillIconRecord(52, 1010), /Weld build/)
   assert.deepEqual(nativeWeldBuild(1000)?.primarySkillIds, [8, 16])
   assert.deepEqual(nativeWeldBuild(1009)?.primarySkillIds, [24, 40])
   assert.equal(nativeWeldBuild(999), null)

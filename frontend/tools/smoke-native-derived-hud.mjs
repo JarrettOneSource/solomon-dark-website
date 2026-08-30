@@ -6,6 +6,7 @@ import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
 import {
+  bindGameSimulationPlayerSkillQuickbar,
   getPlayerEconomy,
   selectGameSimulationPlayerConcentration,
 } from '../src/game/core-server/game-simulation.ts'
@@ -247,9 +248,55 @@ try {
     primarySkillId: 52,
     weldBuildId: 1000,
   })
-  await page.locator('.hub-hud-selected-skill[data-binding="12"][data-record="81"]').waitFor({
+  const weldIconRecords = []
+  for (let index = 0; index < 10; index += 1) {
+    const buildId = 1000 + index
+    const record = 108 + index
+    mutatePlayer(host.state(), playerId, { weldBuildId: buildId })
+    await page.locator(
+      `.hub-hud-selected-skill[data-binding="12"][data-record="${record}"]`,
+    ).waitFor({ timeout: 10_000 })
+    weldIconRecords.push({ buildId, record })
+  }
+  assert.deepEqual(weldIconRecords, [
+    { buildId: 1000, record: 108 },
+    { buildId: 1001, record: 109 },
+    { buildId: 1002, record: 110 },
+    { buildId: 1003, record: 111 },
+    { buildId: 1004, record: 112 },
+    { buildId: 1005, record: 113 },
+    { buildId: 1006, record: 114 },
+    { buildId: 1007, record: 115 },
+    { buildId: 1008, record: 116 },
+    { buildId: 1009, record: 117 },
+  ])
+
+  mutatePlayer(host.state(), playerId, { weldBuildId: 1005 })
+  await page.locator('.hub-hud-selected-skill[data-binding="12"][data-record="113"]').waitFor({
     timeout: 10_000,
   })
+  const boundWeld = bindGameSimulationPlayerSkillQuickbar(host.state(), playerId, 52, 7)
+  assert.ok(boundWeld)
+  Object.assign(host.state(), boundWeld)
+  const steamQuickbarIcon = page.locator(
+    '.hub-hud-quickbar-slot[data-slot="7"] .hub-hud-quickbar-skill-icon[data-record="113"]',
+  )
+  await steamQuickbarIcon.waitFor({ timeout: 10_000 })
+  const steamQuickbarRecord = Number(await steamQuickbarIcon.getAttribute('data-record'))
+  assert.equal(steamQuickbarRecord, 113)
+
+  await page.locator('.hub-hud-selected-skill-action[data-binding="12"]').click({ force: true })
+  const primarySelector = page.getByRole('dialog', { name: 'Select Primary Attack' })
+  await primarySelector.waitFor({ timeout: 10_000 })
+  const steamSelectorOption = primarySelector.locator(
+    '.hud-skill-selector-action[data-skill-id="52"][data-icon-record="113"]',
+  )
+  await steamSelectorOption.waitFor({ timeout: 10_000 })
+  const steamSelectorRecord = Number(await steamSelectorOption.getAttribute('data-icon-record'))
+  assert.equal(steamSelectorRecord, 113)
+  await page.keyboard.press('Escape')
+  await primarySelector.waitFor({ state: 'detached', timeout: 10_000 })
+
   setPlanewalker(host.state(), playerId, true)
   await page.locator('.hub-hud-selected-skill[data-binding="12"][data-record="107"]').waitFor({
     timeout: 10_000,
@@ -261,7 +308,7 @@ try {
   assert.equal(await page.getByRole('dialog', { name: 'Select Primary Attack' }).count(), 0)
   assert.equal(await hubScene.getAttribute('data-gameplay-input-blocked'), 'false')
   setPlanewalker(host.state(), playerId, false)
-  await page.locator('.hub-hud-selected-skill[data-binding="12"][data-record="81"]').waitFor({
+  await page.locator('.hub-hud-selected-skill[data-binding="12"][data-record="113"]').waitFor({
     timeout: 10_000,
   })
 
@@ -269,6 +316,19 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
     timeout: 90_000,
   })
+  const boneyardSteamHudIcon = page.locator(
+    '.hub-hud-selected-skill[data-binding="12"][data-record="113"]',
+  )
+  await boneyardSteamHudIcon.waitFor({ timeout: 10_000 })
+  const boneyardSteamQuickbarIcon = page.locator(
+    '.hub-hud-quickbar-slot[data-slot="7"] .hub-hud-quickbar-skill-icon[data-record="113"]',
+  )
+  await boneyardSteamQuickbarIcon.waitFor({ timeout: 10_000 })
+  const boneyardSteamRecords = {
+    hud: Number(await boneyardSteamHudIcon.getAttribute('data-record')),
+    quickbar: Number(await boneyardSteamQuickbarIcon.getAttribute('data-record')),
+  }
+  assert.deepEqual(boneyardSteamRecords, { hud: 113, quickbar: 113 })
   const boneyardMaximumHealth = playerProgression(host.state(), playerId).maximumHealth
   setPlayerVitalComposition(host.state(), playerId, {
     currentHealth: boneyardMaximumHealth * 0.72,
@@ -297,6 +357,7 @@ try {
     boneyardShieldAfterHit,
     charmedHud,
     consoleErrors,
+    boneyardSteamRecords,
     damagedHud,
     defaultHud,
     layeredHud,
@@ -311,6 +372,9 @@ try {
     shieldNarrowerPixels,
     shieldWiderPixels,
     splitMindHud,
+    steamQuickbarRecord,
+    steamSelectorRecord,
+    weldIconRecords,
   })}\n`)
 } finally {
   await browser.close()

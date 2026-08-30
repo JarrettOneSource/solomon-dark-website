@@ -204,3 +204,184 @@ No member is blocked by the browser platform.
   Commits are retained on the two focused local branches; push and deployment
   were not authorized and were not performed. Task acceptance worktrees and
   the evidence named above remain retained for review.
+
+## 2026-08-29 — Reopened: authored Weld icon identity across every gameplay UI
+
+### Reported smell and parity question
+
+- Reported web behavior: selecting the primary-spell control while the active
+  Weld is Steam Jet paints the Battle Mage icon.
+- Expected behavior: every presentation of an active Weld uses that build's
+  authored, distinct Skills icon; Steam Jet is `Skills.113`, not Battle Mage
+  `Skills.86`.
+- Reproduction inputs/scenes: builds `1000..1009` in the Hub and Boneyard
+  selected-primary HUD, compact primary selector, live eight-slot belt,
+  InventoryScreen belt, SkillScreen row/belt/drag actor, and LevelupScreen
+  card/detail.
+- Falsifiers: `Skills.86` is the authored Steam sprite; any current Website
+  consumer legitimately needs the native `81..90` alias set; a build can reach
+  one surface without a valid build ID; or changing icon projection alters
+  authoritative selection, casting, belt, save, or replication state.
+
+This secondary report exposes a process failure in the 2026-08-23 closure.
+That pass asserted `81..90` numerically but did not identify their pixels or
+reconcile them with the later complete LevelupScreen extraction proving Weld
+records `108..117`. It consequently propagated the stock compact-display alias
+as if it were authored Weld art and did not sweep the live belt siblings.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player report | Website `/game`, 2026-08-29 | Active Steam Jet appears as Battle Mage in the primary selector. | high for the reported web symptom |
+| Retail identity | unmodified Beta 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`, re-hashed 2026-08-29 | Same canonical image as the existing SkillScreen, Weld, and HUD evidence. | high |
+| Read-only instructions | canonical Ghidra replica; `0x00665F10`, `0x00665FF0`, `0x0066F330`, `0x005D2520`, `0x00671810`; Mod Loader tool revision `08bfba9ef367f7b863848030d0a289dc31e33192` | The retail Weld resolver returns `0x51..0x5A` (`81..90`) and refresh stores that byte in row 52's compact-display slot. Compact HUD/selector consumers then paint those raw records, aliasing ordinary skill art. The dedicated Weld card path owns the distinct build presentation. | high |
+| Authored asset/data | Website `native-ui-assets.json`, `skill-picker-skills-atlas.png`, `native-skill-catalog.json`; source-executable SHA above | Battle Mage row 59 owns `Skills.86`; the ten distinct Weld sprites are `Skills.108..117`; Steam Jet is `Skills.113`. All twenty records were inspected, not inferred from names. | high |
+| Existing instruction-derived evidence | entry 069, `0x00671810` and complete build table | Build order `1000..1009` maps one-to-one to authored records `108..117`; the earlier `81..90` values belong to the conflicting compact-display path. | high |
+| Current Website causal trace | `NativeWeldBuild`, `native-hud-presentation`, `hud-skill-selector`, `SkillQuickbar`, `skill-book-model`, SkillScreen and Inventory renderers | The model calls `81..90` `skillsAtlasIconRecord` and feeds it to five Skills-atlas consumers; the ordinary live quickbar separately falls back to generic Spell Welding `Skills.79`. Correct SkillPicker/SkillScreen row paths use the separately named `108..117` field. | high |
+
+No injected process, runtime address, or ASLR-derived conclusion is used. The
+Ghidra wrapper and `decompile_targets.py` hashes were respectively
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`
+and `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+### System boundary and membership inventory
+
+Website system: the single authored Weld-build icon resolver, from replicated
+`weldBuildId` through every stock-art gameplay UI consumer. Cast mechanics,
+offer RNG, button geometry, input authority, and non-Weld skill icons are
+sibling systems and remain unchanged.
+
+The table records the required closing disposition; implementation receipts
+below replace the planned proof with measured proof.
+
+| Member (build/surface/branch) | Native source / authored record | Required disposition | Closing proof |
+| --- | --- | --- | --- |
+| 1000 Burning Bolt | `0x00671810`, `Skills.108` | exact-ported | shared ten-build icon contract |
+| 1001 Frost Missile | same, `Skills.109` | exact-ported | shared ten-build icon contract |
+| 1002 Ball Lightning | same, `Skills.110` | exact-ported | shared ten-build icon contract |
+| 1003 Flame Lash | same, `Skills.111` | exact-ported | shared ten-build icon contract |
+| 1004 Blizzard Beam | same, `Skills.112` | exact-ported | shared ten-build icon contract |
+| 1005 Steam Jet | same, `Skills.113` | exact-ported | explicit Battle-Mage collision regression |
+| 1006 Ethereal Boulder | same, `Skills.114` | exact-ported | shared ten-build icon contract |
+| 1007 Meteor Swarm | same, `Skills.115` | exact-ported | shared ten-build icon contract |
+| 1008 Hailstones | same, `Skills.116` | exact-ported | shared ten-build icon contract |
+| 1009 Crawling Shock | same, `Skills.117` | exact-ported | shared ten-build icon contract |
+| selected-primary HUD, Hub/Boneyard | Game binding 12; active build | exact-ported | every build resolves through one owner |
+| compact primary selector | `Skills_Quickbar`; learned row 52 | exact-ported | every build option exposes matching record |
+| live eight-slot gameplay belt | `BeltButton`; row 52 binding | exact-ported | shared resolver replaces generic record 79 |
+| SkillScreen root row | `0x00671810/0x006720F0` | verified-already-at-parity | already consumed `108..117`; moved to shared owner |
+| SkillDragger | `0x0065E4D0`; live row icon | exact-ported | shared row projection |
+| SkillScreen live belt | `0x005D3E10`; row 52 binding | exact-ported | shared resolver |
+| InventoryScreen live belt | same live `BeltButton` identity | exact-ported | shared resolver |
+| LevelupScreen card and detail | `0x00671810`; synthetic offer build | verified-already-at-parity | already consumed `108..117`; moved to shared owner |
+| pure primaries, concentrations, secondaries, items | ordinary catalog/icon owners | verified-already-at-parity | exhaustive unchanged-record assertions |
+| Plane Orb primary override | Game binding 12, `Skills.107` | verified-already-at-parity | override remains ahead of Weld resolution |
+| retail compact alias records `81..90` | `0x00665F10/0x00665FF0` | out-of-system (player explicitly rejected the visible alias as a glitch; Website uses the authored Weld sprites rather than preserving this retail display defect) | no production consumer retains the alias table |
+| Hall of Fame highest-skill icon | historical skill ID without active `weldBuildId` | out-of-system (cannot identify a particular Weld build) | retains generic row 52 identity |
+| mod-authored skill icons | prepared mod content owns its own image | out-of-system (not a native Weld build) | mod renderer unchanged |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- `Skills_Wizard` owns active synthetic build ID `1000..1009`; snapshots and
+  saves already preserve that identity. Icon choice is presentation-only and
+  must never infer a build from component colors or spell actors.
+- The ten-build authored table is total and positional: build `1000 + n` owns
+  `Skills.108 + n`. There is no fallback among valid active builds.
+- The retail compact resolver's `81..90` values collide exactly with ordinary
+  skill records 54..63; Steam's `86` collision with Battle Mage is therefore a
+  table-domain error, not stale React state, selector timing, or WebGL texture
+  corruption.
+- Website uses one resolver for cards, HUD, selectors, draggers, and belts.
+  Generic row 52 art is legal only when no concrete Weld build exists, such as
+  historical highest-skill presentation without build identity.
+- Scene entry, Hub/Boneyard transition, pause, selector open/close, belt drag,
+  inventory handoff, save/resume, and replication do not mutate the resolver;
+  they supply the same authoritative build ID to a new view owner.
+- Input hit rectangles, audio, authority commands, build selection, casting,
+  and teardown are unchanged. This correction has no tick, RNG, collision, or
+  network behavior.
+
+### Nearby-system findings
+
+- The field names encoded the mistake: `skillsAtlasIconRecord` held the aliased
+  `81..90` set while `skillScreenIconRecord` held the actual Skills-atlas Weld
+  art. The model must expose one authored icon field and keep the rejected
+  retail alias only as documented evidence.
+- The ordinary gameplay belt did not use either Weld field and therefore
+  showed generic `Skills.79`; the prior SkillScreen/quickbar closure missed this
+  sibling even though it shares the active build identity.
+- Entry 069's complete authored-card extraction remains correct for
+  `108..117`; its sentence treating `81..90` as a second Website display domain
+  is superseded by this user-requested correction.
+
+### Confidence and open questions
+
+- Confirmed: retail resolver values and writers, raw compact consumers, all ten
+  authored Weld records, the Steam/Battle-Mage collision, every current Website
+  consumer, state owner, and lifecycle boundaries.
+- Inferred: none material.
+- Unknown: none. The intentional difference from retail compact-display pixels
+  is explicit and user-requested, not a browser limitation.
+
+### Web implementation consequence
+
+- Collapse the two misleading Weld icon fields into one authored
+  `skillsAtlasIconRecord` table containing `108..117`.
+- Add one build-aware skill-icon resolver beside the authoritative skill/Weld
+  catalog and route every native gameplay UI consumer through it.
+- Pass `weldBuildId` into the ordinary live quickbar; keep the generic row-52
+  icon only for callers that genuinely lack build identity.
+- Remove every production use and test expectation of `81..90` as Weld art.
+  Do not add a Steam-only conditional or asset override.
+
+### Validation contract
+
+- Focused tests: assert the complete `1000..1009 -> 108..117` table, Steam
+  `113 != Battle Mage 86`, pure/Plane Orb/concentration stability, and the
+  selected HUD, compact selector, SkillBook model, SkillPicker, drag/belt, and
+  ordinary live-quickbar resolver paths.
+- Mac full gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` against the exact
+  candidate tree.
+- Mac Chrome/WebGL2: cycle all ten active Welds in the selected-primary HUD,
+  settle on Steam `113`, open the compact primary selector and observe its row
+  52 option as `113`, verify the live belt where present, exercise Plane Orb
+  restore, then repeat the selected HUD in Boneyard with empty page, console,
+  and failed-response arrays.
+- Stock/asset comparison: compare each presented record against the extracted
+  authored `Skills.108..117` frames. The completion receipt must call out that
+  retail compact surfaces use the rejected `81..90` aliases.
+
+### Implementation validation receipt
+
+- `NativeWeldBuild` now owns only the authored `Skills.108..117` table, and
+  `nativeSkillIconRecord` is the single resolver for ordinary catalog rows,
+  concrete Weld builds, and the generic row-52 no-build boundary. Selected HUD,
+  compact selector, gameplay belt, SkillScreen row/dragger/belt,
+  InventoryScreen belt, and LevelupScreen card/detail all consume that owner.
+- Table-driven tests cover all ten builds on the catalog resolver, selected
+  HUD, compact selector, SkillBook model, and LevelupScreen card/detail paths.
+  The Steam regression separately proves `Skills.113 != Skills.86`; pure
+  primaries, all fourteen concentrations, Plane Orb `107`, and generic Spell
+  Welding `79` remain fixed.
+- A detached Mac candidate based at
+  `6265aadf5525e8ac2a0be60062c589a3bf951cf2` matched the local 18-file
+  manifest byte-for-byte. With Node `22.17.0`, npm `10.9.2`, and .NET SDK
+  `10.0.302`, `/opt/homebrew/bin/bash ./scripts/validate.sh` passed every
+  backend, frontend, and desktop suite plus the production build, media policy,
+  and game-bundle budget.
+- Mac Chrome `151.0.7922.174` at `1600 x 900` cycled the selected-primary HUD
+  through exact records `108..117`, settled Steam at `113`, opened the compact
+  selector and observed row 52 at `113`, bound Steam to live belt slot 7 at
+  `113`, preserved Plane Orb `107` and restored `113`, then entered Boneyard
+  with both HUD and belt still at `113`. Page, console, and failed-response
+  arrays were empty.
+- The reviewed Boneyard frame shows the distinct Steam plume in both the
+  selected-primary cluster and live belt; Battle Mage's torso record `86` is
+  absent from those owners. No member is browser-blocked and no material
+  unknown remains.
+- The visible difference from retail is deliberate and requested: retail's
+  compact-display writer aliases `81..90`, while Website consistently uses the
+  ten authored Weld sprites. No push or deployment was authorized or performed.

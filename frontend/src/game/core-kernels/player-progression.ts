@@ -189,7 +189,6 @@ export interface NativeWeldBuild {
   readonly id: number
   readonly pairDescription: string
   readonly primarySkillIds: readonly [number, number]
-  readonly skillScreenIconRecord: number
   readonly skillsAtlasIconRecord: number
   readonly syntheticName: string
 }
@@ -268,17 +267,20 @@ const WELDING_RELATED_SKILLS: Readonly<Record<number, readonly [number, number]>
 
 const defineNativeWeldBuild = (build: NativeWeldBuild): NativeWeldBuild => Object.freeze(build)
 
+// Skills.108..117 are the ten authored Weld sprites. The retail compact-display
+// resolver aliases Skills.81..90, which overlap ordinary skills and are not a
+// second Weld-art domain.
 export const NATIVE_WELD_BUILDS: readonly NativeWeldBuild[] = Object.freeze([
-  defineNativeWeldBuild({ colorRoots: [0, 1], componentSkillIds: [8, 16, 10, 18, 9, 17], id: 1000, pairDescription: 'Welded Magic Missile + Fireball', primarySkillIds: [8, 16], skillScreenIconRecord: 108, skillsAtlasIconRecord: 81, syntheticName: 'Burning Bolt' }),
-  defineNativeWeldBuild({ colorRoots: [0, 3], componentSkillIds: [8, 32, 10, 34, 9, 33], id: 1001, pairDescription: 'Welded Magic Missile + Frost Jet', primarySkillIds: [8, 32], skillScreenIconRecord: 109, skillsAtlasIconRecord: 82, syntheticName: 'Frost Missile' }),
-  defineNativeWeldBuild({ colorRoots: [0, 2], componentSkillIds: [8, 24, 10, 25, 9, 26], id: 1002, pairDescription: 'Welded Magic Missile + Lightning', primarySkillIds: [8, 24], skillScreenIconRecord: 110, skillsAtlasIconRecord: 83, syntheticName: 'Ball Lightning' }),
-  defineNativeWeldBuild({ colorRoots: [2, 1], componentSkillIds: [16, 24, 18, 25, 17, 26], id: 1003, pairDescription: 'Welded Lighting + Fireball', primarySkillIds: [16, 24], skillScreenIconRecord: 111, skillsAtlasIconRecord: 84, syntheticName: 'Flame Lash' }),
-  defineNativeWeldBuild({ colorRoots: [2, 3], componentSkillIds: [32, 24, 34, 25, 33, 26], id: 1004, pairDescription: 'Welded Lightning + Frost Jet', primarySkillIds: [32, 24], skillScreenIconRecord: 112, skillsAtlasIconRecord: 85, syntheticName: 'Blizzard Beam' }),
-  defineNativeWeldBuild({ colorRoots: [3, 1], componentSkillIds: [16, 32, 18, 34, 17, 33], id: 1005, pairDescription: 'Welded Fireball + Frost Jet', primarySkillIds: [16, 32], skillScreenIconRecord: 113, skillsAtlasIconRecord: 86, syntheticName: 'Steam Jet' }),
-  defineNativeWeldBuild({ colorRoots: [0, 4], componentSkillIds: [8, 40, 10, 43, 9, 42], id: 1006, pairDescription: 'Welded Magic Missile + Boulder', primarySkillIds: [8, 40], skillScreenIconRecord: 114, skillsAtlasIconRecord: 87, syntheticName: 'Ethereal Boulder' }),
-  defineNativeWeldBuild({ colorRoots: [4, 1], componentSkillIds: [16, 40, 18, 43, 17, 42], id: 1007, pairDescription: 'Welded Fireball + Boulder', primarySkillIds: [16, 40], skillScreenIconRecord: 115, skillsAtlasIconRecord: 88, syntheticName: 'Meteor Swarm' }),
-  defineNativeWeldBuild({ colorRoots: [4, 3], componentSkillIds: [32, 40, 34, 43, 33, 42], id: 1008, pairDescription: 'Welded Frost Jet + Boulder', primarySkillIds: [32, 40], skillScreenIconRecord: 116, skillsAtlasIconRecord: 89, syntheticName: 'Hailstones' }),
-  defineNativeWeldBuild({ colorRoots: [4, 2], componentSkillIds: [24, 40, 25, 43, 26, 42], id: 1009, pairDescription: 'Welded Lightning + Boulder', primarySkillIds: [24, 40], skillScreenIconRecord: 117, skillsAtlasIconRecord: 90, syntheticName: 'Crawling Shock' }),
+  defineNativeWeldBuild({ colorRoots: [0, 1], componentSkillIds: [8, 16, 10, 18, 9, 17], id: 1000, pairDescription: 'Welded Magic Missile + Fireball', primarySkillIds: [8, 16], skillsAtlasIconRecord: 108, syntheticName: 'Burning Bolt' }),
+  defineNativeWeldBuild({ colorRoots: [0, 3], componentSkillIds: [8, 32, 10, 34, 9, 33], id: 1001, pairDescription: 'Welded Magic Missile + Frost Jet', primarySkillIds: [8, 32], skillsAtlasIconRecord: 109, syntheticName: 'Frost Missile' }),
+  defineNativeWeldBuild({ colorRoots: [0, 2], componentSkillIds: [8, 24, 10, 25, 9, 26], id: 1002, pairDescription: 'Welded Magic Missile + Lightning', primarySkillIds: [8, 24], skillsAtlasIconRecord: 110, syntheticName: 'Ball Lightning' }),
+  defineNativeWeldBuild({ colorRoots: [2, 1], componentSkillIds: [16, 24, 18, 25, 17, 26], id: 1003, pairDescription: 'Welded Lighting + Fireball', primarySkillIds: [16, 24], skillsAtlasIconRecord: 111, syntheticName: 'Flame Lash' }),
+  defineNativeWeldBuild({ colorRoots: [2, 3], componentSkillIds: [32, 24, 34, 25, 33, 26], id: 1004, pairDescription: 'Welded Lightning + Frost Jet', primarySkillIds: [32, 24], skillsAtlasIconRecord: 112, syntheticName: 'Blizzard Beam' }),
+  defineNativeWeldBuild({ colorRoots: [3, 1], componentSkillIds: [16, 32, 18, 34, 17, 33], id: 1005, pairDescription: 'Welded Fireball + Frost Jet', primarySkillIds: [16, 32], skillsAtlasIconRecord: 113, syntheticName: 'Steam Jet' }),
+  defineNativeWeldBuild({ colorRoots: [0, 4], componentSkillIds: [8, 40, 10, 43, 9, 42], id: 1006, pairDescription: 'Welded Magic Missile + Boulder', primarySkillIds: [8, 40], skillsAtlasIconRecord: 114, syntheticName: 'Ethereal Boulder' }),
+  defineNativeWeldBuild({ colorRoots: [4, 1], componentSkillIds: [16, 40, 18, 43, 17, 42], id: 1007, pairDescription: 'Welded Fireball + Boulder', primarySkillIds: [16, 40], skillsAtlasIconRecord: 115, syntheticName: 'Meteor Swarm' }),
+  defineNativeWeldBuild({ colorRoots: [4, 3], componentSkillIds: [32, 40, 34, 43, 33, 42], id: 1008, pairDescription: 'Welded Frost Jet + Boulder', primarySkillIds: [32, 40], skillsAtlasIconRecord: 116, syntheticName: 'Hailstones' }),
+  defineNativeWeldBuild({ colorRoots: [4, 2], componentSkillIds: [24, 40, 25, 43, 26, 42], id: 1009, pairDescription: 'Welded Lightning + Boulder', primarySkillIds: [24, 40], skillsAtlasIconRecord: 117, syntheticName: 'Crawling Shock' }),
 ])
 
 export const NATIVE_WELD_COMPONENT_SKILL_IDS: readonly number[] = Object.freeze([
@@ -489,6 +491,20 @@ function nativePrimarySkillRankStats(
 export function nativeWeldBuild(buildId: number): NativeWeldBuild | null {
   if (!Number.isInteger(buildId)) return null
   return NATIVE_WELD_BUILDS[buildId - NATIVE_WELD_BUILDS[0]!.id] ?? null
+}
+
+export function nativeSkillIconRecord(
+  skillId: number,
+  weldBuildId: number | null = null,
+): number {
+  const skill = NATIVE_SKILL_CATALOG[skillId]
+  if (!skill) throw new RangeError(`native skill ${skillId} has no Skills icon`)
+  if (skillId !== SPELL_WELDING_SKILL_ID || weldBuildId === null) {
+    return skill.skills_atlas_icon_record
+  }
+  const build = nativeWeldBuild(weldBuildId)
+  if (!build) throw new RangeError(`native Weld build ${weldBuildId} has no Skills icon`)
+  return build.skillsAtlasIconRecord
 }
 
 export function nativeWeldComponentRanksForBuild(

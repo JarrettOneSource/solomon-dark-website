@@ -120,7 +120,7 @@ test('maps every pure and Weld primary plus the Planewalker override', () => {
       selectedPrimarySkillId: 52,
       weldBuildId: id,
     })[0]!.record),
-    [81, 82, 83, 84, 85, 86, 87, 88, 89, 90],
+    [108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
   )
   assert.equal(nativeHudSkillBindings({
     concentrationSkillIds: [57, null],

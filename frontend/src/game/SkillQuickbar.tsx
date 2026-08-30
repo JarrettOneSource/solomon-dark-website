@@ -24,6 +24,7 @@ import {
 import {
   NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
+  nativeSkillIconRecord,
 } from './core-kernels/player-progression.ts'
 import {
   layoutNativeQuickbarBinding,
@@ -81,6 +82,7 @@ interface SkillQuickbarProps {
   uiScale: number
   /** Logical viewport width (display-scale space) used to keep the touch banks clear of the dock. */
   viewportWidth: number
+  weldBuildId: number | null
 }
 
 export default function SkillQuickbar({
@@ -101,6 +103,7 @@ export default function SkillQuickbar({
   selectedPrimarySkillId,
   uiScale,
   viewportWidth,
+  weldBuildId,
 }: SkillQuickbarProps) {
   const mobileBank = mobileQuickbarBankLayout(viewportWidth, uiScale)
   return (
@@ -130,6 +133,7 @@ export default function SkillQuickbar({
           secondaryManaCosts={secondaryManaCosts}
           selectedPrimarySkillId={selectedPrimarySkillId}
           slot={slot}
+          weldBuildId={weldBuildId}
         />
       ))}
     </div>
@@ -155,6 +159,7 @@ function SkillQuickbarSlot({
   secondaryManaCosts,
   selectedPrimarySkillId,
   slot,
+  weldBuildId,
 }: {
   bindingCode: string
   concentrationSkillIds: SkillQuickbarProps['concentrationSkillIds']
@@ -174,6 +179,7 @@ function SkillQuickbarSlot({
   secondaryManaCosts: SkillQuickbarProps['secondaryManaCosts']
   selectedPrimarySkillId: number
   slot: number
+  weldBuildId: number | null
 }) {
   const mobileUiId: MobileUiElementId = entry?.kind === 'health-potion'
     ? 'healthPotion'
@@ -189,6 +195,7 @@ function SkillQuickbarSlot({
   const [burstSequence, setBurstSequence] = useState<number | null>(null)
   const skillId = entry?.kind === 'skill' ? entry.skillId : null
   const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
+  const skillIconRecord = skillId === null ? null : nativeSkillIconRecord(skillId, weldBuildId)
   const potion = entry?.kind === 'health-potion'
     ? nativeBeltPotionProjection(economy.backpack, 0)
     : entry?.kind === 'mana-potion'
@@ -325,11 +332,11 @@ function SkillQuickbarSlot({
       {remaining > 0 && capacity > 0 ? (
         <CooldownSector remaining={remaining} capacity={capacity} />
       ) : null}
-      {skill === undefined ? null : (
+      {skill === undefined || skillIconRecord === null ? null : (
         <NativeSkillIcon
           cooldown={remaining > 0}
           opacity={iconAlpha}
-          record={skill.skills_atlas_icon_record}
+          record={skillIconRecord}
         />
       )}
       {item ? (

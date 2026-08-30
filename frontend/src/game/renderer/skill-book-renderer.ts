@@ -17,6 +17,7 @@ import {
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
   NATIVE_SKILL_CATALOG,
+  nativeSkillIconRecord,
   nativeSkillRoot,
   nativeWeldBuild,
   playerExperienceProgress,
@@ -225,18 +226,13 @@ function drawSkillDragger(
     .flatMap(({ page }) => page.rows)
     .find(({ id }) => id === presentation.draggedSkillId)
   if (!row) return
-  const weld = row.weldBuildId === null ? null : nativeWeldBuild(row.weldBuildId)
   const glow = spriteFor(textures, 'Skills', 164)
   glow.anchor.set(0.5)
   glow.position.copyFrom(presentation.dragPosition)
   glow.scale.set(NATIVE_SKILL_DRAGGER_SCALE)
   glow.tint = nativeSkillRootTint(nativeSkillRoot(row.id))
   layer.addChild(glow)
-  const icon = spriteFor(
-    textures,
-    'Skills',
-    weld?.skillsAtlasIconRecord ?? row.iconRecord,
-  )
+  const icon = spriteFor(textures, 'Skills', row.iconRecord)
   icon.anchor.set(0.5)
   icon.position.copyFrom(presentation.dragPosition)
   icon.scale.set(NATIVE_SKILL_DRAGGER_SCALE)
@@ -525,7 +521,7 @@ function drawSkillEntry(
   }
   layer.addChild(frame)
 
-  const iconRecord = weldBuild?.skillScreenIconRecord ?? row.iconRecord
+  const iconRecord = row.iconRecord
   const iconShadow = spriteFor(textures, 'Skills', iconRecord)
   iconShadow.anchor.set(0.5)
   iconShadow.position.set(
@@ -668,12 +664,12 @@ function drawSkillQuickbar(
       const row = presentation.placements
         .flatMap(({ page }) => page.rows)
         .find(({ id }) => id === skillId)
-      const record = row?.iconRecord ?? NATIVE_SKILL_CATALOG[skillId]?.skills_atlas_icon_record
+      const record = row?.iconRecord ?? nativeSkillIconRecord(
+        skillId,
+        presentation.progression.weldBuildId,
+      )
       if (record !== undefined) {
-        const weld = skillId === 52
-          ? nativeWeldBuild(presentation.progression.weldBuildId ?? Number.NaN)
-          : null
-        const icon = spriteFor(textures, 'Skills', weld?.skillsAtlasIconRecord ?? record)
+        const icon = spriteFor(textures, 'Skills', record)
         icon.anchor.set(0.5)
         icon.position.set(x + width / 2, y + height / 2)
         icon.alpha = 0.375

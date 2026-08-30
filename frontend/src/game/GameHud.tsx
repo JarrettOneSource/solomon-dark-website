@@ -422,6 +422,7 @@ export default function GameHud({
         selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
         uiScale={uiScale}
         viewportWidth={viewport.width}
+        weldBuildId={quickbarHud.weldBuildId}
       />
 
       {mode === 'hub' ? (

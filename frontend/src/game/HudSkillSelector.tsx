@@ -147,7 +147,7 @@ export default function HudSkillSelector({
       <div ref={hostRef} className="hud-skill-selector-renderer" aria-hidden />
       <h2 className="hud-skill-selector-semantic-title">{title}</h2>
       <div className="hud-skill-selector-actions">
-        {options.map(({ name, skillId }, index) => {
+        {options.map(({ iconRecord, name, skillId }, index) => {
           const selected = target.kind === 'primary'
             ? progression.selectedPrimarySkillId === skillId
             : progression.concentrationSkillIds[target.slot] === skillId
@@ -161,6 +161,7 @@ export default function HudSkillSelector({
               }`}
               aria-pressed={selected}
               className="hud-skill-selector-action"
+              data-icon-record={iconRecord}
               data-skill-id={skillId}
               disabled={rendererState !== 'ready'}
               key={skillId}

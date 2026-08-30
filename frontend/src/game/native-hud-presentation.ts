@@ -1,7 +1,6 @@
 import {
-  NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
-  nativeWeldBuild,
+  nativeSkillIconRecord,
 } from './core-kernels/player-progression.ts'
 
 export const NATIVE_HUD_BASE_HEALTH = 50
@@ -265,11 +264,7 @@ export function nativeHudSkillBindings({
 }
 
 function primaryHudRecord(skillId: number, weldBuildId: number | null): number {
-  if (skillId === 52 && weldBuildId !== null) {
-    const build = nativeWeldBuild(weldBuildId)
-    if (build !== null) return build.skillsAtlasIconRecord
-  }
-  return skillRecord(skillId)
+  return nativeSkillIconRecord(skillId, weldBuildId)
 }
 
 function concentrationBinding(
@@ -280,15 +275,9 @@ function concentrationBinding(
   return Object.freeze({
     binding,
     centerOffset: 0,
-    record: skillRecord(skillId),
+    record: nativeSkillIconRecord(skillId),
     skillId,
   })
-}
-
-function skillRecord(skillId: number): number {
-  const record = NATIVE_SKILL_CATALOG[skillId]?.skills_atlas_icon_record
-  if (record === undefined) throw new RangeError(`native HUD skill ${skillId} has no icon`)
-  return record
 }
 
 function clampUnit(value: number): number {

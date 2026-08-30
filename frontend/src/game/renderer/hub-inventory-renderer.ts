@@ -21,8 +21,7 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
 import {
-  NATIVE_SKILL_CATALOG,
-  nativeWeldBuild,
+  nativeSkillIconRecord,
 } from '../core-kernels/player-progression.ts'
 import {
   nativeBeltEntryItem,
@@ -1340,12 +1339,14 @@ function addBelt(
     addCenteredAtlasSprite(context, hudLayer, 'UI', 2, x, y)
     const entry = belt[index]
     if (entry?.kind === 'skill') {
-      const row = NATIVE_SKILL_CATALOG[entry.skillId]
-      const weld = entry.skillId === 52
-        ? nativeWeldBuild(progression.weldBuildId ?? Number.NaN)
-        : null
-      const record = weld?.skillsAtlasIconRecord ?? row?.skills_atlas_icon_record
-      if (record !== undefined) addCenteredAtlasSprite(context, hudLayer, 'Skills', record, x, y)
+      addCenteredAtlasSprite(
+        context,
+        hudLayer,
+        'Skills',
+        nativeSkillIconRecord(entry.skillId, progression.weldBuildId),
+        x,
+        y,
+      )
       return
     }
     if (!entry) return

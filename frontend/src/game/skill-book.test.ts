@@ -4,7 +4,9 @@ import test from 'node:test'
 
 import {
   NATIVE_SKILL_CATALOG,
+  NATIVE_WELD_BUILDS,
   nativeSkillCategory,
+  nativeSkillIconRecord,
 } from './core-kernels/player-progression.ts'
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
@@ -139,6 +141,13 @@ test('exposes every learned interaction category without losing welded primary r
   assert.deepEqual(selectableSecondarySkillRows(progression).map(({ id }) => id), [11, 21])
   assert.deepEqual(selectableConcentrationSkillRows(progression).map(({ id }) => id), [57])
   assert.deepEqual(nativeSkillBookRows(progression).map(({ id }) => id), [8, 11, 16, 21, 52, 57])
+  assert.deepEqual(
+    NATIVE_WELD_BUILDS.map(({ id }) => nativeSkillBookRows({
+      ...progression,
+      weldBuildId: id,
+    }).find((row) => row.id === 52)?.iconRecord),
+    [108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
+  )
 })
 
 test('uses the recovered page dimensions, wrapping, and common centering', () => {
@@ -373,7 +382,7 @@ function catalogRow(skillId: number): NativeSkillBookRow {
     dependencyIds: [],
     description: skill.config?.mQDescription ?? skill.config?.mDescription ?? '',
     effectiveRank: 1,
-    iconRecord: skill.skills_atlas_icon_record,
+    iconRecord: nativeSkillIconRecord(skillId, skillId === 52 ? 1000 : null),
     id: skillId,
     name: skill.name,
     permanentRank: 1,
