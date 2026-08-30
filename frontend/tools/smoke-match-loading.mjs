@@ -92,12 +92,14 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: sceneTimeoutMs })
   await waitForLoadingTeardown(page, 'boneyard')
-  assert.equal(await page.locator(
+  const arenaProgress = page.locator(
     '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="game-started"]'
     + '[data-gameplay-resume-grace-phase="progress"]',
-  ).count(), 0)
-  assert.equal(await page.getByRole('progressbar', { name: 'Resuming gameplay' }).count(), 0)
+  )
+  await arenaProgress.waitFor()
+  await arenaProgress.getByRole('progressbar', { name: 'Resuming gameplay' }).waitFor()
+  await arenaProgress.waitFor({ state: 'detached' })
 
   await page.waitForTimeout(250)
   const idleStart = await playerPosition(page)

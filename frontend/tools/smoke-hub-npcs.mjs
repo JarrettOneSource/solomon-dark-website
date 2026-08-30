@@ -13,6 +13,7 @@ import {
 import { hubMemorialSlotIndexForInteraction } from '../src/game/core-kernels/hub-memorial.ts'
 import {
   holdForHubTransition,
+  hubSmokePlayerPosition,
   navigateHubRegion,
   waitForSettledHubRegion,
 } from './hub-smoke-navigation.mjs'
@@ -432,10 +433,14 @@ async function exerciseProvokatus(canvas) {
   await page.screenshot({ path: `${screenshotRoot}-provokatus-response.png` })
   await dialog.getByRole('button', { name: 'Skip' }).click()
   await dialog.waitFor({ state: 'hidden' })
-  const note = page.getByRole('alertdialog', { name: 'Boast notice' })
+  const note = page.locator(
+    '.native-notebox-overlay[data-native-notebox-kind="instruction"]',
+  )
   await note.waitFor()
   assert.match(await note.innerText(), /survive until at least Wave 30/)
-  await note.getByRole('button', { name: 'OKAY' }).click()
+  assert.equal(await page.locator('.hub-scene').getAttribute('data-modal-open'), 'false')
+  const movement = await assertNoteboxAllowsMovement(canvas)
+  await note.waitFor({ state: 'detached', timeout: 12_000 })
   const grant = await page.evaluate(() => window.solomonDark.lua.execute(
     'sd.player.grant_experience(91)',
   ))
@@ -460,8 +465,24 @@ async function exerciseProvokatus(canvas) {
     automaticChoiceIndex,
     automaticElapsedMs: Math.round(automaticElapsedMs),
     interaction: 'annalist',
+    noteboxAutoExpired: true,
+    noteboxMovement: movement,
     selectorRows: 5,
   })
+}
+
+async function assertNoteboxAllowsMovement(canvas) {
+  const start = await hubSmokePlayerPosition(canvas)
+  for (const key of ['KeyD', 'KeyA', 'KeyS', 'KeyW']) {
+    await page.keyboard.down(key)
+    await page.waitForTimeout(220)
+    await page.keyboard.up(key)
+    await page.waitForTimeout(80)
+    const end = await hubSmokePlayerPosition(canvas)
+    const moved = Math.hypot(end.x - start.x, end.y - start.y)
+    if (moved > 0.5) return { end, key, moved, start }
+  }
+  assert.fail(`Boast Notebox blocked movement at ${JSON.stringify(start)}`)
 }
 
 async function exerciseSkorcha(canvas) {

@@ -1071,7 +1071,10 @@ export const NATIVE_STREAM_MANIFEST = {
     sourceSha256: 'bccf1c352893ee24d515b09df4fd0d44c733dc3bdab71fe2bf0710bdc14d93a8',
   },
 } as const satisfies Readonly<
-  Record<CreateStreamCue | SecondaryStreamCue | 'death-guitar' | 'dye', NativeSoundEntry>
+  Record<
+    CreateStreamCue | SecondaryStreamCue | 'boast-failure' | 'death-guitar' | 'dye',
+    NativeSoundEntry
+  >
 >
 
 export const NATIVE_SOLOMON_VOICE_MANIFEST = {

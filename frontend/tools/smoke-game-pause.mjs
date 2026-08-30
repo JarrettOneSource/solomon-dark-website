@@ -600,21 +600,8 @@ try {
     type: 'client-resume-grace-ready',
     sequence: pendingLatePeerLoadingGrace.grace.sequence,
   }))
-  const freshReleaseAtMs = performance.now()
   await loadingWaiting.waitFor({ state: 'detached', timeout: 1_000 })
-  assert.equal(await page.locator(
-    '.gameplay-resume-progress-overlay'
-    + '[data-gameplay-resume-grace-reason="game-started"]'
-    + '[data-gameplay-resume-grace-phase="progress"]',
-  ).count(), 0)
-  assert.equal(await page.getByRole('progressbar', { name: 'Resuming gameplay' }).count(), 0)
-  await waitForHost(
-    () => host.state().tick > loadingHeldTick,
-    'fresh all-renderer readiness release',
-    1_000,
-  )
-  await new Promise(resolve => setTimeout(resolve, 60))
-  assertNoCatchUp(loadingHeldTick, freshReleaseAtMs, 'fresh Boneyard readiness')
+  await assertResumeProgress(page, loadingHeldTick, 'game-started')
 
   await page.setViewportSize({ height: 1080, width: 2560 })
   const largeBoneyard = page.locator('.boneyard-scene')

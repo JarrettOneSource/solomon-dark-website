@@ -159,6 +159,7 @@ const SOURCES = {
       string
     >),
     'arch-intro-0': 'arch-intro-0.wav',
+    'boast-failure': 'boast-failure.wav',
     'catch-it': 'catch.wav',
     'choose-element': 'choose.wav',
     'death-guitar': 'death-guitar.wav',
