@@ -727,6 +727,7 @@ try {
   await page.screenshot({ path: variantsScreenshotPath })
 
   const boneyardCloseHeldTick = host.state().tick
+  const boneyardCloseStartedAtMs = performance.now()
   await variantActions.first().click()
   await boneyardPicker.waitFor({ state: 'detached', timeout: 15_000 })
   assert.equal(await page.locator(
@@ -736,8 +737,10 @@ try {
     () => host.state().tick > boneyardCloseHeldTick,
     'Boneyard picker direct release',
   )
+  const boneyardCloseElapsedMs = performance.now() - boneyardCloseStartedAtMs
+  const maximumBoneyardCloseTicks = Math.ceil(boneyardCloseElapsedMs / 10) + 2
   assert.ok(
-    host.state().tick - boneyardCloseHeldTick <= 10,
+    host.state().tick - boneyardCloseHeldTick <= maximumBoneyardCloseTicks,
     'Boneyard picker close replayed held wall time',
   )
 
