@@ -19,8 +19,9 @@ import {
   NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS,
   NATIVE_ETHER_BURN_LIFETIME_TICKS,
   nativePlaneOrbDamage,
-  nativeSecondaryAvailableMana,
   nativeSecondaryCooldownCapacityTicks,
+  nativeSecondaryManaCeiling,
+  nativeSecondaryManaReserve,
   nativeSecondaryStaffCastDurationTicks,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
@@ -3717,7 +3718,6 @@ test('toggle reserves stack, release immediately, and overload clears the full s
   state = stepNativeSecondaryAbilities(state, context(23, 1, 0)).state
   assert.equal(state.players.player?.firewalker, true)
   assert.equal(state.players.player?.reservedMana, 50)
-  assert.equal(nativeSecondaryAvailableMana(100, state.players.player!), 50)
 
   state = stepNativeSecondaryAbilities(state, context(23, 2, null)).state
   state = stepNativeSecondaryAbilities(finishCommonCastGate(state), context(23, 3, 0)).state
@@ -3728,6 +3728,15 @@ test('toggle reserves stack, release immediately, and overload clears the full s
   state = stepNativeSecondaryAbilities(state, context(78, 5, 0)).state
   assert.equal(state.players.player?.mindstar, true)
   assert.equal(state.players.player?.reservedMana, 60)
+  const baseExpandedContext = context(78, 6, null)
+  const expandedContext = {
+    ...baseExpandedContext,
+    players: {
+      player: { ...baseExpandedContext.players.player!, maximumMana: 200 },
+    },
+  }
+  state = stepNativeSecondaryAbilities(state, expandedContext).state
+  assert.equal(state.players.player?.reservedMana, 120)
   state = stepNativeSecondaryAbilities(state, context(79, 6, null, 100, [78])).state
   state = stepNativeSecondaryAbilities(state, context(79, 7, 0, 100, [78])).state
   assert.equal(state.players.player?.reservedMana, 85)
@@ -3740,6 +3749,43 @@ test('toggle reserves stack, release immediately, and overload clears the full s
   assert.equal(state.players.player?.reservedMana, 0)
   assert.deepEqual(overloaded.overloadedPlayerIds, ['player'])
   assert.ok(state.events.some(({ kind }) => kind === 'overload'))
+})
+
+test('hoard toggles cost no current mana and every affordability consumer uses current once', () => {
+  for (const skillId of [23, 78, 79] as const) {
+    const result = stepNativeSecondaryAbilities(
+      createNativeSecondarySimulation(123),
+      context(skillId, 1, 0, 0),
+    )
+    assert.deepEqual(result.manaUnderflowPlayerIds, [], `${skillId}`)
+    assert.equal(result.manaSpent.player, undefined, `${skillId}`)
+    assert.equal(result.state.players.player?.[skillId === 23
+      ? 'firewalker'
+      : skillId === 78
+        ? 'mindstar'
+        : 'regenerate'], true)
+  }
+})
+
+test('active percentage hoards refresh from the current authored maximum mana', () => {
+  const skillBook = book(78, [23, 79])
+  const player = {
+    ...createNativeSecondaryPlayerState(),
+    firewalker: true,
+    mindstar: true,
+    regenerate: true,
+  }
+  assert.equal(nativeSecondaryManaReserve(player, {
+    maximumMana: 100,
+    skillBook,
+  }), 135)
+  assert.equal(nativeSecondaryManaReserve(player, {
+    maximumMana: 200,
+    skillBook,
+  }), 220)
+  assert.equal(nativeSecondaryManaCeiling(100, { reservedMana: 25 }), 75)
+  assert.equal(nativeSecondaryManaCeiling(100, { reservedMana: 100 }), 0)
+  assert.equal(nativeSecondaryManaCeiling(100, { reservedMana: 135 }), 0)
 })
 
 test('Firewalker toggle-off keeps the Region write but owns no ignite request', () => {

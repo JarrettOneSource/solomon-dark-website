@@ -150,11 +150,11 @@ import {
   applyNativeSecondaryPlayerDamage,
   applyNativeSecondaryTargetEffect,
   applyNativeUnforgeCooldownRejuvenation,
-  createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   emitNativePlayerScreenFlash,
   materializeNativePlayerFlashResponse,
-  nativeSecondaryAvailableMana,
+  nativeSecondaryManaCeiling,
+  nativeSecondaryManaReserve,
   nativeSecondaryTargetEffect,
   removeNativeSecondaryOwner,
   resetNativeSecondaryWorld,
@@ -2018,7 +2018,7 @@ export function stepGameSimulationTick(
     const combat = stepPlayerEntityCombatTick(
       playerEntities,
       new Set(),
-      playerCombatMutations(options.extensions, state.tick),
+      playerCombatMutations(options.extensions, state.tick, state.secondaryAbilities),
     )
     playerEntities = combat.store
     let secondaryAbilities = stepNativeMindblastPresentation(state.secondaryAbilities)
@@ -3347,6 +3347,10 @@ function finishGameSimulationTick(
       playerEntities = setPlayerEntityMindstar(playerEntities, playerId, isActive)
     }
   }
+  secondaryAbilities = reconcileNativeSecondaryManaReserves(
+    secondaryAbilities,
+    playerEntities,
+  )
   const primaryOverridePlayerIds = new Set(secondaryResult.primaryOverridePlayerIds)
   const primaryInputs = Object.fromEntries(Object.entries(postStaffInputs).map(([playerId, input]) => [
     playerId,
@@ -3476,11 +3480,7 @@ function finishGameSimulationTick(
         playerId,
         {
           alive: progression.lifeState === 'alive',
-          availableMana: nativeSecondaryAvailableMana(
-            progression.currentMana,
-            secondaryAbilities.players[playerId]
-              ?? createNativeSecondaryPlayerState(),
-          ),
+          availableMana: progression.currentMana,
           castProgressFactor: derived.castProgressFactor,
           eligible: playerEntityCanCast(playerEntities, playerId)
             && progression.pendingOffer === null,
@@ -3843,7 +3843,7 @@ function finishGameSimulationTick(
   const combat = stepPlayerEntityCombatTick(
     playerEntities,
     staffActingPlayerIds,
-    playerCombatMutations(extensions, tick),
+    playerCombatMutations(extensions, tick, secondaryAbilities),
   )
   playerEntities = combat.store
   for (const { playerId } of playerEntities.identities) {
@@ -3993,11 +3993,19 @@ function completedBoneyardWaveBoundary(
 function playerCombatMutations(
   extensions: GameSimulationExtensions | undefined,
   tick: number,
+  secondaryAbilities: NativeSecondarySimulationState,
 ): Readonly<{
   filterMana?: (playerId: string, delta: number, current: number, maximum: number) => number
   filterPoisonDamage?: (playerId: string, amount: number) => number
+  manaCeiling: (playerId: string, maximum: number) => number
 }> {
-  if (!extensions) return {}
+  const manaCeiling = (playerId: string, maximumMana: number) => {
+    const player = secondaryAbilities.players[playerId]
+    return player === undefined
+      ? maximumMana
+      : nativeSecondaryManaCeiling(maximumMana, player)
+  }
+  if (!extensions) return { manaCeiling }
   return {
     filterMana: (playerId, delta, currentMana, maximumMana) => filterManaDelta(
       extensions,
@@ -4018,7 +4026,30 @@ function playerCombatMutations(
       })
       return finiteModMutation(filtered, 'filtered poison damage') <= 0 ? 0 : filtered
     },
+    manaCeiling,
   }
+}
+
+function reconcileNativeSecondaryManaReserves(
+  source: NativeSecondarySimulationState,
+  playerEntities: PlayerEntityStore,
+): NativeSecondarySimulationState {
+  let changed = false
+  const players = { ...source.players }
+  for (const { playerId } of playerEntities.identities) {
+    const player = players[playerId]
+    const progression = playerProgressionAt(playerEntities, playerId)
+    const skillBook = playerSkillBookAt(playerEntities, playerId)
+    if (!player || !progression || !skillBook) continue
+    const reservedMana = nativeSecondaryManaReserve(player, {
+      maximumMana: progression.maximumMana,
+      skillBook,
+    })
+    if (reservedMana === player.reservedMana) continue
+    players[playerId] = { ...player, reservedMana }
+    changed = true
+  }
+  return changed ? { ...source, players } : source
 }
 
 function filterManaDelta(

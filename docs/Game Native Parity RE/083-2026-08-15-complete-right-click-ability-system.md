@@ -1,5 +1,12 @@
 # 2026-08-15 — Complete right-click ability system
 
+> **2026-08-30 correction:** the original closure recovered the three hoard
+> writers but did not connect them to the shared `Skills::Tick` MP ceiling.
+> It consequently treated hoarded MP as a second subtraction at cast/UI
+> consumers while leaving authoritative current MP above the native ceiling.
+> The affected Firewalker, Mindstar, Regenerate, recovery, affordability, and
+> HUD dispositions are superseded by the final section of this file.
+
 ## Reported smell and supersession boundary
 
 The Website currently accepts a semantic secondary-cast input but does not own
@@ -981,3 +988,227 @@ No member is blocked by the browser platform.
   capture hash is
   `3fb09d372ac4d6e1a11c9a120fa9ae3afc73ff9af42c1c6e8e44f3c41f863ad5`.
 - No member is blocked by the browser platform and no approximation was added.
+
+## 2026-08-30 — Mana-hoard ceiling and reserve-HUD reopening
+
+### Reported smell and parity question
+
+- Reported Website behavior: while a hoard toggle is active, the blue mana
+  strip remains full beneath the gold reserve marker. The marker therefore
+  appears blue/cyan-filled instead of enclosing the empty meter track shown by
+  retail Solomon Dark.
+- Stock behavior to recover: the complete hoard path from the three toggle
+  writers, through refreshed maximum MP and the fixed-tick current-MP ceiling,
+  to cast affordability and the `UI.40/UI.41` HUD consumer.
+- Reproduction states: full 100/100 MP with 25 hoarded; current below the
+  ceiling; Firewalker absolute reserve; every Mindstar/Regenerate percentage
+  rank; stacked reserves; reserve equal to or greater than maximum; Mana Up,
+  equipment, charm, Channel Mana, Meditation, direct recovery, toggle-off,
+  death/reset, Hub, Boneyard, Tutorial combat, and multiplayer local HUD.
+- Falsifiers: a retail tick that leaves current MP above `maxMP-hoardedMP`; a
+  toggle dispatcher that debits `mHoard` as a mana cost; or a stock HUD that
+  derives its blue width from a second `current-hoard` subtraction.
+
+This is a secondary report in a system previously marked closed. The skipped
+rule was producer/consumer ownership. The earlier pass recovered `+0x740` and
+the three toggle bytes, but modeled reserve only in the secondary-ability
+store. It never followed `Skills::Tick` through the current-MP writer, then
+compensated by subtracting reserve again in spell, quickbar, and ML consumers.
+The later vital-strip pass repeated the mistake: its smoke injected a reserve,
+measured only the gold rectangle, and never asserted the blue endpoint or live
+authoritative MP. Correct reserve geometry therefore hid an incomplete state
+model.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| User stock/web comparison | `C:\Users\User\Downloads\stock - image.png`, 610x720, SHA-256 `36d100d7914aee222096007182358043c5d06509832b661b6518cb7fca35912c`; `web port - image.png`, 872x1156, SHA-256 `c794ffee1541bda84224762b8d94e4480f3c942f4fc904db27128ede7b1f43c3` | Stock blue ends where the gold hoard begins; Website blue continues through the hollow marker. | high visible |
+| Retail identity | unmodified Beta 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Canonical image for all preferred addresses below. | high |
+| Retail instructions: producer/tick | `Skills_Wizard::RebuildCaches 0x006623F0`; `Skills::Tick 0x00660220`, exact MP block `0x0066029F..0x006602C9`; `Skills_Wizard::Tick 0x006614D0`; Meditation recovery `0x00656640`; overload `0x006639D0` | Firewalker contributes its absolute `mHoard`; Mindstar/Regenerate contribute `maxMP*mHoard/100`. Every base tick stores `min(currentMP + recovery/tickRate, maxMP-hoardedMP)`. Meditation then owns a distinct post-base add capped at max MP. `hoard > max` clears all toggles, hoard, and current MP. | high |
+| Retail instructions: activation/consumers | quickbar router `0x005D5600`; category-2 dispatcher `0x0054CC50`; ordinary debit `0x0052B150`; HUD `0x005D2520`, MP block `0x005D2C02..0x005D2F0A` | Rows 23/78/79 toggle and refresh without calling the debit helper: `mHoard` is not `mManaCost`. Ordinary casts consume already-capped current MP directly. HUD clips `UI.40` by `current/max` and places `UI.41` over the right-side hoard interval; it performs no second reserve subtraction. | high |
+| Authored data/assets | complete checked-in skill catalog rows 23/78/79; `UI.40` blue strip, `UI.41` 21x10 hoard strip, `UI.70` frame in atlas SHA-256 `37d5e8fc543af12a9d8019e738dbe1e29b648211144a3782c3a32e71f76cd2eb` | Firewalker is absolute 50. Mindstar ranks are `60/40/30/25/20/15/10/5%`; Regenerate ranks are `25/21/18/15/12/10/8/6%`. All authored rows and HUD records are already extracted. | high |
+| Loader-injected supporting runtime | staged retail PID `6784`, image base `0x00460000` (ASLR delta `+0x60000`), loader/tool revision `08bfba9ef367f7b863848030d0a289dc31e33192`; Lua writes on local progression followed by a four-byte write watch | At full 100/100 MP, setting `+0x740=25` made the next live tick store 75 MP and rendered the empty gold interval. Runtime EIP `0x006C02C9` maps to preferred `0x006602C9`. Repeated writes retained 75. | high supporting; injected state, reconciled with retail instructions and visible pixels |
+| Ghidra provenance | canonical project `SolomonDark`, program `SolomonDark.exe`, Ghidra 12.0.3 replica pool; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`; `decompile_targets.py` `899167ca...e97465`, `dump_insns_around.py` `79249e8e...632b40` | Read-only canonical replica queries recovered the exact branches and float instruction order; no Mod Loader file changed. | high |
+| Current Website | `origin/main` `ebf693b499aeca417ffe84c9ba0d0a305f55dd2a`; `native-secondary-abilities.ts`, `player-entity-store.ts`, `game-simulation.ts`, `SkillQuickbar.tsx`, `native-hud-presentation.ts`, `smoke-native-derived-hud.mjs` | Reserve is stored but recovery still caps at full maximum. Cast/quickbar/ML paths subtract it independently. The browser smoke sets `reservedMana=50` without constraining current MP and checks only reserve bounds, reproducing the reported blue overlap. | high |
+
+The runtime capture is supporting diagnostic evidence, not a clean-process
+claim. The user-supplied retail pixels establish the visible oracle and the
+unmodified executable instructions independently establish the writer,
+arithmetic, call order, and renderer inputs.
+
+### System boundary and membership inventory
+
+Native system: **wizard mana-hoard ceiling and local reserve presentation**,
+from authored row/toggle state through refreshed reserve, fixed-tick MP
+mutation, affordability consumers, replication, `UI.40/UI.41` painting, and
+toggle/reset teardown.
+
+| Member / branch | Native source | Disposition in this reopening | Proof contract |
+| --- | --- | --- | --- |
+| Firewalker 23, every learned rank | `0x0054CC50`, `0x006623F0`, authored `mHoard=50` | `exact-ported` | free toggle; reserve 50; same-tick ceiling; no second affordability subtraction |
+| Mindstar 78, ranks 1..8 | `+0x8DD`, `0x00661E40`, `0x006623F0`, complete percentage table | `exact-ported` | reserve uses the refreshed maximum after temporary-rank recomputation |
+| Regenerate 79, ranks 1..8 | `+0x8DE`, `0x006623F0`, complete percentage table | `exact-ported` | every authored percentage reaches the shared ceiling and HUD |
+| All stacked toggle combinations | additive `+0x740` cache | `exact-ported` | deterministic sum; order-independent reserve; one shared ceiling |
+| `0 < hoard < max` | `0x0066029F..0x006602C9` | `exact-ported` | current above ceiling drops immediately; current below it receives base recovery only to the ceiling |
+| `hoard == max` | same compare/store; overload is strict `>` | `exact-ported` | zero ceiling without premature overload |
+| `hoard > max` | `0x0066399E -> vslot +0x54 0x006639D0` | `verified-already-at-parity` | all three toggles and reserve clear; MP goes to zero; one overload edge |
+| Mana Up 56, Mindstar-effective rank, max-MP equipment, Mana Charm, unforge max MP | refresh `0x0065F9A0/0x00661530` before cache `0x006623F0` | `exact-ported` | reserve and ceiling recompute from the same refreshed maximum with no stale tick |
+| Channel Mana 57 and equipment recovery | base scalar `+0x98`; `0x006602AB..0x006602C9` | `exact-ported` | transformed base recovery remains subject to `max-hoard` |
+| Meditation 58 ordinary/concentrated branches | `0x006614D0 -> 0x00656640` after base tick | `exact-ported` | separate post-base add, its native activity factor, and max-MP cap remain ordered after the hoard ceiling |
+| Primary/secondary debit and affordability | `0x0052B150`; dispatcher callers | `exact-ported` | already-capped current MP is the sole available value; reserve is not subtracted twice |
+| BeltButton unavailable treatment and ML policy observation | row `+0x60`; authoritative current MP | `exact-ported` | hoard-only rows cost zero; all real mana costs compare directly with current |
+| Mana potion/orb/Magic Circle and other direct positive writers | existing native writer inventory; next `Skills::Tick` ceiling | `verified-already-at-parity` with shared ceiling restored | direct write remains owned; following base tick enforces the hoard boundary |
+| `UI.40` current fill and `UI.41` reserve | `0x005D2C02..0x005D2F0A`; exact repeated-strip helper | `exact-ported` | blue right edge never crosses gold left edge in a settled non-Meditation state; both retain authored strips/blend/order |
+| default/dynamic/fractional maximum meter geometry | shared HUD compositor and `UI.70` | `verified-already-at-parity` | core/track anchors and third-strip construction unchanged |
+| Hub, Boneyard, and Tutorial-combat local HUD | shared `Game::Render 0x005D2520` owner | `exact-ported` | same authoritative local current/reserve pair in every live scene |
+| multiplayer local participant and snapshot restore | host-authored progression plus secondary player state | `exact-ported` | current and reserve publish together; clients perform no local ceiling arithmetic |
+| toggle-off, local death/disconnect, Game Over, new run, save/resume | existing secondary owner cleanup and progression reconstruction | `verified-already-at-parity` with ceiling restored | no reserved amount is refunded; next ticks recover toward the unhoarded maximum; no stale gold strip |
+| health/shield strips, selected skills, ally/nameplate/enemy meters | separate compositor/state owners | `out-of-system` | no mana-hoard state is consumed |
+
+No member is blocked by the browser platform. The existing float state, exact
+atlas strips, DOM clipping, and host snapshot can represent the native system
+without an approximation.
+
+### Native ownership thread and recovered contract
+
+- Rows 23/78/79 own toggle bytes `+0x8DC/+0x8DD/+0x8DE` but do not debit
+  `mHoard`. `Skills_Wizard::RebuildCaches` is the only reserve calculator and
+  writes the additive result to `+0x740` after maximum-MP refresh.
+- `Skills_Wizard` vtable tick `0x006614D0` calls base `Skills::Tick
+  0x00660220`. At 100 Hz the base owner first computes
+  `currentMP = min(currentMP + recoveryScalar/tickRate, maxMP-hoardedMP)`.
+  It therefore clamps an over-ceiling value on the same recurring tick and
+  never refunds hoard on toggle-off.
+- Meditation is a lateral writer after that base store. When ready,
+  `0x00656640` adds its separately calculated recovery and caps at full max MP;
+  the ordering is native even where it leaves a subpixel amount beyond the
+  base ceiling until the next tick.
+- Ordinary spell debit `0x0052B150`, belt availability, and bot policy consume
+  current MP directly. The old Website `current-reserve` calculation was a
+  second reservation and is removed everywhere at once.
+- `Game::Render` clips `UI.40` linearly by `current/max`. If reserve is
+  positive it draws hollow `UI.41` from
+  `coreLeft + coreWidth*(max-hoard)/max` to the core right edge. Correct blue
+  termination is therefore a consequence of authoritative current state, not
+  a CSS mask or marker-specific fill patch.
+- Refresh, host replication, scene changes, and respawn rebuild from the same
+  current/max/reserve facts. Rendering samples them and owns no delayed,
+  interpolated, random, audio, input, or client-authoritative hoard state.
+
+### Nearby-system findings
+
+- The prior native report already stated the `maxMP-hoardedMP` cap, but the
+  Website implementation and HUD receipt never connected that fact to the
+  player combat tick. A documented fact without a producer-to-consumer test
+  did not close the system.
+- `mHoard` is reserve data, not a fallback mana-cost schedule. The dispatcher
+  cases for 23/78/79 contain no `0x0052B150` debit, and router `0x005D5600`
+  adds no separate resource gate.
+- Native Meditation recovery is a distinct post-base write. Folding it into
+  the base recovery delta erases its ordering against the hoard ceiling.
+
+### Confidence and open questions
+
+- Confirmed high: complete reserve writers/tables, strict overload edge,
+  fixed-tick ceiling formula, toggle no-debit branches, Meditation ordering,
+  HUD records/formulas, stock/web pixels, runtime current transition, scenes,
+  and Website failure path.
+- Inferred: none material to implementation.
+- Unknown: none inside the declared system boundary.
+
+### Web implementation consequence
+
+- Make the player combat tick consume the current secondary reserve as its
+  per-player base-recovery ceiling. Preserve the native separate Meditation
+  add after that ceiling.
+- Recalculate reserve from active toggles, the complete authored rank rows,
+  and the refreshed authoritative maximum before the same tick's combat/HUD
+  snapshot.
+- Compare every real cast cost directly with authoritative current MP. Give
+  the three hoard-only toggles zero mana cost; remove all second reserve
+  subtractions from dispatcher, quickbar, primary authority, and ML policy.
+- Keep `nativeManaHudPresentation`, `UI.40`, `UI.41`, repeated-strip geometry,
+  additive composition, and CSS anchors unchanged. The reported pixels must
+  emerge from corrected simulation state.
+
+### Validation contract
+
+- Pure contracts: all three reserve tables and stacks; refreshed maxima;
+  below/at/above ceiling; strict overload; toggle-on/off without debit; base
+  recovery ceiling; separately ordered Meditation; direct cast affordability;
+  exact `UI.40/UI.41` endpoints at default, upgraded, and fractional maxima.
+- Integration: a real authoritative toggle at full MP must publish
+  `current=max-reserve` in the same completed tick; spending uses that current
+  once; toggle-off refunds nothing and ordinary recovery resumes toward max.
+- Mac Chrome: run natural Hub/Boneyard journeys through the affected HUD,
+  measure blue clip right edge and gold left edge, sample the marker interior,
+  exercise one absolute and one percentage reserve, then toggle off. Page,
+  console, failed-response, protocol, and host-error arrays must be empty.
+- Stock comparison: match the supplied state and require the Website gold
+  interval to remain visibly unfilled, with the blue/gold boundary within one
+  device pixel at the same 1600x900 logical viewport.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact Mac candidate.
+
+### Implementation validation receipt
+
+- Implementation: `native-secondary-abilities.ts` now derives reserve from
+  active rows 23/78/79 and their authored rank values, refreshes it against
+  current maximum MP, exports the shared `max-reserve` ceiling, and compares
+  real cast costs directly with current MP. Hoard-only rows now publish zero
+  mana cost. `game-simulation.ts` reconciles reserve after Mindstar refresh and
+  passes the per-player ceiling into the player combat owner; primary and ML
+  affordability use current MP once. `SkillQuickbar` removes the second
+  reserve subtraction.
+- Tick ordering: `player-skill-runtime.ts` now exposes base and Meditation MP
+  recovery as separate lanes. `player-entity-store.ts` applies transformed
+  base recovery under the hoard ceiling, then applies the native Meditation
+  add against full maximum MP. Existing poison, death, potion, direct recovery,
+  Regenerate HP, and extension owners remain separate.
+- HUD consequence: no marker-specific renderer or CSS patch was added.
+  `native-hud-presentation.ts`, `GameHud`, `UI.40`, `UI.41`, `UI.70`, exact
+  strip tiling, blend, and anchors are unchanged. Correct pixels now emerge
+  from authoritative current MP. The derived-HUD smoke adds an endpoint and
+  pixel regression over that existing compositor.
+- Red receipt: the exact-base detached Mac candidate failed only the new
+  contracts: missing `nativeSecondaryManaReserve`, hoard rows still exposing
+  `[0,mHoard]` as cost, and the unsplit Meditation tick result. No product code
+  existed for those assertions at that point.
+- Focused/system coverage: pure tests pin all three toggle no-debit branches,
+  Firewalker absolute reserve, every Mindstar/Regenerate rank table through
+  the catalog, stacked/dynamic reserve, ceiling `75/0/0`, immediate above-cap
+  correction, below-cap recovery, zero ceiling, direct-current affordability,
+  base-before-Meditation ordering, and the exact blue/gold shared endpoint.
+- Mac gate candidate: base `ebf693b499aeca417ffe84c9ba0d0a305f55dd2a`,
+  all 16 changed files byte-identical between the isolated local and detached
+  Mac worktrees. macOS `26.6.2` build `25G83` arm64, Node `22.17.0`, npm
+  `10.9.2`, .NET `10.0.302`, and Chrome `151.0.7922.174` passed the supported
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build and 28
+  contracts; frontend groups `61,10,47,17,327,7,1766,5,5,9,60,17,47,7,36,85,5`
+  all at zero failures; production frontend/game-host builds; media policy;
+  and game bundle `266,211` raw / `80,887` gzip bytes within budget.
+- Mac Chrome derived-HUD receipt: the upgraded 137.5-pixel mana core had
+  `UI.40` clip `inset(0px 20% 0px 0px)`. Its visible right edge was exactly
+  `x=965`, identical to `UI.41` left edge; reserve occupied
+  `[965,992.5]`. Available/hoarded sample pixels were respectively
+  `[29,96,155,255]` and `[2,1,1,255]`. Page, console, and failed-response
+  arrays were empty.
+- Natural Boneyard journeys: Regenerate 79 committed at authoritative tick
+  `2803`, changed current MP `100 -> 75`, exposed quickbar mana cost zero, kept
+  the toggle/`mindstar`/orange Region path, and produced the empty 25-percent
+  marker. Firewalker 23 committed at tick `2715`, changed `100 -> 50`, exposed
+  cost zero, retained its native common cooldown, `ignite`, Region feedback,
+  and live fire patches, and produced the empty absolute-50 marker. Both ran
+  under WebGL2 with empty page/console/response-error arrays. The inspected
+  capture SHA-256 values are Regenerate
+  `5e46cadf09adfe302a76e57715fabc8eba2ded908579ded0d5e05517991b736e`
+  and Firewalker
+  `a46095aa081312d1e519c6b7663f14b78ece8d5bd65d5e615162d032fffe982e`.
+- No member is browser-blocked and no implementation unknown remains. After
+  the receipts above, `origin/main` advanced to
+  `984f07e2449993a0595b435f653f1257563e8a98`; the focused patch was
+  rematerialized cleanly on that exact base, including preservation of its
+  overlapping crash-boundary additions in `native-secondary-abilities.test.ts`
+  and `game-simulation.ts`. The completion handoff owns the unchanged-command
+  current-base repeat and disposable evidence/worktree cleanup. No commit,
+  push, deployment, production restart, or live-service claim is made.

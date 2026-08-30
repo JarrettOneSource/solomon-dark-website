@@ -84,10 +84,12 @@ function define(seed: ContractSeed): NativeSecondaryAbilityContract {
     throw new Error(`native secondary skill catalog mismatch for ${seed.skillId}`)
   }
   const maximumLevel = row.config.mMaxLevel
-  const configuredCost = row.config.mManaCost ?? row.config.mHoard
-  const manaCost = typeof configuredCost === 'number'
-    ? [0, configuredCost]
-    : configuredCost
+  const configuredCost = row.config.mManaCost
+  const manaCost = configuredCost === undefined
+    ? [0]
+    : typeof configuredCost === 'number'
+      ? [0, configuredCost]
+      : configuredCost
   if (!Number.isInteger(maximumLevel) || maximumLevel! < 1 || !manaCost?.length) {
     throw new Error(`native secondary rank schedule is incomplete for ${seed.skillId}`)
   }

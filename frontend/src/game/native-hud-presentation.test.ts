@@ -101,6 +101,15 @@ test('uses each dynamic core for current fill, reserve, and Magic Shield', () =>
   assert.equal(mana.reserveWidth, 31.25)
 })
 
+test('meets the blue fill and gold hoard at one shared native endpoint', () => {
+  const mana = nativeManaHudPresentation(75, 100, 25)
+  assert.equal(mana.fillProgress, 0.75)
+  assert.equal(mana.fillWidth, 75)
+  assert.equal(mana.reserveProgress, 0.25)
+  assert.equal(mana.reserveWidth, 25)
+  assert.equal(mana.fillWidth + mana.reserveWidth, mana.coreWidth)
+})
+
 test('maps every pure and Weld primary plus the Planewalker override', () => {
   assert.deepEqual(
     [8, 16, 24, 32, 40].map((selectedPrimarySkillId) => (

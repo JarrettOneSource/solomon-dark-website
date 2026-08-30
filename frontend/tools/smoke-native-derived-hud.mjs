@@ -189,7 +189,7 @@ try {
     shieldMaximum: 0,
   })
   mutatePlayer(host.state(), playerId, {
-    learnedSkillIds: [12, 23, 56, 57, 58, 64],
+    learnedSkillIds: [12, 23, 56, 57, 64],
     ownedPerkSelectors: [0, 1, 21],
   })
   await page.locator('.hub-hud-meter-health[data-core-width="137.5"]').waitFor({
@@ -222,6 +222,13 @@ try {
     top: 19.5,
     width: 27.5,
   })
+  assert.equal(layeredHud.manaClip, 'inset(0px 20% 0px 0px)')
+  assert.equal(layeredHud.manaVisible.right, layeredHud.reserve.left)
+  const manaHoardPixels = await sampleMeterPixels(page, '.hub-hud-meter-mana', {
+    available: [80, 10],
+    hoarded: [128, 10],
+  })
+  assert.ok(manaHoardPixels.available[2] > manaHoardPixels.hoarded[2] + 40)
   assert.deepEqual(layeredHud.shield, {
     bottom: 29.5,
     left: 607.5,
@@ -231,6 +238,7 @@ try {
   })
   assert.equal(layeredHud.shieldClip, 'inset(0px 50% 0px 0px)')
 
+  mutatePlayer(host.state(), playerId, { learnedSkillIds: [58] })
   selectConcentration(host.state(), playerId, 57)
   selectConcentration(host.state(), playerId, 58)
   await page.locator('.hub-hud-selected-skill[data-binding="20"][data-record="85"]').waitFor({
@@ -361,6 +369,7 @@ try {
     damagedHud,
     defaultHud,
     layeredHud,
+    manaHoardPixels,
     networkErrors,
     pageErrors,
     planeOrbSelectorGate: true,
@@ -539,9 +548,21 @@ function applyShieldHit(state, playerId, damage, worldKey) {
 
 function setVitalLayers(state, playerId) {
   const player = state.secondaryAbilities.players[playerId]
+  const index = playerProgressionIndex(state, playerId)
+  const progression = state.playerEntities.progressions[index]
   assert.ok(player)
+  assert.ok(progression)
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...progression,
+    currentMana: progression.maximumMana - 50,
+  }
   Object.assign(state, {
     ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions,
+    },
     secondaryAbilities: {
       ...state.secondaryAbilities,
       players: {
@@ -608,6 +629,14 @@ async function measureHud(page) {
       ?? ''
     const healthLabel = /^Health ([\d.]+) of ([\d.]+)$/.exec(healthLabelText)
     if (!healthLabel) throw new Error(`Unexpected local health label: ${healthLabelText}`)
+    const manaFill = hud.querySelector('.hub-hud-meter-mana .hub-hud-meter-fill')
+    if (!(manaFill instanceof HTMLElement)) throw new Error('Missing local mana fill')
+    const manaFillBounds = manaFill.getBoundingClientRect()
+    const manaClip = getComputedStyle(manaFill).clipPath
+    const manaRightInset = /^inset\(0px ([\d.]+)% 0px 0px\)$/.exec(manaClip)
+    if (!manaRightInset) throw new Error(`Unexpected local mana clip: ${manaClip}`)
+    const manaRightInsetPercent = Number(manaRightInset[1])
+    const manaVisibleWidth = manaFillBounds.width * (1 - manaRightInsetPercent / 100)
     const healthRightInsetPercent = Number(healthRightInset[1])
     const healthVisibleWidth = healthFillBounds.width
       * (1 - healthRightInsetPercent / 100)
@@ -627,7 +656,13 @@ async function measureHud(page) {
         width: healthVisibleWidth,
       },
       mana: rect('.hub-hud-meter-mana'),
+      manaClip,
       manaCore: rect('.hub-hud-meter-mana .hub-hud-meter-fill'),
+      manaVisible: {
+        left: manaFillBounds.left,
+        right: manaFillBounds.left + manaVisibleWidth,
+        width: manaVisibleWidth,
+      },
       reserve: optionalRect('.hub-hud-mana-reserve'),
       shield: optionalRect('.hub-hud-meter-shield'),
       shieldClip: shield instanceof HTMLElement ? getComputedStyle(shield).clipPath : null,
@@ -653,7 +688,11 @@ async function measureVitalComposition(page) {
 }
 
 async function sampleHealthMeterPixels(page, points) {
-  const png = await page.locator('.hub-hud-meter-health').screenshot()
+  return sampleMeterPixels(page, '.hub-hud-meter-health', points)
+}
+
+async function sampleMeterPixels(page, selector, points) {
+  const png = await page.locator(selector).screenshot()
   return page.evaluate(async ({ dataUrl, samplePoints }) => {
     const image = new Image()
     image.src = dataUrl

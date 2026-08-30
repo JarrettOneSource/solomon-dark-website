@@ -955,11 +955,29 @@ export function applyNativeUnforgeCooldownRejuvenation(
   }
 }
 
-export function nativeSecondaryAvailableMana(
-  currentMana: number,
-  player: NativeSecondaryPlayerState,
+export function nativeSecondaryManaCeiling(
+  maximumMana: number,
+  player: Pick<NativeSecondaryPlayerState, 'reservedMana'>,
 ): number {
-  return Math.max(0, currentMana - player.reservedMana)
+  return Math.max(0, maximumMana - player.reservedMana)
+}
+
+export function nativeSecondaryManaReserve(
+  player: Pick<NativeSecondaryPlayerState, 'firewalker' | 'mindstar' | 'regenerate'>,
+  authority: Pick<NativeSecondaryPlayerAuthority, 'maximumMana' | 'skillBook'>,
+): number {
+  let reservedMana = player.firewalker
+    ? effectiveSecondaryAbilityRankStats(authority.skillBook, 23).values.mHoard ?? 0
+    : 0
+  if (player.mindstar) {
+    const stats = effectiveSecondaryAbilityRankStats(authority.skillBook, 78).values
+    reservedMana += authority.maximumMana * (stats.mHoard ?? 0) / 100
+  }
+  if (player.regenerate) {
+    const stats = effectiveSecondaryAbilityRankStats(authority.skillBook, 79).values
+    reservedMana += authority.maximumMana * (stats.mHoard ?? 0) / 100
+  }
+  return reservedMana
 }
 
 export function nativeSecondaryStaffCastDurationTicks(
@@ -3608,6 +3626,7 @@ export function stepNativeSecondaryAbilities(
     const planewalkerWasActive = player.planewalkerTicksRemaining > 0
     const stoneskinWasActive = player.stoneskinTicksRemaining > 0
     player = stepPlayerState(player, authority)
+    player = recalculateReserve(player, authority)
     if (planewalkerWasActive && player.planewalkerTicksRemaining === 0) {
       state = emit(state, {
         actorId: null,
@@ -3889,7 +3908,7 @@ function castAbility(
     || skillId === 23 && player.firewalker
     || skillId === 78 && player.mindstar
     || skillId === 79 && player.regenerate
-  if (!togglingOff && cost > nativeSecondaryAvailableMana(authority.currentMana, player)) {
+  if (!togglingOff && cost > authority.currentMana) {
     return none(fizzle(source, playerId, skillId, authority, context.tick), {
       ...player, fizzleSequence: player.fizzleSequence + 1, lastSkillId: skillId,
     }, true)
@@ -5900,16 +5919,8 @@ function recalculateReserve(
   source: NativeSecondaryPlayerState,
   authority: NativeSecondaryPlayerAuthority,
 ): NativeSecondaryPlayerState {
-  let reservedMana = source.firewalker ? 50 : 0
-  if (source.mindstar) {
-    const stats = effectiveSecondaryAbilityRankStats(authority.skillBook, 78).values
-    reservedMana += authority.maximumMana * (stats.mHoard ?? 0) / 100
-  }
-  if (source.regenerate) {
-    const stats = effectiveSecondaryAbilityRankStats(authority.skillBook, 79).values
-    reservedMana += authority.maximumMana * (stats.mHoard ?? 0) / 100
-  }
-  return { ...source, reservedMana }
+  const reservedMana = nativeSecondaryManaReserve(source, authority)
+  return reservedMana === source.reservedMana ? source : { ...source, reservedMana }
 }
 
 function withCooldown(

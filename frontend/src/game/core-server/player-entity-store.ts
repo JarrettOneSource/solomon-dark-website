@@ -1274,6 +1274,7 @@ export function stepPlayerEntityCombatTick(
   mutations: Readonly<{
     filterMana?: (playerId: string, delta: number, current: number, maximum: number) => number
     filterPoisonDamage?: (playerId: string, amount: number) => number
+    manaCeiling?: (playerId: string, maximum: number) => number
   }> = {},
 ): PlayerEntityCombatTickResult {
   const autoHealthPotionPlayerIds: string[] = []
@@ -1313,14 +1314,15 @@ export function stepPlayerEntityCombatTick(
     )
     skillRuntimes[index] = skillTick.runtime
     const potionStepped = stepPlayerPotionEffects(progression)
-    const manaRecoveryPerTick = mutations.filterMana
+    const playerId = source.identities[index]!.playerId
+    const baseManaRecoveryPerTick = mutations.filterMana
       ? mutations.filterMana(
-          source.identities[index]!.playerId,
-          skillTick.manaRecoveryPerTick,
+          playerId,
+          skillTick.baseManaRecoveryPerTick,
           potionStepped.currentMana,
           potionStepped.maximumMana,
         )
-      : skillTick.manaRecoveryPerTick
+      : skillTick.baseManaRecoveryPerTick
     const nativePoisonDamagePerTick = Math.fround(
       potionStepped.poisonDamagePerTick
         * derived.poisonDamageFactor
@@ -1332,12 +1334,31 @@ export function stepPlayerEntityCombatTick(
           nativePoisonDamagePerTick,
         )
       : nativePoisonDamagePerTick
-    const result = stepPlayerCombatTick(potionStepped, {
+    let result = stepPlayerCombatTick(potionStepped, {
       healthRecoveryPerTick: derived.healthRecoveryPerTick,
-      manaRecoveryPerTick,
+      manaCeiling: mutations.manaCeiling?.(playerId, potionStepped.maximumMana),
+      manaRecoveryPerTick: baseManaRecoveryPerTick,
       poisonDamagePerTick,
     })
-    const playerId = source.identities[index]!.playerId
+    const meditationManaRecoveryPerTick = skillTick.meditationManaRecoveryPerTick === 0
+      ? 0
+      : mutations.filterMana
+        ? mutations.filterMana(
+            playerId,
+            skillTick.meditationManaRecoveryPerTick,
+            result.combat.currentMana,
+            result.combat.maximumMana,
+          )
+        : skillTick.meditationManaRecoveryPerTick
+    if (meditationManaRecoveryPerTick !== 0 && result.combat.lifeState === 'alive') {
+      result = {
+        ...result,
+        combat: setPlayerMana(result.combat, Math.max(0, Math.min(
+          result.combat.maximumMana,
+          result.combat.currentMana + meditationManaRecoveryPerTick,
+        ))),
+      }
+    }
     const resolved = poisonDamagePerTick > 0 && potionStepped.poisonTicksRemaining > 0
       ? resolveNativeHagathaDamage(
           result.combat,

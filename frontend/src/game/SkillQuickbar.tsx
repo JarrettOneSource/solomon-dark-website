@@ -211,7 +211,7 @@ function SkillQuickbarSlot({
     ? secondaryManaCosts.find(([candidate]) => candidate === skillId)?.[1] ?? 0
     : 0
   const insufficientMana = secondary
-    && Math.max(0, currentMana - (playerState?.reservedMana ?? 0)) < manaCost
+    && currentMana < manaCost
   const unavailable = combatDisabled || insufficientMana
   const { capacity, remaining } = !secondary
     ? { capacity: 0, remaining: 0 }

@@ -91,6 +91,18 @@ test('cold/dazzle clear on death and on a new run', () => {
   assert.throws(() => coldSlowPlayer(affected, 1.5), /safe integer/)
 })
 
+test('base mana recovery clamps current mana to the native hoard ceiling', () => {
+  const full = createPlayerCombat()
+  assert.equal(stepPlayerCombatTick(full, { manaCeiling: 75 }).combat.currentMana, 75)
+  assert.equal(stepPlayerCombatTick({ ...full, currentMana: 70 }, {
+    manaCeiling: 75,
+  }).combat.currentMana, 70.1)
+  assert.equal(stepPlayerCombatTick({ ...full, currentMana: 75 }, {
+    manaCeiling: 75,
+  }).combat.currentMana, 75)
+  assert.equal(stepPlayerCombatTick(full, { manaCeiling: 0 }).combat.currentMana, 0)
+})
+
 test('native death tick 159 disables the player collision body', () => {
   const combat = createPlayerCombat()
   const dyingAt158 = {

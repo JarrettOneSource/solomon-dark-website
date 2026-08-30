@@ -140,6 +140,12 @@ test('the native skill quickbar maps right mouse and all seven keyboard slots', 
   assert.deepEqual(NATIVE_SECONDARY_KEYBOARD_SLOTS, [1, 2, 3, 4, 5, 6, 7])
 })
 
+test('mana hoards are reserve schedules, not secondary-cast costs', () => {
+  assert.deepEqual(nativeSecondaryAbilityContract(23).rank.manaCost, [0])
+  assert.deepEqual(nativeSecondaryAbilityContract(78).rank.manaCost, [0])
+  assert.deepEqual(nativeSecondaryAbilityContract(79).rank.manaCost, [0])
+})
+
 test('critical native VFX and lifecycle constants cannot collapse to generic effects', () => {
   assert.deepEqual(nativeSecondaryAbilityContract(11).timing, {
     activeAgeTicks: '41..1640 inclusive (1600 updates)',

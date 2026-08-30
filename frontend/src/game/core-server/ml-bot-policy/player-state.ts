@@ -6,7 +6,6 @@ import {
 import {
   NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
   createNativeSecondaryPlayerState,
-  nativeSecondaryAvailableMana,
 } from '../../core-kernels/native-secondary-abilities.ts'
 import { nativePrimarySkillProfile } from '../../core-kernels/native-primary-skill-profile.ts'
 import { playerCanCast, playerMovementScale } from '../../core-kernels/player-combat.ts'
@@ -81,7 +80,7 @@ export function observeMlBotPolicyPlayerState(
   const castReady = playerCanCast(progression)
     && !castActive
     && secondary.globalCooldownTicks === 0
-  const availableMana = nativeSecondaryAvailableMana(progression.currentMana, secondary)
+  const availableMana = progression.currentMana
   const primaryProfile = nativePrimarySkillProfile(skillBook, statBook, {
     damage: derived.offensiveDamageFactor,
     equipment: runtime.equipmentModifiers,

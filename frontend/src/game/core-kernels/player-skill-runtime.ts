@@ -127,7 +127,8 @@ export interface PlayerSkillSelectionAutofillResult extends PlayerSkillRuntimeRe
 }
 
 export interface PlayerSkillRuntimeTickResult {
-  readonly manaRecoveryPerTick: number
+  readonly baseManaRecoveryPerTick: number
+  readonly meditationManaRecoveryPerTick: number
   readonly runtime: PlayerSkillRuntimeComponent
 }
 
@@ -695,9 +696,9 @@ export function stepPlayerSkillRuntime(
     ? 1 + (derived.meditationRecoveryMultiplier - 1)
       * NATIVE_MEDITATION_ACTIVITY_BONUS_SCALE
     : derived.meditationRecoveryMultiplier
-  const manaRecoveryPerTick = meditationReady
+  const meditationManaRecoveryPerTick = meditationReady
     ? derived.manaRecoveryPerTick * activityMultiplier
-    : derived.manaRecoveryPerTick
+    : 0
   meditationActivityRampTicks = Math.max(0, meditationActivityRampTicks - 1)
   const hurricane = nativeHurricaneChargeTick(
     source.hurricaneCharge,
@@ -714,7 +715,8 @@ export function stepPlayerSkillRuntime(
         )
     : source.hardenArmor
   return Object.freeze({
-    manaRecoveryPerTick,
+    baseManaRecoveryPerTick: derived.manaRecoveryPerTick,
+    meditationManaRecoveryPerTick,
     runtime: Object.freeze({
       ...source,
       hardenArmor,

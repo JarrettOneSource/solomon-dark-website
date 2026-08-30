@@ -5,6 +5,13 @@
 > blend operation or the poisoned-strip asset branch. Its Magic Shield
 > `verified-already-at-parity` disposition is superseded by the corrective
 > closure in the final section of this file.
+>
+> **2026-08-30 correction:** the later compositor closure proved the mana and
+> reserve records, geometry, blend, and painter order, but its smoke injected
+> `reservedMana` without enforcing the native `maxMP-hoardedMP` current-MP
+> ceiling and asserted only the gold rectangle. Its `Mana fill and reserve`
+> disposition is superseded by the mana-hoard reopening in
+> `083-2026-08-15-complete-right-click-ability-system.md`.
 
 ## Reported smell and parity question
 

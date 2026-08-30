@@ -554,10 +554,12 @@ test('Meditation preserves native idle threshold and concentrated activity ramp'
   for (let tick = 0; tick < 349; tick += 1) {
     const stepped = stepPlayerSkillRuntime(state.runtime, derived, { acting: false, moving: false })
     state = { ...state, runtime: stepped.runtime }
-    assert.equal(stepped.manaRecoveryPerTick, 0.1)
+    assert.equal(stepped.baseManaRecoveryPerTick, 0.1)
+    assert.equal(stepped.meditationManaRecoveryPerTick, 0)
   }
   let stepped = stepPlayerSkillRuntime(state.runtime, derived, { acting: false, moving: false })
-  assert.equal(stepped.manaRecoveryPerTick, 0.4)
+  assert.equal(stepped.baseManaRecoveryPerTick, 0.1)
+  assert.equal(stepped.meditationManaRecoveryPerTick, 0.4)
 
   state = setPlayerConcentration(stepped.runtime, state.skillBook, statBook, economy, 58)
   derived = playerSkillDerivedStats(
@@ -568,7 +570,8 @@ test('Meditation preserves native idle threshold and concentrated activity ramp'
     economy,
   )
   stepped = stepPlayerSkillRuntime(state.runtime, derived, { acting: true, moving: true })
-  assert.ok(Math.abs(stepped.manaRecoveryPerTick - 0.175) < 1e-12)
+  assert.equal(stepped.baseManaRecoveryPerTick, 0.1)
+  assert.ok(Math.abs(stepped.meditationManaRecoveryPerTick - 0.175) < 1e-12)
 })
 
 test('Hurricane and Harden use player-owned channel clocks and weak Water clears only Harden', () => {

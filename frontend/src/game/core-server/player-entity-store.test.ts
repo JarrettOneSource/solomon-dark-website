@@ -662,6 +662,30 @@ test('entity combat APIs update only the indexed progression and publish one-sho
   assert.equal(playerProgressionAt(store, 'second')?.poisonTicksRemaining, 1_000)
 })
 
+test('entity combat applies the per-player hoard ceiling before Meditation recovery', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = grantPlayerEntitySkillRanks(store, 'first', 58, 1, createNativeRng(1)).store
+  const progressions = [...store.progressions]
+  const skillRuntimes = [...store.skillRuntimes]
+  progressions[0] = { ...progressions[0]!, currentMana: 100 }
+  skillRuntimes[0] = {
+    ...skillRuntimes[0]!,
+    meditationIdleElapsedTicks: 349,
+  }
+  store = { ...store, progressions, skillRuntimes }
+
+  store = stepPlayerEntityCombatTick(store, new Set(), {
+    manaCeiling: () => 75,
+  }).store
+  assert.ok(Math.abs(playerProgressionAt(store, 'first')!.currentMana - 75.4) < 1e-12)
+})
+
 test('wave respawn restores only a non-positive player on the same durable entity', () => {
   let store = createPlayerEntityStore()
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 10, y: 20 }), 10)
