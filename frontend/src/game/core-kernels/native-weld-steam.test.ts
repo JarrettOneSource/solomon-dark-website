@@ -101,7 +101,7 @@ test('Steam detonation is gated by Explosion radius without consuming RNG', () =
   assert.deepEqual(result.rng, rng)
 })
 
-test('Steam detonation owns gray Explosion state and three non-recursive particles per fragment', () => {
+test('Steam detonation owns gray Explosion state and three zero-payload particles per fragment', () => {
   const rng = createNativeRng(17)
   const result = createNativeWeldSteamDetonation({
     explodeDamage: 8,

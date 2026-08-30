@@ -8462,7 +8462,7 @@ function primarySpellTransientPayload(
       throw new GameProtocolError(`${field}.ageTicks exceeds the Fire explosion lifetime`)
     }
     const soundPitch = positiveFinite(source.soundPitch, `${field}.soundPitch`)
-    if (soundPitch < 0.9 || soundPitch > 1.1) {
+    if (soundPitch < Math.fround(0.9) || soundPitch > Math.fround(1.1)) {
       throw new GameProtocolError(`${field}.soundPitch is outside the native range`)
     }
     const presentation = source.presentation

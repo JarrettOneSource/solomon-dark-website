@@ -3435,6 +3435,24 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [{ ...fireExplosion, ageTicks: 36 }],
     },
   }))
+  for (const soundPitch of [Math.fround(0.9), Math.fround(1.1)]) {
+    assert.doesNotThrow(() => decodeFrame({
+      ...frame,
+      primarySpells: {
+        nextId: 2,
+        projectiles: [],
+        transients: [{ ...fireExplosion, presentation: 'steam', soundPitch }],
+      },
+    }))
+  }
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...fireExplosion, presentation: 'steam', soundPitch: 1.1001 }],
+    },
+  }), /soundPitch is outside the native range/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {

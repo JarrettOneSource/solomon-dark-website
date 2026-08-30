@@ -291,6 +291,38 @@ test('Steamed pulses for exactly ten native ticks and merges the strongest store
     ticks: 10,
   })
 
+  const childRefresh = applyNativeSecondaryTargetEffect(
+    {
+      ...state,
+      targetEffects: [{
+        ...state.targetEffects[0]!,
+        steamed: { ...state.targetEffects[0]!.steamed!, ticks: 5 },
+      }],
+    },
+    'boneyard:test',
+    target.id,
+    { steamed: {
+      damagePerTick: Math.fround(3 / 100),
+      emberDamage: 0,
+      emberFragments: 0,
+      explodeDamage: 0,
+      explodeRadius: 0,
+      ownerId: 'child',
+      sourceActorId: 12,
+      ticks: 10,
+    } },
+  )
+  assert.deepEqual(childRefresh.targetEffects[0]!.steamed, {
+    damagePerTick: 3,
+    emberDamage: 3,
+    emberFragments: 2,
+    explodeDamage: 5,
+    explodeRadius: 12,
+    ownerId: 'strongest',
+    sourceActorId: 11,
+    ticks: 10,
+  })
+
   for (let tick = 1; tick <= 10; tick += 1) {
     const result = stepNativeSecondaryAbilities(state, {
       ...context(11, tick, null),

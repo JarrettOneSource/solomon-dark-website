@@ -807,6 +807,7 @@ member, color-overlay class, child factory, and non-recursive contact branch.
 | Event producer/consumer census | all five `DAT_0081C70C` xrefs; type-2 write `0x00625FDA`; receiver branch `0x0047704D..0x004770B7`; sole `0x00643CA0` xref at `0x004770B7` | Steam does not call shared Fire helper `0x00642BF0`. Type 2 has exactly one consumer: the distinct Steam detonation helper `0x00643CA0`. | high |
 | Steam detonation instructions | `0x00643CA0..0x0064445D`; `Anim_SpriteArray_ColorOverlay::Draw 0x0045DA80`; `Anim_SteamJetEffect` constructor/tick/draw `0x00453CE0/0x0045B940/0x00458550` | The burst has the shared three visual clocks but gray overlays and optional normal Steam-particle children, not ordinary Embers. | high |
 | Audio registry and call | `0x00643D35..0x00643D86`; registry offset `+0x4BC`, index 27, `sounds\\explodesteam`; source SHA-256 `f93fca2917072811b96f4ec4c3c864c66f0bb785f05c6113e1931661471df090` | Each Steam detonation birth requests only `explodesteam` with signed `Float(.1)+1` pitch and doubled point gain. It does not request `fireballhit` or `throwfire`. | high |
+| Candidate Chrome protocol falsifier | Mac Chrome held-contact journey on protocol 112 | Repeated valid births reached the positive float32 endpoint `1.100000023841858`; the decimal `<=1.1` parser bound rejected it and disconnected the client. The native interval is `[f32(.9),f32(1.1)]`. | high-web |
 | Current Website source | `native-secondary-abilities.ts`, `boneyard-spell-combat.ts`, `primary-spell-fire-effects.ts`, `primary-spell-audio.ts` at base `b023703c` | Correct modifier cadence and values are present, but every exported pulse is materialized as ordinary Fire VFX/audio/Embers. | high |
 
 Ghidra ran read-only through the canonical replica wrapper at Mod Loader revision
@@ -832,10 +833,10 @@ teardown**.
 | orange record-15 core | `0x00643D8B..0x00643E3D`, BadGuys 15 | `verified-already-at-parity` through shared clock | ages 0..9, scale `visualScale*6`, alpha loss `.1` |
 | gray first array | BadGuys 401..419, `Anim_SpriteArray_ColorOverlay` | `exact-ported` | tint `(.8,.8,.8,1)`, additive, `.75*.98^n`, ages 0..34 |
 | gray rising lit array | BadGuys 420..433 plus `ZAnimLit` | `exact-ported` | tint `(.8,.8,.8,1)`, `.625*.97^n`, rise, ages 0..36, same provider light |
-| Steam detonation audio | registry 27 at `MyApp + 0x4BC` | `exact-ported` | `explode-steam` only, signed `.1` pitch, doubled point gain, once per birth |
+| Steam detonation audio | registry 27 at `MyApp + 0x4BC` | `exact-ported` | `explode-steam` only, signed `.1` pitch with exact float32 endpoints, doubled point gain, once per birth |
 | learned fragment fan | `0x0064418D..0x00644438` | `exact-ported` | private `Float(360)` start; three normal Steam children per configured count; complete ten-word program per child |
 | learned fragment motion | same range | `exact-ported` | signed `Float(25)` heading, `Float(10)` birth offset, speed `4*.9*1.5*(.9+Float(.1))`, Y times `.8`, stretch times `.6` |
-| learned fragment contact | `0x006443B7..0x006443F2` | `exact-ported` | damage `fragmentDamage/100`, zero Explosion/fragment payload, non-recursive ten-tick `Steamed` install |
+| learned fragment contact | `0x006443B7..0x006443F2`, merge `0x00625C80` | `exact-ported` | damage `fragmentDamage/100`; zero own payload cannot detonate alone, while max-merge refreshes and preserves a stronger resident Explosion until target loss |
 | ordinary shared Fire helper | `0x00642BF0` callers | `out-of-system` for build 1005; still exact for 1000/1003/1007 and Fire-family callers | negative 1005 caller test and unchanged ordinary fixtures |
 | Hub/private rooms and Boneyard | Region helper and shared primary world view | `exact-ported` | same authoritative state, point gain, painter/light, and audio semantics in every world key |
 | host, observers, late join | primary transient and secondary target-effect snapshots | `exact-ported` | strict protocol round-trip and no observer-side RNG/rerouting |
@@ -860,13 +861,18 @@ No member is blocked by the browser platform.
   by Fire, but both sprite arrays use `Anim_SpriteArray_ColorOverlay` with
   gray RGB `.8`. Explosion area damage is half the stored damage inside radius
   `visualScale*55`; the lit array owns the existing transient light.
-- Each birth requests one positional `explodesteam` one-shot. The ordinary Fire
-  pair (`fireballhit`, then `throwfire`) is unreachable from this branch.
+- Each birth requests one positional `explodesteam` one-shot. Pitch spans the
+  inclusive float32 interval `0.8999999761581421..1.100000023841858`. The
+  ordinary Fire pair (`fireballhit`, then `throwfire`) is unreachable from this
+  branch.
 - When the stored learned-fragment count is positive, the helper creates three
   normal `Anim_SteamJetEffect` children per count. Constructor and private fan
-  RNG remain authoritative. Their payload fields are zero, so their later
-  contacts may deal the stored fragment damage through `Mod_Steamed` but cannot
-  recursively create another Explosion or fragment fan.
+  RNG remain authoritative. Their own payload fields are zero, so a standalone
+  child contact cannot create an Explosion or fragment fan. Contact with a
+  still-resident stronger `Mod_Steamed` follows `0x00625C80`: duration refreshes
+  and the maximum Explosion/fragment fields remain. The family can therefore
+  sustain on that target until target death/removal, after which no new child
+  contact is admitted and every actor retires on its own clock.
 - Target/modifier state is host-owned. Explosion and child actors are stable
   replicated identities; clients render and play each birth edge once, then
   retire it on the fixed clocks. Owner/world teardown removes the whole family.
@@ -892,12 +898,14 @@ No member is blocked by the browser platform.
   ordinary Fire cue pair.
 - Replace ordinary Fire Ember births on Steam pulses with the exact
   three-per-count normal Steam child program. Gate the whole detonation/fragment
-  family on positive Explosion radius and preserve zero-payload non-recursion.
+  family on positive Explosion radius and preserve zero-payload child semantics
+  plus the resident modifier's maximum-field merge.
 - Focused tests must cover normal/Over/weak contacts, all ten modifier ticks,
-  merge/re-contact, radius-zero negative behavior, ten consecutive Explosion
+  strong/zero-payload merge and re-contact, radius-zero negative behavior, ten consecutive Explosion
   births without Fire cues, gray plans at all three lifetime boundaries,
-  one/count/multiple fragment fans and RNG, fragment contact non-recursion,
-  area damage, protocol/copy/interpolation, both scenes, and teardown.
+  one/count/multiple fragment fans and RNG, fragment contact merge behavior,
+  area damage, protocol/copy/interpolation, both scenes, release, target-death
+  teardown, and owner/world teardown.
 - Mac Chrome acceptance must reproduce the reported held Steam+Explosion
   contact, record per-cue/per-kind birth counts, prove no `fireball-hit` or
   `throw-fire` request from this branch, show the gray stock family rather than
