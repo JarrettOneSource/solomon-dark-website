@@ -75,7 +75,8 @@ release/owner/world teardown.
 | Blizzard `0x1000` virtual branch | same mask/vslot branch | `out-of-system` — no Website survival actor owns flag `0x1000` | complete negative target census |
 | Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon | base bit `0x2` plus family store | `exact-ported` | every family has a root-boundary direct/chain test; child Imps/Demons retain state |
 | Coffin-owned Maggot | active bit `0x2` path | `exact-ported` | root, chain, push-latch, and teardown tests |
-| Coffin `1013` | constructor clears queried flags | `verified-already-at-parity` | never admitted despite visible/body-radius overlap |
+| Coffin `1013`, hidden | constructor `0x00479940` clears `+0x14/+0x36` | `exact-ported` in the 2026-08-30 reopening | detached and excluded before emergence |
+| Coffin `1013`, rising/holding/opening/open | activation helper `0x0049A670`, write `0x0049A816` | `exact-ported` in the 2026-08-30 reopening | hostile bit `0x2` admits direct/chain Frost, Lightning, Steam, Flame, and Blizzard contacts |
 | enemy body radii and visible sprite boxes | actor `+0x30` and renderer families | `out-of-system` — directional/polygon narrow phase reads roots only | oversized-radius and sprite-overlap negative tests |
 | terrain-contact variant-3 SpellGlow | `0x00541F98..0x00542062`, `0x00454AD0` | `exact-ported` | one-frame owner at endpoint minus 20 Y, two RNG words, terrain-only birth |
 | per-root variant-3 SpellGlow | `0x00542086..0x00542181` | `exact-ported` | one per flags-2/4 root, stable order, independent one-frame expiry |
@@ -175,7 +176,8 @@ No member is blocked by the browser platform.
   strict 100/200 chain radii; weak branch; push blocker/gap/ramp/caps/rebind;
   child RNG/membership/lifetimes; and no chain beam.
 - Per-family matrix: Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon,
-  Maggot, Coffin negative, all five scenery rows, and Arrow.
+  Maggot, hidden-Coffin negative, risen-Coffin positive, all five scenery rows,
+  and Arrow.
 - Protocol contract: width and height are both finite, bounded, required, and
   preserved through client clone/equality and host input.
 - Browser journey: a real 1600x900 Mac Chrome Boneyard run equips build 1004,

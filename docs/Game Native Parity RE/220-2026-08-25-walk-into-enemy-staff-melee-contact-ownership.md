@@ -15,7 +15,8 @@
 - Falsifiers: a real movement epoch can settle a player/enemy pair at the
   shared circle solver's legal separation without creating a Staff action; a
   walk-in collision needs a facing test; a marker applies physical contact to
-  a departed target; Coffin/Wand/empty hands create an action; or the fix
+  a departed target; a hidden Coffin or Wand/empty hands creates an action; a
+  risen Coffin fails to create one; or the fix
   changes damage shapes, proc RNG, action timing, protocol, or presentation.
 
 This reopens the 2026-08-21 Staff closure. That pass skipped the real
@@ -64,7 +65,8 @@ entry can be called complete.
 | Zombie `1006` | flags `0x2`; shared hostile contact owner | `exact-ported` | per-family admission assertion |
 | Wraith `1007` | flags `0x2`; shared hostile contact owner | `exact-ported` | per-family admission assertion |
 | Demon `1009` and recursively born Demons | flags `0x2`; shared hostile contact owner | `exact-ported` | parent/child admission assertion |
-| Coffin `1013` | constructor clears query flags | `out-of-system` (not a hostile Staff target) | collision may occupy the result list but never admits or receives Staff damage |
+| Coffin `1013`, hidden | constructor `0x00479940` clears `+0x14/+0x36` | `exact-ported` in the 2026-08-30 reopening | no collision result, action admission, or marker damage |
+| Coffin `1013`, rising/holding/opening/open | `0x0049A670`, `+0x36 = 1`, grid attach, `+0x14 = 0x2` | `exact-ported` in the 2026-08-30 reopening | real walk-in admission and radius-based physical contact; independent normal/Critical/Whirl root shapes retain their exact membership |
 | Coffin-owned Maggot | living hostile flags/member; shared GoodGuy contact path | `exact-ported` | real target membership and admission assertion |
 | another player (`0x801`) | non-`0x2`, non-`0x20` dynamic result | `out-of-system` (not a Staff target) | collision result suppresses fallback but creates no Staff action |
 | flag-`0x20` GoodGuy/NPC interaction | separate branch `0x0054B0BB..0x0054B278` | `out-of-system` (dialogue/contact owner) | no Staff action; existing Hub NPC system remains owner |
@@ -104,7 +106,7 @@ There are no `blocked-by-platform` members and no browser approximation.
 - Downstream consumers: the action advances on the 100 Hz clock. Its sole
   marker callback `0x00550180` calls `0x0053B9F0`, whose damage shape query and
   current physical-contact pass have separate membership owners.
-- Siblings: NPC flag-`0x20` collision, nonhostile player collision, Coffin,
+- Siblings: NPC flag-`0x20` collision, nonhostile player collision, hidden Coffin,
   primary/secondary cast admission, and enemy melee consume nearby movement or
   collision state but do not inherit Staff action consequences.
 - Entry/reset/teardown: contact results are one movement epoch only; current
@@ -123,6 +125,11 @@ There are no `blocked-by-platform` members and no browser approximation.
   and hostile collision has no facing gate. Fallback and marker physical
   contact use strict heading delta `< 50`. Damage footprints remain their
   independent trapezoid/circle queries.
+- Coffin's radius is 45, so legal player/Coffin separation is `70.1`. That
+  root lies outside the normal Staff polygon's strict 70-unit endpoint while
+  remaining inside radius-aware physical contact; Critical and Whirl retain
+  their larger root shapes and can include it. Hostile membership must not
+  inflate any Staff polygon to make every admitted action deal damage.
 - Randomness/audio: contact admission consumes no RNG. `0x00537AA0` and later
   action/contact code retain the already recovered proc, timing, impact,
   Ether/Pike, VFX, and audio draw order.
@@ -180,8 +187,10 @@ There are no `blocked-by-platform` members and no browser approximation.
 ## Validation contract
 
 - Focused automated tests: shared physics reports ordered root contacts and
-  excludes recursive-only response; every hostile family plus Maggot admits;
-  Coffin/other-player/Wand/empty weapon do not; nonhostile movement results
+  excludes recursive-only response; every hostile family plus active Maggot
+  and risen Coffin admits; hidden Coffin/other-player/Wand/empty weapon do not;
+  legal Coffin separation keeps normal-root damage out while Critical/Whirl
+  retain their existing membership; nonhostile movement results
   suppress fallback; strict 50-degree boundary remains excluded; radii plus
   `0.1` current contact admits and `+0.0001` does not; marker-time departure
   removes physical effects.

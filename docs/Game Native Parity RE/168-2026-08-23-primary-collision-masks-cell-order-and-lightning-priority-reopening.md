@@ -67,7 +67,8 @@ Lightning contacts, from actor registration through contact retirement.
 | Building `2040` | `0x005F2C30` | `exact-ported` | same |
 | Goodie `2061` | `0x005E3D60`, flags `0x2004` | `exact-ported` | closed/open actor-membership test |
 | living hostile families and Maggots | base priority/flags plus registration/rebind | `exact-ported` | manager-order and cell-tail tests across a cell crossing |
-| Coffin | flags cleared in constructor | `verified-already-at-parity` | never enters any queried mask |
+| Coffin hidden state | constructor `0x00479940` clears `+0x14/+0x36` | `exact-ported` in the 2026-08-30 reopening | hidden root remains detached and outside every queried mask |
+| Coffin rising/holding/opening/open states | transition helper `0x0049A670`, write `0x0049A816` | `exact-ported` in the 2026-08-30 reopening | mask-2 membership covers Fire, Ether, Earth, Lightning, Frost, Steam, Blizzard, and welded siblings |
 | actor death/retirement | flags clear `0x0063E7C0`, manager/cell removal | `exact-ported` | death eligibility and stable-compaction tests |
 | Lightning priority then distance | `0x00641500` | `exact-ported` | hostile-over-scenery, scenery-nearest, priority/distance/equal-tie tests |
 | Lightning retention and chain | `0x0052BA80`, `0x00641340` | `verified-already-at-parity` | wider-dot retention and mask-2 nearest-unused tests |
@@ -93,6 +94,9 @@ No member is blocked by the browser platform.
   constructor/tick/query ownership. Water/Earth share cell traversal only.
 - Teardown: death clears flags before final actor retirement; cell removal
   stably compacts; owner/world reset discards ordinals, projectiles, and input.
+- Coffin activation: its constructor-time zero is temporary. On the exact
+  hidden-to-rising edge, `0x0049A670` attaches the actor to the grid and writes
+  hostile bit `0x2`; no later living-state branch clears it.
 
 ## Recovered behavioral contract
 

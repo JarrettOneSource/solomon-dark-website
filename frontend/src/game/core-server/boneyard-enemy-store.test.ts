@@ -64,6 +64,7 @@ import {
   NATIVE_SKELETON_ACTION_PROGRAMS,
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
+  boneyardEnemyActorFlags,
   boneyardEnemyLiveCount,
   applyBoneyardStaffDisable,
   createBoneyardEnemyStore,
@@ -686,6 +687,39 @@ test('enemy fixed ticks own every native persistent-light writer, reset, and enr
   coffin = step(coffin.store, 2, FAR_PLAYERS)
   assert.equal(coffin.store.actors[0]!.brain.phase, 'rising')
   assert.equal(coffin.store.actors[0]!.lighting.providerCopies, 1)
+})
+
+test('native hostile flags begin on the Coffin rising edge and end on death', () => {
+  for (const token of TOKENS.filter((candidate) => candidate !== 'COFFIN')) {
+    const actor = spawnOne(`actor-flags-${token}`, token, { x: 0, y: 0 }, FAR_PLAYERS)
+      .store.actors[0]!
+    assert.equal(boneyardEnemyActorFlags(actor), 0x2, token)
+  }
+
+  let coffin = spawnOne('actor-flags-coffin', 'COFFIN', { x: 0, y: 0 }, FAR_PLAYERS)
+  assert.equal(boneyardEnemyActorFlags(coffin.store.actors[0]!), 0)
+  coffin = withCoffinRemaining(coffin, 1)
+  coffin = step(coffin.store, 1, FAR_PLAYERS)
+  const risen = coffin.store.actors[0]!
+  assert.equal(risen.brain.family, 'coffin')
+  if (risen.brain.family !== 'coffin') throw new Error('expected Coffin brain')
+  assert.equal(risen.brain.phase, 'rising')
+  assert.equal(boneyardEnemyActorFlags(risen), 0x2)
+  for (const phase of ['holding', 'opening', 'open'] as const) {
+    assert.equal(boneyardEnemyActorFlags({
+      ...risen,
+      brain: { ...risen.brain, phase },
+    }), 0x2, phase)
+  }
+
+  const killed = damageBoneyardEnemy(coffin.store, {
+    actorId: risen.id,
+    amount: risen.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 1,
+  })
+  assert.equal(killed.killed, true)
+  assert.equal(boneyardEnemyActorFlags(killed.store.actors[0]!), 0)
 })
 
 test('Mage lighting reads the pre-action pose and only exact native pose four pauses charge', () => {

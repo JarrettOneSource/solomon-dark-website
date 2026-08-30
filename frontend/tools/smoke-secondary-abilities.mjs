@@ -29,6 +29,7 @@ import {
   firstBoneyardPathBlockProgress,
   withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
+import { boneyardEnemyActorFlags } from '../src/game/core-server/boneyard-enemy-store.ts'
 import {
   getPlayerCharacter,
   getPlayerSkillBook,
@@ -1143,8 +1144,8 @@ function preparePrimaryStatusTarget(host, playerId, enemyBaseline) {
   const playerPosition = state.playerEntities.locomotions[playerIndex].position
   const selected = state.world.enemies.actors.find(({ config, lifeState }) => (
     config.enemyToken === 'SKELETON' && lifeState === 'alive'
-  )) ?? state.world.enemies.actors.find(({ config, lifeState }) => (
-    config.enemyToken !== 'COFFIN' && lifeState === 'alive'
+  )) ?? state.world.enemies.actors.find((actor) => (
+    (boneyardEnemyActorFlags(actor) & 0x2) !== 0
   ))
   assert.ok(selected, 'status-effect acceptance requires one mobile living enemy')
   const position = primaryStatusTargetPosition(

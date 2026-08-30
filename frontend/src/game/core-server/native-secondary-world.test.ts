@@ -14,6 +14,8 @@ import {
   stepBoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
 import {
+  boneyardNativeSecondaryTarget,
+  boneyardNativeSecondaryTargets,
   resolveNativeCollisionAdjustedPosition,
   resolveBoneyardNativeSecondaryCombat,
   resolveBoneyardNativeTeleport,
@@ -115,6 +117,52 @@ test('shared native collision adjustment changes ring sample count and preserves
   assert.equal(checked.length, 13)
   assert.deepEqual(result.rng, thirdPhase.state)
   assert.deepEqual(checked[0], { x: 200, y: 200 })
+})
+
+test('secondary target membership begins on the Coffin rising edge', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('secondary-coffin'), {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'COFFIN',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+      position: { x: 100, y: 100 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  }).store
+  const coffin = spawned.actors[0]!
+  assert.equal(coffin.brain.family, 'coffin')
+  if (coffin.brain.family !== 'coffin') throw new Error('expected Coffin brain')
+
+  assert.deepEqual(boneyardNativeSecondaryTargets(spawned, coffin.position, 1), [])
+  assert.equal(boneyardNativeSecondaryTarget(spawned, coffin.id), null)
+
+  const risen = {
+    ...spawned,
+    actors: [{
+      ...coffin,
+      brain: {
+        ...coffin.brain,
+        phase: 'rising' as const,
+        phaseTick: 0,
+        phaseTicksRemaining: 11,
+      },
+    }],
+  }
+  assert.deepEqual(
+    boneyardNativeSecondaryTargets(risen, coffin.position, 1).map(({ id, nativeFlags }) => ({
+      id,
+      nativeFlags,
+    })),
+    [{ id: coffin.id, nativeFlags: 0x2 }],
+  )
+  assert.equal(boneyardNativeSecondaryTarget(risen, coffin.id)?.nativeFlags, 0x2)
 })
 
 test('Earthquake applies its exact signed heading perturbation at the enemy-store boundary', () => {

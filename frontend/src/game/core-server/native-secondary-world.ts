@@ -15,6 +15,7 @@ import {
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
 import {
+  boneyardEnemyActorFlags,
   damageBoneyardEnemy,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
@@ -185,7 +186,10 @@ export function boneyardNativeSecondaryTargets(
   return [...enemies.actors, ...enemies.maggots]
     .filter((actor) => {
       if (actor.lifeState !== 'alive') return false
-      if ('config' in actor && actor.config.enemyToken === 'COFFIN') return false
+      if (
+        'config' in actor
+        && (boneyardEnemyActorFlags(actor) & 0x2) === 0
+      ) return false
       if (!('config' in actor) && !actor.combatActive) return false
       const bodyRadius = 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius
       return Math.hypot(actor.position.x - center.x, actor.position.y - center.y)
@@ -210,7 +214,10 @@ export function boneyardNativeSecondaryTarget(
 ): NativeSecondaryTarget | null {
   const actor = [...enemies.actors, ...enemies.maggots].find(({ id }) => id === targetId)
   if (!actor || actor.lifeState !== 'alive') return null
-  if ('config' in actor && actor.config.enemyToken === 'COFFIN') return null
+  if (
+    'config' in actor
+    && (boneyardEnemyActorFlags(actor) & 0x2) === 0
+  ) return null
   if (!('config' in actor) && !actor.combatActive) return null
   return Object.freeze({
     family: 'config' in actor ? actor.config.enemyToken : 'MAGGOT',

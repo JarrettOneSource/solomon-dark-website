@@ -33,6 +33,7 @@ import {
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
 import {
+  boneyardEnemyActorFlags,
   damageBoneyardEnemy,
   stepBoneyardEnemyStore,
 } from '../src/game/core-server/boneyard-enemy-store.ts'
@@ -1592,7 +1593,7 @@ async function proveChillWindArrowTumble(page, wire, screenshotPath) {
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
   const auraTargetTemplate = state.world.enemies.actors.find((actor) => (
-    actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+    (boneyardEnemyActorFlags(actor) & 0x2) !== 0
   ))
   assert.ok(auraTargetTemplate, 'opening wave had no Cold Aura target template')
   learnChillWind(state, playerId)
@@ -2023,7 +2024,6 @@ function stageStaffMovementTarget(state, playerId, navigation) {
   const player = getPlayerCharacter(state, playerId)
   const targetIndex = state.world.enemies.actors.findIndex((actor) => (
     actor.lifeState === 'alive'
-    && actor.config.enemyToken !== 'COFFIN'
     && actor.brain.phase === 'approach'
   ))
   assert.notEqual(targetIndex, -1, 'opening wave had no controllable Staff target')
@@ -2595,7 +2595,7 @@ function nearestHostileActor(state, position) {
   assert.equal(state.world.kind, 'boneyard')
   return [
     ...state.world.enemies.actors.flatMap((actor) => (
-      actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+      (boneyardEnemyActorFlags(actor) & 0x2) !== 0
         ? [{
             collisionRadius: actor.config.collisionRadius,
             enemyToken: actor.config.enemyToken,
@@ -2625,7 +2625,9 @@ function hostileHealthById(state) {
   assert.equal(state.world.kind, 'boneyard')
   return new Map([
     ...state.world.enemies.actors.flatMap((actor) => (
-      actor.config.enemyToken === 'COFFIN' ? [] : [[actor.id, actor.currentHealth]]
+      (boneyardEnemyActorFlags(actor) & 0x2) === 0
+        ? []
+        : [[actor.id, actor.currentHealth]]
     )),
     ...state.world.enemies.maggots.map((maggot) => [maggot.id, maggot.currentHealth]),
   ])

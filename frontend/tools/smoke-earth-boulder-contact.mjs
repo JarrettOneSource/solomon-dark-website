@@ -13,6 +13,7 @@ import {
   canPlaceBoneyardBody,
   withBoneyardGateCollision,
 } from '../src/game/core-server/boneyard-collision.ts'
+import { boneyardEnemyActorFlags } from '../src/game/core-server/boneyard-enemy-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -188,7 +189,7 @@ async function openBoneyardContactFixture(host) {
   state = host.state()
   assert.equal(state.world.kind, 'boneyard')
   const target = state.world.enemies.actors.find((actor) => (
-    actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+    (boneyardEnemyActorFlags(actor) & 0x2) !== 0
   ))
   assert.ok(target, 'Earth-contact proof requires one targetable live enemy')
   const targetPosition = lane.targetPosition

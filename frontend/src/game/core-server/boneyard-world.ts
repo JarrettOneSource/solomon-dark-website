@@ -119,6 +119,7 @@ import {
   type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
 import {
+  boneyardEnemyActorFlags,
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
   type BoneyardEnemyPlayerDamage,
@@ -357,7 +358,7 @@ export function boneyardPrimarySpellTargets(
   const actors = world.enemies.actors
     .map((enemy) => ({
       active: enemy.lifeState === 'alive',
-      actorFlags: enemy.config.enemyToken === 'COFFIN' ? 0 : 0x2,
+      actorFlags: boneyardEnemyActorFlags(enemy),
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.config.collisionRadius,
       cellBindingOrder: enemy.nativeCellBindingOrder,
@@ -482,7 +483,7 @@ export function stepBoneyardWorldTick(
   )
   const staffHostileBodyIds = new Set([
     ...world.enemies.actors.flatMap((actor) => (
-      actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+      (boneyardEnemyActorFlags(actor) & 0x2) !== 0
         ? [`enemy-${actor.id}`]
         : []
     )),
@@ -622,10 +623,12 @@ export function stepBoneyardWorldTick(
           ? [{ position: player.position, radius: PLAYER_CHARACTER_RADIUS }]
           : []
       }),
-      ...collisionResolvedEnemies.actors.map((actor) => ({
-        position: actor.position,
-        radius: actor.config.collisionRadius,
-      })),
+      ...collisionResolvedEnemies.actors
+        .filter((actor) => boneyardEnemyActorFlags(actor) !== 0)
+        .map((actor) => ({
+          position: actor.position,
+          radius: actor.config.collisionRadius,
+        })),
       ...collisionResolvedEnemies.maggots.map((maggot) => ({
         position: maggot.position,
         radius: maggot.collisionRadius,
@@ -1388,7 +1391,7 @@ function boneyardEnemyBodies(
 ): ActorPhysicsBody[] {
   return [
     ...enemies.actors
-      .filter((actor) => actor.lifeState === 'alive')
+      .filter((actor) => boneyardEnemyActorFlags(actor) !== 0)
       .map((actor) => {
         const id = `enemy-${actor.id}`
         return enemyCollisionBody(id, actor.position, actor.config.collisionRadius)

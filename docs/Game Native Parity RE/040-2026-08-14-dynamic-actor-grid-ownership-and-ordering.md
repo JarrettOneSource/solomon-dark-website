@@ -10,6 +10,13 @@
   controller-wide actor list, resolves its cell with
   `floor(position / cellSize)`, appends it to that cell, and updates the maximum
   active movement radius used by nearby queries.
+- Coffin is the survival exception to construction-time attachment. Constructor
+  `0x00479940` leaves active byte `+0x36` and query flags `+0x14` clear while
+  hidden. Its hidden-to-rising helper `0x0049A670` writes state one, sets
+  `+0x36 = 1`, calls `0x005212F0`, then writes `+0x14 = 0x2` at
+  `0x0049A816`. Hidden Coffins therefore occupy neither the dynamic grid nor
+  hostile mask-2 queries; rising, holding, opening, and open Coffins occupy
+  both until shared death teardown detaches them.
 - `WorldCellGrid_RebindActor` at `0x005217B0` owns cell changes. It removes the
   actor from the cell stored at actor `+0x54`, resolves the current coordinate,
   appends the actor to the new cell, and stores the new cell pointer at `+0x54`.

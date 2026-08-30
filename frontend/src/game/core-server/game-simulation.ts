@@ -217,6 +217,7 @@ import {
   resolveBoneyardNativeSecondaryCombat,
 } from './native-secondary-world.ts'
 import {
+  boneyardEnemyActorFlags,
   damageBoneyardEnemy,
   applyBoneyardStaffHeadingPerturbation,
   emitBoneyardPlayerDamageSound,
@@ -3236,7 +3237,7 @@ function finishGameSimulationTick(
             radius: PLAYER_CHARACTER_RADIUS,
           })),
           ...boneyardWorld.enemies.actors.flatMap((actor) => (
-            actor.lifeState === 'alive'
+            boneyardEnemyActorFlags(actor) !== 0
               ? [{
                   position: actor.position,
                   radius: actor.config.collisionRadius,

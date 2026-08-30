@@ -225,3 +225,194 @@ representable by deterministic authoritative state plus ordinary WebGL sprites.
   The task left no listener on port 5418. This receipt is the sole
   post-validation documentation write; no runtime, test, build, or browser
   source byte changed afterward. No production deployment was performed.
+
+## 2026-08-30 — Coffin spatial and hostile-membership lifecycle correction
+
+### Reported smell and parity question
+
+- Player report: visible Coffins survive repeated Frost Jet, Fireball, Steam,
+  Lightning, and Ether contact, may persist across waves, and accumulate enough
+  actors/effects to cause severe frame-time spikes. The supplied 15.246-second
+  1854-by-1072 capture, `SDB - Coffins unable to be destroyed.mp4` (SHA-256
+  `afea07719e40df29bd85d2f04b2ed8c1ffd9241a75f44c92b865474465dab0b7`),
+  retains the same visible Coffin bodies through overlapping Fire/Steam/Frost
+  effects; the on-screen frame-time counter reaches 138 ms.
+- This is a secondary report against entries 168, 220, 254, and 268. Those
+  passes inspected Coffin constructor `0x00479940`, observed `+0x14 = 0`, and
+  encoded that constructor value as a lifetime invariant. They did not follow
+  state-zero's call to helper `0x0049A670`, so the causal trace stopped before
+  the native grid-attachment and hostile-flag writes. That violated the state-
+  writer, lifecycle, and shared-consumer membership rules.
+- Stock behavior to recover: a Coffin is spatially detached and untargetable
+  while hidden, then becomes an ordinary mask-`0x2` hostile on the exact
+  hidden-to-rising edge and stays targetable through rising, holding, opening,
+  and open states until shared death teardown.
+- Falsifiers: `0x0049A670` does not write `+0x14`; it writes a flag other than
+  `0x2`; the helper is not the hidden-to-rising owner; a later living Coffin
+  branch clears the bit; or any web combat consumer intentionally bypasses the
+  native actor flag instead of inheriting it.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player capture | supplied MP4 and frames at 0.5, 3.5, 6.5, 9.5, 12.5, and 14.5 seconds | Multiple visible Coffins remain intact while primary contact presentation overlaps their roots; the report spans five pure/welded spell families. | high for web symptom |
+| Retail identity | unmodified Beta 0.72.5 `SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, re-hashed 2026-08-30 | Exact executable behind every address below. | high |
+| Constructor instructions | read-only canonical Ghidra replica; Coffin constructor `0x00479940` | Calls Badguy construction, writes type `0x3F5`, clears actor flags `+0x14`, clears active byte `+0x36`, and seeds hidden state zero. Constructor zero is confirmed but is not lifetime state. | high |
+| Activation instructions | `Coffin` helper `0x0049A670`; raw `0x0049A6D3..0x0049A81D`; caller `Coffin_Tick 0x004A2760` | The hidden deadline calls the helper. It writes state one at `+0x210`, sets `+0x36 = 1` at `0x0049A807`, calls `SceneGrid_AttachActorIfActive 0x005212F0`, then writes `+0x14 = 0x2` at `0x0049A816`. | high |
+| Query/teardown instructions | grid query `0x005235F0`; point/cone/polygon/priority family `0x00641220/0x00641500/0x00641B10/0x006427E0`; shared flag clear/detach `0x0063E7C0/0x005223D0` | Every mask-2 consumer inherits the transition; special projectile/scenery bits remain independent. Death removes the living membership. | high |
+| Tool provenance | read-only Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`; `decompile_targets.py` SHA-256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465` | Canonical source project and four-slot replica wrapper were used without modifying Mod Loader or the analyzed project. | high |
+| Current Website trace | `origin/main a554ea73`; `boneyard-spell-combat.ts`, `boneyard-world.ts`, `player-staff-combat-system.ts`, `native-secondary-world.ts` | Four separate projections hard-code every Coffin as flags-zero/nonhostile for life. Physical bodies also include hidden Coffins, reversing both sides of the native transition. | high |
+
+All addresses are preferred-image addresses. No loader-injected runtime sample
+is required for the material conclusion; the state and flag writes are direct
+instructions, and no stock or Mod Loader file was changed.
+
+### System boundary and membership inventory
+
+Native system: **Coffin spatial and hostile actor membership**, from hidden
+construction through grid attachment, every mask-2 consumer, death detachment,
+world replacement, and authoritative multiplayer projection.
+
+| Member / branch | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| hidden constructor and 180/360 plus 0..49 tick wait | `0x00479940`, `+0x14=0`, `+0x36=0`, state zero | `exact-ported` | no grid body, primary/secondary/Staff target, collision, or hidden damage |
+| hidden-to-rising edge | `0x0049A670`, raw `0x0049A6D3..0x0049A81D` | `exact-ported` | same authoritative tick changes phase, attaches once, and exposes bit `0x2` |
+| rising / holding / opening / open | no later living clear; `0x004A2760` | `exact-ported` | continuous spatial and hostile membership through every visible state |
+| dying / terminal / world replacement | `0x0063E7C0`, `0x005223D0`, common ActorWorld teardown | `verified-already-at-parity` through shared derived flag | no new contact after lethal edge; body, children, and queries retire under existing owners |
+| Skeleton / Archer / Mage / Imp / Zombie / Wraith / Demon | common living Badguy bit `0x2` | `verified-already-at-parity` | unchanged per-family positive matrix |
+| active Coffin-owned Maggot | existing active bit-2 lane | `verified-already-at-parity` | active grounded child remains targetable; emerging/inactive child remains noncombat |
+| Fireball direct/explosion/burn | point/area mask `0x2/0x6` | `exact-ported` through shared flag | risen Coffin takes direct and owned follow-up damage; hidden Coffin is skipped |
+| Ether Magic Missile and builds `1000..1002` | point mask `0x2/0x6` | `exact-ported` through shared flag | pure and inherited weld projectiles contact the risen root |
+| Earth Boulder and retained Boulder weld `1006` | root gather mask `0x6` | `exact-ported` through shared flag | damage-pool traversal includes risen Coffin exactly once |
+| Lightning and Flame Lash `1003` direct/chain | priority and chain mask `0x2` | `exact-ported` through shared flag | acquisition, retention, direct hit, and chain membership |
+| Frost Jet and Steam Jet `1005` | cone/root mask `0x1082` / `0x2` | `exact-ported` through shared flag | cold/steam damage, modifiers, and push use the risen root |
+| Blizzard `1004` direct/chain/push | polygon mask `0x1086`, hostile branch `0x2` | `exact-ported` through shared flag | direct, chain, cold/stun/damage, and push latch include risen Coffin |
+| Staff movement admission and marker-time shapes | `0x0054AFF1..0x0054B336`, `0x0053B9F0` | `exact-ported` through shared flag without changing geometry | hidden Coffin produces no contact; risen Coffin admits radius contact, while normal/Critical/Whirl root shapes keep their independent exact outcomes |
+| player secondary/response target projection | existing mask-2 area/retained-target family | `exact-ported` through shared flag | risen Coffin enters Flash, secondary actors, Mindblast, and retained modifier targets |
+| player/enemy dynamic collision, spawn clearance, and teleport body census | grid attachment `0x005212F0` | `exact-ported` through shared spatial predicate | hidden Coffin occupies no body slot; risen Coffin does |
+| generated Boneyard, custom/mod Boneyard, save/rejoin, late join | same host-owned actor phase | `exact-ported` | targetability derives from restored authoritative phase with no client guess |
+| protocol/render/audio | existing Coffin phase, HP, events, and removal projection | `verified-already-at-parity` | no new wire field or presentation-only authority |
+| direct Web Lua/mod damage by explicit actor id | Website extension, no stock spatial query | `out-of-system` — retain explicit API semantics | collision membership does not silently redefine direct mod commands |
+| ML policy observation | Website training-only full-state contract | `out-of-system` — no policy/training change in parity task | combat outcomes still use corrected host targetability |
+
+There are no `blocked-by-platform` members. The browser can represent this as
+derived authoritative state; no approximation or compatibility layer is needed.
+
+### Native ownership thread and recovered behavioral contract
+
+- Coffin construction owns the hidden deadline but deliberately withholds both
+  active/grid byte `+0x36` and actor-query bit `+0x14`. Hidden presentation,
+  collision, and target queries therefore agree on absence.
+- `Coffin_Tick 0x004A2760` owns the exact deadline. Its sole transition helper
+  changes state, attaches the existing actor to the Region grid, and publishes
+  hostile bit `0x2` in one fixed-tick transition. The bit is not a render flag
+  and is not inferred from Coffin sprite visibility.
+- Point, cone, polygon, chain, Staff, and secondary consumers read the shared
+  actor membership. A per-spell Coffin exception would reproduce the original
+  process failure; one host-side derived flag must feed every consumer.
+- Shared death first makes the actor ineligible, clears/detaches membership,
+  then existing independent break effects and parent-loss Maggot teardown may
+  finish. Wave live count continues to count the Coffin actor while hidden and
+  living; spatial membership does not redefine wave accounting.
+- Multiplayer clients already receive Coffin phase, health, semantic effects,
+  and terminal removal. The host derives collision/targetability from the same
+  phase and remains the only damage authority; no protocol bump is required.
+
+### Nearby-system findings
+
+- The `0x1000` written at Coffin `+0x3C` is not the hostile actor bit. Frost and
+  Blizzard's special `0x1000` virtual branch remains a separate target class;
+  risen Coffin enters their ordinary bit-`0x2` damage branch.
+- Risen Coffin's 45-unit body creates legal Staff contact at player radius 25
+  plus the native `0.1` separation. Its root is consequently outside the
+  normal Staff polygon's strict 70-unit endpoint but remains inside physical
+  contact; Critical and Whirl keep their larger shapes. Actor membership does
+  not authorize widening Staff damage geometry.
+- Hidden Coffins currently participate in the web's all-body solver even while
+  every damage projection excludes them. The native transition proves both
+  halves wrong: hidden means neither; risen means both.
+- The existing phase replication is sufficient for save/rejoin and browser
+  presentation, but collision authority must consume the host brain rather than
+  the presentation snapshot's visible layers.
+
+### Confidence and open questions
+
+- Confirmed: constructor zero, state-zero caller, exact activation instructions
+  and order, bit value, grid attach, every maintained Coffin exclusion, shared
+  query consumers, death detachment, and protocol ownership.
+- Inferred: none material. Web phase names split native visible state more
+  finely, but every non-hidden living phase follows the single instruction-
+  proven bit-2 interval.
+- Unknown: none. No browser limitation applies.
+
+### Web implementation consequence and validation contract
+
+- Add one cohesive enemy-store owner that returns native actor flags from life
+  state and Coffin phase. Use it for primary targets, Staff admission/damage,
+  secondary targets, movement contact classification, physical body census,
+  spawn/transition clearance, and teleport collision.
+- Remove every lifetime `enemyToken === 'COFFIN'` target exception. Keep hidden
+  exclusion as derived state, not a spell-specific branch.
+- Red/green contracts: actual hidden-to-rising stepping proves `0 -> 0x2` on
+  the transition tick; all seven ordinary families stay `0x2`; dying and hidden
+  Coffins are zero; Fire, Ether, Earth, Lightning, Frost, Steam, Blizzard,
+  Staff admission/physical contact, secondary, and physical-body consumers
+  each prove hidden-negative and risen-positive membership; Staff root-damage
+  assertions retain the independent normal/Critical/Whirl geometry.
+- Mac browser acceptance: spawn or reach a real Coffin, record hidden absence,
+  then hit the risen actor with representative projectile, sustained, Staff,
+  and secondary paths; HP must fall, lethal damage must remove the Coffin and
+  its child ownership, later waves must not retain the body, and page, console,
+  failed-response, host-error, and protocol-close arrays must be empty.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the Mac mini. Push, deployment, and production remain separate and require
+  explicit authorization.
+
+### Implementation validation receipt
+
+- Causal result: retail Coffin construction clears `+0x14`, but that value is
+  only the hidden interval. Raw helper instructions at `0x0049A807..0x0049A81D`
+  activate the actor, attach it through `0x005212F0`, and write hostile bit
+  `0x2` on the hidden-to-rising edge. The web had copied constructor zero into
+  four lifetime Coffin exclusions while simultaneously leaving hidden Coffins
+  in physical-body lists.
+- Implementation: `boneyard-enemy-store.ts` now owns one derived
+  `boneyardEnemyActorFlags` result. Hidden, death, and nonliving Coffins return
+  zero; every other living survival actor and every visible living Coffin phase
+  returns `0x2`. Primary spells, Staff, secondary effects, physical collision,
+  arena-transition clearance, teleport collision, and maintained browser-smoke
+  target selection consume that owner. No protocol field, compatibility path,
+  spell-specific Coffin exception, damage geometry, or presentation clock was
+  added.
+- Red proof: the byte-identical Mac test-only tree aggregate
+  `ebb50eb7aed2621e44ea48c910be908463a88704a6392aa63556fd0bc3cdab0e`
+  passed backend/contracts/lint and failed the new Staff Coffin assertion with
+  actual target ids `[]` versus `['enemy:1']`; log SHA-256
+  `ccdf96e8bdf5387fd6eebce6bea80b79d93706ece5189f7e54be06a944318464`.
+  The later root-geometry audit retained native Staff behavior: legal 70.1-unit
+  Coffin separation is radius-contact positive but normal-polygon negative;
+  Critical/Whirl keep their larger independent shapes.
+- Mac exact-tree gate: all 21 tracked changed files were byte-identical between
+  local and detached Mac base `a554ea7368a1c93c07661f9ad01e7a93b528f888`.
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` passed backend build, 28 Website
+  contracts/integration tests, lint, pre-Boneyard `330/330`, Boneyard
+  `1782/1782`, every later frontend/desktop group, production frontend and host
+  builds, bundle budget, and media/CSP policy. `Game-Bu0TvhZ-.js` measured
+  266,211 raw / 80,891 gzip bytes against 524,288 / 134,144 limits. Gate log
+  SHA-256: `dc0b82f64869b2d1c33d4f3df2f634779209ffb2eb3e5d6b13db694216ff7435`.
+- Built-browser acceptance: Mac Chrome `151.0.7922.174`, 1600-by-900 WebGL2,
+  aimed held Blizzard build `1004` from `(620,480)` at the controlled risen
+  Coffin root `(620,360)`. The rendered sample fell from 20 HP to
+  `19.276742187535856` with hit flash one; authority observed
+  `18.34449987411496` at tick 1,050. Two channel actors and three Blizzard
+  contact glows rendered, the target remained the sole `COFFIN` enemy, and the
+  browser error array was empty. Receipt/screenshot SHA-256:
+  `f1334f49d7318599a219a87884cd9ac90ea006c258bb5648864644c559fbf40c` /
+  `2e5147346ce83279f793e0157e201fa12c5ac7b7ee7e237e41f577ad6b777018`.
+  A preceding low-HP diagnostic also reached complete Coffin removal and 78
+  native death/break actors; it was not the acceptance run because its
+  one-frame contact glow retired between 20 Hz browser samples.
+- Unknowns / platform differences: none. Push and deployment were not requested
+  or performed. This receipt is the only tracked post-gate write; the exact
+  final documented tree must pass the canonical gate before completion.

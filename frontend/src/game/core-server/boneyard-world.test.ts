@@ -579,19 +579,20 @@ test('player movement separates from live enemy circles and commits the displace
   assert.ok(player.position.x < enemy.position.x, 'the player must not pass through the enemy')
 })
 
-test('movement contact classifies every hostile actor family and excludes Coffin', () => {
-  const tokens = [
-    'SKELETON',
-    'SKELETONARCHER',
-    'SKELETONMAGE',
-    'IMP',
-    'ZOMBIE',
-    'WRAITH',
-    'DEMON',
-    'COFFIN',
+test('movement contact follows the Coffin hidden-to-rising hostile edge', () => {
+  const cases = [
+    ['SKELETON', null, true],
+    ['SKELETONARCHER', null, true],
+    ['SKELETONMAGE', null, true],
+    ['IMP', null, true],
+    ['ZOMBIE', null, true],
+    ['WRAITH', null, true],
+    ['DEMON', null, true],
+    ['COFFIN', 'hidden', null],
+    ['COFFIN', 'rising', true],
   ] as const
 
-  for (const token of tokens) {
+  for (const [token, coffinPhase, expectedStaffHostile] of cases) {
     const loaded = gatedBoneyard()
     loaded.scene.fences = []
     let world = createBoneyardWorld(loaded)
@@ -620,15 +621,29 @@ test('movement contact classifies every hostile actor family and excludes Coffin
       tick: 0,
     })
     const actor = seeded.store.actors[0]!
+    const configuredActor = actor.brain.family === 'coffin' && coffinPhase !== null
+      ? {
+          ...actor,
+          brain: {
+            ...actor.brain,
+            phase: coffinPhase,
+            phaseTick: 0,
+            phaseTicksRemaining: 100,
+          },
+        }
+      : actor
     world = {
       ...world,
       enemies: {
         ...seeded.store,
         actors: [{
-          ...actor,
+          ...configuredActor,
           nextMovementTick: Number.MAX_SAFE_INTEGER,
           position: {
-            x: player.position.x + PLAYER_CHARACTER_RADIUS + actor.config.collisionRadius + 4,
+            x: player.position.x
+              + PLAYER_CHARACTER_RADIUS
+              + configuredActor.config.collisionRadius
+              + 4,
             y: player.position.y,
           },
         }],
@@ -648,10 +663,13 @@ test('movement contact classifies every hostile actor family and excludes Coffin
       contacts = result.movementContactsByPlayerId.player ?? []
     }
 
-    assert.deepEqual(contacts, [{
-      bodyId: `enemy-${actor.id}`,
-      staffHostile: token !== 'COFFIN',
-    }], token)
+    assert.deepEqual(
+      contacts,
+      expectedStaffHostile === null
+        ? []
+        : [{ bodyId: `enemy-${actor.id}`, staffHostile: expectedStaffHostile }],
+      `${token}:${coffinPhase ?? 'ordinary'}`,
+    )
   }
 })
 

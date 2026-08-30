@@ -138,6 +138,58 @@ test('automatic staff admission requires the exact equipped Staff and emits one 
   assert.ok(result.events.some(({ sound }) => sound === 'bone-crack'))
 })
 
+test('a risen Coffin receives Staff damage when the native root shape reaches it', () => {
+  const rankedEntities = rankPlayerSkill(staffFixture().playerEntities, 71, 9)
+  const base = staffFixture(rankedEntities)
+  const spawned = spawnCoffin()
+  const coffin = spawned.actors[0]!
+  assert.equal(coffin.brain.family, 'coffin')
+  if (coffin.brain.family !== 'coffin') throw new Error('expected Coffin brain')
+  const distance = 25 + coffin.config.collisionRadius
+  let context: PlayerStaffCombatSystemContext = {
+    ...base,
+    enemies: {
+      ...spawned,
+      actors: [{
+        ...coffin,
+        brain: {
+          ...coffin.brain,
+          phase: 'rising',
+          phaseTick: 0,
+          phaseTicksRemaining: 11,
+        },
+        currentHealth: 1_000,
+        position: { x: 0, y: -distance },
+      }],
+    },
+    movementContactsByPlayerId: {
+      [PLAYER_ID]: [{ bodyId: `enemy-${coffin.id}`, staffHostile: true }],
+    },
+    rng: createNativeRng(seedForOutcome(base.playerEntities, 'critical-hit')),
+  }
+  let result = stepPlayerStaffCombatSystem(context)
+  for (let tick = 2; tick < 100; tick += 1) {
+    context = {
+      ...context,
+      enemies: result.enemies,
+      playerEntities: result.playerEntities,
+      players: result.players,
+      rng: result.rng,
+      spells: result.spells,
+      tick,
+    }
+    result = stepPlayerStaffCombatSystem(context)
+    if (result.spells.transients.some(({ kind }) => kind === 'player-staff-contact')) break
+  }
+
+  const contact = result.spells.transients.find(({ kind }) => kind === 'player-staff-contact')
+  assert.ok(contact && contact.kind === 'player-staff-contact')
+  assert.equal(contact.outcome, 'critical-hit')
+  assert.deepEqual(contact.targetIds, [`enemy:${coffin.id}`])
+  assert.ok(result.enemies.actors[0]!.currentHealth < 1_000)
+  assert.equal(result.enemies.actors[0]!.lastDamagedByPlayerId, PLAYER_ID)
+})
+
 test('Disabling Hit permanently multiplies target-owned movement and action lanes', () => {
   let context = staffFixture(rankPlayerSkill(staffFixture().playerEntities, 71, 9))
   context = {
@@ -446,6 +498,34 @@ function spawnSkeleton(flags: readonly 'FLAG_PIKE'[] = []): BoneyardEnemyStore {
       id: 1,
       locationPolicy: 'anywhere',
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 0, y: 0 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  }).store
+}
+
+function spawnCoffin(): BoneyardEnemyStore {
+  return stepBoneyardEnemyStore(createBoneyardEnemyStore('staff-coffin'), {
+    firstProjectileWorldContact: () => null,
+    players: {
+      [PLAYER_ID]: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: { x: 500, y: 0 },
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'COFFIN',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
       position: { x: 0, y: 0 },
       spawnTick: 0,
       waveOrdinal: 1,

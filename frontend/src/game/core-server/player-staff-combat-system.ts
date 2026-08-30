@@ -48,6 +48,7 @@ import {
 import {
   applyBoneyardStaffDisable,
   applyBoneyardStaffImpactVerticalVelocity,
+  boneyardEnemyActorFlags,
   breakBoneyardSkeletonPike,
   damageBoneyardEnemy,
   type BoneyardEnemyLethalObserver,
@@ -514,7 +515,7 @@ function selectStaffContactTargets(
 function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
   return [
     ...enemies.actors.flatMap((actor): StaffCombatTarget[] => (
-      actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+      (boneyardEnemyActorFlags(actor) & 0x2) !== 0
         ? [{
             actorId: actor.id,
             collisionRadius: actor.config.collisionRadius,

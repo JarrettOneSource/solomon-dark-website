@@ -407,6 +407,15 @@ export interface BoneyardEnemyActor {
   readonly waveOrdinal: number
 }
 
+export function boneyardEnemyActorFlags(actor: BoneyardEnemyActor): 0 | 0x2 {
+  if (actor.lifeState !== 'alive') return 0
+  if (
+    actor.brain.family === 'coffin'
+    && (actor.brain.phase === 'hidden' || actor.brain.phase === 'death')
+  ) return 0
+  return 0x2
+}
+
 export function nativeEnemyHitOverlay(
   lastDamageTick: number | null,
   tick: number,

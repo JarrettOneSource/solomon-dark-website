@@ -704,7 +704,7 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
   ])
 })
 
-test('Fire and Ether skip an ineligible Coffin and contact the next hostile actor', () => {
+test('Fire and Ether skip a hidden Coffin and contact the next hostile actor', () => {
   const enemies = spawnEnemies([
     { position: { x: 0, y: 0 }, token: 'COFFIN' },
     { position: { x: 0, y: 0 }, token: 'SKELETON' },
@@ -716,6 +716,48 @@ test('Fire and Ether skip an ineligible Coffin and contact the next hostile acto
     assert.deepEqual(result.hits.map(({ actorId }) => actorId), [2])
     assert.deepEqual(result.spells.projectiles, [])
     assert.equal(result.spells.transients[0]?.kind, `${kind}-impact`)
+  }
+})
+
+test('every reported pure primary damages a risen Coffin', () => {
+  const enemies = riseCoffins(spawnEnemies([
+    { position: { x: 50, y: 0 }, token: 'COFFIN' },
+  ]))
+  const fire = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [projectile({ id: 7, kind: 'fire', position: { x: 50, y: 0 } })],
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
+  const ether = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [projectile({ id: 8, kind: 'ether', position: { x: 50, y: 0 } })],
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
+  const earth = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [projectile({ id: 9, kind: 'earth', position: { x: 50, y: 0 } })],
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
+  const lightning = resolveBoneyardSpellCombat(
+    enemies,
+    spellState({ transients: [transient({ id: 10, kind: 'air', targetId: 'enemy:1' })] }),
+    [emission({ id: 10, kind: 'air' })],
+    1,
+    WORLD_KEY,
+    COMBAT_RNG,
+  )
+  const frost = resolveBoneyardSpellCombat(
+    enemies,
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [emission({ id: 11, kind: 'water' })],
+    1,
+    WORLD_KEY,
+    COMBAT_RNG,
+  )
+
+  for (const [kind, result] of [
+    ['fire', fire],
+    ['ether', ether],
+    ['earth', earth],
+    ['lightning', lightning],
+    ['frost', frost],
+  ] as const) {
+    assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1], kind)
+    assert.ok(result.enemies.actors[0]!.currentHealth < enemies.actors[0]!.currentHealth, kind)
   }
 })
 
@@ -1712,8 +1754,8 @@ test('Blizzard Beam uses its root polygon, 100-unit chains, and Cold-before-Stun
   assert.equal(result.spells.transients.some(({ kind }) => kind === 'weld-channel'), false)
 })
 
-test('Blizzard root membership covers every survival family and excludes Coffin', () => {
-  const spawned = spawnEnemies([
+test('Blizzard root membership covers every survival family after Coffin rises', () => {
+  const spawned = riseCoffins(spawnEnemies([
     { position: { x: 50, y: 0 }, token: 'SKELETON' },
     { position: { x: 80, y: 0 }, token: 'SKELETONARCHER' },
     { position: { x: 110, y: 0 }, token: 'SKELETONMAGE' },
@@ -1722,7 +1764,7 @@ test('Blizzard root membership covers every survival family and excludes Coffin'
     { position: { x: 200, y: 0 }, token: 'WRAITH' },
     { position: { x: 230, y: 0 }, token: 'DEMON' },
     { position: { x: 260, y: 0 }, token: 'COFFIN' },
-  ])
+  ]))
   const profile = weldProfile(1004, [200, 10, 0, 1, 0, 0, 0], 'channel')
   const result = resolveCombatWithAuthority(
     spawned,
@@ -1730,11 +1772,11 @@ test('Blizzard root membership covers every survival family and excludes Coffin'
     [emission({ damage: 0.01, id: 20, kind: 'weld', primarySkill: profile })],
     2,
   )
-  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2, 3, 4, 5, 6, 7])
+  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2, 3, 4, 5, 6, 7, 8])
   const glows = result.spells.transients.filter(({ kind }) => (
     kind === 'weld-blizzard-glow'
   ))
-  assert.equal(glows.length, 7)
+  assert.equal(glows.length, 8)
   assert.equal(glows.every(({ painterRegistrations }) => (
     painterRegistrations?.length === 1
       && painterRegistrations[0]?.managerLane === 'actor'
@@ -1865,8 +1907,10 @@ test('Blizzard push arms after a gap, ramps on sustained roots, and respects its
   assert.equal(blocked.enemies.actors[0]!.blizzardPushAccumulator, 0)
 })
 
-test('Steam particle contact installs its ten-tick Steamed payload and exports the pulse', () => {
-  const spawned = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
+test('Steam particle contact installs its ten-tick Steamed payload on a risen Coffin', () => {
+  const spawned = riseCoffins(spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'COFFIN' },
+  ]))
   const actor = spawned.actors[0]!
   const enemies = {
     ...spawned,
@@ -2512,6 +2556,24 @@ function spawnEnemies(
     })),
     tick: 0,
   }).store
+}
+
+function riseCoffins(source: BoneyardEnemyStore): BoneyardEnemyStore {
+  return {
+    ...source,
+    actors: source.actors.map((actor) => {
+      if (actor.brain.family !== 'coffin') return actor
+      return {
+        ...actor,
+        brain: {
+          ...actor.brain,
+          phase: 'rising' as const,
+          phaseTick: 0,
+          phaseTicksRemaining: 11,
+        },
+      }
+    }),
+  }
 }
 
 function spellState(options: {

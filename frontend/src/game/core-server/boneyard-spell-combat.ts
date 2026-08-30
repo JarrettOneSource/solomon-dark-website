@@ -95,6 +95,7 @@ import {
   type RegisterNativeWorldPainter,
 } from '../core-kernels/native-world-manager-order.ts'
 import {
+  boneyardEnemyActorFlags,
   damageBoneyardEnemy,
   positionBoneyardEnemy,
   setBoneyardArrowChillTumbleAccumulator,
@@ -2380,7 +2381,7 @@ function primaryTargetRows(
     target: {
       active: actor.lifeState === 'alive'
         && ('config' in actor || actor.combatActive),
-      actorFlags: 'config' in actor && actor.config.enemyToken === 'COFFIN' ? 0 : 0x2,
+      actorFlags: 'config' in actor ? boneyardEnemyActorFlags(actor) : 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
       cellBindingOrder: actor.nativeCellBindingOrder,

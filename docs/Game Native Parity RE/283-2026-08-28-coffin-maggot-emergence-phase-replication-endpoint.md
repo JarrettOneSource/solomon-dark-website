@@ -44,7 +44,7 @@ advancement, and teardown**.
 
 | Member / branch | Native/web owner | Disposition | Proof contract |
 | --- | --- | --- | --- |
-| hidden/rise/hold/open Coffin body | `0x00479940/0x004A2760`; `stepCoffin` | `verified-already-at-parity` | body clocks and presentation are unchanged |
+| hidden/rise/hold/open Coffin body | `0x00479940/0x004A2760`; `stepCoffin` | `verified-already-at-parity` for clocks/presentation only; spatial/hostile membership corrected by the 2026-08-30 section in entry 254 | body clocks and presentation are unchanged |
 | three opening births | `0x00479C30`; opening branch | `exact-ported` wire endpoint | each child may carry the closed `Float(5)` endpoint |
 | charged open-state births | same helper from state 3 | `exact-ported` wire endpoint | optional one/triple births use the identical constructor |
 | edge/lid launch segments, position, heading, height, bounce | Maggot constructor | `verified-already-at-parity` | no geometry or RNG-order change |

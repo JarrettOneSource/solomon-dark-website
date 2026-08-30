@@ -302,6 +302,24 @@ test('normal, critical, and Whirl contacts use their exact shapes and strict bou
   )
 })
 
+test('Coffin legal separation admits physical Staff contact without widening root shapes', () => {
+  const normal = actionForOutcome('normal').action
+  const critical = actionForOutcome('critical-hit').action
+  const coffin = {
+    collisionRadius: 45,
+    id: 'coffin',
+    pike: false,
+    position: { x: 0, y: -(25 + 45 + NATIVE_ACTOR_SEPARATION_EPSILON) },
+  }
+  assert.deepEqual(nativeStaffPhysicalContactTargets({
+    collisionRadius: 25,
+    headingDegrees: 0,
+    position: { x: 0, y: 0 },
+  }, [coffin]).map(({ id }) => id), ['coffin'])
+  assert.deepEqual(nativeStaffDamageTargets(normal, [coffin]), [])
+  assert.deepEqual(nativeStaffDamageTargets(critical, [coffin]).map(({ id }) => id), ['coffin'])
+})
+
 test('all three proc knockbacks retain their exact arc, radius, and distance', () => {
   const front = { collisionRadius: 0, id: 'front', position: { x: 0, y: -50 } }
   const side = { collisionRadius: 0, id: 'side', position: { x: 50, y: 0 } }
