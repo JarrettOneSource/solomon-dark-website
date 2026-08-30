@@ -140,7 +140,7 @@ simplification and final movement collision.
   independent of lead or scatter displacement.
 - Arrow planar velocity moves and damps independently from draw orientation.
   The `-25` height, `.75` rise, `-3` landing edge, `.99` planar damping,
-  `(-25/height)*launchSpeed*.5` pitch term, `+0x168` orientation countdown,
+  `(-25/height)*launchSpeed*.25` pitch term, `+0x168` orientation countdown,
   and independent `+0x174 = 5` opacity drained by `.05` after landing are
   authoritative fixed-tick state. The distance-derived countdown does not
   retire the Arrow.
@@ -1112,3 +1112,44 @@ reference player can cross native two-unit row boundaries independently.
   62,500-tick state digests remain the authoritative simulation proof. No
   alternate ECS, fallback planner, feature flag, threshold, quality reduction,
   protocol field, save field, or intentional visual difference was added.
+
+## 2026-08-30 — Arrow draw-angle interpolation correction
+
+### Reported smell and falsifiers
+
+- Normal Archer arrows visibly rotate away from their direction of travel;
+  poison-arrow tracking can look disjointed. Fire and poison payload art is
+  already part of the same Arrow owner, so this reopening covers all three
+  payloads rather than adding a normal-only renderer adjustment.
+- Falsifiers checked before implementation: a fixed atlas-orientation offset,
+  opposite Pixi/native rotation signs, a renderer-local body rotation, linear
+  rather than cyclic interpolation in stock, a different update order, a
+  non-unit Puppet time scalar, or the Arrow sharing GuidedMissile's 720-degree
+  presentation phase.
+
+### Fresh native and web evidence
+
+| Evidence | Exact source | Observation | Consequence |
+| --- | --- | --- | --- |
+| Arrow constructor and base time scalar | `0x005E1000`, base `0x006287D0` | `+0x120` is initialized to `1`; Arrow starts `+0x168=20`, height `+0x16C=-25`, opacity `+0x174=5`. Archer volley replaces the orientation countdown. | Existing fixed-tick decrement, height, and opacity ownership stays authoritative. |
+| Arrow tick | `0x005FEA00`, raw `0x005FED25..0x005FEEA5` | The tick decrements `+0x168` by `+0x120`; while airborne it adds `.75` height, damps planar velocity by float `.9900000095367432`, and computes `atan2(originalX, -(originalY + (-25/height)*launchMagnitude*.25))`. The result is converted to degrees and normalized into `[0,360)`. | Correct the web pitch factor from `.5` to `.25`; retain travel heading, original launch speed, and draw angle as separate lanes. |
+| Arrow draw and transform | `0x0060F590 -> Text_Draw 0x00415130 -> 0x00403120`; BadGuys record 2 | Draw passes `+0x170` directly at scale `1.25`. The transform helper internally applies the native screen-space sign; record 2 points upward at zero. There is no hidden 90/180-degree body correction. Fire alone adds 180 degrees to its overlay. | Keep the shared Arrow body rotation equal to the authoritative draw angle; do not patch the sprite or payload renderer. |
+| Website host and client | `boneyard-enemy-store.ts`; `boneyard-presentation-timeline.ts` | Host used the right formula and update order except for the doubled `.5` pitch factor. Client interpolated every `visualPhaseDeg` on a 720-degree cycle, inherited from GuidedMissile; Arrow's `[0,360)` angles therefore take the long 340-degree route across `350 -> 10`. | Give Arrow a 360-degree interpolation cycle while preserving GuidedMissile's complete 720-degree aura phase. |
+
+This is one authoritative Arrow presentation system. Normal, fire, and poison
+share body record 2, `+0x170`, fixed-tick pitch, protocol field, interpolation,
+and painter view. Payload differences remain limited to the already recovered
+fire/poison overlay banks and contact effects. No host targeting, projectile
+travel, collision, lifetime, protocol shape, atlas registration, or render
+order changes.
+
+### Validation contract
+
+- A host regression must pin the `.25` pitch factor at an exact non-cardinal
+  flight sample and retain the native landing/countdown branches.
+- A client regression must prove Arrow `350 -> 10` takes the 20-degree route
+  while GuidedMissile retains its 720-degree phase interpolation.
+- Focused tests run red then green on the Mac mini. The final rebased tree must
+  pass the complete Mac validation gate and a built WebGL browser journey that
+  exercises normal, fire, and poison Arrow travel plus the already reopened
+  Skeleton-family and Imp presentation membership.

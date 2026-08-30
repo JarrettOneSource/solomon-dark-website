@@ -63,6 +63,7 @@ const ENEMY_GAIT_POSE_COUNT = 8
 const SOLOMON_WALK_FRAME_COUNT = 6
 const HEADING_COUNT = 24
 const FULL_CIRCLE = 360
+const GUIDED_MISSILE_VISUAL_PHASE_PERIOD = 720
 
 export function createBoneyardPresentationTimeline(
   options: BoneyardPresentationTimelineOptions,
@@ -638,7 +639,9 @@ function interpolateEnemyProjectiles(
         olderProjectile.visualPhaseDeg,
         newerProjectile.visualPhaseDeg,
         blend,
-        720,
+        olderProjectile.kind === 'guided-missile'
+          ? GUIDED_MISSILE_VISUAL_PHASE_PERIOD
+          : FULL_CIRCLE,
       ),
       visualScale: lerp(
         olderProjectile.visualScale,

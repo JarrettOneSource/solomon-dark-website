@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import {
   NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
@@ -1935,6 +1936,16 @@ test('Arrow arc countdown is independent from its settled opacity retirement lan
   assert.equal(born.verticalOffset, -25)
   assert.equal(born.visualScale, 5)
   assert.equal(born.settledTicksRemaining, born.lifetimeTicks)
+
+  result = step(result.store, 2, {})
+  const airborne = result.store.projectiles[0]!
+  assert.equal(airborne.verticalOffset, -24.25)
+  const radians = born.headingDeg * Math.PI / 180
+  assert.equal(airborne.visualPhaseDeg, Math.fround(actorHeadingFromVector(
+    Math.sin(radians) * born.minimumSpeed,
+    -Math.cos(radians) * born.minimumSpeed
+      + (-25 / airborne.verticalOffset) * born.minimumSpeed * 0.25,
+  )))
 
   result = step(result.store, 31, {})
   const landed = result.store.projectiles[0]!

@@ -254,3 +254,231 @@ Its log and image SHA-256 values are
 and `ea943b9bdb47e9fb7a27aecb6250d8a18883fdeeceb008acc51512ead5811cb5`.
 Acceptance teardown left zero process whose command referenced the task root or
 its Vite port.
+
+## 2026-08-30 — Skeleton-family glow, articulation, and elemental-tip reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: fire Archers look engulfed in fire instead of carrying
+  fire-tipped arrows on glowing bodies; poison Archers show a dull tip and their
+  arrow presentation appears disjointed; a nearby hat/headgear layer looks
+  slightly misaligned. The supplied browser recording is
+  `SDB - Fire Archers and some imp visual errors.mp4`, 15.429944 seconds,
+  1854 by 1080, SHA-256
+  `7c8648763773aa0ea5b8e000893f3afcd7479eb4425246022f79dfae3f7195e7`.
+- Stock behavior to recover: the complete Skeleton, Archer, and Mage articulated
+  compositor, constructor-owned cosmetic fields, `BURNING` passes, held
+  fire/poison-tip lifetime and geometry, flying Arrow compositor, and nearby Imp
+  body/upper-effect membership.
+- Reproduction inputs: the supplied browser footage at approximately
+  `11.0..15.4` seconds for burning Archers and `0.0..10.0` seconds for the
+  alleged nearby Imp effects; deterministic renderer plans for idle, windup,
+  release pose 8, projectile flight, and each `BURNING` sibling.
+- Falsifiers: a native Archer draw that submits three independently planted
+  DeadHawg flames without articulated redraws; elemental tips that exist only
+  while a web action object is present; a fixed `-4` headgear offset; a poison
+  tint other than native half-green; or an Imp body/upper transform that differs
+  from the current Website plan.
+
+This is a secondary report in a system called complete above. The prior pass
+mistook the two native DeadHawg children plus three articulated color passes for
+three arbitrary attachment flames, did not recover the constructor height and
+stride-sine geometry, and tested one active held-arrow frame without checking
+idle or release boundaries. Those skipped rules made the earlier
+`verified-already-at-parity` Archer row false.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Browser reproduction | supplied MP4 and disposable 10 Hz/2 Hz frame extractions | Fire Archers carry three large, independently planted flame sprites which obscure the articulated body; the elemental hold visibly does not remain joined to the authored tip throughout the stock pose domain. | high for reported web output |
+| Retail identity | unmodified `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed 0.72.5 image as the prior enemy ledgers. | high |
+| Fresh instructions | canonical `SolomonDark` Ghidra project through the read-only replica wrapper; Skeleton ctor/render `0x004771B0/0x0048DEE0`, Archer ctor/render `0x0048A6B0/0x0048F450`, Mage ctor/render `0x0048ABB0/0x00491720`, Arrow draw `0x0060F590`, Imp draw `0x00492E10` | Recovers constructor colors/heights, shared stride-sine articulation, exact three-pass burn composition, held-tip pose/socket/color rules, Arrow flight composition, and unchanged Imp body/upper geometry. | high |
+| Raw instructions/constants | Archer `0x0048F60B..0x0049024C`; `_CIsin 0x007470D0`; `RandomFloat 0x00401310`; doubles `0x007DE808=.5`, `0x007DE838=2`, `0x007DE8D8=5`, `0x007DE8E0=3`, `0x007DE8F0=.25`, `0x007DE910=3`, `0x007DE920=20`; floats `0x007DE934=.75`, `0x00785564=.35` | The relevant arithmetic, strict selector-8 exclusion, and transforms are instruction-derived rather than inferred from pixels. | high |
+| Authored data | untouched `data/wave.txt` projection SHA-256 `363a985d79dc3ca28fb5ce519f56c436f5269a9bea1bedc7d1a825e8139499fc`; BadGuys records `2`, `255..266`, `271..282`, Skeleton-family banks; DeadHawg `46..77` | Retail contains 25 `BURNING` rows, including all eight burning Fire Archer rows; 40 Fire Arrow and 22 Poison Arrow rows cover every shipped flag combination. Archer body record extras provide tip point zero. | high |
+| Existing accepted runtime | read-only `animation-goldens.json` at Mod Loader `origin/main`; stock Skeleton/Archer/Mage samples | Stock carries non-white constructor tint, persistent `+0x220` height, authoritative `+0x140` stride phase, and the expected body/head record ordering. | high-supporting |
+| Current Website source | `native-enemy-presentation.ts`, `native-enemy-projectile-presentation.ts`, and exact fixed-function NPM/additive renderer | Web uses arbitrary three-point isotropic flames, fixed headgear `y=-4`, no constructor height/tint or stride articulation, and action-only tips without the native `-5Y` socket. Flying Arrow shaft/overlay state and poison color already match the recovered draw. | high |
+
+The read-only Mod Loader checkout was not changed. Invocation provenance is
+revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py` SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+### System boundary and membership inventory
+
+Native system: **Skeleton-family articulated draw composition**, from final
+constructor cosmetic state and authoritative stride/action/head selectors
+through ordered body/equipment/tip/burn submissions, common hit redraw, light
+providers, and teardown. Flying Arrow and Imp are adjacent falsifier members,
+not permission to merge their independent lifetimes into the body renderer.
+
+| Member / branch | Native source | Disposition | Proof / consequence |
+| --- | --- | --- | --- |
+| Skeleton normal body, equipment, and four headgear banks | `0x004771B0`, `0x0048DEE0` | `exact-ported` by this reopening | constructor tint/height and stride-relative limbs/body/head geometry; all existing weapon selectors retained |
+| Skeleton `BURNING` body | `0x0048DEE0`, actor `+0x240` | `exact-ported` by this reopening | one orange normal articulated pass, two additive articulated passes, and the two exact DeadHawg children replace guessed three-point flames |
+| SkeletonArcher normal body/headgear | `0x0048A6B0`, `0x0048F450` | `exact-ported` by this reopening | same constructor/stride geometry; head relative to body is `-2-bob`, not fixed `-4` |
+| Fire Archer hold, release, and burning body | `0x0048F450`, type byte `+0x24A=1` | `exact-ported` by this reopening | tip exists for every body selector except 8, uses `255..266`, point zero minus five Y, charge alpha; burning composition is shared body glow plus two bounded fire children |
+| Poison Archer hold and release | `0x0048F450`, type byte `+0x24A=2` | `exact-ported` by this reopening | same pose/socket/charge rule using `271..282`; native tint is `(0,scale*.5,0)`, so no non-native brightening |
+| SkeletonMage body, cloak, four charges, and headgear | `0x0048ABB0`, `0x00491720` | `exact-ported` by this reopening | body/limb passes precede charge; independently ordered headgear follows charge; existing cast particles remain after the articulated membership |
+| SkeletonMage `BURNING` | `0x00491720`, actor `+0x240` | `exact-ported` by this reopening | same three body passes and two DeadHawg children; headgear repeats in its separate post-charge loop |
+| DeadHawg burn children | singleton `0x00819994`, array `+0x19B0`, records `46..77` | `exact-ported` by this reopening | frame `(age/2)%32`; directional/top `(headingVector*2)+(0,-40)`, scale `(0.5,0.85)`; lower `(0,-20)`, scale `(0.4,0.75)`; additive pass-one tint |
+| common burn light providers | existing enemy lighting owner, actor `+0x244/+0x24C` | `verified-already-at-parity` | Skeleton/Archer/Mage provider count, charge, glow, fixed-tick authority, and Region ordering are unchanged |
+| normal/fire/poison flying Arrow | `0x005E1000`, `0x005FEA00`, `0x0060F590` | `verified-already-at-parity` | shaft and elemental overlay share one actor root; exact height, pitch countdown, alpha retirement, frame cadence, fire white, and poison half-green remain unchanged |
+| Wraith `BURNING` | `0x00496220` and record-21 soul-wisp owner | `out-of-system` for Skeleton-family glow; `verified-already-at-parity` in its own renderer | same recipe flag does not imply the articulated three-pass compositor |
+| Imp body and upper strip | `0x00492E10`, BadGuys `285..342` | `verified-already-at-parity` | body bank/facing/rotation/scale, authoritative vertical root, upper `-10Y`, frame and alpha agree with current code; no reported pink projectile is reclassified as Imp art |
+| Imp landing/contact children | entry 179's `0x00478A20/0x00485DC0` closure | `verified-already-at-parity` | independent pre-world flare and bias-zero contact FireBurst retain their own lifetimes and painter lanes |
+| cross-combined burning weapon recipes absent from retail wave rows | complete `wave.txt` row census | `out-of-system` for shipped survival authoring | no stock row combines `BURNING` with Sword/Mace/Flail/Axe/Pike; browser mods remain extension behavior rather than omitted stock membership |
+
+No renderer member is blocked by the browser. Exact retail process-global RNG
+cursor identity is not portable across separately launched stock and browser
+sessions. Constructor values and per-frame burn hues therefore use the
+established stable actor/tick cosmetic domain. The predicted visible difference
+is only which legal orange hue appears on a particular frame, not membership,
+range, geometry, ordering, or cadence.
+
+### Native ownership thread and recovered behavioral contract
+
+- Constructors retain neutral body tint
+  `(1-U(.15),1-U(.15),1,1)` and a fixed body-height offset `U(3)`. Archer and
+  Mage rerun those constructor draws, so each final class owns its final values.
+- For all three renderers,
+  `bob=abs(sin(stridePhaseDeg*.5 degrees))`. Limbs plant at `-bob`, torso and
+  body-aligned equipment at `-height-2*bow`, and headgear at
+  `-height-2-3*bow`; therefore headgear is `-2-bob` relative to the torso.
+- `BURNING` first replaces the base tint with `(1,U(.5),0,1)`. Pass zero draws
+  the articulated family normally. Pass one selects
+  `(1,.25+U(.75),0,1)`, enables additive blend, draws the two exact DeadHawg
+  frames, then redraws the articulated family. Pass two reuses that additive
+  color and redraws the family once more. No third independently planted flame
+  exists.
+- Archer held art is body-owned but not a child of a projectile. Fire uses
+  `255+(age/5)%12`; poison uses `271+(age/6)%12`. Both use body record point
+  zero at `y-5`, charge alpha, and exist whenever body selector is not exactly
+  release pose 8. A normal Archer has no held overlay.
+- Flying Arrow remains an independent actor. Record 2 and its fire/poison
+  overlay share position and vertical root. Poison's pure green half-scale
+  modulation is stock behavior; changing it to cyan/white would create a new
+  parity error.
+- Mage body/limbs repeat before element charge; charge art draws next; headgear
+  repeats afterward. Renderer-local Mage particles and every independent child
+  lifetime remain in their previously recovered lanes.
+- Death, run reset, snapshot removal, and scene teardown destroy the articulated
+  view. Arrow and Imp child effects retain their separately owned lifetimes.
+
+### Nearby-system findings
+
+- The old fixed `-4` headgear correction accidentally approximated absolute
+  root Y for some phases while leaving the torso at root zero. The native
+  relationship is dynamic and shared by Skeleton, Archer, and Mage; an
+  Archer-only `+2px` patch would remain wrong for every other stride phase.
+- The supplied pink star-shaped bodies in the early footage are player Ether
+  presentation, not records `285..342`. The fresh Imp renderer trace agrees
+  with the current body/upper plan, so no Imp symptom patch is justified by
+  this capture.
+- The reported flight “tracking” is not a remaining target/pathfinding bug:
+  entry 273 and fresh `0x0060F590` inspection retain separate travel heading and
+  visual pitch exactly. The newly proven held-tip socket/lifetime is the
+  falsified visual owner.
+
+### Confidence and open questions
+
+- Confirmed: constructor fields/ranges, complete burn pass membership, tints,
+  blend transition, DeadHawg records/cadence/geometry/scales, stride formula,
+  head/body relationship, held-tip pose/socket/frame/color/alpha, complete
+  authored row counts, flying Arrow composition, and Imp body/upper geometry.
+- Browser adaptation: exact cross-launch RNG word identity is unavailable; the
+  existing deterministic actor/tick cosmetic domain substitutes only within
+  the recovered ranges.
+- Material unknowns: none. If a later capture identifies a Wizard/player hat
+  rather than Skeleton-family headgear, that belongs to the separately ledgered
+  player-character compositor and must be reproduced as a distinct report.
+
+### Web implementation consequence
+
+- Replace arbitrary `burningLayers` attachments with one shared
+  Skeleton-family articulation/compositor in `native-enemy-presentation.ts`.
+- Derive fixed constructor tint/height from stable immutable actor identity and
+  derive bob from authoritative `stridePhaseDeg`; do not add a render-cadence
+  clock or protocol field.
+- Preserve exact pass and Mage charge/head ordering. Keep only body/equipment
+  members in the common red hit redraw; DeadHawg and elemental additive art
+  retain their own modulation.
+- Show fire/poison holds for every selector except 8 at point zero minus five Y
+  and modulate them by authoritative Archer charge. Do not alter flying Arrow
+  targeting, physics, poison tint, or Imp presentation.
+- Remove the fixed `-4` headgear offsets and the three guessed family flame
+  points across Skeleton, Archer, and Mage in one change.
+
+### Validation contract
+
+- Focused renderer tests must fail on the old tree and enumerate all three
+  Skeleton-family normal/burning paths, exact pass order/tints/blends, both
+  flame children, constructor-height and stride endpoints, four headgear banks,
+  Mage charge/head ordering, idle/windup/release held tips, both elemental
+  frame clocks, charge alpha, and hit-redraw membership.
+- Preserve explicit negative tests for normal Archer, release pose 8, Wraith's
+  separate burning owner, unchanged flying Arrow shaft/overlay composition, and
+  unchanged Imp body/upper transform.
+- Run the repository-supported Mac gate on a test-only red candidate, then on
+  the implementation candidate. The final exact tree must pass
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+- Mac Chrome WebGL2 must render a burning Fire Archer, non-burning Fire Archer,
+  Poison Archer, Skeleton, Mage, Wraith, and Imp in one deterministic gallery;
+  prove body readability, exact layer/role counts and ordering, joined held
+  sockets before pose 8, clean disappearance at pose 8, and empty page,
+  console, failed-response, and wire arrays. A real Boneyard journey must
+  witness one authored Fire or Poison Archer without synthetic projectile/path
+  substitution.
+
+### Implementation validation receipt
+
+The exact final candidate is current Website base
+`b023703c85ddf28a0791824bb60c5d3f74069df1` plus the three-file focused
+change. Local and Mac SHA-256 manifests matched for the ledger, renderer test,
+and renderer implementation. The candidate remains uncommitted in
+`/home/user/.codex-worktrees/solomon-website-archer-imp-visual-20260830-root`;
+no push, deployment, or production claim is implied.
+
+- The test-only Mac candidate on base `228c1fd8` failed exactly the four new
+  renderer contracts while 1,780 prior Boneyard tests passed. The failures were
+  the intended red signal for articulation, idle/release tip ownership, burn
+  composition, and sibling membership.
+- `native-enemy-presentation.ts` now derives the constructor-neutral tint and
+  inclusive `[0,3]` body height from stable actor identity, consumes
+  authoritative stride phase for limb/body/head articulation, and centralizes
+  the complete Skeleton-family composition. `hitBody` keeps body/equipment
+  redraw membership separate from elemental/DeadHawg children.
+- Fire/poison holds now use charge alpha, additive blend, point zero minus five
+  Y, and the exact selector-8 exclusion. Poison remains native half-green.
+  Flying Arrow and Imp files were not changed.
+- The final current-base Mac gate ran from detached
+  `/Users/jarrett/codex-acceptance/archer-imp-visual-20260830-root-r2/Website`.
+  Backend Release built with zero warnings/errors; 28 Website/backend
+  contracts, lint/architecture, all auxiliary suites, desktop `5/5`, all
+  1,784 Boneyard tests, production builds, media policy, and bundle budget
+  passed. `Game-KpKuofp4.js` measured 266,211 raw / 80,897 gzip bytes under
+  524,288 / 134,144.
+- Mac Chrome selected Pixi WebGL2. The broad gallery rendered all eight
+  families with poison Archer record `275`, exactly two Skeleton DeadHawg-64
+  children at X scales `.5/.4`, articulated burn copies, and unchanged Imp
+  landing/contact ownership. Frame A/B changed 432,326 pixels / 14,147,025 RGB
+  channel units; Imp contact changed 5,820 / 811,914. Page, console, and failed
+  response arrays were empty. Reviewed image SHA-256 is
+  `d68371575685947dee7935773f8894f762249822a32ff30b7beb25bcbe503390`.
+- A task-only input substitution ran the same real renderer with authored
+  `BURNING+FIREARROW`. Its exact ordered plan was base limbs/body, fire record
+  `263`, headgear, two DeadHawg-64 children, then two articulated glow passes;
+  frame A/B changed 433,053 pixels / 14,368,056 channel units. Page, console,
+  and failed-response arrays were empty. Reviewed image SHA-256 is
+  `b89f640aaae93d3f8dbb295bb86053ea1813a78b420e015a6c222a2c2b9b6449`.
+- The visual review confirms the user-visible distinction: stock still has two
+  narrow, vertically planted fire children, but the articulated orange body,
+  headgear, bow, and held tip remain readable. The removed web path used three
+  wider guessed attachment flames and no native body glow, which produced the
+  reported engulfed silhouette.
+- The final fetch proved local `HEAD` and `origin/main` both
+  `b023703c85ddf28a0791824bb60c5d3f74069df1`. Task Vite listeners on ports
+  4291 and 4292 and their exact npm parents were stopped; no task listener
+  remained. Disposable screenshots and copied frame extractions are removed
+  after this receipt records their results and hashes.

@@ -262,6 +262,37 @@ test('Archer and Mage retain the shared stock component order', () => {
   )
 })
 
+test('Skeleton-family constructor height and stride sine articulate limbs, body, and head', () => {
+  const bob = Math.abs(Math.sin(45 * Math.PI / 180))
+  for (const family of [
+    'SKELETON',
+    'SKELETONARCHER',
+    'SKELETONMAGE',
+  ] as const) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy(family),
+      animation: nativeEnemyIdleAnimationSample({ stridePhaseDeg: 90 }),
+    }, 120)
+    const limbs = plan.layers.find(({ role }) => role.endsWith('-limbs'))
+    const body = plan.layers.find(({ role }) => role.endsWith('-body'))
+    const head = plan.layers.find(({ role }) => role.endsWith('-headgear'))
+
+    assert.ok(limbs && body && head, `${family} articulated body is incomplete`)
+    assert.ok(Math.abs(limbs.offset.y + bob) < 1e-6, `${family} limb bob`)
+    assert.ok(
+      Math.abs((head.offset.y - body.offset.y) - (-2 - bob)) < 1e-6,
+      `${family} head/body relationship`,
+    )
+    const constructorHeight = -body.offset.y - 2 * bob
+    assert.ok(constructorHeight >= 0 && constructorHeight <= 3, `${family} constructor height`)
+    assert.equal(limbs.tint, body.tint, `${family} limb/body tint`)
+    assert.equal(head.tint, body.tint, `${family} head/body tint`)
+    assert.equal(body.tint & 0xff, 0xff, `${family} constructor blue channel`)
+    assert.equal((body.tint >>> 16) & 0xff, (body.tint >>> 8) & 0xff)
+    assert.ok(((body.tint >>> 8) & 0xff) >= Math.round(0.85 * 255))
+  }
+})
+
 test('Imp uses four native 12-facing bodies and the registered upper effect', () => {
   const plan = nativeEnemyPresentationPlan(enemy('IMP'), 100)
   assert.equal(plan.layers.length, 2)
@@ -858,6 +889,147 @@ test('Archer action bodies attach only the configured native held elemental arro
   assert.equal(fire.layers.find(({ role }) => role === 'archer-held-fire-arrow')?.entry, 261)
   assert.equal(poison.layers.find(({ role }) => role === 'archer-held-poison-arrow')?.entry, 276)
   assert.ok(ordinary.layers.every(({ role }) => !role.startsWith('archer-held-')))
+})
+
+test('Archer elemental tips persist outside release pose at the authored point minus five', () => {
+  const idle = nativeEnemyIdleAnimationSample({ bodyPose: 0, stridePhaseDeg: 90 })
+  const fire = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER', ['FLAG_FIREARROW']),
+    animation: idle,
+    lighting: { charge: 0.6, glow: 0, providerCopies: 1 },
+  }, 130)
+  const poison = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER', ['FLAG_POISONARROW']),
+    animation: idle,
+    lighting: { charge: 0.6, glow: 0, providerCopies: 0 },
+  }, 130)
+  const fireTip = fire.layers.find(({ role }) => role === 'archer-held-fire-arrow')
+  const poisonTip = poison.layers.find(({ role }) => role === 'archer-held-poison-arrow')
+
+  assert.deepEqual(
+    fireTip && {
+      alpha: fireTip.alpha,
+      blendMode: fireTip.blendMode,
+      entry: fireTip.entry,
+      offset: fireTip.offset,
+      tint: fireTip.tint,
+    },
+    {
+      alpha: 0.6,
+      blendMode: 'add',
+      entry: 261,
+      offset: { x: -1, y: -38 },
+      tint: 0xffffff,
+    },
+  )
+  assert.deepEqual(
+    poisonTip && {
+      alpha: poisonTip.alpha,
+      blendMode: poisonTip.blendMode,
+      entry: poisonTip.entry,
+      offset: poisonTip.offset,
+      tint: poisonTip.tint,
+    },
+    {
+      alpha: 0.6,
+      blendMode: 'add',
+      entry: 276,
+      offset: { x: -1, y: -38 },
+      tint: 0x008000,
+    },
+  )
+
+  for (const flag of ['FLAG_FIREARROW', 'FLAG_POISONARROW'] as const) {
+    const release = nativeEnemyPresentationPlan({
+      ...enemy('SKELETONARCHER', [flag]),
+      animation: nativeEnemyIdleAnimationSample({ bodyPose: 8 }),
+      lighting: { charge: 1, glow: 0, providerCopies: 1 },
+    }, 130)
+    assert.ok(release.layers.every(({ role }) => !role.startsWith('archer-held-')), flag)
+  }
+})
+
+test('burning Archer uses three articulated color passes and two bounded fire children', () => {
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER', ['FLAG_BURNING', 'FLAG_FIREARROW']),
+    animation: nativeEnemyIdleAnimationSample({ bodyPose: 0, stridePhaseDeg: 90 }),
+    lighting: { charge: 1, glow: 1, providerCopies: 2 },
+  }, 130)
+
+  assert.deepEqual(plan.layers.map(({ role }) => role), [
+    'archer-limbs',
+    'archer-body',
+    'archer-held-fire-arrow',
+    'archer-headgear',
+    'archer-burning-fire:upper',
+    'archer-burning-fire:lower',
+    'archer-limbs:burn-glow-1',
+    'archer-body:burn-glow-1',
+    'archer-headgear:burn-glow-1',
+    'archer-limbs:burn-glow-2',
+    'archer-body:burn-glow-2',
+    'archer-headgear:burn-glow-2',
+  ])
+
+  const baseBody = plan.layers.find(({ role }) => role === 'archer-body')!
+  assert.equal(baseBody.blendMode, 'normal')
+  assert.equal(baseBody.tint >>> 16, 0xff)
+  assert.equal(baseBody.tint & 0xff, 0)
+  assert.ok(((baseBody.tint >>> 8) & 0xff) <= 0x80)
+
+  const glow = plan.layers.filter(({ role }) => role.includes(':burn-glow-'))
+  assert.equal(glow.length, 6)
+  assert.ok(glow.every(({ blendMode, tint }) => (
+    blendMode === 'add'
+    && tint >>> 16 === 0xff
+    && (tint & 0xff) === 0
+    && ((tint >>> 8) & 0xff) >= 0x40
+  )))
+  assert.equal(new Set(glow.map(({ tint }) => tint)).size, 1)
+
+  const upper = plan.layers.find(({ role }) => role === 'archer-burning-fire:upper')!
+  const lower = plan.layers.find(({ role }) => role === 'archer-burning-fire:lower')!
+  assert.deepEqual(
+    { entry: upper.entry, offset: upper.offset, scaleX: upper.scaleX, scaleY: upper.scaleY },
+    { entry: 61, offset: { x: 0, y: -42 }, scaleX: 0.5, scaleY: 0.85 },
+  )
+  assert.deepEqual(
+    { entry: lower.entry, offset: lower.offset, scaleX: lower.scaleX, scaleY: lower.scaleY },
+    { entry: 61, offset: { x: 0, y: -20 }, scaleX: 0.4, scaleY: 0.75 },
+  )
+  assert.equal(upper.tint, glow[0]?.tint)
+  assert.equal(lower.tint, glow[0]?.tint)
+})
+
+test('burning Skeleton and Mage share the compositor while Wraith keeps its own owner', () => {
+  const skeleton = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_BURNING']),
+    animation: nativeEnemyIdleAnimationSample({ stridePhaseDeg: 90 }),
+  }, 130)
+  assert.equal(skeleton.layers.filter(({ role }) => role === 'skeleton-limbs').length, 1)
+  assert.equal(skeleton.layers.filter(({ role }) => role.startsWith('skeleton-limbs')).length, 3)
+  assert.equal(skeleton.layers.filter(({ role }) => role.startsWith('skeleton-body')).length, 3)
+  assert.equal(skeleton.layers.filter(({ role }) => role.startsWith('skeleton-headgear')).length, 3)
+  assert.equal(skeleton.layers.filter(({ role }) => role.startsWith('skeleton-burning-fire:')).length, 2)
+
+  const mage = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONMAGE', ['FLAG_BURNING', 'FLAG_CASTFIRE']),
+    animation: nativeEnemyIdleAnimationSample({ stridePhaseDeg: 90 }),
+    lighting: { charge: 0.5, glow: 1, providerCopies: 2 },
+  }, 130)
+  const finalBody = mage.layers.findIndex(({ role }) => role === 'mage-body:burn-glow-2')
+  const firstCharge = mage.layers.findIndex(({ role }) => role.startsWith('mage-fire-charge:'))
+  const firstHead = mage.layers.findIndex(({ role }) => role === 'mage-headgear')
+  const finalHead = mage.layers.findIndex(({ role }) => role === 'mage-headgear:burn-glow-2')
+  assert.ok(finalBody < firstCharge && firstCharge < firstHead && firstHead < finalHead)
+  assert.equal(mage.layers.filter(({ role }) => role.startsWith('mage-burning-fire:')).length, 2)
+
+  const wraith = nativeEnemyPresentationPlan({
+    ...enemy('WRAITH', ['FLAG_BURNING']),
+    animation: nativeEnemyIdleAnimationSample(),
+  }, 130)
+  assert.ok(wraith.layers.every(({ role }) => !role.includes('burn-glow')))
+  assert.ok(wraith.layers.every(({ role }) => !role.startsWith('wraith-burning-fire:')))
 })
 
 test('Mage charge and cloak presentation enumerate every native recipe selector', () => {

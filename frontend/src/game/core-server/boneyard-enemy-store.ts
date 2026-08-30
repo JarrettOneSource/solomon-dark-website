@@ -186,7 +186,7 @@ export const NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS = Object.freeze({
   arrowInitialOpacity: 5,
   arrowOpacityLossPerTick: 0.05,
   arrowPlanarDampingPerTick: 0.9900000095367432,
-  arrowPitchFactor: 0.5,
+  arrowPitchFactor: 0.25,
   demonBombBounceMultiplier: 0.85,
   demonBombDampingPerTick: 0.995,
   demonBombFireTicks: 500,

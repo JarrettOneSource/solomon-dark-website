@@ -121,6 +121,7 @@ interface NativeEnemyFamilyPresentation {
   after: readonly NativeEnemySpriteLayer[]
   before: readonly NativeEnemySpriteLayer[]
   body: readonly NativeEnemySpriteLayer[]
+  hitBody: readonly NativeEnemySpriteLayer[]
   segments: readonly NativeEnemySegmentLayer[]
 }
 
@@ -128,6 +129,7 @@ const EMPTY_FAMILY_PRESENTATION: NativeEnemyFamilyPresentation = Object.freeze({
   after: Object.freeze([]),
   before: Object.freeze([]),
   body: Object.freeze([]),
+  hitBody: Object.freeze([]),
   segments: Object.freeze([]),
 })
 
@@ -305,13 +307,14 @@ function presentation(
   body: readonly NativeEnemySpriteLayer[],
   options: Partial<Pick<
     NativeEnemyFamilyPresentation,
-    'after' | 'before' | 'segments'
+    'after' | 'before' | 'hitBody' | 'segments'
   >> = {},
 ): NativeEnemyFamilyPresentation {
   return {
     after: options.after ?? [],
     before: options.before ?? [],
     body,
+    hitBody: options.hitBody ?? body,
     segments: options.segments ?? [],
   }
 }
@@ -325,26 +328,26 @@ function skeletonPresentation(
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
-  const body = skeletonLayers(enemy, facing, animation, actionFrame)
+  const source = skeletonLayers(enemy, facing, animation, actionFrame)
   const weapon = selectedFlagValue([...flags], WEAPON_BY_FLAG, 0)
   const segments: NativeEnemySegmentLayer[] = []
   if (weapon === 2 || weapon === 3) {
-    const weaponLayer = body.find(({ role }) => role === 'skeleton-weapon')
+    const weaponLayer = source.find(({ role }) => role === 'skeleton-weapon')
     if (weaponLayer) {
       const points = authoredPoints(weaponLayer.atlas, weaponLayer.entry)
       const first = requiredPoint(points, 0, `Skeleton weapon ${weaponLayer.entry}`)
       if (weapon === 2) {
-        body.push(layer('BadGuys', 46, 'skeleton-mace-head', { offset: first }))
+        source.push(layer('BadGuys', 46, 'skeleton-mace-head', { offset: first }))
       } else {
         const second = requiredPoint(points, 1, `Skeleton flail ${weaponLayer.entry}`)
         segments.push(segment(first, second, 'skeleton-flail-chain'))
-        body.push(layer('BadGuys', 46, 'skeleton-flail-head', { offset: second }))
+        source.push(layer('BadGuys', 46, 'skeleton-flail-head', { offset: second }))
       }
     }
   } else if (weapon === 5) {
     const headingRadians = enemy.headingDeg * Math.PI / 180
     const reach = actionFrame?.program.name === 'skeleton-pike' ? 64 : 54
-    body.push(layer(
+    source.push(layer(
       'BadGuys',
       actionFrame?.program.name === 'skeleton-pike' ? 56 : 54,
       'skeleton-pike-shaft',
@@ -359,14 +362,15 @@ function skeletonPresentation(
       },
     ))
   }
-  const burning = flags.has('BURNING')
-    ? burningLayers(enemy, spawnAgeTicks, [
-        { x: -9, y: -20 },
-        { x: 9, y: -27 },
-        { x: 0, y: -38 },
-      ], 'skeleton')
-    : []
-  return presentation(body, { after: burning, segments })
+  const composed = skeletonFamilyComposition(
+    enemy,
+    animation,
+    spawnAgeTicks,
+    source,
+    flags.has('BURNING'),
+    'skeleton',
+  )
+  return presentation(composed.layers, { hitBody: composed.hitBody, segments })
 }
 
 function archerPresentation(
@@ -378,38 +382,51 @@ function archerPresentation(
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
-  const body = skeletonArcherLayers(facing, flags, animation, actionFrame)
-  const bodyLayer = body.find(({ role }) => role === 'archer-body')!
+  const source = skeletonArcherLayers(facing, flags, animation, actionFrame)
+  const bodyLayer = source.find(({ role }) => role === 'archer-body')!
   const bowPoint = requiredPoint(
     authoredPoints(bodyLayer.atlas, bodyLayer.entry),
     0,
     `Archer body ${bodyLayer.entry}`,
   )
-  if (actionFrame && actionFrame.selector !== 0) {
+  const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
+  let held: NativeEnemySpriteLayer | null = null
+  if (Math.floor(finiteOrZero(bodyPose)) !== 8) {
     if (flags.has('FIREARROW')) {
-      body.push(layer(
+      held = layer(
         'BadGuys',
         255 + Math.floor(spawnAgeTicks / 5) % 12,
         'archer-held-fire-arrow',
-        { offset: bowPoint },
-      ))
+        {
+          alpha: boundedUnit(enemy.lighting.charge),
+          blendMode: 'add',
+          offset: { x: bowPoint.x, y: bowPoint.y - 5 },
+        },
+      )
     } else if (flags.has('POISONARROW')) {
-      body.push(layer(
+      held = layer(
         'BadGuys',
         271 + Math.floor(spawnAgeTicks / 6) % 12,
         'archer-held-poison-arrow',
-        { offset: bowPoint },
-      ))
+        {
+          alpha: boundedUnit(enemy.lighting.charge),
+          blendMode: 'add',
+          offset: { x: bowPoint.x, y: bowPoint.y - 5 },
+          tint: 0x008000,
+        },
+      )
     }
   }
-  const burning = flags.has('BURNING')
-    ? burningLayers(enemy, spawnAgeTicks, [
-        bowPoint,
-        { x: -bowPoint.x, y: bowPoint.y + 5 },
-        { x: 0, y: -18 },
-      ], 'archer')
-    : []
-  return presentation(body, { after: burning })
+  const composed = skeletonFamilyComposition(
+    enemy,
+    animation,
+    spawnAgeTicks,
+    source,
+    flags.has('BURNING'),
+    'archer',
+    held,
+  )
+  return presentation(composed.layers, { hitBody: composed.hitBody })
 }
 
 function magePresentation(
@@ -421,7 +438,7 @@ function magePresentation(
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyFamilyPresentation {
-  const body = skeletonMageLayers(
+  const source = skeletonMageLayers(
     enemy,
     facing,
     flags,
@@ -429,26 +446,50 @@ function magePresentation(
     actionFrame,
     authoredPoints,
   )
-  const bodyLayer = body.find(({ role }) => role === 'mage-body')!
+  const bodyLayer = source.find(({ role }) => role === 'mage-body')!
   const authored = authoredPoints(bodyLayer.atlas, bodyLayer.entry)
   const first = requiredPoint(authored, 0, `Mage body ${bodyLayer.entry}`)
   const second = authored[1] ?? { x: -first.x, y: first.y }
-  const after = mageChargeLayers(
+  const charge = mageChargeLayers(
     flags,
     enemy.lighting.charge,
     spawnAgeTicks,
     [first, second],
   )
-  after.push(...mageCastParticleLayers(
+  const particles = mageCastParticleLayers(
     enemy,
     animation,
     spawnAgeTicks,
     [first, second],
-  ))
-  if (flags.has('BURNING')) {
-    after.push(...burningLayers(enemy, spawnAgeTicks, [first, second], 'mage'))
-  }
-  return presentation(body, { after })
+  )
+  const head = source.find(({ role }) => role === 'mage-headgear')!
+  const body = source.filter(({ role }) => role !== 'mage-headgear')
+  const composedBody = skeletonFamilyComposition(
+    enemy,
+    animation,
+    spawnAgeTicks,
+    body,
+    flags.has('BURNING'),
+    'mage',
+  )
+  const composedHead = skeletonFamilyComposition(
+    enemy,
+    animation,
+    spawnAgeTicks,
+    [head],
+    flags.has('BURNING'),
+    'mage',
+    null,
+    false,
+  )
+  return presentation([
+    ...composedBody.layers,
+    ...charge,
+    ...composedHead.layers,
+  ], {
+    after: particles,
+    hitBody: [...composedBody.hitBody, ...composedHead.hitBody],
+  })
 }
 
 function zombiePresentation(
@@ -558,7 +599,6 @@ function skeletonLayers(
       animation?.headFacingOffset ?? 0,
     ),
     'skeleton-headgear',
-    { offset: { x: 0, y: -4 } },
   ))
   return result
 }
@@ -579,9 +619,7 @@ function skeletonArcherLayers(
     layer('BadGuys', HEADGEAR_BASES[headgear] + nativeSkeletonHeadFacing(
       facing,
       animation?.headFacingOffset ?? 0,
-    ), 'archer-headgear', {
-      offset: { x: 0, y: -4 },
-    }),
+    ), 'archer-headgear'),
   ]
 }
 
@@ -616,9 +654,6 @@ function skeletonMageLayers(
       animation?.headFacingOffset ?? 0,
     ),
     'mage-headgear',
-    {
-      offset: { x: 0, y: -4 },
-    },
   )
   if (!enemy.mageCloak) return [limbs, body, headgearLayer]
   const cloakPoint = requiredPoint(
@@ -832,26 +867,111 @@ function demonDeathLayers(
   ]
 }
 
-function burningLayers(
+interface SkeletonFamilyComposition {
+  readonly hitBody: readonly NativeEnemySpriteLayer[]
+  readonly layers: readonly NativeEnemySpriteLayer[]
+}
+
+function skeletonFamilyComposition(
   enemy: NativeEnemyVisualSnapshot,
+  animation: NativeEnemyAnimationSample | undefined,
   spawnAgeTicks: number,
-  attachmentPoints: readonly Readonly<{ x: number; y: number }>[],
+  source: readonly NativeEnemySpriteLayer[],
+  burning: boolean,
   familyRole: string,
-): NativeEnemySpriteLayer[] {
-  return attachmentPoints.map((offset, index) => layer(
-    'DeadHawg',
-    46 + positiveModulo(
-      Math.floor(spawnAgeTicks + stableUnit(enemy, 70 + index) * 32),
-      32,
-    ),
-    `${familyRole}-burning-fire:${index}`,
-    {
-      alpha: 0.75 + stableUnit(enemy, 80 + index) * 0.25,
-      blendMode: 'add',
-      offset,
-      scale: 0.5 + stableUnit(enemy, 90 + index) * 0.35,
-    },
+  held: NativeEnemySpriteLayer | null = null,
+  includeFire = true,
+): SkeletonFamilyComposition {
+  const fixedAge = Math.floor(spawnAgeTicks)
+  const bob = Math.abs(Math.sin(
+    finiteOrZero(animation?.stridePhaseDeg ?? 0) * 0.5 * Math.PI / 180,
   ))
+  const bodyHeight = stableInclusiveUnit(enemy, 70) * 3
+  const neutral = 1 - stableInclusiveUnit(enemy, 71) * 0.15
+  const baseTint = burning
+    ? packRgb(1, stableInclusiveUnit(enemy, 72, fixedAge) * 0.5, 0)
+    : packRgb(neutral, neutral, 1)
+  const articulated = source.map((sourceLayer) => {
+    let y = 0
+    if (sourceLayer.role.endsWith('-limbs')) y = -bob
+    else if (
+      sourceLayer.role.endsWith('-body')
+      || sourceLayer.role === 'skeleton-weapon'
+    ) y = -bodyHeight - bob * 2
+    else if (sourceLayer.role.endsWith('-headgear')) y = -bodyHeight - 2 - bob * 3
+    return {
+      ...sourceLayer,
+      offset: { x: sourceLayer.offset.x, y: sourceLayer.offset.y + y },
+      tint: baseTint,
+    }
+  })
+  const base = insertHeldBeforeHeadgear(articulated, held)
+  if (!burning) return { hitBody: articulated, layers: base }
+
+  const glowTint = packRgb(
+    1,
+    0.25 + stableInclusiveUnit(enemy, 73, fixedAge) * 0.75,
+    0,
+  )
+  const glowPass = (pass: 1 | 2) => articulated.map((sourceLayer) => ({
+    ...sourceLayer,
+    blendMode: 'add' as const,
+    role: `${sourceLayer.role}:burn-glow-${pass}`,
+    tint: glowTint,
+  }))
+  const firstGlow = glowPass(1)
+  const secondGlow = glowPass(2)
+  const fire = includeFire
+    ? skeletonFamilyBurningFireLayers(enemy, fixedAge, glowTint, familyRole)
+    : []
+  return {
+    hitBody: [...articulated, ...firstGlow, ...secondGlow],
+    layers: [...base, ...fire, ...firstGlow, ...secondGlow],
+  }
+}
+
+function insertHeldBeforeHeadgear(
+  source: readonly NativeEnemySpriteLayer[],
+  held: NativeEnemySpriteLayer | null,
+): readonly NativeEnemySpriteLayer[] {
+  if (!held) return source
+  const headIndex = source.findIndex(({ role }) => role.endsWith('-headgear'))
+  if (headIndex < 0) return [...source, held]
+  return [
+    ...source.slice(0, headIndex),
+    held,
+    ...source.slice(headIndex),
+  ]
+}
+
+function skeletonFamilyBurningFireLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  fixedAge: number,
+  tint: number,
+  familyRole: string,
+): readonly NativeEnemySpriteLayer[] {
+  const headingRadians = enemy.headingDeg * Math.PI / 180
+  const direction = {
+    x: Math.sin(headingRadians),
+    y: -Math.cos(headingRadians),
+  }
+  const entry = 46 + positiveModulo(Math.floor(fixedAge / 2), 32)
+  return [
+    layer('DeadHawg', entry, `${familyRole}-burning-fire:upper`, {
+      blendMode: 'add',
+      offset: { x: direction.x * 2, y: -40 + direction.y * 2 },
+      scaleX: 0.5,
+      scaleY: 0.85,
+      tint,
+    }),
+    layer('DeadHawg', entry, `${familyRole}-burning-fire:lower`, {
+      blendMode: 'add',
+      offset: { x: 0, y: -20 },
+      scaleX: 0.4,
+      scaleY: 0.75,
+      tint,
+    }),
+  ]
 }
 
 function mageChargeLayers(
@@ -1236,6 +1356,7 @@ function applyAuthoritativeSample(
   })
   const before = family.before.map(transform)
   const body = family.body.map(transform)
+  const hitBody = family.hitBody.map(transform)
   const after = family.after.map(transform)
   const effects = effectSampleLayers.map(transform)
   const hitFlash = boundedUnit(animation.hitFlash)
@@ -1243,7 +1364,7 @@ function applyAuthoritativeSample(
   return [
     ...before,
     ...body,
-    ...body.filter((source) => source.alpha > 0).map((source) => ({
+    ...hitBody.filter((source) => source.alpha > 0).map((source) => ({
       ...source,
       alpha: source.alpha * hitFlash,
       blendMode: 'normal' as const,
@@ -1366,6 +1487,25 @@ function stableUnit(
   return value / 0x1_0000_0000
 }
 
+function stableInclusiveUnit(
+  enemy: NativeEnemyVisualSnapshot,
+  channel: number,
+  epoch = 0,
+): number {
+  let value = (
+    (enemy.id >>> 0)
+    ^ Math.imul((Math.floor(enemy.spawnTick) + 1) >>> 0, 0x9e3779b1)
+    ^ Math.imul((channel + 1) >>> 0, 0x85ebca6b)
+    ^ Math.imul((epoch + 1) >>> 0, 0xc2b2ae35)
+  ) >>> 0
+  value ^= value >>> 16
+  value = Math.imul(value, 0x7feb352d) >>> 0
+  value ^= value >>> 15
+  value = Math.imul(value, 0x846ca68b) >>> 0
+  value = (value ^ (value >>> 16)) >>> 0
+  return value / 0xffff_ffff
+}
+
 function stableInteger(
   enemy: NativeEnemyVisualSnapshot,
   epoch: number,
@@ -1386,6 +1526,11 @@ function bankPose(value: number, count: number): number | null {
 
 function boundedUnit(value: number): number {
   return Math.min(1, Math.max(0, finiteOrZero(value)))
+}
+
+function packRgb(red: number, green: number, blue: number): number {
+  const channel = (value: number) => Math.round(boundedUnit(value) * 255)
+  return (channel(red) << 16) | (channel(green) << 8) | channel(blue)
 }
 
 function finiteOrZero(value: number): number {

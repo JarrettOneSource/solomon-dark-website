@@ -436,6 +436,48 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   })
 })
 
+test('interpolates Arrow draw angles on 360 degrees without truncating GuidedMissile phase', () => {
+  const phaseTimeline = (
+    kind: BoneyardEnemyProjectileSnapshot['kind'],
+    nativeTypeId: BoneyardEnemyProjectileSnapshot['nativeTypeId'],
+    payload: BoneyardEnemyProjectileSnapshot['payload'],
+    olderPhase: number,
+    newerPhase: number,
+  ) => {
+    const withPhase = (
+      snapshot: BoneyardGameSnapshot,
+      visualPhaseDeg: number,
+    ): BoneyardGameSnapshot => ({
+      ...snapshot,
+      world: {
+        ...snapshot.world,
+        enemyProjectiles: [{
+          ...snapshot.world.enemyProjectiles[0]!,
+          kind,
+          nativeTypeId,
+          payload,
+          visualPhaseDeg,
+        }],
+      },
+    })
+    const older = withPhase(snapshotAt(100, 10, 100), olderPhase)
+    const newer = withPhase(snapshotAt(105, 20, 120), newerPhase)
+    const timeline = createBoneyardPresentationTimeline({
+      initialReceivedAtMs: 0,
+      initialSnapshot: older,
+      serverTickRate: 100,
+      snapshotRate: 20,
+    })
+    timeline.push(newer, 50)
+    return timeline
+  }
+
+  assert.equal(phaseTimeline('arrow', 0x7da, 'normal', 350, 10)
+    .sample(75).world.enemyProjectiles[0]!.visualPhaseDeg, 0)
+  assert.equal(phaseTimeline('guided-missile', 0x7ec, 'cold', 350, 370)
+    .sample(75).world.enemyProjectiles[0]!.visualPhaseDeg, 360)
+})
+
 test('keeps Damage x4 activation and expiry edges discrete in Boneyard', () => {
   const inactive = snapshotAt(100, 10, 100)
   const active = snapshotAt(105, 20, 120)
