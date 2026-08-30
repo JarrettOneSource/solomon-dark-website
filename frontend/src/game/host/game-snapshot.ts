@@ -224,6 +224,8 @@ export function createGameSnapshot(
             pendingSpawnBudget: state.world.waves.pendingSpawnBudget,
             phase: state.world.waves.phase,
             scheduleIndex: state.world.waves.scheduleIndex,
+            slumpgutPhase: state.world.waves.slumpgutPhase,
+            slumpgutTicksRemaining: state.world.waves.slumpgutTicksRemaining,
             spawnDelayTicks: state.world.waves.spawnDelayTicks,
             waveEventId: state.world.waves.waveEventId,
             waveOrdinal: state.world.waves.waveOrdinal,

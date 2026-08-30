@@ -88,6 +88,7 @@ import {
 import {
   createBoneyardWaveDirector,
   startBoneyardWaveDirector,
+  stepBoneyardSlumpgutTrigger,
   stepBoneyardWaveDirector,
   type BoneyardEnemySpawnIntent,
   type BoneyardWaveDirectorState,
@@ -297,7 +298,11 @@ export function createBoneyardWorld(
       ? createNativeTutorialState(loaded.scene.spawn, 0, loaded.seed)
       : null,
     tutorialProfileEconomy: null,
-    waves: ownsRetailEncounter ? createBoneyardWaveDirector(loaded.seed) : null,
+    waves: ownsRetailEncounter
+      ? createBoneyardWaveDirector(loaded.seed, undefined, {
+          sourceSha256: loaded.sourceSha256,
+        })
+      : null,
   }
 }
 
@@ -806,21 +811,23 @@ export function stepBoneyardWorldTick(
         },
       )
     ),
-    resolveSpawnIntents: (liveEnemyCount) => {
+    resolveSpawnIntents: (liveEnemyCount, liveZombieCount) => {
       const external = pendingExternalSpawnIntents
       pendingExternalSpawnIntents = []
       if (
         waves === null
         || encounter === null
-        || wavesStarted
-        || waves.phase === 'dormant'
       ) return external
-      const result = stepBoneyardWaveDirector(waves, {
+      const context = {
         bounds: spawnBounds,
         liveEnemyCount,
+        liveZombieCount,
         players: livingPlayers,
         tick,
-      })
+      }
+      const result = wavesStarted
+        ? stepBoneyardSlumpgutTrigger(waves, context)
+        : stepBoneyardWaveDirector(waves, context)
       waves = result.director
       return [...external, ...result.spawnIntents]
     },
@@ -862,6 +869,7 @@ export function stepBoneyardWorldTick(
         reward.actorId,
         reward.lootSource.position,
       ),
+      onDeathProgram: reward.lootSource.onDeathProgram,
       ownedRecipeIndexes: authorityCombat?.ownedRecipeIndexes ?? [],
       participantLevel: authorityCombat?.level ?? 1,
       participantSlot: reward.lootSource.participantSlot,

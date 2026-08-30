@@ -7,6 +7,7 @@ import {
   type BoneyardEnemyFlag,
 } from './boneyard-enemy-config.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
+import { nativeSlumpgutRecipe } from './native-survival-slumpgut.ts'
 import {
   buildNativeEnemySteering,
   createNativeEnemyPathState,
@@ -243,6 +244,39 @@ test('all eight wave families materialize immutable recovered defaults', () => {
     assert.equal(Object.isFrozen(config.family), true)
     assert.equal(Object.isFrozen(config.flags), true)
   }
+})
+
+test('Slumpgut materializes the authored boss Zombie instead of a flag approximation', () => {
+  const recipe = nativeSlumpgutRecipe(
+    '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
+  )
+  const config = evaluateBoneyardEnemyConfig('ZOMBIE', {
+    authoredRecipe: recipe,
+    flanking: false,
+    pathfindingMode: 2,
+    zombieBodyType: 1,
+  })
+  assert.equal(config.classification, 'boss')
+  assert.equal(config.maximumHealth, 1_575)
+  assert.equal(config.primaryDamage, 35)
+  assert.equal(config.secondaryDamage, 10)
+  assert.equal(config.tertiaryDamage, 15)
+  assert.equal(config.extraDamage, 10)
+  assert.equal(config.experience, 2_756.25)
+  assert.equal(config.chaseSpeed, 1)
+  assert.equal(config.attackSpeed, 1)
+  assert.equal(config.scale, 1)
+  assert.equal(config.flanking, false)
+  assert.equal(config.pathfindingMode, 2)
+  assert.equal(config.recipeName, 'Slumpgut')
+  assert.equal(config.onDeathProgram, 'miniboss-die')
+  assert.deepEqual(config.family, {
+    bodyType: 3,
+    poisonDuration: 10,
+    poisonPoolDamage: 15,
+    poisonPunchDamage: 10,
+    rotten: true,
+  })
 })
 
 test('common scalar flags apply in source order before Arena scalars', () => {

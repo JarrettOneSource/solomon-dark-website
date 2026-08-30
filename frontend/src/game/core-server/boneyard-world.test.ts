@@ -1770,7 +1770,7 @@ function gatedBoneyard(): LoadedBoneyard {
     geometrySha256: 'b'.repeat(64),
     runId: 'gate-crossing-run',
     seed: 'gate-crossing-seed',
-    sourceSha256: 'a'.repeat(64),
+    sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
     scene: {
       bounds: { x: 0, y: 0, w: 500, h: 500 },
       environmentMode: 2,
@@ -1824,7 +1824,9 @@ function encounterBoneyard(source: 'default' | 'mod'): LoadedBoneyard {
     geometrySha256: 'd'.repeat(64),
     runId: `encounter-${source}`,
     seed: `encounter-${source}-seed`,
-    sourceSha256: 'c'.repeat(64),
+    sourceSha256: source === 'default'
+      ? '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f'
+      : 'c'.repeat(64),
     scene: {
       bounds: { x: 0, y: 0, w: 2000, h: 1600 },
       environmentMode: 0,

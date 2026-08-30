@@ -20,6 +20,11 @@ import {
 } from './boneyard-wave-timeline.ts'
 import { NATIVE_RETAIL_WAVES } from './native-retail-wave-schedule.ts'
 import {
+  NATIVE_SLUMPGUT_TRIGGER,
+  nativeSlumpgutRecipe,
+  nativeSlumpgutRecipeForUid,
+} from './native-survival-slumpgut.ts'
+import {
   createNativeRng,
   drawNativeFloat,
   drawNativeInteger,
@@ -40,6 +45,15 @@ export const BONEYARD_WAVE_DIRECTOR_PHASES = [
 ] as const
 
 export type BoneyardWaveDirectorPhase = typeof BONEYARD_WAVE_DIRECTOR_PHASES[number]
+
+export const NATIVE_SLUMPGUT_PHASES = [
+  'eligible',
+  'interval-countdown',
+  'script-sleep',
+  'retired',
+] as const
+
+export type NativeSlumpgutPhase = typeof NATIVE_SLUMPGUT_PHASES[number]
 
 export interface BoneyardEnemySpawnIntent {
   authoredRecipe?: AuthoredBoneyardEnemyRecipe
@@ -87,6 +101,10 @@ export interface BoneyardWaveDirectorState {
   rngState: NativeRngState
   schedule: readonly WaveDef[]
   scheduleIndex: number
+  slumpgutPhase: NativeSlumpgutPhase
+  slumpgutPollCursor: number
+  slumpgutRecipeUid: number | null
+  slumpgutTicksRemaining: number
   spawnCountdown: number
   spawnDelayTicks: number
   waveEventId: number
@@ -100,6 +118,7 @@ export type BoneyardWavePlayers = Readonly<
 export interface BoneyardWaveDirectorTickContext {
   bounds: BoneyardBounds
   liveEnemyCount: number
+  liveZombieCount: number
   players: BoneyardWavePlayers
   tick: number
 }
@@ -119,6 +138,7 @@ const ADVANCE_TO_NEXT_LABEL_TICKS = 50
 export function createBoneyardWaveDirector(
   seed: string,
   schedule: readonly WaveDef[] = NATIVE_RETAIL_WAVES,
+  options: Readonly<{ sourceSha256?: string }> = {},
 ): BoneyardWaveDirectorState {
   validateSchedule(schedule)
   const compilerRng = createNativeRng(seedBoneyardWaveRng(`${seed}:wave-compiler`))
@@ -146,6 +166,12 @@ export function createBoneyardWaveDirector(
     rngState: createNativeRng(seedBoneyardWaveRng(`${seed}:wave-runtime`)),
     schedule,
     scheduleIndex: 0,
+    slumpgutPhase: 'eligible',
+    slumpgutPollCursor: 0,
+    slumpgutRecipeUid: options.sourceSha256 === undefined
+      ? null
+      : nativeSlumpgutRecipe(options.sourceSha256).uid,
+    slumpgutTicksRemaining: 0,
     spawnCountdown: 0,
     spawnDelayTicks: 0,
     waveEventId: 0,
@@ -170,8 +196,22 @@ export function stepBoneyardWaveDirector(
   context: BoneyardWaveDirectorTickContext,
 ): BoneyardWaveDirectorTickResult {
   validateLiveEnemyCount(context.liveEnemyCount)
-  if (source.phase === 'dormant') return tickResult(source)
-  const state = stepArenaLowPopulationTimer(source, context.liveEnemyCount)
+  validateLiveEnemyCount(context.liveZombieCount)
+  const slumpgut = stepBoneyardSlumpgutTrigger(source, context)
+  const state = slumpgut.director.phase === 'dormant'
+    ? slumpgut.director
+    : stepArenaLowPopulationTimer(slumpgut.director, context.liveEnemyCount)
+  const waves = stepOrdinaryWaves(state, context)
+  return {
+    director: waves.director,
+    spawnIntents: [...slumpgut.spawnIntents, ...waves.spawnIntents],
+  }
+}
+
+function stepOrdinaryWaves(
+  state: BoneyardWaveDirectorState,
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
   switch (state.phase) {
     case 'dormant': return tickResult(state)
     case 'opening': return stepSpawnerGraph(state, context)
@@ -188,6 +228,76 @@ export function stepBoneyardWaveDirector(
     case 'wave-lull-delay': return tickResult(stepLullDelay(state))
     case 'wave-lull': return tickResult(stepLullThreshold(state, context.liveEnemyCount))
     case 'interwave': return tickResult(stepInterwave(state))
+  }
+}
+
+export function stepBoneyardSlumpgutTrigger(
+  source: BoneyardWaveDirectorState,
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
+  if (source.slumpgutPhase === 'retired') return tickResult(source)
+  if (source.slumpgutPhase === 'eligible') {
+    const slumpgutPollCursor = (
+      source.slumpgutPollCursor + 1
+    ) % NATIVE_SLUMPGUT_TRIGGER.pollPeriodTicks
+    if (source.slumpgutPollCursor !== 0) {
+      return tickResult({ ...source, slumpgutPollCursor })
+    }
+    return tickResult(context.liveZombieCount > NATIVE_SLUMPGUT_TRIGGER.zombieCountThreshold
+      ? {
+          ...source,
+          slumpgutPhase: 'interval-countdown',
+          slumpgutPollCursor,
+          slumpgutTicksRemaining: NATIVE_SLUMPGUT_TRIGGER.intervalTicks,
+        }
+      : { ...source, slumpgutPollCursor })
+  }
+  if (source.slumpgutTicksRemaining > 1) {
+    return tickResult({
+      ...source,
+      slumpgutTicksRemaining: source.slumpgutTicksRemaining - 1,
+    })
+  }
+  if (source.slumpgutPhase === 'interval-countdown') {
+    return tickResult({
+      ...source,
+      slumpgutPhase: 'script-sleep',
+      slumpgutTicksRemaining: NATIVE_SLUMPGUT_TRIGGER.scriptSleepTicks,
+    })
+  }
+  if (source.slumpgutRecipeUid === null) {
+    throw new Error('default Boneyard wave director has no Slumpgut recipe uid')
+  }
+  const placed = placeEnemy(
+    source.rngState,
+    NATIVE_SLUMPGUT_TRIGGER.spawnLocationPolicy,
+    context.players,
+    context.bounds,
+  )
+  const recipe = nativeSlumpgutRecipeForUid(source.slumpgutRecipeUid)
+  return {
+    director: {
+      ...source,
+      nextSpawnIntentId: source.nextSpawnIntentId + 1,
+      rngState: placed.rngState,
+      slumpgutPhase: 'retired',
+      slumpgutTicksRemaining: 0,
+    },
+    spawnIntents: [{
+      authoredRecipe: recipe,
+      enemyToken: 'ZOMBIE',
+      flags: Object.freeze([]),
+      flanking: false,
+      id: source.nextSpawnIntentId,
+      locationPolicy: NATIVE_SLUMPGUT_TRIGGER.spawnLocationPolicy,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      pathfindingMode: 2,
+      position: Object.freeze({ ...placed.position }),
+      positionPolicy: NATIVE_SLUMPGUT_TRIGGER.spawnPositionPolicy,
+      spawnTick: context.tick,
+      waveOrdinal: source.waveOrdinal,
+      zombieBodyType: 1,
+    }],
   }
 }
 

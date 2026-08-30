@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
@@ -17,6 +18,9 @@ test('native default bank contains distinct exact materializations and Solomon D
     new Set(NATIVE_GENERATED_BONEYARDS.map((entry) => entry.sourceSha256)).size,
     NATIVE_GENERATED_BONEYARDS.length,
   )
+  assert.ok(NATIVE_GENERATED_BONEYARDS.every(({ sourceSha256 }) => (
+    nativeSlumpgutRecipe(sourceSha256).name === 'Slumpgut'
+  )))
   assert.equal(
     new Set(NATIVE_GENERATED_BONEYARDS.map((entry) => entry.geometrySha256)).size,
     NATIVE_GENERATED_BONEYARDS.length,

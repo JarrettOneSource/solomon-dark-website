@@ -68,6 +68,7 @@
     "smoke:game:primary-spells:low-mana": "node --experimental-strip-types tools/smoke-low-mana-primary-spells.mjs",
     "smoke:game:fullscreen": "node tools/smoke-game-fullscreen.mjs",
     "smoke:game:waves": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs",
+    "smoke:game:slumpgut": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs --slumpgut-only",
     "smoke:game:tutorial-responsive": "node --experimental-strip-types tools/smoke-tutorial-responsive.mjs",
     "smoke:game:tutorial-modal-callouts": "node --experimental-strip-types tools/smoke-tutorial-modal-callouts.mjs",
     "smoke:game:boneyard-entrance": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs --entrance-only",

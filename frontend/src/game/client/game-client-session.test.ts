@@ -93,7 +93,7 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
       terrain: [],
     },
     seed: '0123456789abcdef',
-    sourceSha256: '1'.repeat(64),
+    sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   }
 }
 
@@ -450,7 +450,7 @@ test('client carries character config, publishes authority, and tears down', asy
       choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
       runId: 'run-one',
       seed: '0123456789abcdef',
-      sourceSha256: '1'.repeat(64),
+      sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
       geometrySha256: '2'.repeat(64),
       scene: {
         name: 'Random Level',

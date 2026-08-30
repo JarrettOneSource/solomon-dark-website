@@ -1222,6 +1222,13 @@ test('host save documents retain the active Boneyard and its authoritative run i
         escapeCollisionSourceIds: ['scenery:grave-4'],
         escapeTarget: { x: 980, y: 3000 },
       },
+      waves: state.world.waves === null
+        ? null
+        : {
+            ...state.world.waves,
+            slumpgutPhase: 'script-sleep',
+            slumpgutTicksRemaining: 731,
+          },
     },
   }
   const document = createGameSaveDocument({
@@ -1261,6 +1268,8 @@ test('host save documents retain the active Boneyard and its authoritative run i
     'scenery:grave-4',
   ])
   assert.deepEqual(restored.state.world.encounter?.escapeTarget, { x: 980, y: 3000 })
+  assert.equal(restored.state.world.waves?.slumpgutPhase, 'script-sleep')
+  assert.equal(restored.state.world.waves?.slumpgutTicksRemaining, 731)
   assert.deepEqual(restored.state.world.hallOfFameRuns, state.world.kind === 'boneyard'
     ? state.world.hallOfFameRuns
     : {})

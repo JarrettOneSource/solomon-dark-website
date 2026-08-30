@@ -10,6 +10,11 @@ import {
   type BoneyardEnemySpawnIntent,
   type BoneyardWaveDirectorState,
 } from './boneyard-wave-director.ts'
+import {
+  NATIVE_SLUMPGUT_RECIPE_SOURCE,
+  NATIVE_SLUMPGUT_TRIGGER,
+  nativeSlumpgutRecipe,
+} from './native-survival-slumpgut.ts'
 
 const BOUNDS = { x: 0, y: 0, w: 1000, h: 800 }
 const PLAYERS = {
@@ -19,6 +24,7 @@ const PLAYERS = {
 
 interface DirectorHarness {
   liveEnemyCount: number
+  liveZombieCount: number
   spawnIntents: BoneyardEnemySpawnIntent[]
   state: BoneyardWaveDirectorState
 }
@@ -84,6 +90,7 @@ test('near-player Spawner preserves the raw 100-unit point for placement recover
     const result = stepBoneyardWaveDirector(state, {
       bounds: { x: 0, y: 375, w: 1_000, h: 600 },
       liveEnemyCount: 0,
+      liveZombieCount: 0,
       players: { a: { position: { x: 500, y: 375 } } },
       tick: 0,
     })
@@ -101,6 +108,7 @@ test('zero-player opening continues from the native camera-center fallback', () 
   const result = stepBoneyardWaveDirector(state, {
     bounds: BOUNDS,
     liveEnemyCount: 0,
+    liveZombieCount: 0,
     players: {},
     tick: 0,
   })
@@ -124,6 +132,181 @@ test('retail compilation carries ordinary dark and Coffin light policies', () =>
   assert.ok(ordinary.every((burst) => (
     burst.locationPolicy === 'anywhere' && burst.positionPolicy === 'dark'
   )))
+})
+
+test('drains the generated Slumpgut trigger and complete authored recipe', () => {
+  const recipeUids = {
+    '1be4c308ccd442d70060cc66e3daa7b073faf035fd92d6b49fad4c33a91ef0c1': 37_391,
+    '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f': 36_805,
+    '506200e6f89dd26150c7fcc76f5cddfdb321412657ac979ea5924b567b4a2933': 37_465,
+    '624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123': 37_386,
+    '8c2f97d2ed54431987e3cb54b7ae3c1098bf1c4517f59ade6aea57759187adb0': 37_317,
+    '9e9e1bccd99babf99e190ae4acdae98d1fea2f782b60ba6d45a6b9eae6afe2d9': 36_808,
+    'bd3c38468481b7337b1e7382e5503cc214356906571763a68188b23e821e73fb': 35_004,
+    'bec9377cf539bb193e8af6ad72fa78a5e47e44206a1fef4d6bf3bfbda3f04a08': 36_822,
+    'cd4d1ba948ca6624fffb967b02b7c93a6d00cbf9b5ec2c4541330b0616a1c239': 37_355,
+    'e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430': 37_377,
+    'ec2b27a1415c944c233158da8c21324760cd896e1228143aa18d262f65fa2a45': 37_377,
+    'efa240ce741df0f781228206d024bb1903c7210d1163eccf80c87e835365422f': 37_329,
+  }
+  for (const [sourceSha256, uid] of Object.entries(recipeUids)) {
+    assert.equal(nativeSlumpgutRecipe(sourceSha256).uid, uid)
+  }
+  assert.deepEqual(NATIVE_SLUMPGUT_TRIGGER, {
+    intervalTicks: 1_000,
+    pollPeriodTicks: 4,
+    scriptSleepTicks: 1_500,
+    spawnLocationPolicy: 'anywhere',
+    spawnPositionPolicy: 'light',
+    zombieCountThreshold: 75,
+  })
+  assert.deepEqual(NATIVE_SLUMPGUT_RECIPE_SOURCE, {
+    archetype: 'Slumpgut',
+    attackSpeed: 1,
+    auraMode: 0,
+    behaviorCount: 1,
+    behaviorMax: 0,
+    behaviorMin: 0,
+    behaviorTimer: 0,
+    burning: false,
+    castMode: 0,
+    chaseSpeed: 1,
+    dropGold: 4,
+    dropItems: 4,
+    dropOrbs: 4,
+    dropPotions: 4,
+    dropPowerups: 4,
+    dropSpecificItems: 0,
+    enemyType: 1006,
+    extraDamage: 10,
+    flanking: false,
+    headgearMode: 0,
+    hasLinkedUid: true,
+    maxHp: 1_575,
+    moveSpeedScale: 1,
+    name: 'Slumpgut',
+    pathfindingMode: 2,
+    primaryDamage: 35,
+    projectileMode: 0,
+    randomVariant: 0,
+    rect98: [1, 1, 1, 1],
+    rectA8: [1, 1, 1, 1],
+    secondaryDamage: 10,
+    shield: true,
+    shieldOthers: false,
+    specialSpawnMode: 1,
+    tertiaryDamage: 15,
+    unknown81: 0,
+    unknown82: 0,
+    unknown96: false,
+    variantMode: 0,
+    xpBonus: -196.875,
+  })
+  assert.throws(
+    () => nativeSlumpgutRecipe('0'.repeat(64)),
+    /has no extracted Slumpgut recipe/,
+  )
+  assert.deepEqual(
+    nativeSlumpgutRecipe(
+      '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
+    ),
+    {
+      archerAccuracyMode: 0,
+      attackSpeed: 1,
+      chaseSpeed: 1,
+      classification: 'boss',
+      experience: 2_756.25,
+      extraDamage: 10,
+      family: {
+        bodyType: 1,
+        flyblown: true,
+        kind: 'zombie',
+        poisonDuration: 10,
+        poisonPoolDamage: 15,
+        poisonPunchDamage: 10,
+      },
+      lootPolicies: {
+        gold: 4,
+        item: 4,
+        orb: 4,
+        potion: 4,
+        powerup: 4,
+        specificItem: 0,
+      },
+      maximumHealth: 1_575,
+      movementScale: 1,
+      name: 'Slumpgut',
+      onDeathProgram: 'miniboss-die',
+      primaryDamage: 35,
+      secondaryDamage: 10,
+      tertiaryDamage: 15,
+      uid: 36_805,
+    },
+  )
+})
+
+test('Slumpgut arms strictly above 75 Zombies and spawns once after 2500 ticks', () => {
+  const sourceSha256 = '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f'
+  let state = createBoneyardWaveDirector('slumpgut-threshold', [wave({})], {
+    sourceSha256,
+  })
+  const step = (liveEnemyCount: number, liveZombieCount: number, tick: number) => {
+    const result = stepBoneyardWaveDirector(state, {
+      bounds: BOUNDS,
+      liveEnemyCount,
+      liveZombieCount,
+      players: PLAYERS,
+      tick,
+    })
+    state = result.director
+    return result.spawnIntents
+  }
+
+  assert.deepEqual(step(200, 75, 0), [])
+  assert.equal(state.slumpgutPhase, 'eligible')
+  assert.equal(state.slumpgutTicksRemaining, 0)
+
+  for (let tick = 1; tick <= 3; tick += 1) {
+    assert.deepEqual(step(200, 76, tick), [])
+    assert.equal(state.slumpgutPhase, 'eligible')
+  }
+  assert.deepEqual(step(200, 76, 4), [])
+  assert.equal(state.slumpgutPhase, 'interval-countdown')
+  assert.equal(state.slumpgutTicksRemaining, 1_000)
+  for (let tick = 5; tick <= 1_003; tick += 1) assert.deepEqual(step(200, 0, tick), [])
+  assert.equal(state.slumpgutPhase, 'interval-countdown')
+  assert.equal(state.slumpgutTicksRemaining, 1)
+
+  assert.deepEqual(step(200, 0, 1_004), [])
+  assert.equal(state.slumpgutPhase, 'script-sleep')
+  assert.equal(state.slumpgutTicksRemaining, 1_500)
+  for (let tick = 1_005; tick <= 2_503; tick += 1) assert.deepEqual(step(200, 0, tick), [])
+  assert.equal(state.slumpgutPhase, 'script-sleep')
+  assert.equal(state.slumpgutTicksRemaining, 1)
+
+  const intents = step(200, 0, 2_504)
+  assert.equal(intents.length, 1)
+  assert.deepEqual(intents[0], {
+    authoredRecipe: nativeSlumpgutRecipe(sourceSha256),
+    enemyToken: 'ZOMBIE',
+    flags: [],
+    flanking: false,
+    id: 1,
+    locationPolicy: 'anywhere',
+    nativeTypeId: 1006,
+    pathfindingMode: 2,
+    position: intents[0]!.position,
+    positionPolicy: 'light',
+    spawnTick: 2_504,
+    waveOrdinal: 0,
+    zombieBodyType: 1,
+  })
+  assert.equal(Object.isFrozen(intents[0]!.position), true)
+  assert.equal(state.phase, 'dormant')
+  assert.equal(state.pendingSpawnBudget, 0)
+  assert.equal(state.slumpgutPhase, 'retired')
+  assert.equal(state.slumpgutTicksRemaining, 0)
+  assert.deepEqual(step(500, 500, 5_000), [])
 })
 
 test('external nonterminal live count strictly gates opening and wave spawning', () => {
@@ -234,6 +417,16 @@ test('invalid live-count feedback is rejected at the scheduling boundary', () =>
     assert.throws(() => stepBoneyardWaveDirector(state, {
       bounds: BOUNDS,
       liveEnemyCount,
+      liveZombieCount: 0,
+      players: PLAYERS,
+      tick: 0,
+    }), /live enemy count/)
+  }
+  for (const liveZombieCount of [-1, 1.5, Number.NaN]) {
+    assert.throws(() => stepBoneyardWaveDirector(state, {
+      bounds: BOUNDS,
+      liveEnemyCount: 0,
+      liveZombieCount,
       players: PLAYERS,
       tick: 0,
     }), /live enemy count/)
@@ -246,6 +439,7 @@ function startHarness(
 ): DirectorHarness {
   return {
     liveEnemyCount: 0,
+    liveZombieCount: 0,
     spawnIntents: [],
     state: startBoneyardWaveDirector(createBoneyardWaveDirector(seed, schedule)),
   }
@@ -289,11 +483,15 @@ function tick(harness: DirectorHarness, currentTick: number): void {
   const result = stepBoneyardWaveDirector(harness.state, {
     bounds: BOUNDS,
     liveEnemyCount: harness.liveEnemyCount,
+    liveZombieCount: harness.liveZombieCount,
     players: PLAYERS,
     tick: currentTick,
   })
   harness.state = result.director
   harness.liveEnemyCount += result.spawnIntents.length
+  harness.liveZombieCount += result.spawnIntents.filter(({ enemyToken }) => (
+    enemyToken === 'ZOMBIE'
+  )).length
   harness.spawnIntents.push(...result.spawnIntents)
 }
 

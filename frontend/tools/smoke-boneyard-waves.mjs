@@ -9,12 +9,15 @@ import {
 } from 'vite'
 
 import { actorHeadingIndex } from '../src/game/core-kernels/actor-heading.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-director.ts'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import {
   NATIVE_LANTERN_LIGHT_BASE_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
 } from '../src/game/core-kernels/native-boneyard-lighting.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
+import { createNativeRng, drawNativeFloat } from '../src/game/core-kernels/native-rng.ts'
 import { nativeSolomonDirtStateAt } from '../src/game/renderer/boneyard-solomon-dirt-presentation.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
@@ -24,10 +27,15 @@ import {
   PRIMARY_SPELL_RANK_ONE_MANA_COSTS,
 } from '../src/game/core-kernels/primary-spells.ts'
 import {
+  canPlaceBoneyardBody,
   createBoneyardCollisionWorld,
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
+import {
+  damageBoneyardEnemy,
+  stepBoneyardEnemyStore,
+} from '../src/game/core-server/boneyard-enemy-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   getPlayerEconomy,
@@ -50,6 +58,7 @@ const chillArrowOnly = process.argv.includes('--chill-arrow-only')
 const cleanupOnly = process.argv.includes('--cleanup-only')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
+const slumpgutOnly = process.argv.includes('--slumpgut-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
 const deathEffectsOnly = process.argv.includes('--death-effects-only')
 const productionFrontend = process.env.SDR_GAME_WAVES_SMOKE_PRODUCTION === '1'
@@ -64,6 +73,7 @@ const speakingScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-speaking$
 const dirtScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-dirt$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
 const retiredEntryScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-retired-entry$1')
+const slumpgutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-slumpgut$1')
 const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-melee$1')
 const staffSmokeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-smoke$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
@@ -134,6 +144,21 @@ await page.addInitScript((runtime) => {
 await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
+  if (slumpgutOnly) {
+    const slumpgut = await proveSlumpgutBrowser(page, slumpgutScreenshotPath)
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({
+      errors,
+      failedResponses,
+      productionFrontend,
+      screenshotPath: slumpgutScreenshotPath,
+      slumpgut,
+      status: 'ok',
+      wire: wireSummary(wire),
+    })}\n`)
+  } else {
   await enterBoneyard(page)
   const scene = page.locator('.boneyard-scene')
   const initial = await encounterReceipt(scene)
@@ -623,6 +648,7 @@ try {
   })}\n`)
   }
   }
+  }
 } catch (error) {
   await page.screenshot({ path: screenshotPath.replace(/(\.[^.]+)?$/, '-failure$1') })
   process.stderr.write(`${JSON.stringify({
@@ -641,6 +667,324 @@ try {
     host.close(),
     vite.close(),
   ])
+}
+
+async function proveSlumpgutBrowser(page, screenshotPath) {
+  await enterBoneyard(page)
+  const scene = page.locator('.boneyard-scene')
+  let state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.waves)
+  assert.ok(state.world.waves.slumpgutRecipeUid)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const initialPlayer = getPlayerCharacter(state, playerId)
+  const rngState = slumpgutSmokeRngState(state.world, initialPlayer.position)
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const staged = stepBoneyardEnemyStore({
+    ...state.world.enemies,
+    lastStepTick: state.tick - 1,
+  }, {
+    firstProjectileWorldContact: () => null,
+    paused: true,
+    players: {},
+    registerWorldPainter: worldManagerOrder.register,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [
+      ...Array.from({ length: 76 }, (_, index) => ({
+        enemyToken: 'ZOMBIE',
+        flags: Object.freeze([]),
+        id: index + 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+        position: Object.freeze({
+          x: state.world.bounds.x + 250 + index % 10 * 45,
+          y: state.world.bounds.y + 450 + Math.floor(index / 10) * 45,
+        }),
+        spawnTick: state.tick,
+        waveOrdinal: 0,
+      })),
+      {
+        enemyToken: 'COFFIN',
+        flags: Object.freeze([]),
+        id: 77,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+        position: Object.freeze({
+          x: state.world.bounds.x + 900,
+          y: state.world.bounds.y + 700,
+        }),
+        spawnTick: state.tick,
+        waveOrdinal: 0,
+      },
+    ],
+    tick: state.tick,
+  })
+  const censusActors = staged.store.actors.map((actor) => ({
+    ...actor,
+    nextMovementTick: Number.MAX_SAFE_INTEGER,
+    nextTargetRefreshTick: Number.MAX_SAFE_INTEGER,
+    targetPlayerId: null,
+  }))
+  Object.assign(state, {
+    worldManagerOrder: worldManagerOrder.state(),
+    world: {
+      ...state.world,
+      enemies: {
+        ...staged.store,
+        actors: Object.freeze(censusActors),
+        maggots: Object.freeze([]),
+      },
+      waves: {
+        ...state.world.waves,
+        interwaveDelayTicks: 1,
+        nextScheduleIndex: 0,
+        phase: 'interwave',
+        rngState,
+        slumpgutPhase: 'eligible',
+        slumpgutPollCursor: 0,
+        slumpgutTicksRemaining: 0,
+      },
+    },
+  })
+
+  const thresholdTick = state.tick + 1
+  await waitForHostTick(page, thresholdTick)
+  await page.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    return scene?.getAttribute('data-wave-slumpgut-phase') === 'interval-countdown'
+      && Number(scene.getAttribute('data-wave-live-zombie-count')) === 76
+  }, undefined, { timeout: 10_000 })
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.waves?.phase, 'spawning')
+  assert.equal(state.world.waves?.slumpgutPhase, 'interval-countdown')
+  assert.ok((state.world.waves?.slumpgutTicksRemaining ?? 0) > 0)
+  assert.ok((state.world.waves?.slumpgutTicksRemaining ?? 0) <= 1_000)
+  assert.equal(state.world.enemies.actors.filter(({ config }) => (
+    config.enemyToken === 'ZOMBIE'
+  )).length, 76)
+  assert.equal(state.world.enemies.actors.filter(({ config }) => (
+    config.enemyToken === 'COFFIN'
+  )).length, 1)
+  const thresholdReceipt = {
+    liveEnemyCount: state.world.enemies.actors.length,
+    liveZombieCount: 76,
+    ordinaryWavePhase: state.world.waves?.phase,
+    phase: state.world.waves?.slumpgutPhase,
+    tick: state.tick,
+    ticksRemaining: state.world.waves?.slumpgutTicksRemaining,
+  }
+
+  state.world = {
+    ...state.world,
+    enemies: {
+      ...state.world.enemies,
+      actors: Object.freeze(state.world.enemies.actors.filter(({ config }) => (
+        config.enemyToken === 'COFFIN'
+      ))),
+      maggots: Object.freeze([]),
+    },
+    waves: state.world.waves === null
+      ? null
+      : {
+          ...state.world.waves,
+          phase: 'dormant',
+          slumpgutTicksRemaining: 1,
+        },
+  }
+  const intervalReleaseTick = state.tick + 1
+  await waitForHostTick(page, intervalReleaseTick)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.waves?.slumpgutPhase, 'script-sleep')
+  assert.ok((state.world.waves?.slumpgutTicksRemaining ?? 0) > 0)
+  assert.ok((state.world.waves?.slumpgutTicksRemaining ?? 0) <= 1_500)
+  assert.equal(state.world.enemies.actors.filter(({ config }) => (
+    config.enemyToken === 'COFFIN'
+  )).length, 1)
+  const intervalReceipt = {
+    phase: state.world.waves?.slumpgutPhase,
+    tick: state.tick,
+    ticksRemaining: state.world.waves?.slumpgutTicksRemaining,
+  }
+
+  state.world = {
+    ...state.world,
+    waves: state.world.waves === null
+      ? null
+      : { ...state.world.waves, slumpgutTicksRemaining: 1 },
+  }
+  const spawnReleaseTick = state.tick + 1
+  await waitForHostTick(page, spawnReleaseTick)
+  await page.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    return scene?.getAttribute('data-wave-slumpgut-phase') === 'retired'
+      && Number(scene.getAttribute('data-wave-live-zombie-count')) === 1
+  }, undefined, { timeout: 10_000 })
+
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.waves?.slumpgutPhase, 'retired')
+  const actors = state.world.enemies.actors.filter(({ config }) => (
+    config.recipeName === 'Slumpgut'
+  ))
+  assert.equal(actors.length, 1)
+  assert.equal(state.world.enemies.actors.filter(({ config }) => (
+    config.enemyToken === 'COFFIN'
+  )).length, 1)
+  const actor = actors[0]
+  assert.equal(actor.config.classification, 'boss')
+  assert.equal(actor.config.enemyToken, 'ZOMBIE')
+  assert.equal(actor.config.maximumHealth, 1_575)
+  assert.equal(actor.config.pathfindingMode, 2)
+  assert.equal(actor.config.flanking, false)
+  assert.deepEqual(actor.config.family, {
+    bodyType: 3,
+    poisonDuration: 10,
+    poisonPoolDamage: 15,
+    poisonPunchDamage: 10,
+    rotten: true,
+  })
+
+  const player = getPlayerCharacter(state, playerId)
+  const visualPosition = Object.freeze({
+    x: player.position.x + 90,
+    y: player.position.y + 20,
+  })
+  state.world = {
+    ...state.world,
+    enemies: {
+      ...state.world.enemies,
+      actors: state.world.enemies.actors.map((candidate) => (
+        candidate.id === actor.id
+          ? {
+              ...candidate,
+              nextMovementTick: Number.MAX_SAFE_INTEGER,
+              nextTargetRefreshTick: Number.MAX_SAFE_INTEGER,
+              position: visualPosition,
+              targetPlayerId: null,
+            }
+          : candidate
+      )),
+    },
+  }
+  await page.waitForFunction(({ actorId, x, y }) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    const rendered = frame?.enemySamples.find((candidate) => candidate.id === actorId)
+    return rendered !== undefined
+      && Math.abs(rendered.x - x) < 0.01
+      && Math.abs(rendered.y - y) < 0.01
+  }, { actorId: actor.id, ...visualPosition }, { timeout: 10_000 })
+
+  const frame = await boneyardFrame(page)
+  const rendered = frame.enemySamples.find(({ id }) => id === actor.id)
+  assert.ok(rendered)
+  assert.equal(rendered.enemyToken, 'ZOMBIE')
+  assert.equal(rendered.maximumHealth, 1_575)
+  assert.equal(rendered.renderedScale, 1)
+  await page.screenshot({ path: screenshotPath })
+
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const liveActor = state.world.enemies.actors.find(({ id }) => id === actor.id)
+  assert.ok(liveActor)
+  const existingLootActorIds = new Set(state.world.loot.actors.map(({ id }) => id))
+  const damaged = damageBoneyardEnemy(state.world.enemies, {
+    actorId: actor.id,
+    amount: liveActor.currentHealth,
+    sourcePlayerId: playerId,
+    tick: state.tick,
+  })
+  assert.equal(damaged.accepted, true)
+  assert.equal(damaged.killed, true)
+  state.world = { ...state.world, enemies: damaged.store }
+
+  let deathReward = null
+  const deathDeadline = Date.now() + 10_000
+  while (Date.now() < deathDeadline && deathReward === null) {
+    const current = host.state()
+    if (current.world.kind === 'boneyard') {
+      const scriptActors = current.world.loot.actors.filter((candidate) => (
+        candidate.source === 'script' && !existingLootActorIds.has(candidate.id)
+      ))
+      if (
+        !current.world.enemies.actors.some(({ id }) => id === actor.id)
+        && scriptActors.length > 0
+      ) {
+        const gold = scriptActors.filter(({ kind }) => kind === 'gold')
+        const sacks = scriptActors.filter(({ kind }) => kind === 'sack')
+        assert.ok(
+          (gold.length > 0 && sacks.length === 0)
+          || (gold.length === 0 && sacks.length === 1),
+        )
+        assert.equal(current.world.enemies.actors.filter(({ config }) => (
+          config.enemyToken === 'COFFIN'
+        )).length, 1)
+        deathReward = {
+          actorCount: scriptActors.length,
+          gold: gold.reduce((total, candidate) => total + candidate.amount, 0),
+          item: sacks[0]?.item?.name ?? null,
+          kind: gold.length > 0 ? 'gold' : 'item',
+          tick: current.tick,
+        }
+      }
+    }
+    if (deathReward === null) await page.waitForTimeout(10)
+  }
+  assert.ok(deathReward, 'Slumpgut did not execute its linked Miniboss Die reward')
+  await page.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    return Number(scene?.getAttribute('data-wave-live-zombie-count')) === 0
+  }, undefined, { timeout: 10_000 })
+
+  return {
+    actorId: actor.id,
+    currentHealth: actor.currentHealth,
+    deathReward,
+    intervalReceipt,
+    liveEnemyCount: Number(await scene.getAttribute('data-wave-live-enemy-count')),
+    liveZombieCount: Number(await scene.getAttribute('data-wave-live-zombie-count')),
+    maximumHealth: actor.config.maximumHealth,
+    recipeName: actor.config.recipeName,
+    rendered,
+    spawnTick: actor.spawnTick,
+    thresholdReceipt,
+    wavePhase: await scene.getAttribute('data-wave-phase'),
+  }
+}
+
+function slumpgutSmokeRngState(world, playerPosition) {
+  let target = null
+  for (const distance of [90, 120, 70]) {
+    for (let index = 0; index < 16; index += 1) {
+      const angle = index * Math.PI / 8
+      const candidate = {
+        x: playerPosition.x + Math.cos(angle) * distance,
+        y: playerPosition.y + Math.sin(angle) * distance,
+      }
+      if (canPlaceBoneyardBody(candidate, world.bounds, world.collision, 45)) {
+        target = candidate
+        break
+      }
+    }
+    if (target !== null) break
+  }
+  assert.ok(target, 'could not stage an in-light Slumpgut candidate near the player')
+
+  for (let seed = 0; seed < 1_000_000; seed += 1) {
+    const rngState = createNativeRng(seed)
+    const x = drawNativeFloat(rngState, world.bounds.w)
+    const y = drawNativeFloat(x.state, world.bounds.h)
+    const position = {
+      x: world.bounds.x + x.value,
+      y: world.bounds.y + y.value,
+    }
+    if (Math.hypot(position.x - target.x, position.y - target.y) <= 15) {
+      return rngState
+    }
+  }
+  throw new Error('could not pin the Slumpgut smoke RNG near its light-valid target')
 }
 
 function observeGameWire(page, endpoint) {
@@ -3637,6 +3981,10 @@ async function encounterReceipt(scene) {
     waveOrdinal: Number(node.getAttribute('data-wave-ordinal')),
     wavePhase: node.getAttribute('data-wave-phase'),
     waveScheduleIndex: Number(node.getAttribute('data-wave-schedule-index')),
+    waveSlumpgutPhase: node.getAttribute('data-wave-slumpgut-phase'),
+    waveSlumpgutTicksRemaining: Number(
+      node.getAttribute('data-wave-slumpgut-ticks-remaining'),
+    ),
     waveSpawnDelayTicks: Number(node.getAttribute('data-wave-spawn-delay-ticks')),
   }))
 }

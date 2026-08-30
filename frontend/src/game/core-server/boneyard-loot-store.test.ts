@@ -12,6 +12,7 @@ import {
   createNativeRng,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
+import { NATIVE_MINIBOSS_DIE_PROGRAM } from '../core-kernels/native-survival-miniboss.ts'
 import type { BoneyardLootSnapshot } from '../protocol/game-state.ts'
 import {
   boneyardLootDescriptor,
@@ -95,6 +96,7 @@ test('successful Item materialization persists the native last-drop arena level'
     inventoryHasHealthPotion: false,
     modifiers: nativeLootModifiers([]),
     nearbyMaskTwoCount: 0,
+    onDeathProgram: null,
     ownedRecipeIndexes: [],
     participantLevel: 12,
     participantSlot: 0,
@@ -114,6 +116,64 @@ test('successful Item materialization persists the native last-drop arena level'
   assert.equal(result.store.actors[0]?.item?.nativeTypeId, 7006)
   assert.equal(result.store.actors[0]?.item?.recipeIndex, null)
   assert.equal(result.store.lastSuccessfulItemLevel, 10)
+})
+
+test('the linked Miniboss Die script chooses exact trigger-focus Gold or ANY item branches', () => {
+  assert.deepEqual(NATIVE_MINIBOSS_DIE_PROGRAM, {
+    goldMaximum: 600,
+    goldMinimum: 300,
+    goldRollValue: 1,
+    itemMode: 0,
+    placementPolicy: 'trigger-focus',
+    randomBound: 2,
+  })
+  const input = {
+    actorSeed: 110,
+    advancedUnlocks: new Array<boolean>(8).fill(false),
+    arena: {
+      disableMask: 0,
+      itemLevelMaximum: 100,
+      itemLevelMinimum: 0,
+      level: 10,
+      mode: 0,
+      specialSuppression: false,
+    },
+    inventoryHasHealthPotion: false,
+    modifiers: nativeLootModifiers([]),
+    nearbyMaskTwoCount: 0,
+    onDeathProgram: 'miniboss-die' as const,
+    ownedRecipeIndexes: [],
+    participantLevel: 12,
+    participantSlot: 0,
+    placement: NATIVE_LOOT_OPEN_PLACEMENT,
+    policies: { gold: 4, item: 4, orb: 4, potion: 3, powerup: 4, specificItem: 0 } as const,
+    position: { x: 10, y: 20 },
+    sceneForcesHealthPotion: false,
+    tick: 0,
+    worldBadguyCount: 1,
+    worldHasHealthPotionSack: false,
+  }
+  const materialize = (seed: number) => materializeBoneyardEnemyLoot({
+    ...createBoneyardLootStore('miniboss-die'),
+    sharedRng: createNativeRng(seed),
+  }, input).store
+
+  const gold = materialize(0)
+  assert.equal(gold.actors.reduce((total, actor) => total + actor.amount, 0), 544)
+  assert.ok(gold.actors.length > 1)
+  assert.ok(gold.actors.every((actor) => (
+    actor.kind === 'gold'
+    && actor.source === 'script'
+    && actor.position.x === 10
+    && actor.position.y === 20
+  )))
+
+  const item = materialize(1)
+  assert.equal(item.actors.length, 1)
+  assert.equal(item.actors[0]?.kind, 'sack')
+  assert.equal(item.actors[0]?.source, 'script')
+  assert.equal(item.actors[0]?.item?.name, 'Wielding Hat')
+  assert.deepEqual(item.actors[0]?.position, { x: 10, y: 20 })
 })
 
 test('Orb moves exactly 1.5 units, captures strictly, and credits the first canonical participant', () => {

@@ -753,6 +753,7 @@ export interface BoneyardEnemyReward {
 export interface BoneyardEnemyLootSource {
   readonly actorSeed: number
   readonly enemyToken: EvaluatedBoneyardEnemyConfig['enemyToken']
+  readonly onDeathProgram: EvaluatedBoneyardEnemyConfig['onDeathProgram']
   readonly policies?: EvaluatedBoneyardEnemyConfig['lootPolicies']
   readonly participantSlot: 0
   readonly position: Readonly<BoneyardPoint>
@@ -915,6 +916,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly resolveSpawnPlacement?: ResolveBoneyardEnemySpawnPlacement
   readonly resolveSpawnIntents: (
     liveEnemyCount: number,
+    liveZombieCount: number,
   ) => readonly BoneyardEnemySpawnIntent[]
   readonly tick: number
 }
@@ -1883,6 +1885,7 @@ export function stepBoneyardEnemyStore(
   })
   const spawnIntents = context.resolveSpawnIntents(
     work.actors.length,
+    liveZombieCount(work.actors),
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
   return finishBoneyardEnemyStoreStep(work, context.tick)
@@ -1932,6 +1935,7 @@ function stepPausedBoneyardEnemyStore(
   }
   const spawnIntents = context.resolveSpawnIntents(
     work.actors.length,
+    liveZombieCount(work.actors),
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
   work.events = []
@@ -1973,6 +1977,10 @@ function finishBoneyardEnemyStoreStep(
       steeringRngState: work.steeringRngState,
     },
   }
+}
+
+function liveZombieCount(actors: readonly BoneyardEnemyActor[]): number {
+  return actors.filter(({ config }) => config.enemyToken === 'ZOMBIE').length
 }
 
 function materializeSpawnIntents(
@@ -6040,6 +6048,7 @@ function stepDyingActor(
     lootSource: Object.freeze({
       actorSeed: source.lootSeed,
       enemyToken: source.config.enemyToken,
+      onDeathProgram: source.config.onDeathProgram,
       ...(source.config.recipeUid === null ? {} : {
         policies: source.config.lootPolicies,
         recipeUid: source.config.recipeUid,

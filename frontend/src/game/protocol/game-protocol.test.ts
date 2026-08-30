@@ -113,7 +113,7 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
       terrain: [],
     },
     seed: '0123456789abcdef',
-    sourceSha256: '1'.repeat(64),
+    sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   }
 }
 
@@ -1820,8 +1820,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v110 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 110)
+test('protocol v111 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, retained gameplay state, and Slumpgut trigger state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 111)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -4990,7 +4990,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
       choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' as const },
       runId: 'run-one',
       seed: '0123456789abcdef',
-      sourceSha256: '1'.repeat(64),
+      sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
       geometrySha256: '2'.repeat(64),
       scene: {
         name: 'Random Level',

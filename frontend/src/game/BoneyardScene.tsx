@@ -1377,10 +1377,15 @@ function publishSceneDiagnostics(
   }
   const waves = snapshot.world.waves
   scene.dataset.waveEventId = `${waves?.waveEventId ?? 0}`
-  scene.dataset.waveLiveEnemyCount = `${snapshot.world.enemies.length + snapshot.world.maggots.length}`
+  scene.dataset.waveLiveEnemyCount = `${snapshot.world.enemies.length}`
+  scene.dataset.waveLiveZombieCount = `${snapshot.world.enemies.filter(({ enemyToken }) => (
+    enemyToken === 'ZOMBIE'
+  )).length}`
   scene.dataset.wavePendingSpawnBudget = `${waves?.pendingSpawnBudget ?? 0}`
   scene.dataset.wavePhase = waves?.phase ?? 'absent'
   scene.dataset.waveScheduleIndex = `${waves?.scheduleIndex ?? 0}`
+  scene.dataset.waveSlumpgutPhase = waves?.slumpgutPhase ?? 'absent'
+  scene.dataset.waveSlumpgutTicksRemaining = `${waves?.slumpgutTicksRemaining ?? 0}`
   scene.dataset.waveSpawnDelayTicks = `${waves?.spawnDelayTicks ?? 0}`
   scene.dataset.waveOrdinal = `${waves?.waveOrdinal ?? 0}`
   if (digReceipt) {

@@ -1596,7 +1596,9 @@ function normalizeWorld(
         ...actor,
         config: {
           ...config,
+          classification: config.classification ?? 'normal',
           lootPolicies: config.lootPolicies ?? DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES,
+          onDeathProgram: config.onDeathProgram ?? null,
           recipeName: config.recipeName ?? null,
           recipeUid: config.recipeUid ?? null,
         },
@@ -1708,6 +1710,10 @@ function normalizeWorld(
           ...waves,
           openingBursts: waves.openingBursts ?? [],
           openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
+          slumpgutPhase: waves.slumpgutPhase ?? defaults.waves?.slumpgutPhase ?? 'eligible',
+          slumpgutPollCursor: waves.slumpgutPollCursor ?? 0,
+          slumpgutRecipeUid: waves.slumpgutRecipeUid ?? defaults.waves?.slumpgutRecipeUid ?? null,
+          slumpgutTicksRemaining: waves.slumpgutTicksRemaining ?? 0,
         },
   } as unknown as BoneyardWorldState
 }

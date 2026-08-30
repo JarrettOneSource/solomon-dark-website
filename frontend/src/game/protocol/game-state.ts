@@ -9,6 +9,7 @@ import type {
 } from '../core-kernels/boneyard-encounter.ts'
 import type {
   BoneyardWaveDirectorPhase,
+  NativeSlumpgutPhase,
 } from '../core-kernels/boneyard-wave-director.ts'
 import type {
   PlayerCharacterConfig,
@@ -768,6 +769,8 @@ export interface BoneyardWaveSnapshot {
   pendingSpawnBudget: number
   phase: BoneyardWaveDirectorPhase
   scheduleIndex: number
+  slumpgutPhase: NativeSlumpgutPhase
+  slumpgutTicksRemaining: number
   spawnDelayTicks: number
   waveEventId: number
   waveOrdinal: number

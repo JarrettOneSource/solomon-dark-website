@@ -66,6 +66,7 @@ function waveBoneyard(): LoadedBoneyard {
   return {
     ...loaded,
     choice: { id: 'wave-30', name: 'Wave 30', source: 'default' },
+    sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
     scene: {
       ...loaded.scene,
       solomonDig: {

@@ -168,7 +168,7 @@ function primarySpellBoneyard(): LoadedBoneyard {
       terrain: [],
     },
     seed: 'primary-spells-seed',
-    sourceSha256: 'a'.repeat(64),
+    sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   }
 }
 

@@ -22,7 +22,9 @@ import {
 import {
   BONEYARD_WAVE_DIRECTOR_PHASES,
   BONEYARD_WAVE_ENEMY_TYPES,
+  NATIVE_SLUMPGUT_PHASES,
   type BoneyardWaveDirectorPhase,
+  type NativeSlumpgutPhase,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
   isHubRegionId,
@@ -401,7 +403,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 110
+export const GAME_PROTOCOL_VERSION = 111
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -10307,6 +10309,8 @@ function boneyardWaveSnapshot(
     'pendingSpawnBudget',
     'phase',
     'scheduleIndex',
+    'slumpgutPhase',
+    'slumpgutTicksRemaining',
     'spawnDelayTicks',
     'waveEventId',
     'waveOrdinal',
@@ -10314,6 +10318,10 @@ function boneyardWaveSnapshot(
   const phase = limitedString(source.phase, `${field}.phase`, 32)
   if (!(BONEYARD_WAVE_DIRECTOR_PHASES as readonly string[]).includes(phase)) {
     throw new GameProtocolError(`${field}.phase is not supported`)
+  }
+  const slumpgutPhase = limitedString(source.slumpgutPhase, `${field}.slumpgutPhase`, 32)
+  if (!(NATIVE_SLUMPGUT_PHASES as readonly string[]).includes(slumpgutPhase)) {
+    throw new GameProtocolError(`${field}.slumpgutPhase is not supported`)
   }
   return {
     interwaveDelayTicks: nonnegativeInteger(
@@ -10326,6 +10334,11 @@ function boneyardWaveSnapshot(
     ),
     phase: phase as BoneyardWaveDirectorPhase,
     scheduleIndex: nonnegativeInteger(source.scheduleIndex, `${field}.scheduleIndex`),
+    slumpgutPhase: slumpgutPhase as NativeSlumpgutPhase,
+    slumpgutTicksRemaining: nonnegativeInteger(
+      source.slumpgutTicksRemaining,
+      `${field}.slumpgutTicksRemaining`,
+    ),
     spawnDelayTicks: nonnegativeInteger(
       source.spawnDelayTicks,
       `${field}.spawnDelayTicks`,

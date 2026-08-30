@@ -347,3 +347,165 @@ No member is `blocked-by-platform`.
   and broad Boneyard/runtime tests, every auxiliary frontend and desktop suite,
   production frontend/game-host builds, CSP media policy, and bundle budget.
   The raw Game entry remains below both bundle limits.
+
+## 2026-08-30 — Slumpgut high-Zombie trigger and authored boss recipe reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: during one otherwise healthy multiplayer survival run,
+  the expected first featured boss, `SLUMPGUT`, never appeared. Ordinary
+  Zombies continued and the game remained operational. A later checkpoint from
+  the same run still had ordinary Mage, Knight/Skeleton, Imp, Wraith/Ghost,
+  Archer, and Coffin actors, including living Coffins from earlier spawns.
+- Stock behavior to recover: determine whether Slumpgut is a wave-label member,
+  a player-level event, or an independent trigger; recover its complete trigger,
+  delay, placement, recipe, count, death, save, replication, and teardown path;
+  and decide whether ordinary-wave continuation or retained Coffins are defects.
+- Reproduction inputs: the reported Website director at base `ebf693b4`, with
+  the completed implementation rebased onto `7b614e36`; exported
+  browser-to-stock archives `solomon-dark-stock-save-1788059131795.zip`
+  SHA-256 `6b7c949e...e5eac` and
+  `solomon-dark-stock-save-1788061272587.zip` SHA-256
+  `73584ff6...246a9`; twelve checked-in stock-generator source runs; and current
+  stock `sandbox/play.boneyard` SHA-256 `64b5d591...e4030`.
+- The exported archives decode the same wizard, `Soggy`, at levels 17 and 31,
+  but the native portability contract intentionally carries permanent wizard
+  progression only. It does not carry the live browser Boneyard, wave, or actor
+  state, so it corroborates the run chronology but is not treated as a live
+  enemy census.
+- Falsifiers were: Slumpgut is selected by player level or ordinary wave row;
+  the trigger uses total monster count rather than Zombie count; 75 is
+  inclusive; the ten-second interval runs before the condition is admitted;
+  the script pauses the ordinary timeline; Coffins or Maggots are forcibly
+  retired for the boss; or the authored recipe is a normal Zombie row.
+
+This is a secondary report against the original 2026-08-14 wave entry. That
+pass recovered the ordinary `wave.txt` TimeLine and explicitly left "boss
+recipe scripts" adjacent. It therefore stopped its membership sweep before
+the hard-coded `WaveData_Parse` trigger/recipe tail even though the generated
+default survival file and retail instructions were available. The web shipped
+the ordinary schedule without the independent Slumpgut owner.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | Solomon Dark Beta 0.72.5, preferred image base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, re-hashed 2026-08-30 | Same canonical executable as the earlier wave/enemy entries. | high |
+| Current web causal trace | `boneyard-wave-director.ts`, `boneyard-wave-timeline.ts`, `boneyard-world.ts`, `boneyard-enemy-store.ts` at `ebf693b4` | Website compiles only the 42 `wave.txt` rows. The director receives total live actors only and has no trigger, Zombie-count, delayed script, authored boss recipe, or featured-boss state, so no path can emit Slumpgut. | high |
+| Concurrent-main integration | Website `origin/main` `7b614e36`, `Optimize late-wave Boneyard presentation` | The final candidate retains the newer off-camera/painter presentation ownership and adds only semantic live-Zombie/Slumpgut diagnostics; it does not revert or bypass that late-wave renderer optimization. | high |
+| Generator instructions | `WaveData_Parse 0x00632730`, Slumpgut recipe/script/trigger range `0x00636126..0x00636357`; strings `0x0079EC70/84/94` | Stock constructs one Zombie `MonsterRecipe`, one two-command script, and one type-9 interval Trigger. This is hard-coded generator membership outside the parsed 42-row table. | high |
+| Trigger runtime | Trigger ctor `0x00684040`; Sync `0x00684360`; TriggerControl tick `0x0068BBC0`; interval enrollment `0x00681910`; trip `0x00686E70` | Trigger defaults are initially enabled and limited to one trip. TriggerControl round-robins four type-9 interval members in serialized order, with Slumpgut first. Its eligible turn evaluates the condition and, when true, enrolls a `10 * 100 = 1000` fixed-tick countdown; the countdown is not pre-running from scene entry. Expiry trips the script once and retires the Trigger. | high |
+| Condition/UI dispatch | CodeLine command `6`; editor dispatcher `0x004DEDA0`; condition builder `0x004D1C30`; serialized operands `[2,1,75]` | Count selector `2` is `ZOMBIE COUNT`, comparator `1` is `IS GREATER THAN`, and threshold is `75`: admission is strict `Zombie count > 75`. | high |
+| Script commands | Slumpgut Script serialized command ids `0x3EA,0x3EE`; builders `0x004BF790`, `0x004D28B0`; generated script UID references | After trigger expiry, `SLEEP FOR 15 SECONDS` owns another 1500 fixed ticks, then `SPAWN CUSTOM MONSTER` emits the Slumpgut recipe `IN THE LIGHT`. Total threshold-to-spawn delay is 2500 simulation ticks. | high |
+| MonsterRecipe table | serializer `0x0063E890`; current generated file plus twelve source `.boneyard` files whose hashes are pinned by `native-generated-boneyards.ts` | All 15 generated recipe rows were decoded. Across all twelve sources, every Slumpgut field except allocation UID/on-death-link UID is byte-semantically identical. Ironmaw/Foulshaft UIDs, start-wave labels, and Ironmaw weapon selector are generator-variable and are not silently substituted for Slumpgut. | high |
+| Slumpgut row | native type `1006`; generated `MonsterRecipe` fields | Name/archetype `Slumpgut`; boss mode `1`; HP `1575`; primary/secondary/tertiary/extra values `35/10/15/10`; chase/attack/move scale `1/1/1`; Zombie body mode `1`; flyblown true; flanking false; pathfinding mode `2`; XP field `-196.875`; linked manual miniboss-death trigger; drop selectors `4,4,4,0,4,4`; light placement. | high |
+| Linked death program | type-8 `On Miniboss Die` Trigger; `Miniboss Die Script` construction `0x0063553E..0x00635732`; random-condition helper `0x0062C4F0`; command builders `0x004D12F0`, `0x004D4680`, `0x004D4500`, and `0x004D2370` | The recipe death link runs `if RANDOM (2) EQUALS 1`: the true branch drops an inclusive `300..600` Gold amount at location selector `7`, `TRIGGER FOCUS`, then jumps to `EXIT`; the false branch drops one random item with mode `0`, `ANY`, at the same dead-monster focus. This script reward is additional to the recipe's ordinary loot selectors. | high |
+| Count and Coffin boundary | `0x004D1C30`; Website entry 254 and current `work.actors.length` count seam | Slumpgut reads Zombie actors, not total actors. A living Coffin remains one ordinary live actor; its Maggots cancel native Badguy-count admission and are already excluded from the Website count. Neither member is retired when Slumpgut arms or spawns. | high |
+
+Ghidra ran through read-only replicas 2 and 3 of canonical project
+`SolomonDark`; replica 2 recovered the trigger/recipe owner and replica 3
+closed the linked miniboss-death condition, script actions, and trigger-focus
+placement.
+Mod Loader checkout revision `08bfba9ef367f7b863848030d0a289dc31e33192`
+was used only as the wrapper/script provider; wrapper SHA-256 was
+`b0253061...e9d49` and no Mod Loader file was changed.
+
+### System boundary and membership inventory
+
+Native system: **the generated default-survival Slumpgut high-Zombie trigger**,
+from authoritative Zombie-count admission through both fixed-tick delays,
+light-valid materialization, authored Zombie-boss config, independent ordinary
+wave continuation, actor retirement, and durable multiplayer state.
+
+| Member / branch | Native source | Disposition for this correction | Proof contract |
+| --- | --- | --- | --- |
+| Trigger construction/default flags | `0x00636275..0x00636357`, `0x00684040` | `exact-ported` | initially enabled, one-trip limit, type 9, first of four interval members, interval 10 |
+| Zombie-count condition | command 6 / `0x004D1C30`, operands `[2,1,75]` | `exact-ported` | 75 does not arm; 76 arms once; Coffin/Maggot/other families do not contribute |
+| interval countdown | `0x0068BC90..0x0068BD13`, `0x0068BBC0` | `exact-ported` | 1000 fixed ticks begin only after threshold admission |
+| script sleep | command `0x3EA`, `0x004BF790` | `exact-ported` | 1500 further fixed ticks; no render-clock ownership |
+| custom spawn and placement | command `0x3EE`, `0x004D28B0`, policy 1 | `exact-ported` through existing authoritative placement resolver | one Zombie intent, anywhere/light-valid, no timeline budget debit |
+| complete Slumpgut MonsterRecipe | `0x00636126..0x006361E9`, serializer `0x0063E890` | `exact-ported` | every serialized field above asserted, including boss/body/flyblown/poison/path modes and the linked death program |
+| Slumpgut living Zombie family | type 1006 constructor/config/tick/render/attack paths already closed by entries 91/254 | `verified-already-at-parity` with authored recipe values now admitted | selector-3 body/head, flyblown auxiliaries, target/attack/death coverage |
+| shared miniboss death trigger and script | type-8 Trigger plus `0x0063553E..0x00635732` | `exact-ported` for Slumpgut; reusable by the separately scoped Ironmaw/Foulshaft producers | one native `RANDOM(2)` branch; either inclusive 300–600 Gold or one `ANY` item at the retired boss position, never both |
+| ordinary `wave.txt` TimeLine while countdown/boss is live | TimeLine and TriggerControl are independent owners | `verified-already-at-parity` | phase, schedule row, pending budget, and ordinary spawns continue unchanged |
+| Coffin actor and children | entry 254 count/lifetime contract | `verified-already-at-parity` | living Coffin may persist; Maggots remain excluded; no boss-trigger teardown |
+| trigger/script one-shot teardown | Trigger `+0x65/+0x68/+0x94`, `0x00686E70` | `exact-ported` | no second Slumpgut after spawn or death; world replacement resets the owner |
+| save/restore mid-countdown and mid-script sleep | Website Boneyard continuation | `exact-ported` | both remaining counters and tripped state resume without replay/reset |
+| multiplayer authority/replication | host-owned Boneyard world and wave snapshot | `exact-ported` | clients never evaluate Zombie count or schedule their own boss |
+| Slumpgut native boss-prefix HUD | independent guarded HUD prefix `0x005D257E..0x005D2AEF`, already dispositioned in entry 132 | `out-of-system` — separate featured-enemy presentation owner, not a spawn producer or count consumer | this correction proves the actor and trigger state; it does not claim that separate HUD panel |
+| Ironmaw and Foulshaft standard-family boss rows | same MonsterRecipe serializer but type-2 randomized start-wave programs | `out-of-system` — distinct start-wave trigger system, not the high-Zombie interval owner | complete rows and varying start-wave/weapon membership recorded by the twelve-file census; no guessed fixed label |
+| Heartmonger, three Dire Faculty rows, The Discorporeal, and seven Deep Portals | remaining generated 15-row table | `out-of-system` — separate actor families and boss/portal programs | every row enumerated and decoded; none is used as a Slumpgut stand-in |
+| custom/mod Boneyard TriggerControl bytecode | authored opaque section 1 | `out-of-system` — general Bonedit bytecode interpreter remains the declared mod boundary | default hard-coded Slumpgut program only; no custom trigger is inferred |
+
+No member is `blocked-by-platform`.
+
+### Native ownership and recovered behavioral contract
+
+- `TriggerControl`, not the ordinary TimeLine, owns Slumpgut. The eligible
+  trigger remains independent of `waveOrdinal`, player level, schedule index,
+  and `pendingSpawnBudget`.
+- The first Slumpgut round-robin turn observing more than 75 registered Zombie
+  actors enrolls a 1000-tick interval. With four serialized interval triggers,
+  admission is zero to three ticks after the threshold first becomes true. The
+  script begins only at expiry, owns a second
+  1500-tick sleep, then emits exactly one authored Zombie boss. The trigger's
+  default limit retires it after the trip, so count oscillation, boss death,
+  save/resume, or later Zombie surges cannot create another Slumpgut.
+- The spawn command's policy is `IN THE LIGHT`. It does not require a fixed
+  coordinate or a living-Coffin cleanup. The existing host placement resolver
+  owns collision and light-valid retry; no client camera or render cadence may
+  schedule the actor.
+- Slumpgut is a type-1006 Zombie with authored boss mode and exact family
+  overrides, not a wave flag bundle. In particular, body mode 1 selects the
+  already recovered selector-3 Zombie banks; flyblown is true; poison punch,
+  pool, and duration are authored `10/15/10`; pathfinding mode is 2; and the
+  normal wave ordinal must not rescale the row.
+- The linked type-8 death Trigger owns one additional script reward at the
+  retired Slumpgut's position. Its one-in-two condition chooses the Gold branch
+  only when `RANDOM(2) == 1`; that branch draws an inclusive 300–600 amount.
+  Otherwise `DROP RANDOM ITEM` mode 0 materializes one `ANY` item. Both use
+  `TRIGGER FOCUS`, and neither replaces the recipe's ordinary loot-policy pass.
+- The report's continued ordinary waves and retained Coffins agree with stock.
+  Slumpgut neither pauses the main TimeLine nor forces other enemies to die.
+  Those observations are regression expectations, not additional fixes.
+- The host owns count, countdowns, spawn intent, and persistence. A snapshot may
+  expose semantic phase/countdown for acceptance, but peers never reconstruct
+  the trigger from sampled enemy frames.
+
+### Confidence and open questions
+
+- Confirmed: trigger type/default flags; strict condition operands; both delay
+  durations; one-trip teardown; light placement selector; every Slumpgut recipe
+  field across twelve independent generated files; the complete linked
+  miniboss-death branch and trigger-focus placement; ordinary-wave and Coffin
+  non-interference; current web's complete absence of a producer.
+- Inferred only for deterministic multiplayer: the web uses its established
+  host run seed for the initial unconstrained placement candidate before the
+  exact light/collision resolver, rather than reproducing an unrelated retail
+  process-global RNG history. Branch order and policy are exact.
+- No material unknown remains inside the declared high-Zombie trigger system.
+
+### Web implementation consequence and validation contract
+
+- Add a cohesive fixed-tick Slumpgut program to the authoritative wave owner,
+  with explicit `eligible`, interval-countdown, script-sleep, spawned, and
+  retired state. Do not add a browser timer, player-level check, wave-number
+  exception, or synthetic Coffin cleanup.
+- Feed it the authoritative actor-only family census after terminal enemy
+  updates. Keep Maggots outside every count. Emit an authored-recipe spawn
+  intent through the existing materializer and light/collision placement seam.
+- Extend authored Zombie recipe evaluation only for the extracted body,
+  flyblown, poison, boss-mode, pathfinding, flanking, linked death program, and
+  reward fields. Remove no existing ordinary-wave behavior.
+- Focused red/green tests must cover counts 75/76; all four round-robin turns;
+  999/1000 interval ticks;
+  1499/1500 script ticks; exactly one spawn; world reset; save/restore in both
+  waits; ordinary spawn continuation; Coffin persistence; Maggot exclusion;
+  every Slumpgut recipe field; and both deterministic miniboss-death reward
+  branches at trigger focus.
+- Mac Chrome acceptance must force the authentic authoritative threshold,
+  observe the two countdown boundaries and one selector-3 flyblown Zombie
+  materialization, retain ordinary wave progression and a living Coffin, kill
+  that exact actor, observe one script-owned Gold-or-item reward at its death
+  focus, and record empty page/console/failed-response arrays. The exact
+  candidate must then pass `/opt/homebrew/bin/bash ./scripts/validate.sh`.

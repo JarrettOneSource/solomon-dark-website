@@ -24,6 +24,7 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
 import type {
   NativeSecondaryMovementModifierKind,
   NativeSecondaryTargetEffectPatch,
@@ -3500,6 +3501,7 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
     lootSource: {
       actorSeed: lootSeed,
       enemyToken: config.enemyToken,
+      onDeathProgram: null,
       participantSlot: 0,
       position,
     },
@@ -4036,6 +4038,76 @@ test('wave spawn resolution observes post-retirement and terminal-child live cou
   })
   assert.equal(observedLiveCount, result.store.actors.length)
   assert.ok(observedLiveCount > 1)
+})
+
+test('wave trigger census counts Zombie actors without treating Coffins as Zombies', () => {
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('zombie-census'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [
+      intent('ZOMBIE', 1, { x: 0, y: 0 }),
+      intent('COFFIN', 2, { x: 50, y: 0 }),
+      intent('SKELETON', 3, { x: 100, y: 0 }),
+    ],
+    tick: 0,
+  })
+  let observed: readonly [number, number] | null = null
+  result = stepBoneyardEnemyStore(result.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: (liveEnemyCount, liveZombieCount) => {
+      observed = [liveEnemyCount, liveZombieCount]
+      return []
+    },
+    tick: 1,
+  })
+  assert.deepEqual(observed, [3, 1])
+  assert.equal(result.store.actors.some(({ config }) => config.enemyToken === 'COFFIN'), true)
+})
+
+test('Slumpgut terminal reward retains the linked Miniboss Die program', () => {
+  const recipe = nativeSlumpgutRecipe(
+    '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
+  )
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('slumpgut-death'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [{
+      ...intent('ZOMBIE', 1, { x: 25, y: 50 }),
+      authoredRecipe: recipe,
+      flanking: false,
+      pathfindingMode: 2,
+      zombieBodyType: 1,
+    }],
+    tick: 0,
+  })
+  const actor = result.store.actors[0]!
+  result = stepBoneyardEnemyStore(damageBoneyardEnemy(result.store, {
+    actorId: actor.id,
+    amount: actor.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  }).store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 1,
+  })
+  assert.equal(result.rewards.length, 1)
+  assert.equal(result.rewards[0]?.experience, 2_756.25)
+  assert.deepEqual(result.rewards[0]?.lootSource, {
+    actorSeed: actor.lootSeed,
+    enemyToken: 'ZOMBIE',
+    onDeathProgram: 'miniboss-die',
+    participantSlot: 0,
+    policies: recipe.lootPolicies,
+    position: { x: 25, y: 50 },
+    recipeUid: recipe.uid,
+  })
 })
 
 function forcedArcherVolley(

@@ -6,6 +6,7 @@ import {
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   createNativeLootItemIds,
   initialNativeKeyDropLevel,
+  materializeNativeLootScriptAction,
   resolveNativeGoodieContents,
   rollNativeEnemyLoot,
   type NativeBonusKind,
@@ -16,6 +17,7 @@ import {
   type NativeLootModifiers,
   type NativeLootPlacement,
   type NativeLootPolicies,
+  type NativeLootSelectionInput,
   type NativeOrbKind,
 } from '../core-kernels/native-loot.ts'
 import {
@@ -25,6 +27,10 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import {
+  selectNativeMinibossDieReward,
+  type NativeSurvivalOnDeathProgram,
+} from '../core-kernels/native-survival-miniboss.ts'
 import {
   createNativeWorldManagerOrder,
   type NativeWorldManagerRegistration,
@@ -206,6 +212,7 @@ export interface BoneyardEnemyLootMaterializationInput {
   readonly inventoryHasHealthPotion: boolean
   readonly modifiers: NativeLootModifiers
   readonly nearbyMaskTwoCount: number
+  readonly onDeathProgram: NativeSurvivalOnDeathProgram | null
   readonly ownedRecipeIndexes: readonly number[]
   readonly participantLevel: number
   readonly participantSlot: number
@@ -440,7 +447,41 @@ export function materializeBoneyardEnemyLoot(
   registerWorldPainter?: RegisterNativeWorldPainter,
 ): SpawnBoneyardLootResult {
   const itemIds = createNativeLootItemIds(source.nextItemId)
-  const rolled = rollNativeEnemyLoot({
+  const rolled = rollNativeEnemyLoot(enemyLootSelectionInput(source, input, itemIds))
+  let prepared = {
+    ...source,
+    lastSuccessfulItemLevel: rolled.lastSuccessfulItemLevel,
+    nextItemId: itemIds.peek(),
+    nextKeyDropLevel: rolled.nextKeyDropLevel,
+    sharedRng: rolled.sharedRng,
+  }
+  const drops = [...rolled.drops]
+  if (input.onDeathProgram === 'miniboss-die') {
+    const selected = selectNativeMinibossDieReward(prepared.sharedRng)
+    const scriptItemIds = createNativeLootItemIds(prepared.nextItemId)
+    const scripted = materializeNativeLootScriptAction(
+      enemyLootSelectionInput(prepared, input, scriptItemIds, selected.rngState),
+      selected.action,
+    )
+    prepared = {
+      ...prepared,
+      lastSuccessfulItemLevel: scripted.lastSuccessfulItemLevel,
+      nextItemId: scriptItemIds.peek(),
+      nextKeyDropLevel: scripted.nextKeyDropLevel,
+      sharedRng: scripted.sharedRng,
+    }
+    drops.push(...scripted.drops)
+  }
+  return spawnBoneyardLootSpecs(prepared, drops, input.tick, registerWorldPainter)
+}
+
+function enemyLootSelectionInput(
+  source: BoneyardLootStore,
+  input: BoneyardEnemyLootMaterializationInput,
+  itemIds: ReturnType<typeof createNativeLootItemIds>,
+  sharedRng = source.sharedRng,
+): NativeLootSelectionInput {
+  return {
     actorSeed: input.actorSeed,
     arena: {
       ...input.arena,
@@ -457,28 +498,20 @@ export function materializeBoneyardEnemyLoot(
     },
     nearbyMaskTwoCount: input.nearbyMaskTwoCount,
     participant: {
+      advancedUnlocks: input.advancedUnlocks,
       level: input.participantLevel,
       modifiers: input.modifiers,
       ownedRecipeIndexes: input.ownedRecipeIndexes,
-      advancedUnlocks: input.advancedUnlocks,
       slot: input.participantSlot,
     },
     placement: input.placement,
     policies: input.policies,
     sceneForcesHealthPotion: input.sceneForcesHealthPotion,
-    sharedRng: source.sharedRng,
+    sharedRng,
     sourcePosition: input.position,
     worldBadguyCount: input.worldBadguyCount,
     worldHasHealthPotionSack: input.worldHasHealthPotionSack,
-  })
-  const prepared = {
-    ...source,
-    lastSuccessfulItemLevel: rolled.lastSuccessfulItemLevel,
-    nextItemId: itemIds.peek(),
-    nextKeyDropLevel: rolled.nextKeyDropLevel,
-    sharedRng: rolled.sharedRng,
   }
-  return spawnBoneyardLootSpecs(prepared, rolled.drops, input.tick, registerWorldPainter)
 }
 
 export function stepBoneyardLootStore(

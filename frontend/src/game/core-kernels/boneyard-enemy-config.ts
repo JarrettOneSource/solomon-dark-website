@@ -5,6 +5,7 @@ import {
 import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.ts'
 import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
 import type { NativeLootPolicies } from './native-loot.ts'
+import type { NativeSurvivalOnDeathProgram } from './native-survival-miniboss.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_HPUP',
@@ -106,16 +107,33 @@ export interface AuthoredBoneyardEnemyRecipe {
   readonly archerAccuracyMode: 0 | 1 | 2 | 3
   readonly attackSpeed: number
   readonly chaseSpeed: number
+  readonly classification: BoneyardEnemyClassification
+  readonly experience: number
   readonly extraDamage: number
+  readonly family: AuthoredBoneyardEnemyFamilyRecipe
   readonly lootPolicies: NativeLootPolicies
   readonly maximumHealth: number
   readonly movementScale: number
   readonly name: string
+  readonly onDeathProgram: NativeSurvivalOnDeathProgram | null
   readonly primaryDamage: number
   readonly secondaryDamage: number
   readonly tertiaryDamage: number
   readonly uid: number
 }
+
+export type BoneyardEnemyClassification = 'boss' | 'miniboss' | 'multiple-boss' | 'normal'
+
+export type AuthoredBoneyardEnemyFamilyRecipe =
+  | Readonly<{ kind: 'default' }>
+  | Readonly<{
+      bodyType: 0 | 1
+      flyblown: boolean
+      kind: 'zombie'
+      poisonDuration: number
+      poisonPoolDamage: number
+      poisonPunchDamage: number
+    }>
 
 export type BoneyardSkeletonWeapon = 'axe' | 'claw' | 'flail' | 'mace' | 'pike' | 'sword'
 export type BoneyardMageElement = 'fire' | 'frost' | 'lightning' | 'poison'
@@ -126,6 +144,7 @@ interface BoneyardEnemyConfigBase {
   baseSpeed: number
   burning: boolean
   chaseSpeed: number
+  classification: BoneyardEnemyClassification
   collisionRadius: number
   enemyToken: BoneyardWaveEnemyToken
   experience: number
@@ -135,6 +154,7 @@ interface BoneyardEnemyConfigBase {
   ignoredSourceFlags: readonly ('FLAG_IGNITE' | 'FLAG_IMMORTALIZE')[]
   maximumHealth: number
   nativeTypeId: number
+  onDeathProgram: NativeSurvivalOnDeathProgram | null
   pathfindingMode: NativeEnemyPathfindingMode
   primaryDamage: number | null
   recipeName: string | null
@@ -355,21 +375,24 @@ export function evaluateBoneyardEnemyConfig(
     config.accuracyMode = authoredRecipe.archerAccuracyMode
     config.attackSpeed = authoredRecipe.attackSpeed
     config.chaseSpeed = authoredRecipe.chaseSpeed
+    config.experience = authoredRecipe.experience
     config.extraDamage = authoredRecipe.extraDamage
     config.maximumHealth = authoredRecipe.maximumHealth
     config.primaryDamage = authoredRecipe.primaryDamage
     config.secondaryDamage = authoredRecipe.secondaryDamage
     config.tertiaryDamage = authoredRecipe.tertiaryDamage
+    applyAuthoredFamily(config, enemyToken, authoredRecipe.family)
   }
   for (const flag of flags) applyFlag(config, flag, random, waveOrdinal)
   applyArenaScalars(config, validatedArenaScalars(options.arenaScalars))
-  assertImplementedPayloads(config)
+  assertImplementedPayloads(config, enemyToken, authoredRecipe)
 
   const common = {
     attackSpeed: config.attackSpeed,
     baseSpeed: constructorBaseSpeed(enemyToken, random.baseSpeedUnit),
     burning: config.burning,
     chaseSpeed: config.chaseSpeed,
+    classification: authoredRecipe?.classification ?? 'normal',
     collisionRadius: constructorCollisionRadius(enemyToken, random.collisionRadiusUnit),
     enemyToken,
     experience: config.experience,
@@ -381,6 +404,7 @@ export function evaluateBoneyardEnemyConfig(
     ))),
     maximumHealth: config.maximumHealth,
     nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+    onDeathProgram: authoredRecipe?.onDeathProgram ?? null,
     pathfindingMode: validatedPathfindingMode(options.pathfindingMode),
     primaryDamage: base.primaryDamage === null ? null : config.primaryDamage,
     recipeName: authoredRecipe?.name ?? null,
@@ -472,6 +496,7 @@ function validatedAuthoredRecipe(
   for (const [field, value] of Object.entries({
     attackSpeed: recipe.attackSpeed,
     chaseSpeed: recipe.chaseSpeed,
+    experience: recipe.experience,
     extraDamage: recipe.extraDamage,
     maximumHealth: recipe.maximumHealth,
     movementScale: recipe.movementScale,
@@ -489,7 +514,52 @@ function validatedAuthoredRecipe(
   if (enemyToken !== 'SKELETONARCHER' && recipe.archerAccuracyMode !== 0) {
     throw new Error('authored Archer accuracy is only valid for SKELETONARCHER')
   }
+  if (!['boss', 'miniboss', 'multiple-boss', 'normal'].includes(recipe.classification)) {
+    throw new Error('authored enemy classification is invalid')
+  }
+  if (recipe.onDeathProgram !== null && recipe.onDeathProgram !== 'miniboss-die') {
+    throw new Error('authored enemy on-death program is invalid')
+  }
+  validateAuthoredFamily(enemyToken, recipe.family)
   return recipe
+}
+
+function validateAuthoredFamily(
+  enemyToken: BoneyardWaveEnemyToken,
+  family: AuthoredBoneyardEnemyFamilyRecipe,
+): void {
+  if (family.kind === 'default') return
+  if (enemyToken !== 'ZOMBIE') {
+    throw new Error('authored Zombie family is only valid for ZOMBIE')
+  }
+  if (family.bodyType !== 0 && family.bodyType !== 1) {
+    throw new RangeError('authored Zombie body type must be zero or one')
+  }
+  for (const [field, value] of Object.entries({
+    poisonDuration: family.poisonDuration,
+    poisonPoolDamage: family.poisonPoolDamage,
+    poisonPunchDamage: family.poisonPunchDamage,
+  })) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new RangeError(`authored Zombie ${field} must be finite and non-negative`)
+    }
+  }
+}
+
+function applyAuthoredFamily(
+  config: MutableConfig,
+  enemyToken: BoneyardWaveEnemyToken,
+  family: AuthoredBoneyardEnemyFamilyRecipe,
+): void {
+  if (family.kind === 'default') return
+  if (enemyToken !== 'ZOMBIE') {
+    throw new Error('authored Zombie family is only valid for ZOMBIE')
+  }
+  config.bodyType = family.bodyType === 1 ? 3 : 0
+  config.poisonDuration = family.poisonDuration
+  config.poisonPoolDamage = family.poisonPoolDamage
+  config.poisonPunchDamage = family.poisonPunchDamage
+  config.rotten = family.flyblown
 }
 
 function validatedPathfindingMode(
@@ -557,11 +627,17 @@ function validatedZombieBodyType(
   return 3
 }
 
-function assertImplementedPayloads(config: MutableConfig): void {
+function assertImplementedPayloads(
+  config: MutableConfig,
+  enemyToken: BoneyardWaveEnemyToken,
+  authoredRecipe: AuthoredBoneyardEnemyRecipe | null,
+): void {
   if (config.skeletonPolicy !== 'default') {
     throw new Error(`unsupported dormant skeleton policy ${config.skeletonPolicy}`)
   }
-  if (config.tertiaryDamage !== 0 || config.extraDamage !== 0) {
+  const authoredZombie = enemyToken === 'ZOMBIE'
+    && authoredRecipe?.family.kind === 'zombie'
+  if (!authoredZombie && (config.tertiaryDamage !== 0 || config.extraDamage !== 0)) {
     throw new Error('unsupported dormant tertiary/extra enemy damage payload')
   }
 }

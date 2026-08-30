@@ -291,6 +291,8 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         pendingSpawnBudget: tick >= 105 ? 13 : 14,
         phase: tick >= 105 ? 'spawning' : 'dormant',
         scheduleIndex: 0,
+        slumpgutPhase: 'eligible',
+        slumpgutTicksRemaining: 0,
         spawnDelayTicks: 0,
         waveEventId: tick >= 105 ? 1 : 0,
         waveOrdinal: tick >= 105 ? 1 : 0,
