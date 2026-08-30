@@ -40,7 +40,7 @@ import {
   type NativeGateLeaf,
 } from '../../editor/native-fence-geometry.ts'
 import {
-  buildBoneyardPainterOrder,
+  BoneyardPainterOrderPlanner,
   type DynamicPainterLayer,
   type StaticPainterLayer,
 } from '../boneyard-painter-order.ts'
@@ -77,6 +77,7 @@ import {
 } from '../game-settings.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
 import type {
+  BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemySnapshot,
   BoneyardEnemyEventSnapshot,
   BoneyardSolomonSnapshot,
@@ -260,6 +261,37 @@ import {
   boneyardTransformedArtBounds,
 } from './boneyard-off-camera-cleanup.ts'
 
+interface EnemyDeathEffectDiagnosticSample {
+  ageTicks: number
+  alpha: number
+  entry: number
+  id: number
+  kind: string
+  ownerActorId: number
+  x: number
+  y: number
+}
+
+interface EnemyDiagnosticSample {
+  action: string | null
+  actionProgress: number
+  bodyEntry: number | null
+  bodyPose: number
+  currentHealth: number
+  enemyToken: string
+  gaitPose: number
+  headFacingOffset: number
+  hitFlash: number
+  id: number
+  lifeState: string
+  limbsEntry: number | null
+  maximumHealth: number
+  renderedScale: number | null
+  scale: number
+  x: number
+  y: number
+}
+
 interface BoneyardRendererFrameDiagnostics {
   activeStaticPainterLayerCount: number
   arenaTransitionPhase: string
@@ -281,38 +313,13 @@ interface BoneyardRendererFrameDiagnostics {
   enemyAuxiliaryEffectLanes: readonly string[]
   enemyCount: number
   enemyOutsideCombatBoundsCount: number
+  enemyDeathEffectCulledCount: number
   enemyDeathEffectCount: number
-  enemyDeathEffectSamples: readonly Readonly<{
-    ageTicks: number
-    alpha: number
-    entry: number
-    id: number
-    kind: string
-    ownerActorId: number
-    x: number
-    y: number
-  }>[]
+  enemyDeathEffectSamples: readonly EnemyDeathEffectDiagnosticSample[]
+  enemyDeathEffectVisibleCount: number
   enemyFamilies: string
   fadedTreeCount: number
-  enemySamples: readonly Readonly<{
-    action: string | null
-    actionProgress: number
-    bodyEntry: number | null
-    bodyPose: number
-    currentHealth: number
-    enemyToken: string
-    gaitPose: number
-    headFacingOffset: number
-    hitFlash: number
-    id: number
-    lifeState: string
-    limbsEntry: number | null
-    maximumHealth: number
-    renderedScale: number | null
-    scale: number
-    x: number
-    y: number
-  }>[]
+  enemySamples: readonly EnemyDiagnosticSample[]
   enemyProjectileCount: number
   enemyProjectileEffectCount: number
   enemyProjectileEffectIds: readonly number[]
@@ -476,6 +483,83 @@ interface BoneyardRendererFrameDiagnostics {
   worldFeedbackMagnitude: number
   worldShakeX: number
   worldShakeY: number
+}
+
+function updateEnemyDeathEffectDiagnosticSamples(
+  target: EnemyDeathEffectDiagnosticSample[],
+  effects: readonly BoneyardEnemyDeathEffectSnapshot[],
+): void {
+  target.length = effects.length
+  for (let index = 0; index < effects.length; index += 1) {
+    const effect = effects[index]!
+    const sample = target[index] ?? {
+      ageTicks: 0,
+      alpha: 0,
+      entry: 0,
+      id: 0,
+      kind: '',
+      ownerActorId: 0,
+      x: 0,
+      y: 0,
+    }
+    sample.ageTicks = effect.ageTicks
+    sample.alpha = effect.alpha
+    sample.entry = effect.entry
+    sample.id = effect.id
+    sample.kind = effect.kind
+    sample.ownerActorId = effect.ownerActorId
+    sample.x = effect.position.x
+    sample.y = effect.position.y + effect.height
+    target[index] = sample
+  }
+}
+
+function updateEnemyDiagnosticSamples(
+  target: EnemyDiagnosticSample[],
+  enemies: readonly BoneyardEnemySnapshot[],
+  scene: BoneyardDynamicScene,
+): void {
+  target.length = enemies.length
+  for (let index = 0; index < enemies.length; index += 1) {
+    const enemy = enemies[index]!
+    const sample = target[index] ?? {
+      action: null,
+      actionProgress: 0,
+      bodyEntry: null,
+      bodyPose: 0,
+      currentHealth: 0,
+      enemyToken: '',
+      gaitPose: 0,
+      headFacingOffset: 0,
+      hitFlash: 0,
+      id: 0,
+      lifeState: '',
+      limbsEntry: null,
+      maximumHealth: 0,
+      renderedScale: null,
+      scale: 0,
+      x: 0,
+      y: 0,
+    }
+    sample.action = enemy.animation.action
+    sample.actionProgress = enemy.animation.actionProgress
+    sample.bodyEntry = scene.enemyBodyEntry(enemy.id)
+    sample.bodyPose = enemy.animation.bodyPose
+    sample.currentHealth = enemy.currentHealth
+    sample.enemyToken = enemy.enemyToken
+    sample.gaitPose = enemy.animation.gaitPose
+    sample.headFacingOffset = enemy.animation.headFacingOffset
+    sample.hitFlash = enemy.animation.hitFlash
+    sample.id = enemy.id
+    sample.lifeState = enemy.animation.state
+    sample.limbsEntry = scene.enemyLimbsEntry(enemy.id)
+    sample.maximumHealth = enemy.maximumHealth
+    sample.renderedScale = scene.enemyScale(enemy.id)
+    sample.scale = enemy.scale
+    sample.x = enemy.position.x
+    sample.y = enemy.position.y
+    target[index] = sample
+  }
 }
 
 export interface BoneyardWorldRenderer {
@@ -785,6 +869,8 @@ export async function createBoneyardWorldRenderer(
   let resolution = initialResolution
   let spectatorCamera: BoneyardSpectatorCameraState =
     INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
+  const enemyDeathEffectSamples: EnemyDeathEffectDiagnosticSample[] = []
+  const enemySamples: EnemyDiagnosticSample[] = []
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
     activeStaticPainterLayerCount: 0,
     arenaTransitionPhase: 'none',
@@ -806,11 +892,13 @@ export async function createBoneyardWorldRenderer(
     enemyAuxiliaryEffectLanes: [],
     enemyCount: 0,
     enemyOutsideCombatBoundsCount: 0,
+    enemyDeathEffectCulledCount: 0,
     enemyDeathEffectCount: 0,
-    enemyDeathEffectSamples: [],
+    enemyDeathEffectSamples,
+    enemyDeathEffectVisibleCount: 0,
     enemyFamilies: '',
     fadedTreeCount: 0,
-    enemySamples: [],
+    enemySamples,
     enemyProjectileCount: 0,
     enemyProjectileEffectCount: 0,
     enemyProjectileEffectIds: [],
@@ -1269,37 +1357,17 @@ export async function createBoneyardWorldRenderer(
             || position.y > combatBounds.y + combatBounds.h
           )).length
       frameDiagnostics.enemyDeathEffectCount = scene.enemyDeathEffectCount
-      frameDiagnostics.enemyDeathEffectSamples = snapshot.world.deathEffects.map((effect) => ({
-        ageTicks: effect.ageTicks,
-        alpha: effect.alpha,
-        entry: effect.entry,
-        id: effect.id,
-        kind: effect.kind,
-        ownerActorId: effect.ownerActorId,
-        x: effect.position.x,
-        y: effect.position.y + effect.height,
-      }))
+      frameDiagnostics.enemyDeathEffectVisibleCount = scene.visibleEnemyDeathEffectCount
+      frameDiagnostics.enemyDeathEffectCulledCount = (
+        scene.enemyDeathEffectCount - scene.visibleEnemyDeathEffectCount
+      )
+      updateEnemyDeathEffectDiagnosticSamples(
+        enemyDeathEffectSamples,
+        snapshot.world.deathEffects,
+      )
       frameDiagnostics.enemyFamilies = scene.enemyFamilies
       frameDiagnostics.fadedTreeCount = painter.fadedTreeCount
-      frameDiagnostics.enemySamples = snapshot.world.enemies.map((enemy) => ({
-        action: enemy.animation.action,
-        actionProgress: enemy.animation.actionProgress,
-        bodyEntry: scene.enemyBodyEntry(enemy.id),
-        bodyPose: enemy.animation.bodyPose,
-        currentHealth: enemy.currentHealth,
-        enemyToken: enemy.enemyToken,
-        gaitPose: enemy.animation.gaitPose,
-        headFacingOffset: enemy.animation.headFacingOffset,
-        hitFlash: enemy.animation.hitFlash,
-        id: enemy.id,
-        lifeState: enemy.animation.state,
-        limbsEntry: scene.enemyLimbsEntry(enemy.id),
-        maximumHealth: enemy.maximumHealth,
-        renderedScale: scene.enemyScale(enemy.id),
-        scale: enemy.scale,
-        x: enemy.position.x,
-        y: enemy.position.y,
-      }))
+      updateEnemyDiagnosticSamples(enemySamples, snapshot.world.enemies, scene)
       frameDiagnostics.enemyProjectileCount = scene.enemyProjectileCount
       frameDiagnostics.enemyProjectileEffectCount = scene.enemyProjectileEffectCount
       frameDiagnostics.enemyProjectileEffectIds = scene.enemyProjectileEffectIds
@@ -1511,6 +1579,10 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.enemyAuxiliaryEffectCount = `${scene.enemyAuxiliaryEffectCount}`
       canvas.dataset.enemyAuxiliaryEffectLanes = scene.enemyAuxiliaryEffectLanes.join(',')
       canvas.dataset.enemyDeathEffectCount = `${scene.enemyDeathEffectCount}`
+      canvas.dataset.enemyDeathEffectVisibleCount = `${scene.visibleEnemyDeathEffectCount}`
+      canvas.dataset.enemyDeathEffectCulledCount = `${
+        scene.enemyDeathEffectCount - scene.visibleEnemyDeathEffectCount
+      }`
       canvas.dataset.complexShadowCasterCount = `${painter.complexShadowCasterCount}`
       canvas.dataset.complexShadowQuadCount = `${painter.complexShadowQuadCount}`
       canvas.dataset.complexShadowRecordCount = `${painter.complexShadowRecordCount}`
@@ -1723,6 +1795,7 @@ class BoneyardDynamicScene {
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
   private readonly movingGatePainterLayers: readonly StaticPainterLayer[]
+  private readonly painterOrderPlanner = new BoneyardPainterOrderPlanner()
   private readonly players = new Map<string, PlayerWorldView>()
   private readonly playerDeathBursts: PlayerDeathBurstViews
   private readonly playerDeathWeapons: PlayerDeathWeaponViews
@@ -1931,7 +2004,10 @@ class BoneyardDynamicScene {
     this.gates.update(snapshot.world.gateLeaves)
     this.goodies.update(snapshot.world.goodies, snapshot.tick)
     this.enemies.update(enemySnapshots, snapshot.tick)
-    this.enemyDeathEffects.update(snapshot.world.deathEffects)
+    this.enemyDeathEffects.update(
+      snapshot.world.deathEffects,
+      boneyardVisibleWorldBounds(camera, viewport),
+    )
     this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects)
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
     this.maggots.update(snapshot.world.maggots)
@@ -2424,20 +2500,23 @@ class BoneyardDynamicScene {
       if (!player) continue
       view.setWorldTint(nativeBoneyardLightTint(worldLightScalar(player.position)))
     }
-    for (const layer of this.playerDeathWeapons.painterLayers()) {
+    const playerDeathWeaponPainterLayers = this.playerDeathWeapons.painterLayers()
+    const primarySpellPainterLayers = this.primarySpells.painterLayers()
+    const secondaryAbilityPainterLayers = this.secondaryAbilities.painterLayers()
+    for (const layer of playerDeathWeaponPainterLayers) {
       this.playerDeathWeapons.setTint(
         layer.playerId,
         nativeBoneyardLightTint(worldLightScalar(layer.position)),
       )
     }
-    for (const layer of this.primarySpells.painterLayers()) {
+    for (const layer of primarySpellPainterLayers) {
       if (!layer.regionLightPoint) continue
       this.primarySpells.setTint(
         layer.id,
         nativeBoneyardLightTint(worldLightScalar(layer.regionLightPoint)),
       )
     }
-    for (const layer of this.secondaryAbilities.painterLayers()) {
+    for (const layer of secondaryAbilityPainterLayers) {
       if (!layer.regionLightPoint) continue
       this.secondaryAbilities.setTint(
         layer.id,
@@ -2455,12 +2534,6 @@ class BoneyardDynamicScene {
         lightTint,
         secondaryEffectsByTarget.get(enemy.id),
       ))
-    }
-    for (const effect of snapshot.world.deathEffects) {
-      this.enemyDeathEffects.setWorldTint(
-        effect.id,
-        nativeBoneyardLightTint(worldLightScalar(effect.position)),
-      )
     }
     for (const actor of snapshot.world.loot) {
       this.loot.setTint(actor.id, nativeBoneyardLightTint(worldLightScalar(actor.position)))
@@ -2534,7 +2607,7 @@ class BoneyardDynamicScene {
         sortBias: boneyardPlayerSortBias(player),
       })
     }
-    for (const layer of this.playerDeathWeapons.painterLayers()) {
+    for (const layer of playerDeathWeaponPainterLayers) {
       const playerId = layer.id.slice('player-death-weapon:'.length)
       const registration = snapshot.players[playerId]
         ?.lighting.deathWeaponPainterRegistration
@@ -2549,7 +2622,7 @@ class BoneyardDynamicScene {
         sortBias: 0,
       })
     }
-    for (const layer of this.primarySpells.painterLayers()) {
+    for (const layer of primarySpellPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
       dynamicLayers.push({
         ...layer,
@@ -2571,7 +2644,7 @@ class BoneyardDynamicScene {
         visible: layer.visible,
       })
     }
-    for (const layer of this.secondaryAbilities.painterLayers()) {
+    for (const layer of secondaryAbilityPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
       if (layer.registration === null || layer.registration === undefined) {
         throw new Error(`secondary painter ${layer.id} lost its manager registration`)
@@ -2596,6 +2669,7 @@ class BoneyardDynamicScene {
       dynamicLayers.push(nativeGoodiePainterLayer(goodie))
     }
     for (const effect of snapshot.world.deathEffects) {
+      if (!this.enemyDeathEffects.isVisible(effect.id)) continue
       if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') continue
       dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect))
     }
@@ -2667,7 +2741,7 @@ class BoneyardDynamicScene {
       layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
       activeStaticPainterLayers.push(layer)
     }
-    const order = buildBoneyardPainterOrder({
+    const order = this.painterOrderPlanner.build({
       referenceY: localPlayer.position.y,
       staticLayers: activeStaticPainterLayers,
       dynamicLayers,
@@ -2729,7 +2803,7 @@ class BoneyardDynamicScene {
     this.seeker.setDepth(
       (positionedDynamics.get(`player:${localPlayerId}`)?.zIndex ?? 1) + 0.25,
     )
-    for (const layer of this.primarySpells.painterLayers()) {
+    for (const layer of primarySpellPainterLayers) {
       this.primarySpells.setDepth(
         layer.id,
         layer.lane === 'post-world-queue'
@@ -2757,7 +2831,7 @@ class BoneyardDynamicScene {
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       positionedDynamics.get(`player:${ownerId}`)?.zIndex
     ))
-    for (const layer of this.secondaryAbilities.painterLayers()) {
+    for (const layer of secondaryAbilityPainterLayers) {
       this.secondaryAbilities.setDepth(
         layer.id,
         layer.lane === 'pre-world-queue'
@@ -2804,6 +2878,7 @@ class BoneyardDynamicScene {
       )
     }
     for (const effect of snapshot.world.deathEffects) {
+      if (!this.enemyDeathEffects.isVisible(effect.id)) continue
       const lane = nativeEnemyDeathEffectPainterLane(effect)
       this.enemyDeathEffects.setDepth(
         effect.id,
@@ -2943,6 +3018,10 @@ class BoneyardDynamicScene {
 
   get enemyDeathEffectCount(): number {
     return this.enemyDeathEffects.size
+  }
+
+  get visibleEnemyDeathEffectCount(): number {
+    return this.enemyDeathEffects.visibleSize
   }
 
   get mageLightningCount(): number {

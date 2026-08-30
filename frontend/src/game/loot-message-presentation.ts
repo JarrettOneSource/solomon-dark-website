@@ -21,6 +21,8 @@ export interface NativeLootMessageVisual extends NativeLootMessageState {
   readonly scale: number
 }
 
+const EMPTY_LOOT_MESSAGE_VISUALS: readonly NativeLootMessageVisual[] = Object.freeze([])
+
 export class NativeLootMessagePresentation {
   private activeEventId: number | null = null
   private lastTick: number
@@ -70,6 +72,7 @@ export class NativeLootMessagePresentation {
 
   sample(tick: number): readonly NativeLootMessageVisual[] {
     this.advance(tick)
+    if (this.messages.length === 0) return EMPTY_LOOT_MESSAGE_VISUALS
     return Object.freeze(this.messages.map((message) => Object.freeze({
       ...message,
       alpha: Math.min(1, Math.max(0, message.lifetime)),

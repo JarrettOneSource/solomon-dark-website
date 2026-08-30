@@ -22,6 +22,8 @@ import {
   nativeEnemyDeathEffectPainterLayer,
   nativeEnemyDeathEffectPainterLane,
   nativeEnemyDeathEffectPlan,
+  nativeEnemyDeathEffectVisualBounds,
+  nativeEnemyDeathEffectViewResourcePlan,
 } from './native-enemy-death-effect-presentation.ts'
 import {
   NATIVE_ENEMY_FAMILIES,
@@ -1351,4 +1353,98 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     }, 3),
     /cannot enter the world-sorted painter/,
   )
+})
+
+test('retained death-effect views own only their actual variant resources', () => {
+  const kinds = [
+    'banish',
+    'bouncer',
+    'smoky-bouncer',
+    'fade',
+    'fade-additive',
+    'fade-perspective',
+    'fade-perspective-clipped',
+    'fade-scale',
+    'fire-array',
+    'late-splat',
+    'move-fade',
+    'sprite-array',
+    'unbind',
+  ] as const
+  for (const [index, kind] of kinds.entries()) {
+    const shadow = index % 2 === 0
+    assert.deepEqual(nativeEnemyDeathEffectViewResourcePlan({ kind, shadow }), kind === 'banish'
+      ? {
+          banishGraphics: true,
+          banishSprites: 4,
+          childCount: 5,
+          effectSprite: false,
+          shadowSprite: false,
+        }
+      : {
+          banishGraphics: false,
+          banishSprites: 0,
+          childCount: shadow ? 2 : 1,
+          effectSprite: true,
+          shadowSprite: shadow,
+        }, kind)
+  }
+})
+
+test('death-effect visibility bounds union complete transformed art and Banish children', () => {
+  const records = {
+    15: { anchorX: 0, anchorY: 0, height: 10, width: 10 },
+    117: { anchorX: 10, anchorY: 20, height: 60, width: 40 },
+    333: { anchorX: 0, anchorY: 0, height: 10, width: 10 },
+  } as const
+  const resolve = (_atlas: string, entry: number) => {
+    const record = records[entry as keyof typeof records]
+    if (!record) throw new Error(`missing test record ${entry}`)
+    return record
+  }
+  const bouncer = {
+    ageTicks: 7,
+    alpha: 0.75,
+    atlas: 'BadGuys' as const,
+    blendMode: 'normal' as const,
+    entry: 117,
+    height: -12,
+    id: 41,
+    kind: 'bouncer' as const,
+    ownerActorId: 7,
+    painterRegistration: { managerLane: 'actor' as const, registrationOrdinal: 41 },
+    presentationOwner: 'world-sorted' as const,
+    position: { x: 125, y: 240 },
+    rotationRadians: 0,
+    scale: 1.2,
+    shadow: true,
+    spawnTick: 100,
+    tint: 0xff8844,
+  }
+  assert.deepEqual(nativeEnemyDeathEffectVisualBounds(bouncer, resolve), {
+    h: 74,
+    w: 48,
+    x: 113,
+    y: 204,
+  })
+  assert.deepEqual(nativeEnemyDeathEffectVisualBounds({ ...bouncer, shadow: false }, resolve), {
+    h: 72,
+    w: 48,
+    x: 113,
+    y: 204,
+  })
+  assert.deepEqual(nativeEnemyDeathEffectVisualBounds({
+    ...bouncer,
+    ageTicks: 0,
+    entry: 15,
+    height: 0,
+    kind: 'banish',
+    scale: 1,
+    spawnTick: 96,
+  }, resolve), {
+    h: 500,
+    w: 50,
+    x: 115,
+    y: -210,
+  })
 })

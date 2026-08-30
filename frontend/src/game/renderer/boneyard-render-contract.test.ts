@@ -382,6 +382,23 @@ test('Boneyard applies every causal proxy and split-band queue depth to its visi
   assert.match(boneyardRenderer, /inserted native painter .* lost its queue depth/)
 })
 
+test('Boneyard reuses one frame-local Region plan and spell painter projection', () => {
+  assert.match(boneyardRenderer, /new BoneyardPainterOrderPlanner\(\)/)
+  assert.match(boneyardRenderer, /this\.painterOrderPlanner\.build\(\{/)
+  assert.equal(
+    boneyardRenderer.match(/this\.playerDeathWeapons\.painterLayers\(\)/g)?.length,
+    1,
+  )
+  assert.equal(
+    boneyardRenderer.match(/this\.primarySpells\.painterLayers\(\)/g)?.length,
+    1,
+  )
+  assert.equal(
+    boneyardRenderer.match(/this\.secondaryAbilities\.painterLayers\(\)/g)?.length,
+    1,
+  )
+})
+
 test('secondary rain paints native top-to-bottom vertex quads instead of Canvas gradients', () => {
   assert.match(
     secondaryWorldView,
@@ -806,7 +823,22 @@ test('Boneyard renderer consumes terminal feedback once and applies it after sem
   assert.match(boneyardRenderer, /nativeEnemyWorldFeedbackTransform\(/)
   assert.match(boneyardRenderer, /worldFeedbackMagnitude/)
   assert.match(boneyardRenderer, /enemyDeathEffectSamples/)
-  assert.match(boneyardRenderer, /hitFlash: enemy\.animation\.hitFlash/)
+  assert.match(boneyardRenderer, /sample\.hitFlash = enemy\.animation\.hitFlash/)
+})
+
+test('ordinary snapshots do not republish identity-only Boneyard parent state', () => {
+  assert.match(boneyardScene, /gameRunLifecyclesEqual\(current, snapshot\.run\)/)
+  assert.match(boneyardScene, /playerPositionRef\.current = player\.position/)
+  assert.doesNotMatch(boneyardScene, /setPlayerPosition\(\(current\)/)
+})
+
+test('death-effect visibility keeps full diagnostics without offscreen painter submission churn', () => {
+  assert.match(boneyardRenderer, /enemyDeathEffects\.isVisible\(effect\.id\)/)
+  assert.match(boneyardRenderer, /updateEnemyDeathEffectDiagnosticSamples\(/)
+  assert.doesNotMatch(
+    boneyardRenderer,
+    /enemyDeathEffectSamples = snapshot\.world\.deathEffects\.map/,
+  )
 })
 
 test('spectator follow starts after local death presentation and uses the first semantic ID', () => {

@@ -87,7 +87,10 @@ import type {
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
-import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
+import {
+  gameRunLifecyclesEqual,
+  type GameRunLifecycleState,
+} from './core-kernels/game-run.ts'
 import type { ModConsumableCatalogEntry } from './core-kernels/hub-economy.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import type { GameWorldSpeech } from './world-speech-presentation.ts'
@@ -253,8 +256,10 @@ export default function BoneyardScene({
   const [liveBelt, setLiveBelt] = useState<PlayerBeltComponent>(belt)
   const economyRef = useRef(economy)
   economyRef.current = economy
-  const [playerPosition, setPlayerPosition] = useState(
-    boneyardInitialSnapshot.players[playerId]!.position,
+  const initialPlayerPosition = boneyardInitialSnapshot.players[playerId]!.position
+  const playerPositionRef = useRef(initialPlayerPosition)
+  const [inventoryPlayerPosition, setInventoryPlayerPosition] = useState(
+    initialPlayerPosition,
   )
   const [goodieTargetId, setGoodieTargetId] = useState<number | null>(() => {
     const player = boneyardInitialSnapshot.players[playerId]
@@ -401,7 +406,7 @@ export default function BoneyardScene({
     setRun((current) => (
       snapshot.run.phase === 'game-over' && current.phase === 'game-over'
         ? current
-        : snapshot.run
+        : gameRunLifecyclesEqual(current, snapshot.run) ? current : snapshot.run
     ))
     if (snapshot.world.kind === 'boneyard') setTutorial(snapshot.world.tutorial)
     for (const cue of gameOverAudioEvents(previousAudioRunRef.current, snapshot.run)) {
@@ -472,11 +477,7 @@ export default function BoneyardScene({
         setEconomy((current) => current.revision === player.economy.revision
           ? current
           : player.economy)
-        setPlayerPosition((current) => (
-          current.x === player.position.x && current.y === player.position.y
-            ? current
-            : player.position
-        ))
+        playerPositionRef.current = player.position
         const target = player.progression.lifeState === 'alive'
           ? nearestBoneyardGoodie(snapshot.world.goodies, player)
           : null
@@ -486,6 +487,14 @@ export default function BoneyardScene({
       }
     })
   }, [audio, boneyardInitialSnapshot, loaded.runId, playerId, subscribe])
+
+  useLayoutEffect(() => {
+    if (inventorySurface === null) return
+    const next = playerPositionRef.current
+    setInventoryPlayerPosition((current) => (
+      current.x === next.x && current.y === next.y ? current : next
+    ))
+  }, [inventorySurface])
 
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {
@@ -1165,7 +1174,7 @@ export default function BoneyardScene({
               onSurfaceChange={setInventorySurface}
               onUnassignBeltEntry={onUnassignQuickbarSkill}
               overlayRoot={sceneRef}
-              playerPosition={playerPosition}
+              playerPosition={inventoryPlayerPosition}
               progression={progression}
               skillsKeyCode={settings.controls.openSkills}
               region="courtyard"

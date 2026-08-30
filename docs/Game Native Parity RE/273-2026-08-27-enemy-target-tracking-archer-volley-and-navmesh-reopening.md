@@ -783,3 +783,332 @@ No member is blocked by the browser platform.
 - No physical iOS device was attached, so this pass makes no fresh
   physical-device claim. No protocol, snapshot, save schema, tick rate,
   gameplay branch, renderer rule, or intentional browser difference changed.
+
+## 2026-08-30 — late-wave client lag and retained death-effect view reopening
+
+### Reported smell and parity question
+
+- A tester was asked to leave and export when play became laggy. The two
+  supplied stock-export archives were created at `2026-08-30T03:05:31Z` and
+  `03:41:12Z` from the same Ether/Arcane wizard, Soggy, during one long
+  two-player survival lineage.
+- Stock export is a settled wizard/profile projection: it retains and patches
+  the native source attachment but does not serialize the active browser Arena
+  object graph. The production save checkpoint immediately preceding the first
+  export is therefore the exact replay input.
+- The parity question is representation-only: can the browser retain every
+  recovered death-effect actor, painter registration, transform, texture,
+  shadow, blend, lane, fixed-tick sample, and retirement while allocating and
+  traversing only the display resources owned by that actor's actual variant?
+  Host tick rate, effect counts/lifetimes, protocol, save bytes, and visible
+  output are not reopened.
+- Falsifiers are: authoritative tick lag in the reported private session; an
+  ordinary Bouncer using Banish gradients/sprites; a death effect whose world
+  tint does not bypass Region lighting; lazy view membership changing any
+  pixel/painter order; or unchanged exact-state frame cost after removing only
+  maximal-variant display ownership.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Tester exports | Windows Downloads `solomon-dark-stock-save-1788059131795.zip`, 28,974 bytes, SHA-256 `6b7c949ed5baeeb96fe09d59ba32213fabc5cd0c47432cb539a3de7c9c1e5eac`; `solomon-dark-stock-save-1788061272587.zip`, 28,986 bytes, SHA-256 `73584ff6c054d3a68aee31c146d1461c3f8a58cacab788bd3cddfdda026246a9` | Both launcher manifests and file hashes pass. They decode Soggy from level 17 to 31 with the same Magic Missile/More Missiles/Smart Missiles and Arcane loadout, but by contract carry no live browser world. | high bytes and identity |
+| Production journal | deployed `ebf693b499aeca417ffe84c9ba0d0a305f55dd2a`; private sessions ending at `03:05:24Z` and `03:41:02Z` | Both exits precede their downloads by seconds. The reported private sessions emitted zero `simulation.tick_lag`; the later session emitted `replication.baseline_missing` at `03:38:11Z` and `03:40:40Z`, localizing the complaint to the client/projection side. | high-live |
+| Exact durable checkpoint | pre-deployment SQLite backup `pre-6265aadf5525-20260830T025944Z`, Soggy slot revision 1779, document SHA-256 `4a3e40d26fe8bbd5ccbbd1ab9cc50af8803d511500ad08e3c6fc180a2b6d7159`, tick 618,000 | Generated Arena geometry `6a2b230a57042bb103d86b8b6ebdcefd0c3828d87f627a488e0bdd6cb9548c27`, wave 13 threshold: 43 enemies, 16 loot, 5 primary projectiles, 2 primary transients, and exactly 277 world-sorted shadowed Bouncers aged 42..698. | high-live |
+| Exact-state Mac host replay | current main, M2 Mac mini Node 22.17.0, 2,000 continued ticks plus owner snapshots | Simulation mean/p99 is `0.600/2.321 ms`; two-owner-equivalent snapshot projection/JSON work is `0.570/1.254 ms` per 20 Hz sample. The state advances 2,000 ticks with no host-budget failure. | high |
+| Production-build Mac Chrome replay | exact current-main production bundle, 1600x900 WebGL, same restored document | At native CPU speed, 277..174 effects hold `60.09 FPS` but consume 328 ms browser task time over 1.5 s. At 4x CPU slowdown, the same interval reaches `29.9/44.5 ms` p95/max frames; the continued 115..76-effect interval consumes 4,117 ms of 4.5 s browser time with `20.5/38.7 ms` p95/max. Page, console, response, and request-failure arrays are empty. | high |
+| Held-world Mac control | production current main, synthetic lifetime-only extension of the same 277 Bouncer rows, pause after resume grace | A live 277..316-effect interval at 4x CPU uses 3,128 ms browser task time in 3 s and presents 47.63 FPS. Holding 297 effects and 42 enemies behind the authoritative pause uses only 252 ms browser task time in 3 s and presents 60.04 FPS. The pause also suspends the presentation loop, so this localizes the combined live snapshot/presentation pipeline but does not separate wire materialization from drawing. | high differential with named limitation |
+| Current browser source | `native-enemy-death-effect-view.ts`, `native-enemy-death-effect-presentation.ts`, `boneyard-world-renderer.ts` at `ebf693b4` | Every view eagerly creates an effect sprite, shadow sprite, Banish `Graphics`, four Banish sprites, and a container. Every non-Banish frame still calls `clearBanish()`, hides four sprites, destroys gradients, and clears Graphics. The exact 277-Bouncer checkpoint therefore retains 1,385 unused display children and executes 277 irrelevant Graphics clears per presented frame. | high |
+| Snapshot-to-UI causal trace | `EntityReplicationReconstructor`, `BoneyardScene`, `GameHud`, `NativeLootMessagePresentation` at `ebf693b4` | Each 20 Hz entity frame necessarily reconstructs current death-effect samples. Separately, ordinary active play publishes a fresh but semantically unchanged `run` object and a new empty loot-message array into parent React state; moving/pushed player position also republishes the entire Boneyard scene solely to keep a closed inventory action coordinate current. | high |
+| Camera-membership census | revision-1779 checkpoint, saved local-player position, 1600x900 native frame at zoom 1.35 | Root-only conservative counts place 101 effects inside the exact camera rectangle, 118 inside +50 units, 144 inside +100, and 177 inside +200; at least 100 of 277 actors are far enough away that even a broad placeholder margin excludes them. Final admission must use complete transformed authored art, not these diagnostic root margins. | high population; diagnostic geometry only |
+| Existing exact visibility contract | ledger entry 039; `boneyardVisibleWorldBounds`, `boneyardResidentIsVisible`, `boneyardTransformedArtBounds`; native atlas records | Browser renderability may exclude a resident only when its complete transformed painted rectangle, with the 32-world-unit interpolation guard, cannot touch the view. State, painter membership, depth, and re-entry update remain live. The earlier entry deferred dynamic actors because static art owned the then-measured cost; it did not prove dynamic off-camera pixels must be submitted. | high |
+| Existing retail contract | canonical retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; recovered transient membership and painter/lifetime evidence in this entry | The 13 death-effect variants are independent registered actors. Bouncer sprite/shadow state and Banish gradient/four-sprite state are different variant memberships; stock does not construct the maximum union for each actor. | high |
+
+The exported and recovered raw saves remain external task evidence. No bearer,
+party-rejoin capability, credential, or account secret is a ledger artifact.
+
+### System boundary and membership inventory
+
+Native/web system: retained client presentation for all replicated hostile
+death-effect actors, from descriptor birth through interpolated update,
+lighting/painter submission, diagnostics, retirement, run replacement, and
+renderer teardown.
+
+| Member / branch | Disposition | Required invariant |
+| --- | --- | --- |
+| `banish` | `exact-ported` lazy heavy variant | Own six changing gradients in one Graphics plus four authored additive sprites; clear/destroy only resources this variant created. |
+| `bouncer`, `smoky-bouncer` | `exact-ported` compact sprite variant | Own main sprite and authored shadow only; no Banish Graphics/sprites/gradients. |
+| `fade`, `fade-additive`, `fade-perspective`, `fade-perspective-clipped`, `fade-scale`, `fire-array`, `late-splat`, `move-fade`, `sprite-array`, `unbind` | `exact-ported` compact sprite variant | Preserve atlas/entry, anchor, position/height, perspective scale, rotation, alpha, blend, tint, and optional shadow without Banish resources. |
+| Shadow true/false | `exact-ported` conditional child ownership | A shadowed actor owns one shadow sprite; an unshadowed actor does not retain an invisible placeholder. |
+| `world-sorted`, `pre-world-queue`, `direct-post-world` lanes | `verified-already-at-parity` | Stable painter registration, world-Y sorting, queue placement, foreground offset, and teardown remain byte-equivalent. |
+| Dynamic effect camera visibility | `exact-ported` guarded visual traversal | Union main sprite, optional shadow, and Banish gradient/sprite transformed bounds; retain registration/state while fully offscreen, omit the invisible row from that frame's painter traversal, and restore the complete current sample/depth before the first entering frame. |
+| Region-light tint pass | `exact-ported` no-op representation | All current death effects bypass world tint; no light-index query or per-view tint write may run for this population. |
+| Keyed descriptor birth/update/retirement | `exact-ported` | One view per semantic ID, stable kind, interpolated sample updates, survivor order, immediate retirement, and complete destroy remain exact. |
+| 20 Hz descriptor/sample reconstruction | `verified-already-at-parity`; profiled | Protocol fields, quantization, baseline ACK/recovery, IDs, order, and retirement stay unchanged. |
+| Active-run UI lifecycle projection | `exact-ported` identity-stable publication | Active run, null Tutorial, and empty loot-message state retain their React identity until a semantic member changes; Game Over counters and real loot messages still publish at their native cadence. |
+| Current player position for inventory actions | `exact-ported` ref-owned live coordinate | Ordinary movement updates one ref without rerendering the scene; opening Inventory snapshots the current coordinate, after which authoritative pause keeps it stable for item actions. |
+| HUD mana/cooldown/health and ally rows | `verified-already-at-parity` | Their focused subscriptions remain live at snapshot cadence; this pass does not freeze a changing meter or lower HUD update frequency. |
+| Per-frame diagnostic samples | `exact-ported` retained scratch representation | Local acceptance visibility remains complete, but stable rows/arrays are reused rather than allocating one object graph per frame. |
+| Pause, SkillPicker, save/resume, Game Over, new run, context loss, renderer teardown | `exact-ported` lifecycle | Frozen views render unchanged; every owned sprite/Graphics/gradient is destroyed once and no prior-run child survives. |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- The host owns actor birth, fixed-tick state, RNG, lifetime, and retirement.
+  Replication owns descriptors/samples; the presentation timeline interpolates
+  them without inventing actors.
+- The Boneyard React owner consumes snapshots only for semantic UI state. A
+  decoded object having a new identity is not itself a UI transition. Active
+  run fields, empty loot visuals, and a closed inventory's action coordinate
+  must not rerender the complete scene merely because another snapshot arrived.
+- The retained browser map owns exactly one variant view for each live ID.
+  Variant identity is stable for that ID. An ordinary actor never transitions
+  into `banish`; retirement and a new ID own later births.
+- Main sprite, optional shadow, Banish Graphics/four sprites, and gradients are
+  lateral variant resources, not mandatory base-class children. Lazy creation
+  changes browser representation only.
+- All death-effect variants bypass Region tint in the recovered native model.
+  Their existing light-index loop computes a value that the view immediately
+  discards; removing that loop preserves pixels.
+- Dynamic painter order remains authoritative because Bouncers move in Y.
+  This pass may reuse scratch rows/maps and toggle only Pixi renderability when
+  the complete transformed art misses the guarded view. An invisible row may
+  be omitted from that frame's painter traversal because it has no proxy,
+  light, collision, or visible insertion; its native registration and state
+  remain live. The pass may not retire the actor, cache a stale visible order,
+  lower update rate, shorten lifetime, coalesce actors, or reduce effect
+  membership. A culled view receives its complete current sample and painter
+  depth before the first entering frame.
+- Descriptor retirement, run replacement, Game Over, and renderer destroy own
+  complete resource teardown, including lazily created gradients.
+
+### Nearby-system findings
+
+- The later private run fell behind replication twice without host tick lag,
+  making baseline loss a downstream client-saturation signal rather than a
+  reason to enlarge the baseline window first. The held-world control alone
+  does not decide how that saturation divides between decode and render.
+- After the second export, multiple resume attempts were rejected because an
+  enemy projectile sample had `visualScale` outside `[1,1.25]`. That is a
+  separate projectile projection/admission defect, not a death-effect lag
+  explanation; its exact saved producer state was overwritten before the next
+  database backup. It remains recorded here so a resume fix is not mistaken
+  for this performance closure.
+
+### Adjacent hostile-projectile resume admission correction
+
+The second export made the adjacent mismatch directly observable. Between
+`03:41:18Z` and `03:43:01Z`, six new private-session resume attempts
+disconnected immediately with
+`snapshot.world.enemyProjectiles[1].visualScale must be within [1,1.25]`.
+The durable checkpoint containing that exact projectile was overwritten before
+the next database backup, but no value guess is required: current authoritative
+producers and the existing native projectile evidence fully determine every
+reachable range.
+
+| Projectile member | Authoritative producer range | Disposition |
+| --- | --- | --- |
+| Arrow normal/fire/poison | opacity lane starts at `5`, remains positive while live, and subtracts float32 `0.05` after landing; the last live value is about `0.049999`, and the next negative result retires before projection | `exact-ported` kind-specific `(0,5]` admission |
+| Firebolt | fixed visual scalar `1` | `verified-already-at-parity` exact-one admission |
+| Guided Missile cold/poison | constructor `0.9 + unit*0.2`, quantized at `1/1024` | `exact-ported` `[0.9,1.1]` admission |
+| Demon Bomb | fixed visual scalar `1`; bounce/ground animation uses separate speed/height lanes | `verified-already-at-parity` exact-one admission |
+| Poison Pool | starts `1`, grows `0.025` per tick, caps at `1.6` | `exact-ported` `[1,1.6]` admission |
+| Entity sample quantization | nonnegative integer at scale 1024; Arrow's final live value quantizes to `51`, then the next nonpositive authoritative value retires without projection | `exact-ported` representation edge; zero is not a live Arrow sample |
+| Save restore, keyframe, delta frame, and ordinary live frame | same `boneyardEnemyProjectileSnapshot` validator | `exact-ported` one shared kind-aware gate; no resume-only exception or compatibility bypass |
+
+The current generic `[1,1.25]` check rejects ordinary stock-derived Arrow and
+Poison Pool state. Replace it with one closed kind-aware predicate used by
+every decode path. Focused tests must cover all endpoints, interior values,
+neighboring invalid values, entity round-trip, and a mixed projectile snapshot
+that previously disconnected. Protocol fields, quantization, visuals, and
+authoritative producers remain unchanged.
+
+### Web implementation consequence
+
+- Deepen `NativeEnemyDeathEffectViews` into variant-owned retained resources:
+  compact sprite/shadow views for twelve kinds and Banish-only Graphics/four
+  sprites/gradients for `banish`.
+- Remove non-Banish `clearBanish()` work and the unconditional death-effect
+  Region-light loop. Publish parent React state only for semantic run, loot,
+  Tutorial, inventory, and interaction changes; keep the current movement
+  coordinate in the scene-owned ref until Inventory opens. Reuse diagnostic
+  rows/arrays without weakening their complete local acceptance contract.
+- Extend the existing exact transformed-AABB visibility owner to death effects.
+  Main art, shadow, and all Banish children form one union; protocol/state/view
+  identity remains complete, while only visible rows enter the frame-local
+  painter traversal and Pixi render collection.
+- Preserve the existing pure presentation plan as the visual oracle. Do not
+  change host state, lifetime, protocol, save schema, painter law, visible
+  effects, or add a quality/count/device threshold.
+
+### Validation contract
+
+- Focused red/green coverage must enumerate all 13 kinds, both shadow branches,
+  all three painter owners, kind-stable updates, ID retirement/rebirth, Banish
+  gradient cleanup, run replacement, and renderer teardown. It must assert
+  exact presentation plans and exact owned display-child counts.
+- Re-run the restored revision-1779 state on the Mac at native and 4x CPU, with
+  matching effect-count windows. Acceptance requires identical rendered
+  membership/painter samples, clean diagnostics, materially lower task time and
+  frame tails, and no host/state-hash change.
+- Run the 62,500-tick three-Arena deterministic replay, the complete Mac
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate, and a built Chrome
+  natural death/resume/retirement journey on the exact candidate.
+
+### Implementation validation receipt
+
+- The browser owner now constructs only the actual retained variant: Banish
+  owns one Graphics and four sprites; the other twelve kinds own one main
+  sprite plus only an authored shadow. Non-Banish views never clear Banish
+  Graphics, and all death effects skip the provably discarded Region-tint
+  lookup. Complete transformed main/shadow/Banish bounds use the existing
+  32-world-unit guard; offscreen actors retain IDs, state, registration,
+  diagnostics, and teardown while staying out of frame-local painter/Pixi
+  traversal. Entering actors apply their current full sample before rendering.
+- Ordinary active snapshots no longer republish identity-only run/empty-loot
+  state or moving player position through the complete Boneyard React owner.
+  Inventory snapshots the live ref when it opens. HUD meters, cooldowns,
+  Tutorial, real loot messages, Game Over, and ally subscriptions retain their
+  existing cadence. Renderer diagnostic arrays retain complete membership but
+  reuse rows rather than rebuilding object graphs every frame.
+- The shared full/compact hostile-projectile validator now owns the complete
+  five-kind ranges: Arrow `(0,5]`, Firebolt exactly `1`, Guided Missile `[0.9,1.1]`, Demon Bomb
+  exactly `1`, and Poison Pool `[1,1.6]`. This closes the six observed
+  post-export resume disconnects without a resume-only bypass or protocol
+  field change.
+- Focused Mac red/green coverage passes across all 13 death-effect variants,
+  both shadow branches, Banish bounds/resources, guarded visibility, semantic
+  run/empty-loot identity, complete diagnostics, and every hostile projectile
+  endpoint/neighboring rejection.
+- Three matched 4x-CPU production-Chrome pairs held the same `277..316`
+  death-effect stress population and ended at 315 actors, of which 181 were
+  proven offscreen and 134 visible. Median FPS changed `45.50 -> 55.37`
+  (`+21.7%`); browser task time `3260.99 -> 2973.58 ms` (`-8.8%`);
+  script time `2761.29 -> 2456.91 ms` (`-11.0%`); p95 frame time
+  `33.9 -> 25.7 ms` (`-24.2%`); p99 `63.0 -> 51.9 ms` (`-17.6%`); and
+  maximum frame `80.9 -> 69.8 ms` (`-13.7%`). Baseline emitted two long
+  tasks across the three samples; the candidate emitted none.
+- The untouched revision-1779 continuation resumes in the built candidate at
+  native CPU speed with WebGL, 41 enemies, and the complete live effect state.
+  The inspected final frame retained Bouncer debris/shadows, Region darkness,
+  player lighting, Magic Shield, and HUD while reporting `115 total / 56
+  visible / 59 culled` death effects. Page, console, HTTP, and request-failure
+  arrays were empty; inspected frame SHA-256 is
+  `8194eb3763ea24398967ee85d1688b349427e8cac8cb5efb922ec772cb87d18b`.
+- Base/candidate 62,500-tick replays match every 500-tick checkpoint, final
+  state/JSON hash, geometry, wave log, population sum, and peak in generated
+  Arenas 0/1/2. Complete parity digests are respectively
+  `64d12918d8e120030740ad1fe7a45d363ab9fbe224b1dca5310bfb8ea149f3e4`,
+  `7d49a4b97c051b02489cd9918416e67d3ef1226f9c1a8837ba2c23437013971a`,
+  and `f603fcb47645679d277feda08fab7173cfc7b692c0181768be64831c668be4e9`.
+- The exact byte-identical Mac candidate passed the clean canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` retry: all 28 backend/Website
+  contracts, formatting, lint/architecture/generated checks, all 1,766
+  Boneyard/runtime tests, every remaining registered suite, production
+  frontend/game-host builds, bundle budget, and media policy. The production
+  Game entry is 266,211 raw / 80,879 gzip bytes. The first full run had one
+  unrelated 30-ms observer-drain timing miss at `1765/1766`; its exact test
+  passed 3/3 alone and the uncontended canonical retry passed completely.
+- No platform block or intentional visible difference remains. No commit,
+  push, release, deployment, or production restart was performed.
+
+## 2026-08-30 — frame-local Region painter workspace reopening
+
+### Reported smell and parity question
+
+- After the late-wave client fix, the remaining ECS question is whether the
+  Hub Student dense-slot model should also replace authoritative Boneyard
+  populations. The 2026-08-29 storage falsifiers already answer that boundary:
+  Student state mutates inside one live owner, while a Boneyard enemy store is
+  a persistent value that may feed multiple legal damage branches.
+- The browser Region painter queue has the opposite ownership shape. It is
+  rebuilt, consumed, and discarded inside one presentation frame; no save,
+  protocol, simulation branch, or later frame may observe it as authority.
+  Reusing its queue buckets and positioned rows is therefore the safe
+  ECS-shaped seam.
+- The parity question is representation-only: can one retained planner emit
+  the same manager-registration order, Region rows, insertion causality,
+  visibility filtering, static bands, dynamic depths, proxy depths, and
+  foreground edge without allocating a second short-lived queue graph on every
+  frame?
+
+### Evidence, boundary, and consequence
+
+| Evidence class | Exact source | Observation | Confidence / consequence |
+| --- | --- | --- | --- |
+| Prior authoritative storage falsifier | preceding 2026-08-29 section | Mutable Boneyard transient buffers contaminated a sibling Mage-shield damage branch; immutable dense materialization regressed the Mac benchmark. | high; do not introduce authoritative ECS, COW, a typed mirror, or a compatibility path. |
+| Student ownership comparison | `hub-student-store.ts` and Hub simulation owner | Student slots are stable mutable SoA state with detached projection/clone boundaries. They are not persistent sibling-branch values. | high; the Student representation is not transferable to the combat store. |
+| Current late-wave browser profile | revision-1779 candidate, 4x CPU production Chrome | Region painter planning remains a named frame cost after death-effect view/camera cleanup, but host simulation remains inside budget with no production tick-lag event. | high; optimize presentation scratch, not the 100 Hz authority. |
+| Representative Mac microbenchmark | M2 Mac mini Node 22.17.0; 180 visible static rows, 43 enemies, 134 visible death effects; 10,000 builds after warmup | The current pure Boneyard planner costs `178.6..187.3 us/frame`; its prebuilt generic Region queue owns most of that cost at `138.6..191.9 us/frame`. | high diagnostic; retained Region scratch has a bounded sub-millisecond opportunity, not a claim that it caused the original lag. |
+
+Native/web system: frame-local browser painter planning from already projected
+static/dynamic descriptors through immediate Pixi depth assignment and live
+diagnostics. Authoritative world state, actor membership, registration
+allocation, interpolation, art, lighting, collision, replication, saves, and
+teardown are outside this representation change.
+
+The retained planner owns reusable gathered-entry slots, row buckets,
+duplicate-validation sets, positioned rows, static bands, and dynamic/proxy
+result arrays. A build result is valid until that same planner's next build;
+the existing pure builder remains a detached immutable-value interface for
+editor/tests and other persistent consumers. Failed validation must not poison
+the next frame. No row cache may skip a build, because moving actors and the
+reference player can cross native two-unit row boundaries independently.
+
+### Validation contract
+
+- Red/green tests compare retained and pure planners across all manager lanes,
+  same/future-row insertions, invisible roots, dynamic proxies, static bands,
+  duplicate registrations, backwards insertions, a failed-then-valid reuse,
+  and consecutive frames with changed rows/membership.
+- Benchmark the same representative population on the Mac before/after using
+  the production retained entry point. Accept only a repeatable reduction with
+  identical ordered rows and a smaller allocation/GC surface; reject a
+  convert-then-materialize layer.
+- Re-run the complete Mac validation gate and the restored revision-1779 built
+  Chrome journey. The prior three-Arena authoritative hashes remain valid
+  because no host file or input changes; any host diff reopens that proof.
+
+### Implementation validation receipt
+
+- `NativeRegionPainterOrderPlanner` now retains gathered-entry slots, row
+  buckets, lane-registration maps, positioned rows, and its result array.
+  `BoneyardPainterOrderPlanner` retains the static/dynamic adapter entries,
+  bands, dynamic/proxy rows, stable static IDs, and scenery registrations.
+  The renderer owns one planner for its lifetime and projects primary spell,
+  secondary ability, and death-weapon painter rows once per frame for both
+  lighting and depth consumers. The detached pure builders remain unchanged at
+  their call boundary and freeze their persistent ordered rows.
+- A fixed-seed Mac differential compared the untouched `ebf693b4` builders
+  against the candidate over 5,000 valid randomized worlds plus duplicate
+  registration, backwards-insertion, and duplicate-ID failures. All manager
+  lanes, visibility branches, static proxies, and nested dynamic insertions
+  matched exactly, including error text.
+- The paired M2 Mac benchmark used the same 180 static / 43 enemy / 134 visible
+  death-effect population, 15,000 warmups, nine alternating 7,500-frame
+  samples, and explicit between-sample GC. Untouched median planner time was
+  `175.687 us/frame` (`174.310..176.669`); the production retained entry point
+  was `127.334 us/frame` (`127.147..127.881`), a `27.52%` median reduction.
+  This removes about `48 us` at native speed or `0.19 ms` under the 4x stress
+  throttle; it is an additional bounded gain, not the primary lag fix.
+- The exact revision-1779 document SHA-256
+  `4a3e40d26fe8bbd5ccbbd1ab9cc50af8803d511500ad08e3c6fc180a2b6d7159`
+  resumed through a private College against the just-built production assets.
+  After resume grace the WebGL frame held 42 enemies, 95 death effects (53
+  visible), and 196 painter rows at tick 618126 while reporting 60 FPS. Page,
+  console, HTTP, and request-failure arrays were empty; the inspected frame
+  SHA-256 is
+  `cb3eca90f09cb60b80bb7a0f2c18188a37710fc61894d6d7e33f74e2fbd7bece`.
+- The exact candidate passed the pinned clean Mac validation gate on Node
+  22.17.0, npm 10.9.2, and .NET 10.0.302: all 28 backend/Website contracts,
+  formatting, lint/architecture/generated checks, all 1,769 Boneyard/runtime
+  tests, every remaining registered suite, production frontend/game-host
+  builds, bundle budget, and media policy. The production Game entry is
+  266,211 raw / 80,884 gzip bytes. This is the exact tree rebased over
+  schema-23/protocol-110 main; the original schema-22 revision-1779 checkpoint
+  migrated and resumed cleanly through that current boundary.
+- No new host file changed during this reopening, so the preceding three-Arena
+  62,500-tick state digests remain the authoritative simulation proof. No
+  alternate ECS, fallback planner, feature flag, threshold, quality reduction,
+  protocol field, save field, or intentional visual difference was added.

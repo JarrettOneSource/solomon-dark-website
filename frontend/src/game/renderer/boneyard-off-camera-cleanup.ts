@@ -108,19 +108,29 @@ export function boneyardTransformedArtBounds(
   scaleX = 1,
   scaleY = 1,
 ): BoneyardBounds {
-  const corners = [
-    { x: -art.anchorX * scaleX, y: -art.anchorY * scaleY },
-    { x: (art.w - art.anchorX) * scaleX, y: -art.anchorY * scaleY },
-    { x: -art.anchorX * scaleX, y: (art.h - art.anchorY) * scaleY },
-    { x: (art.w - art.anchorX) * scaleX, y: (art.h - art.anchorY) * scaleY },
-  ]
+  const left = -art.anchorX * scaleX
+  const right = (art.w - art.anchorX) * scaleX
+  const top = -art.anchorY * scaleY
+  const bottom = (art.h - art.anchorY) * scaleY
   const radians = rotationDegrees * Math.PI / 180
   const sine = Math.sin(radians)
   const cosine = Math.cos(radians)
-  return requiredPointsBounds(corners.map((corner) => ({
-    x: position.x + corner.x * cosine - corner.y * sine,
-    y: position.y + corner.x * sine + corner.y * cosine,
-  })))
+  const x0 = position.x + left * cosine - top * sine
+  const y0 = position.y + left * sine + top * cosine
+  const x1 = position.x + right * cosine - top * sine
+  const y1 = position.y + right * sine + top * cosine
+  const x2 = position.x + left * cosine - bottom * sine
+  const y2 = position.y + left * sine + bottom * cosine
+  const x3 = position.x + right * cosine - bottom * sine
+  const y3 = position.y + right * sine + bottom * cosine
+  const x = Math.min(x0, x1, x2, x3)
+  const y = Math.min(y0, y1, y2, y3)
+  return {
+    x,
+    y,
+    w: Math.max(x0, x1, x2, x3) - x,
+    h: Math.max(y0, y1, y2, y3) - y,
+  }
 }
 
 function pointsBounds(points: readonly Readonly<BoneyardPoint>[]): BoneyardBounds | null {

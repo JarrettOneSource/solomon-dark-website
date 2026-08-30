@@ -4,6 +4,13 @@ import test from 'node:test'
 import { NativeLootMessagePresentation } from './loot-message-presentation.ts'
 import type { BoneyardLootEventSnapshot } from './protocol/game-state.ts'
 
+test('empty loot-message samples retain identity across ordinary fixed ticks', () => {
+  const presentation = new NativeLootMessagePresentation(0)
+  const initial = presentation.sample(0)
+  assert.equal(initial.length, 0)
+  assert.strictEqual(presentation.sample(1_000), initial)
+})
+
 test('native loot messages merge active Gold, rise eighteen ticks, and expire after float32 decay', () => {
   const presentation = new NativeLootMessagePresentation(0)
   presentation.consume(event(1, 1, '4 GOLD', 'pickup-coin'))

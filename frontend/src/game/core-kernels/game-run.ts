@@ -30,6 +30,22 @@ export interface GameRunLifecycleState {
   readonly runId: string | null
 }
 
+export function gameRunLifecyclesEqual(
+  first: GameRunLifecycleState,
+  second: GameRunLifecycleState,
+): boolean {
+  return first.gameOverEventId === second.gameOverEventId
+    && first.gameOverExitKind === second.gameOverExitKind
+    && first.gameOverExitTicks === second.gameOverExitTicks
+    && first.gameOverTicks === second.gameOverTicks
+    && first.lastCompletedRunId === second.lastCompletedRunId
+    && first.nextGameOverEventId === second.nextGameOverEventId
+    && first.phase === second.phase
+    && first.runId === second.runId
+    && sameStrings(first.eligiblePlayerIds, second.eligiblePlayerIds)
+    && sameStrings(first.loadoutReadyPlayerIds, second.loadoutReadyPlayerIds)
+}
+
 export function createGameRunLifecycle(): GameRunLifecycleState {
   return {
     eligiblePlayerIds: Object.freeze([]),

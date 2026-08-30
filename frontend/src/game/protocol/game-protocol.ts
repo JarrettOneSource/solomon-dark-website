@@ -11129,7 +11129,7 @@ function boneyardEnemyProjectileSnapshot(
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
     verticalOffset,
     visualPhaseDeg,
-    visualScale: positiveFinite(source.visualScale, `${field}.visualScale`),
+    visualScale,
   }
 }
 

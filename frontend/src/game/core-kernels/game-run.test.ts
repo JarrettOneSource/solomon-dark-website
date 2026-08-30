@@ -10,10 +10,21 @@ import {
   continueGameOver,
   continuePostRunToCollegeIntro,
   createGameRunLifecycle,
+  gameRunLifecyclesEqual,
   startGameRun,
   stepGameRunLifecycle,
   synchronizeGameRunParticipants,
 } from './game-run.ts'
+
+test('run lifecycle equality ignores decoded object identity but observes every semantic member', () => {
+  const source = startGameRun(createGameRunLifecycle(), 'run-a', ['b', 'a'])
+  const copy = structuredClone(source)
+  assert.notStrictEqual(copy, source)
+  assert.equal(gameRunLifecyclesEqual(source, copy), true)
+  assert.equal(gameRunLifecyclesEqual(source, { ...copy, gameOverTicks: 1 }), false)
+  assert.equal(gameRunLifecyclesEqual(source, { ...copy, eligiblePlayerIds: ['a'] }), false)
+  assert.equal(gameRunLifecyclesEqual(source, { ...copy, loadoutReadyPlayerIds: ['a'] }), false)
+})
 
 test('one dead participant spectates while another eligible participant lives', () => {
   const run = startGameRun(createGameRunLifecycle(), 'run-a', ['b', 'a'])

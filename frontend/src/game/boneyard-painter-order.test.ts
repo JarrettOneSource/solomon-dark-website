@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  BoneyardPainterOrderPlanner,
   buildBoneyardPainterOrder,
   nativePainterRow,
 } from './boneyard-painter-order.ts'
 import {
+  NativeRegionPainterOrderPlanner,
   buildNativeRegionPainterOrder,
   nativeRegionPainterRow,
 } from './region-painter-order.ts'
@@ -131,6 +133,49 @@ test('Region planner rejects duplicate manager slots and backwards proxy inserti
       insertions: [{ id: 'backwards', sortBias: 0, visible: true, worldY: 0 }],
     }],
   }), /cannot insert into a Region row that already painted/)
+})
+
+test('retained Region planner reuses frame scratch without retaining failed state', () => {
+  const planner = new NativeRegionPainterOrderPlanner()
+  assert.throws(() => planner.build({
+    referenceY: 0,
+    entries: [
+      regionEntry('first', 'actor', 0, 0),
+      regionEntry('duplicate', 'actor', 0, 1),
+    ],
+  }), /duplicate native actor registration ordinal 0/)
+
+  const first = planner.build({
+    referenceY: 100,
+    entries: [
+      {
+        ...regionEntry('owner', 'actor', 0, 100),
+        insertions: [{ id: 'future', sortBias: 0, visible: true, worldY: 140 }],
+      },
+      regionEntry('scenery', 'scenery', 0, 120),
+    ],
+  })
+  assert.deepEqual(structuredClone(first), buildNativeRegionPainterOrder({
+    referenceY: 100,
+    entries: [
+      {
+        ...regionEntry('owner', 'actor', 0, 100),
+        insertions: [{ id: 'future', sortBias: 0, visible: true, worldY: 140 }],
+      },
+      regionEntry('scenery', 'scenery', 0, 120),
+    ],
+  }))
+  const orderedSlots = first.orderedLayers
+
+  const second = planner.build({
+    referenceY: 110,
+    entries: [regionEntry('replacement', 'transient', 0, 90)],
+  })
+  assert.equal(second, first)
+  assert.equal(second.orderedLayers, orderedSlots)
+  assert.deepEqual(second.orderedLayers, [
+    { id: 'replacement', row: -10, zIndex: 1 },
+  ])
 })
 
 test('ZAnimSplit uses bottom-anchored 25/50-unit clipped AnimPointer bands', () => {
@@ -293,6 +338,47 @@ test('reports dynamic Puppet and AnimPointer insertions as explicit proxy roots'
     { id: 'split-band-1', row: 25, zIndex: 2 },
   ])
   assert.deepEqual(order.proxyLayers, order.dynamicLayers)
+})
+
+test('retained Boneyard planner matches the detached builder across consecutive frames', () => {
+  const planner = new BoneyardPainterOrderPlanner()
+  const input = {
+    referenceY: 100,
+    staticLayers: [
+      { layerIndex: 4, worldY: 90, sortBias: 0, sourceOrder: 0 },
+      { layerIndex: 8, worldY: 140, sortBias: 0, sourceOrder: 1 },
+    ],
+    dynamicLayers: [{
+      id: 'actor',
+      insertions: [{ id: 'actor-proxy', sortBias: 0, visible: true, worldY: 130 }],
+      queueFamily: 'ordinary-dynamic' as const,
+      registration: { managerLane: 'actor' as const, registrationOrdinal: 0 },
+      sortBias: 0,
+      visible: false,
+      worldY: 100,
+    }],
+  }
+  const retained = planner.build(input)
+  assert.deepEqual(structuredClone(retained), buildBoneyardPainterOrder(input))
+  const bands = retained.bands
+  const dynamics = retained.dynamicLayers
+
+  const nextInput = {
+    ...input,
+    referenceY: 120,
+    staticLayers: input.staticLayers.slice(1),
+    dynamicLayers: [{
+      ...input.dynamicLayers[0],
+      insertions: undefined,
+      visible: true,
+      worldY: 160,
+    }],
+  }
+  const next = planner.build(nextInput)
+  assert.equal(next, retained)
+  assert.equal(next.bands, bands)
+  assert.equal(next.dynamicLayers, dynamics)
+  assert.deepEqual(structuredClone(next), buildBoneyardPainterOrder(nextInput))
 })
 
 function regionEntry(
