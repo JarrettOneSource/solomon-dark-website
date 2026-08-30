@@ -38,6 +38,7 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 import {
   TITLE_COMPOSITED_ASSET_SOURCES,
   TITLE_STOCK_ASSET_SOURCES,
@@ -519,7 +520,7 @@ function createTitleBuildRevisionView(atlas: Texture): {
   container.position.set(TITLE_RENDER_WIDTH - 1 - layout.right, 12)
 
   for (const glyph of layout.glyphs) {
-    const glyphTexture = new Texture({
+    const glyphTexture = nativeSpriteRecordTexture({
       frame: new Rectangle(
         glyph.atlasX,
         glyph.atlasY,

@@ -7,6 +7,7 @@ import {
   type NativeHubNpcMarkerSide,
   type NativeHubNpcMarkerStyle,
 } from '../core-kernels/native-hub-npc.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 interface NativeMarkerFontGlyph {
   readonly advance: number
@@ -119,7 +120,7 @@ export class HubWalkToTalkView {
   private glyphTexture(fontAtlas: Texture, glyph: MarkerGlyph): Texture {
     const existing = this.glyphTextures.get(glyph.character)
     if (existing) return existing
-    const texture = new Texture({
+    const texture = nativeSpriteRecordTexture({
       source: fontAtlas.source,
       frame: new Rectangle(glyph.atlasX, glyph.atlasY, glyph.width, glyph.height),
     })

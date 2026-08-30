@@ -114,6 +114,24 @@ try {
     const createElement = await createReceipt(page, 'element')
     const createElementScreenshot = `${screenshotRoot}-${viewport.name}-create-element.png`
     await page.screenshot({ path: createElementScreenshot })
+    let createResize = null
+    let createResizeScreenshot = null
+    if (viewport.name === 'mobile') {
+      const resized = { height: 1_000, name: 'mobile-live-resize', width: 1_200 }
+      await page.locator('.create-menu-canvas').evaluate((canvas) => {
+        window.__createCanvasBeforeResize = canvas
+      })
+      await page.setViewportSize({ height: resized.height, width: resized.width })
+      await waitForCreateViewport(page, resized)
+      createResize = await createReceipt(page, 'element')
+      assert.equal(await page.locator('.create-menu-canvas').evaluate((canvas) => (
+        canvas === window.__createCanvasBeforeResize
+      )), true)
+      createResizeScreenshot = `${screenshotRoot}-${resized.name}-create-element.png`
+      await page.screenshot({ path: createResizeScreenshot })
+      await page.setViewportSize({ height: viewport.height, width: viewport.width })
+      await waitForCreateViewport(page, viewport)
+    }
     await page.getByRole('button', { name: /fire/i }).click()
     await page.locator(
       '.create-menu-scene[data-phase="discipline"][data-motion-settled="true"]',
@@ -151,6 +169,8 @@ try {
       createDisciplineScreenshot,
       createElement,
       createElementScreenshot,
+      createResize,
+      createResizeScreenshot,
       declineFlow,
       failedResponses,
       kill: killReceipt,
@@ -172,9 +192,17 @@ try {
     status: 'ok',
   })}\n`)
 } finally {
-  await browser.close()
-  await vite.close()
+  await Promise.race([
+    browser.close(),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ])
+  await Promise.race([
+    vite.close(),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ])
 }
+await new Promise((resolve) => process.stdout.write('', resolve))
+process.exit(0)
 
 async function createReceipt(page, phase) {
   const receipt = await page.locator('.create-menu-canvas').evaluate((canvas) => {
@@ -201,6 +229,7 @@ async function createReceipt(page, phase) {
             .test(source)
         )),
       },
+      nativeRecordUvs: JSON.parse(canvas.dataset.nativeRecordUvs || 'null'),
     }
   })
   assert.ok(receipt.frame)
@@ -222,7 +251,32 @@ async function createReceipt(page, phase) {
     exactUi: true,
     looseCreateRecord: false,
   })
+  assert.deepEqual(receipt.nativeRecordUvs, {
+    etherCore: nativeRecordUvs(559, 1_764, 27, 26),
+    etherRay: nativeRecordUvs(1_069, 543, 27, 28),
+    fireFrame258: nativeRecordUvs(255, 1_115, 29, 41),
+    waterFrame275: nativeRecordUvs(1_152, 49, 35, 34),
+  })
   return receipt
+}
+
+async function waitForCreateViewport(page, viewport) {
+  const expected = fixedGameViewportLayout(viewport.width, viewport.height)
+  await page.waitForFunction(({ height, width }) => {
+    const frame = document.querySelector('.create-menu-canvas')?.__sdrCreateFrame
+    return frame
+      && Math.abs(frame.viewportWidth - width) < 0.01
+      && Math.abs(frame.viewportHeight - height) < 0.01
+  }, { height: expected.height, width: expected.width }, { timeout: 15_000 })
+}
+
+function nativeRecordUvs(x, y, width, height) {
+  const page = 2_048
+  const left = (x + 0.5) / page
+  const top = (y + 0.5) / page
+  const right = (x + width + 0.25) / page
+  const bottom = (y + height + 0.25) / page
+  return [left, top, right, top, right, bottom, left, bottom]
 }
 
 async function promptReceipt(page, kind, viewport) {

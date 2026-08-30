@@ -901,3 +901,212 @@ every scene consumes the resulting page and destroys it at its existing owner.
   while the combat page remains repeat/NPM; its inspected Ring of Ice frame
   hashes to `514fb09505e7afc333db1911feb54789cd8fc84b8853c25643fd0d89ec721077`.
   Both journeys used WebGL2 and had empty page/console/response error arrays.
+
+## 2026-08-30 — Fourth edge report: registered combat records across resize
+
+### Reported smell and parity question
+
+- Reported web behavior: straight or otherwise artificial lines have appeared
+  over Water and Ether primary VFX and were seen earlier over Fire. The player
+  has reproduced the artifact in both windowed and fullscreen presentation and
+  suspects a fullscreen-to-window resolution transition.
+- Stock behavior to recover: a complete retail page, its registered record
+  rectangle, and the renderer's texture-coordinate convention must remain one
+  stable sampling system through initial creation, resize, fullscreen entry and
+  exit, backing-resolution changes, context restoration, and teardown. No page
+  neighbor, stale batch data, or transient target edge may become a visible
+  line.
+- Skipped rule in the earlier closure: the source-policy net proved complete
+  page provenance and artificial *outer-page* addressing, but did not exercise
+  every registered subtexture boundary before and after a live renderer resize.
+  Its Boneyard receipt sampled Ring of Ice rather than the Water/Ether/Fire
+  record families named by this report. The earlier completion claim is
+  therefore reopened rather than used to dismiss the new observation.
+- Reproduction inputs/scenes: isolated full-power Water, Ether, and Fire in Hub
+  and Boneyard; stock `1600 x 900`, fractional logical layouts, fullscreen
+  entry/exit, repeated wide/narrow viewport transitions, and at least one DPR
+  or backing-resolution transition when the browser exposes it.
+- Ranked falsifiable causes before instrumentation: (1) registered subtexture
+  UVs admit adjacent retail-page texels under linear filtering; (2) resize or
+  context replay leaves stale texture/batch coordinates; (3) a resized
+  RenderTexture is sampled for one frame with old geometry; (4) Region painter
+  proxy/clip ordering exposes a narrow world band over translucent VFX. A
+  source-policy label alone is not acceptance for any of these.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player report | 2026-08-30 report quoted above | The symptom crosses Water, Ether, and Fire and correlates with display-mode changes; it is intermittent rather than one permanently corrupt loose image. | medium |
+| Prior browser diagnosis | Codex thread `01a04b58-3714-7883-9ed1-57ed1688b128`; commits `1ec8b1f3`, `41ec3c8f`, and `9f26f3eb` | Earlier edge failures came from wrong alpha/page ownership, crop-level repeat, and artificial composite-page repeat. The final pass explicitly introduced a closed source-policy partition, but did not close record-edge sampling through resize. | high |
+| Current asset path | `boneyard-combat-atlas.generated.ts`, `boneyard-combat-atlas.ts`, `boneyard-textures.ts`, `hub-textures.ts` at `a554ea73` | Combat sprites frame reconstructed complete BadGuys/Demon retail pages and correctly classify those pages NPM/linear/repeat. The initial hypothesis that these two pages escaped into the composite policy is falsified by their `native-pages` layout and pinned hashes. | high |
+| Current lifecycle | `HubScene.tsx`, `BoneyardScene.tsx`, both world renderers, `BoneyardRegionLightField` at `a554ea73` | Scene-owned resize changes logical viewport and renderer resolution; Boneyard additionally resizes the Region light target. No existing browser test combines active primary VFX, live display transitions, and pixel-edge assertions. | high |
+| Native record constructor | read-only Ghidra 12.0.3 replica; `Native_SpriteBundle_ReadRecord 0x00413B10` -> `0x00413DE0`; raw constants `0x007DE808 = double 0.5`, `0x007DE8F0 = double 0.25`; Mod Loader tool revision `08bfba9ef367f7b863848030d0a289dc31e33192` | Every common record passes atlas `x/y/w/h` through one constructor. Its unrotated branch writes `u0=(x+0.5)/pageWidth`, `v0=(y+0.5)/pageHeight`, `u1=(x+w+0.25)/pageWidth`, and `v1=(y+h+0.25)/pageHeight`. All 10,498 retail records have rotation byte zero, so this is the complete shipped table, not a sampled class. | high |
+| Native record submission | `0x004143D0/0x00414540 -> TextQuad_Draw 0x0041E990`; decompile and raw instructions | Direct and transformed sprite paths pass the constructor's four UV pairs at descriptor `+0x4C` to `TextQuad_Draw`; that function copies them into four vertices without later normalization or inset. | high |
+| Website record submission | PixiJS 8.19.0 `Texture.updateUvs`; `boneyard-combat-atlas.ts`, `native-ui-pixi.ts`, and sibling derived-record constructors | Pixi writes `x/pageWidth` through `(x+w)/pageWidth`. The prior ledger called these “native UVs,” but the native constructor above proves both endpoints differ. Renderer resize preserves the wrong values while changing the screen-space sampling phase. | high |
+| Atlas-neighbor census | exact BadGuys page SHA-256 `af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e`; records `28`, `30`, `110..112`, `251..270` | Fire frame 258 has 29/29 opaque texels immediately above its record rectangle. Other named records have authored alpha-zero hidden-RGB neighbors. Pixi's missing top inset can therefore create an opaque foreign row for Fire and hard/colored record edges for Water/Ether as fractional transforms move the bilinear footprint. | high |
+
+### System boundary and membership inventory
+
+Native/web system: **registered retail-record sampling and display-resource
+lifecycle** — from each authored atlas rectangle and full-page sampler through
+derived Pixi `Texture` UVs, batch/mesh upload, scene render targets, display
+resize/context replay, and destruction.
+
+| Member (family/scene/branch) | Native/page source | Current disposition and required proof |
+| --- | --- | --- |
+| Water Frost Jet normal/over core and glint | BadGuys records `30` and `28`; Hub and Boneyard | reopened; pre/post-resize pixel and UV proof required |
+| Ether flight/impact cores, sparks, rays, blast, and pierce | BadGuys `110..112`, `11`, `45`, and `53`; Hub and Boneyard | reopened; every pass/record family must remain line-free |
+| Fire flight core/body, particles, impact, explosion, ember, and patches | BadGuys `110`, `251..270`, `401..433`; DeadHawg `46..77`; Hub and Boneyard | reopened; shared page and both blend paths required |
+| Air, Earth, Frost, selected-primary, Weld, Staff, enemy, projectile, loot, status, weather, and ambient combat records | complete BadGuys/DeadHawg/Demon/College pages and existing catalogs | sibling sweep required; no untested registered-record class may retain a different UV/lifecycle path |
+| Title/Create/native UI exact record textures | complete Title/Create/UI pages | sibling exact-record path; retain existing seam regressions across resize |
+| ExactText point views | complete native font pages | sibling filter variant; retain point/repeat and resize proof |
+| Website composites and packed player/Hub/Solomon pages | PMA/linear/clamp pages | adjacent source family; retain outer-boundary regressions and prove it does not share a record-edge correction illegally |
+| Region/Arena/light and other generated render targets | explicit RenderTexture owners | reopened only for resize sequencing and one-frame stale-target falsification |
+| Initial scene creation, live CSS resize, fullscreen entry, fullscreen exit, DPR/backing change, context restore, scene replacement, teardown | application/Graphics lifecycle and browser display adapter | reopened; state and resources must remain coherent at every transition |
+| Mod-provided images and inactive browser-only UI | separate mod/browser owners | `out-of-system`; must remain inactive during stock acceptance |
+
+### Native ownership thread and validation contract (open)
+
+- Retail Graphics owns one sampler/UV convention for every record on a complete
+  page; scene display changes do not mutate authored record rectangles.
+- The common unrotated bundle constructor owns the exact UV rectangle. For an
+  atlas record `(x,y,w,h)` on page `(W,H)`, its submitted corners are
+  `((x+0.5)/W,(y+0.5)/H)`, `((x+w+0.25)/W,(y+0.5)/H)`,
+  `((x+0.5)/W,(y+h+0.25)/H)`, and
+  `((x+w+0.25)/W,(y+h+0.25)/H)`. The rotated branch exists, but all shipped
+  records select the unrotated branch. The older statement that Pixi's exact
+  frame-edge endpoints were native-equivalent is superseded.
+- Website scene owners retain the loaded retail pages and derived record
+  textures across resize. Hub changes the renderer backing store; Boneyard also
+  resizes its Region light target. Context restoration replays fixed-function
+  state, while teardown destroys derived frames before their owning sources.
+- Instrumentation must capture the exact active record, frame rectangle, UVs,
+  page dimensions/address/filter/alpha mode, renderer logical and physical
+  size, resolution, render-target sizes, painter depth, and pixel interval for
+  every suspect frame before and after each transition.
+- A failing browser loop must be established before implementation. Acceptance
+  requires repeated active Water/Ether/Fire transitions in both scenes, a
+  sibling record sweep, zero straight-edge detections, stable UV/resource
+  diagnostics, empty browser error arrays, and the complete Mac gate on the
+  exact candidate. Findings and the final disposition of every row above will
+  be recorded here before publication.
+
+### Causal reproduction and completed membership sweep
+
+- The reported screenshot class is reproduced in the stock-size Create element
+  phase on untouched `a554ea73`, Chrome `151.0.7922.174`. At application tick
+  `513`, Water uses record `275` and its ordinary/ray stack exposes a straight
+  horizontal record boundary at output rows `555..556`; the mean RGB row deltas
+  over X `560..709` are `17.9933` and `16.8267`, versus adjacent values below
+  `3.66`. The screenshot SHA-256 is
+  `a9fc1a5f8b1f1e3360a9fb92148b64da26d3e1d4939bbfa2e3e5c30e77f321e3`.
+  Ether has the same straight top-edge residual. Fire does not show it in that
+  sampled frame, matching the report that Fire was intermittent/earlier rather
+  than permanently affected.
+- Replacing only registered-record UV construction with the recovered native
+  endpoints removes both visible lines. The candidate stock-size Create frame
+  at tick `517` uses the same Water record `275`; row deltas collapse to
+  `3.3044/3.4467`, and visual inspection shows no straight Water or Ether edge.
+  Its screenshot SHA-256 is
+  `c541417b860ffa21c54c6d84be279a05c437909256c2f371e17963ed147d6aae`.
+  Fire remains visually stable. This falsifies stale resize resource, Region
+  target, and painter-proxy causes for the reported line: Create owns no Region
+  target or world queue, and the failing pixels follow exact record top edges.
+- The same helper must own every full retail record texture, including native
+  UI records/slices/glyphs, BadGuys/Demon combat records, and manual Fonts
+  glyph consumers. Website PMA packed pages keep their existing artificial-page
+  frame semantics and do not receive the retail-record transform.
+- The remaining runtime record-crop census found three source classes. Exact
+  BadGuys and Demon pages were already resident. DeadHawg and Golem still used
+  hundreds of loose files despite exact full pages being available; they move
+  to their pinned `2048x2048` and `512x512` retail pages. Clothes record `2`
+  has an alpha-zero one-pixel visible-content inset, so its exact crop plus
+  NPM/linear/clamp is sample-equivalent. College record `41` is opaque to every
+  edge, and each immediate native-page neighbor equals the corresponding edge
+  texel byte-for-byte, so its exact crop plus NPM/linear/clamp is also
+  sample-equivalent. These two proven framed crops do not justify a fallback
+  for any other record.
+
+### Final recovered contract and implementation disposition
+
+- `nativeSpriteRecordTexture` is the sole WebGL constructor for a retail bundle
+  record. It applies the unrotated `0x00413DE0` UV endpoints, interpolates any
+  native record-relative slice within that domain, and reapplies the values if
+  Pixi updates the texture. The complete shipped rotation table is zero, so no
+  active rotated branch remains undispositioned.
+- The source partition now has four explicit members: complete retail pages are
+  NPM/linear/repeat; sample-equivalent framed retail crops are
+  NPM/linear/clamp; point-font page views are NPM/nearest/repeat; Website
+  composites are PMA/linear/clamp. Duplicate or missing classification still
+  fails before decode.
+- BadGuys, Demon, DeadHawg, and Golem use four byte-identical retail pages with
+  pinned hashes and all `3,164` non-empty record rectangles. Enemy, secondary,
+  loot, Water/Fire/Ether/Air/Earth/Frost, Weld, Staff, weather, Region glyph,
+  Gate, Solomon grave mark, and Golem consumers share those pages and the same
+  record constructor. DeadHawg/Golem loose runtime URLs are retired from the
+  GPU membership; static editor/Canvas2D extraction remains a separate CPU
+  painter input.
+- Native UI atlas records, full-record slices, point glyphs, Title/Create name
+  glyphs, NPC prompts, world nameplates, and world speech use the same recovered
+  record UV owner. Hub College record `41` and Clothes record `2` are the only
+  `stock-framed` members, backed by the border proofs above.
+- Display resize changes renderer backing dimensions only. It must retain the
+  same texture objects, record UV values, source alpha/address/filter policy,
+  and scene state. Context/source update replays the record UVs; scene teardown
+  destroys derived records before their page sources as before.
+
+### Exact-candidate implementation and acceptance receipt
+
+- Focused Mac tests pass `92/92` across native record UV construction, fixed
+  function/source policy, renderer ownership, four-page Boneyard atlas
+  membership, Hub, enemy, secondary, and loot contracts. The atlas generator
+  now pins all `3,164` non-empty records across BadGuys, Demon, DeadHawg, and
+  Golem; the decoded page set is `35,651,584` bytes and no active WebGL
+  DeadHawg/Golem member falls back to a loose record URL.
+- The canonical Mac gate passes the complete exact candidate: backend `28/28`,
+  central renderer/Boneyard `1,780/1,780`, every remaining frontend group,
+  optimized build, media/CSP checks, and bundle budget. The optimized game
+  chunk is `266,414` raw / `80,975` gzip. Combined gate-log SHA-256 is
+  `2217f07a490004a9e019157ae947ac47de307cacdfe95f3654a105ccf2aff466`.
+- Production Chrome `151.0.7922.174` passes Title/Create at stock, mobile,
+  ultrawide, and tall layouts. Exact Ether-core/ray, Fire-258, and Water-275 UV
+  tuples remain unchanged while one mounted mobile Create canvas resizes to
+  `1200 x 1000` and back. All five element VFX remain clean and every page,
+  console, and response error array is empty. Inspected stock and live-resize
+  Create images hash to
+  `54f48bb7f9de3167e763b93286a774f5adc1ca75cc8f7d3951212684d1ef7978`
+  and `74d3a81941a64aca6b9b1b93dd66c060c8f2b541aecba8fa615a87d67e7c2c05`.
+- Independent production journeys pass Hub policy replay, one active Golem,
+  Ring of Fire, held Water, held-facing Ether, and Ether impact with empty
+  browser error arrays. The representative inspected frames hash to
+  `aed9b98600ae0837e7ef411cbb698ece9099f5cd5f525cc74a0e43a9ee49f4f8`,
+  `118f02bf4d0cd62f7bbb66b60c6201716602857d00e8597ca64dde7469280be6`,
+  `9bf9017f20c28d7b3801050fc1da1d99d57feb79e3ee3ab854496044092847a8`,
+  `2c0c8da2c4733f6aaa771dd421048bf8e37f54b4136df7a50c81b69996c40c61`,
+  `d575aaa4288fdc15cd7c5d5478e94217478bfd7b4fb0487999a284c36b652b86`,
+  and `f1edc25b745244237575b1246a4d27d7c4a3c77ecce1b5943539984c2f6851f1`.
+  Visual inspection finds no foreign horizontal record edge in the named
+  Water/Ether/Fire family or the swept siblings.
+- After successive publication rebases, a fresh detached Mac worktree on final
+  parent `7d61602d` reran the canonical gate
+  (`job_20260830T212915Z_24947d2806`), the complete responsive Title/Create
+  journey (`job_20260830T213319Z_2c2cea6296`), held Water
+  (`job_20260830T213411Z_c974f34e1e`), and held-facing/impact Ether
+  (`job_20260830T213453Z_45029cba85`). Those final jobs all exit zero against
+  the same runtime source tree. Two earlier gate attempts timed out in unrelated
+  host-message tests while the Mac was under heavy contention; every failing
+  test passed in isolation, untouched-main comparison passed `1,783/1,783`,
+  the candidate's standalone suite passed `1,783/1,783`, and the complete
+  canonical repeat then passed.
+- Non-passing Water attempts exposed fixture races (ice-start audio and Solomon
+  speaking state), not renderer failures. The fixture now keeps the player
+  pinned only until Solomon enters speech, releases position before the combat
+  wave, and repeated production runs pass. This change is test orchestration
+  only; spell timing and rendering are unchanged.
+- Disposition: record-UV admission was the cause of the reported line.
+  Resize-target staleness and Region/painter layering are falsified for this
+  symptom. Every system-boundary row above is now `exact-ported`,
+  `verified-already-at-parity`, or explicitly `out-of-system`; no active stock
+  record constructor, loose GPU crop family, resize branch, or lifecycle
+  unknown remains open.

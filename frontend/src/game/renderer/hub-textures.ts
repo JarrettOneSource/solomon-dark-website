@@ -1,4 +1,5 @@
-import { Texture } from 'pixi.js'
+import { Rectangle, Texture } from 'pixi.js'
+
 import { boneyard, hub } from '../../lib/assets.ts'
 import {
   createPlayerWorldTextures,
@@ -22,6 +23,8 @@ import {
   type BoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
 import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
+import { NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES } from './native-secondary-assets.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -105,11 +108,20 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     ...playerWorldCompositedAssetSources(),
   ]
   const compositedSet = new Set(composited)
+  // College record 41's native neighbor texels equal its corresponding edge.
+  const stockFramed = [
+    ...NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES,
+    hub.props.statue.aura,
+  ]
+  const stockFramedSet = new Set(stockFramed)
   const loaded = await loadGameTextureEntries({
     composited,
     stock: sources.filter((source) => (
-      source !== hub.hud.fontAtlas && !compositedSet.has(source)
+      source !== hub.hud.fontAtlas
+      && !compositedSet.has(source)
+      && !stockFramedSet.has(source)
     )),
+    stockFramed,
     stockPoint: [hub.hud.fontAtlas],
   })
   const base = Object.fromEntries(loaded) as Record<string, Texture>
@@ -120,6 +132,14 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   }
   const combatAtlas = createBoneyardCombatAtlas(texture)
   for (const source of packedSources) base[source] = combatAtlas.single(source)
+  const statueAuraSource = base[hub.props.statue.aura]
+  if (!statueAuraSource) throw new Error('Hub College Statue aura was not loaded')
+  const statueAura = nativeSpriteRecordTexture({
+    frame: new Rectangle(0, 0, statueAuraSource.width, statueAuraSource.height),
+    source: statueAuraSource.source,
+  })
+  statueAuraSource.destroy(false)
+  base[hub.props.statue.aura] = statueAura
   const visualAtlas = createHubVisualAtlas(texture)
   for (const source of HUB_VISUAL_ATLAS_ORIGINAL_SOURCES) {
     if (source === hub.props.statue.aura) continue

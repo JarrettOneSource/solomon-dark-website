@@ -3,78 +3,11 @@ import deadhawg from '../../editor/manifest/deadhawg.json'
 import golem from '../../editor/manifest/golem.json'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
+import playerMindblastRing from '../../assets/game/player-mindblast-ring.png'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
-import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
-import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
 
 export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'Clothes', 'DeadHawg', 'Golem'] as const
 export type NativeSecondaryAtlas = typeof NATIVE_SECONDARY_ATLASES[number]
-
-const files = import.meta.glob([
-  '../../assets/game/boneyard/badguys/0000.png',
-  '../../assets/game/boneyard/badguys/0007.png',
-  '../../assets/game/boneyard/badguys/0010.png',
-  '../../assets/game/boneyard/badguys/0011.png',
-  '../../assets/game/boneyard/badguys/0015.png',
-  '../../assets/game/boneyard/badguys/0016.png',
-  '../../assets/game/boneyard/badguys/0017.png',
-  '../../assets/game/boneyard/badguys/0022.png',
-  '../../assets/game/boneyard/badguys/0036.png',
-  '../../assets/game/boneyard/badguys/0038.png',
-  '../../assets/game/boneyard/badguys/0039.png',
-  '../../assets/game/boneyard/badguys/0040.png',
-  '../../assets/game/boneyard/badguys/0045.png',
-  '../../assets/game/boneyard/badguys/0048.png',
-  '../../assets/game/boneyard/badguys/0049.png',
-  '../../assets/game/boneyard/badguys/0051.png',
-  '../../assets/game/boneyard/badguys/0053.png',
-  '../../assets/game/boneyard/badguys/0055.png',
-  '../../assets/game/boneyard/badguys/0058.png',
-  '../../assets/game/boneyard/badguys/0062.png',
-  '../../assets/game/boneyard/badguys/0063.png',
-  '../../assets/game/boneyard/badguys/0068.png',
-  '../../assets/game/boneyard/badguys/0072.png',
-  '../../assets/game/boneyard/badguys/0074.png',
-  '../../assets/game/boneyard/badguys/0075.png',
-  '../../assets/game/boneyard/badguys/0078.png',
-  '../../assets/game/boneyard/badguys/0084.png',
-  '../../assets/game/boneyard/badguys/0085.png',
-  '../../assets/game/boneyard/badguys/0086.png',
-  '../../assets/game/boneyard/badguys/0088.png',
-  '../../assets/game/boneyard/badguys/0090.png',
-  '../../assets/game/boneyard/badguys/011[0-2].png',
-  '../../assets/game/boneyard/badguys/015[8-9].png',
-  '../../assets/game/boneyard/badguys/016[0-7].png',
-  '../../assets/game/boneyard/badguys/023[8-9].png',
-  '../../assets/game/boneyard/badguys/024[0-9].png',
-  '../../assets/game/boneyard/badguys/0250.png',
-  '../../assets/game/boneyard/badguys/025[1-4].png',
-  '../../assets/game/boneyard/badguys/026[7-9].png',
-  '../../assets/game/boneyard/badguys/0270.png',
-  '../../assets/game/boneyard/badguys/033[3-9].png',
-  '../../assets/game/boneyard/badguys/034[0-2].png',
-  '../../assets/game/boneyard/badguys/034[3-9].png',
-  '../../assets/game/boneyard/badguys/03[5-9][0-9].png',
-  '../../assets/game/boneyard/badguys/04[0-2][0-9].png',
-  '../../assets/game/boneyard/badguys/043[0-3].png',
-  '../../assets/game/boneyard/badguys/200[8-9].png',
-  '../../assets/game/boneyard/badguys/2010.png',
-  '../../assets/game/boneyard/deadhawg/002.png',
-  '../../assets/game/boneyard/deadhawg/004.png',
-  '../../assets/game/boneyard/deadhawg/00[5-6].png',
-  '../../assets/game/boneyard/deadhawg/01[6-8].png',
-  '../../assets/game/boneyard/deadhawg/04[6-9].png',
-  '../../assets/game/boneyard/deadhawg/05[0-9].png',
-  '../../assets/game/boneyard/deadhawg/06[0-9].png',
-  '../../assets/game/boneyard/deadhawg/07[0-9].png',
-  '../../assets/game/boneyard/deadhawg/08[0-7].png',
-  '../../assets/game/boneyard/deadhawg/114.png',
-  '../../assets/game/boneyard/deadhawg/121.png',
-  '../../assets/game/boneyard/deadhawg/17[7-9].png',
-  '../../assets/game/boneyard/deadhawg/20[0-7].png',
-  '../../assets/game/boneyard/golem/*.png',
-  '../../assets/game/player-mindblast-ring.png',
-], { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
 const specialFiles = import.meta.glob([
   '../../assets/game/boneyard/textures/etherplane.png',
@@ -116,11 +49,6 @@ const manifests: Readonly<Record<Exclude<NativeSecondaryAtlas, 'Clothes'>, Atlas
   DeadHawg: deadhawg as AtlasManifest,
   Golem: golem as AtlasManifest,
 }
-const LIFTED_COMBAT_SOURCES = new Set([
-  ...NATIVE_ENEMY_ASSET_SOURCES,
-  ...NATIVE_LOOT_ASSET_SOURCES,
-])
-
 export interface NativeSecondarySpriteRecord {
   readonly anchorX: number
   readonly anchorY: number
@@ -139,6 +67,10 @@ export const NATIVE_SECONDARY_SPRITE_RECORDS: readonly NativeSecondarySpriteReco
 export const NATIVE_SECONDARY_ASSET_SOURCES = Object.freeze([
   ...new Set(NATIVE_SECONDARY_SPRITE_RECORDS.map(({ source }) => source)),
   ...Object.values(NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES),
+])
+// Clothes record 2 has a one-pixel alpha-zero perimeter around all visible ink.
+export const NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES = Object.freeze([
+  playerMindblastRing,
 ])
 
 export function nativeSecondarySpriteRecord(
@@ -161,8 +93,6 @@ function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpri
     if (entry !== 2) {
       throw new Error(`Native secondary Clothes record is missing: ${entry}`)
     }
-    const source = files['../../assets/game/player-mindblast-ring.png']
-    if (!source) throw new Error('Native Mindblast Clothes record was not bundled')
     const anchor = nativeSpriteAnchor(81, 81, { x: 0, y: 0 })
     return Object.freeze({
       anchorX: anchor.x,
@@ -170,7 +100,7 @@ function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpri
       atlas,
       entry,
       height: 81,
-      source,
+      source: playerMindblastRing,
       width: 81,
     })
   }
@@ -178,13 +108,7 @@ function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpri
   if (!sourceRecord || sourceRecord.empty || !sourceRecord.file) {
     throw new Error(`Native secondary atlas record is missing: ${atlas}:${entry}`)
   }
-  const combatSource = atlas === 'BadGuys'
-    ? boneyardCombatAtlasSource('BadGuys', entry)
-    : null
-  const source = combatSource !== null && LIFTED_COMBAT_SOURCES.has(combatSource)
-    ? combatSource
-    : files[`../../assets/game/boneyard/${sourceRecord.file}`]
-  if (!source) throw new Error(`Native secondary atlas record was not bundled: ${atlas}:${entry}`)
+  const source = boneyardCombatAtlasSource(atlas, entry)
   const anchor = nativeSpriteAnchor(
     sourceRecord.rect.w,
     sourceRecord.rect.h,

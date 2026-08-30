@@ -7,6 +7,7 @@ import {
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import type { GameChatChannel } from '../protocol/game-chat.ts'
 import type { NativeWorldScreenPoint } from './native-world-nameplate.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 export const WORLD_SPEECH_STYLE = Object.freeze({
   anchorWorldOffsetY: -78,
@@ -351,7 +352,7 @@ class NativeWorldSpeechView {
     const existing = this.glyphTextures.get(glyph.char)
     if (existing) return existing
     const style = WORLD_SPEECH_STYLE
-    const texture = new Texture({
+    const texture = nativeSpriteRecordTexture({
       source: this.fontAtlas.source,
       frame: new Rectangle(
         glyph.atlasX,

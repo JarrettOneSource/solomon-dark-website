@@ -5,6 +5,7 @@ import {
   NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
   NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE,
   NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS,
+  NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS,
   NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
   installNativeFixedFunctionRenderPipeline,
   nativeFixedFunctionAdditiveBlendFactors,
@@ -69,6 +70,14 @@ test('maps all three D3D selectors to exact RGB and non-separate alpha factors',
     nativeFixedFunctionMultiplyRgb([0.8, 0.5, 0.25], [0.5, 0.25, 1]),
     [0.4, 0.125, 0.25],
   )
+})
+
+test('native framed crops retain stock pixels while clamping their artificial page', () => {
+  assert.deepEqual(NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS, {
+    addressMode: 'clamp-to-edge',
+    alphaMode: 'no-premultiply-alpha',
+    scaleMode: 'linear',
+  })
 })
 
 test('straight texture and draw alpha combine once for NPM and PMA fragments', () => {

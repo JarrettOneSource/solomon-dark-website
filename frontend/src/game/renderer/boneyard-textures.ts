@@ -4,11 +4,15 @@ import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png
 import { spriteRefFor } from '../../editor/assets.ts'
 import { GROUND_TEXTURE, ROAD_TEXTURES } from '../../editor/textures.ts'
 import { boneyard, hub } from '../../lib/assets.ts'
+import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
 import {
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_ENTRY,
 } from './boneyard-lighting.ts'
+import {
+  NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES,
+} from './native-secondary-assets.ts'
 import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
@@ -47,24 +51,25 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
 }
 
 export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures> {
+  const deadHawgAliases = new Map<string, string>()
+  const deadHawgSource = (entry: number): string => {
+    const ref = spriteRefFor('DeadHawg', entry)
+    if (!ref) throw new Error(`Boneyard DeadHawg record ${entry} is unavailable.`)
+    deadHawgAliases.set(ref.src, boneyardCombatAtlasSource('DeadHawg', entry))
+    return ref.src
+  }
   const regionLightRef = spriteRefFor(
     NATIVE_REGION_LIGHT_ATLAS,
     NATIVE_REGION_LIGHT_ENTRY,
   )
   if (!regionLightRef) throw new Error('Native Region light glyph is missing.')
-  const fenceSources = [3, 7, 8, 36].flatMap((entry) => {
-    const ref = spriteRefFor('DeadHawg', entry)
-    return ref ? [ref.src] : []
-  })
-  fenceSources.push(regionLightRef.src)
-  const solomonGraveMarkSource = spriteRefFor('DeadHawg', 13)?.src
-  if (!solomonGraveMarkSource) {
-    throw new Error('Boneyard DeadHawg record 13 is unavailable.')
-  }
-  const weatherSplashSource = spriteRefFor('DeadHawg', 24)?.src
-  if (!weatherSplashSource) {
-    throw new Error('Boneyard DeadHawg record 24 is unavailable.')
-  }
+  const fenceSources = [3, 7, 8, 36].map(deadHawgSource)
+  fenceSources.push(deadHawgSource(NATIVE_REGION_LIGHT_ENTRY))
+  const solomonGraveMarkSource = deadHawgSource(13)
+  const weatherSplashSource = deadHawgSource(24)
+  const assetSource = (source: string): string => (
+    deadHawgAliases.get(source) ?? boneyardCombatAssetSource(source)
+  )
   const requestedSources = [...new Set([
     ...playerWorldAssetSources(),
     ...fenceSources,
@@ -80,9 +85,13 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonGraveMarkSource,
     weatherSplashSource,
   ])]
-  const packedSources = requestedSources.filter(boneyardCombatAtlasSourceIsPacked)
+  const packedSources = requestedSources.map((source) => (
+    [source, assetSource(source)] as const
+  )).filter(([, source]) => boneyardCombatAtlasSourceIsPacked(source))
   const sources = [...new Set([
-    ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
+    ...requestedSources.map(assetSource).filter((source) => (
+      !boneyardCombatAtlasSourceIsPacked(source)
+    )),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
   ])]
   const composited = [
@@ -91,23 +100,32 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyard.solomonDig,
   ]
   const compositedSet = new Set(composited)
+  const stockFramed = NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES
+  const stockFramedSet = new Set(stockFramed)
   const loaded = await loadGameTextureEntries({
     composited,
     stock: sources.filter((source) => (
-      source !== hub.hud.fontAtlas && !compositedSet.has(source)
+      source !== hub.hud.fontAtlas
+      && !compositedSet.has(source)
+      && !stockFramedSet.has(source)
     )),
+    stockFramed,
     stockPoint: [hub.hud.fontAtlas],
   })
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {
-    const result = base[boneyardCombatAssetSource(source)]
+    const result = base[assetSource(source)]
     if (!result) throw new Error(`Boneyard texture was not loaded: ${source}`)
     return result
   }
   let combatAtlas: BoneyardCombatAtlas
   try {
     combatAtlas = createBoneyardCombatAtlas(texture)
-    for (const source of packedSources) base[source] = combatAtlas.single(source)
+    for (const [logicalSource, packedSource] of packedSources) {
+      const frame = combatAtlas.single(packedSource)
+      base[logicalSource] = frame
+      base[packedSource] = frame
+    }
   } catch (error) {
     for (const [, loadedTexture] of loaded) loadedTexture.destroy(true)
     throw error

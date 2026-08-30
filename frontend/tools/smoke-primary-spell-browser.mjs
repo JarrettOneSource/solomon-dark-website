@@ -109,17 +109,20 @@ async function openWaterCombat(host) {
   assert.notEqual(playerIndex, -1)
   const solomon = state.world.encounter?.position
   assert.ok(solomon, 'Water acceptance requires the authentic Solomon encounter')
-  setHostPlayerPosition(host, playerIndex, solomon)
   await waitUntil(() => {
     const world = host.state().world
-    return world.kind === 'boneyard' && world.encounter?.phase === 'speaking'
+    if (world.kind === 'boneyard' && world.encounter?.phase === 'speaking') return true
+    setHostPlayerPosition(host, playerIndex, solomon)
+    return false
   }, 'Solomon did not enter the speaking phase', 10_000)
-  setHostPlayerPosition(host, playerIndex, { x: solomon.x, y: solomon.y + 250 })
+  const releasePosition = { x: solomon.x, y: solomon.y + 250 }
   await waitUntil(() => {
     const world = host.state().world
-    return world.kind === 'boneyard'
+    if (world.kind === 'boneyard'
       && (world.encounter?.runEventId ?? 0) > 0
-      && world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')
+      && world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')) return true
+    setHostPlayerPosition(host, playerIndex, releasePosition)
+    return false
   }, 'Solomon did not release the Water combat wave', 30_000)
 
   const combat = host.state()

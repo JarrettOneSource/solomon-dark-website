@@ -3,6 +3,7 @@ import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.t
 
 const COMBAT_ATLAS_ALIASES = new Map<string, string>([
   [primarySpells.airWaterActors.coldAura, boneyardCombatAtlasSource('BadGuys', 14)],
+  [primarySpells.airWaterActors.hurricaneCore, boneyardCombatAtlasSource('DeadHawg', 15)],
   [primarySpells.airWaterActors.hurricaneLane, boneyardCombatAtlasSource('BadGuys', 84)],
   [primarySpells.earth.aura, boneyardCombatAtlasSource('BadGuys', 15)],
   [primarySpells.earth.openingFlash, boneyardCombatAtlasSource('BadGuys', 86)],

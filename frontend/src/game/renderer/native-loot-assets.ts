@@ -6,10 +6,6 @@ import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.t
 
 export type NativeLootAtlas = 'BadGuys' | 'DeadHawg'
 
-const deadHawgSpriteFiles = import.meta.glob([
-  '../../assets/game/boneyard/deadhawg/14[5-7].png',
-], { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-
 const REQUIRED_BADGUYS = new Set([
   7, 15, 33, 52, 61, 67, 73, 83, 110,
   ...range(122, 157),
@@ -50,7 +46,7 @@ export function nativeLootSpriteRecord(
   const selected = (atlas === 'DeadHawg' ? REQUIRED_DEADHAWG : REQUIRED_BADGUYS).has(entry)
   if (!selected) throw new Error(`Native loot atlas record was not selected: ${atlas}:${entry}`)
   const source = atlas === 'DeadHawg'
-    ? requiredDeadHawgSource(entry)
+    ? boneyardCombatAtlasSource('DeadHawg', entry)
     : boneyardCombatAtlasSource('BadGuys', entry)
   const anchor = nativeSpriteAnchor(record.rect.w, record.rect.h, record.origin)
   return {
@@ -66,11 +62,8 @@ export function nativeLootSpriteRecord(
 
 function requiredDeadHawgSource(entry: number): string {
   const record = manifests.DeadHawg.entries[entry]
-  const source = record?.file
-    ? deadHawgSpriteFiles[`../../assets/game/boneyard/${record.file}`]
-    : undefined
-  if (!source) throw new Error(`Native loot DeadHawg source is missing: ${entry}`)
-  return source
+  if (!record?.file) throw new Error(`Native loot DeadHawg source is missing: ${entry}`)
+  return boneyardCombatAtlasSource('DeadHawg', entry)
 }
 
 function range(first: number, last: number): number[] {

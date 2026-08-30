@@ -17,6 +17,7 @@ test('the stock right-click atlas membership is complete and every row is regist
     const module = await server.ssrLoadModule('/src/game/renderer/native-secondary-assets.ts') as {
       NATIVE_SECONDARY_ASSET_SOURCES: readonly string[]
       NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES: Readonly<{ etherPlane: string }>
+      NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES: readonly string[]
       NATIVE_SECONDARY_SPRITE_MEMBERSHIP: Readonly<Record<'BadGuys' | 'Clothes' | 'DeadHawg' | 'Golem', readonly number[]>>
       NATIVE_SECONDARY_SPRITE_RECORDS: readonly unknown[]
       nativeSecondarySpriteRecord(atlas: 'BadGuys' | 'Clothes' | 'DeadHawg' | 'Golem', entry: number): { source: string }
@@ -70,6 +71,9 @@ test('the stock right-click atlas membership is complete and every row is regist
       module.NATIVE_SECONDARY_SPRITE_RECORDS.length + 1,
     )
     assert.ok(module.NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane.includes('etherplane.png'))
+    assert.deepEqual(module.NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES, [
+      module.nativeSecondarySpriteRecord('Clothes', 2).source,
+    ])
     const hubSources = new Set(hubTextures.hubWorldAssetSources())
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_DECODED_BYTES, 44_408_832)
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES.length, 3)
@@ -102,11 +106,12 @@ test('the stock right-click atlas membership is complete and every row is regist
       createHash('sha256').update(etherPlane).digest('hex'),
       'cd9aee555fecde2d4917e1776f6bff927c8957e813659dcf163798a2c9e398fb',
     )
-    assert.ok(module.nativeSecondarySpriteRecord('BadGuys', 343).source.includes('0343.png'))
-    assert.ok(module.nativeSecondarySpriteRecord('BadGuys', 22).source.includes('0022.png'))
-    assert.ok(module.nativeSecondarySpriteRecord('BadGuys', 63).source.includes('0063.png'))
-    assert.ok(module.nativeSecondarySpriteRecord('BadGuys', 78).source.includes('0078.png'))
-    assert.ok(module.nativeSecondarySpriteRecord('DeadHawg', 4).source.includes('004.png'))
+    assert.equal(module.nativeSecondarySpriteRecord('BadGuys', 343).source, 'boneyard-combat:BadGuys:343')
+    assert.equal(module.nativeSecondarySpriteRecord('BadGuys', 22).source, 'boneyard-combat:BadGuys:22')
+    assert.equal(module.nativeSecondarySpriteRecord('BadGuys', 63).source, 'boneyard-combat:BadGuys:63')
+    assert.equal(module.nativeSecondarySpriteRecord('BadGuys', 78).source, 'boneyard-combat:BadGuys:78')
+    assert.equal(module.nativeSecondarySpriteRecord('DeadHawg', 4).source, 'boneyard-combat:DeadHawg:4')
+    assert.equal(module.nativeSecondarySpriteRecord('Golem', 1).source, 'boneyard-combat:Golem:1')
     assert.ok(module.nativeSecondarySpriteRecord('Clothes', 2).source.includes('player-mindblast-ring.png'))
     const mindblastRing = await readFile(new URL(
       '../../assets/game/player-mindblast-ring.png',
@@ -116,14 +121,6 @@ test('the stock right-click atlas membership is complete and every row is regist
       createHash('sha256').update(mindblastRing).digest('hex'),
       '9312387b1ba6a8eba523eaf955504c564f39aec89e1d67fbfd10e358991a627e',
     )
-    for (const [path, sha256] of [
-      ['../../assets/game/boneyard/badguys/0063.png', '49d7ac6d774e2c07c4645cdf63ab1b6f0df5c61c2e63a607f69c38ec0dc449c7'],
-      ['../../assets/game/boneyard/badguys/0078.png', '01dfee71b290c0967c62619ce89df909aa4dbb1f56b07a8dd8d4e4abc64825ae'],
-      ['../../assets/game/boneyard/deadhawg/004.png', '62dc63bc5b367bc9d6f676bc59187f8d9f6d314fd7cc7601bf022b868de5881b'],
-    ] as const) {
-      const asset = await readFile(new URL(path, import.meta.url))
-      assert.equal(createHash('sha256').update(asset).digest('hex'), sha256)
-    }
     assert.throws(() => module.nativeSecondarySpriteRecord('BadGuys', 1), /outside the closed membership/)
   } finally {
     await server.close()

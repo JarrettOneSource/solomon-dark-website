@@ -8,22 +8,6 @@ import type { NativeEnemySampleAtlas } from './native-enemy-animation.ts'
 
 type NativeEnemyAtlas = NativeEnemySampleAtlas
 
-const deadHawgSpriteFiles = import.meta.glob([
-  '../../assets/game/boneyard/deadhawg/000.png',
-  '../../assets/game/boneyard/deadhawg/019.png',
-  '../../assets/game/boneyard/deadhawg/028.png',
-  '../../assets/game/boneyard/deadhawg/030.png',
-  '../../assets/game/boneyard/deadhawg/031.png',
-  '../../assets/game/boneyard/deadhawg/04[6-9].png',
-  '../../assets/game/boneyard/deadhawg/05[0-9].png',
-  '../../assets/game/boneyard/deadhawg/06[0-9].png',
-  '../../assets/game/boneyard/deadhawg/07[0-7].png',
-  '../../assets/game/boneyard/deadhawg/11[4-9].png',
-  '../../assets/game/boneyard/deadhawg/12[0-9].png',
-  '../../assets/game/boneyard/deadhawg/13[0-9].png',
-  '../../assets/game/boneyard/deadhawg/14[0-4].png',
-], { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-
 const requiredBadGuysRanges = [
   [2, 2],
   [5, 5],
@@ -93,10 +77,7 @@ for (const atlas of ['BadGuys', 'DeadHawg', 'Demon'] as const) {
     if (!record || record.empty || !record.file) {
       throw new Error(`Native enemy atlas record is missing: ${atlas}:${entry}`)
     }
-    const source = atlas === 'DeadHawg'
-      ? deadHawgSpriteFiles[`../../assets/game/boneyard/${record.file}`]
-      : boneyardCombatAtlasSource(atlas, entry)
-    if (!source) throw new Error(`Native enemy atlas source is missing: ${atlas}:${entry}`)
+    const source = boneyardCombatAtlasSource(atlas, entry)
     selectedSources.set(`${atlas}:${entry}`, source)
   }
 }

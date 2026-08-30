@@ -1,4 +1,4 @@
-export type BoneyardCombatAtlasName = 'BadGuys' | 'Demon'
+export type BoneyardCombatAtlasName = 'BadGuys' | 'DeadHawg' | 'Demon' | 'Golem'
 
 export function boneyardCombatAtlasSource(
   atlas: BoneyardCombatAtlasName,

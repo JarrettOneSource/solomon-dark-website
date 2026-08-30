@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconstruct native BadGuys and Demon atlas pages from exact record crops."""
+"""Reconstruct native combat atlas pages from exact retail record crops."""
 
 from __future__ import annotations
 
@@ -17,12 +17,16 @@ PAGE_PREFIX = "boneyard-combat-atlas"
 ATLAS_SPECS = (
     ("BadGuys", "badguys.json"),
     ("Demon", "demon.json"),
+    ("DeadHawg", "deadhawg.json"),
+    ("Golem", "golem.json"),
 )
-EXPECTED_SOURCE_COUNT = 2625
-EXPECTED_PAGE_COUNT = 2
+EXPECTED_SOURCE_COUNT = 3164
+EXPECTED_PAGE_COUNT = 4
 EXPECTED_PAGE_SHA256 = (
     "af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e",
     "0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4",
+    "3758ce24d516f0ca6349e57b988d8a84e8d6f89fb3827856d7bb521618281af0",
+    "586bb06b4fc69f0d90c90da99871e1cd97d5f250a1e83edbba82a4b7504294ac",
 )
 
 

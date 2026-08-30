@@ -10,6 +10,7 @@ import { mapAssetSources } from '../game-asset-readiness.ts'
 import {
   installNativeFixedFunctionRenderPipeline,
   nativeCompositedTextureFromImage,
+  nativeStockFramedTextureFromImage,
   nativeStockPointTextureFromImage,
   nativeStockTextureFromImage,
 } from './native-fixed-function-render-pipeline.ts'
@@ -121,6 +122,8 @@ async function loadGameTextureEntriesFromPlan(
         const policy = plan.policies[source]!
         const texture = policy === 'stock-point'
           ? nativeStockPointTextureFromImage(image)
+          : policy === 'stock-framed'
+            ? nativeStockFramedTextureFromImage(image)
           : policy === 'composited'
             ? nativeCompositedTextureFromImage(image)
             : nativeStockTextureFromImage(image)

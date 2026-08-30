@@ -70,12 +70,31 @@ test('every image source has one explicit stock, point, or composite policy', ()
   const domBitmapText = source(`${gameRoot}/native-ui/NativeBitmapText.tsx`)
   const nativeUiPixi = source(`${gameRoot}/native-ui/native-ui-pixi.ts`)
   const quickbar = source(`${gameRoot}/SkillQuickbar.tsx`)
+  const recordTextureOwners = gameSources.filter((path) => (
+    !isTestSource(path)
+    && path !== `${rendererRoot}/native-sprite-record-texture.ts`
+    && source(path).includes('nativeSpriteRecordTexture(')
+  ))
+  assert.deepEqual(recordTextureOwners.map(relativeToGame).sort(), [
+    'native-ui/native-ui-pixi.ts',
+    'renderer/boneyard-combat-atlas.ts',
+    'renderer/create-menu-renderer.ts',
+    'renderer/hub-npc-marker-view.ts',
+    'renderer/hub-textures.ts',
+    'renderer/native-world-nameplate.ts',
+    'renderer/native-world-speech.ts',
+    'renderer/title-menu-renderer.ts',
+    'renderer/world-player-textures.ts',
+  ])
   assert.match(
     gameWebGl,
-    /policy === 'stock-point'[\s\S]*?nativeStockPointTextureFromImage\(image\)[\s\S]*?policy === 'composited'[\s\S]*?nativeCompositedTextureFromImage\(image\)[\s\S]*?nativeStockTextureFromImage\(image\)/,
+    /policy === 'stock-point'[\s\S]*?nativeStockPointTextureFromImage\(image\)[\s\S]*?policy === 'stock-framed'[\s\S]*?nativeStockFramedTextureFromImage\(image\)[\s\S]*?policy === 'composited'[\s\S]*?nativeCompositedTextureFromImage\(image\)[\s\S]*?nativeStockTextureFromImage\(image\)/,
   )
   assert.match(sourcePolicy, /classified as both \$\{existing\} and \$\{policy\}/)
-  assert.match(sourcePolicy, /add\('stock'[\s\S]*?add\('stock-point'[\s\S]*?add\('composited'/)
+  assert.match(
+    sourcePolicy,
+    /add\('stock'[\s\S]*?add\('stock-framed'[\s\S]*?add\('stock-point'[\s\S]*?add\('composited'/,
+  )
   for (const packer of [hubAtlasPacker, playerAtlasPacker]) {
     assert.match(packer, /rectangle\.x = shelf\.used_width \+ 1/)
     assert.match(packer, /rectangle\.x = 1/)
@@ -124,6 +143,7 @@ test('every image source has one explicit stock, point, or composite policy', ()
   assert.match(hubInventoryRenderer, /composited: PLAYER_CHARACTER_ATLAS_SOURCES/)
   assert.match(hubInventoryRenderer, /createBoneyardCombatAtlas\(texture\)/)
   assert.match(nativeUiPixi, /source = nativeStockPointTextureFromImage\(image\)/)
+  assert.match(nativeUiPixi, /nativeSpriteRecordTexture\(\{/)
   assert.match(nativeUiPixi, /for \(const item of pointFilteredAtlases\.values\(\)\) item\.destroy\(true\)/)
   assert.match(domBitmapText, /imageRendering: 'pixelated'/)
   assert.match(quickbar, /imageRendering: 'pixelated'/)

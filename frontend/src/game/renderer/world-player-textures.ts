@@ -41,6 +41,7 @@ import {
   NATIVE_WELD_SPRITES,
 } from './primary-spell-weld-native.ts'
 import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
@@ -410,6 +411,18 @@ export function createPlayerWorldTextures(
   )
   const etherPlane = texture(NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane)
   etherPlane.source.addressMode = 'repeat'
+  const secondary = Object.fromEntries(NATIVE_SECONDARY_SPRITE_RECORDS.map((record) => {
+    const source = texture(record.source)
+    return [
+      nativeSecondarySpriteKey(record.atlas, record.entry),
+      record.atlas === 'Clothes'
+        ? nativeSpriteRecordTexture({
+            frame: new Rectangle(0, 0, record.width, record.height),
+            source: source.source,
+          })
+        : source,
+    ]
+  }))
   return {
     death: {
       hat: {
@@ -518,10 +531,7 @@ export function createPlayerWorldTextures(
       }),
       etherPierceStreak: texture(primarySpells.etherPierceStreak),
     },
-    secondary: Object.fromEntries(NATIVE_SECONDARY_SPRITE_RECORDS.map((record) => [
-      nativeSecondarySpriteKey(record.atlas, record.entry),
-      texture(record.source),
-    ])),
+    secondary,
     secondarySpecial: { etherPlane },
   }
 }
@@ -612,6 +622,7 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
     textures.primarySpells.frost.over,
     textures.primarySpells.frost.spark,
   ])
+  derived.add(textures.secondary[nativeSecondarySpriteKey('Clothes', 2)]!)
   for (const texture of derived) texture.destroy(false)
 }
 
@@ -692,7 +703,7 @@ function nativeRegisteredRecordTexture(
     logicalHeight,
   )
   const source = texture(record.source)
-  return new Texture({
+  return nativeSpriteRecordTexture({
     frame: new Rectangle(source.frame.x, source.frame.y, source.frame.width, source.frame.height),
     orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
     source: source.source,
@@ -710,7 +721,7 @@ function nativeRawRecordTexture(
   entry: number,
 ): Texture {
   const source = texture(nativeEnemySpriteRecord('BadGuys', entry).source)
-  return new Texture({
+  return nativeSpriteRecordTexture({
     frame: new Rectangle(source.frame.x, source.frame.y, source.frame.width, source.frame.height),
     source: source.source,
   })

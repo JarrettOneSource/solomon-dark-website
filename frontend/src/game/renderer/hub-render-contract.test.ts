@@ -106,6 +106,9 @@ test('Hub renderer loads compact pages and releases derived frames before page o
     /const composited = \[[\s\S]*?HUB_VISUAL_ATLAS_SOURCES[\s\S]*?loadGameTextureEntries\(\{[\s\S]*?composited/,
   )
   assert.match(hubTextures, /playerWorldCompositedAssetSources\(\)/)
+  assert.match(hubTextures, /const stockFramed = \[[\s\S]*?hub\.props\.statue\.aura/)
+  assert.match(hubTextures, /stockFramed,/)
+  assert.match(hubTextures, /nativeSpriteRecordTexture\(\{/)
   assert.match(hubTextures, /if \(source === hub\.props\.statue\.aura\) continue/)
   assert.ok(
     hubTextures.indexOf('textures.combatAtlas.destroy()')

@@ -917,7 +917,7 @@ try {
     assert.equal(browserReceipt.textureAlpha.hubVisual, 'premultiply-alpha-on-upload')
     assert.equal(browserReceipt.textureAlpha.statueAura, 'no-premultiply-alpha')
     assert.equal(browserReceipt.textureAddress.hubVisual, 'clamp-to-edge')
-    assert.equal(browserReceipt.textureAddress.statueAura, 'repeat')
+    assert.equal(browserReceipt.textureAddress.statueAura, 'clamp-to-edge')
   } else {
     assert.equal(browserReceipt.textureAlpha.solomon, 'premultiply-alpha-on-upload')
     assert.equal(browserReceipt.textureAddress.solomon, 'clamp-to-edge')

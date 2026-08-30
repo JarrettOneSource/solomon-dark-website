@@ -229,18 +229,18 @@ test('static Boneyard residents keep native unpremultiplied linear pixels', () =
   assert.doesNotMatch(boneyardTextures, /createElement\('canvas'\)|BufferImageSource/)
 })
 
-test('BadGuys and Demon records retain the two exact native atlas pages', () => {
+test('combat records retain the four exact native atlas pages', () => {
   assert.match(
     boneyardCombatAtlasGenerated,
     /BONEYARD_COMBAT_ATLAS_LAYOUT = 'native-pages'/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_DECODED_BYTES = 17825792/,
+    /BONEYARD_COMBAT_ATLAS_DECODED_BYTES = 35651584/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_SOURCE_COUNT = 2625/,
+    /BONEYARD_COMBAT_ATLAS_SOURCE_COUNT = 3164/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
@@ -248,15 +248,15 @@ test('BadGuys and Demon records retain the two exact native atlas pages', () => 
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = 2625/,
+    /BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = 3164/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = 15013700/,
+    /BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = 30132496/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = \[\[2048,2048\],\[512,512\]\]/,
+    /BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = \[\[2048,2048\],\[512,512\],\[2048,2048\],\[512,512\]\]/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
@@ -264,11 +264,13 @@ test('BadGuys and Demon records retain the two exact native atlas pages', () => 
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_SOURCES = \[page0, page1\]/,
+    /BONEYARD_COMBAT_ATLAS_SOURCES = \[page0, page1, page2, page3\]/,
   )
   const expectedPages = [
     [0, 2048, 2048, 'af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e'],
     [1, 512, 512, '0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4'],
+    [2, 2048, 2048, '3758ce24d516f0ca6349e57b988d8a84e8d6f89fb3827856d7bb521618281af0'],
+    [3, 512, 512, '586bb06b4fc69f0d90c90da99871e1cd97d5f250a1e83edbba82a4b7504294ac'],
   ] as const
   for (const [page, width, height, expectedSha256] of expectedPages) {
     const png = readFileSync(new URL(
@@ -279,8 +281,8 @@ test('BadGuys and Demon records retain the two exact native atlas pages', () => 
     assert.equal(png.readUInt32BE(20), height)
     assert.equal(createHash('sha256').update(png).digest('hex'), expectedSha256)
   }
-  assert.match(boneyardCombatAtlasPacker, /EXPECTED_SOURCE_COUNT = 2625/)
-  assert.match(boneyardCombatAtlasPacker, /EXPECTED_PAGE_COUNT = 2/)
+  assert.match(boneyardCombatAtlasPacker, /EXPECTED_SOURCE_COUNT = 3164/)
+  assert.match(boneyardCombatAtlasPacker, /EXPECTED_PAGE_COUNT = 4/)
   assert.match(boneyardCombatAtlasPacker, /EXPECTED_PAGE_SHA256/)
   assert.match(boneyardCombatAtlasPacker, /verify_reconstruction\(/)
   assert.match(boneyardCombatAtlasPacker, /verify_native_page_asset\(/)
@@ -291,17 +293,18 @@ test('BadGuys and Demon records retain the two exact native atlas pages', () => 
 })
 
 test('Boneyard maps logical combat URLs to shared pages and tears frames down first', () => {
-  assert.match(boneyardTextures, /requestedSources\.filter\(boneyardCombatAtlasSourceIsPacked\)/)
+  assert.match(boneyardTextures, /requestedSources\.map\(\(source\) => \(/)
   assert.match(boneyardTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(
     boneyardTextures,
     /const loaded = await loadGameTextureEntries\(\{[\s\S]*?composited,[\s\S]*?stock:/,
   )
+  assert.match(boneyardTextures, /stockFramed,/)
   assert.doesNotMatch(boneyardTextures, /clamp-to-edge|combatPageSources/)
   assert.match(boneyardTextures, /createBoneyardCombatAtlas\(texture\)/)
   assert.match(
     boneyardTextures,
-    /for \(const source of packedSources\) base\[source\] = combatAtlas\.single\(source\)/,
+    /for \(const \[logicalSource, packedSource\] of packedSources\)/,
   )
   assert.ok(
     boneyardTextures.indexOf('textures.combatAtlas.destroy()')
@@ -322,7 +325,7 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   )
   assert.match(playerTextures, /collectAssetSources\([\s\S]*?\.map\(boneyardCombatAssetSource\)/)
   assert.match(playerTextures, /resolveTexture\(boneyardCombatAssetSource\(source\)\)/)
-  assert.match(boneyardTextures, /base\[boneyardCombatAssetSource\(source\)\]/)
+  assert.match(boneyardTextures, /base\[assetSource\(source\)\]/)
 })
 
 test('Website-composed player and Solomon pages never impersonate native straight-alpha pages', () => {

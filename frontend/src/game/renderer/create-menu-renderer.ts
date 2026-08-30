@@ -61,6 +61,7 @@ import {
   type FixedGameViewportLayout,
 } from './game-viewport.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 import { createNativeElementVfxTextures } from './world-player-textures.ts'
 import {
   BONEYARD_COMBAT_ATLAS_SOURCES,
@@ -174,6 +175,12 @@ export async function createCreateMenuRenderer(
   ).source.alphaMode
   canvas.dataset.nativeTextureAddress = vfxTextures.fire[0]!.source.addressMode
   canvas.dataset.nativeTextureAlpha = vfxTextures.fire[0]!.source.alphaMode
+  canvas.dataset.nativeRecordUvs = JSON.stringify({
+    etherCore: textureUvs(vfxTextures.core[0]!),
+    etherRay: textureUvs(vfxTextures.ray[0]!),
+    fireFrame258: textureUvs(vfxTextures.fire[3]!),
+    waterFrame275: textureUvs(vfxTextures.water[4]!),
+  })
 
   const root = new Container({ label: 'create-menu' })
   root.eventMode = 'none'
@@ -693,7 +700,7 @@ function updateCreateNameView(view: CreateNameView, displayName: string): void {
   for (const glyph of layout.glyphs) {
     let glyphTexture = view.glyphTextures.get(glyph.char)
     if (!glyphTexture) {
-      glyphTexture = new Texture({
+      glyphTexture = nativeSpriteRecordTexture({
         frame: new Rectangle(glyph.atlasX, glyph.atlasY, glyph.atlasWidth, glyph.atlasHeight),
         source: view.atlas.source,
       })
@@ -736,6 +743,11 @@ function centeredSprite(
   const sprite = stageSprite(texture, x, y, width, height, zIndex)
   sprite.anchor.set(0.5)
   return sprite
+}
+
+function textureUvs(texture: Texture): readonly number[] {
+  const uvs = texture.uvs
+  return [uvs.x0, uvs.y0, uvs.x1, uvs.y1, uvs.x2, uvs.y2, uvs.x3, uvs.y3]
 }
 
 function countSprites(container: Container): number {

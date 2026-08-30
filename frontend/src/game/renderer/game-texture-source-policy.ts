@@ -1,8 +1,9 @@
-export type GameTextureSourcePolicy = 'composited' | 'stock' | 'stock-point'
+export type GameTextureSourcePolicy = 'composited' | 'stock' | 'stock-framed' | 'stock-point'
 
 export interface GameTextureSourceGroups {
   readonly composited?: readonly string[]
   readonly stock?: readonly string[]
+  readonly stockFramed?: readonly string[]
   readonly stockPoint?: readonly string[]
 }
 
@@ -31,6 +32,7 @@ export function planGameTextureSources(
   }
 
   add('stock', groups.stock)
+  add('stock-framed', groups.stockFramed)
   add('stock-point', groups.stockPoint)
   add('composited', groups.composited)
   if (sources.length === 0) throw new RangeError('game texture source plan must not be empty')

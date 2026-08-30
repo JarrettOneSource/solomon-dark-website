@@ -1,4 +1,4 @@
-import { Rectangle, Texture } from 'pixi.js'
+import { Rectangle, type Texture } from 'pixi.js'
 
 import {
   BONEYARD_COMBAT_ATLAS_DECODED_BYTES,
@@ -14,6 +14,7 @@ import {
   BONEYARD_COMBAT_ATLAS_SOURCES,
   type BoneyardCombatPackedFrame,
 } from './boneyard-combat-atlas.generated.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 export {
   BONEYARD_COMBAT_ATLAS_DECODED_BYTES,
@@ -89,7 +90,7 @@ function packedCombatTexture(
     trimY,
   ] = packed
   const pageSource = pageTexture(page)
-  return new Texture({
+  return nativeSpriteRecordTexture({
     frame: new Rectangle(x, y, width, height),
     orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
     source: pageSource.source,

@@ -5,6 +5,7 @@ import {
   type NativeAllyNameGlyph,
 } from '../ally-hud.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 export type WorldNameplateElement = ProtocolPlayerState['config']['element']
 
@@ -477,7 +478,7 @@ class NativeWorldNameplateView {
   ): Texture {
     const existing = this.glyphTextures.get(glyph.char)
     if (existing) return existing
-    const texture = new Texture({
+    const texture = nativeSpriteRecordTexture({
       source: this.fontAtlas.source,
       frame: new Rectangle(glyph.atlasX, glyph.atlasY, atlasWidth, atlasHeight),
     })

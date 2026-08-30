@@ -1,9 +1,10 @@
-import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Graphics, Rectangle, Sprite, type Texture } from 'pixi.js'
 
 import { textureFrom, type GameTextureMap } from '../renderer/game-webgl.ts'
 import {
   nativeStockPointTextureFromImage,
 } from '../renderer/native-fixed-function-render-pipeline.ts'
+import { nativeSpriteRecordTexture } from '../renderer/native-sprite-record-texture.ts'
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
 import {
   nativeUiFont,
@@ -72,7 +73,7 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
     const [x, y, width, height] = definition.frame
     const [logicalWidth, logicalHeight] = definition.logicalSize
     const [trimX, trimY] = definition.trimOrigin
-    const result = new Texture({
+    const result = nativeSpriteRecordTexture({
       frame: new Rectangle(x, y, width, height),
       orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
       source: source.source,
@@ -106,10 +107,11 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
     const [x, y, width, height] = definition.frame
     const sliceWidth = width * (right - left)
     const sliceHeight = height * (bottom - top)
-    const result = new Texture({
-      frame: new Rectangle(x + width * left, y + height * top, sliceWidth, sliceHeight),
+    const result = nativeSpriteRecordTexture({
+      frame: new Rectangle(x, y, width, height),
       orig: new Rectangle(0, 0, sliceWidth, sliceHeight),
       source: source.source,
+      sourceUv,
     })
     derived.set(key, result)
     return result
@@ -131,7 +133,7 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
       source = nativeStockPointTextureFromImage(image)
       pointFilteredAtlases.set(atlas, source)
     }
-    const result = new Texture({
+    const result = nativeSpriteRecordTexture({
       frame: new Rectangle(x, y, width, height),
       source: source.source,
     })

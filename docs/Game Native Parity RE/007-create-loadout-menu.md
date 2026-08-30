@@ -425,3 +425,52 @@ selection, left/right submission, reflection, and scene teardown.
   image `8b3575eef4a279ba2e26c75cc5435bccb333c02cbe9764ccb215cdcb6a5dce90`
   and tall discipline image
   `bc0af8c0f91db52907871b20cfdbf3d5bebe4fac5ec05227b732ab508dccbb6c`.
+
+## 2026-08-30 — Create element-VFX record-edge reopening
+
+The reported straight lines over Water and Ether reproduce in the settled
+Create element screen; Fire shares the same record constructor and had shown
+the artifact on other animation frames. This is not a hand-page recurrence or
+a Region-layering error. All five element views are sibling
+`NativeElementVfxView` instances in one Create painter stack, and the residual
+lies exactly on registered BadGuys texture edges.
+
+Untouched `a554ea73`, Chrome `151.0.7922.174`, `1600 x 900`, application tick
+`513` shows Water's two-row horizontal residual at Y `555..556`. Across X
+`560..709`, adjacent-row mean RGB deltas are `17.9933/16.8267`; surrounding
+rows remain below `3.66`. Ether shows the same top-edge class. Screenshot
+SHA-256 is
+`a9fc1a5f8b1f1e3360a9fb92148b64da26d3e1d4939bbfa2e3e5c30e77f321e3`.
+
+Fresh decompilation of the one common retail record constructor
+`0x00413DE0`, called by record reader `0x00413B10`, falsifies the earlier
+assumption that Pixi's default frame UVs are the native record UVs. For record
+rectangle `(x,y,w,h)` on page `(W,H)`, every shipped unrotated record stores
+`(x+0.5)/W`, `(y+0.5)/H`, `(x+w+0.25)/W`, and `(y+h+0.25)/H` at descriptor
+`+0x4C`; `0x004143D0/0x00414540 -> 0x0041E990` submit those values unchanged.
+The full 10,498-record rotation census is zero, so this formula covers the
+complete retail table.
+
+Create's complete element membership remains Ether `110..112`, Fire
+`110/255..266`, Air `110/1836..1839`, Water `110/112/271..282`, and Earth
+`110/238..245`. Their timing, transforms, scale, color, blend, and painter
+order remain unchanged. The shared retail-record texture owner now applies the
+native UV domain to every member; the fix is not a Water mask or line eraser.
+At candidate tick `517`, which retains Water record `275`, the former row
+deltas fall to `3.3044/3.4467`; Water and Ether have no visible straight edge,
+and Fire remains stable. Candidate screenshot SHA-256 is
+`c541417b860ffa21c54c6d84be279a05c437909256c2f371e17963ed147d6aae`.
+
+Acceptance extends the responsive Title/Create browser journey with exact
+runtime UV diagnostics for Ether core/ray, Fire record `258`, and Water record
+`275`, plus a live mobile-to-tall Create resize on the same mounted canvas.
+The complete renderer-wide source/page membership, sibling migration, and
+final gate receipt remain owned by renderer entry 287.
+
+Production Chrome `151.0.7922.174` passes the expanded journey at stock,
+mobile, ultrawide, and tall layouts. The same mounted Create canvas survives a
+mobile-to-tall-to-mobile resize with its exact UV tuples unchanged, all five
+element views visually clean, and empty page/console/response error arrays.
+The inspected stock and live-resize frames hash to
+`54f48bb7f9de3167e763b93286a774f5adc1ca75cc8f7d3951212684d1ef7978`
+and `74d3a81941a64aca6b9b1b93dd66c060c8f2b541aecba8fa615a87d67e7c2c05`.
