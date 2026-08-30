@@ -247,3 +247,118 @@ the requested policy directly without timing or platform approximation.
   test, build, or browser byte changed afterward. There is no browser-platform
   exception, unresolved native fact, or predicted visible discrepancy beyond
   the explicitly requested Website-only resume policy.
+
+## 2026-08-29 — Arena-entry and orienting-surface resume-progress matrix
+
+### Reported smell and parity question
+
+- Product correction: show the existing two-second `RESUMING...` progress
+  phase after a player finishes loading into an Arena and after Pause,
+  Inventory, or the full Skill Screen releases gameplay. Do not show it for
+  compact concentration changes or after LevelupScreen closes.
+- Reopened boundaries: the 2026-08-28 fresh-entry correction made
+  `game-started` pending-only, and the original surface policy made solo
+  Pause/Inventory/Skill Screen release immediate. Both contradict the newly
+  requested event matrix.
+- Preserved boundaries: renderer readiness still precedes Arena progress;
+  compact primary/concentration selectors still release directly; the hidden
+  LevelupScreen close hold may finish its native presentation but never gains
+  a positive remainder or progress surface; disconnect release remains direct.
+- Falsifiers: progress burning behind loading; a fresh Arena beginning to tick
+  before every expected renderer is ready; no progress after a solo eligible
+  surface; progress after concentration A/B selection or an ordinary level-up;
+  a click/input leak during progress; or held wall time replayed as catch-up.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Product direction | user feature request, 2026-08-29 | Arena entry, Pause, Skills, and Inventory are positive progress edges; concentration changes and level-up are explicit negatives. | authoritative |
+| Existing retail lifecycle | retail `SolomonDark.exe` 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; session G13; pause `0x005CBD40`; Inventory `0x005C6F10`; SkillScreen `0x005CA640`; selector `0x0066F0B0`; LevelupScreen `0x0067CAC0` | Native loading and modal owners establish the input/readiness/retained-world boundaries. Stock supplies no post-release delay; the two-second phase remains an explicit Website policy. | high |
+| Current Website causal trace | exact base `0c5f1577c9cce0bfab5ad188e5830d992848a051`, protocol 108; `game-host.ts`, `gameplay-resume-grace.ts`, `MainMenuScene.tsx`, `GameplayResumeProgress.tsx` | `game-started` clears directly after readiness; eligible surface grace requires at least two materialized humans; compact selector maps to direct release; LevelupScreen uses a nullable close-only hold and mounts no progress. | high |
+| Existing browser evidence | entries 288 and 294 | The current direct fresh release and selector/level-up negatives were exercised independently. The same host record already owns readiness, exact duration, input clearing, no-catch-up expiry, and per-party isolation. | high |
+
+No new retail address, authored asset, or save fact is introduced. This is a
+Website admission-policy correction over the already recovered native
+suspension and presentation boundaries.
+
+### System boundary and membership inventory
+
+System boundary: **run-scoped resume-progress admission**, from an Arena
+renderer-ready or eligible modal-release edge through the existing 2,000-ms
+host deadline, strict projection, input/simulation hold, visible progress,
+expiry, and teardown.
+
+| Member / branch | Source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Fresh standalone/private ordinary or custom Arena | `game-started` readiness owner | `exact-ported` requested Website policy | pending until the sole renderer is ready, then positive two-second progress before the next tick |
+| Fresh shared-party ordinary or custom Arena | same expected-renderer cohort | `exact-ported` requested Website policy | all humans ready before one party-scoped deadline; every peer sees the same progress |
+| Fresh stock Tutorial Arena | same `game-started` owner plus Tutorial renderer | `exact-ported` requested Website policy | authored Tutorial clock remains held through readiness and progress |
+| Active save restart, active-party rejoin/takeover, coordinated recovery | `game-restarted` / `game-rejoined` | `verified-already-at-parity` | existing-run readiness and two-second progress remain unchanged |
+| Standalone and multiplayer Pause Menu / nested Settings release | `pause-menu-closed` | `exact-ported` expanded policy | owner Resume begins progress after final surface release; no catch-up |
+| Standalone and multiplayer Inventory close | `inventory-closed` | `exact-ported` expanded policy | native close completes, then progress begins |
+| Standalone and multiplayer full Skill Screen close | `skill-book-closed` | `exact-ported` expanded policy | 40-tick close and Inventory handoff remain ordered; only final release begins progress |
+| Compact primary selector | source `skill-selector` | `verified-already-at-requested-policy` direct release | no progress; same compact-family rule remains coherent |
+| Compact concentration A and B selectors | source `skill-selector`, addressed slots 16/20 | `verified-already-at-requested-policy` direct release | explicit user negative; no positive grace state or progressbar |
+| Mandatory LevelupScreen final close | nullable `skill-picker-closed` close hold | `verified-already-at-requested-policy` | close presentation may hold the world, then clears directly with no positive remainder or progress |
+| Earlier/reroll/save level-up branches and bot choices | level barrier / picker producer family | `verified-already-at-requested-policy` | no synthetic progress; final simulation release remains ordered |
+| Pause owner disconnect | disconnect teardown | `verified-already-at-parity` direct release | departed owner cannot impose a new timer |
+| Slow/erroring renderer, stale or duplicate ready receipt | strict run/sequence readiness | `verified-already-at-parity` | fail closed while pending; cannot shorten or recreate progress |
+| Bot, observer, detached nonmaterialized actor | no player renderer owner | `out-of-system` | never joins the ready cohort or creates a client progress owner |
+| Hub Skills/Inventory/selectors, title, Create, Game Over, Hall, loadout | non-Arena scene owners | `out-of-system` | live Hub policy and unrelated scenes never acquire run progress |
+| Run replacement, Game Over, empty retirement, host close | run teardown | `verified-already-at-parity` | pending/deadline state retires once; no late expiry or progress survives |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- The host remains the deepest owner. Fresh entry first owns the exact expected
+  human renderer cohort; only its all-ready edge may assign the deadline.
+- Pause, Inventory, and full Skill Screen release use their existing
+  source-qualified pause record. Eligibility now depends on an active Arena,
+  not on a two-human minimum. Hub remains outside the run scope.
+- Compact selector release remains null-mapped. LevelupScreen retains only its
+  nullable presentation-close barrier, after which the next ordinary fixed
+  tick is admitted directly.
+- Every positive member uses the existing 2,000 monotonic milliseconds,
+  progress projection, queued/held-input clearing, fixed-tick exclusion,
+  late-peer projection, expiry, and standalone scheduler reset. No elapsed
+  wall time becomes simulation.
+- `game-started` is no longer pending-only on the strict wire. The same reason
+  legitimately projects either `remainingMs=null` before renderer readiness or
+  a bounded positive remainder afterward. This exact-match change requires a
+  protocol increment but no save-schema change.
+
+### Confidence and open questions
+
+- Confirmed: every producer, exclusion, readiness edge, host scope, protocol
+  projection, client gate, presentation branch, expiry, and teardown member.
+- Inferred: none used for implementation.
+- Unknown: none material.
+
+### Web implementation consequence
+
+- Let the all-ready `game-started` branch enter the ordinary deadline path;
+  remove the strict pending-only decoder assertion.
+- Generalize eligible pause-like surface grace from multiplayer-only to any
+  active Arena while retaining disconnect, scene, selector, and picker
+  negatives.
+- Keep one shared reason map and host record. Do not introduce UI timers,
+  scene-specific delays, or a second loading barrier.
+- Advance the exact-match protocol and update every affected host/protocol/
+  browser contract as one cutover.
+
+### Validation contract
+
+- Focused automated coverage: fresh standalone/shared/Tutorial readiness then
+  positive progress; solo and multiplayer Pause/Settings, Inventory, and full
+  Skill Screen positives; compact primary/A/B and LevelupScreen negatives;
+  disconnect/stale-ready/teardown negatives; rejoin/restart nonregression;
+  exact duration, held ticks/input, isolation, and no-catch-up.
+- Mac Chrome: one fresh solo Arena and one delayed-peer shared Arena must show
+  pending readiness followed by `RESUMING...`; solo and shared Pause,
+  Inventory, and full Skills must show progress; both concentration selectors
+  and a real two-player level-up must resume without progress. Require empty
+  page, console, failed-response, and host-error arrays.
+- Exact candidate: byte-identical Mac worktree and
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` before completion.

@@ -533,6 +533,13 @@ Machinimbus unlock rows are read and mutated through the authenticated
 participant's economy/progression components. A newly admitted shared-Hub
 player receives fresh defaults and never inherits another resident's service
 state; actor visibility itself is not progression-gated.
+Boast instruction/failure presentation is a client-local transient Notebox,
+not a UI Surface or pause owner. It consumes only a newly observed participant
+Boast edge, paints the exact UI.64/Fonts-group-3 notification over the live Hub
+or Arena, optionally shortens its own lifetime on a panel-local pointer down,
+and expires automatically. Failure alone restarts the native buzzer stream.
+Neither the Notebox nor its audio is serialized or replayed from an already
+failed save baseline.
 Hagatha ownership retains the native ordered outcome vector rather than a
 sorted set: ordinary charm/curse selectors occur once, while selector 27 Tonic
 may occur twice in purchase order. `tonicPurchases` and capacity 3/6/9 are
@@ -1977,24 +1984,23 @@ enumerated admission reason, a set of returning players whose Boneyard
 renderers must become ready, and either a pending marker or a host-monotonic
 expiry deadline. It is never serialized into a save.
 
-Fresh Boneyard and Tutorial entry reuse the pending record only as the
-authoritative renderer-readiness barrier. Their `game-started` projection can
-never carry a positive remainder: once every expected renderer is ready, the
-host clears the hold and admits the next ordinary fixed tick directly. An
-already loaded peer may see `Waiting on players ...`, but fresh entry never
-enters the `RESUMING...` progress phase. Positive-duration grace is reserved
-for returning to an existing active run or releasing an eligible in-game
-pause/barrier owner.
+Fresh Boneyard and Tutorial entry first use the pending record as the
+authoritative renderer-readiness barrier. An already loaded peer may see
+`Waiting on players ...`; only after every expected human renderer is ready
+does `game-started` enter the ordinary 2,000-ms `RESUMING...` phase. No
+countdown time burns behind loading.
 
-Multiplayer Pause Menu, Inventory, full Skill Book, compact skill-selector,
-and final mandatory SkillPicker release atomically enter a 2,000-ms grace only
-when that active run contains more than one connected materialized human.
-Solo modal release stays immediate. Active-party rejoin, same-player takeover,
-and active saved-run restart install grace even for one player. A restarted or
-returning client acknowledges its exact sequence from the Boneyard renderer's
-ready edge; the clock waits for every addressed returner and for older gameplay
-pause/level-up owners to clear. This prevents the grace from expiring beneath
-loading or another modal.
+Pause Menu/Settings, Inventory, and full Skill Book release atomically enter
+the same 2,000-ms grace in any active Arena, including standalone play. Compact
+primary and concentration A/B selectors release directly. Mandatory
+LevelupScreen retains only its nullable close-presentation hold and clears
+without a positive remainder or progress surface. Pause-owner disconnect also
+releases directly. Active-party rejoin, same-player takeover, and active saved-
+run restart retain grace even for one player. A restarted or returning client
+acknowledges its exact sequence from the Boneyard renderer's ready edge; the
+clock waits for every addressed returner and for older gameplay pause/level-up
+owners to clear. This prevents grace from expiring beneath loading or another
+modal.
 
 Protocol 83 introduced `gameplayResumeGrace` in welcome and live messages as
 `{ sequence, reason, remainingMs }`. `remainingMs=null` means the run is held

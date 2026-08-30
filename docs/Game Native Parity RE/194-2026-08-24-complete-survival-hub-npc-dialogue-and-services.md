@@ -334,3 +334,121 @@ timer values.
   proved a late join received the same portrait at memorial age 1002. Both
   journeys had empty page-error, console-error, and failed-response arrays, and
   their captures were visually inspected.
+
+## 2026-08-29 — Boast Notebox notification lifecycle correction
+
+### Reported smell and parity question
+
+- Reported web behavior: Provokatus's Boast instruction and failure are shown
+  as a full-screen `alertdialog` with an `OKAY` button. The surface blocks the
+  player's local controls until clicked while authoritative gameplay continues.
+- Stock behavior to recover: Boast creates a transient `Notebox` notification
+  over the live game. It expires automatically, never acquires the gameplay
+  suspension owner, and uses a short red/buzzer failure variant.
+- This is a secondary report against the earlier complete-Hub-NPC entry. That
+  pass recovered Boast state and every failure producer but stopped at the text
+  payload, labeled a guessed modal Notebox as parity, and did not trace the
+  native `Notebox` constructor/update/render/input/audio xrefs. The skipped
+  presentation/lifecycle owner caused the defect.
+- Falsifiers: any native modal-loop or `Gameplay+0x80` suspension call; a
+  required acknowledgement; no automatic expiry; a generic HTML panel/font;
+  failure without the buzzer; replaying an old failure after rejoin; or one of
+  the four failure producers retaining the blocking path.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| User stock/web comparison | feature report, 2026-08-29 | The original is a non-invasive live-game overlay/notification; the Website requires a click while the game does not pause. | authoritative |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Exact pinned retail image used for every address below. | high |
+| Fresh read-only instructions | canonical Ghidra `SolomonDark/SolomonDark.exe`; Mod Loader tool revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49` | `Notebox` vtable `0x007906DC`; ctor `0x004F63D0`; layout `0x004F6530`; update `0x004F5370`; render `0x004F6740`; pointer-down shortener `0x004F6470`. No modal runner or gameplay suspension call appears in the owner thread. | high |
+| Instruction producer | `Chat` teardown `0x004FCB40`, string `0x00791378` | A selected Boast spawns a standard Notebox containing `To succeed at your boast, you must\nsurvive until at least Wave 30`. It has the full native hold and no buzzer. | high |
+| Failure owner/xref sweep | common failure `0x005CB110`; all refs from `0x0052B150`, `0x0054CC50`, `0x00577760`, `0x005CB810` | Mana underflow, secondary cast, potion use, and magical-equipment paths all enter the same one-shot failure constructor. It formats `FAILED \"%s\"`, sets the red variant, halves the hold, and plays one stream. No fifth caller exists. | high |
+| Timing instructions/data | `0x004F6530`, `0x004F5370`; timing scale `0x00820230=100`; doubles `10`, `0.1`, `0.05` | Standard hold starts at 1,000 ticks; failure arithmetic-shifts it to 500. Alpha rises by 0.1 for 10 ticks, then after the hold falls by 0.05 for 20 ticks: approximately 10.2 s standard and 5.2 s failure. Pointer down sets the hold to zero; it is optional because expiry is automatic. | high |
+| Geometry/render instructions | `0x004F6530`, `0x004F6740`; UI record `64`; Fonts group 3 | Text bounds are centered at native `(800,250)` and expanded by 35 px on every side. UI.64 is drawn by the mirrored nine-slice helper in 0.85 and 0.15 passes. Standard text is RGB `(0.85,0.73,0.44)`; failure multiplies panel/text by `(1,0.25,0.25)`. Text uses the exact 92-glyph/210-kerning menu font. | high |
+| Exact assets | `UI.bundle` SHA-256 `1db00ea8826e787ca9a320c90a33e726991cae00906baddfdc8bde31da697498`, UI.64 atlas frame `(213,392,28,28)`; `Fonts.bundle` SHA-256 `048aa22cc715ee633f5e31f0400b4a3a9c0a8c8b49d681419e19d5ff676c214a`; audio registry `DAT_008199D8+0x133C` | The Website already owns exact UI.64 and Fonts group 3. Failure plays `sounds\\buzzer__stream.wav`, `SoundStream`, SHA-256 `19c010bb56690b3f7808a0f71ae639ab8d033e0ea1e31637ac688da957f3e844`, at gain 1/restart semantics. | high |
+| Current Website trace | exact base `0c5f1577c9cce0bfab5ad188e5830d992848a051`; `HubInventoryUi.tsx`, `HubScene.tsx`, `BoneyardScene.tsx`, `hub-inventory.css` | One string state portals a full-screen pointer-active dialog, publishes `onBlockingOverlayChange`, adds the notice to both scenes' modal predicates, exposes a focusable button, never auto-expires, and plays no failure stream. | high |
+
+All Ghidra addresses are preferred-image VAs. The wrapper leased a read-only
+replica with `-noanalysis`; no Mod Loader file or canonical project was changed.
+
+### System boundary and membership inventory
+
+Native system: **Boast-owned Notebox notification**, from instruction/failure
+production through exact transient presentation, optional early dismissal,
+audio, automatic expiry, save/rejoin behavior, and teardown.
+
+| Member / branch | Native source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Post-selection Boast instruction | `0x004FCB40`, string `0x00791378` | `exact-ported` | gold UI.64/group-3 Notebox, 10.2-s automatic lifetime, no sound or blocking owner |
+| Potion-use failure, Boast 0 | `0x00577760 -> 0x005CB110` | `exact-ported` | red five-second failure notification plus buzzer, once |
+| Magical-equipment failure, Boast 1 | `0x005CB810 -> 0x005CB110` | `exact-ported` | same shared presentation/audio/lifetime |
+| Secondary-cast failure, Boast 2 | `0x0054CC50 -> 0x005CB110` | `exact-ported` | same shared presentation/audio/lifetime |
+| Automatic-choice Boast 3 | selection/picker path, no `0x005CB110` caller | `verified-already-at-parity`, no failure Notebox | automatic selection remains; instruction Notebox still applies after selection |
+| Mana-underflow failure, Boast 4 | `0x0052B150 -> 0x005CB110` | `exact-ported` | strict negative-underflow producer retains one shared notification |
+| Wave-30 success and 1.1 score award | `0x005BC400`, no Notebox call | `verified-already-at-parity`, out of notification branch | success remains silent and score-owned |
+| Standard panel/text style | UI.64, Fonts group 3, normal color path | `exact-ported` | exact nine-slice/font/geometry and 100-ms reveal |
+| Failure panel/text style and audio | red branch at `0x005CB173`; audio `+0x133C` | `exact-ported` | exact red multiplier, 500-tick hold, 200-ms fade, buzzer stream restart |
+| Optional pointer-down lifetime shortening | vtable slot `+0x64 -> 0x004F6470` | `exact-ported` within the small panel | may begin fade early; no full-screen hit target or required click |
+| Hub instruction over live world | `Chat` teardown owner | `exact-ported` | dialogue closes; Hub movement/presence continues beneath notification |
+| Arena failure over live world | common gameplay producers | `exact-ported` | simulation and ordinary gameplay input continue; notification is presentation-only |
+| Persisted failed Boast on save/rejoin | native flags serialize, Notebox object does not | `verified-already-at-parity` with corrected presentation | current failure sequence seeds the client baseline and does not replay old transient UI/audio |
+| New Boast/run reset, scene/route teardown | native one-shot/reset and CPU destruction | `exact-ported` | pending timer/audio owner retires without blocking or leaking into the next wizard |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- `Notebox` is an ordinary transient CPU/presentation object. Construction and
+  render do not enter `0x004281F0`, `0x005CBD40`, or any modal exclusion owner.
+- Both producers configure one centered text box at offset `(0,-200)` from the
+  1600x900 center. The shared renderer uses UI.64 mirrored nine-slice bounds
+  and Fonts group 3; failure changes tint/lifetime/audio, not ownership.
+- Application presentation ticks drive reveal, hold, and fade while the world
+  continues. The notification owns no network state beyond the already
+  replicated Boast failure sequence and cannot block authoritative input.
+- Only the notification's own compact bounds accept optional early dismissal.
+  There is no `OKAY` action, keyboard focus owner, curtain, or full-screen hit
+  surface. Automatic expiry is always sufficient.
+- Save documents retain Boast selection/failure/success, never the transient
+  Notebox or buzzer channel. A new client baselines the current sequence and
+  observes only a later failure edge.
+
+### Confidence and open questions
+
+- Confirmed: complete constructor/update/render/vtable thread, every producer,
+  all five Boast rows, timing, geometry, tint, exact UI/font/audio assets,
+  pointer behavior, non-modal ownership, persistence, and teardown.
+- Inferred: none used for implementation.
+- Unknown: none material.
+
+### Web implementation consequence
+
+- Replace the full-screen `NativeNpcNotebox` dialog with one reusable
+  transient Notebox presentation that uses `NativeUiNineSlice` UI.64 and
+  `NativeBitmapText` menu font at native geometry.
+- Store notice kind/sequence, drive the exact automatic lifetime and optional
+  panel-local early fade, and expose noninteractive status semantics instead
+  of `alertdialog`/`OKAY`.
+- Remove `onBlockingOverlayChange`, both scene-local Notebox modal flags, and
+  every resulting input/modal gate. Boast notification must not request or
+  simulate pause.
+- Add the exact buzzer WAV as a resident `SoundStream` cue and play it only on
+  a newly observed failure sequence. Do not replay persisted failure state.
+- Remove the superseded invented full-screen panel/button CSS and smoke steps.
+
+### Validation contract
+
+- Focused tests: exact timing/envelope/geometry/style contracts; all four
+  failure producers and automatic/success negatives; one-shot sequence; exact
+  UI/font/audio registry/hash; no full-screen hit/modal callback/button; old
+  failure baseline suppression; route/reset cleanup.
+- Mac Chrome: select a Boast and let its instruction expire without clicking
+  while Hub ticks/movement continue; trigger one Arena failure and prove the
+  red panel, buzzer restart, local input, player/enemy/wave ticks, automatic
+  expiry, and no page/console/network errors. Optional panel click may shorten
+  only that notice.
+- Stock-versus-web comparison: match native 1600x900 position, panel bounds,
+  colors, reveal/fade frames, text, and audio using the pinned retail contract.
+- Exact candidate: byte-identical Mac worktree and canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` before completion.

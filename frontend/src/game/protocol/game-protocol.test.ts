@@ -463,10 +463,13 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     type: 'server-gameplay-resume-grace',
     grace: { reason: 'game-started', remainingMs: null, sequence: 8 },
   })
-  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
-    grace: { reason: 'game-started', remainingMs: 1, sequence: 8 },
-  })), /game-started.*pending/i)
+    grace: { reason: 'game-started', remainingMs: 2_000, sequence: 8 },
+  })), {
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'game-started', remainingMs: 2_000, sequence: 8 },
+  })
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-resume-grace',
     grace: { reason: 'unknown', remainingMs: 2_000, sequence: 7 },
@@ -1746,8 +1749,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v108 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped resume grace, pending-only fresh readiness, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 108)
+test('protocol v109 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 109)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
