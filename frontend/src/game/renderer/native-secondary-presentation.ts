@@ -902,6 +902,7 @@ export function nativeSecondaryPresentationPlan(
         ageTicks: actor.ageTicks,
         id: actor.id,
         origin: actor.position,
+        presentation: 'fire',
         visualScale: actor.scale,
       }, pointGain).draws.map(secondaryFireDraw))
     }
