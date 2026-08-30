@@ -11,7 +11,10 @@ import {
   GAME_FIXED_TICK_SECONDS,
   gameSimulationPlayerRecords,
 } from '../src/game/core-server/game-simulation.ts'
-import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
+import {
+  HUB_INTERACTION_GEOMETRY,
+  HUB_TRADER_GEOMETRY,
+} from '../src/game/hub-inventory-presentation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   GAME_PROTOCOL_VERSION,
@@ -19,12 +22,17 @@ import {
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
 import { PAUSE_MENU_ACTION_BOUNDS } from '../src/game/pause-menu-contract.ts'
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
 const screenshots = {
   boneyardLoadingWaiting: process.env.SDR_GAME_LOADING_WAITING_SCREENSHOT
     || '/tmp/solomon-dark-loading-waiting.png',
+  boastFailure: process.env.SDR_GAME_BOAST_FAILURE_SCREENSHOT
+    || '/tmp/solomon-dark-boast-failure.png',
+  boastInstruction: process.env.SDR_GAME_BOAST_INSTRUCTION_SCREENSHOT
+    || '/tmp/solomon-dark-boast-instruction.png',
   boneyardWaiting: process.env.SDR_GAME_PAUSE_BONEYARD_SCREENSHOT
     || '/tmp/solomon-dark-pause-boneyard-waiting.png',
   chatBoneyardPause: process.env.SDR_GAME_CHAT_BONEYARD_PAUSE_SCREENSHOT
@@ -100,6 +108,7 @@ try {
   page.on('response', (response) => {
     if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
   })
+  await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration
@@ -541,6 +550,30 @@ try {
   await page.keyboard.press('Escape')
   await Promise.all([fomentiusDialogue.waitFor({ state: 'detached' }), peerSawDialogueClear])
 
+  moveHostPlayerTo({
+    x: HUB_INTERACTION_GEOMETRY.annalist.position.x - 70,
+    y: HUB_INTERACTION_GEOMETRY.annalist.position.y,
+  })
+  const talkToProvokatus = page.getByRole('button', { name: 'Talk to Provokatus' })
+  await talkToProvokatus.waitFor()
+  await talkToProvokatus.click()
+  const provokatus = page.getByRole('dialog', { name: 'Talking to Provokatus' })
+  await provokatus.waitFor()
+  await provokatus.getByRole('button', { name: 'Skip' }).click()
+  await provokatus.getByRole('button', { name: 'Boast' }).click()
+  await provokatus.locator('[data-native-selector-id="0"]').click()
+  await provokatus.getByRole('button', { name: 'Skip' }).click()
+  await provokatus.waitFor({ state: 'detached' })
+  const boastInstruction = page.locator(
+    '.native-notebox-overlay[data-native-notebox-kind="instruction"]',
+  )
+  await boastInstruction.waitFor()
+  assert.match(await boastInstruction.innerText(), /survive until at least Wave 30/)
+  assert.equal(await page.locator('.hub-scene').getAttribute('data-modal-open'), 'false')
+  await assertLiveHub(page, 'Boast instruction Notebox', 550)
+  await page.screenshot({ path: screenshots.boastInstruction })
+  await boastInstruction.waitFor({ state: 'detached', timeout: 12_000 })
+
   const rawHubPause = simulationReceipt()
   for (const source of ['pause-menu', 'inventory', 'skill-book', 'skill-selector']) {
     peer.socket.send(encodeGameMessage({
@@ -602,6 +635,31 @@ try {
   }))
   await loadingWaiting.waitFor({ state: 'detached', timeout: 1_000 })
   await assertResumeProgress(page, loadingHeldTick, 'game-started')
+
+  const boastFailureAudioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  await page.locator(
+    '.hub-hud-quickbar-slot[data-entry-kind="health-potion"]',
+  ).click()
+  const boastFailure = page.locator(
+    '.native-notebox-overlay[data-native-notebox-kind="failure"]',
+  )
+  await boastFailure.waitFor()
+  assert.match(await boastFailure.innerText(), /^FAILED /)
+  assert.equal(
+    await page.locator('.boneyard-scene').getAttribute('data-gameplay-input-blocked'),
+    'false',
+  )
+  await page.waitForFunction((start) => window.__sdrAudioEvents.slice(start).some((event) => (
+    event.type === 'buffer-start'
+    && window.__sdrAudioSourceMatches(event.src, 'buzzer.wav')
+  )), boastFailureAudioStart)
+  const boastFailureTick = host.state().tick
+  await page.keyboard.down('KeyD')
+  await page.waitForTimeout(350)
+  await page.keyboard.up('KeyD')
+  assert.ok(host.state().tick > boastFailureTick)
+  await page.screenshot({ path: screenshots.boastFailure })
+  await boastFailure.waitFor({ state: 'detached', timeout: 7_000 })
 
   await page.setViewportSize({ height: 1080, width: 2560 })
   const largeBoneyard = page.locator('.boneyard-scene')
