@@ -400,7 +400,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 108
+export const GAME_PROTOCOL_VERSION = 109
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2641,11 +2641,6 @@ function gameplayResumeGraceState(
   if (remainingMs !== null && remainingMs > GAMEPLAY_RESUME_GRACE_DURATION_MS) {
     throw new GameProtocolError(
       `${field}.remainingMs exceeds the resume grace duration`,
-    )
-  }
-  if (reason === 'game-started' && remainingMs !== null) {
-    throw new GameProtocolError(
-      `${field}.remainingMs must be null while game-started readiness is pending`,
     )
   }
   if (reason === 'skill-picker-closed' && remainingMs !== null) {

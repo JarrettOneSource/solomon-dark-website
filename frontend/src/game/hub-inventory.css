@@ -164,50 +164,46 @@
   transform: translate(-50%, -50%);
 }
 
-.hub-native-notebox-overlay {
+.native-notebox-overlay {
   position: absolute;
   z-index: 31000;
   inset: 0;
   overflow: hidden;
+  pointer-events: none;
+}
+
+.native-notebox-panel {
+  position: absolute;
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
-.hub-native-notebox {
+.native-notebox-frame {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 1600px;
-  height: 900px;
-  transform-origin: 0 0;
+  inset: 0;
 }
 
-.hub-native-notebox p {
-  position: absolute;
-  top: 350px;
-  left: 520px;
-  box-sizing: border-box;
-  width: 560px;
-  min-height: 150px;
-  margin: 0;
-  padding: 42px 54px 70px;
-  border: 3px solid #8d743f;
-  background: linear-gradient(#211c17f5, #080706fa);
-  box-shadow: 0 0 0 3px #050403, inset 0 0 28px #71521e55;
-  color: #d9ba70;
-  font: 25px/1.25 Georgia, serif;
-  text-align: center;
-  white-space: pre-line;
+.native-notebox-frame-primary {
+  opacity: 0.85;
 }
 
-.hub-native-notebox button {
+.native-notebox-frame-secondary {
+  opacity: 0.15;
+  mix-blend-mode: screen;
+}
+
+.native-notebox-text {
   position: absolute;
-  top: 455px;
-  left: 730px;
-  width: 140px;
-  height: 45px;
-  border: 1px solid #8cbf8c;
-  background: #12110ef2;
-  color: #d9ba70;
-  font: 20px Georgia, serif;
-  cursor: pointer;
+}
+
+.native-notebox-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

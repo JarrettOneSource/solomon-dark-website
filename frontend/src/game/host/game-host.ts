@@ -2139,7 +2139,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.queuedInputs.clear()
         if (barrierBefore !== null && selected.levelUpBarrier === null) {
           stopWorldClientInputs(client.playerId)
-          beginMultiplayerResumeGrace(client.playerId, 'skill-picker-closed')
+          beginSurfaceResumeGrace(client.playerId, 'skill-picker-closed')
         }
         broadcastSnapshot()
         publishSaveCheckpoint('skill-selected')
@@ -2383,7 +2383,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           if (closedSkillBarrier) {
             stopWorldClientInputs(client.playerId)
-            beginMultiplayerResumeGrace(client.playerId, 'skill-picker-closed')
+            beginSurfaceResumeGrace(client.playerId, 'skill-picker-closed')
           }
           broadcastPreparedModProjection(client.playerId, modHost)
           broadcastSnapshot()
@@ -2455,7 +2455,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.queuedInputs.clear()
         if (barrierBefore !== null && applied.levelUpBarrier === null) {
           stopWorldClientInputs(client.playerId)
-          beginMultiplayerResumeGrace(client.playerId, 'skill-picker-closed')
+          beginSurfaceResumeGrace(client.playerId, 'skill-picker-closed')
         }
         broadcastSnapshot()
         publishSaveCheckpoint('level-up-action')
@@ -6314,7 +6314,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return true
   }
 
-  function beginMultiplayerResumeGrace(
+  function beginSurfaceResumeGrace(
     playerId: PlayerId,
     reason: GameplayResumeGraceReason,
   ): boolean {
@@ -6328,7 +6328,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (
       activeState.world.kind !== 'boneyard'
       || activeState.run.phase !== 'active'
-      || connectedMaterializedHumanCount(activeState) < 2
     ) return false
     const waitsForPickerClose = reason === 'skill-picker-closed'
       && [...clients.values()].some(client => (
@@ -6351,10 +6350,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     broadcastGameplayResumeGrace(playerId, scope)
     if (!waitsForPickerClose) logGameplayResumeGrace('started', grace, scope)
     return true
-  }
-
-  function connectedMaterializedHumanCount(activeState: GameSimulationState): number {
-    return connectedMaterializedHumanPlayerIds(activeState).length
   }
 
   function beginPartyRejoinWaitIfNeeded(
@@ -6456,14 +6451,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
       ))
     ) return false
-    if (grace.reason === 'game-started' || grace.reason === 'skill-picker-closed') {
+    if (grace.reason === 'skill-picker-closed') {
       setGameplayResumeGrace(scope, null)
       stopResumeGraceInputs(scope)
       if (!sharedWorlds) resetNextTickDeadline()
       broadcastGameplayResumeGrace(playerId, scope)
-      if (grace.reason === 'skill-picker-closed') {
-        logGameplayResumeGrace('completed', grace, scope)
-      }
+      logGameplayResumeGrace('completed', grace, scope)
       return true
     }
     grace.deadlineMs = performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS
@@ -6705,7 +6698,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (reason === null) {
         maybeStartGameplayResumeGrace(released.ownerPlayerId, scope)
       } else {
-        beginMultiplayerResumeGrace(released.ownerPlayerId, reason)
+        beginSurfaceResumeGrace(released.ownerPlayerId, reason)
       }
     } else {
       maybeStartGameplayResumeGrace(released.ownerPlayerId, scope)

@@ -249,7 +249,6 @@ export default function HubScene({
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
   const hubUiSurfaceRef = useRef<HubUiSurface>(hubUiSurface)
   hubUiSurfaceRef.current = hubUiSurface
-  const [npcNoteboxOpen, setNpcNoteboxOpen] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
   const [partySettingsOpen, setPartySettingsOpen] = useState(false)
@@ -325,7 +324,7 @@ export default function HubScene({
   useEffect(() => () => {
     audio.stopLoop('polisher-wipe', 'story-office-polisher')
   }, [audio])
-  const modalOpen = pickerOpen || hubUiSurface !== null || npcNoteboxOpen || selectedPlayerId !== null
+  const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
     || partySettingsOpen
   modalOpenRef.current = modalOpen
 
@@ -963,7 +962,6 @@ export default function HubScene({
           modAssets={modAssets}
           nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
-          onBlockingOverlayChange={setNpcNoteboxOpen}
           onOpenSkills={onOpenSkills}
           onSurfaceChange={setHubUiSurface}
           onUnassignBeltEntry={onUnassignQuickbarSkill}

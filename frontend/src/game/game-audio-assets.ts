@@ -10,6 +10,7 @@ import bigFire from '../assets/game/audio/sfx/big-fire.wav'
 import bite1 from '../assets/game/audio/sfx/bite-1.wav'
 import bite2 from '../assets/game/audio/sfx/bite-2.wav'
 import bite3 from '../assets/game/audio/sfx/bite-3.wav'
+import boastFailure from '../assets/game/audio/sfx/buzzer.wav'
 import cometLoop from '../assets/game/audio/sfx/comet-loop.wav'
 import electricLoop from '../assets/game/audio/sfx/electric-loop.wav'
 import cometWhistle from '../assets/game/audio/sfx/comet-whistle.wav'
@@ -323,6 +324,7 @@ export const GAME_AUDIO_SOURCES = {
   },
   streams: {
     'arch-intro-0': archIntro0,
+    'boast-failure': boastFailure,
     'catch-it': catchIt,
     'choose-element': chooseElement,
     'death-guitar': deathGuitar,

@@ -102,6 +102,8 @@ import {
   nativeSkillQuickbarDropSlot,
 } from './skill-book-model.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
+import NativeNotebox from './NativeNotebox.tsx'
+import type { NativeNoteboxKind, NativeNoteboxNotice } from './native-notebox.ts'
 import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
@@ -268,7 +270,6 @@ interface HubInventoryUiProps {
   memorial?: HubMemorialState | null
   nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
-  onBlockingOverlayChange?: (open: boolean) => void
   onOpenSkills: () => void
   onUnassignBeltEntry?: (slot: number) => void
   modAssets: readonly GameModAsset[]
@@ -300,7 +301,6 @@ export default function HubInventoryUi({
   memorial = null,
   nativeUiStageStyle,
   onAction,
-  onBlockingOverlayChange,
   onOpenSkills,
   onUnassignBeltEntry,
   modAssets,
@@ -323,12 +323,20 @@ export default function HubInventoryUi({
   )
   const rendererOwner = rendererOwnerRef.current
   const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
-  const [npcNotebox, setNpcNotebox] = useState<string | null>(null)
+  const noteboxSequenceRef = useRef(0)
+  const [npcNotebox, setNpcNotebox] = useState<NativeNoteboxNotice | null>(null)
   const [inventorySackPath, setInventorySackPath] = useState<readonly number[]>([])
   const [inventorySackTransition, setInventorySackTransition] =
     useState<HubInventorySackTransitionModel | null>(null)
   const [inventoryCloseTarget, setInventoryCloseTarget] =
     useState<'closed' | 'skills' | null>(null)
+  const showNotebox = useCallback((kind: NativeNoteboxKind, text: string) => {
+    noteboxSequenceRef.current += 1
+    setNpcNotebox({ kind, sequence: noteboxSequenceRef.current, text })
+  }, [])
+  const showInstructionNotebox = useCallback((text: string) => {
+    showNotebox('instruction', text)
+  }, [showNotebox])
   const nearestInteraction = useMemo(
     () => disabled || inputSuspended || transitionActive || !interactionsEnabled
       ? null
@@ -538,13 +546,11 @@ export default function HubInventoryUi({
     const sequence = economy.npc.boast.failureSequence
     if (sequence <= failureSequenceRef.current) return
     failureSequenceRef.current = sequence
-    setNpcNotebox(nativeBoastFailureText(economy.npc.boast))
-  }, [economy.npc.boast])
-
-  useEffect(() => {
-    onBlockingOverlayChange?.(npcNotebox !== null)
-    return () => onBlockingOverlayChange?.(false)
-  }, [npcNotebox, onBlockingOverlayChange])
+    const text = nativeBoastFailureText(economy.npc.boast)
+    if (text === null) return
+    audio.playStream('boast-failure')
+    showNotebox('failure', text)
+  }, [audio, economy.npc.boast, showNotebox])
 
   const prompt = !surface && nearestInteraction ? (
       <ContextualInteractButton
@@ -574,7 +580,7 @@ export default function HubInventoryUi({
       onInventoryBack={inventoryBackOrClose}
       onOpenSack={openInventorySack}
       onOpenSkills={() => beginInventoryClose('skills')}
-      onNotebox={setNpcNotebox}
+      onNotebox={showInstructionNotebox}
       onSurfaceChange={onSurfaceChange}
       onUnassignBeltEntry={onUnassignBeltEntry}
       perkRemovalEnabled={interactionsEnabled}
@@ -594,11 +600,13 @@ export default function HubInventoryUi({
       {prompt}
       {overlay && overlayRoot.current ? createPortal(overlay, overlayRoot.current) : null}
       {npcNotebox && overlayRoot.current ? createPortal(
-        <NativeNpcNotebox
-          inputSuspended={inputSuspended}
+        <NativeNotebox
+          key={npcNotebox.sequence}
+          notice={npcNotebox}
+          onExpired={(sequence) => setNpcNotebox((current) => (
+            current?.sequence === sequence ? null : current
+          ))}
           style={nativeUiStageStyle}
-          text={npcNotebox}
-          onClose={() => setNpcNotebox(null)}
         />,
         overlayRoot.current,
       ) : null}
@@ -1599,37 +1607,6 @@ function NativeHubSurface({
         {rendererState === 'error' ? (
           <p className="hub-native-ui-error" role="alert">Native inventory renderer unavailable.</p>
         ) : null}
-      </section>
-    </div>
-  )
-}
-
-function NativeNpcNotebox({
-  inputSuspended,
-  onClose,
-  style,
-  text,
-}: {
-  inputSuspended: boolean
-  onClose: () => void
-  style: CSSProperties
-  text: string
-}) {
-  return (
-    <div
-      className="hub-native-notebox-overlay"
-      data-input-suspended={inputSuspended}
-      data-native-notebox-text={text}
-      inert={inputSuspended || undefined}
-    >
-      <section
-        className="hub-native-notebox"
-        role="alertdialog"
-        aria-label="Boast notice"
-        style={style}
-      >
-        <p>{text}</p>
-        <button type="button" onClick={onClose}>OKAY</button>
       </section>
     </div>
   )

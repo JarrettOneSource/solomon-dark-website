@@ -162,6 +162,7 @@ export type GameStreamCue =
   | 'death-guitar'
   | 'dye'
   | 'arch-intro-0'
+  | 'boast-failure'
 export type GameLoopCue =
   | 'comet-loop'
   | 'electric-loop'
@@ -964,6 +965,11 @@ export const NATIVE_LOOP_MANIFEST = {
 } as const satisfies Readonly<Record<GameLoopCue, NativeSoundEntry>>
 
 export const NATIVE_STREAM_MANIFEST = {
+  'boast-failure': {
+    registryOffset: 0x133c,
+    sourceName: 'sounds\\buzzer__stream',
+    sourceSha256: '19c010bb56690b3f7808a0f71ae639ab8d033e0ea1e31637ac688da957f3e844',
+  },
   dye: {
     registryOffset: 0x1374,
     sourceName: 'sounds\\dye__Stream',

@@ -13,6 +13,7 @@ interface NativeUiNineSliceProps {
   readonly edgeUvOrigin?: number
   readonly fill?: boolean
   readonly height: number
+  readonly multiplyTint?: number
   readonly record: number
   readonly style?: CSSProperties
   readonly width: number
@@ -37,6 +38,7 @@ export default function NativeUiNineSlice({
   edgeUvOrigin = 0.95,
   fill = true,
   height,
+  multiplyTint,
   record,
   style,
   width,
@@ -51,6 +53,9 @@ export default function NativeUiNineSlice({
   }
   const atlasDefinition = nativeUiAtlas(atlas)
   const source = `url("${nativeUiAtlasSource(atlas)}")`
+  const tint = multiplyTint === undefined
+    ? null
+    : `#${multiplyTint.toString(16).padStart(6, '0')}`
   const edgeWidth = cornerWidth * (1 - edgeUvOrigin)
   const edgeHeight = cornerHeight * (1 - edgeUvOrigin)
   const pieces = nineSlicePieces(cornerWidth, cornerHeight, width, height, fill)
@@ -92,17 +97,28 @@ export default function NativeUiNineSlice({
           <i
             key={index}
             style={{
-              backgroundImage: source,
+              backgroundBlendMode: tint === null ? undefined : 'multiply',
+              backgroundImage: tint === null
+                ? source
+                : `linear-gradient(${tint}, ${tint}), ${source}`,
               backgroundPosition,
               backgroundRepeat: 'no-repeat',
               backgroundSize,
               display: 'block',
               height: piece.height,
               left: piece.left,
+              maskImage: tint === null ? undefined : source,
+              maskPosition: tint === null ? undefined : backgroundPosition,
+              maskRepeat: tint === null ? undefined : 'no-repeat',
+              maskSize: tint === null ? undefined : backgroundSize,
               position: 'absolute',
               top: piece.top,
               transform: `scale(${piece.mirrorX ? -1 : 1}, ${piece.mirrorY ? -1 : 1})`,
               transformOrigin: 'center',
+              WebkitMaskImage: tint === null ? undefined : source,
+              WebkitMaskPosition: tint === null ? undefined : backgroundPosition,
+              WebkitMaskRepeat: tint === null ? undefined : 'no-repeat',
+              WebkitMaskSize: tint === null ? undefined : backgroundSize,
               width: piece.width,
             }}
           />
