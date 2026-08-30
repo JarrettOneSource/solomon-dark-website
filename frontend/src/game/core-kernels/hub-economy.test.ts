@@ -16,6 +16,8 @@ import {
   MOD_ITEM_NATIVE_TYPE_ID,
   NATIVE_DYE_SWATCH_COLORS,
   NATIVE_DYE_SWATCHES,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   NATIVE_RETAINED_SACK_SUFFIXES,
   NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS,
   NATIVE_FRESH_PROFILE_GOLD,
@@ -50,6 +52,8 @@ import {
   nativeDyeCommittedTint,
   nativeDyeMixedColor,
   nativeDyeMixedTint,
+  nativeEquipmentMeetsLevelRequirement,
+  nativeEquipmentRequiredLevel,
   inventoryDyeableClothingItems,
   inventoryItemsAtSackPath,
   nativeInventoryItemCanUnforge,
@@ -68,6 +72,11 @@ import {
   type HubEconomyState,
   type HubInventoryItem,
 } from './hub-economy.ts'
+
+const UNRESTRICTED_EQUIPMENT_ADMISSION = {
+  creativityRank: 0,
+  playerLevel: 100,
+} as const
 
 function maximumSackChildren(item: HubInventoryItem): number {
   return Math.max(
@@ -242,7 +251,12 @@ test('mod wearable items use existing slots, native dye transactions, and strict
   const dyed = dyeInventoryClothing(withDye, dye.id, identified.id, 'cloth', [1])
   assert.equal(dyed.accepted, true)
   assert.notEqual(findInventoryItem(dyed.state.backpack, identified.id)?.iconTints?.[0], 0x6688cc)
-  const equipped = equipInventoryItem(dyed.state, identified.id, 'robe')
+  const equipped = equipInventoryItem(
+    dyed.state,
+    identified.id,
+    'robe',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  )
   assert.equal(equipped.accepted, true)
   assert.equal(equipped.state.equipment.robe?.modItemContent?.wearable?.slot, 'robe')
   assert.equal(hubEconomyInventoryIsValid(equipped.state), true)
@@ -631,7 +645,12 @@ test('all six equipment classes route through the seven sinks and third ring is 
     const base = createHubEconomy(1)
     const item = createEquipmentInventoryItem(samples.get(type)!, base.nextItemId)
     const state = { ...base, backpack: [...base.backpack, item], nextItemId: base.nextItemId + 1 }
-    const equipped = equipInventoryItem(state, item.id, slot)
+    const equipped = equipInventoryItem(
+      state,
+      item.id,
+      slot,
+      UNRESTRICTED_EQUIPMENT_ADMISSION,
+    )
     assert.equal(equipped.accepted, true, `${type} equips into ${slot}`)
     const unequipped = unequipInventorySlot(equipped.state, slot)
     if (slot === 'hat' || slot === 'robe') {
@@ -647,9 +666,114 @@ test('all six equipment classes route through the seven sinks and third ring is 
   const ringRecipe = samples.get('ring')!
   const ring = createEquipmentInventoryItem(ringRecipe, base.nextItemId)
   const ringState = { ...base, backpack: [...base.backpack, ring], nextItemId: base.nextItemId + 1 }
-  assert.equal(equipInventoryItem(ringState, ring.id, 'ring-2').reason, 'slot-locked')
+  assert.equal(equipInventoryItem(
+    ringState,
+    ring.id,
+    'ring-2',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  ).reason, 'slot-locked')
   const unlocked = { ...ringState, ownedPerkSelectors: [19] }
-  assert.equal(equipInventoryItem(unlocked, ring.id, 'ring-2').accepted, true)
+  assert.equal(equipInventoryItem(
+    unlocked,
+    ring.id,
+    'ring-2',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  ).accepted, true)
+})
+
+test('all six equipment classes reject generated gear above the player level', () => {
+  const samples = new Map(DOWSING_EQUIPMENT_RECIPES.map((recipe) => [recipe.type, recipe]))
+  const expected = new Map<string, EquipmentSlot>([
+    ['hat', 'hat'],
+    ['robe', 'robe'],
+    ['amulet', 'amulet'],
+    ['staff', 'weapon'],
+    ['wand', 'weapon'],
+    ['ring', 'ring-0'],
+  ])
+  for (const [type, slot] of expected) {
+    const base = createHubEconomy(1)
+    const item = {
+      ...createEquipmentInventoryItem(samples.get(type)!, base.nextItemId),
+      generatedLevel: 8,
+    }
+    const state = {
+      ...base,
+      backpack: [...base.backpack, item],
+      nextItemId: base.nextItemId + 1,
+    }
+    const equipped = equipInventoryItem(state, item.id, slot, {
+      creativityRank: 0,
+      playerLevel: 7,
+    })
+    assert.equal(equipped.accepted, false, `${type} rejects level 8 for player level 7`)
+    assert.equal(equipped.reason, 'ineligible-item')
+    assert.strictEqual(equipped.state, state)
+    assert.equal(equipInventoryItem(state, item.id, slot, {
+      creativityRank: 0,
+      playerLevel: 8,
+    }).accepted, true, `${type} admits level 8 at the inclusive threshold`)
+  }
+})
+
+test('equipment level admission drains every recipe and applies non-stacking Creativity', () => {
+  assert.equal(NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID, 63)
+  assert.equal(NATIVE_EQUIPMENT_LEVEL_REDUCTION, 2)
+  const base = createHubEconomy(1)
+  for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+    const item = createEquipmentInventoryItem(recipe, base.nextItemId + recipe.sourceIndex)
+    assert.equal(nativeEquipmentRequiredLevel(item), recipe.level, recipe.name)
+    assert.equal(nativeEquipmentMeetsLevelRequirement(item, {
+      creativityRank: 0,
+      playerLevel: Math.max(1, recipe.level),
+    }), true, recipe.name)
+    if (recipe.level > 1) {
+      assert.equal(nativeEquipmentMeetsLevelRequirement(item, {
+        creativityRank: 0,
+        playerLevel: recipe.level - 1,
+      }), false, recipe.name)
+    }
+  }
+
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const generated = {
+    ...createEquipmentInventoryItem(ringRecipe, base.nextItemId + 100),
+    generatedLevel: 8,
+  }
+  assert.equal(nativeEquipmentRequiredLevel(generated), 8)
+  assert.equal(nativeEquipmentMeetsLevelRequirement(generated, {
+    creativityRank: 0,
+    playerLevel: 7,
+  }), false)
+  for (const creativityRank of [1, 2, 10]) {
+    assert.equal(nativeEquipmentMeetsLevelRequirement(generated, {
+      creativityRank,
+      playerLevel: 6,
+    }), true)
+    assert.equal(nativeEquipmentMeetsLevelRequirement(generated, {
+      creativityRank,
+      playerLevel: 5,
+    }), false)
+  }
+  assert.equal(nativeEquipmentRequiredLevel(base.equipment.hat!), 0)
+  assert.equal(nativeEquipmentMeetsLevelRequirement(base.equipment.hat!, {
+    creativityRank: 0,
+    playerLevel: 1,
+  }), true)
+
+  const stocked = {
+    ...base,
+    backpack: [...base.backpack, generated],
+    nextItemId: generated.id + 1,
+  }
+  assert.equal(equipInventoryItem(stocked, generated.id, 'ring-0', {
+    creativityRank: 1,
+    playerLevel: 5,
+  }).reason, 'ineligible-item')
+  assert.equal(equipInventoryItem(stocked, generated.id, 'ring-0', {
+    creativityRank: 1,
+    playerLevel: 6,
+  }).accepted, true)
 })
 
 test('equipping into an occupied compatible sink returns the exact displaced item once', () => {
@@ -658,6 +782,7 @@ test('equipping into an occupied compatible sink returns the exact displaced ite
   const first = { ...createEquipmentInventoryItem(ringRecipe, base.nextItemId), inventorySlot: 2 }
   const second = {
     ...createEquipmentInventoryItem(ringRecipe, base.nextItemId + 1),
+    generatedLevel: 8,
     inventorySlot: 3,
   }
   const stocked = {
@@ -665,9 +790,27 @@ test('equipping into an occupied compatible sink returns the exact displaced ite
     backpack: [...base.backpack, first, second],
     nextItemId: base.nextItemId + 2,
   }
-  const firstEquip = equipInventoryItem(stocked, first.id, 'ring-0')
+  const firstEquip = equipInventoryItem(
+    stocked,
+    first.id,
+    'ring-0',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  )
   assert.equal(firstEquip.accepted, true)
-  const swap = equipInventoryItem(firstEquip.state, second.id, 'ring-0')
+  const rejectedSwap = equipInventoryItem(firstEquip.state, second.id, 'ring-0', {
+    creativityRank: 0,
+    playerLevel: 7,
+  })
+  assert.equal(rejectedSwap.reason, 'ineligible-item')
+  assert.strictEqual(rejectedSwap.state, firstEquip.state)
+  assert.strictEqual(rejectedSwap.state.equipment.rings[0], first)
+  assert.strictEqual(rejectedSwap.state.backpack.find(({ id }) => id === second.id), second)
+  const swap = equipInventoryItem(
+    firstEquip.state,
+    second.id,
+    'ring-0',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  )
   assert.equal(swap.accepted, true)
   assert.strictEqual(swap.state.equipment.rings[0], second)
   assert.equal(swap.state.backpack.filter(({ id }) => id === first.id).length, 1)
@@ -678,10 +821,25 @@ test('equipping into an occupied compatible sink returns the exact displaced ite
 test('equipping a direct Sack child returns displaced gear to that same native root', () => {
   const base = createHubEconomy(1)
   const hatRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'hat')!
-  const hat = { ...createEquipmentInventoryItem(hatRecipe, base.nextItemId), inventorySlot: 0 }
+  const hat = {
+    ...createEquipmentInventoryItem(hatRecipe, base.nextItemId),
+    generatedLevel: 8,
+    inventorySlot: 0,
+  }
   const sack = { ...nativeTestSack(base.nextItemId + 1, [hat]), inventorySlot: 2 }
   const source = { ...base, backpack: [...base.backpack, sack], nextItemId: base.nextItemId + 2 }
-  const equipped = equipInventoryItem(source, hat.id, 'hat')
+  const rejected = equipInventoryItem(source, hat.id, 'hat', {
+    creativityRank: 0,
+    playerLevel: 7,
+  })
+  assert.equal(rejected.reason, 'ineligible-item')
+  assert.strictEqual(rejected.state, source)
+  const equipped = equipInventoryItem(
+    source,
+    hat.id,
+    'hat',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  )
   assert.equal(equipped.accepted, true)
   assert.strictEqual(equipped.state.equipment.hat, hat)
   assert.equal(equipped.state.backpack.some(({ id }) => id === base.equipment.hat!.id), false)
@@ -725,7 +883,10 @@ test('Sack item action equips eligible direct children and returns displaced gea
   const carrier = { ...nativeTestSack(nextId++, [actionSack]), inventorySlot: 2 }
   const source = { ...base, backpack: [...base.backpack, carrier], nextItemId: nextId }
 
-  const result = equipEligibleInventorySackContents(source, actionSack.id, 5)
+  const result = equipEligibleInventorySackContents(source, actionSack.id, {
+    creativityRank: 0,
+    playerLevel: 5,
+  })
   assert.equal(result.accepted, true)
   assert.strictEqual(result.state.equipment.hat, hat)
   assert.strictEqual(result.state.equipment.robe, robe)
@@ -748,6 +909,46 @@ test('Sack item action equips eligible direct children and returns displaced gea
   assert.equal(retainedIds.has(staff.id), true)
   assert.strictEqual(findInventoryItem(retained.contents ?? [], nestedHat.id), nestedHat)
   assert.equal(hubEconomyInventoryIsValid(result.state), true)
+})
+
+test('Sack auto-equip uses recipe levels and the same Creativity threshold', () => {
+  const base = createHubEconomy(1)
+  const ringwallRecipe = DOWSING_EQUIPMENT_RECIPES.find(
+    ({ sourceIndex }) => sourceIndex === 35,
+  )!
+  const ringwall = {
+    ...createEquipmentInventoryItem(ringwallRecipe, base.nextItemId),
+    inventorySlot: 0,
+  }
+  const generated = {
+    ...createEquipmentInventoryItem(ringwallRecipe, base.nextItemId + 1),
+    generatedLevel: 4,
+    inventorySlot: 1,
+  }
+  const sack = {
+    ...nativeTestSack(base.nextItemId + 2, [ringwall, generated]),
+    inventorySlot: 2,
+  }
+  const source = {
+    ...base,
+    backpack: [...base.backpack, sack],
+    nextItemId: base.nextItemId + 3,
+  }
+
+  const withoutCreativity = equipEligibleInventorySackContents(source, sack.id, {
+    creativityRank: 0,
+    playerLevel: 1,
+  })
+  assert.deepEqual(withoutCreativity.state.equipment.rings, [null, null, null])
+  assert.strictEqual(findInventoryItem(withoutCreativity.state.backpack, ringwall.id), ringwall)
+
+  const withCreativity = equipEligibleInventorySackContents(source, sack.id, {
+    creativityRank: 1,
+    playerLevel: 1,
+  })
+  assert.strictEqual(withCreativity.state.equipment.rings[0], ringwall)
+  assert.strictEqual(findInventoryItem(withCreativity.state.backpack, generated.id), generated)
+  assert.equal(findInventoryItem(withCreativity.state.backpack, ringwall.id), null)
 })
 
 test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct native capacities', () => {
@@ -1374,7 +1575,12 @@ test('consume, equip, and unforge resolve recursively owned inventory nodes', ()
   assert.equal(consumed.accepted, true)
   assert.equal(findInventoryItem(consumed.state.backpack, potion.id)?.quantity, 1)
 
-  const equipped = equipInventoryItem(consumed.state, robe.id, 'robe')
+  const equipped = equipInventoryItem(
+    consumed.state,
+    robe.id,
+    'robe',
+    UNRESTRICTED_EQUIPMENT_ADMISSION,
+  )
   assert.equal(equipped.accepted, true)
   assert.equal(equipped.state.equipment.robe?.id, robe.id)
   assert.equal(findInventoryItem(equipped.state.backpack, robe.id), null)

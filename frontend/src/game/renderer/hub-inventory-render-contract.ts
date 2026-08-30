@@ -9,6 +9,8 @@ import {
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
+  nativeEquipmentMeetsLevelRequirement,
+  nativeEquipmentRequiredLevel,
   type EquipmentSlot,
   type HubActionFeedback,
   type HubInventoryItem,
@@ -565,7 +567,7 @@ export interface HubTooltipLine {
 }
 
 export interface HubTooltipOptions {
-  readonly ownedPerkSelectors?: readonly number[]
+  readonly creativityRank?: number
   readonly ownedRecipeIndexes?: readonly number[]
   readonly playerLevel?: number
   readonly price?: number | null
@@ -946,7 +948,6 @@ export function hubItemTooltipLines(
     return Object.freeze(lines)
   }
 
-  const recipe = recipeIndex === null ? null : DOWSING_EQUIPMENT_RECIPES[recipeIndex] ?? null
   const description = item.modItemContent?.description ?? (recipeIndex === null
     ? nativeTutorialAmuletIdentityMatches(item)
       ? NATIVE_TUTORIAL_AMULET_DESCRIPTION
@@ -955,14 +956,13 @@ export function hubItemTooltipLines(
   if (description) lines.push(tooltipBody(description))
   const affixNames = item.modAffixes?.map(affix => affix.name).join(' · ')
   if (affixNames) lines.push(tooltipBody(affixNames))
-  const requiredLevel = item.generatedLevel ?? recipe?.level ?? 0
-  const effectiveRequiredLevel = Math.max(
-    0,
-    requiredLevel - ((options.ownedPerkSelectors ?? []).includes(8) ? 2 : 0),
-  )
+  const requiredLevel = nativeEquipmentRequiredLevel(item)
   if (
     options.playerLevel !== undefined
-    && options.playerLevel < effectiveRequiredLevel
+    && !nativeEquipmentMeetsLevelRequirement(item, {
+      creativityRank: options.creativityRank ?? 0,
+      playerLevel: options.playerLevel,
+    })
   ) {
     lines.push({
       font: 'body',

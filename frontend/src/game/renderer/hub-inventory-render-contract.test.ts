@@ -542,7 +542,7 @@ test('every Fomentius class and all 47 recipe rows build complete contextual det
   for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
     const item = createEquipmentInventoryItem(recipe, recipe.sourceIndex + 100)
     const lines = hubItemTooltipLines(item, {
-      ownedPerkSelectors: [],
+      creativityRank: 0,
       playerLevel: 100,
       price: 5_000,
     }).map(({ text }) => text)
@@ -560,6 +560,30 @@ test('every Fomentius class and all 47 recipe rows build complete contextual det
       assert.ok(lines.includes('Complete Set Bonus:'))
     }
   }
+})
+
+test('equipment ItemInfo uses permanent Creativity for the native two-level reduction', () => {
+  const ringwallRecipe = DOWSING_EQUIPMENT_RECIPES.find(
+    ({ sourceIndex }) => sourceIndex === 35,
+  )!
+  const ringwall = createEquipmentInventoryItem(ringwallRecipe, 35)
+  assert.ok(hubItemTooltipLines(ringwall, {
+    creativityRank: 0,
+    playerLevel: 1,
+  }).some(({ text }) => text === 'Requires Player Level 3'))
+  assert.equal(hubItemTooltipLines(ringwall, {
+    creativityRank: 1,
+    playerLevel: 1,
+  }).some(({ text }) => text.startsWith('Requires Player Level')), false)
+
+  const staffRecipe = DOWSING_EQUIPMENT_RECIPES.find(
+    ({ sourceIndex }) => sourceIndex === 33,
+  )!
+  const staff = createEquipmentInventoryItem(staffRecipe, 33)
+  assert.ok(hubItemTooltipLines(staff, {
+    creativityRank: 2,
+    playerLevel: 2,
+  }).some(({ text }) => text === 'Requires Player Level 5'))
 })
 
 test('native equipment HoverBox effect formatting covers every operator and feature family', () => {

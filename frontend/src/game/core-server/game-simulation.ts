@@ -94,6 +94,7 @@ import {
   findInventoryItem,
   hagathaOffers,
   moveInventoryItem,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   readLibrarianBook,
   readInventorySkillBook,
   removeHagathaPerk,
@@ -1511,7 +1512,11 @@ export function applyGameSimulationHubAction(
         action.swatchRows,
       )
       case 'dowse': return dowse(economy, getPlayerProgression(state, playerId).level)
-      case 'equip': return equipInventoryItem(economy, action.itemId, action.slot)
+      case 'equip': return equipInventoryItem(economy, action.itemId, action.slot, {
+        creativityRank:
+          skillBook.permanentRanks[NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID] ?? 0,
+        playerLevel: getPlayerProgression(state, playerId).level,
+      })
       case 'move-inventory-item': return moveInventoryItem(
         economy,
         action.itemId,
@@ -4189,10 +4194,15 @@ function activateGameSimulationBeltSlot(
     )
   }
   if (item.nativeTypeId === 7008) {
+    const skillBook = getPlayerSkillBook(state, playerId)
     const result = equipEligibleInventorySackContents(
       economy,
       item.id,
-      getPlayerProgression(state, playerId).level,
+      {
+        creativityRank:
+          skillBook.permanentRanks[NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID] ?? 0,
+        playerLevel: getPlayerProgression(state, playerId).level,
+      },
     )
     const actionFeedback = {
       accepted: result.accepted,

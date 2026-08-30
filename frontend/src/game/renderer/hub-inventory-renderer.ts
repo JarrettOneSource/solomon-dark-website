@@ -9,6 +9,7 @@ import { hub, skillPicker } from '../../lib/assets.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   NATIVE_DYE_SWATCHES,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   findInventoryItem,
   inventoryItemsAtSackPath,
   nativeDyeMixedTint,
@@ -802,7 +803,10 @@ function buildInventory(
         selectedCenter.x,
         selectedCenter.y,
         {
-          ownedPerkSelectors: economy.ownedPerkSelectors,
+          creativityRank: permanentSkillRank(
+            progression,
+            NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
+          ),
           ownedRecipeIndexes: economyRecipeIndexes(economy),
           playerLevel: progression.level,
         },
@@ -2196,7 +2200,10 @@ function addServiceInspection(
     context,
     layer,
     hubItemTooltipLines(item, {
-      ownedPerkSelectors: model.economy.ownedPerkSelectors,
+      creativityRank: permanentSkillRank(
+        model.progression,
+        NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
+      ),
       ownedRecipeIndexes: economyRecipeIndexes(model.economy),
       playerLevel: model.progression.level,
       price: model.trader === 'luthacus' ? null : hubShopItemPrice(item),
@@ -2249,6 +2256,13 @@ function economyRecipeIndexes(economy: ProtocolPlayerEconomy): readonly number[]
     ...economy.storage,
     ...equipment.filter((item): item is HubInventoryItem => item !== null),
   ].flatMap(visit))
+}
+
+function permanentSkillRank(
+  progression: ProtocolPlayerProgression,
+  skillId: number,
+): number {
+  return progression.learnedSkills.find(([candidate]) => candidate === skillId)?.[1] ?? 0
 }
 
 function hubShopItemPrice(item: HubInventoryItem | HubShopItem): number | null {

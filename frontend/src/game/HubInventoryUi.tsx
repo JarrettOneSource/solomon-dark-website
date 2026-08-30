@@ -20,6 +20,7 @@ import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
   MAX_NATIVE_DYE_SELECTIONS,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   findInventoryItem,
   inventoryItemsAtSackPath,
   inventoryItemsShareStack,
@@ -3482,7 +3483,9 @@ function serviceInspectionTooltipText(
       : dowsingItems(economy).find(({ id }) => id === inspection.id)
   if (!item) return null
   return tooltipSemanticText(hubItemTooltipLines(item, {
-    ownedPerkSelectors: economy.ownedPerkSelectors,
+    creativityRank: progression.learnedSkills.find(
+      ([skillId]) => skillId === NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
+    )?.[1] ?? 0,
     playerLevel: progression.level,
     price: trader === 'luthacus' ? null : hubShopItemPrice(item),
   }))

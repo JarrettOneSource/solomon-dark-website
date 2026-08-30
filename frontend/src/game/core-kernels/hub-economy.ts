@@ -603,6 +603,29 @@ export const DOWSING_EQUIPMENT_RECIPES: readonly EquipmentRecipe[] =
     type,
   }))
 
+export const NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID = 63
+export const NATIVE_EQUIPMENT_LEVEL_REDUCTION = 2
+
+export interface NativeEquipmentAdmissionContext {
+  readonly creativityRank: number
+  readonly playerLevel: number
+}
+
+export function nativeEquipmentRequiredLevel(item: HubInventoryItem): number {
+  const recipe = item.recipeIndex === null
+    ? null
+    : DOWSING_EQUIPMENT_RECIPES[item.recipeIndex] ?? null
+  return item.generatedLevel ?? recipe?.level ?? 0
+}
+
+export function nativeEquipmentMeetsLevelRequirement(
+  item: HubInventoryItem,
+  context: NativeEquipmentAdmissionContext,
+): boolean {
+  const reduction = context.creativityRank > 0 ? NATIVE_EQUIPMENT_LEVEL_REDUCTION : 0
+  return nativeEquipmentRequiredLevel(item) - reduction <= context.playerLevel
+}
+
 const HAGATHA_PERK_ROWS = [
   [0, 'LIFE CHARM', 200, 'Increases maximum life by 25 percent.', 'derived_stat'],
   [1, 'MANA CHARM', 200, 'Increases maximum mana by 25 percent.', 'derived_stat'],
@@ -1310,10 +1333,10 @@ export function moveInventoryItem(
 export function equipEligibleInventorySackContents(
   source: HubEconomyState,
   itemId: number,
-  playerLevel: number,
+  context: NativeEquipmentAdmissionContext,
 ): HubEconomyResult {
   if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
-  if (!Number.isSafeInteger(playerLevel) || playerLevel < 1) {
+  if (!nativeEquipmentAdmissionContextIsValid(context)) {
     return rejected(source, 'ineligible-item')
   }
   const sack = findInventoryItem(source.backpack, itemId)
@@ -1322,7 +1345,7 @@ export function equipEligibleInventorySackContents(
   }
   const eligible = (item: HubInventoryItem, nativeTypeId: number) => (
     item.nativeTypeId === nativeTypeId
-    && (item.generatedLevel === undefined || item.generatedLevel <= playerLevel)
+    && nativeEquipmentMeetsLevelRequirement(item, context)
   )
   let state = source
   for (const { nativeTypeId, slot } of [
@@ -1933,11 +1956,18 @@ export function equipInventoryItem(
   source: HubEconomyState,
   itemId: number,
   slot: EquipmentSlot,
+  context: NativeEquipmentAdmissionContext,
 ): HubEconomyResult {
   if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  if (!nativeEquipmentAdmissionContextIsValid(context)) {
+    return rejected(source, 'ineligible-item')
+  }
   const item = findInventoryItem(source.backpack, itemId)
   if (!item) return rejected(source, 'item-not-found')
   if (!item.equipmentType) return rejected(source, 'ineligible-item')
+  if (!nativeEquipmentMeetsLevelRequirement(item, context)) {
+    return rejected(source, 'ineligible-item')
+  }
   if (!slotAccepts(slot, item.equipmentType)) return rejected(source, 'invalid-slot')
   if (slot === 'ring-2' && !source.ownedPerkSelectors.includes(19)) {
     return rejected(source, 'slot-locked')
@@ -2628,6 +2658,15 @@ function equipDirectSackChild(
         backpack,
         equipment: withEquippedItem(source.equipment, slot, item),
       }
+}
+
+function nativeEquipmentAdmissionContextIsValid(
+  context: NativeEquipmentAdmissionContext,
+): boolean {
+  return Number.isSafeInteger(context.playerLevel)
+    && context.playerLevel >= 1
+    && Number.isSafeInteger(context.creativityRank)
+    && context.creativityRank >= 0
 }
 
 function accepted(

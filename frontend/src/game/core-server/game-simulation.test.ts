@@ -39,6 +39,7 @@ import {
   createEquipmentInventoryItem,
   DOWSING_EQUIPMENT_RECIPES,
   findInventoryItem,
+  NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import {
@@ -1442,6 +1443,88 @@ test('inventory double activation consumes one potion and applies its participan
       : null,
     0,
   )
+})
+
+test('authoritative equipment admission uses player level and permanent Creativity in both worlds', () => {
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const initial = createGameSimulation()
+  const economy = getPlayerEconomy(initial)
+  const ring = {
+    ...createEquipmentInventoryItem(ringRecipe, economy.nextItemId),
+    generatedLevel: 8,
+    inventorySlot: 2,
+  }
+  const seeded = {
+    ...initial,
+    playerEntities: replacePlayerEconomy(initial.playerEntities, 'local-player', {
+      ...economy,
+      backpack: [...economy.backpack, ring],
+      nextItemId: economy.nextItemId + 1,
+      revision: economy.revision + 1,
+    }),
+  }
+  assert.equal(getPlayerProgression(seeded).level, 1)
+
+  for (const [world, state] of [
+    ['College', seeded],
+    ['Boneyard', enterBoneyardWorld(seeded, emptyBoneyard())],
+  ] as const) {
+    const rejected = applyGameSimulationHubAction(state, 'local-player', {
+      itemId: ring.id,
+      slot: 'ring-0',
+      type: 'equip',
+    })
+    assert.equal(rejected.accepted, false, world)
+    assert.equal(rejected.reason, 'ineligible-item', world)
+    assert.strictEqual(getPlayerEconomy(rejected.state).equipment.rings[0], null, world)
+    assert.strictEqual(findInventoryItem(getPlayerEconomy(rejected.state).backpack, ring.id), ring)
+  }
+
+  const bound = applyGameSimulationHubAction(seeded, 'local-player', {
+    itemId: ring.id,
+    slot: 2,
+    type: 'bind-belt-item',
+  })
+  assert.equal(bound.accepted, true)
+  const beltRejected = applyGameSimulationHubAction(bound.state, 'local-player', {
+    slot: 2,
+    type: 'activate-belt-slot',
+  })
+  assert.equal(beltRejected.accepted, false)
+  assert.equal(beltRejected.reason, 'ineligible-item')
+  assert.strictEqual(getPlayerEconomy(beltRejected.state).equipment.rings[0], null)
+  assert.strictEqual(findInventoryItem(getPlayerEconomy(beltRejected.state).backpack, ring.id), ring)
+
+  const playerIndex = seeded.playerEntities.identities.findIndex(
+    ({ playerId }) => playerId === 'local-player',
+  )
+  const skillBooks = [...seeded.playerEntities.skillBooks]
+  const skillBook = skillBooks[playerIndex]!
+  const permanentRanks = [...skillBook.permanentRanks]
+  permanentRanks[NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID] = 1
+  skillBooks[playerIndex] = { ...skillBook, permanentRanks: Object.freeze(permanentRanks) }
+  const reducedRing = { ...ring, generatedLevel: 3 }
+  const creativeEconomy = {
+    ...getPlayerEconomy(seeded),
+    backpack: getPlayerEconomy(seeded).backpack.map((item) => (
+      item.id === reducedRing.id ? reducedRing : item
+    )),
+  }
+  const creativeState = {
+    ...seeded,
+    playerEntities: replacePlayerEconomy(
+      { ...seeded.playerEntities, skillBooks: Object.freeze(skillBooks) },
+      'local-player',
+      creativeEconomy,
+    ),
+  }
+  const admitted = applyGameSimulationHubAction(creativeState, 'local-player', {
+    itemId: reducedRing.id,
+    slot: 'ring-0',
+    type: 'equip',
+  })
+  assert.equal(admitted.accepted, true)
+  assert.strictEqual(getPlayerEconomy(admitted.state).equipment.rings[0], reducedRing)
 })
 
 test('native item belt binds shortcuts without moving ownership and activates exact item families', () => {

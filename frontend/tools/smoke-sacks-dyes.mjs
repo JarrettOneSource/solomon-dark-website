@@ -60,6 +60,7 @@ const IDS = Object.freeze({
   dyeInnerSack: 40_010,
   dyeOne: 40_007,
   dyeTwo: 40_008,
+  highLevelRing: 40_019,
   mergePotion: 40_014,
   mergeStack: 40_015,
   mergeSack: 40_016,
@@ -214,6 +215,7 @@ try {
     `[data-inventory-owner="backpack"][data-inventory-item-id="${id}"]`,
   )
   const equipmentSlot = (slot) => inventory.locator(`[data-equipment-slot="${slot}"]`).first()
+  const levelAdmissionReceipts = { boneyard: null, hub: null }
 
   const blankDestinationSlot = 12
   await dragToInventorySlot(page, inventory, backpackItem(IDS.rootKey), blankDestinationSlot)
@@ -309,6 +311,41 @@ try {
     close: await inventorySoundCount(page, 'backpack-close.wav'),
     open: await inventorySoundCount(page, 'backpack-open.wav'),
   }
+
+  const highLevelRing = backpackItem(IDS.highLevelRing)
+  await highLevelRing.click()
+  await highLevelRing.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await page.waitForTimeout(250)
+  await inventoryCanvas.locator('xpath=self::*[@data-native-item-info="visible"]').waitFor()
+  await page.waitForTimeout(300)
+  const hubFeedbackSequence = gameHost.state().playerEntities.economies[0]
+    ?.actionFeedback?.sequence ?? 0
+  const hubBadActionStart = await audioCueCount(page, 'bad-action.wav')
+  await doubleActivate(page, highLevelRing)
+  const hubLevelFeedback = await waitForHostEconomy(gameHost, (economy) => (
+    (economy.actionFeedback?.sequence ?? 0) > hubFeedbackSequence
+      && economy.actionFeedback?.action === 'equip'
+  ))
+  assert.deepEqual({
+    accepted: hubLevelFeedback.actionFeedback?.accepted,
+    reason: hubLevelFeedback.actionFeedback?.reason,
+  }, { accepted: false, reason: 'ineligible-item' })
+  await waitForAudioCueCount(page, 'bad-action.wav', hubBadActionStart + 1)
+  assert.equal(hubLevelFeedback.equipment.rings.some((ring) => (
+    ring?.id === IDS.highLevelRing
+  )), false)
+  assert.ok(findHostBackpackItem(gameHost, IDS.highLevelRing))
+  await page.screenshot({ path: `${screenshotRoot}-hub-equipment-level-rejection.png` })
+  assert.equal(await audioCueCount(page, 'bad-action.wav') - hubBadActionStart, 1)
+  levelAdmissionReceipts.hub = {
+    badActionCount: await audioCueCount(page, 'bad-action.wav') - hubBadActionStart,
+    itemId: IDS.highLevelRing,
+    playerLevel: 1,
+    requiredLevel: 3,
+  }
+  await inventory.locator('[data-inventory-empty-space="true"]').click({
+    position: { x: 800, y: 450 },
+  })
 
   await backpackItem(IDS.clickRingOne).click()
   await backpackItem(IDS.clickRingOne).locator('xpath=self::*[@data-selected="true"]').waitFor()
@@ -675,6 +712,36 @@ try {
   const runInventory = page.getByRole('dialog', { name: 'Inventory' })
   await runInventory.waitFor()
   await runInventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const runHighLevelRing = runInventory.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.highLevelRing}"]`,
+  )
+  const boneyardFeedbackSequence = gameHost.state().playerEntities.economies[0]
+    ?.actionFeedback?.sequence ?? 0
+  const boneyardBadActionStart = await audioCueCount(page, 'bad-action.wav')
+  await dragTo(
+    page,
+    runHighLevelRing,
+    runInventory.locator('[data-equipment-slot="ring-0"]').first(),
+  )
+  const boneyardLevelFeedback = await waitForHostEconomy(gameHost, (economy) => (
+    (economy.actionFeedback?.sequence ?? 0) > boneyardFeedbackSequence
+      && economy.actionFeedback?.action === 'equip'
+  ))
+  assert.deepEqual({
+    accepted: boneyardLevelFeedback.actionFeedback?.accepted,
+    reason: boneyardLevelFeedback.actionFeedback?.reason,
+  }, { accepted: false, reason: 'ineligible-item' })
+  await waitForAudioCueCount(page, 'bad-action.wav', boneyardBadActionStart + 1)
+  assert.equal(boneyardLevelFeedback.equipment.rings[0]?.id, IDS.clickRingTwo)
+  assert.equal(boneyardLevelFeedback.equipment.rings[1]?.id, IDS.clickRingOne)
+  assert.ok(findHostBackpackItem(gameHost, IDS.highLevelRing))
+  await page.screenshot({ path: `${screenshotRoot}-boneyard-equipment-level-rejection.png` })
+  assert.equal(await audioCueCount(page, 'bad-action.wav') - boneyardBadActionStart, 1)
+  levelAdmissionReceipts.boneyard = {
+    badActionCount: await audioCueCount(page, 'bad-action.wav') - boneyardBadActionStart,
+    itemId: IDS.highLevelRing,
+    preservedRingIds: boneyardLevelFeedback.equipment.rings.slice(0, 2).map((ring) => ring?.id),
+  }
   await openSack(page, runInventory, runInventory.locator(
     `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.sourceSack}"]`,
   ), IDS.sourceSack)
@@ -706,6 +773,7 @@ try {
     audioEvents: await dyeAudioCount(page),
     consoleErrors,
     dyedTarget: dyedTarget.iconTints,
+    equipmentLevelAdmission: levelAdmissionReceipts,
     failedResponses,
     hasTouch,
     pageErrors,
@@ -714,6 +782,8 @@ try {
     sackAudio,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
+      `${screenshotRoot}-hub-equipment-level-rejection.png`,
+      `${screenshotRoot}-boneyard-equipment-level-rejection.png`,
       `${screenshotRoot}-addressed-root-slots.png`,
       `${screenshotRoot}-inventory-flyby-swap.png`,
       `${screenshotRoot}-inventory-flyby-restore.png`,
@@ -758,6 +828,11 @@ function createSeededSave() {
   const target = createEquipmentInventoryItem(robeRecipe, IDS.target)
   const clickRingOne = createEquipmentInventoryItem(ringRecipes[0], IDS.clickRingOne)
   const clickRingTwo = createEquipmentInventoryItem(ringRecipes[1], IDS.clickRingTwo)
+  const highLevelRingRecipe = DOWSING_EQUIPMENT_RECIPES.find(
+    ({ sourceIndex }) => sourceIndex === 35,
+  )
+  if (!highLevelRingRecipe) throw new Error('Inventory acceptance requires Ringwall')
+  const highLevelRing = createEquipmentInventoryItem(highLevelRingRecipe, IDS.highLevelRing)
   const rootKey = inventoryItem(IDS.rootKey, 'Wizard Key', 'key', 7012, 1, [43])
   const movableKey = inventoryItem(IDS.movableKey, 'Wizard Key', 'key', 7012, 1, [43])
   const movableSackKey = inventoryItem(
@@ -821,6 +896,7 @@ function createSeededSave() {
       mergeSack,
       clickRingOne,
       clickRingTwo,
+      highLevelRing,
     ],
     collegeIntroPending: false,
     firstMixedSelectors: reportedParityOnly ? [0] : economy.firstMixedSelectors,
