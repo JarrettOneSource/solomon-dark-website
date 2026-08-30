@@ -24,13 +24,13 @@ import {
   type PartySystemState,
 } from './party-system.ts'
 
-test('every connected player starts as leader of an opaque private singleton', () => {
+test('every connected player starts as leader of an opaque public singleton', () => {
   let state = players('player-a', 'player-b')
   assert.deepEqual(partyForPlayer(state, 'player-a'), {
     ...identity('player-a'),
     leaderPlayerId: 'player-a',
     memberPlayerIds: ['player-a'],
-    visibility: 'private',
+    visibility: 'public',
   })
   assert.equal(partyByJoinCode(state, 'CODE-player-a')?.leaderPlayerId, 'player-a')
   assert.equal(partyByListingId(state, 'LIST-player-b')?.leaderPlayerId, 'player-b')
@@ -53,13 +53,14 @@ test('invite and recipient acceptance atomically replace the singleton party', (
   assert.equal(invitePartyPlayer(state, 'player-b', 'player-c', 4).reason, 'not-leader')
 })
 
-test('direct joins, leave, and leader kick create fresh private singletons', () => {
+test('direct joins, leave, and leader kick create fresh public singletons', () => {
   let state = players('player-a', 'player-b', 'player-c')
   state = joinPartyPlayer(state, 'player-b', identity('player-a').id, 3).state
   assert.equal(joinPartyPlayer(state, 'player-c', identity('player-a').id, 2).reason, 'party-full')
 
   state = leaveParty(state, 'player-b', identity('player-b-left')).state
   assert.equal(partyForPlayer(state, 'player-b')?.id, identity('player-b-left').id)
+  assert.equal(partyForPlayer(state, 'player-b')?.visibility, 'public')
   state = joinPartyPlayer(state, 'player-b', identity('player-a').id, 3).state
   state = kickPartyPlayer(
     state,
@@ -68,6 +69,7 @@ test('direct joins, leave, and leader kick create fresh private singletons', () 
     identity('player-b-kicked'),
   ).state
   assert.equal(partyForPlayer(state, 'player-b')?.id, identity('player-b-kicked').id)
+  assert.equal(partyForPlayer(state, 'player-b')?.visibility, 'public')
   assert.equal(kickPartyPlayer(state, 'player-a', 'player-a', identity('nope')).reason, 'self-kick')
 })
 
@@ -117,6 +119,7 @@ test('recovery restores the original ordered membership and leader independently
 
 test('visibility, join-code rotation, and requests are leader-owned and bounded', () => {
   let state = players('player-a', 'player-b')
+  state = setPartyVisibility(state, 'player-a', 'private').state
   assert.equal(requestPartyJoin(state, identity('player-a').id, {
     id: 'request-private',
     requester: requester('guest'),

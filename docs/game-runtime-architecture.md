@@ -56,11 +56,13 @@ rules. Player cards and a post-world same-region badge are presentation
 consumers. Activity clears when the participant leaves the Hub.
 
 The Play submenu and Dark Cloud keep distinct visual wrappers over one headless
-party-directory/join module. Opted-in singleton and grouped parties on the
-resident Hub or any private-College host may be public or invite-only; private
-parties remain unlisted. The supervisor aggregates only each host's safe
-projection. Private-College rows disclose session kind, mod count, and ordinary
-cheat policy but never content digests, host credentials, or Party ID. A rotatable
+party-directory/join module. Newly constructed singleton parties default to
+Public on both the resident Hub and private-College hosts; leaders may still
+choose Invite Only or Private, and recovered parties retain their signed
+visibility. Private parties remain unlisted. The supervisor aggregates only
+each host's safe projection. Private-College rows disclose session kind, mod
+count, and ordinary cheat policy but never content digests, host credentials,
+or Party ID. A rotatable
 eight-character Party ID is a direct-join capability and appears only in the
 leader cog. Resolution creates a ten-minute in-memory intent, while the actual
 host ticket is minted only after Create. Invite-only requests are memory-only,
@@ -438,16 +440,16 @@ identity into position or actor behavior.
 
 Party identity is also distinct from participant and world identity. Every
 connected browser participant belongs to exactly one party. A new participant
-creates a singleton party and is its leader. Accepting an invitation atomically
-moves a singleton participant into the inviter's party; it never derives
-authority from connection order. Leader disconnect promotes the earliest
-remaining member. Rejoining the same active run does not revoke that promotion.
-Invitations are invalidated when either endpoint disappears, the target ceases
-to be a singleton, or the party starts a run. Party identity, public listing
-identity, Party ID, connection-resume token, and active-run rejoin capability
-are separate opaque values. Leave and Kick move a shared-Hub participant into
-a fresh private singleton. A private College projects all connected clients as
-one party whose leader follows host transfer.
+creates a Public singleton party and is its leader. Accepting an invitation
+atomically moves a singleton participant into the inviter's party; it never
+derives authority from connection order. Leader disconnect promotes the
+earliest remaining member. Rejoining the same active run does not revoke that
+promotion. Invitations are invalidated when either endpoint disappears, the
+target ceases to be a singleton, or the party starts a run. Party identity,
+public listing identity, Party ID, connection-resume token, and active-run
+rejoin capability are separate opaque values. Leave and Kick move a shared-Hub
+participant into a fresh Public singleton. A private College projects all
+connected clients as one party whose leader follows host transfer.
 
 Chat identity is never a fifth client-provided identity. A client chat command
 contains only a channel, bounded text, and an optional server-issued target

@@ -10,11 +10,13 @@ Status: implemented contract, 2026-08-28.
   and are score/save neutral.
 - New Game decides global versus private before Create, but the actual host
   ticket is minted only after the discipline is committed.
-- Every party starts private. Leaders in the global Hub or a private College
-  may choose Public, Invite Only, or Private. The supervisor aggregates opted-in
-  singleton and grouped parties from every live host. Private parties remain
-  unlisted; private-College rows disclose MODDED and CHEATS policy without
-  exposing their Party ID or manifest.
+- Every newly created party starts Public. This includes first admission and
+  the fresh singleton created by Leave or Kick. Explicit Invite Only or Private
+  choices remain authoritative, and signed active-run recovery restores the
+  recovered visibility instead of replacing it with the default. The supervisor
+  aggregates opted-in singleton and grouped parties from every live host.
+  Private parties remain unlisted; private-College rows disclose MODDED and
+  CHEATS policy without exposing their Party ID or manifest.
 - The Party ID is an eight-character rotatable capability shown only in the
   leader cog. It is not a URL, public listing identifier, or host credential.
 - Play and Dark Cloud both expose the party directory through distinct UI

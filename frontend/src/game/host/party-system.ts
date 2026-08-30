@@ -418,7 +418,7 @@ function membership(identity: PartyIdentity, playerId: string): PartyMembership 
     ...identity,
     leaderPlayerId: playerId,
     memberPlayerIds: [playerId],
-    visibility: 'private',
+    visibility: 'public',
   }
 }
 

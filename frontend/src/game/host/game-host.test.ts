@@ -405,7 +405,7 @@ test('developer observer watches one private run without joining or mutating par
   if (boneyard.type !== 'server-boneyard-loaded') throw new Error('expected Boneyard')
   observedRunId = boneyard.boneyard.runId
   assert.equal(host.observationTargets().length, 1)
-  assert.equal(host.observationTargets()[0]?.visibility, 'private')
+  assert.equal(host.observationTargets()[0]?.visibility, 'public')
 
   // Let the match transition finish publishing its own party state before the
   // observer admission becomes the event under test.
@@ -882,7 +882,7 @@ test('private College projects one party, supports Party-ID reservation, and che
   const partyState = await merged
   assert.equal(partyState.type, 'server-party-state')
   assert.match(partyState.state.party.joinCode, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
-  assert.equal(partyState.state.party.visibility, 'private')
+  assert.equal(partyState.state.party.visibility, 'public')
   assert.equal(first.welcome.cheatsEnabled, true)
   assert.equal(second.welcome.cheatsEnabled, true)
   const rejectedCheatChange = nextMessage(second.socket, message => (
@@ -908,19 +908,10 @@ test('private College projects one party, supports Party-ID reservation, and che
   ))
   first.socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: true }))
   await Promise.all([enabledForFirst, enabledForSecond])
-  const publicState = nextMessage(first.socket, message => (
-    message.type === 'server-party-state' && message.state.party.visibility === 'public'
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-party-settings',
-    visibility: 'public',
-  }))
-  const listedState = await publicState
-  assert.equal(listedState.type, 'server-party-state')
   assert.deepEqual(host.publicParties(), [{
     boneyardName: null,
     cheatsEnabled: true,
-    id: listedState.state.party.listingId,
+    id: partyState.state.party.listingId,
     leader: FIRST_CHARACTER.displayName,
     maxMembers: 16,
     memberCount: 2,
@@ -977,16 +968,12 @@ test('reserved party transfer imports one durable profile into an existing priva
     true,
   )
   context.after(() => closeSocket(leader.socket))
-  const publicState = nextMessage(leader.socket, message => (
-    message.type === 'server-party-state' && message.state.party.visibility === 'public'
-  ))
-  leader.socket.send(encodeGameMessage({
-    type: 'client-party-settings',
-    visibility: 'public',
-  }))
-  const listed = await publicState
-  assert.equal(listed.type, 'server-party-state')
-  partyId = listed.state.party.id
+  const listing = host.publicParties()[0]
+  assert.ok(listing)
+  const target = host.partyTargetByListingId(listing.id)
+  assert.ok(target)
+  assert.equal(target.visibility, 'public')
+  partyId = target.id
   assert.equal(
     host.reservePartyJoin(partyId, reservationId, performance.now() + 10_000),
     null,

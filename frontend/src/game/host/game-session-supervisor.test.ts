@@ -261,14 +261,9 @@ test('private Colleges opt into discovery and share live social routing with hos
   assert.equal(remoteWhisper.recipient?.playerId, remote.welcome.playerId)
   assert.equal(senderWhisper.recipient?.playerReference, remoteIdentity.sender.playerReference)
 
-  const publicState = modded.next(message => (
+  const listedState = await modded.next(message => (
     message.type === 'server-party-state' && message.state.party.visibility === 'public'
   ))
-  modded.socket.send(encodeGameMessage({
-    type: 'client-party-settings',
-    visibility: 'public',
-  }))
-  const listedState = await publicState
   assert.equal(listedState.type, 'server-party-state')
   const directory = await readPublicParties(supervisor.address.url)
   const listed = directory.find(({ id }) => id === listedState.state.party.listingId)
@@ -414,7 +409,22 @@ test('game session supervisor admits independent players to one shared Hub and r
       mods: [],
     })
   }
-  assert.deepEqual(await readPublicParties(supervisor.address.url), [])
+  const defaultDirectory = await readPublicParties(supervisor.address.url)
+  assert.equal(defaultDirectory.length, 3)
+  assert.equal(new Set(defaultDirectory.map(({ id }) => id)).size, 3)
+  assert.ok(defaultDirectory.every(party => (
+    party.boneyardName === null
+    && party.cheatsEnabled === false
+    && party.leader === CHARACTER.displayName
+    && party.maxMembers === 16
+    && party.memberCount === 1
+    && party.members.length === 1
+    && party.members[0] === CHARACTER.displayName
+    && party.modCount === 0
+    && party.sessionKind === 'global-hub'
+    && party.status === 'hub'
+    && party.visibility === 'public'
+  )))
   assert.deepEqual(await readPresence(supervisor.address.url), [1, 2, 3].map(() => ({
     accountUsername: null,
     activity: 'hub',
@@ -496,19 +506,15 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.equal(nonLeaderRejection.ok, false)
   assert.equal(nonLeaderRejection.reason, 'not-leader')
 
-  const publicState = first.next((message) => (
-    message.type === 'server-party-state'
-    && message.state.party.visibility === 'public'
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-party-settings',
-    visibility: 'public',
-  }))
-  const listedParty = await publicState
-  assert.equal(listedParty.type, 'server-party-state')
+  const listedParty = acceptedFirstState
 
   const hubDirectory = await readPublicParties(supervisor.address.url)
-  assert.deepEqual(hubDirectory, [{
+  assert.equal(hubDirectory.length, 2)
+  const groupedDirectoryParty = hubDirectory.find(
+    ({ id }) => id === listedParty.state.party.listingId,
+  )
+  assert.ok(groupedDirectoryParty)
+  assert.deepEqual(groupedDirectoryParty, {
     boneyardName: null,
     cheatsEnabled: false,
     id: listedParty.state.party.listingId,
@@ -520,7 +526,24 @@ test('game session supervisor admits independent players to one shared Hub and r
     sessionKind: 'global-hub',
     status: 'hub',
     visibility: 'public',
-  }])
+  })
+  const singletonDirectoryParty = hubDirectory.find(
+    ({ id }) => id !== listedParty.state.party.listingId,
+  )
+  assert.ok(singletonDirectoryParty)
+  assert.deepEqual(singletonDirectoryParty, {
+    boneyardName: null,
+    cheatsEnabled: false,
+    id: singletonDirectoryParty.id,
+    leader: CHARACTER.displayName,
+    maxMembers: 16,
+    memberCount: 1,
+    members: [CHARACTER.displayName],
+    modCount: 0,
+    sessionKind: 'global-hub',
+    status: 'hub',
+    visibility: 'public',
+  })
   assert.doesNotMatch(JSON.stringify(hubDirectory), /player-|invitation|credential|manifest/i)
 
   const stalePublicIntent = await resolvePublicParty(
@@ -630,13 +653,19 @@ test('game session supervisor admits independent players to one shared Hub and r
       token: rejoinToken,
     }),
   })).status, 409)
-  assert.deepEqual(await readPublicParties(supervisor.address.url), [{
-    ...hubDirectory[0]!,
+  const runDirectory = await readPublicParties(supervisor.address.url)
+  assert.equal(runDirectory.length, 2)
+  assert.deepEqual(runDirectory.find(({ id }) => id === groupedDirectoryParty.id), {
+    ...groupedDirectoryParty,
     boneyardName: firstRun.type === 'server-boneyard-loaded'
       ? firstRun.boneyard.choice.name
       : null,
     status: 'playing',
-  }])
+  })
+  assert.deepEqual(
+    runDirectory.find(({ id }) => id === singletonDirectoryParty.id),
+    singletonDirectoryParty,
+  )
   const runPresence = await readPresence(supervisor.address.url)
   const presenceInRun = runPresence.filter(player => player.activity === 'boneyard')
   const presenceInHub = runPresence.filter(player => player.activity === 'hub')
@@ -821,7 +850,7 @@ test('developer observer admission reaches a private active match without changi
     }>
   }
   assert.equal(directory.items.length, 1)
-  assert.equal(directory.items[0]?.visibility, 'private')
+  assert.equal(directory.items[0]?.visibility, 'public')
   assert.equal(directory.items[0]?.playerCount, 2)
 
   const observerResponse = await fetch(`${supervisor.address.url}/admin/observers`, {
@@ -883,14 +912,9 @@ test('party admission cannot overbook global Hub capacity across singleton parti
   )
   context.after(() => closeSocket(leader.socket))
   context.after(() => closeSocket(other.socket))
-  const visible = leader.next(message => (
+  const party = await leader.next(message => (
     message.type === 'server-party-state' && message.state.party.visibility === 'public'
   ))
-  leader.socket.send(encodeGameMessage({
-    type: 'client-party-settings',
-    visibility: 'public',
-  }))
-  const party = await visible
   assert.equal(party.type, 'server-party-state')
   const resolved = await resolvePublicParty(
     supervisor.address.url,

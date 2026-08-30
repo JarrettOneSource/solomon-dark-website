@@ -98,6 +98,7 @@ test('shared Hub restore preserves the saved character and participant state', (
     restored.world.participants[playerId]?.transition?.scriptedTarget,
     savedParticipant.transition.scriptedTarget,
   )
+  assert.equal(worlds.parties.parties[0]?.visibility, 'public')
 })
 
 test('shared Hub denial removes the recipient invitation without moving either party', () => {

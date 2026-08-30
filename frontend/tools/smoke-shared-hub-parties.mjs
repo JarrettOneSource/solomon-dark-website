@@ -15,6 +15,7 @@ const pointerMode = process.env.SDR_SHARED_HUB_POINTER_MODE?.trim() || 'mobile'
 const evidenceRoot = process.env.SDR_SHARED_HUB_EVIDENCE_DIR?.trim()
 const chatLifecycleOnly = process.argv.includes('--chat-lifecycle-only')
 const chatRoutingOnly = process.argv.includes('--chat-routing-only')
+const partyDefaultOnly = process.argv.includes('--party-default-only')
 if (Boolean(gatewayUrl) !== Boolean(publicWebSocketOrigin)) {
   throw new Error('SDR_SHARED_HUB_GATEWAY_URL and SDR_SHARED_HUB_PUBLIC_ORIGIN must be set together')
 }
@@ -165,11 +166,13 @@ smokeFlow: try {
   await Promise.all([partySettings.waitFor(), hostSawSettingsOccupied])
   const initialPartyId = await partySettings.locator('code').innerText()
   assert.match(initialPartyId, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
-  await partySettings.getByLabel('PUBLIC').click()
-  await first.page.waitForFunction(() => (
-    document.querySelector('input[name="party-visibility"]:checked')
-      ?.parentElement?.textContent?.trim() === 'PUBLIC'
-  ))
+  assert.equal(await partySettings.getByLabel('PUBLIC').isChecked(), true)
+  const partyDefaultEvidencePath = evidenceRoot
+    ? join(evidenceRoot, 'party-default-public.png')
+    : null
+  if (partyDefaultEvidencePath) {
+    await first.page.screenshot({ path: partyDefaultEvidencePath })
+  }
   await partySettings.getByRole('button', { name: 'REGENERATE' }).click()
   await first.page.waitForFunction(initial => (
     document.querySelector('.party-settings-code code')?.textContent !== initial
@@ -182,6 +185,39 @@ smokeFlow: try {
   ), 'party settings activity clear')
   await partySettings.getByRole('button', { name: 'CLOSE' }).click()
   await Promise.all([partySettings.waitFor({ state: 'detached' }), hostSawSettingsClear])
+  if (partyDefaultOnly) {
+    const response = await fetch(`${baseUrl}/api/game/parties`)
+    const directory = await response.json()
+    assert.equal(response.status, 200, JSON.stringify(directory))
+    assert.deepEqual(
+      directory.items.map(({ leader }) => leader).sort(),
+      ['Aurelia', 'Basil'],
+    )
+    assert.ok(directory.items.every((party) => (
+      party.memberCount === 1
+      && party.sessionKind === 'global-hub'
+      && party.status === 'hub'
+      && party.visibility === 'public'
+    )))
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors, unexpectedRequestFailures }, {
+      consoleErrors: [],
+      failedResponses: [],
+      pageErrors: [],
+      unexpectedRequestFailures: [],
+    })
+    await host.close()
+    for (const context of contexts.splice(0)) await context.close()
+    const finalHealth = await waitForEmptyHealth()
+    process.stdout.write(`${JSON.stringify({
+      browserVersion: browser.version(),
+      finalHealth,
+      partyDefaultEvidencePath,
+      publicPartyLeaders: directory.items.map(({ leader }) => leader).sort(),
+      status: 'ok',
+      visibility: 'public',
+    })}\n`)
+    break smokeFlow
+  }
 
   const firstInviteClickCountBefore = await soundCount(first.page, 'click')
   host.invitePlayer(first.playerId)

@@ -187,11 +187,7 @@ try {
   await source.getByRole('button', { name: 'Party settings' }).click()
   const partySettings = source.getByRole('dialog', { name: 'Party settings' })
   await partySettings.waitFor()
-  await partySettings.getByLabel('PUBLIC').click()
-  await source.waitForFunction(() => (
-    document.querySelector('input[name="party-visibility"]:checked')
-      ?.parentElement?.textContent?.trim() === 'PUBLIC'
-  ))
+  assert.equal(await partySettings.getByLabel('PUBLIC').isChecked(), true)
   await partySettings.getByRole('button', { name: 'CLOSE' }).click()
   await partySettings.waitFor({ state: 'detached' })
 
