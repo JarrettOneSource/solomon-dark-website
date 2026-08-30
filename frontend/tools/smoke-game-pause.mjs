@@ -918,8 +918,8 @@ try {
   process.stderr.write(`${JSON.stringify({ errors, failedResponses })}\n`)
   throw error
 } finally {
-  peer?.socket.close()
-  latePeer?.socket.close()
+  peer?.socket.terminate()
+  latePeer?.socket.terminate()
   await browser.close()
   await host.close()
   await vite.close()
