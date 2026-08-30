@@ -19,6 +19,26 @@
 | Web Gate consumers | `renderer/boneyard-world-renderer.ts` and `editor/render.ts` | Both duplicated the same reversed offset, drawing bare `p1` to `(p3.x,p3.y+32)`. On a vertical closed leaf this is 64 world units longer than stock. | high |
 | Clean-stock visual oracle | `/tmp/solomon-dark-native-fence-gate-closed-20260814.png` and `/tmp/solomon-dark-native-fence-gate-open-20260814.png`, captured from an uninjected retail process | Closed and pushed leaves retain the short internal tip rule; no matching extension continues below the lower tip. | high |
 
+## 2026-08-29 — Exact stock adjacent-Gate confirmation
+
+- A player reported one random map with two complete working Gates immediately
+  beside each other and asked whether the strange arrangement was a web
+  rendering duplication.
+- The exact raw stock-generator output from instance
+  `steam-host-beta8-boneyard-seed-0720c` hashes to
+  `cd4d1ba948ca6624fffb967b02b7c93a6d00cbf9b5ec2c4541330b0616a1c239`,
+  exactly matching its committed generated-bank provenance. Parsing that raw
+  `.boneyard` independently yields two collinear code-2 Gate segments at
+  `y=2079.550048828125`: `(99.1114501953125 -> 249.1114501953125)` and
+  `(235.52423095703125 -> 385.52423095703125)`.
+- The two authored segments therefore overlap by
+  `13.58721923828125` world units. Each code-2 segment materializes its own two
+  working leaves, so the observed adjacent double-Gate arrangement is stock
+  generator output, not a duplicated Website painter or replicated Gate.
+- The complete twelve-template bank contains Gate-segment counts
+  `1,2,2,1,1,3,2,1,1,2,1,1`. No Gate source, projection, collision, renderer,
+  protocol, or selection code changes from this confirmation.
+
 The authoritative native detail is retained in sibling reports
 `docs/reverse-engineering/boneyard-system.md` and
 `docs/reverse-engineering/native-gate-art-and-lifecycle.md` in the Mod Loader

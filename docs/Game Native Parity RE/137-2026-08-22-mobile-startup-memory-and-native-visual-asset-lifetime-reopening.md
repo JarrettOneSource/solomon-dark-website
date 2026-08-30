@@ -1,5 +1,16 @@
 # 2026-08-22 — Mobile startup memory and native visual-asset lifetime reopening
 
+## 2026-08-29 — Hub native UI family lifetime correction
+
+The cross-surface black-frame reopening in entry 280 falsifies only this
+entry's claim that every Inventory/trader logical screen may destroy its WebGL
+application independently. Startup ownership remains unchanged: none of that
+family's private art loads before first use. After first use, the browser keeps
+one `HubInventoryUi` renderer across standalone Inventory, dialogue, and all
+four companion services, then destroys it on Hub/Boneyard scene teardown. This
+bounded scene-local adaptation prevents a proven destroy/recreate resource race
+without restoring route-global residency or retaining assets across world exit.
+
 ## Reported smell and parity question
 
 - Production report: opening `/game` on a phone advances partway through the
@@ -49,7 +60,7 @@ owner boundaries.
 | Dark Cloud DOM/CSS imagery | separate Website catalog screen | `out-of-system` (Website extension) | Vite scene chunk/CSS owns its images; no route resident-image entry is added. |
 | Hub world, rooms, NPCs, players, spells and HUD | native College/room/actor owners; Website Hub renderer barrier | `exact-ported` ownership | Deferred to Hub renderer, bounded load, input sealed through first frame, textures destroyed on world exit. |
 | Boneyard field, scenery, enemy, loot, Solomon, player and spell art | native Arena/actor bundle owners; Website Boneyard renderer barrier | `exact-ported` ownership | Deferred to Boneyard renderer, bounded load, prior Hub teardown precedes residency, and run exit destroys textures. |
-| SkillPicker, SkillBook, inventory/traders and pause renderers | their native screen owners | `verified-already-at-parity` with on-demand renderer ownership | Existing lazy imports/renderers retain independent construction/destruction; startup contains none of their private art. |
+| SkillPicker, SkillBook, inventory/traders and pause renderers | their native screen owners | `verified-already-at-parity` with bounded browser lifetime adaptation | All remain lazy and absent from startup. SkillPicker, SkillBook, and Pause retain independent teardown; the Inventory/trader family retains one renderer after first use until its containing Hub/Boneyard scene exits. |
 | Mod presentation textures | Website mod runtime | `out-of-system` (browser mod extension) | Run/screen scoped loader releases its image promises and destroys textures on teardown. |
 | Browser image-promise cache | no native object; mirrors in-progress page acquisition | `out-of-system` (browser adapter) | Deduplicates only active loads; every texture-map success/error path deletes the corresponding promise entries. |
 | Maximum four concurrent browser tasks | native builders are mostly synchronous with a finite five-builder async family, but expose no browser-equivalent numeric cap | `blocked-by-platform` adaptation (mobile WebKit process budget) | Deterministic unit test pins `<=4`; visible behavior differs only in load throughput, not art/readiness/order. |
@@ -67,8 +78,10 @@ burst; final pixels, scene timing after readiness, and gameplay are unchanged.
   the process may consume later.
 - Each later visual owner acquires only when its scene/renderer constructs,
   blocks that scene's input until its first ready frame, retains GPU textures
-  while active, and destroys them on teardown. Transition loading is therefore
-  real work, not a timed splash.
+  while active, and destroys them at its recorded teardown boundary. The
+  Inventory/trader native UI family uses containing-scene teardown after first
+  use; other screen families keep their independent teardown. Transition
+  loading is therefore real work, not a timed splash.
 - Browser image promises deduplicate overlapping requests but do not confer
   residency. Pixi textures become the active owner; the promise entry is
   deleted immediately after successful texture construction or any failure.

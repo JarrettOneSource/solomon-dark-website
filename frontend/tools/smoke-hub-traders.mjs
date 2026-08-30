@@ -23,6 +23,7 @@ const baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
 const hostElement = process.env.SDR_GAME_TRADER_HOST_ELEMENT || 'Fire'
 const screenshotRoot = process.env.SDR_GAME_TRADER_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-trader'
 const singleClient = process.env.SDR_GAME_TRADER_SINGLE_CLIENT === '1'
+const rendererLifecycleOnly = process.argv.includes('--renderer-lifecycle-only')
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -43,7 +44,11 @@ for (const page of [hostPage, guestPage]) {
   await page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket
     window.__sdrSmokeKeyEvents = []
+    window.__sdrSmokeWebGlContextLosses = []
     window.__sdrSmokeWebSocketEvents = []
+    document.addEventListener('webglcontextlost', (event) => {
+      window.__sdrSmokeWebGlContextLosses.push(event.target?.className ?? 'unknown')
+    }, true)
     for (const type of ['keydown', 'keyup']) {
       window.addEventListener(type, (event) => {
         window.__sdrSmokeKeyEvents.push({
@@ -111,9 +116,27 @@ try {
   const canvas = hostPage.locator('.hub-world-canvas')
   if (!singleClient) assert.equal(await inventoryGold(guestPage), 500)
   await focusPage(hostPage)
-  const hostStartingGold = await inventoryGold(hostPage)
+  const hostStartingGold = await inventoryGold(hostPage, true)
   assert.equal(hostStartingGold, 500)
   step('both participants start with the retail 500 gold')
+  const rendererLifecycle = await exerciseRetainedInventoryRenderer(hostPage)
+  if (rendererLifecycleOnly) {
+    assert.deepEqual(browserErrors, [])
+    assert.deepEqual(failedRequests, [])
+    assert.deepEqual(failedResponses, [])
+    assert.deepEqual(await hostPage.evaluate(() => window.__sdrSmokeWebGlContextLosses), [])
+    await writeFile(`${screenshotRoot}-receipt.json`, `${JSON.stringify({
+      abortedRequests,
+      browserErrors,
+      failedRequests,
+      failedResponses,
+      host: await pageReceipt(hostPage),
+      rendererLifecycle,
+    }, null, 2)}\n`)
+    step('focused native UI renderer lifecycle receipt complete')
+    await browser.close()
+    process.exit(0)
+  }
   await fundTraderSmoke(hostPage)
   await exerciseStarterInventory(hostPage)
 
@@ -598,7 +621,7 @@ try {
     browserErrors,
     failedRequests,
     failedResponses,
-    guest: await pageReceipt(guestPage),
+    guest: singleClient ? null : await pageReceipt(guestPage),
     host: await pageReceipt(hostPage),
   })}\n`)
   throw error
@@ -623,6 +646,7 @@ async function pageReceipt(page) {
       modalOpen: node.dataset.modalOpen,
       region: node.dataset.hubRegion,
     }))),
+    webGlContextLosses: await page.evaluate(() => window.__sdrSmokeWebGlContextLosses),
     webSocketEvents: await page.evaluate(() => window.__sdrSmokeWebSocketEvents),
   }
 }
@@ -748,14 +772,99 @@ async function focusPage(page) {
   })
 }
 
-async function inventoryGold(page) {
+async function inventoryGold(page, markRendererOwner = false) {
   await page.keyboard.press('i')
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
+  if (markRendererOwner) {
+    await inventory.locator('.hub-inventory-native-canvas').evaluate((canvas) => {
+      canvas.dataset.sdrInventoryRendererOwner = 'scene'
+    })
+  }
   const gold = await dialogGold(inventory)
   await closeInventory(page, inventory)
   return gold
+}
+
+async function exerciseRetainedInventoryRenderer(page) {
+  const services = [
+    ['Hagatha', "HAGATHA'S CHARMS AND CURSES"],
+    ['Fomentius', "FOMENTIUS' USEFUL THYNGS"],
+    ['Luthacus', "LUTHACUS' SCAVENGED GOODS"],
+    ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"],
+  ]
+  let hagathaPixels = null
+  const serviceReceipts = []
+  for (const [trader, title] of services) {
+    await page.getByRole('button', { name: `Open ${trader} interaction` }).click()
+    const service = page.getByRole('dialog', { name: title })
+    await service.waitFor()
+    await waitForNativeSurfaceSettled(service)
+    const canvas = service.locator('.hub-inventory-native-canvas')
+    assert.equal(
+      await canvas.getAttribute('data-sdr-inventory-renderer-owner'),
+      'scene',
+      `standalone Inventory and ${trader} must retain one scene-local renderer`,
+    )
+    if (trader === 'Hagatha') {
+      const companionItem = service.getByLabel('Backpack').getByRole('button', {
+        exact: true,
+        name: 'Mana Potion, quantity 1',
+      })
+      await companionItem.click()
+      await companionItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
+      await page.waitForTimeout(4_250)
+      hagathaPixels = await nativeUiCentralPixelReceipt(page)
+      assert.ok(hagathaPixels.nonBlackPixels > 50_000, JSON.stringify(hagathaPixels))
+      assert.ok(hagathaPixels.rgbTotal > 5_000_000, JSON.stringify(hagathaPixels))
+      await page.screenshot({ path: `${screenshotRoot}-hagatha-after-inventory-lifetime.png` })
+    }
+    const resume = service.locator('[data-inventory-resume="true"]')
+    const resumeBox = await resume.boundingBox()
+    assert.ok(resumeBox, `${trader} companion backpack control has no browser geometry`)
+    const resumeHit = await page.evaluate(({ x, y }) => (
+      document.elementFromPoint(x, y)?.getAttribute('data-inventory-resume')
+    ), {
+      x: resumeBox.x + resumeBox.width / 2,
+      y: resumeBox.y + resumeBox.height / 2,
+    })
+    assert.equal(resumeHit, 'true')
+    serviceReceipts.push({ rendererOwner: 'scene', resumeHit, trader })
+    await resume.click()
+    await service.waitFor({ state: 'detached' })
+  }
+  step('standalone Inventory and all four services retained one painted native UI renderer')
+  return { hagathaPixels, services: serviceReceipts }
+}
+
+async function nativeUiCentralPixelReceipt(page) {
+  const screenshot = await page.screenshot({
+    clip: { height: 820, width: 800, x: 400, y: 0 },
+  })
+  return page.evaluate(async (source) => {
+    const image = new Image()
+    const loaded = new Promise((resolve, reject) => {
+      image.addEventListener('load', resolve, { once: true })
+      image.addEventListener('error', reject, { once: true })
+    })
+    image.src = `data:image/png;base64,${source}`
+    await loaded
+    const canvas = document.createElement('canvas')
+    canvas.width = image.width
+    canvas.height = image.height
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    context.drawImage(image, 0, 0)
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data
+    let nonBlackPixels = 0
+    let rgbTotal = 0
+    for (let offset = 0; offset < data.length; offset += 4) {
+      const total = data[offset] + data[offset + 1] + data[offset + 2]
+      if (total > 24) nonBlackPixels += 1
+      rgbTotal += total
+    }
+    return { nonBlackPixels, rgbTotal }
+  }, screenshot.toString('base64'))
 }
 
 async function fundTraderSmoke(page) {

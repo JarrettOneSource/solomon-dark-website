@@ -307,7 +307,7 @@ entry only when the evidence belongs to a genuinely separate system.
 - [2026-08-28 — Cross-College social routing, discovery, and host-content invitations](<277-2026-08-28-cross-college-social-routing-discovery-and-host-content-invitations.md>)
 - [2026-08-28 — PlayerWizard movement during Staff actions](<278-2026-08-28-playerwizard-movement-during-staff-actions.md>)
 - [2026-08-28 — Frost Jet upgrade presentation and Chill impulse correction](<279-2026-08-28-frost-jet-upgrade-presentation-and-chill-impulse-correction.md>)
-- [2026-08-28 — Luthacus multi-run Scavenged Goods menu reopening](<280-2026-08-28-luthacus-multi-run-scavenged-goods-menu-reopening.md>)
+- [2026-08-28/29 — Luthacus Scavenged Goods and shared native UI renderer lifetime](<280-2026-08-28-luthacus-multi-run-scavenged-goods-menu-reopening.md>)
 - [2026-08-28 — Persistent Boneyard player-light regression reopening](<281-2026-08-28-persistent-boneyard-player-light-regression-reopening.md>)
 - [2026-08-28 — Welded-primary inclusive presentation endpoints](<282-2026-08-28-welded-primary-inclusive-presentation-endpoints.md>)
 - [2026-08-28 — Coffin-Maggot emergence-phase replication endpoint](<283-2026-08-28-coffin-maggot-emergence-phase-replication-endpoint.md>)

@@ -117,6 +117,10 @@ import {
   type HubServiceInspectionModel,
 } from './renderer/hub-inventory-renderer.ts'
 import {
+  createRetainedRendererOwner,
+  type RetainedRendererOwner,
+} from './renderer/retained-renderer-owner.ts'
+import {
   HUB_CHAT_PANEL,
   HUB_DOWSING_GRID,
   HUB_DYE_CLOTHING,
@@ -313,6 +317,11 @@ export default function HubInventoryUi({
   interactionsEnabled = true,
   storyOffice = false,
 }: HubInventoryUiProps) {
+  const rendererOwnerRef = useRef<RetainedRendererOwner<HubInventoryRenderer> | null>(null)
+  rendererOwnerRef.current ??= createRetainedRendererOwner(
+    () => createHubInventoryRenderer(modAssets),
+  )
+  const rendererOwner = rendererOwnerRef.current
   const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
   const [npcNotebox, setNpcNotebox] = useState<string | null>(null)
   const [inventorySackPath, setInventorySackPath] = useState<readonly number[]>([])
@@ -349,6 +358,8 @@ export default function HubInventoryUi({
     setInventoryCloseTarget(null)
     onSurfaceChange(null)
   }, [economy.dowsingOffers.length, onAction, onSurfaceChange, surface])
+
+  useEffect(() => () => rendererOwner.destroy(), [rendererOwner])
 
   const openInventorySack = useCallback((sackId: number) => {
     if (inventorySackTransition !== null) return
@@ -553,7 +564,6 @@ export default function HubInventoryUi({
       economy={economy}
       forceModalHudSettled={forceModalHudSettled}
       inputSuspended={inputSuspended}
-      modAssets={modAssets}
       menuKeyCode={menuKeyCode}
       memorial={memorial}
       onAction={onAction}
@@ -570,6 +580,7 @@ export default function HubInventoryUi({
       perkRemovalEnabled={interactionsEnabled}
       progression={progression}
       replacementTarget={inventoryCloseTarget}
+      rendererOwner={rendererOwner}
       sackPath={inventorySackPath}
       sackTransition={inventorySackTransition}
       skorchaDismissalIndex={skorchaDismissalIndex}
@@ -603,7 +614,6 @@ function NativeHubSurface({
   economy,
   forceModalHudSettled,
   inputSuspended,
-  modAssets,
   menuKeyCode,
   memorial,
   onAction,
@@ -618,6 +628,7 @@ function NativeHubSurface({
   perkRemovalEnabled,
   progression,
   replacementTarget,
+  rendererOwner,
   sackPath,
   sackTransition,
   skorchaDismissalIndex,
@@ -632,7 +643,6 @@ function NativeHubSurface({
   economy: ProtocolPlayerEconomy
   forceModalHudSettled: boolean
   inputSuspended: boolean
-  modAssets: readonly GameModAsset[]
   menuKeyCode: string
   memorial: HubMemorialState | null
   onAction: (action: HubInventoryAction) => void
@@ -647,6 +657,7 @@ function NativeHubSurface({
   perkRemovalEnabled: boolean
   progression: ProtocolPlayerProgression
   replacementTarget: 'closed' | 'skills' | null
+  rendererOwner: RetainedRendererOwner<HubInventoryRenderer>
   sackPath: readonly number[]
   sackTransition: HubInventorySackTransitionModel | null
   skorchaDismissalIndex: number
@@ -1121,11 +1132,8 @@ function NativeHubSurface({
     if (!host) return
     let disposed = false
     let renderer: HubInventoryRenderer | undefined
-    void createHubInventoryRenderer(modAssets).then((created) => {
-      if (disposed) {
-        created.destroy()
-        return
-      }
+    void rendererOwner.get().then((created) => {
+      if (disposed) return
       renderer = created
       rendererRef.current = created
       created.setModel(modelRef.current!)
@@ -1184,10 +1192,9 @@ function NativeHubSurface({
       disposed = true
       unsubscribe()
       rendererRef.current = null
-      renderer?.destroy()
       host.replaceChildren()
     }
-  }, [modAssets])
+  }, [rendererOwner])
 
   useEffect(() => {
     if (surface.kind !== 'dialogue' && inventorySelection) {
@@ -1569,8 +1576,7 @@ function NativeHubSurface({
               onClick={onOpenSkills}
             />
           ) : null}
-          {(surface.kind === 'inventory'
-            || (surface.kind === 'service' && sackPath.length > 0))
+          {(surface.kind === 'inventory' || surface.kind === 'service')
             && !notice && !dyeModal ? (
             <NativeAction
               data={{ 'data-inventory-resume': 'true' }}
@@ -1579,7 +1585,7 @@ function NativeHubSurface({
               rect={inventoryResumeRect}
               onClick={onInventoryBack}
             />
-          ) : surface.kind !== 'inventory' ? (
+          ) : surface.kind === 'dialogue' ? (
             <button
               className="hub-native-ui-semantic"
               data-game-back="true"
