@@ -737,6 +737,20 @@ try {
     'skill-selector-closed',
   )
 
+  await largeBoneyard.getByRole('button', {
+    name: /^Select concentration A, current /,
+  }).click()
+  const concentrationSelector = page.getByRole('dialog', { name: 'Select Concentration' })
+  await concentrationSelector.waitFor()
+  const concentrationHeldTick = host.state().tick
+  await page.keyboard.press('Escape')
+  await concentrationSelector.waitFor({ state: 'detached' })
+  await assertDirectResume(
+    page,
+    concentrationHeldTick,
+    'concentration-selector-closed',
+  )
+
   const peerSawBoneyardPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()
   ))
@@ -832,6 +846,16 @@ try {
   latePeer.socket.close(1000, 'solo restart setup')
   latePeer = null
   await waitForHost(() => host.humanPlayerCount() === 1, 'solo restart owner')
+  await pressPause(page, '.boneyard-scene')
+  const soloPause = page.locator(
+    '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
+  )
+  await soloPause.waitFor()
+  const heldSoloPauseTick = host.state().tick
+  await soloPause.getByRole('button', { name: 'RESUME GAME' }).click()
+  await soloPause.waitFor({ state: 'detached' })
+  await assertResumeProgress(page, heldSoloPauseTick, 'pause-menu-closed')
+
   await pressPause(page, '.boneyard-scene')
   const restartLeave = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',

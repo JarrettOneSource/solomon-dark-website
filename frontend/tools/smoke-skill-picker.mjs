@@ -568,6 +568,7 @@ try {
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor()
   const boneyardCanvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
   await boneyardCanvas.waitFor({ timeout: 90_000 })
   const boneyardState = host.state()
@@ -725,6 +726,21 @@ try {
   ))))
   await page.screenshot({ path: variantsScreenshotPath })
 
+  const boneyardCloseHeldTick = host.state().tick
+  await variantActions.first().click()
+  await boneyardPicker.waitFor({ state: 'detached', timeout: 15_000 })
+  assert.equal(await page.locator(
+    '.gameplay-resume-progress-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
+  ).count(), 0)
+  await waitForHost(
+    () => host.state().tick > boneyardCloseHeldTick,
+    'Boneyard picker direct release',
+  )
+  assert.ok(
+    host.state().tick - boneyardCloseHeldTick <= 10,
+    'Boneyard picker close replayed held wall time',
+  )
+
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -734,6 +750,7 @@ try {
     boneyardBackgroundReceipt,
     boneyardEarlyRevealObserved,
     boneyardPickerAudioReceipt,
+    boneyardCloseHeldTick,
     boneyardPickerHeldTick,
     chatPickerReceipt,
     chatScreenshotPath,

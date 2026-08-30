@@ -2155,6 +2155,63 @@ test('solo Inventory admits item belt bind and pull-off before resume progress',
   assert.ok(host.state().tick - heldTick <= 10, 'solo Inventory must not replay held time')
 })
 
+test('solo Pause and full Skill Screen release through resume progress', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const loaded = nextMessage(
+    client.socket,
+    message => message.type === 'server-boneyard-loaded',
+  )
+  const initialReady = completeInitialGameplayReadiness([client.socket])
+  client.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await loaded
+  await initialReady
+
+  for (const [source, reason] of [
+    ['pause-menu', 'pause-menu-closed'],
+    ['skill-book', 'skill-book-closed'],
+  ] as const) {
+    const paused = nextMessage(client.socket, message => (
+      message.type === 'server-gameplay-pause' && message.pause?.source === source
+    ))
+    client.socket.send(encodeGameMessage({
+      type: 'client-gameplay-pause',
+      paused: true,
+      source,
+    }))
+    await paused
+    const heldTick = host.state().tick
+    const started = nextMessage(client.socket, message => (
+      message.type === 'server-gameplay-resume-grace'
+      && message.grace?.reason === reason
+      && message.grace.remainingMs !== null
+    ))
+    client.socket.send(encodeGameMessage({
+      type: 'client-gameplay-pause',
+      paused: false,
+    }))
+    const activeGrace = await started
+    assert.equal(activeGrace.type, 'server-gameplay-resume-grace')
+    assert.ok((activeGrace.grace?.remainingMs ?? 0) > 1_900)
+    const completed = nextMessage(client.socket, message => (
+      message.type === 'server-gameplay-resume-grace' && message.grace === null
+    ))
+    await new Promise(resolve => setTimeout(resolve, 1_500))
+    assert.equal(host.state().tick, heldTick)
+    await completed
+    await waitFor(() => host.state().tick > heldTick)
+    assert.ok(host.state().tick - heldTick <= 10, `${source} replayed held time`)
+  }
+})
+
 test('the authority can start a Boneyard from a stable private Hub room', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
