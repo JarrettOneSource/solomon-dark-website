@@ -222,6 +222,13 @@ export class PrimarySpellAudioSynchronizer {
           effect.origin.x - listener.position.x,
           effect.origin.y - listener.position.y,
         ))
+        if (effect.presentation === 'steam') {
+          this.audio.playSound('explode-steam', {
+            playbackRate: effect.soundPitch,
+            volume,
+          })
+          continue
+        }
         this.audio.playSound('fireball-hit', {
           playbackRate: effect.soundPitch,
           volume,

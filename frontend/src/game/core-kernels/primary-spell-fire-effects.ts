@@ -46,6 +46,7 @@ export const NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS = 10
 export const NATIVE_GOOD_IMP_MOVEMENT_FACTOR = 0.25
 
 export type NativeFirePatchType = 'fire' | 'goodguy' | 'moving'
+export type NativeFireExplosionPresentation = 'fire' | 'steam'
 
 export interface NativeFirePatchState {
   readonly ageTicks: number
@@ -179,6 +180,7 @@ export interface NativeFireExplosionState {
   readonly footprintDimension: number
   readonly origin: Vector2
   readonly ownerId: string
+  readonly presentation: NativeFireExplosionPresentation
   readonly visualScale: number
   readonly worldKey: string
 }
@@ -705,6 +707,7 @@ export function nativeFireExplosion(
     footprintDimension: visualScale * 110,
     origin: Object.freeze({ ...origin }),
     ownerId,
+    presentation: 'fire',
     visualScale,
     worldKey,
   })
@@ -862,6 +865,7 @@ export function stepNativeFireEmber(
           footprintDimension: NATIVE_FIRE_EMBER_IMMOLATE_FOOTPRINT,
           origin: Object.freeze({ ...position }),
           ownerId: source.ownerId,
+          presentation: 'fire',
           visualScale: 1,
           worldKey: source.worldKey,
         }),

@@ -8454,7 +8454,8 @@ function primarySpellTransientPayload(
   if (source.kind === 'fire-explosion') {
     onlyKeys(source, field, [
       'ageTicks', 'burnDamage', 'damage', 'footprintDimension', 'id', 'kind',
-      'lightRegistration', 'origin', 'ownerId', 'soundPitch', 'visualScale', 'worldKey',
+      'lightRegistration', 'origin', 'ownerId', 'presentation', 'soundPitch',
+      'visualScale', 'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
     if (ageTicks >= NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS) {
@@ -8464,10 +8465,16 @@ function primarySpellTransientPayload(
     if (soundPitch < 0.9 || soundPitch > 1.1) {
       throw new GameProtocolError(`${field}.soundPitch is outside the native range`)
     }
+    const presentation = source.presentation
+    if (presentation !== 'fire' && presentation !== 'steam') {
+      throw new GameProtocolError(`${field}.presentation is not a native explosion family`)
+    }
     return {
       ageTicks,
       burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
-      damage: positiveFinite(source.damage, `${field}.damage`),
+      damage: presentation === 'steam'
+        ? nonnegativeFinite(source.damage, `${field}.damage`)
+        : positiveFinite(source.damage, `${field}.damage`),
       footprintDimension: positiveFinite(
         source.footprintDimension,
         `${field}.footprintDimension`,
@@ -8481,6 +8488,7 @@ function primarySpellTransientPayload(
       ),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      presentation,
       soundPitch,
       visualScale: positiveFinite(source.visualScale, `${field}.visualScale`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),

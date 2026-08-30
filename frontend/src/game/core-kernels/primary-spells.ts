@@ -133,7 +133,10 @@ import {
   stepNativeWeldBoulderDebrisParticle,
   type NativeWeldBoulderDebrisParticleState,
 } from './native-weld-boulder-debris.ts'
-import { spawnNativeWeldSteamActor } from './native-weld-steam.ts'
+import {
+  createNativeWeldSteamDetonation,
+  spawnNativeWeldSteamActor,
+} from './native-weld-steam.ts'
 import {
   createNativeWeldHailTerrainImpact,
   NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
@@ -3232,7 +3235,6 @@ export function createPrimarySpellWeldFireDetonation(
 }> {
   if (spell.buildId !== 1000
     && spell.buildId !== 1003
-    && spell.buildId !== 1005
     && spell.buildId !== 1007) {
     throw new Error(`weld build ${spell.buildId} has no Fire detonation payload`)
   }
@@ -3294,6 +3296,66 @@ export function createPrimarySpellWeldFireDetonation(
     nextId: detonation.nextId,
     rng: detonation.rng,
     transients: Object.freeze([...impact, ...explosion, ...embers]),
+  })
+}
+
+export function createPrimarySpellWeldSteamDetonation(
+  sourceNextId: number,
+  pulse: Readonly<{
+    emberDamage: number
+    emberFragments: number
+    explodeDamage: number
+    explodeRadius: number
+    ownerId: string
+    position: Vector2
+    worldKey: string
+  }>,
+  birthTick: number,
+  sourceRng: NativeRngState,
+  privateSeed: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+): Readonly<{
+  nextId: number
+  rng: NativeRngState
+  transients: readonly PrimarySpellTransientState[]
+}> {
+  const fallbackOrder = createNativeWorldManagerOrder({
+    nextRegistrationOrdinal: { actor: sourceNextId, transient: sourceNextId },
+  })
+  const register = registerWorldPainter ?? fallbackOrder.register
+  const detonation = createNativeWeldSteamDetonation({
+    explodeDamage: pulse.explodeDamage,
+    explodeRadius: pulse.explodeRadius,
+    firstFragmentId: sourceNextId + 1,
+    fragmentCount: pulse.emberFragments,
+    fragmentDamage: pulse.emberDamage,
+    origin: pulse.position,
+    ownerId: pulse.ownerId,
+    privateSeed,
+    rng: sourceRng,
+    tick: birthTick,
+    worldKey: pulse.worldKey,
+  })
+  if (detonation.explosion === null) {
+    return Object.freeze({ nextId: sourceNextId, rng: detonation.rng, transients: [] })
+  }
+  const explosionRegistration = register('transient')
+  const explosion: PrimarySpellFireExplosionState = Object.freeze({
+    ...detonation.explosion,
+    ageTicks: 0,
+    id: sourceNextId,
+    kind: 'fire-explosion',
+    lightRegistration: explosionRegistration,
+    painterRegistrations: Object.freeze([explosionRegistration]),
+  })
+  const fragments = detonation.fragments.map((fragment) => Object.freeze({
+    ...fragment,
+    painterRegistrations: registerNativeWorldPainterRoots(register, 'actor'),
+  }))
+  return Object.freeze({
+    nextId: detonation.nextId,
+    rng: detonation.rng,
+    transients: Object.freeze([explosion, ...fragments]),
   })
 }
 

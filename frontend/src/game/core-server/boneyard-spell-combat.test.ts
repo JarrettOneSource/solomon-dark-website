@@ -1971,7 +1971,11 @@ test('Steam particle contact installs its ten-tick Steamed payload on a risen Co
   const explosion = pulsed.spells.transients.find(({ kind }) => kind === 'fire-explosion')
   assert.equal(explosion?.kind === 'fire-explosion' && explosion.presentation, 'steam')
   assert.equal(pulsed.spells.transients.some(({ kind }) => kind === 'fire-ember'), false)
-  const fragments = pulsed.spells.transients.filter(({ kind }) => kind === 'weld-steam')
+  const fragments = pulsed.spells.transients.filter(
+    (effect): effect is Extract<PrimarySpellTransientState, { kind: 'weld-steam' }> => (
+      effect.kind === 'weld-steam'
+    ),
+  )
   assert.equal(fragments.length, 9)
   assert.equal(fragments.every(({ vector }) => vector.every((value) => value === 0)), true)
   assert.equal(fragments.every(({ contactDamage }) => contactDamage === Math.fround(2 / 100)), true)

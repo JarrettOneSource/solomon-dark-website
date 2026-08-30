@@ -295,10 +295,14 @@ export function nativeFireImpactPlan(
 }
 
 export function nativeFireExplosionPlan(
-  state: Pick<PrimarySpellFireExplosionState, 'ageTicks' | 'id' | 'origin' | 'visualScale'>,
+  state: Pick<
+    PrimarySpellFireExplosionState,
+    'ageTicks' | 'id' | 'origin' | 'presentation' | 'visualScale'
+  >,
   pointGain = 1,
 ): NativeFireExplosionPlan {
   const ageTicks = Math.max(0, Math.floor(state.ageTicks))
+  const arrayTint = state.presentation === 'steam' ? 0xcccccc : 0xffffff
   const draws: NativeFireActorDraw[] = []
   if (ageTicks < NATIVE_FIRE_EXPLOSION_CORE_VISIBLE_TICKS) {
     draws.push(fireActorDraw(
@@ -324,6 +328,7 @@ export function nativeFireExplosionPlan(
       {
         blend: 'add',
         scale: Math.fround(state.visualScale * 2),
+        tint: arrayTint,
       },
     ))
   }
@@ -342,6 +347,7 @@ export function nativeFireExplosionPlan(
         blend: 'add',
         offset: { x: 0, y: repeatedFloatAdd(initialY, velocityY, ageTicks) },
         scale: Math.fround(2 * Math.max(0, pointGain)),
+        tint: arrayTint,
       },
     ))
   }

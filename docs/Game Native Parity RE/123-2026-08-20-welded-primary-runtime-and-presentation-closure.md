@@ -833,7 +833,7 @@ teardown**.
 | gray first array | BadGuys 401..419, `Anim_SpriteArray_ColorOverlay` | `exact-ported` | tint `(.8,.8,.8,1)`, additive, `.75*.98^n`, ages 0..34 |
 | gray rising lit array | BadGuys 420..433 plus `ZAnimLit` | `exact-ported` | tint `(.8,.8,.8,1)`, `.625*.97^n`, rise, ages 0..36, same provider light |
 | Steam detonation audio | registry 27 at `MyApp + 0x4BC` | `exact-ported` | `explode-steam` only, signed `.1` pitch, doubled point gain, once per birth |
-| learned fragment fan | `0x0064418D..0x00644438` | `exact-ported` | private `Float(360)` start; three normal Steam children per configured count; complete nine-word program per child |
+| learned fragment fan | `0x0064418D..0x00644438` | `exact-ported` | private `Float(360)` start; three normal Steam children per configured count; complete ten-word program per child |
 | learned fragment motion | same range | `exact-ported` | signed `Float(25)` heading, `Float(10)` birth offset, speed `4*.9*1.5*(.9+Float(.1))`, Y times `.8`, stretch times `.6` |
 | learned fragment contact | `0x006443B7..0x006443F2` | `exact-ported` | damage `fragmentDamage/100`, zero Explosion/fragment payload, non-recursive ten-tick `Steamed` install |
 | ordinary shared Fire helper | `0x00642BF0` callers | `out-of-system` for build 1005; still exact for 1000/1003/1007 and Fire-family callers | negative 1005 caller test and unchanged ordinary fixtures |

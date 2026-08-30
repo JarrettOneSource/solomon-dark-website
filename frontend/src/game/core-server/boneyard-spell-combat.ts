@@ -4,6 +4,7 @@ import {
   createPrimarySpellFireDetonation,
   createPrimarySpellWeldBoulderTerminal,
   createPrimarySpellWeldFireDetonation,
+  createPrimarySpellWeldSteamDetonation,
   nativePrimaryPainterRegistrationContract,
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
@@ -500,37 +501,26 @@ export function resolveBoneyardSpellCombat(
   }
 
   for (const pulse of steamedPulses) {
-    if (pulse.worldKey !== worldKey) continue
+    if (pulse.worldKey !== worldKey || pulse.explodeRadius <= 0) continue
     const privateSeed = drawNativeInteger(rng, 1_000_000)
     rng = privateSeed.state
-    const detonation = createPrimarySpellWeldFireDetonation(
+    const detonation = createPrimarySpellWeldSteamDetonation(
       nextSpellId,
       {
-        buildId: 1005,
-        direction: { x: 0, y: -1 },
+        emberDamage: pulse.emberDamage,
+        emberFragments: pulse.emberFragments,
+        explodeDamage: pulse.explodeDamage,
+        explodeRadius: pulse.explodeRadius,
         ownerId: pulse.sourcePlayerId,
         position: { ...pulse.position },
-        vector: [
-          0,
-          0,
-          0,
-          0,
-          pulse.explodeDamage,
-          pulse.explodeRadius,
-          pulse.emberDamage,
-          pulse.emberFragments,
-        ],
         worldKey,
       },
-      pulse.position,
       tick,
       rng,
       privateSeed.value,
-      false,
       registerWorldPainter,
     )
     rng = detonation.rng
-    pendingFireActorContacts.push(...detonation.contacts)
     impactTransients.push(...enrollCombatActors(detonation.transients))
     nextSpellId = detonation.nextId
   }
