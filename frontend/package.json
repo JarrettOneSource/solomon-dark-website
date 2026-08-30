@@ -88,6 +88,7 @@
     "smoke:game:inventory-skill-book": "node --experimental-strip-types tools/smoke-inventory-skill-book.mjs",
     "smoke:game:tutorial-amulet": "node --experimental-strip-types tools/smoke-sorcerors-amulet.mjs",
     "smoke:game:derived-hud": "node --experimental-strip-types tools/smoke-native-derived-hud.mjs",
+    "smoke:game:hagatha-capacity": "node --experimental-strip-types tools/smoke-hub-traders.mjs --hagatha-capacity-only",
     "smoke:game:pause": "node --experimental-strip-types tools/smoke-game-pause.mjs",
     "smoke:game:settings": "node --experimental-strip-types tools/smoke-game-settings.mjs",
     "smoke:game:native-ui": "node tools/smoke-native-ui-workbench.mjs",

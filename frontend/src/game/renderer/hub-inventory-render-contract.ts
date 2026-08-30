@@ -704,6 +704,16 @@ export const HUB_DOWSING_INSUFFICIENT_GOLD = {
   title: 'NOT ENOUGH GOLD!',
 } as const
 
+export function hubHagathaFullMindNotice(selector: number) {
+  return {
+    actionLabel: 'OKAY',
+    body: selector === 27
+      ? "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!"
+      : "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
+    title: 'YOUR MIND IS FULL!',
+  } as const
+}
+
 export const HUB_HAT_REMOVAL_MSGBOX = {
   actionLabel: 'OKAY',
   body: "A wizard might switch hats.  A wizard might even wear his hat at a jaunty angle.  But a wizard would never, under any circumstances, remove his hat altogether.\n\nAfter all, if you're not wearing a wizard hat, how would people know to be awed by the presence of a wizard?",

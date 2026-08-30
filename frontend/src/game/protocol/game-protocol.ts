@@ -173,12 +173,14 @@ import {
   HUB_SACK_CHILD_REPLICATION_LIMIT,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
   HUB_STORAGE_SLOT_CAPACITY,
-  nativeHagathaOutcomeStateIsValid,
   MAX_NATIVE_DYE_SELECTIONS,
   modItemInventoryIdentityIsValid,
   modWearableContentIsValid,
+  NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   NATIVE_UNFORGE_OUTCOME_KINDS,
+  nativeHagathaBundleStateIsValid,
+  nativeHagathaOutcomeStateIsValid,
   projectInventoryRootSlots,
   type DowsingOffer,
   type EquipmentSlot,
@@ -403,7 +405,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 111
+export const GAME_PROTOCOL_VERSION = 112
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2732,7 +2734,12 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type', 'boastId'])
     return { type, boastId: integerWithin(source.boastId, 'action.boastId', 0, 4) }
   }
-  if (type === 'close-dowsing' || type === 'dowse' || type === 'interact-goodie') {
+  if (
+    type === 'close-dowsing'
+    || type === 'close-hagatha'
+    || type === 'dowse'
+    || type === 'interact-goodie'
+  ) {
     onlyKeys(source, 'action', ['type'])
     return { type }
   }
@@ -3139,6 +3146,7 @@ function hubActionFeedback(
     'buy-hagatha',
     'buy-teacher-spell',
     'close-dowsing',
+    'close-hagatha',
     'consume',
     'dye',
     'dowse',
@@ -3860,7 +3868,12 @@ function hagathaOffer(value: unknown, field: string): HagathaOffer {
   if (selector < -1 || selector >= HAGATHA_PERKS.length || selector === 8) {
     throw new GameProtocolError(`${field}.selector is unavailable`)
   }
-  const members = selectorArray(source.members, `${field}.members`)
+  const members = selector === -1
+    ? hagathaOutcomeArray(source.members, `${field}.members`)
+    : selectorArray(source.members, `${field}.members`)
+  if (selector === -1 && !nativeHagathaBundleStateIsValid(members)) {
+    throw new GameProtocolError(`${field}.members is not a native Hagatha bundle`)
+  }
   if (members.length < 1 || (selector >= 0 && (members.length !== 1 || members[0] !== selector))) {
     throw new GameProtocolError(`${field}.members does not match selector`)
   }
@@ -3886,9 +3899,11 @@ function selectorArray(value: unknown, field: string): readonly number[] {
 }
 
 function hagathaOutcomeArray(value: unknown, field: string): readonly number[] {
-  const selectors = limitedArray(value, field, 11).map((selector, index) => (
-    boundedInteger(selector, `${field}[${index}]`, 0, 27)
-  ))
+  const selectors = limitedArray(
+    value,
+    field,
+    NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY,
+  ).map((selector, index) => boundedInteger(selector, `${field}[${index}]`, 0, 27))
   const ordinary = selectors.filter(selector => selector !== 27)
   if (
     selectors.includes(8)

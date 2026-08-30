@@ -3,6 +3,10 @@ import {
   type NativeBoastId,
 } from '../core-kernels/native-hub-npc.ts'
 import {
+  nativeHagathaBundleStateIsValid,
+  nativeHagathaOutcomeStateIsValid,
+} from '../core-kernels/hub-economy.ts'
+import {
   NativeSaveFormatError,
   decodeNativeDarkdata,
   encodeNativeDarkdata,
@@ -296,6 +300,9 @@ export function decodeNativeDarkdataProfile(bytes: Uint8Array): NativeDarkdataPr
   const bulk = new PayloadReader(bulkNode.payload, 'darkdata Hagatha bundle')
   const hagathaBundleSelectors = bulk.i32s(bulk.u32('count'), 'selectors')
   bulk.finish()
+  if (!nativeHagathaBundleStateIsValid(hagathaBundleSelectors)) {
+    throw new NativeSaveFormatError('native Hagatha bundle is invalid')
+  }
   const mix = new PayloadReader(mixNode.payload, 'darkdata first-mix state')
   const firstMixed = Array.from({ length: NATIVE_FIRST_MIX_COUNT }, (_, index) => (
     mix.boolean(`selector ${index}`)
@@ -703,6 +710,14 @@ export function decodeNativeGamestateWizard(bytes: Uint8Array): NativeWizardProg
   ]) as readonly [number | null, number | null]
   const belt = decodeNativeBelt(local.buffer.root)
   const footer = decodeNativeGameFooter(local.buffer.root)
+  const tonicPurchases = decoded.progression.perkSelectors.filter(
+    selector => selector === 27,
+  ).length
+  if (!nativeHagathaOutcomeStateIsValid(
+    decoded.progression.perkSelectors,
+    tonicPurchases,
+    decoded.progression.perkCapacity,
+  )) throw new NativeSaveFormatError('native Hagatha outcomes are invalid')
   return Object.freeze({
     ...decoded.progression,
     concentrationSkillIds,
@@ -934,7 +949,9 @@ export function patchNativeDarkdata(
   const decoded = decodeNativeDarkdataProfile(source)
   requireBooleanArray(patch.helpPending, 10, 'native help state')
   requireBooleanArray(patch.firstMixed, NATIVE_FIRST_MIX_COUNT, 'native first-mix state')
-  requireIntegerArray(patch.hagathaBundleSelectors, null, -1, 49, 'native Hagatha bundle')
+  if (!nativeHagathaBundleStateIsValid(patch.hagathaBundleSelectors)) {
+    throw new NativeSaveFormatError('native Hagatha bundle is invalid')
+  }
   const root = decoded.buffer.root
   const coreNode = root.children[0]!
   const core = coreNode.payload.slice()
@@ -1026,7 +1043,12 @@ export function patchNativeGamestate(
     'native permanent ranks',
   )
   requireIntegerArray(patch.learnedOrder, null, 8, 79, 'native learned order')
-  requireIntegerArray(patch.perkSelectors, null, 0, 49, 'native perk selectors')
+  const tonicPurchases = patch.perkSelectors.filter(selector => selector === 27).length
+  if (!nativeHagathaOutcomeStateIsValid(
+    patch.perkSelectors,
+    tonicPurchases,
+    patch.perkCapacity,
+  )) throw new NativeSaveFormatError('native Hagatha outcomes are invalid')
   requireBooleanArray(
     patch.hagathaOwnership,
     NATIVE_HAGATHA_OWNERSHIP_COUNT,

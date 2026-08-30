@@ -1,8 +1,22 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import {
+  createGameSimulation,
+  getPlayerEconomy,
+} from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
+import {
+  WEB_GAME_SAVE_SCHEMA_VERSION,
+  WEB_GAME_SAVE_SLOT,
+} from '../src/game/save/game-save-contract.ts'
+import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 import {
@@ -19,22 +33,54 @@ import { DOWSING_EQUIPMENT_RECIPES } from '../src/game/core-kernels/hub-economy.
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 
-const baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
 const hostElement = process.env.SDR_GAME_TRADER_HOST_ELEMENT || 'Fire'
 const screenshotRoot = process.env.SDR_GAME_TRADER_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-trader'
 const singleClient = process.env.SDR_GAME_TRADER_SINGLE_CLIENT === '1'
+const hagathaCapacityOnly = process.argv.includes('--hagatha-capacity-only')
 const rendererLifecycleOnly = process.argv.includes('--renderer-lifecycle-only')
+const productionBuild = process.env.SDR_GAME_TRADER_PRODUCTION === '1'
+let staticServer = null
+let gameHost = null
+let gameCredential = null
+let baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
+if (hagathaCapacityOnly && productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
+  staticServer = await startStaticClientServer({
+    root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+  })
+  gameCredential = 'hagatha-capacity-browser-acceptance'
+  gameHost = await startGameHost({
+    allowedOrigins: [staticServer.origin],
+    authentication: { kind: 'shared', credential: gameCredential },
+    snapshotRate: 20,
+  })
+  baseUrl = staticServer.origin
+}
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
 const hostPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const guestPage = await browser.newPage({ viewport: { width: 960, height: 540 } })
+if (gameHost && gameCredential) {
+  for (const page of [hostPage, guestPage]) {
+    await page.addInitScript(({ credential, gameUrl }) => {
+      window.solomonDarkRuntime = {
+        gameEndpoint: { credential, kind: 'localhost', url: gameUrl },
+      }
+    }, { credential: gameCredential, gameUrl: gameHost.address.url })
+  }
+}
 const abortedRequests = []
 const browserErrors = []
 const failedRequests = []
 const failedResponses = []
 for (const page of [hostPage, guestPage]) {
+  if (hagathaCapacityOnly) {
+    await page.addInitScript((key) => {
+      const current = JSON.parse(localStorage.getItem(key) || '{}')
+      localStorage.setItem(key, JSON.stringify({ ...current, enableCheats: true }))
+    }, GAME_SETTINGS_STORAGE_KEY)
+  }
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(bypassStartupAudioPreload)
   await page.route('**/deployment.json?*', async (route) => {
@@ -102,10 +148,17 @@ for (const page of [hostPage, guestPage]) {
 }
 
 try {
-  step('preloading both game clients')
-  await Promise.all([loadGame(hostPage), ...(singleClient ? [] : [loadGame(guestPage)])])
-  step('entering host Hub')
-  await enterHub(hostPage, hostElement)
+  if (hagathaCapacityOnly) {
+    step('seeding the focused cheat-mode Hub save')
+    await seedLocalSave(hostPage, createHagathaCapacitySave())
+    step('entering the saved host Hub')
+    await enterSavedHub(hostPage)
+  } else {
+    step('preloading both game clients')
+    await Promise.all([loadGame(hostPage), ...(singleClient ? [] : [loadGame(guestPage)])])
+    step('entering host Hub')
+    await enterHub(hostPage, hostElement)
+  }
   if (!singleClient) {
     step('entering guest Hub')
     await enterHub(guestPage, 'Earth')
@@ -117,8 +170,34 @@ try {
   if (!singleClient) assert.equal(await inventoryGold(guestPage), 500)
   await focusPage(hostPage)
   const hostStartingGold = await inventoryGold(hostPage, true)
-  assert.equal(hostStartingGold, 500)
-  step('both participants start with the retail 500 gold')
+  assert.equal(hostStartingGold, hagathaCapacityOnly ? 100_000 : 500)
+  step(hagathaCapacityOnly
+    ? 'focused host restored the cheat-funded 100,000 gold save'
+    : 'both participants start with the retail 500 gold')
+  if (hagathaCapacityOnly) {
+    await hostPage.locator('.main-menu-page[data-session-cheats-enabled="true"]').waitFor()
+    const hagathaCapacity = await exerciseHagathaCapacity(hostPage)
+    assert.deepEqual(browserErrors, [])
+    assert.deepEqual(failedRequests, [])
+    assert.deepEqual(failedResponses, [])
+    assert.deepEqual(await hostPage.evaluate(() => window.__sdrSmokeWebGlContextLosses), [])
+    const receipt = {
+      abortedRequests,
+      browserErrors,
+      failedRequests,
+      failedResponses,
+      hagathaCapacity,
+      host: await pageReceipt(hostPage),
+      status: 'ok',
+    }
+    await writeFile(`${screenshotRoot}-hagatha-capacity-receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`)
+    process.stdout.write(`${JSON.stringify(receipt)}\n`)
+    step('focused Tonic-inclusive Hagatha capacity receipt complete')
+    await browser.close()
+    await gameHost?.close()
+    await staticServer?.close()
+    process.exit(0)
+  }
   const rendererLifecycle = await exerciseRetainedInventoryRenderer(hostPage)
   if (rendererLifecycleOnly) {
     assert.deepEqual(browserErrors, [])
@@ -627,6 +706,8 @@ try {
   throw error
 } finally {
   await browser.close()
+  await gameHost?.close()
+  await staticServer?.close()
 }
 
 async function pageReceipt(page) {
@@ -668,6 +749,7 @@ async function enterHub(page, element) {
   await focusPage(page)
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()
+  await continueLocalPlay(page)
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'New Game' }).click()
   const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -746,6 +828,99 @@ async function declineTutorialOffer(page) {
   if (await offer.isVisible()) {
     await offer.getByRole('button', { exact: true, name: 'NO' }).click()
   }
+}
+
+async function continueLocalPlay(page) {
+  const action = page.getByRole('button', { exact: true, name: 'CONTINUE LOCAL' })
+  if (await action.isVisible()) await action.click()
+}
+
+function createHagathaCapacitySave() {
+  const playerId = 'hagatha-capacity-owner'
+  const character = {
+    discipline: 'arcane',
+    displayName: 'Capacitus',
+    element: 'fire',
+  }
+  const initial = createGameSimulation({ [playerId]: character })
+  const economy = getPlayerEconomy(initial, playerId)
+  const playerEntities = replacePlayerEconomy(initial.playerEntities, playerId, {
+    ...economy,
+    collegeIntroPending: false,
+    gold: 100_000,
+    tutorialPending: false,
+  })
+  const state = {
+    ...initial,
+    playerEntities,
+    world: initial.world.kind === 'hub'
+      ? {
+          ...initial.world,
+          participants: Object.fromEntries(Object.entries(initial.world.participants).map(
+            ([id, participant]) => [id, {
+              ...participant,
+              collegeIntro: null,
+              region: 'courtyard',
+              transition: null,
+            }],
+          )),
+        }
+      : initial.world,
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId,
+    state,
+  })
+  return {
+    document,
+    formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
+    revision: 1,
+    sha256: createHash('sha256').update(document).digest('hex'),
+    slot: WEB_GAME_SAVE_SLOT,
+    updatedAtUtc: new Date().toISOString(),
+  }
+}
+
+async function seedLocalSave(page, record) {
+  await page.goto(new URL('/', baseUrl).href, { waitUntil: 'domcontentloaded' })
+  await page.evaluate((seed) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('solomon-dark-game-saves', 1)
+    open.onupgradeneeded = () => {
+      if (!open.result.objectStoreNames.contains('slots')) {
+        open.result.createObjectStore('slots', { keyPath: 'slot' })
+      }
+    }
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const transaction = open.result.transaction('slots', 'readwrite')
+      transaction.objectStore('slots').put(seed)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+      transaction.onabort = () => reject(transaction.error)
+    }
+  }), record)
+}
+
+async function enterSavedHub(page) {
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  await page.getByRole('button', { name: 'Play' }).click()
+  const continueLocal = page.getByRole('button', { exact: true, name: 'CONTINUE LOCAL' })
+  const lastGame = page.getByRole('button', { name: 'Last game' })
+  const requiresConsent = await Promise.race([
+    continueLocal.waitFor({ timeout: 180_000 }).then(() => true),
+    lastGame.waitFor({ timeout: 180_000 }).then(() => false),
+  ])
+  if (requiresConsent) await continueLocal.click()
+  await lastGame.waitFor({ timeout: 180_000 })
+  assert.equal(await lastGame.isEnabled(), true)
+  await lastGame.click()
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
 }
 
 async function loadGame(page) {
@@ -867,7 +1042,7 @@ async function nativeUiCentralPixelReceipt(page) {
   }, screenshot.toString('base64'))
 }
 
-async function fundTraderSmoke(page) {
+async function fundTraderSmoke(page, gold = 10_000) {
   await page.evaluate((key) => {
     const current = JSON.parse(localStorage.getItem(key) || '{}')
     localStorage.setItem(key, JSON.stringify({ ...current, enableCheats: true }))
@@ -878,11 +1053,113 @@ async function fundTraderSmoke(page) {
   })
   const result = await page.evaluate((gold) => (
     window.solomonDark.lua.execute(`sd.player.set_gold(${gold})`)
-  ), 10_000)
+  ), gold)
   assert.equal(result.ok, true, result.error)
   await page.waitForTimeout(100)
-  assert.equal(await inventoryGold(page), 10_000)
+  assert.equal(await inventoryGold(page), gold)
   step('host received an explicit Lua-funded trader test bankroll')
+}
+
+async function exerciseHagathaCapacity(page) {
+  await page.getByRole('button', { name: 'Open Hagatha interaction' }).click()
+  const hagatha = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
+  await hagatha.waitFor()
+  await waitForNativeSurfaceSettled(hagatha)
+
+  const purchases = []
+  for (const [selector, count, capacity] of [
+    [27, 1, 6],
+    [27, 2, 9],
+    [0, 3, 9],
+    [1, 4, 9],
+    [2, 5, 9],
+    [3, 6, 9],
+    [4, 7, 9],
+    [5, 8, 9],
+    [6, 9, 9],
+  ]) {
+    purchases.push(await buyHagathaSelector(page, hagatha, selector, count, capacity))
+  }
+
+  const expectedOutcomes = [27, 27, 0, 1, 2, 3, 4, 5, 6]
+  const owned = hagatha.getByLabel('Owned Charms and Curses')
+  const outcomes = await owned.locator('[data-owned-hagatha-selector]').evaluateAll((nodes) => (
+    nodes.map(node => Number(node.getAttribute('data-owned-hagatha-selector')))
+  ))
+  assert.deepEqual(outcomes, expectedOutcomes)
+  assert.match(await hagatha.locator('.hub-charm-capacity').innerText(), /9 \/ 9/)
+
+  const rejectedSelector = 9
+  const rejected = hagatha.locator(`[data-hagatha-selector="${rejectedSelector}"]`)
+  const goldBeforeRejection = await dialogGold(hagatha)
+  await rejected.click()
+  await rejected.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await rejected.click()
+  const notice = hagatha.getByRole('alert')
+  await notice.waitFor()
+  await waitForNativeNoticeSettled(hagatha)
+  assert.match(await notice.innerText(), /YOUR MIND IS FULL!/)
+  assert.match(await notice.innerText(), /Thaumic Covalence Meridian/)
+  assert.equal(await dialogGold(hagatha), goldBeforeRejection)
+  await page.screenshot({ path: `${screenshotRoot}-hagatha-capacity-rejected.png` })
+  await hagatha.getByRole('button', { name: 'OKAY' }).click()
+  await notice.waitFor({ state: 'detached' })
+  assert.equal(await owned.locator('[data-owned-hagatha-selector]').count(), 9)
+
+  await hagatha.getByRole('button', { name: 'Done' }).click()
+  await hagatha.waitFor({ state: 'detached' })
+  await page.waitForTimeout(250)
+  await page.getByRole('button', { name: 'Open Hagatha interaction' }).click()
+  const reopened = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
+  await reopened.waitFor()
+  await waitForNativeSurfaceSettled(reopened)
+  await page.waitForTimeout(500)
+  assert.equal(await reopened.getByLabel('Owned Charms and Curses')
+    .locator('[data-owned-hagatha-selector]').count(), 9)
+  await page.screenshot({ path: `${screenshotRoot}-hagatha-capacity-nine-cells.png` })
+  const bundle = reopened.locator('[data-hagatha-selector="-1"]')
+  await bundle.waitFor()
+  assert.match(await bundle.getAttribute('aria-label'), /Buy BARGAIN BUNDLE/)
+  await bundle.hover()
+  const bundleTooltip = await assertTooltip(reopened, [
+    'BARGAIN BUNDLE',
+    'TONIC',
+    "SEEKER'S CHARM",
+    'REVELATION CHARM',
+  ])
+  await page.waitForTimeout(250)
+  await page.screenshot({ path: `${screenshotRoot}-hagatha-capacity-bundle.png` })
+  await reopened.getByRole('button', { name: 'Done' }).click()
+
+  return {
+    bundleTooltip,
+    capacity: 9,
+    goldAfterRejection: goldBeforeRejection,
+    outcomes,
+    purchases,
+    rejectedSelector,
+  }
+}
+
+async function buyHagathaSelector(page, hagatha, selector, expectedCount, expectedCapacity) {
+  const offer = hagatha.locator(`[data-hagatha-selector="${selector}"]`)
+  const price = Number.parseInt(
+    (await offer.locator('.hub-trader-price').innerText()).replace(/\D/g, ''),
+    10,
+  )
+  const goldBefore = await dialogGold(hagatha)
+  await offer.click()
+  await offer.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await offer.click()
+  await hagatha.locator('.hub-charm-capacity').filter({
+    hasText: `${expectedCount} / ${expectedCapacity}`,
+  }).waitFor()
+  await hagatha.getByLabel('Owned Charms and Curses')
+    .locator('[data-owned-hagatha-selector]').nth(expectedCount - 1).waitFor()
+  await waitForDialogGold(hagatha, goldBefore - price)
+  const emptySlot = hagatha.locator('[data-store-empty-slot]').first()
+  if (await emptySlot.count() > 0) await emptySlot.click()
+  return { capacity: expectedCapacity, count: expectedCount, price, selector }
 }
 
 async function exerciseStarterInventory(page) {

@@ -38,6 +38,8 @@ import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  createHubEconomy,
+  hagathaOffers,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
@@ -600,6 +602,7 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
     { type: 'buy-hagatha', selector: -1 },
+    { type: 'close-hagatha' },
     { type: 'remove-hagatha', selector: 8 },
     { type: 'buy-teacher-spell', skillId: 72 },
     { type: 'close-dowsing' },
@@ -785,10 +788,34 @@ test('server welcome round-trips content, kernel, character, and world ownership
   const tonicWelcome = structuredClone(welcome)
   Object.assign(tonicWelcome.snapshot.players['player-1'].economy, {
     charmCapacity: 9,
-    ownedPerkSelectors: [5, 27, 0, 27],
+    ownedPerkSelectors: [27, 27, 0, 1, 2, 3, 4, 5, 6],
     tonicPurchases: 2,
   })
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(tonicWelcome)), tonicWelcome)
+  const bundleWelcome = structuredClone(tonicWelcome)
+  bundleWelcome.snapshot.players['player-1'].economy.hagathaOffers = [
+    ...hagathaOffers(createHubEconomy(1, {
+      hagathaBundleSelectors: [27, 5, 0, 27, 24],
+    })),
+  ]
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(bundleWelcome)), bundleWelcome)
+  const malformedBundleWelcome = structuredClone(bundleWelcome)
+  const malformedBundle = malformedBundleWelcome.snapshot.players['player-1'].economy
+    .hagathaOffers.find(({ selector }) => selector === -1)
+  assert.ok(malformedBundle)
+  Object.assign(malformedBundle, { members: [27, 27, 27] })
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(malformedBundleWelcome)),
+    /Hagatha outcome list|Hagatha bundle/,
+  )
+  const overflowCharmWelcome = structuredClone(tonicWelcome)
+  overflowCharmWelcome.snapshot.players['player-1'].economy.ownedPerkSelectors = [
+    27, 27, 0, 1, 2, 3, 4, 5, 6, 7, 9,
+  ]
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(overflowCharmWelcome)),
+    /ownedPerkSelectors|Hagatha outcome/,
+  )
   const duplicateCharmWelcome = structuredClone(tonicWelcome)
   duplicateCharmWelcome.snapshot.players['player-1'].economy.ownedPerkSelectors = [5, 27, 5, 27]
   assert.throws(
@@ -1820,8 +1847,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v111 carries addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, retained gameplay state, and Slumpgut trigger state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 111)
+test('protocol v112 carries Tonic-inclusive Hagatha capacity, addressed inventory slots, world-painter registrations, Teacher release roots, enemy construction phases and composite scale, effective secondary costs, inventory stats, Insight, Web Lua readiness, scoped Arena-entry resume grace, cross-College social state, Damage x4 time, enemy routes, online state, viewport dimensions, retained gameplay state, and Slumpgut trigger state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 112)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

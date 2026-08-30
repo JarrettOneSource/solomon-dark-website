@@ -87,6 +87,7 @@ import {
   buyHagathaPerk,
   buyTeacherSpell,
   closeDowsingOffers,
+  closeHagathaShop,
   consumeInventoryItem,
   dyeInventoryClothing,
   dowse,
@@ -1503,6 +1504,13 @@ export function applyGameSimulationHubAction(
           state: next,
           unforgeOutcome: null,
         }
+      }
+      case 'close-hagatha': return {
+        accepted: true,
+        dowsingPitch: null,
+        reason: null,
+        state: closeHagathaShop(economy),
+        unforgeOutcome: null,
       }
       case 'consume': return consumeInventoryItem(economy, action.itemId)
       case 'dye': return dyeInventoryClothing(
@@ -4317,6 +4325,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
   switch (action.type) {
     case 'buy-fomentius': return 'fomentius'
     case 'buy-hagatha': return 'hagatha'
+    case 'close-hagatha': return 'hagatha'
     case 'remove-hagatha': return 'hagatha'
     case 'transfer': return 'luthacus'
     case 'buy-dowsing':

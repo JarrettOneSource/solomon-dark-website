@@ -77,7 +77,7 @@ disposition.
 | 24 Serendipity | active byte `+0x73C`; spell damage `*= 3` until positive remaining damage clears it | missing | fresh/hurt/save/replication |
 | 25 Reverie | active byte `+0x73D`; offensive mana factor becomes zero until the same hurt edge | missing | free cast/hurt/save/replication |
 | 26 Brute's | melee damage `*= 3`; Player `+0x2C` actor-push strength `*= 2`; direct spell handlers do not read that field | missing | Staff contact, Hub/Boneyard player physics, and negative sustained-spell push coverage |
-| 27 Tonic | capacity `+3`, maximum 9, exactly two purchases | verified working | `3 -> 6 -> 9`, third rejection |
+| 27 Tonic | appends one ordinary counted outcome, then raises capacity `+3`, maximum 9, exactly two direct purchases | corrected by the 2026-08-30 reopening below | `3 -> 6 -> 9`; the two visible Tonic rows consume two of the nine final cells, leaving seven ordinary cells; third/full-mind rejection |
 
 No member is blocked by the browser platform.
 
@@ -87,7 +87,9 @@ No member is blocked by the browser platform.
   `ActorProgression` owns flags `+0x7CC+selector`, selector array/count
   `+0x7C0/+0x7C4`, capacity `+0x800`, Cheat Death charges `+0x820`, and
   Serendipity/Reverie active bytes `+0x73C/+0x73D`.
-- Upstream producers: `0x0066EF70` rejects duplicate non-Tonics, appends the
+- Upstream producers: PerkShop purchase `0x0056C340` first rejects when the
+  complete ordered outcome count `+0x7C4` is greater than or equal to capacity
+  `+0x800`. `0x0066EF70` then rejects duplicate non-Tonics, appends the
   selector, sets its flag, initializes selectors 7/24/25, and invokes refresh.
   Hagatha purchase is participant-local; host authority in the web port owns
   the corresponding mutation and RNG.
@@ -163,8 +165,8 @@ No member is blocked by the browser platform.
 
 ## Validation contract
 
-- One table-driven contract row per selector 0..27, plus bundle composition,
-  Tonics, and Perky exclusion.
+- One table-driven contract row per selector 0..27, plus ordered bundle
+  composition, Tonic-inclusive total capacity, and Perky exclusion.
 - Derived matrix: neutral/charmed/composed factors; armed/unarmed Bare Hands;
   spell versus melee Glass/Serendipity/Brute; Hub/Boneyard player-push contacts;
   negative Water/Steam/Blizzard direct-handler push cases.
@@ -220,7 +222,7 @@ documents fail closed on malformed charges or Weld caches.
 | 24 Serendipity | verified implemented | accepted purchase arms triple spell damage; zero/shielded damage preserves it and positive remaining damage clears it |
 | 25 Reverie | verified implemented | accepted purchase arms free offensive casts and shares the same defended hurt edge |
 | 26 Brute's | verified implemented after the 2026-08-29 Frost reopening | Staff damage consumes factor three and Player `+0x2C` push consumers use factor two; direct Water/Steam/Blizzard handler operands do not |
-| 27 Tonic | verified retained | exact `3 -> 6 -> 9` capacity and third-purchase rejection |
+| 27 Tonic | corrected by the 2026-08-30 reopening below | exact `3 -> 6 -> 9` capacity; each Tonic remains in and counts toward the ordered list, so two Tonics admit seven ordinary outcomes; full-mind and third-purchase rejection |
 
 Residual source sweeps found no obtainable selector left as ownership-only and
 no alternative Hagatha state owner. The neutral skill-runtime regression found
@@ -251,3 +253,248 @@ rank-10,000 Mindblast sibling alongside the ordinary scale-9 form.
 No member is blocked by the browser platform and no material unknown remains.
 Publication and deployment remain separate operations; this receipt proves the
 candidate tree and does not claim a deployment.
+
+## 2026-08-30 — Tonic-inclusive outcome capacity and ordered bundle correction
+
+### Reported smell and parity question
+
+- Reported web behavior: with ordinary Website cheat mode enabled, a player
+  bought two Tonics and nine ordinary upgrades. The left CHARMS/CURSES pane
+  still has only nine cells, so it showed the two Tonics and the first seven
+  ordinary outcomes while the final two accepted outcomes had no cell.
+- Stock behavior to recover: the complete PerkShop admission rule, ordered
+  outcome vector, Tonic capacity transition, previous-wizard Bargain Bundle,
+  nine-cell render/hover consumers, participant authority, and every
+  protocol/save/portable boundary which admits that state.
+- Reproduction inputs/scenes: capacities 3, 6, and 9; zero, one, and two
+  Tonics in multiple purchase orders; all ordinary selectors; a full mind;
+  removal followed by replacement; ordered Bargain Bundles containing both
+  Tonics; ordinary cheat mode; save/resume; stock import/export; and two
+  participants.
+- Falsifiers: an instruction which subtracts Tonic rows from `+0x7C4`; a
+  renderer with more than nine owned cells; a direct Tonic purchase allowed
+  at `count == capacity`; a native bundle serializer which sorts or removes a
+  repeated Tonic; or a cheat-mode branch around PerkShop admission.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player report | `/mnt/c/Users/User/Downloads/tonics - image.png`, 1336 by 557 RGBA PNG, SHA-256 `02ad9ae2d792cae9987e6f361f6ea48ce6862c3eabb6796e1b346f6c2751855d` | The web pane contains two visible Tonic icons followed by seven ordinary icons. The shop still exposes ordinary offers. This is the exact shape produced when an 11-entry state is accepted but a nine-cell painter consumes only indices 0..8. | high for the reported web presentation; purchase count is reporter testimony until reproduced in the candidate browser |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000` | Same sealed image as the existing Hagatha catalog/effect/save entries. | high |
+| Purchase instructions | `PerkShop::Purchase 0x0056C340`, raw `0x0056C3D5..0x0056C3F1`; apply `0x0066EF70` | Purchase reads the complete vector count `Skills+0x7C4` and capacity `Skills+0x800`, then takes the full-mind branch unless `count < capacity`. Apply appends selector 27 to the same vector; it never uses a separate non-Tonic count. | high |
+| Tonic transition instructions | `0x0056C90D..0x0056C958` and `0x0056CA2E..0x0056CA7D` | After selector 27 has been applied, PerkShop writes `capacity = min(capacity + 3, 9)`. The first comparison already counted the Tonic's required cell. Full-mind Tonic text explicitly says it is unsafe when already at capacity. | high |
+| Construction/reset instructions | `Skills` constructor `0x006594E0`, writes at `+0x800`; clear `0x0066F020` | Fresh capacity is three. The outcome vector and 50 ownership bytes are distinct from the capacity scalar. | high |
+| Bundle ownership instructions | PerkShop successful-close owner `0x0056C230`; profile vector `0x0081A390/+0x0081A394`; save/read owners already mapped at profile `+0x60/+0x64` | A successful shop close copies the complete current outcome vector in order into the next Bargain Bundle. It does not sort, set-deduplicate, or remove the second Tonic. | high |
+| Renderer and hit-test instructions | `InventoryScreen::Render 0x00562520`, raw owned-page loop `0x00564C67..0x00564ECF`; pointer owner `0x0056FC90`, raw loop from `0x005707A8` | Render iterates exactly a 3 by 3 grid. Each index below `+0x7C4` loads the matching ordered selector; remaining cells use the empty art. Hover scans the same ordered count/cells. The native invariant keeps the count at or below nine. | high |
+| Serializer instructions | `Skills` disk serializer `0x0065EE80`, raw vector `0x0065F18B..0x0065F1DF`, capacity `0x0065F43D..0x0065F446`; Hall `0x005A2C80` | Count, every ordered selector, flags, and capacity serialize separately; no serialization path subtracts Tonics. Hall consumes the same ordered vector. | high |
+| Current web causal trace | Website `origin/main` `a554ea7368a1c93c07661f9ad01e7a93b528f888`; `hub-economy.ts`, protocol 111, save schema 23, portable profile v1, Hub Inventory renderer | `perksFitCapacity` counts only non-Tonics; `nativeHagathaOutcomeStateIsValid` allows ordinary count up to capacity; protocol and portable codecs allow 11 outcomes. The renderer correctly owns nine cells and therefore cannot show the two illegal tail entries. `stableSelectors` also sorts/deduplicates the native ordered Bargain Bundle. | high |
+
+Static queries used canonical project `SolomonDark/SolomonDark.exe` through the
+read-only replica wrapper from Mod Loader revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`. Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py`, `dump_insns_around.py`, and
+`find_offset_accesses.py` were used against preferred-image addresses. The
+dirty Mod Loader checkout was not changed.
+
+### System boundary and membership inventory
+
+Native system: participant-owned Hagatha admission from the selected Perk or
+Bargain Bundle through the ordered `ActorProgression` outcome vector, Tonic
+capacity, nine-cell presentation, effects, replication, persistence, and
+teardown. The selector-by-selector effect membership remains the complete
+0..27 table above; this reopening corrects the shared admission invariant
+consumed by every row.
+
+| Member / branch | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| capacity 3, no Tonic | constructor `0x006594E0`; admission `0x0056C3D5` | `exact-ported` | three total outcomes accept; the fourth ordinary row and a Tonic both reject when already full |
+| capacity 6, one Tonic | apply plus `0x0056CA2E..0x0056CA63` | `exact-ported` | the visible Tonic plus five ordinary outcomes fill all six cells |
+| capacity 9, two Tonics | same transition capped at nine | `exact-ported` | two visible Tonics plus seven ordinary outcomes fill all nine cells; every eighth ordinary selector rejects |
+| ordinary selectors 0..7 and 9..26 | complete authored table above; shared admission | `exact-ported` after this correction | one table-driven rejection row per member at the nine-cell boundary; existing per-effect assertions remain unchanged |
+| selector 8 Perky | native builder exclusion | `verified-already-at-parity` | never appears as an offer or outcome |
+| selector 27 Tonic | `0x0066EF70`, PerkShop capacity writer | `exact-ported` after this correction | outcome list contains one row per drink; direct third purchase and full-mind drink reject |
+| purchase order and ordinary uniqueness | vector `+0x7C0/+0x7C4`; apply | `exact-ported` | order survives; ordinary duplicate is a no-op/unavailable offer; only two valid Tonic rows may repeat |
+| Bargain Bundle `-1` membership | profile `0x0081A390/+0x0081A394`; `0x0056C230` | `exact-ported` after this correction | original order and two Tonic entries survive profile/save/portable paths and replay atomically |
+| native bundle corrupt-state loophole | `0x0056C340` performs one precheck before replaying all bundle members | `out-of-system` — incidental retail debt contradicts the authored two-Tonic/nine-cell contract and can only produce an unrenderable state; the clean web authority preflights the complete projected outcome | invalid/disjoint/repeated-Tonic bundles reject without debit or partial effects |
+| first-mix price history and debit | profile flags plus common purchase | `verified-already-at-parity` | capacity rejection preserves gold/history; accepted bundle retains current price formula |
+| requested ordinary-perk removal | Website extension in the prior reopening | `verified-already-at-parity` | removal frees one counted cell; Tonic remains non-removable and capacity is unchanged |
+| all 27 obtainable gameplay effect consumers | complete table and final receipt above | `verified-already-at-parity` | effects derive only from retained legal selectors; illegal migrated tail effects disappear with ownership |
+| Cheat Death/Serendipity/Reverie runtime | progression runtime siblings | `exact-ported` for repaired saves | dropping an illegal legacy tail clears its matching retained runtime lane; retained owned lanes remain byte-for-byte |
+| Split Mind concentration B and derived vitals/stats | shared skill/runtime refresh | `exact-ported` for repaired saves | repair runs the same ownership refresh as removal, so no orphaned concentration or cached factor survives |
+| Hagatha service pane | `0x00562520` fixed replacement page | `verified-already-at-parity` | exactly nine row-major cells, two Tonic icons plus seven ordinary at final capacity |
+| standalone/ordinary companion page 2 | same InventoryScreen owner | `verified-already-at-parity` | same ordered nine-cell plan and hover indices |
+| owned-cell HoverBox | `0x0056FC90` | `verified-already-at-parity` | every retained occupied index is inspectable; no hidden legal tail exists |
+| protocol snapshot and Hall projection | current economy codec/Hall record | `exact-ported` after this correction | protocol 112 admits at most nine outcomes and rejects count/capacity disagreement |
+| browser save profile/continuation/Tutorial baseline | schema 23 and earlier generated state | `exact-ported` through schema 24 migration | retain both Tonics and earliest ordinary purchase-order entries up to capacity; current schema 24 malformed states fail closed |
+| old invalid web debit/first-mix history | impossible-native schema 23 and earlier state | `out-of-system` deterministic repair | preserve gold and first-mix history because old saves contain no transaction-price history; never invent a refund or replay irreversible acquisition grants |
+| stock import/export and portable profile | native codec plus portable v1 | `exact-ported` after this correction | legal stock vector/bundle order and duplicate Tonics round-trip; over-cap portable outcome lists reject |
+| ordinary Website cheat mode | Website Settings/session policy | `verified-already-at-parity` | cheat mode supplies no bypass around the same participant transaction |
+| multiplayer participants | authenticated player economy | `verified-already-at-parity` | one player's acceptance/rejection and repair never mutate another player |
+| close, save, resume, Game Over, and replacement lifecycle | existing economy/profile owners | `verified-already-at-parity` | legal outcome order/capacity and bundle survive each existing boundary without a second owner |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread
+
+- Owner and construction: `Skills` constructs the vector empty and capacity
+  three. `ActorProgression` owns the ordered vector/count, 50 selector flags,
+  capacity, and three retained one-shot lanes.
+- Upstream producers: PerkShop owns the only ordinary purchase admission. It
+  checks total count before funds debit/apply. `0x0066EF70` appends the selected
+  outcome. Tonic then raises capacity by three, capped at nine. A successful
+  shop close copies that exact vector into the profile-owned next bundle.
+- State transitions: ordinary removal is a Website extension which deletes one
+  ordinary ordered entry and refreshes all downstream state. Tonic is never
+  removed. Save migration may delete only impossible web-created overflow
+  tail members while protecting the recorded Tonic rows.
+- Downstream consumers: shared derived/runtime effects, InventoryScreen and
+  PerkShop panes/HoverBoxes, Hall records, protocol snapshots, browser saves,
+  and native portable import/export all consume the same bounded vector.
+- Authority and lifecycle: the host transaction is participant-private.
+  Ordinary cheat mode changes neither capacity nor authority. Existing
+  save/resume, run, and replacement owners retain the corrected vector; no
+  renderer or client infers or mutates membership.
+
+### Recovered behavioral contract
+
+- A purchase can begin only when `outcomeCount < charmCapacity`. Capacity is
+  one of 3, 6, or 9 and equals `3 + 3 * TonicCount` for legal web state.
+- Every appended selector, including 27, consumes one outcome/cell. The first
+  and second Tonics therefore have net capacity gains of two cells each:
+  `3 ordinary`, `1 Tonic + 5 ordinary`, `2 Tonics + 7 ordinary`.
+- A Tonic attempted after the existing count already fills capacity rejects;
+  it cannot retroactively open a full mind. Capacity rejection is atomic and
+  does not debit gold, set first-mix history, apply runtime effects, or revise
+  another participant.
+- The owned pane is exactly nine row-major cells and reads the ordered vector
+  directly. Tonics remain visible members. No legal state has a hidden tenth
+  or eleventh effect.
+- The next Bargain Bundle is the complete ordered outcome vector, not a sorted
+  set. Both Tonic rows remain present. The web preflights the projected final
+  vector atomically so the retail bundle loophole cannot manufacture a state
+  which violates the authored two-Tonic/nine-cell contract.
+- Schemas through 23 could create impossible 10/11-entry states. Schema 24
+  retains all recorded Tonics and the earliest ordinary entries in order up to
+  the stored capacity, then refreshes every ownership-derived/runtime consumer.
+  It preserves gold and first-mix history; those old documents do not contain
+  enough transaction history to invent an exact refund. New malformed states
+  fail closed.
+
+### Nearby-system findings
+
+- The older portability entry correctly recovered that Tonic is an ordered
+  list member, but its validators counted only ordinary selectors against
+  capacity. That contradiction let protocol, browser saves, portable profiles,
+  and the renderer disagree. All references to the old 11-entry bound must be
+  removed together.
+- The profile Bargain Bundle was also incorrectly normalized through a sorted
+  set in `createHubEconomy` and rejected duplicate Tonics in the portable
+  parser. Native `0x0056C230` proves it is an ordered vector copy.
+- Retail's bundle replay has no per-member capacity guard. That is executable
+  debt rather than a second capacity model: it contradicts its own direct
+  admission, full-mind copy, two-Tonic text, and fixed nine-cell consumers.
+
+### Confidence and open questions
+
+- Confirmed: retail image/tool identity; total-count comparison; append order;
+  post-append Tonic capacity change; fresh capacity; fixed renderer/hit-test
+  membership; serializer fields; ordered bundle copy; current web causal path.
+- Inferred: none required for the implementation.
+- Unknown: none material. The historical price of an already-saved illegal web
+  purchase was never persisted; schema 24 defines a deterministic no-refund
+  repair rather than claiming a native transaction occurred.
+
+### Web implementation consequence
+
+- Make one Hagatha outcome invariant own total count, ordinary uniqueness,
+  Tonic count, and 3/6/9 capacity. Consume it from purchase preflight,
+  protocol, save, portable import/export, and tests.
+- Count Tonics in `perksFitCapacity`; preflight the entire bundle atomically.
+  Preserve bundle order and its two Tonic entries instead of sorting/set-
+  deduplicating.
+- Change the wire maximum from 11 to 9 and advance exact-match protocol 111 to
+  112. Advance browser save schema 23 to 24 and repair only older invalid web
+  states; schema 24 remains strict.
+- Refresh runtime, concentrations, derived stats/vitals, belt/effect consumers,
+  and Hall/snapshot projection after a migrated overflow is removed. Delete all
+  independent ordinary-only capacity checks.
+
+### Validation contract
+
+- Focused kernels: every selector 0..27, all 3/6/9 boundaries, full-mind
+  Tonic, removal/replacement, order, duplicate rules, ordered two-Tonic bundle,
+  invalid bundle atomicity, gold/history preservation, and participant
+  isolation.
+- Codecs/saves: protocol 112 maximum nine; capacity/count mismatch rejection;
+  schema-23 overflow migration in profile, continuation, and Tutorial baseline;
+  schema-24 fail-closed behavior; runtime/derived refresh; portable/native
+  ordered bundle and two-Tonic round trip.
+- Renderer: two Tonics plus seven ordinary icons fill exactly all nine cells;
+  every cell has the correct ordered hover target and no hidden legal member.
+- Browser: in a real Mac Chrome production bundle with ordinary cheat mode,
+  purchase both Tonics and seven ordinary rows, attempt an eighth, and prove
+  nine retained outcomes, unchanged gold/effects on rejection, both Tonic
+  icons, seven ordinary icons, visible full-capacity feedback, and empty page,
+  console, failed-response, WebGL, wire, and host-error arrays.
+- Run the complete Mac mini `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  against the exact candidate tree.
+
+### Implementation validation receipt
+
+- One invariant in `hub-economy.ts` now validates the complete ordered outcome
+  count, ordinary uniqueness, two-Tonic membership, and capacity 3/6/9.
+  Purchase preflight counts Tonics, rejects a full mind before debit, and
+  atomically checks the whole bundle. `closeHagathaShop` and the authenticated
+  `close-hagatha` action copy the final ordered outcome vector, including both
+  Tonics, only after a successful service session.
+- Protocol 112 bounds player outcomes at nine and gives Bargain Bundle `-1`
+  its ordered/repeated-Tonic decoder while keeping every ordinary offer an
+  exact singleton. Save schema 24 and the backend inspector migrate schemas
+  through 23 by retaining both Tonics plus the earliest ordinary rows up to
+  capacity, refreshing runtime/concentration/derived state, and preserving
+  gold/first-mix history. New malformed documents fail closed. The native
+  bridge and portable profile now preserve and validate the same ordered
+  outcome and bundle contracts.
+- The native full-mind MsgBox is restored with exact title and ordinary/Tonic
+  copy. The fixed nine-cell pane remains the sole renderer; it no longer has a
+  legal hidden tail. Ordinary Website cheat mode uses this same transaction
+  and has no capacity bypass.
+- Focused Mac tests passed the six directly affected kernel/simulation/
+  protocol/save/portable files (`211/211`), native UI/type coverage (`61/61`),
+  the corrected protocol suite, every ordinary selector at the two-Tonic
+  boundary, full-mind Tonic, ordered bundle replay, participant isolation,
+  schema-23 repair/schema-24 rejection, and stock-web-stock round trip. On the
+  final rebased base, the broad game suite's first canonical invocation had one
+  transient failure after 1,780 siblings; the unchanged exact suite reran
+  `1,781/1,781`, so no product edit was made for it.
+- The publication candidate is rebased on Website
+  `78c51c36195e5cdc57d1f7e033560a33f40aa84a`. Its complete Mac gate passes 28
+  backend/contracts, backend formatting, frontend architecture/lint with 19
+  existing warnings and zero errors, all frontend suites, desktop `5/5`,
+  production frontend/game-host builds, bundle budget, and media policy. The
+  production Game entry is 266,278 raw / 80,897 gzip bytes under 524,288 /
+  134,144.
+- Real Mac Chrome used that rebased production bundle, a task-owned loopback
+  host/static server, and an ordinary cheats-on local session. Starting at
+  100,000 gold, it bought Tonic for 3,000, Tonic for 1,000, then selectors
+  `0..6` for `600,600,750,3000,1500,600,2400`, reaching exactly 86,550 and
+  outcomes `[27,27,0,1,2,3,4,5,6]`. Attempting selector 9 retained 86,550 and
+  all nine outcomes, displayed the settled `YOUR MIND IS FULL!` MsgBox, and
+  left both Tonics plus seven ordinary icons visible. Close/reopen exposed
+  `BARGAIN BUNDLE` with the same ordered two Tonics and seven ordinary names at
+  the native 50-percent price. Aborted requests, page/console errors, failed
+  requests/responses, WebGL losses, wire errors, and host errors were all
+  empty.
+- Pre-publication visual SHA-256 receipts on the already validated `b023703c`
+  base are
+  `8186bebcc1e155ec0b71bd7bc8d296d741e6c506dcb436f820d50d278cdfb8ed`
+  (settled full-mind rejection),
+  `33beebebf4ab9d17573cc0a23aa16b1dab9939b60288dc5e44f54cd8e57dfe54`
+  (bright nine-cell pane), and
+  `48e46ca5d4b7438b1554b9d17164ff8a26a4e57ce34407597c4edcb25a025182`
+  (ordered bundle HoverBox); the structured browser receipt is
+  `251c7dccbde41e085d8071dae89980b24f8a5599707ddcca5e4cdeadec35823f`.
+- No native member is blocked by the browser platform and no material unknown
+  remains. No commit, push, deployment, or production claim is made.

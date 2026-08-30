@@ -227,7 +227,7 @@ tier 3 even while amount/text/credit continue above 8.
 | Member / branch | Native source | Disposition | Proof contract |
 | --- | --- | --- | --- |
 | selectors 0..26 ordinary ownership | `+0x7C0/+0x7C4`, flags `+0x7CC+selector` | `verified-already-at-parity` for purchase; `out-of-system` for stock removal | unique ordered row, capacity, save, replication |
-| selector 27 Tonic, at most two | same list plus capacity `+0x800` | `verified-already-at-parity`; not removable by the extension | duplicate Tonic rows and capacity 3/6/9 remain valid |
+| selector 27 Tonic, at most two | same list plus capacity `+0x800` | corrected by the 2026-08-30 Hagatha reopening; not removable by the extension | both Tonic rows remain visible and count within total capacity 3/6/9, leaving seven ordinary cells after two Tonics |
 | owned pane, nine row-major cells | `0x00562520`, `0x0056FC90` | `exact-ported` in Hagatha service; missing from standalone page 2 | icon `Skills[127+selector]`, hover detail, empty cells |
 | first-mix history | profile first-mix bytes | requested extension preserves it | removed selector returns as a base-price offer, never a new triple-price first mix |
 | derived/status charms and curses | complete 0..26 effect matrix | requested extension deactivates ongoing ownership and refreshes shared derived state | one regression per selector family |

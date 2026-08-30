@@ -340,9 +340,13 @@ with `nativeSource = null`.
 Protocol 86 changes the existing Hagatha selector projection from a sorted
 unique set to the retail ordered outcome vector. Ordinary selectors remain
 unique; selector 27 may repeat twice, and its count must match
-`tonicPurchases` and capacity 3/6/9. This is a protocol break because an older
-client rejects the native order/Tonic membership even though no field name was
-added.
+`tonicPurchases` and capacity 3/6/9. Protocol 112 corrects the shared bound:
+Tonics are members of that same counted vector, so its total length is at most
+the current 3/6/9 capacity and never 11. This is an exact-match protocol break
+because protocol 111 admitted the impossible two-Tonic plus nine-ordinary
+state. Protocol 112 also decodes Bargain Bundle `-1` members through this
+ordered outcome contract, including both Tonics; ordinary offer members remain
+exact singleton selectors.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -545,7 +549,9 @@ failed save baseline.
 Hagatha ownership retains the native ordered outcome vector rather than a
 sorted set: ordinary charm/curse selectors occur once, while selector 27 Tonic
 may occur twice in purchase order. `tonicPurchases` and capacity 3/6/9 are
-validated against those entries. That same ordered vector feeds the Hall
+validated against those entries, and every Tonic counts as one of the total
+3/6/9 entries. Two Tonics therefore leave seven ordinary cells. That same
+ordered vector feeds the Hall
 projection and schema-17 stock bridge, so Tonic membership is neither hidden
 during web play nor reconstructed heuristically during export.
 

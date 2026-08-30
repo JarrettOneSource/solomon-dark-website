@@ -66,6 +66,7 @@ import {
   hubDyeModalOpacity,
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
+  hubHagathaFullMindNotice,
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
   hubInventoryWizardIdentityText,
@@ -858,7 +859,7 @@ test('trader Chat preserves ExactText inline italic commands and authored spacin
   ])
 })
 
-test('dowsing preserves the stock red flash and insufficient-gold message branch', () => {
+test('native shop message boxes preserve Dowsing and Hagatha rejection copy', () => {
   assert.deepEqual(HUB_DOWSING_FLASH, {
     decrementPerTick: 0.05,
     durationMs: 200,
@@ -866,6 +867,16 @@ test('dowsing preserves the stock red flash and insufficient-gold message branch
   })
   assert.equal(HUB_DOWSING_INSUFFICIENT_GOLD.title, 'NOT ENOUGH GOLD!')
   assert.match(HUB_DOWSING_INSUFFICIENT_GOLD.body, /endless, swirling, impossible colors/)
+  assert.deepEqual(hubHagathaFullMindNotice(27), {
+    actionLabel: 'OKAY',
+    body: "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!",
+    title: 'YOUR MIND IS FULL!',
+  })
+  assert.deepEqual(hubHagathaFullMindNotice(0), {
+    actionLabel: 'OKAY',
+    body: "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
+    title: 'YOUR MIND IS FULL!',
+  })
   assert.deepEqual(HUB_DOWSING_PREROLL, {
     buttonActionRect: [675, 265.5, 250, 69],
     buttonCenter: [800, 300],

@@ -425,46 +425,66 @@ test('ordered Hagatha outcomes and repeated Tonic membership survive stock-web-s
     gamestate,
     fixture.expected.runName,
   )
+  const orderedBundle = [27, 5, 0, 27, 24]
+  const nativeWithBundle = patchNativeDarkdata(darkdata, {
+    ...base.profile,
+    hagathaBundleSelectors: orderedBundle,
+  })
   const ownership = [...base.wizard.hagathaOwnership]
-  for (const selector of [0, 5, 24, 25]) ownership[selector] = true
+  for (const selector of [0, 1, 2, 3, 5, 24, 25]) ownership[selector] = true
   ownership[27] = true
   const nativeWithTonics = patchNativeGamestate(gamestate, {
     ...base.wizard,
     hagathaOwnership: ownership,
     perkCapacity: 9,
-    perkSelectors: [5, 24, 27, 0, 25, 27],
+    perkSelectors: [27, 5, 0, 27, 24, 25, 1, 2, 3],
   })
   const portable = await createPortableGameProfileFromNative(
-    darkdata,
+    nativeWithBundle,
     nativeWithTonics,
     fixture.expected.runName,
   )
+  assert.deepEqual(portable.profile.hagathaBundleSelectors, orderedBundle)
   const imported = createWebGameSaveFromPortableProfile(portable)
   const restored = restoreGameSaveDocument(imported.document)
   const economy = restored.state.playerEntities.economies[0]!
-  assert.deepEqual(economy.ownedPerkSelectors, [5, 24, 27, 0, 25, 27])
+  assert.deepEqual(economy.hagathaBundleSelectors, orderedBundle)
+  assert.deepEqual(economy.ownedPerkSelectors, [27, 5, 0, 27, 24, 25, 1, 2, 3])
   assert.equal(economy.tonicPurchases, 2)
   assert.equal(economy.charmCapacity, 9)
   assert.equal(restored.state.playerEntities.progressions[0]?.hagathaRuntime.serendipityActive, false)
   assert.equal(restored.state.playerEntities.progressions[0]?.hagathaRuntime.reverieActive, false)
 
   const exported = await createPortableGameProfileFromWebSave(imported.document)
-  assert.deepEqual(exported.wizard.perkSelectors, [5, 24, 27, 0, 25, 27])
+  assert.deepEqual(exported.profile.hagathaBundleSelectors, orderedBundle)
+  assert.deepEqual(exported.wizard.perkSelectors, [27, 5, 0, 27, 24, 25, 1, 2, 3])
   assert.deepEqual(
     exported.wizard.hagathaOwnership.flatMap((owned, selector) => owned ? [selector] : []),
-    [0, 5, 24, 25, 27],
+    [0, 1, 2, 3, 5, 24, 25, 27],
   )
   const archive = await exportWebGameSaveToNativeArchive(imported.document)
-  const decoded = decodeNativeGamestateWizard(
-    (await readNativeSaveArchive(archive.archive)).gamestate,
+  const decodedArchive = await readNativeSaveArchive(archive.archive)
+  assert.deepEqual(
+    decodeNativeDarkdataProfile(decodedArchive.darkdata).hagathaBundleSelectors,
+    orderedBundle,
   )
-  assert.deepEqual(decoded.perkSelectors, [5, 24, 27, 0, 25, 27])
+  assert.deepEqual(
+    decodeNativeGamestateWizard(decodedArchive.gamestate).perkSelectors,
+    [27, 5, 0, 27, 24, 25, 1, 2, 3],
+  )
 
   const thirdTonic = JSON.parse(encodePortableGameProfile(portable))
   thirdTonic.wizard.perkSelectors.push(27)
   await assert.rejects(
     () => parsePortableGameProfile(JSON.stringify(thirdTonic)),
     /native outcome list/,
+  )
+  const tenthOrdinary = JSON.parse(encodePortableGameProfile(portable))
+  tenthOrdinary.wizard.perkSelectors.push(4)
+  tenthOrdinary.wizard.hagathaOwnership[4] = true
+  await assert.rejects(
+    () => parsePortableGameProfile(JSON.stringify(tenthOrdinary)),
+    /native outcome list|Hagatha outcomes/,
   )
 })
 

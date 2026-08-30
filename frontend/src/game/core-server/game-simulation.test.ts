@@ -1262,11 +1262,60 @@ test('Hagatha purchase actions arm and consume their authoritative until-hurt ef
     playerSkillDerivedStatsAt(purchased.state.playerEntities, 'owner')?.offensiveDamageFactor,
     3,
   )
+  const closed = applyGameSimulationHubAction(purchased.state, 'owner', {
+    type: 'close-hagatha',
+  })
+  assert.equal(closed.accepted, true)
+  assert.deepEqual(getPlayerEconomy(closed.state, 'owner').hagathaBundleSelectors, [24])
   const hurt = {
-    ...purchased.state,
-    playerEntities: damagePlayerEntity(purchased.state.playerEntities, 'owner', 1, 1),
+    ...closed.state,
+    playerEntities: damagePlayerEntity(closed.state.playerEntities, 'owner', 1, 1),
   }
   assert.equal(playerSkillDerivedStatsAt(hurt.playerEntities, 'owner')?.offensiveDamageFactor, 1)
+})
+
+test('a full two-Tonic mind rejects the eighth ordinary purchase without effects or peer mutation', () => {
+  let state = createGameSimulation({
+    owner: {
+      discipline: 'arcane',
+      displayName: 'Full Mind',
+      element: 'ether',
+    },
+    peer: {
+      discipline: 'body',
+      displayName: 'Peer',
+      element: 'water',
+    },
+  })
+  const ownerEconomy = getPlayerEconomy(state, 'owner')
+  const peerEconomy = getPlayerEconomy(state, 'peer')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      replacePlayerEconomy(state.playerEntities, 'owner', {
+        ...ownerEconomy,
+        charmCapacity: 9,
+        firstMixedSelectors: [27, 0, 1, 2, 3, 4, 5, 6],
+        gold: 1_000_000,
+        ownedPerkSelectors: [27, 27, 0, 1, 2, 3, 4, 5, 6],
+        tonicPurchases: 2,
+      }),
+      'owner',
+      { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
+    ),
+  }
+
+  const result = applyGameSimulationHubAction(state, 'owner', {
+    type: 'buy-hagatha',
+    selector: 24,
+  })
+  assert.equal(result.accepted, false)
+  assert.equal(result.reason, 'perk-capacity-full')
+  const rejectedEconomy = getPlayerEconomy(result.state, 'owner')
+  assert.equal(rejectedEconomy.gold, 1_000_000)
+  assert.deepEqual(rejectedEconomy.ownedPerkSelectors, [27, 27, 0, 1, 2, 3, 4, 5, 6])
+  assert.equal(getPlayerProgression(result.state, 'owner').hagathaRuntime.serendipityActive, false)
+  assert.strictEqual(getPlayerEconomy(result.state, 'peer'), peerEconomy)
 })
 
 test('requested Hagatha removal deactivates runtime and reactivation does not repeat Weird Caster grants', () => {

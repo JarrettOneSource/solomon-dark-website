@@ -151,6 +151,7 @@ import {
   hubDowsingSlotPosition,
   hubDyeItemLayerRects,
   hubDyeSwatchRect,
+  hubHagathaFullMindNotice,
   hubHagathaTooltipLines,
   hubInventoryEquipmentSlotRects,
   hubInventoryRootSlot,
@@ -324,6 +325,7 @@ export default function HubInventoryUi({
   )
   const rendererOwner = rendererOwnerRef.current
   const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
+  const hagathaPurchasePendingRef = useRef(false)
   const noteboxSequenceRef = useRef(0)
   const [npcNotebox, setNpcNotebox] = useState<NativeNoteboxNotice | null>(null)
   const [inventorySackPath, setInventorySackPath] = useState<readonly number[]>([])
@@ -338,6 +340,7 @@ export default function HubInventoryUi({
   const showInstructionNotebox = useCallback((text: string) => {
     showNotebox('instruction', text)
   }, [showNotebox])
+  const serviceTrader = surface?.kind === 'service' ? surface.trader : null
   const nearestInteraction = useMemo(
     () => disabled || inputSuspended || transitionActive || !interactionsEnabled
       ? null
@@ -362,6 +365,11 @@ export default function HubInventoryUi({
       && economy.dowsingOffers.length > 0) {
       onAction({ type: 'close-dowsing' })
     }
+    if (surface?.kind === 'service' && surface.trader === 'hagatha'
+      && hagathaPurchasePendingRef.current) {
+      hagathaPurchasePendingRef.current = false
+      onAction({ type: 'close-hagatha' })
+    }
     setInventorySackPath([])
     setInventorySackTransition(null)
     setInventoryCloseTarget(null)
@@ -369,6 +377,18 @@ export default function HubInventoryUi({
   }, [economy.dowsingOffers.length, onAction, onSurfaceChange, surface])
 
   useEffect(() => () => rendererOwner.destroy(), [rendererOwner])
+
+  useEffect(() => {
+    if (serviceTrader === 'hagatha') hagathaPurchasePendingRef.current = false
+  }, [serviceTrader])
+
+  useEffect(() => {
+    const feedback = economy.actionFeedback
+    if (serviceTrader === 'hagatha'
+      && feedback?.accepted === true && feedback.action === 'buy-hagatha') {
+      hagathaPurchasePendingRef.current = true
+    }
+  }, [economy.actionFeedback, serviceTrader])
 
   const openInventorySack = useCallback((sackId: number) => {
     if (inventorySackTransition !== null) return
@@ -890,11 +910,21 @@ function NativeHubSurface({
       setNotice(unforgeResultNotice(feedback.unforgeOutcome))
       return
     }
+    if (!feedback.accepted && feedback.action === 'buy-hagatha'
+      && feedback.reason === 'perk-capacity-full') {
+      audio.playSound('bad-action')
+      setNotice(hubHagathaFullMindNotice(serviceSelection?.id ?? -1))
+      return
+    }
     if (!feedback.accepted) {
       audio.playSound('bad-action')
       return
     }
-    if (feedback.action === 'buy-fomentius' || feedback.action === 'buy-hagatha') {
+    if (feedback.action === 'buy-hagatha') {
+      audio.playSound('drop-coins')
+      return
+    }
+    if (feedback.action === 'buy-fomentius') {
       audio.playSound('drop-coins')
       return
     }
@@ -927,7 +957,7 @@ function NativeHubSurface({
       if (feedback.transferGesture === 'double-activation') audio.playSound('backpack-close')
       else audio.playSound('click', { playbackRate: 0.75 })
     }
-  }, [audio, economy.actionFeedback, onClose, pendingNpcSelection])
+  }, [audio, economy.actionFeedback, onClose, pendingNpcSelection, serviceSelection?.id])
 
   useEffect(() => () => {
     if (selectorResponseTimeoutRef.current !== null) {

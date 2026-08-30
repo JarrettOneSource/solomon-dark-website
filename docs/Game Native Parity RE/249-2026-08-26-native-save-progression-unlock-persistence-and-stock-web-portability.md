@@ -57,7 +57,7 @@ archival, and portable semantic projection into or out of the web authority.
 | Lace one-shot | profile `+0x105`, `0x004FA290` | exact-ported | 26 -> 25 BookReview membership after import/resume/export |
 | Memoratorium marker/FIFO/portrait fields | profile `+0x90`, `+0xA4`, `+0xCC`, `+0xF4..+0xFC` | out-of-system for account import (shared Website memorial is process authority); byte-preserved in native attachment/export | import cannot overwrite the shared memorial; untouched bytes remain exact |
 | Luthacus polymorphic storage | profile `+0x8C`, darkdata child 1 | exact-preserved, semantically projected only for supported native item members | opaque subtree retained; unsupported materialization is reported, never dropped on export |
-| Hagatha bundle selectors | profile `+0x60/+0x64` | exact-ported | ordered selectors and bundle offer survive |
+| Hagatha bundle selectors | profile `+0x60/+0x64` | corrected by the 2026-08-30 Hagatha reopening | ordered selectors and both repeated Tonic rows survive; no sorted-set normalization |
 | Hagatha first-mix flags | profile `+0x6C[30]` | exact-ported | every selector price state survives |
 | Shlorio fee | profile `+0x100` | exact-ported | exact fee survives |
 | local wizard name/class | gamestate root child 0 plus progression roots | exact-ported | all 15 element/discipline combinations and UTF-8 bounds |
@@ -72,7 +72,7 @@ archival, and portable semantic projection into or out of the web authority.
 | eight BeltButton slots | Game root payload; type 7015 skill rows plus non-skill entries | exact-ported for skill entries; non-skill members exact-preserved | skill order/duplicates/removal survive; potions/items remain byte-identical unless a web skill intentionally replaces that slot |
 | active synthetic Weld build | progression `+0x844`; omitted between serialized `+0x840` and `+0x848` | out-of-system for retail disk portability | learned row 52 survives; selected/belted Weld warns and resets to the creation primary for stock/web settled import |
 | offer seed, pending/deferred choices | `+0x834`, `+0x44/+0x48` | exact-ported | deterministic next offer and queued-choice count |
-| Hagatha ordered outcome list/ownership/capacity | `+0x7C0/+0x7C4`, `+0x7CC[50]`, `+0x800`; producer `0x0066EF70` | exact-ported | purchase order survives; ordinary selectors are unique; repeatable selector 27 Tonic appears up to twice and remains visible in the list; ownership flags and 3/6/9 capacity agree |
+| Hagatha ordered outcome list/ownership/capacity | `+0x7C0/+0x7C4`, `+0x7CC[50]`, `+0x800`; admission `0x0056C340`; producer `0x0066EF70` | corrected by the 2026-08-30 Hagatha reopening | purchase order survives; ordinary selectors are unique; repeatable selector 27 Tonic appears up to twice, remains visible, and counts toward total capacity; the complete list has at most 3/6/9 entries |
 | selected Boast lifecycle | Game serializer `0x005CE3D0`; `Gameplay+0x1D44/+0x1D48/+0x1D80/+0x1D81`; progression random flag `+0x2D` | exact-ported | selected ID and authored statement, one-shot failure, success, ID-3 random-choice byte, score/eulogy state, and stock-web-stock bytes agree; local XP gate `+0x2C` remains true |
 | Serendipity/Reverie active-until-hurt bytes | progression `+0x73C/+0x73D`; purchase producer `0x0066EF70` | out-of-system for stock disk portability; clear on stock import like retail disk restore | ownership persists, but consumed one-shot effects are never resurrected by import |
 | Firewalker active state | wizard disk override `0x00663AE0`, `+0x8DC` | exact-ported | native import/export and web resume preserve it |
@@ -118,15 +118,20 @@ browser party capability.
   understood web changes back onto a validated native base (or controlled Hub
   template) without rewriting opaque sibling nodes.
 - Hagatha `+0x7C0/+0x7C4` is an ordered outcome vector, not a sorted set.
-  `ActorProgression_ApplyHagathaPerk 0x0066EF70` appends each purchase;
+  PerkShop `0x0056C340` first compares the complete `+0x7C4` count against
+  `+0x800`; Tonics are not subtracted. `ActorProgression_ApplyHagathaPerk
+  0x0066EF70` appends each purchase;
   ordinary selectors reject duplicates, while selector 27 Tonic appends once
-  per purchase (at most twice), and raises capacity 3 -> 6 -> 9. Common apply
+  per direct purchase (at most twice), occupies a list cell, and then raises
+  capacity 3 -> 6 -> 9. Common apply
   still sets ownership byte 27; only duplicate-list rejection is bypassed. The
   web authority, protocol, save, Hall
   projection, and stock bridge must retain that exact list. Protocol 86 owns
   the ordered/repeated projection; schema 17 owns it directly, while schemas
   1..16 migrate the older sorted ordinary set by appending their recorded
-  Tonic count.
+  Tonic count and total list length no greater than capacity. PerkShop close
+  `0x0056C230` also copies the ordered current list, including both Tonics,
+  into the next profile-owned Bargain Bundle.
 - The same serializer audit distinguishes ownership from runtime: purchase
   writes Serendipity/Reverie active bytes at `+0x73C/+0x73D`, but disk
   serializer `0x0065EE80` never emits either offset. A stock import therefore

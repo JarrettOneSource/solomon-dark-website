@@ -26,6 +26,7 @@ import {
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
+  closeHagathaShop,
   closeDowsingOffers,
   consumeInventoryItem,
   consumeWizardKey,
@@ -520,20 +521,114 @@ test('requested Hagatha removal drops one ordinary outcome without refunding or 
   assert.equal(removeHagathaPerk(tonic.state, -1).reason, 'invalid-offer')
 })
 
-test('Hagatha bundle price is ceiling-half and Tonic raises capacity only twice', () => {
+test('Hagatha bundle price is ceiling-half and preserves ordered repeated Tonics', () => {
   const initial = {
-    ...createHubEconomy(1, { hagathaBundleSelectors: [0, 1] }),
-    gold: 10_000,
+    ...createHubEconomy(1, { hagathaBundleSelectors: [27, 5, 0, 27, 24] }),
+    gold: 1_000_000,
   }
   const bundle = hagathaOffers(initial).find(({ selector }) => selector === -1)
-  assert.deepEqual(bundle?.members, [0, 1])
-  assert.equal(bundle?.price, 600)
+  assert.deepEqual(bundle?.members, [27, 5, 0, 27, 24])
+  assert.equal(bundle?.price, 5_100)
 
   const bought = buyHagathaPerk(initial, -1)
   assert.equal(bought.accepted, true)
-  assert.equal(bought.state.gold, 9_400)
-  assert.deepEqual(bought.state.ownedPerkSelectors, [0, 1])
+  assert.equal(bought.state.gold, 994_900)
+  assert.equal(bought.state.charmCapacity, 9)
+  assert.equal(bought.state.tonicPurchases, 2)
+  assert.deepEqual(bought.state.ownedPerkSelectors, [27, 5, 0, 27, 24])
+  assert.deepEqual(bought.state.hagathaBundleSelectors, [])
+  assert.deepEqual(
+    closeHagathaShop(bought.state).hagathaBundleSelectors,
+    [27, 5, 0, 27, 24],
+  )
 
+  assert.throws(
+    () => createHubEconomy(1, { hagathaBundleSelectors: [27, 27, 27] }),
+    /Hagatha bundle/,
+  )
+  assert.throws(
+    () => createHubEconomy(1, {
+      hagathaBundleSelectors: [27, 27, 0, 1, 2, 3, 4, 5, 6, 7],
+    }),
+    /Hagatha bundle/,
+  )
+})
+
+test('Tonic is a counted outcome and leaves seven ordinary cells at final capacity', () => {
+  let state = { ...createHubEconomy(1), gold: 1_000_000 }
+  state = buyHagathaPerk(state, 27).state
+  for (const selector of [0, 1, 2, 3, 4]) state = buyHagathaPerk(state, selector).state
+  assert.deepEqual(state.ownedPerkSelectors, [27, 0, 1, 2, 3, 4])
+  assert.equal(state.charmCapacity, 6)
+  assert.equal(buyHagathaPerk(state, 5).reason, 'perk-capacity-full')
+
+  state = removeHagathaPerk(state, 4).state
+  state = buyHagathaPerk(state, 27).state
+  for (const selector of [5, 6, 7]) state = buyHagathaPerk(state, selector).state
+  assert.deepEqual(state.ownedPerkSelectors, [27, 0, 1, 2, 3, 27, 5, 6, 7])
+  assert.equal(state.charmCapacity, 9)
+  assert.equal(state.tonicPurchases, 2)
+
+  const fullGold = state.gold
+  const rejected = buyHagathaPerk(state, 9)
+  assert.equal(rejected.accepted, false)
+  assert.equal(rejected.reason, 'perk-capacity-full')
+  assert.strictEqual(rejected.state, state)
+  assert.equal(rejected.state.gold, fullGold)
+
+  const replacement = buyHagathaPerk(removeHagathaPerk(state, 7).state, 9)
+  assert.equal(replacement.accepted, true)
+  assert.deepEqual(replacement.state.ownedPerkSelectors, [27, 0, 1, 2, 3, 27, 5, 6, 9])
+})
+
+test('every ordinary Hagatha row rejects as the eighth ordinary outcome after two Tonics', () => {
+  const ordinarySelectors = HAGATHA_PERKS.flatMap(({ selector }) => (
+    selector === 8 || selector === 27 ? [] : [selector]
+  ))
+  for (const candidate of ordinarySelectors) {
+    const fillers = ordinarySelectors.filter(selector => selector !== candidate).slice(0, 7)
+    const state: HubEconomyState = {
+      ...createHubEconomy(1),
+      charmCapacity: 9,
+      firstMixedSelectors: [27, ...fillers],
+      gold: 1_000_000,
+      ownedPerkSelectors: [27, 27, ...fillers],
+      tonicPurchases: 2,
+    }
+    const rejected = buyHagathaPerk(state, candidate)
+    assert.equal(rejected.accepted, false, `selector ${candidate} was accepted`)
+    assert.equal(rejected.reason, 'perk-capacity-full', `selector ${candidate} reason`)
+    assert.strictEqual(rejected.state, state, `selector ${candidate} mutated state`)
+  }
+})
+
+test('a full three-cell mind cannot drink a Tonic and an overflowing bundle rejects atomically', () => {
+  const fullBase: HubEconomyState = {
+    ...createHubEconomy(1),
+    firstMixedSelectors: [0, 1, 2],
+    gold: 1_000_000,
+    ownedPerkSelectors: [0, 1, 2],
+  }
+  const tonic = buyHagathaPerk(fullBase, 27)
+  assert.equal(tonic.accepted, false)
+  assert.equal(tonic.reason, 'perk-capacity-full')
+  assert.strictEqual(tonic.state, fullBase)
+
+  const bundleSource: HubEconomyState = {
+    ...createHubEconomy(1, { hagathaBundleSelectors: [10, 11] }),
+    charmCapacity: 9,
+    firstMixedSelectors: [27, 0, 1, 2, 3, 4, 5],
+    gold: 1_000_000,
+    ownedPerkSelectors: [27, 27, 0, 1, 2, 3, 4, 5],
+    tonicPurchases: 2,
+  }
+  const bundle = buyHagathaPerk(bundleSource, -1)
+  assert.equal(bundle.accepted, false)
+  assert.equal(bundle.reason, 'perk-capacity-full')
+  assert.strictEqual(bundle.state, bundleSource)
+})
+
+test('Tonic raises capacity only twice', () => {
   const firstTonic = buyHagathaPerk({ ...createHubEconomy(1), gold: 10_000 }, 27)
   assert.equal(firstTonic.accepted, true)
   assert.equal(firstTonic.state.charmCapacity, 6)
@@ -544,6 +639,12 @@ test('Hagatha bundle price is ceiling-half and Tonic raises capacity only twice'
   assert.equal(secondTonic.state.charmCapacity, 9)
   assert.deepEqual(secondTonic.state.ownedPerkSelectors, [27, 27])
   assert.equal(hagathaOffers(secondTonic.state).some(({ selector }) => selector === 27), false)
+
+  assert.equal(nativeHagathaOutcomeStateIsValid(
+    [27, 27, 0, 1, 2, 3, 4, 5, 6],
+    2,
+    9,
+  ), true)
 })
 
 test('Hagatha retains native purchase order and only Tonic may repeat', () => {
@@ -564,7 +665,7 @@ test('Hagatha retains native purchase order and only Tonic may repeat', () => {
     [0, 1, 2, 3, 4, 5, 6, 7, 9, 27, 27],
     2,
     9,
-  ), true)
+  ), false)
 })
 
 test('Luthacus transfers one stable object both ways without touching gold or copying', () => {

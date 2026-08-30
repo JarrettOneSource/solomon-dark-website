@@ -176,7 +176,7 @@ test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix
   )))
 })
 
-test('schema 19 compact inventory roots migrate to schema 23 addressed slots', () => {
+test('schema 19 compact inventory roots migrate to schema 24 addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -203,7 +203,7 @@ test('schema 19 compact inventory roots migrate to schema 23 addressed slots', (
     playerId: 'owner',
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 23)
+  assert.equal(current.schemaVersion, 24)
   assert.deepEqual(
     current.continuation.simulation.playerEntities.economies[0].backpack
       .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
@@ -257,7 +257,7 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
     playerId: restoredHub.playerId,
     state: restoredHub.state,
   }))
-  assert.equal(reencodedHub.schemaVersion, 23)
+  assert.equal(reencodedHub.schemaVersion, 24)
   assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
   assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
 
@@ -485,7 +485,7 @@ test('schema 22 restores late Water painters and every native death-effect owner
     playerId: restored.playerId,
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 23)
+  assert.equal(current.schemaVersion, 24)
   const missingOwner = structuredClone(current)
   delete missingOwner.continuation.simulation.world.enemies.deathEffects[0]
     .presentationOwner
@@ -523,7 +523,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 23)
+  assert.equal(encoded.schemaVersion, 24)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -1546,7 +1546,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 23)
+  assert.equal(encoded.schemaVersion, 24)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,
@@ -1891,6 +1891,67 @@ test('schema-18 retains ordered Hagatha outcomes and schema 16 materializes Toni
     restoreGameSaveProfile(JSON.stringify(legacy)).economy.ownedPerkSelectors,
     [0, 5, 27, 27],
   )
+})
+
+test('schema 23 repairs Tonic-inclusive overflow while schema 24 rejects it', () => {
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  }))
+  const overflow = [27, 27, 0, 1, 2, 3, 4, 5, 6, 24, 25]
+  const expected = overflow.slice(0, 9)
+  const profileEconomy = document.profile.economy
+  const continuationEconomy = document.continuation.simulation.playerEntities.economies[0]
+  for (const economy of [profileEconomy, continuationEconomy]) {
+    economy.charmCapacity = 9
+    economy.firstMixedSelectors = [...new Set(overflow)]
+    economy.ownedPerkSelectors = overflow
+    economy.tonicPurchases = 2
+  }
+  document.profile.hagathaRuntime = {
+    cheatDeathCharges: 0,
+    reverieActive: true,
+    serendipityActive: true,
+  }
+  document.continuation.simulation.playerEntities.progressions[0].hagathaRuntime = {
+    cheatDeathCharges: 0,
+    reverieActive: true,
+    serendipityActive: true,
+  }
+  document.schemaVersion = 23
+
+  const legacy = JSON.stringify(document)
+  const restored = restoreGameSaveDocument(legacy)
+  assert.deepEqual(restored.state.playerEntities.economies[0]?.ownedPerkSelectors, expected)
+  assert.deepEqual(restored.state.playerEntities.progressions[0]?.hagathaRuntime, {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+  const profile = restoreGameSaveProfile(legacy)
+  assert.deepEqual(profile.economy.ownedPerkSelectors, expected)
+  assert.deepEqual(profile.hagathaRuntime, {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+  assert.equal(profile.economy.gold, continuationEconomy.gold)
+  assert.deepEqual(profile.economy.firstMixedSelectors, [...new Set(overflow)])
+
+  const lateTonics = structuredClone(document)
+  lateTonics.profile.economy.ownedPerkSelectors = [0, 1, 2, 3, 4, 5, 6, 7, 9, 27, 27]
+  assert.deepEqual(
+    restoreGameSaveProfile(JSON.stringify(lateTonics)).economy.ownedPerkSelectors,
+    [0, 1, 2, 3, 4, 5, 6, 27, 27],
+  )
+
+  document.schemaVersion = 24
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(document)), /Hagatha|inventory/)
+  assert.throws(() => restoreGameSaveProfile(JSON.stringify(document)), /Hagatha|inventory/)
 })
 
 test('known schema 1 through 5 continuations migrate through current authority', () => {

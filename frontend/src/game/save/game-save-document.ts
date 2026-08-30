@@ -10,6 +10,7 @@ import {
   archiveCompletedRunEconomy,
   createNativeUnforgeBonuses,
   hubEconomyInventoryIsValid,
+  nativeHagathaBundleStateIsValid,
   normalizeHubEconomyInventorySlots,
   nativeHagathaOutcomeStateIsValid,
   type HubEconomyState,
@@ -17,6 +18,7 @@ import {
 import {
   applyNativeHagathaPurchaseRuntime,
   createNativeHagathaRuntimeState,
+  removeNativeHagathaRuntime,
   type NativeHagathaRuntimeState,
 } from '../core-kernels/native-hagatha-effects.ts'
 import {
@@ -51,6 +53,8 @@ import {
 } from '../core-kernels/native-belt.ts'
 import {
   createPlayerSkillRuntime,
+  playerSkillDerivedStats,
+  refreshPlayerCombatFromSkillStats,
   refreshPlayerSkillRuntime,
   type PlayerSkillRuntimeComponent,
 } from '../core-kernels/player-skill-runtime.ts'
@@ -639,12 +643,18 @@ export function restoreGameSaveProfile(document: string): RestoredGameSaveProfil
       transferCarriedItems: false,
     })
   }
-  const hagathaRuntime = parsed.profile.hagathaRuntime === undefined
+  const parsedHagathaRuntime = parsed.profile.hagathaRuntime === undefined
     ? applyNativeHagathaPurchaseRuntime(
         createNativeHagathaRuntimeState(),
         economy.ownedPerkSelectors,
       )
     : parseHagathaRuntime(parsed.profile.hagathaRuntime, 0)
+  const hagathaRuntime = normalizeHagathaRuntimeForOwnership(
+    parsedHagathaRuntime,
+    economy.ownedPerkSelectors,
+    parsed.sourceSchemaVersion,
+    0,
+  )
   return {
     continuation: parsed.continuation,
     economy,
@@ -1304,11 +1314,17 @@ function normalizePlayerStore(
     || (sourceSchemaVersion >= 18 && (source.belts as unknown[]).length !== count)
   ) throw new Error('game save player component cardinality drifted')
 
-  const economies = source.economies.map(value => normalizeEconomy(value, sourceSchemaVersion))
+  const removedHagathaSelectors: number[][] = []
+  const economies = source.economies.map((value, index) => normalizeEconomy(
+    value,
+    sourceSchemaVersion,
+    (removed) => { removedHagathaSelectors[index] = removed },
+  ))
   const primaryCasts: PlayerPrimaryCastState[] = []
   const belts: PlayerBeltComponent[] = []
   const skillBooks: PlayerSkillBookComponent[] = []
   const skillRuntimes: PlayerSkillRuntimeComponent[] = []
+  const statBooks = source.statBooks as PlayerStatBookComponent[]
   const persistedRuntimes = Array.isArray(source.skillRuntimes) ? source.skillRuntimes : null
   if (persistedRuntimes && persistedRuntimes.length !== count) {
     throw new Error('game save skill runtime cardinality drifted')
@@ -1321,7 +1337,7 @@ function normalizePlayerStore(
         ? legacyBook.skillQuickbar
         : array(legacyBook.secondaryBelt, 'game save secondary belt')
     let skillBook = normalizeSkillBook(legacyBook, index)
-    const statBook = source.statBooks[index] as PlayerStatBookComponent
+    const statBook = statBooks[index]!
     const economy = economies[index]!
     let runtime: PlayerSkillRuntimeComponent
     if (persistedRuntimes) {
@@ -1360,11 +1376,45 @@ function normalizePlayerStore(
     skillRuntimes.push(refreshed.runtime)
   }
 
+  const progressions = array(source.progressions, 'game save player progressions').map(
+    (value, index) => {
+      const progression = record(value, `game save player progression ${index}`)
+      const economy = economies[index]!
+      const parsedRuntime = progression.hagathaRuntime === undefined
+        ? applyNativeHagathaPurchaseRuntime(
+            createNativeHagathaRuntimeState(),
+            economy.ownedPerkSelectors,
+          )
+        : parseHagathaRuntime(progression.hagathaRuntime, index)
+      const hagathaRuntime = normalizeHagathaRuntimeForOwnership(
+        parsedRuntime,
+        economy.ownedPerkSelectors,
+        sourceSchemaVersion,
+        index,
+      )
+      const normalized = {
+        ...progression,
+        disciplineOfferBias: economy.ownedPerkSelectors.includes(14),
+        hagathaRuntime,
+      } as unknown as GameSimulationState['playerEntities']['progressions'][number]
+      if ((removedHagathaSelectors[index]?.length ?? 0) === 0) return normalized
+      const derived = playerSkillDerivedStats(
+        skillRuntimes[index]!,
+        skillBooks[index]!,
+        statBooks[index]!,
+        normalized,
+        economy,
+      )
+      return refreshPlayerCombatFromSkillStats(normalized, derived)
+    },
+  )
+
   return {
     ...source,
     belts,
     economies,
     primaryCasts,
+    progressions,
     skillBooks,
     skillRuntimes,
   } as unknown as GameSimulationState['playerEntities']
@@ -1410,7 +1460,41 @@ function normalizeDiskSecondary(value: unknown): GameSimulationState['secondaryA
   } as unknown as GameSimulationState['secondaryAbilities']
 }
 
-function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEconomyState {
+function repairLegacyHagathaOutcomes(
+  outcomes: readonly unknown[],
+  tonicPurchases: number,
+  charmCapacity: number,
+): Readonly<{ outcomes: readonly unknown[]; removed: readonly number[] }> {
+  if (
+    outcomes.length <= charmCapacity
+    || !Number.isSafeInteger(tonicPurchases)
+    || !Number.isSafeInteger(charmCapacity)
+    || charmCapacity !== 3 + tonicPurchases * 3
+    || !outcomes.every(selector => Number.isSafeInteger(selector))
+    || outcomes.filter(selector => selector === 27).length !== tonicPurchases
+  ) return { outcomes, removed: [] }
+
+  const retained: number[] = []
+  const removed: number[] = []
+  let remainingTonics = tonicPurchases
+  for (const selector of outcomes as readonly number[]) {
+    if (selector === 27) {
+      remainingTonics -= 1
+      retained.push(selector)
+    } else if (retained.length < charmCapacity - remainingTonics) {
+      retained.push(selector)
+    } else {
+      removed.push(selector)
+    }
+  }
+  return { outcomes: retained, removed }
+}
+
+function normalizeEconomy(
+  value: unknown,
+  sourceSchemaVersion: number,
+  onHagathaRepair: (removed: number[]) => void = () => undefined,
+): HubEconomyState {
   const source = record(value, 'game save player economy')
   rejectUnexpectedKeys(source, 'game save player economy', ECONOMY_KEYS)
   if (sourceSchemaVersion >= 13 && typeof source.collegeIntroPending !== 'boolean') {
@@ -1425,30 +1509,49 @@ function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEcono
     ? [...source.ownedPerkSelectors]
     : []
   const tonicEntries = sourceOutcomes.filter(selector => selector === 27).length
-  const ownedPerkSelectors = sourceSchemaVersion < 17
+  const materializedOutcomes = sourceSchemaVersion < 17
     && Number.isSafeInteger(tonicPurchases)
     && tonicPurchases > tonicEntries
     ? [...sourceOutcomes, ...Array(tonicPurchases - tonicEntries).fill(27)]
     : sourceOutcomes
+  const outcomeRepair = sourceSchemaVersion < 24
+    ? repairLegacyHagathaOutcomes(
+        materializedOutcomes,
+        tonicPurchases,
+        Number(source.charmCapacity),
+      )
+    : { outcomes: materializedOutcomes, removed: [] }
+  const sourceBundle = Array.isArray(source.hagathaBundleSelectors)
+    ? [...source.hagathaBundleSelectors]
+    : source.hagathaBundleSelectors
+  const bundleTonics = Array.isArray(sourceBundle)
+    ? sourceBundle.filter(selector => selector === 27).length
+    : 0
+  const bundleRepair = sourceSchemaVersion < 24 && Array.isArray(sourceBundle)
+    ? repairLegacyHagathaOutcomes(sourceBundle, bundleTonics, 3 + bundleTonics * 3)
+    : { outcomes: sourceBundle, removed: [] }
   const restored = normalizeHubEconomyInventorySlots({
     ...source,
     actionFeedback: feedback,
     collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
+    hagathaBundleSelectors: bundleRepair.outcomes,
     npc: normalizeNativeHubNpcState(source.npc, sourceSchemaVersion >= 11),
-    ownedPerkSelectors,
+    ownedPerkSelectors: outcomeRepair.outcomes,
     tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
   } as unknown as HubEconomyState)
   if (
     !hubEconomyInventoryIsValid(restored)
+    || !nativeHagathaBundleStateIsValid(restored.hagathaBundleSelectors)
     || !nativeHagathaOutcomeStateIsValid(
       restored.ownedPerkSelectors,
       restored.tonicPurchases,
       restored.charmCapacity,
     )
   ) {
-    throw new Error('game save player economy inventory is invalid')
+    throw new Error('game save player economy inventory is invalid or Hagatha state is invalid')
   }
+  onHagathaRepair([...outcomeRepair.removed])
   return restored
 }
 
@@ -2181,6 +2284,24 @@ function parseHagathaRuntime(value: unknown, index: number) {
     reverieActive: runtime.reverieActive,
     serendipityActive: runtime.serendipityActive,
   }
+}
+
+function normalizeHagathaRuntimeForOwnership(
+  source: NativeHagathaRuntimeState,
+  ownedPerkSelectors: readonly number[],
+  sourceSchemaVersion: number,
+  index: number,
+): NativeHagathaRuntimeState {
+  let normalized = source
+  for (const selector of [7, 24, 25]) {
+    if (!ownedPerkSelectors.includes(selector)) {
+      normalized = removeNativeHagathaRuntime(normalized, selector)
+    }
+  }
+  if (sourceSchemaVersion >= 24 && normalized !== source) {
+    throw new Error(`game save Hagatha runtime ${index} has no matching ownership`)
+  }
+  return normalized
 }
 
 function parseLoadedBoneyard(value: unknown): LoadedBoneyard {

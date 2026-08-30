@@ -32,6 +32,7 @@ export const HUB_SACK_REPLICATION_DEPTH_LIMIT = 32
 /** Bounded wire representation for one DyeClothing mixing transaction. */
 export const MAX_NATIVE_DYE_SELECTIONS = 256
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
+export const NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY = 9
 export const NATIVE_RETAINED_SACK_SUFFIXES = [
   'Earthly Possessions',
   'Stuff',
@@ -101,6 +102,7 @@ export type HubInventoryAction =
   | { readonly type: 'buy-dowsing'; readonly offerId: number }
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }
+  | { readonly type: 'close-hagatha' }
   | { readonly type: 'remove-hagatha'; readonly selector: number }
   | { readonly type: 'buy-teacher-spell'; readonly skillId: number }
   | { readonly type: 'bind-belt-item'; readonly itemId: number; readonly slot: number }
@@ -692,7 +694,19 @@ export function nativeHagathaOutcomeStateIsValid(
       ordinary.add(selector)
     }
   }
-  return tonics === tonicPurchases && ordinary.size <= charmCapacity
+  return tonics === tonicPurchases && outcomes.length <= charmCapacity
+}
+
+export function nativeHagathaBundleStateIsValid(
+  outcomes: readonly number[],
+): boolean {
+  if (!Array.isArray(outcomes)) return false
+  const tonicPurchases = outcomes.filter(selector => selector === 27).length
+  return nativeHagathaOutcomeStateIsValid(
+    outcomes,
+    tonicPurchases,
+    3 + tonicPurchases * 3,
+  )
 }
 
 export const SORCERORS_CHARM_SELECTOR = 17
@@ -721,7 +735,7 @@ export function createHubEconomy(
   )
   const starters = starterLoadout(1, starterAppearance)
   const stock = rollFomentiusStock(createNativeRng(seed), starters.nextItemId)
-  const bundleSelectors = stableSelectors(options.hagathaBundleSelectors ?? [])
+  const bundleSelectors = nativeHagathaBundleSelectors(options.hagathaBundleSelectors ?? [])
   return {
     actionFeedback: null,
     backpack: starters.backpack,
@@ -978,7 +992,7 @@ export function buyHagathaPerk(
     if (member === 27) {
       if (tonicPurchases < 2) {
         tonicPurchases += 1
-        charmCapacity = Math.min(9, charmCapacity + 3)
+        charmCapacity = Math.min(NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY, charmCapacity + 3)
         outcomes.push(member)
       }
     } else {
@@ -997,6 +1011,15 @@ export function buyHagathaPerk(
     ownedPerkSelectors: outcomes,
     tonicPurchases,
   })
+}
+
+export function closeHagathaShop(source: HubEconomyState): HubEconomyState {
+  if (sameNumbers(source.hagathaBundleSelectors, source.ownedPerkSelectors)) return source
+  return {
+    ...source,
+    hagathaBundleSelectors: [...source.ownedPerkSelectors],
+    revision: source.revision + 1,
+  }
 }
 
 export function removeHagathaPerk(
@@ -2197,10 +2220,10 @@ function equippedItems(equipment: HubEquipmentState): readonly HubInventoryItem[
   ].filter((item): item is HubInventoryItem => item !== null)
 }
 
-function stableSelectors(source: readonly number[]): readonly number[] {
-  const result = [...new Set(source)].sort((left, right) => left - right)
-  if (result.some((selector) => selector < 0 || selector > 27 || selector === 8)) {
-    throw new RangeError('Hagatha bundle contains an unavailable selector')
+function nativeHagathaBundleSelectors(source: readonly number[]): readonly number[] {
+  const result = [...source]
+  if (!nativeHagathaBundleStateIsValid(result)) {
+    throw new RangeError('Hagatha bundle is not a valid ordered outcome list')
   }
   return result
 }
@@ -2212,21 +2235,34 @@ function individualPerkPrice(source: HubEconomyState, selector: number): number 
 }
 
 function perksFitCapacity(source: HubEconomyState, selectors: readonly number[]): boolean {
+  if (
+    !nativeHagathaOutcomeStateIsValid(
+      source.ownedPerkSelectors,
+      source.tonicPurchases,
+      source.charmCapacity,
+    )
+    || source.ownedPerkSelectors.length >= source.charmCapacity
+  ) return false
   let capacity = source.charmCapacity
   let tonicPurchases = source.tonicPurchases
-  let ownedCount = source.ownedPerkSelectors.filter(selector => selector !== 27).length
+  const outcomes = [...source.ownedPerkSelectors]
   const owned = new Set(source.ownedPerkSelectors)
   for (const selector of selectors) {
     if (selector === 27) {
       if (tonicPurchases >= 2) return false
       tonicPurchases += 1
-      capacity = Math.min(9, capacity + 3)
+      capacity = Math.min(NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY, capacity + 3)
+      outcomes.push(selector)
     } else if (!owned.has(selector)) {
       owned.add(selector)
-      ownedCount += 1
+      outcomes.push(selector)
     }
   }
-  return ownedCount <= capacity
+  return nativeHagathaOutcomeStateIsValid(outcomes, tonicPurchases, capacity)
+}
+
+function sameNumbers(left: readonly number[], right: readonly number[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
 interface RemovedInventoryTreeItem {

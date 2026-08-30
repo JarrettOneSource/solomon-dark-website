@@ -1,4 +1,10 @@
 import {
+  NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY,
+  nativeHagathaBundleStateIsValid,
+  nativeHagathaOutcomeStateIsValid,
+} from '../core-kernels/hub-economy.ts'
+import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
+import {
   NATIVE_FIRST_MIX_COUNT,
   NATIVE_HAGATHA_OWNERSHIP_COUNT,
   NATIVE_SOURCE_ATTACHMENT_MAX_BYTES,
@@ -9,7 +15,6 @@ import {
   decodeNativeGamestateWizard,
   type NativeGameBoastState,
 } from './native-save-bridge.ts'
-import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import { NativeSaveFormatError } from './native-save-codec.ts'
 
 export const PORTABLE_GAME_PROFILE_FORMAT = 'solomon-dark-portable-profile'
@@ -368,11 +373,19 @@ function hagathaOutcomes(value: unknown): readonly number[] {
   const outcomes = integers(value, null, 0, 27, 'portable perk selectors')
   const ordinary = outcomes.filter(selector => selector !== 27)
   if (
-    outcomes.length > 11
+    outcomes.length > NATIVE_HAGATHA_MAX_OUTCOME_CAPACITY
     || outcomes.includes(8)
     || new Set(ordinary).size !== ordinary.length
     || outcomes.filter(selector => selector === 27).length > 2
   ) throw new NativeSaveFormatError('portable perk selectors are not a native outcome list')
+  return outcomes
+}
+
+function hagathaBundle(value: unknown): readonly number[] {
+  const outcomes = integers(value, null, 0, 27, 'portable Hagatha bundle')
+  if (!nativeHagathaBundleStateIsValid(outcomes)) {
+    throw new NativeSaveFormatError('portable Hagatha bundle is not a native outcome list')
+  }
   return outcomes
 }
 
@@ -526,9 +539,7 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
       dowsingFee: integer(profile.dowsingFee, 0, 2_147_483_647, 'portable Dowsing fee'),
       firstMixed: booleans(profile.firstMixed, NATIVE_FIRST_MIX_COUNT, 'portable first-mix state'),
       gold: integer(profile.gold, 0, 2_147_483_647, 'portable gold'),
-      hagathaBundleSelectors: integers(
-        profile.hagathaBundleSelectors, null, -1, 49, 'portable Hagatha bundle', true,
-      ),
+      hagathaBundleSelectors: hagathaBundle(profile.hagathaBundleSelectors),
       helpPending: booleans(profile.helpPending, 10, 'portable help state'),
       librarianLaceRead: boolean(profile.librarianLaceRead, 'portable Lace state'),
       nativeStorage: {
@@ -619,8 +630,11 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
   const tonicPurchases = result.wizard.perkSelectors.filter(selector => selector === 27).length
   const ordinaryPerks = new Set(result.wizard.perkSelectors.filter(selector => selector !== 27))
   if (
-    result.wizard.perkCapacity !== 3 + tonicPurchases * 3
-    || ordinaryPerks.size > result.wizard.perkCapacity
+    !nativeHagathaOutcomeStateIsValid(
+      result.wizard.perkSelectors,
+      tonicPurchases,
+      result.wizard.perkCapacity,
+    )
     || result.wizard.hagathaOwnership.slice(0, 27).some((owned, selector) => (
       selector !== 8 && owned !== ordinaryPerks.has(selector)
     ))
