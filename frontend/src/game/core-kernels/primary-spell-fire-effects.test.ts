@@ -77,6 +77,7 @@ test('creates the exact-count seeded fan, footprint, and ten pre-ticks', () => {
     footprintDimension: 208.99999737739563,
     origin: { x: 10, y: 20 },
     ownerId: 'p1',
+    presentation: 'fire',
     visualScale: 1.899999976158142,
     worldKey: 'world',
   })
@@ -107,6 +108,7 @@ test('Ember bounces, settles, and Immolates only on natural grounded retirement'
       footprintDimension: 110,
       origin: ember.position,
       ownerId: 'p1',
+      presentation: 'fire',
       visualScale: 1,
       worldKey: 'world',
     },
