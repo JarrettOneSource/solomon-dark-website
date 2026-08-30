@@ -147,7 +147,7 @@ test('Provokatus owns all five Boasts and each producer fails exactly its own ch
       if (producer === boast.failureProducer) {
         assert.equal(failed.boast.failed, true, `Boast ${boast.id} ignored ${producer}`)
         assert.equal(failed.boast.failureSequence, 1)
-        assert.equal(nativeBoastFailureText(failed.boast), `FAILED ${boast.statement}`)
+        assert.equal(nativeBoastFailureText(failed.boast), `FAILED "${boast.label}"`)
         assert.equal(failNativeBoast(failed, producer), failed)
       } else {
         assert.equal(failed, selected, `Boast ${boast.id} consumed unrelated ${producer}`)

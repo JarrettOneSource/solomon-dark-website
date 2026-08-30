@@ -651,6 +651,10 @@ try {
   await boastFailure.waitFor()
   assert.match(await boastFailure.innerText(), /^FAILED /)
   assert.equal(
+    await boastFailure.getAttribute('data-native-notebox-text'),
+    'FAILED "POTIONS ARE FOR PEASANTS!"',
+  )
+  assert.equal(
     await page.locator('.boneyard-scene').getAttribute('data-gameplay-input-blocked'),
     'false',
   )

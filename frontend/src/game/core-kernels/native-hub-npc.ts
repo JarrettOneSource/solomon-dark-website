@@ -288,7 +288,7 @@ export function nativeBoastScore(score: number, state: NativeBoastState): number
 
 export function nativeBoastFailureText(state: NativeBoastState): string | null {
   const boast = state.selected === null ? null : nativeBoastDefinition(state.selected)
-  return boast && state.failed ? `FAILED ${boast.statement}` : null
+  return boast && state.failed ? `FAILED "${boast.label}"` : null
 }
 
 export function nativeLibrarianBooks(

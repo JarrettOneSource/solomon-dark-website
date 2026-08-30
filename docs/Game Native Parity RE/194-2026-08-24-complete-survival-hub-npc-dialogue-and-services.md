@@ -486,3 +486,140 @@ No member is blocked by the browser platform.
   and `8aa6f509e45512a195c119674529326039fcfa181edc5821547d18175e99b5ee`.
   Every Notebox/Boast member is dispositioned; no platform exception or open
   question remains. Push to `main` is authorized; deployment is not implied.
+
+## 2026-08-30 — Boast failure-title payload correction, third reopen
+
+### Reported smell and parity question
+
+- The supplied Website frame still shows the pre-correction blocking
+  acknowledgement, while the supplied stock footage shows a compact red
+  failure Notebox over continuously live Arena play.
+- Fresh production testing establishes that deployed revision
+  `984f07e2449993a0595b435f653f1257563e8a98` now owns the corrected non-modal
+  Notebox lifecycle, but exposes a second defect: failure text is the long
+  selector statement instead of the short authored Boast title visible in
+  stock.
+- This is the third report against the Boast system. The 2026-08-29 pass traced
+  Notebox ownership, timing, geometry, input, and audio, but accepted
+  `nativeBoastFailureText -> boast.statement` without tracing which of the
+  three native Boast string arrays feeds `Game+0x1D48`. That incomplete field
+  trace made the validation screenshot look stock-like while its payload was
+  wrong.
+- Falsifiers: `0x005CB110` reading the long-statement array directly; any
+  failure producer selecting a different payload field; Boast 3 owning a
+  failure path; or stock rendering the selector statement rather than the
+  title.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Supplied Website frame | `boast 1 - image.png`, 1438x806, SHA-256 `e85d2ad9e7195328987f692777e928c507dece6da2bb2aed94cefe1378d79ba4` | Pre-correction Website failure used the blocking `OKAY` acknowledgement and the long mana statement. | high |
+| Supplied stock menu | `boast 2 - image.png`, 532x457, SHA-256 `7e97c6ff9a5d626667677c029650eb689fa796170b9cb053b74f52e08417c02b` | Stock distinguishes the short uppercase title from the quoted long selector statement for every visible row. | high |
+| Supplied clean-stock failure | `boast 3 - SolomonDark 2026-08-29 21-54-45.mp4`, 1600x900, 4.5759 s, SHA-256 `33f1804f879577a154a23dc1070a4d23102fd9be0ac64293ee2fa0be132bc29e` | Drinking the potion produces `FAILED "POTIONS ARE FOR PEASANTS!"` at native center `(800,250)` while actors continue updating beneath it. It does not display the long potion statement. | authoritative |
+| Fresh production Chrome | Mac Chrome 151 against `https://solomondarker.com/game`, deployed revision `984f07e2`, 2026-08-30 | A production-safe anonymous journey selected Boast 0, proved the instruction Notebox was non-modal, accepted movement, and auto-expired. In the Arena the potion failure reached the red Notebox with `data-native-notebox-text='FAILED "I can do this entire mission without drinking a single potion of any kind!"'`, directly reproducing the residual payload defect. Page, console, and failed-response arrays were empty on that reproducing run. | high |
+| Retail identity and tooling | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000`; read-only replica 3; Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49` | Canonical project and wrapper provenance for the fresh instruction trace. | high |
+| Authored Boast arrays | `FUN_004F99F0`; title strings `0x0079115C`, `0x00791140`, `0x00791128`, `0x0079110C`, `0x007910F0`; statements `0x007910A0`, `0x00791050`, `0x00791014`, `0x00790FD0`, `0x00790F88` | `BoastBox+0xDC` is the complete five-title array; the separate `+0xEC` array owns the five quoted selector statements. | high |
+| Selection field write | `FUN_004FC340`, instructions `0x004FC395..0x004FC3B4`; BoastBox subobject at Boast `+0x140` | Selected index reads Boast `+0x21C/+0x220` (`+0x140 + title-array +0xDC/+0xE0`) and assigns that title String to `Game+0x1D48`. Response-key dispatch is a separate switch. | high |
+| Shared failure formatter | `FUN_005CB110`, instructions `0x005CB197..0x005CB1C5`; callers `0x0052B150`, `0x0054CC50`, `0x00577760`, `0x005CB810` | The formatter reads the String payload at `Game+0x1D4C` and applies `FAILED "%s"`. Therefore all four failure producers use the selected short title and add their own quotes. | high |
+
+One intervening production attempt received an unrelated `/api/game/hub` 502
+and was excluded from Boast evidence; the reproducing run above had empty
+network-error arrays.
+
+### System boundary and membership inventory
+
+Native system: **Boast failure payload selection**, from the complete authored
+title/statement tables through selected-title storage and the shared Notebox
+formatter for every failure producer.
+
+| Member / branch | Native source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Boast 0 potion failure | title `0x0079115C`; `0x00577760 -> 0x005CB110` | `exact-ported` | `FAILED "POTIONS ARE FOR PEASANTS!"` |
+| Boast 1 magical-equipment failure | title `0x00791140`; `0x005CB810 -> 0x005CB110` | `exact-ported` | `FAILED "I'M TOO MACHO FOR MAGIC!"` |
+| Boast 2 secondary-cast failure | title `0x00791128`; `0x0054CC50 -> 0x005CB110` | `exact-ported` | `FAILED "SECONDARIES ARE SISSY!"` |
+| Boast 3 automatic choice | title `0x0079110C`; no `0x005CB110` caller | `verified-already-at-parity`, no failure payload | automatic choice and silent failure branch remain unchanged |
+| Boast 4 mana-underflow failure | title `0x007910F0`; `0x0052B150 -> 0x005CB110` | `exact-ported` | `FAILED "I NEVER RUN OUT OF MANA!"` |
+| Five quoted selector statements | `0x007910A0..0x00790F88`, BoastBox `+0xEC` | `verified-already-at-parity` | remain selector detail/speech content and never feed failure text |
+| Instruction Notebox, success/score, persistence, reset, presentation, audio | prior complete membership | `verified-already-at-parity` | payload correction does not alter lifecycle, replication, save, or rendering owners |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- `FUN_004F99F0` constructs parallel title, quoted-statement, and explanation
+  arrays. `FUN_004FC340` copies only the selected title into the Gameplay-owned
+  String at `+0x1D48`, independently dispatches `ANNAL_*BOAST`, and retains the
+  existing instruction-Notebox handoff.
+- Each of the four failure triggers enters `FUN_005CB110` once. That common
+  owner reads the selected title, wraps it with `FAILED "..."`, marks the
+  one-shot state, applies the red/short-lifetime Notebox variant, and starts
+  the buzzer stream. Boast 3 has no failure caller.
+- Title and statement are both authored truth, but have different consumers.
+  The Website catalog remains correct; only its failure-text consumer crossed
+  those fields.
+
+### Confidence and open questions
+
+- Confirmed: all five titles, all five statements, selected-title field write,
+  common formatting string, all four callers, stock visual payload, current
+  production mismatch, and the unchanged Notebox lifecycle.
+- Inferred: none used for implementation.
+- Unknown: none material.
+
+### Web implementation consequence
+
+- Keep `statement` as selector detail and change the shared failure formatter
+  to quote `label` exactly once.
+- Replace the statement-based expectation for every producer, not only the
+  reported potion row. Strengthen the browser smoke to assert the exact short
+  potion title while retaining non-modal movement, buzzer, and expiry checks.
+- Do not change Boast state, protocol/save shape, presentation geometry,
+  timing, audio, or success scoring.
+
+### Validation contract
+
+- Focused Mac tests must assert exact title-based output for all four failure
+  producers and prove Boast 3 still has no failure path.
+- Mac Chrome must select Boast 0, let the instruction expire while moving,
+  enter a real Arena, drink the starter potion, observe the exact short-title
+  failure, buzzer, unblocked input/world progress, and automatic expiry.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`;
+  production remains separately uncorrected until an authorized publication
+  and deployment.
+
+### Implementation validation receipt
+
+- `nativeBoastFailureText` now quotes the selected Boast `label`; the five
+  quoted `statement` rows remain unchanged as selector detail. The existing
+  all-row producer loop now pins the exact title output for potion,
+  magical-equipment, secondary-cast, and mana-underflow failures and retains
+  the no-failure Boast-3 branch.
+- The registered browser smoke now asserts
+  `data-native-notebox-text='FAILED "POTIONS ARE FOR PEASANTS!"'` before its
+  existing buzzer, unblocked-input, advancing-tick, screenshot, and automatic
+  expiry checks.
+- The candidate was rebased onto `origin/main`
+  `a554ea7368a1c93c07661f9ad01e7a93b528f888` and transferred to a detached Mac
+  worktree with byte-identical SHA-256 manifests for all changed files.
+- Mac focused receipt: `npm run test:hub-ui` passed all 85 tests. The first
+  canonical `/opt/homebrew/bin/bash ./scripts/validate.sh` receipt exited zero;
+  its broad frontend suite passed 1,779 tests, production frontend/game-host
+  builds passed, the game entry was 266,211 raw / 80,891 gzip bytes within
+  budget, and production media policy passed.
+- Mac Chrome `151.0.7922.174` completed the full registered Hub/Arena journey
+  with `status: ok` and `failedResponses: []`. The instruction remained
+  non-modal and auto-expired over live Hub movement. Potion use then rendered
+  the exact short-title red failure Notebox, restarted the buzzer, kept
+  gameplay input and authoritative ticks live, and auto-expired.
+- The 1600x900 instruction and failure frames were visually inspected. Their
+  SHA-256 values are
+  `aac78e78c54d7f72a0bed83896e78dcfee5e43be0090661df91918cc761125cf`
+  and
+  `89d919fe6566b139a7c711563fd4a674684a3187cb5c21a17abd8545c9f726d7`.
+  The failure frame matches the supplied stock title, centered compact panel,
+  retained live world, and absence of acknowledgement chrome.
+- No browser-platform exception or material unknown remains. The implementation
+  is local and uncommitted; it has not been pushed or deployed. The deployed
+  `origin/main` tree therefore still carries the long-statement payload until
+  a separately authorized publication and deployment.
