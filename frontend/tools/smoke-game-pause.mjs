@@ -68,6 +68,7 @@ const screenshots = {
 }
 const errors = []
 const failedResponses = []
+const pendingRawMessageCleanups = new Set()
 
 const vite = await createViteServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
@@ -918,6 +919,7 @@ try {
   process.stderr.write(`${JSON.stringify({ errors, failedResponses })}\n`)
   throw error
 } finally {
+  for (const cleanup of pendingRawMessageCleanups) cleanup()
   peer?.socket.terminate()
   latePeer?.socket.terminate()
   await browser.close()
@@ -1100,7 +1102,9 @@ function nextRawMessage(socket, predicate) {
       clearTimeout(timeout)
       socket.off('message', receive)
       socket.off('error', fail)
+      pendingRawMessageCleanups.delete(cleanup)
     }
+    pendingRawMessageCleanups.add(cleanup)
     socket.on('message', receive)
     socket.on('error', fail)
   })
