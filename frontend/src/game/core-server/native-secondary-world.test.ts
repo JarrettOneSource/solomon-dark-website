@@ -12,8 +12,10 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.
 import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
+  type BoneyardEnemyProjectile,
 } from './boneyard-enemy-store.ts'
 import {
+  boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
   boneyardNativeSecondaryTargets,
   resolveNativeCollisionAdjustedPosition,
@@ -165,6 +167,26 @@ test('secondary target membership begins on the Coffin rising edge', () => {
   assert.equal(boneyardNativeSecondaryTarget(risen, coffin.id)?.nativeFlags, 0x2)
 })
 
+test('Dampen selects only the four native hostile-magic projectile families', () => {
+  const projectiles: readonly BoneyardEnemyProjectile[] = [
+    enemyProjectile(1, 'arrow', 0x7da, 'normal'),
+    enemyProjectile(2, 'firebolt', 0x7eb, 'fire'),
+    enemyProjectile(3, 'guided-missile', 0x7ec, 'cold'),
+    enemyProjectile(4, 'demon-bomb', 0x7f7, 'none'),
+    enemyProjectile(5, 'poison-pool', 0x806, 'poison'),
+  ]
+  const source = {
+    ...createBoneyardEnemyStore('dampen-projectile-membership'),
+    projectiles,
+  }
+
+  assert.deepEqual(
+    boneyardNativeSecondaryDampenCandidates(source, { x: 0, y: 0 })
+      .projectiles.map(({ id }) => id),
+    [2, 3],
+  )
+})
+
 test('Earthquake applies its exact signed heading perturbation at the enemy-store boundary', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('earthquake-heading'), {
     firstProjectileWorldContact: () => null,
@@ -197,3 +219,45 @@ test('Earthquake applies its exact signed heading perturbation at the enemy-stor
 
   assert.equal(result.enemies.actors[0]!.headingDeg, Math.fround(350))
 })
+
+function enemyProjectile(
+  id: number,
+  kind: BoneyardEnemyProjectile['kind'],
+  nativeTypeId: BoneyardEnemyProjectile['nativeTypeId'],
+  payload: BoneyardEnemyProjectile['payload'],
+): BoneyardEnemyProjectile {
+  return {
+    ageTicks: 8,
+    bounceVelocity: 0,
+    chillTumbleAccumulator: 0,
+    coldSlowTicks: 0,
+    contactRadius: 8,
+    damage: 1,
+    headingDeg: 90,
+    hitPlayerIds: [],
+    homing: false,
+    id,
+    kind,
+    lastStepTick: 0,
+    lightRegistration: null,
+    lifetimeTicks: 300,
+    minimumSpeed: 0,
+    nativeCellBindingOrder: id,
+    nativeRegistrationOrder: id,
+    nativeTypeId,
+    ownerActorId: 3,
+    painterRegistration: { managerLane: 'actor', registrationOrdinal: id },
+    payload,
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: { x: id * 10, y: 0 },
+    settledTicksRemaining: 0,
+    spawnTick: 0,
+    speed: 5,
+    targetPlayerId: null,
+    verticalOffset: 0,
+    verticalVelocity: 0,
+    visualPhaseDeg: 15,
+    visualScale: 1,
+  }
+}

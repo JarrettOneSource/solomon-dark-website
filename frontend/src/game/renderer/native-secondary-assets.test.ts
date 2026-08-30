@@ -56,6 +56,23 @@ test('the stock right-click atlas membership is complete and every row is regist
     for (const entry of [15, 16, 17, 74, 85, 111, 112, 158, 167]) {
       assert.equal(membership.BadGuys.includes(entry), true, `missing Magic Trap record ${entry}`)
     }
+    assert.deepEqual(
+      membership.BadGuys.filter((entry) => entry >= 255 && entry <= 266),
+      Array.from({ length: 12 }, (_, index) => 255 + index),
+    )
+    const dampenProjectileEntries = [
+      ...Array.from({ length: 12 }, (_, index) => 255 + index),
+      110,
+      111,
+      112,
+    ]
+    for (const entry of dampenProjectileEntries) {
+      assert.match(
+        module.nativeSecondarySpriteRecord('BadGuys', entry).source,
+        /^boneyard-combat:BadGuys:/,
+        `Dampen projectile record ${entry} did not reuse the loaded combat atlas`,
+      )
+    }
     assert.equal(membership.DeadHawg.includes(2), true)
     assert.equal(membership.DeadHawg.includes(4), true)
     assert.equal(membership.DeadHawg.includes(18), true)

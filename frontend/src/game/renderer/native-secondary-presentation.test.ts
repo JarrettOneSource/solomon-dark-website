@@ -44,7 +44,7 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'golem', 'golem-death', 'teleport-burst', 'magic-circle',
   'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn', 'flash-response-fade', 'flash-response-grow',
-  'dampen-wave', 'shield-break',
+  'dampen-wave', 'dampened-projectile', 'shield-break',
   'shield-explosion', 'acid-rain', 'acid-drop', 'mindblast-burst',
   'mindblast-shockwave', 'ring-fire-explosion',
   'ring-fire-fragment', 'acid-splash', 'ether-drain',
@@ -102,6 +102,8 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
       ? null
       : kind.startsWith('ether-burn')
         ? 14
+      : kind.startsWith('dampen')
+        ? 51
       : kind.startsWith('flash-response-')
         ? 53
       : kind.startsWith('acid-')
@@ -630,7 +632,10 @@ test('gameplay waves stay invisible while the independent Ring visual owns exact
     enhanced: true,
   }).draws, [])
   assert.equal(nativeSecondaryPresentationPlan(actor('ice-blast')).draws.length, 0)
-  assert.ok(nativeSecondaryPresentationPlan(actor('dampen-wave')).draws.length >= 360)
+  assert.equal(nativeSecondaryPresentationPlan({
+    ...actor('dampen-wave'),
+    ageTicks: 0,
+  }).draws.length, 39)
 })
 
 test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled lights', () => {
@@ -705,14 +710,22 @@ test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled l
   assert.ok(fragmentLight.radius >= 0.75 && fragmentLight.radius <= 1)
 })
 
-test('Dampen replays 360 source-over MoveFades and 30 centered additive fades', () => {
+test('Dampen repairs the crashing suffix as 36 radial wisps and three magical arcs', () => {
   const initial = createNativeRng(711)
   const born = nativeSecondaryPresentationPlan({
     ...actor('dampen-wave'),
     ageTicks: 0,
     presentationRng: initial,
   }).draws
-  assert.equal(born.length, 390)
+  assert.equal(born.length, 39)
+  assert.deepEqual(
+    born.slice(0, 36).map(({ role }) => role),
+    Array.from({ length: 36 }, (_, index) => `dampen-move-fade-${index * 10}`),
+  )
+  assert.deepEqual(
+    born.slice(36).map(({ role }) => role),
+    ['dampen-additive-0', 'dampen-additive-10', 'dampen-additive-20'],
+  )
 
   const record = drawNativeInteger(initial, 2)
   const speed = drawNativeFloat(record.state, 4)
@@ -740,7 +753,7 @@ test('Dampen replays 360 source-over MoveFades and 30 centered additive fades', 
   const additiveScale = drawNativeFloat(additiveRotation.state, 4.75)
   const additiveLife = drawNativeFloat(additiveScale.state, 1)
   const spriteScale = Math.fround(0.75 + additiveScale.value)
-  assert.deepEqual(born[360], {
+  assert.deepEqual(born[36], {
     alpha: Math.min(Math.fround(0.5 + additiveLife.value), 1),
     atlas: 'BadGuys',
     blend: 'add',
@@ -767,6 +780,36 @@ test('Dampen replays 360 source-over MoveFades and 30 centered additive fades', 
   const undead = nativeSecondaryPresentationPlan(actor('turn-undead')).draws[0]!
   assert.equal(undead.tint, 0x808080)
   assert.equal(undead.scaleY, actor('turn-undead').scale * 0.8)
+})
+
+test('Dampen flyouts keep Firebolt and both Guided Missile native compositors', () => {
+  const fire = nativeSecondaryPresentationPlan({
+    ...actor('dampened-projectile'),
+    frame: 8,
+    targetId: 40,
+    variant: 0,
+  }).draws
+  assert.deepEqual(fire.map(({ entry, role }) => ({ entry, role })), [
+    { entry: 15, role: 'dampened-projectile-firebolt-orange-glow' },
+    { entry: 263, role: 'dampened-projectile-firebolt-body' },
+  ])
+
+  for (const [variant, mainEntry, payload] of [
+    [1, 111, 'poison'],
+    [2, 110, 'cold'],
+  ] as const) {
+    const guided = nativeSecondaryPresentationPlan({
+      ...actor('dampened-projectile'),
+      frame: 12,
+      phase: 30,
+      targetId: 41 + variant,
+      variant,
+    }).draws
+    assert.deepEqual(guided.map(({ entry, role }) => ({ entry, role })), [
+      { entry: mainEntry, role: `dampened-projectile-guided-missile-${payload}-body` },
+      { entry: 112, role: `dampened-projectile-guided-missile-${payload}-aura` },
+    ])
+  }
 })
 
 test('Explosive Shield replays the exact four-layer burst and one hundred FuzzySpears', () => {

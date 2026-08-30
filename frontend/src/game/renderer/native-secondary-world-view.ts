@@ -48,6 +48,8 @@ const STORM_RENDER_TARGET_SIZE = 256
 const LEVIATHAN_RENDER_TARGET_SIZE = 256
 const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
   'acid-rain',
+  'dampen-wave',
+  'dampened-projectile',
   'freeze-wave-visual',
   'golem',
   'leviathan',

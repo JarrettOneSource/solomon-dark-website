@@ -2993,7 +2993,7 @@ function finishGameSimulationTick(
       world.kind === 'boneyard'
       && worldKey === `boneyard:${world.runId}`
         ? boneyardNativeSecondaryDampenCandidates(world.enemies, origin)
-        : { casterTargetIds: [], projectileIds: [], shieldTargetIds: [] }
+        : { casterTargetIds: [], projectiles: [], shieldTargetIds: [] }
     ),
     effectPositionBlocked: (worldKey, position) => {
       if (

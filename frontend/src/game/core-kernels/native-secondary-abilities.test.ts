@@ -142,7 +142,28 @@ function context(
   return {
     dampenCandidates: () => ({
       casterTargetIds: [7],
-      projectileIds: [8, 9],
+      projectiles: [
+        {
+          ageTicks: 8,
+          headingDegrees: 90,
+          id: 8,
+          kind: 'firebolt',
+          payload: 'fire',
+          position: { x: 10, y: 0 },
+          visualPhaseDegrees: 15,
+          visualScale: 1,
+        },
+        {
+          ageTicks: 12,
+          headingDegrees: 0,
+          id: 9,
+          kind: 'guided-missile',
+          payload: 'cold',
+          position: { x: 0, y: 20 },
+          visualPhaseDegrees: 30,
+          visualScale: 1.1,
+        },
+      ],
       shieldTargetIds: [10],
     }),
     golemMovement: (_playerId, _worldKey, _origin, requestedPosition) => requestedPosition,
@@ -2305,7 +2326,7 @@ test('Dampen and Turn Undead consume their complete native child-animation RNG p
   assert.deepEqual(undead.rng, advanceNativeRngWords(undeadInitial, 71))
 })
 
-test('Dampen removes projectiles, disrupts casters, rolls shield dispels, and owns CastSpin', () => {
+test('Dampen flings native magic projectiles, disrupts casters, rolls shields, and owns CastSpin', () => {
   const initialRng = createNativeRng(123)
   const actionIdentity = drawNativeInteger(initialRng, 100_000)
   const shieldRoll = drawNativeInteger(actionIdentity.state, 100)
@@ -2315,6 +2336,41 @@ test('Dampen removes projectiles, disrupts casters, rolls shield dispels, and ow
   assert.deepEqual(result.disruptedTargetIds, [7])
   assert.deepEqual(result.dispelledShieldTargetIds, shieldRoll.value < 0x33 ? [10] : [])
   assert.equal(result.state.players.player?.castSpinTicksRemaining, 73)
+  assert.deepEqual(
+    result.state.actors
+      .filter(({ kind }) => kind === 'dampened-projectile')
+      .map(({ frame, lifetimeTicks, phase, position, targetId, variant, velocity }) => ({
+        frame, lifetimeTicks, phase, position, targetId, variant, velocity,
+      })),
+    [
+      {
+        frame: 8,
+        lifetimeTicks: 100,
+        phase: 15,
+        position: { x: 10, y: 0 },
+        targetId: 8,
+        variant: 0,
+        velocity: { x: 40, y: 0 },
+      },
+      {
+        frame: 12,
+        lifetimeTicks: 100,
+        phase: 30,
+        position: { x: 0, y: 20 },
+        targetId: 9,
+        variant: 2,
+        velocity: { x: 0, y: 40 },
+      },
+    ],
+  )
+  const advanced = stepNativeSecondaryAbilities(
+    result.state,
+    context(51, 2, null),
+  ).state.actors.filter(({ kind }) => kind === 'dampened-projectile')
+  assert.deepEqual(advanced.map(({ position }) => position), [
+    { x: 50, y: 0 },
+    { x: 0, y: 60 },
+  ])
   assert.deepEqual(
     result.state.targetEffects.find(({ targetId }) => targetId === 7),
     {

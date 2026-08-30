@@ -1212,3 +1212,228 @@ without an approximation.
   and `game-simulation.ts`. The completion handoff owns the unchanged-command
   current-base repeat and disposable evidence/worktree cleanup. No commit,
   push, deployment, production restart, or live-service claim is made.
+
+## 2026-08-30 — Dampen crash-debt presentation and canceled-projectile reopening
+
+### Reported smell and parity question
+
+- A player supplied `SDB - Dampen Visual Glitch.mp4` (1,256,320 bytes,
+  SHA-256 `75065366e18f0d79fda16d85a848d06486459103fdb2c176dd0995aaa864a3f7`).
+  The 1920x1080, 3.034-second capture shows a Dampen cast producing a single
+  oversized, bright white stack of concentric/partial loops around the caster,
+  followed by the gray radial puffs. The loop stack is visible near 1.85
+  seconds and is the Website's current 30-copy BadGuys-48 suffix, not video
+  corruption or a missing texture.
+- The report identifies this as the infamous stock Dampen path that crashed
+  Solomon Dark. No surviving clean-SD footage establishes a successful
+  intended final frame; reproducing the executable's corrupting allocation
+  storm is therefore not an externally observable parity target.
+- Falsifiers were: a Website-only transform or blend error; a safe stock
+  animation with the wrong web scale; a separate intended stock owner hidden
+  after the 390-child suffix; or a sibling-game implementation that retained
+  the same 390-object construction. All four are false.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player capture | Windows Downloads video above; H.264 1920x1080 at 29.65 average FPS | The bright loop stack is followed by the gray radial cloud exactly where `dampenDraws` paints its additive and MoveFade groups. | high |
+| Retail SD instructions | unmodified 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000`; fresh replica-3 decompile of `0x00648DF0` and instruction window `0x0054F03F..0x0054F11B` | Accepted row 51 calls the helper, then separately creates mode-21 CastSpin and halves its action scalar. The helper first creates one `Anim_DampenedSpell` for each eligible projectile, then allocates 360 MoveFades and 30 additive-perspective fades. | high |
+| Retail SD child lifecycle | fresh decompile of `Anim_DampenedSpell` constructor/update/draw `0x00455020/0x0045A030/0x00461100`; BadGuys registry rows `10/11`, `110..112`, `255..266` | Canceled projectiles retain their native family art, move away from the caster, and emit fading record-10/11 feedback before teardown. Firebolt is mode 0; GuidedMissile resolves cold/poison modes; SkullMissile and DarkFireball use mode 3. | high |
+| Crash evidence | read-only Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; `stock_dampen_effect_context.inl`; two recorded Windows dumps | Both the helper and following stock presentation allocation path poisoned the shared pointer-list heap and later failed in `HookPointerListDeleteBatch`. The multiplayer workaround suppresses that block rather than invoking it. | high |
+| Current sibling implementation | Boneyard `SB.exe`, 9,539,584 bytes, SHA-256 `b9322c6963ff03a9ff52dcb0789490b46510e4b78b1cbbda229ef1b0a173e9bb`; read-only `SolomonsBoneyard` Ghidra project | Skill `0x34` is `Unmagic`, the same area-cancel family. Cast dispatcher `0x1401F4F20` creates one `Anim_Unmagic` (`0x140016900`) and flings canceled magic through `Anim_Flinger` (`0x140017550`) rather than allocating a one-frame radial storm. | high |
+| Sibling owner/lifetime | `Anim_Unmagic` update/draw `0x140016970/0x1400173A0`; `Anim_Flinger` update/draw `0x140017610/0x140017710`; decrypted `unmagic.txt` | One owner grows by `s=(s+0.01)*1.05` and retires after crossing one (36 updates), emits three caster-image wisps per update, and keeps canceled projectiles visibly moving outward through their own painter. The cast uses the Dampen sample; rank two expands shield removal to 100 percent. | high |
+| Existing Website implementation | `native-secondary-abilities.ts`, `native-secondary-world.ts`, and `native-secondary-presentation.ts` at base `228c1fd8` | Website advances the 2,970-word stock suffix and paints all 390 children. It deletes every enemy projectile kind in the square, including Arrow, DemonBomb, and PoisonPool, and emits no canceled-projectile painter. | high |
+
+The fresh SD queries used the required read-only wrapper and replica pool. The
+wrapper and decompile script hashes were respectively
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`
+and `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+No runtime address or injected observation is used as an instruction fact.
+
+### System boundary and membership inventory
+
+Native system: **Dampen admission, hostile-magic selection, canceled-magic
+flyout, caster pulse, CastSpin, and audio**, beginning at accepted row 51 and
+ending when its flyout/pulse painters and disruption state retire.
+
+| Member / branch | Native source | Disposition in this reopening | Proof contract |
+| --- | --- | --- | --- |
+| row-51 admission, mana, global/row cooldown | dispatcher `0x0054CC50`, debit `0x0052B150` | `verified-already-at-parity` | rejected casts create no actor; accepted cast spends once and retains 20-second row cooldown |
+| action identity and CastSpin | `0x0054F0FE..0x0054F11B`, mode `0x15/21`, half scalar | `verified-already-at-parity` | 73 strict-boundary ticks, independent from the pulse lifetime |
+| Firebolt `0x7EB` | helper flag `0x100`, `Anim_DampenedSpell` mode 0, BadGuys `255..266` | `exact-ported` | selected in the 400-square, removed from combat, then visibly flung outward with Firebolt art |
+| GuidedMissile `0x7EC`, cold and poison | helper flag `0x100`, mode `2-payload`, BadGuys `110..112` | `exact-ported` | both payload variants preserve their main/aura family during outward flyout |
+| SkullMissile `0x800` and DarkFireball `0x804` | helper mode 3 | `out-of-system` — DireFaculty/story projectile owners are not in the maintained Website runtime | explicit negative inventory row; no fabricated Boneyard actor |
+| Arrow `0x7DA`, DemonBomb `0x7F7`, PoisonPool `0x806` | absent from helper flag/mode membership | `exact-ported` negative branch | Dampen must not remove or repaint any of the three |
+| SkeletonMage `0x3EB` disruption | helper type branch and six-second action reset | `verified-already-at-parity` | target effect remains 600 fixed ticks |
+| DireFaculty `0x3F2` disruption | helper type branch | `out-of-system` — story boss is separately dispositioned outside the current runtime | no claim that SkeletonMage-only current scenes cover it |
+| shield-bearing hostile with capability bit `0x2` | `RandomInt(100) < 0x33` and shield-clear virtual | `verified-already-at-parity` | 51 successful values out of 100; sorted deterministic targets; no UI-text correction to 50 |
+| broken 360 MoveFade plus 30 arc allocation suffix | `0x00648DF0`, BadGuys `10/11/48`, 2,970 RNG words | `out-of-system` — crash-inducing executable debt, not a successful stock presentation | retain the authoritative RNG advance and full 360-degree asset domain, but never materialize the corrupt child count |
+| repaired caster pulse | sibling `Anim_Unmagic`; SD `10/11/48`; loader safety pulse | `exact-ported` as the Website's explicit crash-debt repair contract | one owner, 36 evenly spaced radial wisps, three centered magical arcs, bounded one-second retirement, no light or camera invention |
+| `flash` and `dampen` audio | SD dispatcher/helper registries | `verified-already-at-parity` | one flash cast edge followed by one Dampen pulse edge; no invented loop |
+| Hub/non-combat rejection, teardown, multiplayer observer | existing secondary authority and actor snapshot lifecycle | `verified-already-at-parity` with the new transient members | no Hub world mutation; host owns targets/RNG; late renderers sample actor state without replaying a cast |
+
+No member is blocked by the browser platform. The shipped SD child count is
+deliberately excluded because it corrupts the stock heap; the replacement is
+an explicit repair of executable debt, not a claim that footage proved an
+unseen successful SD frame.
+
+### Native ownership thread and recovered contract
+
+- Accepted row 51 owns admission, cost, cooldown, the sentinel action-identity
+  word, shield rolls, target mutation, mode-21 CastSpin, and two audio edges.
+  Those facts remain host-authoritative and unchanged.
+- `0x00648DF0` selects only magic actors carrying native flag `0x100`. Within
+  the maintained Boneyard projectile set that means Firebolt and GuidedMissile,
+  not every object in `enemies.projectiles`. The current all-projectile filter
+  is a gameplay defect revealed by the visual-system sweep.
+- Every selected projectile is handed to `Anim_DampenedSpell` before native
+  teardown. Its family selector keeps Firebolt, cold Guided, poison Guided,
+  and Dire projectile presentation distinct. Immediate array deletion loses a
+  real native painter member.
+- The final 390 allocations are not the clock for gameplay or CastSpin. They
+  are a presentation-only suffix that consumes 2,970 RNG words, overwhelms the
+  pointer-list owner, and maps directly to the captured Website loops/cloud.
+- Modern Boneyard resolves the same design problem with one `Anim_Unmagic`
+  owner and one `Anim_Flinger` per canceled spell. The Website repair follows
+  that ownership shape while retaining SD's already bundled BadGuys art and
+  the SD authoritative RNG advance.
+- Scene exit, actor retirement, observer interpolation, and host reset remain
+  generic secondary-actor lifecycle owners. No renderer-local timer or
+  browser-frame RNG is introduced.
+
+### Nearby-system findings
+
+- The prior closure treated instruction-exact crash debt as presentation
+  truth and stopped before the known `Anim_DampenedSpell` sibling. That is the
+  skipped rule which caused this secondary report.
+- The existing `radius=400` square query is the intended caster-area domain,
+  but its projectile predicate is too broad. Projectile membership must be
+  based on native family/capability, not mere presence in the store.
+- The Mod Loader's multiplayer double-ring is useful crash evidence and a
+  bounded-size witness, but it is not clean stock footage and does not become
+  the Website asset recipe.
+
+### Confidence and open questions
+
+- Confirmed: capture/source correspondence; crash ownership; all four native
+  projectile families; current Website over-removal; per-projectile flyout;
+  CastSpin/audio separation; modern sibling owner, formula, and lifecycle.
+- Inferred by necessity: the exact successful SD arc density is unrecoverable
+  because the only shipped path corrupts the heap and no successful capture is
+  known. The repair keeps the full angular domain and stock assets but samples
+  one child per ten native headings and one per ten native arc rows. This is
+  deliberately labeled repair policy rather than recovered SD pixels.
+- Falsifier: a future clean recording or source archive showing a safe Dampen
+  pulse supersedes only the 36/3 sampling policy; projectile membership,
+  gameplay, CastSpin, audio, and crash findings remain established.
+
+### Web implementation consequence
+
+- Keep the 2,970-word authoritative RNG advance so later gameplay remains on
+  the established SD stream. Render only headings `0,10,...,350` and additive
+  rows `0,10,20`; do not create a second effect kind for each of the discarded
+  presentation rows.
+- Enrich Dampen candidates with the exact Firebolt/Guided presentation state,
+  filter out Arrow/DemonBomb/PoisonPool, and create one host-owned
+  `dampened-projectile` transient for every removed projectile.
+- Move each transient radially away from the caster at the sibling's exact
+  40-units-per-update flyout speed and retire it with the bounded repaired
+  pulse. Render through the existing Firebolt/Guided native compositor so
+  payload art, atlas membership, tint, heading, and phase stay cohesive.
+- Preserve shield probability, mage disruption, cast admission, cooldown,
+  action, audio, light-negative disposition, and multiplayer authority.
+
+### Validation contract
+
+- Kernel: Dampen selects Firebolt and both Guided payloads, excludes Arrow,
+  DemonBomb, and PoisonPool, removes the selected IDs, spawns one outward
+  transient per selected projectile plus one pulse, keeps the 2,970-word
+  suffix advance, and retains 73-tick CastSpin.
+- Renderer: the caster pulse has exactly 36 source-over MoveFades and three
+  additive record-48 arcs at birth; no plan can reach the former 390 draws.
+  Firebolt and cold/poison Guided flyouts reuse their exact existing native
+  layer families and move farther from the caster on successive fixed ticks.
+- Protocol/ownership: the new actor kind is accepted by the closed union,
+  decodes for an observer, owns one transient painter, and owns no light.
+- Mac Chrome: cast Dampen naturally in Boneyard with one Firebolt, one cold or
+  poison GuidedMissile, and one negative projectile family in range. Require
+  the positive projectiles to fly outward visibly, the negative family to
+  remain, the loop stack to be absent, CastSpin/audio to remain, and all page,
+  console, host, and failed-response arrays to be empty.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact Mac candidate.
+
+### Implementation validation receipt
+
+- Implementation: Dampen candidates now carry only retail Firebolt `0x7EB`
+  and cold/poison GuidedMissile `0x7EC` state in native registration order.
+  Arrow, DemonBomb, and PoisonPool remain in the hostile projectile store.
+  The dispatcher removes the selected IDs, advances the unchanged 2,970-word
+  suffix, creates one host-owned `dampened-projectile` per removed spell, and
+  keeps the existing pulse, 73-tick CastSpin, shield rolls, disruption, debit,
+  cooldown, and audio owners.
+- Presentation: each canceled spell moves radially outward at 40 world units
+  per fixed update and reuses the existing Firebolt or Guided compositor. The
+  pulse consumes the complete recovered RNG rows but materializes only 36
+  evenly spaced record-10/11 puffs plus three record-48 arcs. Its birth ceiling
+  is therefore 39 primitives instead of 390; it adds no light, camera, local
+  clock, or new atlas art. Firebolt records `255..266` and Guided records
+  `110..112` are now explicit members of the secondary renderer's closed asset
+  set and reuse the already loaded Boneyard combat atlas.
+- Ownership/protocol: `dampened-projectile` is in the kernel, protocol,
+  renderer-diagnostic, and ML closed unions. Protocol version 113 combines the
+  Dampen actor change with the concurrently published Hagatha capacity schema.
+  Observer snapshots carry both flyouts and the pulse; teardown remains the
+  generic secondary-world lifecycle.
+- Red receipt: on detached base
+  `228c1fd803feb0d2c2dfac15b69031ef269a8cf1`, the unchanged product failed only
+  the new Dampen assertions: renderer birth counts were 375/390 rather than
+  39, and candidate membership still included every projectile family. That
+  established the pre-fix visual and gameplay defects before implementation.
+- Browser diagnosis receipt: the first end-to-end candidates proved that the
+  host and wire carried both flyouts plus the pulse, but the browser aborted
+  their frames with `Native secondary sprite is outside the closed membership:
+  BadGuys:255..266`. Adding the exact retail Firebolt rows, rather than a
+  fallback, closed that renderer owner. A separate 36-tick flyout candidate
+  also proved too short for the network presentation timeline; flyouts now
+  share the bounded 100-tick repaired-pulse lifetime. The final smoke keeps
+  these failure diagnostics and repeatedly stabilizes only fixture safety
+  bodies/health while the authentic generated Arena completes its 400-tick
+  seal; no product transition or hostile lifecycle is bypassed.
+- Current-base integration: `origin/main` advanced through Coffin hostile
+  activation, restored Archer/Arrow presentation, and replaced per-file sprite
+  loading with native packed-record sampling while this work was in progress.
+  The isolated patch was rebased onto
+  `70c162a95f7a9933ec4172b7050da2f2e7eddb6f`; the only conflict preserved both
+  Coffin rising-edge targetability and the Dampen projectile-membership test.
+  The later Arrow and sampled-texture changes applied without conflict; Dampen
+  records `255..266` now resolve through that packed owner. The Hagatha schema
+  rebase retained both features and advanced their combined protocol to 113.
+  All 16 changed files were checksum-identical in the detached Mac worktree
+  `/Users/jarrett/codex-acceptance/dampen-vfx-20260830-green5-root/Website`.
+- Final Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` passed on that
+  current-base candidate after the final fixture change: backend build and 28
+  contract/integration tests; lint and architecture/spec generation; every
+  frontend, desktop, tutorial, mod, and protocol group; production frontend
+  and game-host builds; CSP media policy; and bundle budget at 266,481 raw /
+  80,994 gzip bytes. Earlier host-test timeout runs were rejected as receipts;
+  inspection proved overlapping remote test trees, and the clean
+  non-overlapping run passed unchanged.
+- Final production Chrome receipt: WebGL2 rendered one pulse and two
+  `dampened-projectile` actors, with maximum actor count 3 and maximum primitive
+  count 43 (39 pulse plus two two-layer flyouts). Firebolt used
+  `BadGuys:15 + BadGuys:264`; cold Guided used `BadGuys:110 + BadGuys:112`.
+  Both moved 66.8 world units between sampled frames. Positive IDs 1/2 were
+  removed, negative Arrow ID 3 remained, `flash` then `dampen` cues were
+  published, and the `dampen` audio probe fired. Page, console, and failed
+  response arrays were empty.
+- Visual inspection: the current-base cancellation capture shows a compact
+  gray magical cloud at the caster and separated outbound spell art, with no
+  oversized white loop stack. Its SHA-256 is
+  `268eb9247794377f6ccf98e16e5704e409cad25c3d733af0666466eacfd4469b`;
+  the later Dampen frame is
+  `fd06b8abd0cb7456cbeba1a3d5bab58dec5e28f9c2f1d9219e54e9608da6f3bd`.
+- No implementation unknown remains inside the declared boundary. Git
+  publication is a separate authorized receipt; a main push is not a
+  deployment, and no deployment, production restart, or live-service claim is
+  made here.

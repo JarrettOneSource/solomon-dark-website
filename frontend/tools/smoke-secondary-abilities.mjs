@@ -359,6 +359,9 @@ try {
         readyQuickbar = { ...readyQuickbar, screenshotPath }
       }
     }
+    const dampenSetup = contract.skillId === 51 && requestedScene === 'boneyard'
+      ? prepareDampenProjectileProof(host, playerId)
+      : null
     const castSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
     const firstEventId = host.state().secondaryAbilities.nextEventId
     const sampleStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
@@ -439,6 +442,16 @@ try {
     const manaAfterCast = committedState.playerEntities
       .progressions[committedPlayerIndex].currentMana
     const positionAfterCast = structuredClone(getPlayerCharacter(committedState, playerId).position)
+    const dampenCancellation = dampenSetup === null
+      ? null
+      : await captureDampenCancellation(
+          page,
+          host,
+          dampenSetup,
+          `${screenshotRoot}/51-dampen-cancellation.png`,
+          sampleStart,
+          wireSecondarySamples,
+        )
     positionCombatTargetForAbility(host, contract.skillId, combatBaseline)
     await waitUntil(() => host.state().secondaryAbilities.events.some((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
@@ -847,6 +860,7 @@ try {
       cooldownPath,
       cooldownTiming,
       combatProof,
+      dampenCancellation,
       eventCues: events.flatMap(({ cue }) => cue === null ? [] : [cue]),
       flashObserved,
       framePacing,
@@ -1695,6 +1709,7 @@ async function openBoneyardCombat(page, host, playerId) {
       lifeState === 'alive'
     ))
   }, 'Solomon opening did not release a live combat wave', 30_000)
+  stabilizeBoneyardProofPlayer(host, playerId)
   const combatState = host.state()
   assert.equal(combatState.world.kind, 'boneyard')
   const combatBounds = combatState.world.arenaTransition?.combatBounds
@@ -1705,12 +1720,63 @@ async function openBoneyardCombat(page, host, playerId) {
   })
   await waitUntil(() => {
     const world = host.state().world
-    return world.kind === 'boneyard' && world.arenaTransition?.phase === 'sealed'
+    if (world.kind !== 'boneyard') return false
+    stabilizeBoneyardProofPlayer(host, playerId)
+    if (world.arenaTransition?.phase === 'open') {
+      placeArenaSafetyBodiesInsideCombatBounds(host, combatBounds)
+    }
+    return world.arenaTransition?.phase !== 'open'
+  }, 'Boneyard arena transition did not start its authoritative lock edge', 10_000)
+  await waitUntil(() => {
+    const world = host.state().world
+    if (world.kind !== 'boneyard') return false
+    stabilizeBoneyardProofPlayer(host, playerId)
+    return world.arenaTransition?.phase === 'sealed'
   }, 'Boneyard arena transition did not reach its authoritative sealed edge', 10_000)
+  stabilizeBoneyardProofPlayer(host, playerId)
   await page.waitForFunction(() => (
     document.querySelector('.boneyard-world-canvas')
       ?.__sdrBoneyardFrame?.arenaTransitionPhase === 'sealed'
   ), undefined, { timeout: 5_000 })
+}
+
+function placeArenaSafetyBodiesInsideCombatBounds(host, combatBounds) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const enemies = state.world.enemies
+  const center = {
+    x: combatBounds.x + combatBounds.w * 0.5,
+    y: combatBounds.y + combatBounds.h * 0.5,
+  }
+  const count = enemies.actors.length + enemies.maggots.length
+  const radius = Math.max(0, Math.min(combatBounds.w, combatBounds.h) * 0.5 - 100)
+  const position = (index) => {
+    const radians = count === 0 ? 0 : index / count * Math.PI * 2
+    return {
+      x: Math.fround(center.x + Math.cos(radians) * radius),
+      y: Math.fround(center.y + Math.sin(radians) * radius),
+    }
+  }
+  const actors = enemies.actors.map((actor, index) => ({
+    ...actor,
+    nextMovementTick: state.tick + 100_000,
+    nextTargetRefreshTick: state.tick + 100_000,
+    position: position(index),
+  }))
+  const maggots = enemies.maggots.map((maggot, index) => ({
+    ...maggot,
+    position: position(actors.length + index),
+  }))
+  const lootActors = state.world.loot.actors.map((actor) => actor.kind === 'sack'
+    ? { ...actor, position: { ...center } }
+    : actor)
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: { ...enemies, actors, maggots },
+      loot: { ...state.world.loot, actors: lootActors },
+    },
+  })
 }
 
 function setHostPlayerPosition(host, index, position) {
@@ -1721,6 +1787,26 @@ function setHostPlayerPosition(host, index, position) {
     playerEntities: {
       ...state.playerEntities,
       locomotions: Object.freeze(locomotions),
+    },
+  })
+}
+
+function stabilizeBoneyardProofPlayer(host, playerId) {
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const progressions = [...state.playerEntities.progressions]
+  const progression = progressions[index]
+  assert.equal(progression.lifeState, 'alive')
+  progressions[index] = {
+    ...progression,
+    currentHealth: Math.max(progression.currentHealth, 1_000_000),
+    maximumHealth: Math.max(progression.maximumHealth, 1_000_000),
+  }
+  Object.assign(state, {
+    playerEntities: {
+      ...state.playerEntities,
+      progressions: Object.freeze(progressions),
     },
   })
 }
@@ -1749,6 +1835,234 @@ function restoreBoneyardEnemies(host, baseline) {
     nextTargetRefreshTick: state.tick + 1_000,
   }))
   Object.assign(state, { world: { ...state.world, enemies, enemyEvents: [] } })
+}
+
+function prepareDampenProjectileProof(host, playerId) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(playerIndex, -1)
+  const center = state.playerEntities.locomotions[playerIndex].position
+  const enemies = state.world.enemies
+  const firstId = enemies.nextProjectileId
+  const firstRegistration = enemies.nextNativeRegistrationOrder
+  const firstCellBinding = enemies.nextNativeCellBindingOrder
+  const ownerActorId = enemies.actors.find(({ lifeState }) => lifeState === 'alive')?.id ?? 0
+  const projectile = ({
+    headingDeg,
+    id,
+    kind,
+    nativeTypeId,
+    offset,
+    payload,
+    registrationOffset,
+  }) => {
+    const registration = {
+      managerLane: 'actor',
+      registrationOrdinal: firstRegistration + registrationOffset,
+    }
+    return {
+      ageTicks: 8,
+      bounceVelocity: 0,
+      chillTumbleAccumulator: 0,
+      coldSlowTicks: 0,
+      contactRadius: 8,
+      damage: 1,
+      headingDeg,
+      hitPlayerIds: [],
+      homing: false,
+      id,
+      kind,
+      lastStepTick: state.tick + 100_000,
+      lightRegistration: kind === 'arrow' ? null : registration,
+      lifetimeTicks: 400,
+      minimumSpeed: 0,
+      nativeCellBindingOrder: firstCellBinding + registrationOffset,
+      nativeRegistrationOrder: firstRegistration + registrationOffset,
+      nativeTypeId,
+      ownerActorId,
+      painterRegistration: registration,
+      payload,
+      poisonDamage: payload === 'poison' ? 1 : 0,
+      poisonDuration: payload === 'poison' ? 100 : 0,
+      position: {
+        x: Math.fround(center.x + offset.x),
+        y: Math.fround(center.y + offset.y),
+      },
+      settledTicksRemaining: 0,
+      spawnTick: state.tick,
+      speed: 0,
+      targetPlayerId: null,
+      verticalOffset: 0,
+      verticalVelocity: 0,
+      visualPhaseDeg: registrationOffset * 30,
+      visualScale: 1,
+    }
+  }
+  const positiveIds = [firstId, firstId + 1]
+  const negativeId = firstId + 2
+  const projectiles = [
+    projectile({
+      headingDeg: 90,
+      id: positiveIds[0],
+      kind: 'firebolt',
+      nativeTypeId: 0x7eb,
+      offset: { x: 120, y: 0 },
+      payload: 'fire',
+      registrationOffset: 0,
+    }),
+    projectile({
+      headingDeg: 0,
+      id: positiveIds[1],
+      kind: 'guided-missile',
+      nativeTypeId: 0x7ec,
+      offset: { x: 0, y: 140 },
+      payload: 'cold',
+      registrationOffset: 1,
+    }),
+    projectile({
+      headingDeg: 270,
+      id: negativeId,
+      kind: 'arrow',
+      nativeTypeId: 0x7da,
+      offset: { x: -160, y: 0 },
+      payload: 'normal',
+      registrationOffset: 2,
+    }),
+  ]
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: {
+        ...enemies,
+        nextNativeCellBindingOrder: firstCellBinding + projectiles.length,
+        nextNativeRegistrationOrder: firstRegistration + projectiles.length,
+        nextProjectileId: firstId + projectiles.length,
+        projectiles,
+      },
+    },
+  })
+  return { negativeId, positiveIds }
+}
+
+async function captureDampenCancellation(
+  page,
+  host,
+  setup,
+  screenshotPath,
+  sampleStart,
+  wireSecondarySamples,
+) {
+  const committed = host.state()
+  assert.equal(committed.world.kind, 'boneyard')
+  const liveProjectileIds = committed.world.enemies.projectiles.map(({ id }) => id)
+  assert.equal(liveProjectileIds.includes(setup.negativeId), true)
+  assert.deepEqual(
+    setup.positiveIds.map((id) => liveProjectileIds.includes(id)),
+    [false, false],
+  )
+  const flyouts = committed.secondaryAbilities.actors.filter(({ kind }) => (
+    kind === 'dampened-projectile'
+  ))
+  assert.equal(flyouts.length, 2)
+  assert.deepEqual(
+    flyouts.map(({ targetId }) => targetId).sort((first, second) => first - second),
+    [...setup.positiveIds],
+  )
+  for (const flyout of flyouts) {
+    assert.ok(Math.abs(Math.hypot(flyout.velocity.x, flyout.velocity.y) - 40) < 0.001)
+  }
+  const committedHostActors = committed.secondaryAbilities.actors.map((actor) => ({
+    ageTicks: actor.ageTicks,
+    id: actor.id,
+    kind: actor.kind,
+    position: actor.position,
+    targetId: actor.targetId,
+  }))
+
+  try {
+    await page.waitForFunction((start) => {
+      const samples = window.__secondaryRenderSamples.slice(start)
+      const first = samples.find(({ actors }) => {
+        const wave = actors.find(({ kind }) => kind === 'dampen-wave')
+        const projectiles = actors.filter(({ kind }) => kind === 'dampened-projectile')
+        return wave !== undefined
+          && wave.primitiveCount > 0
+          && wave.primitiveCount <= 39
+          && projectiles.length === 2
+          && projectiles.every(({ primitiveCount }) => primitiveCount === 2)
+      })
+      if (!first) return false
+      const origins = first.actors
+        .filter(({ kind }) => kind === 'dampened-projectile')
+        .map(({ id, worldX, worldY }) => ({ id, worldX, worldY }))
+      return samples.some(({ actors }) => origins.every((origin) => {
+        const current = actors.find(({ id }) => id === origin.id)
+        return current !== undefined
+          && Math.hypot(current.worldX - origin.worldX, current.worldY - origin.worldY) >= 40
+      }))
+    }, sampleStart, { timeout: 5_000 })
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      browserFrame: await page.evaluate(() => (
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame ?? null
+      )),
+      committedHostActors,
+      consoleErrors,
+      fatal: await page.evaluate(() => (
+        document.querySelector('.game-runtime-error')?.textContent ?? null
+      )),
+      hostActors: host.state().secondaryAbilities.actors.map((actor) => ({
+        ageTicks: actor.ageTicks,
+        id: actor.id,
+        kind: actor.kind,
+        position: actor.position,
+        targetId: actor.targetId,
+      })),
+      dampenSamples: await page.evaluate((start) => (
+        window.__secondaryRenderSamples.slice(start).filter(({ kinds }) => (
+          kinds.includes('dampen-wave') || kinds.includes('dampened-projectile')
+        ))
+      ), sampleStart),
+      pageErrors,
+      recentSamples: await page.evaluate(() => window.__secondaryRenderSamples.slice(-20)),
+      responseErrors,
+      wireDampenSamples: wireSecondarySamples.filter(({ kinds }) => (
+        kinds.includes('dampen-wave') || kinds.includes('dampened-projectile')
+      )),
+      wireRecentSamples: wireSecondarySamples.slice(-20),
+    }, null, 2)}\n`)
+    throw error
+  }
+  const observed = await page.evaluate((start) => (
+    window.__secondaryRenderSamples.slice(start).filter(({ kinds }) => (
+      kinds.includes('dampen-wave') || kinds.includes('dampened-projectile')
+    ))
+  ), sampleStart)
+  const first = observed.find(({ actors }) => (
+    actors.filter(({ kind }) => kind === 'dampened-projectile').length === 2
+  ))
+  assert.ok(first)
+  const initial = first.actors
+    .filter(({ kind }) => kind === 'dampened-projectile')
+    .map(({ id, primitiveCount, worldX, worldY }) => ({
+      id, primitiveCount, worldX, worldY,
+    }))
+  const moved = observed.find(({ actors }) => initial.every((origin) => {
+    const current = actors.find(({ id }) => id === origin.id)
+    return current !== undefined
+      && Math.hypot(current.worldX - origin.worldX, current.worldY - origin.worldY) >= 40
+  }))
+  assert.ok(moved)
+  await page.screenshot({ path: screenshotPath })
+  return {
+    initial,
+    moved: moved.actors.filter(({ kind }) => kind === 'dampened-projectile'),
+    negativeProjectileId: setup.negativeId,
+    observedFrames: observed.length,
+    positiveProjectileIds: setup.positiveIds,
+    screenshotPath,
+  }
 }
 
 function stabilizeBoneyardCooldownEnemies(host) {

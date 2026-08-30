@@ -243,15 +243,46 @@ export function boneyardNativeSecondaryDampenCandidates(
   const actors = enemies.actors.filter((actor) => (
     actor.lifeState === 'alive' && inside(actor.position)
   ))
+  const projectiles = enemies.projectiles
+    .filter((projectile) => (
+      inside(projectile.position)
+      && (
+        (
+          projectile.nativeTypeId === 0x7eb
+          && projectile.kind === 'firebolt'
+          && projectile.payload === 'fire'
+        )
+        || (
+          projectile.nativeTypeId === 0x7ec
+          && projectile.kind === 'guided-missile'
+          && (projectile.payload === 'cold' || projectile.payload === 'poison')
+        )
+      )
+    ))
+    .toSorted((first, second) => (
+      first.nativeRegistrationOrder - second.nativeRegistrationOrder
+      || first.id - second.id
+    ))
+    .map((projectile) => Object.freeze({
+      ageTicks: projectile.ageTicks,
+      headingDegrees: projectile.headingDeg,
+      id: projectile.id,
+      kind: projectile.nativeTypeId === 0x7eb ? 'firebolt' : 'guided-missile',
+      payload: projectile.nativeTypeId === 0x7eb
+        ? 'fire'
+        : projectile.payload === 'poison'
+          ? 'poison'
+          : 'cold',
+      position: Object.freeze({ ...projectile.position }),
+      visualPhaseDegrees: projectile.visualPhaseDeg,
+      visualScale: projectile.visualScale,
+    }))
   return Object.freeze({
     casterTargetIds: Object.freeze(actors
       .filter(({ config }) => config.enemyToken === 'SKELETONMAGE')
       .map(({ id }) => id)
       .sort((a, b) => a - b)),
-    projectileIds: Object.freeze(enemies.projectiles
-      .filter(({ position }) => inside(position))
-      .map(({ id }) => id)
-      .sort((a, b) => a - b)),
+    projectiles: Object.freeze(projectiles),
     shieldTargetIds: Object.freeze(actors
       .filter(({ shieldHealth }) => shieldHealth > 0)
       .map(({ id }) => id)

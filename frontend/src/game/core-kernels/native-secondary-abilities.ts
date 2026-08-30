@@ -94,7 +94,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'teleport-burst', 'magic-circle', 'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn',
   'flash-response-fade', 'flash-response-grow',
-  'dampen-wave', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
+  'dampen-wave', 'dampened-projectile', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
   'mindblast-burst', 'mindblast-shockwave',
   'ring-fire-explosion', 'ring-fire-fragment',
   'acid-splash', 'ether-drain', 'ether-drain-cloud', 'ether-drain-debris',
@@ -367,8 +367,19 @@ export interface NativeSecondaryPlayerAuthority {
 
 export interface NativeSecondaryDampenCandidates {
   readonly casterTargetIds: readonly number[]
-  readonly projectileIds: readonly number[]
+  readonly projectiles: readonly NativeSecondaryDampenProjectileCandidate[]
   readonly shieldTargetIds: readonly number[]
+}
+
+export interface NativeSecondaryDampenProjectileCandidate {
+  readonly ageTicks: number
+  readonly headingDegrees: number
+  readonly id: number
+  readonly kind: 'firebolt' | 'guided-missile'
+  readonly payload: 'cold' | 'fire' | 'poison'
+  readonly position: Vector2
+  readonly visualPhaseDegrees: number
+  readonly visualScale: number
 }
 
 export interface NativeSecondaryPositionResult {
@@ -679,6 +690,8 @@ const DAMPEN_PRESENTATION_RNG_WORDS = (
   + DAMPEN_ADDITIVE_CHILDREN * DAMPEN_RNG_WORDS_PER_ADDITIVE
 )
 const DAMPEN_PRESENTATION_LIFETIME_TICKS = 100
+const DAMPEN_PROJECTILE_FLYOUT_LIFETIME_TICKS = DAMPEN_PRESENTATION_LIFETIME_TICKS
+const DAMPEN_PROJECTILE_FLYOUT_SPEED = Math.fround(40)
 const MAGIC_SHIELD_BREAK_CHILDREN = 20
 const MAGIC_SHIELD_BREAK_ALPHA_LOSS = Math.fround(0.05)
 const MAGIC_SHIELD_BREAK_LIFETIME_TICKS = 26
@@ -3535,6 +3548,15 @@ export function stepNativeSecondaryAbilities(
       case 'dampen-wave':
       case 'mindblast-burst':
         break
+      case 'dampened-projectile':
+        actor = {
+          ...actor,
+          position: {
+            x: Math.fround(sourceActor.position.x + sourceActor.velocity.x),
+            y: Math.fround(sourceActor.position.y + sourceActor.velocity.y),
+          },
+        }
+        break
       case 'flash-response-grow':
         actor = {
           ...actor,
@@ -4515,7 +4537,7 @@ function castAbility(
       const actionIdentity = drawNativeInteger(state.rng, 100_000)
       state = { ...state, rng: actionIdentity.state }
       const dampen = context.dampenCandidates(authority.worldKey, origin)
-      removedProjectileIds = dampen.projectileIds
+      removedProjectileIds = Object.freeze(dampen.projectiles.map(({ id }) => id))
       disruptedTargetIds = dampen.casterTargetIds
       const dispelled: number[] = []
       for (const targetId of [...dampen.shieldTargetIds].sort((a, b) => a - b)) {
@@ -4528,6 +4550,21 @@ function castAbility(
         state = mergeEffect(state, authority.worldKey, targetId, { disruptedTicks: 600 })
       }
       nextPlayer = { ...nextPlayer, castSpinTicksRemaining: 73 }
+      for (const projectile of dampen.projectiles) {
+        spawnActor({
+          frame: projectile.ageTicks,
+          kind: 'dampened-projectile',
+          lifetimeTicks: DAMPEN_PROJECTILE_FLYOUT_LIFETIME_TICKS,
+          phase: projectile.visualPhaseDegrees,
+          position: projectile.position,
+          rotationRadians: projectile.headingDegrees * Math.PI / 180,
+          scale: projectile.visualScale,
+          skillId,
+          targetId: projectile.id,
+          variant: dampenedProjectileVariant(projectile),
+          velocity: dampenedProjectileVelocity(origin, projectile.position),
+        })
+      }
       const presentationRng = state.rng
       state = {
         ...state,
@@ -5263,6 +5300,24 @@ function wizardElementIndex(element: WizardElement): number {
     case 'air': return 2
     case 'water': return 3
     case 'earth': return 4
+  }
+}
+
+function dampenedProjectileVariant(
+  projectile: NativeSecondaryDampenProjectileCandidate,
+): 0 | 1 | 2 {
+  if (projectile.kind === 'firebolt') return 0
+  return projectile.payload === 'poison' ? 1 : 2
+}
+
+function dampenedProjectileVelocity(origin: Vector2, position: Vector2): Vector2 {
+  const x = Math.fround(position.x - origin.x)
+  const y = Math.fround(position.y - origin.y)
+  const distance = Math.hypot(x, y)
+  if (distance === 0) return ZERO
+  return {
+    x: Math.fround(x / distance * DAMPEN_PROJECTILE_FLYOUT_SPEED),
+    y: Math.fround(y / distance * DAMPEN_PROJECTILE_FLYOUT_SPEED),
   }
 }
 

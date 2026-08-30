@@ -25,7 +25,7 @@ export const NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES = Object.freeze({
 const BADGUYS_ENTRIES = Object.freeze([
   0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 78, 84, 85, 86, 88, 90,
   ...range(110, 112), ...range(158, 167), ...range(238, 250),
-  ...range(251, 254), ...range(267, 270),
+  ...range(251, 266), ...range(267, 270),
   ...range(333, 433), ...range(2008, 2010),
 ])
 const DEADHAWG_ENTRIES = Object.freeze([

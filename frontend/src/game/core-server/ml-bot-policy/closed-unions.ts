@@ -200,6 +200,7 @@ export const ML_BOT_POLICY_SECONDARY_ACTOR_CLASSES = Object.freeze({
   'comet-impact': 'presentation',
   'comet-trail': 'presentation',
   'dampen-wave': 'effect',
+  'dampened-projectile': 'presentation',
   'earthquake': 'effect',
   'earthquake-debris': 'presentation',
   'earthquake-dust': 'presentation',

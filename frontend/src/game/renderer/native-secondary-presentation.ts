@@ -17,11 +17,13 @@ import {
 } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellEtherBlastState } from '../core-kernels/primary-spells.ts'
+import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
 import {
   NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY,
   NATIVE_ETHER_BLAST_SCREEN_GREEN,
 } from '../core-kernels/native-ether-blast.ts'
 import { roundHalfToEven } from './native-enemy-presentation.ts'
+import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 import type { NativeSecondaryAtlas } from './native-secondary-assets.ts'
 import {
   ETHER_PRIMARY_FLIGHT_RECORDS,
@@ -883,6 +885,8 @@ export function nativeSecondaryPresentationPlan(
       return plan([])
     case 'dampen-wave':
       return plan(dampenDraws(actor, draw), 'zanim')
+    case 'dampened-projectile':
+      return plan(dampenedProjectileDraws(actor, draw))
     case 'shield-break':
       return plan([draw('BadGuys', 68, {
         alpha: actor.alpha,
@@ -2380,7 +2384,7 @@ function dampenDraws(
       Math.fround(0.01 + loss.value),
       age,
     )
-    if (alpha <= 0) continue
+    if (alpha <= 0 || heading % 10 !== 0) continue
     const drag = dragRoll.value === 3
       ? Math.fround(0.93)
       : Math.fround(0.96)
@@ -2420,7 +2424,7 @@ function dampenDraws(
       0.1,
       age,
     )
-    if (alpha <= 0) continue
+    if (alpha <= 0 || index % 10 !== 0) continue
     const spriteScale = Math.fround(0.75 + scale.value)
     draws.push(draw('BadGuys', 48, {
       alpha: Math.min(alpha, 1),
@@ -2432,6 +2436,59 @@ function dampenDraws(
     }))
   }
   return draws
+}
+
+function dampenedProjectileDraws(
+  actor: NativeSecondaryActorState,
+  draw: (
+    atlas: NativeSecondaryAtlas,
+    entry: number,
+    options?: Partial<Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>>,
+  ) => NativeSecondarySpriteDraw,
+): NativeSecondarySpriteDraw[] {
+  const guided = actor.variant !== 0
+  const projectile: BoneyardEnemyProjectileSnapshot = {
+    ageTicks: Math.max(0, Math.trunc(actor.frame)),
+    contactRadius: 0,
+    headingDeg: actor.rotationRadians * 180 / Math.PI,
+    homing: false,
+    id: actor.targetId ?? actor.id,
+    kind: guided ? 'guided-missile' : 'firebolt',
+    lightRegistration: null,
+    lifetimeTicks: 400,
+    nativeTypeId: guided ? 0x7ec : 0x7eb,
+    ownerActorId: 0,
+    painterRegistration: actor.painterRegistrations?.[0] ?? {
+      managerLane: 'transient',
+      registrationOrdinal: actor.id,
+    },
+    payload: actor.variant === 1
+      ? 'poison'
+      : actor.variant === 2
+        ? 'cold'
+        : 'fire',
+    position: { x: 0, y: 0 },
+    speed: Math.hypot(actor.velocity.x, actor.velocity.y),
+    spawnTick: 0,
+    verticalOffset: 0,
+    visualPhaseDeg: actor.phase,
+    visualScale: actor.scale,
+  }
+  return nativeEnemyProjectilePlan(projectile, actor.ageTicks).layers.map((layer) => {
+    if (layer.atlas === 'Demon') {
+      throw new TypeError('Dampened projectiles cannot use the Demon atlas')
+    }
+    return draw(layer.atlas, layer.entry, {
+      alpha: layer.alpha,
+      blend: layer.blendMode,
+      offset: layer.offset,
+      role: `dampened-projectile-${layer.role}`,
+      rotationRadians: layer.rotationRadians,
+      scaleX: layer.scale,
+      scaleY: layer.scaleY,
+      tint: layer.tint,
+    })
+  })
 }
 
 function shieldExplosionDraws(
