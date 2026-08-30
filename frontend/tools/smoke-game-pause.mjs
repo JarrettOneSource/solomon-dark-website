@@ -551,7 +551,7 @@ try {
   await Promise.all([fomentiusDialogue.waitFor({ state: 'detached' }), peerSawDialogueClear])
 
   moveHostPlayerTo({
-    x: HUB_INTERACTION_GEOMETRY.annalist.position.x - 70,
+    x: HUB_INTERACTION_GEOMETRY.annalist.position.x - 30,
     y: HUB_INTERACTION_GEOMETRY.annalist.position.y,
   })
   const talkToProvokatus = page.getByRole('button', { name: 'Talk to Provokatus' })
