@@ -110,6 +110,7 @@ import {
   type BoneyardSpectatorStatusPresentation,
 } from './renderer/boneyard-render-contract.ts'
 import {
+  boundedGameViewportLayout,
   gameViewportLayout,
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
@@ -573,7 +574,12 @@ export default function BoneyardScene({
     const scene = sceneRef.current
     if (!scene) return
     const resize = () => {
-      const next = gameViewportLayout(scene.clientWidth, scene.clientHeight)
+      const next = boundedGameViewportLayout(
+        scene.clientWidth,
+        scene.clientHeight,
+        { height: loaded.scene.bounds.h, width: loaded.scene.bounds.w },
+        cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent),
+      )
       viewportRef.current = next
       setViewport((current) => sameViewport(current, next) ? current : next)
       rendererRef.current?.resize(next)
@@ -582,7 +588,7 @@ export default function BoneyardScene({
     const observer = new ResizeObserver(resize)
     observer.observe(scene)
     return () => observer.disconnect()
-  }, [])
+  }, [loaded.scene.bounds.h, loaded.scene.bounds.w, settings.cameraFovPercent])
 
   useLayoutEffect(() => {
     inputRef.current?.setBlocked(sceneInputBlocked)

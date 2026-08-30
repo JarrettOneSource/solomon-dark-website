@@ -11,7 +11,10 @@ import type {
   HubPresentationFrame,
 } from './client/hub-presentation-timeline.ts'
 import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
-import type { HubRegionId } from './core-kernels/hub-regions.ts'
+import {
+  HUB_REGION_DEFINITIONS,
+  type HubRegionId,
+} from './core-kernels/hub-regions.ts'
 import type { NativeCollegeIntroState } from './core-kernels/native-college-intro.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import { art } from '../lib/assets.ts'
@@ -79,6 +82,7 @@ import {
   type HubWorldRenderer,
 } from './renderer/hub-world-renderer.ts'
 import {
+  boundedGameViewportLayout,
   gameViewportLayout,
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
@@ -371,7 +375,12 @@ export default function HubScene({
     const scene = sceneRef.current
     if (!scene) return
     const resize = () => {
-      const next = gameViewportLayout(scene.clientWidth, scene.clientHeight)
+      const next = boundedGameViewportLayout(
+        scene.clientWidth,
+        scene.clientHeight,
+        HUB_REGION_DEFINITIONS[currentRegion],
+        cameraZoomForFov(HUB_CAMERA_SCALE, settings.cameraFovPercent),
+      )
       viewportRef.current = next
       setViewport((current) => sameViewport(current, next) ? current : next)
       rendererRef.current?.resize(next)
@@ -380,7 +389,7 @@ export default function HubScene({
     const observer = new ResizeObserver(resize)
     observer.observe(scene)
     return () => observer.disconnect()
-  }, [])
+  }, [currentRegion, settings.cameraFovPercent])
 
   useLayoutEffect(() => {
     inputRef.current?.setBlocked(inputBlocked || modalOpen)

@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
+  boundedGameViewportLayout,
   fixedGamePresentationResolution,
   fixedGameStageBounds,
   fixedGameStageCssBounds,
@@ -11,6 +12,11 @@ import {
   fixedGameViewportScale,
   gameViewportLayout,
 } from './game-viewport.ts'
+import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
+import { HUB_REGION_DEFINITIONS } from '../core-kernels/hub-regions.ts'
+import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
+import { STOCK_TUTORIAL_BONEYARD } from '../host/stock-tutorial-boneyard.ts'
+import { BONEYARD_CAMERA_ZOOM } from './boneyard-render-contract.ts'
 
 function closeTo(actual: number, expected: number, epsilon = 0.000_001): void {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} is not within ${epsilon} of ${expected}`)
@@ -126,6 +132,65 @@ test('larger browsers expand camera field of view at native scale', () => {
   })
 })
 
+test('oversized browser zoom keeps every Hub region inside its authored or stock envelope', () => {
+  for (const fovPercent of [75, 100, 125]) {
+    const zoom = HUB_CAMERA_SCALE / (fovPercent / 100)
+    for (const region of Object.values(HUB_REGION_DEFINITIONS)) {
+      assertBoundedWorldLayout(
+        boundedGameViewportLayout(6400, 3600, region, zoom),
+        { height: 3600, width: 6400 },
+        region,
+        zoom,
+        `Hub ${region.id} at ${fovPercent}% FOV`,
+      )
+    }
+  }
+})
+
+test('oversized browser zoom keeps every authored Boneyard inside its scene bounds', () => {
+  const authored = [
+    ...NATIVE_GENERATED_BONEYARDS.map(({ scene }) => scene.bounds),
+    STOCK_TUTORIAL_BONEYARD.scene.bounds,
+    { h: 700, w: 4_000, x: -300, y: 125 },
+  ]
+  for (const fovPercent of [75, 100, 125]) {
+    const zoom = BONEYARD_CAMERA_ZOOM / (fovPercent / 100)
+    for (const [index, bounds] of authored.entries()) {
+      assertBoundedWorldLayout(
+        boundedGameViewportLayout(
+          6400,
+          3600,
+          { height: bounds.h, width: bounds.w },
+          zoom,
+        ),
+        { height: 3600, width: 6400 },
+        { height: bounds.h, width: bounds.w },
+        zoom,
+        `Boneyard ${index} at ${fovPercent}% FOV`,
+      )
+    }
+  }
+})
+
+test('bounded gameplay preserves stock and ordinary larger-browser layouts until an edge is reached', () => {
+  const courtyard = HUB_REGION_DEFINITIONS.courtyard
+  assert.deepEqual(boundedGameViewportLayout(1600, 900, courtyard, HUB_CAMERA_SCALE), {
+    displayScale: 1,
+    height: 900,
+    width: 1600,
+  })
+  assert.deepEqual(boundedGameViewportLayout(1920, 1080, courtyard, HUB_CAMERA_SCALE), {
+    displayScale: 1,
+    height: 1080,
+    width: 1920,
+  })
+
+  const oversized = boundedGameViewportLayout(6400, 3600, courtyard, HUB_CAMERA_SCALE)
+  closeTo(oversized.displayScale, 3600 / (courtyard.height * HUB_CAMERA_SCALE))
+  closeTo(oversized.height, courtyard.height * HUB_CAMERA_SCALE)
+  closeTo(oversized.width, 6400 / oversized.displayScale)
+})
+
 test('smaller and non-native aspects retain a minimum logical viewport without stretching', () => {
   const desktop = gameViewportLayout(1280, 800)
   assert.deepEqual(desktop, {
@@ -162,3 +227,24 @@ test('an unmeasured scene falls back to the exact stock viewport', () => {
     width: 1600,
   })
 })
+
+function assertBoundedWorldLayout(
+  layout: Readonly<{ displayScale: number, height: number, width: number }>,
+  measured: Readonly<{ height: number, width: number }>,
+  world: Readonly<{ height: number, width: number }>,
+  zoom: number,
+  label: string,
+): void {
+  closeTo(layout.width * layout.displayScale, measured.width)
+  closeTo(layout.height * layout.displayScale, measured.height)
+  assert.ok(layout.width >= GAME_VIEWPORT_MIN_WIDTH, `${label} width dropped below stock`)
+  assert.ok(layout.height >= GAME_VIEWPORT_MIN_HEIGHT, `${label} height dropped below stock`)
+  assert.ok(
+    layout.width / zoom <= Math.max(world.width, GAME_VIEWPORT_MIN_WIDTH / zoom) + 0.000_001,
+    `${label} exposed the horizontal map edge`,
+  )
+  assert.ok(
+    layout.height / zoom <= Math.max(world.height, GAME_VIEWPORT_MIN_HEIGHT / zoom) + 0.000_001,
+    `${label} exposed the vertical map edge`,
+  )
+}

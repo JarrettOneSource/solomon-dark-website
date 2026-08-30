@@ -7,6 +7,11 @@ export interface GameViewportLayout {
   width: number
 }
 
+export interface GameViewportWorldExtent {
+  height: number
+  width: number
+}
+
 export interface GameViewportBounds {
   height: number
   width: number
@@ -114,6 +119,28 @@ export function gameViewportLayout(width: number, height: number): GameViewportL
     }
   }
   const displayScale = Math.min(1, fixedGameViewportScale(width, height))
+  return {
+    displayScale,
+    height: height / displayScale,
+    width: width / displayScale,
+  }
+}
+
+export function boundedGameViewportLayout(
+  width: number,
+  height: number,
+  world: GameViewportWorldExtent,
+  cameraZoom: number,
+): GameViewportLayout {
+  const layout = gameViewportLayout(width, height)
+  if (!validSize(width, height)) return layout
+  const maximumWidth = Math.max(GAME_VIEWPORT_MIN_WIDTH, world.width * cameraZoom)
+  const maximumHeight = Math.max(GAME_VIEWPORT_MIN_HEIGHT, world.height * cameraZoom)
+  const displayScale = Math.max(
+    layout.displayScale,
+    width / maximumWidth,
+    height / maximumHeight,
+  )
   return {
     displayScale,
     height: height / displayScale,
