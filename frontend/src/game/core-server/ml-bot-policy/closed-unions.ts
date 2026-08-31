@@ -71,11 +71,8 @@ export const ML_BOT_POLICY_ENEMY_PHASE_MAP = Object.freeze({
   mage: Object.freeze({ cast: 'clocked-attack', death: null, 'range-control': 'range-control' }),
   skeleton: Object.freeze({ approach: 'approach', attack: 'clocked-attack', death: null }),
   wraith: Object.freeze({
-    approach: 'approach',
-    cooldown: 'cooldown',
     death: null,
-    drain: 'clocked-attack',
-    orbit: 'orbit',
+    flight: 'orbit',
   }),
   zombie: Object.freeze({
     approach: 'approach',

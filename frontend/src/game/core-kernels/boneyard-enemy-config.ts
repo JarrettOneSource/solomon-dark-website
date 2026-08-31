@@ -7,6 +7,7 @@ import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
 import type { NativeLootPolicies } from './native-loot.ts'
 import type { NativeSurvivalOnDeathProgram } from './native-survival-miniboss.ts'
 import type { NativePortalFrequency } from './native-survival-portal.ts'
+import { NATIVE_WRAITH_COLLISION_RADIUS } from './native-wraith-flight.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_HPUP',
@@ -267,9 +268,6 @@ export const DEFAULT_BONEYARD_ENEMY_ARENA_SCALARS: Readonly<BoneyardEnemyArenaSc
     secondaryDamage: 1,
     tertiaryDamage: 1,
   })
-
-/** Wraith's inherited native radius remains open; this is the named web bound. */
-export const BOUNDED_WRAITH_COLLISION_RADIUS = 20
 
 const KNOWN_FLAGS = new Set<string>(BONEYARD_ENEMY_FLAGS)
 const BASE_STATS: Readonly<Record<BoneyardWaveEnemyToken, Readonly<{
@@ -854,7 +852,7 @@ function constructorCollisionRadius(token: BoneyardWaveEnemyToken, unit: number)
     case 'IMP': return 10 - unit * 2.5
     case 'PORTAL': return 5
     case 'ZOMBIE': return 25 - unit * 8
-    case 'WRAITH': return BOUNDED_WRAITH_COLLISION_RADIUS
+    case 'WRAITH': return NATIVE_WRAITH_COLLISION_RADIUS
     case 'DEMON': return 35
     case 'COFFIN': return 45
   }

@@ -26,6 +26,11 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import { createNativeWraithFlightState } from '../core-kernels/native-wraith-flight.ts'
+import {
+  nextBoneyardWaveRandom,
+  randomBoneyardWaveInteger,
+} from '../core-kernels/boneyard-wave-timeline.ts'
 import {
   createNativeWorldManagerOrder,
   type NativeWorldManagerOrderState,
@@ -1692,12 +1697,32 @@ function normalizeWorld(
   const loadedBoneyard = parseLoadedBoneyard(loadedBoneyardValue)
   const defaults = createBoneyardWorld(loadedBoneyard)
   const enemies = record(source.enemies, 'game save Boneyard enemies')
+  let enemyRngState = finiteNumber(enemies.rngState, 'game save Boneyard enemy RNG')
   const enemyActors = array(enemies.actors, 'game save Boneyard enemy actors').map(
     (value, index) => {
       const actor = record(value, `game save Boneyard enemy actor ${index}`)
       const config = record(actor.config, `game save Boneyard enemy config ${index}`)
+      let brain = actor.brain
+      if (sourceSchemaVersion < 26 && config.enemyToken === 'WRAITH') {
+        const visualPhase = nextBoneyardWaveRandom(enemyRngState)
+        const restingSpeed = nextBoneyardWaveRandom(visualPhase.state)
+        const flyby = randomBoneyardWaveInteger(restingSpeed.state, 601)
+        const initialSpeed = nextBoneyardWaveRandom(flyby.state)
+        enemyRngState = initialSpeed.state
+        brain = {
+          ...createNativeWraithFlightState(
+            finiteNumber(config.chaseSpeed, `game save Wraith ${index} chase speed`),
+            restingSpeed.value,
+            initialSpeed.value,
+            flyby.value,
+          ),
+          family: 'wraith',
+          phase: actor.lifeState === 'alive' ? 'flight' : 'death',
+        }
+      }
       return {
         ...actor,
+        brain,
         config: {
           ...config,
           classification: config.classification ?? 'normal',
@@ -1798,6 +1823,7 @@ function normalizeWorld(
       actors: enemyActors,
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
       projectiles: enemyProjectiles,
+      rngState: enemyRngState,
       steeringRngState: enemies.steeringRngState ?? defaults.enemies.steeringRngState,
     },
     encounter: normalizedEncounter,

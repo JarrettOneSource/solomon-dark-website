@@ -7,6 +7,15 @@ import {
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import {
+  NATIVE_WRAITH_FLYBY_TICKS,
+  createNativeWraithFlightState,
+  nativeWraithContactContains,
+  nativeWraithMovement,
+  resetNativeWraithFlightAfterContact,
+  stepNativeWraithFlightClock,
+  type NativeWraithFlightState,
+} from '../core-kernels/native-wraith-flight.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
 import { nativePrimaryCellCoordinate } from '../core-kernels/primary-spell-targeting.ts'
 import type { NativeEnemyWorldFeedbackOutput } from '../core-kernels/native-enemy-world-feedback.ts'
@@ -155,11 +164,6 @@ export const NATIVE_DEMON_BOMB_ACTION_PROGRAM = Object.freeze({
   strictEnd: 8,
 })
 
-/** Named deterministic web programs for families whose exact action clocks remain open. */
-export const BOUNDED_ENEMY_ACTION_PROGRAMS = Object.freeze({
-  wraithDrain: Object.freeze({ cooldownTicks: 50, markerTick: 4, strictEndTick: 9 }),
-})
-
 /** Mod_Knockback magnitude is runtime-authored and remains open in the retail binary. */
 export const BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE = 10
 
@@ -171,7 +175,6 @@ export const BOUNDED_ENEMY_ATTACK_REACH = Object.freeze({
   SKELETON: 36,
   SKELETONARCHER: 240,
   SKELETONMAGE: 220,
-  WRAITH: 52,
   ZOMBIE: 48,
 })
 
@@ -250,8 +253,6 @@ export const NATIVE_MAGGOT_PROGRAM = Object.freeze({
   poisonDurationTicks: 10,
 })
 
-const NATIVE_WRAITH_RETREAT_MINIMUM_TICKS = 200
-const NATIVE_WRAITH_RETREAT_RANDOM_COUNT = 601
 const NATIVE_COFFIN_HIDDEN_SHORT_TICKS = 180
 const NATIVE_COFFIN_HIDDEN_LONG_TICKS = 360
 const NATIVE_COFFIN_RISE_TICKS = 11
@@ -328,13 +329,9 @@ export interface BoneyardZombieBrain {
   readonly visualRngState: number
 }
 
-export interface BoneyardWraithBrain {
-  readonly actionTick: number
-  readonly contactTargetPlayerId: string | null
+export interface BoneyardWraithBrain extends NativeWraithFlightState {
   readonly family: 'wraith'
-  readonly markerEmitted: boolean
-  readonly phase: 'approach' | 'orbit' | 'drain' | 'cooldown' | 'death'
-  readonly phaseTicksRemaining: number
+  readonly phase: 'flight' | 'death'
 }
 
 export interface BoneyardDemonBrain {
@@ -2388,13 +2385,21 @@ function createBrain(
         visualRngState: work.rngState,
       }
     }
-    case 'WRAITH': return {
-      actionTick: 0,
-      contactTargetPlayerId: null,
-      family: 'wraith',
-      markerEmitted: false,
-      phase: 'approach',
-      phaseTicksRemaining: 0,
+    case 'WRAITH': {
+      drawUnit(work) // Constructor +0x214 visual phase.
+      const restingSpeedUnit = drawUnit(work)
+      const flybyTickOffset = drawInteger(work, NATIVE_WRAITH_FLYBY_TICKS.randomCount)
+      const initialSpeedUnit = drawUnit(work)
+      return {
+        ...createNativeWraithFlightState(
+          config.chaseSpeed,
+          restingSpeedUnit,
+          initialSpeedUnit,
+          flybyTickOffset,
+        ),
+        family: 'wraith',
+        phase: 'flight',
+      }
     }
     case 'DEMON': return {
       actionProgress: 0,
@@ -3549,90 +3554,100 @@ function stepWraith(
   brain: BoneyardWraithBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) {
-    const reset = resetWraith(actor, brain)
-    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  const clockedBrain: BoneyardWraithBrain = {
+    ...stepNativeWraithFlightClock(brain),
+    family: 'wraith',
+    phase: 'flight',
   }
-  if (brain.phase === 'cooldown') {
-    const moved = moveTowardTarget(work, actor, brain, context, 1)
-    const movedBrain = moved.brain
-    if (movedBrain.family !== 'wraith') throw new Error('Wraith chase changed brain family')
-    const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
-    return {
-      ...moved,
-      brain: remaining === 0
-        ? {
-            ...movedBrain,
-            actionTick: 0,
-            contactTargetPlayerId: null,
-            markerEmitted: false,
-            phase: 'approach',
-            phaseTicksRemaining: 0,
-          }
-        : { ...movedBrain, phaseTicksRemaining: remaining },
-    }
+  const moved = moveWraith(work, { ...actor, brain: clockedBrain }, clockedBrain, context)
+  const target = moved.targetPlayerId === null
+    ? null
+    : context.players[moved.targetPlayerId] ?? null
+  if (
+    target === null
+    || !targetEligible(target)
+    || !nativeWraithContactContains(moved.position, target.position)
+  ) return moved
+
+  if (clockedBrain.contactCooldownTicks === 0) {
+    drawUnit(work) // Native contact sound pitch Float(.25).
+    const eventId = attackMarker(work, moved, context.tick, moved.targetPlayerId)
+    directPlayerDamage(work, moved, moved.targetPlayerId, eventId)
+    drawUnit(work) // Native contact effect phase Float(1).
   }
-  if (brain.phase === 'orbit') {
-    const moved = moveTowardTarget(work, actor, brain, context, 0, 1)
-    const movedBrain = moved.brain as BoneyardWraithBrain
-    const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
-    return {
-      ...moved,
-      brain: remaining === 0
-        ? { ...movedBrain, actionTick: 0, markerEmitted: false, phase: 'drain', phaseTicksRemaining: 0 }
-        : { ...movedBrain, phaseTicksRemaining: remaining },
-    }
+  const flybyTickOffset = drawInteger(work, NATIVE_WRAITH_FLYBY_TICKS.randomCount)
+  const turnGainUnit = drawUnit(work)
+  return {
+    ...moved,
+    brain: {
+      ...resetNativeWraithFlightAfterContact(
+        clockedBrain,
+        flybyTickOffset,
+        turnGainUnit,
+      ),
+      family: 'wraith',
+      phase: 'flight',
+    },
   }
-  if (brain.phase === 'drain') {
-    const moved = moveTowardTarget(work, actor, brain, context, 1)
-    const movedBrain = moved.brain
-    if (movedBrain.family !== 'wraith') throw new Error('Wraith drain changed brain family')
-    const nextTick = brain.actionTick + staffAttackSpeed(actor)
-    let markerEmitted = brain.markerEmitted
-    if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.markerTick) {
-      const eventId = attackMarker(work, moved, context.tick, brain.contactTargetPlayerId)
-      directContactPlayerDamage(
-        work,
-        moved,
-        brain.contactTargetPlayerId,
-        context.players,
-        BOUNDED_ENEMY_ATTACK_REACH.WRAITH,
-        eventId,
-      )
-      markerEmitted = true
-    }
-    if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.strictEndTick) {
-      return {
-        ...moved,
-        brain: {
-          ...movedBrain,
-          actionTick: 0,
-          contactTargetPlayerId: null,
-          markerEmitted: false,
-          phase: 'cooldown',
-          phaseTicksRemaining: BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.cooldownTicks,
-        },
-      }
-    }
-    return {
-      ...moved,
-      brain: { ...movedBrain, actionTick: nextTick, markerEmitted },
-    }
+}
+
+function moveWraith(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  brain: BoneyardWraithBrain,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
+  if (context.tick < actor.nextMovementTick) return actor
+  const statusFactor = work.pathStatusFactors.get(actor.id) ?? 1
+  const target = actor.targetPlayerId === null
+    ? null
+    : context.players[actor.targetPlayerId] ?? null
+  const movement = nativeWraithMovement({
+    actorAgeTicks: Math.max(0, context.tick - actor.spawnTick),
+    actorHeadingDeg: actor.headingDeg,
+    actorPosition: actor.position,
+    pathSpeedFactor: actor.path.speedFactor,
+    pathTurnFactor: actor.path.turnFactor,
+    state: brain,
+    statusFactor,
+    targetPosition: target && targetEligible(target) ? target.position : null,
+  })
+  const requestedPosition = Object.freeze({
+    x: actor.position.x + movement.delta.x,
+    y: actor.position.y + movement.delta.y,
+  })
+  const traveled = Math.hypot(movement.delta.x, movement.delta.y)
+  const pathWithoutRoute = clearNativeEnemyRoute(actor.path)
+  const pathAfterSubsteps = pathWithoutRoute.flankTicksRemaining > 0
+    ? Object.freeze({
+        ...pathWithoutRoute,
+        flankTicksRemaining: Math.max(
+          0,
+          pathWithoutRoute.flankTicksRemaining - NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+        ),
+      })
+    : pathWithoutRoute
+  const recovery = stepNativeEnemyPathRecovery(
+    pathAfterSubsteps,
+    work.steeringRngState,
+    {
+      flankingEnabled: actor.config.flanking,
+      requestedDistance: Math.hypot(movement.delta.x, movement.delta.y),
+      statusFactor,
+      tick: context.tick,
+      traveledDistance: traveled,
+    },
+  )
+  work.steeringRngState = recovery.rngState
+  return {
+    ...actor,
+    brain,
+    headingDeg: movement.headingDeg,
+    lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
+    nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    path: recovery.state,
+    position: requestedPosition,
   }
-  if (targetWithinAttackReach(actor, context.players, BOUNDED_ENEMY_ATTACK_REACH.WRAITH)) {
-    const retreat = randomBoneyardWaveInteger(work.rngState, NATIVE_WRAITH_RETREAT_RANDOM_COUNT)
-    work.rngState = retreat.state
-    return {
-      ...actor,
-      brain: {
-        ...brain,
-        contactTargetPlayerId: actor.targetPlayerId,
-        phase: 'orbit',
-        phaseTicksRemaining: NATIVE_WRAITH_RETREAT_MINIMUM_TICKS + retreat.value,
-      },
-    }
-  }
-  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function stepDemon(
@@ -4786,7 +4801,7 @@ function interruptNativeSecondaryAction(
     case 'imp': return actor
     case 'portal': return actor
     case 'zombie': return resetZombie(actor, actor.brain)
-    case 'wraith': return resetWraith(actor, actor.brain)
+    case 'wraith': return actor
     case 'demon': return resetDemon(actor, actor.brain)
     case 'coffin': return actor
   }
@@ -7571,23 +7586,6 @@ function resetZombie(
       actionRate: 0,
       contactTargetPlayerId: null,
       impactStateTicksRemaining: 0,
-      markerEmitted: false,
-      phase: 'approach',
-      phaseTicksRemaining: 0,
-    },
-  }
-}
-
-function resetWraith(
-  actor: BoneyardEnemyActor,
-  brain: BoneyardWraithBrain,
-): BoneyardEnemyActor {
-  return brain.phase === 'approach' ? actor : {
-    ...actor,
-    brain: {
-      ...brain,
-      actionTick: 0,
-      contactTargetPlayerId: null,
       markerEmitted: false,
       phase: 'approach',
       phaseTicksRemaining: 0,

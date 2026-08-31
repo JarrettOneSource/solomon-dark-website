@@ -1,7 +1,6 @@
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../../core-kernels/boneyard-zombie-beat.ts'
 import type { NativeSecondarySimulationState } from '../../core-kernels/native-secondary-abilities.ts'
 import {
-  BOUNDED_ENEMY_ACTION_PROGRAMS,
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_DEMON_BOMB_ACTION_PROGRAM,
   NATIVE_MAGE_ACTION_PROGRAMS,
@@ -136,17 +135,13 @@ function enemyClock(actor: BoneyardEnemyActor): EnemyClockObservation {
         strictEnd: NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.completionProgress,
       }, brain.actionRate, [NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress], brain.markerEmitted)
     case 'wraith':
-      if (brain.phase === 'approach') return passiveClock('approach', brain.phaseTicksRemaining)
-      if (brain.phase === 'orbit') return passiveClock('orbit', brain.phaseTicksRemaining)
-      if (brain.phase === 'cooldown') return passiveClock('cooldown', brain.phaseTicksRemaining)
       if (brain.phase === 'death') return passiveClock('recover')
-      return tickClock(
-        brain.actionTick,
-        BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.markerTick,
-        BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.strictEndTick,
-        speed,
-        brain.markerEmitted,
-      )
+      if (brain.contactCooldownTicks > 0) {
+        return passiveClock('cooldown', brain.contactCooldownTicks)
+      }
+      return brain.flybyTicksRemaining > 0
+        ? passiveClock('orbit', brain.flybyTicksRemaining)
+        : passiveClock('approach')
     case 'demon':
       if (brain.phase === 'approach') return passiveClock('approach')
       if (brain.phase === 'death') return passiveClock('recover')
@@ -193,23 +188,6 @@ function progressClock(
     phaseRemainingTicks: 0,
     timeToActionEndTicks: ticksForProgress(Math.max(0, program.strictEnd - progress), rate),
     timeToStrikeTicks: nextMarker === null ? null : ticksForProgress(nextMarker - progress, rate),
-  }
-}
-
-function tickClock(
-  tick: number,
-  markerTick: number,
-  strictEndTick: number,
-  rate: number,
-  markerEmitted: boolean,
-): EnemyClockObservation {
-  const nextMarker = markerEmitted ? null : markerTick
-  return {
-    markerEmitted,
-    phase: nextMarker === null || tick >= markerTick ? 'recover' : 'windup',
-    phaseRemainingTicks: 0,
-    timeToActionEndTicks: ticksForProgress(Math.max(0, strictEndTick - tick), rate),
-    timeToStrikeTicks: nextMarker === null ? null : ticksForProgress(Math.max(0, markerTick - tick), rate),
   }
 }
 

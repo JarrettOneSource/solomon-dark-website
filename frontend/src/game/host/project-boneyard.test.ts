@@ -355,6 +355,60 @@ test('projects the native refreshed 20-tick hit latch without changing enemy act
   assert.equal(first.animation.actionProgress, 4)
 })
 
+test('projects Wraith contact cooldown as wisp action state without inventing a body frame', () => {
+  const contactPlayer = {
+    player: {
+      alive: true,
+      collisionRadius: 25,
+      connected: true,
+      eligible: true,
+      position: { x: 10, y: 0 },
+      velocityPerTick: { x: 0, y: 0 },
+    },
+  } as const
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('wraith-contact-projection'), {
+    firstProjectileWorldContact: () => null,
+    players: contactPlayer,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'WRAITH',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+      position: { x: 0, y: 0 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  result = stepBoneyardEnemyStore(result.store, {
+    firstProjectileWorldContact: () => null,
+    players: contactPlayer,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [],
+    tick: 1,
+  })
+  const contact = projectBoneyardEnemies(result.store, 1)[0]!
+  assert.equal(contact.animation.action, 'wraith-drain')
+  assert.equal(contact.animation.actionProgress, 0)
+  assert.equal(contact.animation.state, 'action')
+
+  result = stepBoneyardEnemyStore(result.store, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      player: { ...contactPlayer.player, position: { x: 500, y: 0 } },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  })
+  const cooling = projectBoneyardEnemies(result.store, 2)[0]!
+  assert.equal(cooling.animation.action, 'wraith-drain')
+  assert.equal(cooling.animation.actionProgress, 1)
+  assert.equal(cooling.animation.state, 'action')
+})
+
 test('Demon lethal projection freezes its articulated composite root', () => {
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('demon-death-root'), {
     firstProjectileWorldContact: () => null,

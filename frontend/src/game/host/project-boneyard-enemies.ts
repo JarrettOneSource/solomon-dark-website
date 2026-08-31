@@ -15,6 +15,7 @@ import {
   nativeDemonArticulationSample,
 } from '../core-kernels/boneyard-demon-articulation.ts'
 import { nativeImpEffectFrame } from '../core-kernels/boneyard-imp-flight.ts'
+import { nativeWraithContactActionProgress } from '../core-kernels/native-wraith-flight.ts'
 import {
   nativeZombieArticulationPose,
   nativeZombieBeatPose,
@@ -348,7 +349,7 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
     case 'imp': return null
     case 'portal': return null
     case 'zombie': return brain.phase === 'swipe' ? 'zombie-beat' : null
-    case 'wraith': return brain.phase === 'drain' ? 'wraith-drain' : null
+    case 'wraith': return brain.contactCooldownTicks > 0 ? 'wraith-drain' : null
     case 'demon': return brain.phase === 'bomb' ? 'demon-bomb' : null
     case 'coffin': return null
   }
@@ -361,7 +362,7 @@ function actionProgress(brain: BoneyardEnemyBrain): number {
     case 'mage': return brain.actionProgress
     case 'imp': return 0
     case 'portal': return 0
-    case 'wraith': return brain.actionTick
+    case 'wraith': return nativeWraithContactActionProgress(brain.contactCooldownTicks)
     case 'zombie':
     case 'demon': return brain.actionProgress
     case 'coffin': return brain.phase === 'opening'

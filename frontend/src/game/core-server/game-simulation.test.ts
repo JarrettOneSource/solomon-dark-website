@@ -119,6 +119,7 @@ import {
 import {
   damageBoneyardEnemy,
   NATIVE_MAGE_ACTION_PROGRAMS,
+  positionBoneyardEnemy,
   stepBoneyardEnemyStore,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
@@ -2645,6 +2646,46 @@ test('Boneyard movement consumes the first fractional Dazzle ramp sample', () =>
   assert.equal(getPlayerProgression(dazzled).dazzleTicksRemaining, 49)
 })
 
+test('Wraith contact damages immediately and drives the complete player Dazzle recovery', () => {
+  let state = withWraithAtPlayer(enterBoneyardWorld(createGameSimulation(), emptyBoneyard()))
+  const initialPosition = getPlayerCharacter(state).position
+  const initialHealth = getPlayerProgression(state).currentHealth
+  state = stepGameSimulationTick(state, {
+    'local-player': gameplayInput(0, 0),
+  })
+  assert.ok(getPlayerProgression(state).currentHealth < initialHealth)
+  assert.equal(getPlayerProgression(state).dazzleTicksRemaining, 50)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      enemies: positionBoneyardEnemy(
+        state.world.enemies,
+        state.world.enemies.actors[0]!.id,
+        { x: 10_000, y: 10_000 },
+      ).store,
+    },
+  }
+
+  state = stepGameSimulationTick(state, {
+    'local-player': gameplayInput(1, 0),
+  })
+  assert.deepEqual(getPlayerCharacter(state).position, initialPosition)
+  assert.equal(getPlayerProgression(state).dazzleTicksRemaining, 49)
+
+  for (let tick = 0; tick < 49; tick += 1) {
+    state = stepGameSimulationTick(state, {
+      'local-player': gameplayInput(0, 0),
+    })
+  }
+  assert.equal(getPlayerProgression(state).dazzleTicksRemaining, 0)
+  state = stepGameSimulationTick(state, {
+    'local-player': gameplayInput(1, 0),
+  })
+  assert.ok(getPlayerCharacter(state).position.x > initialPosition.x)
+})
+
 test('disconnect and world replacement clean spell actors and cast ownership', () => {
   const earth = {
     discipline: 'arcane',
@@ -4846,6 +4887,37 @@ function withRottenZombieAtPlayer(state: GameSimulationState): GameSimulationSta
       id: 1,
       locationPolicy: 'anywhere',
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      position: { ...player.position },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+    tick: state.tick,
+  })
+  return { ...state, world: { ...state.world, enemies: seeded.store } }
+}
+
+function withWraithAtPlayer(state: GameSimulationState): GameSimulationState {
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state)
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      'local-player': {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'WRAITH',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
       position: { ...player.position },
       spawnTick: state.tick,
       waveOrdinal: 1,

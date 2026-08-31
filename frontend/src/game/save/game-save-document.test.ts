@@ -10,7 +10,14 @@ import {
   createNativeWaterAuraActor,
   createNativeWaterHailActor,
 } from '../core-kernels/air-water-spell-actors.ts'
-import type { BoneyardEnemyDeathEffect } from '../core-server/boneyard-enemy-store.ts'
+import {
+  stepBoneyardEnemyStore,
+  type BoneyardEnemyDeathEffect,
+} from '../core-server/boneyard-enemy-store.ts'
+import {
+  BONEYARD_WAVE_ENEMY_TYPES,
+  type BoneyardEnemySpawnIntent,
+} from '../core-kernels/boneyard-wave-director.ts'
 import {
   applyGameSimulationHubAction,
   armGameSimulationCollegeIntro,
@@ -176,7 +183,7 @@ test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix
   )))
 })
 
-test('schema 19 compact inventory roots migrate to schema 25 addressed slots', () => {
+test('schema 19 compact inventory roots migrate to current addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -203,12 +210,79 @@ test('schema 19 compact inventory roots migrate to schema 25 addressed slots', (
     playerId: 'owner',
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 25)
+  assert.equal(current.schemaVersion, 26)
   assert.deepEqual(
     current.continuation.simulation.playerEntities.economies[0].backpack
       .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
     [0, 1],
   )
+})
+
+test('schema 25 active Wraiths migrate from the fabricated phase brain to native flight state', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 91),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const spawnIntent: BoneyardEnemySpawnIntent = {
+    enemyToken: 'WRAITH',
+    flags: [],
+    id: 1,
+    locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+    position: { x: 300, y: 300 },
+    spawnTick: state.tick,
+    waveOrdinal: 1,
+  }
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [spawnIntent],
+    tick: state.tick,
+  })
+  state = { ...state, world: { ...state.world, enemies: spawned.store } }
+  const legacy = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  legacy.schemaVersion = 25
+  legacy.continuation.simulation.world.enemies.actors[0].brain = {
+    actionTick: 0,
+    contactTargetPlayerId: null,
+    family: 'wraith',
+    markerEmitted: false,
+    phase: 'orbit',
+    phaseTicksRemaining: 400,
+  }
+
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.equal(restored.world.kind, 'boneyard')
+  if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  const brain = restored.world.enemies.actors[0]!.brain
+  assert.equal(brain.family, 'wraith')
+  if (brain.family !== 'wraith') throw new Error('expected restored Wraith')
+  assert.equal(brain.phase, 'flight')
+  assert.equal(brain.baseFlybySpeed, Math.fround(0.8))
+  assert.ok(brain.currentSpeed >= 20 && brain.currentSpeed < 60)
+  assert.ok(brain.restingSpeed >= 0 && brain.restingSpeed < 8)
+  assert.ok(brain.flybyTicksRemaining >= 200 && brain.flybyTicksRemaining <= 800)
+  assert.equal(JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: restored,
+  })).schemaVersion, 26)
 })
 
 test('schema 20 restores complete Hub and Boneyard world-painter ownership', () => {
@@ -257,7 +331,7 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
     playerId: restoredHub.playerId,
     state: restoredHub.state,
   }))
-  assert.equal(reencodedHub.schemaVersion, 25)
+  assert.equal(reencodedHub.schemaVersion, 26)
   assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
   assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
 
@@ -485,7 +559,7 @@ test('schema 22 restores late Water painters and every native death-effect owner
     playerId: restored.playerId,
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 25)
+  assert.equal(current.schemaVersion, 26)
   const missingOwner = structuredClone(current)
   delete missingOwner.continuation.simulation.world.enemies.deathEffects[0]
     .presentationOwner
@@ -523,7 +597,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 25)
+  assert.equal(encoded.schemaVersion, 26)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -1558,7 +1632,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 25)
+  assert.equal(encoded.schemaVersion, 26)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,

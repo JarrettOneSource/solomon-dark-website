@@ -211,7 +211,7 @@ test('all eight ordinary wave families materialize immutable recovered defaults'
     SKELETON: [5, 3, 1, 1, 10, 16, (1.25 + 0.5) * 1.25 ** 2],
     SKELETONARCHER: [5, 4, 1, 1, 10, 20, (1.25 + 0.5) * 1.25 ** 2 * 0.75],
     SKELETONMAGE: [5, 3, 0.8, 1, 10, 25, (1.25 + 0.5) * 1.25 ** 2 * 0.75 * 0.65],
-    WRAITH: [2, 4, 1, 1, 4, 20, 1],
+    WRAITH: [2, 4, 1, 1, 4, 15, 1],
     ZOMBIE: [105, 35, 1, 1, 210, 21, 0.85],
   } satisfies Record<Exclude<BoneyardWaveEnemyToken, 'PORTAL'>, readonly (number | null)[]>
 

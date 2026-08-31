@@ -55,7 +55,6 @@ import {
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
-  BOUNDED_ENEMY_ACTION_PROGRAMS,
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_DEMON_BOMB_ACTION_PROGRAM,
@@ -1112,7 +1111,6 @@ test('every mobile survival family enters the shared blocked-goal route owner', 
     'SKELETONMAGE',
     'IMP',
     'ZOMBIE',
-    'WRAITH',
     'DEMON',
   ] as const) {
     const players = { player: livingTarget(1_000, 0) }
@@ -1144,6 +1142,26 @@ test('every mobile survival family enters the shared blocked-goal route owner', 
       { x: 100, y: 100 },
     ], token)
   }
+})
+
+test('Wraith special flight bypasses inherited route and collision owners', () => {
+  const players = { player: livingTarget(1_000, 0) }
+  const spawned = spawnOne('wraith-special-route', 'WRAITH', { x: 0, y: 0 }, players)
+  const result = stepBoneyardEnemyStore(spawned.store, {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    navigation: {
+      findRoute: () => assert.fail('Wraith special vector does not call NavMesh'),
+      isPathClear: () => assert.fail('Wraith special vector does not call route LOS'),
+    },
+    players,
+    resolveMovement: () => assert.fail('Wraith special vector bypasses movement collision'),
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  })
+  assert.notDeepEqual(result.store.actors[0]!.position, { x: 0, y: 0 })
+  assert.equal(result.store.actors[0]!.config.collisionRadius, 15)
+  assert.equal(result.store.actors[0]!.path.routeWaypoints, null)
 })
 
 test('stationary Coffin does not invoke its inherited route slot', () => {
@@ -2416,23 +2434,101 @@ test('Mage lightning preserves its dispatch target identity after attachment bec
   assert.deepEqual(brain.lightningTargetPosition, { x: 150, y: 0 })
 })
 
-test('Wraith contact applies the exact 50-tick Dazzle duration', () => {
+test('Wraith contact immediately applies damage and the exact 50-tick Dazzle duration', () => {
   const players = { player: livingTarget(10, 0) }
   let result = spawnOne('wraith-dazzle', 'WRAITH', { x: 0, y: 0 }, players)
-  const brain = result.store.actors[0]!.brain
-  assert.equal(brain.family, 'wraith')
-  if (brain.family !== 'wraith') throw new Error('expected Wraith brain')
-  result = withActorBrain(result, 0, {
-    ...brain,
-    actionTick: BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.markerTick - 1,
-    contactTargetPlayerId: 'player',
-    markerEmitted: false,
-    phase: 'drain',
-  })
   result = step(result.store, 1, players)
 
   assert.equal(result.playerDamage.length, 1)
+  assert.equal(result.playerDamage[0]!.amount, 4)
   assert.equal(result.playerDamage[0]!.dazzleTicks, NATIVE_WRAITH_DAZZLE_TICKS)
+})
+
+test('Wraith contact is strict at 40 units and repeated overlap resets flight without duplicate damage', () => {
+  const boundaryPlayers = { player: livingTarget(40, 0) }
+  let boundary = spawnOne(
+    'wraith-contact-boundary',
+    'WRAITH',
+    { x: 0, y: 0 },
+    boundaryPlayers,
+  )
+  boundary = step(boundary.store, 1, boundaryPlayers)
+  assert.deepEqual(boundary.playerDamage, [])
+
+  const insidePlayers = { player: livingTarget(39.999, 0) }
+  let inside = spawnOne('wraith-contact-inside', 'WRAITH', { x: 0, y: 0 }, insidePlayers)
+  inside = step(inside.store, 1, insidePlayers)
+  assert.equal(inside.playerDamage.length, 1)
+  const contacted = inside.store.actors[0]!.brain
+  assert.equal(contacted.family, 'wraith')
+  if (contacted.family !== 'wraith') throw new Error('expected Wraith brain')
+  assert.equal(contacted.contactCooldownTicks, 50)
+  assert.equal(contacted.currentSpeed, Math.fround(contacted.baseFlybySpeed * 50))
+
+  inside = {
+    ...inside,
+    store: {
+      ...inside.store,
+      actors: inside.store.actors.map(actor => ({
+        ...actor,
+        nextMovementTick: Number.MAX_SAFE_INTEGER,
+      })),
+    },
+  }
+  inside = stepBoneyardEnemyStore(inside.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: insidePlayers,
+    resolveMovement: () => assert.fail('Wraith flight bypasses movement collision'),
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  })
+  assert.deepEqual(inside.playerDamage, [])
+  const repeated = inside.store.actors[0]!.brain
+  assert.equal(repeated.family, 'wraith')
+  if (repeated.family !== 'wraith') throw new Error('expected Wraith brain')
+  assert.equal(repeated.contactCooldownTicks, 50)
+  assert.equal(repeated.currentSpeed, Math.fround(repeated.baseFlybySpeed * 50))
+  assert.ok(repeated.flybyTicksRemaining >= 200 && repeated.flybyTicksRemaining <= 800)
+})
+
+test('Wraith initial flight uses its native high-speed vector instead of ordinary walking speed', () => {
+  const players = { player: livingTarget(500, 0) }
+  let result = spawnOne('wraith-flight-speed', 'WRAITH', { x: 0, y: 0 }, players)
+  result = stepBoneyardEnemyStore(result.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players,
+    resolveMovement: () => assert.fail('Wraith flight bypasses movement collision'),
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  })
+
+  const requestedDistance = Math.hypot(
+    result.store.actors[0]!.position.x,
+    result.store.actors[0]!.position.y,
+  )
+  assert.ok(requestedDistance >= 8.5 && requestedDistance <= 30)
+})
+
+test('Wraith native flight derives from every shared authored chase transform', () => {
+  for (const [flags, expectedChaseSpeed] of [
+    [[], 1],
+    [['FLAG_FAST'], 1.25],
+    [['FLAG_SLOW'], 0.5],
+    [['FLAG_BURNING'], 1.5],
+  ] as const) {
+    const spawned = spawnOne(
+      `wraith-chase-${flags.join('-') || 'normal'}`,
+      'WRAITH',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      flags,
+    )
+    const actor = spawned.store.actors[0]!
+    assert.equal(actor.config.chaseSpeed, expectedChaseSpeed)
+    assert.equal(actor.brain.family, 'wraith')
+    if (actor.brain.family !== 'wraith') throw new Error('expected Wraith brain')
+    assert.equal(actor.brain.baseFlybySpeed, Math.fround(expectedChaseSpeed * 0.8))
+  }
 })
 
 test('Zombie beat emits one target-radial knockback at exact progress 100', () => {
@@ -2665,16 +2761,16 @@ test('remaining action families keep separate approach, special, and cooldown st
   assert.deepEqual(result.store.actors.map((actor) => actor.brain.phase), [
     'flight',
     'swipe',
-    'orbit',
+    'flight',
     'bomb',
     'hidden',
   ])
   const wraith = result.store.actors[2]!.brain
   assert.equal(wraith.family, 'wraith')
   if (wraith.family !== 'wraith') throw new Error('expected Wraith brain')
-  assert.ok(wraith.phaseTicksRemaining >= 200 && wraith.phaseTicksRemaining <= 800)
+  assert.equal(wraith.contactCooldownTicks, 50)
 
-  const damagedActorIds = new Set<number>()
+  const damagedActorIds = new Set<number>(result.playerDamage.map(({ actorId }) => actorId))
   let tick = 2
   for (; tick <= 250 && result.store.projectiles.length === 0; tick += 1) {
     result = step(result.store, tick, { player: livingTarget(10, 0) })
@@ -2690,25 +2786,7 @@ test('remaining action families keep separate approach, special, and cooldown st
     managerLane: 'actor',
     registrationOrdinal: 5,
   })
-
-  result = withActorBrain(result, 2, {
-    ...wraith,
-    phase: 'orbit',
-    phaseTicksRemaining: 1,
-  })
-  result = step(result.store, tick, { player: livingTarget(10, 0) })
-  assert.equal(result.store.actors[2]!.brain.phase, 'drain')
-  for (let drainTick = tick + 1; drainTick <= tick + 10; drainTick += 1) {
-    result = step(result.store, drainTick, { player: livingTarget(10, 0) })
-  }
-  const postDrain = result.store.actors[2]!.brain
-  assert.equal(postDrain.family, 'wraith')
-  if (postDrain.family !== 'wraith') throw new Error('expected Wraith brain')
-  assert.equal(postDrain.phase, 'cooldown')
-  assert.equal(
-    postDrain.phaseTicksRemaining,
-    BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.cooldownTicks,
-  )
+  assert.ok(damagedActorIds.has(3), 'Wraith contact damages immediately')
 })
 
 test('GuidedMissile deterministically reacquires, homes, contacts, and retires', () => {
