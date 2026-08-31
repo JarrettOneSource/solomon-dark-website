@@ -52,7 +52,7 @@ test('showcase coverage maps every public Web Lua 1.0 surface to executable evid
   })
   const expected = [
     ...['boneyard', 'music', 'ref', 'scene', 'sheet', 'sound', 'sprite', 'wearable'].map(name => `sd.art.${name}`),
-    ...['affix', 'affix_pool', 'boneyard', 'enemy', 'item', 'potion', 'powerup', 'room', 'scene', 'scene_extension', 'shop', 'skill', 'spell', 'status', 'ui'].map(name => `sd.kit.${name}`),
+    ...['affix', 'affix_pool', 'boneyard', 'boast', 'enemy', 'item', 'potion', 'powerup', 'room', 'scene', 'scene_extension', 'shop', 'skill', 'spell', 'status', 'ui'].map(name => `sd.kit.${name}`),
     ...['after', 'all', 'every', 'first', 'on', 'when'].map(name => `sd.rules.${name}`),
     ...['damage', 'grant', 'present', 'resource', 'spawn', 'state', 'status'].map(name => `sd.effect.${name}`),
     ...['area', 'channel', 'minimap', 'portal', 'projectile'].map(name => `sd.prefab.${name}`),

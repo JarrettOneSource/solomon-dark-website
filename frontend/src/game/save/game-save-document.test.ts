@@ -176,7 +176,7 @@ test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix
   )))
 })
 
-test('schema 19 compact inventory roots migrate to schema 24 addressed slots', () => {
+test('schema 19 compact inventory roots migrate to schema 25 addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -203,7 +203,7 @@ test('schema 19 compact inventory roots migrate to schema 24 addressed slots', (
     playerId: 'owner',
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 24)
+  assert.equal(current.schemaVersion, 25)
   assert.deepEqual(
     current.continuation.simulation.playerEntities.economies[0].backpack
       .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
@@ -257,7 +257,7 @@ test('schema 20 restores complete Hub and Boneyard world-painter ownership', () 
     playerId: restoredHub.playerId,
     state: restoredHub.state,
   }))
-  assert.equal(reencodedHub.schemaVersion, 24)
+  assert.equal(reencodedHub.schemaVersion, 25)
   assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
   assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
 
@@ -485,7 +485,7 @@ test('schema 22 restores late Water painters and every native death-effect owner
     playerId: restored.playerId,
     state: restored.state,
   }))
-  assert.equal(current.schemaVersion, 24)
+  assert.equal(current.schemaVersion, 25)
   const missingOwner = structuredClone(current)
   delete missingOwner.continuation.simulation.world.enemies.deathEffects[0]
     .presentationOwner
@@ -523,7 +523,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 24)
+  assert.equal(encoded.schemaVersion, 25)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -1558,7 +1558,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 24)
+  assert.equal(encoded.schemaVersion, 25)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,

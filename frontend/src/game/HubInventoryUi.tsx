@@ -44,10 +44,9 @@ import {
   type PlayerBeltComponent,
 } from './core-kernels/native-belt.ts'
 import {
-  NATIVE_HUB_NPC_CATALOG,
   NATIVE_SELECTOR_ACCEPT_TICKS,
-  nativeBoastFailureText,
 } from './core-kernels/native-hub-npc.ts'
+import type { ModBoastSelection } from './core-kernels/boast.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
 import type { HubMemorialState } from './core-kernels/hub-memorial.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
@@ -88,23 +87,30 @@ import {
   hubNpcDismissal,
   hubNpcQuestion,
   hubNpcSelectorAction,
+  hubBoastFailureText,
+  hubBoastInstruction,
   hubNpcSelectorContent,
   hubNpcSelectorResponse,
   hubNpcSelectorRows,
+  hubNpcSelectorRowKey,
   hubNpcSelectorTitle,
   type HubNpcChatChoice,
   type HubNpcChatContent,
   type HubNpcSelectorRow,
 } from './hub-npc-dialogue.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
-import type { GameModAsset } from './protocol/game-protocol.ts'
+import type { GameModAsset, ModContentProjection } from './protocol/game-protocol.ts'
 import {
   nativeBeltPullOffStarted,
   nativeSkillQuickbarDropSlot,
 } from './skill-book-model.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
-import NativeNotebox from './NativeNotebox.tsx'
-import type { NativeNoteboxKind, NativeNoteboxNotice } from './native-notebox.ts'
+import {
+  planNativeUiBoastMenu,
+  type NativeNoteboxKind,
+  type NativeNoteboxNotice,
+} from './native-ui/core.ts'
+import { NativeUiNotebox } from './native-ui/react.ts'
 import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
@@ -214,7 +220,7 @@ interface HubNpcChatPresentation {
 
 interface PendingHubNpcSelection {
   readonly action: 'buy-teacher-spell' | 'read-librarian-book' | 'select-boast'
-  readonly id: number
+  readonly id: number | ModBoastSelection
   readonly selector: 'boast' | 'books' | 'teacher-spells'
 }
 
@@ -275,6 +281,7 @@ interface HubInventoryUiProps {
   onOpenSkills: () => void
   onUnassignBeltEntry?: (slot: number) => void
   modAssets: readonly GameModAsset[]
+  modContent?: ModContentProjection | null
   onSurfaceChange: (surface: HubUiSurface) => void
   overlayRoot: RefObject<HTMLDivElement | null>
   playerPosition: Vector2
@@ -306,6 +313,7 @@ export default function HubInventoryUi({
   onOpenSkills,
   onUnassignBeltEntry,
   modAssets,
+  modContent = null,
   onSurfaceChange,
   overlayRoot,
   playerPosition,
@@ -566,12 +574,12 @@ export default function HubInventoryUi({
   useEffect(() => {
     const sequence = economy.npc.boast.failureSequence
     if (sequence <= failureSequenceRef.current) return
-    failureSequenceRef.current = sequence
-    const text = nativeBoastFailureText(economy.npc.boast)
+    const text = hubBoastFailureText(economy.npc.boast, modContent)
     if (text === null) return
+    failureSequenceRef.current = sequence
     audio.playStream('boast-failure')
     showNotebox('failure', text)
-  }, [audio, economy.npc.boast, showNotebox])
+  }, [audio, economy.npc.boast, modContent, showNotebox])
 
   const prompt = !surface && nearestInteraction ? (
       <ContextualInteractButton
@@ -593,6 +601,7 @@ export default function HubInventoryUi({
       inputSuspended={inputSuspended}
       menuKeyCode={menuKeyCode}
       memorial={memorial}
+      modContent={modContent}
       onAction={onAction}
       onClose={closeSurface}
       onInventoryCloseComplete={() => {
@@ -621,7 +630,7 @@ export default function HubInventoryUi({
       {prompt}
       {overlay && overlayRoot.current ? createPortal(overlay, overlayRoot.current) : null}
       {npcNotebox && overlayRoot.current ? createPortal(
-        <NativeNotebox
+        <NativeUiNotebox
           key={npcNotebox.sequence}
           notice={npcNotebox}
           onExpired={(sequence) => setNpcNotebox((current) => (
@@ -645,6 +654,7 @@ function NativeHubSurface({
   inputSuspended,
   menuKeyCode,
   memorial,
+  modContent,
   onAction,
   onClose,
   onInventoryCloseComplete,
@@ -674,6 +684,7 @@ function NativeHubSurface({
   inputSuspended: boolean
   menuKeyCode: string
   memorial: HubMemorialState | null
+  modContent: ModContentProjection | null
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
   onInventoryCloseComplete: () => void
@@ -715,6 +726,8 @@ function NativeHubSurface({
   const selectorResponseTimeoutRef = useRef<number | null>(null)
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
   const [notice, setNotice] = useState<HubInventoryUiNotice | null>(null)
+  const [highlightedNpcSelectorId, setHighlightedNpcSelectorId] =
+    useState<number | ModBoastSelection | null>(null)
   const [pressedControl, setPressedControl] = useState<HubInventoryPressedControl>(null)
   const [chat, setChat] = useState<HubNpcChatPresentation>(() => ({
     acceleratedAtMs: null,
@@ -872,6 +885,7 @@ function NativeHubSurface({
       const response = hubNpcSelectorResponse(
         pendingNpcSelection.selector,
         pendingNpcSelection.id,
+        modContent,
       )
       if (!response) setPendingNpcSelection(null)
       else selectorResponseTimeoutRef.current = window.setTimeout(() => {
@@ -957,7 +971,7 @@ function NativeHubSurface({
       if (feedback.transferGesture === 'double-activation') audio.playSound('backpack-close')
       else audio.playSound('click', { playbackRate: 0.75 })
     }
-  }, [audio, economy.actionFeedback, onClose, pendingNpcSelection, serviceSelection?.id])
+  }, [audio, economy.actionFeedback, modContent, onClose, pendingNpcSelection, serviceSelection?.id])
 
   useEffect(() => () => {
     if (selectorResponseTimeoutRef.current !== null) {
@@ -1007,6 +1021,7 @@ function NativeHubSurface({
 
   const beginChatContent = useCallback((content: HubNpcChatContent) => {
     chatCompletionHandledRef.current = false
+    setHighlightedNpcSelectorId(null)
     setChat({
       acceleratedAtMs: null,
       content,
@@ -1017,9 +1032,9 @@ function NativeHubSurface({
 
   const selectorRows = useMemo((): readonly HubNpcSelectorRow[] => (
     chat.content.kind === 'selector'
-      ? hubNpcSelectorRows(chat.content.selector, economy.npc, progression)
+      ? hubNpcSelectorRows(chat.content.selector, economy.npc, progression, modContent)
       : []
-  ), [chat.content, economy.npc, progression])
+  ), [chat.content, economy.npc, modContent, progression])
 
   const advanceChat = useCallback(() => {
     if (surface.kind !== 'dialogue' || chat.content.kind !== 'speech') return
@@ -1038,14 +1053,19 @@ function NativeHubSurface({
       else onClose()
       return
     }
-    if (chat.content.key.startsWith('ANNAL_') && economy.npc.boast.selected !== null) {
-      onNotebox(NATIVE_HUB_NPC_CATALOG.boastInstruction)
+    if (
+      (chat.content.key.startsWith('ANNAL_') || chat.content.key.startsWith('MOD_BOAST_'))
+      && economy.npc.boast.selected !== null
+    ) {
+      const instruction = hubBoastInstruction(economy.npc.boast.selected, modContent)
+      if (instruction !== null) onNotebox(instruction)
     }
     onClose()
   }, [
     beginChatContent,
     chat.content,
     economy.npc.boast.selected,
+    modContent,
     onClose,
     onNotebox,
     storyOffice,
@@ -1108,6 +1128,7 @@ function NativeHubSurface({
       interaction: surface.interaction,
       kind: 'dialogue',
       phaseStartedAtMs: chat.phaseStartedAtMs,
+      highlightedSelectorId: highlightedNpcSelectorId,
       selectedSelectorId: pendingNpcSelection?.id ?? null,
       selectorOffset: chat.selectorOffset,
       selectorRows,
@@ -1142,6 +1163,7 @@ function NativeHubSurface({
     inventoryDrag,
     inventoryFlybys,
     inventorySelection,
+    highlightedNpcSelectorId,
     notice,
     pendingNpcSelection,
     pressedControl,
@@ -1479,6 +1501,7 @@ function NativeHubSurface({
               onDone={() => click(() => {
                 dismissOrCloseChat()
               })}
+              onSelectorHighlight={setHighlightedNpcSelectorId}
               onSelectRow={(selector, id) => {
                 if (pendingNpcSelection) return
                 const action = hubNpcSelectorAction(selector, id)
@@ -1650,6 +1673,7 @@ function DialogueActions({
   onAdvance,
   onChoice,
   onDone,
+  onSelectorHighlight,
   onSelectRow,
   onSelectorDone,
   onSelectorOffset,
@@ -1662,9 +1686,10 @@ function DialogueActions({
   onAdvance: () => void
   onChoice: (choice: HubNpcChatChoice) => void
   onDone: () => void
+  onSelectorHighlight: (id: number | ModBoastSelection | null) => void
   onSelectRow: (
     selector: 'boast' | 'books' | 'teacher-spells',
-    id: number,
+    id: number | ModBoastSelection,
   ) => void
   onSelectorDone: () => void
   onSelectorOffset: (offset: number) => void
@@ -1697,9 +1722,27 @@ function DialogueActions({
 
   if (chat.content.kind === 'selector') {
     const selector = chat.content.selector
-    const maximumOffset = Math.max(0, selectorRows.length - HUB_NPC_SELECTOR.rowCount)
+    const maximumOffset = selector === 'boast'
+      ? Math.max(
+          0,
+          Math.floor((selectorRows.length - 1) / HUB_NPC_SELECTOR.rowCount)
+            * HUB_NPC_SELECTOR.rowCount,
+        )
+      : Math.max(0, selectorRows.length - HUB_NPC_SELECTOR.rowCount)
     const offset = Math.min(chat.selectorOffset, maximumOffset)
     const visibleRows = selectorRows.slice(offset, offset + HUB_NPC_SELECTOR.rowCount)
+    const boastPlan = selector === 'boast' ? planNativeUiBoastMenu({
+      height: HUB_NATIVE_UI_SIZE.height,
+      pageCount: Math.max(1, Math.ceil(selectorRows.length / HUB_NPC_SELECTOR.rowCount)),
+      pageIndex: Math.floor(offset / HUB_NPC_SELECTOR.rowCount),
+      rows: visibleRows.map(row => ({
+        detail: row.detail,
+        id: hubNpcSelectorRowKey(row),
+        label: row.label,
+        ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
+      })),
+      width: HUB_NATIVE_UI_SIZE.width,
+    }) : null
     return (
       <section
         className="hub-native-dialogue-actions"
@@ -1714,41 +1757,63 @@ function DialogueActions({
         </span>
         {visibleRows.map((row, index) => (
           <NativeAction
-            key={`${selector}-${row.id}`}
+            key={`${selector}-${hubNpcSelectorRowKey(row)}`}
             data={{
-              'data-native-selector-id': row.id,
+              'data-native-selector-id': typeof row.id === 'number' ? row.id : row.id.contentId,
               'data-native-selector-kind': selector,
+              'data-native-selector-mod-id': typeof row.id === 'number' ? '' : row.id.modId,
               'data-native-selector-price': row.price ?? '',
             }}
             disabled={pendingSelection}
             label={`${row.label}${row.price === null ? '' : `, ${row.price} gold`}. ${row.detail}`}
-            rect={[
-              HUB_NPC_SELECTOR.rowLeft,
-              HUB_NPC_SELECTOR.rowTop + index * HUB_NPC_SELECTOR.rowHeight,
-              HUB_NPC_SELECTOR.rowWidth,
-              HUB_NPC_SELECTOR.rowHeight - 3,
-            ]}
+            rect={boastPlan
+              ? nativeUiActionRect(boastPlan.rowBounds[index]!.bounds)
+              : [
+                  HUB_NPC_SELECTOR.rowLeft,
+                  HUB_NPC_SELECTOR.rowTop + index * HUB_NPC_SELECTOR.rowHeight,
+                  HUB_NPC_SELECTOR.rowWidth,
+                  HUB_NPC_SELECTOR.rowHeight - 3,
+                ]}
+            onBlur={() => onSelectorHighlight(null)}
             onClick={() => onSelectRow(selector, row.id)}
+            onFocus={() => onSelectorHighlight(row.id)}
+            onPointerEnter={() => onSelectorHighlight(row.id)}
+            onPointerLeave={() => onSelectorHighlight(null)}
           />
         ))}
         {offset > 0 ? (
           <NativeAction
             label="Previous entries"
-            rect={HUB_NPC_SELECTOR.previousRect}
-            onClick={() => onSelectorOffset(Math.max(0, offset - HUB_NPC_SELECTOR.rowCount))}
+            rect={boastPlan
+              ? nativeUiActionRect(boastPlan.actions.find(({ id }) => id === 'previous')!.bounds)
+              : HUB_NPC_SELECTOR.previousRect}
+            onClick={() => {
+              onSelectorHighlight(null)
+              onSelectorOffset(Math.max(0, offset - HUB_NPC_SELECTOR.rowCount))
+            }}
           />
         ) : null}
         {offset < maximumOffset ? (
           <NativeAction
             label="More entries"
-            rect={HUB_NPC_SELECTOR.nextRect}
-            onClick={() => onSelectorOffset(Math.min(
-              maximumOffset,
-              offset + HUB_NPC_SELECTOR.rowCount,
-            ))}
+            rect={boastPlan
+              ? nativeUiActionRect(boastPlan.actions.find(({ id }) => id === 'next')!.bounds)
+              : HUB_NPC_SELECTOR.nextRect}
+            onClick={() => {
+              onSelectorHighlight(null)
+              onSelectorOffset(Math.min(
+                maximumOffset,
+                offset + HUB_NPC_SELECTOR.rowCount,
+              ))
+            }}
           />
         ) : null}
-        <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onSelectorDone} />
+        <NativeAction
+          gameBack
+          label="Done"
+          rect={boastPlan ? nativeUiActionRect(boastPlan.doneBounds) : HUB_CHAT_PANEL.doneRect}
+          onClick={onSelectorDone}
+        />
       </section>
     )
   }
@@ -3445,6 +3510,15 @@ function NativeAction({
 
 function rectStyle([left, top, width, height]: readonly [number, number, number, number]): CSSProperties {
   return { height, left, top, width }
+}
+
+function nativeUiActionRect(bounds: Readonly<{
+  height: number
+  left: number
+  top: number
+  width: number
+}>): readonly [number, number, number, number] {
+  return [bounds.left, bounds.top, bounds.width, bounds.height]
 }
 
 function itemAtEquipmentSlot(economy: ProtocolPlayerEconomy, slot: EquipmentSlot): HubInventoryItem | null {

@@ -256,8 +256,8 @@ def build(source_root: Path) -> dict[str, Any]:
         (4, "I NEVER RUN OUT OF MANA!", '"A profound practicioner of magic never allows his mana pool to empty!"', "ANNAL_MANABOAST", "mana-underflow"),
     ]
     boast_rows = [
-        {"failureProducer": failure, "id": row_id, "label": label,
-         "response": response, "statement": statement}
+        {"failureProducer": failure, "iconRecord": 90 + row_id, "id": row_id,
+         "label": label, "response": response, "statement": statement}
         for row_id, label, statement, response, failure in boasts
     ]
 
@@ -293,6 +293,29 @@ def build(source_root: Path) -> dict[str, Any]:
     return {
         "badEulogies": [speech[f"SAY_BADEULOGY_{index}"] for index in range(8)],
         "boastInstruction": "To succeed at your boast, you must\nsurvive until at least Wave 30",
+        "boastPresentation": {
+            "boxInset": {"heightReduction": 160, "left": 90, "top": 80,
+                         "widthReduction": 180},
+            "edgeUvOrigin": 0.95,
+            "fadeAlphaStep": 0.10000000149011612,
+            "fonts": {"detail": "medium", "label": "special-uppercase",
+                      "title": "menu"},
+            "iconInset": 15,
+            "iconRecords": list(range(90, 98)),
+            "idleTint": [0.85, 0.73, 0.44, 1.0],
+            "outer": {"centerYOffset": 70, "height": 560, "panelRecord": 11,
+                      "width": 700},
+            "row": {"firstTop": 25, "height": 85, "left": 15, "pitch": 90,
+                    "record": 50, "widthInset": 30},
+            "rowTextOffsets": {"detail": 5, "label": -15},
+            "selectedBaseTint": [0.5, 1.0, 0.5, 1.0],
+            "selectedSaturation": 0.6,
+            "stockRowCount": 5,
+            "titleBaselineY": 64,
+            "titleText": "Select a Boast",
+            "doneBottomInset": 50,
+            "doneText": "DONE",
+        },
         "boastScoreMultiplier": 1.100000023841858,
         "boasts": boast_rows, "books": books,
         "dialogue": {key: dialogue[key] for key in sorted(required)},
@@ -304,7 +327,7 @@ def build(source_root: Path) -> dict[str, Any]:
         "interactions": interactions,
         "interruptEulogies": [speech[f"SAY_EULOGY_INTERRUPT{index}"] for index in range(1, 5)],
         "markers": markers,
-        "schema": "solomon-dark-native-hub-npc-interactions-v3",
+        "schema": "solomon-dark-native-hub-npc-interactions-v4",
         "skorcha": {"animationDelay": {"drawCount": 10, "offsetTicks": 20},
             "animationStateCount": 3, "artRecords": list(range(510, 517)),
             "placements": [{"variant": 0, "x": 1437.5, "y": 732.5},

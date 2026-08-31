@@ -4,6 +4,7 @@ export const WEB_LUA_CONTENT_KINDS = [
   'affix',
   'affix-pool',
   'boneyard',
+  'boast',
   'enemy',
   'item',
   'potion',

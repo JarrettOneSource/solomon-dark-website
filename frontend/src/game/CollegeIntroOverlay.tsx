@@ -1,6 +1,6 @@
 import type { NativeCollegeIntroState } from './core-kernels/native-college-intro.ts'
 import { nativeCollegeTitlePresentation } from './core-kernels/native-college-intro.ts'
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
+import { NativeUiSprite } from './native-ui/react-raw.ts'
 import './college-intro.css'
 
 export default function CollegeIntroOverlay({

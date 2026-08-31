@@ -1,4 +1,4 @@
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
+import { NativeUiSprite } from './native-ui/react-raw.ts'
 import './tutorial.css'
 
 const TUTORIAL_GOLD = 0xd9ba70

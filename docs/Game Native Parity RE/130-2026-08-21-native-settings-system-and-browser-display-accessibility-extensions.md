@@ -465,3 +465,20 @@ browser Chat, and browser Open Cheats.
   production build, media policy, and bundle budget (`Game-CG_-oeee.js`,
   277,279 raw / 83,703 gzip bytes). Publication and deployment remain separate
   and were not requested.
+
+## 2026-08-31 — Settings semantic ownership moved into the UI Kit
+
+No native presentation fact changed. Entry 183's game-wide UI Kit reopening
+removed a remaining web ownership split: the exact Settings records lived in
+`native-ui/`, while the semantic shell, group, range, toggle, action, binding,
+and static-row structures were private functions in `GameSettingsDialog`.
+
+The semantic modules now live behind `native-ui/react.ts` as
+`NativeUiSettingsPanel` and the `NativeUiSettings*` row family. The dialog owns
+only Settings values, persistence, pages, browser extensions, and return
+behavior. Save-transfer and mobile-layout actions use the same stock action row.
+The complete desktop/mobile Settings journeys re-proved the prior exact record
+counts, geometry, real-touch ranges, and empty error arrays; their current title
+captures hash to
+`d991afe1c307237317bb24ea5f12ab875bfaafee6c29defadcc5c29701b6bbd4`
+and `fe9aa95e30ecc696a3337da2f3dd9d64daac5028596de526b2e265ae909ce93b`.

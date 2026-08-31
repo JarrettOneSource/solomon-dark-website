@@ -615,6 +615,14 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'move-inventory-item', destinationSackId: null, destinationSlot: 87, itemId: 9 },
     { type: 'read-librarian-book', bookId: 25 },
     { type: 'select-boast', boastId: 4 },
+    {
+      type: 'select-boast',
+      boastId: {
+        contentId: '5000000000000000016',
+        kind: 'mod',
+        modId: 'example.boasts',
+      },
+    },
     { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
     { type: 'transfer', direction: 'to-backpack', gesture: 'double-activation', itemId: 4 },
     { type: 'unforge', itemId: 6 },
@@ -641,6 +649,7 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
     { type: 'remove-hagatha', selector: 27 },
     { type: 'remove-hagatha', selector: -1 },
     { type: 'select-boast', boastId: 5 },
+    { type: 'select-boast', boastId: { contentId: '16', kind: 'stock', modId: 'example' } },
     { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
     { type: 'transfer', direction: 'to-storage', gesture: 'double-activation', itemId: 1 },
     { type: 'dowse', offerId: 1 },
@@ -1847,8 +1856,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v113 carries Portal objectives, Steam detonation presentation, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 113)
+test('protocol v114 carries mod Boasts, Portal objectives, Steam detonation presentation, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 114)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -5485,6 +5494,48 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
 test('mod content projection round-trips every stable family field and active status', () => {
   const message = {
     type: 'server-mod-content' as const,
+    boasts: [{
+      contentId: '5000000000000000003',
+      failureProducers: ['potion-use', 'magical-equipment'],
+      icon: { kind: 'stock' as const, record: 96, style: 6 },
+      instruction: 'Survive through Wave 25.',
+      modId: 'example.mod',
+      name: 'EMPTY HANDS, FULL GLORY!',
+      randomSkillChoices: false,
+      response: 'Provokatus nods at your reckless confidence.',
+      scoreMultiplier: 1.25,
+      statement: '"I need neither potion nor enchanted equipment!"',
+      successWave: 25,
+    }, {
+      contentId: '5000000000000000005',
+      failureProducers: [],
+      icon: {
+        frame: {
+          centerOffsetX: 0,
+          centerOffsetY: 0,
+          contentHeight: 50,
+          contentWidth: 53,
+          height: 50,
+          logicalHeight: 50,
+          logicalWidth: 53,
+          width: 53,
+          x: 0,
+          y: 0,
+        },
+        imageHeight: 50,
+        imagePath: 'art/custom-boast.png',
+        imageWidth: 53,
+        kind: 'mod' as const,
+      },
+      instruction: 'Survive.',
+      modId: 'example.mod',
+      name: 'CUSTOM BOAST!',
+      randomSkillChoices: false,
+      response: 'Response.',
+      scoreMultiplier: 1.1,
+      statement: '"Statement."',
+      successWave: 30,
+    }],
     content: [{
       art: [{
         path: 'art/icon.png',
@@ -5507,6 +5558,15 @@ test('mod content projection round-trips every stable family field and active st
       name: 'Steady',
       presentation: null,
     }, {
+      art: [],
+      contentId: '5000000000000000003',
+      contentKind: 'boast' as const,
+      description: '',
+      key: 'empty_hands',
+      modId: 'example.mod',
+      name: 'EMPTY HANDS, FULL GLORY!',
+      presentation: null,
+    }, {
       art: [{ path: 'art/orb.png', slot: 'world' }],
       contentId: '5000000000000000004',
       contentKind: 'powerup' as const,
@@ -5514,6 +5574,15 @@ test('mod content projection round-trips every stable family field and active st
       key: 'survey_orb',
       modId: 'example.mod',
       name: 'Survey Orb',
+      presentation: null,
+    }, {
+      art: [{ path: 'art/custom-boast.png', slot: 'icon' }],
+      contentId: '5000000000000000005',
+      contentKind: 'boast' as const,
+      description: '',
+      key: 'custom_boast',
+      modId: 'example.mod',
+      name: 'CUSTOM BOAST!',
       presentation: null,
     }],
     manifestSha256: 'a'.repeat(64),
@@ -5537,7 +5606,11 @@ test('mod content projection round-trips every stable family field and active st
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     ...message,
     content: [...message.content, message.content[0]],
-  })), /content\[3\] is invalid/)
+  })), /content\[5\] is invalid/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    ...message,
+    boasts: [{ ...message.boasts[0], icon: { kind: 'stock', record: 90, style: 6 } }],
+  })), /icon is inconsistent/)
 })
 
 test('mod spell cast protocol carries only stable content, request, and target values', () => {

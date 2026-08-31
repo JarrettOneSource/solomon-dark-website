@@ -65,6 +65,7 @@ Unknown asset aliases and metadata fail admission. Canonical file fields are
 | `sd.kit.spell` | Complete | Authenticated cast, mana, cooldown, area/projectile/channel effect actor, hit attribution, VFX/audio and save policy |
 | `sd.kit.enemy` | Complete | Collision-valid spawn/movement, nearest-player attack, health/death, XP/gold, directional sheet, audio and tombstone |
 | `sd.kit.boneyard` | Complete | Ordinary picker launch, environment mode, entry anchor, initial/wave rosters, triggers and music |
+| `sd.kit.boast` | Complete | Namespaced Provokatus row, stock or owned icon, bounded failure producers, random-choice policy, success wave, score multiplier, save/reconciliation and stock-style pagination |
 | `sd.kit.room`, `sd.kit.scene` | Complete | Party-owned trusted room-map overlay, ordered rooms, scene stack, checkpoint and parent-world suspension |
 | `sd.kit.scene_extension` | Complete | Monument selector, leader/any-member policy, party entry and return |
 | `sd.kit.ui` | Complete | Trusted Minimap, five mounts, typed scene/state visibility, read-only bindings and distinguishable declared actions |

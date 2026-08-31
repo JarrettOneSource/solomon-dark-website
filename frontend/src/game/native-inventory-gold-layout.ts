@@ -1,5 +1,4 @@
-import { nativeUiRecord } from './native-ui/native-ui-catalog.ts'
-import { measureNativeUiText } from './native-ui/native-ui-text.ts'
+import { measureNativeUiText, nativeUiRecord } from './native-ui/core.ts'
 
 export const NATIVE_INVENTORY_GOLD_LEDGER = {
   iconCenter: [38, 868] as const,

@@ -416,14 +416,16 @@ export function connectGameClientSession(
       }
       if (message.type === 'server-mod-content') {
         if (modContent && message.revision < modContent.revision) return
-        modContent = {
+        const projection: ModContentProjection = {
+          boasts: message.boasts,
           content: message.content,
           manifestSha256: message.manifestSha256,
           powerups: message.powerups,
           revision: message.revision,
           statuses: message.statuses,
         }
-        for (const listener of modContentListeners) listener(modContent)
+        modContent = projection
+        for (const listener of modContentListeners) listener(projection)
         return
       }
       if (message.type === 'server-mod-runtime') {

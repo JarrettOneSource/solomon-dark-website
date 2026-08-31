@@ -9,6 +9,8 @@ const screenshotPath = process.env.SDR_NATIVE_UI_SCREENSHOT
   || '/tmp/solomon-dark-native-ui-workbench.png'
 const domScreenshotPath = process.env.SDR_NATIVE_UI_DOM_SCREENSHOT
   || '/tmp/solomon-dark-native-ui-dom-workbench.png'
+const boastScreenshotPath = process.env.SDR_NATIVE_UI_BOAST_SCREENSHOT
+  || '/tmp/solomon-dark-native-ui-boast-workbench.png'
 const errors = {
   console: [],
   failedResponses: [],
@@ -69,10 +71,37 @@ try {
   await dom.waitFor()
   assert.equal(await dom.locator('[data-native-ui-message-box]').count(), 1)
   assert.equal(await dom.locator('[data-native-ui-button]').count(), 3)
+  assert.equal(await dom.locator('[data-native-ui-tabs]').count(), 1)
+  assert.equal(await dom.locator('[data-native-ui-tab]').count(), 4)
+  assert.equal(await dom.locator('[data-native-ui-simple-menu]').count(), 1)
+  assert.equal(await dom.locator('[data-native-ui-simple-menu-action]').count(), 2)
+  assert.equal(await dom.locator('[data-native-ui-settings-controls]').count(), 1)
+  assert.equal(await dom.getByRole('slider', { name: 'SOUND VOL:' }).count(), 1)
   assert.equal(await dom.locator('[data-native-ui-font="menu"]').count() > 0, true)
   assert.equal(await dom.locator('[data-native-ui-font="medium"]').count() > 0, true)
-  await page.waitForTimeout(500)
+  await dom.getByRole('tab', { name: 'SIMPLE MENUS' }).click()
+  assert.equal(
+    await dom.getByRole('tab', { name: 'SIMPLE MENUS' }).getAttribute('aria-selected'),
+    'true',
+  )
+  const menuSettings = dom.locator('[data-native-ui-simple-menu-action="settings"]')
+  await menuSettings.dispatchEvent('pointerdown', { button: 0, pointerType: 'mouse' })
+  assert.equal(
+    await dom.locator('[data-native-ui-simple-menu]').getAttribute('data-native-ui-simple-menu-pressed'),
+    'settings',
+  )
+  assert.equal(await dom.locator('[data-native-ui-node="settings:body"] [data-native-ui-record="UI.102"]').count(), 1)
+  await menuSettings.dispatchEvent('pointercancel', { pointerType: 'mouse' })
+  await waitForDomUiImages(page)
   await page.locator('#native-ui-stage').screenshot({ path: domScreenshotPath })
+  await dom.getByRole('tab', { name: 'BOAST MENU' }).click()
+  const boastMenu = dom.locator('[data-native-ui-boast-menu]')
+  await boastMenu.waitFor()
+  assert.equal(await boastMenu.locator('[data-native-ui-boast-action]').count(), 6)
+  assert.equal(await boastMenu.locator('[data-native-ui-node="native:0:icon-left"]').count(), 1)
+  assert.equal(await boastMenu.locator('[data-native-ui-node="native:0:icon-right"]').count(), 1)
+  await waitForDomUiImages(page)
+  await page.locator('#native-ui-stage').screenshot({ path: boastScreenshotPath })
   await page.locator('#show-components').click()
   await canvas.waitFor({ state: 'visible' })
 
@@ -105,6 +134,7 @@ try {
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     atlasesExercised: Object.keys(atlasCounts),
+    boastScreenshotPath,
     domScreenshotPath,
     screenshotPath,
     errors,
@@ -112,4 +142,24 @@ try {
 } finally {
   await browser.close()
   await vite.close()
+}
+
+async function waitForDomUiImages(page) {
+  await page.evaluate(async () => {
+    const urls = new Set()
+    for (const element of document.querySelectorAll('[data-native-ui-dom-workbench] *')) {
+      const style = getComputedStyle(element)
+      for (const source of [style.backgroundImage, style.maskImage, style.webkitMaskImage]) {
+        for (const match of (source || '').matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
+          urls.add(new URL(match[1], document.baseURI).href)
+        }
+      }
+    }
+    await Promise.all(Array.from(urls, async (url) => {
+      const image = new Image()
+      image.src = url
+      await image.decode()
+    }))
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
 }

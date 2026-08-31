@@ -1,12 +1,12 @@
 import type { CSSProperties } from 'react'
 
-import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
-import { nativeUiAtlasSource } from './native-ui/native-ui-assets.ts'
+import { NativeBitmapText } from './native-ui/react-raw.ts'
 import {
   nativeUiAtlas,
   nativeUiRecord,
   type NativeUiAtlasRecord,
-} from './native-ui/native-ui-catalog.ts'
+} from './native-ui/core.ts'
+import { nativeUiAtlasSource } from './native-ui/assets.ts'
 import type { GameViewportLayout } from './renderer/game-viewport.ts'
 import type { BoneyardSpectatorStatusPresentation } from './renderer/boneyard-render-contract.ts'
 import {

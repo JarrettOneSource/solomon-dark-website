@@ -44,7 +44,7 @@ import {
   TITLE_STOCK_ASSET_SOURCES,
   TITLE_STOCK_POINT_ASSET_SOURCES,
 } from '../game-assets.ts'
-import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
+import { createNativeUiPixiAdapter } from '../native-ui/pixi.ts'
 import {
   type TitleMenuPromptAction,
   type TitleMenuPromptKind,

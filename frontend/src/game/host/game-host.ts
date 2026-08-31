@@ -18,6 +18,7 @@ import type {
   HubMemorialPlayerProfile,
   HubMemorialState,
 } from '../core-kernels/hub-memorial.ts'
+import type { BoastResolver } from '../core-kernels/boast.ts'
 import {
   GAME_FIXED_TICK_SECONDS,
   GAME_TICK_RATE,
@@ -1507,6 +1508,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               activeState,
               playerId,
               options.initialPlayerExperience,
+              modBoastResolverForPlayer(playerId),
             )
             replaceStateForPlayer(playerId, experienced)
           }
@@ -2133,7 +2135,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           const slot = client.partyRejoinSlot
           const activeState = activeRunForPartyRejoin(slot)
           const selected = activeState && slot.detachedState
-            ? selectDetachedGameSimulationPlayerSkill(activeState, slot.detachedState, message)
+            ? selectDetachedGameSimulationPlayerSkill(
+                activeState,
+                slot.detachedState,
+                message,
+                partyRejoinBoastResolver(slot),
+              )
             : null
           if (!selected) {
             disconnect(socket, 'invalid-message', 'The skill choice is stale or not in this offer.')
@@ -2442,11 +2449,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                   activeState,
                   slot.detachedState,
                   message.offerSequence,
+                  partyRejoinBoastResolver(slot),
                 )
               : saveDetachedGameSimulationPlayerSkill(
                   activeState,
                   slot.detachedState,
                   message.offerSequence,
+                  partyRejoinBoastResolver(slot),
                 )
             : null
           if (!applied) {
@@ -3618,7 +3627,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 luaRuntimeOwnerPlayerId,
               )?.id ?? null
               luaRuntime.beginTick(ownerState.tick + 1)
-              const applied = applyWebLuaCommands(ownerState, luaRuntime.drainCommands())
+              const applied = applyWebLuaCommands(
+                ownerState,
+                luaRuntime.drainCommands(),
+                modBoastResolverForPlayer(luaRuntimeOwnerPlayerId),
+              )
               replaceStateForPlayer(luaRuntimeOwnerPlayerId, applied.state)
               if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
               if (developerPartyId && applied.enemySpawnIntents.length > 0) {
@@ -3805,7 +3818,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         enemySpawnIntents.push(...privateModHost?.drainEnemySpawns() ?? [])
         for (const runtime of runtimes) {
           runtime.beginTick(nextTick)
-          const applied = applyWebLuaCommands(state, runtime.drainCommands())
+          const applied = applyWebLuaCommands(
+            state,
+            runtime.drainCommands(),
+            privateModHost?.extensions.resolveBoast,
+          )
           state = applied.state
           enemySpawnIntents.push(...applied.enemySpawnIntents)
           if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
@@ -4341,7 +4358,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (!active || !slot.detachedState) {
       throw new Error('party rejoin staging lost its active run or detached actor')
     }
-    return projectDetachedGameSimulationPlayer(active, slot.detachedState)
+    return projectDetachedGameSimulationPlayer(
+      active,
+      slot.detachedState,
+      partyRejoinBoastResolver(slot),
+    )
   }
 
   function replacePartyRejoinRunState(
@@ -4411,6 +4432,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         slot.partyIdentity,
         availablePartyMembers(slot.partyId, reservationId, slot.playerId),
         null,
+        partyRejoinBoastResolver(slot),
       )
       if (!rejoined.accepted) return partyRejectionMessage(rejoined.reason)
       sharedWorlds = rejoined.state
@@ -4429,6 +4451,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         slot.detachedState,
         slot.playerId,
         null,
+        partyRejoinBoastResolver(slot),
       )
     } catch (error) {
       return error instanceof Error ? error.message : 'The active run cannot be rejoined.'
@@ -4853,6 +4876,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           experience: milestoneProgression.experience,
           level: milestoneProgression.level,
         },
+        partyRejoinBoastResolver(slot),
       )
       synchronizedState = synchronized.state
       slot.detachedState = synchronized.detached
@@ -6898,6 +6922,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       candidate.state.playerEntities.identities.some(identity => identity.playerId === playerId)
     ))
     return run ? partyModRuntimes.get(run.partyId) ?? null : null
+  }
+
+  function modBoastResolverForPlayer(playerId: PlayerId): BoastResolver | undefined {
+    return (modRuntimeScopeForPlayer(playerId)?.runtime ?? privateModHost)
+      ?.extensions.resolveBoast
+  }
+
+  function partyRejoinBoastResolver(slot: PartyRejoinSlot): BoastResolver | undefined {
+    return (sharedWorlds
+      ? partyModRuntimes.get(slot.partyId)?.runtime
+      : privateModHost)?.extensions.resolveBoast
   }
 
   function sendPreparedModProjection(

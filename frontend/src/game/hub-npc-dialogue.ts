@@ -8,7 +8,18 @@ import {
   type NativeHubNpcSelector,
   type NativeHubNpcState,
 } from './core-kernels/native-hub-npc.ts'
+import {
+  boastSelectionKey,
+  createModBoastSelection,
+  type BoastSelection,
+  type BoastState,
+  type ModBoastSelection,
+} from './core-kernels/boast.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type {
+  ModBoastIconProjection,
+  ModContentProjection,
+} from './protocol/game-protocol.ts'
 import { formatHallOfFameTime } from './core-kernels/hall-of-fame.ts'
 import type { HubMemorialPortrait } from './core-kernels/hub-memorial.ts'
 import { wizardClassDisplayTitle } from './core-kernels/native-wizard-class.ts'
@@ -47,8 +58,9 @@ export type HubNpcChatChoice =
     }
 
 export interface HubNpcSelectorRow {
+  readonly boastIcon?: ModBoastIconProjection
   readonly detail: string
-  readonly id: number
+  readonly id: number | ModBoastSelection
   readonly label: string
   readonly price: number | null
 }
@@ -178,14 +190,25 @@ export function hubNpcSelectorRows(
   selector: Extract<HubNpcChatContent, { kind: 'selector' }>['selector'],
   npc: NativeHubNpcState,
   progression: Pick<ProtocolPlayerProgression, 'advancedUnlocks'>,
+  mods: ModContentProjection | null = null,
 ): readonly HubNpcSelectorRow[] {
   switch (selector) {
-    case 'boast': return NATIVE_BOASTS.map(boast => ({
-      detail: boast.statement,
-      id: boast.id,
-      label: boast.label,
-      price: null,
-    }))
+    case 'boast': return [
+      ...NATIVE_BOASTS.map(boast => ({
+        boastIcon: { kind: 'stock' as const, record: boast.iconRecord, style: boast.iconRecord - 90 },
+        detail: boast.statement,
+        id: boast.id,
+        label: boast.label,
+        price: null,
+      })),
+      ...(mods?.boasts ?? []).map(boast => ({
+        boastIcon: boast.icon,
+        detail: boast.statement,
+        id: createModBoastSelection(boast.contentId, boast.modId),
+        label: boast.name,
+        price: null,
+      })),
+    ]
     case 'books': return nativeLibrarianBooks(npc).map(book => ({
       detail: book.lines.join(' '),
       id: book.id,
@@ -213,13 +236,21 @@ export function hubNpcSelectorTitle(
 
 export function hubNpcSelectorResponse(
   selector: Extract<HubNpcChatContent, { kind: 'selector' }>['selector'],
-  id: number,
+  id: number | ModBoastSelection,
+  mods: ModContentProjection | null = null,
 ): HubNpcChatContent | null {
   if (selector === 'boast') {
-    const boast = NATIVE_BOASTS.find(candidate => candidate.id === id)
-    if (!boast) return null
-    return recordSpeech(NATIVE_HUB_NPC_CATALOG.dialogue[boast.response]!, 'close')
+    if (typeof id === 'number') {
+      const boast = NATIVE_BOASTS.find(candidate => candidate.id === id)
+      if (!boast) return null
+      return recordSpeech(NATIVE_HUB_NPC_CATALOG.dialogue[boast.response]!, 'close')
+    }
+    const boast = mods?.boasts.find(candidate => (
+      candidate.contentId === id.contentId && candidate.modId === id.modId
+    ))
+    return boast ? speech(`MOD_BOAST_${boast.contentId}`, [boast.response], 'close') : null
   }
+  if (typeof id !== 'number') return null
   if (selector === 'books') {
     const book = NATIVE_HUB_NPC_CATALOG.books.find(candidate => candidate.id === id)
     return book ? speech(book.key, book.lines, 'choices') : null
@@ -230,13 +261,56 @@ export function hubNpcSelectorResponse(
 
 export function hubNpcSelectorAction(
   selector: Extract<HubNpcChatContent, { kind: 'selector' }>['selector'],
-  id: number,
+  id: number | ModBoastSelection,
 ) {
   switch (selector) {
-    case 'boast': return { boastId: id, type: 'select-boast' as const }
-    case 'books': return { bookId: id, type: 'read-librarian-book' as const }
-    case 'teacher-spells': return { skillId: id, type: 'buy-teacher-spell' as const }
+    case 'boast': {
+      if (typeof id === 'number' && ![0, 1, 2, 3, 4].includes(id)) {
+        throw new RangeError('Boast selector ID must be stock 0..4 or namespaced mod content')
+      }
+      return {
+        boastId: id as BoastSelection,
+        type: 'select-boast' as const,
+      }
+    }
+    case 'books': {
+      if (typeof id !== 'number') throw new RangeError('Book selector ID must be numeric')
+      return { bookId: id, type: 'read-librarian-book' as const }
+    }
+    case 'teacher-spells': {
+      if (typeof id !== 'number') throw new RangeError('Teacher selector ID must be numeric')
+      return { skillId: id, type: 'buy-teacher-spell' as const }
+    }
   }
+}
+
+export function hubNpcSelectorRowKey(row: HubNpcSelectorRow): string {
+  return typeof row.id === 'number' ? `row:${row.id}` : boastSelectionKey(row.id)
+}
+
+export function hubBoastInstruction(
+  selection: BoastSelection | null,
+  mods: ModContentProjection | null,
+): string | null {
+  if (selection === null) return null
+  if (typeof selection === 'number') return NATIVE_HUB_NPC_CATALOG.boastInstruction
+  return mods?.boasts.find(boast => (
+    boast.contentId === selection.contentId && boast.modId === selection.modId
+  ))?.instruction ?? null
+}
+
+export function hubBoastFailureText(
+  state: BoastState,
+  mods: ModContentProjection | null,
+): string | null {
+  if (!state.failed || state.selected === null) return null
+  const label = typeof state.selected === 'number'
+    ? NATIVE_BOASTS.find(boast => boast.id === state.selected)?.label
+    : mods?.boasts.find(boast => (
+        boast.contentId === (state.selected as ModBoastSelection).contentId
+        && boast.modId === (state.selected as ModBoastSelection).modId
+      ))?.name
+  return label ? `FAILED "${label}"` : null
 }
 
 function hasChoices(interactionId: HubInteractionId, storyOffice: boolean): boolean {

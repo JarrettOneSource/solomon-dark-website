@@ -7,28 +7,29 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 
-import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import { subscribeGamePresentationFrames } from '../game-presentation-frame-loop.ts'
 import {
   NATIVE_NOTEBOX,
   nativeNoteboxDurationMs,
   nativeNoteboxLayout,
   nativeNoteboxOpacity,
   type NativeNoteboxNotice,
-} from './native-notebox.ts'
-import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
-import NativeUiNineSlice from './native-ui/NativeUiNineSlice.tsx'
+} from './native-ui-notebox.ts'
+import NativeBitmapText from './NativeBitmapText.tsx'
+import NativeUiNineSlice from './NativeUiNineSlice.tsx'
+import './native-ui-notebox.css'
 
-interface NativeNoteboxProps {
+interface NativeUiNoteboxProps {
   readonly notice: NativeNoteboxNotice
   readonly onExpired: (sequence: number) => void
   readonly style: CSSProperties
 }
 
-export default function NativeNotebox({
+export default function NativeUiNotebox({
   notice,
   onExpired,
   style,
-}: NativeNoteboxProps) {
+}: NativeUiNoteboxProps) {
   const [dismissedAtMs, setDismissedAtMs] = useState<number | null>(null)
   const dismissedAtMsRef = useRef<number | null>(null)
   const expiredRef = useRef(false)

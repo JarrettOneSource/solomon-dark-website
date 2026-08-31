@@ -51,6 +51,29 @@
         "source"
       ]
     },
+    "boast": {
+      "allowed": [
+        "key",
+        "art",
+        "description",
+        "fail_on",
+        "instruction",
+        "name",
+        "random_skill_choices",
+        "response",
+        "score_multiplier",
+        "statement",
+        "stock_icon",
+        "success_wave"
+      ],
+      "required": [
+        "key",
+        "instruction",
+        "name",
+        "response",
+        "statement"
+      ]
+    },
     "enemy": {
       "allowed": [
         "key",

@@ -38,6 +38,7 @@ const SETTINGS = '.game-settings-dialog'
 const PAUSE = '.gameplay-pause-overlay'
 const errors = []
 const receipts = { viewport: { height, width } }
+const throughHubOnly = process.argv.includes('--through-hub')
 
 const vite = await createViteServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
@@ -196,49 +197,51 @@ try {
   await page.locator('.hub-party-toggle').tap()
   await page.locator('.hub-party-members[hidden]').waitFor({ state: 'attached', timeout: 10_000 })
 
-  await page.getByRole('button', { name: 'Enter the Boneyard' }).tap()
-  const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
-  const picker = page.locator('.hub-boneyard-picker')
-  await Promise.race([
-    boneyardScene.waitFor({ timeout: 240_000 }),
-    picker.waitFor({ timeout: 240_000 }),
-  ])
-  if (await picker.isVisible()) {
-    await page.locator('.hub-boneyard-option').first().waitFor({ timeout: 30_000 })
-    const pickerStop = await capture('hub-boneyard-picker', {
-      cancel: '.hub-boneyard-cancel',
-      option: '.hub-boneyard-option',
-      picker: '.hub-boneyard-picker',
-      stage: '.main-menu-stage',
-    })
-    assertDialogFits(pickerStop, 'hub-boneyard-picker', { button: 'cancel', dialog: 'picker' })
-    await backWithSkull('hub-boneyard-picker', '.hub-boneyard-picker', 'the skull presses Cancel on the picker')
+  if (!throughHubOnly) {
     await page.getByRole('button', { name: 'Enter the Boneyard' }).tap()
-    await picker.waitFor({ timeout: 30_000 })
-    await page.locator('.hub-boneyard-option').first().tap()
-  } else {
-    // The host owns a single boneyard (the stock random arena) under the stubbed mod list,
-    // so the picker never shows here; its fit is covered by the stylesheet contract test.
-    receipts['hub-boneyard-picker'] = { skipped: 'single boneyard, picker not shown' }
+    const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+    const picker = page.locator('.hub-boneyard-picker')
+    await Promise.race([
+      boneyardScene.waitFor({ timeout: 240_000 }),
+      picker.waitFor({ timeout: 240_000 }),
+    ])
+    if (await picker.isVisible()) {
+      await page.locator('.hub-boneyard-option').first().waitFor({ timeout: 30_000 })
+      const pickerStop = await capture('hub-boneyard-picker', {
+        cancel: '.hub-boneyard-cancel',
+        option: '.hub-boneyard-option',
+        picker: '.hub-boneyard-picker',
+        stage: '.main-menu-stage',
+      })
+      assertDialogFits(pickerStop, 'hub-boneyard-picker', { button: 'cancel', dialog: 'picker' })
+      await backWithSkull('hub-boneyard-picker', '.hub-boneyard-picker', 'the skull presses Cancel on the picker')
+      await page.getByRole('button', { name: 'Enter the Boneyard' }).tap()
+      await picker.waitFor({ timeout: 30_000 })
+      await page.locator('.hub-boneyard-option').first().tap()
+    } else {
+      // The host owns a single boneyard (the stock random arena) under the stubbed mod list,
+      // so the picker never shows here; its fit is covered by the stylesheet contract test.
+      receipts['hub-boneyard-picker'] = { skipped: 'single boneyard, picker not shown' }
+    }
+    await boneyardScene.waitFor({ timeout: 240_000 })
+    await page.locator('.main-menu-screen-fade-idle').waitFor()
+
+    // 4. Boneyard: skull ↔ pause, settings and its sub-page backed out one press at a time.
+    await assertSkull('boneyard', { available: true, scene: 'boneyard' })
+    await openMenuWithSkull('boneyard-pause')
+    await page.getByRole('button', { name: 'GAME SETTINGS' }).tap()
+    await settingsProbe('boneyard-settings', 'DONE')
+    await page.locator(SETTINGS).getByRole('button', { name: 'TWEAK GAME' }).tap()
+    await settingsProbe('boneyard-settings-performance', 'BACK')
+    await page.locator(SKULL).tap()
+    await page.locator(SETTINGS).locator('.game-settings-close', { hasText: 'DONE' }).waitFor({ timeout: 10_000 })
+    await capture('boneyard-settings-after-back', { close: '.game-settings-close', dialog: SETTINGS })
+    await backWithSkull('boneyard-settings', SETTINGS, 'the skull presses DONE')
+    await page.locator(PAUSE).waitFor({ state: 'detached', timeout: 10_000 })
+    await assertSkull('boneyard-resumed', { available: true, scene: 'boneyard' })
   }
-  await boneyardScene.waitFor({ timeout: 240_000 })
-  await page.locator('.main-menu-screen-fade-idle').waitFor()
 
-  // 4. Boneyard: skull ↔ pause, settings and its sub-page backed out one press at a time.
-  await assertSkull('boneyard', { available: true, scene: 'boneyard' })
-  await openMenuWithSkull('boneyard-pause')
-  await page.getByRole('button', { name: 'GAME SETTINGS' }).tap()
-  await settingsProbe('boneyard-settings', 'DONE')
-  await page.locator(SETTINGS).getByRole('button', { name: 'TWEAK GAME' }).tap()
-  await settingsProbe('boneyard-settings-performance', 'BACK')
-  await page.locator(SKULL).tap()
-  await page.locator(SETTINGS).locator('.game-settings-close', { hasText: 'DONE' }).waitFor({ timeout: 10_000 })
-  await capture('boneyard-settings-after-back', { close: '.game-settings-close', dialog: SETTINGS })
-  await backWithSkull('boneyard-settings', SETTINGS, 'the skull presses DONE')
-  await page.locator(PAUSE).waitFor({ state: 'detached', timeout: 10_000 })
-  await assertSkull('boneyard-resumed', { available: true, scene: 'boneyard' })
-
-  process.stdout.write(`${JSON.stringify({ errors, receipts, status: 'ok' }, null, 1)}\n`)
+  process.stdout.write(`${JSON.stringify({ errors, receipts, status: 'ok', throughHubOnly }, null, 1)}\n`)
 } catch (error) {
   await page.screenshot({ path: join(evidenceRoot, 'failure.png') }).catch(() => {})
   process.stderr.write(`${JSON.stringify({ errors, receipts }, null, 1)}\n`)
@@ -254,8 +257,8 @@ async function openMenuWithSkull(label) {
   await page.locator(SKULL).tap()
   const overlay = page.locator(`${PAUSE}[aria-modal="true"]`)
   await overlay.waitFor({ timeout: 10_000 })
-  await page.locator('[data-pause-action="resume"]').waitFor({ timeout: 10_000 })
-  const paused = await capture(label, { pause: PAUSE, rows: '[data-pause-action]', stage: '.main-menu-stage' })
+  await page.locator('[data-native-ui-simple-menu-action="resume"]').waitFor({ timeout: 10_000 })
+  const paused = await capture(label, { pause: PAUSE, rows: '[data-native-ui-simple-menu-action]', stage: '.main-menu-stage' })
   assert.ok(paused.members.pause[0]?.visible, `${label}: the scene menu opens on the skull tap`)
   receipts[label].skullOpensMenu = true
 }

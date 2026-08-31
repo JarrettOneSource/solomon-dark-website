@@ -4,7 +4,7 @@ import {
   mainMenu,
   matchLoading,
 } from '../lib/assets.ts'
-import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/native-ui-assets.ts'
+import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/assets.ts'
 import {
   GAME_RESIDENT_AUDIO_SOURCES,
   loadGameAudioAsset,

@@ -20,6 +20,7 @@ Every content definition requires a stable `key`. The root `sd.mod` table accept
 | `affix` | `key`, `modifiers`, `name` | `key`, `applies_to`, `description`, `modifiers`, `name` |
 | `affix-pool` | `key`, `entries` | `key`, `applies_to`, `description`, `entries`, `name`, `rng_domain`, `rolls` |
 | `boneyard` | `key`, `name`, `source` | `key`, `anchors`, `art`, `description`, `environment`, `name`, `roster`, `source`, `triggers`, `waves` |
+| `boast` | `key`, `instruction`, `name`, `response`, `statement` | `key`, `art`, `description`, `fail_on`, `instruction`, `name`, `random_skill_choices`, `response`, `score_multiplier`, `statement`, `stock_icon`, `success_wave` |
 | `enemy` | `key`, `name` | `key`, `art`, `description`, `loot`, `name`, `stats` |
 | `item` | `key`, `name` | `key`, `art`, `description`, `equipment`, `name`, `stack`, `use` |
 | `potion` | `key`, `duration`, `name`, `on_use` | `key`, `art`, `description`, `duration`, `loot`, `name`, `on_use`, `presentation`, `status` |

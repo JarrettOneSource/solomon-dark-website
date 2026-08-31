@@ -8,8 +8,7 @@ import {
   type TitleMenuPromptAction,
   type TitleMenuPromptKind,
 } from './title-menu-prompt.ts'
-import NativeUiButton from './native-ui/NativeUiButton.tsx'
-import NativeUiMessageBox from './native-ui/NativeUiMessageBox.tsx'
+import { NativeUiButton, NativeUiMessageBox } from './native-ui/react.ts'
 import './stock-prompt-dialog.css'
 
 interface StockPromptDialogProps {

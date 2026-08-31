@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { SharedMobileUiLayout } from '../lib/api.ts'
 import { readMobileUiLayoutState } from './mobile-ui-layout.ts'
 import { publishCurrentMobileUiLayout } from './mobile-ui-sharing.ts'
+import { NativeUiSettingsAction } from './native-ui/react.ts'
 
 export default function MobileUiLayoutSettingsAction({
   accountUsername,
@@ -44,15 +45,11 @@ export default function MobileUiLayoutSettingsAction({
 
   return (
     <div className="game-settings-mobile-ui-share">
-      <button
-        className="game-settings-action"
+      <NativeUiSettingsAction
         disabled={disabled}
+        label={busy ? 'SUBMITTING MOBILE UI...' : 'SUBMIT TO DARK CLOUD'}
         onClick={() => { void publish() }}
-        type="button"
-      >
-        <span>{busy ? 'SUBMITTING MOBILE UI…' : 'SUBMIT TO DARK CLOUD'}</span>
-        <i aria-hidden />
-      </button>
+      />
       {accountUsername === null ? (
         <small>SIGN IN TO SUBMIT A MOBILE UI LAYOUT.</small>
       ) : !customized ? (

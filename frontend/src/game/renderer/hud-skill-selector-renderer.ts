@@ -8,7 +8,7 @@ import {
   nativeHudSkillSelectorLayout,
   type NativeHudSkillSelectorOption,
 } from '../hud-skill-selector.ts'
-import { destroyNativeUiPixiFor } from '../native-ui/native-ui-pixi.ts'
+import { destroyNativeUiPixiFor } from '../native-ui/pixi.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,

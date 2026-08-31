@@ -1,5 +1,5 @@
-import { nativeUiFont } from './native-ui/native-ui-catalog.ts'
-import { layoutNativeUiText } from './native-ui/native-ui-text.ts'
+import { nativeUiFont } from './native-ui-catalog.ts'
+import { layoutNativeUiText } from './native-ui-text.ts'
 
 export type NativeNoteboxKind = 'failure' | 'instruction'
 

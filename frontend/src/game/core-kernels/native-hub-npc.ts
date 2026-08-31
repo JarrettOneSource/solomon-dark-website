@@ -1,14 +1,23 @@
 import nativeCatalogJson from '../native-hub-npc-catalog.json' with { type: 'json' }
 
+import {
+  boastFailureText,
+  createBoastState,
+  failBoast,
+  scoreBoast,
+  selectBoast,
+  succeedBoast,
+  type BoastDefinition,
+  type BoastFailureProducer,
+  type BoastSelection,
+  type BoastState,
+  type NativeBoastId,
+} from './boast.ts'
 import type { HubRegionId } from './hub-regions.ts'
 import type { Vector2 } from './vector.ts'
 
-export type NativeBoastId = 0 | 1 | 2 | 3 | 4
-export type NativeBoastFailureProducer =
-  | 'magical-equipment'
-  | 'mana-underflow'
-  | 'potion-use'
-  | 'secondary-cast'
+export type { BoastSelection, NativeBoastId } from './boast.ts'
+export type NativeBoastFailureProducer = BoastFailureProducer
 export type NativeHubInteractionId =
   | 'hagatha' | 'fomentius' | 'annalist' | 'luthacus' | 'skorcha' | 'teacher'
   | 'memorator' | 'painting-0' | 'painting-1' | 'painting-100' | 'painting-3'
@@ -46,6 +55,7 @@ export interface NativeHubInteractionDefinition {
 }
 export interface NativeBoastDefinition {
   readonly failureProducer: NativeBoastFailureProducer | null
+  readonly iconRecord: number
   readonly id: NativeBoastId
   readonly label: string
   readonly response: string
@@ -82,6 +92,46 @@ export interface NativeHubNpcMarkerActorDefinition {
 interface NativeHubNpcCatalog {
   readonly badEulogies: readonly string[]
   readonly boastInstruction: string
+  readonly boastPresentation: {
+    readonly boxInset: {
+      readonly heightReduction: number
+      readonly left: number
+      readonly top: number
+      readonly widthReduction: number
+    }
+    readonly doneBottomInset: number
+    readonly doneText: string
+    readonly edgeUvOrigin: number
+    readonly fadeAlphaStep: number
+    readonly fonts: {
+      readonly detail: 'medium'
+      readonly label: 'special-uppercase'
+      readonly title: 'menu'
+    }
+    readonly iconInset: number
+    readonly iconRecords: readonly number[]
+    readonly idleTint: readonly [number, number, number, number]
+    readonly outer: {
+      readonly centerYOffset: number
+      readonly height: number
+      readonly panelRecord: number
+      readonly width: number
+    }
+    readonly row: {
+      readonly firstTop: number
+      readonly height: number
+      readonly left: number
+      readonly pitch: number
+      readonly record: number
+      readonly widthInset: number
+    }
+    readonly rowTextOffsets: { readonly detail: number; readonly label: number }
+    readonly selectedBaseTint: readonly [number, number, number, number]
+    readonly selectedSaturation: number
+    readonly stockRowCount: number
+    readonly titleBaselineY: number
+    readonly titleText: string
+  }
   readonly boastScoreMultiplier: number
   readonly boasts: readonly NativeBoastDefinition[]
   readonly books: readonly NativeLibrarianBookDefinition[]
@@ -130,7 +180,7 @@ interface NativeHubNpcCatalog {
       readonly textOffset: Vector2
     }
   }
-  readonly schema: 'solomon-dark-native-hub-npc-interactions-v3'
+  readonly schema: 'solomon-dark-native-hub-npc-interactions-v4'
   readonly skorcha: {
     readonly animationDelay: { readonly drawCount: number; readonly offsetTicks: number }
     readonly animationStateCount: number
@@ -171,12 +221,7 @@ interface NativeHubNpcCatalog {
   }
   readonly teacherSpells: readonly NativeTeacherSpellDefinition[]
 }
-export interface NativeBoastState {
-  readonly failed: boolean
-  readonly failureSequence: number
-  readonly selected: NativeBoastId | null
-  readonly succeeded: boolean
-}
+export type NativeBoastState = BoastState
 export interface NativeHubNpcState {
   readonly boast: NativeBoastState
   readonly helpFlags: readonly boolean[]
@@ -186,6 +231,7 @@ export interface NativeHubNpcState {
 export const NATIVE_HUB_NPC_CATALOG = nativeCatalogJson as unknown as NativeHubNpcCatalog
 export const NATIVE_HUB_INTERACTION_IDS = NATIVE_HUB_NPC_CATALOG.interactionOrder
 export const NATIVE_BOASTS = NATIVE_HUB_NPC_CATALOG.boasts
+export const NATIVE_BOAST_PRESENTATION = NATIVE_HUB_NPC_CATALOG.boastPresentation
 export const NATIVE_LIBRARIAN_BOOKS = NATIVE_HUB_NPC_CATALOG.books
 export const NATIVE_TEACHER_SPELLS = NATIVE_HUB_NPC_CATALOG.teacherSpells
 export const NATIVE_BOAST_SUCCESS_WAVE = 30
@@ -194,7 +240,7 @@ export const NATIVE_HUB_HELP_ROW_COUNT = NATIVE_HUB_NPC_CATALOG.markers.profileH
 
 export function createNativeHubNpcState(): NativeHubNpcState {
   return Object.freeze({
-    boast: Object.freeze({ failed: false, failureSequence: 0, selected: null, succeeded: false }),
+    boast: createBoastState(),
     helpFlags: Object.freeze(Array<boolean>(NATIVE_HUB_HELP_ROW_COUNT).fill(true)),
     librarianLaceRead: false,
   })
@@ -224,16 +270,32 @@ export function nativeBoastDefinition(id: number): NativeBoastDefinition | null 
   return NATIVE_BOASTS.find((boast) => boast.id === id) ?? null
 }
 
+export function resolveNativeBoast(selection: BoastSelection): BoastDefinition | null {
+  if (typeof selection !== 'number') return null
+  const boast = nativeBoastDefinition(selection)
+  if (!boast) return null
+  return Object.freeze({
+    failureProducers: Object.freeze(boast.failureProducer === null ? [] : [boast.failureProducer]),
+    instruction: NATIVE_HUB_NPC_CATALOG.boastInstruction,
+    label: boast.label,
+    randomSkillChoices: boast.id === 3,
+    scoreMultiplier: NATIVE_HUB_NPC_CATALOG.boastScoreMultiplier,
+    selection: boast.id,
+    statement: boast.statement,
+    successWave: NATIVE_BOAST_SUCCESS_WAVE,
+  })
+}
+
 export function nativeTeacherSpellDefinition(skillId: number): NativeTeacherSpellDefinition | null {
   return NATIVE_TEACHER_SPELLS.find((spell) => spell.skillId === skillId) ?? null
 }
 
 export function selectNativeBoast(source: NativeHubNpcState, id: number): NativeHubNpcState | null {
-  const boast = nativeBoastDefinition(id)
+  const boast = resolveNativeBoast(id as NativeBoastId)
   if (!boast) return null
   return Object.freeze({
     ...source,
-    boast: Object.freeze({ ...source.boast, selected: boast.id, succeeded: false }),
+    boast: selectBoast(source.boast, boast),
   })
 }
 
@@ -241,27 +303,13 @@ export function failNativeBoast(
   source: NativeHubNpcState,
   producer: NativeBoastFailureProducer,
 ): NativeHubNpcState {
-  const boast = source.boast.selected === null
-    ? null
-    : nativeBoastDefinition(source.boast.selected)
-  if (!boast || boast.failureProducer !== producer || source.boast.failed) return source
-  return Object.freeze({
-    ...source,
-    boast: Object.freeze({
-      ...source.boast,
-      failed: true,
-      failureSequence: source.boast.failureSequence + 1,
-      succeeded: false,
-    }),
-  })
+  const boast = failBoast(source.boast, producer, resolveNativeBoast)
+  return boast === source.boast ? source : Object.freeze({ ...source, boast })
 }
 
 export function succeedNativeBoast(source: NativeHubNpcState): NativeHubNpcState {
-  if (source.boast.selected === null || source.boast.failed || source.boast.succeeded) return source
-  return Object.freeze({
-    ...source,
-    boast: Object.freeze({ ...source.boast, succeeded: true }),
-  })
+  const boast = succeedBoast(source.boast, NATIVE_BOAST_SUCCESS_WAVE, resolveNativeBoast)
+  return boast === source.boast ? source : Object.freeze({ ...source, boast })
 }
 
 export function readNativeLibrarianBook(
@@ -278,17 +326,11 @@ export function resetNativeRunNpcState(source: NativeHubNpcState): NativeHubNpcS
 }
 
 export function nativeBoastScore(score: number, state: NativeBoastState): number {
-  if (!Number.isSafeInteger(score) || score < 0) {
-    throw new RangeError('native Boast score must be a non-negative safe integer')
-  }
-  return state.succeeded
-    ? Math.trunc(Math.fround(score) * NATIVE_HUB_NPC_CATALOG.boastScoreMultiplier)
-    : score
+  return scoreBoast(score, state, resolveNativeBoast)
 }
 
 export function nativeBoastFailureText(state: NativeBoastState): string | null {
-  const boast = state.selected === null ? null : nativeBoastDefinition(state.selected)
-  return boast && state.failed ? `FAILED "${boast.label}"` : null
+  return boastFailureText(state, resolveNativeBoast)
 }
 
 export function nativeLibrarianBooks(

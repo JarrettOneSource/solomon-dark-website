@@ -68,6 +68,67 @@ test('compiler resolves local references and canonicalizes definition ordering',
   assert.deepEqual(first.capabilities, ['content.potion', 'content.status', 'effect.status'])
 })
 
+test('compiler admits bounded stock-style Boasts and rejects ambiguous behavior or art', () => {
+  const compiled = compileWebLuaDefinition(IDENTITY, definition([
+    content('boast', 'empty_hands', {
+      fail_on: ['potion-use', 'magical-equipment'],
+      instruction: 'Survive through Wave 25.',
+      name: 'EMPTY HANDS, FULL GLORY!',
+      random_skill_choices: false,
+      response: 'Provokatus nods at your reckless confidence.',
+      score_multiplier: 1.25,
+      statement: '"I need neither potion nor enchanted equipment!"',
+      stock_icon: 6,
+      success_wave: 25,
+    }),
+  ]))
+  assert.deepEqual(compiled.capabilities, ['content.boast'])
+  assert.equal(compiled.content[0]?.contentKind, 'boast')
+
+  assert.throws(
+    () => compileWebLuaDefinition(IDENTITY, definition([
+      content('boast', 'bad_boast', {
+        fail_on: ['potion-use', 'potion-use'],
+        instruction: '',
+        name: 'BAD BOAST',
+        random_skill_choices: 'yes',
+        response: 'Response.',
+        score_multiplier: 11,
+        statement: 'Statement.',
+        success_wave: 0,
+      }),
+    ])),
+    (error: unknown) => {
+      assert.ok(error instanceof WebLuaDefinitionError)
+      assert.ok(error.issues.some(({ message }) => message.includes('exactly one of stock_icon or art.icon')))
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.fail_on')))
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.random_skill_choices')))
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.score_multiplier')))
+      assert.ok(error.issues.some(({ path }) => path.endsWith('.success_wave')))
+      return true
+    },
+  )
+  assert.throws(
+    () => compileWebLuaDefinition(IDENTITY, definition([
+      content('boast', 'extra_art', {
+        art: {
+          icon: { key: 'icon', kind: 'asset-reference' },
+          portrait: { key: 'icon', kind: 'asset-reference' },
+        },
+        instruction: 'Instruction.',
+        name: 'EXTRA ART!',
+        response: 'Response.',
+        statement: 'Statement.',
+      }),
+    ])),
+    (error: unknown) => {
+      assert.ok(error instanceof WebLuaDefinitionError)
+      assert.ok(error.issues.some(({ message }) => message.includes('only the icon slot')))
+      return true
+    },
+  )
+})
+
 test('compiler reports unresolved and cross-kind duplicate content together', () => {
   assert.throws(
     () => compileWebLuaDefinition(IDENTITY, definition([

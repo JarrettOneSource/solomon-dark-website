@@ -18,10 +18,12 @@ import {
 } from './native-modal-slide-progress.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import { nativeTutorialSelectedHudLayoutFromCenters } from './native-hud-presentation.ts'
-import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
-import NativeUiNineSlice from './native-ui/NativeUiNineSlice.tsx'
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
-import { nativeUiFont, type NativeUiFontName } from './native-ui/native-ui-catalog.ts'
+import {
+  NativeBitmapText,
+  NativeUiNineSlice,
+  NativeUiSprite,
+} from './native-ui/react-raw.ts'
+import { nativeUiFont, type NativeUiFontName } from './native-ui/core.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   emptyTutorialHudAnchors,

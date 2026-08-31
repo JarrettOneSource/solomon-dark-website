@@ -41,7 +41,7 @@ import {
   nativeManaHudPresentation,
   type NativeHudSkillBinding,
 } from './native-hud-presentation.ts'
-import NativeUiStrip from './native-ui/NativeUiStrip.tsx'
+import { NativeUiStrip } from './native-ui/react-raw.ts'
 
 interface GameHudProps {
   accountUsername: string | null

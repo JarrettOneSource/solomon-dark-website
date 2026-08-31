@@ -9,7 +9,7 @@ import {
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
 } from './renderer/hub-inventory-render-contract.ts'
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
+import { NativeUiSprite } from './native-ui/react-raw.ts'
 
 export default function NativeBeltItemIcon({
   element,

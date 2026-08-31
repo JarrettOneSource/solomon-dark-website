@@ -55,6 +55,20 @@
 ---@field triggers? SdRule[]
 ---@field waves? table[]
 
+---@class SdBoastSpec
+---@field key string
+---@field art? table
+---@field description? string
+---@field fail_on? ("magical-equipment"|"mana-underflow"|"potion-use"|"secondary-cast")[]
+---@field instruction string
+---@field name string
+---@field random_skill_choices? boolean
+---@field response string
+---@field score_multiplier? number
+---@field statement string
+---@field stock_icon? integer
+---@field success_wave? integer
+
 ---@class SdEnemySpec
 ---@field key string
 ---@field art? table
@@ -187,6 +201,7 @@
 ---@field affix fun(spec: SdAffixSpec): table
 ---@field affix_pool fun(spec: SdAffixPoolSpec): table
 ---@field boneyard fun(spec: SdBoneyardSpec): table
+---@field boast fun(spec: SdBoastSpec): table
 ---@field enemy fun(spec: SdEnemySpec): table
 ---@field item fun(spec: SdItemSpec): table
 ---@field potion fun(spec: SdPotionSpec): table

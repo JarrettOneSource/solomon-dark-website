@@ -4,12 +4,17 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 
 import {
+  applyGameSimulationHubAction,
   createGameSimulation,
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
 } from '../core-server/game-simulation.ts'
-import { setPlayerEntityMana } from '../core-server/player-entity-store.ts'
+import {
+  replacePlayerEconomy,
+  setPlayerEntityMana,
+} from '../core-server/player-entity-store.ts'
+import { createBoastState } from '../core-kernels/boast.ts'
 import {
   compileWebLuaDefinition,
   WebLuaDefinitionRuntime,
@@ -87,6 +92,17 @@ local enemy = sd.kit.enemy({
   stats = {health = 250, speed = 2.5},
   art = {atlas = sd.art.ref("icon")},
 })
+local boast = sd.kit.boast({
+  key = "empty_hands",
+  name = "EMPTY HANDS, FULL GLORY!",
+  statement = [["I need neither potion nor enchanted equipment!"]],
+  response = "Provokatus nods at your reckless confidence.",
+  instruction = "Survive through Wave 25.",
+  fail_on = {"potion-use", "magical-equipment", "secondary-cast", "mana-underflow"},
+  success_wave = 25,
+  score_multiplier = 1.25,
+  stock_icon = 6,
+})
 local spawn_content = sd.rules.on("run.started", sd.rules.all({
   sd.effect.spawn({
     content = sd.ref("powerup", "survey_orb"),
@@ -105,7 +121,7 @@ local remember_purchase = sd.rules.on("action.shop.purchase", sd.effect.state({
 return sd.mod({
   api = "1.0.0",
   assets = {icon = icon},
-  content = {status, potion, powerup, ingredient, shop, spell, skill, enemy},
+  content = {status, potion, powerup, ingredient, shop, spell, skill, enemy, boast},
   rules = {spawn_content, probe, remember_purchase},
 })
 `
@@ -128,6 +144,23 @@ test('prepared shop purchases dispatch profile rules after the atomic grant', as
     wasmPath,
   })
   try {
+    const boast = host.content.boasts()[0]!
+    assert.deepEqual(host.extensions.resolveBoast?.(boast.selection), boast)
+    assert.deepEqual(host.project().boasts, [{
+      contentId: boast.contentId,
+      failureProducers: [
+        'potion-use', 'magical-equipment', 'secondary-cast', 'mana-underflow',
+      ],
+      icon: { kind: 'stock', record: 96, style: 6 },
+      instruction: 'Survive through Wave 25.',
+      modId: identity.id,
+      name: 'EMPTY HANDS, FULL GLORY!',
+      randomSkillChoices: false,
+      response: 'Provokatus nods at your reckless confidence.',
+      scoreMultiplier: 1.25,
+      statement: '"I need neither potion nor enchanted equipment!"',
+      successWave: 25,
+    }])
     const shop = host.content.all().find(entry => entry.contentKind === 'shop')!
     host.purchaseShop('player-1', shop.contentId, 0)
     assert.equal(getPlayerEconomy(state, 'player-1').backpack.some(item => (
@@ -197,12 +230,18 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
     assert.equal(result.accepted, true)
     assert.equal(getPlayerProgression(state, 'player-1').currentMana, 100)
     const spell = host.content.all().find(entry => entry.contentKind === 'spell')!
+    const boast = host.content.boasts()[0]!
+    state = applyGameSimulationHubAction(state, 'player-1', {
+      boastId: boast.selection,
+      type: 'select-boast',
+    }, host.extensions).state
     host.bindModQuickbar('player-1', 0, spell.contentId)
     assert.equal(host.cast({
       contentId: spell.contentId,
       playerId: 'player-1',
       requestId: 2,
     }).accepted, true)
+    assert.equal(getPlayerEconomy(state, 'player-1').npc.boast.failed, true)
     assert.equal(getPlayerProgression(state, 'player-1').currentMana, 100)
     assert.deepEqual(host.drainPresentation(), [])
     host.tick(1)
@@ -264,6 +303,29 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
       targetPlayerId: 'player-1',
       tick: 11,
     }), 0)
+    const economyAfterCast = getPlayerEconomy(state, 'player-1')
+    state = {
+      ...state,
+      playerEntities: replacePlayerEconomy(state.playerEntities, 'player-1', {
+        ...economyAfterCast,
+        npc: { ...economyAfterCast.npc, boast: createBoastState() },
+      }),
+      tick: 101,
+    }
+    state = applyGameSimulationHubAction(state, 'player-1', {
+      boastId: boast.selection,
+      type: 'select-boast',
+    }, host.extensions).state
+    state = {
+      ...state,
+      playerEntities: setPlayerEntityMana(state.playerEntities, 'player-1', 0),
+    }
+    assert.throws(() => host.cast({
+      contentId: spell.contentId,
+      playerId: 'player-1',
+      requestId: 3,
+    }), /mana/i)
+    assert.equal(getPlayerEconomy(state, 'player-1').npc.boast.failed, true)
     const modId = Object.keys(saveState)[0]!
     assert.throws(() => host.restoreSaveState({
       ...saveState,

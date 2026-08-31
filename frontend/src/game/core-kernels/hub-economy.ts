@@ -14,10 +14,17 @@ import {
   nativeTeacherSpellDefinition,
   readNativeLibrarianBook,
   resetNativeRunNpcState,
-  selectNativeBoast,
+  resolveNativeBoast,
   type NativeHubInteractionId,
   type NativeHubNpcState,
 } from './native-hub-npc.ts'
+import {
+  createBoastState,
+  isModBoastSelection,
+  selectBoast,
+  type BoastResolver,
+  type BoastSelection,
+} from './boast.ts'
 
 /** Retail missing-profile initializer 0x005A8390 writes profile +0x58 = 500. */
 export const NATIVE_FRESH_PROFILE_GOLD = 500
@@ -127,7 +134,7 @@ export type HubInventoryAction =
     }
   | { readonly type: 'read-librarian-book'; readonly bookId: number }
   | { readonly type: 'read-skill-book'; readonly itemId: number }
-  | { readonly type: 'select-boast'; readonly boastId: number }
+  | { readonly type: 'select-boast'; readonly boastId: BoastSelection }
   | {
       readonly type: 'transfer'
       readonly direction: 'to-backpack' | 'to-storage'
@@ -1037,9 +1044,17 @@ export function removeHagathaPerk(
   })
 }
 
-export function selectHubBoast(source: HubEconomyState, boastId: number): HubEconomyResult {
-  const npc = selectNativeBoast(source.npc, boastId)
-  return npc === null ? rejected(source, 'invalid-offer') : accepted({ ...source, npc })
+export function selectHubBoast(
+  source: HubEconomyState,
+  boastId: BoastSelection,
+  resolveMod?: BoastResolver,
+): HubEconomyResult {
+  const definition = resolveNativeBoast(boastId) ?? resolveMod?.(boastId) ?? null
+  if (definition === null) return rejected(source, 'invalid-offer')
+  return accepted({
+    ...source,
+    npc: Object.freeze({ ...source.npc, boast: selectBoast(source.npc.boast, definition) }),
+  })
 }
 
 export function readLibrarianBook(source: HubEconomyState, bookId: number): HubEconomyResult {
@@ -1204,6 +1219,12 @@ export function reconcileHubEconomyModPackages(
     robe: source.equipment.robe && reconcileItem(source.equipment.robe),
     weapon: source.equipment.weapon && reconcileItem(source.equipment.weapon),
   }
+  const boastRemoved = source.npc.boast.selected !== null
+    && isModBoastSelection(source.npc.boast.selected)
+    && !available.has(source.npc.boast.selected.modId.toLowerCase())
+  const npc = boastRemoved
+    ? Object.freeze({ ...source.npc, boast: createBoastState() })
+    : source.npc
   const unchanged = backpack.length === source.backpack.length
     && backpack.every((item, index) => item === source.backpack[index])
     && storage.length === source.storage.length
@@ -1215,7 +1236,8 @@ export function reconcileHubEconomyModPackages(
     && equipment.rings.every((item, index) => item === source.equipment.rings[index])
     && equipment.robe === source.equipment.robe
     && equipment.weapon === source.equipment.weapon
-  return unchanged ? source : { ...source, backpack, equipment, fomentiusStock, storage }
+    && npc === source.npc
+  return unchanged ? source : { ...source, backpack, equipment, fomentiusStock, npc, storage }
 }
 
 export function inventoryDyeableClothingItems(

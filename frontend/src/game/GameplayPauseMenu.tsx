@@ -4,31 +4,19 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type PointerEvent,
-  type RefObject,
 } from 'react'
 
-import { skillPicker } from '../lib/assets.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
-import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
+import { NATIVE_UI_SIMPLE_MENU } from './native-ui/core.ts'
+import { NativeUiSimpleMenu } from './native-ui/react.ts'
 import {
-  NATIVE_PAUSE_PRESSED_ROW_FRAME,
-  NATIVE_PAUSE_ROW_END_FRAME,
-  NATIVE_PAUSE_EDGE_UV_START,
-  NATIVE_PAUSE_TEXT_TINT,
   NATIVE_PAUSE_MENU_ROWS,
   gameplayPausePresentation,
-  nativePauseMenuRenderPlan,
   nativePauseMenuReveal,
-  type NativePauseMenuRowPlan,
   type NativeSimpleMenuAction,
   type NativeSimpleMenuRow,
 } from './pause-menu-contract.ts'
 import type { GameplayPauseState } from './protocol/game-protocol.ts'
-import {
-  createGameplayPauseRenderer,
-  type GameplayPauseRenderer,
-} from './renderer/gameplay-pause-renderer.ts'
 import './gameplay-pause-menu.css'
 
 interface GameplayPauseMenuProps {
@@ -65,50 +53,14 @@ export default function GameplayPauseMenu({
   style,
 }: GameplayPauseMenuProps) {
   const backOwner = backAction === undefined ? escapeAction : backAction
-  const firstRowRef = useRef<HTMLButtonElement>(null)
-  const rendererHostRef = useRef<HTMLDivElement>(null)
-  const rendererRef = useRef<GameplayPauseRenderer | null>(null)
   const openingStartedAtRef = useRef(performance.now())
   const closingStartedAtRef = useRef<number | null>(null)
   const completedCloseRef = useRef(false)
   const callbacksRef = useRef({ onSelect })
   const [closing, setClosing] = useState<NativeSimpleMenuAction | null>(null)
-  const [pressedAction, setPressedAction] = useState<NativeSimpleMenuAction | null>(null)
   const [reveal, setReveal] = useState(0)
-  const revealRef = useRef(reveal)
   const presentation = gameplayPausePresentation(pause, playerId)
   callbacksRef.current = { onSelect }
-  revealRef.current = reveal
-
-  useEffect(() => {
-    if (presentation.kind === 'owner' && !inputSuspended) firstRowRef.current?.focus()
-  }, [inputSuspended, presentation.kind])
-
-  useEffect(() => {
-    const host = rendererHostRef.current
-    if (!host || presentation.kind !== 'owner') return
-    let cancelled = false
-    void createGameplayPauseRenderer(rows).then((renderer) => {
-      if (cancelled) {
-        renderer.destroy()
-        return
-      }
-      rendererRef.current = renderer
-      host.append(renderer.canvas)
-      renderer.render(revealRef.current)
-    }, (error: unknown) => {
-      console.error('Gameplay pause renderer failed', error)
-    })
-    return () => {
-      cancelled = true
-      rendererRef.current?.destroy()
-      rendererRef.current = null
-    }
-  }, [presentation.kind, rows])
-
-  useEffect(() => {
-    rendererRef.current?.render(reveal)
-  }, [reveal])
 
   useEffect(() => {
     const phase = closing ? 'closing' : 'opening'
@@ -133,7 +85,6 @@ export default function GameplayPauseMenu({
   const beginClose = (action: NativeSimpleMenuAction) => {
     if (closing || presentation.kind !== 'owner') return
     audio.playSound('click')
-    setPressedAction(null)
     closingStartedAtRef.current = performance.now()
     setClosing(action)
   }
@@ -150,9 +101,6 @@ export default function GameplayPauseMenu({
     event.stopPropagation()
     if (escapeAction) beginClose(escapeAction)
   }
-  const renderPlan = nativePauseMenuRenderPlan(reveal, pressedAction, rows)
-  const pressedRow = renderPlan.rows.find((row) => row.bodyRecord === 102)
-
   return (
     <div
       className={`gameplay-pause-overlay gameplay-pause-stage${className ? ` ${className}` : ''}`}
@@ -160,7 +108,6 @@ export default function GameplayPauseMenu({
       data-gameplay-pause-owner-name={pause.ownerDisplayName}
       data-gameplay-pause-source={pause.source}
       data-input-suspended={inputSuspended}
-      data-gameplay-pause-pressed={pressedAction ?? 'none'}
       data-gameplay-pause-reveal={reveal}
       data-gameplay-pause-view={presentation.kind}
       inert={inputSuspended || undefined}
@@ -171,27 +118,24 @@ export default function GameplayPauseMenu({
       aria-label={presentation.label}
     >
       <div
-        className="gameplay-pause-dim"
-        style={{ backgroundColor: `rgb(0 0 0 / ${renderPlan.dimAlpha})` }}
         aria-hidden
+        className="gameplay-pause-dim"
+        style={{
+          backgroundColor: `rgb(0 0 0 / ${Math.fround(reveal * NATIVE_UI_SIMPLE_MENU.dimAlpha)})`,
+        }}
       />
       <div className="main-menu-native-stage gameplay-pause-native-stage" style={style}>
         {presentation.kind === 'owner' ? (
-          <>
-            <div ref={rendererHostRef} className="gameplay-pause-native-render" aria-hidden />
-            {pressedRow ? <NativePausePressedRow row={pressedRow} /> : null}
-            {renderPlan.rows.map((row, index) => (
-              <NativePauseButton
-                back={backOwner === row.action}
-                key={row.action}
-                buttonRef={index === 0 ? firstRowRef : undefined}
-                closing={closing}
-                onBeginClose={beginClose}
-                onPressedChange={setPressedAction}
-                row={row}
-              />
-            ))}
-          </>
+          <NativeUiSimpleMenu
+            ariaLabel={presentation.label}
+            autoFocus={!inputSuspended}
+            backId={backOwner}
+            dimAlpha={0}
+            disabled={closing !== null}
+            onAction={beginClose}
+            reveal={reveal}
+            rows={rows.map(({ action, label }) => ({ id: action, label }))}
+          />
         ) : (
           <div className="gameplay-pause-waiting" style={{ opacity: reveal }}>
             <p>{presentation.label}</p>
@@ -200,129 +144,5 @@ export default function GameplayPauseMenu({
         )}
       </div>
     </div>
-  )
-}
-
-interface NativePauseButtonProps {
-  back: boolean
-  buttonRef?: RefObject<HTMLButtonElement | null>
-  closing: NativeSimpleMenuAction | null
-  onBeginClose: (action: NativeSimpleMenuAction) => void
-  onPressedChange: (action: NativeSimpleMenuAction | null) => void
-  row: NativePauseMenuRowPlan
-}
-
-function NativePauseButton({
-  back,
-  buttonRef,
-  closing,
-  onBeginClose,
-  onPressedChange,
-  row: { action, bodyRecord, bounds, label },
-}: NativePauseButtonProps) {
-  const press = (event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button === 0 && !closing) onPressedChange(action)
-  }
-  const keyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if ((event.key === 'Enter' || event.key === ' ') && !closing) onPressedChange(action)
-  }
-  const release = () => onPressedChange(null)
-  // Focus leaving a row releases only that row's press. The first row is auto-focused, so a pointer landing on any
-  // other row blurs it inside the same gesture, and the native pressed body (UI.102) has to survive that hand-off.
-  const blur = () => {
-    if (bodyRecord === 102) release()
-  }
-
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      className="gameplay-pause-action"
-      style={bounds}
-      disabled={closing !== null}
-      data-pause-action={action}
-      data-game-back={back || undefined}
-      onBlur={blur}
-      onClick={() => onBeginClose(action)}
-      onKeyDown={keyDown}
-      onKeyUp={release}
-      onPointerCancel={release}
-      onPointerDown={press}
-      onPointerLeave={release}
-      onPointerUp={release}
-    >
-      {label}
-    </button>
-  )
-}
-
-function NativePausePressedRow({ row: { action, bounds, label } }: { row: NativePauseMenuRowPlan }) {
-  const [frameX, frameY] = NATIVE_PAUSE_PRESSED_ROW_FRAME
-  const [endX, endY, endWidth, endHeight] = NATIVE_PAUSE_ROW_END_FRAME
-  const edgeX = endX + endWidth * NATIVE_PAUSE_EDGE_UV_START
-  const edgeWidth = endWidth * (1 - NATIVE_PAUSE_EDGE_UV_START)
-  return (
-    <span
-      className="gameplay-pause-pressed-row"
-      style={{
-        height: endHeight,
-        left: bounds.left - 6,
-        top: bounds.top - 6,
-        width: bounds.width + 12,
-      }}
-      data-pause-pressed-action={action}
-      data-pause-pressed-record="102"
-      aria-hidden
-    >
-      <span
-        className="gameplay-pause-pressed-row-body"
-        style={{
-          backgroundImage: `url("${skillPicker.uiAtlas}")`,
-          backgroundPosition: `-${frameX}px -${frameY}px`,
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: '1024px 1024px',
-          height: bounds.height,
-          width: bounds.width,
-        }}
-      />
-      <span
-        className="gameplay-pause-pressed-row-end gameplay-pause-pressed-row-end-left"
-        style={{
-          backgroundImage: `url("${skillPicker.uiAtlas}")`,
-          backgroundPosition: `-${endX}px -${endY}px`,
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: '1024px 1024px',
-          height: endHeight,
-          width: endWidth,
-        }}
-      />
-      <svg
-        className="gameplay-pause-pressed-row-connector"
-        viewBox={`${edgeX} ${endY} ${edgeWidth} ${endHeight}`}
-        preserveAspectRatio="none"
-      >
-        <image href={skillPicker.uiAtlas} width="1024" height="1024" />
-      </svg>
-      <span
-        className="gameplay-pause-pressed-row-end gameplay-pause-pressed-row-end-right"
-        style={{
-          backgroundImage: `url("${skillPicker.uiAtlas}")`,
-          backgroundPosition: `-${endX}px -${endY}px`,
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: '1024px 1024px',
-          height: endHeight,
-          width: endWidth,
-        }}
-      />
-      <NativeBitmapText
-        align="center"
-        className="gameplay-pause-pressed-row-label"
-        font="menu"
-        style={{ left: 12, position: 'absolute', top: 43.5 }}
-        text={label}
-        tint={NATIVE_PAUSE_TEXT_TINT}
-        width={bounds.width}
-      />
-    </span>
   )
 }

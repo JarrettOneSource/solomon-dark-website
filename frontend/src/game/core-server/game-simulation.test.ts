@@ -11,6 +11,12 @@ import {
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import {
+  createModBoastSelection,
+  selectBoast,
+  type BoastDefinition,
+  type BoastResolver,
+} from '../core-kernels/boast.ts'
+import {
   NATIVE_SECONDARY_ABILITY_IDS,
   type NativeSecondaryAbilityId,
 } from '../core-kernels/native-secondary-ability-contract.ts'
@@ -94,6 +100,7 @@ import {
   getPlayerSkillBook,
   gameSimulationDurableProfileEconomy,
   grantGameSimulationPlayerExperience,
+  projectDetachedGameSimulationPlayer,
   removePlayerCharacter,
   rejoinGameSimulationPlayer,
   replaceGameSimulationPlayerSkillWithMod,
@@ -2462,6 +2469,81 @@ test('detached catch-up stacks live milestones without joining or pausing the ru
   live = rejoinGameSimulationPlayer(live, detached, 'second', null)
   assert.equal(live.levelUpBarrier, null)
   assert.equal(live.playerEntities.identities.some(({ playerId }) => playerId === 'second'), true)
+})
+
+test('detached catch-up resolves mod Boasts before assigning automatic skill choices', () => {
+  const selection = createModBoastSelection('5000000000000000016', 'example.boasts')
+  const definition: BoastDefinition = Object.freeze({
+    failureProducers: Object.freeze([]),
+    instruction: 'Accept the skill chosen for you.',
+    label: 'FATE CHOOSES!',
+    randomSkillChoices: true,
+    scoreMultiplier: 1.25,
+    selection,
+    statement: '"I accept whatever knowledge fate provides!"',
+    successWave: 25,
+  })
+  const resolve: BoastResolver = candidate => (
+    typeof candidate !== 'number'
+      && candidate.contentId === selection.contentId
+      && candidate.modId === selection.modId
+      ? definition
+      : null
+  )
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  let live = createGameSimulation({ first, second }, { gameRngSeed: 91 })
+  const secondEconomy = getPlayerEconomy(live, 'second')
+  live = {
+    ...live,
+    playerEntities: replacePlayerEconomy(live.playerEntities, 'second', {
+      ...secondEconomy,
+      npc: Object.freeze({
+        ...secondEconomy.npc,
+        boast: selectBoast(secondEconomy.npc.boast, definition),
+      }),
+    }),
+  }
+  live = enterBoneyardWorld(live, combatBoneyard('detached-mod-boast'))
+  let detached = detachGameSimulationPlayer(live, 'second')
+  live = removePlayerCharacter(live, 'second')
+
+  live = grantGameSimulationPlayerExperience(live, 'first', 300)
+  const milestone = live.levelUpBarrier
+  assert.ok(milestone)
+  while (getPlayerProgression(live, 'first').pendingOffer) {
+    const offer = getPlayerProgression(live, 'first').pendingOffer!
+    live = selectGameSimulationPlayerSkill(live, 'first', {
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    })!
+  }
+
+  const synchronized = synchronizeDetachedGameSimulationPlayer(live, detached, {
+    crossedLevels: [2, 3, 4],
+    experience: milestone.milestoneExperience,
+    level: milestone.milestoneLevel,
+  }, resolve)
+  live = synchronized.state
+  detached = synchronized.detached
+  const automaticChoice = detached.playerEntities.progressions[0]?.pendingOffer?.automaticChoiceIndex
+  assert.equal(Number.isSafeInteger(automaticChoice), true)
+  assert.equal(
+    getPlayerProgression(
+      projectDetachedGameSimulationPlayer(live, detached, resolve),
+      'second',
+    ).pendingOffer?.automaticChoiceIndex,
+    automaticChoice,
+  )
 })
 
 test('Sorceror actions are authoritative, consume the active offer, and preserve saved choices', () => {

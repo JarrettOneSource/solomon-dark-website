@@ -28,8 +28,8 @@ import {
   type NativeHudControlLayout,
   type NativeHudPoint,
 } from '../native-hud-layout.ts'
-import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
-import { destroyNativeUiPixiFor } from '../native-ui/native-ui-pixi.ts'
+import { nativeUiFont } from '../native-ui/core.ts'
+import { destroyNativeUiPixiFor } from '../native-ui/pixi.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,

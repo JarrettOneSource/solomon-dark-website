@@ -27,6 +27,7 @@ teardown guarantees described in [Web Lua framework 1.0](web-lua-framework-1.0.m
 | 9 | NPC shops | Stock hard-coded services | `sd.kit.shop` | NPC interaction, economy, native-style UI |
 | 10 | UI elements | No mod UI | `sd.kit.ui` | Trusted browser presentation runtime |
 | 11 | Rooms/scenes | Stock Hub regions and one Boneyard world | `sd.kit.scene` | Scene graph, transitions, renderer |
+| 12 | Boasts | Five fixed Provokatus rows | `sd.kit.boast` | Participant economy, fixed-tick simulation, Hall score, stock UI Kit |
 
 Art is not a side channel. Every definition references typed `sd.art` assets;
 package admission validates dimensions, frames, animation names, decoded bytes,
@@ -428,6 +429,46 @@ separate explicit `instance = "player"` policy.
 First vertical slice: an authored monument trigger enters one single-room
 Boneyard-backed dungeon and returns to a checkpointed parent run. This is the
 hardest requested seam and must not be represented as a raw region switch.
+
+## 12. Boasts
+
+A Boast is a participant-run challenge offered by Provokatus. Stock numeric
+IDs `0..4` remain reserved; every mod row uses its stable `sd.content.v1`
+identity and owning package ID.
+
+```lua
+sd.kit.boast({
+  key = "empty_hands",
+  name = "EMPTY HANDS, FULL GLORY!",
+  statement = "\"I need neither potion nor enchanted equipment!\"",
+  response = "Provokatus nods at your reckless confidence.",
+  instruction = "Survive through Wave 25 without breaking your boast.",
+  fail_on = { "potion-use", "magical-equipment" },
+  success_wave = 25,
+  score_multiplier = 1.25,
+  stock_icon = 6,
+})
+```
+
+Exactly one icon source is required: `stock_icon = 0..7`, or
+`art = { icon = sd.art.ref("...") }` for the first frame of one owned sprite;
+the logical frame is bounded to `128x128` pixels and no other Boast art slots
+are admitted.
+`fail_on` accepts only `potion-use`, `magical-equipment`, `secondary-cast`, and
+`mana-underflow`; duplicates fail admission. `random_skill_choices` defaults
+to false, `success_wave` to 30, and `score_multiplier` to the stock 1.1 bonus.
+
+Framework ownership:
+
+- host-only selection, failure, automatic choice, completed-wave success, and
+  Hall score mutation;
+- Website save persistence and package-removal reconciliation;
+- explicit clearing with a warning on retail export, because native saves
+  have only one byte for stock IDs `0..4`;
+- deterministic stock-first ordering and five-row pagination through the same
+  reusable BoastMenu plan;
+- stock UI records `90..97` or one validated owned sprite frame, mirrored at
+  both row ends.
 
 ## Cross-family invariants
 

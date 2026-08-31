@@ -623,3 +623,207 @@ No member is blocked by the browser platform.
   is local and uncommitted; it has not been pushed or deployed. The deployed
   `origin/main` tree therefore still carries the long-statement payload until
   a separately authorized publication and deployment.
+
+## 2026-08-31 — BoastBox visual-owner recovery and mod-extension reopening
+
+### Reported smell and parity question
+
+- The Website currently routes `Boast`, `BookReview`, and `SellSpell` through
+  one generic five-row Chat selector. That preserves the five Boast choices and
+  their downstream mutations, but it omits the stock Boast-specific button
+  chrome, paired silhouette art, two-font row treatment, hover/selection tint,
+  outer frame geometry, title placement, and selection fade.
+- The requested target is the complete stock `Boast` presentation plus a
+  Website-owned extension seam that lets admitted Web Lua mods add Boasts
+  without changing the retail numeric `0..4` ABI or pretending that arbitrary
+  mod content is portable to a retail save.
+- Falsifiers: a caller-independent generic selector renderer; a different UI
+  sprite bank; one icon instead of mirrored left/right copies; one text array
+  or font for both row lines; a row pitch other than 90; selection committing
+  immediately; or more than five stock rows in retail.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, image base `0x00400000` | Canonical executable for every address and constant below. | high |
+| Read-only analysis | Mod Loader `08bfba9ef367f7b863848030d0a289dc31e33192`; `scripts/Invoke-GhidraHeadless.ps1` SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`; replica 3; `decompile_targets.py`, `dump_function_instructions.py`, `dump_function_data_refs.py`, `dump_floats_at.py`, `trace_call_arguments.py` | Fresh constructor, vtable, callsite, instruction, scalar, and asset-consumer recovery without modifying the shared Ghidra project. | high |
+| Stock construction | `Boast::Boast 0x004F7D20`; `BoastBox::BoastBox 0x004F6C00`; row builder `0x004F99F0`; factory/callsite `0x004FB890` | The outer `Boast` owns an embedded `BoastBox` at `+0x140`, five Button children, three parallel authored String arrays, and fixed `700x560` outer geometry. | high |
+| Stock rendering | outer `0x004F7BA0/0x004F7DC0`; `BoastBox::Render 0x004FDEC0`; shared nine-slice `0x00417760`; UI assets at singleton fields `+0x08A4`, `+0x2680`, and array `+0x40BC` | Outer frame is UI 11, every row frame is UI 50, and row `i` draws UI `90+i` at both ends with the right copy mirrored. | high |
+| Asset construction/census | UI builder `0x004F3590`; Mod Loader `docs/reverse-engineering/native-atlas-consumers.json`; Website `native-ui-assets.json` | `+0x40BC` is an eight-entry authored bank, UI records 90..97. Retail currently constructs five rows and consumes records 90..94. | high |
+| Interaction/lifecycle | `BoastBox` vtable `0x00790794`; `Boast` vtable `0x00790A24`; box action `0x004F7FE0`; outer action `0x004FC340`; update `0x004FFD50` | Hover/selection is box-owned; selection copies the row index, dispatches the matching `ANNAL_*BOAST`, latches 100 ticks and a full-screen fade, then completes through the existing Chat/Notebox lifecycle. | high |
+| Existing supplied visual | `boast 2 - image.png`, 532x457, SHA-256 `7e97c6ff9a5d626667677c029650eb689fa796170b9cb053b74f52e08417c02b`, documented in the 2026-08-30 reopening above | Confirms the distinct uppercase title, quoted statement, framed rows, and per-row silhouette presentation recovered statically. | high |
+
+### Complete presentation membership
+
+Native owning system: `Boast` outer modal and embedded `BoastBox`, from
+Provokatus command replacement through row construction, pointer state,
+rendering, delayed acceptance, response Chat, instruction Notebox, Arena
+failure/success, score mutation, and teardown.
+
+| Member / branch | Native source | Required disposition |
+| --- | --- | --- |
+| Outer `700x560` frame | `0x004FB890`, `0x004F7BA0`, UI 11 | exact-ported through the shared native nine-slice primitive |
+| `Select a Boast` title | `0x004F7DC0`, menu font group 3 | exact-ported with authored case and gold tint |
+| `DONE` action | `0x004F7BA0`, menu font group 3 | exact-ported semantic action and teardown |
+| Five `490x85` row Buttons at pitch 90 | `0x004F99F0`, UI 50 | exact-ported for the stock page |
+| Five short uppercase titles | BoastBox `+0xDC`, special-uppercase font group 2 | exact-ported independently of statements |
+| Five quoted statements | BoastBox `+0xEC`, medium font group 1 | exact-ported independently of titles |
+| Paired row silhouettes | `0x004FDEC0`, UI 90..94 | exact-ported left copy plus horizontally mirrored right copy |
+| Dormant authored silhouettes | `0x004F3590`, UI 95..97 | supported stock-style choices for Website mod rows; no claim that retail constructs rows 5..7 |
+| Idle gold treatment | RGB `(0.85,0.73,0.44)`, alpha `1` | exact-ported |
+| Hover/current-row treatment | Button hover byte or selected index; green transform blended at `0.6` | exact-ported across background, art, and text |
+| Selection delay/fade | `+0x254=100`, `+0x25C=1`; decrement `0.100000001` per update; full-screen `-1000..3000` overlay | exact-ported |
+| Response/Notebox/audio | `0x004FC340` and the already recovered Chat/Notebox owners | retained; visual cutover must not fork lifecycle |
+| Mod-added rows beyond five | no retail producer | web-adapted pagination using the same five-row stock page rather than shrinking stock geometry |
+| Mod content identity/behavior | no retail Lua system | web-adapted through admitted `sd.content.v1` definitions and host authority |
+
+No presentation member is browser-blocked. Custom mod art is a Website
+extension and must stay visibly inside the stock row composition; it is not
+evidence about retail content.
+
+### Exact geometry, draw order, fonts, and assets
+
+- The factory writes outer size `(700,560)` and centers it relative to the
+  owning Chat surface as:
+  `left = parent.left + parent.width/2 - 350` and
+  `top = parent.top + parent.height/2 + 70 - 280`. On the stock `1600x900`
+  surface this is `(450,240)`.
+- Outer resize places the embedded `BoastBox` at outer `(90,80)` with width
+  `outer.width - 180 = 520` and initial height `outer.height - 160 = 400`.
+  The builder then gives row `i` local bounds
+  `(15, 25 + 90*i, box.width - 30, 85)` and sets box content height to the last
+  row bottom plus 25. These relative equations, rather than screenshot-fitted
+  offsets, are authoritative.
+- The title center is `(outer.width/2, 64)` relative to the outer frame. `DONE`
+  is centered at outer X and rendered 50 pixels above the outer bottom.
+- Each row draws UI 50 as the shared `0.95`-origin native nine-slice, then UI
+  `90+i` with its logical edge inset 15 pixels from the left and the same
+  record inset 15 pixels from the right with X mirrored. The short title is
+  centered 15 pixels above row center; the statement is centered 5 pixels
+  below row center.
+- UI records 90..97 are exact unrotated logical/frame rectangles:
+
+| Record | Frame `(x,y,w,h)` |
+| ---: | --- |
+| 90 | `(86,946,35,61)` |
+| 91 | `(198,719,41,66)` |
+| 92 | `(212,923,48,60)` |
+| 93 | `(984,62,39,55)` |
+| 94 | `(30,958,45,60)` |
+| 95 | `(212,328,34,62)` |
+| 96 | `(0,958,29,58)` |
+| 97 | `(122,946,30,57)` |
+
+### Web-owned mod-extension contract
+
+- Preserve native stock selections as numeric IDs `0..4`. A mod selection is
+  a discriminated value carrying its stable `contentId` and owning `modId`;
+  it never occupies or renumbers the retail byte.
+- Add one bounded Web Lua `boast` content family. Its admitted definition owns
+  name, quoted statement, response, instruction, failure-producer set,
+  random-skill-choice flag, success wave, score multiplier, and exactly one
+  icon source: authored stock style `0..7` or one owned sprite frame.
+- Mod Boasts reuse the existing authoritative failure producers
+  (`potion-use`, `magical-equipment`, `secondary-cast`, `mana-underflow`),
+  fixed-tick automatic-choice owner, completed-wave boundary, Hall score owner,
+  reset, replication, and failure Notebox. Definition data chooses behavior;
+  the browser never decides success, failure, or reward.
+- The host projects only validated Boast presentation/behavior fields needed by
+  clients. Arbitrary Lua tables and callbacks do not cross the wire.
+- Website saves may retain an admitted mod selection. Package reconciliation
+  clears it when the owning mod is removed. Retail export clears a mod
+  selection to native `null` and emits an explicit portability warning; it must
+  never hash, truncate, or alias the mod selection into native `0..4`.
+- More than five admitted rows paginate in deterministic stock-then-mod order.
+  Every page retains the exact five-row geometry; page navigation is a
+  documented Website adaptation and is absent when the stock five rows are the
+  complete membership.
+
+### Confidence and remaining proof
+
+- Confirmed statically: constructors, object membership, vtables, exact five
+  strings in all three arrays, outer/box/row geometry equations, title/Done
+  placement, UI 11/50/90..97, mirrored draw, font groups, idle and selected
+  tint setup, response dispatch, 100-tick latch, and fade decrement.
+- Confirmed visually by the retained supplied stock frame: framed two-line rows
+  with distinct silhouette art and title/statement separation.
+- Web adaptation requiring implementation proof: custom icon texture framing,
+  deterministic pagination, namespaced selection replication/save
+  reconciliation, and native-export clearing.
+- Material unknown: none for the five-row stock visual. Mod pagination and
+  custom art are explicit Website policy rather than inferred native behavior.
+
+### Implementation and validation contract
+
+- Build the Boast surface as a reusable native UI Kit plan consumed by Pixi and
+  DOM/workbench adapters. Do not add another Hub-only pile of raw sprite and
+  text calls or make HTML the visible renderer.
+- Keep BookReview and SellSpell on their separately recovered selector
+  presentation until their own native render owners are reopened; only Boast
+  leaves the generic selector in this change.
+- Unit tests must pin every geometry equation, UI record, frame, font, tint,
+  mirrored icon, row ordering, stock absence of pagination, all eight stock
+  icon styles, mod schema bounds, projection shape, custom sprite frame,
+  authoritative lifecycle branch, package removal, wire parsing, Website save,
+  and retail-portability warning.
+- Mac Chrome on the exact candidate must capture the complete stock page and a
+  mod-expanded second page, exercise hover/focus/selection, receive the correct
+  response and instruction Notebox, and report empty page-error, console-error,
+  and failed-response arrays. The stock frame must be visually inspected
+  against the supplied reference and exact static geometry.
+- The exact changed manifest must pass focused Hub/UI Kit/Web Lua/protocol/save
+  tests and the canonical Mac `./scripts/validate.sh`. Publication and
+  production deployment remain separate authorization steps.
+
+### BoastBox implementation validation receipt
+
+- The extracted stock catalog is schema v4 and now owns the complete Boast
+  presentation record: UI 11 outer frame, UI 50 rows, UI 90..97 icon bank,
+  three exact fonts, idle/selected tints, five-row geometry, title/Done
+  placement, and selection/fade timing. The shared UI Kit plan feeds both the
+  real Pixi Hub renderer and the semantic DOM workbench; BookReview and
+  SellSpell remain on their separate generic selector owner.
+- The five retail choices keep numeric IDs `0..4`. Admitted Web Lua Boasts use
+  namespaced `{ kind: "mod", modId, contentId }` identity and define one stock
+  icon style `0..7` or one owned sprite frame, exact failure producers,
+  random-choice policy, success wave, and score multiplier. Extra art slots,
+  duplicate/unknown producers, oversized frames, and ambiguous icon sources
+  fail admission.
+- The authoritative host resolves mod definitions for selection, potion and
+  magical-equipment use, secondary casts, mana underflow, completed-wave
+  success, automatic choices, Hall scoring, developer grants, and every
+  detached/rejoin transaction. Package removal clears an orphaned selection.
+  Protocol 114 projects only bounded presentation/behavior fields; Website
+  save schema 25 persists the namespaced selection while retaining schema 24
+  migration, and retail export clears it with an explicit warning.
+- The showcase package includes `EMPTY HANDS, FULL GLORY!` with an owned custom
+  sprite, Wave 25 success, 1.25 score multiplier, and potion/equipment failure.
+  Its canonical content graph is
+  `ff6ee22044ae76a52f7ae69c8f61b4fb4102b021368e577ec65d462fdc1a7528`.
+- Local focused closure passed Web Lua `63/63`, Hub UI `90/90`, UI Kit `67/67`,
+  protocol/save `89/89`, the new detached mod-Boast regression, 18 Lua/shared
+  world tests, two staged-rejoin host journeys, lint/generated checks, and the
+  production build/budget (`264,039` raw / `80,406` gzip bytes).
+- Mac Chrome 151 on Apple M2 Metal completed the exact final stock-courtyard
+  and full mod-showcase journeys with empty page, console, and failed-response
+  arrays. Stock page/hover captures hash to
+  `1bb314548ce43eaa2af0048df5cf9761ee0ada6fa821a2ea25a7f74ee4c3c911`
+  and `6d07db69fc79b783e21516ed93191e3c3ba6b608d3a7c9f9b9ec482992e9ca30`;
+  expanded stock/mod/instruction captures hash to
+  `cf1391f399cc428595a1ebe9729e1ae270069db2ff1ecac221db1289afbc99ac`,
+  `2ec8ddc69a1ec4f602a438d5665dd84e543ee60471d4f121d41088182017aa86`,
+  and `c2b1c15d1e628179a833f1918f1a5888da41a36c796f5b49c29720e5ee1d250c`.
+  The frames visibly confirm paired stock/custom art, green hover, text-only
+  pagination with no top `UI.8`, and the fully opaque Wave 25 Notebox.
+- The exact source/test manifest
+  `1354e942dbcc3e113faa3363423baf51a05313a455ba489ef4d7b1d5245289df`
+  passed the canonical Mac gate: .NET Release build, 28 backend/contracts,
+  zero lint errors, 340 prerequisite tests, 1,807 broad game tests, every
+  focused suite, desktop tests, production build, media policy, and budget.
+  One all-section NPC retry passed the Boast section and then hit the existing
+  Skorcha seed assertion; the final registered courtyard run and an immediately
+  preceding all-section run both completed successfully, with no Boast failure.
+- No material presentation or authority unknown remains. At receipt time the
+  work was local, uncommitted, unpushed, and undeployed. A later Git publication
+  does not imply production deployment.

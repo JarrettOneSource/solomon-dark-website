@@ -29,6 +29,7 @@ import {
   createNativeSecondaryPlayerState,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { nativeHagathaOutcomeStateIsValid } from '../core-kernels/hub-economy.ts'
+import { isModBoastSelection } from '../core-kernels/boast.ts'
 import {
   createGameSimulation,
   type GameSimulationState,
@@ -54,6 +55,7 @@ import {
   loadNativeHubTemplate,
   patchNativeDarkdata,
   patchNativeGamestate,
+  type NativeGameBoastState,
 } from './native-save-bridge.ts'
 import { createNativeSaveArchive } from './native-save-archive.ts'
 import { NativeSaveFormatError } from './native-save-codec.ts'
@@ -431,6 +433,15 @@ export async function createPortableGameProfileFromWebSave(
         : profile.economy.ownedPerkSelectors.includes(selector),
   )
   const beltSkills = nativeBeltSkillProjection(belt)
+  const selectedBoast = wizardEconomy.npc.boast.selected
+  const modBoastSelected = selectedBoast !== null && isModBoastSelection(selectedBoast)
+  const portableBoast: NativeGameBoastState = modBoastSelected
+    ? Object.freeze({ failed: false, selected: null, succeeded: false })
+    : Object.freeze({
+        failed: wizardEconomy.npc.boast.failed,
+        selected: typeof selectedBoast === 'number' ? selectedBoast : null,
+        succeeded: wizardEconomy.npc.boast.succeeded,
+      })
   const warnings = [
     ...base.warnings,
     ...(profile.economy.storage.length > 0
@@ -454,17 +465,16 @@ export async function createPortableGameProfileFromWebSave(
     ...(skillBook.primarySkillId === 52 || beltSkills.includes(52)
       ? ['Retail does not serialize the active synthetic Weld build ID; selected or belted Spell Welding resets to the creation-element primary on stock export.']
       : []),
+    ...(modBoastSelected
+      ? ['Retail cannot represent a mod Boast selection; stock export clears the active Boast.']
+      : []),
   ]
   const portableSeed: PortableGameProfile = Object.freeze({
     ...base,
     nativeSource: source,
     profile: Object.freeze({
       ...base.profile,
-      boast: Object.freeze({
-        failed: wizardEconomy.npc.boast.failed,
-        selected: wizardEconomy.npc.boast.selected,
-        succeeded: wizardEconomy.npc.boast.succeeded,
-      }),
+      boast: portableBoast,
       dowsingFee: profile.economy.dowsingFee,
       firstMixed: Object.freeze(firstMixed),
       gold: profile.economy.gold,

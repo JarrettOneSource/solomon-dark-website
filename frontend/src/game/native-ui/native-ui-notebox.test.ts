@@ -8,28 +8,30 @@ import {
   nativeNoteboxDurationMs,
   nativeNoteboxLayout,
   nativeNoteboxOpacity,
-} from './native-notebox.ts'
+} from './native-ui-notebox.ts'
 
-const gameRoot = new URL('./', import.meta.url)
+const gameRoot = new URL('../', import.meta.url)
 
 function source(relativePath: string): string {
   return readFileSync(new URL(relativePath, gameRoot), 'utf8')
 }
 
 test('Boast uses the transient native Notebox instead of a blocking acknowledgement', () => {
-  assert.equal(existsSync(new URL('NativeNotebox.tsx', gameRoot)), true)
-  assert.equal(existsSync(new URL('native-notebox.ts', gameRoot)), true)
+  assert.equal(existsSync(new URL('native-ui/NativeUiNotebox.tsx', gameRoot)), true)
+  assert.equal(existsSync(new URL('native-ui/native-ui-notebox.ts', gameRoot)), true)
 
   const inventoryUi = source('HubInventoryUi.tsx')
   const hub = source('HubScene.tsx')
   const boneyard = source('BoneyardScene.tsx')
-  const css = source('hub-inventory.css')
+  const css = source('native-ui/native-ui-notebox.css')
+  const hubCss = source('hub-inventory.css')
 
-  assert.match(inventoryUi, /<NativeNotebox/)
+  assert.match(inventoryUi, /<NativeUiNotebox/)
   assert.doesNotMatch(inventoryUi, /alertdialog|>OKAY<|NativeNpcNotebox|onBlockingOverlayChange/)
   assert.doesNotMatch(hub, /npcNoteboxOpen/)
   assert.doesNotMatch(boneyard, /npcNoteboxOpen/)
-  assert.doesNotMatch(css, /hub-native-notebox-overlay|hub-native-notebox button/)
+  assert.match(css, /\.native-notebox-overlay/)
+  assert.doesNotMatch(hubCss, /native-notebox-overlay|hub-native-notebox/)
 })
 
 test('native Notebox keeps the exact geometry and fixed-tick envelope', () => {
@@ -62,7 +64,7 @@ test('Boast failure owns the exact native buzzer stream', () => {
   const assets = source('game-audio-assets.ts')
   const contract = source('game-audio-native.ts')
   const extractor = readFileSync(
-    new URL('../../../tools/extract-game-audio.sh', import.meta.url),
+    new URL('../../../tools/extract-game-audio.sh', gameRoot),
     'utf8',
   )
 
@@ -72,7 +74,7 @@ test('Boast failure owns the exact native buzzer stream', () => {
   assert.match(contract, /sounds\\\\buzzer__stream/)
   assert.match(contract, /19c010bb56690b3f7808a0f71ae639ab8d033e0ea1e31637ac688da957f3e844/)
   assert.match(extractor, /buzzer__stream\.wav buzzer\.wav 19c010bb56690b3f7808a0f71ae639ab8d033e0ea1e31637ac688da957f3e844/)
-  const buzzer = readFileSync(new URL('../assets/game/audio/sfx/buzzer.wav', import.meta.url))
+  const buzzer = readFileSync(new URL('../assets/game/audio/sfx/buzzer.wav', gameRoot))
   assert.equal(
     createHash('sha256').update(buzzer).digest('hex'),
     '19c010bb56690b3f7808a0f71ae639ab8d033e0ea1e31637ac688da957f3e844',

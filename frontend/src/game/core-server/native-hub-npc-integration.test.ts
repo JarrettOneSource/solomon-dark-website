@@ -8,6 +8,11 @@ import {
   createEquipmentInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
+import {
+  createModBoastSelection,
+  type BoastDefinition,
+  type BoastSelection,
+} from '../core-kernels/boast.ts'
 import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import {
   applyGameSimulationHubAction,
@@ -20,6 +25,7 @@ import {
   grantGameSimulationPlayerExperience,
   stepGameSimulationTick,
   type GameSimulationState,
+  type GameSimulationExtensions,
 } from './game-simulation.ts'
 import {
   replacePlayerEconomy,
@@ -92,13 +98,43 @@ function idle(primary = false, quickbar: number | null = null) {
   }
 }
 
-function selectBoast(state: GameSimulationState, boastId: number): GameSimulationState {
+function selectBoast(
+  state: GameSimulationState,
+  boastId: BoastSelection,
+  extensions?: GameSimulationExtensions,
+): GameSimulationState {
   const result = applyGameSimulationHubAction(state, PLAYER_ID, {
     boastId,
     type: 'select-boast',
-  })
+  }, extensions)
   assert.equal(result.accepted, true)
   return result.state
+}
+
+const MOD_BOAST_SELECTION = createModBoastSelection(
+  '5000000000000000016',
+  'example.boasts',
+)
+const MOD_BOAST: BoastDefinition = Object.freeze({
+  failureProducers: Object.freeze(['potion-use']),
+  instruction: 'Survive through Wave 25.',
+  label: 'EMPTY HANDS, FULL GLORY!',
+  randomSkillChoices: true,
+  scoreMultiplier: 1.25,
+  selection: MOD_BOAST_SELECTION,
+  statement: '"I need neither potion nor enchanted equipment!"',
+  successWave: 25,
+})
+const MOD_EXTENSIONS: GameSimulationExtensions = {
+  createLootItems: () => [],
+  filterDamage: ({ amount }) => amount,
+  filterMana: ({ delta }) => delta,
+  hasConsumable: () => false,
+  resolveBoast: selection => typeof selection !== 'number'
+    && selection.contentId === MOD_BOAST_SELECTION.contentId
+    && selection.modId === MOD_BOAST_SELECTION.modId
+    ? MOD_BOAST
+    : null,
 }
 
 test('Teacher purchases debit exact gold, unlock only the advanced flag, and reject repeats', () => {
@@ -281,4 +317,78 @@ test('surviving into Wave 30 succeeds the Boast and the terminal archive applies
   state = stepGameSimulationTick(state, idle())
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(state.world.hallOfFameRuns[PLAYER_ID]?.awesomeness, 111)
+})
+
+test('admitted mod Boasts select, fail, choose, succeed, and score through the same host owners', () => {
+  let failed = enterBoneyardWorld(selectBoast(
+    createGameSimulation({ [PLAYER_ID]: CHARACTER }),
+    MOD_BOAST_SELECTION,
+    MOD_EXTENSIONS,
+  ), boneyard())
+  const potionId = getPlayerEconomy(failed, PLAYER_ID).backpack.find(
+    ({ nativeTypeId }) => nativeTypeId === 7001,
+  )!.id
+  failed = applyGameSimulationHubAction(failed, PLAYER_ID, {
+    itemId: potionId,
+    type: 'consume',
+  }, MOD_EXTENSIONS).state
+  assert.equal(getPlayerEconomy(failed, PLAYER_ID).npc.boast.failed, true)
+
+  let automatic = selectBoast(
+    createGameSimulation({ [PLAYER_ID]: CHARACTER }, { gameRngSeed: 91 }),
+    MOD_BOAST_SELECTION,
+    MOD_EXTENSIONS,
+  )
+  automatic = grantGameSimulationPlayerExperience(
+    automatic,
+    PLAYER_ID,
+    91,
+    MOD_EXTENSIONS.resolveBoast,
+  )
+  assert.ok(getPlayerProgression(automatic, PLAYER_ID).pendingOffer?.automaticChoiceIndex !== undefined)
+
+  let success = enterBoneyardWorld(selectBoast(
+    createGameSimulation({ [PLAYER_ID]: CHARACTER }),
+    MOD_BOAST_SELECTION,
+    MOD_EXTENSIONS,
+  ), waveBoneyard())
+  if (success.world.kind !== 'boneyard' || success.world.encounter === null) {
+    throw new Error('expected Boneyard encounter')
+  }
+  success = {
+    ...success,
+    world: {
+      ...success.world,
+      encounter: { ...success.world.encounter, phase: 'gone', runEventId: 1 },
+      waves: {
+        ...createBoneyardWaveDirector('mod-boast-wave-25'),
+        phase: 'wave-threshold',
+        populationThreshold: 1,
+        waveOrdinal: 25,
+      },
+    },
+  }
+  success = stepGameSimulationTick(success, idle(), { extensions: MOD_EXTENSIONS })
+  assert.equal(getPlayerEconomy(success, PLAYER_ID).npc.boast.succeeded, true)
+  if (success.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const run = success.world.hallOfFameRuns[PLAYER_ID]!
+  success = {
+    ...success,
+    run: {
+      ...success.run,
+      gameOverEventId: 1,
+      gameOverTicks: NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick - 1,
+      phase: 'game-over',
+    },
+    world: {
+      ...success.world,
+      hallOfFameRuns: {
+        ...success.world.hallOfFameRuns,
+        [PLAYER_ID]: { ...run, awesomeness: 101 },
+      },
+    },
+  }
+  success = stepGameSimulationTick(success, idle(), { extensions: MOD_EXTENSIONS })
+  if (success.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(success.world.hallOfFameRuns[PLAYER_ID]?.awesomeness, 126)
 })

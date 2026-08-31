@@ -5,7 +5,7 @@ import type { HubInventoryItem } from './core-kernels/hub-economy.ts'
 import { nativeTutorialAmuletItem } from './core-kernels/native-tutorial.ts'
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
-import { measureNativeUiText } from './native-ui/native-ui-text.ts'
+import { measureNativeUiText } from './native-ui/core.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   hubInventoryEquipmentSlotRects,

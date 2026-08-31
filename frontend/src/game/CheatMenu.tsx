@@ -32,7 +32,7 @@ import {
 } from './cheat-menu-contract.ts'
 import type { GameSnapshot } from './protocol/game-state.ts'
 import { MAX_LUA_CONSOLE_CODE_LENGTH } from './protocol/game-protocol.ts'
-import NativePanelArt from './native-ui/NativePanelArt.tsx'
+import { NativePanelArt } from './native-ui/react-raw.ts'
 import './cheat-menu.css'
 
 interface CheatMenuProps {

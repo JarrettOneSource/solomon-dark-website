@@ -161,9 +161,19 @@ test('content catalog projects every family and builds deterministic consumables
       features: [area],
       scene: 'stock.boneyard',
     }),
+    content('boast', 'empty_hands', '5000000000000000016', {
+      fail_on: ['potion-use', 'magical-equipment'],
+      instruction: 'Survive through Wave 25 without breaking your boast.',
+      name: 'EMPTY HANDS, FULL GLORY!',
+      response: 'Provokatus nods at your reckless confidence.',
+      score_multiplier: 1.25,
+      statement: '"I need neither potion nor enchanted equipment!"',
+      stock_icon: 6,
+      success_wave: 25,
+    }),
   ])], assets())
 
-  assert.equal(catalog.all().length, 15)
+  assert.equal(catalog.all().length, 16)
   assert.equal(catalog.consumables().length, 1)
   assert.equal(catalog.consumables()[0]?.nativeSubtype, 6)
   assert.equal(catalog.consumables()[0]?.content.icon.imagePath, 'art/icon.png')
@@ -180,7 +190,92 @@ test('content catalog projects every family and builds deterministic consumables
   assert.equal(catalog.shop('5000000000000000011')?.services[0]?.price, 50)
   assert.equal(catalog.ui('5000000000000000012')?.mount, 'hud.top_right')
   assert.equal(catalog.scene('5000000000000000014')?.rooms[0]?.contentId, '5000000000000000013')
+  assert.deepEqual(catalog.boast('5000000000000000016'), {
+    art: {},
+    contentId: '5000000000000000016',
+    contentKind: 'boast',
+    description: '',
+    failureProducers: ['potion-use', 'magical-equipment'],
+    fields: {
+      fail_on: ['potion-use', 'magical-equipment'],
+      instruction: 'Survive through Wave 25 without breaking your boast.',
+      name: 'EMPTY HANDS, FULL GLORY!',
+      response: 'Provokatus nods at your reckless confidence.',
+      score_multiplier: 1.25,
+      statement: '"I need neither potion nor enchanted equipment!"',
+      stock_icon: 6,
+      success_wave: 25,
+    },
+    icon: { kind: 'stock', record: 96, style: 6 },
+    instruction: 'Survive through Wave 25 without breaking your boast.',
+    key: 'empty_hands',
+    label: 'EMPTY HANDS, FULL GLORY!',
+    modId: identity.id,
+    name: 'EMPTY HANDS, FULL GLORY!',
+    randomSkillChoices: false,
+    response: 'Provokatus nods at your reckless confidence.',
+    scoreMultiplier: 1.25,
+    selection: {
+      contentId: '5000000000000000016',
+      kind: 'mod',
+      modId: identity.id,
+    },
+    statement: '"I need neither potion nor enchanted equipment!"',
+    successWave: 25,
+  })
   assert.equal(catalog.createLootItems(7, false)[0]?.modContent?.contentId, potionId)
+})
+
+test('mod Boasts admit one owned custom icon frame and reject ambiguous icon ownership', () => {
+  const fields = {
+    instruction: 'Survive through Wave 30.',
+    name: 'CUSTOM SILHOUETTE!',
+    response: 'A custom response.',
+    statement: '"A custom statement."',
+  }
+  const custom = compileModContentCatalog([compiled([
+    content('boast', 'custom_silhouette', '5000000000000000099', {
+      ...fields,
+      art: { icon: { key: 'icon', kind: 'asset-reference' } },
+    }),
+  ])], assets()).boast('5000000000000000099')!
+  assert.deepEqual(custom.icon, {
+    frame: assets().image(identity.id, 'icon').frames[0],
+    imageHeight: 50,
+    imagePath: 'art/icon.png',
+    imageWidth: 53,
+    kind: 'mod',
+  })
+  assert.throws(() => compileModContentCatalog([compiled([
+    content('boast', 'ambiguous', '5000000000000000098', {
+      ...fields,
+      art: { icon: { key: 'icon', kind: 'asset-reference' } },
+      stock_icon: 0,
+    }),
+  ])], assets()), /exactly one icon source/)
+  assert.throws(() => compileModContentCatalog([compiled([
+    content('boast', 'missing', '5000000000000000097', fields),
+  ])], assets()), /exactly one icon source/)
+  assert.throws(() => compileModContentCatalog([compiled([
+    content('boast', 'extra_art', '5000000000000000095', {
+      ...fields,
+      art: {
+        icon: { key: 'icon', kind: 'asset-reference' },
+        portrait: { key: 'icon', kind: 'asset-reference' },
+      },
+    }),
+  ])], assets()), /unknown fields: portrait/)
+  const icon = assets().image(identity.id, 'icon')
+  const oversized = new PreparedModAssetCatalog([{
+    ...icon,
+    frames: [{ ...icon.frames[0]!, logicalWidth: 129 }],
+  }])
+  assert.throws(() => compileModContentCatalog([compiled([
+    content('boast', 'oversized', '5000000000000000096', {
+      ...fields,
+      art: { icon: { key: 'icon', kind: 'asset-reference' } },
+    }),
+  ])], oversized), /exceeds 128 logical pixels/)
 })
 
 test('item equipment compiles modder-friendly robe sheets into one existing-slot wearable item', () => {

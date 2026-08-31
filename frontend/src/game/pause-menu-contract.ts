@@ -1,3 +1,7 @@
+import {
+  NATIVE_UI_SIMPLE_MENU,
+  planNativeUiSimpleMenu,
+} from './native-ui/core.ts'
 import type { GameplayPauseState } from './protocol/game-protocol.ts'
 import type { FixedGameViewportLayout } from './renderer/game-viewport.ts'
 
@@ -23,15 +27,6 @@ export interface NativePauseBounds {
   readonly width: number
 }
 
-export interface NativePauseMenuRowPlan {
-  readonly action: NativeSimpleMenuAction
-  readonly bodyRecord: 101 | 102
-  readonly bounds: NativePauseBounds
-  readonly label: string
-  readonly labelX: number
-  readonly labelY: number
-}
-
 export interface NativePauseMenuStagePlacement {
   /** `native-stage` reuses the gameplay stage verbatim; `touch-fit` re-scales it for a phone host. */
   readonly mode: 'native-stage' | 'touch-fit'
@@ -40,22 +35,8 @@ export interface NativePauseMenuStagePlacement {
   readonly y: number
 }
 
-export interface NativePauseMenuRenderPlan {
-  readonly alpha: number
-  readonly arrows: readonly Readonly<{ scale: number; x: number; y: number }>[]
-  readonly chrome: Readonly<NativePauseBounds & { bottom: number; right: number }>
-  readonly dimAlpha: number
-  readonly header: Readonly<{ rotation: number; x: number; y: number }>
-  readonly rows: readonly NativePauseMenuRowPlan[]
-}
-
 export const NATIVE_PAUSE_REVEAL_MS = 29 * 10
 export const NATIVE_PAUSE_CLOSE_MS = 20 * 10
-export const NATIVE_PAUSE_DIM_ALPHA = 0.85
-export const NATIVE_PAUSE_EDGE_UV_START = 0.95
-export const NATIVE_PAUSE_TEXT_TINT = 0xd9ba70
-export const NATIVE_PAUSE_PRESSED_ROW_FRAME = Object.freeze([620, 482, 353, 69] as const)
-export const NATIVE_PAUSE_ROW_END_FRAME = Object.freeze([679, 394, 70, 85] as const)
 /**
  * Logical atlas sizes of the chrome art that reaches past the frame box: the
  * header (record 18, drawn rotated π/2 so it lies 262 wide × 86 tall on screen)
@@ -73,43 +54,6 @@ export const NATIVE_PAUSE_TOUCH_MARGIN_PX = 12
 const NATIVE_PAUSE_REVEAL_STEP = 0.03500000014901161
 const NATIVE_PAUSE_CLOSE_STEP = 0.05000000074505806
 const NATIVE_PAUSE_TICK_MS = 10
-const NATIVE_PAUSE_CHROME_PADDING = 40
-const NATIVE_PAUSE_CHROME_MOTION = 25
-const NATIVE_PAUSE_LABEL_Y_OFFSET = 9
-const NATIVE_PAUSE_PRESSED_OFFSET = 6
-
-export const NATIVE_PAUSE_ART_RECORDS = Object.freeze({
-  arrow: 8,
-  frame: 17,
-  header: 18,
-  idleRow: 101,
-  pressedRow: 102,
-  rowEnd: 54,
-} as const)
-
-export const NATIVE_PAUSE_ART_COUNTS = Object.freeze({
-  8: 3,
-  17: 4,
-  18: 1,
-  54: 6,
-  101: 3,
-} as const)
-
-export const NATIVE_PAUSE_FONT = Object.freeze({
-  firstRecord: 216,
-  glyphCount: 92,
-  group: 'menu',
-  kerningCount: 210,
-  lastRecord: 307,
-  metrics: Object.freeze([24, 6, 28] as const),
-  spaceAdvance: 6,
-})
-
-export const PAUSE_MENU_ACTION_BOUNDS = Object.freeze({
-  resume: Object.freeze({ height: 69, left: 623.5, top: 339.5, width: 353 }),
-  settings: Object.freeze({ height: 69, left: 623.5, top: 415.5, width: 353 }),
-  leave: Object.freeze({ height: 69, left: 623.5, top: 491.5, width: 353 }),
-})
 
 /** Gameplay's pause rows, exactly as `0x0058EA50` authors them. */
 export const NATIVE_PAUSE_MENU_ROWS: readonly NativeSimpleMenuRow[] = Object.freeze([
@@ -147,41 +91,34 @@ export const NATIVE_DARK_CLOUD_GUEST_MENU_ROWS: readonly NativeSimpleMenuRow[] =
 )
 
 /** One SimpleMenu row body (`UI.101` / `UI.102`) and the pitch between stacked rows. */
-export const NATIVE_SIMPLE_MENU_ROW_SIZE = Object.freeze({ height: 69, width: 353 })
-const NATIVE_SIMPLE_MENU_ROW_PITCH = 76
+export const NATIVE_SIMPLE_MENU_ROW_SIZE = Object.freeze({
+  height: NATIVE_UI_SIMPLE_MENU.rowHeight,
+  width: NATIVE_UI_SIMPLE_MENU.rowWidth,
+})
 
 const NATIVE_PAUSE_STAGE = Object.freeze({ height: 900, width: 1600 })
 
-/**
- * The row stack's union for an N-row SimpleMenu: 353×69 rows on a 76 px pitch,
- * centred on the stage, so the frame, header, and daggers follow the row count.
- */
-function nativeSimpleMenuControlUnion(rowCount: number): NativePauseBounds {
+export function nativeSimpleMenuRowBounds(rowCount: number): readonly NativePauseBounds[] {
   if (!Number.isInteger(rowCount) || rowCount < 1) {
     throw new RangeError(`A SimpleMenu needs at least one row; got ${rowCount}.`)
   }
-  const height = NATIVE_SIMPLE_MENU_ROW_SIZE.height + NATIVE_SIMPLE_MENU_ROW_PITCH * (rowCount - 1)
-  return {
-    height,
-    left: NATIVE_PAUSE_STAGE.width / 2 - NATIVE_SIMPLE_MENU_ROW_SIZE.width / 2,
-    top: NATIVE_PAUSE_STAGE.height / 2 - height / 2,
-    width: NATIVE_SIMPLE_MENU_ROW_SIZE.width,
-  }
+  return planNativeUiSimpleMenu({
+    height: NATIVE_PAUSE_STAGE.height,
+    rows: Array.from({ length: rowCount }, (_, index) => ({
+      id: `${index}`,
+      label: '',
+    })),
+    width: NATIVE_PAUSE_STAGE.width,
+  }).actions.map(({ bounds }) => bounds)
 }
 
-function nativeSimpleMenuRowAt(union: NativePauseBounds, index: number): NativePauseBounds {
-  return {
-    height: NATIVE_SIMPLE_MENU_ROW_SIZE.height,
-    left: union.left,
-    top: union.top + index * NATIVE_SIMPLE_MENU_ROW_PITCH,
-    width: NATIVE_SIMPLE_MENU_ROW_SIZE.width,
-  }
-}
+const [pauseResumeBounds, pauseSettingsBounds, pauseLeaveBounds] = nativeSimpleMenuRowBounds(3)
 
-export function nativeSimpleMenuRowBounds(rowCount: number): readonly NativePauseBounds[] {
-  const union = nativeSimpleMenuControlUnion(rowCount)
-  return Array.from({ length: rowCount }, (_, index) => nativeSimpleMenuRowAt(union, index))
-}
+export const PAUSE_MENU_ACTION_BOUNDS = Object.freeze({
+  resume: Object.freeze(pauseResumeBounds!),
+  settings: Object.freeze(pauseSettingsBounds!),
+  leave: Object.freeze(pauseLeaveBounds!),
+})
 
 export function nativePauseMenuReveal(phase: NativePausePhase, elapsedMs: number): number {
   const ticks = Math.max(0, Math.floor(elapsedMs / NATIVE_PAUSE_TICK_MS))
@@ -200,48 +137,6 @@ export function nativePauseMenuReveal(phase: NativePausePhase, elapsedMs: number
     if (reveal < 0) return 0
   }
   return reveal
-}
-
-export function nativePauseMenuRenderPlan(
-  reveal: number,
-  pressedAction: NativeSimpleMenuAction | null,
-  rows: readonly NativeSimpleMenuRow[] = NATIVE_PAUSE_MENU_ROWS,
-): NativePauseMenuRenderPlan {
-  const alpha = Math.min(1, Math.max(0, reveal))
-  const union = nativeSimpleMenuControlUnion(rows.length)
-  const spread = Math.fround(
-    (1 - alpha) * NATIVE_PAUSE_CHROME_MOTION + NATIVE_PAUSE_CHROME_PADDING,
-  )
-  const left = union.left - spread
-  const top = union.top - spread
-  const width = union.width + spread * 2
-  const height = union.height + spread * 2
-  const right = left + width
-  const bottom = top + height
-
-  return {
-    alpha,
-    arrows: [
-      { scale: 1, x: 800, y: bottom + 55 },
-      { scale: 0.75, x: 725, y: bottom + 42 },
-      { scale: 0.75, x: 875, y: bottom + 42 },
-    ],
-    chrome: { bottom, height, left, right, top, width },
-    dimAlpha: Math.fround(alpha * NATIVE_PAUSE_DIM_ALPHA),
-    header: { rotation: Math.PI / 2, x: 800, y: top - 42 },
-    rows: rows.map(({ action, label }, index) => {
-      const bounds = nativeSimpleMenuRowAt(union, index)
-      const pressedOffset = action === pressedAction ? NATIVE_PAUSE_PRESSED_OFFSET : 0
-      return {
-        action,
-        bodyRecord: action === pressedAction ? 102 : 101,
-        bounds,
-        label,
-        labelX: bounds.left + bounds.width / 2 + pressedOffset,
-        labelY: bounds.top + bounds.height / 2 + NATIVE_PAUSE_LABEL_Y_OFFSET + pressedOffset,
-      }
-    }),
-  }
 }
 
 export type GameplayPausePresentation =
@@ -278,19 +173,23 @@ export function gameplayPausePresentation(
 export function nativePauseMenuExtent(
   rows: readonly NativeSimpleMenuRow[] = NATIVE_PAUSE_MENU_ROWS,
 ): NativePauseBounds {
-  const plan = nativePauseMenuRenderPlan(1, null, rows)
+  const rowBounds = nativeSimpleMenuRowBounds(rows.length)
+  const first = rowBounds[0]!
+  const last = rowBounds.at(-1)!
+  const frameLeft = first.left - NATIVE_UI_SIMPLE_MENU.chromePadding
+  const frameTop = first.top - NATIVE_UI_SIMPLE_MENU.chromePadding
+  const frameRight = first.left + first.width + NATIVE_UI_SIMPLE_MENU.chromePadding
+  const frameBottom = last.top + last.height + NATIVE_UI_SIMPLE_MENU.chromePadding
   const { arrow, header } = NATIVE_PAUSE_CHROME_ART_SIZES
   // The header sprite is centre-anchored and rotated π/2, so its atlas height lies along x.
-  const headerLeft = plan.header.x - header.height / 2
-  const headerRight = plan.header.x + header.height / 2
-  const headerTop = plan.header.y - header.width / 2
-  const arrowBottom = Math.max(
-    ...plan.arrows.map((sprite) => sprite.y + (arrow.height * sprite.scale) / 2),
-  )
-  const left = Math.min(plan.chrome.left, headerLeft)
-  const right = Math.max(plan.chrome.right, headerRight)
-  const top = Math.min(plan.chrome.top, headerTop)
-  const bottom = Math.max(plan.chrome.bottom, arrowBottom)
+  const headerLeft = NATIVE_PAUSE_STAGE.width / 2 - header.height / 2
+  const headerRight = NATIVE_PAUSE_STAGE.width / 2 + header.height / 2
+  const headerTop = frameTop - NATIVE_UI_SIMPLE_MENU.headerOffset - header.width / 2
+  const arrowBottom = frameBottom + NATIVE_UI_SIMPLE_MENU.largeArrowOffset + arrow.height / 2
+  const left = Math.min(frameLeft, headerLeft)
+  const right = Math.max(frameRight, headerRight)
+  const top = Math.min(frameTop, headerTop)
+  const bottom = Math.max(frameBottom, arrowBottom)
   return { height: bottom - top, left, top, width: right - left }
 }
 

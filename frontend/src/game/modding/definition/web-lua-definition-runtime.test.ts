@@ -77,6 +77,14 @@ test('definition VM builds and compiles the complete family census without runti
             name = "Enemy",
           }),
           sd.kit.boneyard({key = "boneyard", name = "Boneyard", source = "levels/test.boneyard"}),
+          sd.kit.boast({
+            key = "boast",
+            name = "BOAST",
+            statement = "Statement.",
+            response = "Response.",
+            instruction = "Instruction.",
+            stock_icon = 0,
+          }),
           sd.kit.shop({key = "shop", name = "Shop", stock = {}}),
           sd.kit.ui({
             key = "ui",

@@ -54,7 +54,7 @@ import {
   CREATE_STOCK_ASSET_SOURCES,
   CREATE_STOCK_POINT_ASSET_SOURCES,
 } from '../game-assets.ts'
-import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
+import { createNativeUiPixiAdapter } from '../native-ui/pixi.ts'
 import {
   fixedGamePresentationResolution,
   fixedGameStageBounds,

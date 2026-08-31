@@ -201,6 +201,7 @@ export function rejoinSharedPartyRunPlayer(
   partyIdentity: PartyIdentity,
   maximumMembers: number,
   milestone: SharedPlayerLevelMilestone | null,
+  resolveModBoast?: GameSimulationExtensions['resolveBoast'],
 ): SharedWorldActionResult {
   const existingParty = partyForPlayer(state.parties, playerId)
   if (
@@ -230,6 +231,7 @@ export function rejoinSharedPartyRunPlayer(
       detachedState,
       playerId,
       milestone,
+      resolveModBoast,
     )
   } catch {
     return rejected(state, 'run-unavailable')

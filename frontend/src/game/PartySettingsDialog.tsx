@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { art } from '../lib/assets.ts'
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
+import { NativeUiSprite } from './native-ui/react-raw.ts'
 import type { GameSessionKind } from './protocol/game-protocol.ts'
 import { PARTY_VISIBILITIES, type LocalPartyState, type PartyVisibility } from './protocol/party-state.ts'
 import './party-settings.css'

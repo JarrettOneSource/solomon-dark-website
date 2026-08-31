@@ -128,6 +128,76 @@ try {
     .find(playerId => playerId !== hostPlayerId)
   assert.ok(hostPlayerId && guestPlayerId)
 
+  mark('testing mod-expanded stock Boast menu')
+  const boastDefinition = content.compiledMods.flatMap(mod => mod.content.map(definition => ({
+    definition,
+    modId: mod.identity.id,
+  }))).find(({ definition }) => definition.contentKind === 'boast')
+  assert.ok(boastDefinition)
+  movePlayer(host, hostPlayerId, { x: 895.5, y: 485.5 })
+  movePlayer(host, guestPlayerId, { x: 1_300, y: 700 })
+  const boastPrompt = hostPage.locator(
+    '.game-interact-prompt[data-interaction-target="hub:annalist"]',
+  )
+  await boastPrompt.waitFor({ timeout: 15_000 })
+  await boastPrompt.click()
+  const boastDialog = hostPage.getByRole('dialog', { name: 'Talking to Provokatus' })
+  await boastDialog.waitFor()
+  await boastDialog.getByRole('button', { name: 'Skip' }).click()
+  await boastDialog.getByRole('button', { name: 'Boast' }).click()
+  await boastDialog.locator('[data-native-selector="boast"]').waitFor({ state: 'attached' })
+  const boastCanvas = boastDialog.locator('.hub-inventory-native-canvas')
+  await hostPage.waitForFunction(() => (
+    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastMenu
+      === 'mod-expanded'
+  ))
+  await boastDialog.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor({ timeout: 15_000 })
+  assert.equal(await boastDialog.locator('[data-native-selector-kind="boast"]').count(), 5)
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-page'), '1/2')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), '90,91,92,93,94')
+  screenshots.boastStock = join(screenshotRoot, 'boast-stock-page.png')
+  await hostPage.screenshot({ path: screenshots.boastStock })
+  await boastDialog.getByRole('button', { name: 'More entries' }).click()
+  await hostPage.waitForFunction(() => (
+    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastPage === '2/2'
+  ))
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-rows'), '1')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), 'mod')
+  const modBoastRow = boastDialog.locator(
+    `[data-native-selector-kind="boast"][data-native-selector-id="${boastDefinition.definition.contentId}"]`,
+  )
+  await modBoastRow.hover()
+  await hostPage.waitForFunction(expected => (
+    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastHighlighted
+      === expected
+  ), `mod:${boastDefinition.modId}:${boastDefinition.definition.contentId}`)
+  screenshots.boastMod = join(screenshotRoot, 'boast-mod-page.png')
+  await hostPage.screenshot({ path: screenshots.boastMod })
+  await modBoastRow.click()
+  await waitUntil(() => {
+    const selected = getPlayerEconomy(host.state(), hostPlayerId).npc.boast.selected
+    return typeof selected !== 'number' && selected?.contentId === boastDefinition.definition.contentId
+  }, 'mod Boast selection did not reach the authoritative participant economy')
+  await boastDialog.locator(
+    `xpath=self::*[@data-native-chat-record="MOD_BOAST_${boastDefinition.definition.contentId}"]`,
+  ).waitFor({ timeout: 20_000 })
+  await boastDialog.getByRole('button', { name: 'Skip' }).click()
+  const boastInstruction = hostPage.locator(
+    '.native-notebox-overlay[data-native-notebox-kind="instruction"]',
+  )
+  await boastInstruction.waitFor()
+  assert.match(await boastInstruction.innerText(), /Wave 25/)
+  await hostPage.waitForFunction(() => (
+    Number(document.querySelector(
+      '.native-notebox-overlay[data-native-notebox-kind="instruction"]',
+    )?.dataset.nativeNoteboxOpacity) >= 0.99
+  ))
+  screenshots.boastInstruction = join(screenshotRoot, 'boast-mod-instruction.png')
+  await hostPage.screenshot({ path: screenshots.boastInstruction })
+  await boastInstruction.waitFor({ state: 'detached', timeout: 12_000 })
+
   giveGold(host, hostPlayerId, 200)
   moveStarterRobeToBackpack(host, hostPlayerId)
   movePlayer(host, hostPlayerId, { x: 1510, y: 665 })

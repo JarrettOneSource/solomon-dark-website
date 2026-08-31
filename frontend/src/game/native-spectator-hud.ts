@@ -1,5 +1,4 @@
-import { nativeUiRecord } from './native-ui/native-ui-catalog.ts'
-import { NATIVE_UI_MESSAGE } from './native-ui/native-ui-plan.ts'
+import { NATIVE_UI_MESSAGE, nativeUiRecord } from './native-ui/core.ts'
 
 const HORIZONTAL_RAIL = nativeUiRecord('UI', NATIVE_UI_MESSAGE.horizontalEdgeRecord)
 const VERTICAL_RAIL = nativeUiRecord('UI', NATIVE_UI_MESSAGE.verticalEdgeRecord)

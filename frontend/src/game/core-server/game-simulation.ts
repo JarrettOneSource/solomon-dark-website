@@ -61,12 +61,18 @@ import {
 } from '../core-kernels/native-belt.ts'
 import {
   acknowledgeNativeHubNpcHint,
-  failNativeBoast,
-  nativeBoastScore,
-  NATIVE_BOAST_SUCCESS_WAVE,
-  succeedNativeBoast,
+  resolveNativeBoast,
   type NativeBoastFailureProducer,
 } from '../core-kernels/native-hub-npc.ts'
+import {
+  boastUsesRandomSkillChoices,
+  failBoast,
+  scoreBoast,
+  succeedBoast,
+  type BoastDefinition,
+  type BoastResolver,
+  type BoastSelection,
+} from '../core-kernels/boast.ts'
 import {
   NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
   nativeLootModifiers,
@@ -439,6 +445,7 @@ export interface GameSimulationExtensions {
   filterDamage(input: GameSimulationDamageFilterInput): number
   filterMana(input: GameSimulationManaFilterInput): number
   hasConsumable(contentId: string): boolean
+  resolveBoast?(selection: BoastSelection): BoastDefinition | null
 }
 
 export const DEFAULT_PLAYER_ID = 'local-player'
@@ -733,6 +740,7 @@ export function rejoinGameSimulationPlayer(
   detached: DetachedGameSimulationPlayer,
   playerId: PlayerId,
   milestone: SharedPlayerLevelMilestone | null,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState {
   if (
     target.world.kind !== 'boneyard'
@@ -785,7 +793,12 @@ export function rejoinGameSimulationPlayer(
     playerEntities = synchronized.store
     gameRng = synchronized.rng
   }
-  const automatic = assignAutomaticSkillChoices(playerEntities, [playerId], gameRng)
+  const automatic = assignAutomaticSkillChoices(
+    playerEntities,
+    [playerId],
+    gameRng,
+    resolveModBoast,
+  )
   playerEntities = automatic.store
 
   const participantIds = stableExistingPlayerIds(
@@ -849,10 +862,11 @@ export function synchronizeDetachedGameSimulationPlayer(
   target: GameSimulationState,
   detached: DetachedGameSimulationPlayer,
   milestone: SharedPlayerLevelMilestone,
+  resolveModBoast?: BoastResolver,
 ): DetachedGameSimulationPlayerTransaction {
   return commitDetachedGameSimulationPlayerTransaction(
     target,
-    rejoinGameSimulationPlayer(target, detached, detached.playerId, milestone),
+    rejoinGameSimulationPlayer(target, detached, detached.playerId, milestone, resolveModBoast),
     detached.playerId,
   )
 }
@@ -861,12 +875,14 @@ export function selectDetachedGameSimulationPlayerSkill(
   target: GameSimulationState,
   detached: DetachedGameSimulationPlayer,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
+  resolveModBoast?: BoastResolver,
 ): DetachedGameSimulationPlayerTransaction | null {
   const staged = rejoinGameSimulationPlayer(
     target,
     detached,
     detached.playerId,
     null,
+    resolveModBoast,
   )
   const selected = selectGameSimulationPlayerSkill(staged, detached.playerId, selection)
   return selected === null
@@ -878,12 +894,14 @@ export function rerollDetachedGameSimulationPlayerSkill(
   target: GameSimulationState,
   detached: DetachedGameSimulationPlayer,
   offerSequence: number,
+  resolveModBoast?: BoastResolver,
 ): DetachedGameSimulationPlayerTransaction | null {
   const staged = rejoinGameSimulationPlayer(
     target,
     detached,
     detached.playerId,
     null,
+    resolveModBoast,
   )
   const rerolled = rerollGameSimulationPlayerSkill(staged, detached.playerId, offerSequence)
   return rerolled === null
@@ -895,12 +913,14 @@ export function saveDetachedGameSimulationPlayerSkill(
   target: GameSimulationState,
   detached: DetachedGameSimulationPlayer,
   offerSequence: number,
+  resolveModBoast?: BoastResolver,
 ): DetachedGameSimulationPlayerTransaction | null {
   const staged = rejoinGameSimulationPlayer(
     target,
     detached,
     detached.playerId,
     null,
+    resolveModBoast,
   )
   const saved = saveGameSimulationPlayerSkill(staged, detached.playerId, offerSequence)
   return saved === null
@@ -911,8 +931,15 @@ export function saveDetachedGameSimulationPlayerSkill(
 export function projectDetachedGameSimulationPlayer(
   target: GameSimulationState,
   detached: DetachedGameSimulationPlayer,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState {
-  return rejoinGameSimulationPlayer(target, detached, detached.playerId, null)
+  return rejoinGameSimulationPlayer(
+    target,
+    detached,
+    detached.playerId,
+    null,
+    resolveModBoast,
+  )
 }
 
 function commitDetachedGameSimulationPlayerTransaction(
@@ -1366,6 +1393,21 @@ export function getPlayerEconomy(
   return economy
 }
 
+export function failGameSimulationPlayerBoast(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  producer: NativeBoastFailureProducer,
+  extensions?: GameSimulationExtensions,
+): GameSimulationState {
+  const playerEntities = failPlayerEntityBoast(
+    state.playerEntities,
+    playerId,
+    producer,
+    extensions,
+  )
+  return playerEntities === state.playerEntities ? state : { ...state, playerEntities }
+}
+
 export function reconcileGameSimulationPlayerModPackages(
   state: GameSimulationState,
   playerId: PlayerId,
@@ -1535,7 +1577,11 @@ export function applyGameSimulationHubAction(
       )
       case 'read-librarian-book': return readLibrarianBook(economy, action.bookId)
       case 'read-skill-book': return readInventorySkillBook(economy, action.itemId)
-      case 'select-boast': return selectHubBoast(economy, action.boastId)
+      case 'select-boast': return selectHubBoast(
+        economy,
+        action.boastId,
+        extensions?.resolveBoast,
+      )
       case 'transfer': return transferInventoryItem(economy, action.itemId, action.direction)
       case 'unforge': return unforgeInventoryItem(
         economy,
@@ -1594,11 +1640,16 @@ export function applyGameSimulationHubAction(
     }
     playerEntities = unlocked
   }
+  if (result.accepted && action.type === 'consume' && consumedPotion?.nativeTypeId === 7001) {
+    playerEntities = failPlayerEntityBoast(
+      playerEntities,
+      playerId,
+      'potion-use',
+      extensions,
+    )
+  }
   if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null &&
       consumedPotion.modContent === undefined) {
-    if (consumedPotion.nativeTypeId === 7001) {
-      playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'potion-use')
-    }
     const beforeMana = getPlayerProgression(state, playerId).currentMana
     playerEntities = applyPlayerEntityPotionEffect(
       playerEntities,
@@ -1641,7 +1692,12 @@ export function applyGameSimulationHubAction(
     && equippedItem !== null
     && inventoryItemHasMagicalEffects(equippedItem)
   ) {
-    playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'magical-equipment')
+    playerEntities = failPlayerEntityBoast(
+      playerEntities,
+      playerId,
+      'magical-equipment',
+      extensions,
+    )
   }
   if (result.accepted && action.type === 'unforge' && result.unforgeOutcome) {
     const index = playerEntityIndex(playerEntities, playerId)
@@ -1660,7 +1716,12 @@ export function applyGameSimulationHubAction(
       const granted = grantPlayerEntityBonusSkillChoice(playerEntities, playerId, gameRng)
       playerEntities = granted.store
       gameRng = granted.rng
-      const automatic = assignAutomaticSkillChoices(playerEntities, [playerId], gameRng)
+      const automatic = assignAutomaticSkillChoices(
+        playerEntities,
+        [playerId],
+        gameRng,
+        extensions?.resolveBoast,
+      )
       playerEntities = automatic.store
       gameRng = automatic.rng
       const progression = playerProgressionAt(playerEntities, playerId)
@@ -1883,9 +1944,10 @@ export function grantGameSimulationPlayerExperience(
   state: GameSimulationState,
   playerId: PlayerId,
   amount: number,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState {
   const previousLevel = getPlayerProgression(state, playerId).level
-  let next = grantSharedGameSimulationExperience(state, playerId, amount)
+  let next = grantSharedGameSimulationExperience(state, playerId, amount, resolveModBoast)
   const level = getPlayerProgression(next, playerId).level
   if (level <= previousLevel) return next
   const worldManagerOrder = createNativeWorldManagerOrder(next.worldManagerOrder)
@@ -2084,7 +2146,14 @@ export function stepGameSimulationTick(
         const boast = playerEconomyAt(playerEntities, playerId)?.npc.boast
         const scoredRun = boast === undefined
           ? hallRun
-          : { ...hallRun, awesomeness: nativeBoastScore(hallRun.awesomeness, boast) }
+          : {
+              ...hallRun,
+              awesomeness: scoreBoast(
+                hallRun.awesomeness,
+                boast,
+                gameBoastResolver(options.extensions),
+              ),
+            }
         hallOfFameRuns[playerId] = archiveNativeHallOfFameRun(
           scoredRun,
           tick,
@@ -2258,6 +2327,7 @@ export function stepGameSimulationTick(
             state,
             tutorialPlayerId,
             tutorial.grantExperience,
+            options.extensions?.resolveBoast,
           )
           if (state.world.kind !== 'boneyard') {
             throw new Error('Tutorial experience changed the active world')
@@ -2696,6 +2766,7 @@ function finishGameSimulationTick(
       progressionState,
       reward.playerId,
       creditedExperience,
+      extensions?.resolveBoast,
     )
     playerEntities = awarded.playerEntities
     levelUpBarrier = awarded.levelUpBarrier
@@ -2781,6 +2852,7 @@ function finishGameSimulationTick(
             playerEntities,
             [pickup.playerId],
             gameRng,
+            extensions?.resolveBoast,
           )
           playerEntities = automatic.store
           gameRng = automatic.rng
@@ -2974,7 +3046,12 @@ function finishGameSimulationTick(
         playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
       }
     } else if (skillId !== null && category === 2) {
-      playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'secondary-cast')
+      playerEntities = failPlayerEntityBoast(
+        playerEntities,
+        playerId,
+        'secondary-cast',
+        extensions,
+      )
     } else if (
       skillId !== null
       && category === 3
@@ -3340,7 +3417,12 @@ function finishGameSimulationTick(
     )
   }
   for (const playerId of secondaryResult.manaUnderflowPlayerIds) {
-    playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'mana-underflow')
+    playerEntities = failPlayerEntityBoast(
+      playerEntities,
+      playerId,
+      'mana-underflow',
+      extensions,
+    )
   }
   for (const playerId of secondaryResult.overloadedPlayerIds) {
     const progression = playerProgressionAt(playerEntities, playerId)
@@ -3547,7 +3629,12 @@ function finishGameSimulationTick(
       : `boneyard:${result.world.runId}`,
   })
   for (const playerId of cast.manaUnderflowPlayerIds) {
-    playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'mana-underflow')
+    playerEntities = failPlayerEntityBoast(
+      playerEntities,
+      playerId,
+      'mana-underflow',
+      extensions,
+    )
   }
   for (const [playerId, cost] of Object.entries(cast.manaSpent)) {
     if (cost <= 0) continue
@@ -3935,10 +4022,15 @@ function finishGameSimulationTick(
     && world.kind === 'boneyard'
     && completedBoneyardWaveBoundary(previous.world, world)
   ) {
-    if (world.waves !== null && world.waves.waveOrdinal >= NATIVE_BOAST_SUCCESS_WAVE) {
+    if (world.waves !== null) {
       for (const playerId of previous.run.eligiblePlayerIds) {
         if (playerProgressionAt(playerEntities, playerId)?.lifeState === 'alive') {
-          playerEntities = succeedPlayerEntityBoast(playerEntities, playerId)
+          playerEntities = succeedPlayerEntityBoast(
+            playerEntities,
+            playerId,
+            world.waves.waveOrdinal,
+            extensions,
+          )
         }
       }
     }
@@ -4111,7 +4203,7 @@ function applyFilteredManaDelta(
   if (delta < 0) {
     const underflow = -delta > progression.currentMana
     const next = underflow
-      ? failPlayerEntityBoast(source, playerId, 'mana-underflow')
+      ? failPlayerEntityBoast(source, playerId, 'mana-underflow', extensions)
       : source
     const debit = tryDebitPlayerEntityMana(next, playerId, -delta)
     if (debit.accepted) return debit.store
@@ -4354,15 +4446,16 @@ function failPlayerEntityBoast(
   source: PlayerEntityStore,
   playerId: string,
   producer: NativeBoastFailureProducer,
+  extensions?: GameSimulationExtensions,
 ): PlayerEntityStore {
   const economy = playerEconomyAt(source, playerId)
   if (economy === null) return source
-  const npc = failNativeBoast(economy.npc, producer)
-  return npc === economy.npc
+  const boast = failBoast(economy.npc.boast, producer, gameBoastResolver(extensions))
+  return boast === economy.npc.boast
     ? source
     : replacePlayerEconomy(source, playerId, {
         ...economy,
-        npc,
+        npc: Object.freeze({ ...economy.npc, boast }),
         revision: economy.revision + 1,
       })
 }
@@ -4370,17 +4463,31 @@ function failPlayerEntityBoast(
 function succeedPlayerEntityBoast(
   source: PlayerEntityStore,
   playerId: string,
+  completedWave: number,
+  extensions?: GameSimulationExtensions,
 ): PlayerEntityStore {
   const economy = playerEconomyAt(source, playerId)
   if (economy === null) return source
-  const npc = succeedNativeBoast(economy.npc)
-  return npc === economy.npc
+  const boast = succeedBoast(
+    economy.npc.boast,
+    completedWave,
+    gameBoastResolver(extensions),
+  )
+  return boast === economy.npc.boast
     ? source
     : replacePlayerEconomy(source, playerId, {
         ...economy,
-        npc,
+        npc: Object.freeze({ ...economy.npc, boast }),
         revision: economy.revision + 1,
       })
+}
+
+function gameBoastResolver(extensions?: GameSimulationExtensions): BoastResolver {
+  return gameBoastResolverFromMod(extensions?.resolveBoast)
+}
+
+function gameBoastResolverFromMod(resolveModBoast?: BoastResolver): BoastResolver {
+  return (selection) => resolveNativeBoast(selection) ?? resolveModBoast?.(selection) ?? null
 }
 
 function isHubNpcAction(action: HubInventoryAction): boolean {
@@ -4391,6 +4498,7 @@ function isHubNpcAction(action: HubInventoryAction): boolean {
 }
 
 function inventoryItemHasMagicalEffects(item: HubInventoryItem): boolean {
+  if (item.modItemContent !== undefined) return true
   return item.nativeEffects !== undefined
     ? item.nativeEffects.length > 0
     : item.recipeIndex !== null && nativeEquipmentRecipeEffects(item.recipeIndex).length > 0
@@ -4693,6 +4801,7 @@ function grantSharedGameSimulationExperience(
   state: GameSimulationState,
   playerId: PlayerId,
   amount: number,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState {
   const participantIds = state.levelUpBarrier?.participantIds
     ?? levelUpParticipantIds(state)
@@ -4710,6 +4819,7 @@ function grantSharedGameSimulationExperience(
     granted.store,
     participantIds,
     granted.rng,
+    resolveModBoast,
   )
   const pendingPlayerIds = pendingOfferPlayerIds(automatic.store, participantIds)
   if (pendingPlayerIds.length === 0) {
@@ -4748,6 +4858,7 @@ function assignAutomaticSkillChoices(
   source: PlayerEntityStore,
   playerIds: readonly string[],
   sourceRng: NativeRngState,
+  resolveModBoast?: BoastResolver,
 ): Readonly<{ rng: NativeRngState; store: PlayerEntityStore }> {
   let rng = sourceRng
   let store = source
@@ -4755,8 +4866,11 @@ function assignAutomaticSkillChoices(
     const economy = playerEconomyAt(store, playerId)
     const offer = playerProgressionAt(store, playerId)?.pendingOffer
     if (
-      economy?.npc.boast.selected !== 3
-      || economy.npc.boast.failed
+      !economy
+      || !boastUsesRandomSkillChoices(
+        economy.npc.boast,
+        gameBoastResolverFromMod(resolveModBoast),
+      )
       || !offer
       || offer.automaticChoiceIndex !== undefined
     ) continue

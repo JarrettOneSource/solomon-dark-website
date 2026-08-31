@@ -182,7 +182,7 @@ try {
     page,
     largeHubPause,
     largeHubPause.locator('.gameplay-pause-native-stage'),
-    largeHubPause.locator('.gameplay-pause-canvas'),
+    largeHubPause.locator('.native-ui-simple-menu'),
   )
   assertBoxClose(
     await largeHubPause.locator('.gameplay-pause-dim').boundingBox(),
@@ -366,20 +366,21 @@ try {
     true,
   )
   assert.equal(await ownerPause.getAttribute('data-gameplay-pause-reveal'), '1')
-  const pauseCanvas = ownerPause.locator('canvas[data-pause-renderer="native-simple-menu"]')
-  await pauseCanvas.waitFor()
-  assert.deepEqual(await pauseCanvas.evaluate((canvas) => ({
-    height: canvas.height,
-    renderer: canvas.dataset.gameRenderer,
-    width: canvas.width,
+  const pauseMenu = ownerPause.locator('[data-native-ui-simple-menu]')
+  await pauseMenu.waitFor()
+  assert.deepEqual(await pauseMenu.evaluate((menu) => ({
+    height: menu.getBoundingClientRect().height,
+    planCount: menu.querySelectorAll('[data-native-ui-plan]').length,
+    width: menu.getBoundingClientRect().width,
   })), {
     height: 900,
-    renderer: 'pixi-webgl',
+    planCount: 1,
     width: 1600,
   })
+  assert.equal(await ownerPause.locator('canvas[data-pause-renderer]').count(), 0)
   const bounds = {}
   for (const action of ['resume', 'settings', 'leave']) {
-    bounds[action] = await ownerPause.locator(`[data-pause-action="${action}"]`).boundingBox()
+    bounds[action] = await ownerPause.locator(`[data-native-ui-simple-menu-action="${action}"]`).boundingBox()
   }
   assert.deepEqual(bounds, {
     leave: { height: 69, width: 353, x: 623.5, y: 491.5 },
@@ -392,17 +393,11 @@ try {
     )),
     'rgba(0, 0, 0, 0.85)',
   )
-  const idlePauseRender = await pauseCanvas.evaluate((canvas) => ({
-    bodyRecords: canvas.dataset.pauseBodyRecords,
-    frameRevision: canvas.dataset.pauseFrameRevision,
-  }))
+  const idlePauseRender = await simpleMenuRenderState(pauseMenu)
   const resumeButton = ownerPause.getByRole('button', { name: 'RESUME GAME' })
   await resumeButton.focus()
   await resumeButton.hover()
-  const hoverPauseRender = await pauseCanvas.evaluate((canvas) => ({
-    bodyRecords: canvas.dataset.pauseBodyRecords,
-    frameRevision: canvas.dataset.pauseFrameRevision,
-  }))
+  const hoverPauseRender = await simpleMenuRenderState(pauseMenu)
   assert.deepEqual(hoverPauseRender, idlePauseRender)
   assert.deepEqual(await resumeButton.evaluate((button) => {
     const computed = getComputedStyle(button)
@@ -417,7 +412,7 @@ try {
     ownerPause,
     page,
     path: screenshots.resumePressed,
-    pauseCanvas,
+    pauseMenu,
   })]
   await page.screenshot({ path: screenshots.hubOwner })
 
@@ -463,14 +458,14 @@ try {
   await settingsPause.waitFor()
   await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
-  const settingsCanvas = settingsPause.locator('canvas[data-pause-renderer="native-simple-menu"]')
-  await settingsCanvas.waitFor()
+  const settingsMenu = settingsPause.locator('[data-native-ui-simple-menu]')
+  await settingsMenu.waitFor()
   pressedFrames.push(await capturePressedAction({
     action: 'settings',
     ownerPause: settingsPause,
     page,
     path: screenshots.settingsPressed,
-    pauseCanvas: settingsCanvas,
+    pauseMenu: settingsMenu,
   }))
 
   await settingsPause.getByRole('button', { name: 'GAME SETTINGS' }).click()
@@ -505,14 +500,14 @@ try {
   await leavePause.waitFor()
   await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
-  const leaveCanvas = leavePause.locator('canvas[data-pause-renderer="native-simple-menu"]')
-  await leaveCanvas.waitFor()
+  const leaveMenu = leavePause.locator('[data-native-ui-simple-menu]')
+  await leaveMenu.waitFor()
   pressedFrames.push(await capturePressedAction({
     action: 'leave',
     ownerPause: leavePause,
     page,
     path: screenshots.leavePressed,
-    pauseCanvas: leaveCanvas,
+    pauseMenu: leaveMenu,
   }))
   assert.equal(new Set(pressedFrames).size, 3)
 
@@ -791,7 +786,7 @@ try {
     page,
     boneyardOwner,
     boneyardOwner.locator('.gameplay-pause-native-stage'),
-    boneyardOwner.locator('.gameplay-pause-canvas'),
+    boneyardOwner.locator('.native-ui-simple-menu'),
   )
   const heldBoneyardOwner = simulationReceipt()
   const heldBoneyardOwnerFrame = await canvasFrame(page, '.boneyard-world-canvas')
@@ -1220,10 +1215,9 @@ async function capturePressedAction({
   ownerPause,
   page,
   path,
-  pauseCanvas,
+  pauseMenu,
 }) {
-  const button = ownerPause.locator(`[data-pause-action="${action}"]`)
-  const priorRevision = Number(await pauseCanvas.getAttribute('data-pause-frame-revision'))
+  const button = ownerPause.locator(`[data-native-ui-simple-menu-action="${action}"]`)
   await button.dispatchEvent('pointerdown', {
     button: 0,
     isPrimary: true,
@@ -1232,40 +1226,43 @@ async function capturePressedAction({
   })
   await page.waitForFunction(
     (pressedAction) => {
-      const stage = document.querySelector('.gameplay-pause-stage')
-      const overlay = document.querySelector('[data-pause-pressed-record="102"]')
-      return stage?.getAttribute('data-gameplay-pause-pressed') === pressedAction
-        && overlay?.getAttribute('data-pause-pressed-action') === pressedAction
+      const menu = document.querySelector('[data-native-ui-simple-menu]')
+      const body = menu?.querySelector(`[data-native-ui-node="${pressedAction}:body"] [data-native-ui-record="UI.102"]`)
+      return menu?.getAttribute('data-native-ui-simple-menu-pressed') === pressedAction
+        && body !== null
     },
     action,
   )
-  assert.equal(
-    await pauseCanvas.getAttribute('data-pause-body-records'),
-    '101,101,101',
-  )
-  assert.equal(
-    Number(await pauseCanvas.getAttribute('data-pause-frame-revision')),
-    priorRevision,
-  )
+  const pressedState = await simpleMenuRenderState(pauseMenu)
+  assert.equal(pressedState.pressed, action)
+  assert.equal(pressedState.bodyRecords.filter((record) => record === 'UI.102').length, 1)
   await settleBrowserPaint(page)
-  const overlay = ownerPause.locator(
-    `[data-pause-pressed-record="102"][data-pause-pressed-action="${action}"]`,
-  )
-  assert.deepEqual(await overlay.boundingBox(), {
-    height: 85,
-    width: 365,
-    x: PAUSE_MENU_ACTION_BOUNDS[action].left - 6,
-    y: PAUSE_MENU_ACTION_BOUNDS[action].top - 6,
+  const body = ownerPause.locator(`[data-native-ui-node="${action}:body"]`)
+  assert.deepEqual(await body.boundingBox(), {
+    height: PAUSE_MENU_ACTION_BOUNDS[action].height,
+    width: PAUSE_MENU_ACTION_BOUNDS[action].width,
+    x: PAUSE_MENU_ACTION_BOUNDS[action].left,
+    y: PAUSE_MENU_ACTION_BOUNDS[action].top,
   })
-  const pressedFrame = await overlay.screenshot()
+  const pressedFrame = await pauseMenu.screenshot()
   await writeFile(path, pressedFrame)
   await button.dispatchEvent('pointercancel', { pointerId: 1, pointerType: 'mouse' })
   await page.waitForFunction(() => (
-    document.querySelector('.gameplay-pause-stage')
-      ?.getAttribute('data-gameplay-pause-pressed') === 'none'
-    && document.querySelector('[data-pause-pressed-record="102"]') === null
+    document.querySelector('[data-native-ui-simple-menu]')
+      ?.getAttribute('data-native-ui-simple-menu-pressed') === 'none'
+    && document.querySelector('[data-native-ui-node$=":body"] [data-native-ui-record="UI.102"]') === null
   ))
   return pressedFrame.toString('base64')
+}
+
+async function simpleMenuRenderState(menu) {
+  return menu.evaluate((node) => ({
+    bodyRecords: Array.from(
+      node.querySelectorAll('[data-native-ui-node$=":body"] [data-native-ui-record]'),
+      (body) => body.getAttribute('data-native-ui-record'),
+    ),
+    pressed: node.getAttribute('data-native-ui-simple-menu-pressed'),
+  }))
 }
 
 async function settleBrowserPaint(page) {

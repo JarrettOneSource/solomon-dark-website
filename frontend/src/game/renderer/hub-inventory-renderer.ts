@@ -30,6 +30,10 @@ import {
   type PlayerBeltComponent,
 } from '../core-kernels/native-belt.ts'
 import {
+  boastSelectionKey,
+  type ModBoastSelection,
+} from '../core-kernels/boast.ts'
+import {
   HUB_TRADER_DIALOGUES,
   equipmentSlotsForItem,
   hubInteractionDialogue,
@@ -53,21 +57,21 @@ import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../p
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
 import {
+  measureNativeUiText,
   nativeUiAtlas,
   nativeUiFont,
+  nativeUiKerning,
   nativeUiRecord,
+  NATIVE_UI_BOAST_SELECTED_TINT,
+  planNativeUiBoastMenu,
+  wrapNativeUiText,
   type NativeUiAtlasRecord,
   type NativeUiFontName,
-} from '../native-ui/native-ui-catalog.ts'
+} from '../native-ui/core.ts'
 import {
   destroyNativeUiPixiFor,
   nativeUiPixiFor,
-} from '../native-ui/native-ui-pixi.ts'
-import {
-  measureNativeUiText,
-  nativeUiKerning,
-  wrapNativeUiText,
-} from '../native-ui/native-ui-text.ts'
+} from '../native-ui/pixi.ts'
 import {
   loadModPresentationTextures,
   type ModPresentationTextures,
@@ -252,7 +256,8 @@ export type HubInventoryRendererModel =
       readonly interaction: HubInteractionId
       readonly kind: 'dialogue'
       readonly phaseStartedAtMs: number
-      readonly selectedSelectorId: number | null
+      readonly highlightedSelectorId: number | ModBoastSelection | null
+      readonly selectedSelectorId: number | ModBoastSelection | null
       readonly selectorOffset: number
       readonly selectorRows: readonly HubNpcSelectorRow[]
       readonly storyOffice: boolean
@@ -566,6 +571,32 @@ export async function createHubInventoryRenderer(
       previousNoticeTitle = nextNotice?.title ?? null
       currentKind = model.kind
       currentModel = model
+      if (model.kind === 'dialogue'
+          && model.content.kind === 'selector'
+          && model.content.selector === 'boast') {
+        const pageSize = 5
+        const pageIndex = Math.floor(model.selectorOffset / pageSize)
+        const rows = model.selectorRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+        gpu.canvas.dataset.nativeBoastMenu = model.selectorRows.length > pageSize
+          ? 'mod-expanded'
+          : 'stock'
+        gpu.canvas.dataset.nativeBoastPage = `${pageIndex + 1}/${Math.max(1, Math.ceil(model.selectorRows.length / pageSize))}`
+        gpu.canvas.dataset.nativeBoastRows = `${rows.length}`
+        gpu.canvas.dataset.nativeBoastIconRecords = rows.map(row => (
+          row.boastIcon?.kind === 'stock' ? row.boastIcon.record : 'mod'
+        )).join(',')
+        gpu.canvas.dataset.nativeBoastHighlighted = model.highlightedSelectorId === null
+          ? ''
+          : typeof model.highlightedSelectorId === 'number'
+            ? `native:${model.highlightedSelectorId}`
+            : boastSelectionKey(model.highlightedSelectorId)
+      } else {
+        delete gpu.canvas.dataset.nativeBoastMenu
+        delete gpu.canvas.dataset.nativeBoastPage
+        delete gpu.canvas.dataset.nativeBoastRows
+        delete gpu.canvas.dataset.nativeBoastIconRecords
+        delete gpu.canvas.dataset.nativeBoastHighlighted
+      }
       if (model.kind !== 'dialogue' && model.sackPath.length > 0) {
         gpu.canvas.dataset.nativeInventoryParentHolder = 'visible'
         gpu.canvas.dataset.nativeInventoryParentHolderAlpha = `${HUB_INVENTORY_PARENT_HOLDER.alpha}`
@@ -1403,6 +1434,9 @@ function buildDialogue(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
+  if (model.content.kind === 'selector' && model.content.selector === 'boast') {
+    return buildBoastDialogue(context, layer, model)
+  }
   const dialogue = hubInteractionDialogue(model.interaction, model.storyOffice)
   addChatPanel(context, layer)
   addBitmapText(
@@ -1516,6 +1550,72 @@ function buildDialogue(
     }
   }
   return { content, contentHeight }
+}
+
+function buildBoastDialogue(
+  context: RenderContext,
+  layer: Container,
+  model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
+): ChatRenderState {
+  const pageSize = 5
+  const offset = Math.max(0, Math.floor(model.selectorOffset / pageSize) * pageSize)
+  const rows = model.selectorRows.slice(offset, offset + pageSize)
+  const pageCount = Math.max(1, Math.ceil(model.selectorRows.length / pageSize))
+  const pageIndex = Math.min(pageCount - 1, Math.floor(offset / pageSize))
+  const active = model.highlightedSelectorId ?? model.selectedSelectorId
+  const plan = planNativeUiBoastMenu({
+    height: HUB_NATIVE_UI_SIZE.height,
+    pageCount,
+    pageIndex,
+    rows: rows.map(row => ({
+      detail: row.detail,
+      id: hubNpcSelectorRendererRowKey(row),
+      label: row.label,
+      ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
+      state: selectorIdsEqual(row.id, active) ? 'selected' : 'idle',
+    })),
+    width: HUB_NATIVE_UI_SIZE.width,
+  })
+  layer.addChild(nativeUiPixiFor(context.textures).render(plan, 'native-boast-menu'))
+  for (const placement of plan.customIcons) {
+    const row = rows.find(candidate => hubNpcSelectorRendererRowKey(candidate) === placement.id)
+    const icon = row?.boastIcon
+    if (!row || !icon || icon.kind !== 'mod' || typeof row.id === 'number') continue
+    const texture = context.modTextures.spriteFrame(
+      `boast:${row.id.modId}:${row.id.contentId}`,
+      row.id.modId,
+      icon.imagePath,
+      icon.frame,
+    )
+    for (const side of ['left', 'right'] as const) {
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5)
+      sprite.position.set(
+        side === 'left'
+          ? placement.leftEdgeX + icon.frame.logicalWidth / 2
+          : placement.rightEdgeX - icon.frame.logicalWidth / 2,
+        placement.y,
+      )
+      if (side === 'right') sprite.scale.x = -1
+      if (placement.selected) sprite.tint = NATIVE_UI_BOAST_SELECTED_TINT
+      sprite.eventMode = 'none'
+      sprite.label = `${placement.id}:custom-icon-${side}`
+      layer.addChild(sprite)
+    }
+  }
+  return { content: new Container({ label: 'native-boast-static-content' }), contentHeight: 0 }
+}
+
+function hubNpcSelectorRendererRowKey(row: HubNpcSelectorRow): string {
+  return typeof row.id === 'number' ? `native:${row.id}` : boastSelectionKey(row.id)
+}
+
+function selectorIdsEqual(
+  left: HubNpcSelectorRow['id'],
+  right: HubNpcSelectorRow['id'] | null,
+): boolean {
+  if (right === null || typeof left === 'number' || typeof right === 'number') return left === right
+  return left.contentId === right.contentId && left.modId === right.modId
 }
 
 function buildService(

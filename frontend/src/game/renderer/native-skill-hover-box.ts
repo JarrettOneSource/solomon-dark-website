@@ -1,12 +1,12 @@
 import { Container, Graphics } from 'pixi.js'
 
 import { nativeSkillRoot } from '../core-kernels/player-progression.ts'
-import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
-import { nativeUiPixiFor } from '../native-ui/native-ui-pixi.ts'
+import { nativeUiPixiFor } from '../native-ui/pixi.ts'
 import {
   measureNativeUiText,
+  nativeUiFont,
   wrapNativeUiText,
-} from '../native-ui/native-ui-text.ts'
+} from '../native-ui/core.ts'
 import {
   nativeSkillBookTooltipLines,
   type NativeSkillBookRow,

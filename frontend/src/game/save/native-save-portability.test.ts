@@ -417,6 +417,51 @@ test('all native Boast IDs and terminal states round-trip through the Game paylo
     () => parsePortableGameProfile(JSON.stringify(malformedBoast)),
     /Boast lifecycle/,
   )
+
+  const restored = restoreGameSaveDocument(imported.document)
+  const economy = restored.state.playerEntities.economies[0]!
+  const modSelection = {
+    contentId: '5000000000000000016',
+    kind: 'mod' as const,
+    modId: 'example.boasts',
+  }
+  const modState = {
+    ...restored.state,
+    playerEntities: {
+      ...restored.state.playerEntities,
+      economies: [{
+        ...economy,
+        npc: {
+          ...economy.npc,
+          boast: {
+            failed: false,
+            failureSequence: 0,
+            selected: modSelection,
+            succeeded: false,
+          },
+        },
+      }],
+    },
+  }
+  const modDocument = createGameSaveDocument({
+    integrity: restored.integrity,
+    loadedBoneyard: restored.loadedBoneyard,
+    mods: restored.mods,
+    modState: restored.modState,
+    nativeSource: restored.nativeSource,
+    playerId: restored.playerId,
+    state: modState,
+  })
+  assert.deepEqual(
+    restoreGameSaveDocument(modDocument).state.playerEntities.economies[0]?.npc.boast.selected,
+    modSelection,
+  )
+  const exportedMod = await exportWebGameSaveToNativeArchive(modDocument)
+  assert.match(exportedMod.warnings.join('\n'), /cannot represent a mod Boast selection/)
+  assert.deepEqual(
+    decodeNativeGamestateBoast((await readNativeSaveArchive(exportedMod.archive)).gamestate),
+    { failed: false, selected: null, succeeded: false },
+  )
 })
 
 test('ordered Hagatha outcomes and repeated Tonic membership survive stock-web-stock', async () => {

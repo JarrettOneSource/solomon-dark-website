@@ -2,6 +2,7 @@ import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
 } from '../../core-kernels/boneyard-wave-director.ts'
+import type { BoastResolver } from '../../core-kernels/boast.ts'
 import {
   getPlayerCharacter,
   getPlayerEconomy,
@@ -113,6 +114,7 @@ export function createWebLuaFrameState(
 export function applyWebLuaCommands(
   source: GameSimulationState,
   commands: readonly WebLuaCommand[],
+  resolveModBoast?: BoastResolver,
 ): AppliedWebLuaCommands {
   let state = source
   let nextRunSeed: number | null = null
@@ -123,7 +125,12 @@ export function applyWebLuaCommands(
     }
     switch (command.type) {
       case 'grant-experience':
-        state = grantGameSimulationPlayerExperience(state, command.playerId, command.amount)
+        state = grantGameSimulationPlayerExperience(
+          state,
+          command.playerId,
+          command.amount,
+          resolveModBoast,
+        )
         break
       case 'grant-gold': {
         if (!Number.isSafeInteger(command.amount) || command.amount < 1) break

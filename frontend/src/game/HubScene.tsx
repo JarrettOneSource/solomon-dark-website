@@ -66,6 +66,7 @@ import type {
   GameModAsset,
   GameSessionKind,
   GameSnapshot,
+  ModContentProjection,
 } from './protocol/game-protocol.ts'
 import type { LocalPartyState, PartyVisibility } from './protocol/party-state.ts'
 import PartySettingsDialog from './PartySettingsDialog.tsx'
@@ -110,6 +111,7 @@ interface HubSceneProps {
   optionalBookOverlap: boolean
   modalDisabled: boolean
   modAssets: readonly GameModAsset[]
+  modContent: ModContentProjection | null
   levelUpPresentationId: number | null
   nativeUiStageStyle: CSSProperties
   onInput: (input: PlayerCharacterInput) => void
@@ -172,6 +174,7 @@ export default function HubScene({
   optionalBookOverlap,
   modalDisabled,
   modAssets,
+  modContent,
   levelUpPresentationId,
   nativeUiStageStyle,
   onInput,
@@ -960,6 +963,7 @@ export default function HubScene({
           menuKeyCode={settings.controls.openMenu}
           memorial={memorial}
           modAssets={modAssets}
+          modContent={modContent}
           nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
           onOpenSkills={onOpenSkills}

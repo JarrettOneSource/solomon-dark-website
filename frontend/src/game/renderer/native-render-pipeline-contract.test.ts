@@ -107,7 +107,6 @@ test('every image source has one explicit stock, point, or composite policy', ()
     'native-ui/native-ui-workbench.ts',
     'renderer/boneyard-textures.ts',
     'renderer/create-menu-renderer.ts',
-    'renderer/gameplay-pause-renderer.ts',
     'renderer/hub-inventory-renderer.ts',
     'renderer/hub-textures.ts',
     'renderer/hud-skill-selector-renderer.ts',

@@ -402,7 +402,7 @@ async function pauseRoundTrip(page, label) {
   await overlay.waitFor({ timeout: 10_000 })
   const paused = await capture(page, label)
   assert.ok(paused.members.pauseOverlay[0]?.visible, `${label}: pause menu visible after the skull tap`)
-  await page.locator('[data-pause-action="resume"]').tap()
+  await page.locator('[data-native-ui-simple-menu-action="resume"]').tap()
   await overlay.waitFor({ state: 'detached', timeout: 10_000 })
   await page.waitForTimeout(100)
   await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]')

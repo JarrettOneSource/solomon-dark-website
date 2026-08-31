@@ -1,4 +1,4 @@
-import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
+import { NativeBitmapText } from './native-ui/react-raw.ts'
 
 interface NativeLootBitmapTextProps {
   readonly text: string

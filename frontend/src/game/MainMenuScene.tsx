@@ -100,6 +100,7 @@ import type {
   GameplayResumeGraceState,
   HubPlayerActivity,
   LoadedBoneyard,
+  ModContentProjection,
   PartyActionRejection,
 } from './protocol/game-protocol.ts'
 import {
@@ -407,6 +408,7 @@ export default function MainMenuScene({
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [observerSession, setObserverSession] = useState<GameObserverSession | null>(null)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
+  const [modContent, setModContent] = useState<ModContentProjection | null>(null)
   const [runtimeProgression, setRuntimeProgression] = useState<ProtocolPlayerProgression | null>(null)
   const [runtimeRunPhase, setRuntimeRunPhase] = useState<GameRunPhase>('hub')
   const [runtimeAudioScene, setRuntimeAudioScene] = useState<GameAudioScene | null>(null)
@@ -666,7 +668,10 @@ export default function MainMenuScene({
   }, [audio, runtimeAudioScene, runtimeSnapshot?.world.kind, screen])
 
   useEffect(() => {
-    if (!session) return
+    if (!session) {
+      setModContent(null)
+      return
+    }
     setWorldSpeeches([])
     const hallRecorder = new HallOfFameRunRecorder()
     const initialSnapshot = session.getSnapshot()
@@ -694,6 +699,7 @@ export default function MainMenuScene({
     setLoadedBoneyard(initialBoneyard)
     setGameplayPause(session.getGameplayPause())
     setGameplayResumeGrace(session.getGameplayResumeGrace())
+    setModContent(session.getModContent())
     const initialPartyState = session.getPartyState()
     partyInvitationAudioCursorRef.current = initialPartyState
       ? createPartyInvitationAudioCursor(initialPartyState.invitations.map(({ id }) => id))
@@ -776,6 +782,7 @@ export default function MainMenuScene({
       }
     })
     const removeGameplayPause = session.onGameplayPause(setGameplayPause)
+    const removeModContent = session.onModContent(setModContent)
     const removeGameplayResumeGrace = session.onGameplayResumeGrace(
       setGameplayResumeGrace,
     )
@@ -836,6 +843,7 @@ export default function MainMenuScene({
       removeSnapshot()
       removeBoneyard()
       removeGameplayPause()
+      removeModContent()
       removeGameplayResumeGrace()
       removeChatMessage()
       removeCheatMode()
@@ -2113,6 +2121,7 @@ export default function MainMenuScene({
               optionalBookOverlap={optionalBookOverlap}
               modalDisabled={sceneModalDisabled}
               modAssets={session.modAssets}
+              modContent={modContent}
               levelUpPresentationId={levelUpPresentationId}
               nativeUiStageStyle={nativeStageStyle}
               playerId={session.playerId}

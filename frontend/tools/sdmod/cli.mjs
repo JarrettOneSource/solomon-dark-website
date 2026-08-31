@@ -619,6 +619,13 @@ function pascal(value) {
 
 function luaFieldType(kind, field) {
   if (['accessible_name', 'description', 'name', 'source'].includes(field)) return 'string'
+  if (kind === 'boast' && ['instruction', 'response', 'statement'].includes(field)) return 'string'
+  if (kind === 'boast' && field === 'fail_on') {
+    return '("magical-equipment"|"mana-underflow"|"potion-use"|"secondary-cast")[]'
+  }
+  if (kind === 'boast' && field === 'random_skill_choices') return 'boolean'
+  if (kind === 'boast' && field === 'score_multiplier') return 'number'
+  if (kind === 'boast' && ['stock_icon', 'success_wave'].includes(field)) return 'integer'
   if (['cooldown', 'duration', 'restock'].includes(field)) return 'SdDuration'
   if (['maximum_rank', 'rolls'].includes(field)) return 'integer'
   if (field === 'mana') return 'number'

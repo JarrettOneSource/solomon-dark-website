@@ -359,6 +359,9 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
       assertLive()
       const result = new Container({ label })
       result.eventMode = 'none'
+      result.alpha = 'opacity' in fragment && typeof fragment.opacity === 'number'
+        ? fragment.opacity
+        : 1
       for (const node of fragment.nodes) renderNode(result, node)
       return result
     },

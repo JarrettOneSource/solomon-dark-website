@@ -6,12 +6,9 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from 'react'
 
-import { gameSettings as settingsAssets } from '../lib/assets.ts'
 import {
   GAME_FULLSCREEN_CHANGE_EVENTS,
   gameFullscreenActive,
@@ -44,14 +41,15 @@ import {
 } from './mobile-ui-layout.ts'
 import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
 import {
-  NativeSettingsActionArrow,
-  NativeSettingsBindingPlate,
-  NativeSettingsPanelArt,
-  NativeSettingsRangeTrack,
-  NativeSettingsRowPlate,
-  NativeSettingsText,
-  NativeSettingsToggleArt,
-} from './native-ui/NativeSettingsPresentation.tsx'
+  NativeUiSettingsAction,
+  NativeUiSettingsBinding,
+  NativeUiSettingsGroup,
+  NativeUiSettingsPanel,
+  NativeUiSettingsRange,
+  NativeUiSettingsStaticRow,
+  NativeUiSettingsToggle,
+  NativeUiSettingsValueAction,
+} from './native-ui/react.ts'
 
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
 type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
@@ -225,39 +223,28 @@ export default function GameSettingsDialog({
     )
   }
 
+  const footerLabel = page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'
   return (
-    <div className="game-settings-backdrop" role="presentation">
-      <section
-        aria-labelledby="game-settings-title"
-        aria-modal="true"
-        className="game-settings-dialog"
-        data-settings-context={context}
-        data-settings-page={page}
-        onContextMenu={(event) => {
-          if (listening) event.preventDefault()
-        }}
-        onPointerDown={(event) => captureMouseBinding(
-          event,
-          listening,
-          settings,
-          onChange,
-          setListening,
-        )}
-        role="dialog"
-        style={{
-          '--settings-control-panel-atlas': `url("${settingsAssets.controlPanelAtlas}")`,
-          '--settings-ui-atlas': `url("${settingsAssets.uiAtlas}")`,
-        } as CSSProperties}
-      >
-        <NativeSettingsPanelArt />
-        <header className="game-settings-header">
-          <h2 id="game-settings-title">
-            <span className="sr-only">{pageTitle(page)}</span>
-            <NativeSettingsText align="center" scale={1.75} text={pageTitle(page)} tint={0xd9bd72} />
-          </h2>
-        </header>
-        <div ref={contentRef} className="game-settings-content">
-          {page === 'root' ? (
+    <NativeUiSettingsPanel
+      contentRef={contentRef}
+      data-settings-context={context}
+      data-settings-page={page}
+      footerBack
+      footerLabel={footerLabel}
+      onContextMenu={(event) => {
+        if (listening) event.preventDefault()
+      }}
+      onFooter={back}
+      onPointerDown={(event) => captureMouseBinding(
+        event,
+        listening,
+        settings,
+        onChange,
+        setListening,
+      )}
+      title={pageTitle(page)}
+    >
+      {page === 'root' ? (
             <RootSettings
               accountUsername={accountUsername}
               context={context}
@@ -269,40 +256,22 @@ export default function GameSettingsDialog({
               saveTransfer={saveTransfer}
               settings={settings}
             />
-          ) : page === 'controls' ? (
+      ) : page === 'controls' ? (
             <ControlsSettings
               listening={listening}
               onListen={setListening}
               settings={settings}
             />
-          ) : page === 'mobile-ui' ? (
+      ) : page === 'mobile-ui' ? (
             mobileUiEditor
-          ) : page === 'performance' ? (
+      ) : page === 'performance' ? (
             <PerformanceSettings onChange={onChange} settings={settings} />
-          ) : saveTransfer ? (
+      ) : saveTransfer ? (
             <Suspense fallback={<p className="game-settings-context-note" role="status">Opening save transfer…</p>}>
               <NativeSaveTransferSettings controller={saveTransfer} />
             </Suspense>
-          ) : null}
-        </div>
-        <button
-          className="game-settings-close"
-          data-game-back="true"
-          onClick={page === 'root' ? onClose : back}
-          type="button"
-        >
-          <span className="sr-only">
-            {page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'}
-          </span>
-          <NativeSettingsText
-            align="center"
-            scale={1.15}
-            text={page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'}
-            tint={0xf2f0dc}
-          />
-        </button>
-      </section>
-    </div>
+      ) : null}
+    </NativeUiSettingsPanel>
   )
 }
 
@@ -325,14 +294,14 @@ function RootSettings({
   const globalChat = onlineFeatures && settings.enableGlobalChat
   return (
     <>
-      <SettingsGroup title="ONLINE FEATURES">
-        <SettingsToggle
+      <NativeUiSettingsGroup title="ONLINE FEATURES">
+        <NativeUiSettingsToggle
           autoFocus
           checked={onlineFeatures}
           label="ENABLE ONLINE FEATURES"
           onChange={(enableOnlineFeatures) => onChange({ ...settings, enableOnlineFeatures })}
         />
-        <SettingsToggle
+        <NativeUiSettingsToggle
           checked={globalChat && settings.enableActivityMessages}
           disabled={!globalChat}
           label="ENABLE ACTIVITY MESSAGES"
@@ -342,84 +311,84 @@ function RootSettings({
             enableActivityMessages,
           })}
         />
-        <SettingsToggle
+        <NativeUiSettingsToggle
           checked={globalChat}
           disabled={!onlineFeatures}
           label="ENABLE GLOBAL CHAT"
           nested
           onChange={(enableGlobalChat) => onChange({ ...settings, enableGlobalChat })}
         />
-        <SettingsToggle
+        <NativeUiSettingsToggle
           checked={onlineFeatures && settings.enableSharedHub}
           disabled={!onlineFeatures}
           label="ENABLE SHARED HUB"
           nested
           onChange={(enableSharedHub) => onChange({ ...settings, enableSharedHub })}
         />
-        <SettingsToggle
+        <NativeUiSettingsToggle
           checked={onlineFeatures && settings.submitRunsToServer}
           disabled={!onlineFeatures}
           label="SUBMIT RUNS TO SERVER"
           nested
           onChange={(submitRunsToServer) => onChange({ ...settings, submitRunsToServer })}
         />
-      </SettingsGroup>
+      </NativeUiSettingsGroup>
 
-      <SettingsGroup title="SOUND AND MUSIC">
-        <SettingsRange
+      <NativeUiSettingsGroup title="SOUND AND MUSIC">
+        <NativeUiSettingsRange
           label="SOUND VOL:"
           maximum={100}
           minimum={0}
           onChange={(soundVolumePercent) => onChange({ ...settings, soundVolumePercent })}
           value={settings.soundVolumePercent}
         />
-        <SettingsRange
+        <NativeUiSettingsRange
           label="MUSIC VOL:"
           maximum={100}
           minimum={0}
           onChange={(musicVolumePercent) => onChange({ ...settings, musicVolumePercent })}
           value={settings.musicVolumePercent}
         />
-      </SettingsGroup>
+      </NativeUiSettingsGroup>
 
-      <SettingsGroup title="VIDEO SETTINGS">
+      <NativeUiSettingsGroup title="VIDEO SETTINGS">
         <FullscreenSetting />
-        <SettingsRange
+        <NativeUiSettingsRange
           label="CAMERA FOV"
           maximum={CAMERA_FOV_MAX_PERCENT}
           minimum={CAMERA_FOV_MIN_PERCENT}
           onChange={(cameraFovPercent) => onChange({ ...settings, cameraFovPercent })}
           value={settings.cameraFovPercent}
         />
-        <SettingsRange
+        <NativeUiSettingsRange
           label="UI SCALE"
           maximum={UI_SCALE_MAX_PERCENT}
           minimum={UI_SCALE_MIN_PERCENT}
           onChange={(uiScalePercent) => onChange({ ...settings, uiScalePercent })}
           value={settings.uiScalePercent}
         />
-      </SettingsGroup>
+      </NativeUiSettingsGroup>
 
-      <SettingsGroup title="CONTROLS">
-        <SettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
-        <SettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
+      <NativeUiSettingsGroup title="CONTROLS">
+        <NativeUiSettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
+        <NativeUiSettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
         <Suspense fallback={null}>
           <MobileUiLayoutSettingsAction accountUsername={accountUsername} />
         </Suspense>
-      </SettingsGroup>
+      </NativeUiSettingsGroup>
 
-      <SettingsGroup title="PERFORMANCE">
-        <SettingsAction label="TWEAK GAME" onClick={() => onOpen('performance')} />
-      </SettingsGroup>
+      <NativeUiSettingsGroup title="PERFORMANCE">
+        <NativeUiSettingsAction label="TWEAK GAME" onClick={() => onOpen('performance')} />
+      </NativeUiSettingsGroup>
 
       {context === 'title' && saveTransfer ? (
-        <SettingsGroup title="SAVE TRANSFER">
-          <SettingsAction label="STOCK / BROWSER SAVE" onClick={() => onOpen('save-transfer')} />
-        </SettingsGroup>
+        <NativeUiSettingsGroup title="SAVE TRANSFER">
+          <NativeUiSettingsAction label="STOCK / BROWSER SAVE" onClick={() => onOpen('save-transfer')} />
+        </NativeUiSettingsGroup>
       ) : null}
 
-      <SettingsGroup title="DEVELOPER">
-        <SettingsToggle
+      <NativeUiSettingsGroup title="DEVELOPER">
+        <NativeUiSettingsToggle
           checked={settings.enableCheats}
           label="ENABLE CHEATS"
           onChange={(enableCheats) => onChange({ ...settings, enableCheats })}
@@ -430,7 +399,7 @@ function RootSettings({
             <br />DevTools: <code>solomonDark.lua.help()</code>
           </p>
         ) : null}
-      </SettingsGroup>
+      </NativeUiSettingsGroup>
 
       {context !== 'title' ? (
         <p className="game-settings-context-note">
@@ -453,39 +422,19 @@ function ControlsSettings({
   return (
     <div className="game-settings-controls">
       {BINDING_GROUPS.map((group) => (
-        <SettingsGroup key={group.label} title={group.label}>
+        <NativeUiSettingsGroup key={group.label} title={group.label}>
           {group.rows.map(([action, label]) => (
-            <button
-              aria-label={`${label}, ${gameBindingLabel(settings.controls[action])}`}
+            <NativeUiSettingsBinding
               aria-pressed={listening === action}
-              className="game-settings-binding"
               data-binding-action={action}
               data-binding-code={settings.controls[action]}
               key={action}
+              label={label}
               onClick={() => onListen(listening === action ? null : action)}
-              type="button"
-            >
-              <NativeSettingsRowPlate className="game-settings-row-plate" />
-              <span className="game-settings-native-label">
-                <span className="sr-only">{label}</span>
-                <NativeSettingsText scale={1.15} text={label} />
-              </span>
-              <strong>
-                <NativeSettingsBindingPlate />
-                <span className="sr-only">
-                  {listening === action ? 'PRESS A KEY' : gameBindingLabel(settings.controls[action])}
-                </span>
-                <NativeSettingsText
-                  align="center"
-                  scale={1.05}
-                  text={listening === action ? 'PRESS A KEY' : gameBindingLabel(settings.controls[action])}
-                  tint={0xd9bd72}
-                  width={200}
-                />
-              </strong>
-            </button>
+              value={listening === action ? 'PRESS A KEY' : gameBindingLabel(settings.controls[action])}
+            />
           ))}
-        </SettingsGroup>
+        </NativeUiSettingsGroup>
       ))}
     </div>
   )
@@ -500,32 +449,32 @@ function PerformanceSettings({
 }) {
   return (
     <>
-      <SettingsGroup title="LIGHTING">
-        <SettingsToggle
+      <NativeUiSettingsGroup title="LIGHTING">
+        <NativeUiSettingsToggle
           checked={settings.complexLighting}
           label="COMPLEX LIGHTING"
           onChange={(complexLighting) => onChange({ ...settings, complexLighting })}
         />
-        <SettingsToggle
+        <NativeUiSettingsToggle
           checked={settings.complexShadows}
           label="COMPLEX SHADOWS"
           onChange={(complexShadows) => onChange({ ...settings, complexShadows })}
         />
-        <SettingsToggle
+        <NativeUiSettingsToggle
           checked={settings.multipleShadows}
           label="MULTIPLE SHADOWS"
           onChange={(multipleShadows) => onChange({ ...settings, multipleShadows })}
         />
-        <SettingsRange
+        <NativeUiSettingsRange
           label="LIGHT QUALITY"
           maximum={LIGHT_QUALITY_MAX_PERCENT}
           minimum={LIGHT_QUALITY_MIN_PERCENT}
           onChange={(lightQualityPercent) => onChange({ ...settings, lightQualityPercent })}
           value={settings.lightQualityPercent}
         />
-      </SettingsGroup>
-      <SettingsGroup title="PLAY STYLE">
-        <SettingsToggle
+      </NativeUiSettingsGroup>
+      <NativeUiSettingsGroup title="PLAY STYLE">
+        <NativeUiSettingsToggle
           checked={settings.castSecondariesAtMouse}
           label="CAST SECONDARY SPELLS AT MOUSE"
           onChange={(castSecondariesAtMouse) => onChange({
@@ -533,128 +482,19 @@ function PerformanceSettings({
             castSecondariesAtMouse,
           })}
         />
-      </SettingsGroup>
-      <SettingsGroup title="SPECIAL EFFECTS">
-        <SettingsToggle
+      </NativeUiSettingsGroup>
+      <NativeUiSettingsGroup title="SPECIAL EFFECTS">
+        <NativeUiSettingsToggle
           checked={settings.zoomEffects}
           label="CAMERA SHAKE"
           onChange={(zoomEffects) => onChange({ ...settings, zoomEffects })}
         />
-        <p className="game-settings-fixed-policy">
-          <NativeSettingsRowPlate className="game-settings-row-plate" />
-          <span className="game-settings-native-label">
-            <span className="sr-only">ENHANCED EFFECTS: ON</span>
-            <NativeSettingsText scale={1.15} text="ENHANCED EFFECTS: ON" />
-          </span>
-          <small>Fixed for synchronized multiplayer presentation.</small>
-        </p>
-      </SettingsGroup>
-    </>
-  )
-}
-
-function SettingsGroup({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <section className="game-settings-group" aria-label={title}>
-      <h3>
-        <span className="sr-only">{title}</span>
-        <NativeSettingsText scale={1.05} text={title} tint={0xa99258} />
-      </h3>
-      <div>{children}</div>
-    </section>
-  )
-}
-
-function SettingsRange({
-  autoFocus = false,
-  label,
-  maximum,
-  minimum,
-  onChange,
-  value,
-}: {
-  autoFocus?: boolean
-  label: string
-  maximum: number
-  minimum: number
-  onChange: (value: number) => void
-  value: number
-}) {
-  return (
-    <label className="game-settings-range">
-      <NativeSettingsRowPlate className="game-settings-row-plate" />
-      <span className="game-settings-native-label">
-        <span className="sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
-      </span>
-      <div className="game-settings-range-control">
-        <NativeSettingsRangeTrack />
-        <input
-          autoFocus={autoFocus}
-          aria-valuetext={`${value}%`}
-          data-game-default-focus={autoFocus ? 'true' : undefined}
-          max={maximum}
-          min={minimum}
-          onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
-          step={1}
-          type="range"
-          value={value}
+        <NativeUiSettingsStaticRow
+          detail="Fixed for synchronized multiplayer presentation."
+          label="ENHANCED EFFECTS: ON"
         />
-        <output>
-          <span className="sr-only">{value}%</span>
-          <NativeSettingsText align="right" scale={0.9} text={`${value}%`} tint={0xf0d996} width={48} />
-        </output>
-      </div>
-    </label>
-  )
-}
-
-function SettingsToggle({
-  autoFocus = false,
-  checked,
-  disabled = false,
-  label,
-  nested = false,
-  onChange,
-}: {
-  autoFocus?: boolean
-  checked: boolean
-  disabled?: boolean
-  label: string
-  nested?: boolean
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <button
-      autoFocus={autoFocus}
-      aria-pressed={checked}
-      className="game-settings-native-toggle-row"
-      data-game-default-focus={autoFocus ? 'true' : undefined}
-      data-settings-nested={nested || undefined}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      type="button"
-    >
-      <NativeSettingsRowPlate className="game-settings-row-plate" />
-      <span className="game-settings-native-label">
-        <span className="sr-only">{label}</span>
-        <NativeSettingsText scale={nested ? 1 : 1.15} text={label} />
-      </span>
-      <NativeSettingsToggleArt enabled={checked} />
-    </button>
-  )
-}
-
-function SettingsAction({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button className="game-settings-action" onClick={onClick} type="button">
-      <NativeSettingsRowPlate className="game-settings-row-plate" />
-      <span className="game-settings-native-label">
-        <span className="sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
-      </span>
-      <NativeSettingsActionArrow />
-    </button>
+      </NativeUiSettingsGroup>
+    </>
   )
 }
 
@@ -696,28 +536,22 @@ function FullscreenSetting() {
   }
   return (
     <div className="game-settings-fullscreen">
-      <button
-        aria-expanded={mode === 'install' ? showInstallHelp : undefined}
-        aria-pressed={mode === 'fullscreen' ? active : undefined}
-        className="game-settings-native-toggle-row"
-        data-settings-fullscreen
-        onClick={() => { void toggle() }}
-        type="button"
-      >
-        <NativeSettingsRowPlate className="game-settings-row-plate" />
-        <span className="game-settings-native-label">
-          <span className="sr-only">FULLSCREEN</span>
-          <NativeSettingsText scale={1.15} text="FULLSCREEN" />
-        </span>
-        {mode === 'install' ? (
-          <strong>
-            <span className="sr-only">OPTIONS</span>
-            <NativeSettingsText align="right" scale={1.05} text="OPTIONS" tint={0xd9bd72} width={82} />
-          </strong>
-        ) : (
-          <NativeSettingsToggleArt enabled={active} />
-        )}
-      </button>
+      {mode === 'install' ? (
+        <NativeUiSettingsValueAction
+          aria-expanded={showInstallHelp}
+          data-settings-fullscreen
+          label="FULLSCREEN"
+          onClick={() => { void toggle() }}
+          value="OPTIONS"
+        />
+      ) : (
+        <NativeUiSettingsToggle
+          checked={active}
+          data-settings-fullscreen
+          label="FULLSCREEN"
+          onChange={() => { void toggle() }}
+        />
+      )}
       {showInstallHelp ? (
         <small role="status">Install this page as a web app for fullscreen on iPhone or iPad.</small>
       ) : null}

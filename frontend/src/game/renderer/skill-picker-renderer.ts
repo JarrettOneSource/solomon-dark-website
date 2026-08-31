@@ -35,12 +35,12 @@ import {
 } from './skill-picker-render-contract.ts'
 import { drawNativeSkillHoverBox } from './native-skill-hover-box.ts'
 import type { NativeSkillPickerReveal } from './level-up-presentation.ts'
-import { nativeUiRecord } from '../native-ui/native-ui-catalog.ts'
+import { nativeUiRecord } from '../native-ui/core.ts'
 import {
   destroyNativeUiPixiFor,
   nativeUiPixiFor,
-} from '../native-ui/native-ui-pixi.ts'
-import { measureNativeUiText } from '../native-ui/native-ui-text.ts'
+} from '../native-ui/pixi.ts'
+import { measureNativeUiText } from '../native-ui/core.ts'
 
 interface AnimatedCorner {
   readonly baseX: number

@@ -11,6 +11,8 @@ import {
 import {
   createHubNpcChatContent,
   hubNpcChatChoices,
+  hubBoastFailureText,
+  hubBoastInstruction,
   hubNpcDismissal,
   hubNpcQuestion,
   hubNpcSelectorAction,
@@ -19,8 +21,38 @@ import {
   hubNpcSelectorRows,
   hubNpcSelectorTitle,
 } from './hub-npc-dialogue.ts'
+import type { ModContentProjection } from './protocol/game-protocol.ts'
 
 const PROGRESSION = { advancedUnlocks: Array<boolean>(8).fill(false) }
+const MOD_BOAST_CONTENT: ModContentProjection = {
+  boasts: [{
+    contentId: '5000000000000000016',
+    failureProducers: ['potion-use'],
+    icon: { kind: 'stock', record: 96, style: 6 },
+    instruction: 'Survive through Wave 25.',
+    modId: 'example.boasts',
+    name: 'EMPTY HANDS, FULL GLORY!',
+    randomSkillChoices: false,
+    response: 'Provokatus nods at your reckless confidence.',
+    scoreMultiplier: 1.25,
+    statement: '"I need neither potion nor enchanted equipment!"',
+    successWave: 25,
+  }],
+  content: [{
+    art: [],
+    contentId: '5000000000000000016',
+    contentKind: 'boast',
+    description: '',
+    key: 'empty_hands',
+    modId: 'example.boasts',
+    name: 'EMPTY HANDS, FULL GLORY!',
+    presentation: null,
+  }],
+  manifestSha256: 'a'.repeat(64),
+  powerups: [],
+  revision: 0,
+  statuses: [],
+}
 
 test('every compiled actor opens its exact aggregate intro and every painting owns its exact index', () => {
   const npc = createNativeHubNpcState()
@@ -228,4 +260,42 @@ test('all three selector families expose exact rows, actions, titles, and respon
     assert.equal(spellResponse.next, 'choices')
   }
   assert.equal(hubNpcSelectorResponse('books', 99), null)
+})
+
+test('admitted mod Boasts append after stock rows and retain namespaced response ownership', () => {
+  const npc = createNativeHubNpcState()
+  const rows = hubNpcSelectorRows('boast', npc, PROGRESSION, MOD_BOAST_CONTENT)
+  assert.equal(rows.length, 6)
+  assert.deepEqual(rows[5], {
+    boastIcon: { kind: 'stock', record: 96, style: 6 },
+    detail: '"I need neither potion nor enchanted equipment!"',
+    id: {
+      contentId: '5000000000000000016',
+      kind: 'mod',
+      modId: 'example.boasts',
+    },
+    label: 'EMPTY HANDS, FULL GLORY!',
+    price: null,
+  })
+  const selection = rows[5]!.id
+  assert.notEqual(typeof selection, 'number')
+  if (typeof selection === 'number') return
+  assert.deepEqual(hubNpcSelectorAction('boast', selection), {
+    boastId: selection,
+    type: 'select-boast',
+  })
+  const response = hubNpcSelectorResponse('boast', selection, MOD_BOAST_CONTENT)
+  assert.deepEqual(response, {
+    key: 'MOD_BOAST_5000000000000000016',
+    kind: 'speech',
+    lines: ['Provokatus nods at your reckless confidence.'],
+    next: 'close',
+  })
+  assert.equal(hubBoastInstruction(selection, MOD_BOAST_CONTENT), 'Survive through Wave 25.')
+  assert.equal(hubBoastFailureText({
+    failed: true,
+    failureSequence: 1,
+    selected: selection,
+    succeeded: false,
+  }, MOD_BOAST_CONTENT), 'FAILED "EMPTY HANDS, FULL GLORY!"')
 })

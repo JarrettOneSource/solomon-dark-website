@@ -48,6 +48,17 @@ const CONTENT_SCHEMAS: Readonly<Record<WebLuaContentDefinition['contentKind'], C
     'triggers',
     'waves',
   ], ['name', 'source']),
+  boast: schema([
+    'art',
+    'fail_on',
+    'instruction',
+    'random_skill_choices',
+    'response',
+    'score_multiplier',
+    'statement',
+    'stock_icon',
+    'success_wave',
+  ], ['instruction', 'name', 'response', 'statement']),
   enemy: schema([
     'art',
     'loot',
@@ -164,6 +175,9 @@ export function validateWebLuaContentSchema(
   if (definition.fields.description !== undefined) {
     validateText(definition.fields.description, `${path}.description`, definition, issues, 1_024)
   }
+  if (definition.contentKind === 'boast') {
+    validateBoast(definition, path, issues)
+  }
   if (definition.fields.duration !== undefined) {
     validateDuration(definition.fields.duration, `${path}.duration`, definition, issues)
   }
@@ -181,6 +195,73 @@ export function validateWebLuaContentSchema(
     ))
   }
   validateLootProbabilities(definition.fields.loot, `${path}.loot`, definition, issues)
+}
+
+function validateBoast(
+  definition: WebLuaContentDefinition,
+  path: string,
+  issues: WebLuaDefinitionIssue[],
+): void {
+  for (const field of ['instruction', 'response', 'statement'] as const) {
+    validateText(definition.fields[field]!, `${path}.${field}`, definition, issues, 1_024)
+  }
+  const stockIcon = definition.fields.stock_icon
+  const art = definition.fields.art
+  const artFields = art && typeof art === 'object' && !Array.isArray(art)
+    ? art as Readonly<Record<string, WebLuaDefinitionValue>>
+    : null
+  const customIcon = Boolean(artFields?.icon)
+  if (artFields && Object.keys(artFields).some(field => field !== 'icon')) {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA', `${path}.art`, 'boast art supports only the icon slot',
+      { source: definition.source },
+    ))
+  }
+  if ((stockIcon === undefined) === !customIcon) {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA', path, 'boast requires exactly one of stock_icon or art.icon',
+      { source: definition.source },
+    ))
+  }
+  if (stockIcon !== undefined && (
+    !Number.isSafeInteger(stockIcon) || Number(stockIcon) < 0 || Number(stockIcon) > 7
+  )) issues.push(webLuaDefinitionIssue(
+    'E_SCHEMA', `${path}.stock_icon`, 'boast stock_icon must be an integer within 0..7',
+    { source: definition.source },
+  ))
+  const producers = definition.fields.fail_on
+  const allowed = new Set(['magical-equipment', 'mana-underflow', 'potion-use', 'secondary-cast'])
+  if (producers !== undefined && (
+    !Array.isArray(producers)
+    || producers.length > allowed.size
+    || producers.some(value => typeof value !== 'string' || !allowed.has(value))
+    || new Set(producers).size !== producers.length
+  )) issues.push(webLuaDefinitionIssue(
+    'E_SCHEMA', `${path}.fail_on`, 'boast fail_on contains unsupported or duplicate producers',
+    { source: definition.source },
+  ))
+  if (definition.fields.random_skill_choices !== undefined
+      && typeof definition.fields.random_skill_choices !== 'boolean') {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA', `${path}.random_skill_choices`, 'boast random_skill_choices must be boolean',
+      { source: definition.source },
+    ))
+  }
+  const successWave = definition.fields.success_wave
+  if (successWave !== undefined && (
+    !Number.isSafeInteger(successWave) || Number(successWave) < 1 || Number(successWave) > 10_000
+  )) issues.push(webLuaDefinitionIssue(
+    'E_SCHEMA', `${path}.success_wave`, 'boast success_wave must be an integer within 1..10000',
+    { source: definition.source },
+  ))
+  const multiplier = definition.fields.score_multiplier
+  if (multiplier !== undefined && (
+    typeof multiplier !== 'number' || !Number.isFinite(multiplier)
+    || multiplier < 1 || multiplier > 10
+  )) issues.push(webLuaDefinitionIssue(
+    'E_SCHEMA', `${path}.score_multiplier`, 'boast score_multiplier must be finite within 1..10',
+    { source: definition.source },
+  ))
 }
 
 export function validateWebLuaDefinitionNodes(

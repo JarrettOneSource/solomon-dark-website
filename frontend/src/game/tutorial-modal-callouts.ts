@@ -22,8 +22,7 @@ import {
   type NativeHudPoint,
   type NativeHudRect,
 } from './native-hud-layout.ts'
-import { nativeUiFont } from './native-ui/native-ui-catalog.ts'
-import { measureNativeUiText } from './native-ui/native-ui-text.ts'
+import { measureNativeUiText, nativeUiFont } from './native-ui/core.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   HUB_INVENTORY_GRID,

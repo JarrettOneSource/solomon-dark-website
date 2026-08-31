@@ -427,7 +427,23 @@ async function exerciseProvokatus(canvas) {
   await dialog.getByRole('button', { name: 'Boast' }).click()
   await waitForPhase(dialog, 'selector')
   assert.equal(await dialog.locator('[data-native-selector-kind="boast"]').count(), 5)
+  const boastCanvas = dialog.locator('.hub-inventory-native-canvas')
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastMenu === 'stock'
+  ))
+  await dialog.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor({ timeout: 15_000 })
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-page'), '1/1')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-rows'), '5')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), '90,91,92,93,94')
   await page.screenshot({ path: `${screenshotRoot}-provokatus-boasts.png` })
+  await dialog.locator('[data-native-selector-id="0"]').hover()
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastHighlighted
+      === 'native:0'
+  ))
+  await page.screenshot({ path: `${screenshotRoot}-provokatus-boast-hover.png` })
   await dialog.locator('[data-native-selector-id="3"]').click()
   await assertSpeech(dialog, 'ANNAL_RANDOMBOAST', 5_000)
   await page.screenshot({ path: `${screenshotRoot}-provokatus-response.png` })

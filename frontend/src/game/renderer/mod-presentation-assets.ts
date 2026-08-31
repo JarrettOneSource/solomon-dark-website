@@ -3,6 +3,7 @@ import { Rectangle, Texture } from 'pixi.js'
 import type {
   ModConsumableContent,
   ModItemContent,
+  ModSpriteFrame,
 } from '../core-kernels/hub-economy.ts'
 import { loadGameImage, releaseGameImages } from '../game-assets.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
@@ -11,6 +12,12 @@ import { gameContentUrl } from '../game-content-cache.ts'
 export interface ModPresentationTextures {
   destroy(): void
   iconTrim(content: ModItemContent): Texture | null
+  spriteFrame(
+    cacheKey: string,
+    modId: string,
+    imagePath: string,
+    frame: ModSpriteFrame,
+  ): Texture
   texture(content: ModConsumableContent | ModItemContent): Texture
   wearable(content: ModItemContent): ModWearableTextureFrames | null
 }
@@ -117,6 +124,27 @@ export async function loadModPresentationTextures(
       return content.iconTrimImagePath
         ? iconTexture(content, content.icon, 'icon-trim', content.iconTrimImagePath)
         : null
+    },
+    spriteFrame(cacheKey, modId, imagePath, frame) {
+      if (destroyed) throw new Error('mod presentation textures are destroyed')
+      const key = `sprite:${cacheKey}`
+      const cached = frames.get(key)
+      if (cached) return cached
+      const source = base(modId, imagePath, 'mod sprite asset')
+      const texture = new Texture({
+        frame: new Rectangle(frame.x, frame.y, frame.width, frame.height),
+        orig: new Rectangle(0, 0, frame.logicalWidth, frame.logicalHeight),
+        source: source.source,
+        trim: new Rectangle(
+          (frame.logicalWidth - frame.width) / 2 + frame.centerOffsetX,
+          (frame.logicalHeight - frame.height) / 2 + frame.centerOffsetY,
+          frame.width,
+          frame.height,
+        ),
+      })
+      frames.set(key, texture)
+      derived.add(texture)
+      return texture
     },
     texture(content) {
       if (destroyed) throw new Error('mod presentation textures are destroyed')

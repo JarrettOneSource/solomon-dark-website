@@ -4,8 +4,11 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { installGameLuaConsole } from './game-lua-console.ts'
-import { nativeUiFont, nativeUiRecord } from './native-ui/native-ui-catalog.ts'
-import { NATIVE_SETTINGS_PRESENTATION } from './native-ui/native-settings-contract.ts'
+import {
+  NATIVE_SETTINGS_PRESENTATION,
+  nativeUiFont,
+  nativeUiRecord,
+} from './native-ui/core.ts'
 import {
   CAMERA_FOV_MAX_PERCENT,
   CAMERA_FOV_MIN_PERCENT,

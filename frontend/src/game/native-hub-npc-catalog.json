@@ -10,10 +10,73 @@
     "Dodged when he should have parried."
   ],
   "boastInstruction": "To succeed at your boast, you must\nsurvive until at least Wave 30",
+  "boastPresentation": {
+    "boxInset": {
+      "heightReduction": 160,
+      "left": 90,
+      "top": 80,
+      "widthReduction": 180
+    },
+    "edgeUvOrigin": 0.95,
+    "fadeAlphaStep": 0.10000000149011612,
+    "fonts": {
+      "detail": "medium",
+      "label": "special-uppercase",
+      "title": "menu"
+    },
+    "iconInset": 15,
+    "iconRecords": [
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97
+    ],
+    "idleTint": [
+      0.85,
+      0.73,
+      0.44,
+      1.0
+    ],
+    "outer": {
+      "centerYOffset": 70,
+      "height": 560,
+      "panelRecord": 11,
+      "width": 700
+    },
+    "row": {
+      "firstTop": 25,
+      "height": 85,
+      "left": 15,
+      "pitch": 90,
+      "record": 50,
+      "widthInset": 30
+    },
+    "rowTextOffsets": {
+      "detail": 5,
+      "label": -15
+    },
+    "selectedBaseTint": [
+      0.5,
+      1.0,
+      0.5,
+      1.0
+    ],
+    "selectedSaturation": 0.6,
+    "stockRowCount": 5,
+    "titleBaselineY": 64,
+    "titleText": "Select a Boast",
+    "doneBottomInset": 50,
+    "doneText": "DONE"
+  },
   "boastScoreMultiplier": 1.100000023841858,
   "boasts": [
     {
       "failureProducer": "potion-use",
+      "iconRecord": 90,
       "id": 0,
       "label": "POTIONS ARE FOR PEASANTS!",
       "response": "ANNAL_POTIONBOAST",
@@ -21,6 +84,7 @@
     },
     {
       "failureProducer": "magical-equipment",
+      "iconRecord": 91,
       "id": 1,
       "label": "I'M TOO MACHO FOR MAGIC!",
       "response": "ANNAL_ITEMBOAST",
@@ -28,6 +92,7 @@
     },
     {
       "failureProducer": "secondary-cast",
+      "iconRecord": 92,
       "id": 2,
       "label": "SECONDARIES ARE SISSY!",
       "response": "ANNAL_SECONDARIESBOAST",
@@ -35,6 +100,7 @@
     },
     {
       "failureProducer": null,
+      "iconRecord": 93,
       "id": 3,
       "label": "I AM ONE WITH THE MAGIC!",
       "response": "ANNAL_RANDOMBOAST",
@@ -42,6 +108,7 @@
     },
     {
       "failureProducer": "mana-underflow",
+      "iconRecord": 94,
       "id": 4,
       "label": "I NEVER RUN OUT OF MANA!",
       "response": "ANNAL_MANABOAST",
@@ -1260,7 +1327,7 @@
       }
     }
   },
-  "schema": "solomon-dark-native-hub-npc-interactions-v3",
+  "schema": "solomon-dark-native-hub-npc-interactions-v4",
   "skorcha": {
     "animationDelay": {
       "drawCount": 10,

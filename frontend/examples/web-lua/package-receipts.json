@@ -4,10 +4,10 @@
     {
       "directory": "apprentice-apothecary",
       "fileName": "apprentice-apothecary.sdmod",
-      "graphSha256": "a24d19aa71cebf09603f54e09cf2b4e67c3368d1631ebba15a288a5b89a4d123",
+      "graphSha256": "ff6ee22044ae76a52f7ae69c8f61b4fb4102b021368e577ec65d462fdc1a7528",
       "id": "showcase.apprentice-apothecary",
-      "packageBytes": 126215,
-      "packageSha256": "b203004d9e13f093cde2a7edfbd7055981ea7e5a81f24b57e8393b3c88f16eb4",
+      "packageBytes": 127298,
+      "packageSha256": "efc5b3e43490f8954b0457d06e980a9382b1bd7b7a224abeaf213711bc13fd06",
       "version": "1.0.0"
     },
     {

@@ -97,6 +97,7 @@ export interface NativeUiFragment {
 
 export interface NativeUiPlan extends NativeUiFragment {
   readonly height: number
+  readonly opacity?: number
   readonly width: number
 }
 
@@ -155,6 +156,7 @@ export interface NativeUiSimpleMenuSpec {
   readonly dimAlpha?: number
   readonly firstRowTop?: number
   readonly height: number
+  readonly reveal?: number
   readonly rowGap?: number
   readonly rows: readonly NativeUiSimpleMenuRow[]
   readonly width: number
@@ -197,6 +199,25 @@ export const NATIVE_UI_MESSAGE = Object.freeze({
   textInsetX: 76,
   titleBaselineOffset: 95,
   verticalEdgeRecord: 79,
+})
+
+export const NATIVE_UI_SIMPLE_MENU = Object.freeze({
+  arrowRecord: 8,
+  chromeMotion: 25,
+  chromePadding: 40,
+  dimAlpha: 0.85,
+  frameEdgeUvOrigin: 0.95,
+  frameRecord: 17,
+  headerOffset: 42,
+  headerRecord: 18,
+  largeArrowOffset: 55,
+  rowGap: 7,
+  rowHeight: 69,
+  rowWidth: 353,
+  sideArrowOffset: 42,
+  sideArrowScale: 0.75,
+  sideArrowSpacing: 75,
+  pressedLabelOffset: 6,
 })
 
 export function nativeUiRect(
@@ -575,56 +596,108 @@ export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
 
 export function planNativeUiSimpleMenu(spec: NativeUiSimpleMenuSpec): NativeUiPlan {
   if (spec.rows.length === 0) throw new RangeError('native UI SimpleMenu requires at least one row')
+  const reveal = spec.reveal ?? 1
+  if (!Number.isFinite(reveal) || reveal < 0 || reveal > 1) {
+    throw new RangeError('native UI SimpleMenu reveal must be between zero and one')
+  }
   const centerX = spec.centerX ?? spec.width / 2
-  const firstTop = spec.firstRowTop ?? (spec.height - (spec.rows.length * 69 + (spec.rows.length - 1) * 7)) / 2
-  const rowGap = spec.rowGap ?? 7
-  const rowFragments = spec.rows.map((row, index) => planNativeUiButton({
-    bounds: nativeUiRect(centerX - 176.5, firstTop + index * (69 + rowGap), 353, 69),
-    id: row.id,
-    label: row.label,
-    state: row.state,
-  }))
-  const top = firstTop - 40
-  const height = spec.rows.length * 69 + (spec.rows.length - 1) * rowGap + 80
+  const rowGap = spec.rowGap ?? NATIVE_UI_SIMPLE_MENU.rowGap
+  const rowStackHeight = spec.rows.length * NATIVE_UI_SIMPLE_MENU.rowHeight
+    + (spec.rows.length - 1) * rowGap
+  const firstTop = spec.firstRowTop ?? (spec.height - rowStackHeight) / 2
+  const rowFragments = spec.rows.map((row, index) => {
+    const fragment = planNativeUiButton({
+      bounds: nativeUiRect(
+        centerX - NATIVE_UI_SIMPLE_MENU.rowWidth / 2,
+        firstTop + index * (NATIVE_UI_SIMPLE_MENU.rowHeight + rowGap),
+        NATIVE_UI_SIMPLE_MENU.rowWidth,
+        NATIVE_UI_SIMPLE_MENU.rowHeight,
+      ),
+      id: row.id,
+      label: row.label,
+      state: row.state,
+    })
+    if (row.state !== 'pressed') return fragment
+    return {
+      ...fragment,
+      nodes: fragment.nodes.map((node) => node.kind === 'text'
+        ? {
+            ...node,
+            text: {
+              ...node.text,
+              x: node.text.x + NATIVE_UI_SIMPLE_MENU.pressedLabelOffset,
+              y: node.text.y + NATIVE_UI_SIMPLE_MENU.pressedLabelOffset,
+            },
+          }
+        : node),
+    }
+  })
+  const spread = Math.fround(
+    (1 - reveal) * NATIVE_UI_SIMPLE_MENU.chromeMotion
+      + NATIVE_UI_SIMPLE_MENU.chromePadding,
+  )
+  const top = firstTop - spread
+  const height = rowStackHeight + spread * 2
+  const bottom = top + height
+  const curtain: NativeUiFragment = {
+    actions: [],
+    nodes: [{
+      alpha: spec.dimAlpha ?? NATIVE_UI_SIMPLE_MENU.dimAlpha,
+      bounds: nativeUiRect(0, 0, spec.width, spec.height),
+      color: 0x000000,
+      kind: 'solid',
+      label: 'simple-menu:curtain',
+    }],
+  }
   const chrome: NativeUiFragment = {
     actions: [],
     nodes: [
       {
-        alpha: spec.dimAlpha ?? 0.85,
-        bounds: nativeUiRect(0, 0, spec.width, spec.height),
-        color: 0x000000,
-        kind: 'solid',
-        label: 'simple-menu:curtain',
-      },
-      {
         atlas: 'UI',
-        bounds: nativeUiRect(centerX - 216.5, top, 433, height),
-        edgeUvOrigin: 0.95,
+        bounds: nativeUiRect(
+          centerX - NATIVE_UI_SIMPLE_MENU.rowWidth / 2 - spread,
+          top,
+          NATIVE_UI_SIMPLE_MENU.rowWidth + spread * 2,
+          height,
+        ),
+        edgeUvOrigin: NATIVE_UI_SIMPLE_MENU.frameEdgeUvOrigin,
         kind: 'nine-slice',
         label: 'simple-menu:frame',
-        record: 17,
+        record: NATIVE_UI_SIMPLE_MENU.frameRecord,
       },
       {
         anchor: [0.5, 0.5],
         atlas: 'UI',
         kind: 'sprite',
         label: 'simple-menu:header',
-        record: 18,
+        record: NATIVE_UI_SIMPLE_MENU.headerRecord,
         rotation: Math.PI / 2,
         x: centerX,
-        y: top - 37,
+        y: top - NATIVE_UI_SIMPLE_MENU.headerOffset,
       },
-      ...[0, 1, 2].map((index): NativeUiSpriteNode => ({
+      {
         anchor: [0.5, 0.5],
         atlas: 'UI',
         kind: 'sprite',
-        label: `simple-menu:arrow-${index}`,
-        record: 8,
-        scale: index === 0 ? 1 : 0.75,
-        x: centerX + (index - 1) * 75,
-        y: top + height + (index === 1 ? 50 : 37),
+        label: 'simple-menu:arrow-center',
+        record: NATIVE_UI_SIMPLE_MENU.arrowRecord,
+        x: centerX,
+        y: bottom + NATIVE_UI_SIMPLE_MENU.largeArrowOffset,
+      },
+      ...[-1, 1].map((side): NativeUiSpriteNode => ({
+        anchor: [0.5, 0.5],
+        atlas: 'UI',
+        kind: 'sprite',
+        label: `simple-menu:arrow-${side < 0 ? 'left' : 'right'}`,
+        record: NATIVE_UI_SIMPLE_MENU.arrowRecord,
+        scale: NATIVE_UI_SIMPLE_MENU.sideArrowScale,
+        x: centerX + side * NATIVE_UI_SIMPLE_MENU.sideArrowSpacing,
+        y: bottom + NATIVE_UI_SIMPLE_MENU.sideArrowOffset,
       })),
     ],
   }
-  return nativeUiPlan(spec.width, spec.height, chrome, ...rowFragments)
+  return {
+    ...nativeUiPlan(spec.width, spec.height, curtain, ...rowFragments, chrome),
+    opacity: reveal,
+  }
 }

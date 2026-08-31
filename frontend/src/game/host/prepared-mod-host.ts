@@ -19,6 +19,7 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import {
   GAME_TICK_RATE,
+  failGameSimulationPlayerBoast,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
@@ -76,6 +77,7 @@ import {
   type PreparedModUiDefinition,
 } from '../modding/content/index.ts'
 import type { ResolvedWebLuaContentReference } from '../modding/definition/index.ts'
+import type { BoastResolver } from '../core-kernels/boast.ts'
 import {
   prepareModSession,
   type ModIntent,
@@ -225,6 +227,11 @@ export async function prepareModHost(options: Readonly<{
   const enemySpawns: BoneyardEnemySpawnIntent[] = []
   const presentation: PreparedModPresentationIntent[] = []
   const reportedEnemyHealth = new Map<number, number>()
+  const resolveBoast: BoastResolver = (selection) => {
+    if (typeof selection === 'number') return null
+    const definition = content.boast(selection.contentId)
+    return definition?.modId === selection.modId ? definition : null
+  }
   let activeBoneyardContentId: string | null = null
   let closed = false
   const adapter = createHostIntentAdapter({
@@ -233,6 +240,7 @@ export async function prepareModHost(options: Readonly<{
     enemySpawns,
     powerups,
     presentation,
+    resolveBoast,
     scenes,
     semanticState,
     skills,
@@ -295,6 +303,7 @@ export async function prepareModHost(options: Readonly<{
         skills.filter(input.playerId, 'mana_spend', -filtered),
       )
     },
+    resolveBoast,
     hasConsumable: contentId => content.potion(contentId) !== null,
   }
   const host: PreparedModHost = {
@@ -371,6 +380,14 @@ export async function prepareModHost(options: Readonly<{
         'mana_spend',
         skills.filter(input.playerId, 'mana_spend', -statusDelta),
       )
+      if (manaCost > progression.currentMana) {
+        options.state.write(failGameSimulationPlayerBoast(
+          source,
+          input.playerId,
+          'mana-underflow',
+          extensions,
+        ))
+      }
       const admission = spells.admit(
         input.playerId,
         input.contentId,
@@ -401,6 +418,13 @@ export async function prepareModHost(options: Readonly<{
         if (!result.accepted) {
           options.state.write(source)
           spells.restore(spellCheckpoint)
+        } else if (spell.slot === 'secondary') {
+          options.state.write(failGameSimulationPlayerBoast(
+            options.state.read(),
+            input.playerId,
+            'secondary-cast',
+            extensions,
+          ))
         }
         return result
       } catch (error) {
@@ -478,6 +502,19 @@ export async function prepareModHost(options: Readonly<{
     project() {
       requireOpen()
       return Object.freeze({
+        boasts: Object.freeze(content.boasts().map(definition => Object.freeze({
+          contentId: definition.contentId,
+          failureProducers: definition.failureProducers,
+          icon: definition.icon,
+          instruction: definition.instruction,
+          modId: definition.modId,
+          name: definition.label,
+          randomSkillChoices: definition.randomSkillChoices,
+          response: definition.response,
+          scoreMultiplier: definition.scoreMultiplier,
+          statement: definition.statement,
+          successWave: definition.successWave,
+        }))),
         content: Object.freeze(content.all().map(entry => Object.freeze({
           art: Object.freeze(Object.entries(entry.art)
             .sort(([left], [right]) => left.localeCompare(right))
@@ -1103,6 +1140,7 @@ function createHostIntentAdapter(options: Readonly<{
   enemySpawns: BoneyardEnemySpawnIntent[]
   powerups: ModPowerupEngine
   presentation: PreparedModPresentationIntent[]
+  resolveBoast: BoastResolver
   scenes: ModSceneEngine
   semanticState: ModSemanticStateEngine
   skills: ModSkillEngine
@@ -1135,6 +1173,7 @@ function createHostIntentAdapter(options: Readonly<{
             options.semanticState,
             options.skills,
             options.spellEffects,
+            options.resolveBoast,
           )
           candidate = result.state
           if (result.spawn) spawns.push(result.spawn)
@@ -1189,6 +1228,7 @@ function applyIntent(
   semanticState: ModSemanticStateEngine,
   skills: ModSkillEngine,
   spellEffects: ModSpellEffectEngine,
+  resolveBoast: BoastResolver,
 ): Readonly<{
   presentation: PreparedModPresentationIntent | null
   spawn: BoneyardEnemySpawnIntent | null
@@ -1205,10 +1245,11 @@ function applyIntent(
         enemies,
         skills,
         content,
+        resolveBoast,
       ))
     case 'resource':
       exactObjectKeys(intent.fields, intentFields(intent, ['experience', 'gold', 'health', 'mana', 'target']), 'resource intent')
-      return outcome(applyResource(source, intent.fields, context))
+      return outcome(applyResource(source, intent.fields, context, resolveBoast))
     case 'grant':
       exactObjectKeys(intent.fields, intentFields(intent, ['item', 'quantity', 'target']), 'grant intent')
       return outcome(applyGrant(source, intent.fields, context, content))
@@ -1278,6 +1319,7 @@ function applyDamage(
   enemies: ModEnemyEngine,
   skills: ModSkillEngine,
   content: PreparedModContentCatalog,
+  resolveBoast: BoastResolver,
 ): GameSimulationState {
   const amount = positive(fields.amount, 'damage amount')
   const target = fields.target
@@ -1318,7 +1360,12 @@ function applyDamage(
     }
     return definition.experience === 0
       ? rewarded
-      : grantGameSimulationPlayerExperience(rewarded, sourcePlayerId, definition.experience)
+      : grantGameSimulationPlayerExperience(
+          rewarded,
+          sourcePlayerId,
+          definition.experience,
+          resolveBoast,
+        )
   }
   if (source.world.kind !== 'boneyard') throw new Error('enemy damage requires an active Boneyard')
   const worldManagerOrder = createNativeWorldManagerOrder(source.worldManagerOrder)
@@ -1354,6 +1401,7 @@ function applyResource(
   source: GameSimulationState,
   fields: LuaConsoleObject,
   context: ModIntentExecutionContext,
+  resolveBoast: BoastResolver,
 ): GameSimulationState {
   const playerId = targetPlayer(source, fields.target, context)
   let state = source
@@ -1391,6 +1439,7 @@ function applyResource(
       state,
       playerId,
       nonnegative(fields.experience, 'resource experience'),
+      resolveBoast,
     )
   }
   return state

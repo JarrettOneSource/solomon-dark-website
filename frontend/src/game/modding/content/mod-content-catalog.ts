@@ -6,7 +6,13 @@ import {
   type ModConsumableContent,
   type ModItemCatalogEntry,
   type ModItemContent,
+  type ModSpriteFrame,
 } from '../../core-kernels/hub-economy.ts'
+import {
+  createModBoastSelection,
+  type BoastFailureProducer,
+  type ModBoastSelection,
+} from '../../core-kernels/boast.ts'
 import type {
   CompiledWebLuaContent,
   CompiledWebLuaMod,
@@ -26,6 +32,12 @@ const MAXIMUM_CATALOG_CONTENT = 4_096
 const MAXIMUM_DESCRIPTION_BYTES = 1_024
 const MAXIMUM_DURATION_MS = 24 * 60 * 60 * 1_000
 const MAXIMUM_LOOT_ROWS = 1_024
+const BOAST_FAILURE_PRODUCERS = new Set<BoastFailureProducer>([
+  'magical-equipment',
+  'mana-underflow',
+  'potion-use',
+  'secondary-cast',
+])
 const STACKING = new Set<ModStatusStacking>(['ignore', 'refresh', 'replace', 'stack'])
 const EQUIPMENT_TYPES = new Set(['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'])
 const textEncoder = new TextEncoder()
@@ -33,6 +45,7 @@ const CONTENT_ART_SLOTS: Readonly<Record<WebLuaContentKind, readonly string[]>> 
   affix: Object.freeze([]),
   'affix-pool': Object.freeze([]),
   boneyard: Object.freeze(['ambience', 'layout', 'loop', 'music']),
+  boast: Object.freeze(['icon']),
   enemy: Object.freeze(['atlas', 'attack_sound', 'death_sound', 'sound']),
   item: Object.freeze(['icon', 'icon_trim', 'worn', 'worn_trim']),
   potion: Object.freeze(['icon']),
@@ -156,6 +169,34 @@ export interface PreparedModBoneyardDefinition extends PreparedModContentEntry {
   readonly waves: readonly Readonly<Record<string, WebLuaDefinitionValue>>[]
 }
 
+export type PreparedModBoastIcon =
+  | Readonly<{
+      kind: 'mod'
+      frame: ModSpriteFrame
+      imageHeight: number
+      imagePath: string
+      imageWidth: number
+    }>
+  | Readonly<{
+      kind: 'stock'
+      record: number
+      style: number
+    }>
+
+export interface PreparedModBoastDefinition extends PreparedModContentEntry {
+  readonly contentKind: 'boast'
+  readonly failureProducers: readonly BoastFailureProducer[]
+  readonly icon: PreparedModBoastIcon
+  readonly instruction: string
+  readonly label: string
+  readonly randomSkillChoices: boolean
+  readonly response: string
+  readonly scoreMultiplier: number
+  readonly selection: ModBoastSelection
+  readonly statement: string
+  readonly successWave: number
+}
+
 export interface PreparedModShopDefinition extends PreparedModContentEntry {
   readonly contentKind: 'shop'
   readonly mount: Readonly<Record<string, WebLuaDefinitionValue>> | null
@@ -220,6 +261,7 @@ export class PreparedModContentCatalog {
   readonly #spells: ReadonlyMap<string, PreparedModSpellDefinition>
   readonly #enemies: ReadonlyMap<string, PreparedModEnemyDefinition>
   readonly #boneyards: ReadonlyMap<string, PreparedModBoneyardDefinition>
+  readonly #boasts: ReadonlyMap<string, PreparedModBoastDefinition>
   readonly #rooms: ReadonlyMap<string, PreparedModRoomDefinition>
   readonly #scenes: ReadonlyMap<string, PreparedModSceneDefinition>
   readonly #sceneExtensions: readonly PreparedModSceneExtensionDefinition[]
@@ -239,6 +281,7 @@ export class PreparedModContentCatalog {
     spells: readonly PreparedModSpellDefinition[]
     enemies: readonly PreparedModEnemyDefinition[]
     boneyards: readonly PreparedModBoneyardDefinition[]
+    boasts: readonly PreparedModBoastDefinition[]
     rooms: readonly PreparedModRoomDefinition[]
     scenes: readonly PreparedModSceneDefinition[]
     sceneExtensions: readonly PreparedModSceneExtensionDefinition[]
@@ -263,6 +306,7 @@ export class PreparedModContentCatalog {
     this.#spells = new Map(options.spells.map(spell => [spell.contentId, spell]))
     this.#enemies = new Map(options.enemies.map(enemy => [enemy.contentId, enemy]))
     this.#boneyards = new Map(options.boneyards.map(entry => [entry.contentId, entry]))
+    this.#boasts = new Map(options.boasts.map(entry => [entry.contentId, entry]))
     this.#rooms = new Map(options.rooms.map(entry => [entry.contentId, entry]))
     this.#scenes = new Map(options.scenes.map(entry => [entry.contentId, entry]))
     this.#sceneExtensions = Object.freeze([...options.sceneExtensions].sort(compareContent))
@@ -348,6 +392,8 @@ export class PreparedModContentCatalog {
   }
 
   boneyard(contentId: string) { return this.#boneyards.get(contentId) ?? null }
+  boast(contentId: string) { return this.#boasts.get(contentId) ?? null }
+  boasts() { return Object.freeze([...this.#boasts.values()].sort(compareContent)) }
   room(contentId: string) { return this.#rooms.get(contentId) ?? null }
   scene(contentId: string) { return this.#scenes.get(contentId) ?? null }
   sceneExtensions() { return this.#sceneExtensions }
@@ -372,6 +418,7 @@ export function compileModContentCatalog(
   const spellCandidates: PreparedModContentEntry[] = []
   const enemyCandidates: PreparedModContentEntry[] = []
   const boneyardCandidates: PreparedModContentEntry[] = []
+  const boastCandidates: PreparedModContentEntry[] = []
   const shopCandidates: PreparedModContentEntry[] = []
   const uiCandidates: PreparedModContentEntry[] = []
   const roomCandidates: PreparedModContentEntry[] = []
@@ -403,6 +450,8 @@ export function compileModContentCatalog(
         enemyCandidates.push(common)
       } else if (definition.contentKind === 'boneyard') {
         boneyardCandidates.push(common)
+      } else if (definition.contentKind === 'boast') {
+        boastCandidates.push(common)
       } else if (definition.contentKind === 'shop') {
         shopCandidates.push(common)
       } else if (definition.contentKind === 'ui') {
@@ -441,6 +490,7 @@ export function compileModContentCatalog(
   const spells = spellCandidates.sort(compareContent).map(common => compileSpell(common))
   const enemies = enemyCandidates.sort(compareContent).map(common => compileEnemy(common))
   const boneyards = boneyardCandidates.sort(compareContent).map(compileBoneyard)
+  const boasts = boastCandidates.sort(compareContent).map(common => compileBoast(common, assets))
   const rooms = roomCandidates.sort(compareContent).map(compileRoom)
   const roomIds = new Set(rooms.map(room => room.contentId))
   const scenes = sceneCandidates.sort(compareContent).map(common => compileScene(common, roomIds))
@@ -464,6 +514,7 @@ export function compileModContentCatalog(
     ...spells,
     ...enemies,
     ...boneyards,
+    ...boasts,
     ...rooms,
     ...scenes,
     ...sceneExtensions,
@@ -480,6 +531,7 @@ export function compileModContentCatalog(
     affixes,
     affixPools,
     boneyards,
+    boasts,
     content,
     enemies,
     items,
@@ -1046,6 +1098,70 @@ function compileBoneyard(common: PreparedModContentEntry): PreparedModBoneyardDe
   })
 }
 
+function compileBoast(
+  common: PreparedModContentEntry,
+  assets: PreparedModAssetCatalog,
+): PreparedModBoastDefinition {
+  const stockIconValue = common.fields.stock_icon
+  const iconBinding = common.art.icon
+  if ((stockIconValue === undefined) === (iconBinding === undefined)) {
+    throw new Error(`${common.modId}:${common.key} Boast requires exactly one icon source`)
+  }
+  const icon: PreparedModBoastIcon = iconBinding === undefined
+    ? (() => {
+        const style = integer(stockIconValue, 0, 7, `${common.key}.stock_icon`)
+        return Object.freeze({ kind: 'stock' as const, record: 90 + style, style })
+      })()
+    : (() => {
+        if (iconBinding.assetKind !== 'sprite') {
+          throw new Error(`${common.modId}:${common.key} Boast art.icon must be a sprite`)
+        }
+        const asset = assets.image(common.modId, iconBinding.key)
+        if (asset.assetKind !== 'sprite' || asset.frames.length < 1) {
+          throw new Error(`${common.modId}:${common.key} Boast art.icon has no sprite frame`)
+        }
+        const frame = asset.frames[0]!
+        if (frame.logicalWidth > 128 || frame.logicalHeight > 128) {
+          throw new Error(`${common.modId}:${common.key} Boast art.icon exceeds 128 logical pixels`)
+        }
+        return Object.freeze({
+          frame,
+          imageHeight: asset.height,
+          imagePath: asset.path,
+          imageWidth: asset.width,
+          kind: 'mod' as const,
+        })
+      })()
+  const failureProducers = common.fields.fail_on === undefined
+    ? Object.freeze([] as BoastFailureProducer[])
+    : Object.freeze(textArray(common.fields.fail_on, `${common.key}.fail_on`).map((producer) => {
+        if (!BOAST_FAILURE_PRODUCERS.has(producer as BoastFailureProducer)) {
+          throw new Error(`${common.modId}:${common.key} has an unsupported Boast failure producer`)
+        }
+        return producer as BoastFailureProducer
+      }))
+  return Object.freeze({
+    ...common,
+    contentKind: 'boast' as const,
+    failureProducers,
+    icon,
+    instruction: requiredText(common.fields.instruction, 1_024, `${common.key}.instruction`),
+    label: common.name,
+    randomSkillChoices: common.fields.random_skill_choices === undefined
+      ? false
+      : boolean(common.fields.random_skill_choices, `${common.key}.random_skill_choices`),
+    response: requiredText(common.fields.response, 1_024, `${common.key}.response`),
+    scoreMultiplier: common.fields.score_multiplier === undefined
+      ? 1.100000023841858
+      : number(common.fields.score_multiplier, 1, 10, `${common.key}.score_multiplier`),
+    selection: createModBoastSelection(common.contentId, common.modId),
+    statement: requiredText(common.fields.statement, 1_024, `${common.key}.statement`),
+    successWave: common.fields.success_wave === undefined
+      ? 30
+      : integer(common.fields.success_wave, 1, 10_000, `${common.key}.success_wave`),
+  })
+}
+
 function compileRoom(common: PreparedModContentEntry): PreparedModRoomDefinition {
   const geometry = optionalObject(common.fields.geometry, `${common.key}.geometry`)
   exactObjectKeys(geometry, ['floor', 'height', 'kind', 'walls', 'width'], `${common.key}.geometry`)
@@ -1418,6 +1534,12 @@ function optionalText(
     throw new Error(`${field} must contain at most ${maximumBytes} bytes of text`)
   }
   return value
+}
+
+function requiredText(value: unknown, maximumBytes: number, field: string): string {
+  const result = optionalText(value, '', maximumBytes, field)
+  if (result.length === 0) throw new Error(`${field} must be nonempty text`)
+  return result
 }
 
 function textArray(value: WebLuaDefinitionValue, field: string): readonly string[] {

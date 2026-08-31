@@ -5,10 +5,12 @@ import {
   buyTeacherSpell,
   createHubEconomy,
   readLibrarianBook,
+  reconcileHubEconomyModPackages,
   selectHubBoast,
 } from './hub-economy.ts'
 import {
   NATIVE_BOASTS,
+  NATIVE_BOAST_PRESENTATION,
   NATIVE_BOAST_SUCCESS_WAVE,
   NATIVE_HUB_INTERACTION_IDS,
   NATIVE_HUB_NPC_CATALOG,
@@ -29,6 +31,17 @@ import {
   succeedNativeBoast,
   type NativeBoastFailureProducer,
 } from './native-hub-npc.ts'
+import {
+  boastFailureText,
+  boastUsesRandomSkillChoices,
+  createBoastState,
+  createModBoastSelection,
+  failBoast,
+  scoreBoast,
+  selectBoast,
+  succeedBoast,
+  type BoastDefinition,
+} from './boast.ts'
 
 test('fresh profiles own all ten native help rows and only three named actors clear them', () => {
   const initial = createNativeHubNpcState()
@@ -52,7 +65,7 @@ test('fresh profiles own all ten native help rows and only three named actors cl
 })
 
 test('the generated catalog owns every compiled survival Hub actor, painting, and source hash', () => {
-  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v3')
+  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v4')
   assert.equal(NATIVE_HUB_NPC_CATALOG.source.retailVersion, '0.72.5')
   assert.equal(
     NATIVE_HUB_NPC_CATALOG.source.executableSha256,
@@ -78,6 +91,23 @@ test('the generated catalog owns every compiled survival Hub actor, painting, an
     )),
     ['!BUYPERKS', '!BUYPOTIONS', '!BOAST', '!INVENTORY', '!SPELLS', '!BOOKS', '!DOWSE'],
   )
+  assert.deepEqual(NATIVE_BOAST_PRESENTATION.iconRecords, [90, 91, 92, 93, 94, 95, 96, 97])
+  assert.deepEqual(NATIVE_BOAST_PRESENTATION.outer, {
+    centerYOffset: 70,
+    height: 560,
+    panelRecord: 11,
+    width: 700,
+  })
+  assert.deepEqual(NATIVE_BOAST_PRESENTATION.row, {
+    firstTop: 25,
+    height: 85,
+    left: 15,
+    pitch: 90,
+    record: 50,
+    widthInset: 30,
+  })
+  assert.deepEqual(NATIVE_BOAST_PRESENTATION.selectedBaseTint, [0.5, 1, 0.5, 1])
+  assert.equal(NATIVE_BOAST_PRESENTATION.selectedSaturation, 0.6)
   assert.equal('ANNAL_Q' in NATIVE_HUB_NPC_CATALOG.dialogue, false)
   assert.equal(
     Object.values(NATIVE_HUB_NPC_CATALOG.interactions).flatMap(({ questions }) => questions).length,
@@ -173,6 +203,37 @@ test('Boast success and score use the stock one-shot state and float truncation'
   assert.equal(reset.librarianLaceRead, true)
 })
 
+test('namespaced mod Boasts reuse the authoritative lifecycle without occupying stock IDs', () => {
+  const selection = createModBoastSelection('5000000000000000016', 'example.boasts')
+  const definition: BoastDefinition = Object.freeze({
+    failureProducers: Object.freeze(['potion-use', 'magical-equipment']),
+    instruction: 'Survive through Wave 25.',
+    label: 'EMPTY HANDS, FULL GLORY!',
+    randomSkillChoices: true,
+    scoreMultiplier: 1.25,
+    selection,
+    statement: '"I need neither potion nor enchanted equipment!"',
+    successWave: 25,
+  })
+  const resolve = (candidate: typeof selection | number) => (
+    typeof candidate !== 'number' && candidate.contentId === selection.contentId
+      ? definition
+      : null
+  )
+  const selected = selectBoast(createBoastState(), definition)
+  assert.deepEqual(selected.selected, selection)
+  assert.equal(boastUsesRandomSkillChoices(selected, resolve), true)
+  assert.equal(succeedBoast(selected, 24, resolve), selected)
+  const succeeded = succeedBoast(selected, 25, resolve)
+  assert.equal(succeeded.succeeded, true)
+  assert.equal(scoreBoast(101, succeeded, resolve), 126)
+  const failed = failBoast(selected, 'potion-use', resolve)
+  assert.equal(failed.failed, true)
+  assert.equal(boastFailureText(failed, resolve), 'FAILED "EMPTY HANDS, FULL GLORY!"')
+  assert.equal(succeedBoast(failed, 25, resolve), failed)
+  assert.equal(failBoast(selected, 'mana-underflow', resolve), selected)
+})
+
 test('Semicus exposes all 26 exact books and removes only one-shot Lace after reading it', () => {
   assert.equal(NATIVE_LIBRARIAN_BOOKS.length, 26)
   assert.deepEqual(NATIVE_LIBRARIAN_BOOKS.map(({ id }) => id), [...Array(26).keys()])
@@ -231,4 +292,26 @@ test('Hub economy actions persist Boast and Lace mutations under authoritative r
   assert.equal(lace.accepted, true)
   assert.equal(lace.state.npc.librarianLaceRead, true)
   assert.equal(readLibrarianBook(lace.state, 25).reason, 'invalid-offer')
+})
+
+test('Hub economy retains admitted mod Boasts and clears them with their removed package', () => {
+  const selection = createModBoastSelection('5000000000000000016', 'example.boasts')
+  const definition: BoastDefinition = {
+    failureProducers: [],
+    instruction: 'Survive.',
+    label: 'MOD BOAST',
+    randomSkillChoices: false,
+    scoreMultiplier: 1.1,
+    selection,
+    statement: '"Statement."',
+    successWave: 30,
+  }
+  const selected = selectHubBoast(createHubEconomy(11), selection, () => definition)
+  assert.equal(selected.accepted, true)
+  assert.deepEqual(selected.state.npc.boast.selected, selection)
+  assert.equal(
+    reconcileHubEconomyModPackages(selected.state, ['example.boasts']),
+    selected.state,
+  )
+  assert.deepEqual(reconcileHubEconomyModPackages(selected.state, []).npc.boast, createBoastState())
 })

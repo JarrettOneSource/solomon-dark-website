@@ -40,6 +40,7 @@ export default function NativeUiPlanView({
         height: plan.height,
         left: 0,
         overflow: 'visible',
+        opacity: plan.opacity ?? 1,
         pointerEvents: 'none',
         position: 'absolute',
         top: 0,

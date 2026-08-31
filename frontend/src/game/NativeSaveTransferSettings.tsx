@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react'
 
+import {
+  NativeUiSettingsAction,
+  NativeUiSettingsGroup,
+} from './native-ui/react.ts'
+
 export interface NativeSaveImportPreview {
   readonly discipline: string
   readonly displayName: string
@@ -99,9 +104,7 @@ export default function NativeSaveTransferSettings({
         Move permanent wizard progression between stock Solomon Dark and this browser slot.
         Imports resume in the Hub; an in-progress Boneyard run does not cross engines.
       </p>
-      <section className="game-settings-group" aria-label="Import stock save">
-        <h3>IMPORT FROM STOCK</h3>
-        <div>
+      <NativeUiSettingsGroup title="IMPORT FROM STOCK">
           <input
             ref={fileInput}
             className="sr-only"
@@ -110,36 +113,23 @@ export default function NativeSaveTransferSettings({
             multiple
             onChange={event => { void inspect(event.currentTarget.files) }}
           />
-          <button
+          <NativeUiSettingsAction
             autoFocus
-            className="game-settings-action"
-            data-game-default-focus="true"
             disabled={busy}
+            label="CHOOSE STOCK SAVE FILES"
             onClick={() => fileInput.current?.click()}
-            type="button"
-          >
-            <span>CHOOSE STOCK SAVE FILES</span>
-            <i aria-hidden />
-          </button>
-        </div>
-      </section>
-      <section className="game-settings-group" aria-label="Export stock save">
-        <h3>EXPORT FOR STOCK</h3>
-        <div>
-          <button
-            className="game-settings-action"
+          />
+      </NativeUiSettingsGroup>
+      <NativeUiSettingsGroup title="EXPORT FOR STOCK">
+          <NativeUiSettingsAction
             disabled={busy || !controller.canExport}
+            label="DOWNLOAD STOCK SAVE ARCHIVE"
             onClick={() => { void exportCurrent() }}
-            type="button"
-          >
-            <span>DOWNLOAD STOCK SAVE ARCHIVE</span>
-            <i aria-hidden />
-          </button>
-        </div>
+          />
         {!controller.canExport ? (
           <p className="native-save-transfer-note">Create or import a wizard before exporting.</p>
         ) : null}
-      </section>
+      </NativeUiSettingsGroup>
       {pendingImport ? (
         <section className="native-save-transfer-preview" aria-label="Stock import preview">
           <h3>{pendingImport.displayName}</h3>

@@ -82,6 +82,7 @@ import {
   nativeBoastDefinition,
   type NativeHubNpcState,
 } from '../core-kernels/native-hub-npc.ts'
+import type { BoastSelection, ModBoastSelection } from '../core-kernels/boast.ts'
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   gameSimulationDurableProfileEconomy,
@@ -2232,13 +2233,12 @@ function normalizeNativeHubNpcState(
     'selected',
     'succeeded',
   ])
-  const selected = boast.selected
+  const selected = savedBoastSelection(boast.selected)
   const helpFlags = state.helpFlags === undefined
     ? acknowledgedHelpFlags()
     : array(state.helpFlags, 'game save Hub NPC help flags')
   if (
-    (selected !== null && (typeof selected !== 'number' || nativeBoastDefinition(selected) === null))
-    || typeof boast.failed !== 'boolean'
+    typeof boast.failed !== 'boolean'
     || !Number.isSafeInteger(boast.failureSequence)
     || Number(boast.failureSequence) < 0
     || Number(boast.failureSequence) > 1
@@ -2261,6 +2261,29 @@ function normalizeNativeHubNpcState(
     helpFlags: helpFlags as boolean[],
     librarianLaceRead: state.librarianLaceRead,
   }
+}
+
+function savedBoastSelection(value: unknown): BoastSelection | null {
+  if (value === null) return null
+  if (typeof value === 'number') {
+    if (nativeBoastDefinition(value) === null) throw new Error('game save Boast selection is invalid')
+    return value as 0 | 1 | 2 | 3 | 4
+  }
+  const source = record(value, 'game save mod Boast selection')
+  onlyKeys(source, 'game save mod Boast selection', ['contentId', 'kind', 'modId'])
+  const selection: ModBoastSelection = {
+    contentId: String(source.contentId),
+    kind: source.kind as 'mod',
+    modId: String(source.modId),
+  }
+  if (
+    selection.kind !== 'mod'
+    || typeof source.contentId !== 'string'
+    || !/^[1-9][0-9]{0,18}$/.test(selection.contentId)
+    || typeof source.modId !== 'string'
+    || !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(selection.modId)
+  ) throw new Error('game save mod Boast selection is invalid')
+  return selection
 }
 
 function parseWeldComponentRanks(value: unknown, index: number) {

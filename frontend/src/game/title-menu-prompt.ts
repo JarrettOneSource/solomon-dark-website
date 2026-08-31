@@ -3,7 +3,7 @@ import {
   planNativeUiMessage,
   type NativeUiButtonState,
   type NativeUiPlan,
-} from './native-ui/native-ui-plan.ts'
+} from './native-ui/core.ts'
 
 export type TitleMenuPromptAction = 'prompt-primary' | 'prompt-secondary'
 export type TitleMenuPromptKind = 'kill-wizard' | 'tutorial'

@@ -3,7 +3,27 @@
 The native UI kit is the one reusable interface for Solomon Dark's stock UI
 art and bitmap text. It contains all 12 presentation/UI atlases, all 1,259
 records, all ten bitmap-font wrappers, and composable plans for sprites, text,
-tiled/clipped fills, mirrored frames, buttons, tabs, messages, and SimpleMenu.
+tiled/clipped fills, mirrored frames, buttons, tabs, messages, SimpleMenu, and
+the stock BoastBox.
+
+## Supported entrypoints
+
+Game code imports the kit through one of five supported seams. Do not deep-
+import implementation files from outside `native-ui/`.
+
+- `native-ui/core.ts`: Node-safe catalog, text, plan, Settings contract, and
+  Notebox contract. It never evaluates PNG imports.
+- `native-ui/assets.ts`: browser atlas URLs.
+- `native-ui/pixi.ts`: the Pixi adapter.
+- `native-ui/react-raw.ts`: exact low-level React sprite, strip, nine-slice,
+  bitmap-text, and plan adapters.
+- `native-ui/react.ts`: semantic Button, MsgBox, Tabs, SimpleMenu, BoastMenu,
+  Settings, and Notebox modules.
+
+An architecture test rejects every external import that bypasses these seams.
+Use the semantic interface whenever the stock composition already exists; the
+raw React interface is the explicit escape hatch for a recovered composition
+that has not yet earned a semantic module.
 
 Use the workbench while authoring:
 
@@ -23,9 +43,9 @@ plan does not own input, authority, screen state, or transitions.
 
 ```ts
 import { loadGameTextureMap } from './renderer/game-webgl.ts'
-import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/native-ui-assets.ts'
-import { nativeUiRect, planNativeUiMessage, planNativeUiTabs } from './native-ui/native-ui-plan.ts'
-import { createNativeUiPixiAdapter } from './native-ui/native-ui-pixi.ts'
+import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/assets.ts'
+import { nativeUiRect, planNativeUiMessage, planNativeUiTabs } from './native-ui/core.ts'
+import { createNativeUiPixiAdapter } from './native-ui/pixi.ts'
 
 const textures = await loadGameTextureMap(Object.values(NATIVE_UI_ATLAS_SOURCES))
 const ui = createNativeUiPixiAdapter(textures)
@@ -53,8 +73,7 @@ React callers use the DOM adapter through the semantic stock modules rather
 than rebuilding transparent hit rectangles beside a Pixi render:
 
 ```tsx
-import NativeUiButton from './native-ui/NativeUiButton.tsx'
-import NativeUiMessageBox from './native-ui/NativeUiMessageBox.tsx'
+import { NativeUiButton, NativeUiMessageBox } from './native-ui/react.ts'
 
 <NativeUiMessageBox title="Kill character?" body={warning}>
   <NativeUiButton onClick={confirm}>YES</NativeUiButton>
@@ -73,7 +92,7 @@ The small raw interface is available when a recovered screen needs an exact
 record without a high-level composition:
 
 ```ts
-import { nativeUiRecord } from './native-ui/native-ui-catalog.ts'
+import { nativeUiRecord } from './native-ui/core.ts'
 
 const record = nativeUiRecord('UI', 13)
 const sprite = ui.sprite({ atlas: 'UI', kind: 'sprite', record: 13, x: 460, y: 128 })
@@ -131,11 +150,65 @@ second CSS button skin for a stock action.
 arrows, curtain, and action rectangles. The screen owner continues to supply
 opening/closing progress and to decide what an action means.
 
+`NativeUiSimpleMenu` is the semantic React owner for that plan. It accepts the
+authored rows, reveal progress, back-row id, and one action callback; it owns
+focus, pointer/keyboard press state, exact action rectangles, and the visible
+pressed substitution. Gameplay and Dark Cloud retain pause authority, close
+timing, audio, and navigation meaning.
+
+```tsx
+import { NativeUiSimpleMenu } from './native-ui/react.ts'
+
+<NativeUiSimpleMenu
+  ariaLabel="Game paused"
+  backId="resume"
+  onAction={beginClose}
+  reveal={reveal}
+  rows={[
+    { id: 'resume', label: 'RESUME GAME' },
+    { id: 'settings', label: 'GAME SETTINGS' },
+    { id: 'leave', label: 'LEAVE GAME' },
+  ]}
+/>
+```
+
 `planNativeUiMessage` uses the recovered MsgBox text inset, baselines, 17-pixel
 body-line advance, and 400-pixel wrap limit. A concrete native consumer may
 supply `bounds` on every message action when its recovered controls do not use
 the generic centered row; omitting action bounds retains the reusable one/two-
 button layout. Mixed supplied/derived action geometry fails closed.
+
+## BoastMenu
+
+`planNativeUiBoastMenu` owns the distinct stock `Boast` surface rather than the
+generic Chat selector: UI 11 outer frame, UI 50 row frames, menu title/Done,
+special-uppercase labels, medium quoted statements, gold idle text, selected
+green transform, and paired icon records with the right copy mirrored. The
+stock page is always five rows with exact `490x85` row bounds at a 90-pixel
+pitch.
+
+The plan returns the same row, Done, and optional page-action rectangles used
+by semantic controls. Pagination uses stock menu-font `PREVIOUS`/`MORE` labels;
+it never repurposes the bottom-only `UI.8` ornament. Rows without
+`stockIconRecord` return `customIcons`
+placements so an owning renderer can inject one admitted mod sprite through
+the shared mod-texture catalog without teaching the UI Kit about package URLs.
+
+```tsx
+import { NativeUiBoastMenu } from './native-ui/react.ts'
+
+<NativeUiBoastMenu
+  items={rows}
+  onDone={close}
+  onPageChange={setPage}
+  onSelect={selectBoast}
+  pageCount={pageCount}
+  pageIndex={page}
+/>
+```
+
+Pagination is a Website adaptation and appears only when admitted mod rows
+extend the five stock choices. It never shrinks or reflows the stock page.
 
 ## Bitmap text
 
@@ -160,6 +233,19 @@ the React presentation pieces for the shell, row plate, range track, binding
 plate, Off/On switch, and action arrow. Screen-specific settings state and
 browser-added rows remain in their owning dialog; they consume this vocabulary
 without redefining atlas coordinates.
+
+React callers use `NativeUiSettingsPanel`, `NativeUiSettingsGroup`,
+`NativeUiSettingsRange`, `NativeUiSettingsToggle`,
+`NativeUiSettingsAction`, `NativeUiSettingsBinding`, and
+`NativeUiSettingsStaticRow` from `native-ui/react.ts`. These modules own the
+semantic controls and stock row structure as well as their art. Callers own
+values, persistence, pages, and browser behavior.
+
+`NativeUiTabs` similarly turns `planNativeUiTabs` into one semantic tablist
+whose visible art and hit rectangles come from the same plan. `NativeUiNotebox`
+owns the recovered Notebox geometry, fixed-tick reveal/fade, pointer dismissal,
+and self-contained styles; its caller supplies only the notice and expiry
+effect.
 
 ## Regeneration
 

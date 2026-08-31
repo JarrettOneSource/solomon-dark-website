@@ -1,5 +1,4 @@
-import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
-import { measureNativeUiText } from '../native-ui/native-ui-text.ts'
+import { measureNativeUiText, nativeUiFont } from '../native-ui/core.ts'
 
 export const NATIVE_SKILL_SCREEN_SIZE = Object.freeze({ height: 900, width: 1_600 })
 

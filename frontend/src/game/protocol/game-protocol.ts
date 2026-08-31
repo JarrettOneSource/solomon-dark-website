@@ -198,6 +198,7 @@ import {
   type ModWearableContent,
   type NativeUnforgeOutcome,
 } from '../core-kernels/hub-economy.ts'
+import type { BoastSelection, ModBoastSelection } from '../core-kernels/boast.ts'
 import {
   NATIVE_BELT_ITEM_TYPE_IDS,
   nativeInventoryItemCanBindToBelt,
@@ -405,7 +406,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 113
+export const GAME_PROTOCOL_VERSION = 114
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -880,6 +881,7 @@ export const MOD_CONTENT_KINDS = [
   'affix',
   'affix-pool',
   'boneyard',
+  'boast',
   'enemy',
   'item',
   'potion',
@@ -925,7 +927,36 @@ export interface ModPowerupProjectionEntry {
   readonly y: number
 }
 
+export type ModBoastIconProjection =
+  | Readonly<{
+      frame: ModSpriteFrame
+      imageHeight: number
+      imagePath: string
+      imageWidth: number
+      kind: 'mod'
+    }>
+  | Readonly<{
+      kind: 'stock'
+      record: number
+      style: number
+    }>
+
+export interface ModBoastProjectionEntry {
+  readonly contentId: string
+  readonly failureProducers: readonly string[]
+  readonly icon: ModBoastIconProjection
+  readonly instruction: string
+  readonly modId: string
+  readonly name: string
+  readonly randomSkillChoices: boolean
+  readonly response: string
+  readonly scoreMultiplier: number
+  readonly statement: string
+  readonly successWave: number
+}
+
 export interface ModContentProjection {
+  readonly boasts: readonly ModBoastProjectionEntry[]
   readonly content: readonly ModContentProjectionEntry[]
   readonly manifestSha256: string
   readonly powerups: readonly ModPowerupProjectionEntry[]
@@ -1611,7 +1642,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
   }
   if (value.type === 'server-mod-content') {
     onlyKeys(value, 'message', [
-      'type', 'content', 'manifestSha256', 'powerups', 'revision', 'statuses',
+      'type', 'boasts', 'content', 'manifestSha256', 'powerups', 'revision', 'statuses',
     ])
     return { type: 'server-mod-content', ...modContentProjection(value) }
   }
@@ -1959,6 +1990,14 @@ function finite(value: unknown, field: string): number {
     throw new GameProtocolError(`${field} must be finite`)
   }
   return value
+}
+
+function finiteWithin(value: unknown, field: string, minimum: number, maximum: number): number {
+  const result = finite(value, field)
+  if (result < minimum || result > maximum) {
+    throw new GameProtocolError(`${field} must be within [${minimum},${maximum}]`)
+  }
+  return result
 }
 
 function positiveFinite(value: unknown, field: string): number {
@@ -2732,7 +2771,7 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
   }
   if (type === 'select-boast') {
     onlyKeys(source, 'action', ['type', 'boastId'])
-    return { type, boastId: integerWithin(source.boastId, 'action.boastId', 0, 4) }
+    return { type, boastId: boastSelection(source.boastId, 'action.boastId') }
   }
   if (
     type === 'close-dowsing'
@@ -3067,9 +3106,9 @@ function nativeHubNpcState(
     'selected',
     'succeeded',
   ])
-  const selected = (rawBoast.selected === null
+  const selected = rawBoast.selected === null
     ? null
-    : integerWithin(rawBoast.selected, `${field}.boast.selected`, 0, 4)) as 0 | 1 | 2 | 3 | 4 | null
+    : boastSelection(rawBoast.selected, `${field}.boast.selected`)
   const failed = boolean(rawBoast.failed, `${field}.boast.failed`)
   const succeeded = boolean(rawBoast.succeeded, `${field}.boast.succeeded`)
   const failureSequence = nonnegativeInteger(
@@ -3091,6 +3130,25 @@ function nativeHubNpcState(
     helpFlags,
     librarianLaceRead: boolean(source.librarianLaceRead, `${field}.librarianLaceRead`),
   }
+}
+
+function boastSelection(value: unknown, field: string): BoastSelection {
+  if (typeof value === 'number') {
+    return integerWithin(value, field, 0, 4) as 0 | 1 | 2 | 3 | 4
+  }
+  const source = record(value, field)
+  onlyKeys(source, field, ['contentId', 'kind', 'modId'])
+  const selection: ModBoastSelection = {
+    contentId: limitedString(source.contentId, `${field}.contentId`, 19),
+    kind: limitedString(source.kind, `${field}.kind`, 8) as 'mod',
+    modId: limitedString(source.modId, `${field}.modId`, 128),
+  }
+  if (
+    selection.kind !== 'mod'
+    || !/^[1-9][0-9]{0,18}$/.test(selection.contentId)
+    || !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(selection.modId)
+  ) throw new GameProtocolError(`${field} is not a valid Boast selection`)
+  return selection
 }
 
 function nativeUnforgeBonuses(
@@ -12063,6 +12121,104 @@ function modContentProjection(value: Record<string, unknown>): ModContentProject
         : limitedString(source.presentation, `${field}.presentation`, 64),
     }
   })
+  const byContentId = new Map(content.map(entry => [entry.contentId, entry]))
+  const boastContentIds = new Set<string>()
+  const failureProducers = new Set([
+    'magical-equipment', 'mana-underflow', 'potion-use', 'secondary-cast',
+  ])
+  const boasts = limitedArray(value.boasts, 'boasts', 4_096).map((value, index) => {
+    const field = `boasts[${index}]`
+    const source = record(value, field)
+    onlyKeys(source, field, [
+      'contentId', 'failureProducers', 'icon', 'instruction', 'modId', 'name',
+      'randomSkillChoices', 'response', 'scoreMultiplier', 'statement', 'successWave',
+    ])
+    const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
+    const contentEntry = byContentId.get(contentId)
+    const modId = limitedString(source.modId, `${field}.modId`, 128)
+    const name = limitedString(source.name, `${field}.name`, 128)
+    if (
+      contentEntry?.contentKind !== 'boast'
+      || contentEntry.modId !== modId
+      || contentEntry.name !== name
+      || boastContentIds.has(contentId)
+    ) throw new GameProtocolError(`${field} does not match its Boast content entry`)
+    boastContentIds.add(contentId)
+    const producers = limitedArray(source.failureProducers, `${field}.failureProducers`, 4)
+      .map((value, producerIndex) => limitedString(
+        value,
+        `${field}.failureProducers[${producerIndex}]`,
+        32,
+      ))
+    if (
+      producers.some(producer => !failureProducers.has(producer))
+      || new Set(producers).size !== producers.length
+    ) throw new GameProtocolError(`${field}.failureProducers is invalid`)
+    const iconSource = record(source.icon, `${field}.icon`)
+    const kind = limitedString(iconSource.kind, `${field}.icon.kind`, 8)
+    const icon: ModBoastIconProjection = kind === 'stock'
+      ? (() => {
+          onlyKeys(iconSource, `${field}.icon`, ['kind', 'record', 'style'])
+          const style = boundedInteger(iconSource.style, `${field}.icon.style`, 0, 7)
+          const record = boundedInteger(iconSource.record, `${field}.icon.record`, 90, 97)
+          if (
+            record !== 90 + style
+            || contentEntry.art.some(art => art.slot === 'icon')
+          ) throw new GameProtocolError(`${field}.icon is inconsistent`)
+          return { kind: 'stock' as const, record, style }
+        })()
+      : kind === 'mod'
+        ? (() => {
+            onlyKeys(iconSource, `${field}.icon`, [
+              'frame', 'imageHeight', 'imagePath', 'imageWidth', 'kind',
+            ])
+            const frame = modSpriteFrame(iconSource.frame, `${field}.icon.frame`)
+            const imageWidth = boundedInteger(
+              iconSource.imageWidth,
+              `${field}.icon.imageWidth`,
+              1,
+              4_096,
+            )
+            const imageHeight = boundedInteger(
+              iconSource.imageHeight,
+              `${field}.icon.imageHeight`,
+              1,
+              4_096,
+            )
+            if (
+              frame.logicalWidth > 128
+              || frame.logicalHeight > 128
+              || frame.x + frame.width > imageWidth
+              || frame.y + frame.height > imageHeight
+              || !contentEntry.art.some(art => (
+                art.slot === 'icon' && art.path === iconSource.imagePath
+              ))
+            ) {
+              throw new GameProtocolError(`${field}.icon is inconsistent`)
+            }
+            return {
+              frame,
+              imageHeight,
+              imagePath: limitedString(iconSource.imagePath, `${field}.icon.imagePath`, 240),
+              imageWidth,
+              kind: 'mod' as const,
+            }
+          })()
+        : (() => { throw new GameProtocolError(`${field}.icon.kind is invalid`) })()
+    return {
+      contentId,
+      failureProducers: producers,
+      icon,
+      instruction: boundedString(source.instruction, `${field}.instruction`, 1_024),
+      modId,
+      name,
+      randomSkillChoices: boolean(source.randomSkillChoices, `${field}.randomSkillChoices`),
+      response: boundedString(source.response, `${field}.response`, 1_024),
+      scoreMultiplier: finiteWithin(source.scoreMultiplier, `${field}.scoreMultiplier`, 1, 10),
+      statement: boundedString(source.statement, `${field}.statement`, 1_024),
+      successWave: boundedInteger(source.successWave, `${field}.successWave`, 1, 10_000),
+    }
+  })
   const instanceIds = new Set<number>()
   const powerups = limitedArray(value.powerups, 'powerups', 1_024).map((value, index) => {
     const field = `powerups[${index}]`
@@ -12106,6 +12262,7 @@ function modContentProjection(value: Record<string, unknown>): ModContentProject
     }
   })
   return {
+    boasts,
     content,
     manifestSha256: sha256(value.manifestSha256, 'manifestSha256'),
     powerups,

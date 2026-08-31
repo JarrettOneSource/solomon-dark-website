@@ -100,6 +100,18 @@ local apothecary_shop = sd.kit.shop({
   art = {npc = sd.art.ref("shop_icon")},
 })
 
+local empty_hands_boast = sd.kit.boast({
+  key = "empty_hands",
+  name = "EMPTY HANDS, FULL GLORY!",
+  statement = "\"I need neither potion nor enchanted equipment!\"",
+  response = "Provokatus nods at your reckless confidence.",
+  instruction = "Survive through Wave 25 without breaking your boast.",
+  fail_on = {"potion-use", "magical-equipment"},
+  success_wave = 25,
+  score_multiplier = 1.25,
+  art = {icon = sd.art.ref("ingredient_icon")},
+})
+
 local survey_minimap = sd.kit.ui({
   key = "survey_minimap",
   name = "Survey Minimap",
@@ -166,6 +178,7 @@ return sd.mod({
     clear_minded,
     apprentice_reforge,
     apothecary_shop,
+    empty_hands_boast,
     survey_minimap,
   },
   rules = {

@@ -185,6 +185,120 @@ them.
 - The exact candidate passes `/opt/homebrew/bin/bash ./scripts/validate.sh` on
   the Mac mini.
 
+### UI Kit implementation validation receipt
+
+- The supported interface is now exactly five entrypoints: `core.ts`,
+  `assets.ts`, `pixi.ts`, `react-raw.ts`, and `react.ts`. The architecture test
+  rejects every external deep import; the final sweep found none. The pure
+  entrypoint remains free of browser image evaluation and the React seams do
+  not pull Pixi into DOM-only callers.
+- `NativeUiTabs`, `NativeUiSimpleMenu`, the complete semantic Settings row
+  family, `NativeUiNotebox`, `NativeUiButton`, `NativeUiMessageBox`, and
+  `NativeUiBoastMenu` are kit-owned modules. Gameplay Pause now supplies only
+  lifecycle, action meaning, and reveal state; the superseded dedicated pause
+  renderer and duplicate pressed-row CSS path are deleted. Settings,
+  save-transfer, and mobile-layout callers consume the same semantic rows.
+- The original corner report is enforced at the reusable seam: `UI.17` remains
+  clean frame art, while the only game-source draw of `UI.8` is the stock
+  three-piece group below Message/SimpleMenu frames. Mod Boast pagination uses
+  `PREVIOUS`/`MORE` bitmap text and never moves the bottom ornament to the top
+  of a panel.
+- Local focused closure passed UI Kit `67/67`, Hub UI `90/90`, Web Lua `63/63`,
+  protocol/save `89/89`, affected detached/shared-host `21/21`, lint/generated
+  checks, both TypeScript builds, production build, host bundle, and the game
+  budget at `264,039` raw / `80,406` gzip bytes.
+- Mac Chrome 151 rendered the component workbench with all 12 atlases, ten
+  fonts, Button, MessageBox, Tabs, SimpleMenu, Settings, and BoastMenu; page,
+  console, and failed-response arrays were empty. The inspected 1600x900 stock
+  Boast workbench frame hashes to
+  `f69f91b0cb866488f7ddc100d3360dc7a058819e62b752b7735492376f1ebaf4`.
+- The exact source/test candidate manifest
+  `1354e942dbcc3e113faa3363423baf51a05313a455ba489ef4d7b1d5245289df`
+  passed the Mac canonical gate: .NET Release build with zero warnings/errors,
+  28 Website/backend contracts, lint with zero errors (19 pre-existing
+  warnings), the 340-test prerequisite set, 1,807-test broad game suite, all
+  named focused suites, desktop tests, production build, media policy, and
+  bundle budget.
+- At validation-receipt time the candidate was local, uncommitted, and
+  unpushed. It was based on
+  `2bcbdcf69f6c61e1c8d61bbd531def848302c304`; `origin/main` advanced during
+  validation to `41e1525491649235c00e82207f67803084138943`, so the later publication
+  request requires a fresh integration and validation pass.
+
+### 2026-08-31 BoastMenu deepening
+
+The complete `BoastBox` recovery in report 194 establishes one more justified
+semantic composition. `planNativeUiBoastMenu` and `NativeUiBoastMenu` now own
+UI 11/50/90..97, the exact menu/special-uppercase/medium text treatment,
+mirrored icon placement, five-row action geometry, hover/focus selection, and
+Website-only menu-font page actions. It does not reuse bottom-only `UI.8` as a
+top-of-panel arrow. The Pixi Hub renderer and DOM workbench consume the same
+plan; custom mod sprites enter only through the plan's bounded
+`customIcons` placements and the shared prepared texture catalog.
+
+Boast selection, failure, success, score, response, Notebox, save, and package
+reconciliation remain outside the UI Kit. The kit accepts rows and action
+callbacks and cannot mutate authoritative game state. Stock membership stays
+one five-row page; pagination exists only when admitted mods extend it.
+
+Focused closure adds exact UI-plan assertions, the interface import fence,
+DOM/Pixi workbench captures, the registered stock Hub journey, and the Web Lua
+showcase's mod-expanded second-page journey.
+
+### Implementation validation receipt
+
+- `core.ts`, `assets.ts`, `pixi.ts`, `react-raw.ts`, and `react.ts` are the five
+  supported seams. `native-ui-interface.test.ts` scans every TypeScript caller
+  outside the kit and rejects implementation-file imports. The original 32
+  consumer files now cross a supported seam; pure Node tests no longer
+  evaluate PNG modules.
+- `NativeUiTabs`, `NativeUiSimpleMenu`, and the `NativeUiSettings*` family are
+  semantic modules over the existing exact plans/records. `NativeUiNotebox`
+  and its fixed-tick contract/styles now live inside the kit. The custom
+  tutorial, mod-selection, party-list, directory, Cheat, and other screen state
+  machines remain unchanged.
+- `planNativeUiSimpleMenu` now owns the settled and opening frame spread,
+  header/arrows, root opacity, exact N-row action bounds, and pressed label
+  displacement. `GameplayPauseMenu` supplies only rows, reveal progress,
+  disabled/back state, and action meaning. Its superseded Pixi renderer,
+  manual `UI.102` pressed-row renderer, raw crop constants, and duplicate CSS
+  path are removed.
+- `NativeUiSettingsPanel`, Group, Range, Toggle, Action, Binding, ValueAction,
+  and StaticRow own the exact shell and semantic row structure. Settings values,
+  persistence, subpages, fullscreen, save transfer, mobile layout sharing, and
+  scene return behavior remain in their prior owners. Standalone workbench use
+  exposed and fixed an accessible-label CSS dependency; kit labels now use the
+  self-contained screen-reader rule.
+- The Mac Chrome 151 workbench exercised all 12 atlases plus semantic MsgBox,
+  Button, Tabs, two-row SimpleMenu, and Settings controls. Pointer press,
+  selection, slider, native font, and exact-record assertions passed with empty
+  page/console/failed-response arrays. The reviewed DOM capture SHA-256 is
+  `b781945f5463ea191966083d4088f65e6ee28c2d59ea074c9012a12e6766ba01`.
+- The complete Pause journey passed Hub and Boneyard owner/waiting states,
+  three pressed actions, Settings handoff, keyboard/Escape, chat coexistence,
+  Notebox instruction/failure, fixed-stage geometry, pause authority, and
+  teardown with no failed responses. Its receipt log SHA-256 is
+  `f67cc28be1419860247708ff837e582d60bbe9ef5da4a2f3267ba0d39eebc886`.
+- The coarse-pointer mobile menu journey passed Title, Dark Cloud SimpleMenu,
+  Dark Cloud Settings/search, Hub SimpleMenu/Settings, scrolling, skull-back,
+  and Player Card through the focused Hub stop. Receipt log SHA-256:
+  `536c14b93e42e618642957369a3310ab7378522e8851e4d05b3b28ca105525d2`.
+  The broader attempt reached those same checks and then observed the Boneyard
+  skull still gated during `RESUMING...`; the separate complete Pause journey
+  proves the Boneyard UI after readiness.
+- Desktop and DPR-2 mobile Settings journeys passed title, Dark Cloud, Hub,
+  and Boneyard contexts with empty errors. They retained four action arrows,
+  15 row plates, four tracks, seven exact toggles, 28 ControlPanel text runs,
+  `UI.17 x4 / UI.18 x2`, desktop `600 x 700`, mobile `600 x 389.1875`, and all
+  five real-touch range changes. Receipt-log SHA-256 values are
+  `e961703b5c4917c8efbc1da3d452d7a69809eede37b19ee3a2c34c5510fc3eb6`
+  and `86065f18fc4ead2deb5abf869d7b0bbcc1e1bacf100c4d8ddee6897b051f40e3`.
+- The Mac canonical Website gate passed all backend/contracts, lint/typecheck,
+  every frontend/desktop suite, production build, media policy, and bundle
+  budget. The game entry fell from 277,279 raw / 83,703 gzip bytes to 263,896
+  raw / 80,337 gzip bytes after removing the dedicated Pause renderer.
+  Publication and deployment were not requested.
+
 ## Implementation validation receipt
 
 - `tools/extract-native-ui-kit.py` now fails closed over the retail executable,
@@ -455,3 +569,108 @@ adapters.
   desktop tests, production build, generated host bundle, media policy, and
   bundle budget (`Game-CG_-oeee.js`, 277,279 raw / 83,703 gzip bytes).
   Commit, push, deployment, and production restart were not performed.
+
+## 2026-08-31 — Reopened: supported game-wide UI Kit interface
+
+### Reported smell and parity question
+
+- Owner request: deepen the reusable stock UI work into an explicit UI Kit that
+  game screens can consume without learning atlas files, plan implementation
+  paths, duplicated pointer-state code, or Settings row structure.
+- Published-state smell at Website `2bcbdcf69f6c61e1c8d61bbd531def848302c304`:
+  32 files outside `native-ui/` import 15 different implementation paths.
+  `GameplayPauseMenu` coordinates a Pixi renderer, transparent actions, and a
+  separate DOM pressed-row renderer; `GameSettingsDialog` keeps its semantic
+  group, range, toggle, action, and binding modules private while the kit
+  exposes only their paint fragments.
+- Stock behavior to preserve: the already recovered catalog, font, Button,
+  MsgBox, Tabs, SimpleMenu, Settings, and Notebox contracts. This pass changes
+  the web module seam, not any stock record, geometry, timing, state machine,
+  action meaning, or authority owner.
+- Falsifiers: callers still deep-import implementation files; a second button
+  or Settings skin remains; Pause or Dark Cloud menu geometry/timing changes;
+  a kit module starts owning screen navigation, saved settings, pause
+  authority, audio, or network state; or the package facade pulls Pixi into a
+  DOM-only caller.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Settled native UI system | this ledger's complete 12-atlas/ten-font inventory; retail 0.72.5 executable SHA-256 `03a834566ce70fd808f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | All native art, font, Button, Tabs, MsgBox, SimpleMenu, and Settings presentation facts needed by this consolidation are already exact and dispositioned. No new binary fact is required. | high |
+| Current import census | Website `2bcbdcf69`; `frontend/src/game` imports excluding `native-ui/` | 32 consumer files name 15 internal kit paths, so file layout rather than a supported interface is the effective public contract. | high |
+| SimpleMenu causal trace | `GameplayPauseMenu.tsx`, `pause-menu-contract.ts`, `renderer/gameplay-pause-renderer.ts`, `gameplay-pause-menu.css` | One native surface has three presentation owners: Pixi paints settled art, the screen owns semantic buttons, and a second DOM path paints the pressed row. Gameplay and Dark Cloud share the same host module. | high |
+| Settings causal trace | `GameSettingsDialog.tsx`, `NativeSettingsPresentation.tsx`, `main-menu.css` | Exact paint records live in the kit, but five semantic row modules and the shell remain private to one caller. Save-transfer and mobile-layout actions separately reproduce the row class. | high |
+| Existing real adapters | `native-ui-pixi.ts`, `NativeUiPlanView.tsx`, React stock modules | Pure plans already have two justified adapters. Package entrypoints can expose those real seams without adding a hypothetical abstraction. | high |
+
+### System boundary and membership inventory
+
+Native system: the Website-owned stock UI Kit below screen state machines,
+including its supported pure, browser-asset, Pixi, raw React, and semantic
+React interfaces.
+
+| Member | Source | Disposition | Proof |
+| --- | --- | --- | --- |
+| catalog, fonts, text layout, and pure plan model | existing `native-ui-*` modules | `verified-already-at-parity` | complete catalog and focused plan receipts |
+| Pixi adapter | `native-ui-pixi.ts` | `verified-already-at-parity` | existing renderer and teardown receipts |
+| raw React adapter | sprite, strip, nine-slice, bitmap text, plan view | `verified-already-at-parity` | existing DOM workbench and prompt receipts |
+| semantic Button and MsgBox | `NativeUiButton`, `NativeUiMessageBox` | `verified-already-at-parity` | title prompt and workbench receipts |
+| supported pure/browser-asset/Pixi/raw-React/semantic-React entrypoints | missing | `exact-ported` | import fence plus every external caller migrated to one of five entrypoints |
+| semantic Tabs | pure `planNativeUiTabs` exists; DOM owner missing | `exact-ported` | shared visible/action geometry and tab semantics in workbench |
+| semantic SimpleMenu | pure/static plan plus split Gameplay/Dark Cloud presentation owners | `exact-ported` | one module owns plan painting, press state, focus, and action rectangles; callers retain lifecycle/action meaning |
+| Settings shell, group, range, toggle, action, binding, and static row | exact fragments exist; semantic rows private to `GameSettingsDialog` | `exact-ported` | Settings, save-transfer, and mobile-layout rows consume shared modules |
+| native Notebox module | exact contract/component at game root | `verified-already-at-parity`; kit ownership relocation | unchanged fixed-tick/fade/layout tests and Hub journey |
+| Gameplay and Dark Cloud Pause owners | host pause state, close timing, audio, row meaning | `out-of-system` (screen lifecycle and authority) | existing pause protocol/scene tests remain owners |
+| Settings values, page navigation, persistence, fullscreen, save transfer, and mobile editor | browser/application state | `out-of-system` (screen behavior) | existing Settings tests and journeys remain owners |
+| tutorial, mod selection, party list, directory, and other custom layouts | no complete native screen owner | `out-of-system` for this pass | may consume the supported kit later without being restyled here |
+| host simulation, protocol, save, replication, and RNG | no presentation ownership | `out-of-system` | no wire or authoritative-state change |
+
+No member is blocked by the browser platform.
+
+### Recovered interface contract
+
+- External game callers use exactly five entrypoints: pure core, browser asset
+  URLs, Pixi adapter, raw React adapter, or semantic React modules.
+  Implementation-file imports are kit-internal and rejected by an architecture
+  test. The pure entrypoint never evaluates PNG imports.
+- The semantic interface accepts content, state, and action callbacks. It hides
+  record selection, bitmap layout, painter order, hit rectangles, pointer and
+  keyboard press state, and stock CSS structure.
+- SimpleMenu callers continue to own open/close progress, audio, Escape/back
+  meaning, and authorization. The kit owns only the rendered plan, focus,
+  press state, and action dispatch.
+- Settings callers continue to own values, persistence, subpages, and browser
+  extensions. The kit owns the shell and exact row/control presentation.
+- Raw records remain an explicit advanced interface for a recovered screen
+  whose composition is not yet a semantic module; they are not a reason to
+  recreate Button, MsgBox, Tabs, SimpleMenu, Settings, or Notebox locally.
+
+### Web implementation consequence
+
+- Add separate package entrypoints so Node/pure code does not import PNGs,
+  DOM-only code does not import Pixi, and raw-record callers do not implicitly
+  load semantic Settings styles.
+- Add semantic Tabs, SimpleMenu, and Settings modules over the existing pure
+  plans and exact presentation records.
+- Move Notebox implementation/contract under kit ownership without changing
+  its public behavior.
+- Replace the Gameplay/Dark Cloud SimpleMenu's renderer/button/pressed-row
+  coordination with the semantic kit module and remove the superseded renderer
+  and CSS art path.
+- Migrate Settings, save-transfer, and mobile-layout actions to shared semantic
+  rows. Leave custom screen layouts and all screen state machines untouched.
+
+### Validation contract
+
+- Architecture test: every non-kit import crosses one of the five supported
+  entrypoints; no external implementation-file import remains.
+- Focused pure tests: all SimpleMenu row counts, reveal geometry/alpha, pressed
+  records, action bounds, Tabs semantics, and existing Button/MsgBox contracts.
+- Existing pause and Settings suites preserve lifecycle, exact record counts,
+  touch geometry, values, keyboard bindings, and browser extensions.
+- Workbench: render Button, MsgBox, Tabs, SimpleMenu, and Settings controls from
+  the semantic interface with empty page/console/failed-response arrays.
+- Mac Chrome: gameplay and Dark Cloud Esc menus, title prompt, desktop/mobile
+  Settings, and Hub Notebox journeys retain exact actions and presentation.
+- The exact candidate passes `/opt/homebrew/bin/bash ./scripts/validate.sh` on
+  the Mac mini.

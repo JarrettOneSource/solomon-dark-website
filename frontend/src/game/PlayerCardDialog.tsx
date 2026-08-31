@@ -10,7 +10,7 @@ import {
   PLAYER_CHARACTER_SHEETS,
   playerCharacterAtlasCssFrame,
 } from './renderer/player-character-atlas.ts'
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
+import { NativeUiSprite } from './native-ui/react-raw.ts'
 import './hub.css'
 
 export interface PlayerCardView {
