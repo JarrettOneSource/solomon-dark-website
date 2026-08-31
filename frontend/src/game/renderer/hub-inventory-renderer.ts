@@ -63,7 +63,10 @@ import {
   nativeUiKerning,
   nativeUiRecord,
   NATIVE_UI_BOAST_SELECTED_TINT,
+  NATIVE_UI_BUTTON,
+  nativeUiRect,
   planNativeUiBoastMenu,
+  planNativeUiButtonChrome,
   wrapNativeUiText,
   type NativeUiAtlasRecord,
   type NativeUiFontName,
@@ -138,7 +141,6 @@ import {
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
   hubInventoryWizardIdentityText,
-  hubNativeLabeledControlPresentation,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
   hubOwnedPerkSlotRect,
@@ -163,7 +165,11 @@ import { createNativeElementVfxTextures, type PlayerWorldTextures } from './worl
 type AtlasName = 'Inventory' | 'Skills' | 'UI'
 type FontName = 'body' | 'medium' | 'menu' | 'skill'
 
-export type HubInventoryPressedControl = 'dowsing' | 'message-primary' | null
+export type HubInventoryPressedControl =
+  | 'dowsing'
+  | 'message-primary'
+  | 'message-secondary'
+  | null
 
 export interface HubInventoryRendererNotice {
   readonly actionLabel: string
@@ -653,7 +659,7 @@ export async function createHubInventoryRenderer(
           context,
           surface,
           nextNotice,
-          model.kind !== 'dialogue' && model.pressedControl === 'message-primary',
+          model.kind === 'dialogue' ? null : model.pressedControl,
         )
       }
       if (inventorySackPages) {
@@ -1858,10 +1864,10 @@ function buildNotice(
   context: RenderContext,
   layer: Container,
   notice: HubInventoryRendererNotice,
-  primaryPressed: boolean,
+  pressedControl: HubInventoryPressedControl,
 ): void {
   if (notice.variant === 'unforge-confirmation' || notice.variant === 'unforge-result') {
-    buildUnforgeNotice(context, layer, notice)
+    buildUnforgeNotice(context, layer, notice, pressedControl)
     return
   }
   const noticeLayer = new Container()
@@ -1919,7 +1925,12 @@ function buildNotice(
     maxWidth: HUB_DOWSING_MSGBOX.bodyMaxWidth,
     tint: 0xffffff,
   })
-  addMessageBoxButton(context, noticeLayer, notice.actionLabel, primaryPressed)
+  addMessageBoxButton(
+    context,
+    noticeLayer,
+    notice.actionLabel,
+    pressedControl === 'message-primary',
+  )
   layer.addChild(noticeLayer)
 }
 
@@ -1927,6 +1938,7 @@ function buildUnforgeNotice(
   context: RenderContext,
   layer: Container,
   notice: HubInventoryRendererNotice,
+  pressedControl: HubInventoryPressedControl,
 ): void {
   const confirmation = notice.variant === 'unforge-confirmation'
   const resultLayout = confirmation ? null : hubUnforgeResultLayout(Math.max(
@@ -1977,12 +1989,14 @@ function buildUnforgeNotice(
       noticeLayer,
       notice.actionLabel,
       HUB_UNFORGE_CONFIRMATION.primaryButtonRect,
+      pressedControl === 'message-primary',
     )
     addContentSizedMessageButton(
       context,
       noticeLayer,
       notice.secondaryActionLabel ?? 'CANCEL',
       HUB_UNFORGE_CONFIRMATION.secondaryButtonRect,
+      pressedControl === 'message-secondary',
     )
   } else {
     addBitmapText(
@@ -2008,6 +2022,7 @@ function buildUnforgeNotice(
       noticeLayer,
       notice.actionLabel,
       resultLayout!.primaryButtonRect,
+      pressedControl === 'message-primary',
     )
   }
   layer.addChild(noticeLayer)
@@ -2066,15 +2081,18 @@ function addContentSizedMessageButton(
   layer: Container,
   label: string,
   [left, top, width, height]: readonly [number, number, number, number],
+  pressed: boolean,
 ): void {
-  const background = addAtlasSprite(context, layer, 'UI', 101, left, top + 8)
-  background.width = width
-  background.height = 69
-  addCenteredAtlasSprite(context, layer, 'UI', 54, left + 35, top + height / 2)
-  addCenteredAtlasSprite(context, layer, 'UI', 54, left + width - 35, top + height / 2, -1, 1)
-  addBitmapText(context, layer, label, 'menu', left + width / 2, top + 51, {
-    tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint,
-  })
+  addNativeButton(
+    context,
+    layer,
+    `content-message-${label}`,
+    label,
+    [left, top, width, height],
+    pressed,
+    left + width / 2,
+    top + 45,
+  )
 }
 
 function addStoreGrid(
@@ -2511,32 +2529,23 @@ function addDowsingButton(
   fee: number,
   pressed: boolean,
 ): void {
-  const presentation = hubNativeLabeledControlPresentation(pressed)
-  addCenteredAtlasSprite(
+  const copyOffset = addNativeButton(
     context,
     layer,
-    'UI',
-    presentation.bodyRecord,
-    ...HUB_DOWSING_PREROLL.buttonCenter,
-  )
-  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_PREROLL.buttonSideCenters[0])
-  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_PREROLL.buttonSideCenters[1], -1, 1)
-  addBitmapText(
-    context,
-    layer,
+    'dowsing',
     'DOWSE',
-    'menu',
-    800 + presentation.copyOffset,
-    HUB_DOWSING_PREROLL.labelTextBaselineY + presentation.copyOffset,
-    { tint: HUB_SHOP_TEXT.goldTint },
+    HUB_DOWSING_PREROLL.buttonActionRect,
+    pressed,
+    800,
+    HUB_DOWSING_PREROLL.labelTextBaselineY,
   )
   addBitmapText(
     context,
     layer,
     `${fee} GOLD`,
     'medium',
-    800 + presentation.copyOffset,
-    HUB_DOWSING_PREROLL.feeTextBaselineY + presentation.copyOffset,
+    800 + copyOffset,
+    HUB_DOWSING_PREROLL.feeTextBaselineY + copyOffset,
     { tint: HUB_SHOP_TEXT.goldTint },
   )
 }
@@ -2547,25 +2556,45 @@ function addMessageBoxButton(
   label: string,
   pressed: boolean,
 ): void {
-  const presentation = hubNativeLabeledControlPresentation(pressed)
-  addCenteredAtlasSprite(
+  addNativeButton(
     context,
     layer,
-    'UI',
-    presentation.bodyRecord,
-    ...HUB_DOWSING_MSGBOX.primaryButtonCenter,
+    'message-primary',
+    label,
+    HUB_DOWSING_MSGBOX.primaryButtonActionRect,
+    pressed,
+    800,
+    HUB_DOWSING_MSGBOX.primaryButtonTextBaselineY,
   )
-  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_MSGBOX.primaryButtonSideCenters[0])
-  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_MSGBOX.primaryButtonSideCenters[1], -1, 1)
+}
+
+function addNativeButton(
+  context: RenderContext,
+  layer: Container,
+  id: string,
+  label: string,
+  [left, top, width, height]: readonly [number, number, number, number],
+  pressed: boolean,
+  labelCenterX: number,
+  labelBaselineY: number,
+): number {
+  const chrome = planNativeUiButtonChrome({
+    bounds: nativeUiRect(left, top, width, height),
+    id,
+    state: pressed ? 'pressed' : 'idle',
+  })
+  layer.addChild(nativeUiPixiFor(context.textures).render(chrome, `${id}:chrome`))
+  const copyOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset : 0
   addBitmapText(
     context,
     layer,
     label,
     'menu',
-    800 + presentation.copyOffset,
-    HUB_DOWSING_MSGBOX.primaryButtonTextBaselineY + presentation.copyOffset,
+    labelCenterX + copyOffset,
+    labelBaselineY + copyOffset,
     { tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint },
   )
+  return copyOffset
 }
 
 function addHorizontalChain(context: RenderContext, layer: Container, x: number, y: number, width: number): void {

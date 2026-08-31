@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import nativeAssetsJson from '../../assets/game/native-ui-assets.json' with { type: 'json' }
@@ -43,7 +44,6 @@ import {
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_MODAL_HUD_CONTROLS,
-  HUB_NATIVE_LABELED_CONTROL,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
@@ -78,7 +78,6 @@ import {
   hubHagathaTooltipLines,
   hubItemTooltipLines,
   hubNativeEquipmentEffectText,
-  hubNativeLabeledControlPresentation,
   hubNativeUiCloseReveal,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
@@ -94,6 +93,11 @@ import {
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
+
+const hubInventoryRendererSource = readFileSync(
+  new URL('./hub-inventory-renderer.ts', import.meta.url),
+  'utf8',
+)
 
 const AUTHORED_EQUIPMENT_DESCRIPTIONS: Readonly<Record<number, string>> = {
   29: 'An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read "Interferenal."',
@@ -609,19 +613,19 @@ test('the unforge anvil owns its native drop geometry, pulse, and dialog layouts
   assert.equal(hubUnforgeTargetTint(90), 0xccffff)
   assert.equal(hubUnforgeTargetTint(270), 0x66ffff)
   assert.deepEqual(HUB_UNFORGE_CONFIRMATION.innerPanelRect, [544.5, 387.5, 514, 326])
-  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.primaryButtonRect, [589, 567, 209, 85])
-  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.secondaryButtonRect, [805, 567, 209, 85])
+  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.primaryButtonRect, [595, 573, 197, 69])
+  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.secondaryButtonRect, [811, 573, 197, 69])
   assert.deepEqual(HUB_UNFORGE_RESULT.innerPanelRect, [606.5, 396.5, 390, 308])
-  assert.deepEqual(HUB_UNFORGE_RESULT.primaryButtonRect, [697, 558, 209, 85])
+  assert.deepEqual(HUB_UNFORGE_RESULT.primaryButtonRect, [703, 564, 197, 69])
   assert.deepEqual(hubUnforgeResultLayout(249), {
     bodyLeft: 677,
     innerPanelRect: [606.5, 396.5, 390, 308],
-    primaryButtonRect: [697, 558, 209, 85],
+    primaryButtonRect: [703, 564, 197, 69],
   })
   assert.deepEqual(hubUnforgeResultLayout(460), {
     bodyLeft: 571.5,
     innerPanelRect: [501, 396.5, 601, 308],
-    primaryButtonRect: [697, 558, 209, 85],
+    primaryButtonRect: [703, 564, 197, 69],
   })
   assert.throws(() => hubUnforgeResultLayout(Number.NaN), /finite and nonnegative/)
 })
@@ -881,9 +885,6 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
   })
   assert.deepEqual(HUB_DOWSING_PREROLL, {
     buttonActionRect: [675, 265.5, 250, 69],
-    buttonCenter: [800, 300],
-    buttonVisualRect: [623.5, 265.5, 353, 69],
-    buttonSideCenters: [[704, 302], [896, 302]],
     feeTextBaselineY: 322.5,
     labelTextBaselineY: 302,
     mirrorPromptRect: [693, 54.5, 214, 41],
@@ -903,12 +904,9 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     innerPanelRect: [540.5, 163, 519, 374],
     innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]],
     outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]],
-    primaryButtonCenter: [800, 432],
     primaryButtonActionRect: [702, 397.5, 196, 69],
-    primaryButtonSideCenters: [[731, 434], [869, 434]],
     primaryButtonTextBaselineY: 440,
     primaryButtonTextTint: 0xd9ba70,
-    primaryButtonVisualRect: [623.5, 397.5, 353, 69],
     skullHeaderCenter: [800, 121],
     titleTextBaselineY: 252,
     verticalEdgeRecord: 79,
@@ -959,19 +957,6 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
   assert.equal(hubDowsingFieldTint(180), 0xffccff)
   assert.equal(hubDowsingFieldTint(540), 0xff99ff)
   assert.equal(hubDowsingFieldTint(720), 0xffb3ff)
-  assert.deepEqual(HUB_NATIVE_LABELED_CONTROL, {
-    idleBodyRecord: 101,
-    pressedBodyRecord: 102,
-    pressedCopyOffset: 6,
-  })
-  assert.deepEqual(hubNativeLabeledControlPresentation(false), {
-    bodyRecord: 101,
-    copyOffset: 0,
-  })
-  assert.deepEqual(hubNativeLabeledControlPresentation(true), {
-    bodyRecord: 102,
-    copyOffset: 6,
-  })
   assert.equal(hubDowsingFlashAlpha(0), 1)
   assert.equal(hubDowsingFlashAlpha(9.999), 1)
   assert.ok(Math.abs(hubDowsingFlashAlpha(10) - 0.95) < 1e-6)
@@ -999,6 +984,14 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     action: 'buy-fomentius',
     sequence: 10,
   }), null)
+})
+
+test('every Hub standard button consumes the shared body and UI.54 surround plan', () => {
+  assert.equal(hubInventoryRendererSource.match(/addNativeButton\(/g)?.length, 4)
+  assert.equal(hubInventoryRendererSource.match(/planNativeUiButtonChrome\(/g)?.length, 1)
+  assert.doesNotMatch(hubInventoryRendererSource, /buttonSideCenters|primaryButtonSideCenters/)
+  assert.doesNotMatch(hubInventoryRendererSource, /hubNativeLabeledControlPresentation/)
+  assert.match(hubInventoryRendererSource, /pressedControl === 'message-secondary'/)
 })
 
 test('the port exports the complete stock UI membership', () => {

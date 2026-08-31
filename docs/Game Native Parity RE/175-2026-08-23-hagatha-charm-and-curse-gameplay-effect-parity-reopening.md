@@ -682,3 +682,93 @@ No member is blocked by the browser platform.
   changed. No native member is blocked and no material unknown remains.
   Publication and production deployment are separate operations and are not
   claimed by this pre-publication receipt.
+
+## 2026-08-31 — Six-slot/one-Tonic full-mind report and Button handoff
+
+### Reported smell and parity question
+
+- Reported state: six visible outcomes include one Tonic; the pane still paints
+  `DRINK TONIC`; Hagatha rejects another Tonic and every ordinary charm with
+  `YOUR MIND IS FULL!`. The side glyphs on that message's `OKAY` button are
+  visibly misplaced.
+- Parity question: distinguish a broken Tonic projection from the authored
+  capacity dead-end, then hand the independently observed shared-Button defect
+  to its owning presentation system rather than changing Hagatha authority.
+- Falsifiers: selector 27 does not consume one outcome cell; capacity grows
+  before direct-purchase admission; the capacity-six plaque is absent; or the
+  full-mind branch mutates gold/outcomes/capacity.
+
+This is a secondary report in the Hagatha system. The 2026-08-30 admission pass
+did recover this boundary, but the resulting behavior is counterintuitive
+enough that the exact six-slot/one-Tonic state must be explicit rather than
+mistaken for a regression. The button-ornament issue is a separate secondary
+report against the reusable stock-Button system in entry 183.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail instructions | `PerkShop::Purchase 0x0056C340`, precheck `0x0056C3D5..0x0056C3F1`; apply `0x0066EF70`; capacity write `0x0056CA2E..0x0056CA7D` | Direct purchase requires current ordered outcome count `<` current capacity. Selector 27 is appended to that same vector before capacity rises by three. | high |
+| Retail renderer | `InventoryScreen::Render 0x00562520`, capacity branch `0x00564EFA..0x00564FA0` | Legal capacity six paints six bright cells and record 5 `DRINK TONIC` at `[253,318]`; only capacity nine omits it. The plaque is not a control. | high |
+| Current web authority | Website `41e15254`; `perksFitCapacity`, `buyHagathaPerk`, `hubHagathaTonicPromptCenter` | The host performs the same pre-append full check and the renderer derives the same capacity-six plaque. Rejection preserves the economy and emits the selector-specific full-mind notice. | high |
+| Fresh retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Re-confirms the sealed image behind the existing addresses. | high |
+
+### System boundary and membership inventory
+
+Native system: Hagatha direct-purchase admission and capacity presentation for
+the exact one-Tonic/full-six-outcome state. Shared Button art and input are
+owned by entry 183.
+
+| Member / branch | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| one Tonic plus zero to four ordinary outcomes | ordered vector and capacity six | `verified-already-at-parity` | another ordinary row or the second Tonic can fit while count is below six |
+| one Tonic plus five ordinary outcomes | direct precheck at `0x0056C3D5` | `verified-already-at-parity` | count equals six, so both an ordinary row and the second Tonic reject before debit/apply |
+| capacity-six `DRINK TONIC` plaque | `0x00564F4E..0x00564F8D` | `verified-already-at-parity` | visible at `[253,318]` despite the full state; no hit target |
+| Tonic-specific full-mind copy | PerkShop selector-27 rejection strings | `verified-already-at-parity` | `YOUR MIND IS FULL!`, head-explosion paragraph, `OKAY` |
+| ordinary full-mind copy | non-27 rejection strings | `verified-already-at-parity` | meridian paragraph and Tonic explanation, no mutation |
+| ordinary-perk removal Website extension | prior owner-authorized extension | `verified-already-at-parity` | removing one ordinary outcome creates the free cell required to buy the second Tonic |
+| `OKAY` body/end/edge/label composition and pressed state | shared `Button` / MsgBox presentation | transferred to entry 183 | one correction covers this and every Hub sibling using the same primitive |
+
+No Hagatha member is browser-blocked and no authority, protocol, save, price,
+offer, effect, or lifecycle change follows from this report.
+
+### Web implementation consequence and validation contract
+
+- Preserve the current Hagatha capacity rule and capacity-six plaque. Do not
+  special-case selector 27, infer capacity from visible art, or move the
+  capacity write ahead of admission.
+- Correct the `OKAY` button through entry 183's shared Button composition only.
+- Focused authority coverage must keep the six-outcome/one-Tonic rejection,
+  unchanged gold/vector/capacity, and successful second Tonic after one ordinary
+  removal. Mac Chrome must reproduce both selector-27 and ordinary full-mind
+  messages while proving the corrected shared Button geometry.
+
+### Implementation validation receipt
+
+- Hagatha authority and presentation code did not change. Focused Mac economy
+  coverage now explicitly proves `[27,0,1,2,3,4]` at capacity six rejects a
+  second Tonic without changing object identity, then accepts it after selector
+  4 is removed. The complete 50-test economy file passes.
+- Real Mac Chrome used the built production bundle and authoritative loopback
+  host. It bought one Tonic plus selectors `0..4`, reached `6 / 6`, retained the
+  lower `DRINK TONIC` plaque, rejected selector 27 at unchanged 90,550 gold with
+  the exact head-explosion copy, removed selector 4, then bought the second
+  Tonic. It finished with ordered outcomes `[27,0,1,2,3,27,4,5,6]`, capacity
+  nine, and an ordinary selector-9 rejection at unchanged 86,050 gold.
+- The Tonic and ordinary notices both expose the exact body action rectangle
+  `[702,397.5,196,69]`. Idle/pressed connector probes found nonzero pixels in
+  both top and bottom middle strips and both full ends; the shared Button
+  implementation and sibling receipts are owned by entry 183.
+- Browser page/console errors, failed requests/responses, WebGL losses, wire
+  errors, and host errors were empty; the final frame reported 59 FPS. The
+  structured browser receipt SHA-256 is
+  `909d7bc35ab03369586c38028fffea0be4d2cb57b7b107e91ab55dddca67ed5e`.
+  Idle/pressed Tonic full-mind captures hash to
+  `b9a7b664a8cde6a085930812e8e00eb7cdfbb541878143041716df727e438df1`
+  and `9eda51e721cf76f23d6db9856e2c80f453368e2f7bda8ad4e49ffaa3af0ee6dc`;
+  the ordinary rejection hashes to
+  `1937f17211725cc5a086d1a2624c5b4471afacd3425641234c6f0a8aedbe36cb`.
+- No protocol, schema, price, offer, capacity, effect, replication, or lifecycle
+  behavior changed. No Hagatha member is browser-blocked and no material
+  unknown remains. Commit, push, deployment, and production restart were not
+  performed.

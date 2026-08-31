@@ -561,6 +561,9 @@ test('Tonic is a counted outcome and leaves seven ordinary cells at final capaci
   assert.deepEqual(state.ownedPerkSelectors, [27, 0, 1, 2, 3, 4])
   assert.equal(state.charmCapacity, 6)
   assert.equal(buyHagathaPerk(state, 5).reason, 'perk-capacity-full')
+  const fullMindTonic = buyHagathaPerk(state, 27)
+  assert.equal(fullMindTonic.reason, 'perk-capacity-full')
+  assert.strictEqual(fullMindTonic.state, state)
 
   state = removeHagathaPerk(state, 4).state
   state = buyHagathaPerk(state, 27).state

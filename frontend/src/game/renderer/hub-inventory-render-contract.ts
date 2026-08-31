@@ -224,8 +224,8 @@ export const HUB_UNFORGE_CONFIRMATION = {
   bodyMaxWidth: 376,
   bodyTextBaselineY: 511,
   innerPanelRect: [544.5, 387.5, 514, 326] as const,
-  primaryButtonRect: [589, 567, 209, 85] as const,
-  secondaryButtonRect: [805, 567, 209, 85] as const,
+  primaryButtonRect: [595, 573, 197, 69] as const,
+  secondaryButtonRect: [811, 573, 197, 69] as const,
   titleTextBaselineY: 478,
 } as const
 
@@ -236,7 +236,7 @@ export const HUB_UNFORGE_RESULT = {
   horizontalChrome: 141,
   innerPanelRect: [606.5, 396.5, 390, 308] as const,
   outcomeTextBaselineY: 537,
-  primaryButtonRect: [697, 558, 209, 85] as const,
+  primaryButtonRect: [703, 564, 197, 69] as const,
   summaryTextBaselineY: 520,
   titleTextBaselineY: 485,
 } as const
@@ -600,9 +600,6 @@ export interface HagathaTooltipOptions {
 
 export const HUB_DOWSING_PREROLL = {
   buttonActionRect: [675, 265.5, 250, 69] as const,
-  buttonCenter: [800, 300] as const,
-  buttonVisualRect: [623.5, 265.5, 353, 69] as const,
-  buttonSideCenters: [[704, 302], [896, 302]] as const,
   feeTextBaselineY: 322.5,
   labelTextBaselineY: 302,
   mirrorPromptRect: [693, 54.5, 214, 41] as const,
@@ -623,12 +620,9 @@ export const HUB_DOWSING_MSGBOX = {
   innerPanelRect: [540.5, 163, 519, 374] as const,
   innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]] as const,
   outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]] as const,
-  primaryButtonCenter: [800, 432] as const,
   primaryButtonActionRect: [702, 397.5, 196, 69] as const,
-  primaryButtonSideCenters: [[731, 434], [869, 434]] as const,
   primaryButtonTextBaselineY: 440,
   primaryButtonTextTint: 0xd9ba70,
-  primaryButtonVisualRect: [623.5, 397.5, 353, 69] as const,
   skullHeaderCenter: [800, 121] as const,
   titleTextBaselineY: 252,
   verticalEdgeRecord: 79,
@@ -661,27 +655,6 @@ export function hubNativeUiCloseReveal(
     throw new RangeError('native InventoryScreen close progress must be within [0, 1]')
   }
   return Math.max(0, startProgress - hubNativeUiElapsedTicks(elapsedMs) * decrementPerTick)
-}
-
-export const HUB_NATIVE_LABELED_CONTROL = {
-  idleBodyRecord: 101,
-  pressedBodyRecord: 102,
-  pressedCopyOffset: 6,
-} as const
-
-export function hubNativeLabeledControlPresentation(pressed: boolean): {
-  readonly bodyRecord: 101 | 102
-  readonly copyOffset: number
-} {
-  return pressed
-    ? {
-        bodyRecord: HUB_NATIVE_LABELED_CONTROL.pressedBodyRecord,
-        copyOffset: HUB_NATIVE_LABELED_CONTROL.pressedCopyOffset,
-      }
-    : {
-        bodyRecord: HUB_NATIVE_LABELED_CONTROL.idleBodyRecord,
-        copyOffset: 0,
-      }
 }
 
 export const HUB_DOWSING_FLASH = {

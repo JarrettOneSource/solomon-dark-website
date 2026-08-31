@@ -1448,9 +1448,9 @@ function NativeHubSurface({
                     setNotice(null)
                   })
                 }}
-                onPressedChange={notice.variant === undefined
-                  ? (pressed) => setPressedControl(pressed ? 'message-primary' : null)
-                  : undefined}
+                onPressedChange={(pressed) => setPressedControl(
+                  pressed ? 'message-primary' : null,
+                )}
               />
               {notice.variant === 'unforge-confirmation' ? (
                 <NativeAction
@@ -1458,6 +1458,9 @@ function NativeHubSurface({
                   label={notice.secondaryActionLabel ?? 'CANCEL'}
                   rect={HUB_UNFORGE_CONFIRMATION.secondaryButtonRect}
                   onClick={() => click(() => setNotice(null))}
+                  onPressedChange={(pressed) => setPressedControl(
+                    pressed ? 'message-secondary' : null,
+                  )}
                 />
               ) : null}
             </>

@@ -177,6 +177,7 @@ try {
   if (hagathaCapacityOnly) {
     await hostPage.locator('.main-menu-page[data-session-cheats-enabled="true"]').waitFor()
     const hagathaCapacity = await exerciseHagathaCapacity(hostPage)
+    const sharedButtons = await exerciseSharedButtonSiblings(hostPage)
     assert.deepEqual(browserErrors, [])
     assert.deepEqual(failedRequests, [])
     assert.deepEqual(failedResponses, [])
@@ -188,13 +189,14 @@ try {
       failedResponses,
       hagathaCapacity,
       host: await pageReceipt(hostPage),
+      sharedButtons,
       status: 'ok',
     }
     await writeFile(`${screenshotRoot}-hagatha-capacity-receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`)
     process.stdout.write(`${JSON.stringify(receipt)}\n`)
     step('focused Tonic-inclusive Hagatha capacity receipt complete')
-    await browser.close()
     await gameHost?.close()
+    await browser.close()
     await staticServer?.close()
     process.exit(0)
   }
@@ -705,8 +707,8 @@ try {
   })}\n`)
   throw error
 } finally {
-  await browser.close()
   await gameHost?.close()
+  await browser.close()
   await staticServer?.close()
 }
 
@@ -1070,14 +1072,11 @@ async function exerciseHagathaCapacity(page) {
   const purchases = []
   for (const [selector, count, capacity] of [
     [27, 1, 6],
-    [27, 2, 9],
-    [0, 3, 9],
-    [1, 4, 9],
-    [2, 5, 9],
-    [3, 6, 9],
-    [4, 7, 9],
-    [5, 8, 9],
-    [6, 9, 9],
+    [0, 2, 6],
+    [1, 3, 6],
+    [2, 4, 6],
+    [3, 5, 6],
+    [4, 6, 6],
   ]) {
     purchases.push(await buyHagathaSelector(page, hagatha, selector, count, capacity))
     if (selector === 27) {
@@ -1085,8 +1084,26 @@ async function exerciseHagathaCapacity(page) {
     }
   }
 
-  const expectedOutcomes = [27, 27, 0, 1, 2, 3, 4, 5, 6]
   const owned = hagatha.getByLabel('Owned Charms and Curses')
+  const fullMindTonic = await rejectHagathaSelector(
+    page,
+    hagatha,
+    27,
+    /head to explode/,
+    'hagatha-capacity-full-tonic',
+    true,
+  )
+  assert.equal(await owned.locator('[data-owned-hagatha-selector]').count(), 6)
+
+  await owned.locator('[data-owned-hagatha-selector="4"]').click()
+  await hagatha.locator('.hub-charm-capacity').filter({ hasText: '5 / 6' }).waitFor()
+  purchases.push(await buyHagathaSelector(page, hagatha, 27, 6, 9))
+  hagatha = await captureHagathaCapacityPresentation(page, hagatha, 9)
+  for (const [selector, count] of [[4, 7], [5, 8], [6, 9]]) {
+    purchases.push(await buyHagathaSelector(page, hagatha, selector, count, 9))
+  }
+
+  const expectedOutcomes = [27, 0, 1, 2, 3, 27, 4, 5, 6]
   const outcomes = await owned.locator('[data-owned-hagatha-selector]').evaluateAll((nodes) => (
     nodes.map(node => Number(node.getAttribute('data-owned-hagatha-selector')))
   ))
@@ -1094,20 +1111,13 @@ async function exerciseHagathaCapacity(page) {
   assert.match(await hagatha.locator('.hub-charm-capacity').innerText(), /9 \/ 9/)
 
   const rejectedSelector = 9
-  const rejected = hagatha.locator(`[data-hagatha-selector="${rejectedSelector}"]`)
-  const goldBeforeRejection = await dialogGold(hagatha)
-  await rejected.click()
-  await rejected.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  await rejected.click()
-  const notice = hagatha.getByRole('alert')
-  await notice.waitFor()
-  await waitForNativeNoticeSettled(hagatha)
-  assert.match(await notice.innerText(), /YOUR MIND IS FULL!/)
-  assert.match(await notice.innerText(), /Thaumic Covalence Meridian/)
-  assert.equal(await dialogGold(hagatha), goldBeforeRejection)
-  await page.screenshot({ path: `${screenshotRoot}-hagatha-capacity-rejected.png` })
-  await hagatha.getByRole('button', { name: 'OKAY' }).click()
-  await notice.waitFor({ state: 'detached' })
+  const ordinaryFullMind = await rejectHagathaSelector(
+    page,
+    hagatha,
+    rejectedSelector,
+    /Thaumic Covalence Meridian/,
+    'hagatha-capacity-rejected',
+  )
   assert.equal(await owned.locator('[data-owned-hagatha-selector]').count(), 9)
 
   await hagatha.getByRole('button', { name: 'Done' }).click()
@@ -1138,11 +1148,211 @@ async function exerciseHagathaCapacity(page) {
   return {
     bundleTooltip,
     capacity: 9,
-    goldAfterRejection: goldBeforeRejection,
+    fullMindTonic,
+    goldAfterRejection: ordinaryFullMind.goldBefore,
+    ordinaryFullMind,
     outcomes,
     presentationCapacities: [3, 6, 9],
     purchases,
     rejectedSelector,
+  }
+}
+
+async function rejectHagathaSelector(
+  page,
+  hagatha,
+  selector,
+  expectedCopy,
+  screenshotSuffix,
+  captureButton = false,
+) {
+  const offer = hagatha.locator(`[data-hagatha-selector="${selector}"]`)
+  const goldBefore = await dialogGold(hagatha)
+  await offer.click()
+  await offer.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await offer.click()
+  const notice = hagatha.getByRole('alert')
+  await notice.waitFor()
+  await waitForNativeNoticeSettled(hagatha)
+  assert.match(await notice.innerText(), /YOUR MIND IS FULL!/)
+  assert.match(await notice.innerText(), expectedCopy)
+  assert.equal(await dialogGold(hagatha), goldBefore)
+
+  const okay = hagatha.getByRole('button', { name: 'OKAY' })
+  const buttonBox = await okay.boundingBox()
+  assertBoxNear(buttonBox, { height: 69, width: 196, x: 702, y: 397.5 })
+  const idleChrome = captureButton ? await nativeButtonChromeReceipt(page, buttonBox) : null
+  await page.screenshot({ path: `${screenshotRoot}-${screenshotSuffix}.png` })
+
+  let pressedChrome = null
+  if (captureButton) {
+    await page.mouse.move(
+      buttonBox.x + buttonBox.width / 2,
+      buttonBox.y + buttonBox.height / 2,
+    )
+    await page.mouse.down()
+    await hagatha.locator(
+      'xpath=self::*[@data-native-pressed-control="message-primary"]',
+    ).waitFor()
+    pressedChrome = await nativeButtonChromeReceipt(page, buttonBox)
+    await page.screenshot({ path: `${screenshotRoot}-${screenshotSuffix}-pressed.png` })
+    await page.mouse.up()
+  } else {
+    await okay.click()
+  }
+  await notice.waitFor({ state: 'detached' })
+  return { buttonBox, goldBefore, idleChrome, pressedChrome, selector }
+}
+
+async function nativeButtonChromeReceipt(page, bodyBox) {
+  const surround = {
+    height: bodyBox.height + 16,
+    width: bodyBox.width + 12,
+    x: bodyBox.x - 6,
+    y: bodyBox.y - 6,
+  }
+  const screenshot = await page.screenshot({ clip: surround })
+  const receipt = await page.evaluate(async ({ height, source, width }) => {
+    const image = new Image()
+    const loaded = new Promise((resolve, reject) => {
+      image.addEventListener('load', resolve, { once: true })
+      image.addEventListener('error', reject, { once: true })
+    })
+    image.src = `data:image/png;base64,${source}`
+    await loaded
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    context.drawImage(image, 0, 0)
+    const data = context.getImageData(0, 0, width, height).data
+    const matchingPixels = (left, top, right, bottom, predicate) => {
+      let count = 0
+      for (let y = top; y < bottom; y += 1) {
+        for (let x = left; x < right; x += 1) {
+          const offset = (y * width + x) * 4
+          const red = data[offset]
+          const green = data[offset + 1]
+          const blue = data[offset + 2]
+          if (predicate(red, green, blue)) count += 1
+        }
+      }
+      return count
+    }
+    const brightPixels = (left, top, right, bottom) => matchingPixels(
+      left,
+      top,
+      right,
+      bottom,
+      (red, green, blue) => red + green + blue > 150,
+    )
+    const goldPixels = (left, top, right, bottom) => matchingPixels(
+      left,
+      top,
+      right,
+      bottom,
+      (red, green, blue) => red > 110 && green > 75 && blue < 125 && red > blue * 1.2,
+    )
+    return {
+      bottomConnectorBright: brightPixels(70, height - 10, width - 70, height),
+      bottomConnectorGold: goldPixels(70, height - 10, width - 70, height),
+      leftEndBright: brightPixels(0, 0, 70, height),
+      leftEndGold: goldPixels(0, 0, 70, height),
+      rightEndBright: brightPixels(width - 70, 0, width, height),
+      rightEndGold: goldPixels(width - 70, 0, width, height),
+      topConnectorBright: brightPixels(70, 0, width - 70, 10),
+      topConnectorGold: goldPixels(70, 0, width - 70, 10),
+    }
+  }, {
+    height: Math.round(surround.height),
+    source: screenshot.toString('base64'),
+    width: Math.round(surround.width),
+  })
+  assert.ok(receipt.leftEndBright > 300, JSON.stringify(receipt))
+  assert.ok(receipt.rightEndBright > 300, JSON.stringify(receipt))
+  assert.ok(receipt.topConnectorBright > 20, JSON.stringify(receipt))
+  assert.ok(receipt.bottomConnectorBright > 20, JSON.stringify(receipt))
+  return receipt
+}
+
+async function exerciseSharedButtonSiblings(page) {
+  const canvas = page.locator('.hub-world-canvas')
+  await navigateRegion(page, canvas, 'courtyard', { x: 1800, y: 650 })
+  await holdUntilTransition(page, canvas, ['d', 'w'], 'library')
+  await waitForSettledRegion(page, canvas, 'library')
+  await navigateRegion(page, canvas, 'library', HUB_TRADER_GEOMETRY.shlorio.position, 60)
+  await openNearbyTrader(page, 'shlorio')
+  const dialogue = page.getByRole('dialog', { name: 'Talking to Shlorio' })
+  await dialogue.waitFor()
+  await waitForNativeSurfaceSettled(dialogue)
+  await advanceDialogue(dialogue)
+  await dialogue.locator('[data-service-trader="shlorio"]').click()
+  const shlorio = page.getByRole('dialog', { name: "SHLORIO'S DISCOUNT DOWSING" })
+  await shlorio.waitFor()
+  await waitForNativeSurfaceSettled(shlorio)
+  const dowse = shlorio.getByRole('button', { name: /DOWSE\s+650 gold/ })
+  const dowseBox = await dowse.boundingBox()
+  assertBoxNear(dowseBox, { height: 69, width: 250, x: 675, y: 265.5 })
+  await page.screenshot({ path: `${screenshotRoot}-shlorio-dowse-shared-button-idle.png` })
+  const dowseIdleChrome = await nativeButtonChromeReceipt(page, dowseBox)
+  await page.mouse.move(
+    dowseBox.x + dowseBox.width / 2,
+    dowseBox.y + dowseBox.height / 2,
+  )
+  await page.mouse.down()
+  await shlorio.locator('xpath=self::*[@data-native-pressed-control="dowsing"]').waitFor()
+  const dowsePressedChrome = await nativeButtonChromeReceipt(page, dowseBox)
+  await page.screenshot({ path: `${screenshotRoot}-shlorio-dowse-shared-button-pressed.png` })
+  await page.mouse.up()
+  await shlorio.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first().waitFor()
+  await shlorio.getByRole('button', { name: 'Done' }).click()
+  await shlorio.waitFor({ state: 'detached' })
+
+  await page.keyboard.press('i')
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
+  const equippedStaff = inventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first()
+  await dragInventoryPointer(page, inventory, equippedStaff, { x: 800, y: 650 })
+  const backpackStaff = inventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Staff, quantity 1',
+  })
+  await backpackStaff.waitFor()
+  await dragInventoryPointer(page, inventory, backpackStaff, { x: 1550, y: 850 })
+  const unforgeNotice = inventory.getByRole('alert')
+  await unforgeNotice.waitFor()
+  await waitForNativeNoticeSettled(inventory)
+  assert.match(await unforgeNotice.innerText(), /REALLY UNFORGE THIS\?/)
+  const unforge = inventory.getByRole('button', { name: 'UNFORGE' })
+  const cancel = inventory.getByRole('button', { name: 'CANCEL' })
+  const unforgeBox = await unforge.boundingBox()
+  const cancelBox = await cancel.boundingBox()
+  assertBoxNear(unforgeBox, { height: 69, width: 197, x: 595, y: 573 })
+  assertBoxNear(cancelBox, { height: 69, width: 197, x: 811, y: 573 })
+  const unforgeIdleChrome = await nativeButtonChromeReceipt(page, unforgeBox)
+  await page.mouse.move(
+    cancelBox.x + cancelBox.width / 2,
+    cancelBox.y + cancelBox.height / 2,
+  )
+  await page.mouse.down()
+  await inventory.locator(
+    'xpath=self::*[@data-native-pressed-control="message-secondary"]',
+  ).waitFor()
+  const cancelPressedChrome = await nativeButtonChromeReceipt(page, cancelBox)
+  await page.screenshot({ path: `${screenshotRoot}-inventory-unforge-shared-button-pressed.png` })
+  await page.mouse.up()
+  await unforgeNotice.waitFor({ state: 'detached' })
+  await closeInventory(page, inventory)
+
+  return {
+    dowsing: { buttonBox: dowseBox, idleChrome: dowseIdleChrome, pressedChrome: dowsePressedChrome },
+    unforge: {
+      cancelBox,
+      cancelPressedChrome,
+      idleChrome: unforgeIdleChrome,
+      unforgeBox,
+    },
   }
 }
 
@@ -1183,7 +1393,7 @@ async function buyHagathaSelector(page, hagatha, selector, expectedCount, expect
   const goldBefore = await dialogGold(hagatha)
   await offer.click()
   await offer.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  await offer.click()
+  await offer.evaluate(node => node.click())
   await hagatha.locator('.hub-charm-capacity').filter({
     hasText: `${expectedCount} / ${expectedCapacity}`,
   }).waitFor()

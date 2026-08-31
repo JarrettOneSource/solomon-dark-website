@@ -674,3 +674,206 @@ No member is blocked by the browser platform.
   Settings, and Hub Notebox journeys retain exact actions and presentation.
 - The exact candidate passes `/opt/homebrew/bin/bash ./scripts/validate.sh` on
   the Mac mini.
+## 2026-08-31 — Reopened: shared Button surround and input-state projection
+
+### Reported smell and parity question
+
+- Owner report: the little glyphs beside the `OKAY` button on Hagatha's
+  `YOUR MIND IS FULL!` message are in the wrong positions.
+- Current web smell: the Hub renderer draws two complete 70 by 85 `UI.54`
+  records centred inside the 353 by 69 button body and omits the continuous
+  edge slice between them. Its Dowsing and content-sized MsgBox siblings repeat
+  the same false composition. Separately, the reusable pure Button plan maps
+  focus/hover to pressed `UI.102` and does not move the label on press.
+- Stock behavior to recover: the complete standard Button body/surround/label
+  composition, input-state writers, exact expansion constants, edge sampling,
+  disabled branch, painter order, and every Website consumer of that primitive.
+- Falsifiers: `UI.54` is two small centre ornaments rather than a surround;
+  hover selects `UI.102`; press leaves the label fixed; an affected Hub member
+  uses distinct native geometry; or semantic hit bounds are derived from the
+  decorative surround rather than its owning control.
+
+This is a secondary report in a covered system. The 2026-08-23 extraction
+correctly identified `UI.54` and the 5-percent strip helper, but did not migrate
+the Hub renderer's older two-centred-sprite path. The reusable DOM reopening
+then called the pure Button plan already at parity without checking its state
+projection against the previously recovered Button field writers. Both skipped
+membership checks are corrected across the shared primitive here. The
+supported UI Kit publication above makes `native-ui/core.ts` the public pure
+owner used by this reopening.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed image as the UI catalog and earlier Button entries. | high |
+| Button state instructions | constructor `0x00430430`; pointer down `0x00430890`; release `0x00430A40`; hover enter `0x00430AC0`; leave `0x00430AE0` | `Button+0x78` is the pressed byte. Pointer down sets it, release/leave clear it. Hover writes only `+0x79`; it never selects pressed art. | high |
+| Labeled renderer instructions | `UiLabeledControl_Render 0x005C60F0`, raw tail `0x005C64EA..0x005C654A` | The body record is indexed only by `+0x78`; the bitmap label adds `6 * pressed` to both axes. The surround call receives body left/top minus 6 and width plus 12. | high |
+| Standard surround helper | `FUN_00417E30`; 13 xrefs in ten functions; standard singleton operand `DAT_008199E4+0x2990` | Offset `0x2990 = 0x38 + 54 * 0xC4`, so the helper consumes `UI.54`. It draws one full left end, repeats the final five-percent horizontal strip, and mirrors one full right end. | high |
+| Raw constants/assets | doubles `0x007852E0=6`, `0x007DE9D8=12`; float `0x007DE96C=0.95`; generated catalog `UI.54 [679,394,70,85]`, `UI.101 [266,482,353,69]`, `UI.102 [620,482,353,69]` | A 353 by 69 body has a 365 by 85 surround: left/top `-6`, 70-pixel full ends, 225-pixel connector, mirrored right edge. | high |
+| MsgBox instructions | shared `MsgBox::Render 0x005C4530`, primary/secondary surround calls `0x005C4FA8` and `0x005C52D2` | Both actions use the identical `UI.54` helper and `-6/+12` geometry; button count and content sizing do not create a second composition. | high |
+| Current web causal trace | Website `b686dccc`; supported `native-ui/core.ts` facade over `native-ui-plan.ts`; `hub-inventory-renderer.ts`; `hub-inventory-render-contract.ts` | The pure plan owns correct full-end/edge geometry but uses pressed art for focus and omits the `(6,6)` label shift. Hub bypasses it with centred end sprites and a duplicate state helper. The newly published facade exposes, but does not correct, that shared primitive. | high |
+
+Fresh read-only Ghidra queries used canonical project
+`SolomonDark/SolomonDark.exe` through Mod Loader revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`. Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py`, `refs_to_addr_decompile.py`, `dump_insns_around.py`, and
+`dump_floats_at.py` were invoked read-only against preferred-image addresses.
+The dirty Mod Loader checkout was not changed.
+
+### System boundary and membership inventory
+
+Native system: standard `Button` presentation from input-state bytes through
+body selection, bitmap-label transform, `UI.54` surround composition, disabled
+overlay, semantic control rectangle, and all Website adapters/consumers.
+
+| Member / branch | Native/current source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| idle body and label | `+0x78=0`, `UI.101` | `exact-ported` | record 101, zero label offset, complete surround |
+| pointer/key press | `+0x78=1`, `UI.102` | `exact-ported` | record 102 and label offset `[6,6]`; release/cancel/leave restores idle |
+| hover | `+0x79` only | `exact-ported` | body remains 101 and label remains fixed; no hover render branch |
+| browser keyboard focus | no retail keyboard-focus visual | `blocked-by-platform` only for the required focus-visible outline | stock body stays idle; CSS outline remains the browser accessibility indication |
+| explicit latched `selected` adapter state | Website authoring state with pressed appearance | `out-of-system` semantic state; exact Button pressed presentation | record 102 plus `[6,6]`, no second art path |
+| disabled body/text/overlay | `UiLabeledControl_Render` disabled argument; `0.5`/`0.25` constants | `verified-already-at-parity` | idle body/text alpha 0.5, final gray overlay alpha 0.25 |
+| full `UI.54` left end, 5-percent connector, mirrored right end | `FUN_00417E30` | `exact-ported` | surround begins six pixels left/up, extends six right, and keeps authored height 85 (ten below the 69-pixel body) |
+| pure plan and Pixi/DOM adapters | `native-ui/core.ts`, `native-ui/pixi.ts`, `native-ui/react-raw.ts`, `planNativeUiButton` | `exact-ported` | one facade-supported reusable chrome/state plan, identical nodes in both adapters |
+| semantic React `NativeUiButton` | shared DOM owner | `exact-ported` | pointer/key press only; hover keeps idle art; focus outline does not replace stock body |
+| stock title Kill/Tutorial MsgBox buttons | `StockPromptDialog` via reusable DOM message | `exact-ported` | two action bodies/surrounds and pressed transition from the shared plan |
+| Hagatha ordinary/Tonic full-mind `OKAY` | shared Hub notice path | `exact-ported` | corrected standard body/surround while authority remains entry 175 |
+| Dowsing insufficient-gold and Hat/Robe `OKAY` notices | same Hub notice path | `exact-ported` | no message-specific glyph coordinates |
+| Dowsing pre-roll action | standard UI.101/.102/.54 control with caller-specific copy baselines | `exact-ported` | shared chrome plus retained DOWSE/fee baselines and pressed offsets |
+| Unforge confirmation primary/secondary and result action | shared content-sized MsgBox | `exact-ported` | each outer 85-pixel row resolves to body x/y `+6`, width `-12`, height 69 and a continuous surround |
+| gameplay and Dark Cloud SimpleMenu rows | established `FUN_00417E30` sibling | `verified-already-at-parity` | existing 365 by 85 full-end/225-pixel connector composition and `(6,6)` pressed overlay |
+| nonstandard alternate/unlabeled controls and tab brackets | `0x005C65A0`, `0x005C6A50`, `UI.53`, `UI.13` | `out-of-system` (different records/state geometry) | inspected as lateral siblings; no standard-Button helper substitution |
+
+The focus-visible outline is the only browser-specific visible difference. It
+appears only for keyboard focus and does not alter stock body, surround, label,
+hit geometry, action meaning, or pointer behavior.
+
+### Native ownership thread and recovered behavioral contract
+
+- Screen owners construct and place a `Button`; its body rectangle remains the
+  semantic action rectangle. `Button` alone owns pressed/hover bytes and the
+  action callback. UI art never authorizes a transaction.
+- Pointer down sets `+0x78`; release clears it before dispatch; leave clears
+  both pressed and hover. Hover enter sets `+0x79`, which the standard renderer
+  does not read for body or label presentation.
+- `UiLabeledControl_Render` draws `UI.101 + pressed`, then bitmap copy at
+  `[centerX, nativeBaseline] + [6,6] * pressed`. Disabled state changes alpha
+  and adds the final control-rect overlay; it does not select a third body.
+- After body and label, `FUN_00417E30` paints `UI.54` around the body rectangle
+  expanded from `(left,top,width,69)` to `(left-6,top-6,width+12,85)`. Full
+  70-pixel ends bound a connector sampled from UV x `0.95..1`; the right end is
+  mirrored. Side ends are never centre glyphs.
+- A screen may retain caller-specific label baselines, action hit rectangles,
+  and content sizing, but it must consume the same chrome/state primitive. The
+  surrounding art is non-interactive and never expands authority.
+- Teardown remains adapter/scene-owned. The pure plan retains no texture or
+  state, and the shared Pixi adapter releases derived `UI.54` slice textures
+  with its source pages.
+
+### Nearby-system findings
+
+- The six-slot/one-Tonic rejection that exposed this button is exact Hagatha
+  behavior, documented in entry 175; this correction intentionally changes no
+  economy or capacity rule.
+- `HUB_NATIVE_LABELED_CONTROL` duplicates the reusable Button state contract
+  and enabled the older Hub composition to drift. It must be removed rather
+  than kept as a compatibility alias.
+- The alternate labeled control uses a different source record and a four-pixel
+  state displacement. It cannot be folded into the standard Button merely
+  because both call the same lower strip helper.
+
+### Confidence and open questions
+
+- Confirmed: exact retail identity; state writers; body index; press-only
+  branch; six-pixel label displacement; surround expansion; record identity;
+  edge UV; helper xrefs; all current Website standard-Button consumers.
+- Inferred: none required for implementation.
+- Unknown: none material. The browser focus outline is deliberate platform
+  accessibility and explicitly isolated from native presentation.
+
+### Web implementation consequence
+
+- Expose the standard Button chrome/state fragment beneath
+  `planNativeUiButton` through supported `native-ui/core.ts`; make the full
+  plan, Pixi Hub consumers, and DOM adapter share it. Preserve caller-specific
+  text baselines where native callers own them.
+- Correct state projection so focus/hover retains idle stock art and only
+  pressed/explicit-selected presentation chooses `UI.102` and shifts its label
+  by `[6,6]`.
+- Replace every Hub pair of centred `UI.54` sprites with the complete shared
+  left-end/connector/right-end plan. For content-sized MsgBoxes, interpret the
+  existing 85-pixel outer rectangles as surround bounds and derive body x/y
+  `+6`, width `-12`, and height 69.
+- Remove `HUB_NATIVE_LABELED_CONTROL`, `buttonSideCenters`, and
+  `primaryButtonSideCenters`; add no aliases or screen-specific offsets.
+- Preserve all semantic action rectangles, copy, audio, message lifetime,
+  authority, and responsive fixed-stage mapping.
+
+### Validation contract
+
+- Pure-plan tests: all five adapter states; exact 101/102 selection; hover/focus
+  idle; `[6,6]` pressed/selected copy; left/connector/right nodes at
+  `[-6,+64,+width+6]`; UI.54 and UV `0.95`; disabled painter order.
+- Hub contract/source test: no centred-side constants or local state duplicate;
+  Dowsing, generic MsgBox, and content-sized MsgBox all call the shared chrome
+  plan. Existing Hagatha capacity/economy tests must remain unchanged.
+- Complete Mac mini `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact
+  candidate.
+- Real Mac Chrome production-bundle journey: reproduce one Tonic plus five
+  ordinary outcomes, confirm both second-Tonic and ordinary full-mind notices,
+  visually inspect idle and pointer-down `OKAY`, and measure the 208 by 85
+  surround around the 196 by 69 body. Also visit Dowsing and one content-sized
+  Unforge message; require continuous end/connector geometry and empty page,
+  console, failed-response, WebGL-loss, wire-error, and host-error arrays.
+
+### Implementation validation receipt
+
+- `native-ui-plan.ts` now exposes `planNativeUiButtonChrome` through the
+  supported `native-ui/core.ts` facade. The full Button plan consumes it, maps
+  focus/hover to idle `UI.101`, maps press/explicit selection to `UI.102`, and
+  moves pressed copy by `[6,6]`. SimpleMenu delegates that displacement to the
+  same Button plan rather than applying a second offset. The DOM and Pixi
+  adapters therefore share one body/end/edge state model.
+- `hub-inventory-renderer.ts` consumes that chrome once for generic MsgBox,
+  Dowsing, and content-sized Unforge actions while preserving their recovered
+  caller-specific text baselines. `HubInventoryUi` now publishes primary and
+  secondary pressed state; the old centred-side constants and duplicate Hub
+  state helper are removed completely. Unforge semantic body rectangles are
+  `[595,573,197,69]`, `[811,573,197,69]`, and `[703,564,197,69]`; their old
+  209 by 85 rectangles remain only as the derived surrounding art extent.
+- The test-first Mac red receipt was TypeScript `TS2724`: missing exported
+  `planNativeUiButtonChrome`. After implementation and integration with the
+  published UI Kit, the 68-test native-UI suite, 91-test Hub-UI suite, and
+  50-test economy file pass. Coverage pins all
+  five plan states, exact body records and copy offsets, complete UI.54 node
+  geometry/UV, the absence of local Hub side constants, all three shared Hub
+  call families, and full-six/one-Tonic authority.
+- The exact candidate was materialized byte-for-byte in a clean detached Mac
+  worktree at Website base `18a8ec9a1f29108e5b06bdd6e82075c80a9e2c8a`.
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` passes backend build and 28
+  contracts, backend formatting, architecture/lint with 19 existing warnings
+  and zero errors, every frontend suite, desktop `5/5`, production
+  frontend/game-host builds, bundle budget, and media policy. The Game entry is
+  264,039 raw / 80,414 gzip bytes under 524,288 / 134,144.
+- Real Mac Chrome used the production bundle at 1600 by 900. Hagatha `OKAY`
+  measured `[702,397.5,196,69]`; its idle top/bottom connector counts were
+  340/204 bright pixels and its pressed counts 204/204, with both 70-pixel ends
+  populated. Shlorio `DOWSE` measured `[675,265.5,250,69]` with continuous
+  idle/pressed connector counts 610/375 and 366/375. Unforge primary/secondary
+  measured `[595,573,197,69]` and `[811,573,197,69]`; idle primary and pressed
+  secondary both retained populated ends and top/bottom connectors.
+- Reviewed DOWSE idle/pressed captures hash to
+  `71de26ce36777327ef36d2e240477d4f48831d12ddf27b5087f9bab3ff1ebb2d`
+  and `8267a6881c391b34d6318198151f2947c8e922a2c8b963f81f320643b63c8a38`;
+  the pressed Unforge confirmation hashes to
+  `0446bcb0232bdf38c40b87afbfc2fea098cf7ab165f039055ff77d3c57543ca8`.
+  Browser errors, failed requests/responses, WebGL losses, wire errors, and host
+  errors were empty; the structured receipt is the SHA-256 recorded in entry
+  175.
+- Keyboard focus retains the named browser-only accessibility outline; no other
+  member is browser-blocked and no material unknown remains. No runtime,
+  protocol, save, audio, authority, or responsive-layout owner changed.
+  Commit, push, deployment, and production restart were not performed.

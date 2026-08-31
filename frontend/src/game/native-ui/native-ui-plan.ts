@@ -103,11 +103,14 @@ export interface NativeUiPlan extends NativeUiFragment {
 
 export type NativeUiButtonState = 'disabled' | 'focused' | 'idle' | 'pressed' | 'selected'
 
-export interface NativeUiButtonSpec {
+export interface NativeUiButtonChromeSpec {
   readonly bounds: NativeUiRect
   readonly id: string
-  readonly label: string
   readonly state?: NativeUiButtonState
+}
+
+export interface NativeUiButtonSpec extends NativeUiButtonChromeSpec {
+  readonly label: string
 }
 
 export interface NativeUiTabSpec {
@@ -167,6 +170,7 @@ export const NATIVE_UI_BUTTON = Object.freeze({
   idleRecord: 101,
   labelYOffset: 9,
   minWidth: 140,
+  pressedOffset: 6,
   pressedRecord: 102,
   surround: 6,
   surroundEndRecord: 54,
@@ -217,7 +221,6 @@ export const NATIVE_UI_SIMPLE_MENU = Object.freeze({
   sideArrowOffset: 42,
   sideArrowScale: 0.75,
   sideArrowSpacing: 75,
-  pressedLabelOffset: 6,
 })
 
 export function nativeUiRect(
@@ -279,10 +282,10 @@ export function nativeUiPlan(
   }
 }
 
-export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
+export function planNativeUiButtonChrome(spec: NativeUiButtonChromeSpec): NativeUiFragment {
   const state = spec.state ?? 'idle'
   const disabled = state === 'disabled'
-  const selected = state === 'focused' || state === 'pressed' || state === 'selected'
+  const pressed = state === 'pressed' || state === 'selected'
   if (spec.bounds.width < NATIVE_UI_BUTTON.minWidth) {
     throw new RangeError(`native UI button width must be at least ${NATIVE_UI_BUTTON.minWidth}`)
   }
@@ -301,7 +304,7 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
       height,
       kind: 'sprite',
       label: `${spec.id}:body`,
-      record: selected ? NATIVE_UI_BUTTON.pressedRecord : NATIVE_UI_BUTTON.idleRecord,
+      record: pressed ? NATIVE_UI_BUTTON.pressedRecord : NATIVE_UI_BUTTON.idleRecord,
       width,
       x: left,
       y: top,
@@ -334,6 +337,19 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
       x: surroundRight,
       y: surroundTop,
     },
+  ]
+  return { actions: [], nodes }
+}
+
+export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
+  const state = spec.state ?? 'idle'
+  const disabled = state === 'disabled'
+  const pressed = state === 'pressed' || state === 'selected'
+  const alpha = disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1
+  const labelOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset : 0
+  const chrome = planNativeUiButtonChrome(spec)
+  const nodes: NativeUiNode[] = [
+    ...chrome.nodes,
     {
       kind: 'text',
       label: `${spec.id}:label`,
@@ -342,8 +358,9 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
         font: 'menu',
         text: spec.label,
         tint: NATIVE_UI_BUTTON.textTint,
-        x: left + width / 2,
-        y: top + height / 2 + NATIVE_UI_BUTTON.labelYOffset,
+        x: spec.bounds.left + spec.bounds.width / 2 + labelOffset,
+        y: spec.bounds.top + spec.bounds.height / 2
+          + NATIVE_UI_BUTTON.labelYOffset + labelOffset,
       },
     },
   ]
@@ -605,33 +622,17 @@ export function planNativeUiSimpleMenu(spec: NativeUiSimpleMenuSpec): NativeUiPl
   const rowStackHeight = spec.rows.length * NATIVE_UI_SIMPLE_MENU.rowHeight
     + (spec.rows.length - 1) * rowGap
   const firstTop = spec.firstRowTop ?? (spec.height - rowStackHeight) / 2
-  const rowFragments = spec.rows.map((row, index) => {
-    const fragment = planNativeUiButton({
-      bounds: nativeUiRect(
-        centerX - NATIVE_UI_SIMPLE_MENU.rowWidth / 2,
-        firstTop + index * (NATIVE_UI_SIMPLE_MENU.rowHeight + rowGap),
-        NATIVE_UI_SIMPLE_MENU.rowWidth,
-        NATIVE_UI_SIMPLE_MENU.rowHeight,
-      ),
-      id: row.id,
-      label: row.label,
-      state: row.state,
-    })
-    if (row.state !== 'pressed') return fragment
-    return {
-      ...fragment,
-      nodes: fragment.nodes.map((node) => node.kind === 'text'
-        ? {
-            ...node,
-            text: {
-              ...node.text,
-              x: node.text.x + NATIVE_UI_SIMPLE_MENU.pressedLabelOffset,
-              y: node.text.y + NATIVE_UI_SIMPLE_MENU.pressedLabelOffset,
-            },
-          }
-        : node),
-    }
-  })
+  const rowFragments = spec.rows.map((row, index) => planNativeUiButton({
+    bounds: nativeUiRect(
+      centerX - NATIVE_UI_SIMPLE_MENU.rowWidth / 2,
+      firstTop + index * (NATIVE_UI_SIMPLE_MENU.rowHeight + rowGap),
+      NATIVE_UI_SIMPLE_MENU.rowWidth,
+      NATIVE_UI_SIMPLE_MENU.rowHeight,
+    ),
+    id: row.id,
+    label: row.label,
+    state: row.state,
+  }))
   const spread = Math.fround(
     (1 - reveal) * NATIVE_UI_SIMPLE_MENU.chromeMotion
       + NATIVE_UI_SIMPLE_MENU.chromePadding,

@@ -16,6 +16,7 @@ import {
   nativeUiRect,
   nativeUiStripPieces,
   planNativeUiButton,
+  planNativeUiButtonChrome,
   planNativeUiMessage,
   planNativeUiMessageFrame,
   planNativeUiSimpleMenu,
@@ -132,20 +133,68 @@ test('native bitmap text shares exact measurement, wrapping, kerning, and no-fal
 
 test('stock button plans share visible and semantic geometry for every state', () => {
   const bounds = nativeUiRect(623.5, 339.5, 353, 69)
-  for (const [state, bodyRecord, disabled] of [
-    ['idle', 101, false],
-    ['focused', 102, false],
-    ['pressed', 102, false],
-    ['selected', 102, false],
-    ['disabled', 101, true],
+  for (const [state, bodyRecord, labelOffset, disabled] of [
+    ['idle', 101, 0, false],
+    ['focused', 101, 0, false],
+    ['pressed', 102, 6, false],
+    ['selected', 102, 6, false],
+    ['disabled', 101, 0, true],
   ] as const) {
     const plan = planNativeUiButton({ bounds, id: state, label: 'RESUME GAME', state })
     assert.deepEqual(plan.actions, [{ bounds, disabled, id: state, role: 'button' }])
-    assert.equal(plan.nodes[0]!.kind, 'sprite')
-    if (plan.nodes[0]!.kind === 'sprite') assert.equal(plan.nodes[0]!.record, bodyRecord)
-    assert.ok(plan.nodes.some((node) => node.kind === 'slice' && node.record === NATIVE_UI_BUTTON.surroundEndRecord))
+    const body = plan.nodes.find(({ label }) => label === `${state}:body`)
+    assert.ok(body?.kind === 'sprite')
+    assert.equal(body.record, bodyRecord)
+    const label = plan.nodes.find(({ label }) => label === `${state}:label`)
+    assert.ok(label?.kind === 'text')
+    assert.equal(label.text.x, bounds.left + bounds.width / 2 + labelOffset)
+    assert.equal(label.text.y, bounds.top + bounds.height / 2 + NATIVE_UI_BUTTON.labelYOffset + labelOffset)
     assert.equal(plan.nodes.some(({ label }) => label === `${state}:disabled-overlay`), disabled)
   }
+
+  const chrome = planNativeUiButtonChrome({ bounds, id: 'exact-surround', state: 'idle' })
+  assert.deepEqual(chrome.actions, [])
+  assert.deepEqual(chrome.nodes, [
+    {
+      alpha: 1,
+      atlas: 'UI',
+      height: 69,
+      kind: 'sprite',
+      label: 'exact-surround:body',
+      record: 101,
+      width: 353,
+      x: 623.5,
+      y: 339.5,
+    },
+    {
+      alpha: 1,
+      atlas: 'UI',
+      kind: 'sprite',
+      label: 'exact-surround:end-left',
+      record: 54,
+      x: 617.5,
+      y: 333.5,
+    },
+    {
+      alpha: 1,
+      atlas: 'UI',
+      bounds: { height: 85, left: 687.5, top: 333.5, width: 225 },
+      kind: 'slice',
+      label: 'exact-surround:edge',
+      record: 54,
+      sourceUv: [0.95, 0, 1, 1],
+    },
+    {
+      alpha: 1,
+      atlas: 'UI',
+      kind: 'sprite',
+      label: 'exact-surround:end-right',
+      mirrorX: true,
+      record: 54,
+      x: 982.5,
+      y: 333.5,
+    },
+  ])
 })
 
 test('stock tabs keep bracket X fixed and move only the selected Y contract', () => {
@@ -255,7 +304,7 @@ test('title Kill Character prompt preserves the settled stock lines and action g
   )
   const secondaryBody = plan.nodes.find(({ label }) => label === 'prompt-secondary:body')
   assert.ok(secondaryBody?.kind === 'sprite')
-  assert.equal(secondaryBody.record, NATIVE_UI_BUTTON.pressedRecord)
+  assert.equal(secondaryBody.record, NATIVE_UI_BUTTON.idleRecord)
 })
 
 test('tutorial offer reuses the same exact stock MsgBox composition', () => {
@@ -329,6 +378,22 @@ test('SimpleMenu is a reusable composition over the same stock primitives', () =
       ? [arrow.x, arrow.y, arrow.scale ?? 1]
       : null),
     [[800, 655.5, 1], [725, 642.5, 0.75], [875, 642.5, 0.75]],
+  )
+
+  const pressedMenu = planNativeUiSimpleMenu({
+    height: 900,
+    rows: [{ id: 'resume', label: 'RESUME GAME', state: 'pressed' }],
+    width: 1_600,
+  })
+  const pressedButton = planNativeUiButton({
+    bounds: nativeUiRect(623.5, 415.5, 353, 69),
+    id: 'resume',
+    label: 'RESUME GAME',
+    state: 'pressed',
+  })
+  assert.deepEqual(
+    pressedMenu.nodes.find(({ label }) => label === 'resume:label'),
+    pressedButton.nodes.find(({ label }) => label === 'resume:label'),
   )
 
   const opening = planNativeUiSimpleMenu({

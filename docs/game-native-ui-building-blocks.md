@@ -83,10 +83,12 @@ import { NativeUiButton, NativeUiMessageBox } from './native-ui/react.ts'
 
 Messages require one or two `NativeUiButton` children. The message owns stock
 layout, wrapping, curtain, frame, ornaments, and default action bounds; each
-button owns its focus, hover, press, disabled art, bitmap label, and semantic
-element. Callers own only content and action meaning. `NativeUiPlanView` is the
+button owns its pointer/key press, disabled art, bitmap label, focus-visible
+accessibility outline, and semantic element. Hover and focus leave the stock
+body idle; only press selects `UI.102` and moves the label by `(6,6)`. Callers
+own only content and action meaning. `NativeUiPlanView` is the
 DOM adapter for lower-level recovered compositions and consumes the same pure
-plan as `native-ui-pixi.ts`.
+plan as the supported `native-ui/pixi.ts` adapter.
 
 The small raw interface is available when a recovered screen needs an exact
 record without a high-level composition:
@@ -139,9 +141,23 @@ rectangle but return `disabled: true` and render at native disabled alpha.
 ## Buttons and SimpleMenu
 
 `planNativeUiButton` owns the stock `UI.101` idle body, `UI.102` pressed/
-selected body, `UI.54` end treatment, Fonts group 3 label, native gold tint,
-and disabled alpha. Its states are `idle`, `focused`, `pressed`, `selected`,
-and `disabled`.
+explicit-selected body, Fonts group 3 label, native gold tint, and disabled
+alpha. Its states are `idle`, `focused`, `pressed`, `selected`, and `disabled`.
+`focused` preserves the idle body because retail hover/focus state does not
+enter the render branch; the DOM adapter supplies a separate browser-required
+focus-visible outline. `pressed` and explicit `selected` use `UI.102` and move
+the bitmap label six pixels right and down.
+
+`planNativeUiButtonChrome` exposes the same body and surround without assuming
+a label baseline. Use it for recovered native callers such as Dowsing whose
+body is the standard Button but whose owner adds more than one text row. The
+body rectangle is also the semantic control rectangle. The chrome begins six
+pixels left and above it, extends six pixels past its right edge, and retains
+`UI.54`'s authored 85-pixel height (ten pixels below the 69-pixel body). It
+draws one full 70 by 85 `UI.54` left end, stretches
+only the record's final five-percent strip through the middle, and mirrors one
+full right end. Never draw two centred `UI.54` sprites or widen `UI.101` to the
+surround bounds.
 
 `NativeUiButton` is the semantic React form of that same plan. Do not create a
 second CSS button skin for a stock action.
