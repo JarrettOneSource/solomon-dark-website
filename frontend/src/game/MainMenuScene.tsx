@@ -407,6 +407,7 @@ export default function MainMenuScene({
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [observerSession, setObserverSession] = useState<GameObserverSession | null>(null)
+  const collegeLoadoutNameSeededRef = useRef(false)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
   const [modContent, setModContent] = useState<ModContentProjection | null>(null)
   const [runtimeProgression, setRuntimeProgression] = useState<ProtocolPlayerProgression | null>(null)
@@ -909,16 +910,23 @@ export default function MainMenuScene({
       runtimeSnapshot.players[session.playerId]?.economy.collegeIntroPending === true,
     )
   useEffect(() => {
-    if (!session || !runtimeSnapshot) return
+    if (!session || !runtimeSnapshot) {
+      collegeLoadoutNameSeededRef.current = false
+      return
+    }
     if (collegeLoadoutActive) {
-      setWizardName(current => current.length === 0
-        ? initialCreateWizardNameForSession(displayName)
-        : current)
+      if (!collegeLoadoutNameSeededRef.current) {
+        setWizardName(current => current.length === 0
+          ? initialCreateWizardNameForSession(displayName)
+          : current)
+        collegeLoadoutNameSeededRef.current = true
+      }
       setFadeState('idle')
       setFadeTarget(null)
       setScreen('create')
       return
     }
+    collegeLoadoutNameSeededRef.current = false
     if (runtimeRunPhase === 'hub' && screen === 'create') {
       setFadeState('idle')
       setFadeTarget(null)
