@@ -1,6 +1,7 @@
 import {
   GAME_SCENE_MUSIC,
   NATIVE_AUDIO_TICK_MS,
+  NATIVE_SOUND_MAXIMUM_VOICES,
   type GameAudioScene,
   type GameAudioSources,
   type GameLoopCue,
@@ -25,6 +26,7 @@ export type GameMusicChannel = Pick<
 
 export interface GameAudioPlaybackOptions {
   loop?: boolean
+  maximumVoices?: number
   offsetSeconds?: number
   playbackRate: number
   volume: number
@@ -179,7 +181,9 @@ export class GameAudioDirector {
   }
 
   playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
+    const maximumVoices = NATIVE_SOUND_MAXIMUM_VOICES[cue]
     this.playback.play(this.sources.sounds[cue], {
+      ...(maximumVoices === undefined ? {} : { maximumVoices }),
       playbackRate: options.playbackRate ?? 1,
       volume: clampUnit(options.volume ?? 1),
     })

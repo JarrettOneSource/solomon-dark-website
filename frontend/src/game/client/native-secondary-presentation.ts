@@ -5,6 +5,14 @@ export function copyNativeSecondaryState(
 ): NativeSecondarySnapshotState {
   return {
     actors: source.actors.map(copyActor),
+    ...copyNativeSecondaryMembers(source),
+  }
+}
+
+function copyNativeSecondaryMembers(
+  source: NativeSecondarySnapshotState,
+): Omit<NativeSecondarySnapshotState, 'actors'> {
+  return {
     events: source.events.map((event) => ({
       ...event,
       cameraDisplacement: event.cameraDisplacement === null
@@ -37,7 +45,11 @@ export function interpolateNativeSecondaryState(
   newer: NativeSecondarySnapshotState,
   blend: number,
 ): NativeSecondarySnapshotState {
-  const newerById = new Map(newer.actors.map((actor) => [actor.id, actor]))
+  const newerById = new Map<
+    number,
+    NativeSecondarySnapshotState['actors'][number]
+  >()
+  for (const actor of newer.actors) newerById.set(actor.id, actor)
   const actors = older.actors.map((actor) => {
     const next = newerById.get(actor.id)
     if (!next || next.kind !== actor.kind) return copyActor(actor)
@@ -71,15 +83,15 @@ export function interpolateNativeSecondaryState(
     }
   })
   if (blend >= 1) {
-    const knownIds = new Set(actors.map(({ id }) => id))
+    const knownIds = new Set<number>()
+    for (const actor of actors) knownIds.add(actor.id)
     for (const actor of newer.actors) {
       if (!knownIds.has(actor.id)) actors.push(copyActor(actor))
     }
   }
   const discrete = blend < 1 ? older : newer
-  const copied = copyNativeSecondaryState(discrete)
   return {
-    ...copied,
+    ...copyNativeSecondaryMembers(discrete),
     actors: blend < 1
       ? actors
       : actors.filter(({ id }) => newerById.has(id)),

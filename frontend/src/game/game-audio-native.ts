@@ -194,6 +194,15 @@ export interface GameAudioSources {
   streams: Readonly<Record<GameStreamCue, string>>
 }
 
+export const NATIVE_SOUND_MAXIMUM_VOICES: Readonly<Partial<
+  Record<GameSoundCue, number>
+>> = Object.freeze({
+  'hail-bounce-0': 10,
+  'hail-bounce-1': 10,
+  'hail-bounce-2': 10,
+  'hail-bounce-3': 10,
+})
+
 export const NATIVE_LEVEL_UP_SOUND_REQUEST = Object.freeze({
   cue: 'level-up' as const,
   playbackRate: 1,

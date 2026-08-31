@@ -19,6 +19,12 @@ import {
 } from './skill-book-render-contract.ts'
 
 export const SKILL_PICKER_SIZE = { height: 900, width: 1600 } as const
+export const SKILL_PICKER_OFFER_CACHE_BOUNDS = {
+  height: 430,
+  width: 1600,
+  x: 0,
+  y: 220,
+} as const
 export const SKILL_PICKER_NATIVE_UI_RECORDS = [
   3, 10, 37, 49, 56, 57, 59, 62, 79, 107, 108, 109, 110,
 ] as const
@@ -227,6 +233,13 @@ export function skillPickerDetailPresentation(
     }))
   }
   return Object.freeze({ lines: Object.freeze(lines), row })
+}
+
+/** Insight owns live pulsing passes; every other card belongs to the static layer. */
+export function skillPickerCardUsesLiveLayer(
+  option: ProtocolPlayerSkillOfferOption,
+): boolean {
+  return option.insight === true
 }
 
 export function skillPickerInsightAlpha(ageTicks: number): number {

@@ -119,7 +119,8 @@ test('every reachable projectile and welded painter record is selected for prelo
         entry: number,
       ): { readonly atlas: NativeEnemyAtlas; readonly entry: number; readonly source: string }
     }
-    assert.deepEqual(assetModule.nativeEnemySpriteGeometry('BadGuys', 73), {
+    const levelUpGeometry = assetModule.nativeEnemySpriteGeometry('BadGuys', 73)
+    assert.deepEqual(levelUpGeometry, {
       anchorX: 6,
       anchorY: 6.5,
       atlas: 'BadGuys',
@@ -128,6 +129,9 @@ test('every reachable projectile and welded painter record is selected for prelo
       points: [],
       width: 12,
     })
+    assert.equal(assetModule.nativeEnemySpriteGeometry('BadGuys', 73), levelUpGeometry)
+    const cachedRecord = assetModule.nativeEnemySpriteRecord('BadGuys', 15)
+    assert.equal(assetModule.nativeEnemySpriteRecord('BadGuys', 15), cachedRecord)
     const required = new Set([
       'BadGuys:2',
       'BadGuys:15',

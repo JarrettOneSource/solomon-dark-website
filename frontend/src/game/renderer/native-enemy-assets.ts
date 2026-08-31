@@ -83,17 +83,17 @@ for (const atlas of ['BadGuys', 'DeadHawg', 'Demon'] as const) {
 }
 
 export interface NativeEnemySpriteGeometry {
-  anchorX: number
-  anchorY: number
-  atlas: NativeEnemyAtlas
-  entry: number
-  height: number
-  points: readonly Readonly<{ x: number; y: number }>[]
-  width: number
+  readonly anchorX: number
+  readonly anchorY: number
+  readonly atlas: NativeEnemyAtlas
+  readonly entry: number
+  readonly height: number
+  readonly points: readonly Readonly<{ x: number; y: number }>[]
+  readonly width: number
 }
 
 export interface NativeEnemySpriteRecord extends NativeEnemySpriteGeometry {
-  source: string
+  readonly source: string
 }
 
 export interface NativeEnemyRegisteredFrame {
@@ -107,16 +107,35 @@ export interface NativeEnemyRegisteredFrame {
 
 export const NATIVE_ENEMY_ASSET_SOURCES = [...new Set(selectedSources.values())]
 
+const nativeEnemyGeometryByAtlas: Readonly<Record<
+  NativeEnemyAtlas,
+  Map<number, NativeEnemySpriteGeometry>
+>> = {
+  BadGuys: new Map(),
+  DeadHawg: new Map(),
+  Demon: new Map(),
+}
+const nativeEnemyRecordByAtlas: Readonly<Record<
+  NativeEnemyAtlas,
+  Map<number, NativeEnemySpriteRecord>
+>> = {
+  BadGuys: new Map(),
+  DeadHawg: new Map(),
+  Demon: new Map(),
+}
+
 export function nativeEnemySpriteGeometry(
   atlas: NativeEnemyAtlas,
   entry: number,
 ): NativeEnemySpriteGeometry {
+  const cached = nativeEnemyGeometryByAtlas[atlas].get(entry)
+  if (cached) return cached
   const record = manifests[atlas].entries[entry]
   if (!record || record.empty || !record.file) {
     throw new Error(`Native enemy atlas record is missing: ${atlas}:${entry}`)
   }
   const anchor = nativeSpriteAnchor(record.rect.w, record.rect.h, record.origin)
-  return {
+  const geometry = Object.freeze({
     anchorX: anchor.x,
     anchorY: anchor.y,
     atlas,
@@ -124,19 +143,25 @@ export function nativeEnemySpriteGeometry(
     height: record.rect.h,
     points: Object.freeze((record.extras ?? []).map((point) => Object.freeze({ ...point }))),
     width: record.rect.w,
-  }
+  })
+  nativeEnemyGeometryByAtlas[atlas].set(entry, geometry)
+  return geometry
 }
 
 export function nativeEnemySpriteRecord(
   atlas: NativeEnemyAtlas,
   entry: number,
 ): NativeEnemySpriteRecord {
+  const cached = nativeEnemyRecordByAtlas[atlas].get(entry)
+  if (cached) return cached
   const geometry = nativeEnemySpriteGeometry(atlas, entry)
   const source = selectedSources.get(`${atlas}:${entry}`)
   if (!source) {
     throw new Error(`Native enemy atlas record was not selected for loading: ${atlas}:${entry}`)
   }
-  return { ...geometry, source }
+  const record = Object.freeze({ ...geometry, source })
+  nativeEnemyRecordByAtlas[atlas].set(entry, record)
+  return record
 }
 
 export function nativeEnemyRegisteredFrame(

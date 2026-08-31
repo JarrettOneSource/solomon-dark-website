@@ -6,6 +6,7 @@ import {
   createNativeAirStormActor,
   createNativeWaterAuraActor,
   createNativeWaterHailActor,
+  nativeWaterHailLifeAtAge,
   createNativeWaterFreezeWave,
   drawNativeDisintegratePercentile,
   drawNativeStormInitialHeading,
@@ -127,6 +128,32 @@ test('Hail birth consumes the exact eight-draw Bouncer and handler sequence', ()
   assert.equal(born.rng.indexB, (initial.indexB + 8) % 55)
 })
 
+test('Hail lifetime height envelope includes the complete first bounce arc', () => {
+  const born = createNativeWaterHailActor(
+    9,
+    'water',
+    'boneyard:run',
+    44,
+    { x: 100, y: 200 },
+    { x: 1, y: 0 },
+    createNativeRng(41),
+  )
+  let actor = {
+    ...born.actor,
+    height: Math.fround(-0.0002),
+    savedBounceVelocity: -5,
+  }
+  let rng = born.rng
+  let minimum = actor.height
+  while (actor) {
+    minimum = Math.min(minimum, actor.height)
+    const stepped = stepNativeWaterHailActor(actor, rng)
+    actor = stepped.actor!
+    rng = stepped.rng
+  }
+  assert.equal(minimum, NATIVE_HAIL_MINIMUM_HEIGHT)
+})
+
 test('Cold Aura snapshots native fade and its two cosmetic RNG draws', () => {
   const initial = createNativeRng(43)
   const born = createNativeWaterAuraActor(
@@ -170,6 +197,11 @@ test('Hail owns Bouncer motion, bounce RNG, audio sequence, and 134-tick life', 
   assert.equal(bounced.rng.indexA, (born.rng.indexA + (
     bounced.actor.bounceSoundSequence === 1 ? 5 : 3
   )) % 55)
+
+  const endpointBounce = stepNativeWaterHailActor(forcedBounce, createNativeRng(439_089))
+  assert.ok(endpointBounce.actor)
+  assert.equal(endpointBounce.actor.bounceSoundSequence, 1)
+  assert.equal(endpointBounce.actor.bounceSoundPitch, Math.fround(1.2))
 
   let actor = born.actor
   let rng = born.rng
@@ -221,6 +253,27 @@ test('Hail preserves native settled-zero and full airborne height lifecycle', ()
   }
   assert.ok(minimumHeight < -20)
   assert.ok(minimumHeight >= NATIVE_HAIL_MINIMUM_HEIGHT)
+})
+
+test('Hail lifecycle table reproduces every authoritative float32 subtraction', () => {
+  let actor = createNativeWaterHailActor(
+    1,
+    'wizard',
+    'boneyard:run-1',
+    100,
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    createNativeRng(41),
+  ).actor
+  let rng = createNativeRng(9)
+  for (let ageTicks = 0; actor; ageTicks += 1) {
+    assert.equal(nativeWaterHailLifeAtAge(ageTicks), actor.life)
+    const stepped = stepNativeWaterHailActor(actor, rng)
+    actor = stepped.actor!
+    rng = stepped.rng
+  }
+  assert.throws(() => nativeWaterHailLifeAtAge(-1), /native lifecycle/)
+  assert.throws(() => nativeWaterHailLifeAtAge(134), /native lifecycle/)
 })
 
 test('Prismatic owns a 100-tick spray actor independent of modifier duration', () => {

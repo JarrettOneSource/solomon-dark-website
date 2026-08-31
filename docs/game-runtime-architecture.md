@@ -429,6 +429,26 @@ indices; schema 19 and older compact roots migrate deterministically by array
 order before they re-enter simulation. The effective-cost rows are derived
 snapshot state used by the Game-owned BeltButton presenter and are not a second
 spell-authority lane.
+Protocol 104 retains protocol 103 and removes the impossible selector-close
+resume reason while preserving grace only for surfaces that actually orient
+gameplay. Protocol 105 retains protocol 104 and adds the strict participant-owned
+`remove-hagatha` Hub action plus the five authoritative InventoryScreen stats:
+cast speed, walk speed, and pain, magic, and poison resistance percentages.
+Perk removal remains an authenticated host mutation; the Inventory stats are
+derived snapshot state for the native three-page presenter, not a second
+economy or movement authority.
+Protocol 106 retains protocol 105 and replaces repeated keyed Hail objects in
+subsequent `GameSnapshotFrame` messages with one strict positional row table.
+Owner and world strings are interned per frame; actor age and float32 life are
+reconstructed from the authoritative frame and birth ticks. A parallel,
+strictly ascending position table preserves the exact authoritative transient
+sequence even when non-Hail lifecycle families are not ID-sorted. Full welcome
+and simulation snapshots keep their complete actor contract. The Boneyard
+display timeline separately owns retained, ephemeral Hail interpolation storage
+so network history stays immutable while the synchronous renderer avoids
+creating three nested objects per Hail actor and display frame. This is a
+representation and presentation-ownership change only: native actor count,
+simulation, audio, painter order, visual state, and teardown remain unchanged.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or

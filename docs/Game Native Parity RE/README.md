@@ -326,3 +326,4 @@ entry only when the evidence belongs to a genuinely separate system.
 - [2026-08-28 — Create element-fork and ray cadence correction](<296-2026-08-28-create-element-ray-cadence-correction.md>)
 - [2026-08-29 — Complete Region world-painter layering audit](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)
 - [2026-08-29 — Live cheat menu and in-game Lua console](<298-2026-08-29-live-cheat-menu-and-in-game-lua-console.md>)
+- [2026-08-28 — Physical iPhone performance and Hail snapshot-allocation reopening](<299-2026-08-28-physical-iphone-performance-and-hail-snapshot-allocation-reopening.md>)

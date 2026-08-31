@@ -5,6 +5,7 @@ import { Rectangle, TextureSource } from 'pixi.js'
 
 import {
   nativeSpriteRecordTexture,
+  nativeSpriteRecordTrimmedTexture,
   nativeSpriteRecordUvs,
 } from './native-sprite-record-texture.ts'
 
@@ -62,6 +63,72 @@ test('record textures replay native UVs after a Pixi texture update', () => {
   texture.update()
   assert.deepEqual(texture.uvs, expected)
   texture.destroy(true)
+})
+
+test('alpha-trimmed records retain logical geometry and interpolate original native UVs', () => {
+  const source = new TextureSource({ height: 2_048, width: 2_048 })
+  const record = nativeSpriteRecordTexture({
+    frame: new Rectangle(526, 1_948, 63, 63),
+    source,
+    trim: new Rectangle(0, 0, 63, 63),
+  })
+  const trimmed = nativeSpriteRecordTrimmedTexture(record, {
+    height: 60,
+    width: 63,
+    x: 0,
+    y: 2,
+  })
+
+  assert.deepEqual(trimmed.frame, new Rectangle(526, 1_950, 63, 60))
+  assert.deepEqual(trimmed.orig, new Rectangle(0, 0, 63, 63))
+  assert.deepEqual(trimmed.trim, new Rectangle(0, 2, 63, 60))
+  assert.deepEqual(trimmed.uvs, nativeSpriteRecordUvs(
+    record.frame,
+    { height: source.height, width: source.width },
+    [0, 2 / 63, 1, 62 / 63],
+  ))
+  trimmed.update()
+  assert.deepEqual(trimmed.uvs, nativeSpriteRecordUvs(
+    record.frame,
+    { height: source.height, width: source.width },
+    [0, 2 / 63, 1, 62 / 63],
+  ))
+  trimmed.destroy(false)
+  record.destroy(true)
+})
+
+test('alpha trim rejects nested and out-of-record rectangles', () => {
+  const source = new TextureSource({ height: 16, width: 16 })
+  const record = nativeSpriteRecordTexture({
+    frame: new Rectangle(0, 0, 16, 16),
+    source,
+  })
+  const trimmed = nativeSpriteRecordTrimmedTexture(record, {
+    height: 14,
+    width: 14,
+    x: 1,
+    y: 1,
+  })
+  assert.throws(
+    () => nativeSpriteRecordTrimmedTexture(trimmed, {
+      height: 12,
+      width: 12,
+      x: 1,
+      y: 1,
+    }),
+    /requires an untrimmed source record/,
+  )
+  assert.throws(
+    () => nativeSpriteRecordTrimmedTexture(record, {
+      height: 16,
+      width: 16,
+      x: 1,
+      y: 0,
+    }),
+    /must fit its logical record/,
+  )
+  trimmed.destroy(false)
+  record.destroy(true)
 })
 
 test('native record UV construction rejects invalid pages and slices', () => {

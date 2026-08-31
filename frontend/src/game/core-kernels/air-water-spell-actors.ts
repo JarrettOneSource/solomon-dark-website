@@ -36,7 +36,23 @@ export const NATIVE_HAIL_BOUNCE_RESTITUTION = Math.fround(0.65)
 export const NATIVE_HAIL_STOP_VELOCITY = Math.fround(-0.75)
 export const NATIVE_HAIL_BASE_SPEED = Math.fround(4)
 export const NATIVE_HAIL_ANGLE_DIVISIONS = 100_000
-export const NATIVE_HAIL_MINIMUM_HEIGHT = -80
+/**
+ * Closed lifetime envelope from the inclusive Anim_Hail constructor endpoints
+ * followed through tick 0x00458D80. The constructor-only height domain is
+ * [-20, 0], but its first doubled-displacement bounce reaches this minimum.
+ */
+export const NATIVE_HAIL_MINIMUM_HEIGHT = Math.fround(-79.45)
+export const NATIVE_HAIL_LIFETIME_TICKS = 134
+const NATIVE_HAIL_LIFE_BY_AGE = Object.freeze(Array.from(
+  { length: NATIVE_HAIL_LIFETIME_TICKS },
+  (_, ageTicks) => {
+    let life = NATIVE_HAIL_INITIAL_LIFE
+    for (let tick = 0; tick < ageTicks; tick += 1) {
+      life = Math.fround(life - NATIVE_HAIL_LIFE_PER_TICK)
+    }
+    return life
+  },
+))
 export const NATIVE_WATER_AURA_INITIAL_ALPHA = Math.fround(0.5)
 export const NATIVE_WATER_AURA_ALPHA_RADIUS_FACTOR = Math.fround(0.15)
 export const NATIVE_WATER_AURA_SCALE_FACTOR = 1.0149999856948853
@@ -256,6 +272,13 @@ export function createNativeWaterAuraActor(
 export interface NativeWaterHailTickResult {
   readonly actor: PrimarySpellWaterHailState | null
   readonly rng: NativeRngState
+}
+
+export function nativeWaterHailLifeAtAge(ageTicks: number): number {
+  if (!Number.isInteger(ageTicks) || ageTicks < 0 || ageTicks >= NATIVE_HAIL_LIFETIME_TICKS) {
+    throw new RangeError('Hail age must be within its native lifecycle')
+  }
+  return NATIVE_HAIL_LIFE_BY_AGE[ageTicks]!
 }
 
 /**

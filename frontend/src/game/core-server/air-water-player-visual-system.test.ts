@@ -202,7 +202,6 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
       expectedRng,
     )
     expectedRng = hail.rng
-    expectedId += 1
     expectedHail.push({
       ...hail.actor,
       painterRegistrations: [{
@@ -210,6 +209,7 @@ test('Hub and Boneyard share Normal-only Hail allocation from the Staff emitter'
         registrationOrdinal: expectedHail.length,
       }],
     })
+    expectedId += 1
   }
 
   const result = synchronizeAirWaterPlayerVisualActors(

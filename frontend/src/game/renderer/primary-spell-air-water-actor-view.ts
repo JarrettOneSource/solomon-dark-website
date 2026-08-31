@@ -59,7 +59,8 @@ export class AirWaterActorSpellView {
     this.container = new Container({ label: state.kind })
     this.container.eventMode = 'none'
     this.containers = [this.container]
-    this.sprites = Array.from({ length: 17 }, (_, index) => {
+    const spriteCount = state.kind === 'air-hurricane' ? 17 : 1
+    this.sprites = Array.from({ length: spriteCount }, (_, index) => {
       const sprite = new Sprite({
         label: `${state.kind}:sprite:${index}`,
         texture: textures.airWaterActors.coldAura,

@@ -13,7 +13,7 @@ import {
   skillPickerWorldPresentationFrame,
 } from './level-up-presentation.ts'
 
-test('replays the stock 40-tick picker reveal and its three alpha lanes', () => {
+test('keeps the stock 40-tick picker reveal behind an opaque web curtain', () => {
   assert.equal(NATIVE_SKILL_PICKER_REVEAL_TICKS, 40)
   assert.deepEqual(nativeSkillPickerReveal(0), {
     ambientAlpha: 0,
@@ -24,7 +24,7 @@ test('replays the stock 40-tick picker reveal and its three alpha lanes', () => 
   })
   assert.deepEqual(nativeSkillPickerReveal(100), {
     ambientAlpha: 0.025,
-    curtainAlpha: 0.125,
+    curtainAlpha: 0.25,
     interactive: false,
     panelAlpha: 0.015625,
     revealAlpha: 0.25,
@@ -32,7 +32,7 @@ test('replays the stock 40-tick picker reveal and its three alpha lanes', () => 
   assert.equal(nativeSkillPickerReveal(399).interactive, false)
   assert.deepEqual(nativeSkillPickerReveal(400), {
     ambientAlpha: 0.1,
-    curtainAlpha: 0.5,
+    curtainAlpha: 1,
     interactive: true,
     panelAlpha: 1,
     revealAlpha: 1,

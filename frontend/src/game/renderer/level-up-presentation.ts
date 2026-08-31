@@ -87,7 +87,9 @@ function nativeSkillPickerFrame(
 ): NativeSkillPickerReveal {
   return {
     ambientAlpha: revealAlpha * 0.1,
-    curtainAlpha: revealAlpha * 0.5,
+    // The web modal owns an opaque settled curtain so live WebGL lighting
+    // cannot flicker through while the retained SkillPicker is open.
+    curtainAlpha: revealAlpha,
     interactive,
     panelAlpha: revealAlpha ** 3,
     revealAlpha,

@@ -7,7 +7,7 @@ import {
   type BoneyardEnemyEventSnapshot,
   type GameModAsset,
   type GameSessionKind,
-  type GameSnapshot,
+  type GameClientSnapshot,
   type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
@@ -15,6 +15,7 @@ import {
   EntityReplicationGapError,
   EntityReplicationReconstructor,
 } from '../protocol/entity-replication.ts'
+import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
 import { appendGameChatMessage } from '../game-chat.ts'
 import {
   createBoneyardPresentationTimeline,
@@ -35,7 +36,7 @@ export interface GameObserverState {
   readonly boneyard: LoadedBoneyard
   readonly chatMessages: readonly GameChatMessage[]
   readonly pingMs: number | null
-  readonly snapshot: GameSnapshot
+  readonly snapshot: GameClientSnapshot
   readonly viewPlayerId: string
 }
 
@@ -68,7 +69,7 @@ export function connectGameObserverSession(
     let welcome: Extract<ReturnType<typeof decodeServerGameMessage>, { type: 'server-welcome' }>
       | null = null
     let boneyard: LoadedBoneyard | null = null
-    let snapshot: GameSnapshot | null = null
+    let snapshot: GameClientSnapshot | null = null
     let viewPlayerId: string | null = null
     let pingMs: number | null = null
     let chatMessages: readonly GameChatMessage[] = []
@@ -100,29 +101,30 @@ export function connectGameObserverSession(
         return
       }
       if (message.type === 'server-welcome') {
+        const clientSnapshot = createGameClientSnapshot(message.snapshot)
         if (
           settled
           || message.observer !== true
           || message.protocolVersion !== GAME_PROTOCOL_VERSION
           || message.sessionKind === 'standalone'
-          || !isBoneyardGameSnapshot(message.snapshot)
-          || !message.snapshot.players[message.playerId]
+          || !isBoneyardGameSnapshot(clientSnapshot)
+          || !clientSnapshot.players[message.playerId]
         ) {
           fail(new Error('The server returned an invalid observer welcome.'))
           return
         }
         welcome = message
-        snapshot = message.snapshot
+        snapshot = clientSnapshot
         viewPlayerId = message.playerId
         lastSnapshotSequence = message.snapshotSequence
-        entityReplication.reset(message.snapshot, message.snapshotSequence)
+        entityReplication.reset(clientSnapshot, message.snapshotSequence)
         enemyEventCursor = {
-          eventId: message.snapshot.world.enemyEvents.at(-1)?.eventId ?? 0,
-          runId: message.snapshot.world.runId,
+          eventId: clientSnapshot.world.enemyEvents.at(-1)?.eventId ?? 0,
+          runId: clientSnapshot.world.runId,
         }
         timeline = createBoneyardPresentationTimeline({
           initialReceivedAtMs: now(),
-          initialSnapshot: message.snapshot,
+          initialSnapshot: clientSnapshot,
           serverTickRate: message.serverTickRate,
           snapshotRate: message.snapshotRate,
         })
@@ -163,7 +165,7 @@ export function connectGameObserverSession(
       }
       if (message.type !== 'server-snapshot') return
       if (message.sequence <= lastSnapshotSequence) return
-      let reconstructed: GameSnapshot
+      let reconstructed: GameClientSnapshot
       try {
         reconstructed = entityReplication.apply(message.frame, message.sequence)
       } catch (error) {
@@ -322,7 +324,7 @@ export function connectGameObserverSession(
       else options.onFatal?.(failure)
     }
 
-    function publishEnemyEvents(nextSnapshot: GameSnapshot): void {
+    function publishEnemyEvents(nextSnapshot: GameClientSnapshot): void {
       if (!isBoneyardGameSnapshot(nextSnapshot)) return
       if (enemyEventCursor?.runId !== nextSnapshot.world.runId) {
         enemyEventCursor = { eventId: 0, runId: nextSnapshot.world.runId }

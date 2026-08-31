@@ -30,6 +30,7 @@ import {
   nativeEnemyFacingBucket,
   nativeEnemyPainterLayer,
   nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
+  nativeEnemyViewPlanInputsEqual,
   roundHalfToEven,
   type NativeEnemyAtlas,
   type NativeEnemyVisualSnapshot,
@@ -71,6 +72,7 @@ function enemy(
       SKELETONARCHER: 1002,
       SKELETONMAGE: 1003,
       IMP: 1004,
+      PORTAL: 1005,
       ZOMBIE: 1006,
       WRAITH: 1007,
       DEMON: 1009,
@@ -112,6 +114,122 @@ test('native enemy facing truncates toward zero at every authored bucket boundar
     )),
     Array.from({ length: 12 }, (_, facing) => facing),
   )
+})
+
+test('enemy view plan equality ignores movement-only state and closes every visual writer', () => {
+  const source = {
+    ...enemy('SKELETON'),
+    animation: nativeEnemyIdleAnimationSample({ gaitPose: 2, state: 'locomotion' }),
+  }
+  const movementOnly = {
+    ...structuredClone(source),
+    lighting: { ...source.lighting, glow: 1, providerCopies: 2 as const },
+    position: { x: 400, y: 800 },
+    shieldHealth: 9,
+    shieldMaximumHealth: 10,
+  }
+  assert.equal(nativeEnemyViewPlanInputsEqual(source, 120, movementOnly, 125), true)
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    source,
+    120,
+    { ...movementOnly, headingDeg: 20 },
+    125,
+  ), false)
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    source,
+    120,
+    { ...movementOnly, scale: 1.5 },
+    125,
+  ), false)
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    source,
+    120,
+    {
+      ...movementOnly,
+      animation: { ...movementOnly.animation, stridePhaseDeg: 90 },
+    },
+    125,
+  ), false)
+  const portal = {
+    ...enemy('PORTAL'),
+    animation: nativeEnemyIdleAnimationSample({ stridePhaseDeg: 1.5 }),
+  }
+  assert.equal(
+    nativeEnemyViewPlanInputsEqual(portal, 120, structuredClone(portal), 125),
+    true,
+  )
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    source,
+    120,
+    {
+      ...movementOnly,
+      animation: { ...movementOnly.animation, gaitPose: 3 },
+    },
+    125,
+  ), false)
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    { ...source, flags: ['FLAG_BURNING'] },
+    120,
+    { ...movementOnly, flags: ['FLAG_BURNING'] },
+    121,
+  ), false)
+  const demon = {
+    ...enemy('DEMON'),
+    animation: nativeEnemyIdleAnimationSample(),
+  }
+  assert.equal(nativeEnemyViewPlanInputsEqual(demon, 120, structuredClone(demon), 121), false)
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    demon,
+    120,
+    {
+      ...structuredClone(demon),
+      animation: nativeEnemyIdleAnimationSample({
+        demonFrontExtremityOffset: { x: 1, y: 0 },
+      }),
+    },
+    120,
+  ), false)
+  const coffin = {
+    ...enemy('COFFIN'),
+    animation: nativeEnemyIdleAnimationSample(),
+  }
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    coffin,
+    120,
+    {
+      ...structuredClone(coffin),
+      animation: nativeEnemyIdleAnimationSample({ coffinRotationRadians: 0.2 }),
+    },
+    120,
+  ), false)
+  assert.equal(nativeEnemyViewPlanInputsEqual(
+    coffin,
+    120,
+    {
+      ...structuredClone(coffin),
+      animation: nativeEnemyIdleAnimationSample({ coffinScaleX: -1 }),
+    },
+    120,
+  ), false)
+  const hit = {
+    ...source,
+    animation: nativeEnemyIdleAnimationSample({
+      effects: [{
+        alpha: 0.5,
+        atlas: 'BadGuys',
+        blendMode: 'add',
+        entry: 15,
+        id: 1,
+        offset: { x: 0, y: 0 },
+        role: 'effect',
+        rotationRadians: 0,
+        scale: 1,
+      }],
+    }),
+  }
+  const changedHit = structuredClone(hit)
+  changedHit.animation.effects[0]!.alpha = 0.75
+  assert.equal(nativeEnemyViewPlanInputsEqual(hit, 120, changedHit, 120), false)
 })
 
 test('Skeleton flags select native armor, weapon, and headgear banks', () => {

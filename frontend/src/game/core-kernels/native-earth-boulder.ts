@@ -1,4 +1,5 @@
 export const NATIVE_EARTH_BOULDER_TRAVERSAL_POOL_THRESHOLD = 0.001
+export const NATIVE_EARTH_BOULDER_MAXIMUM_CHARGE = 3
 
 export interface NativeEarthBoulderContactInput {
   readonly releaseBaseDamage: number

@@ -14,6 +14,7 @@ import {
 } from './native-enemy-sprite-registration.ts'
 
 const DEGREES_TO_RADIANS = Math.PI / 180
+const NATIVE_WATER_AURA_SCALE_BY_AGE = [Math.fround(1)]
 
 export interface NativeWaterAuraVisualPlan {
   readonly alpha: number
@@ -85,9 +86,10 @@ export function nativeWaterAuraVisualPlan(
   >,
 ): NativeWaterAuraVisualPlan {
   const age = Math.max(0, Math.trunc(state.ageTicks))
-  let scale = Math.fround(1)
-  for (let tick = 0; tick < age; tick += 1) {
-    scale = Math.fround(scale * NATIVE_WATER_AURA_SCALE_FACTOR)
+  while (NATIVE_WATER_AURA_SCALE_BY_AGE.length <= age) {
+    NATIVE_WATER_AURA_SCALE_BY_AGE.push(Math.fround(
+      NATIVE_WATER_AURA_SCALE_BY_AGE.at(-1)! * NATIVE_WATER_AURA_SCALE_FACTOR,
+    ))
   }
   const red = Math.max(0, Math.fround(1 - age * NATIVE_WATER_AURA_RED_FADE_PER_TICK))
   return Object.freeze({
@@ -95,7 +97,7 @@ export function nativeWaterAuraVisualPlan(
     rotationRadians: (
       state.initialRotationDegrees + age * state.rotationStepDegrees
     ) * DEGREES_TO_RADIANS,
-    scale,
+    scale: NATIVE_WATER_AURA_SCALE_BY_AGE[age]!,
     tint: (Math.round(red * 255) << 16) | 0x00ffff,
   })
 }
@@ -106,6 +108,13 @@ export const NATIVE_AIR_WATER_SPRITES = Object.freeze({
   hurricaneCore: nativeEnemySpriteRegistration('DeadHawg', 15),
   hurricaneLane: nativeEnemySpriteRegistration('BadGuys', 84),
 } satisfies Readonly<Record<string, NativeEnemySpriteRegistration>>)
+
+export const NATIVE_WATER_AURA_SAFE_ALPHA_TRIM = Object.freeze({
+  height: 60,
+  width: 63,
+  x: 0,
+  y: 2,
+})
 
 /** Anim_Hail draw transform recovered at 0x00458D80. */
 export function nativeHailVisualPlan(

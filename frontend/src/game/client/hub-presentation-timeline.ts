@@ -1,4 +1,5 @@
 import type {
+  GameClientSnapshot,
   GameSnapshot,
   HubWorldSnapshot,
   ProtocolAmbientState,
@@ -7,10 +8,11 @@ import type {
   ProtocolPlayerState,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
+import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
 import {
-  copyPrimarySpellState,
-  interpolatePrimarySpellState,
-} from './primary-spell-presentation.ts'
+  createRetainedBoneyardPrimarySpellPresentation,
+  type RetainedBoneyardPrimarySpellPresentation,
+} from './primary-spell-retained-hail-presentation.ts'
 import {
   copyNativeSecondaryState,
   interpolateNativeSecondaryState,
@@ -26,25 +28,38 @@ import {
 } from '../core-kernels/native-college-intro.ts'
 import { copyHubMemorialState } from '../core-kernels/hub-memorial.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
+import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 
-export type HubGameSnapshot = Omit<GameSnapshot, 'world'> & {
+type HubClientGameSnapshot = Omit<GameClientSnapshot, 'world'> & {
   world: HubWorldSnapshot
 }
 
-export interface HubPresentationFrame extends Omit<HubGameSnapshot, 'tick'> {
+type HubAuthoritySnapshot = Omit<GameSnapshot, 'world'> & {
+  world: HubWorldSnapshot
+}
+
+export type HubGameSnapshot = HubAuthoritySnapshot | HubClientGameSnapshot
+
+type HubSnapshotSource = HubGameSnapshot
+
+export interface HubPresentationFrame extends Omit<
+  HubClientGameSnapshot,
+  'primarySpells' | 'tick'
+> {
+  primarySpells: PrimarySpellSimulationState
   /** Fractional authoritative tick represented by this display frame. */
   tick: number
 }
 
 export interface HubPresentationTimeline {
-  latest(): HubGameSnapshot
-  push(snapshot: HubGameSnapshot, receivedAtMs: number): void
+  latest(): HubClientGameSnapshot
+  push(snapshot: HubSnapshotSource, receivedAtMs: number): void
   sample(nowMs: number): HubPresentationFrame
 }
 
 export interface HubPresentationTimelineOptions {
   initialReceivedAtMs: number
-  initialSnapshot: HubGameSnapshot
+  initialSnapshot: HubSnapshotSource
   localPlayerId: string
   serverTickRate: number
   snapshotRate: number
@@ -52,7 +67,7 @@ export interface HubPresentationTimelineOptions {
 
 interface TimedSnapshot {
   receivedAtMs: number
-  snapshot: HubGameSnapshot
+  snapshot: HubClientGameSnapshot
 }
 
 const MAX_BUFFERED_SNAPSHOTS = 8
@@ -78,23 +93,25 @@ export function createHubPresentationTimeline(
   const intervalTicks = Math.max(1, options.serverTickRate / options.snapshotRate)
   const history: TimedSnapshot[] = [{
     receivedAtMs: options.initialReceivedAtMs,
-    snapshot: options.initialSnapshot,
+    snapshot: clientHubSnapshot(options.initialSnapshot),
   }]
+  const primarySpellPresentation = createRetainedBoneyardPrimarySpellPresentation()
 
   return {
     latest: () => history.at(-1)!.snapshot,
     push(snapshot, receivedAtMs) {
       requireFinite(receivedAtMs, 'receivedAtMs')
+      const clientSnapshot = clientHubSnapshot(snapshot)
       const latest = history.at(-1)!
-      if (snapshot.tick < latest.snapshot.tick) return
-      if (snapshot.tick === latest.snapshot.tick) {
+      if (clientSnapshot.tick < latest.snapshot.tick) return
+      if (clientSnapshot.tick === latest.snapshot.tick) {
         history[history.length - 1] = {
           receivedAtMs: latest.receivedAtMs,
-          snapshot,
+          snapshot: clientSnapshot,
         }
         return
       }
-      history.push({ receivedAtMs, snapshot })
+      history.push({ receivedAtMs, snapshot: clientSnapshot })
       if (history.length > MAX_BUFFERED_SNAPSHOTS) history.shift()
     },
     sample(nowMs) {
@@ -106,8 +123,14 @@ export function createHubPresentationTimeline(
         intervalTicks,
       )
       const frame = history.length === 1
-        ? presentationCopy(newest.snapshot)
-        : interpolatedFrame(history, newest, intervalTicks, elapsedTicks)
+        ? presentationCopy(newest.snapshot, primarySpellPresentation)
+        : interpolatedFrame(
+            history,
+            newest,
+            intervalTicks,
+            elapsedTicks,
+            primarySpellPresentation,
+          )
 
       const localPlayer = newest.snapshot.players[options.localPlayerId]
       if (localPlayer) {
@@ -139,12 +162,19 @@ function interpolatedFrame(
   newest: TimedSnapshot,
   intervalTicks: number,
   elapsedTicks: number,
+  primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
 ): HubPresentationFrame {
   const targetTick = newest.snapshot.tick - intervalTicks + elapsedTicks
   const [older, newer] = bracketSnapshots(history, targetTick)
   const span = newer.snapshot.tick - older.snapshot.tick
   const blend = span <= 0 ? 1 : clamp((targetTick - older.snapshot.tick) / span, 0, 1)
-  return interpolateSnapshot(older.snapshot, newer.snapshot, blend, targetTick)
+  return interpolateSnapshot(
+    older.snapshot,
+    newer.snapshot,
+    blend,
+    targetTick,
+    primarySpellPresentation,
+  )
 }
 
 function projectLocalParticipant(
@@ -179,8 +209,15 @@ function projectLocalParticipant(
   return result
 }
 
-export function isHubGameSnapshot(snapshot: GameSnapshot): snapshot is HubGameSnapshot {
+export function isHubGameSnapshot(
+  snapshot: GameClientSnapshot | GameSnapshot,
+): snapshot is HubSnapshotSource {
   return snapshot.world.kind === 'hub'
+}
+
+function clientHubSnapshot(snapshot: HubSnapshotSource): HubClientGameSnapshot {
+  if ('hail' in snapshot.primarySpells) return snapshot as HubClientGameSnapshot
+  return createGameClientSnapshot(snapshot) as HubClientGameSnapshot
 }
 
 function bracketSnapshots(
@@ -196,10 +233,11 @@ function bracketSnapshots(
 }
 
 function interpolateSnapshot(
-  older: HubGameSnapshot,
-  newer: HubGameSnapshot,
+  older: HubClientGameSnapshot,
+  newer: HubClientGameSnapshot,
   blend: number,
   targetTick: number,
+  primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
 ): HubPresentationFrame {
   const players: Record<string, ProtocolPlayerState> = {}
   for (const [playerId, olderPlayer] of Object.entries(older.players)) {
@@ -222,7 +260,7 @@ function interpolateSnapshot(
       : newer.materializingPlayerIds,
     modEffects: blend < 1 ? older.modEffects : newer.modEffects,
     players,
-    primarySpells: interpolatePrimarySpellState(
+    primarySpells: primarySpellPresentation.interpolateFrame(
       older.primarySpells,
       newer.primarySpells,
       blend,
@@ -532,7 +570,10 @@ function interpolateFountainParticles(
   return particles
 }
 
-function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
+function presentationCopy(
+  snapshot: HubClientGameSnapshot,
+  primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
+): HubPresentationFrame {
   return {
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
@@ -541,7 +582,10 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
     players: Object.fromEntries(
       Object.entries(snapshot.players).map(([id, player]) => [id, copyPlayer(player)]),
     ),
-    primarySpells: copyPrimarySpellState(snapshot.primarySpells),
+    primarySpells: primarySpellPresentation.copyFrame(
+      snapshot.primarySpells,
+      snapshot.tick,
+    ),
     secondaryAbilities: copyNativeSecondaryState(snapshot.secondaryAbilities),
     run: snapshot.run,
     tick: snapshot.tick,

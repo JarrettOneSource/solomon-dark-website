@@ -40,8 +40,12 @@ import {
   NATIVE_WELD_DEADHAWG_SPRITES,
   NATIVE_WELD_SPRITES,
 } from './primary-spell-weld-native.ts'
+import { NATIVE_WATER_AURA_SAFE_ALPHA_TRIM } from './primary-spell-air-water-native.ts'
 import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
-import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
+import {
+  nativeSpriteRecordTexture,
+  nativeSpriteRecordTrimmedTexture,
+} from './native-sprite-record-texture.ts'
 
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
@@ -423,6 +427,10 @@ export function createPlayerWorldTextures(
         : source,
     ]
   }))
+  const coldAura = nativeSpriteRecordTrimmedTexture(
+    texture(primarySpells.airWaterActors.coldAura),
+    NATIVE_WATER_AURA_SAFE_ALPHA_TRIM,
+  )
   return {
     death: {
       hat: {
@@ -482,7 +490,7 @@ export function createPlayerWorldTextures(
         })]
       }))) as PlayerWorldTextures['primarySpells']['etherBlast'],
       airWaterActors: {
-        coldAura: texture(primarySpells.airWaterActors.coldAura),
+        coldAura,
         hail: texture(primarySpells.airWaterActors.hail),
         hurricaneCore: texture(primarySpells.airWaterActors.hurricaneCore),
         hurricaneLane: texture(primarySpells.airWaterActors.hurricaneLane),
@@ -617,6 +625,7 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
   Object.values(textures.elementVfx).forEach(add)
   add(textures.primarySpells.fire.impacts)
   add(textures.primarySpells.fire.particles)
+  derived.add(textures.primarySpells.airWaterActors.coldAura)
   add([
     textures.primarySpells.frost.extra,
     textures.primarySpells.frost.over,

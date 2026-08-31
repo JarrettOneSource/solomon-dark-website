@@ -6,8 +6,9 @@ import {
   buildBoneyardPainterOrder,
 } from './boneyard-painter-order.ts'
 import {
-  NativeRegionPainterOrderPlanner,
   buildNativeRegionPainterOrder,
+  NativeRegionPainterOrderPlanner,
+  NativeRegionPainterPlanner,
   nativeRegionPainterRow,
 } from './region-painter-order.ts'
 import {
@@ -134,7 +135,7 @@ test('Region planner rejects duplicate manager slots and backwards proxy inserti
   }), /cannot insert into a Region row that already painted/)
 })
 
-test('retained Region planner reuses frame scratch without retaining failed state', () => {
+test('frame-local Region planner reuses scratch without retaining failed state', () => {
   const planner = new NativeRegionPainterOrderPlanner()
   assert.throws(() => planner.build({
     referenceY: 0,
@@ -144,25 +145,17 @@ test('retained Region planner reuses frame scratch without retaining failed stat
     ],
   }), /duplicate native actor registration ordinal 0/)
 
-  const first = planner.build({
-    referenceY: 100,
-    entries: [
-      {
-        ...regionEntry('owner', 'actor', 0, 100),
-        insertions: [{ id: 'future', sortBias: 0, visible: true, worldY: 140 }],
-      },
-      regionEntry('scenery', 'scenery', 0, 120),
-    ],
-  })
+  const entries = [
+    {
+      ...regionEntry('owner', 'actor', 0, 100),
+      insertions: [{ id: 'future', sortBias: 0, visible: true, worldY: 140 }],
+    },
+    regionEntry('scenery', 'scenery', 0, 120),
+  ]
+  const first = planner.build({ referenceY: 100, entries })
   assert.deepEqual(structuredClone(first), buildNativeRegionPainterOrder({
     referenceY: 100,
-    entries: [
-      {
-        ...regionEntry('owner', 'actor', 0, 100),
-        insertions: [{ id: 'future', sortBias: 0, visible: true, worldY: 140 }],
-      },
-      regionEntry('scenery', 'scenery', 0, 120),
-    ],
+    entries,
   }))
   const orderedSlots = first.orderedLayers
 
@@ -371,6 +364,121 @@ test('retained Boneyard planner matches the detached builder across consecutive 
   assert.equal(next.bands, bands)
   assert.equal(next.dynamicLayers, dynamics)
   assert.deepEqual(structuredClone(next), buildBoneyardPainterOrder(nextInput))
+})
+
+test('retained Region planner reuses result storage without retaining retired membership', () => {
+  const planner = new NativeRegionPainterPlanner()
+  const first = planner.build([
+    regionEntry('actor', 'actor', 0, 100),
+    regionEntry('scenery', 'scenery', 0, 120),
+  ], 100)
+  const resultIdentity = first
+  const orderedIdentity = first.orderedLayers
+  const actorIdentity = first.orderedLayers[0]
+  assert.deepEqual(first.orderedLayers.map(({ id, row, zIndex }) => ({ id, row, zIndex })), [
+    { id: 'actor', row: 0, zIndex: 1 },
+    { id: 'scenery', row: 10, zIndex: 2 },
+  ])
+
+  const second = planner.build([
+    regionEntry('actor', 'actor', 0, 104),
+    regionEntry('scenery', 'scenery', 0, 124),
+  ], 100)
+  assert.strictEqual(second, resultIdentity)
+  assert.strictEqual(second.orderedLayers, orderedIdentity)
+  assert.strictEqual(second.orderedLayers[0], actorIdentity)
+  assert.deepEqual(second.orderedLayers.map(({ id, row, zIndex }) => ({ id, row, zIndex })), [
+    { id: 'actor', row: 2, zIndex: 1 },
+    { id: 'scenery', row: 12, zIndex: 2 },
+  ])
+
+  const third = planner.build([regionEntry('replacement', 'actor', 1, 100)], 100)
+  assert.strictEqual(third.orderedLayers, orderedIdentity)
+  assert.equal(third.orderedLayers.length, 1)
+  assert.equal(third.orderedLayers[0]?.id, 'replacement')
+  planner.clear()
+  assert.equal(third.orderedLayers.length, 0)
+  assert.equal(third.queueEndZIndex, 1)
+})
+
+test('retained Boneyard planner preserves static proxy membership and pooled identities', () => {
+  const planner = new BoneyardPainterOrderPlanner()
+  const staticLayers = [{
+    insertions: [{
+      id: 'proxy:tree-upper',
+      sortBias: 0,
+      visible: true,
+      worldY: 140,
+    }],
+    layerIndex: 0,
+    sortBias: 0,
+    sourceOrder: 0,
+    worldY: 100,
+  }]
+  const dynamicLayers = [{
+    id: 'player',
+    queueFamily: 'ordinary-dynamic' as const,
+    registration: { managerLane: 'actor' as const, registrationOrdinal: 0 },
+    sortBias: 0,
+    worldY: 120,
+  }]
+  const first = planner.build({ dynamicLayers, referenceY: 100, staticLayers })
+  const resultIdentity = first
+  const bandArrayIdentity = first.bands
+  const dynamicArrayIdentity = first.dynamicLayers
+  const orderedArrayIdentity = first.orderedLayers
+  const proxyArrayIdentity = first.proxyLayers
+  const playerIdentity = first.dynamicLayers[0]
+  assert.deepEqual(first.bands, [
+    { id: 'static-0', layerIndexes: [0], row: 0, zIndex: 1 },
+  ])
+  assert.deepEqual(first.dynamicLayers, [{ id: 'player', row: 10, zIndex: 2 }])
+  assert.deepEqual(first.proxyLayers, [{ id: 'proxy:tree-upper', row: 20, zIndex: 3 }])
+
+  staticLayers[0]!.worldY = 104
+  dynamicLayers[0]!.worldY = 124
+  const second = planner.build({ dynamicLayers, referenceY: 100, staticLayers })
+  assert.strictEqual(second, resultIdentity)
+  assert.strictEqual(second.bands, bandArrayIdentity)
+  assert.strictEqual(second.dynamicLayers, dynamicArrayIdentity)
+  assert.strictEqual(second.orderedLayers, orderedArrayIdentity)
+  assert.strictEqual(second.proxyLayers, proxyArrayIdentity)
+  assert.strictEqual(second.dynamicLayers[0], playerIdentity)
+  assert.deepEqual(second.bands, [
+    { id: 'static-0', layerIndexes: [0], row: 2, zIndex: 1 },
+  ])
+  assert.deepEqual(second.dynamicLayers, [{ id: 'player', row: 12, zIndex: 2 }])
+
+  const third = planner.build({ dynamicLayers: [], referenceY: 100, staticLayers: [] })
+  assert.equal(third.bands.length, 0)
+  assert.equal(third.dynamicLayers.length, 0)
+  assert.equal(third.orderedLayers.length, 0)
+  assert.equal(third.proxyLayers.length, 0)
+  assert.equal(third.foregroundZIndex, 1)
+  planner.clear()
+})
+
+test('pure painter builders retain frozen Region snapshot ownership', () => {
+  const region = buildNativeRegionPainterOrder({
+    entries: [regionEntry('actor', 'actor', 0, 100)],
+    referenceY: 100,
+  })
+  const boneyard = buildBoneyardPainterOrder({
+    dynamicLayers: [{
+      id: 'actor',
+      queueFamily: 'ordinary-dynamic',
+      registration: { managerLane: 'actor', registrationOrdinal: 0 },
+      sortBias: 0,
+      worldY: 100,
+    }],
+    referenceY: 100,
+    staticLayers: [],
+  })
+  assert.equal(Object.isFrozen(region), true)
+  assert.equal(Object.isFrozen(region.orderedLayers), true)
+  assert.equal(Object.isFrozen(region.orderedLayers[0]), true)
+  assert.equal(Object.isFrozen(boneyard.orderedLayers), true)
+  assert.equal(Object.isFrozen(boneyard.orderedLayers[0]), true)
 })
 
 function regionEntry(

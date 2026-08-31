@@ -1,8 +1,10 @@
 import type { GameSnapshot } from './protocol/game-state.ts'
 import { hubAudioAttenuation } from './game-audio-native.ts'
 
+type GameAudioSpatialSnapshot = Pick<GameSnapshot, 'players' | 'world'>
+
 export function playerAudioWorldKey(
-  snapshot: GameSnapshot,
+  snapshot: GameAudioSpatialSnapshot,
   playerId: string,
 ): string | null {
   if (!snapshot.players[playerId]) return null
@@ -12,7 +14,7 @@ export function playerAudioWorldKey(
 }
 
 export function playerAudioAttenuation(
-  snapshot: GameSnapshot,
+  snapshot: GameAudioSpatialSnapshot,
   listenerId: string,
   sourceId: string,
 ): number | null {

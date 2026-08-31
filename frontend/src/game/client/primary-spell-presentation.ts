@@ -18,7 +18,6 @@ export function copyPrimarySpellState(
     transients: spells.transients.map(copyPrimarySpellTransient),
   }
 }
-
 export function interpolatePrimarySpellState(
   older: PrimarySpellSimulationState,
   newer: PrimarySpellSimulationState,

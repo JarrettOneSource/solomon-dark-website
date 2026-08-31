@@ -5,7 +5,11 @@ import {
   type GameMusicChannel,
 } from './game-audio-director.ts'
 import { createWebAudioPlayback } from './game-audio-web-playback.ts'
+import { createBrowserNativeSoundVoicePool } from './game-audio-native-sound-voice-pool.ts'
+import nativeSoundVoicePoolWorklet from './game-audio-native-sound-voice-pool.worklet.js?url&no-inline'
 import { createMediaElementGain } from '../lib/media-element-gain.ts'
+
+const NATIVE_SOUND_VOICE_POOL_WORKLET = nativeSoundVoicePoolWorklet
 
 const GAME_BUFFERED_AUDIO_SOURCES = collectAssetSources({
   loops: GAME_AUDIO_SOURCES.loops,
@@ -16,6 +20,7 @@ const GAME_MUSIC_SOURCES = collectAssetSources(GAME_AUDIO_SOURCES.music)
 export const GAME_RESIDENT_AUDIO_SOURCES = [
   ...GAME_BUFFERED_AUDIO_SOURCES,
   ...GAME_MUSIC_SOURCES,
+  NATIVE_SOUND_VOICE_POOL_WORKLET,
 ]
 
 const bufferedSources = new Set(GAME_BUFFERED_AUDIO_SOURCES)
@@ -25,12 +30,17 @@ const buffers = new Map<string, AudioBuffer>()
 const musicPromises = new Map<string, Promise<GameMusicChannel>>()
 const musicChannels = new Map<string, GameMusicChannel>()
 let audioContext: AudioContext | null = null
+let nativeSoundVoicePoolReady = false
+let nativeSoundVoicePoolPromise: Promise<void> | null = null
 
 export function loadGameAudioAsset(
   source: string,
-): Promise<AudioBuffer | GameMusicChannel> {
+): Promise<AudioBuffer | GameMusicChannel | void> {
   if (bufferedSources.has(source)) return loadAudioBuffer(source)
   if (musicSources.has(source)) return loadMusicChannel(source)
+  if (source === NATIVE_SOUND_VOICE_POOL_WORKLET) {
+    return loadNativeSoundVoicePoolWorklet()
+  }
   return Promise.reject(new Error(`unknown game audio asset: ${source}`))
 }
 
@@ -40,13 +50,34 @@ export function loadModGameAudioAsset(source: string): Promise<AudioBuffer> {
 
 export function createBrowserGameAudioDirector(): GameAudioDirector {
   const context = residentAudioContext()
+  if (!nativeSoundVoicePoolReady) {
+    throw new Error('native sound voice pool was not loaded during game startup')
+  }
   return new GameAudioDirector(GAME_AUDIO_SOURCES, {
     createMusicChannel: (source) => {
       const channel = musicChannels.get(source)
       return channel ?? createBrowserMusicChannel(context, new Audio(source))
     },
-    playback: createWebAudioPlayback(context, buffers),
+    playback: createWebAudioPlayback(
+      context,
+      buffers,
+      (destination) => createBrowserNativeSoundVoicePool(
+        context,
+        destination,
+        buffers,
+      ),
+    ),
   })
+}
+
+function loadNativeSoundVoicePoolWorklet(): Promise<void> {
+  if (nativeSoundVoicePoolPromise) return nativeSoundVoicePoolPromise
+  nativeSoundVoicePoolPromise = residentAudioContext().audioWorklet
+    .addModule(NATIVE_SOUND_VOICE_POOL_WORKLET)
+    .then(() => {
+      nativeSoundVoicePoolReady = true
+    })
+  return nativeSoundVoicePoolPromise
 }
 
 function loadAudioBuffer(source: string): Promise<AudioBuffer> {

@@ -21,20 +21,29 @@ import {
   SKILL_PICKER_INSIGHT_LABEL_Y,
   SKILL_PICKER_INSIGHT_TINT,
   SKILL_PICKER_NATIVE_UI_RECORDS,
+  SKILL_PICKER_OFFER_CACHE_BOUNDS,
   SKILL_PICKER_PANEL,
   SKILL_PICKER_ROOT_TINTS,
   SKILL_PICKER_SIZE,
   skillPickerCardPresentation,
+  skillPickerCardUsesLiveLayer,
   skillPickerDetailPresentation,
   skillPickerIconBounds,
   skillPickerInsightAlpha,
   skillPickerPanelBounds,
   skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
+import { createRetainedRendererOwner } from './retained-renderer-owner.ts'
 
 const ASSET_ROOT = new URL('../../assets/game/', import.meta.url)
 test('the picker keeps the sealed 1600x900 stock card geometry and records', () => {
   assert.deepEqual(SKILL_PICKER_SIZE, { height: 900, width: 1600 })
+  assert.deepEqual(SKILL_PICKER_OFFER_CACHE_BOUNDS, {
+    height: 430,
+    width: 1600,
+    x: 0,
+    y: 220,
+  })
   assert.deepEqual(SKILL_PICKER_CARD_CENTERS[3], [600, 800, 1000])
   assert.deepEqual(SKILL_PICKER_CARD_CENTERS[4], [500, 700, 900, 1100])
   assert.deepEqual(SKILL_PICKER_CARD_FRAME, { height: 88, width: 87, y: 382.5 })
@@ -136,6 +145,12 @@ test('the picker presents authoritative Creativity Insight identity and detail',
   assert.equal(skillPickerInsightAlpha(0), 0.5)
   assert.equal(skillPickerInsightAlpha(45), 1)
   assert.ok(Math.abs(skillPickerInsightAlpha(90) - 0.5) < 1e-12)
+  assert.equal(skillPickerCardUsesLiveLayer({ skillId: 21, targetRank: 1 }), false)
+  assert.equal(skillPickerCardUsesLiveLayer({
+    insight: true,
+    skillId: 21,
+    targetRank: 1,
+  }), true)
   assert.equal(skillPickerInsightAlpha(135), 0)
   assert.ok(Math.abs(skillPickerInsightAlpha(180) - 0.5) < 1e-12)
 })
@@ -289,6 +304,29 @@ test('every Welding picker detail keeps its synthetic build identity and pair de
       build.syntheticName,
     )
   }
+})
+
+test('the game owner retains one picker renderer through modal mounts', async () => {
+  let createCount = 0
+  let destroyCount = 0
+  const owner = createRetainedRendererOwner(async () => {
+    createCount += 1
+    return { destroy: () => { destroyCount += 1 } }
+  })
+  const first = await owner.get()
+  const second = await owner.get()
+  assert.strictEqual(second, first)
+  assert.equal(createCount, 1)
+  owner.destroy()
+  owner.destroy()
+  await Promise.resolve()
+  assert.equal(destroyCount, 1)
+  const next = await owner.get()
+  assert.notStrictEqual(next, first)
+  assert.equal(createCount, 2)
+  owner.destroy()
+  await Promise.resolve()
+  assert.equal(destroyCount, 2)
 })
 
 function pngDimensions(name: string): readonly [number, number] {

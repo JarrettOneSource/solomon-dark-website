@@ -94,7 +94,7 @@ import type {
   GameChatMessage,
   GameCollegeInvitation,
   GamePlayerCardProfile,
-  GameSnapshot,
+  GameClientSnapshot,
   GameplayPauseSource,
   GameplayPauseState,
   GameplayResumeGraceState,
@@ -153,6 +153,8 @@ import {
   type FixedGameViewportLayout,
   type GameViewportBounds,
 } from './renderer/game-viewport.ts'
+import type { RetainedRendererOwner } from './renderer/retained-renderer-owner.ts'
+import type { SkillPickerRenderer } from './renderer/skill-picker-renderer.ts'
 import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
 import type { TitleMenuPromptKind } from './title-menu-prompt.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
@@ -393,6 +395,9 @@ export default function MainMenuScene({
   tutorialOfferEligible,
 }: MainMenuSceneProps) {
   const audio = useMemo(createBrowserGameAudioDirector, [])
+  const skillPickerRendererOwnerRef = useRef<
+    RetainedRendererOwner<SkillPickerRenderer> | null
+  >(null)
   const stageRef = useRef<HTMLElement>(null)
   const [screen, setScreen] = useState<MenuScreen>(initialScreen)
   const [tutorialOfferOpen, setTutorialOfferOpen] = useState(
@@ -408,7 +413,7 @@ export default function MainMenuScene({
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [observerSession, setObserverSession] = useState<GameObserverSession | null>(null)
   const collegeLoadoutNameSeededRef = useRef(false)
-  const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameClientSnapshot | null>(null)
   const [modContent, setModContent] = useState<ModContentProjection | null>(null)
   const [runtimeProgression, setRuntimeProgression] = useState<ProtocolPlayerProgression | null>(null)
   const [runtimeRunPhase, setRuntimeRunPhase] = useState<GameRunPhase>('hub')
@@ -642,6 +647,10 @@ export default function MainMenuScene({
 
   useEffect(() => () => session?.destroy(), [session])
   useEffect(() => () => observerSession?.close(), [observerSession])
+  useEffect(() => () => {
+    skillPickerRendererOwnerRef.current?.destroy()
+    skillPickerRendererOwnerRef.current = null
+  }, [])
 
   useEffect(() => {
     const unlock = () => audio.unlock()
@@ -858,7 +867,7 @@ export default function MainMenuScene({
       removeSaveCheckpoint()
     }
 
-    function recordHallSnapshot(snapshot: GameSnapshot) {
+    function recordHallSnapshot(snapshot: GameClientSnapshot) {
       if (snapshot.world.kind === 'boneyard' && snapshot.world.tutorial) return
       const entry = hallRecorder.observe(snapshot, session!.playerId, accountUsername)
       if (!entry) return
@@ -2333,6 +2342,7 @@ export default function MainMenuScene({
               onSave={session.saveSkill}
               onSelect={session.selectSkill}
               presentationId={levelUpPickerPresentationId}
+              rendererOwnerRef={skillPickerRendererOwnerRef}
               sorcerorsCharmAvailable={Boolean(
                 runtimeProgression?.sorcerorsCharmAvailable,
               )}
@@ -2622,7 +2632,7 @@ export default function MainMenuScene({
   )
 }
 
-function gameplayAudioScene(snapshot: GameSnapshot): GameAudioScene | null {
+function gameplayAudioScene(snapshot: GameClientSnapshot): GameAudioScene | null {
   if (snapshot.run.phase === 'game-over') return 'game-over'
   if (snapshot.world.kind !== 'boneyard') return null
   if (snapshot.world.tutorial) {
@@ -2686,8 +2696,8 @@ function partyActionErrorMessage(reason: PartyActionRejection | null): string {
 }
 
 function sameRuntimeScene(
-  current: GameSnapshot | null,
-  next: GameSnapshot,
+  current: GameClientSnapshot | null,
+  next: GameClientSnapshot,
   playerId: string,
 ): boolean {
   if (
@@ -2709,8 +2719,8 @@ function sameRuntimeScene(
 }
 
 function sameLevelUpBarrier(
-  first: GameSnapshot['levelUpBarrier'],
-  second: GameSnapshot['levelUpBarrier'],
+  first: GameClientSnapshot['levelUpBarrier'],
+  second: GameClientSnapshot['levelUpBarrier'],
 ): boolean {
   if (first === null || second === null) return first === second
   return first.barrierId === second.barrierId

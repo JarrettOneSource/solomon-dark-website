@@ -602,6 +602,10 @@ test('game session supervisor admits independent players to one shared Hub and r
     .continuation.summary.partyRejoinToken as string
   const secondPlayerId = second.welcome.playerId
   await closeSocket(second.socket)
+  await waitFor(() => runtimeEvents.some(entry => (
+    entry.event === 'player.disconnected'
+    && entry.details?.playerId === secondPlayerId
+  )))
   let rejoinResponse: Response | null = null
   await waitFor(async () => {
     const candidate = await fetch(`${supervisor.address.url}/admin/rejoin`, {

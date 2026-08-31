@@ -1,4 +1,4 @@
-import type { GameSnapshot } from './protocol/game-state.ts'
+import type { GameClientSnapshot, GameSnapshot } from './protocol/game-state.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   hubAudioAttenuation,
@@ -7,6 +7,7 @@ import {
   type SecondaryStreamCue,
 } from './game-audio-native.ts'
 import type { NativeSecondaryAudioCue } from './core-kernels/native-secondary-abilities.ts'
+import type { PrimarySpellTransientState } from './core-kernels/primary-spells.ts'
 import {
   playerAudioAttenuation,
   playerAudioWorldKey,
@@ -17,7 +18,11 @@ import {
   nativeEarthBoulderRockHitPitch,
   nativeEarthBoulderStoneBreakPitch,
 } from './core-kernels/native-earth-boulder.ts'
-import { newNativeAirWaterActorSoundRequests } from './air-water-skill-audio.ts'
+import {
+  NativeAirWaterFrameSoundCursor,
+  newNativeAirWaterActorSoundRequests,
+  type NativeAirWaterActorSoundRequest,
+} from './air-water-skill-audio.ts'
 import type { NativeWeldBuildId } from './core-kernels/native-weld-primary-profile.ts'
 import {
   nativeWeldCastSoundCues,
@@ -69,23 +74,28 @@ const GOOD_IMP_CONTACT_CUES = Object.freeze([
 
 export class PrimarySpellAudioSynchronizer {
   private readonly audio: GameAudioDirector
+  private readonly hailAudioCursor = new NativeAirWaterFrameSoundCursor()
   private readonly localPlayerId: string
   private readonly loopOwners = new Map<GameLoopCue, Map<string, PrimaryLoopMix>>()
-  private previous: GameSnapshot
+  private previous: GameSnapshot | GameClientSnapshot
 
   constructor(
     audio: GameAudioDirector,
     localPlayerId: string,
-    initialSnapshot: GameSnapshot,
+    initialSnapshot: GameSnapshot | GameClientSnapshot,
   ) {
     this.audio = audio
     this.localPlayerId = localPlayerId
     this.previous = initialSnapshot
     for (const cue of LOOP_CUES) this.loopOwners.set(cue, new Map())
+    const listenerWorldKey = playerAudioWorldKey(initialSnapshot, localPlayerId)
+    if (listenerWorldKey !== null && 'hail' in initialSnapshot.primarySpells) {
+      this.hailAudioCursor.reset(initialSnapshot.primarySpells, listenerWorldKey)
+    }
     this.syncLoops(initialSnapshot)
   }
 
-  update(snapshot: GameSnapshot): void {
+  update(snapshot: GameSnapshot | GameClientSnapshot): void {
     const listener = snapshot.players[this.localPlayerId]
     const listenerWorldKey = playerAudioWorldKey(snapshot, this.localPlayerId)
     if (listener && listenerWorldKey) {
@@ -173,10 +183,10 @@ export class PrimarySpellAudioSynchronizer {
           this.audio.playSound('magic-shield-up', { playbackRate: 2, volume })
         }
       }
-      const previousEtherBlasts = new Set(this.previous.primarySpells.transients
+      const previousEtherBlasts = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'ether-blast')
         .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'ether-blast'
           || effect.worldKey !== listenerWorldKey
@@ -192,10 +202,10 @@ export class PrimarySpellAudioSynchronizer {
         this.audio.playSound('goto-orb', { playbackRate: 0.75, volume })
         this.audio.playSound('goto-orb', { playbackRate: 0.5, volume })
       }
-      const previousFireImpacts = new Set(this.previous.primarySpells.transients
+      const previousFireImpacts = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'fire-impact')
         .map((effect) => effect.id))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'fire-impact'
           || effect.worldKey !== listenerWorldKey
@@ -209,10 +219,10 @@ export class PrimarySpellAudioSynchronizer {
           )),
         })
       }
-      const previousFireExplosions = new Set(this.previous.primarySpells.transients
+      const previousFireExplosions = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'fire-explosion')
         .map((effect) => effect.id))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'fire-explosion'
           || effect.worldKey !== listenerWorldKey
@@ -238,10 +248,10 @@ export class PrimarySpellAudioSynchronizer {
           volume,
         })
       }
-      const previousMeteors = new Map(this.previous.primarySpells.transients
+      const previousMeteors = new Map(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'weld-meteor')
         .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'weld-meteor'
           || effect.phase !== 'impact'
@@ -268,10 +278,10 @@ export class PrimarySpellAudioSynchronizer {
           })
         }
       }
-      const previousWeldImpacts = new Set(this.previous.primarySpells.transients
+      const previousWeldImpacts = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'weld-impact')
         .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'weld-impact'
           || effect.worldKey !== listenerWorldKey
@@ -314,10 +324,10 @@ export class PrimarySpellAudioSynchronizer {
           })
         }
       }
-      const previousEarthImpacts = new Set(this.previous.primarySpells.transients
+      const previousEarthImpacts = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'earth-impact')
         .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'earth-impact'
           || effect.worldKey !== listenerWorldKey
@@ -334,10 +344,10 @@ export class PrimarySpellAudioSynchronizer {
         const stoneBreakPitch = nativeEarthBoulderStoneBreakPitch(effect.charge)
         this.audio.playSound('stone-break', { playbackRate: stoneBreakPitch, volume })
       }
-      const previousWeldPersistentActors = new Map(this.previous.primarySpells.transients
+      const previousWeldPersistentActors = new Map(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'weld-persistent')
         .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'weld-persistent'
           || effect.buildId !== 1008
@@ -351,10 +361,10 @@ export class PrimarySpellAudioSynchronizer {
         this.audio.playSound('rock-hit', { playbackRate: 1.5, volume: 1 })
         this.audio.playSound('hail-shot', { playbackRate: 1, volume: 1 })
       }
-      const previousGoodImps = new Map(this.previous.primarySpells.transients
+      const previousGoodImps = new Map(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'fire-good-imp')
         .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (effect.kind !== 'fire-good-imp' || effect.worldKey !== listenerWorldKey) continue
         const previous = previousGoodImps.get(`${effect.worldKey}\u0000${effect.id}`)
         const priorBounceSequence = previous?.bounceSoundSequence ?? 0
@@ -387,12 +397,33 @@ export class PrimarySpellAudioSynchronizer {
           })
         }
       }
-      for (const request of newNativeAirWaterActorSoundRequests(
-        this.previous.primarySpells.transients,
-        snapshot.primarySpells.transients,
-        listener.position,
-        listenerWorldKey,
-      )) {
+      const previousHailFrame = 'hail' in this.previous.primarySpells
+        ? this.previous.primarySpells
+        : null
+      const currentHailFrame = 'hail' in snapshot.primarySpells
+        ? snapshot.primarySpells
+        : null
+      let hailRequests: readonly NativeAirWaterActorSoundRequest[] = []
+      if (previousHailFrame && currentHailFrame) {
+        hailRequests = this.hailAudioCursor.advance(
+          currentHailFrame,
+          listener.position,
+          listenerWorldKey,
+        )
+      } else if (!previousHailFrame && !currentHailFrame) {
+        this.hailAudioCursor.clear()
+        hailRequests = newNativeAirWaterActorSoundRequests(
+          primaryTransients(this.previous),
+          primaryTransients(snapshot),
+          listener.position,
+          listenerWorldKey,
+        )
+      } else if (currentHailFrame) {
+        this.hailAudioCursor.reset(currentHailFrame, listenerWorldKey)
+      } else {
+        this.hailAudioCursor.clear()
+      }
+      for (const request of hailRequests) {
         this.audio.playSound(request.cue, {
           playbackRate: request.playbackRate,
           volume: request.volume,
@@ -438,10 +469,10 @@ export class PrimarySpellAudioSynchronizer {
         this.audio.playSound('big-fire', { playbackRate: 1, volume })
         this.audio.playSound('big-fire', { playbackRate: 0.8, volume })
       }
-      const previousEtherImpacts = new Set(this.previous.primarySpells.transients
+      const previousEtherImpacts = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'ether-impact')
         .map((effect) => effect.id))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'ether-impact'
           || effect.worldKey !== listenerWorldKey
@@ -455,10 +486,10 @@ export class PrimarySpellAudioSynchronizer {
           )),
         })
       }
-      const previousStaffContacts = new Set(this.previous.primarySpells.transients
+      const previousStaffContacts = new Set(primaryTransients(this.previous)
         .filter((effect) => effect.kind === 'player-staff-contact')
         .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
-      for (const effect of snapshot.primarySpells.transients) {
+      for (const effect of primaryTransients(snapshot)) {
         if (
           effect.kind !== 'player-staff-contact'
           || effect.worldKey !== listenerWorldKey
@@ -487,19 +518,22 @@ export class PrimarySpellAudioSynchronizer {
           this.audio.playSound(effect.procSound, { playbackRate, volume })
         }
       }
+    } else {
+      this.hailAudioCursor.clear()
     }
     this.syncLoops(snapshot)
     this.previous = snapshot
   }
 
   destroy(): void {
+    this.hailAudioCursor.clear()
     for (const [cue, owners] of this.loopOwners) {
       for (const owner of owners.keys()) this.audio.stopLoop(cue, owner)
       owners.clear()
     }
   }
 
-  private syncLoops(snapshot: GameSnapshot): void {
+  private syncLoops(snapshot: GameSnapshot | GameClientSnapshot): void {
     const desired = new Map<GameLoopCue, Map<string, PrimaryLoopMix>>(
       LOOP_CUES.map((cue) => [cue, new Map<string, PrimaryLoopMix>()]),
     )
@@ -602,7 +636,7 @@ export class PrimarySpellAudioSynchronizer {
             volume: Math.max(loops.get(owner)?.volume ?? 0, volume),
           })
         }
-        for (const actor of snapshot.primarySpells.transients) {
+        for (const actor of primaryTransients(snapshot)) {
           if (
             actor.kind !== 'air-hurricane'
             || actor.worldKey !== listenerWorldKey
@@ -687,7 +721,7 @@ export class PrimarySpellAudioSynchronizer {
   }
 
   private earthFizzleVolume(
-    snapshot: GameSnapshot,
+    snapshot: GameSnapshot | GameClientSnapshot,
     playerId: string,
     fallback: number,
   ): number {
@@ -723,4 +757,10 @@ function selectedPrimaryElement(
 
 function isWeldOneShot(buildId: NativeWeldBuildId): boolean {
   return buildId === 1000 || buildId === 1001 || buildId === 1002 || buildId === 1009
+}
+
+function primaryTransients(
+  snapshot: GameSnapshot | GameClientSnapshot,
+): readonly PrimarySpellTransientState[] {
+  return snapshot.primarySpells.transients
 }

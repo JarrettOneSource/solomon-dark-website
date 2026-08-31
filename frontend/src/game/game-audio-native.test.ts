@@ -6,6 +6,7 @@ import {
   GAME_SCENE_MUSIC,
   HUB_AUDIO_ATTENUATION_RADIUS,
   NATIVE_LEVEL_UP_SOUND_REQUEST,
+  NATIVE_SOUND_MAXIMUM_VOICES,
   createEntryAudioEvents,
   createSelectionAudioEvents,
   hubAudioAttenuation,
@@ -43,6 +44,17 @@ test('maps the level-up request at scalar one', () => {
     cue: 'level-up',
     playbackRate: 1,
   })
+})
+
+test('caps each retained Hail bounce sound at ten native voices', () => {
+  for (const cue of [
+    'hail-bounce-0',
+    'hail-bounce-1',
+    'hail-bounce-2',
+    'hail-bounce-3',
+  ] as const) {
+    assert.equal(NATIVE_SOUND_MAXIMUM_VOICES[cue], 10)
+  }
 })
 
 test('maps successful Deflect feedback globally', () => {

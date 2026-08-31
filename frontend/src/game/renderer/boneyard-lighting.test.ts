@@ -641,7 +641,7 @@ test('matches the native Building tessellator and packed vertex color', () => {
   assert.deepEqual([...nativeBuildingMeshGrid(300, 200, false).indices], [0, 1, 2, 1, 2, 3])
 
   const colors = new Uint8Array(5 * 4)
-  writeNativeStaticSurfaceVertexColors(colors, [-1, 0, 0.5, 1, 2])
+  assert.equal(writeNativeStaticSurfaceVertexColors(colors, [-1, 0, 0.5, 1, 2]), true)
   assert.deepEqual([...colors], [
     0, 0, 0, 255,
     0, 0, 0, 255,
@@ -649,6 +649,8 @@ test('matches the native Building tessellator and packed vertex color', () => {
     255, 255, 255, 255,
     255, 255, 255, 255,
   ])
+  assert.equal(writeNativeStaticSurfaceVertexColors(colors, [-1, 0, 0.5, 1, 2]), false)
+  assert.equal(writeNativeStaticSurfaceVertexColors(colors, [-1, 0, 0.6, 1, 2]), true)
 })
 
 test('projects the two native Wall endpoint samples across its retained raster', () => {

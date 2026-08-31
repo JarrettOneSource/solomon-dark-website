@@ -17,6 +17,15 @@ import {
   earthImpactFragmentCount,
   earthImpactLifetimeTicks,
 } from '../core-kernels/primary-spell-earth.ts'
+import {
+  createNativeWaterHailActor,
+  nativeWaterHailLifeAtAge,
+  NATIVE_HAIL_MINIMUM_HEIGHT,
+  stepNativeWaterHailActor,
+} from '../core-kernels/air-water-spell-actors.ts'
+import type {
+  PrimarySpellTransientState,
+} from '../core-kernels/primary-spells.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
@@ -65,6 +74,11 @@ import {
   type ServerWelcomeMessage,
 } from './game-protocol.ts'
 import { createGameSnapshotFrame } from './entity-replication.ts'
+import {
+  createPrimarySpellSimulationFrame,
+  materializePrimarySpellSimulationFrame,
+} from './primary-spell-hail-replication.ts'
+import { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -76,6 +90,30 @@ const ONLINE_PREFERENCES = {
   globalChat: true,
   submitRuns: true,
 } as const
+
+function withEmptyHailTable(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  return {
+    ...value,
+    hail: {
+      ownerIds: [],
+      rows: PrimarySpellWaterHailFrameRows.create(0),
+      worldKeys: [],
+    },
+  }
+}
+
+function withMutatedHailRows(
+  frame: ReturnType<typeof createPrimarySpellSimulationFrame>,
+  mutate: (rows: PrimarySpellWaterHailFrameRows) => void,
+): ReturnType<typeof createPrimarySpellSimulationFrame> {
+  const rows = PrimarySpellWaterHailFrameRows.fromBase64(
+    frame.hail.rows.toBase64(),
+    16_384,
+  )
+  mutate(rows)
+  return { ...frame, hail: { ...frame.hail, rows } }
+}
 const PLAYER_REFERENCE_A = `player-ref-${'a'.repeat(32)}`
 const PLAYER_REFERENCE_B = `player-ref-${'b'.repeat(32)}`
 const CHAT_SENDER_A = {
@@ -1854,7 +1892,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v115 carries Demon endpoints, mod Boasts, Portal objectives, Steam presentation, Hagatha capacity, and the complete game snapshot', () => {
+test('protocol v115 carries packed order-preserving Hail, Demon endpoints, mod Boasts, Portal objectives, Steam presentation, Hagatha capacity, and the complete game snapshot', () => {
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2928,12 +2966,18 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     'player-1',
   )
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
-  const decodeFrame = (candidate: unknown) => decodeServerGameMessage(JSON.stringify({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 0,
-    frame: candidate,
-    sequence: 2,
-  }))
+  const decodeFrame = (candidate: unknown) => {
+    const candidateFrame = candidate as { primarySpells?: unknown }
+    return decodeServerGameMessage(JSON.stringify({
+      type: 'server-snapshot',
+      acknowledgedInputSequence: 0,
+      frame: {
+        ...candidateFrame,
+        primarySpells: withEmptyHailTable(candidateFrame.primarySpells),
+      },
+      sequence: 2,
+    }))
+  }
   const missile = {
     ageTicks: 1,
     charge: 1,
@@ -3004,6 +3048,21 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   const earthImpact = {
     ...earthImpactSeed,
     lifetimeTicks: earthImpactLifetimeTicks(earthImpactSeed),
+  }
+  const gargantuanImpactSeed = {
+    ...earthImpactSeed,
+    charge: 2.2,
+    painterRegistrations: Array.from(
+      { length: earthImpactFragmentCount(2.2) },
+      (_, registrationOrdinal) => ({
+        managerLane: 'actor' as const,
+        registrationOrdinal: registrationOrdinal + 200,
+      }),
+    ),
+  }
+  const gargantuanImpact = {
+    ...gargantuanImpactSeed,
+    lifetimeTicks: earthImpactLifetimeTicks(gargantuanImpactSeed),
   }
   const earthBoulderBit = {
     ageTicks: 0,
@@ -3080,6 +3139,15 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedImpact.type, 'server-snapshot')
   assert.deepEqual(decodedImpact.frame.primarySpells.transients, [earthImpact])
+  const decodedGargantuanImpact = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [], transients: [gargantuanImpact] },
+  })
+  assert.equal(decodedGargantuanImpact.type, 'server-snapshot')
+  assert.deepEqual(
+    decodedGargantuanImpact.frame.primarySpells.transients,
+    [gargantuanImpact],
+  )
   const decodedBoulderBit = decodeFrame({
     ...frame,
     primarySpells: { nextId: 3, projectiles: [], transients: [earthBoulderBit] },
@@ -4140,9 +4208,9 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     primarySpells: {
       nextId: 2,
       projectiles: [],
-      transients: [{ ...earthImpact, charge: 1.1 }],
+      transients: [{ ...earthImpact, charge: 3.01 }],
     },
-  }), /charge must be within/)
+  }), /charge must be within \[0,3\]/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {
@@ -4229,15 +4297,15 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
     {
       ageTicks: 20,
       birthTick: 3,
-      bounceProgress: 0.4,
+      bounceProgress: Math.fround(0.4),
       bounceSoundIndex: 2,
-      bounceSoundPitch: 1.1,
+      bounceSoundPitch: Math.fround(1.1),
       bounceSoundSequence: 1,
       height: -4,
       horizontalVelocity: { x: 3, y: -4 },
       id: 3,
       kind: 'water-hail',
-      life: Math.fround(1.7),
+      life: nativeWaterHailLifeAtAge(20),
       ownerId: 'player-1',
       painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 42 }],
       position: { x: 10, y: 20 },
@@ -4248,27 +4316,248 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
       verticalVelocity: 1,
       worldKey: 'hub:courtyard',
     },
-  ]
-  const decodeEffects = (transients: unknown) => decodeServerGameMessage(JSON.stringify({
+  ] satisfies PrimarySpellTransientState[]
+  const decodePrimarySpells = (
+    primarySpells: unknown,
+    tick = 23,
+  ) => decodeServerGameMessage(JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
     frame: {
       ...frame,
-      primarySpells: { nextId: 4, projectiles: [], transients },
+      primarySpells,
+      tick,
     },
     sequence: 2,
   }))
-  const decoded = decodeEffects(effects)
-  assert.equal(decoded.type, 'server-snapshot')
-  assert.deepEqual(decoded.frame.primarySpells.transients, effects)
-  assert.doesNotThrow(() => decodeEffects([{ ...effects[2], height: -79.45 }]))
-  assert.throws(
-    () => decodeEffects([{ ...effects[2], height: -80.01 }]),
-    /native Bouncer range/,
+  const compact = createPrimarySpellSimulationFrame({
+    nextId: 4,
+    projectiles: [],
+    transients: effects,
+  })
+  const decodeEffects = (transients: PrimarySpellTransientState[]) => (
+    decodePrimarySpells(createPrimarySpellSimulationFrame({
+      nextId: 4,
+      projectiles: [],
+      transients,
+    }))
   )
-  assert.throws(() => decodeEffects([{ ...effects[0], charge: 0 }]), /charge must be within/)
-  assert.throws(() => decodeEffects([{ ...effects[1], ageTicks: 2_400 }]), /native lifetime/)
-  assert.throws(() => decodeEffects([{ ...effects[2], ageTicks: 134 }]), /Hail lifecycle/)
+  const decoded = decodePrimarySpells(compact)
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(decoded.frame.primarySpells, compact)
+  assert.deepEqual(
+    materializePrimarySpellSimulationFrame(decoded.frame.primarySpells, 23).transients,
+    effects,
+  )
+  const interleaved = [effects[2]!, effects[0]!, effects[1]!]
+  const interleavedFrame = createPrimarySpellSimulationFrame({
+    nextId: 4,
+    projectiles: [],
+    transients: interleaved,
+  })
+  const decodedInterleaved = decodePrimarySpells(interleavedFrame)
+  assert.equal(decodedInterleaved.type, 'server-snapshot')
+  assert.deepEqual(
+    materializePrimarySpellSimulationFrame(
+      decodedInterleaved.frame.primarySpells,
+      23,
+    ).transients,
+    interleaved,
+  )
+  const hurricane = effects[0]
+  const aura = effects[1]
+  if (hurricane?.kind !== 'air-hurricane' || aura?.kind !== 'water-aura') {
+    throw new Error('expected Air/Water protocol fixtures')
+  }
+  assert.throws(() => decodeEffects([{ ...hurricane, charge: 0 }]), /charge must be within/)
+  assert.throws(() => decodeEffects([{ ...aura, ageTicks: 2_400 }]), /native lifetime/)
+  assert.throws(() => decodePrimarySpells({
+    ...compact,
+    hail: {
+      ownerIds: [],
+      rows: PrimarySpellWaterHailFrameRows.create(0),
+      worldKeys: [],
+    },
+    transients: [effects[2]],
+  }), /compact Hail table/)
+  assert.throws(() => decodePrimarySpells(compact, 3 + 134), /Hail lifecycle/)
+  const shortRow = JSON.parse(JSON.stringify(compact)) as {
+    hail: { rows: { data: string } }
+  }
+  const shortRowBytes = Buffer.from(shortRow.hail.rows.data, 'base64')
+  shortRow.hail.rows.data = shortRowBytes
+    .subarray(0, shortRowBytes.length - 1)
+    .toString('base64')
+  assert.throws(() => decodePrimarySpells(shortRow), /Hail frame payload length/)
+  const hail = effects[2]
+  if (hail?.kind !== 'water-hail') throw new Error('expected Hail protocol fixture')
+  const twoHail = createPrimarySpellSimulationFrame({
+    nextId: 5,
+    projectiles: [],
+    transients: [hail, { ...hail, id: 4 }],
+  })
+  const duplicateRow = withMutatedHailRows(twoHail, (rows) => {
+    rows.ids[1] = rows.ids[0]!
+  })
+  assert.throws(() => decodePrimarySpells(duplicateRow), /duplicate id/)
+  const duplicatePosition = withMutatedHailRows(twoHail, (rows) => {
+    rows.transientPositions[1] = rows.transientPositions[0]!
+  })
+  assert.throws(() => decodePrimarySpells(duplicatePosition), /positions must be unique/)
+  const missingOwner = withMutatedHailRows(compact, (rows) => {
+    rows.ownerIndexes[0] = 1
+  })
+  assert.throws(() => decodePrimarySpells(missingOwner), /hail.rows.*ownerIndex/)
+  const negativePainterRegistration = withMutatedHailRows(compact, (rows) => {
+    rows.painterRegistrationOrdinals[0] = -1
+  })
+  assert.throws(
+    () => decodePrimarySpells(negativePainterRegistration),
+    /painterRegistrationOrdinal must be nonnegative/,
+  )
+  const unsafePainterRegistration = withMutatedHailRows(compact, (rows) => {
+    rows.painterRegistrationOrdinals[0] = Number.MAX_SAFE_INTEGER + 1
+  })
+  assert.throws(
+    () => decodePrimarySpells(unsafePainterRegistration),
+    /painterRegistrationOrdinal must be a safe integer/,
+  )
+  const duplicateOwner = JSON.parse(JSON.stringify(compact))
+  duplicateOwner.hail.ownerIds.push(duplicateOwner.hail.ownerIds[0])
+  assert.throws(() => decodePrimarySpells(duplicateOwner), /ownerIds must be unique/)
+})
+
+test('protocol carries a native Hail bounce above its constructor height domain', () => {
+  const born = createNativeWaterHailActor(
+    3,
+    'player-1',
+    'hub:courtyard',
+    3,
+    { x: 10, y: 20 },
+    { x: 1, y: 0 },
+    createNativeRng(9_725),
+  )
+  let actor = born.actor
+  let rng = born.rng
+  for (let tick = 0; tick < 21; tick += 1) {
+    const stepped = stepNativeWaterHailActor(actor, rng)
+    assert.ok(stepped.actor)
+    actor = stepped.actor
+    rng = stepped.rng
+  }
+  assert.equal(actor.height, -73.80191040039062)
+
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const registeredActor = {
+    ...actor,
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 90 }],
+  }
+  const compact = createPrimarySpellSimulationFrame({
+    nextId: 4,
+    projectiles: [],
+    transients: [registeredActor],
+  })
+  const message = {
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      primarySpells: compact,
+      tick: actor.birthTick + actor.ageTicks,
+    },
+    sequence: 2,
+  }
+  const decoded = decodeServerGameMessage(JSON.stringify(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(
+    materializePrimarySpellSimulationFrame(
+      decoded.frame.primarySpells,
+      decoded.frame.tick,
+    ).transients,
+    [registeredActor],
+  )
+  const invalidHeight = withMutatedHailRows(compact, (rows) => {
+    rows.heights[0] = Math.fround(NATIVE_HAIL_MINIMUM_HEIGHT - 0.01)
+  })
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    ...message,
+    frame: {
+      ...message.frame,
+      primarySpells: invalidHeight,
+    },
+  })), /native Bouncer range/)
+})
+
+test('protocol carries the inclusive native Hail bounce-pitch endpoint', () => {
+  const born = createNativeWaterHailActor(
+    3,
+    'player-1',
+    'hub:courtyard',
+    3,
+    { x: 10, y: 20 },
+    { x: 1, y: 0 },
+    createNativeRng(41),
+  )
+  const stepped = stepNativeWaterHailActor({
+    ...born.actor,
+    height: 0.1,
+    savedBounceVelocity: -2,
+  }, createNativeRng(439_089))
+  assert.ok(stepped.actor)
+  assert.equal(stepped.actor.bounceSoundPitch, Math.fround(1.2))
+
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const registeredActor = {
+    ...stepped.actor,
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: 91 }],
+  }
+  const compact = createPrimarySpellSimulationFrame({
+    nextId: 4,
+    projectiles: [],
+    transients: [registeredActor],
+  })
+  const message = {
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      primarySpells: compact,
+      tick: stepped.actor.birthTick + stepped.actor.ageTicks,
+    },
+    sequence: 2,
+  }
+  const decoded = decodeServerGameMessage(JSON.stringify(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(
+    materializePrimarySpellSimulationFrame(
+      decoded.frame.primarySpells,
+      decoded.frame.tick,
+    ).transients,
+    [registeredActor],
+  )
+
+  const decodePitch = (bounceSoundPitch: number) => {
+    const primarySpells = withMutatedHailRows(compact, (rows) => {
+      rows.bounceSoundPitches[0] = bounceSoundPitch
+    })
+    return decodeServerGameMessage(JSON.stringify({
+      ...message,
+      frame: {
+        ...message.frame,
+        primarySpells,
+      },
+    }))
+  }
+  assert.throws(() => decodePitch(Math.fround(1 - 0.001)), /bounceSoundPitch/)
+  assert.throws(() => decodePitch(Math.fround(1.2) + 0.001), /bounceSoundPitch/)
 })
 
 test('protocol strictly validates nested native Region screen-feedback events', () => {
@@ -5806,7 +6095,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   const decodeFrame = (primarySpells: unknown) => decodeServerGameMessage(JSON.stringify({
     acknowledgedInputSequence: 0,
-    frame: { ...frame, primarySpells },
+    frame: { ...frame, primarySpells: withEmptyHailTable(primarySpells) },
     sequence: 2,
     type: 'server-snapshot',
   }))

@@ -409,3 +409,30 @@ fresh exact opening-glimmer pixel and a clean-stock side-by-side remain proof
 gaps; static instruction closure and deterministic regressions cover the
 opening recurrence, but those gaps plus the explicitly unrecovered shared-RNG
 sequence still preclude a literal pixel-for-pixel/exact-RNG claim.
+
+## 2026-08-28 max-rank impact wire-domain correction
+
+The physical-iPhone performance matrix reopened Earth after the exact-head Mac
+control journey disconnected at max rank. Receipt
+`/private/tmp/solomon-final-5c029073-mac-element-earth-8s.json`, SHA-256
+`1c1e556987a23232120ae83d5819c4395e117eb6feea6bfe53c6d7ac71497194`,
+records one live Boulder, sixteen CalledRocks, and the strict-wire failure
+`frame.primarySpells.transients[15].charge must be within [0,1]`. The
+authoritative host remained alive; protocol rejection closed that browser
+session with code `4008`.
+
+The `[0,1]` impact bound was not a native limit. Authored `Gargantuan` skill 47
+has maximum rank `8` and `mSize=200`, so the row-40 profile owns the exact
+maximum charge `1 + 200/100 = 3`. The held and released Boulder wire already
+preserves charge above one. Terminal `earthImpact` copies that charge without
+normalization, matching stock `0x0060B700`: fragment count
+`floor(max(8,30*charge))`, radial placement, and velocity use full charge,
+while only the recovered bounce/height scalar `q=min(charge,1)` saturates.
+Clamping the impact to one would therefore erase Gargantuan's authored breakup
+membership and geometry.
+
+Protocol 106 must accept finite Earth-impact charge throughout the authored
+`[0,3]` domain and reject values above the rank-8 Gargantuan ceiling before
+evaluating the fragment recurrence. The regression owns both a representative
+rank-2 charge `2.2` and the hard upper bound. No renderer fallback or visual
+normalization is permitted.

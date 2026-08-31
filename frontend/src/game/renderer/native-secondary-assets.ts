@@ -64,6 +64,17 @@ export const NATIVE_SECONDARY_SPRITE_RECORDS: readonly NativeSecondarySpriteReco
     NATIVE_SECONDARY_SPRITE_MEMBERSHIP[atlas].map((entry) => record(atlas, entry))
   )))
 
+const NATIVE_SECONDARY_SPRITE_RECORDS_BY_ATLAS = new Map(
+  NATIVE_SECONDARY_ATLASES.map((atlas) => [
+    atlas,
+    new Map(
+      NATIVE_SECONDARY_SPRITE_RECORDS
+        .filter((record) => record.atlas === atlas)
+        .map((record) => [record.entry, record] as const),
+    ),
+  ] as const),
+)
+
 export const NATIVE_SECONDARY_ASSET_SOURCES = Object.freeze([
   ...new Set(NATIVE_SECONDARY_SPRITE_RECORDS.map(({ source }) => source)),
   ...Object.values(NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES),
@@ -77,9 +88,7 @@ export function nativeSecondarySpriteRecord(
   atlas: NativeSecondaryAtlas,
   entry: number,
 ): NativeSecondarySpriteRecord {
-  const found = NATIVE_SECONDARY_SPRITE_RECORDS.find((record) => (
-    record.atlas === atlas && record.entry === entry
-  ))
+  const found = NATIVE_SECONDARY_SPRITE_RECORDS_BY_ATLAS.get(atlas)?.get(entry)
   if (!found) throw new Error(`Native secondary sprite is outside the closed membership: ${atlas}:${entry}`)
   return found
 }

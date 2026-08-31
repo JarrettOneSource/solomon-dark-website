@@ -83,6 +83,30 @@ class FakeAudioContext {
   }
 }
 
+class FakeNativeSoundVoicePool {
+  destroyCalls = 0
+  readonly plays: Array<Readonly<{
+    options: Readonly<{ maximumVoices?: number; playbackRate: number; volume: number }>
+    source: string
+  }>> = []
+
+  destroy(): void {
+    this.destroyCalls += 1
+  }
+
+  play(
+    source: string,
+    options: Readonly<{
+      maximumVoices?: number
+      playbackRate: number
+      volume: number
+    }>,
+  ): boolean {
+    this.plays.push({ options, source })
+    return true
+  }
+}
+
 test('reuses resident buffers across overlapping low-latency one-shots', async () => {
   const context = new FakeAudioContext()
   const click = {} as AudioBuffer
@@ -167,6 +191,43 @@ test('restarts keyed streams and stops keyed loops without touching other channe
 
   playback.destroy()
   assert.equal(context.sources[2].stopCalls, 1)
+})
+
+test('routes capped native samples through one retained voice pool', () => {
+  const context = new FakeAudioContext()
+  const nativeVoices = new FakeNativeSoundVoicePool()
+  let voicePoolCreations = 0
+  const playback = createWebAudioPlayback(
+    context as unknown as AudioContext,
+    new Map<string, AudioBuffer>([
+      ['hail-0.wav', {} as AudioBuffer],
+      ['hail-1.wav', {} as AudioBuffer],
+    ]),
+    (destination) => {
+      voicePoolCreations += 1
+      assert.equal(destination, context.gains[0])
+      return nativeVoices
+    },
+  )
+
+  for (let voice = 0; voice < 11; voice += 1) {
+    playback.play('hail-0.wav', {
+      maximumVoices: 10,
+      playbackRate: 1,
+      volume: 1,
+    })
+  }
+  assert.equal(voicePoolCreations, 1)
+  assert.equal(nativeVoices.plays.length, 11)
+  assert.equal(context.sources.length, 0)
+  assert.equal(context.gains.length, 1)
+
+  playback.play('hail-0.wav', { playbackRate: 1, volume: 1 })
+  playback.play('hail-0.wav', { playbackRate: 1, volume: 1 })
+  assert.equal(context.sources.length, 2)
+
+  playback.destroy()
+  assert.equal(nativeVoices.destroyCalls, 1)
 })
 
 test('rejects playback for an asset absent from the resident bank', () => {

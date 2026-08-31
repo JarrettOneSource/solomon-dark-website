@@ -25,6 +25,7 @@ import {
   type NativeEnemyActionProgramName,
   type NativeEnemyAnimationSample,
   type NativeEnemyEffectSample,
+  type NativeEnemyMaggotSample,
   type NativeEnemySampleAtlas,
 } from './native-enemy-animation.ts'
 
@@ -229,6 +230,167 @@ export function nativeEnemyPresentationPlan(
     segments,
     spawnAgeTicks,
   }
+}
+
+export function nativeEnemyViewPlanInputsEqual(
+  previous: NativeEnemyVisualSnapshot,
+  previousTick: number,
+  current: NativeEnemyVisualSnapshot,
+  currentTick: number,
+): boolean {
+  return previous.id === current.id
+    && previous.nativeTypeId === current.nativeTypeId
+    && previous.enemyToken === current.enemyToken
+    && previous.armored === current.armored
+    && previous.headingDeg === current.headingDeg
+    && previous.mageCloak === current.mageCloak
+    && previous.scale === current.scale
+    && previous.spawnTick === current.spawnTick
+    && previous.lighting.charge === current.lighting.charge
+    && enemyFlagsEqual(previous.flags, current.flags)
+    && (
+      !enemyPresentationUsesTick(current)
+      || previousTick === currentTick
+    )
+    && enemyAnimationSamplesEqual(previous.animation, current.animation)
+}
+
+function enemyPresentationUsesTick(enemy: NativeEnemyVisualSnapshot): boolean {
+  switch (enemy.enemyToken) {
+    case 'SKELETON':
+      return hasEnemyFlag(enemy.flags, 'BURNING')
+    case 'SKELETONARCHER':
+      return hasEnemyFlag(enemy.flags, 'BURNING')
+        || hasEnemyFlag(enemy.flags, 'FIREARROW')
+        || hasEnemyFlag(enemy.flags, 'POISONARROW')
+    case 'SKELETONMAGE':
+      return enemy.lighting.charge > 0
+        || enemy.animation?.state === 'action'
+        || hasEnemyFlag(enemy.flags, 'BURNING')
+    case 'ZOMBIE':
+      return hasEnemyFlag(enemy.flags, 'ROTTEN')
+    case 'WRAITH':
+      return hasEnemyFlag(enemy.flags, 'BURNING')
+    case 'DEMON':
+    case 'COFFIN':
+      return true
+    case 'IMP':
+    case 'PORTAL':
+      return false
+  }
+}
+
+function enemyFlagsEqual(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    if (normalizeEnemyFlag(left[index]!) !== normalizeEnemyFlag(right[index]!)) return false
+  }
+  return true
+}
+
+function normalizeEnemyFlag(flag: string): string {
+  return flag.toUpperCase().replace(/^FLAG_/, '')
+}
+
+function hasEnemyFlag(flags: readonly string[], requested: string): boolean {
+  for (const flag of flags) {
+    if (normalizeEnemyFlag(flag) === requested) return true
+  }
+  return false
+}
+
+function enemyAnimationSamplesEqual(
+  left: NativeEnemyAnimationSample | undefined,
+  right: NativeEnemyAnimationSample | undefined,
+): boolean {
+  if (left === right) return true
+  if (!left || !right) return false
+  return left.action === right.action
+    && left.actionProgress === right.actionProgress
+    && left.alpha === right.alpha
+    && left.bodyPose === right.bodyPose
+    && left.coffinPose === right.coffinPose
+    && left.coffinRotationRadians === right.coffinRotationRadians
+    && left.coffinScaleX === right.coffinScaleX
+    && left.coffinSecondaryPose === right.coffinSecondaryPose
+    && left.coffinState === right.coffinState
+    && left.deathEpoch === right.deathEpoch
+    && left.deathTick === right.deathTick
+    && left.demonFrontExtremityOffset.x === right.demonFrontExtremityOffset.x
+    && left.demonFrontExtremityOffset.y === right.demonFrontExtremityOffset.y
+    && left.demonFrontRotationRadians === right.demonFrontRotationRadians
+    && left.demonRearExtremityOffset.x === right.demonRearExtremityOffset.x
+    && left.demonRearExtremityOffset.y === right.demonRearExtremityOffset.y
+    && left.demonRearRotationRadians === right.demonRearRotationRadians
+    && left.gaitPose === right.gaitPose
+    && left.headFacingOffset === right.headFacingOffset
+    && left.hitFlash === right.hitFlash
+    && left.impBodyRotationRadians === right.impBodyRotationRadians
+    && left.impEffectAlpha === right.impEffectAlpha
+    && left.impEffectFrame === right.impEffectFrame
+    && left.state === right.state
+    && left.stridePhaseDeg === right.stridePhaseDeg
+    && left.verticalOffset === right.verticalOffset
+    && left.zombieAngularOffsetDeg === right.zombieAngularOffsetDeg
+    && left.zombieAttackSide === right.zombieAttackSide
+    && left.zombieBodyRotationRadians === right.zombieBodyRotationRadians
+    && left.zombieBodyType === right.zombieBodyType
+    && left.zombieFrontArmPose === right.zombieFrontArmPose
+    && left.zombieFrontArmRotationRadians === right.zombieFrontArmRotationRadians
+    && left.zombieHeadType === right.zombieHeadType
+    && left.zombieHeadRotationRadians === right.zombieHeadRotationRadians
+    && left.zombieRearArmPose === right.zombieRearArmPose
+    && left.zombieRearArmRotationRadians === right.zombieRearArmRotationRadians
+    && enemyEffectSamplesEqual(left.effects, right.effects)
+    && enemyMaggotSamplesEqual(left.maggots, right.maggots)
+}
+
+function enemyEffectSamplesEqual(
+  left: readonly NativeEnemyEffectSample[],
+  right: readonly NativeEnemyEffectSample[],
+): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    const first = left[index]!
+    const second = right[index]!
+    if (
+      first.id !== second.id
+      || first.alpha !== second.alpha
+      || first.atlas !== second.atlas
+      || first.blendMode !== second.blendMode
+      || first.entry !== second.entry
+      || first.offset.x !== second.offset.x
+      || first.offset.y !== second.offset.y
+      || first.role !== second.role
+      || first.rotationRadians !== second.rotationRadians
+      || first.scale !== second.scale
+    ) return false
+  }
+  return true
+}
+
+function enemyMaggotSamplesEqual(
+  left: readonly NativeEnemyMaggotSample[],
+  right: readonly NativeEnemyMaggotSample[],
+): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    const first = left[index]!
+    const second = right[index]!
+    if (
+      first.id !== second.id
+      || first.alpha !== second.alpha
+      || first.headingDeg !== second.headingDeg
+      || first.offset.x !== second.offset.x
+      || first.offset.y !== second.offset.y
+      || first.pose !== second.pose
+      || first.rotationRadians !== second.rotationRadians
+      || first.state !== second.state
+    ) return false
+  }
+  return true
 }
 
 export function nativeEnemyPainterLayer(

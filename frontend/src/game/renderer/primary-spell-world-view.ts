@@ -1,10 +1,11 @@
-import { Container } from 'pixi.js'
+import { Container, type Shader } from 'pixi.js'
 
 import type {
   PrimarySpellProjectileState,
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import type { PositionedDynamicLayer } from '../boneyard-painter-order.ts'
 import {
   nativeWorldPainterRegistration,
   type NativeWorldManagerRegistration,
@@ -36,6 +37,10 @@ import {
 } from './primary-spell-fire-view.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
+import {
+  isNativeWaterMeshActorState,
+  NativeWaterMeshRuns,
+} from './primary-spell-water-mesh-runs.ts'
 import { isNativePlayerStaffTransient } from '../core-kernels/native-player-staff-action.ts'
 import {
   PlayerStaffPikeBreakView,
@@ -49,6 +54,7 @@ export interface PrimarySpellPainterLayer {
   id: string
   insertions?: readonly NativeRegionPainterInsertion[]
   lane: 'post-world-queue' | 'world-sorted'
+  meshActorId?: number
   queueFamily: 'ordinary-dynamic' | 'zanim' | null
   regionLightPoint: { x: number, y: number } | null
   registration: NativeWorldManagerRegistration
@@ -90,7 +96,9 @@ interface SpellPainterRoot {
 }
 
 export class PrimarySpellWorldView {
+  private readonly cachedPainterLayers: PrimarySpellPainterLayer[] = []
   private readonly liveIds = new Set<number>()
+  private readonly painterOwners = new Map<number, 'view' | 'water-mesh'>()
   private readonly root: Container
   private readonly postWorldQueueDepth: number | null
   private readonly textures: PlayerWorldTextures
@@ -99,6 +107,21 @@ export class PrimarySpellWorldView {
     number,
     PrimarySpellProjectileState | PrimarySpellTransientState
   >()
+  private waterMeshes: NativeWaterMeshRuns | null = null
+
+  static forBoneyard(
+    root: Container,
+    textures: PlayerWorldTextures,
+    shader?: Shader,
+  ): PrimarySpellWorldView {
+    const view = new PrimarySpellWorldView(root, textures)
+    view.waterMeshes = new NativeWaterMeshRuns(root, {
+      core: textures.primarySpells.frost.core,
+      glint: textures.primarySpells.frost.over,
+      hail: textures.primarySpells.airWaterActors.hail,
+    }, shader)
+    return view
+  }
 
   constructor(
     root: Container,
@@ -117,7 +140,13 @@ export class PrimarySpellWorldView {
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
   ): void {
     this.liveIds.clear()
-    for (const state of [...spells.projectiles, ...spells.transients]) {
+    this.waterMeshes?.beginFrame()
+    const projectileCount = spells.projectiles.length
+    const stateCount = projectileCount + spells.transients.length
+    for (let stateIndex = 0; stateIndex < stateCount; stateIndex += 1) {
+      const state = stateIndex < projectileCount
+        ? spells.projectiles[stateIndex]!
+        : spells.transients[stateIndex - projectileCount]!
       if (state.worldKey !== worldKey) continue
       if (isNativePlayerStaffTransient(state) && (
         state.kind !== 'player-staff-smoke'
@@ -127,6 +156,10 @@ export class PrimarySpellWorldView {
       )) continue
       this.liveIds.add(state.id)
       this.states.set(state.id, state)
+      if (this.waterMeshes && isNativeWaterMeshActorState(state)) {
+        if (this.waterMeshes.update(state)) this.painterOwners.set(state.id, 'water-mesh')
+        continue
+      }
       let view = this.views.get(state.id)
       if (!view) {
         if (isNativeWeldPresentationState(state)) {
@@ -199,6 +232,7 @@ export class PrimarySpellWorldView {
           throw new Error('Unsupported primary spell presentation')
         }
         this.views.set(state.id, view)
+        if (this.waterMeshes) this.painterOwners.set(state.id, 'view')
         this.root.addChild(...view.containers)
       }
       view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)))
@@ -212,43 +246,69 @@ export class PrimarySpellWorldView {
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
       this.views.delete(id)
-      this.states.delete(id)
       for (const container of view.containers) this.root.removeChild(container)
       view.destroy()
     }
-  }
-
-  painterLayers(): PrimarySpellPainterLayer[] {
-    const layers: PrimarySpellPainterLayer[] = []
-    for (const [id, view] of this.views) {
-      const state = this.states.get(id)
-      if (!state) throw new Error(`primary spell ${id} lost its painter state`)
-      for (const [rootIndex, painterRoot] of view.painterRoots().entries()) {
-        const layerId = painterRoot.suffix.length > 0
-          ? `primary-spell:${id}:${painterRoot.suffix}`
-          : `primary-spell:${id}`
-        layers.push({
-          id: layerId,
-          insertions: painterRoot.insertions?.map((insertion) => ({
-            id: `primary-spell:${id}:${insertion.suffix}`,
-            sortBias: insertion.sortBias,
-            visible: insertion.visible,
-            worldY: insertion.worldY,
-          })),
-          lane: painterRoot.lane,
-          queueFamily: painterRoot.queueFamily,
-          regionLightPoint: painterRoot.regionLightPoint,
-          registration: nativeWorldPainterRegistration(
-            state,
-            primaryPainterRegistrationIndex(state, painterRoot.suffix, rootIndex),
-          ),
-          sortBias: painterRoot.sortBias,
-          visible: painterRoot.visible,
-          worldY: painterRoot.worldY,
-        })
+    this.waterMeshes?.endFrame()
+    for (const id of this.states.keys()) {
+      if (!this.liveIds.has(id)) this.states.delete(id)
+    }
+    if (this.waterMeshes) {
+      for (const id of this.painterOwners.keys()) {
+        if (!this.liveIds.has(id)) this.painterOwners.delete(id)
       }
     }
-    return layers
+    const painterLayers = this.cachedPainterLayers
+    painterLayers.length = 0
+    if (this.waterMeshes) {
+      for (const [id, owner] of this.painterOwners) {
+        if (owner === 'water-mesh') {
+          const layer = this.waterMeshes.painterLayer(id)
+          if (layer) painterLayers.push(layer)
+          continue
+        }
+        const view = this.views.get(id)
+        if (view) this.appendPainterLayers(id, view, painterLayers)
+      }
+    } else {
+      for (const [id, view] of this.views) this.appendPainterLayers(id, view, painterLayers)
+    }
+  }
+
+  private appendPainterLayers(
+    id: number,
+    view: SpellView,
+    painterLayers: PrimarySpellPainterLayer[],
+  ): void {
+    const state = this.states.get(id)
+    if (!state) throw new Error(`primary spell ${id} lost its painter state`)
+    for (const [rootIndex, painterRoot] of view.painterRoots().entries()) {
+      painterLayers.push({
+        id: painterRoot.suffix.length > 0
+          ? `primary-spell:${id}:${painterRoot.suffix}`
+          : `primary-spell:${id}`,
+        insertions: painterRoot.insertions?.map((insertion) => ({
+          id: `primary-spell:${id}:${insertion.suffix}`,
+          sortBias: insertion.sortBias,
+          visible: insertion.visible,
+          worldY: insertion.worldY,
+        })),
+        lane: painterRoot.lane,
+        queueFamily: painterRoot.queueFamily,
+        regionLightPoint: painterRoot.regionLightPoint,
+        registration: nativeWorldPainterRegistration(
+          state,
+          primaryPainterRegistrationIndex(state, painterRoot.suffix, rootIndex),
+        ),
+        sortBias: painterRoot.sortBias,
+        visible: painterRoot.visible,
+        worldY: painterRoot.worldY,
+      })
+    }
+  }
+
+  painterLayers(): readonly PrimarySpellPainterLayer[] {
+    return this.cachedPainterLayers
   }
 
   setDepth(id: string, depth: number): void {
@@ -259,12 +319,33 @@ export class PrimarySpellWorldView {
     if (container) container.zIndex = depth
   }
 
+  applyBoneyardPainterDepths(
+    orderedWorldLayers: readonly PositionedDynamicLayer[],
+    postWorldDepth: number,
+  ): void {
+    this.waterMeshes?.beginDepths()
+    for (const layer of orderedWorldLayers) {
+      if (!layer.id.startsWith('primary-spell:')) continue
+      const parsed = parsePainterId(layer.id)
+      if (parsed.suffix.length === 0 && this.waterMeshes?.has(parsed.numericId)) {
+        this.waterMeshes.appendDepth(parsed.numericId, layer.zIndex)
+      } else {
+        this.setDepth(layer.id, layer.zIndex)
+      }
+    }
+    for (const layer of this.cachedPainterLayers) {
+      if (layer.lane === 'post-world-queue') this.setDepth(layer.id, postWorldDepth)
+    }
+    this.waterMeshes?.commitDepths()
+  }
+
   setTint(id: string, tint: number): void {
     const { numericId, suffix } = parsePainterId(id)
     this.views.get(numericId)?.setTint(suffix, tint)
   }
 
   setRenderable(renderable: boolean): void {
+    this.waterMeshes?.setRenderable(renderable)
     for (const view of this.views.values()) {
       for (const container of view.containers) container.renderable = renderable
     }
@@ -282,10 +363,35 @@ export class PrimarySpellWorldView {
   }
 
   get count(): number {
-    return this.views.size
+    return this.views.size + (this.waterMeshes?.count ?? 0)
+  }
+
+  get hailMeshCount(): number {
+    return this.waterMeshes?.hailCount ?? 0
+  }
+
+  get hailMeshRunCount(): number {
+    return this.waterMeshes?.runCount ?? 0
+  }
+
+  get waterMeshActorCount(): number {
+    return this.waterMeshes?.count ?? 0
+  }
+
+  get waterMeshNormalFrostCount(): number {
+    return this.waterMeshes?.normalFrostCount ?? 0
+  }
+
+  get waterMeshRunCount(): number {
+    return this.waterMeshes?.runCount ?? 0
   }
 
   get kinds(): readonly string[] {
+    if (this.waterMeshes) return [...this.painterOwners].map(([id, owner]) => (
+      owner === 'water-mesh'
+        ? this.waterMeshes?.kind(id) ?? 'unknown'
+        : this.views.get(id)?.kind ?? 'unknown'
+    ))
     return [...this.views.values()].map((view) => view.kind)
   }
 
@@ -315,6 +421,8 @@ export class PrimarySpellWorldView {
   }
 
   destroy(): void {
+    this.waterMeshes?.destroy()
+    this.waterMeshes = null
     for (const view of this.views.values()) {
       for (const container of view.containers) this.root.removeChild(container)
       view.destroy()
@@ -322,6 +430,8 @@ export class PrimarySpellWorldView {
     this.views.clear()
     this.states.clear()
     this.liveIds.clear()
+    this.cachedPainterLayers.length = 0
+    this.painterOwners.clear()
   }
 }
 

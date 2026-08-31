@@ -16,6 +16,7 @@ import {
 } from './native-enemy-attack-effect.ts'
 import {
   nativeEnemyPresentationPlan,
+  nativeEnemyViewPlanInputsEqual,
   type NativeEnemyFamily,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
@@ -189,6 +190,8 @@ class NativeEnemyView {
   private renderedLimbsEntry: number | null = null
   private headingDeg = 0
   private demonMuzzleOffset: Readonly<{ x: number; y: number }> | null = null
+  private previousPlanInput: NativeEnemyVisualSnapshot | null = null
+  private previousPlanTick = Number.NaN
 
   constructor(
     root: Container,
@@ -210,11 +213,21 @@ class NativeEnemyView {
   }
 
   update(enemy: NativeEnemyVisualSnapshot, tick: number): void {
-    const plan = nativeEnemyPresentationPlan(
-      enemy,
-      tick,
-      (atlas, entry) => nativeEnemySpriteRecord(atlas, entry).points,
-    )
+    const previous = this.previousPlanInput
+    if (
+      previous === null
+      || !nativeEnemyViewPlanInputsEqual(previous, this.previousPlanTick, enemy, tick)
+    ) this.updateVisualPlan(enemy, tick)
+    this.previousPlanInput = enemy
+    this.previousPlanTick = tick
+    this.container.position.set(enemy.position.x, enemy.position.y)
+    this.headingDeg = enemy.headingDeg
+  }
+
+  private updateVisualPlan(enemy: NativeEnemyVisualSnapshot, tick: number): void {
+    const plan = nativeEnemyPresentationPlan(enemy, tick, (atlas, entry) => (
+      nativeEnemySpriteRecord(atlas, entry).points
+    ))
     this.renderedBodyEntry = plan.layers.find(({ role }) => (
       role.endsWith('-body')
     ))?.entry ?? null

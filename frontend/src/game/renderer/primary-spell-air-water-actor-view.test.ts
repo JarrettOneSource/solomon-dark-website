@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Container, Sprite, Texture } from 'pixi.js'
+import { Container, Shader, Sprite, Texture } from 'pixi.js'
 
 import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
+  PrimarySpellWaterTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
 import {
   NATIVE_AIR_WATER_ACTOR_KINDS,
   isNativeAirWaterActorState,
 } from './primary-spell-air-water-actor-view.ts'
 import {
   NATIVE_AIR_WATER_SPRITES,
+  NATIVE_WATER_AURA_SAFE_ALPHA_TRIM,
   nativeHurricaneVisualPlan,
   nativeHailVisualPlan,
   nativeWaterAuraVisualPlan,
@@ -29,6 +32,7 @@ test('Air/Water world view routes all three primary-owned actors through stock t
   view.update(spells, WORLD_KEY, 100)
   assert.equal(root.children.length, 3)
   assert.deepEqual(root.children.map(({ label }) => label), NATIVE_AIR_WATER_ACTOR_KINDS)
+  assert.deepEqual(root.children.map(({ children }) => children.length), [17, 1, 1])
   assert.equal(view.count, 3)
   assert.ok(root.children.every(({ children }) => children.some(({ visible }) => visible)))
   const hurricane = visibleSprites(root.children[0]!)
@@ -46,6 +50,65 @@ test('Air/Water world view routes all three primary-owned actors through stock t
   view.update({ nextId: 4, projectiles: [], transients: [] }, WORLD_KEY)
   assert.equal(root.children.length, 0)
   view.destroy()
+})
+
+test('Boneyard Hail mesh retains every actor row and exact painter partition', () => {
+  const root = new Container()
+  const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), testShader())
+  view.update(actorFixture(), WORLD_KEY, 100)
+  assert.deepEqual(view.painterLayers().map(({ id }) => id), [
+    'primary-spell:1',
+    'primary-spell:2',
+    'primary-spell:3',
+  ])
+  view.applyBoneyardPainterDepths([
+    { id: 'primary-spell:1', row: 1, zIndex: 1 },
+    { id: 'primary-spell:2', row: 2, zIndex: 2 },
+    { id: 'primary-spell:3', row: 30, zIndex: 30 },
+  ], 40)
+  assert.equal(view.count, 3)
+  assert.equal(view.hailMeshCount, 1)
+  assert.equal(view.hailMeshRunCount, 1)
+  assert.equal(view.waterMeshActorCount, 1)
+  assert.equal(view.waterMeshNormalFrostCount, 0)
+  assert.equal(view.waterMeshRunCount, 1)
+  assert.equal(root.children.filter(({ label }) => label === 'water-hail').length, 0)
+  assert.equal(root.children.filter(({ label }) => label.startsWith('primary-water-mesh-run')).length, 1)
+
+  view.update({ nextId: 4, projectiles: [], transients: [] }, WORLD_KEY)
+  view.applyBoneyardPainterDepths([], 1)
+  assert.equal(view.count, 0)
+  assert.equal(view.hailMeshCount, 0)
+  assert.equal(view.hailMeshRunCount, 0)
+  view.destroy()
+  assert.equal(root.children.length, 0)
+})
+
+test('Boneyard Water mesh owns normal Frost while Frost-over retains its post-world view', () => {
+  const root = new Container()
+  const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), testShader())
+  const normal = water(normalWaterId(10))
+  const over = water(overWaterId(10))
+  view.update({ nextId: 100, projectiles: [], transients: [normal, over] }, WORLD_KEY, 100)
+  const layers = view.painterLayers()
+  assert.deepEqual(layers.map(({ id }) => id), [
+    `primary-spell:${normal.id}`,
+    `primary-spell:${over.id}`,
+  ])
+  assert.equal(layers[0]!.meshActorId, normal.id)
+  assert.equal(layers[0]!.queueFamily, 'zanim')
+  assert.equal(layers[1]!.meshActorId, undefined)
+  assert.equal(layers[1]!.lane, 'post-world-queue')
+  view.applyBoneyardPainterDepths([
+    { id: `primary-spell:${normal.id}`, row: 1, zIndex: 1 },
+  ], 30)
+  assert.equal(view.waterMeshActorCount, 1)
+  assert.equal(view.waterMeshNormalFrostCount, 1)
+  assert.equal(view.waterMeshRunCount, 1)
+  assert.equal(root.children.filter(({ label }) => label === 'water').length, 1)
+  assert.equal(root.children.filter(({ label }) => label.startsWith('primary-water-mesh-run')).length, 1)
+  view.destroy()
+  assert.equal(root.children.length, 0)
 })
 
 test('Air/Water type guard rejects unrelated primary transients', () => {
@@ -91,6 +154,20 @@ test('Hail and Cold Aura plans retain their authoritative motion fields', () => 
   assert.equal(NATIVE_AIR_WATER_SPRITES.hurricaneCore.entry, 15)
   assert.equal(NATIVE_AIR_WATER_SPRITES.hurricaneCore.atlas, 'DeadHawg')
   assert.equal(NATIVE_AIR_WATER_SPRITES.hurricaneLane.entry, 84)
+  assert.deepEqual(NATIVE_WATER_AURA_SAFE_ALPHA_TRIM, {
+    height: 60,
+    width: 63,
+    x: 0,
+    y: 2,
+  })
+  for (const ageTicks of [200, 0, 100, 200]) {
+    assert.equal(nativeWaterAuraVisualPlan({
+      ageTicks,
+      alphaDecay: Math.fround(0.15 / 720),
+      initialRotationDegrees: 90,
+      rotationStepDegrees: 0.5,
+    }).scale, repeatedFloatScale(1.0149999856948853, ageTicks))
+  }
 })
 
 test('Hurricane painter owns the stock core and both enhanced/low lane branches', () => {
@@ -192,8 +269,43 @@ function worldTextures(): PlayerWorldTextures {
         hurricaneCore: Texture.EMPTY,
         hurricaneLane: Texture.EMPTY,
       },
+      frost: {
+        core: Texture.EMPTY,
+        over: Texture.EMPTY,
+      },
     },
   } as unknown as PlayerWorldTextures
+}
+
+function water(id: number): PrimarySpellWaterTransientState {
+  return {
+    ageTicks: 1,
+    direction: { x: 1, y: 0 },
+    id,
+    kind: 'water',
+    lightRegistration: null,
+    obstructionDistance: null,
+    obstructionPoint: null,
+    origin: { x: 10, y: 20 },
+    ownerId: 'wizard',
+    painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: id + 100 }],
+    speed: 4,
+    underpowered: false,
+    variant: 0,
+    worldKey: WORLD_KEY,
+  }
+}
+
+function normalWaterId(first: number): number {
+  let id = first
+  while (waterFrostJetKind(id) !== 'normal') id += 1
+  return id
+}
+
+function overWaterId(first: number): number {
+  let id = first
+  while (waterFrostJetKind(id) !== 'over') id += 1
+  return id
 }
 
 function hurricaneLanes() {
@@ -209,4 +321,8 @@ function visibleSprites(container: Container): Sprite[] {
   return container.children.filter((child): child is Sprite => (
     child instanceof Sprite && child.visible
   ))
+}
+
+function testShader(): Shader {
+  return new Shader({ resources: {} } as unknown as ConstructorParameters<typeof Shader>[0])
 }

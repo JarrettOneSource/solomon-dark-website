@@ -109,8 +109,7 @@ function createNativeStaticSurfaceMesh(
       mesh.geometry.destroy(true)
     },
     update(scalars) {
-      writeNativeStaticSurfaceVertexColors(colors, scalars)
-      colorBuffer.update()
+      if (writeNativeStaticSurfaceVertexColors(colors, scalars)) colorBuffer.update()
     },
   }
 }

@@ -7,6 +7,13 @@ export type NativeSpriteRecordSourceUv = readonly [
   bottom: number,
 ]
 
+export interface NativeSpriteRecordTrim {
+  readonly height: number
+  readonly width: number
+  readonly x: number
+  readonly y: number
+}
+
 interface NativeSpriteRecordTextureOptions {
   readonly frame: Rectangle
   readonly orig?: Rectangle
@@ -60,6 +67,47 @@ export function nativeSpriteRecordTexture({
   texture.on('update', applyNativeUvs)
   applyNativeUvs()
   return texture
+}
+
+export function nativeSpriteRecordTrimmedTexture(
+  source: Texture,
+  trim: NativeSpriteRecordTrim,
+): Texture {
+  const logicalWidth = source.orig.width
+  const logicalHeight = source.orig.height
+  const sourceTrim = source.trim
+  const sourceHasNontrivialTrim = sourceTrim !== null && sourceTrim !== undefined && (
+    sourceTrim.x !== 0
+    || sourceTrim.y !== 0
+    || sourceTrim.width !== logicalWidth
+    || sourceTrim.height !== logicalHeight
+  )
+  if (
+    sourceHasNontrivialTrim
+    || source.frame.width !== logicalWidth
+    || source.frame.height !== logicalHeight
+  ) throw new TypeError('native sprite alpha trim requires an untrimmed source record')
+  if (
+    ![trim.x, trim.y, trim.width, trim.height].every(Number.isInteger)
+    || trim.x < 0
+    || trim.y < 0
+    || trim.width <= 0
+    || trim.height <= 0
+    || trim.x + trim.width > logicalWidth
+    || trim.y + trim.height > logicalHeight
+  ) throw new RangeError('native sprite alpha trim must fit its logical record')
+  return nativeSpriteRecordTexture({
+    frame: source.frame,
+    orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
+    source: source.source,
+    sourceUv: [
+      trim.x / logicalWidth,
+      trim.y / logicalHeight,
+      (trim.x + trim.width) / logicalWidth,
+      (trim.y + trim.height) / logicalHeight,
+    ],
+    trim: new Rectangle(trim.x, trim.y, trim.width, trim.height),
+  })
 }
 
 export function nativeSpriteRecordUvs(

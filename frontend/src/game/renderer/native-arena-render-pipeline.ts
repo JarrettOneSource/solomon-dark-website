@@ -27,6 +27,7 @@ export type NativeArenaRgba = readonly [
 ]
 
 export const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
+  if (outColor.a <= 0.0 || vColor.a <= 0.0) discard;
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
   vec3 sampledTextureColor = texturePremultiplied > 0.5 && textureAlpha > 0.0
@@ -481,6 +482,7 @@ uniform sampler2D uTexture;
 
 void main(void) {
   vec4 textureColor = texture2D(uTexture, vUV);
+  if (textureColor.a <= 0.0 || vColor.a <= 0.0) discard;
   float vertexAlpha = vColor.a;
   vec3 vertexColor = vertexAlpha > 0.0 ? vColor.rgb / vertexAlpha : vec3(0.0);
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;

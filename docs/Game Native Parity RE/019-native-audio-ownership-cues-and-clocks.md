@@ -12,6 +12,46 @@ that channel. Music owns two module channels and transitions by name through
 `0x00409CD0`; `Music::Tick` (`0x00409610`) advances the incoming and outgoing
 gains by `1 / transitionTicks` on the already-recovered 100 Hz game clock.
 
+## Hail one-shot channel saturation
+
+Overlap is bounded per native `Sound`; it is not an unlimited voice stream.
+The four grouped Hail registry constructions at `0x004F1CDD`, `0x004F1D33`,
+`0x004F1D89`, and `0x004F1DDF` each push `10` before constructing the by-value
+path argument and calling `Sound_Load` at `0x004F1D24`, `0x004F1D7A`,
+`0x004F1DD0`, and `0x004F1E26`. `Sound_Load` returns with `ret 0x20`; its final
+dword is read from `[ebp+0x24]`, passed as the `max` argument to
+`BASS_SampleLoad`, and stored at `Sound +0x20`.
+
+The channel acquisition helper at `0x00407A20` first scans the Sound-owned
+channel list. `BASS_ChannelIsActive(channel) == 1` keeps a channel occupied;
+any inactive channel object is reused. If every retained channel is active,
+instructions `0x00407A8F..0x00407A95` compare the list count with
+`Sound +0x20`; a count greater than or equal to ten returns null at
+`0x00407B5E` without calling `BASS_SampleGetChannel` or
+`BASS_ChannelPlay`. Only a count below ten allocates another 16-byte channel
+record and obtains a sample channel.
+
+`Anim_Hail` therefore may request every native bounce edge, but each of its
+four sample variants owns at most ten simultaneous channels: forty audible
+Hail voices in total. Saturated requests are intentionally inaudible and do
+not replace an active voice. Browser playback must preserve the same
+per-sample active-voice gate and release capacity only when that exact sample
+source ends. Creating an unbounded `AudioBufferSourceNode` and `GainNode` for
+every replicated Hail edge is not native overlap.
+
+The browser channel objects must also be retained. A normal Web Audio
+`AudioBufferSourceNode` is one-use, so enforcing ten active nodes while
+destroying and recreating a node and gain after each 0.11--0.26-second sample
+still does not match the `Sound` list at `+0x08..+0x1C`. The stock list keeps
+its ten 16-byte channel records and `0x00407A20` reuses an inactive record.
+For Hail, the browser equivalent is one scene-owned audio-render-thread mixer
+with four resident PCM buffers and ten persistent logical slots per buffer.
+An admitted request resets one inactive slot to sample position zero with the
+unchanged pitch and gain. The slot becomes inactive only after that PCM voice
+finishes; saturation still rejects without replacing an active slot. The
+shared mixer output passes through the existing game master gain and teardown
+retires the processor once with the audio director.
+
 The current scope changes music as follows:
 
 | Owner | Native call site | Module entry | Transition |

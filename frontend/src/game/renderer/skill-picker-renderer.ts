@@ -2,6 +2,7 @@ import {
   Container,
   MeshSimple,
   NineSliceSprite,
+  Rectangle,
   Sprite,
   TilingSprite,
   type Texture,
@@ -24,10 +25,12 @@ import {
   SKILL_PICKER_ICON_ANCHOR_OFFSET,
   SKILL_PICKER_INSIGHT_COMPOSITE,
   SKILL_PICKER_INSIGHT_LABEL_Y,
+  SKILL_PICKER_OFFER_CACHE_BOUNDS,
   SKILL_PICKER_PANEL,
   SKILL_PICKER_SIZE,
   skillPickerCardPresentation,
   skillPickerCardCenters,
+  skillPickerCardUsesLiveLayer,
   skillPickerDetailPresentation,
   skillPickerInsightAlpha,
   skillPickerPanelBounds,
@@ -103,6 +106,15 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   const panelLayer = new Container()
   const chromeLayer = new Container()
   const offerLayer = new Container()
+  const staticOfferLayer = new Container()
+  staticOfferLayer.boundsArea = new Rectangle(
+    SKILL_PICKER_OFFER_CACHE_BOUNDS.x,
+    SKILL_PICKER_OFFER_CACHE_BOUNDS.y,
+    SKILL_PICKER_OFFER_CACHE_BOUNDS.width,
+    SKILL_PICKER_OFFER_CACHE_BOUNDS.height,
+  )
+  const insightOfferLayer = new Container()
+  offerLayer.addChild(staticOfferLayer, insightOfferLayer)
   const detailLayer = new Container()
   ambient.alpha = 0
   panelLayer.alpha = 0
@@ -229,12 +241,13 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       insightPanels = panel.insightCards
       selectionPanels = panel.cards
       insightCardTreatments = []
-      offerLayer.removeChildren().forEach((child) => child.destroy({ children: true }))
+      staticOfferLayer.removeChildren().forEach((child) => child.destroy({ children: true }))
+      insightOfferLayer.removeChildren().forEach((child) => child.destroy({ children: true }))
       const levelLine = `Y O U   A R E   N O W   L E V E L   ${offer.level}`
       for (let degrees = 0; degrees < 360; degrees += 45) {
         const radians = degrees * Math.PI / 180
         addBitmapText(
-          offerLayer,
+          staticOfferLayer,
           resources,
           levelLine,
           'menu',
@@ -244,7 +257,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         )
       }
       addBitmapText(
-        offerLayer,
+        staticOfferLayer,
         resources,
         levelLine,
         'menu',
@@ -254,7 +267,12 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       )
       const centers = skillPickerCardCenters(offer.options.length)
       offer.options.forEach((option, index) => {
-        const insight = addSkillCard(offerLayer, resources, option, centers[index]!)
+        const insight = addSkillCard(
+          skillPickerCardUsesLiveLayer(option) ? insightOfferLayer : staticOfferLayer,
+          resources,
+          option,
+          centers[index]!,
+        )
         insightPanels[index]!.visible = insight !== null
         if (insight !== null) {
           insightCardTreatments.push({ cardIndex: index, pulsing: insight })
@@ -272,9 +290,17 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
             actionBounds.left + actionBounds.width / 2,
             actionBounds.top + actionBounds.height / 2,
           )
-          offerLayer.addChild(action)
+          staticOfferLayer.addChild(action)
         }
       }
+      if (!staticOfferLayer.isCachedAsTexture) {
+        staticOfferLayer.cacheAsTexture({
+          antialias: false,
+          resolution: 1,
+          scaleMode: 'nearest',
+        })
+      }
+      staticOfferLayer.updateCacheTexture()
       application.renderer.render(application.stage)
     },
   }

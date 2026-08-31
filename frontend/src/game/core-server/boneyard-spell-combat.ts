@@ -559,6 +559,7 @@ export function resolveBoneyardSpellCombat(
       id,
       origin: projectile.position,
       ownerId: projectile.ownerId,
+      registerWorldPainter: registerCombatPainter,
       tick,
       worldKey: projectile.worldKey,
     })))

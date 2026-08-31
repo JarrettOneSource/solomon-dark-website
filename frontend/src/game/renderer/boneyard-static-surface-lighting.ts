@@ -132,16 +132,25 @@ export function writeNativeWallVertexScalars(
 export function writeNativeStaticSurfaceVertexColors(
   colors: Uint8Array,
   scalars: ArrayLike<number>,
-): void {
+): boolean {
   if (colors.length !== scalars.length * 4) {
     throw new Error('Native static-surface color buffer does not match its lighting grid.')
   }
+  let changed = false
   for (let index = 0; index < scalars.length; index += 1) {
     const lane = Math.trunc(Math.max(0, Math.min(1, scalars[index]!)) * 255)
     const offset = index * 4
+    if (
+      colors[offset] === lane
+      && colors[offset + 1] === lane
+      && colors[offset + 2] === lane
+      && colors[offset + 3] === 255
+    ) continue
     colors[offset] = lane
     colors[offset + 1] = lane
     colors[offset + 2] = lane
     colors[offset + 3] = 255
+    changed = true
   }
+  return changed
 }

@@ -25,7 +25,7 @@ import {
   type GameCollegeInvitation,
   type GameChatRejection,
   type GamePlayerCardProfile,
-  type GameSnapshot,
+  type GameClientSnapshot,
   type GameSessionKind,
   type GameplayPauseSource,
   type GameplayPauseState,
@@ -87,6 +87,7 @@ import {
   EntityReplicationGapError,
   EntityReplicationReconstructor,
 } from '../protocol/entity-replication.ts'
+import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
 import { appendGameChatMessage } from '../game-chat.ts'
 
 export interface GameClientSessionOptions {
@@ -149,7 +150,7 @@ export interface GameClientSession {
   getPingMs(): number | null
   getPartyState(): LocalPartyState | null
   getSaveCheckpoint(): GameSaveCheckpoint | null
-  getSnapshot(): GameSnapshot
+  getSnapshot(): GameClientSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onChatMessage(listener: (message: GameChatMessage) => void): () => void
   onChatRejected(listener: (rejection: GameChatRejection) => void): () => void
@@ -170,7 +171,7 @@ export interface GameClientSession {
   onPartyState(listener: (state: LocalPartyState) => void): () => void
   onPartyAction(listener: (result: GamePartyActionResult) => void): () => void
   onSaveCheckpoint(listener: (checkpoint: GameSaveCheckpoint) => void): () => void
-  onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
+  onSnapshot(listener: (snapshot: GameClientSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
@@ -274,7 +275,7 @@ export function connectGameClientSession(
     let destroyed = false
     let deploymentRestarting = false
     let welcome: ServerWelcomeMessage | undefined
-    let snapshot: GameSnapshot | undefined
+    let snapshot: GameClientSnapshot | undefined
     let presentationTimeline: HubPresentationTimeline | undefined
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
@@ -311,7 +312,7 @@ export function connectGameClientSession(
     let lastChatSequence = 0
     let enemyEventCursor: { eventId: number; runId: string } | null = null
     const now = options.now ?? (() => performance.now())
-    const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
+    const snapshotListeners = new Set<(snapshot: GameClientSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     const chatMessageListeners = new Set<(message: GameChatMessage) => void>()
     const chatRejectionListeners = new Set<(rejection: GameChatRejection) => void>()
@@ -362,7 +363,7 @@ export function connectGameClientSession(
         }
         welcome = message
         authoritativeCheatsEnabled = message.cheatsEnabled
-        snapshot = message.snapshot
+        snapshot = createGameClientSnapshot(message.snapshot)
         gameplayPause = message.gameplayPause
         gameplayResumeGrace = message.gameplayResumeGrace
         requestedHubActivity = snapshot.world.kind === 'hub'
@@ -592,7 +593,7 @@ export function connectGameClientSession(
         return
       }
       if (message.sequence <= lastSnapshotSequence) return
-      let reconstructedSnapshot: GameSnapshot
+      let reconstructedSnapshot: GameClientSnapshot
       try {
         reconstructedSnapshot = entityReplication.apply(message.frame, message.sequence)
       } catch (error) {
@@ -1518,7 +1519,7 @@ export function connectGameClientSession(
       })
     }
 
-    function publishEnemyEvents(nextSnapshot: GameSnapshot): void {
+    function publishEnemyEvents(nextSnapshot: GameClientSnapshot): void {
       if (!isBoneyardGameSnapshot(nextSnapshot)) {
         enemyEventCursor = null
         return
@@ -1819,7 +1820,7 @@ function diagnosticFailureDetail(failure: GameConnectionFailure): string | null 
 }
 
 function initialEnemyEventCursor(
-  snapshot: GameSnapshot,
+  snapshot: GameClientSnapshot,
 ): { eventId: number; runId: string } | null {
   if (!isBoneyardGameSnapshot(snapshot)) return null
   return {

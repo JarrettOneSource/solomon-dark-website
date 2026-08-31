@@ -1,6 +1,7 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
+import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import {
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
@@ -18,43 +19,57 @@ import type {
   BoneyardSolomonSnapshot,
   BoneyardWaveSnapshot,
   BoneyardWorldSnapshot,
+  GameClientSnapshot,
   GameSnapshot,
   ProtocolPlayerState,
 } from '../protocol/game-state.ts'
+import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
 import { lerpCycle } from './hub-presentation-timeline.ts'
 import {
-  copyPrimarySpellState,
-  interpolatePrimarySpellState,
-} from './primary-spell-presentation.ts'
+  createRetainedBoneyardPrimarySpellPresentation,
+  type RetainedBoneyardPrimarySpellPresentation,
+} from './primary-spell-retained-hail-presentation.ts'
 import {
   copyNativeSecondaryState,
   interpolateNativeSecondaryState,
 } from './native-secondary-presentation.ts'
 
-export type BoneyardGameSnapshot = Omit<GameSnapshot, 'world'> & {
+type BoneyardClientGameSnapshot = Omit<GameClientSnapshot, 'world'> & {
   world: BoneyardWorldSnapshot
 }
 
-export interface BoneyardPresentationFrame extends Omit<BoneyardGameSnapshot, 'tick'> {
+type BoneyardAuthoritySnapshot = Omit<GameSnapshot, 'world'> & {
+  world: BoneyardWorldSnapshot
+}
+
+export type BoneyardGameSnapshot = BoneyardAuthoritySnapshot | BoneyardClientGameSnapshot
+
+type BoneyardSnapshotSource = BoneyardGameSnapshot
+
+export interface BoneyardPresentationFrame extends Omit<
+  BoneyardClientGameSnapshot,
+  'primarySpells' | 'tick'
+> {
+  primarySpells: PrimarySpellSimulationState
   tick: number
 }
 
 export interface BoneyardPresentationTimeline {
-  latest(): BoneyardGameSnapshot
-  push(snapshot: BoneyardGameSnapshot, receivedAtMs: number): void
+  latest(): BoneyardClientGameSnapshot
+  push(snapshot: BoneyardSnapshotSource, receivedAtMs: number): void
   sample(nowMs: number): BoneyardPresentationFrame
 }
 
 export interface BoneyardPresentationTimelineOptions {
   initialReceivedAtMs: number
-  initialSnapshot: BoneyardGameSnapshot
+  initialSnapshot: BoneyardSnapshotSource
   serverTickRate: number
   snapshotRate: number
 }
 
 interface TimedSnapshot {
   receivedAtMs: number
-  snapshot: BoneyardGameSnapshot
+  snapshot: BoneyardClientGameSnapshot
 }
 
 const MAX_BUFFERED_SNAPSHOTS = 8
@@ -74,29 +89,33 @@ export function createBoneyardPresentationTimeline(
   const intervalTicks = Math.max(1, options.serverTickRate / options.snapshotRate)
   const history: TimedSnapshot[] = [{
     receivedAtMs: options.initialReceivedAtMs,
-    snapshot: options.initialSnapshot,
+    snapshot: clientBoneyardSnapshot(options.initialSnapshot),
   }]
+  const primarySpellPresentation = createRetainedBoneyardPrimarySpellPresentation()
 
   return {
     latest: () => history.at(-1)!.snapshot,
     push(snapshot, receivedAtMs) {
       requireFinite(receivedAtMs, 'receivedAtMs')
+      const clientSnapshot = clientBoneyardSnapshot(snapshot)
       const latest = history.at(-1)!
-      if (snapshot.tick < latest.snapshot.tick) return
-      if (snapshot.tick === latest.snapshot.tick) {
+      if (clientSnapshot.tick < latest.snapshot.tick) return
+      if (clientSnapshot.tick === latest.snapshot.tick) {
         history[history.length - 1] = {
           receivedAtMs: latest.receivedAtMs,
-          snapshot,
+          snapshot: clientSnapshot,
         }
         return
       }
-      history.push({ receivedAtMs, snapshot })
+      history.push({ receivedAtMs, snapshot: clientSnapshot })
       if (history.length > MAX_BUFFERED_SNAPSHOTS) history.shift()
     },
     sample(nowMs) {
       requireFinite(nowMs, 'nowMs')
       const newest = history.at(-1)!
-      if (history.length === 1) return presentationCopy(newest.snapshot)
+      if (history.length === 1) {
+        return presentationCopy(newest.snapshot, primarySpellPresentation)
+      }
       const elapsedTicks = clamp(
         (nowMs - newest.receivedAtMs) * options.serverTickRate / 1000,
         0,
@@ -110,15 +129,28 @@ export function createBoneyardPresentationTimeline(
         0,
         1,
       )
-      return interpolateSnapshot(older.snapshot, newer.snapshot, blend, targetTick)
+      return interpolateSnapshot(
+        older.snapshot,
+        newer.snapshot,
+        blend,
+        targetTick,
+        primarySpellPresentation,
+      )
     },
   }
 }
 
 export function isBoneyardGameSnapshot(
-  snapshot: GameSnapshot,
-): snapshot is BoneyardGameSnapshot {
+  snapshot: GameClientSnapshot | GameSnapshot,
+): snapshot is BoneyardSnapshotSource {
   return snapshot.world.kind === 'boneyard'
+}
+
+function clientBoneyardSnapshot(
+  snapshot: BoneyardSnapshotSource,
+): BoneyardClientGameSnapshot {
+  if ('hail' in snapshot.primarySpells) return snapshot as BoneyardClientGameSnapshot
+  return createGameClientSnapshot(snapshot) as BoneyardClientGameSnapshot
 }
 
 function bracketSnapshots(
@@ -134,10 +166,11 @@ function bracketSnapshots(
 }
 
 function interpolateSnapshot(
-  older: BoneyardGameSnapshot,
-  newer: BoneyardGameSnapshot,
+  older: BoneyardClientGameSnapshot,
+  newer: BoneyardClientGameSnapshot,
   blend: number,
   targetTick: number,
+  primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
 ): BoneyardPresentationFrame {
   const players: Record<string, ProtocolPlayerState> = {}
   for (const [playerId, olderPlayer] of Object.entries(older.players)) {
@@ -159,7 +192,7 @@ function interpolateSnapshot(
       : newer.materializingPlayerIds,
     modEffects: blend < 1 ? older.modEffects : newer.modEffects,
     players,
-    primarySpells: interpolatePrimarySpellState(
+    primarySpells: primarySpellPresentation.interpolateFrame(
       older.primarySpells,
       newer.primarySpells,
       blend,
@@ -386,7 +419,10 @@ function interpolateGateLeaves(
   return leaves
 }
 
-function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationFrame {
+function presentationCopy(
+  snapshot: BoneyardClientGameSnapshot,
+  primarySpellPresentation: RetainedBoneyardPrimarySpellPresentation,
+): BoneyardPresentationFrame {
   return {
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
@@ -396,7 +432,10 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       id,
       copyPlayer(player),
     ])),
-    primarySpells: copyPrimarySpellState(snapshot.primarySpells),
+    primarySpells: primarySpellPresentation.copyFrame(
+      snapshot.primarySpells,
+      snapshot.tick,
+    ),
     secondaryAbilities: copyNativeSecondaryState(snapshot.secondaryAbilities),
     run: snapshot.run,
     tick: snapshot.tick,

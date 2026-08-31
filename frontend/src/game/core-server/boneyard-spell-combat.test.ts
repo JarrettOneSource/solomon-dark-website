@@ -1192,6 +1192,54 @@ test('Earth gathers strict roots once, shrinks, and sheds one independent contac
   assert.equal(repeated.spells.transients[0]?.ageTicks, 0)
 })
 
+test('Earth contact rocks consume the shared actor registrar instead of the spell id', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 100,
+      maximumHealth: 100,
+    })),
+  }
+  const registrations: Array<{ managerLane: string; registrationOrdinal: number }> = []
+  let nextRegistrationOrdinal = 500
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spellState({
+      projectiles: [projectile({ id: 4, kind: 'earth' })],
+    }),
+    [],
+    1,
+    WORLD_KEY,
+    COMBAT_RNG,
+    null,
+    (managerLane) => {
+      const registration = { managerLane, registrationOrdinal: nextRegistrationOrdinal }
+      nextRegistrationOrdinal += 1
+      registrations.push(registration)
+      return registration
+    },
+  )
+
+  const bit = result.spells.transients.find(({ kind }) => kind === 'earth-boulder-bit')
+  assert.ok(bit?.kind === 'earth-boulder-bit')
+  assert.deepEqual(bit.painterRegistrations, [
+    { managerLane: 'actor', registrationOrdinal: 500 },
+  ])
+  assert.deepEqual(registrations[0], {
+    managerLane: 'actor',
+    registrationOrdinal: 500,
+  })
+  assert.ok(registrations.every(({ managerLane }, index) => (
+    managerLane === 'actor'
+    && registrations[index]?.registrationOrdinal === 500 + index
+  )))
+  assert.notEqual(bit.painterRegistrations[0]?.registrationOrdinal, bit.id)
+})
+
 test('Earth contact consumes the finalized quadratic release pool without scaling charge twice', () => {
   const enemies = spawnEnemies([{ position: { x: 20, y: 0 }, token: 'SKELETON' }])
   const result = resolveBoneyardSpellCombat(enemies, spellState({

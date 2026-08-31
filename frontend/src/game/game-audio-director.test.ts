@@ -10,6 +10,7 @@ import {
 import type { GameAudioSources } from './game-audio-native.ts'
 import { NATIVE_TUTORIAL_CUES } from './core-kernels/native-tutorial.ts'
 import './game-audio-web-playback.test.ts'
+import './game-audio-native-sound-voice-pool.test.ts'
 import '../lib/media-element-gain.test.ts'
 import './player-footstep-audio.test.ts'
 import './primary-spell-audio.test.ts'
@@ -552,6 +553,38 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
   assert.equal(playback.destroyCalls, 1)
   assert.equal(created.length, 0)
   await flushPromises()
+})
+
+test('passes the recovered ten-channel limit only for native Hail samples', () => {
+  const { director, playback } = fixture()
+  director.playSound('hail-bounce-0')
+  director.playSound('hail-bounce-1')
+  director.playSound('hail-bounce-2')
+  director.playSound('hail-bounce-3')
+  director.playSound('click')
+
+  assert.deepEqual(playback.plays.map(({ options, source }) => ({ options, source })), [
+    {
+      options: { maximumVoices: 10, playbackRate: 1, volume: 1 },
+      source: 'hail-0.wav',
+    },
+    {
+      options: { maximumVoices: 10, playbackRate: 1, volume: 1 },
+      source: 'hail-1.wav',
+    },
+    {
+      options: { maximumVoices: 10, playbackRate: 1, volume: 1 },
+      source: 'hail-2.wav',
+    },
+    {
+      options: { maximumVoices: 10, playbackRate: 1, volume: 1 },
+      source: 'hail-3.wav',
+    },
+    {
+      options: { playbackRate: 1, volume: 1 },
+      source: 'click.wav',
+    },
+  ])
 })
 
 test('owns independent native loop channels and updates gain without restarting', async () => {

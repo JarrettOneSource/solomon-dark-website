@@ -58,7 +58,10 @@ import {
 import {
   NativeBoneyardWeather,
 } from '../core-kernels/native-boneyard-weather.ts'
-import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
+import {
+  nativeSecondaryTargetMaterialTint,
+  type NativeSecondaryTargetEffectState,
+} from '../core-kernels/native-secondary-abilities.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_TARGET,
   nativeTutorialCameraBounds,
@@ -421,7 +424,12 @@ interface BoneyardRendererFrameDiagnostics {
   }>[]
   primarySpellCount: number
   primarySpellPainterDepths: Readonly<Record<string, number>>
+  primaryHailMeshCount: number
+  primaryHailMeshRunCount: number
   primarySpellKinds: readonly string[]
+  primaryWaterMeshActorCount: number
+  primaryWaterMeshNormalFrostCount: number
+  primaryWaterMeshRunCount: number
   playerScreenX: number
   playerScreenY: number
   playerWalkPose: number
@@ -1032,7 +1040,12 @@ export async function createBoneyardWorldRenderer(
     playerSamples: [],
     primarySpellCount: 0,
     primarySpellPainterDepths: {},
+    primaryHailMeshCount: 0,
+    primaryHailMeshRunCount: 0,
     primarySpellKinds: [],
+    primaryWaterMeshActorCount: 0,
+    primaryWaterMeshNormalFrostCount: 0,
+    primaryWaterMeshRunCount: 0,
     playerScreenX: Number.NaN,
     playerScreenY: Number.NaN,
     playerWalkPose: 0,
@@ -1486,7 +1499,14 @@ export async function createBoneyardWorldRenderer(
       }))
       frameDiagnostics.primarySpellCount = scene.primarySpellCount
       frameDiagnostics.primarySpellPainterDepths = scene.primarySpellPainterDepths
+      frameDiagnostics.primaryHailMeshCount = scene.primaryHailMeshCount
+      frameDiagnostics.primaryHailMeshRunCount = scene.primaryHailMeshRunCount
       frameDiagnostics.primarySpellKinds = scene.primarySpellKinds
+      frameDiagnostics.primaryWaterMeshActorCount = scene.primaryWaterMeshActorCount
+      frameDiagnostics.primaryWaterMeshNormalFrostCount = (
+        scene.primaryWaterMeshNormalFrostCount
+      )
+      frameDiagnostics.primaryWaterMeshRunCount = scene.primaryWaterMeshRunCount
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
         + viewport.width / 2
       frameDiagnostics.playerScreenY = (player.position.y - camera.y) * camera.zoom
@@ -1865,9 +1885,14 @@ class BoneyardDynamicScene {
   private readonly collisionWorld: BoneyardCollisionWorld
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   private readonly enemies: NativeEnemyViews
+  private readonly enemyLightRegistrations = new Map<
+    number,
+    NativeWorldManagerRegistration
+  >()
   private readonly enemyDeathEffects: NativeEnemyDeathEffectViews
   private readonly enemyProjectileEffects: NativeEnemyProjectileEffectViews
   private readonly enemyProjectiles: NativeEnemyProjectileViews
+  private readonly earthquakeTreeWobbles = new Map<string, number>()
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gateShadowDepthOwners = new Map<string, ContainerChild>()
   private readonly gates: BoneyardGateViews
@@ -1893,6 +1918,10 @@ class BoneyardDynamicScene {
   private readonly mageLightningPulses: NativeMageLightningPulseViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly secondaryAbilities: NativeSecondaryWorldView
+  private readonly secondaryEffectsByTarget = new Map<
+    number,
+    NativeSecondaryTargetEffectState
+  >()
   private readonly seeker: NativeHagathaSeekerView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
@@ -1947,7 +1976,7 @@ class BoneyardDynamicScene {
     preWorld.sortableChildren = true
     preWorld.zIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX / 2
     root.addChild(preWorld)
-    this.primarySpells = new PrimarySpellWorldView(root, textures)
+    this.primarySpells = PrimarySpellWorldView.forBoneyard(root, textures)
     this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer, {
       preWorldRoot: preWorld,
     })
@@ -2329,12 +2358,15 @@ class BoneyardDynamicScene {
     }
     for (const actor of snapshot.secondaryAbilities.actors) {
       if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      const pointGain = actor.kind === 'ring-fire-explosion'
+        ? (this.secondaryAbilities.fireExplosionPointGain(actor.id)
+          ?? pointGainAt(actor.position))
+        : 1
       const source = nativeSecondaryProviderLightSource(
         actor,
         presentationFrame,
         settings.multipleShadows,
-        this.secondaryAbilities.fireExplosionPointGain(actor.id)
-          ?? pointGainAt(actor.position),
+        pointGain,
       )
       if (!source) continue
       lightProviderOwners.push({
@@ -2408,10 +2440,11 @@ class BoneyardDynamicScene {
         sources: [source],
       })
     }
-    const enemyLightRegistrations = new Map(snapshot.world.enemies.map((enemy) => [
-      enemy.id,
-      enemy.lightRegistration,
-    ]))
+    const enemyLightRegistrations = this.enemyLightRegistrations
+    enemyLightRegistrations.clear()
+    for (const enemy of snapshot.world.enemies) {
+      enemyLightRegistrations.set(enemy.id, enemy.lightRegistration)
+    }
     for (const batch of this.mageLightningPulses.pathLightBatches) {
       const miscLightAppendOrdinal = snapshot.secondaryAbilities.actors.reduce(
         (nextOrdinal, actor) => (
@@ -2434,13 +2467,13 @@ class BoneyardDynamicScene {
         sources: batch.sources,
       })
     }
-    const appendOrderedMiscBatches = lightMiscBatches.toSorted((first, second) => (
+    lightMiscBatches.sort((first, second) => (
       first.miscLightAppendOrdinal - second.miscLightAppendOrdinal
       || first.birthTick - second.birthTick
       || first.id - second.id
     ))
     for (const batch of mergeNativeWorldManagerOwners(
-      [appendOrderedMiscBatches],
+      [lightMiscBatches],
       ({ registration }) => registration,
     )) {
       if (batch.registration.managerLane !== 'actor') {
@@ -2537,7 +2570,8 @@ class BoneyardDynamicScene {
       snapshot.tick,
       localPlayer.position,
     )
-    const earthquakeTreeWobbles = new Map<string, number>()
+    const earthquakeTreeWobbles = this.earthquakeTreeWobbles
+    earthquakeTreeWobbles.clear()
     for (const actor of snapshot.secondaryAbilities.actors) {
       if (
         actor.kind !== 'earthquake-scenery-wobble'
@@ -2612,11 +2646,13 @@ class BoneyardDynamicScene {
         nativeBoneyardLightTint(worldLightScalar(layer.regionLightPoint)),
       )
     }
-    const secondaryEffectsByTarget = new Map(
-      snapshot.secondaryAbilities.targetEffects
-        .filter(({ worldKey }) => worldKey === `boneyard:${snapshot.world.runId}`)
-        .map((effect) => [effect.targetId, effect] as const),
-    )
+    const secondaryEffectsByTarget = this.secondaryEffectsByTarget
+    secondaryEffectsByTarget.clear()
+    for (const effect of snapshot.secondaryAbilities.targetEffects) {
+      if (effect.worldKey === `boneyard:${snapshot.world.runId}`) {
+        secondaryEffectsByTarget.set(effect.targetId, effect)
+      }
+    }
     for (const enemy of enemySnapshots) {
       const lightTint = nativeBoneyardLightTint(worldLightScalar(enemy.position))
       this.enemies.setTint(enemy.id, nativeSecondaryTargetMaterialTint(
@@ -2713,10 +2749,7 @@ class BoneyardDynamicScene {
     }
     for (const layer of primarySpellPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
-      dynamicLayers.push({
-        ...layer,
-        queueFamily: layer.queueFamily,
-      })
+      dynamicLayers.push(layer as DynamicPainterLayer)
     }
     for (const layer of mageLightningPainterLayers) {
       if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
@@ -2738,15 +2771,7 @@ class BoneyardDynamicScene {
       if (layer.registration === null || layer.registration === undefined) {
         throw new Error(`secondary painter ${layer.id} lost its manager registration`)
       }
-      dynamicLayers.push({
-        id: layer.id,
-        insertions: layer.insertions,
-        queueFamily: layer.queueFamily,
-        registration: layer.registration,
-        sortBias: layer.sortBias,
-        visible: layer.visible,
-        worldY: layer.worldY,
-      })
+      dynamicLayers.push(layer as DynamicPainterLayer)
     }
     for (const enemy of enemySnapshots) {
       dynamicLayers.push(nativeEnemyPainterLayer(enemy))
@@ -2892,19 +2917,10 @@ class BoneyardDynamicScene {
     this.seeker.setDepth(
       (positionedDynamics.get(`player:${localPlayerId}`)?.zIndex ?? 1) + 0.25,
     )
-    for (const layer of primarySpellPainterLayers) {
-      this.primarySpells.setDepth(
-        layer.id,
-        layer.lane === 'post-world-queue'
-          ? order.foregroundZIndex + 0.5
-          : positionedDynamics.get(layer.id)?.zIndex ?? 1,
-      )
-      applyInsertedPainterDepths(
-        layer.insertions,
-        positionedDynamics,
-        (id, depth) => this.primarySpells.setDepth(id, depth),
-      )
-    }
+    this.primarySpells.applyBoneyardPainterDepths(
+      order.dynamicLayers,
+      order.foregroundZIndex + 0.5,
+    )
     const targetContactDepths = nativeMageLightningTargetContactDepths(
       mageLightningPainterLayers,
       Object.keys(snapshot.players),
@@ -3201,8 +3217,28 @@ class BoneyardDynamicScene {
     return this.primarySpells.painterDepths
   }
 
+  get primaryHailMeshCount(): number {
+    return this.primarySpells.hailMeshCount
+  }
+
+  get primaryHailMeshRunCount(): number {
+    return this.primarySpells.hailMeshRunCount
+  }
+
   get primarySpellKinds(): readonly string[] {
     return this.primarySpells.kinds
+  }
+
+  get primaryWaterMeshActorCount(): number {
+    return this.primarySpells.waterMeshActorCount
+  }
+
+  get primaryWaterMeshNormalFrostCount(): number {
+    return this.primarySpells.waterMeshNormalFrostCount
+  }
+
+  get primaryWaterMeshRunCount(): number {
+    return this.primarySpells.waterMeshRunCount
   }
 
   get secondaryAbilityCount(): number {
@@ -3270,6 +3306,7 @@ class BoneyardDynamicScene {
   }
 
   destroy(): void {
+    this.painterOrderPlanner.clear()
     this.complexShadows.destroy()
     this.primarySpells.destroy()
     this.secondaryAbilities.destroy()

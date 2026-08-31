@@ -7,6 +7,7 @@ import type {
   BoneyardGoodieSnapshot,
   BoneyardLootSnapshot,
   BoneyardMaggotSnapshot,
+  GameClientSnapshot,
   GameSnapshot,
   GameSnapshotFrame,
   ProtocolPlayerEconomy,
@@ -74,6 +75,7 @@ import {
   boneyardGoodieSample,
   materializeBoneyardGoodie,
 } from './boneyard-goodie-replication.ts'
+import { createPrimarySpellSimulationFrame } from './primary-spell-hail-replication.ts'
 
 export const REPLICATED_ENTITY_TYPES = {
   boneyardEnemy: BONEYARD_ENEMY_ENTITY_TYPE_ID,
@@ -297,7 +299,7 @@ export function createGameSnapshotFrame(
     materializingPlayerIds: snapshot.materializingPlayerIds,
     modEffects: snapshot.modEffects,
     players: playerSnapshotFrames(snapshot.players, baseline, keyframe),
-    primarySpells: snapshot.primarySpells,
+    primarySpells: createPrimarySpellSimulationFrame(snapshot.primarySpells),
     secondaryAbilities: snapshot.secondaryAbilities,
     run: snapshot.run,
     tick: snapshot.tick,
@@ -380,7 +382,7 @@ export class EntityReplicationReconstructor {
   private lastSequence = 0
   private worldIdentity: string | null = null
 
-  reset(snapshot: GameSnapshot, sequence: number): void {
+  reset(snapshot: GameSnapshot | GameClientSnapshot, sequence: number): void {
     this.descriptors.clear()
     this.playerEconomies.clear()
     for (const descriptor of descriptorMap(snapshot).values()) {
@@ -393,7 +395,7 @@ export class EntityReplicationReconstructor {
     this.worldIdentity = replicatedWorldIdentity(snapshot)
   }
 
-  apply(frame: GameSnapshotFrame, sequence: number): GameSnapshot {
+  apply(frame: GameSnapshotFrame, sequence: number): GameClientSnapshot {
     if (sequence <= this.lastSequence) {
       throw new EntityReplicationGapError('snapshot sequence is not newer')
     }
@@ -542,7 +544,9 @@ export class EntityReplicationGapError extends Error {
   override name = 'EntityReplicationGapError'
 }
 
-function descriptorMap(snapshot: GameSnapshot): Map<string, ReplicatedEntityDescriptor> {
+function descriptorMap(
+  snapshot: GameSnapshot | GameClientSnapshot,
+): Map<string, ReplicatedEntityDescriptor> {
   const descriptors = new Map<string, ReplicatedEntityDescriptor>()
   if (snapshot.world.kind === 'hub') {
     for (const student of snapshot.world.students) {
@@ -582,7 +586,7 @@ function descriptorMap(snapshot: GameSnapshot): Map<string, ReplicatedEntityDesc
   return descriptors
 }
 
-function replicatedWorldIdentity(snapshot: GameSnapshot): string {
+function replicatedWorldIdentity(snapshot: GameSnapshot | GameClientSnapshot): string {
   return snapshot.world.kind === 'hub'
     ? 'hub'
     : `boneyard:${snapshot.world.runId}`

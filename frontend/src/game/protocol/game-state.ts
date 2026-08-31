@@ -29,7 +29,11 @@ import type {
   HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
-import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import type {
+  PrimarySpellProjectileState,
+  PrimarySpellSimulationState,
+  PrimarySpellTransientState,
+} from '../core-kernels/primary-spells.ts'
 import type { NativeWorldManagerRegistration } from '../core-kernels/native-world-manager-order.ts'
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
@@ -41,6 +45,7 @@ import type {
 import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
 import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
+import type { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
 import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
@@ -813,6 +818,24 @@ export interface BoneyardWorldSnapshotFrame {
 
 export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapshotFrame
 
+export type PrimarySpellNonHailTransientState = Exclude<
+  PrimarySpellTransientState,
+  { kind: 'water-hail' }
+>
+
+export interface PrimarySpellWaterHailFrameTable {
+  ownerIds: readonly string[]
+  rows: PrimarySpellWaterHailFrameRows
+  worldKeys: readonly string[]
+}
+
+export interface PrimarySpellSimulationFrameState {
+  hail: PrimarySpellWaterHailFrameTable
+  nextId: number
+  projectiles: readonly PrimarySpellProjectileState[]
+  transients: readonly PrimarySpellNonHailTransientState[]
+}
+
 export interface GameSnapshot {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
@@ -826,13 +849,17 @@ export interface GameSnapshot {
   world: GameWorldSnapshot
 }
 
+export type GameClientSnapshot = Omit<GameSnapshot, 'primarySpells'> & {
+  primarySpells: PrimarySpellSimulationFrameState
+}
+
 export interface GameSnapshotFrame {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
   materializingPlayerIds: readonly string[]
   modEffects: readonly ProtocolModEffect[]
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>
-  primarySpells: PrimarySpellSimulationState
+  primarySpells: PrimarySpellSimulationFrameState
   secondaryAbilities: NativeSecondarySnapshotState
   run: GameRunLifecycleState
   tick: number

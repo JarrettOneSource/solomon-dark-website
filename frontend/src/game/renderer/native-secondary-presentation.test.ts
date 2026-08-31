@@ -22,6 +22,7 @@ import {
   nativeSecondaryProviderLightSource,
 } from './boneyard-lighting.ts'
 import {
+  NativeSecondaryPresentationScratch,
   nativeGolemFacing,
   nativeGolemPresentationPlan,
   nativePlayerMagicShieldPlan,
@@ -32,6 +33,7 @@ import {
   nativeRegionPointGain,
   NativeSecondaryScreenFeedbackPresentation,
   nativeSecondaryWorldShake,
+  updateNativeSecondaryPresentationPlan,
 } from './native-secondary-presentation.ts'
 
 const KINDS: readonly NativeSecondaryActorKind[] = [
@@ -159,6 +161,55 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
     ].includes(kind)) {
       assert.ok(plan.draws.length > 0, `${kind} unexpectedly became invisible`)
     }
+  }
+})
+
+test('view-owned secondary scratch reproduces every plan and reuses hot draw storage', () => {
+  const scratch = new NativeSecondaryPresentationScratch()
+  for (const kind of KINDS) {
+    const source = kind === 'acid-rain'
+      ? { ...actor(kind), phase: 1 }
+      : actor(kind)
+    const expected = nativeSecondaryPresentationPlan(source, 37, 0.75)
+    const actual = updateNativeSecondaryPresentationPlan(scratch, source, 37, 0.75)
+    assert.deepEqual(actual, expected, kind)
+  }
+
+  const first = updateNativeSecondaryPresentationPlan(
+    scratch,
+    { ...actor('moving-fire'), frame: 50, scale: 0.75 },
+    40,
+    1,
+  )
+  const planStorage = first
+  const drawStorage = first.draws[0]
+  const secondSource = { ...actor('moving-fire'), alpha: 0.5, frame: 51, scale: 1.25 }
+  const secondExpected = nativeSecondaryPresentationPlan(secondSource, 41, 1)
+  const second = updateNativeSecondaryPresentationPlan(scratch, secondSource, 41, 1)
+  assert.equal(second, planStorage)
+  assert.equal(second.draws[0], drawStorage)
+  assert.deepEqual(second, secondExpected)
+
+  const fallingStorm = { ...actor('storm-drop'), phase: -155, quantity: 4 }
+  const firstStorm = updateNativeSecondaryPresentationPlan(scratch, fallingStorm, 40, 1)
+  const stormPlanStorage = firstStorm
+  const stormGradientStorage = firstStorm.gradients[0]
+  const nextStorm = { ...fallingStorm, phase: -145, quantity: 4.25 }
+  const secondStorm = updateNativeSecondaryPresentationPlan(scratch, nextStorm, 41, 1)
+  assert.equal(secondStorm, stormPlanStorage)
+  assert.equal(secondStorm.gradients[0], stormGradientStorage)
+  assert.deepEqual(secondStorm, nativeSecondaryPresentationPlan(nextStorm, 41, 1))
+})
+
+test('only ring-fire explosions consume the sampled Region point gain', () => {
+  for (const kind of KINDS) {
+    const source = kind === 'acid-rain'
+      ? { ...actor(kind), phase: 1 }
+      : actor(kind)
+    const dim = nativeSecondaryPresentationPlan(source, 37, 0.25)
+    const full = nativeSecondaryPresentationPlan(source, 37, 1)
+    if (kind === 'ring-fire-explosion') assert.notDeepEqual(dim, full)
+    else assert.deepEqual(dim, full, kind)
   }
 })
 

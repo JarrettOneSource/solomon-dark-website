@@ -1,5 +1,6 @@
 import type { PrimarySpellTransientState } from './core-kernels/primary-spells.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
+import type { PrimarySpellSimulationFrameState } from './protocol/game-state.ts'
 import {
   hubAudioAttenuation,
   type GameSoundCue,
@@ -48,6 +49,124 @@ const HAIL_BOUNCE_CUES = Object.freeze([
   'hail-bounce-2',
   'hail-bounce-3',
 ] as const satisfies readonly GameSoundCue[])
+
+const NO_ACTOR_SOUND_REQUESTS = Object.freeze(
+  [],
+) as readonly NativeAirWaterActorSoundRequest[]
+
+interface RetainedHailSoundState {
+  bounceSoundSequence: number
+  seenGeneration: number
+}
+
+export class NativeAirWaterFrameSoundCursor {
+  private generation = 0
+  private readonly hailById = new Map<number, RetainedHailSoundState>()
+  private listenerWorldKey: string | null = null
+
+  advance(
+    current: PrimarySpellSimulationFrameState,
+    listenerPosition: Readonly<Vector2>,
+    listenerWorldKey: string,
+  ): readonly NativeAirWaterActorSoundRequest[] {
+    if (this.listenerWorldKey !== listenerWorldKey) {
+      this.reset(current, listenerWorldKey)
+      return NO_ACTOR_SOUND_REQUESTS
+    }
+    const previousGeneration = this.generation
+    const generation = previousGeneration + 1
+    let liveActorCount = 0
+    let requests: NativeAirWaterActorSoundRequest[] | undefined
+    const rows = current.hail.rows
+    for (let index = 0; index < rows.length; index += 1) {
+      if (current.hail.worldKeys[rows.worldKeyIndexes[index]!] !== listenerWorldKey) continue
+      liveActorCount += 1
+      const id = rows.ids[index]!
+      const bounceSoundSequence = rows.bounceSoundSequences[index]!
+      const retained = this.hailById.get(id)
+      const earlierSequence = retained?.seenGeneration === previousGeneration
+        ? retained.bounceSoundSequence
+        : null
+      if (earlierSequence !== null && bounceSoundSequence > earlierSequence) {
+        const bounceSoundIndex = rows.bounceSoundIndexes[index]!
+        const bounceSoundPitch = rows.bounceSoundPitches[index]!
+        const cue = bounceSoundIndex === 0xff
+          ? undefined
+          : HAIL_BOUNCE_CUES[bounceSoundIndex]
+        if (!cue || Number.isNaN(bounceSoundPitch)) {
+          throw new Error('Hail bounce sequence advanced without its native sample and pitch')
+        }
+        const sourcePosition = {
+          x: rows.positionXs[index]!,
+          y: rows.positionYs[index]!,
+        }
+        const volume = hubAudioAttenuation(Math.hypot(
+          sourcePosition.x - listenerPosition.x,
+          sourcePosition.y - listenerPosition.y,
+        ))
+        requests ??= []
+        for (
+          let sequence = earlierSequence;
+          sequence < bounceSoundSequence;
+          sequence += 1
+        ) {
+          requests.push({
+            cue,
+            playbackRate: bounceSoundPitch,
+            sourcePosition,
+            volume,
+          })
+        }
+      }
+      if (retained) {
+        retained.bounceSoundSequence = bounceSoundSequence
+        retained.seenGeneration = generation
+      } else {
+        this.hailById.set(id, {
+          bounceSoundSequence,
+          seenGeneration: generation,
+        })
+      }
+    }
+    this.generation = generation
+    this.pruneRetired(liveActorCount)
+    return requests === undefined ? NO_ACTOR_SOUND_REQUESTS : Object.freeze(requests)
+  }
+
+  clear(): void {
+    this.generation = 0
+    this.hailById.clear()
+    this.listenerWorldKey = null
+  }
+
+  reset(
+    current: PrimarySpellSimulationFrameState,
+    listenerWorldKey: string,
+  ): void {
+    this.clear()
+    this.generation = 1
+    this.listenerWorldKey = listenerWorldKey
+    const rows = current.hail.rows
+    for (let index = 0; index < rows.length; index += 1) {
+      if (current.hail.worldKeys[rows.worldKeyIndexes[index]!] !== listenerWorldKey) continue
+      this.hailById.set(rows.ids[index]!, {
+        bounceSoundSequence: rows.bounceSoundSequences[index]!,
+        seenGeneration: this.generation,
+      })
+    }
+  }
+
+  private pruneRetired(liveActorCount: number): void {
+    if (liveActorCount === 0) {
+      this.hailById.clear()
+      return
+    }
+    if (this.hailById.size <= Math.max(64, liveActorCount * 2)) return
+    for (const [id, retained] of this.hailById) {
+      if (retained.seenGeneration !== this.generation) this.hailById.delete(id)
+    }
+  }
+}
 
 /** Converts replicated Hail bounce counters into exactly-once spatial requests. */
 export function newNativeAirWaterActorSoundRequests(

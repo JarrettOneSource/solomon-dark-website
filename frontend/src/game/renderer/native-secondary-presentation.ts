@@ -111,6 +111,196 @@ export interface NativeSecondaryPresentationPlan {
   readonly worldY: number
 }
 
+type MutableSecondarySpriteDraw = {
+  -readonly [Field in keyof NativeSecondarySpriteDraw]: NativeSecondarySpriteDraw[Field]
+}
+
+type MutableSecondaryGradientDraw = {
+  -readonly [Field in keyof NativeSecondaryGradientDraw]: NativeSecondaryGradientDraw[Field]
+}
+
+type MutableSecondaryPresentationPlan = {
+  -readonly [Field in keyof NativeSecondaryPresentationPlan]: NativeSecondaryPresentationPlan[Field]
+}
+
+type NativeAcidActorState = NativeSecondaryActorState & {
+  readonly kind: 'acid-drop' | 'acid-splash'
+}
+
+type NativeStormDropActorState = NativeSecondaryActorState & {
+  readonly kind: 'storm-drop'
+}
+
+export class NativeSecondaryPresentationScratch {
+  private drawCursor = 0
+  private readonly drawPool: MutableSecondarySpriteDraw[] = []
+  private readonly gradientStorage = {
+    topLeft: { x: 0, y: 0 },
+  } as MutableSecondaryGradientDraw
+  private readonly planStorage = {} as MutableSecondaryPresentationPlan
+  private readonly singleDraws: MutableSecondarySpriteDraw[] = []
+  private readonly singleGradients: MutableSecondaryGradientDraw[] = []
+
+  reset(): void {
+    this.drawCursor = 0
+  }
+
+  nextDraw(): MutableSecondarySpriteDraw {
+    const index = this.drawCursor
+    this.drawCursor += 1
+    const draw = this.drawPool[index] ?? ({} as MutableSecondarySpriteDraw)
+    if (index === this.drawPool.length) this.drawPool.push(draw)
+    return draw
+  }
+
+  writeAcidPlan(
+    actor: NativeAcidActorState,
+  ): NativeSecondaryPresentationPlan {
+    const draw = this.nextDraw()
+    draw.atlas = 'BadGuys'
+    if (draw.colorMode !== undefined) delete draw.colorMode
+    draw.offset = ZERO_SECONDARY_DRAW_OFFSET
+    draw.scaleX = actor.scale
+    draw.scaleY = actor.scale
+    this.singleDraws[0] = draw
+    this.singleGradients.length = 0
+    if (actor.kind === 'acid-splash') {
+      draw.alpha = Math.min(1, actor.alpha / ACID_SPLASH_INITIAL_LIFE)
+      draw.blend = 'add'
+      draw.entry = 10
+      draw.role = 'acid-rain-splash'
+      draw.rotationRadians = actor.rotationRadians
+      draw.tint = 0x80ff80
+    } else if (actor.phase < 0) {
+      draw.alpha = 0.25
+      draw.blend = 'normal'
+      draw.entry = 0
+      draw.role = 'acid-raindrop-falling'
+      draw.rotationRadians = 0
+      draw.scaleX = 1
+      draw.scaleY = 1
+      draw.tint = 0xb3f2bf
+      const gradient = this.gradientStorage
+      gradient.bottomAlpha = NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid.bottomAlpha
+      gradient.bottomColor = NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid.bottomColor
+      gradient.height = actor.quantity
+      gradient.role = 'acid-raindrop-streak'
+      gradient.topAlpha = NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid.topAlpha
+      gradient.topColor = NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid.topColor
+      gradient.topLeft.x = -1
+      gradient.topLeft.y = actor.phase
+      gradient.width = NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid.width
+      this.singleGradients[0] = gradient
+    } else {
+      draw.alpha = Math.max(0, 1 - actor.scale * actor.scale)
+      draw.blend = 'normal'
+      draw.entry = 63
+      draw.role = 'acid-raindrop-ground'
+      draw.rotationRadians = 0
+      draw.tint = 0xccffcc
+    }
+    return this.writePlan(
+      this.singleDraws,
+      this.singleGradients,
+      EMPTY_SECONDARY_MESHES,
+      EMPTY_SECONDARY_QUADS,
+      'zanim',
+      actor.position,
+      0,
+      null,
+      EMPTY_SECONDARY_DRAWS,
+      actor.position.y,
+    )
+  }
+
+  writeStormDropPlan(
+    actor: NativeStormDropActorState,
+  ): NativeSecondaryPresentationPlan {
+    this.singleDraws.length = 0
+    this.singleGradients.length = 0
+    if (actor.phase < 0) {
+      const gradient = this.gradientStorage
+      gradient.bottomAlpha = NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm.bottomAlpha
+      gradient.bottomColor = NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm.bottomColor
+      gradient.height = actor.quantity
+      gradient.role = 'storm-raindrop-streak'
+      gradient.topAlpha = NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm.topAlpha
+      gradient.topColor = NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm.topColor
+      gradient.topLeft.x = 0
+      gradient.topLeft.y = actor.phase
+      gradient.width = NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm.width
+      this.singleGradients[0] = gradient
+    } else {
+      const draw = this.nextDraw()
+      draw.alpha = Math.max(0, 1 - actor.scale * actor.scale)
+      draw.atlas = 'BadGuys'
+      draw.blend = 'normal'
+      if (draw.colorMode !== undefined) delete draw.colorMode
+      draw.entry = 63
+      draw.offset = ZERO_SECONDARY_DRAW_OFFSET
+      draw.role = 'storm-raindrop-ground'
+      draw.rotationRadians = 0
+      draw.scaleX = actor.scale
+      draw.scaleY = actor.scale
+      draw.tint = 0xccffff
+      this.singleDraws[0] = draw
+    }
+    return this.writePlan(
+      this.singleDraws,
+      this.singleGradients,
+      EMPTY_SECONDARY_MESHES,
+      EMPTY_SECONDARY_QUADS,
+      'zanim',
+      actor.position,
+      0,
+      null,
+      EMPTY_SECONDARY_DRAWS,
+      actor.position.y,
+    )
+  }
+
+  copyPlan(source: NativeSecondaryPresentationPlan): NativeSecondaryPresentationPlan {
+    const target = this.planStorage
+    target.draws = source.draws
+    target.gradients = source.gradients
+    target.meshes = source.meshes
+    target.quads = source.quads
+    target.queueFamily = source.queueFamily
+    target.root = source.root
+    target.sortBias = source.sortBias
+    target.stormComposite = source.stormComposite
+    target.underlayDraws = source.underlayDraws
+    target.worldY = source.worldY
+    return target
+  }
+
+  writePlan(
+    draws: readonly NativeSecondarySpriteDraw[],
+    gradients: readonly NativeSecondaryGradientDraw[],
+    meshes: readonly NativeSecondaryMeshDraw[],
+    quads: readonly NativeSecondaryQuadDraw[],
+    queueFamily: NativeSecondaryPresentationPlan['queueFamily'],
+    root: Vector2,
+    sortBias: number,
+    stormComposite: NativeStormWeatherComposite | null,
+    underlayDraws: readonly NativeSecondarySpriteDraw[],
+    worldY: number,
+  ): NativeSecondaryPresentationPlan {
+    const target = this.planStorage
+    target.draws = draws
+    target.gradients = gradients
+    target.meshes = meshes
+    target.quads = quads
+    target.queueFamily = queueFamily
+    target.root = root
+    target.sortBias = sortBias
+    target.stormComposite = stormComposite
+    target.underlayDraws = underlayDraws
+    target.worldY = worldY
+    return target
+  }
+}
+
 export interface NativeStormWeatherComposite {
   readonly draws: readonly NativeSecondarySpriteDraw[]
   readonly offset: Vector2
@@ -481,24 +671,65 @@ export function nativeSecondaryPresentationPlan(
   presentationFrame = actor.ageTicks,
   pointGain = 1,
 ): NativeSecondaryPresentationPlan {
+  return buildNativeSecondaryPresentationPlan(actor, presentationFrame, pointGain, null)
+}
+
+export function updateNativeSecondaryPresentationPlan(
+  scratch: NativeSecondaryPresentationScratch,
+  actor: NativeSecondaryActorState,
+  presentationFrame = actor.ageTicks,
+  pointGain = 1,
+): NativeSecondaryPresentationPlan {
+  scratch.reset()
+  if (actor.kind === 'acid-drop' || actor.kind === 'acid-splash') {
+    return scratch.writeAcidPlan(actor as NativeAcidActorState)
+  }
+  if (actor.kind === 'storm-drop') {
+    return scratch.writeStormDropPlan(actor as NativeStormDropActorState)
+  }
+  return buildNativeSecondaryPresentationPlan(actor, presentationFrame, pointGain, scratch)
+}
+
+const EMPTY_SECONDARY_DRAWS: readonly NativeSecondarySpriteDraw[] = []
+const EMPTY_SECONDARY_MESHES: readonly NativeSecondaryMeshDraw[] = []
+const EMPTY_SECONDARY_QUADS: readonly NativeSecondaryQuadDraw[] = []
+const EMPTY_SECONDARY_DRAW_OPTIONS: Partial<
+  Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>
+> = {}
+const ZERO_SECONDARY_DRAW_OFFSET: Readonly<Vector2> = { x: 0, y: 0 }
+
+function buildNativeSecondaryPresentationPlan(
+  actor: NativeSecondaryActorState,
+  presentationFrame: number,
+  pointGain: number,
+  scratch: NativeSecondaryPresentationScratch | null,
+): NativeSecondaryPresentationPlan {
   const root = actor.position
   const draw = (
     atlas: NativeSecondaryAtlas,
     entry: number,
-    options: Partial<Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>> = {},
-  ): NativeSecondarySpriteDraw => ({
-    alpha: actor.alpha,
-    atlas,
-    blend: 'normal',
-    entry,
-    offset: { x: 0, y: 0 },
-    role: `${actor.kind}-${atlas}-${entry}`,
-    rotationRadians: 0,
-    scaleX: actor.scale,
-    scaleY: actor.scale,
-    tint: WHITE,
-    ...options,
-  })
+    options: Partial<Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>> = (
+      EMPTY_SECONDARY_DRAW_OPTIONS
+    ),
+  ): NativeSecondarySpriteDraw => {
+    const target = scratch?.nextDraw() ?? ({} as MutableSecondarySpriteDraw)
+    target.alpha = options.alpha ?? actor.alpha
+    target.atlas = atlas
+    target.blend = options.blend ?? 'normal'
+    if (options.colorMode === undefined) {
+      if (target.colorMode !== undefined) delete target.colorMode
+    } else target.colorMode = options.colorMode
+    target.entry = entry
+    target.offset = options.offset ?? (
+      scratch === null ? { x: 0, y: 0 } : ZERO_SECONDARY_DRAW_OFFSET
+    )
+    target.role = options.role ?? `${actor.kind}-${atlas}-${entry}`
+    target.rotationRadians = options.rotationRadians ?? 0
+    target.scaleX = options.scaleX ?? actor.scale
+    target.scaleY = options.scaleY ?? actor.scale
+    target.tint = options.tint ?? WHITE
+    return target
+  }
   const plan = (
     draws: readonly NativeSecondarySpriteDraw[],
     queueFamily: NativeSecondaryPresentationPlan['queueFamily'] = 'zanim',
@@ -507,7 +738,9 @@ export function nativeSecondaryPresentationPlan(
     gradients: readonly NativeSecondaryGradientDraw[] = [],
     stormComposite: NativeStormWeatherComposite | null = null,
     meshes: readonly NativeSecondaryMeshDraw[] = [],
-  ): NativeSecondaryPresentationPlan => ({
+    underlayDraws: readonly NativeSecondarySpriteDraw[] = EMPTY_SECONDARY_DRAWS,
+    worldY = root.y,
+  ): NativeSecondaryPresentationPlan => scratch?.writePlan(
     draws,
     gradients,
     meshes,
@@ -516,9 +749,20 @@ export function nativeSecondaryPresentationPlan(
     root,
     sortBias,
     stormComposite,
-    underlayDraws: [],
-    worldY: root.y,
-  })
+    underlayDraws,
+    worldY,
+  ) ?? {
+    draws,
+    gradients,
+    meshes,
+    quads,
+    queueFamily,
+    root,
+    sortBias,
+    stormComposite,
+    underlayDraws,
+    worldY,
+  }
 
   switch (actor.kind) {
     case 'leviathan':
@@ -542,17 +786,14 @@ export function nativeSecondaryPresentationPlan(
         actor.slowFactor,
       )
       const parentY = actor.position.y - actor.scale * localRoot.y
-      return {
-        ...plan([draw('BadGuys', nativeLeviathanAppendageRecord(
+      return plan([draw('BadGuys', nativeLeviathanAppendageRecord(
           actor.phase,
           headingDegrees,
         ), {
           rotationRadians: wobble,
           scaleX: actor.radius * actor.scale,
           scaleY: actor.radius * actor.scale,
-        })], 'ordinary-dynamic'),
-        sortBias: parentY + (actor.frame - 100) * 0.001 - actor.position.y,
-      }
+        })], 'ordinary-dynamic', parentY + (actor.frame - 100) * 0.001 - actor.position.y)
     }
     case 'leviathan-mote':
       return plan([draw('BadGuys', 11, {
@@ -789,10 +1030,14 @@ export function nativeSecondaryPresentationPlan(
       }))
       return plan(draws, 'zanim', -15)
     }
-    case 'golem':
-      return nativeGolemPresentationPlan(actor, presentationFrame)
-    case 'golem-death':
-      return nativeGolemDeathPresentationPlan(actor)
+    case 'golem': {
+      const golem = nativeGolemPresentationPlan(actor, presentationFrame)
+      return scratch?.copyPlan(golem) ?? golem
+    }
+    case 'golem-death': {
+      const death = nativeGolemDeathPresentationPlan(actor)
+      return scratch?.copyPlan(death) ?? death
+    }
     case 'teleport-burst':
       return plan([draw('BadGuys', 90, {
         alpha: Math.min(actor.alpha, 1),
@@ -988,11 +1233,17 @@ export function nativeSecondaryPresentationPlan(
           tint: 0x0d1a0d,
         }))
       }
-      return {
-        ...plan(cloudDraws),
+      return plan(
+        cloudDraws,
+        'zanim',
+        0,
+        [],
+        [],
+        null,
+        [],
         underlayDraws,
-        worldY: actor.position.y + 350,
-      }
+        actor.position.y + 350,
+      )
     }
     case 'acid-drop':
       return actor.phase < 0

@@ -14,9 +14,12 @@ import {
 import type { ProtocolPlayerSkillOffer } from './protocol/game-state.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import {
-  createSkillPickerRenderer,
   type SkillPickerRenderer,
 } from './renderer/skill-picker-renderer.ts'
+import {
+  createRetainedRendererOwner,
+  type RetainedRendererOwner,
+} from './renderer/retained-renderer-owner.ts'
 import {
   nativeSkillPickerClose,
   nativeSkillPickerReveal,
@@ -51,6 +54,9 @@ interface SkillPickerProps {
   onSave: (offerSequence: number) => void
   onSelect: (choiceIndex: number, offerSequence: number, skillId: number) => void
   presentationId: number
+  rendererOwnerRef: {
+    current: RetainedRendererOwner<SkillPickerRenderer> | null
+  }
   sorcerorsCharmAvailable: boolean
   style: CSSProperties
 }
@@ -68,6 +74,7 @@ export default function SkillPicker({
   onSave,
   onSelect,
   presentationId,
+  rendererOwnerRef,
   sorcerorsCharmAvailable,
   style,
 }: SkillPickerProps) {
@@ -75,6 +82,12 @@ export default function SkillPicker({
   if (initialOfferRef.current === null) {
     throw new Error('skill picker requires an initial authoritative offer')
   }
+  const rendererOwner = rendererOwnerRef.current ??= createRetainedRendererOwner(
+    async () => {
+      const { createSkillPickerRenderer } = await import('./renderer/skill-picker-renderer.ts')
+      return createSkillPickerRenderer()
+    },
+  )
   const stageRef = useRef<HTMLDivElement>(null)
   const curtainRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -138,11 +151,8 @@ export default function SkillPicker({
     let disposed = false
     let renderer: SkillPickerRenderer | undefined
     setRendererState('loading')
-    void createSkillPickerRenderer().then((created) => {
-      if (disposed) {
-        created.destroy()
-        return
-      }
+    void rendererOwner.get().then((created) => {
+      if (disposed) return
       renderer = created
       rendererRef.current = created
       created.setOffer(
@@ -286,10 +296,9 @@ export default function SkillPicker({
       disposed = true
       unsubscribe()
       rendererRef.current = null
-      renderer?.destroy()
       host.replaceChildren()
     }
-  }, [audio])
+  }, [audio, rendererOwner])
 
   const setSelection = (index: number) => {
     selectedIndexRef.current = index

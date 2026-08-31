@@ -4,6 +4,8 @@ import test from 'node:test'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   BoneyardEnemyDeathEffectSnapshot,
@@ -31,6 +33,7 @@ import {
   createGameSnapshotFrame,
   createReplicatedEntityBaseline,
 } from './entity-replication.ts'
+import { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
 import {
   BONEYARD_LOOT_ENTITY_REGISTRATION,
   boneyardLootDescriptor,
@@ -166,6 +169,55 @@ test('registry gives Students stable static descriptors and compact dynamic samp
   const fullBytes = Buffer.byteLength(JSON.stringify(initial))
   const frameBytes = Buffer.byteLength(JSON.stringify(frame))
   assert.ok(frameBytes < fullBytes * 0.4, `${frameBytes} is not compact against ${fullBytes}`)
+})
+
+test('Hail frame rows remain compact through client snapshot reconstruction', () => {
+  const snapshot = boneyardSnapshot('run-hail-frame')
+  const actors = Array.from({ length: 1_340 }, (_, index) => ({
+    ...createNativeWaterHailActor(
+      index + 1,
+      'wizard',
+      'boneyard:run-hail-frame',
+      snapshot.tick,
+      { x: 100 + index, y: 200 - index },
+      { x: 1, y: 0 },
+      createNativeRng(41 + index),
+    ).actor,
+    painterRegistrations: [{ managerLane: 'actor' as const, registrationOrdinal: index }],
+  }))
+  snapshot.primarySpells = {
+    nextId: 1_341,
+    projectiles: [],
+    transients: actors,
+  }
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  assert.deepEqual(frame.primarySpells.transients, [])
+  assert.deepEqual(frame.primarySpells.hail.ownerIds, ['wizard'])
+  assert.deepEqual(frame.primarySpells.hail.worldKeys, ['boneyard:run-hail-frame'])
+  assert.equal(frame.primarySpells.hail.rows.length, 1_340)
+  assert.deepEqual(
+    Array.from(frame.primarySpells.hail.rows.transientPositions),
+    Array.from({ length: 1_340 }, (_, index) => index),
+  )
+  assert.deepEqual(
+    Array.from(frame.primarySpells.hail.rows.painterRegistrationOrdinals),
+    Array.from({ length: 1_340 }, (_, index) => index),
+  )
+  const wireHail = JSON.parse(JSON.stringify(frame.primarySpells.hail)) as Record<
+    string,
+    unknown
+  >
+  assert.deepEqual(Object.keys(wireHail.rows as object), ['data'])
+  assert.equal('positions' in wireHail, false)
+  assert.ok(
+    JSON.stringify(frame.primarySpells.hail).length
+      < JSON.stringify(snapshot.primarySpells.transients).length * 0.2,
+  )
+
+  const reconstructed = new EntityReplicationReconstructor().apply(frame, 1)
+  assert.equal(reconstructed.primarySpells, frame.primarySpells)
+  assert.equal(reconstructed.primarySpells.hail.rows.length, 1_340)
+  assert.deepEqual(reconstructed.primarySpells.transients, [])
 })
 
 test('a Hub delta carries one atomic memorial update to the reconstructor', () => {
@@ -1373,7 +1425,18 @@ function cloneSnapshot(snapshot: GameSnapshot): GameSnapshot {
 function cloneSnapshotFrame(
   frame: ReturnType<typeof createGameSnapshotFrame>,
 ): ReturnType<typeof createGameSnapshotFrame> {
-  return JSON.parse(JSON.stringify(frame)) as ReturnType<typeof createGameSnapshotFrame>
+  const cloned = JSON.parse(JSON.stringify(frame)) as ReturnType<
+    typeof createGameSnapshotFrame
+  > & { primarySpells: { hail: { rows: { data?: unknown } } } }
+  const encoded = cloned.primarySpells.hail.rows.data
+  if (typeof encoded !== 'string') {
+    throw new Error('expected encoded Hail frame rows')
+  }
+  cloned.primarySpells.hail.rows = PrimarySpellWaterHailFrameRows.fromBase64(
+    encoded,
+    16_384,
+  )
+  return cloned
 }
 
 function cyclicDistance(first: number, second: number, period: number): number {
