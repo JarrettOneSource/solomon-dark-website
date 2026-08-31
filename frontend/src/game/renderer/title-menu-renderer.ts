@@ -46,7 +46,6 @@ import {
 } from '../game-assets.ts'
 import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
 import {
-  planTitleMenuPrompt,
   type TitleMenuPromptAction,
   type TitleMenuPromptKind,
 } from '../title-menu-prompt.ts'
@@ -158,17 +157,11 @@ export async function createTitleMenuRenderer(
   const solomonStage = titleStage('title-menu-solomon-stage', 20)
   const centerStage = titleStage('title-menu-center-stage', 21)
   const versionStage = titleStage('title-menu-version-stage', 22)
-  const promptCurtain = new Graphics()
-  promptCurtain.alpha = 0.75
-  promptCurtain.zIndex = 29
-  const promptStage = titleStage('title-menu-prompt-stage', 30)
   root.addChild(
     backdrop,
     solomonStage,
     centerStage,
     versionStage,
-    promptCurtain,
-    promptStage,
   )
 
   const gradients: FillGradient[] = []
@@ -280,10 +273,6 @@ export async function createTitleMenuRenderer(
   let presentedHoveredAction: TitleMenuAction | null | undefined
   let presentedPressedAction: TitleMenuAction | null | undefined
   let presentedCanResume: boolean | undefined
-  let presentedPrompt: TitleMenuPromptKind | null | undefined
-  let presentedPromptBusy: boolean | undefined
-  let presentedPromptHoveredAction: TitleMenuPromptAction | null | undefined
-  let presentedPromptPressedAction: TitleMenuPromptAction | null | undefined
   let presentedScreen: TitleMenuScreen | undefined
   const diagnostics = {
     canResume: false,
@@ -362,27 +351,6 @@ export async function createTitleMenuRenderer(
         presentedHoveredAction = frame.hoveredAction
         presentedPressedAction = frame.pressedAction
       }
-      const promptHoveredAction = titleMenuPromptAction(frame.hoveredAction)
-      const promptPressedAction = titleMenuPromptAction(frame.pressedAction)
-      if (presentedPrompt !== frame.prompt
-        || presentedPromptBusy !== frame.promptBusy
-        || presentedPromptHoveredAction !== promptHoveredAction
-        || presentedPromptPressedAction !== promptPressedAction) {
-        for (const child of promptStage.removeChildren()) child.destroy({ children: true })
-        promptCurtain.visible = frame.prompt !== null
-        if (frame.prompt) {
-          promptStage.addChild(nativeUi.render(planTitleMenuPrompt({
-            busy: frame.promptBusy,
-            hoveredAction: promptHoveredAction,
-            kind: frame.prompt,
-            pressedAction: promptPressedAction,
-          }, 0), `title-menu-${frame.prompt}-prompt`))
-        }
-        presentedPrompt = frame.prompt
-        presentedPromptBusy = frame.promptBusy
-        presentedPromptHoveredAction = promptHoveredAction
-        presentedPromptPressedAction = promptPressedAction
-      }
       application.render()
       diagnostics.frameCount += 1
       diagnostics.canResume = frame.canResume
@@ -412,8 +380,6 @@ export async function createTitleMenuRenderer(
         solomonStage,
         centerStage,
         versionStage,
-        promptCurtain,
-        promptStage,
         viewport,
         currentResolution,
       )
@@ -440,8 +406,6 @@ export async function createTitleMenuRenderer(
     solomonStage,
     centerStage,
     versionStage,
-    promptCurtain,
-    promptStage,
     options.viewport,
     resolution,
   )
@@ -464,8 +428,6 @@ function applyTitleViewport(
   solomonStage: Container,
   centerStage: Container,
   versionStage: Container,
-  promptCurtain: Graphics,
-  promptStage: Container,
   viewport: FixedGameViewportLayout,
   resolution: number,
 ): void {
@@ -485,10 +447,6 @@ function applyTitleViewport(
   solomonStage.position.set(solomonBounds.x, solomonBounds.y)
   centerStage.position.set(centerBounds.x, centerBounds.y)
   versionStage.position.set(versionBounds.x, versionBounds.y)
-  promptStage.position.set(centerBounds.x, centerBounds.y)
-  promptCurtain.clear()
-    .rect(0, 0, viewport.width, viewport.height)
-    .fill(0x000000)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.dataset.centerStage = `${centerBounds.x},${centerBounds.y}`
   canvas.dataset.solomonStage = `${solomonBounds.x},${solomonBounds.y}`
@@ -503,10 +461,6 @@ function titleStage(label: string, zIndex: number): Container {
   stage.sortableChildren = true
   stage.zIndex = zIndex
   return stage
-}
-
-function titleMenuPromptAction(action: TitleMenuAction | null): TitleMenuPromptAction | null {
-  return action === 'prompt-primary' || action === 'prompt-secondary' ? action : null
 }
 
 function createTitleBuildRevisionView(atlas: Texture): {

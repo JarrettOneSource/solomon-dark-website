@@ -233,3 +233,225 @@ them.
   and `5e76024ef89226d3d3cbfa988ac9ff410cf3dc3768519e9e15e48b0b4b7b08ad`.
 - No member is browser-blocked. The kit adds no host/protocol/save/replication
   state. Publication and deployment remain separate operations.
+
+## 2026-08-31 — Reopened: frame corners versus bottom ornaments
+
+### Reported smell and parity question
+
+- Owner report: Party Settings shows little gold "tails" beside both top
+  corners. `UI.8` belongs on the bottom of UI frames, as visibly demonstrated
+  by the Esc/SimpleMenu family, not beside top corners.
+- The 2026-08-23 reusable-kit pass catalogued every stock record, but its
+  migration sweep stopped at the then-listed native renderers. It did not
+  inspect the older DOM `art.cornerGold` crop or enumerate the Party Settings
+  and Player Card consumers that later reused it. This violated the shared
+  consumer and legacy-crop membership sweep.
+- Falsifiers: the crop is wholly contained in one native record; `UI.8` is a
+  corner member; another consumer still uses the composite after correction;
+  or the Esc/message paths place `UI.8` anywhere except their bottom ornament
+  group.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail-derived generated catalog | retail 0.72.5 `UI.png` SHA-256 `37d5e8fc543af12a9d8019e738dbe1e29b648211144a3782c3a32e71f76cd2eb`; `UI.bundle` SHA-256 `1db00ea8826e787ca9a320c90a33e726991cae00906baddfdc8bde31da697498`; `native-ui-assets.json` | `UI.17` is exactly frame `[743,588,80,83]`; adjacent `UI.8` is exactly frame `[824,587,49,112]`. Both have matching logical size, zero trim origin, and no rotation. | high |
+| Legacy extraction trace | `tools/extract-assets.sh` crop `UI.png corner-gold 740 583 118 80`; emitted `frontend/src/assets/game/corner-gold.png`, 118 by 77, SHA-256 `6a5041e523a340c3004caa487d0fa898184fcb71d86ffa36c2a684244a982dfa` | The crop covers all 80 columns of `UI.17`, omits its final eight source rows, and also covers the first 34 columns and 76 rows of `UI.8`. ImageMagick trim cannot separate the two nontransparent records, so the visible "tail" is clipped arrow art rather than a corner member. | high |
+| Current web consumer sweep | `PartySettingsDialog.tsx`; `PlayerCardDialog.tsx`; `assets.ts`; `party-settings.css`; `hub.css` | Exactly two components consume `art.cornerGold`, each twice and with the right copy mirrored. No other source consumer exists. | high |
+| Correct sibling | `DarkCloudPanel.tsx`; `frontend/src/assets/game/dark-cloud/corner-gold.png`, 80 by 83 | Dark Cloud uses a clean corner image with no adjacent `UI.8` pixels. It is already correct and remains unchanged. | high |
+| Stock composition owner | `planNativeUiMessage`, `planNativeUiSimpleMenu`, `pause-menu-contract`, `hub-inventory-renderer`; ledger entries 103 and 140 | Every live `UI.8` draw is one centre plus two 0.75-scale side ornaments below the message/menu frame. `UI.17` independently supplies the frame/nine-slice. | high |
+
+### System boundary and membership inventory
+
+Native system: exact `UI.17` frame membership and exact `UI.8` bottom-ornament
+membership across every Website consumer, including web-authored DOM panels
+that borrow stock chrome.
+
+| Member | Native/current source | Disposition | Proof |
+| --- | --- | --- | --- |
+| `UI.17` source record | generated UI catalog frame `[743,588,80,83]` | `exact-ported` | catalog/hash guard plus native-UI tests |
+| `UI.8` source record | generated UI catalog frame `[824,587,49,112]` | `exact-ported` | catalog/hash guard plus native-UI tests |
+| Party Settings left/right top corners | web-authored dialog borrowing stock chrome | `exact-ported` presentation membership; dialog semantics remain `out-of-system` | both decorations consume `NativeUiSprite` `UI.17`; no `UI.8` descendant |
+| Player Card left/right top corners | web-authored card borrowing stock chrome | `exact-ported` presentation membership; card semantics remain `out-of-system` | both decorations consume `NativeUiSprite` `UI.17`; no `UI.8` descendant |
+| Dark Cloud four frame corners | clean 80 by 83 crop | `verified-already-at-parity` | existing desktop/mobile Dark Cloud receipts; no composite crop |
+| stock message bottom group | `planNativeUiMessage`; Hub notice renderer | `verified-already-at-parity` | exactly three `UI.8` nodes with centres below the frame bottom |
+| Esc/gameplay/Dark Cloud SimpleMenu bottom group | `planNativeUiSimpleMenu`; pause renderer | `verified-already-at-parity` | exactly three `UI.8` nodes with centres below the frame bottom |
+| legacy `corner-gold.png` composite and extractor row | no native record or authored composition | `out-of-system` (remove completely) | zero imports, zero source references, tracked bitmap deleted |
+| unrelated atlas records and non-frame UI consumers | complete native UI catalog | `out-of-system` (unchanged) | source/reference sweep |
+
+No member is browser-blocked. There is no timing, input, audio, simulation,
+protocol, replication, save, or teardown state in this correction.
+
+### Recovered behavioral contract
+
+- `UI.17` and `UI.8` are separate records and must remain separately
+  addressable through the generated native UI catalog.
+- A top-corner decoration may draw clean `UI.17`; it must never contain any
+  pixel from `UI.8`.
+- `UI.8` is not a corner flourish. It renders only in the authored three-piece
+  group below stock message and SimpleMenu frames, at the existing native
+  centre/side scales and positions.
+- Mirroring the right DOM corner mirrors `UI.17` only. Responsive scaling may
+  resize that record but cannot change its membership.
+
+### Web implementation consequence
+
+- Replace both DOM panels' `art.cornerGold` images with the shared
+  `NativeUiSprite atlas="UI" record={17}` adapter.
+- Preserve each panel's current responsive positioning through CSS transforms
+  on the exact 80 by 83 logical record.
+- Delete the contaminated bitmap, its broad extractor row, and its now-unused
+  `assets.ts` import/export. Do not add a replacement crop or compatibility
+  alias.
+- Strengthen the reusable plan test so `UI.8` identity and below-frame
+  placement are contractual, then assert both browser panels expose exactly
+  two `UI.17` decorations and zero `UI.8` descendants.
+
+### Validation contract
+
+- Mac focused native-UI test: pin exact `UI.17`/`UI.8` frames; require the
+  three SimpleMenu ornaments to be `UI.8` and centred below the frame bottom.
+- Mac production-browser journey: open Party Settings and Player Card at
+  desktop and coarse-pointer landscape sizes; each has two visible
+  `data-native-ui-record="UI.17"` corners, no `UI.8` descendant, fits the
+  viewport, and closes normally.
+- Exercise the Esc/gameplay pause menu and retain its three bottom ornaments;
+  page, console, and failed-response arrays must remain empty.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact Mac candidate.
+
+### Implementation validation receipt
+
+- `PartySettingsDialog` and `PlayerCardDialog` now render their two top
+  ornaments through `NativeUiSprite atlas="UI" record={17}`. The right copy
+  mirrors only that record. The 118 by 77 composite bitmap, its `assets.ts`
+  export, and the `740 583 118 80` extractor row are deleted; no compatibility
+  alias remains.
+- The focused native-UI contract pins `UI.17 [743,588,80,83]`, `UI.8
+  [824,587,49,112]`, and requires every SimpleMenu arrow to be record 8 with
+  its centre below the frame bottom. The 62-test native-UI suite passes on the
+  Mac mini.
+- An isolated full-stack 896 by 414 DPR-2 Chrome journey passed 18 Hub/social
+  stops with empty page, console, failed-response, and unexpected-request
+  arrays. Party Settings measured 520 by 137 and Player Card 300 by 221; both
+  exposed exactly two `UI.17` corners and zero `UI.8` descendants. Reviewed
+  captures hash to `6241e4adfc56e6882fd93f002dadf55029e50871aa4902f94879247227969451`
+  and `be7d6b365da8a954b27528d59713b97a03e37b10bb1ae87dbac278710f26f266`.
+- The Esc/MsgBox `UI.8` ownership remains the existing three-piece bottom
+  group; the stock Kill capture visibly re-proves it below the message frame.
+
+## 2026-08-31 — Reopened: reusable DOM message and button interface
+
+### Reported smell and parity question
+
+- Owner request: expose a reusable message-box module that looks exactly like
+  the stock Kill Character box, accepts caller-defined buttons, and exposes one
+  reusable stock button so every caller shares the same visual states.
+- The 2026-08-23 pass recovered the pure `planNativeUiMessage` and
+  `planNativeUiButton` model plus a Pixi adapter, but stopped at a transparent
+  semantic overlay for title prompts. `StockPromptDialog` therefore makes
+  callers understand action rectangles and pointer/focus state while the
+  renderer separately owns the art. That is a shallow caller seam, not the
+  requested reusable UI module.
+- Falsifiers: Kill Character uses unique chrome; message buttons are not the
+  shared stock button; the DOM cannot express the plan without substituting OS
+  fonts or CSS-drawn art; or another stock message/button path requires a
+  second visual contract.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Settled stock MsgBox family | entries 087, 189, 203, and 228; ctor `0x004A98E0`, layout `0x005AB060`, render `0x005C4530`, line `0x005BCCB0`, action builders `0x005AB7E0/0x005AB980`, finalize `0x005AB5C0` | Kill Character is one ordinary two-action member of the common MsgBox family. The family owns curtain, frame, title/body bitmap text, bottom ornaments, actions, and hit rectangles. | high |
+| Complete family census | 25 constructor references in 16 functions; 194 line-builder references in 22 functions, already drained in entry 189 | One shared primitive serves one- and two-action native dialogs; screen state and action meaning stay with callers. | high |
+| Existing pure model | `native-ui-plan.ts`; `native-ui-text.ts`; generated 12-atlas/ten-font catalog | `planNativeUiMessage` composes the exact message frame and one/two `planNativeUiButton` fragments. Button states are idle, focused, pressed, selected, and disabled. | high |
+| Existing adapters | `native-ui-pixi.ts`; DOM `NativeUiSprite`, `NativeUiNineSlice`, `NativeUiStrip`, and `NativeBitmapText` | Pixi can render every plan node. DOM has the underlying exact primitives but no plan adapter or semantic message/button module. | high |
+| Current title bridge | `StockPromptDialog.tsx`; `title-menu-renderer.ts`; `stock-prompt-dialog.css` | Pixi paints the prompt while React duplicates transparent action rectangles and state callbacks. A new caller must coordinate both owners. | high |
+
+### System boundary and membership inventory
+
+Native system: the common MsgBox frame and stock Button presentation below
+screen-specific state machines, exposed through one pure plan and two rendering
+adapters.
+
+| Member | Source | Disposition | Proof |
+| --- | --- | --- | --- |
+| pure stock button plan | `planNativeUiButton`; `UI.101/.102/.54`; menu bitmap font | `verified-already-at-parity` | existing all-state plan tests |
+| pure stock message plan | `planNativeUiMessage`; exact MsgBox record family | `verified-already-at-parity` | existing one/two-action composition tests and stock captures |
+| Pixi plan adapter | `native-ui-pixi.ts` | `verified-already-at-parity` | existing title, Inventory, Pause, workbench, and teardown receipts |
+| DOM plan adapter | missing | `exact-ported` | render every plan node through the same catalog/text layout without copied record geometry |
+| reusable semantic stock button | missing | `exact-ported` | one React button owns focus/hover/press/disabled state and renders `planNativeUiButton` through the DOM adapter |
+| reusable semantic stock message box | missing | `exact-ported` | caller supplies title/body and one or two stock-button children; module owns frame, layout, art, and semantic bounds |
+| stock Kill Character title prompt | `StockPromptDialog`; title caller | `exact-ported` through new DOM module | exact four-line copy and YES/NO actions; no transparent duplicate renderer |
+| first-run Tutorial offer | Website-authored content in stock presentation | `out-of-system` content; `exact-ported` shared presentation | reuses the same module without claiming native wording |
+| native one-button Inventory/trader messages | retained Pixi consumers | `verified-already-at-parity` | same pure plan remains their interface; no forced screen-owner migration |
+| remaining native MsgBox callers | separate native screen state machines | `out-of-system` state; shared presentation `exact-ported` | prior complete constructor census |
+| custom party/mod/directory dialogs | no native MsgBox owner | `out-of-system` for this pass | explicitly deferred by owner |
+
+### Recovered interface contract
+
+- The pure plan remains the only record, geometry, font, painter-order, and
+  state truth. React and Pixi are adapters at that seam; neither duplicates
+  native constants.
+- A stock button's caller supplies semantic content and action only. The module
+  owns idle/focused/pressed/disabled art, bitmap label, pointer/keyboard state,
+  and the shared visible/semantic rectangle.
+- A stock message caller supplies title, body, one or two stock-button children,
+  and action handlers. The module owns the stock frame, curtain, wrapping,
+  action layout, and bottom ornaments. Unsupported child counts fail closed.
+- Screen-specific authorization, mutation, dismissal, and audio remain with
+  the caller. The presentation module never becomes a state machine.
+
+### Web implementation consequence
+
+- Split the existing message planner into an independently reusable frame plan
+  plus the existing composed one/two-action plan; preserve byte-for-byte node
+  order for Pixi callers.
+- Add one DOM plan adapter, then build `NativeUiButton` and
+  `NativeUiMessageBox` on that interface. Do not add a parallel CSS skin.
+- Replace the title prompt's Pixi-art plus transparent-button dual ownership
+  with the reusable DOM message/button module. Retain the pure title plan as a
+  stock contract/workbench fixture.
+- Document the copy-ready React interface beside the existing plan/Pixi
+  interface.
+
+### Validation contract
+
+- Focused tests preserve every plan node/action and verify independent message
+  frame composition, one/two action layout, button states, and UI.8 bottom-only
+  placement.
+- The native UI workbench renders the same message and standalone button
+  through both adapters.
+- Mac Chrome title journey opens Kill Character and Tutorial prompts, observes
+  one native message module with exact bitmap fonts and one/two shared stock
+  buttons, activates mouse/keyboard/Escape paths, and reports no duplicate
+  renderer prompt stage or browser errors.
+- The exact candidate passes `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+
+### Implementation validation receipt
+
+- `NativeUiPlanView` is the DOM adapter at the existing pure-plan seam.
+  `NativeUiButton` owns semantic focus/hover/press/disabled state and renders
+  `planNativeUiButton`; `NativeUiMessageBox` accepts one or two button children,
+  renders the independently reusable message frame, and keeps visible versus
+  accessible title/body copy distinct.
+- `StockPromptDialog` now composes those modules directly. The title Pixi
+  renderer no longer paints a second prompt or owns transparent duplicated hit
+  boxes; the responsive full-stage curtain remains a separate DOM surface.
+  Existing Pixi consumers retain the unchanged composed plan.
+- `/native-ui.html` adds a DOM-components mode beside the Pixi plan and atlas
+  modes. It rendered one stock message and three semantic stock buttons with
+  empty page/console/response errors; the reviewed DOM capture hashes to
+  `ed32656acb7afcea235073b134b82fce07ea8304be72fe05b08f8e11b21ed849`.
+- Mac Chrome 151 passed Tutorial and Kill Character at 1600 by 900, 896 by
+  414, 2560 by 1080, and 1200 by 1000. Every prompt exposed one message module,
+  two 200 by 69 native action rectangles at stock scale, exact `menu`/`medium`
+  bitmap fonts, a curtain equal to the complete viewport, and empty page,
+  console, and failed-response arrays. Final stock/mobile Kill captures hash to
+  `2151f14f25d3c536cd43b8df27cfd7a6cea35cacd672642c9b72e914bbd25340`
+  and `04abcedb170a9febe2708a72a67d70ea2e3da96b5797d95df4da6092acd4b8a1`.
+- The exact Mac candidate passed the canonical validation gate: lint 0 errors
+  (19 pre-existing warnings), all backend/contracts and frontend suites,
+  including the 340-test prerequisite set and 1,804-test broad game set,
+  desktop tests, production build, generated host bundle, media policy, and
+  bundle budget (`Game-CG_-oeee.js`, 277,279 raw / 83,703 gzip bytes).
+  Commit, push, deployment, and production restart were not performed.

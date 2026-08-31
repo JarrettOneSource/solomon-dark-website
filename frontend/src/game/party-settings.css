@@ -44,14 +44,16 @@
   position: absolute;
   top: -5px;
   left: -5px;
-  width: 54px;
   pointer-events: none;
+  transform: scale(0.675);
+  transform-origin: top left;
 }
 
 .party-settings-corner-right {
   left: auto;
   right: -5px;
-  transform: scaleX(-1);
+  transform: scaleX(-1) scale(0.675);
+  transform-origin: top right;
 }
 
 .party-settings-header {
@@ -250,7 +252,9 @@
     transform-origin: center;
   }
 
-  .party-settings-corner { width: 44px; }
+  .party-settings-corner { transform: scale(0.55); }
+
+  .party-settings-corner-right { transform: scaleX(-1) scale(0.55); }
 
   .party-settings-header {
     gap: 8px;

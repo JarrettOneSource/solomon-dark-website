@@ -1,11 +1,15 @@
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
+import type { CSSProperties, KeyboardEvent } from 'react'
 
 import {
+  STOCK_PROMPT_BOUNDS,
+  STOCK_PROMPT_PRIMARY_BOUNDS,
+  STOCK_PROMPT_SECONDARY_BOUNDS,
   TITLE_MENU_PROMPT_COPY,
-  planTitleMenuPrompt,
   type TitleMenuPromptAction,
   type TitleMenuPromptKind,
 } from './title-menu-prompt.ts'
+import NativeUiButton from './native-ui/NativeUiButton.tsx'
+import NativeUiMessageBox from './native-ui/NativeUiMessageBox.tsx'
 import './stock-prompt-dialog.css'
 
 interface StockPromptDialogProps {
@@ -30,12 +34,6 @@ export default function StockPromptDialog({
   style,
 }: StockPromptDialogProps) {
   const copy = TITLE_MENU_PROMPT_COPY[kind]
-  const actions = planTitleMenuPrompt({
-    busy,
-    hoveredAction: null,
-    kind,
-    pressedAction: null,
-  }, 0).actions
   const activate = (action: TitleMenuPromptAction) => {
     if (busy) return
     if (action === 'prompt-primary') onPrimary()
@@ -50,28 +48,26 @@ export default function StockPromptDialog({
   }
 
   return (
-    <div className="main-menu-native-stage stock-prompt-stage" style={style}>
-      <section
-        aria-describedby={`stock-prompt-${kind}-body`}
-        aria-labelledby={`stock-prompt-${kind}-title`}
-        aria-modal="true"
-        className="stock-prompt-dialog"
-        data-prompt-kind={kind}
-        onKeyDown={handleKeyDown}
-        role="dialog"
-      >
-        <h2 className="sr-only" id={`stock-prompt-${kind}-title`}>{copy.accessibleTitle}</h2>
-        <p className="sr-only" id={`stock-prompt-${kind}-body`}>{copy.accessibleBody}</p>
-        {actions.map((action, index) => (
-          <button
-            autoFocus={index === 0}
-            aria-label={index === 0 ? copy.primaryLabel : copy.secondaryLabel}
-            className="stock-prompt-action"
-            data-game-back={index === 1 || undefined}
-            data-game-action={action.id}
-            data-game-default-focus={index === 0 || undefined}
+    <>
+      <div aria-hidden className="stock-prompt-curtain" />
+      <div className="main-menu-native-stage stock-prompt-stage" data-prompt-kind={kind} style={style}>
+        <NativeUiMessageBox
+          accessibleBody={copy.accessibleBody}
+          accessibleTitle={copy.accessibleTitle}
+          body={copy.body}
+          bounds={STOCK_PROMPT_BOUNDS}
+          className="stock-prompt-dialog"
+          dimAlpha={0}
+          onKeyDown={handleKeyDown}
+          title={copy.title}
+        >
+          <NativeUiButton
+            autoFocus
+            data-game-action="prompt-primary"
+            data-game-default-focus="true"
             disabled={busy}
-            key={action.id}
+            name="prompt-primary"
+            nativeBounds={STOCK_PROMPT_PRIMARY_BOUNDS}
             onBlur={() => {
               onHighlight(null)
               onPressState(null)
@@ -79,38 +75,54 @@ export default function StockPromptDialog({
             onClick={() => {
               onPressState(null)
               onPress()
-              activate(action.id as TitleMenuPromptAction)
+              activate('prompt-primary')
             }}
-            onFocus={() => onHighlight(action.id as TitleMenuPromptAction)}
-            onKeyDown={(event) => {
-              if (!busy && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
-                onPressState(action.id as TitleMenuPromptAction)
-              }
-            }}
-            onKeyUp={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') onPressState(null)
-            }}
+            onFocus={() => onHighlight('prompt-primary')}
             onPointerCancel={() => onPressState(null)}
-            onPointerDown={(event: MouseEvent<HTMLButtonElement>) => {
-              if (busy || event.button !== 0) return
-              onPressState(action.id as TitleMenuPromptAction)
+            onPointerDown={(event) => {
+              if (!busy && event.button === 0) onPressState('prompt-primary')
             }}
-            onPointerEnter={() => onHighlight(action.id as TitleMenuPromptAction)}
+            onPointerEnter={() => onHighlight('prompt-primary')}
             onPointerLeave={() => {
               onHighlight(null)
               onPressState(null)
             }}
             onPointerUp={() => onPressState(null)}
-            style={{
-              height: action.bounds.height,
-              left: action.bounds.left,
-              top: action.bounds.top,
-              width: action.bounds.width,
+          >
+            {copy.primaryLabel}
+          </NativeUiButton>
+          <NativeUiButton
+            aria-label={copy.secondaryLabel}
+            data-game-action="prompt-secondary"
+            data-game-back="true"
+            disabled={busy}
+            name="prompt-secondary"
+            nativeBounds={STOCK_PROMPT_SECONDARY_BOUNDS}
+            onBlur={() => {
+              onHighlight(null)
+              onPressState(null)
             }}
-            type="button"
-          />
-        ))}
-      </section>
-    </div>
+            onClick={() => {
+              onPressState(null)
+              onPress()
+              activate('prompt-secondary')
+            }}
+            onFocus={() => onHighlight('prompt-secondary')}
+            onPointerCancel={() => onPressState(null)}
+            onPointerDown={(event) => {
+              if (!busy && event.button === 0) onPressState('prompt-secondary')
+            }}
+            onPointerEnter={() => onHighlight('prompt-secondary')}
+            onPointerLeave={() => {
+              onHighlight(null)
+              onPressState(null)
+            }}
+            onPointerUp={() => onPressState(null)}
+          >
+            {copy.secondaryLabel}
+          </NativeUiButton>
+        </NativeUiMessageBox>
+      </div>
+    </>
   )
 }

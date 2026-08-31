@@ -3,22 +3,17 @@
   pointer-events: auto;
 }
 
+.stock-prompt-curtain {
+  position: absolute;
+  z-index: 119;
+  inset: 0;
+  background: rgb(0 0 0 / 0.75);
+  pointer-events: auto;
+}
+
 .stock-prompt-dialog {
   position: absolute;
   inset: 0;
   width: 1600px;
   height: 900px;
 }
-
-.stock-prompt-action {
-  position: absolute;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: transparent;
-  cursor: pointer;
-}
-
-.stock-prompt-action:disabled { cursor: default; }

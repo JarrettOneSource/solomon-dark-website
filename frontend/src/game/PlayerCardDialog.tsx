@@ -10,6 +10,7 @@ import {
   PLAYER_CHARACTER_SHEETS,
   playerCharacterAtlasCssFrame,
 } from './renderer/player-character-atlas.ts'
+import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
 import './hub.css'
 
 export interface PlayerCardView {
@@ -74,12 +75,12 @@ export default function PlayerCardDialog({
         data-profile-player={player.id}
         data-profile-element={player.element}
       >
-        <img className="hub-player-profile-corner" src={art.cornerGold} alt="" aria-hidden />
-        <img
+        <NativeUiSprite className="hub-player-profile-corner" atlas="UI" record={17} style={{ position: 'absolute' }} />
+        <NativeUiSprite
+          atlas="UI"
           className="hub-player-profile-corner hub-player-profile-corner-right"
-          src={art.cornerGold}
-          alt=""
-          aria-hidden
+          record={17}
+          style={{ position: 'absolute' }}
         />
         <div className="hub-player-profile-body">
           <header className="hub-player-profile-header">

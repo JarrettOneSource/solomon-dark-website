@@ -29,9 +29,9 @@ export const NATIVE_KILL_CHARACTER_BODY =
   'Starting a new game will kill off your current game and character (Lucritius will scavenge his equipment)!'
 export const NATIVE_KILL_CHARACTER_QUESTION = 'Are you sure you want to do this?'
 
-const STOCK_PROMPT_BOUNDS = nativeUiRect(550, 268, 500, 362)
-const STOCK_PROMPT_PRIMARY_BOUNDS = nativeUiRect(595, 484, 200, 69)
-const STOCK_PROMPT_SECONDARY_BOUNDS = nativeUiRect(811, 484, 200, 69)
+export const STOCK_PROMPT_BOUNDS = nativeUiRect(550, 268, 500, 362)
+export const STOCK_PROMPT_PRIMARY_BOUNDS = nativeUiRect(595, 484, 200, 69)
+export const STOCK_PROMPT_SECONDARY_BOUNDS = nativeUiRect(811, 484, 200, 69)
 
 export const TITLE_MENU_PROMPT_COPY: Readonly<Record<TitleMenuPromptKind, TitleMenuPromptCopy>> = {
   'kill-wizard': {

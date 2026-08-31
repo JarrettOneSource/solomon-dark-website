@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { installGameLuaConsole } from './game-lua-console.ts'
+import { nativeUiFont, nativeUiRecord } from './native-ui/native-ui-catalog.ts'
+import { NATIVE_SETTINGS_PRESENTATION } from './native-ui/native-settings-contract.ts'
 import {
   CAMERA_FOV_MAX_PERCENT,
   CAMERA_FOV_MIN_PERCENT,
@@ -203,6 +205,35 @@ test('Settings uses the untouched stock ControlPanel atlas', () => {
     createHash('sha256').update(atlas).digest('hex'),
     'd63bd3ac402fcbc00a60916b6f0aa79f662501acc8f6fbe88ee1676e69b43f86',
   )
+})
+
+test('Settings presentation pins the complete stock shell and control vocabulary', () => {
+  assert.deepEqual(NATIVE_SETTINGS_PRESENTATION.design, { height: 900, width: 1_600 })
+  assert.deepEqual(NATIVE_SETTINGS_PRESENTATION.panel, {
+    bounds: { height: 700, left: 500, top: 100, width: 600 },
+    contentWidth: 560,
+    footerBounds: { height: 41, left: 650, top: 739.5, width: 300 },
+    footerHeight: 70,
+    headerHeight: 70,
+    rowHeight: 44,
+  })
+  assert.deepEqual(nativeUiFont('control-panel').metrics, [14, 4, 29])
+  assert.equal(Object.keys(nativeUiFont('control-panel').glyphs).length, 92)
+  for (const [name, expected] of [
+    ['actionArrow', ['ControlPanel', 0, [308, 89, 14, 15]]],
+    ['bindingPlate', ['ControlPanel', 5, [175, 45, 159, 30]]],
+    ['frameCorner', ['UI', 17, [743, 588, 80, 83]]],
+    ['frameFlourish', ['UI', 18, [543, 205, 67, 262]]],
+    ['rowPlate', ['ControlPanel', 3, [26, 0, 315, 44]]],
+    ['sliderThumb', ['ControlPanel', 18, [26, 45, 64, 25]]],
+    ['sliderTrack', ['ControlPanel', 4, [342, 0, 106, 29]]],
+    ['toggleOff', ['ControlPanel', 8, [92, 46, 82, 30]]],
+    ['toggleOn', ['ControlPanel', 9, [407, 31, 82, 30]]],
+  ] as const) {
+    const source = NATIVE_SETTINGS_PRESENTATION.records[name]
+    assert.deepEqual([source.atlas, source.record], expected.slice(0, 2))
+    assert.deepEqual(nativeUiRecord(source.atlas, source.record).frame, expected[2])
+  }
 })
 
 test('browser Lua console installs only for enabled host and rechecks both gates per call', async () => {

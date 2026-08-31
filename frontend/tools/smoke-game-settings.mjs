@@ -26,6 +26,7 @@ const errors = []
 const failedResponses = []
 let darkCloudPaint = null
 let mobileAudio = null
+let settingsPresentation = null
 const rangeTouches = {}
 
 const vite = await createViteServer({
@@ -140,6 +141,7 @@ try {
   await page.getByRole('button', { name: 'Settings' }).click()
   let dialog = page.locator('.game-settings-dialog')
   await dialog.waitFor()
+  settingsPresentation = await assertNativeSettingsPresentation(dialog, { desktop: !mobile })
   assert.equal(await dialog.getAttribute('data-settings-context'), 'title')
   assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
   assert.equal(await dialog.getByText('RESOLUTION', { exact: true }).count(), 0)
@@ -232,11 +234,11 @@ try {
   await page.keyboard.press('KeyJ')
   assert.equal(await healthPotion.getAttribute('data-binding-code'), 'KeyH')
   assert.equal(await manaPotion.getAttribute('data-binding-code'), 'KeyJ')
-  await dialog.getByRole('button', { name: 'BACK' }).click()
+  await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
   await dialog.locator('[data-game-default-focus="true"]').waitFor()
   await nextPaint(page)
   await page.screenshot({ path: screenshots.title })
-  await dialog.getByRole('button', { name: 'DONE' }).click()
+  await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
   await dialog.waitFor({ state: 'detached' })
 
   const persistedTitle = await storedSettings(page)
@@ -283,6 +285,7 @@ try {
   await page.getByRole('button', { name: 'GAME SETTINGS' }).click()
   dialog = page.locator('.game-settings-dialog')
   await dialog.waitFor()
+  await assertNativeSettingsPresentation(dialog, { desktop: !mobile })
   assert.equal(await dialog.getAttribute('data-settings-context'), 'dark-cloud')
   assert.equal(await page.locator('.dark-cloud-modal-backdrop').count(), 0)
   darkCloudPaint = await dialog.evaluate((node) => {
@@ -305,7 +308,7 @@ try {
   })
   await nextPaint(page)
   await page.screenshot({ path: screenshots.darkCloud })
-  await dialog.getByRole('button', { name: 'DONE' }).click()
+  await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
   await dialog.waitFor({ state: 'detached' })
   assert.equal(await page.locator('.dark-cloud-scene').count(), 1)
   await page.getByRole('button', { name: 'Menu' }).click()
@@ -375,6 +378,7 @@ try {
   await pause.getByRole('button', { name: 'GAME SETTINGS' }).click()
   dialog = page.locator('.game-settings-dialog')
   await dialog.waitFor()
+  await assertNativeSettingsPresentation(dialog, { desktop: !mobile })
   assert.equal(await dialog.getAttribute('data-settings-context'), 'gameplay')
   await dialog.getByRole('button', { name: 'TWEAK GAME' }).click()
   for (const label of ['COMPLEX LIGHTING', 'COMPLEX SHADOWS', 'MULTIPLE SHADOWS']) {
@@ -404,8 +408,8 @@ try {
   }))
   assert.equal(lowQualityRegionTarget.physicalSide, 128)
   await page.screenshot({ path: screenshots.boneyard })
-  await dialog.getByRole('button', { name: 'BACK' }).click()
-  await dialog.getByRole('button', { name: 'DONE' }).click()
+  await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
+  await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
   await dialog.waitFor({ state: 'detached' })
   await page.waitForFunction(() => (
     document.querySelector('.boneyard-world-canvas')?.dataset.complexShadowRecordCount === '0'
@@ -431,6 +435,7 @@ try {
     hub: hubReceipt,
     mobileAudio,
     rangeTouches,
+    settingsPresentation,
     screenshots,
     status: 'ok',
   })}\n`)
@@ -464,7 +469,8 @@ async function setRange(locator, value) {
     const touchValue = before === minimum ? maximum : minimum
     const box = await locator.boundingBox()
     assert.ok(box)
-    const label = await locator.locator('xpath=preceding-sibling::span').innerText()
+    const row = locator.locator('xpath=ancestor::label[1]')
+    const label = await row.locator('.game-settings-native-label .sr-only').innerText()
     await locator.tap({
       position: {
         x: touchValue === minimum ? 1 : box.width - 1,
@@ -474,7 +480,7 @@ async function setRange(locator, value) {
     await page.waitForTimeout(100)
     assert.equal(Number(await locator.inputValue()), touchValue)
     assert.equal(
-      await locator.locator('xpath=following-sibling::output').innerText(),
+      await row.locator('output').innerText(),
       `${touchValue}%`,
     )
     rangeTouches[label] = { before, touchValue }
@@ -608,6 +614,44 @@ async function enterCreateAfterCollegeAdmission(page, host) {
   } finally {
     await page.keyboard.up('s')
   }
+}
+
+async function assertNativeSettingsPresentation(dialog, { desktop }) {
+  const receipt = await dialog.evaluate((node) => {
+    const bounds = node.getBoundingClientRect()
+    const records = [...node.querySelectorAll('.native-settings-panel-art [data-native-ui-record]')]
+      .map((record) => record.getAttribute('data-native-ui-record'))
+    return {
+      actionArrows: node.querySelectorAll('[data-native-ui-record="ControlPanel.0"]').length,
+      bounds: { height: bounds.height, width: bounds.width },
+      frameRecords: records,
+      nativeFonts: [...node.querySelectorAll('[data-native-ui-font]')].map((font) => (
+        font.getAttribute('data-native-ui-font')
+      )),
+      rowPlates: node.querySelectorAll('[data-native-ui-plan] [data-native-ui-record="ControlPanel.3"]').length,
+      sliderTracks: node.querySelectorAll('[data-native-ui-strip="ControlPanel.4"]').length,
+      toggles: [...node.querySelectorAll(
+        '[data-native-ui-record="ControlPanel.8"], [data-native-ui-record="ControlPanel.9"]',
+      )].map((toggle) => toggle.getAttribute('data-native-ui-record')),
+    }
+  })
+  assert.deepEqual(receipt.frameRecords, [
+    'UI.17', 'UI.17', 'UI.17', 'UI.17', 'UI.18', 'UI.18',
+  ])
+  assert.ok(receipt.nativeFonts.length > 0)
+  assert.ok(receipt.nativeFonts.every((font) => font === 'control-panel'))
+  assert.ok(receipt.rowPlates > 0)
+  assert.ok(receipt.sliderTracks >= 4)
+  assert.ok(receipt.toggles.length > 0)
+  assert.ok(receipt.actionArrows > 0)
+  if (desktop) {
+    assert.ok(Math.abs(receipt.bounds.width - 600) < 0.1, JSON.stringify(receipt.bounds))
+    assert.ok(Math.abs(receipt.bounds.height - 700) < 0.1, JSON.stringify(receipt.bounds))
+  } else {
+    assert.ok(receipt.bounds.width <= 600)
+    assert.ok(receipt.bounds.height <= 700)
+  }
+  return receipt
 }
 
 async function storedSettings(page) {

@@ -21,6 +21,7 @@ import {
   type NativeUiPlan,
 } from './native-ui-plan.ts'
 import { createNativeUiPixiAdapter } from './native-ui-pixi.ts'
+import { mountNativeUiDomWorkbench } from './native-ui-dom-workbench.tsx'
 
 const WIDTH = 1_600
 const HEIGHT = 900
@@ -30,6 +31,7 @@ const status = requiredElement<HTMLOutputElement>('native-ui-status')
 const atlasSelect = requiredElement<HTMLSelectElement>('atlas')
 const recordInput = requiredElement<HTMLInputElement>('record')
 const componentsButton = requiredElement<HTMLButtonElement>('show-components')
+const domButton = requiredElement<HTMLButtonElement>('show-dom')
 const atlasButton = requiredElement<HTMLButtonElement>('show-atlas')
 const previousButton = requiredElement<HTMLButtonElement>('previous')
 const nextButton = requiredElement<HTMLButtonElement>('next')
@@ -43,7 +45,7 @@ for (const name of NATIVE_UI_ATLAS_NAMES) {
 atlasSelect.value = 'UI'
 recordInput.value = '101'
 
-let mode: 'atlas' | 'components' = 'components'
+let mode: 'atlas' | 'components' | 'dom' = 'components'
 let revision = 0
 
 void start().catch((error: unknown) => {
@@ -66,15 +68,19 @@ async function start(): Promise<void> {
   const root = new Container({ label: 'native-ui-workbench' })
   gpu.application.stage.addChild(root)
   host.replaceChildren(gpu.canvas)
+  const dom = mountNativeUiDomWorkbench(host)
+  dom.setVisible(false)
   gpu.canvas.dataset.atlasCount = `${NATIVE_UI_MANIFEST.summary.atlasCount}`
   gpu.canvas.dataset.fontCount = `${NATIVE_UI_MANIFEST.summary.fontCount}`
   gpu.canvas.dataset.recordCount = `${NATIVE_UI_MANIFEST.summary.recordCount}`
 
   const render = (): void => {
     root.removeChildren().forEach((child) => child.destroy({ children: true }))
-    const plan = mode === 'components' ? componentPlan() : atlasPlan(selectedAtlas(), selectedRecord())
-    root.addChild(nativeUi.render(plan, `native-ui-${mode}`))
-    gpu.application.renderer.render(gpu.application.stage)
+    const plan = mode === 'atlas' ? atlasPlan(selectedAtlas(), selectedRecord()) : componentPlan()
+    if (mode !== 'dom') root.addChild(nativeUi.render(plan, `native-ui-${mode}`))
+    gpu.canvas.style.display = mode === 'dom' ? 'none' : 'block'
+    dom.setVisible(mode === 'dom')
+    if (mode !== 'dom') gpu.application.renderer.render(gpu.application.stage)
     revision += 1
     gpu.canvas.dataset.mode = mode
     gpu.canvas.dataset.atlas = selectedAtlas()
@@ -84,6 +90,8 @@ async function start(): Promise<void> {
     gpu.canvas.dataset.renderRevision = `${revision}`
     status.value = mode === 'components'
       ? `12 atlases · 1,259 records · 10 fonts · ${plan.nodes.length} visible plan nodes · ${plan.actions.length} semantic actions`
+      : mode === 'dom'
+        ? 'DOM adapter · exact stock message · 3 semantic stock buttons'
       : `${selectedAtlas()}.${selectedRecord()} · ${formatRecord(selectedAtlas(), selectedRecord())}`
     document.documentElement.dataset.nativeUiWorkbench = 'ready'
   }
@@ -91,6 +99,7 @@ async function start(): Promise<void> {
   const setMode = (next: typeof mode): void => {
     mode = next
     componentsButton.ariaPressed = `${mode === 'components'}`
+    domButton.ariaPressed = `${mode === 'dom'}`
     atlasButton.ariaPressed = `${mode === 'atlas'}`
     render()
   }
@@ -101,6 +110,7 @@ async function start(): Promise<void> {
     recordInput.value = `${Math.max(0, Math.min(maximum, Number.isFinite(value) ? value : 0))}`
   }
   componentsButton.addEventListener('click', () => setMode('components'))
+  domButton.addEventListener('click', () => setMode('dom'))
   atlasButton.addEventListener('click', () => setMode('atlas'))
   atlasSelect.addEventListener('change', () => {
     recordInput.value = '0'
@@ -122,6 +132,7 @@ async function start(): Promise<void> {
     setMode('atlas')
   })
   window.addEventListener('pagehide', () => {
+    dom.destroy()
     gpu.application.destroy({ removeView: true })
     nativeUi.destroy()
     textures.destroy()

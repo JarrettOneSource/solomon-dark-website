@@ -344,3 +344,124 @@ already assigned Backquote; corrupt, partial, or duplicate records still fail
 closed. This is a designed Website extension, not a newly attributed retail
 setting. The complete input membership is now the fifteen native identities,
 browser Chat, and browser Open Cheats.
+
+## 2026-08-31 — Reopened: complete stock Settings presentation vocabulary
+
+### Reported smell and parity question
+
+- Owner request: reverse engineer the stock Settings appearance more deeply,
+  port that appearance, and make the maintained native UI framework the base
+  for later custom-interface rebuilds. Custom tutorial, mod-selection, party,
+  and directory redesigns are explicitly deferred.
+- The 2026-08-21 pass closed Settings behavior and used several exact atlas
+  snippets, but explicitly left native label/hit rectangles unresolved. The
+  current DOM still approximates panel proportions, type, row chrome, header,
+  and footer with CSS/OS fonts. The earlier receipt therefore proves behavior,
+  not complete presentation parity.
+- Falsifiers: the stock shell is responsive rather than fixed; Settings uses a
+  second font or unlisted atlas family; ControlPanel records `.0/.3/.4/.5/.8/
+  .9/.18` do not own navigation, rows, range tracks/values, toggles, and slider
+  thumbs; or a current stock-semantic row cannot fit the recovered vocabulary.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Fresh static binary | canonical `SolomonDark`/`SolomonDark.exe` read-only replica 3; retail 0.72.5 SHA-256 `03a834566ce70fd808f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000`; `MyCPanel` vtable `0x0079BEDC` | Slots `+0xB4/+0xB8/+0xBC` are `Settings_Render 0x005D9A50`, audio apply `0x005D8FC0`, and `Controls_Render 0x005DAEF0`. Constructor/destructor remain `0x005D8DC0/0x005D8F30`; one panel lifetime owns root and children. | high |
+| Fresh shell trace | `MyQuickPanel_Render 0x005D86E0`; `CPanel` setup/render `0x00434540/0x00434840`; shared control builders `0x00435B00/0x00435CA0/0x004366E0` | The native shell is one retained fixed panel; it builds controls through shared rollout/control objects rather than screen-specific paint code. Render constants resolve to 5/15/5/20-pixel shell insets and 10/70/140-pixel context offsets. | high |
+| Fresh control-family trace | slider `0x00436160 -> 0x00438600`; toggle `0x00435DE0 -> 0x004380D0`; key binding `0x00436310 -> 0x00438F50`; action/button `0x00436750 -> 0x00437D90/0x004389C0`; ControlPanel control vtables | Root and child screens share one slider, checkbox/toggle, binding, navigation-action, and button family. `Controls_Render` enumerates the complete native row set through these builders. | high |
+| Settled live native layouts | retained 1600 by 900 fixtures/captures `game-settings-title`, `game-settings-gameplay`, `game-settings-dark-cloud`, `controls`, and `performance`; capture tree `4ae5370977019c1c20813fa17d5141f32cd50968` | Every context uses panel `[500,100,1100,800]` (600 by 700); `UI.17` corners sit at `(490/1030,90/727)`; mirrored `UI.18` flourishes span y `319..581`; Done/Back is `[650,739.5,950,780.5]` (300 by 41). | high |
+| Exact generated catalog | `native-ui-assets.json`; UI atlas SHA-256 `37d5e8fc543af12a9d8019e738dbe1e29b648211144a3782c3a32e71f76cd2eb`; ControlPanel atlas SHA-256 `d63bd3ac402fcbc00a60916b6f0aa79f662501acc8f6fbe88ee1676e69b43f86` | Shell uses `UI.17/.18`; ControlPanel `.0` is the 14 by 15 action arrow, `.3` the 315 by 44 row plate, `.4` the 106 by 29 range track, `.5` the 159 by 30 binding plate, `.8/.9` the 82 by 30 Off/On switches, and `.18` the 64 by 25 slider thumb. The finite ControlPanel wrapper supplies 92 glyphs, metrics `[14,4,29]`, and 39 kerning rows. | high |
+| Tool provenance | read-only Mod Loader `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`; `decompile_targets.py` SHA-256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465` | Existing tooling only; no Mod Loader file changed. | high |
+
+### Presentation membership inventory
+
+| Member | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| 600 by 700 shell and 70-pixel header/footer bands | settled layouts plus `MyQuickPanel_Render` | `exact-ported` | desktop geometry contract and matching capture |
+| four `UI.17` frame corners | generated UI record 17 | `exact-ported` | shared native sprite adapter; no CSS crop constants |
+| two mirrored `UI.18` side flourishes | generated UI record 18 | `exact-ported` | shared native sprite adapter and exact native anchors |
+| dark cracked body, gold frame/header/footer treatment | settled captures and shared panel renderer | `exact-ported` | stock texture/paint composition, no invented generic dialog skin |
+| title, section, row, value, and button type | finite ControlPanel bitmap wrapper | `exact-ported` | no OS-font visible Settings text; unsupported glyphs fail visibly |
+| 44-pixel row plate | ControlPanel `.3` | `exact-ported` | shared row presentation across root, Controls, and Performance |
+| slider track and thumb | ControlPanel `.4/.18` | `exact-ported` | range states retain semantic input with exact visible art |
+| Off/On switches | ControlPanel `.8/.9` | `exact-ported` | exact record selected from authoritative Boolean and disabled alpha |
+| navigation/action arrow | ControlPanel `.0` | `exact-ported` | every child-page action uses one shared arrow module |
+| binding value plate | ControlPanel `.5` | `exact-ported` | complete keyboard rows share one value presentation |
+| Done/Back footer | shared CPanel button, exact 300 by 41 HotRect | `exact-ported` | common footer module and semantic rectangle |
+| title/gameplay/Dark Cloud contexts | same MyCPanel shell | `verified-already-at-parity` lifecycle; presentation re-proved | retained underlay and return behavior unchanged |
+| Controls child native rows | complete native binding census | `exact-ported` presentation | one row vocabulary; web Chat/Cheats rows remain labeled extensions |
+| Performance child native rows | complete native settings census | `exact-ported` presentation | supported rows use exact vocabulary; prior negative dispositions remain |
+| Camera FOV, UI Scale, online, mobile UI, save transfer, Cheats, and browser notes | Website additions | `out-of-system` semantics; exact stock Settings presentation vocabulary | no false native attribution |
+| Resolution, Login Info, Kid Mode, Enhanced Effects Off, Save Memory | prior explicit dispositions | unchanged | no inert rows restored merely for appearance |
+| custom tutorial/mod/party/directory screens | no MyCPanel owner | `out-of-system` for this pass | owner-deferred |
+
+### Recovered presentation contract
+
+- Native coordinates are authored in a 1600 by 900 surface. The desktop shell
+  is 600 by 700 at `(500,100)` with a 70-pixel header and a 300 by 41 centred
+  footer control. Browser fit may clamp height and scroll content, but must not
+  invent a different desktop proportion.
+- Every visible Settings label comes from the finite ControlPanel bitmap font.
+  Semantic HTML retains accessible copy but cannot paint a second OS-font label.
+- Records `.3/.4/.5/.8/.9/.18/.0` remain distinct authored members. A CSS
+  approximation cannot stand in for an extractable record.
+- Browser-added rows use the recovered vocabulary without claiming native
+  membership. Settings state, persistence, input, audio, renderer consumers,
+  modal lifetime, and prior negative dispositions remain unchanged.
+
+### Web implementation consequence
+
+- Add a pure `native-settings-contract` beside the reusable catalog, pinning
+  shell geometry, font, record membership, and row variants.
+- Add one React Settings presentation module over `NativeUiSprite` and
+  `NativeBitmapText`; move atlas-record knowledge out of `GameSettingsDialog`
+  and `main-menu.css`.
+- Recompose the existing semantic Settings controls through that module. Do
+  not rewrite persistence, scene ownership, control actions, or custom-row
+  semantics.
+- Preserve mobile scrolling and minimum hit targets as explicit browser policy;
+  desktop uses the exact 600 by 700 stock proportion.
+
+### Validation contract
+
+- Focused contract tests pin all shell coordinates, every required record and
+  ControlPanel font metric, row membership, and prior negative dispositions.
+- Mac Chrome at 1600 by 900 compares panel/corner/flourish/header/footer/row
+  geometry and pixels against the retained stock captures. Title, gameplay,
+  and Dark Cloud contexts must share one presentation.
+- Controls and Performance journeys exercise slider, toggle, action, binding,
+  Back, Done, focus, disabled, and scrolling states. Coarse-pointer 896 by 414
+  retains fit, scroll, and at least 44-pixel semantic targets.
+- Page, console, and failed-response arrays remain empty; the exact candidate
+  passes `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini.
+
+### Implementation validation receipt
+
+- `native-settings-contract.ts` now owns the 1600 by 900 design, 600 by 700
+  shell, 70-pixel header/footer, 44-pixel row, ControlPanel font, and exact
+  `.0/.3/.4/.5/.8/.9/.18` plus `UI.17/.18` membership.
+  `NativeSettingsPresentation.tsx` projects those records through the shared
+  native sprite, strip, plan, and bitmap-text modules.
+- `GameSettingsDialog` retains all prior state, persistence, actions, context
+  lifecycle, browser extensions, and negative dispositions, but its visible
+  shell, headings, rows, sliders, binding plates, switches, action arrows, and
+  footer now use the recovered vocabulary. Desktop geometry is exactly 600 by
+  700; the coarse-pointer browser policy clamps only height and scrolls content.
+- Mac Chrome desktop Settings passed title, Dark Cloud, Hub, and Boneyard
+  contexts. The root exposed four action arrows, 15 row plates, four slider
+  tracks, exact Off/On records, 28 ControlPanel bitmap-text runs, and exact
+  `UI.17 x4 / UI.18 x2` shell art. The title capture hashes to
+  `36c501a1670e23ee17c7b49832de567e6155088fd5fab01d1e842f69e5eff26c`.
+- The 896 by 414 DPR-2 touch journey fit the 600 by 389.1875 clamped panel and
+  exercised real touch changes on Sound `100 -> 0`, Music `100 -> 0`, Camera
+  FOV `100 -> 75`, UI Scale `100 -> 75`, and Light Quality `100 -> 24` before
+  applying the final values. Effective game music/sound returned `0.40/0.65`,
+  Hub/Boneyard camera and renderer settings remained live, and errors were
+  empty. The mobile title capture hashes to
+  `c64f1e1ef79dc23e2b181cf24a8642ee5319b62fe2e90841c22fef2d4196ebb6`.
+- Focused Settings/native-UI tests and the exact Mac canonical gate pass. The
+  final gate includes 0 lint errors, every backend/frontend/desktop suite,
+  production build, media policy, and bundle budget (`Game-CG_-oeee.js`,
+  277,279 raw / 83,703 gzip bytes). Publication and deployment remain separate
+  and were not requested.

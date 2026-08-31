@@ -7,6 +7,8 @@ import { createServer as createViteServer } from 'vite'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotPath = process.env.SDR_NATIVE_UI_SCREENSHOT
   || '/tmp/solomon-dark-native-ui-workbench.png'
+const domScreenshotPath = process.env.SDR_NATIVE_UI_DOM_SCREENSHOT
+  || '/tmp/solomon-dark-native-ui-dom-workbench.png'
 const errors = {
   console: [],
   failedResponses: [],
@@ -62,6 +64,18 @@ try {
   })
   await canvas.screenshot({ path: screenshotPath })
 
+  await page.locator('#show-dom').click()
+  const dom = page.locator('[data-native-ui-dom-workbench="ready"]:not([hidden])')
+  await dom.waitFor()
+  assert.equal(await dom.locator('[data-native-ui-message-box]').count(), 1)
+  assert.equal(await dom.locator('[data-native-ui-button]').count(), 3)
+  assert.equal(await dom.locator('[data-native-ui-font="menu"]').count() > 0, true)
+  assert.equal(await dom.locator('[data-native-ui-font="medium"]').count() > 0, true)
+  await page.waitForTimeout(500)
+  await page.locator('#native-ui-stage').screenshot({ path: domScreenshotPath })
+  await page.locator('#show-components').click()
+  await canvas.waitFor({ state: 'visible' })
+
   const atlasCounts = {
     Bonedit: 84,
     ControlPanel: 116,
@@ -91,6 +105,7 @@ try {
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     atlasesExercised: Object.keys(atlasCounts),
+    domScreenshotPath,
     screenshotPath,
     errors,
   })}\n`)

@@ -43,7 +43,15 @@ import {
   type MobileUiSize,
 } from './mobile-ui-layout.ts'
 import type { NativeSaveTransferController } from './NativeSaveTransferSettings.tsx'
-import NativePanelArt from './native-ui/NativePanelArt.tsx'
+import {
+  NativeSettingsActionArrow,
+  NativeSettingsBindingPlate,
+  NativeSettingsPanelArt,
+  NativeSettingsRangeTrack,
+  NativeSettingsRowPlate,
+  NativeSettingsText,
+  NativeSettingsToggleArt,
+} from './native-ui/NativeSettingsPresentation.tsx'
 
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
 type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
@@ -241,9 +249,12 @@ export default function GameSettingsDialog({
           '--settings-ui-atlas': `url("${settingsAssets.uiAtlas}")`,
         } as CSSProperties}
       >
-        <NativePanelArt />
+        <NativeSettingsPanelArt />
         <header className="game-settings-header">
-          <h2 id="game-settings-title">{pageTitle(page)}</h2>
+          <h2 id="game-settings-title">
+            <span className="sr-only">{pageTitle(page)}</span>
+            <NativeSettingsText align="center" scale={1.75} text={pageTitle(page)} tint={0xd9bd72} />
+          </h2>
         </header>
         <div ref={contentRef} className="game-settings-content">
           {page === 'root' ? (
@@ -280,7 +291,15 @@ export default function GameSettingsDialog({
           onClick={page === 'root' ? onClose : back}
           type="button"
         >
-          {page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'}
+          <span className="sr-only">
+            {page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'}
+          </span>
+          <NativeSettingsText
+            align="center"
+            scale={1.15}
+            text={page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'}
+            tint={0xf2f0dc}
+          />
         </button>
       </section>
     </div>
@@ -446,8 +465,24 @@ function ControlsSettings({
               onClick={() => onListen(listening === action ? null : action)}
               type="button"
             >
-              <span>{label}</span>
-              <strong>{listening === action ? 'PRESS A KEY' : gameBindingLabel(settings.controls[action])}</strong>
+              <NativeSettingsRowPlate className="game-settings-row-plate" />
+              <span className="game-settings-native-label">
+                <span className="sr-only">{label}</span>
+                <NativeSettingsText scale={1.15} text={label} />
+              </span>
+              <strong>
+                <NativeSettingsBindingPlate />
+                <span className="sr-only">
+                  {listening === action ? 'PRESS A KEY' : gameBindingLabel(settings.controls[action])}
+                </span>
+                <NativeSettingsText
+                  align="center"
+                  scale={1.05}
+                  text={listening === action ? 'PRESS A KEY' : gameBindingLabel(settings.controls[action])}
+                  tint={0xd9bd72}
+                  width={200}
+                />
+              </strong>
             </button>
           ))}
         </SettingsGroup>
@@ -506,7 +541,11 @@ function PerformanceSettings({
           onChange={(zoomEffects) => onChange({ ...settings, zoomEffects })}
         />
         <p className="game-settings-fixed-policy">
-          ENHANCED EFFECTS: ON
+          <NativeSettingsRowPlate className="game-settings-row-plate" />
+          <span className="game-settings-native-label">
+            <span className="sr-only">ENHANCED EFFECTS: ON</span>
+            <NativeSettingsText scale={1.15} text="ENHANCED EFFECTS: ON" />
+          </span>
           <small>Fixed for synchronized multiplayer presentation.</small>
         </p>
       </SettingsGroup>
@@ -517,7 +556,10 @@ function PerformanceSettings({
 function SettingsGroup({ children, title }: { children: ReactNode; title: string }) {
   return (
     <section className="game-settings-group" aria-label={title}>
-      <h3>{title}</h3>
+      <h3>
+        <span className="sr-only">{title}</span>
+        <NativeSettingsText scale={1.05} text={title} tint={0xa99258} />
+      </h3>
       <div>{children}</div>
     </section>
   )
@@ -540,19 +582,29 @@ function SettingsRange({
 }) {
   return (
     <label className="game-settings-range">
-      <span>{label}</span>
-      <input
-        autoFocus={autoFocus}
-        aria-valuetext={`${value}%`}
-        data-game-default-focus={autoFocus ? 'true' : undefined}
-        max={maximum}
-        min={minimum}
-        onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
-        step={1}
-        type="range"
-        value={value}
-      />
-      <output>{value}%</output>
+      <NativeSettingsRowPlate className="game-settings-row-plate" />
+      <span className="game-settings-native-label">
+        <span className="sr-only">{label}</span>
+        <NativeSettingsText scale={1.15} text={label} />
+      </span>
+      <div className="game-settings-range-control">
+        <NativeSettingsRangeTrack />
+        <input
+          autoFocus={autoFocus}
+          aria-valuetext={`${value}%`}
+          data-game-default-focus={autoFocus ? 'true' : undefined}
+          max={maximum}
+          min={minimum}
+          onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
+          step={1}
+          type="range"
+          value={value}
+        />
+        <output>
+          <span className="sr-only">{value}%</span>
+          <NativeSettingsText align="right" scale={0.9} text={`${value}%`} tint={0xf0d996} width={48} />
+        </output>
+      </div>
     </label>
   )
 }
@@ -583,8 +635,12 @@ function SettingsToggle({
       onClick={() => onChange(!checked)}
       type="button"
     >
-      <span>{label}</span>
-      <i className="game-settings-native-toggle" data-enabled={checked} aria-hidden />
+      <NativeSettingsRowPlate className="game-settings-row-plate" />
+      <span className="game-settings-native-label">
+        <span className="sr-only">{label}</span>
+        <NativeSettingsText scale={nested ? 1 : 1.15} text={label} />
+      </span>
+      <NativeSettingsToggleArt enabled={checked} />
     </button>
   )
 }
@@ -592,8 +648,12 @@ function SettingsToggle({
 function SettingsAction({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button className="game-settings-action" onClick={onClick} type="button">
-      <span>{label}</span>
-      <i aria-hidden />
+      <NativeSettingsRowPlate className="game-settings-row-plate" />
+      <span className="game-settings-native-label">
+        <span className="sr-only">{label}</span>
+        <NativeSettingsText scale={1.15} text={label} />
+      </span>
+      <NativeSettingsActionArrow />
     </button>
   )
 }
@@ -644,9 +704,18 @@ function FullscreenSetting() {
         onClick={() => { void toggle() }}
         type="button"
       >
-        <span>FULLSCREEN</span>
-        {mode === 'install' ? <strong>OPTIONS</strong> : (
-          <i className="game-settings-native-toggle" data-enabled={active} aria-hidden />
+        <NativeSettingsRowPlate className="game-settings-row-plate" />
+        <span className="game-settings-native-label">
+          <span className="sr-only">FULLSCREEN</span>
+          <NativeSettingsText scale={1.15} text="FULLSCREEN" />
+        </span>
+        {mode === 'install' ? (
+          <strong>
+            <span className="sr-only">OPTIONS</span>
+            <NativeSettingsText align="right" scale={1.05} text="OPTIONS" tint={0xd9bd72} width={82} />
+          </strong>
+        ) : (
+          <NativeSettingsToggleArt enabled={active} />
         )}
       </button>
       {showInstallHelp ? (

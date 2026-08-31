@@ -48,6 +48,7 @@ const deviceScaleFactor = Number(process.env.SDR_MOBILE_HUD_DPR || 2)
 const gatewayUrl = process.env.SDR_MOBILE_HUD_GATEWAY_URL?.trim()
 const publicWebSocketOrigin = process.env.SDR_MOBILE_HUD_PUBLIC_ORIGIN?.trim()
 const layoutEditorOnly = process.argv.includes('--layout-editor-only')
+const socialOnly = process.argv.includes('--social-only')
 const IPHONE_USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) '
   + 'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
 
@@ -119,6 +120,7 @@ smokeFlow: try {
     viewport: { width, height },
   })
   page = await context.newPage()
+  await routeDeploymentManifest(page)
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
@@ -201,6 +203,7 @@ smokeFlow: try {
   await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
   const shortSettings = page.locator(MEMBER_SELECTORS.partySettingsDialog)
   await shortSettings.waitFor({ timeout: 10_000 })
+  await assertExactFrameCorners(shortSettings, '.party-settings-corner', 'hub-solo-settings-short')
   const shortSettingsStop = await capture(page, 'hub-solo-settings-short')
   assertDialogFits(shortSettingsStop.members.partySettingsDialog[0], 'hub-solo-settings-short', { minWidth: 300 }, shortHeight)
   await shortSettings.getByRole('button', { name: /close/i }).click()
@@ -217,6 +220,7 @@ smokeFlow: try {
   await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
   const soloSettings = page.locator(MEMBER_SELECTORS.partySettingsDialog)
   await soloSettings.waitFor({ timeout: 10_000 })
+  await assertExactFrameCorners(soloSettings, '.party-settings-corner', 'hub-solo-settings')
   const soloSettingsStop = await capture(page, 'hub-solo-settings')
   const soloDialog = soloSettingsStop.members.partySettingsDialog[0]
   assertDialogFits(soloDialog, 'hub-solo-settings', { minWidth: 300 }, height)
@@ -268,6 +272,7 @@ smokeFlow: try {
   await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
   const settings = page.locator(MEMBER_SELECTORS.partySettingsDialog)
   await settings.waitFor({ timeout: 10_000 })
+  await assertExactFrameCorners(settings, '.party-settings-corner', 'hub-party-settings')
   const settingsStop = await capture(page, 'hub-party-settings')
   assertDialogFits(settingsStop.members.partySettingsDialog[0], 'hub-party-settings', { minWidth: 300 }, height)
   await settings.getByRole('button', { name: /close/i }).click()
@@ -276,6 +281,7 @@ smokeFlow: try {
   await page.locator(MEMBER_SELECTORS.partyMembers).first().tap()
   const profile = page.locator(MEMBER_SELECTORS.playerProfile)
   await profile.waitFor({ timeout: 10_000 })
+  await assertExactFrameCorners(profile, '.hub-player-profile-corner', 'hub-player-card')
   const cardStop = await capture(page, 'hub-player-card')
   const card = cardStop.members.playerProfile[0]
   assert.ok(card?.visible, 'hub-player-card: card visible')
@@ -292,52 +298,54 @@ smokeFlow: try {
   await page.locator('.game-chat-close').click()
   await page.locator('.game-chat[data-chat-open="false"]').waitFor({ timeout: 10_000 })
 
-  const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
-  const leaderLoaded = leader.next(
-    (message) => message.type === 'server-boneyard-loaded',
-    'leader Boneyard materialization',
-  )
-  leader.startMatch('default-random')
-  await boneyard.waitFor({ timeout: 240_000 })
-  await leaderLoaded
-  await page.locator(MEMBER_SELECTORS.joystickPrimary).waitFor({ timeout: 15_000 })
-  const runIdle = await capture(page, 'run-idle')
-  assertHubLayout(runIdle, 'run-idle', { primaryJoystick: true })
-  assertEditorMatchesDefaultHud(receipts['mobile-ui-editor'].defaultGeometry, runIdle, true)
-  assertSkullButton(runIdle, 'run-idle')
-  // A run has no party chip: the roster takes the chip's anchor.
-  assertAllyColumn(runIdle, 'run-idle', { hidden: false, rows: 1, top: 54 })
-  await pauseRoundTrip(page, 'run-pause')
+  if (!socialOnly) {
+    const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+    const leaderLoaded = leader.next(
+      (message) => message.type === 'server-boneyard-loaded',
+      'leader Boneyard materialization',
+    )
+    leader.startMatch('default-random')
+    await boneyard.waitFor({ timeout: 240_000 })
+    await leaderLoaded
+    await page.locator(MEMBER_SELECTORS.joystickPrimary).waitFor({ timeout: 15_000 })
+    const runIdle = await capture(page, 'run-idle')
+    assertHubLayout(runIdle, 'run-idle', { primaryJoystick: true })
+    assertEditorMatchesDefaultHud(receipts['mobile-ui-editor'].defaultGeometry, runIdle, true)
+    assertSkullButton(runIdle, 'run-idle')
+    // A run has no party chip: the roster takes the chip's anchor.
+    assertAllyColumn(runIdle, 'run-idle', { hidden: false, rows: 1, top: 54 })
+    await pauseRoundTrip(page, 'run-pause')
 
-  const cdp = await context.newCDPSession(page)
-  const movement = rectCenter(await page.locator(MEMBER_SELECTORS.joystickMovement).boundingBox())
-  const primary = rectCenter(await page.locator(MEMBER_SELECTORS.joystickPrimary).boundingBox())
-  const movementBounds = await page.locator(MEMBER_SELECTORS.joystickMovement).boundingBox()
-  const reach = movementBounds.width * 0.3
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [
-      { id: 11, x: movement.x, y: movement.y },
-      { id: 22, x: primary.x, y: primary.y },
-    ],
-  })
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [
-      { id: 11, x: movement.x + reach, y: movement.y - reach * 0.4 },
-      { id: 22, x: primary.x + reach, y: primary.y },
-    ],
-  })
-  const runHeld = await capture(page, 'run-held')
-  const heldKnob = rectCenter(runHeld.members.joystickMovementKnob[0])
-  assert.ok(heldKnob.x > movement.x + reach * 0.5, `run-held: movement knob deflected (${heldKnob.x} vs base ${movement.x})`)
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  const runReleased = await capture(page, 'run-released')
-  const releasedKnob = rectCenter(runReleased.members.joystickMovementKnob[0])
-  assert.ok(Math.abs(releasedKnob.x - movement.x) < 1 && Math.abs(releasedKnob.y - movement.y) < 1,
-    `run-released: movement knob recentred (${releasedKnob.x}, ${releasedKnob.y}) vs (${movement.x}, ${movement.y})`)
-  assertHubLayout(runReleased, 'run-released', { primaryJoystick: true })
-  assertAllyColumn(runReleased, 'run-released', { hidden: false, rows: 1, top: 54 })
+    const cdp = await context.newCDPSession(page)
+    const movement = rectCenter(await page.locator(MEMBER_SELECTORS.joystickMovement).boundingBox())
+    const primary = rectCenter(await page.locator(MEMBER_SELECTORS.joystickPrimary).boundingBox())
+    const movementBounds = await page.locator(MEMBER_SELECTORS.joystickMovement).boundingBox()
+    const reach = movementBounds.width * 0.3
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { id: 11, x: movement.x, y: movement.y },
+        { id: 22, x: primary.x, y: primary.y },
+      ],
+    })
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { id: 11, x: movement.x + reach, y: movement.y - reach * 0.4 },
+        { id: 22, x: primary.x + reach, y: primary.y },
+      ],
+    })
+    const runHeld = await capture(page, 'run-held')
+    const heldKnob = rectCenter(runHeld.members.joystickMovementKnob[0])
+    assert.ok(heldKnob.x > movement.x + reach * 0.5, `run-held: movement knob deflected (${heldKnob.x} vs base ${movement.x})`)
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    const runReleased = await capture(page, 'run-released')
+    const releasedKnob = rectCenter(runReleased.members.joystickMovementKnob[0])
+    assert.ok(Math.abs(releasedKnob.x - movement.x) < 1 && Math.abs(releasedKnob.y - movement.y) < 1,
+      `run-released: movement knob recentred (${releasedKnob.x}, ${releasedKnob.y}) vs (${movement.x}, ${movement.y})`)
+    assertHubLayout(runReleased, 'run-released', { primaryJoystick: true })
+    assertAllyColumn(runReleased, 'run-released', { hidden: false, rows: 1, top: 54 })
+  }
 
   const expectedCancelledRequests = failedRequests.filter((request) => (
     expectedNavigationCancellation(request)
@@ -1048,6 +1056,7 @@ async function assertCustomMobileUi(page, geometry, profile) {
 async function assertFinePointerMobileUiIsolation(profile) {
   const context = await browser.newContext({ viewport: { height: 900, width: 1600 } })
   const desktop = await context.newPage()
+  await routeDeploymentManifest(desktop)
   desktop.on('pageerror', (error) => pageErrors.push(`desktop mobile-profile isolation: ${error.message}`))
   desktop.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`desktop mobile-profile isolation: ${message.text()}`)
@@ -1177,6 +1186,21 @@ async function enterHub(page, context, displayName, element) {
   return { mobileUiProfile, playerId }
 }
 
+async function assertExactFrameCorners(root, selector, label) {
+  assert.deepEqual(
+    await root.locator(selector).evaluateAll((corners) => corners.map((corner) => (
+      corner.getAttribute('data-native-ui-record')
+    ))),
+    ['UI.17', 'UI.17'],
+    `${label}: exact UI.17 corners`,
+  )
+  assert.equal(
+    await root.locator('[data-native-ui-record="UI.8"]').count(),
+    0,
+    `${label}: no bottom ornament inside a top-corner panel`,
+  )
+}
+
 async function enterRawHub(displayName, element) {
   const response = await fetch(`${baseUrl}/api/game/hub`, {
     headers: { 'x-solomon-dark-session': 'enter-hub' },
@@ -1254,4 +1278,11 @@ async function waitForPartySize(page, size) {
   await page.waitForFunction((expected) => (
     document.querySelectorAll('[data-party-member]').length === expected
   ), size, { timeout: 15_000 })
+}
+
+async function routeDeploymentManifest(page) {
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
 }

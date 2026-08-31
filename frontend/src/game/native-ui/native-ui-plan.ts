@@ -131,14 +131,17 @@ export interface NativeUiMessageAction {
   readonly state?: NativeUiButtonState
 }
 
-export interface NativeUiMessageSpec {
-  readonly actions: readonly NativeUiMessageAction[]
+export interface NativeUiMessageFrameSpec {
   readonly body: string
   readonly bounds: NativeUiRect
   readonly dimAlpha?: number
   readonly height: number
   readonly title: string
   readonly width: number
+}
+
+export interface NativeUiMessageSpec extends NativeUiMessageFrameSpec {
+  readonly actions: readonly NativeUiMessageAction[]
 }
 
 export interface NativeUiSimpleMenuRow {
@@ -397,10 +400,7 @@ export function planNativeUiTabs(spec: NativeUiTabsSpec): NativeUiPlan {
   return nativeUiPlan(spec.width, spec.height, ...fragments)
 }
 
-export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
-  if (spec.actions.length < 1 || spec.actions.length > 2) {
-    throw new RangeError('native UI message requires one or two actions')
-  }
+export function planNativeUiMessageFrame(spec: NativeUiMessageFrameSpec): NativeUiPlan {
   const { bounds } = spec
   const centerX = bounds.left + bounds.width / 2
   const inner = nativeUiRect(bounds.left + 5, bounds.top + 5, bounds.width - 10, bounds.height - 10)
@@ -526,24 +526,41 @@ export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
     nodes.push({ anchor: [0.5, 0.5], atlas: 'UI', kind: 'sprite', record: 8, scale, x, y })
   }
 
+  return nativeUiPlan(spec.width, spec.height, { actions: [], nodes })
+}
+
+export function nativeUiMessageActionBounds(
+  bounds: NativeUiRect,
+  actionCount: 1 | 2,
+): readonly NativeUiRect[] {
   const actionGap = 8
   const availableWidth = bounds.width - 80
-  const actionWidth = spec.actions.length === 1
+  const actionWidth = actionCount === 1
     ? Math.min(353, availableWidth)
     : Math.min(260, (availableWidth - actionGap) / 2)
-  const actionsWidth = actionWidth * spec.actions.length + actionGap * (spec.actions.length - 1)
+  const actionsWidth = actionWidth * actionCount + actionGap * (actionCount - 1)
+  const centerX = bounds.left + bounds.width / 2
   const actionTop = bounds.top + bounds.height - 92
+  return Object.freeze(Array.from({ length: actionCount }, (_, index) => nativeUiRect(
+    centerX - actionsWidth / 2 + index * (actionWidth + actionGap),
+    actionTop,
+    actionWidth,
+    69,
+  )))
+}
+
+export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
+  if (spec.actions.length < 1 || spec.actions.length > 2) {
+    throw new RangeError('native UI message requires one or two actions')
+  }
+
   const suppliedActionBounds = spec.actions.filter(({ bounds: actionBounds }) => actionBounds !== undefined).length
   if (suppliedActionBounds !== 0 && suppliedActionBounds !== spec.actions.length) {
     throw new RangeError('native UI message action bounds must be supplied for every action or none')
   }
+  const defaultBounds = nativeUiMessageActionBounds(spec.bounds, spec.actions.length as 1 | 2)
   const actionFragments = spec.actions.map((action, index) => planNativeUiButton({
-    bounds: action.bounds ?? nativeUiRect(
-      centerX - actionsWidth / 2 + index * (actionWidth + actionGap),
-      actionTop,
-      actionWidth,
-      69,
-    ),
+    bounds: action.bounds ?? defaultBounds[index]!,
     id: action.id,
     label: action.label,
     state: action.state,
@@ -551,7 +568,7 @@ export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
   return nativeUiPlan(
     spec.width,
     spec.height,
-    { actions: [], nodes },
+    planNativeUiMessageFrame(spec),
     ...actionFragments,
   )
 }

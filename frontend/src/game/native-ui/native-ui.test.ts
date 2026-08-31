@@ -12,10 +12,12 @@ import {
   NATIVE_UI_BUTTON,
   NATIVE_UI_MESSAGE,
   NATIVE_UI_TAB,
+  nativeUiMessageActionBounds,
   nativeUiRect,
   nativeUiStripPieces,
   planNativeUiButton,
   planNativeUiMessage,
+  planNativeUiMessageFrame,
   planNativeUiSimpleMenu,
   planNativeUiTabs,
 } from './native-ui-plan.ts'
@@ -91,6 +93,8 @@ test('native UI catalog drains all stock presentation records and font wrappers'
   }
   assert.throws(() => nativeUiRecord('UI', 113), /native UI\.113 does not exist/)
   assert.throws(() => nativeUiRecord('UI', 1.5), /nonnegative integer/)
+  assert.deepEqual(nativeUiRecord('UI', 17).frame, [743, 588, 80, 83])
+  assert.deepEqual(nativeUiRecord('UI', 8).frame, [824, 587, 49, 112])
 })
 
 test('native bitmap text shares exact measurement, wrapping, kerning, and no-fallback layout', () => {
@@ -184,6 +188,27 @@ test('stock messages compose exact chrome and one or two action rows in order', 
   }
 })
 
+test('stock message frame is independently reusable by semantic adapters', () => {
+  const bounds = nativeUiRect(550, 268, 500, 362)
+  const frame = planNativeUiMessageFrame({
+    body: 'BODY',
+    bounds,
+    height: 900,
+    title: 'TITLE',
+    width: 1_600,
+  })
+  assert.deepEqual(frame.actions, [])
+  assert.ok(frame.nodes.some(({ label }) => label === 'message:background'))
+  assert.ok(frame.nodes.some(({ label }) => label === 'message:title'))
+  assert.deepEqual(nativeUiMessageActionBounds(bounds, 1), [
+    nativeUiRect(623.5, 538, 353, 69),
+  ])
+  assert.deepEqual(nativeUiMessageActionBounds(bounds, 2), [
+    nativeUiRect(590, 538, 206, 69),
+    nativeUiRect(804, 538, 206, 69),
+  ])
+})
+
 test('title Kill Character prompt preserves the settled stock lines and action geometry', () => {
   const plan = planTitleMenuPrompt({
     busy: false,
@@ -275,6 +300,14 @@ test('SimpleMenu is a reusable composition over the same stock primitives', () =
     width: 1_600,
   })
   assert.equal(plan.actions.length, 3)
-  assert.ok(plan.nodes.some((node) => node.label === 'simple-menu:frame' && node.kind === 'nine-slice'))
-  assert.equal(plan.nodes.filter(({ label }) => label?.startsWith('simple-menu:arrow-')).length, 3)
+  const frame = plan.nodes.find((node) => node.label === 'simple-menu:frame')
+  assert.ok(frame?.kind === 'nine-slice')
+  assert.equal(frame.record, 17)
+  const arrows = plan.nodes.filter(({ label }) => label?.startsWith('simple-menu:arrow-'))
+  assert.equal(arrows.length, 3)
+  for (const arrow of arrows) {
+    assert.ok(arrow.kind === 'sprite')
+    assert.equal(arrow.record, 8)
+    assert.ok(arrow.y > frame.bounds.top + frame.bounds.height)
+  }
 })

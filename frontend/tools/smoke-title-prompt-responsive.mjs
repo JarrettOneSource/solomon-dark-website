@@ -310,9 +310,13 @@ async function promptReceipt(page, kind, viewport) {
 
   const receipt = await page.evaluate((promptKind) => {
     const canvas = document.querySelector('.title-menu-canvas')
-    const dialog = document.querySelector(`.stock-prompt-dialog[data-prompt-kind="${promptKind}"]`)
+    const curtain = document.querySelector('.stock-prompt-curtain')
+    const dialog = document.querySelector(
+      `.stock-prompt-stage[data-prompt-kind="${promptKind}"] .stock-prompt-dialog`,
+    )
     const stage = dialog?.closest('.stock-prompt-stage')
-    if (!(canvas instanceof HTMLCanvasElement) || !(dialog instanceof HTMLElement)
+    if (!(canvas instanceof HTMLCanvasElement) || !(curtain instanceof HTMLElement)
+      || !(dialog instanceof HTMLElement)
       || !(stage instanceof HTMLElement)) return null
     const rect = (element) => {
       const bounds = element.getBoundingClientRect()
@@ -327,10 +331,18 @@ async function promptReceipt(page, kind, viewport) {
     }
     const textureSources = JSON.parse(canvas.dataset.textureSources || '[]')
     return {
-      actions: [...dialog.querySelectorAll('.stock-prompt-action')].map(rect),
+      actions: [...dialog.querySelectorAll('[data-native-ui-button]')].map(rect),
       canvas: rect(canvas),
+      curtain: rect(curtain),
       dialog: rect(dialog),
       frame: structuredClone(canvas.__sdrTitleFrame),
+      messageBoxes: Number(dialog.matches('[data-native-ui-message-box]')),
+      nativeButtonStates: [...dialog.querySelectorAll('[data-native-ui-button]')].map((button) => (
+        button.getAttribute('data-native-ui-button-state')
+      )),
+      nativeFonts: [...dialog.querySelectorAll('[data-native-ui-font]')].map((font) => (
+        font.getAttribute('data-native-ui-font')
+      )),
       prompt: canvas.dataset.prompt,
       stage: rect(stage),
       textureAlpha: {
@@ -367,8 +379,18 @@ async function promptReceipt(page, kind, viewport) {
   })
   assert.equal(receipt.textureSources.exactTitle, true)
   assert.equal(receipt.textureSources.looseTitleCrop, false)
+  assert.equal(receipt.messageBoxes, 1)
+  assert.equal(receipt.nativeButtonStates.length, 2)
+  assert.ok(receipt.nativeButtonStates.every((state) => state === 'idle' || state === 'focused'))
+  assert.ok(receipt.nativeButtonStates.includes('focused'))
+  assert.ok(receipt.nativeFonts.includes('menu'))
+  assert.ok(receipt.nativeFonts.includes('medium'))
   close(receipt.canvas.width, viewport.width, `${kind} canvas width`)
   close(receipt.canvas.height, viewport.height, `${kind} canvas height`)
+  close(receipt.curtain.width, receipt.canvas.width, `${kind} curtain width`)
+  close(receipt.curtain.height, receipt.canvas.height, `${kind} curtain height`)
+  close(receipt.curtain.left, receipt.canvas.left, `${kind} curtain left`)
+  close(receipt.curtain.top, receipt.canvas.top, `${kind} curtain top`)
   const physicalStageWidth = 1_600 * expected.displayScale
   const physicalStageHeight = 900 * expected.displayScale
   close(receipt.stage.width, physicalStageWidth, `${kind} native stage width`)

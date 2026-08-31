@@ -49,6 +49,26 @@ ui.destroy()
 textures.destroy()
 ```
 
+React callers use the DOM adapter through the semantic stock modules rather
+than rebuilding transparent hit rectangles beside a Pixi render:
+
+```tsx
+import NativeUiButton from './native-ui/NativeUiButton.tsx'
+import NativeUiMessageBox from './native-ui/NativeUiMessageBox.tsx'
+
+<NativeUiMessageBox title="Kill character?" body={warning}>
+  <NativeUiButton onClick={confirm}>YES</NativeUiButton>
+  <NativeUiButton data-game-back="true" onClick={cancel}>NO</NativeUiButton>
+</NativeUiMessageBox>
+```
+
+Messages require one or two `NativeUiButton` children. The message owns stock
+layout, wrapping, curtain, frame, ornaments, and default action bounds; each
+button owns its focus, hover, press, disabled art, bitmap label, and semantic
+element. Callers own only content and action meaning. `NativeUiPlanView` is the
+DOM adapter for lower-level recovered compositions and consumes the same pure
+plan as `native-ui-pixi.ts`.
+
 The small raw interface is available when a recovered screen needs an exact
 record without a high-level composition:
 
@@ -60,6 +80,20 @@ const sprite = ui.sprite({ atlas: 'UI', kind: 'sprite', record: 13, x: 460, y: 1
 ```
 
 `nativeUiRecord` fails on a missing index. It never substitutes another image.
+
+## Frames and bottom ornaments
+
+`UI.17` is the stock 80 by 83 frame source. Use it through the shared
+`NativeUiSprite` or nine-slice interfaces; never recover it with a broad atlas
+crop. A crop that extends one pixel past `UI.17`'s right edge enters the
+adjacent `UI.8` record.
+
+`UI.8` is a separate 49 by 112 downward ornament. It is not a corner tail. It
+belongs only to the authored three-ornament group below stock message and
+SimpleMenu frames: one full-scale centre ornament and two 0.75-scale side
+ornaments. Web-authored panels may reuse the clean `UI.17` corner art, but must
+not attach `UI.8` to their top corners or combine the two records into one
+bitmap.
 
 ## Tabs
 
@@ -90,6 +124,9 @@ selected body, `UI.54` end treatment, Fonts group 3 label, native gold tint,
 and disabled alpha. Its states are `idle`, `focused`, `pressed`, `selected`,
 and `disabled`.
 
+`NativeUiButton` is the semantic React form of that same plan. Do not create a
+second CSS button skin for a stock action.
+
 `planNativeUiSimpleMenu` composes those buttons with the native frame, header,
 arrows, curtain, and action rectangles. The screen owner continues to supply
 opening/closing progress and to decide what an action means.
@@ -113,6 +150,16 @@ Available font names are:
 - `body`, `medium`, `special-uppercase`, `menu`, `heading`;
 - `skill-uppercase`, `world-and-roster`, `timeline`, `belt`;
 - `control-panel`.
+
+## Settings presentation
+
+`native-settings-contract.ts` owns the recovered 1600 by 900 Settings design,
+600 by 700 shell, 70-pixel header/footer bands, 44-pixel rows, ControlPanel
+font, and exact record membership. `NativeSettingsPresentation.tsx` exposes
+the React presentation pieces for the shell, row plate, range track, binding
+plate, Off/On switch, and action arrow. Screen-specific settings state and
+browser-added rows remain in their owning dialog; they consume this vocabulary
+without redefining atlas coordinates.
 
 ## Regeneration
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { art } from '../lib/assets.ts'
+import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
 import type { GameSessionKind } from './protocol/game-protocol.ts'
 import { PARTY_VISIBILITIES, type LocalPartyState, type PartyVisibility } from './protocol/party-state.ts'
 import './party-settings.css'
@@ -58,8 +59,8 @@ export default function PartySettingsDialog({
       if (event.target === event.currentTarget) onClose()
     }}>
       <section className="party-settings-dialog" role="dialog" aria-modal="true" aria-label="Party settings">
-        <img className="party-settings-corner" src={art.cornerGold} alt="" aria-hidden />
-        <img className="party-settings-corner party-settings-corner-right" src={art.cornerGold} alt="" aria-hidden />
+        <NativeUiSprite className="party-settings-corner" atlas="UI" record={17} style={{ position: 'absolute' }} />
+        <NativeUiSprite className="party-settings-corner party-settings-corner-right" atlas="UI" record={17} style={{ position: 'absolute' }} />
         <header className="party-settings-header">
           <img className="party-settings-header-skull" src={art.skullGold} alt="" aria-hidden />
           <h2>PARTY</h2>

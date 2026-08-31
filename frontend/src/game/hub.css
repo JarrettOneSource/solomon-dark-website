@@ -893,16 +893,17 @@
   position: absolute;
   top: -5px;
   left: -6px;
-  width: 72px;
-  height: auto;
   filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.6));
   pointer-events: none;
+  transform: scale(0.9);
+  transform-origin: top left;
 }
 
 .hub-player-profile-corner-right {
   left: auto;
   right: -6px;
-  transform: scaleX(-1);
+  transform: scaleX(-1) scale(0.9);
+  transform-origin: top right;
 }
 
 .hub-player-profile-header {
@@ -1498,12 +1499,13 @@
   .hub-player-profile-corner {
     top: -4px;
     left: -4px;
-    width: 44px;
+    transform: scale(0.55);
   }
 
   .hub-player-profile-corner-right {
     left: auto;
     right: -4px;
+    transform: scaleX(-1) scale(0.55);
   }
 
   .hub-player-profile-header {

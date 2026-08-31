@@ -69,7 +69,6 @@ crop UI.png bar-red         425  28 140  26
 crop UI.png arrow-gold      376   3  48  55
 crop UI.png gate-iron       267 747 124 267
 crop UI.png midnight        272  58 308  80
-crop UI.png corner-gold     740 583 118  80
 crop UI.png figures-gold      0 928 152  86
 
 # ---- Skills.png (1024x512): element wordmarks, frames, stamp icons ---------
