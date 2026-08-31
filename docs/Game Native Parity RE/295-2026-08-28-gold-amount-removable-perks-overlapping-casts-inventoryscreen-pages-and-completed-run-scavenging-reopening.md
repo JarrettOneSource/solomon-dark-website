@@ -1,5 +1,10 @@
 # 2026-08-28 — Gold amount, removable perks, overlapping casts, InventoryScreen pages, and completed-run scavenging reopening
 
+> **Partial supersession, 2026-08-31:** the Tonic capacity-affordance reopening
+> in entry 175 corrects this entry's unconditional `DRINK TONIC` decoration
+> model. Stock moves the plaque after the first Tonic, removes it after the
+> second, and paints unlocked empty cells brighter than locked cells.
+
 ## 2026-08-28 — Assigned wizard class-title secondary-report reopening
 
 ### Reported smell and parity question

@@ -498,3 +498,187 @@ No member is blocked by the browser platform.
   `251c7dccbde41e085d8071dae89980b24f8a5599707ddcca5e4cdeadec35823f`.
 - No native member is blocked by the browser platform and no material unknown
   remains. No commit, push, deployment, or production claim is made.
+
+## 2026-08-31 — Tonic capacity-affordance renderer reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: the purple `DRINK TONIC` plaque remains at one fixed
+  location after both Tonics have been purchased. The existing parity ledger
+  called it non-transactional decoration without recovering the capacity branch
+  that owns its placement and lifetime.
+- Stock behavior to recover: the complete `Skills+0x800` capacity presentation
+  in the shared nine-cell CHARMS/CURSES pane: unlocked-versus-locked cell alpha,
+  the plaque's zero/one-Tonic positions, its two-Tonic absence, painter order,
+  input ownership, every InventoryScreen/service surface, and persistence and
+  participant boundaries.
+- Reproduction inputs/scenes: legal capacities 3, 6, and 9 in standalone Hub
+  and Boneyard Inventory page 2, Fomentius/Luthacus/Shlorio companion page 2,
+  and Hagatha's fixed replacement pane; purchase, close/reopen, save/resume,
+  Game Over/replacement, and two participants.
+- Falsifiers: an unconditional draw of Inventory record 5; identical alpha for
+  an unlocked empty cell and a locked cell; a plaque at capacity 9; a plaque
+  hit target; or a surface that paints the pane through a second implementation.
+
+This is a secondary report in a covered system. The 2026-08-28 InventoryScreen
+pass stopped after identifying the plaque asset and failed to follow the
+post-grid `Skills+0x800` reads at `0x00564EFF` and `0x00564F4E`. The 2026-08-30
+Tonic correction recovered admission and persistence but accepted that
+incomplete renderer claim. This reopening replaces the falsified unconditional
+decoration model everywhere the shared pane is used.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed image as the existing Hagatha and InventoryScreen entries. | high |
+| Renderer instructions | `InventoryScreen::Render 0x00562520`; grid `0x00564C67..0x00564ECF`; plaque branch `0x00564EFA..0x00564FA0` | Every cell below capacity is painted at alpha 1 and every later cell at float32 0.5. Capacity below 4 draws glyph `DAT_008199B0+0x40C` at the first authored center; capacity 4..7 draws it at the second; capacity at least 8 skips the draw. Legal capacity is only 3/6/9. | high |
+| Raw constants | `0x007DE870=0.5f`; doubles `0x007849A0=60`, `0x00784D50=30`, `0x00784CC8=32`, `0x007870D8=16`; slot icon scale `0x00785368=0.8f` | The existing fixed-stage projection maps the two native plaque centers to `[253,288]` at capacity 3 and `[253,318]` at capacity 6. Slot pitch and icon scale remain 60 and 0.8. | high |
+| Asset | tracked stock Inventory atlas record 5, frame `[429,0,92,50]`, atlas SHA-256 `527b52fb30453ae9d2bf5a0e1d3b0ee9f822eb7591452a11084e1cf4e2626265` | Exact purple `DRINK TONIC` plaque used by the conditional glyph draw. | high |
+| Input instructions | `InventoryScreen::PointerRelease 0x0056FC90`, occupied-cell hover tail `0x005707A8..0x00570A6D` | Owned cells can construct HoverBoxes; the plaque has no control or transaction edge. | high |
+| Current web causal trace | Website `f1c46c02`; `hub-inventory-renderer.ts`, `hub-inventory-render-contract.ts` | `addHagathaInventoryPane` unconditionally draws Inventory record 5 at `bundleCenter [253,288]`; every empty slot is tinted `0x808080` without consulting `charmCapacity`. The same function feeds both fixed Hagatha and scrolled page-2 surfaces. | high |
+
+Fresh read-only queries used canonical project `SolomonDark/SolomonDark.exe`
+through Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`.
+Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py`, `dump_insns_around.py`, and `dump_floats_at.py` were
+used against preferred-image addresses. The dirty Mod Loader checkout was not
+changed.
+
+### System boundary and membership inventory
+
+Native system: InventoryScreen's participant-owned Hagatha capacity
+presentation, from the authoritative ordered outcome count/capacity through the
+shared nine-cell painter, exact plaque asset, hover-only input, and every scene
+and lifecycle that renders the pane.
+
+| Member / branch | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| capacity 3, zero Tonics | `0x00564EFF..0x00564F4C` | exact-ported | cells 0..2 alpha 1, cells 3..8 alpha 0.5, plaque center `[253,288]` |
+| capacity 6, one Tonic | `0x00564F4E..0x00564F8D` | exact-ported | cells 0..5 alpha 1, cells 6..8 alpha 0.5, plaque center `[253,318]` |
+| capacity 9, two Tonics | `0x00564F4E..0x00564FA5` | exact-ported | all cells alpha 1 and no plaque |
+| occupied outcome icons, including repeated selector 27 | `0x00564E1F..0x00564EAA` | verified-already-at-parity | ordered icon `Skills[127+selector]`, scale 0.8, painted before the plaque |
+| standalone Hub/Boneyard Inventory page 2 | common InventoryScreen SwipePages | exact-ported through shared painter | correct state immediately after purchase and after close/reopen |
+| Fomentius, Luthacus, and Shlorio companion page 2 | common InventoryScreen with +53 x projection | exact-ported through shared painter | same state with companion offset and clipping |
+| Hagatha fixed replacement pane | PerkShop/InventoryScreen common pane | exact-ported through shared painter | no nested page; purchase transition updates the same participant's pane |
+| desktop, responsive, and authored mobile HUD layouts | one fixed 1600x900 native renderer | exact-ported through shared painter | no breakpoint-specific state or duplicate label |
+| hover, click, drag, wheel, and page arrows | `0x0056FC90`, SwipePages input | verified-already-at-parity | plaque remains non-transactional; occupied cells alone own HoverBoxes |
+| save/resume, Game Over/replacement, stock import/export | serialized `Skills+0x800` and ordered vector | verified-already-at-parity | presentation derives from restored capacity without stored UI state |
+| multiplayer participants | participant-private progression/economy | verified-already-at-parity | one participant's purchase never moves another participant's plaque |
+| malformed capacity outside 3/6/9 | executable threshold debt versus strict web protocol/save invariant | out-of-system | malformed current web state fails closed before rendering |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread
+
+- Owner and construction: `Skills` owns ordered outcomes at `+0x7C0/+0x7C4`
+  and capacity at `+0x800`; fresh capacity is three.
+- Upstream producers: PerkShop appends selector 27 and raises capacity by three,
+  capped at nine. Save/import and participant replication preserve the same
+  capacity and ordered vector.
+- State transitions: capacity 3 paints one unlocked row and the first plaque;
+  capacity 6 paints two unlocked rows and the second plaque; capacity 9 paints
+  all cells and bypasses the plaque draw. There is no independent UI flag.
+- Downstream consumers: the common InventoryScreen renderer paints slot frames,
+  ordered icons, then record 5. Hover construction reads only occupied ordered
+  cells; it does not consume the plaque.
+- Entry/reset/teardown: page navigation and service close discard only painter
+  state. Reopen, save/resume, run replacement, and participant replication
+  rederive presentation from authoritative capacity.
+
+### Recovered behavioral contract
+
+- Slot index is compared directly with `charmCapacity`: below-capacity frames
+  use alpha 1; later locked frames use alpha 0.5. Empty does not imply locked.
+- At capacity 3, record 5 is centered at `[253,288]`. At capacity 6 it is
+  centered at `[253,318]`. At capacity 9 it is not drawn.
+- The plaque paints after all nine slot frames and any owned icons, preserving
+  the stock overlap. It is exact atlas art, not bitmap text.
+- The plaque has no hit target and does not buy a Tonic. Hagatha's offer and
+  host transaction remain the only purchase owner.
+- Every surface consumes the authenticated local participant's replicated
+  capacity. No browser-local inference, stored presentation flag, or responsive
+  branch owns visibility.
+
+### Nearby-system findings
+
+- The web field name `bundleCenter` is false ownership: record 5 is the Tonic
+  capacity affordance, not the profile Bargain Bundle.
+- The earlier unconditional `emptySlotTint` hid a second capacity discrepancy:
+  stock distinguishes unlocked empty cells from locked cells by alpha.
+- These findings change presentation only. Admission, prices, ordered outcomes,
+  gameplay effects, persistence, Bargain Bundles, and the explicit ordinary-
+  perk removal extension remain unchanged.
+
+### Confidence and open questions
+
+- Confirmed: exact retail identity; raw branch thresholds; state field;
+  constants; asset record; painter order; input non-ownership; shared web call
+  sites; legal 3/6/9 invariant.
+- Inferred: none required for implementation.
+- Unknown: none material.
+
+### Web implementation consequence
+
+- Replace `bundleCenter` and unconditional empty tint with one shared native
+  capacity-presentation contract in `hub-inventory-render-contract.ts`.
+- Make `addHagathaInventoryPane` set each slot's alpha from index/capacity and
+  draw record 5 only at the recovered capacity-dependent center.
+- Consume that single function from standalone, companion, and Hagatha panes;
+  add no service, viewport, protocol, save, or responsive exception.
+
+### Validation contract
+
+- Focused contract coverage: all nine slot alphas and plaque centers for legal
+  capacities 3, 6, and 9; exact Inventory record-5 frame; invalid indices.
+- Existing economy coverage must continue to prove 0/1/2 Tonics, capacity
+  3/6/9, full-mind rejection, order, persistence, and participant isolation.
+- Complete Mac mini `./scripts/validate.sh` on the exact candidate.
+- Real Mac Chrome production-bundle journey: capture standalone page 2 and
+  Hagatha service at capacities 3, 6, and 9; prove first-position, second-
+  position, then absence, the 3/6/9 slot-alpha pattern, unchanged purchase
+  behavior, and empty page/console/failed-response/WebGL/wire/host errors.
+
+### Implementation validation receipt
+
+- `hub-inventory-render-contract.ts` now owns the two plaque centers, record 5,
+  locked alpha 0.5, the raw `<4/<8/else` capacity branch, and slot-index alpha.
+  `hub-inventory-renderer.ts` consumes that contract once for every fixed and
+  scrolled pane. The false `bundleCenter` and unconditional `emptySlotTint`
+  paths are removed.
+- Contract coverage pins the exact record-5 atlas frame, every slot alpha at
+  capacities 3/6/9, both plaque centers, capacity-9 absence, and invalid slot
+  indices. The existing authority/save/portable suites continue to cover two-
+  Tonic admission, full-mind rejection, participant isolation, ordered bundle
+  replay, schema repair, and stock-web-stock round trip.
+- The exact six-file candidate was materialized byte-for-byte in a clean
+  detached Mac worktree based on Website
+  `f1c46c02c60a2a3efa59bffda034c5c687856a11`. The complete Mac mini
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate passed: 28 backend
+  contracts, backend formatting, frontend architecture/lint with 19 existing
+  warnings and zero errors, every frontend suite, desktop `5/5`, production
+  frontend/game-host builds, bundle budget, and media policy. The Game entry is
+  277,279 raw / 83,708 gzip bytes under 524,288 / 134,144.
+- Real Mac Chrome ran the built production bundle and authoritative host with
+  ordinary cheat mode. Both Hagatha's fixed pane and standalone Inventory page
+  2 showed the first plaque at capacity 3, the lower plaque at capacity 6, and
+  no plaque at capacity 9; their slot frames followed 3/6/9 bright membership
+  with the remainder at alpha 0.5. It then retained outcomes
+  `[27,27,0,1,2,3,4,5,6]`, rejected selector 9 without changing 86,550 gold,
+  and reopened the ordered Bargain Bundle. Browser errors, failed requests,
+  failed responses, WebGL losses, wire errors, and host errors were empty.
+- Final inspected 1600 by 900 frame SHA-256 values are
+  `47ead2f7fb3a05aefb577e807e799521db954c1f33d2369fb6101cf5cebe9822`,
+  `825572a93d31043dacef48dac5ab28b2d9f28aef8cd5200637f221277e799b2e`,
+  and `cca127b0abfee10e455e2fe4e79ba2e532e948b9678e73777661abc7da4e327d`
+  for Hagatha capacities 3/6/9, plus
+  `1d75da2dafd0370ff5b84d53d10a810db155e02f7bf026d6ae2b4fb59dc26e67`,
+  `605d04efc207171c1bfc899a51c7ab499407f169b823ba70b5a01f697e0da66a`,
+  and `b58b59792105697b536ebb65c8a34fc867d7a188c42476484b01f7fbf1f541e9`
+  for standalone Inventory capacities 3/6/9. The structured receipt SHA-256 is
+  `d831cf03ea130b9b89146037b47a9aff95731463e2b2b441d95c0b91d85347f5`.
+- No protocol, save-schema, gameplay-authority, timing, or platform adaptation
+  changed. No native member is blocked and no material unknown remains.
+  Publication and production deployment are separate operations and are not
+  claimed by this pre-publication receipt.

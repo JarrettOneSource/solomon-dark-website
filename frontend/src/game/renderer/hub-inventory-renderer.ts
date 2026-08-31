@@ -123,6 +123,8 @@ import {
   hubDyeModalOpacity,
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
+  hubHagathaPerkSlotAlpha,
+  hubHagathaTonicPromptCenter,
   hubInventoryEquipmentSlotRects,
   hubInventoryFlybyFrame,
   hubInventoryFlybyPoint,
@@ -2370,8 +2372,8 @@ function addHagathaInventoryPane(
       centerY,
       HUB_HAGATHA_PERK_PANE.slotScale,
     )
-    if (selector === undefined) slot.tint = HUB_HAGATHA_PERK_PANE.emptySlotTint
-    else addCenteredAtlasSprite(
+    slot.alpha = hubHagathaPerkSlotAlpha(index, economy.charmCapacity)
+    if (selector !== undefined) addCenteredAtlasSprite(
       context,
       layer,
       'Skills',
@@ -2381,14 +2383,17 @@ function addHagathaInventoryPane(
       HUB_HAGATHA_PERK_PANE.slotScale,
     )
   }
-  addCenteredAtlasSprite(
-    context,
-    layer,
-    'Inventory',
-    5,
-    HUB_HAGATHA_PERK_PANE.bundleCenter[0] + offsetX,
-    HUB_HAGATHA_PERK_PANE.bundleCenter[1] + offsetY,
-  )
+  const tonicPromptCenter = hubHagathaTonicPromptCenter(economy.charmCapacity)
+  if (tonicPromptCenter) {
+    addCenteredAtlasSprite(
+      context,
+      layer,
+      'Inventory',
+      HUB_HAGATHA_PERK_PANE.tonicPromptRecord,
+      tonicPromptCenter[0] + offsetX,
+      tonicPromptCenter[1] + offsetY,
+    )
+  }
 }
 
 function addDoneControl(context: RenderContext, layer: Container): void {

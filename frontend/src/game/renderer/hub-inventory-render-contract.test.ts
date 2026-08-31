@@ -67,6 +67,8 @@ import {
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
   hubHagathaFullMindNotice,
+  hubHagathaPerkSlotAlpha,
+  hubHagathaTonicPromptCenter,
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
   hubInventoryWizardIdentityText,
@@ -912,13 +914,12 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     verticalEdgeRecord: 79,
   })
   assert.deepEqual(HUB_HAGATHA_PERK_PANE, {
-    bundleCenter: [253, 288],
     columns: 3,
-    emptySlotTint: 0x808080,
     innerHeight: 238,
     innerPanelTint: 0x191916,
     innerWidth: 227,
     left: 139,
+    lockedSlotAlpha: 0.5,
     rows: 3,
     slotCenterOrigin: [193, 198],
     slotPitch: 60,
@@ -926,8 +927,28 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     titleTint: 0xd9ba70,
     titleCenterX: 253,
     titleTextBaselineY: 152.5,
+    tonicPromptCenters: [[253, 288], [253, 318]],
+    tonicPromptRecord: 5,
     top: 129,
   })
+  assert.deepEqual(nativeAssetsJson.atlases.Inventory.records['5']?.frame, [429, 0, 92, 50])
+  assert.deepEqual(
+    Array.from({ length: 9 }, (_, index) => hubHagathaPerkSlotAlpha(index, 3)),
+    [1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+  )
+  assert.deepEqual(
+    Array.from({ length: 9 }, (_, index) => hubHagathaPerkSlotAlpha(index, 6)),
+    [1, 1, 1, 1, 1, 1, 0.5, 0.5, 0.5],
+  )
+  assert.deepEqual(
+    Array.from({ length: 9 }, (_, index) => hubHagathaPerkSlotAlpha(index, 9)),
+    [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  )
+  assert.deepEqual(hubHagathaTonicPromptCenter(3), [253, 288])
+  assert.deepEqual(hubHagathaTonicPromptCenter(6), [253, 318])
+  assert.equal(hubHagathaTonicPromptCenter(9), null)
+  assert.throws(() => hubHagathaPerkSlotAlpha(-1, 3), /within \[0, 8\]/)
+  assert.throws(() => hubHagathaPerkSlotAlpha(9, 9), /within \[0, 8\]/)
   assert.deepEqual(HUB_DOWSING_FIELD, {
     greenAmplitude: 0.1,
     greenBase: 0.7,

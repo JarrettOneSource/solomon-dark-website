@@ -510,13 +510,12 @@ export const HUB_SHOP_TEXT = {
 } as const
 
 export const HUB_HAGATHA_PERK_PANE = {
-  bundleCenter: [253, 288] as const,
   columns: 3,
-  emptySlotTint: 0x808080,
   innerHeight: 238,
   innerPanelTint: 0x191916,
   innerWidth: 227,
   left: 139,
+  lockedSlotAlpha: 0.5,
   rows: 3,
   slotCenterOrigin: [193, 198] as const,
   slotPitch: 60,
@@ -524,8 +523,26 @@ export const HUB_HAGATHA_PERK_PANE = {
   titleTint: 0xd9ba70,
   titleCenterX: 253,
   titleTextBaselineY: 152.5,
+  tonicPromptCenters: [[253, 288], [253, 318]] as const,
+  tonicPromptRecord: 5,
   top: 129,
 } as const
+
+export function hubHagathaPerkSlotAlpha(index: number, charmCapacity: number): number {
+  const slotCount = HUB_HAGATHA_PERK_PANE.columns * HUB_HAGATHA_PERK_PANE.rows
+  if (!Number.isInteger(index) || index < 0 || index >= slotCount) {
+    throw new RangeError('native Hagatha perk slot index must be within [0, 8]')
+  }
+  return index < charmCapacity ? 1 : HUB_HAGATHA_PERK_PANE.lockedSlotAlpha
+}
+
+export function hubHagathaTonicPromptCenter(
+  charmCapacity: number,
+): readonly [number, number] | null {
+  if (charmCapacity < 4) return HUB_HAGATHA_PERK_PANE.tonicPromptCenters[0]
+  if (charmCapacity < 8) return HUB_HAGATHA_PERK_PANE.tonicPromptCenters[1]
+  return null
+}
 
 export const HAGATHA_NATIVE_TOOLTIP_LINES: readonly (readonly string[])[] = [
   ['Maximum life is always increased by 25%.'],

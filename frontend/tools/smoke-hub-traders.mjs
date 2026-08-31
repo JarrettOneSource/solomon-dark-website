@@ -1062,9 +1062,10 @@ async function fundTraderSmoke(page, gold = 10_000) {
 
 async function exerciseHagathaCapacity(page) {
   await page.getByRole('button', { name: 'Open Hagatha interaction' }).click()
-  const hagatha = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
+  let hagatha = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
   await hagatha.waitFor()
   await waitForNativeSurfaceSettled(hagatha)
+  hagatha = await captureHagathaCapacityPresentation(page, hagatha, 3)
 
   const purchases = []
   for (const [selector, count, capacity] of [
@@ -1079,6 +1080,9 @@ async function exerciseHagathaCapacity(page) {
     [6, 9, 9],
   ]) {
     purchases.push(await buyHagathaSelector(page, hagatha, selector, count, capacity))
+    if (selector === 27) {
+      hagatha = await captureHagathaCapacityPresentation(page, hagatha, capacity)
+    }
   }
 
   const expectedOutcomes = [27, 27, 0, 1, 2, 3, 4, 5, 6]
@@ -1136,9 +1140,38 @@ async function exerciseHagathaCapacity(page) {
     capacity: 9,
     goldAfterRejection: goldBeforeRejection,
     outcomes,
+    presentationCapacities: [3, 6, 9],
     purchases,
     rejectedSelector,
   }
+}
+
+async function captureHagathaCapacityPresentation(page, hagatha, capacity) {
+  assert.match(await hagatha.locator('.hub-charm-capacity').innerText(), new RegExp(`/ ${capacity}$`))
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: `${screenshotRoot}-hagatha-capacity-${capacity}.png` })
+  await hagatha.getByRole('button', { name: 'Done' }).click()
+  await hagatha.waitFor({ state: 'detached' })
+
+  await page.keyboard.press('i')
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
+  for (const expectedPage of [1, 2]) {
+    await inventory.locator('[data-native-stats-arrow="down"]').click()
+    await inventory.locator(
+      `xpath=self::*[@data-native-stats-page="${expectedPage}"]`,
+    ).waitFor()
+  }
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: `${screenshotRoot}-inventory-capacity-${capacity}.png` })
+  await closeInventory(page, inventory)
+
+  await page.getByRole('button', { name: 'Open Hagatha interaction' }).click()
+  const reopened = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
+  await reopened.waitFor()
+  await waitForNativeSurfaceSettled(reopened)
+  return reopened
 }
 
 async function buyHagathaSelector(page, hagatha, selector, expectedCount, expectedCapacity) {
