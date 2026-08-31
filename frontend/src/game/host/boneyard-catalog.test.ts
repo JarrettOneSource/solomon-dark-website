@@ -191,19 +191,6 @@ test('native default openings contain no ground clutter beneath Solomon or rock 
   })
 
   assert.deepEqual(overlaps, [])
-  assert.deepEqual(
-    NATIVE_GENERATED_BONEYARDS
-      .filter(({ sourceSha256 }) => OPENING_CLEARANCE_RECEIPTS.has(sourceSha256))
-      .map(({ geometrySha256, scene, sourceSha256 }) => ({
-        geometrySha256,
-        sourceSha256,
-        spriteCount: scene.sprites.length,
-      })),
-    [...OPENING_CLEARANCE_RECEIPTS].map(([sourceSha256, receipt]) => ({
-      ...receipt,
-      sourceSha256,
-    })),
-  )
 })
 
 test('default selector reaches every stock-generated template', () => {
@@ -292,25 +279,6 @@ const OPENING_GROUND_CLUTTER_SIZES = new Map<number, readonly [number, number]>(
   [24, [69, 59]],
 ])
 const OPENING_ROCK_ENTRIES = new Set([21, 22, 23, 24])
-
-const OPENING_CLEARANCE_RECEIPTS = new Map([
-  ['2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f', {
-    geometrySha256: 'bb6072ba6adedba364d36a004d6622e7610df848456c1c3ac92b6e372b4ba4c0',
-    spriteCount: 327,
-  }],
-  ['ec2b27a1415c944c233158da8c21324760cd896e1228143aa18d262f65fa2a45', {
-    geometrySha256: 'ffaacb41b92345b1816c0a49c5b0585ac6da7b7ab8153ad162bb833473620750',
-    spriteCount: 271,
-  }],
-  ['624b79ae325daa714b24017e0a308c64519f7481eb206e4489968217b1a2e123', {
-    geometrySha256: 'a026e733247fe03510a517288a6f04f47f41bec54cf16ecbf1926303a529d2b6',
-    spriteCount: 303,
-  }],
-  ['e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430', {
-    geometrySha256: '489bbe3f9e4e7b365691245035923a1cc67ba1a9018f4c35bd37f1b2ac2b230e',
-    spriteCount: 253,
-  }],
-])
 
 function openingGroundClutterContains(
   sprite: (typeof NATIVE_GENERATED_BONEYARDS)[number]['scene']['sprites'][number],

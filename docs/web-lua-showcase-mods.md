@@ -99,8 +99,8 @@ Public surfaces:
 - schemas: `object`, `array`, `enum`, `integer`, `number`, `string`, `boolean`.
 
 Its Grave Keeper sheet is rendered from a downloaded Quaternius CC0 animated
-3D model by the checked-in Blender workflow. The package contains the derived PNG and
-provenance receipt, not the source-pack archive.
+3D model by the checked-in Blender workflow. The package contains the derived
+PNG and source attribution, not the source-pack archive.
 
 Acceptance:
 
@@ -112,11 +112,8 @@ Acceptance:
 - Return restores the exact parent checkpoint with no duplicate actors/events;
 - teardown closes enemies, music, presentation and scoped state.
 
-## Coverage rule
+## Executable coverage
 
-The build maintains
-[`coverage.json`](../frontend/examples/web-lua/coverage.json), a machine-readable
-assertion mapping every public constructor and scope to a package and executable
-admission, headless, or browser evidence. Existing-slot wearable art points to its dedicated browser
-fixture because clothing was already covered before these three packages.
-Adding a constructor without extending the ledger is a release failure.
+The headless showcase suite admits and runs all three packages. Browser smokes
+exercise their visible surfaces, while the separate wearable smoke covers the
+existing Hat, Robe, and Staff path.

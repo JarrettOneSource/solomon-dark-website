@@ -241,16 +241,14 @@ reconciliation remain outside the UI Kit. The kit accepts rows and action
 callbacks and cannot mutate authoritative game state. Stock membership stays
 one five-row page; pagination exists only when admitted mods extend it.
 
-Focused closure adds exact UI-plan assertions, the interface import fence,
-DOM/Pixi workbench captures, the registered stock Hub journey, and the Web Lua
-showcase's mod-expanded second-page journey.
+The implementation adds UI-plan coverage, DOM/Pixi workbench captures, the
+registered stock Hub journey, and the Web Lua showcase's mod-expanded
+second-page journey.
 
-### Implementation validation receipt
+### Implementation
 
 - `core.ts`, `assets.ts`, `pixi.ts`, `react-raw.ts`, and `react.ts` are the five
-  supported seams. `native-ui-interface.test.ts` scans every TypeScript caller
-  outside the kit and rejects implementation-file imports. The original 32
-  consumer files now cross a supported seam; pure Node tests no longer
+  supported seams. Consumers import through those seams; pure Node tests do not
   evaluate PNG modules.
 - `NativeUiTabs`, `NativeUiSimpleMenu`, and the `NativeUiSettings*` family are
   semantic modules over the existing exact plans/records. `NativeUiNotebox`

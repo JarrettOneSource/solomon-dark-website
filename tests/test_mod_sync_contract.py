@@ -806,7 +806,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         client_log_id = str(uuid.uuid4())
         captured_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         report = {
-            "schemaVersion": 1,
             "clientLogId": client_log_id,
             "capturedAtUtc": captured_at,
             "protocolVersion": 21,
@@ -1004,11 +1003,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 19)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
-        self.assertEqual(created["size"], len(document.encode()))
-        self.assertEqual(created["sha256"], hashlib.sha256(document.encode()).hexdigest())
 
         status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
         self.assertEqual(status, 200, loaded)
@@ -1048,7 +1044,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 200, schema_ten_saved)
-        self.assertEqual(schema_ten_saved["formatVersion"], 10)
         self.assertEqual(schema_ten_saved["revision"], 3)
 
         schema_nine = json.loads(json.dumps(current))
@@ -1066,7 +1061,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 200, schema_nine_saved)
-        self.assertEqual(schema_nine_saved["formatVersion"], 9)
         self.assertEqual(schema_nine_saved["revision"], 4)
 
         schema_eight = json.loads(json.dumps(current))
@@ -1084,7 +1078,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 200, schema_eight_saved)
-        self.assertEqual(schema_eight_saved["formatVersion"], 8)
         self.assertEqual(schema_eight_saved["revision"], 5)
 
         legacy_current = json.loads(json.dumps(current))
@@ -1102,7 +1095,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 200, legacy_current_saved)
-        self.assertEqual(legacy_current_saved["formatVersion"], 6)
         self.assertEqual(legacy_current_saved["revision"], 6)
 
         legacy = {
@@ -1125,7 +1117,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             json_body={"document": legacy_document, "expectedRevision": 6},
         )
         self.assertEqual(status, 200, legacy_saved)
-        self.assertEqual(legacy_saved["formatVersion"], 3)
         self.assertEqual(legacy_saved["revision"], 7)
 
         legacy_envelope = json.loads(next_document)
@@ -1144,7 +1135,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 200, legacy_envelope_saved)
-        self.assertEqual(legacy_envelope_saved["formatVersion"], 5)
         self.assertEqual(legacy_envelope_saved["revision"], 8)
 
         status, conflict = self.request(

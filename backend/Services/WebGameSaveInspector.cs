@@ -4,16 +4,12 @@ using System.Text.Json;
 
 namespace SolomonDarkRevived.Services;
 
-public sealed record WebGameSaveInspection(int FormatVersion, long Size, string Sha256);
-
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 26;
-    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
     public const int MaxDocumentBytes = 16 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
-    public static WebGameSaveInspection Inspect(string? document)
+    public static void Inspect(string? document)
     {
         if (string.IsNullOrEmpty(document))
         {
@@ -43,17 +39,15 @@ public static class WebGameSaveInspector
             throw new InvalidDataException("The browser game save is not valid JSON.");
         }
 
-        var inspectedFormatVersion = 0;
         using (parsed)
         {
             var root = RequireObject(parsed.RootElement, "browser game save");
             if (!root.TryGetProperty("schemaVersion", out var schemaVersion) ||
                 !schemaVersion.TryGetInt32(out var version) ||
-                (version != FormatVersion && !LegacyFormatVersions.Contains(version)))
+                version < 1)
             {
                 throw new InvalidDataException("The browser game save schema version is not supported.");
             }
-            inspectedFormatVersion = version;
             if (version >= 5)
             {
                 RequireExactProperties(
@@ -143,10 +137,6 @@ public static class WebGameSaveInspector
             }
         }
 
-        return new WebGameSaveInspection(
-            inspectedFormatVersion,
-            bytes.Length,
-            Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }
 
     private static void ValidateContinuation(

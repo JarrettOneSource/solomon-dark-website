@@ -25,11 +25,8 @@ class RecordingStore implements GameSaveStore {
     if ((this.record?.revision ?? 0) !== expectedRevision) throw new Error('revision conflict')
     this.record = {
       document,
-      formatVersion: 2,
       revision: expectedRevision + 1,
-      sha256: String(expectedRevision + 1).padStart(64, '0'),
       slot: 0,
-      updatedAtUtc: '2026-08-20T12:00:00Z',
     }
     return this.record
   }
@@ -60,11 +57,8 @@ test('save coordinator serializes progress before the Game Over profile checkpoi
 test('save coordinator ignores replayed and byte-identical checkpoints', async () => {
   const existing: StoredGameSave = {
     document: 'same-document',
-    formatVersion: 2,
     revision: 4,
-    sha256: '4'.repeat(64),
     slot: 0,
-    updatedAtUtc: '2026-08-20T12:00:00Z',
   }
   const store = new RecordingStore(existing)
   const coordinator = new GameSaveCoordinator(store, () => {})

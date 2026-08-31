@@ -55,10 +55,9 @@ public static class WebGameSaveEndpoints
             return ApiErrors.Unauthorized("A website account is required for browser cloud saves.");
         }
 
-        WebGameSaveInspection inspection;
         try
         {
-            inspection = WebGameSaveInspector.Inspect(request.Document);
+            WebGameSaveInspector.Inspect(request.Document);
         }
         catch (InvalidDataException exception)
         {
@@ -79,11 +78,7 @@ public static class WebGameSaveEndpoints
             db.WebGameSaves.Add(save);
         }
         save.Document = request.Document!;
-        save.FormatVersion = inspection.FormatVersion;
         save.Revision = currentRevision + 1;
-        save.Size = inspection.Size;
-        save.Sha256 = inspection.Sha256;
-        save.UpdatedAtUtc = DateTime.UtcNow;
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -145,12 +140,8 @@ public static class WebGameSaveEndpoints
     private static object Payload(WebGameSave save) => new
     {
         save.Slot,
-        save.FormatVersion,
         save.Revision,
-        save.Document,
-        save.Size,
-        save.Sha256,
-        save.UpdatedAtUtc
+        save.Document
     };
 
     private static IResult Conflict(int currentRevision) => Results.Conflict(new

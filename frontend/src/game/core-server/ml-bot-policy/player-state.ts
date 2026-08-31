@@ -1,6 +1,5 @@
 import { isSolomonPlayerLocked } from '../../core-kernels/boneyard-encounter.ts'
 import {
-  NATIVE_SECONDARY_ABILITY_CONTRACTS,
   NATIVE_SECONDARY_ABILITY_IDS,
 } from '../../core-kernels/native-secondary-ability-contract.ts'
 import {
@@ -12,6 +11,7 @@ import { playerCanCast, playerMovementScale } from '../../core-kernels/player-co
 import {
   MAX_PLAYER_LEVEL,
   NATIVE_WELD_BUILDS,
+  effectiveSecondaryAbilityRankStats,
   type NativePlayerPrimarySkillId,
 } from '../../core-kernels/player-progression.ts'
 import {
@@ -161,12 +161,8 @@ export function observeMlBotPolicyPlayerState(
     const occupied = skillId !== null
       && (NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)
     const isPrimaryBinding = skillId !== null && PRIMARY_SKILL_IDS.has(skillId)
-    const rank = skillId === null ? 0 : skillBook.effectiveRanks[skillId] ?? 0
-    const contract = occupied
-      ? NATIVE_SECONDARY_ABILITY_CONTRACTS.find(({ skillId: id }) => id === skillId)
-      : undefined
-    const manaCost = contract
-      ? contract.rank.manaCost[Math.min(rank, contract.rank.manaCost.length - 1)] ?? 0
+    const manaCost = occupied
+      ? effectiveSecondaryAbilityRankStats(skillBook, skillId).values.mManaCost ?? 0
       : 0
     const cooldown = skillId === null ? 0 : secondary.cooldownTicksBySkill[skillId] ?? 0
     const cooldownMaximum = skillId === null

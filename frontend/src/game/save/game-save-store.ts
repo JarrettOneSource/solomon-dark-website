@@ -1,13 +1,10 @@
 import { api, ApiError } from '../../lib/api.ts'
-import { WEB_GAME_SAVE_SCHEMA_VERSION, WEB_GAME_SAVE_SLOT } from './game-save-contract.ts'
+import { WEB_GAME_SAVE_SLOT } from './game-save-contract.ts'
 
 export interface StoredGameSave {
   readonly document: string
-  readonly formatVersion: number
   readonly revision: number
-  readonly sha256: string
   readonly slot: number
-  readonly updatedAtUtc: string
 }
 
 export interface GameSaveStore {
@@ -48,7 +45,6 @@ export function createLocalGameSaveStore(factory: IDBFactory = indexedDB): GameS
       ).then((record) => record ?? null)
     },
     async write(document, expectedRevision) {
-      const documentSha256 = await sha256(document)
       const db = await database
       const transaction = db.transaction(LOCAL_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(LOCAL_STORE_NAME)
@@ -61,11 +57,8 @@ export function createLocalGameSaveStore(factory: IDBFactory = indexedDB): GameS
       }
       const record: StoredGameSave = {
         document,
-        formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
         revision: expectedRevision + 1,
-        sha256: documentSha256,
         slot: WEB_GAME_SAVE_SLOT,
-        updatedAtUtc: new Date().toISOString(),
       }
       store.put(record)
       await transactionDone(transaction)
@@ -100,11 +93,4 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
     transaction.onabort = () => reject(transaction.error ?? new Error('Local game save transaction aborted.'))
     transaction.onerror = () => reject(transaction.error ?? new Error('Local game save transaction failed.'))
   })
-}
-
-async function sha256(document: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(document))
-  return [...new Uint8Array(digest)]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')
 }

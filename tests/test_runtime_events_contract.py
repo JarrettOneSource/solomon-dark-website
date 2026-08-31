@@ -134,7 +134,6 @@ class RuntimeEventContractTests(unittest.TestCase):
     def test_runtime_event_outbox_is_private_detailed_and_bounded(self) -> None:
         occurred = datetime.now(timezone.utc).isoformat()
         event = {
-            "schemaVersion": 1,
             "component": "game-host",
             "event": "run.started",
             "message": "A party started a Boneyard run.",

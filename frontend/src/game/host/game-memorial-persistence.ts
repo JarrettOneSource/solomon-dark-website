@@ -17,7 +17,6 @@ import {
 } from '../core-kernels/hub-memorial.ts'
 import { decodeHubMemorialState } from '../protocol/game-protocol.ts'
 
-const GAME_MEMORIAL_SCHEMA_VERSION = 1
 const MAX_GAME_MEMORIAL_BYTES = 256 * 1024
 
 export interface GameMemorialPersistence {
@@ -34,10 +33,7 @@ export function openGameMemorialPersistence(path: string): GameMemorialPersisten
   return {
     initialState,
     persist(state) {
-      const document = JSON.stringify({
-        schemaVersion: GAME_MEMORIAL_SCHEMA_VERSION,
-        state,
-      })
+      const document = JSON.stringify({ state })
       if (Buffer.byteLength(document, 'utf8') > MAX_GAME_MEMORIAL_BYTES) {
         throw new Error('Game memorial state exceeds its bounded document size')
       }
@@ -76,12 +72,6 @@ function readMemorial(path: string): HubMemorialState {
     throw new Error('Game memorial document must be an object')
   }
   const source = parsed as Record<string, unknown>
-  if (Object.keys(source).sort().join('\0') !== ['schemaVersion', 'state'].join('\0')) {
-    throw new Error('Game memorial document fields are invalid')
-  }
-  if (source.schemaVersion !== GAME_MEMORIAL_SCHEMA_VERSION) {
-    throw new Error('Game memorial document version is unsupported')
-  }
   return copyHubMemorialState(decodeHubMemorialState(source.state, 'gameMemorial.state'))
 }
 

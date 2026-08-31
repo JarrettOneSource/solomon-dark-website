@@ -3,27 +3,6 @@
 
 import type { WaveDef } from './boneyard-wave-schema.ts'
 
-export const NATIVE_RETAIL_WAVE_PROVENANCE = {
-  "schema": "solomon-dark-retail-wave-schedule-v1",
-  "sourceFilename": "data/wave.txt",
-  "sourceBytes": 29147,
-  "sourceSha256": "363a985d79dc3ca28fb5ce519f56c436f5269a9bea1bedc7d1a825e8139499fc",
-  "waveCount": 42,
-  "spawnBudget": 918,
-  "groupCount": 205,
-  "enemyRowCount": 680,
-  "enemyRowCounts": {
-    "COFFIN": 15,
-    "DEMON": 14,
-    "IMP": 63,
-    "SKELETON": 344,
-    "SKELETONARCHER": 140,
-    "SKELETONMAGE": 58,
-    "WRAITH": 5,
-    "ZOMBIE": 41
-  }
-} as const
-
 export const NATIVE_RETAIL_WAVES: readonly WaveDef[] = [
   {
     "spawn": 14,

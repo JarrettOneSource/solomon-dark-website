@@ -27,6 +27,7 @@ const NULL_PROFILE = {
 test('bootGame accepts a separate localhost server and routes through the shared connector', async () => {
   let connected: GameClientSessionOptions | undefined
   const session = inertSession()
+  const saveDocument = '{"schemaVersion":1}'
   const result = await bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
@@ -37,7 +38,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
       credential: 'secret',
     },
     resumeToken: 'same-tab-token',
-    saveDocument: '{"schemaVersion":1}',
+    saveDocument,
     transportFactory: async () => inertTransport,
     sessionConnector: async (options) => {
       connected = options
@@ -47,7 +48,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
   assert.equal(result, session)
   assert.equal(connected?.credential, 'secret')
   assert.deepEqual(connected?.character, CHARACTER)
-  assert.equal(connected?.saveDocument, '{"schemaVersion":1}')
+  assert.equal(connected?.saveDocument, saveDocument)
   assert.equal(connected?.saveIntent, 'resume')
   assert.equal(connected?.resumeToken, 'same-tab-token')
   assert.deepEqual(connected?.onlinePreferences, {

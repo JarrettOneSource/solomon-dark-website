@@ -330,7 +330,7 @@
   background: rgb(7 6 14 / 0.94);
 }
 
-/* Dialog fit contract (2026-08-24 ledger entry): every in-stage backdrop centres with
+/* Every in-stage backdrop centres with
    flex, never grid. A centred grid item resolves its percentage height against its own
    content-sized implicit track, so `height: min(760px, 100%)` came out as the content
    height (650 px) and the DONE row fell below an iPhone's 366 px stage while the body

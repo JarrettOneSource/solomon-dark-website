@@ -63,7 +63,6 @@ export interface NativeSkillCatalogEntry {
 }
 
 interface NativeSkillCatalogJson {
-  readonly schema: string
   readonly skills: readonly NativeSkillCatalogEntry[]
 }
 
@@ -77,7 +76,6 @@ export interface NativeSkillStatBookEntry {
 }
 
 export interface PlayerStatBookComponent {
-  readonly catalogSchema: string
   readonly entries: readonly NativeSkillStatBookEntry[]
 }
 
@@ -295,7 +293,6 @@ const CATALOG = nativeCatalogJson as unknown as NativeSkillCatalogJson
 export const NATIVE_SKILL_CATALOG = CATALOG.skills
 
 const SHARED_STAT_BOOK: PlayerStatBookComponent = Object.freeze({
-  catalogSchema: CATALOG.schema,
   entries: Object.freeze([...CATALOG.skills.map((skill) => {
     const numericProperties: Record<string, number | readonly number[]> = {}
     for (const [property, value] of Object.entries(skill.config ?? {})) {

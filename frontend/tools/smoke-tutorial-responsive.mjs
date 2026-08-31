@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
@@ -2052,7 +2052,6 @@ async function waitForLocalCollegeSave(page, playerId, phase) {
             ? restored.state.world.participants[playerId]?.collegeIntro ?? null
             : undefined,
           revision: record.revision,
-          schemaVersion: record.formatVersion,
           world: restored.state.world.kind,
         }
         if (
@@ -2077,7 +2076,6 @@ async function waitForLocalCollegeSave(page, playerId, phase) {
         lastReceipt = {
           error: error instanceof Error ? error.message : String(error),
           revision: record.revision,
-          schemaVersion: record.formatVersion,
         }
       }
     }
@@ -2100,7 +2098,6 @@ async function waitForLocalOnboardingCompletion(page, playerId) {
         lastReceipt = {
           collegeIntroPending: economy.collegeIntroPending,
           revision: record.revision,
-          schemaVersion: record.formatVersion,
           tutorialPending: economy.tutorialPending,
         }
         if (!economy.collegeIntroPending && !economy.tutorialPending) return lastReceipt
@@ -2108,7 +2105,6 @@ async function waitForLocalOnboardingCompletion(page, playerId) {
         lastReceipt = {
           error: error instanceof Error ? error.message : String(error),
           revision: record.revision,
-          schemaVersion: record.formatVersion,
         }
       }
     }
@@ -2561,11 +2557,8 @@ function tutorialIntroSave() {
   return {
     record: {
       document,
-      formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
       revision: 1,
-      sha256: createHash('sha256').update(document).digest('hex'),
       slot: WEB_GAME_SAVE_SLOT,
-      updatedAtUtc: new Date().toISOString(),
     },
   }
 }

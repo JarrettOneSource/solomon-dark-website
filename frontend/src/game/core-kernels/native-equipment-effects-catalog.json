@@ -1,6 +1,4 @@
 {
-  "schema": "solomon-dark-native-equipment-effects-v1",
-  "sourceSchema": "solomon-dark-native-item-catalog-v1",
   "sets": [
     {
       "effects": [
@@ -19,8 +17,7 @@
         4,
         5
       ],
-      "name": "The Arcanus Spectrum Paraclosm",
-      "sourceIndex": 0
+      "name": "The Arcanus Spectrum Paraclosm"
     },
     {
       "effects": [
@@ -44,8 +41,7 @@
         9,
         10
       ],
-      "name": "Combinator's Coutrement",
-      "sourceIndex": 1
+      "name": "Combinator's Coutrement"
     },
     {
       "effects": [
@@ -69,8 +65,7 @@
         14,
         15
       ],
-      "name": "Pandimensional Bug-Master's Outfit",
-      "sourceIndex": 2
+      "name": "Pandimensional Bug-Master's Outfit"
     },
     {
       "effects": [
@@ -99,8 +94,7 @@
         18,
         19
       ],
-      "name": "Tempest Kit",
-      "sourceIndex": 3
+      "name": "Tempest Kit"
     },
     {
       "effects": [
@@ -115,8 +109,7 @@
         20,
         21
       ],
-      "name": "Burning Man",
-      "sourceIndex": 4
+      "name": "Burning Man"
     },
     {
       "effects": [
@@ -138,8 +131,7 @@
         23,
         24
       ],
-      "name": "Frostburn Jewels",
-      "sourceIndex": 5
+      "name": "Frostburn Jewels"
     },
     {
       "effects": [
@@ -162,8 +154,7 @@
         27,
         28
       ],
-      "name": "Fete of Clay",
-      "sourceIndex": 6
+      "name": "Fete of Clay"
     }
   ],
   "items": [
@@ -177,8 +168,7 @@
           "target": 11
         }
       ],
-      "name": "Pentaclostic Ring",
-      "sourceIndex": 0
+      "name": "Pentaclostic Ring"
     },
     {
       "description": "",
@@ -196,8 +186,7 @@
           "target": 28
         }
       ],
-      "name": "Arcanoric Robe",
-      "sourceIndex": 1
+      "name": "Arcanoric Robe"
     },
     {
       "description": "",
@@ -215,8 +204,7 @@
           "target": 51
         }
       ],
-      "name": "Cosmofluxic Wand",
-      "sourceIndex": 2
+      "name": "Cosmofluxic Wand"
     },
     {
       "description": "",
@@ -228,8 +216,7 @@
           "target": 21
         }
       ],
-      "name": "Theptoplasmar Amulet",
-      "sourceIndex": 3
+      "name": "Theptoplasmar Amulet"
     },
     {
       "description": "",
@@ -241,8 +228,7 @@
           "target": 35
         }
       ],
-      "name": "Synertauxic Ring",
-      "sourceIndex": 4
+      "name": "Synertauxic Ring"
     },
     {
       "description": "",
@@ -260,8 +246,7 @@
           "target": 41
         }
       ],
-      "name": "Sublunarous Hat",
-      "sourceIndex": 5
+      "name": "Sublunarous Hat"
     },
     {
       "description": "",
@@ -273,8 +258,7 @@
           "target": 0
         }
       ],
-      "name": "Combinator's Cap",
-      "sourceIndex": 6
+      "name": "Combinator's Cap"
     },
     {
       "description": "",
@@ -286,8 +270,7 @@
           "target": 0
         }
       ],
-      "name": "Combinator's Cape",
-      "sourceIndex": 7
+      "name": "Combinator's Cape"
     },
     {
       "description": "",
@@ -299,8 +282,7 @@
           "target": 0
         }
       ],
-      "name": "Combinator's Club",
-      "sourceIndex": 8
+      "name": "Combinator's Club"
     },
     {
       "description": "",
@@ -318,8 +300,7 @@
           "target": 0
         }
       ],
-      "name": "Combinator's Choker",
-      "sourceIndex": 9
+      "name": "Combinator's Choker"
     },
     {
       "description": "",
@@ -337,8 +318,7 @@
           "target": 0
         }
       ],
-      "name": "Combinator's Circle",
-      "sourceIndex": 10
+      "name": "Combinator's Circle"
     },
     {
       "description": "",
@@ -350,8 +330,7 @@
           "target": 11
         }
       ],
-      "name": "Bug-Master's Cap",
-      "sourceIndex": 11
+      "name": "Bug-Master's Cap"
     },
     {
       "description": "",
@@ -363,8 +342,7 @@
           "target": 11
         }
       ],
-      "name": "Bug-Master's Robe",
-      "sourceIndex": 12
+      "name": "Bug-Master's Robe"
     },
     {
       "description": "",
@@ -376,8 +354,7 @@
           "target": 11
         }
       ],
-      "name": "Bug-Master's Wand",
-      "sourceIndex": 13
+      "name": "Bug-Master's Wand"
     },
     {
       "description": "",
@@ -389,8 +366,7 @@
           "target": 11
         }
       ],
-      "name": "Bug-Master's Loop",
-      "sourceIndex": 14
+      "name": "Bug-Master's Loop"
     },
     {
       "description": "",
@@ -408,8 +384,7 @@
           "target": 11
         }
       ],
-      "name": "Pan-Dimensional Strangler",
-      "sourceIndex": 15
+      "name": "Pan-Dimensional Strangler"
     },
     {
       "description": "",
@@ -421,8 +396,7 @@
           "target": 27
         }
       ],
-      "name": "Cloudcover Hood",
-      "sourceIndex": 16
+      "name": "Cloudcover Hood"
     },
     {
       "description": "",
@@ -434,8 +408,7 @@
           "target": 30
         }
       ],
-      "name": "Ozone Cape",
-      "sourceIndex": 17
+      "name": "Ozone Cape"
     },
     {
       "description": "",
@@ -447,8 +420,7 @@
           "target": 24
         }
       ],
-      "name": "Lightning Rod",
-      "sourceIndex": 18
+      "name": "Lightning Rod"
     },
     {
       "description": "",
@@ -460,8 +432,7 @@
           "target": 27
         }
       ],
-      "name": "Storm Choker",
-      "sourceIndex": 19
+      "name": "Storm Choker"
     },
     {
       "description": "",
@@ -479,8 +450,7 @@
           "target": 1
         }
       ],
-      "name": "Burning Hat",
-      "sourceIndex": 20
+      "name": "Burning Hat"
     },
     {
       "description": "",
@@ -498,8 +468,7 @@
           "target": 1
         }
       ],
-      "name": "Burning Robe",
-      "sourceIndex": 21
+      "name": "Burning Robe"
     },
     {
       "description": "",
@@ -511,8 +480,7 @@
           "target": 3
         }
       ],
-      "name": "Biting Ring",
-      "sourceIndex": 22
+      "name": "Biting Ring"
     },
     {
       "description": "",
@@ -524,8 +492,7 @@
           "target": 3
         }
       ],
-      "name": "Bitter Ring",
-      "sourceIndex": 23
+      "name": "Bitter Ring"
     },
     {
       "description": "",
@@ -543,8 +510,7 @@
           "target": 32
         }
       ],
-      "name": "Glittering Amulet",
-      "sourceIndex": 24
+      "name": "Glittering Amulet"
     },
     {
       "description": "",
@@ -556,8 +522,7 @@
           "target": 4
         }
       ],
-      "name": "Potter's Apron",
-      "sourceIndex": 25
+      "name": "Potter's Apron"
     },
     {
       "description": "",
@@ -569,8 +534,7 @@
           "target": 45
         }
       ],
-      "name": "Clayshaper's Ring",
-      "sourceIndex": 26
+      "name": "Clayshaper's Ring"
     },
     {
       "description": "",
@@ -582,8 +546,7 @@
           "target": 45
         }
       ],
-      "name": "Claybaker's Ring",
-      "sourceIndex": 27
+      "name": "Claybaker's Ring"
     },
     {
       "description": "",
@@ -595,8 +558,7 @@
           "target": 16
         }
       ],
-      "name": "Kiln",
-      "sourceIndex": 28
+      "name": "Kiln"
     },
     {
       "description": "An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read \"Interferenal.\"",
@@ -608,8 +570,7 @@
           "target": 0
         }
       ],
-      "name": "Obfuscate's Meddler",
-      "sourceIndex": 29
+      "name": "Obfuscate's Meddler"
     },
     {
       "description": "An amulet known to be forged by the great wizard Basculus.  Much has been written about the unusual name, with some speculating that Basculus finished work on the amulet immediately after an unhappy love affair.",
@@ -639,8 +600,7 @@
           "target": 5
         }
       ],
-      "name": "Karen You Scandalous Wench",
-      "sourceIndex": 30
+      "name": "Karen You Scandalous Wench"
     },
     {
       "description": "An amulet clearly forged during the Great Healing Madness.",
@@ -652,8 +612,7 @@
           "target": 0
         }
       ],
-      "name": "Poxproof",
-      "sourceIndex": 31
+      "name": "Poxproof"
     },
     {
       "description": "Designed for those whose passion for Ether Magic surpasses their taste.",
@@ -683,8 +642,7 @@
           "target": 0
         }
       ],
-      "name": "Ethereal Choker",
-      "sourceIndex": 32
+      "name": "Ethereal Choker"
     },
     {
       "description": "Formerly the property of Archmage Garthus Absolox, who was overly enthusiastic about the Meteor spell.",
@@ -702,8 +660,7 @@
           "target": 40
         }
       ],
-      "name": "Absolox's Boomstick",
-      "sourceIndex": 33
+      "name": "Absolox's Boomstick"
     },
     {
       "description": "Forged by the wizard Gnoxis to achieve minimal functionality on mornings without coffee.  The imprints of hands have been squeezed into the wood at the gripping spots.",
@@ -715,8 +672,7 @@
           "target": 6
         }
       ],
-      "name": "Staff of Dawn",
-      "sourceIndex": 34
+      "name": "Staff of Dawn"
     },
     {
       "description": "A simple ring, crafted to give unhealthy mages that extra staying power.",
@@ -728,8 +684,7 @@
           "target": 54
         }
       ],
-      "name": "Ringwall",
-      "sourceIndex": 35
+      "name": "Ringwall"
     },
     {
       "description": "Forged to boost dexterity and allow mages to work faster, this ring was stolen immediately by Casanava Lancashire, history's greatest reputed lover.  The ring only resurfaced again recently, but frequently changes owners because of a tendency to fly off the hand in the heat of casting.",
@@ -741,8 +696,7 @@
           "target": 0
         }
       ],
-      "name": "Fleetfinger",
-      "sourceIndex": 36
+      "name": "Fleetfinger"
     },
     {
       "description": "Created by Blue Mage Wendrell to prove once and for all that a strong mind is worth more that a strong body.",
@@ -760,8 +714,7 @@
           "target": 0
         }
       ],
-      "name": "Gritchenscorn",
-      "sourceIndex": 37
+      "name": "Gritchenscorn"
     },
     {
       "description": "When presented at the artificer's conclave, this ring garnered much interest because it emits a destructive blast (dealing damage depending on level) when the bearer levels up.  Concern was expressed that the presenter (level 47) was so close to levelling up that even the experience of speaking before a large group might do it, and an early lunch was declared.",
@@ -773,8 +726,7 @@
           "target": 0
         }
       ],
-      "name": "Mindblowing Ring",
-      "sourceIndex": 38
+      "name": "Mindblowing Ring"
     },
     {
       "description": "The high level requirments of this ring indicate that it was not necessarily forged to assist in learning, but rather to allow those smug in their knowledge to be more smug.",
@@ -786,8 +738,7 @@
           "target": 0
         }
       ],
-      "name": "Smartest Ring",
-      "sourceIndex": 39
+      "name": "Smartest Ring"
     },
     {
       "description": "Annoyed at being accused of dueling with opponents below his magical grade, the wizard Yzmar designed this hat to provide a handicap to his challengers and silence accusations of advantage.  Sadly, Yzmar was disintegrated in his next duel.",
@@ -805,8 +756,7 @@
           "target": 56
         }
       ],
-      "name": "Yzmar's Handicap",
-      "sourceIndex": 40
+      "name": "Yzmar's Handicap"
     },
     {
       "description": "Part of Qubar's \"Elemental Boost\" collection.",
@@ -824,8 +774,7 @@
           "target": 0
         }
       ],
-      "name": "Qubar's Ether",
-      "sourceIndex": 41
+      "name": "Qubar's Ether"
     },
     {
       "description": "Part of Qubar's \"Elemental Boost\" collection.",
@@ -843,8 +792,7 @@
           "target": 1
         }
       ],
-      "name": "Qubar's Fire",
-      "sourceIndex": 42
+      "name": "Qubar's Fire"
     },
     {
       "description": "Part of Qubar's \"Elemental Boost\" collection.",
@@ -862,8 +810,7 @@
           "target": 2
         }
       ],
-      "name": "Qubar's Air",
-      "sourceIndex": 43
+      "name": "Qubar's Air"
     },
     {
       "description": "Part of Qubar's \"Elemental Boost\" collection.",
@@ -881,8 +828,7 @@
           "target": 3
         }
       ],
-      "name": "Qubar's Water",
-      "sourceIndex": 44
+      "name": "Qubar's Water"
     },
     {
       "description": "Part of Qubar's \"Elemental Boost\" collection.",
@@ -900,8 +846,7 @@
           "target": 4
         }
       ],
-      "name": "Qubar's Earth",
-      "sourceIndex": 45
+      "name": "Qubar's Earth"
     },
     {
       "description": "Woven as a defensive outfit for working with demons, this robe absorbs almost all magic in the vicinity.  The only known side effect is that your own magic is harmed as well.",
@@ -931,8 +876,7 @@
           "target": 0
         }
       ],
-      "name": "Robe of Thaumic Unperturbability",
-      "sourceIndex": 46
+      "name": "Robe of Thaumic Unperturbability"
     }
   ]
 }

@@ -12,8 +12,8 @@
  * counter, never the gameplay tick.
  *
  * The web derives the same 100 Hz tick from the presentation clock so it is
- * unaffected by the gameplay pause. Only the phase relative to process start
- * is not reproducible (blocked-by-platform; see the 2026-08-25 ledger entry).
+ * unaffected by the gameplay pause. Its phase relative to process start is not
+ * reproducible.
  */
 export const NATIVE_APPLICATION_TICK_RATE = 100
 export const NATIVE_APPLICATION_TICK_MS = 1_000 / NATIVE_APPLICATION_TICK_RATE

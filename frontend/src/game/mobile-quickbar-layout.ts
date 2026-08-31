@@ -2,8 +2,7 @@
 // virtual joysticks. Every number is a HUD-root pixel: the HUD root is
 // `viewport / uiScale` wide and scaled by `uiScale` about the viewport centre,
 // and each joystick scales itself by `uiScale` from its own bottom corner, so
-// root pixels and joystick pixels share one coordinate system. Ledger:
-// docs/game-native-parity-re.md, 2026-08-22 compact touch HUD entry.
+// root pixels and joystick pixels share one coordinate system.
 
 export const MOBILE_JOYSTICK_BASE = 237.5
 export const MOBILE_JOYSTICK_KNOB = 100

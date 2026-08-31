@@ -13,7 +13,7 @@ import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
 import { SCHOOLS } from '../fx/SchoolBursts'
-import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
+import { formatCount, formatDate, timeAgo } from '../lib/format'
 import type { PortableImportResult } from '../game/save/game-save-portability.ts'
 import type { PortableGameProfile } from '../game/save/portable-game-profile.ts'
 
@@ -188,15 +188,12 @@ function BrowserGameSaveSlot({
     <div className="panel panel-ornate flex min-h-36 max-w-sm flex-col p-4">
       <div className="flex items-start justify-between">
         <span className="font-display text-lg text-gold">I</span>
-        <span className="font-mono text-[10px] text-bone-dim/60">
-          {save ? `revision ${save.revision} · ${formatBytes(save.size)}` : 'empty'}
-        </span>
       </div>
       <div className="mt-1 font-display text-sm font-bold tracking-wide text-bone">
         Browser Game
       </div>
       <div className="mt-0.5 text-xs text-bone-dim">
-        {save ? `saved ${timeAgo(save.updatedAtUtc)}` : 'Unwritten'}
+        {save ? 'Saved' : 'Unwritten'}
       </div>
       {save ? (
         <button

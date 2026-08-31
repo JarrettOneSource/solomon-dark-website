@@ -1327,22 +1327,12 @@
       }
     }
   },
-  "schema": "solomon-dark-native-hub-npc-interactions-v4",
   "skorcha": {
     "animationDelay": {
       "drawCount": 10,
       "offsetTicks": 20
     },
     "animationStateCount": 3,
-    "artRecords": [
-      510,
-      511,
-      512,
-      513,
-      514,
-      515,
-      516
-    ],
     "placements": [
       {
         "variant": 0,
@@ -1363,23 +1353,7 @@
     "presenceDrawCount": 3,
     "presenceDrawValue": 1
   },
-  "source": {
-    "dialogueHashes": {
-      "survival.txt": "5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67",
-      "story.txt": "ce1580bdce93a617c6045617d4c42f9c1b9019a5d5664efadf36c8b80f40071d",
-      "books.txt": "d7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1",
-      "spellfacts.txt": "1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17",
-      "narration.txt": "5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174"
-    },
-    "executableSha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
-    "preferredImageBase": "0x00400000",
-    "retailVersion": "0.72.5"
-  },
   "storyOffice": {
-    "archIntroVoice": {
-      "bytes": 1231088,
-      "sha256": "b819a5aa7397df964ec9f9e03149941450d65d10fe207f71c3643419fd071255"
-    },
     "dialogue": {
       "ARCH_DISMISS_0": {
         "key": "ARCH_DISMISS_0",
@@ -1512,19 +1486,8 @@
       }
     },
     "polisher": {
-      "artRecords": [
-        23,
-        24,
-        25,
-        26
-      ],
       "loopFullDistance": 50,
-      "loopSha256": "ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57",
-      "loopSilentDistance": 200,
-      "phaseFloatRange": 0.25,
-      "phaseSpeed": 0.05,
-      "reverseDrawCount": 1500,
-      "reverseDrawValue": 3
+      "loopSilentDistance": 200
     }
   },
   "teacherSpells": [

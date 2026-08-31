@@ -3,7 +3,6 @@ import test from 'node:test'
 
 import nativeLevelTwoOffers from './native-skill-offer-level2-golden.json' with { type: 'json' }
 
-import './native-secondary-ability-contract.test.ts'
 import './native-secondary-abilities.test.ts'
 import '../skill-book.test.ts'
 import './skill-quickbar.test.ts'
@@ -1011,7 +1010,6 @@ test('stock seed 929799 retries an exact-ID collision and advances only gameplay
 
 test('100 paired stock level-two rolls match ordered membership and gameplay RNG advance', () => {
   const fixture = nativeLevelTwoOffers
-  assert.equal(fixture.schema, 'solomon-dark-skill-offer-level2-golden-v1')
   assert.equal(fixture.rolls.length, 100)
   const base = createPlayerSkillBook(ETHER_ARCANE)
   assert.equal(base.primarySkillId, fixture.loadout.primarySkillId)

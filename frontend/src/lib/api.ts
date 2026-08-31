@@ -240,12 +240,8 @@ export interface ProvisionedGameEndpointResponse {
 
 export interface WebGameSave {
   slot: number
-  formatVersion: number
   revision: number
   document: string
-  size: number
-  sha256: string
-  updatedAtUtc: string
 }
 
 export interface SharedMobileUiLayout {

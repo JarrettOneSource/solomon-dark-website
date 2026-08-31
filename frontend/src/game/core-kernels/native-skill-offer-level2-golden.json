@@ -1,7 +1,4 @@
 {
-  "schema": "solomon-dark-skill-offer-level2-golden-v1",
-  "retail_binary_sha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
-  "source_capture_sha256": "d9716cf2fde89c8f29b822bf5d6e8f42f2e736d7868ce0f4b679b8e83ec0b81a",
   "loadout": {
     "advancedUnlocks": [
       true,

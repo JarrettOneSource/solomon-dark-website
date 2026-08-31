@@ -59,7 +59,7 @@ python3 -m venv /path/to/ml-bot-venv
   -r tools/ml_bot/requirements.txt
 ```
 
-The pinned campaign stack is Python 3.12, NumPy 2.5.2, and PyTorch 2.13.0.
+`tools/ml_bot/requirements.txt` defines the campaign dependencies.
 The Website no longer ships an ML-specific automated test or smoke gate.
 Training, evaluation, checkpoint validation, and runtime commands remain
 available, but none is part of the canonical Website test suite.

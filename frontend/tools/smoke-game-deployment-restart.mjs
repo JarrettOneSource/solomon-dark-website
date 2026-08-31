@@ -673,11 +673,8 @@ async function seedLocalSave(page, document) {
       const transaction = database.transaction('slots', 'readwrite')
       transaction.objectStore('slots').put({
         document: saveDocument,
-        formatVersion: JSON.parse(saveDocument).schemaVersion,
         revision: 1,
-        sha256: '0'.repeat(64),
         slot: 0,
-        updatedAtUtc: new Date().toISOString(),
       })
       transaction.onabort = () => reject(transaction.error)
       transaction.oncomplete = () => resolve()

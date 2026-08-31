@@ -56,7 +56,6 @@ import {
   GAMEPLAY_RESUME_GRACE_REASONS,
   GAME_PROTOCOL_VERSION,
   MAX_LUA_CONSOLE_CODE_LENGTH,
-  PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeClientGameMessage,
   decodeServerGameMessage,
@@ -723,7 +722,6 @@ test('server welcome round-trips content, kernel, character, and world ownership
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
       movementAcceleration: 10,
@@ -1471,7 +1469,6 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
       movementAcceleration: 10,
@@ -1857,7 +1854,6 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v114 carries mod Boasts, Portal objectives, Steam detonation presentation, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 114)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -2320,7 +2316,6 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
       movementAcceleration: 10,
@@ -5012,7 +5007,6 @@ test('protocol bounds server-controlled world collections', () => {
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
       movementAcceleration: 10,
@@ -5454,7 +5448,6 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
       movementThresholdSquared: Math.fround(0.01),
       playerRadius: 25,
     },
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     modAssets: [],
     modCatalog: [{ content, name: 'Invincibility Potion', nativeSubtype: 6 }],
     playerId: 'player-1',

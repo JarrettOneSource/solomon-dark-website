@@ -172,7 +172,6 @@ export function defaultMobileUiGeometry(
   }
 
   add('pause', 26, 26, 44, 44)
-  // Accepted 896 x 414 coarse-pointer receipt: left 92, top 15, 69.73 x 10.2.
   // Width varies slightly with the live FPS digits; this stable two-digit seed keeps the
   // complete saved profile centred on the shipped diagnostics lane.
   add('diagnostics', 126.865, 20.1, 69.73, 10.2)

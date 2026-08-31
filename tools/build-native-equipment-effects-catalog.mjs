@@ -18,19 +18,15 @@ const compactEffect = (effect) => ({
 })
 
 const output = {
-  schema: 'solomon-dark-native-equipment-effects-v1',
-  sourceSchema: source.schema,
   sets: source.item_sets.map((set) => ({
     effects: set.fx.map(compactEffect),
     memberRecipeIndices: set.item_source_indexes,
     name: set.name,
-    sourceIndex: set.source_index,
   })),
   items: source.items.map((item) => ({
     description: item.description,
     effects: item.fx.map(compactEffect),
     name: item.name,
-    sourceIndex: item.source_index,
   })),
 }
 

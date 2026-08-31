@@ -413,7 +413,6 @@ export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
 export const GAME_SESSION_REPLACED_CLOSE_CODE = 4002
-export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-5'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256
@@ -848,7 +847,6 @@ export interface ServerWelcomeMessage {
   serverTickRate: number
   snapshotRate: number
   sessionKind: GameSessionKind
-  kernelVersion: string
   kernelParameters: PlayerCharacterKernelParameters
   content: GameContentManifest
   modAssets: readonly GameModAsset[]
@@ -1586,7 +1584,6 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'serverTickRate',
       'snapshotRate',
       'sessionKind',
-      'kernelVersion',
       'kernelParameters',
       'content',
       'modAssets',
@@ -1618,7 +1615,6 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       serverTickRate: positiveFinite(value.serverTickRate, 'serverTickRate'),
       snapshotRate: positiveFinite(value.snapshotRate, 'snapshotRate'),
       sessionKind: gameSessionKind(value.sessionKind),
-      kernelVersion: limitedString(value.kernelVersion, 'kernelVersion', 128),
       kernelParameters: playerCharacterKernelParameters(value.kernelParameters),
       content: contentManifest(value.content),
       modAssets: gameModAssets(value.modAssets),

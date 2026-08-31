@@ -8,7 +8,6 @@ import { createServer as createViteServer } from 'vite'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
-  NATIVE_SECONDARY_ABILITY_CONTRACTS,
   NATIVE_SECONDARY_ABILITY_IDS,
 } from '../src/game/core-kernels/native-secondary-ability-contract.ts'
 import { actorHeadingVector } from '../src/game/core-kernels/actor-heading.ts'
@@ -16,6 +15,7 @@ import {
   DOWSING_EQUIPMENT_RECIPES,
   createEquipmentInventoryItem,
 } from '../src/game/core-kernels/hub-economy.ts'
+import { NATIVE_SKILL_CATALOG } from '../src/game/core-kernels/player-progression.ts'
 import { isHubRegionTraversable } from '../src/game/core-kernels/hub-regions.ts'
 import {
   nativeSecondaryCooldownCapacityTicks,
@@ -286,11 +286,13 @@ try {
   if (!retainNativeViewport) await page.setViewportSize({ width: 800, height: 450 })
   await page.waitForTimeout(250)
 
+  const abilities = NATIVE_SECONDARY_ABILITY_IDS.map((skillId) => ({
+    name: NATIVE_SKILL_CATALOG[skillId].name,
+    skillId,
+  }))
   const selectedContracts = requestedSkillIds.length === 0
-    ? NATIVE_SECONDARY_ABILITY_CONTRACTS
-    : NATIVE_SECONDARY_ABILITY_CONTRACTS.filter(({ skillId }) => (
-      requestedSkillIds.includes(skillId)
-    ))
+    ? abilities
+    : abilities.filter(({ skillId }) => requestedSkillIds.includes(skillId))
   if (selectedContracts.length === 0) {
     throw new Error(`Unknown SDR_SECONDARY_ABILITY_ID ${requestedSkillIds.join(',')}`)
   }

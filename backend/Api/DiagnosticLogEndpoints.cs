@@ -142,9 +142,9 @@ public static class DiagnosticLogEndpoints
 
     private static string? ValidateBrowserGameReport(BrowserGameDiagnosticReport? report)
     {
-        if (report is null || report.SchemaVersion != 1 || report.ClientLogId == Guid.Empty)
+        if (report is null || report.ClientLogId == Guid.Empty)
         {
-            return "Browser game diagnostics must include a supported schema and clientLogId.";
+            return "Browser game diagnostics must include a clientLogId.";
         }
         var now = DateTimeOffset.UtcNow;
         if (report.CapturedAtUtc == default || report.CapturedAtUtc > now.AddMinutes(5))
@@ -257,7 +257,6 @@ public static class DiagnosticLogEndpoints
 
 
     private sealed record BrowserGameDiagnosticReport(
-        int SchemaVersion,
         Guid ClientLogId,
         DateTimeOffset CapturedAtUtc,
         int ProtocolVersion,

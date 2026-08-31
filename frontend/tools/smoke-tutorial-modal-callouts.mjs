@@ -11,7 +11,7 @@
 // 20 hidden / 30 visible ticks) while the gameplay pause holds `stageTicks` still, and the
 // steady modal pointers must never hide.
 import assert from 'node:assert/strict'
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
@@ -42,7 +42,6 @@ import { NATIVE_HUD_BACKBUFFER } from '../src/game/native-hud-layout.ts'
 import { nativeUiFont } from '../src/game/native-ui/native-ui-catalog.ts'
 import { layoutNativeUiText } from '../src/game/native-ui/native-ui-text.ts'
 import {
-  WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
@@ -1086,11 +1085,8 @@ function tutorialIntroSave() {
   return {
     record: {
       document,
-      formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
       revision: 1,
-      sha256: createHash('sha256').update(document).digest('hex'),
       slot: WEB_GAME_SAVE_SLOT,
-      updatedAtUtc: new Date().toISOString(),
     },
   }
 }

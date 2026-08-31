@@ -15,7 +15,6 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 
-import nativeAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
@@ -1371,8 +1370,6 @@ function NativeHubSurface({
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        data-native-ui-schema={nativeAssetsJson.schema}
-        data-source-executable={nativeAssetsJson.sourceExecutableSha256}
         data-renderer-state={rendererState}
         data-native-pressed-control={pressedControl ?? 'none'}
         data-native-chat-phase={surface.kind === 'dialogue' ? chat.content.kind : ''}

@@ -110,14 +110,6 @@ export type HubVisualPackedSheet = readonly [
   frames: readonly HubVisualPackedFrame[],
 ]
 
-export const HUB_VISUAL_ATLAS_MAX_PAGE_SIZE = 2048
-export const HUB_VISUAL_ATLAS_DECODED_BYTES = 44408832
-export const HUB_VISUAL_ATLAS_SOURCE_COUNT = 87
-export const HUB_VISUAL_ATLAS_FRAME_COUNT = 582
-export const HUB_VISUAL_ATLAS_EMPTY_FRAME_COUNT = 0
-export const HUB_VISUAL_ATLAS_PACKED_RECTANGLE_COUNT = 576
-export const HUB_VISUAL_ATLAS_PACKED_RGBA_BYTES = 39176348
-export const HUB_VISUAL_ATLAS_PAGE_DIMENSIONS = [[2048,2048],[2048,2046],[2048,1327]] as const
 export const HUB_VISUAL_ATLAS_SOURCES = [page0, page1, page2] as const
 export const HUB_VISUAL_ATLAS_ORIGINAL_SOURCES = [source0, source1, source2, source3, source4, source5, source6, source7, source8, source9, source10, source11, source12, source13, source14, source15, source16, source17, source18, source19, source20, source21, source22, source23, source24, source25, source26, source27, source28, source29, source30, source31, source32, source33, source34, source35, source36, source37, source38, source39, source40, source41, source42, source43, source44, source45, source46, source47, source48, source49, source50, source51, source52, source53, source54, source55, source56, source57, source58, source59, source60, source61, source62, source63, source64, source65, source66, source67, source68, source69, source70, source71, source72, source73, source74, source75, source76, source77, source78, source79, source80, source81, source82, source83, source84, source85, source86] as const
 

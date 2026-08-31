@@ -97,7 +97,6 @@ test('the aura uses exact endpoints, five-unit extension, inclusive width, and b
 })
 
 test('every heading and attachment pose consumes the extracted native point/depth row', () => {
-  assert.equal(staffProgramJson.schema, 1)
   assert.equal(staffProgramJson.frames.length, 10)
   for (let pose = 0; pose < 10; pose += 1) {
     assert.equal(staffProgramJson.frames[pose]?.length, 24)

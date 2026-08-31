@@ -7,9 +7,8 @@ collision, transactions, scene suspension, replication, and teardown.
 
 The Grave Keeper PNG was rendered from Quaternius's human-made CC0 animated
 Zombie Male model. [`grave-keeper.render.json`](art/grave-keeper.render.json)
-is the editable recipe and [`grave-keeper.receipt.json`](art/grave-keeper.receipt.json)
-records the exact source, Blender, and output hashes. See the complete
-[3D-to-2D workflow](../../../../docs/web-lua-3d-to-2d-art.md).
+is the editable recipe. See the complete [3D-to-2D
+workflow](../../../../docs/web-lua-3d-to-2d-art.md).
 
 From `frontend/`:
 

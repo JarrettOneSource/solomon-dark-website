@@ -80,14 +80,11 @@ interface NativeEquipmentCatalog {
     readonly description: string
     readonly effects: readonly NativeEquipmentEffect[]
     readonly name: string
-    readonly sourceIndex: number
   }[]
-  readonly schema: string
   readonly sets: readonly {
     readonly effects: readonly NativeEquipmentEffect[]
     readonly memberRecipeIndices: readonly number[]
     readonly name: string
-    readonly sourceIndex: number
   }[]
 }
 
@@ -95,7 +92,6 @@ export interface NativeEquipmentTooltipSet {
   readonly effects: readonly NativeEquipmentEffect[]
   readonly memberRecipeIndices: readonly number[]
   readonly name: string
-  readonly sourceIndex: number
 }
 
 interface MutableNativeEquipmentModifiers {
@@ -132,9 +128,6 @@ interface MutableNativeEquipmentModifiers {
 }
 
 const CATALOG = nativeEquipmentCatalogJson as NativeEquipmentCatalog
-if (CATALOG.schema !== 'solomon-dark-native-equipment-effects-v1') {
-  throw new Error('native equipment-effects catalog schema is unsupported')
-}
 
 export const NATIVE_EQUIPMENT_RECIPE_COUNT = CATALOG.items.length
 export const NATIVE_EQUIPMENT_SET_COUNT = CATALOG.sets.length
@@ -146,7 +139,6 @@ const NATIVE_EQUIPMENT_TOOLTIP_SETS = Object.freeze(CATALOG.sets.map((set) => Ob
   effects: cloneEffects(set.effects),
   memberRecipeIndices: Object.freeze([...set.memberRecipeIndices]),
   name: set.name,
-  sourceIndex: set.sourceIndex,
 })))
 
 export function resolveEquippedNativeEffects(
@@ -175,13 +167,11 @@ export function nativeEquipmentRecipeEffects(
   recipeIndex: number,
 ): readonly NativeEquipmentEffect[] {
   const recipe = CATALOG.items[recipeIndex]
-  if (recipe === undefined || recipe.sourceIndex !== recipeIndex) return Object.freeze([])
-  return cloneEffects(recipe.effects)
+  return recipe === undefined ? Object.freeze([]) : cloneEffects(recipe.effects)
 }
 
 export function nativeEquipmentRecipeDescription(recipeIndex: number): string {
-  const recipe = CATALOG.items[recipeIndex]
-  return recipe?.sourceIndex === recipeIndex ? recipe.description : ''
+  return CATALOG.items[recipeIndex]?.description ?? ''
 }
 
 export function nativeEquipmentTooltipSets(): readonly NativeEquipmentTooltipSet[] {

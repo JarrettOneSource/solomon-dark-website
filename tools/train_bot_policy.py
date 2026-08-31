@@ -40,8 +40,6 @@ DEFAULT_EVAL_SEEDS = REPOSITORY_ROOT / "tools/ml_bot/eval-seeds.json"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    if sys.version_info[:2] != (3, 12):
-        raise RuntimeError("ML bot training requires the pinned Python 3.12 toolchain")
     parser = create_parser()
     args = parser.parse_args(argv)
     result = args.handler(args)

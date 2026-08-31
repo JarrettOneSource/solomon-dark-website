@@ -25,7 +25,6 @@ import {
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_PROTOCOL_VERSION,
-  PLAYER_CHARACTER_KERNEL_VERSION,
   decodeClientGameMessage,
   encodeGameMessage,
   type GameChatMessage,
@@ -133,7 +132,6 @@ test('client carries character config, publishes authority, and tears down', asy
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
@@ -556,7 +554,6 @@ test('client carries the fresh Tutorial-decline admission intent', async () => {
     gameplayPause: null,
     gameplayResumeGrace: null,
     kernelParameters: kernelParameters(),
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     modAssets: [],
     modCatalog: [],
     playerId: 'player-1',
@@ -812,7 +809,6 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
@@ -1293,7 +1289,6 @@ test('client coalesces held aim updates but schedules every cast-level transitio
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
@@ -1380,7 +1375,7 @@ test('client measures authenticated WebSocket round trips with its monotonic clo
   assert.deepEqual(samples, [38])
 })
 
-test('client disables prediction when the shared character kernel does not match', async () => {
+test('client disables prediction when the shared character parameters do not match', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
@@ -1399,8 +1394,10 @@ test('client disables prediction when the shared character kernel does not match
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: 'future-player-character-kernel',
-    kernelParameters: kernelParameters(),
+    kernelParameters: {
+      ...kernelParameters(),
+      movementAcceleration: kernelParameters().movementAcceleration + 1,
+    },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
     modCatalog: [],
@@ -1441,7 +1438,6 @@ test('client presents bounded display-rate movement without resending unchanged 
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
@@ -1843,7 +1839,6 @@ test('client rejects a welcome that omits its assigned player', async () => {
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
@@ -2050,7 +2045,6 @@ function receiveWelcome(
     serverTickRate: 100,
     snapshotRate: 20,
     sessionKind: 'standalone',
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     modAssets: [],
@@ -2106,7 +2100,6 @@ test('observer session exposes only read-only match state, chat, and replication
     gameplayPause: null,
     gameplayResumeGrace: null,
     kernelParameters: kernelParameters(),
-    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     modAssets: [],
     modCatalog: [],
     observer: true,

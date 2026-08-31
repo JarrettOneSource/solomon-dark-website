@@ -53,7 +53,6 @@ console.log(JSON.stringify({
   node: process.version,
   pathsPerArena,
   repetitions,
-  schema: 'solomon-dark-boneyard-collision-benchmark-v1',
   speedup: allPairs.wallMs / indexed.wallMs,
   templates: NATIVE_GENERATED_BONEYARDS.length,
 }, null, 2))

@@ -3,10 +3,6 @@ import { resolve } from 'node:path'
 
 import electron from 'electron'
 
-const requiredNode = '22.17.0'
-if (process.versions.node !== requiredNode) {
-  throw new Error(`Desktop development requires Node ${requiredNode}, found ${process.versions.node}`)
-}
 await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'])
 const child = spawn(electron, [resolve('desktop')], {
   env: {

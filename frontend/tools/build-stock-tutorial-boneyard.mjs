@@ -45,7 +45,6 @@ const scene = Object.freeze({
 const template = Object.freeze({
   geometrySha256: boneyardGeometrySha256(scene),
   scene,
-  sourceLabel: 'stock/data/levels/tutorial.boneyard',
   sourceSha256: createHash('sha256').update(bytes).digest('hex'),
 })
 

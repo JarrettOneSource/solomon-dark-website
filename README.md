@@ -2,7 +2,6 @@
 
 ## Validation
 
-The repository pins its .NET, Node.js, npm, and frontend lint tool versions.
 Run the complete backend build, integration contracts, lint checks, frontend
 tests, and production build from the repository root:
 
@@ -15,8 +14,6 @@ For lint alone, use the same entrypoint:
 ```bash
 ./scripts/validate.sh lint
 ```
-
-Those are the only supported validation entrypoints for agents and CI.
 
 ## Boneyard viewer
 
@@ -113,7 +110,7 @@ browser-provisioned, and dedicated topology. This standalone host ends its
 current run when the final client leaves, so a desktop restart or browser
 refresh begins from a fresh Hub and materializes a new random Boneyard.
 
-The offline schema-v7 bot trainer, authoritative Boneyard rollout bridge,
+The offline bot trainer, authoritative Boneyard rollout bridge,
 checkpoint format, evaluation protocol, and diagnostics are documented in
 `docs/ml-bot-training.md`.
 
@@ -131,8 +128,8 @@ release health gates are documented in `ops/nfo/README.md`.
 
 The desktop rebuild packages the same production browser client; it does not
 contain a second renderer or gameplay implementation. Electron serves that
-bundle on an OS-assigned loopback origin, starts the bundled Node `22.17.0`
-runtime as a separate authoritative process, and injects its credentialed
+bundle on an OS-assigned loopback origin, starts the bundled Node runtime as a
+separate authoritative process, and injects its credentialed
 `ws://127.0.0.1/...` endpoint through an isolated preload.
 
 From `frontend/`:
@@ -148,7 +145,7 @@ under `dist-desktop/`. The smoke runs the real packaged Electron app under
 Xvfb, enters the Hub, verifies WebGL and authoritative movement, proves the
 host executable is the bundled Node runtime in a separate process, exits, and
 checks that the child process was reaped. `npm run dev:desktop` exercises the
-same boundary with the development machine's already pinned Node runtime.
+same boundary with the development machine's Node runtime.
 
 The website is not contacted during desktop solo. Encrypted direct peer
 hosting/joining and save persistence are subsequent product slices; the one
@@ -169,7 +166,7 @@ Subscribe in the Library and enable mods from Explore the Dark Cloud. Session
 provisioning resolves exact latest versions, validates dependencies and hashes,
 starts one isolated Lua VM per active script, and adds active package
 Boneyards to that session only. Browser lobby rows advertise the exact host
-manifest before joining. Save schema 2 records that manifest and bounded
+manifest before joining. Save documents record that manifest and bounded
 per-mod state.
 
 Published mods may be `public`, `unlisted`, or `private`. Unlisted mods stay

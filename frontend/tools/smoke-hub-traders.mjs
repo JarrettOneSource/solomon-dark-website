@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -13,7 +12,6 @@ import {
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
-  WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
@@ -799,32 +797,6 @@ async function enterHub(page, element) {
   }
 }
 
-async function moveHubAxis(page, key, axis, target, direction) {
-  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
-  await page.keyboard.down(key)
-  try {
-    await page.waitForFunction(({ axis, direction, target }) => {
-      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-      const value = frame?.[axis]
-      return typeof value === 'number'
-        && (direction === 'at-least' ? value >= target : value <= target)
-    }, { axis, direction, target }, { timeout: 15_000 })
-  } catch (error) {
-    const receipt = await page.evaluate(() => ({
-      frame: document.querySelector('.hub-world-canvas')?.__sdrHubFrame ?? null,
-      surface: document.querySelector('.hub-native-ui-stage')
-        ?.getAttribute('aria-label') ?? null,
-    }))
-    throw new Error(
-      `Hub movement ${key}/${axis}/${direction}/${target} failed: ${JSON.stringify(receipt)}`,
-      { cause: error },
-    )
-  } finally {
-    await page.keyboard.up(key)
-    await page.waitForTimeout(150)
-  }
-}
-
 async function declineTutorialOffer(page) {
   const offer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
   if (await offer.isVisible()) {
@@ -879,11 +851,8 @@ function createHagathaCapacitySave() {
   })
   return {
     document,
-    formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
     revision: 1,
-    sha256: createHash('sha256').update(document).digest('hex'),
     slot: WEB_GAME_SAVE_SLOT,
-    updatedAtUtc: new Date().toISOString(),
   }
 }
 

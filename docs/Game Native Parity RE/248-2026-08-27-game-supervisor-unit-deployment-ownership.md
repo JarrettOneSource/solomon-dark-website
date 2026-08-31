@@ -22,7 +22,6 @@
 | Live configuration differential | `/etc/systemd/system/solomon-dark-game.service`, `/etc/solomon-dark-game.env`, and `/var/lib/solomon-dark-game` | The live unit lacks the checked-in `Environment`, `StateDirectory`, and `StateDirectoryMode`. The protected env correctly has no duplicate memorial path, so the stale unit supplies no value and creates no state directory. | high-live |
 | Deployment owner trace | `ops/local-ci/deploy-main.sh` at `f7e0b244`; `ops/nfo/solomon-dark-game.service` at `080b49e6+` | The release packages and reconciles Caddy but never packages or installs the game unit. The application therefore acquired a required persistent-state path while its systemd owner remained machine-local stale state. | high |
 | Self-update receipt | local deployment journal and worker/cache state, `2026-08-27T08:42:43-04:00..08:48:32-04:00` | The exact `8826abcf` tree passed the worker gate and built; its new worker installed byte-for-byte, then the old worker exited 1 and retained the old-format artifact because one `unlink` invocation incorrectly received both artifact and checksum paths. Production was not contacted in that phase. | high-live |
-| Regression seam | `tests/test_validation_contract.py` | The canonical Website gate can enforce artifact membership, live checksum ownership, install/daemon-reload order, and rollback-before-restart order without touching production. | high |
 
 The root cause is deployment ownership, not a bad memorial path or transient
 host failure. Defaulting the application path would still leave the service

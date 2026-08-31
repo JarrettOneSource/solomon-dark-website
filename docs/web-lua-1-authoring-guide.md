@@ -117,9 +117,8 @@ Three larger copyable examples live beside it:
   custom Boneyards, enemies, monument portals, rooms, scene stacks, music, and
   entity/party/scene reducers.
 
-[`coverage.json`](../frontend/examples/web-lua/coverage.json) is the checked
-constructor-to-example ledger. Deterministic package digests are recorded in
-[`package-receipts.json`](../frontend/examples/web-lua/package-receipts.json).
+The showcase headless and browser tests execute these packages through the
+same admission, compilation, host, and presentation paths used in production.
 
 ## Lua syntax used by mods
 

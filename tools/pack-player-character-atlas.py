@@ -283,13 +283,6 @@ export type PlayerCharacterPackedSheet = readonly [
   frames: readonly PlayerCharacterPackedFrame[],
 ]
 
-export const PLAYER_CHARACTER_ATLAS_PAGE_SIZE = {PAGE_SIZE}
-export const PLAYER_CHARACTER_ATLAS_DECODED_BYTES = {sum(page.width * page.height * 4 for page in pages)}
-export const PLAYER_CHARACTER_ATLAS_SOURCE_SHEET_COUNT = {len(sheets)}
-export const PLAYER_CHARACTER_ATLAS_FRAME_COUNT = {sum(len(sheet.frames) for sheet in sheets.values())}
-export const PLAYER_CHARACTER_ATLAS_EMPTY_FRAME_COUNT = {sum(frame.rectangle is None for sheet in sheets.values() for frame in sheet.frames)}
-export const PLAYER_CHARACTER_ATLAS_PACKED_RECTANGLE_COUNT = {len(rectangles)}
-export const PLAYER_CHARACTER_ATLAS_PACKED_RGBA_BYTES = {sum(rectangle.image.width * rectangle.image.height * 4 for rectangle in rectangles)}
 export const PLAYER_CHARACTER_ATLAS_SOURCES = [{page_names}] as const
 
 export const PLAYER_CHARACTER_ATLAS_RECTANGLES: readonly PlayerCharacterPackedRectangle[] = {json.dumps(rectangle_rows, separators=(",", ":"))}

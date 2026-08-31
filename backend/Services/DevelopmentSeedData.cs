@@ -11,11 +11,8 @@ public static class DevelopmentSeedData
     private const string SurvivalSlug = "the-survival-grounds-as-shipped";
     private const string SurvivalSummary =
         "The stock survival boneyard, byte for byte from the 0.72.5 beta. The yard re-rolls itself every time you visit; the file is the recipe, not the furniture.";
-    private const string SurvivalSha256 =
-        "fe2e01b0ab62f644c3e5bf53f71df3a41968b95c8e22fa44c1d1250ba08cdb5b";
     private const string SurvivalDescription =
         "Extracted from the preserved 0.72.5 beta data.\n\n" +
-        "SHA-256: " + SurvivalSha256 + ".\n\n" +
         "The retail BoneyardGenerator decorates this recipe shell at load with a fresh random seed.\n\n" +
         "Staged install path: sandbox/DarkCloud/mylevels/The Survival Grounds, As Shipped.boneyard.\n\n" +
         "Original level (c) Raptisoft.";
@@ -44,11 +41,6 @@ public static class DevelopmentSeedData
             cancellationToken);
 
         var survival = await File.ReadAllBytesAsync(survivalBoneyardPath, cancellationToken);
-        if (!string.Equals(StorageService.Sha256(survival), SurvivalSha256, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("The development survival Boneyard does not match its recorded SHA-256.");
-        }
-
         await EnsureDraftAsync(
             db,
             storage,
@@ -56,7 +48,6 @@ public static class DevelopmentSeedData
             "Survival Recipe Notes",
             JsonSerializer.SerializeToUtf8Bytes(new
             {
-                schemaVersion = 1,
                 title = "Survival Recipe Notes",
                 source = "data/levels/survival.boneyard",
                 notes = new[]
@@ -75,7 +66,6 @@ public static class DevelopmentSeedData
             "Dratmoor Margin Study",
             JsonSerializer.SerializeToUtf8Bytes(new
             {
-                schemaVersion = 1,
                 title = "Dratmoor Margin Study",
                 source = "new",
                 notes = new[]

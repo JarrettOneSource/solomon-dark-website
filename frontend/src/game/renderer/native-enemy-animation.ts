@@ -31,7 +31,6 @@ export interface NativeEnemyActionProgram {
   readonly name: NativeEnemyActionProgramName
   /** Multiplied by the listed authoritative simulation factors each fixed tick. */
   readonly progressPerTick: number
-  readonly provenance: 'native-exact'
   readonly rateFactors: readonly (
     'attack-speed' | 'marker-multiplier' | 'one-plus-cast-roll'
   )[]
@@ -276,7 +275,6 @@ function exactProgram(
     frames,
     name,
     progressPerTick,
-    provenance: 'native-exact',
     rateFactors,
     strictEnd,
   }

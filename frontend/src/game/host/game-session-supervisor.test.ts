@@ -89,7 +89,6 @@ test('runtime event publisher retries and posts bounded activity to the loopback
 
   assert.equal(requests[1]?.authorization, `Bearer ${secret}`)
   assert.deepEqual(requests[1]?.body, {
-    schemaVersion: 1,
     component: 'game-host',
     event: 'run.started',
     message: 'A party started a Boneyard run.',

@@ -80,7 +80,6 @@ import {
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
   PARTY_ACTION_REJECTIONS,
   GAME_PROTOCOL_VERSION,
-  PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeClientGameMessage,
   encodeGameMessage,
@@ -1029,7 +1028,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             serverTickRate: GAME_TICK_RATE,
             snapshotRate,
             sessionKind,
-            kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
             kernelParameters: {
               fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
               movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,
@@ -1875,7 +1873,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           serverTickRate: GAME_TICK_RATE,
           snapshotRate,
           sessionKind,
-          kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
           kernelParameters: {
             fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
             movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,

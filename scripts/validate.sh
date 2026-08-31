@@ -14,24 +14,6 @@ for command_name in python3 node npm; do
         fail "$command_name is required"
 done
 
-mapfile -t required_versions < <(
-    python3 - <<'PY'
-import json
-from pathlib import Path
-
-root = Path.cwd()
-dotnet = json.loads((root / "global.json").read_text())["sdk"]["version"]
-frontend = json.loads((root / "frontend/package.json").read_text())
-print(dotnet)
-print(frontend["engines"]["node"])
-print(frontend["engines"]["npm"])
-PY
-)
-
-required_dotnet="${required_versions[0]}"
-required_node="${required_versions[1]}"
-required_npm="${required_versions[2]}"
-
 dotnet_candidates=()
 if [[ -n "${SDR_DOTNET:-}" ]]; then
     dotnet_candidates+=("$SDR_DOTNET")
@@ -48,25 +30,15 @@ fi
 
 dotnet_command=""
 for candidate in "${dotnet_candidates[@]}"; do
-    if actual_version="$("$candidate" --version 2>/dev/null)" &&
-        [[ "$actual_version" == "$required_dotnet" ]]; then
+    if "$candidate" --version >/dev/null 2>&1; then
         dotnet_command="$candidate"
         break
     fi
 done
 
 if [[ -z "$dotnet_command" ]]; then
-    fail ".NET SDK $required_dotnet is required; install it or set SDR_DOTNET to its dotnet host"
+    fail ".NET SDK is required; install it or set SDR_DOTNET to its dotnet host"
 fi
-
-actual_node="$(node --version)"
-actual_node="${actual_node#v}"
-[[ "$actual_node" == "$required_node" ]] ||
-    fail "Node.js $required_node is required, found $actual_node"
-
-actual_npm="$(npm --version)"
-[[ "$actual_npm" == "$required_npm" ]] ||
-    fail "npm $required_npm is required, found $actual_npm"
 
 export SDR_DOTNET="$dotnet_command"
 

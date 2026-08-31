@@ -139,12 +139,8 @@ public sealed class WebGameSave
     public int Id { get; set; }
     public int UserId { get; set; }
     public int Slot { get; set; }
-    public int FormatVersion { get; set; }
     public int Revision { get; set; }
     public string Document { get; set; } = string.Empty;
-    public long Size { get; set; }
-    public string Sha256 { get; set; } = string.Empty;
-    public DateTime UpdatedAtUtc { get; set; }
 
     public User User { get; set; } = null!;
 }

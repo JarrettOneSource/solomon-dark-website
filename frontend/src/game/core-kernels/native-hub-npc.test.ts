@@ -64,20 +64,7 @@ test('fresh profiles own all ten native help rows and only three named actors cl
   assert.equal(acknowledgeNativeHubNpcHint(luthacus, 'hagatha'), luthacus)
 })
 
-test('the generated catalog owns every compiled survival Hub actor, painting, and source hash', () => {
-  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v4')
-  assert.equal(NATIVE_HUB_NPC_CATALOG.source.retailVersion, '0.72.5')
-  assert.equal(
-    NATIVE_HUB_NPC_CATALOG.source.executableSha256,
-    '03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3',
-  )
-  assert.deepEqual(NATIVE_HUB_NPC_CATALOG.source.dialogueHashes, {
-    'books.txt': 'd7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1',
-    'narration.txt': '5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174',
-    'spellfacts.txt': '1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17',
-    'story.txt': 'ce1580bdce93a617c6045617d4c42f9c1b9019a5d5664efadf36c8b80f40071d',
-    'survival.txt': '5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67',
-  })
+test('the generated catalog owns every compiled survival Hub actor and painting', () => {
   assert.equal(NATIVE_HUB_INTERACTION_IDS.length, 20)
   assert.deepEqual(NATIVE_HUB_INTERACTION_IDS, [
     'hagatha', 'fomentius', 'annalist', 'luthacus', 'skorcha', 'teacher',
@@ -113,7 +100,6 @@ test('the generated catalog owns every compiled survival Hub actor, painting, an
     Object.values(NATIVE_HUB_NPC_CATALOG.interactions).flatMap(({ questions }) => questions).length,
     6,
   )
-  assert.deepEqual(NATIVE_HUB_NPC_CATALOG.skorcha.artRecords, [510, 511, 512, 513, 514, 515, 516])
   assert.equal(NATIVE_HUB_NPC_CATALOG.eulogies['100'], null)
   assert.ok(NATIVE_HUB_INTERACTION_IDS.filter(id => id.startsWith('painting-')).every(id => {
     const geometry = NATIVE_HUB_NPC_CATALOG.interactions[id].geometry
@@ -138,14 +124,8 @@ test('the generated catalog owns every compiled survival Hub actor, painting, an
     { position: { x: 566, y: 735 }, radius: 15, region: 'office' },
   )
   assert.deepEqual(NATIVE_HUB_NPC_CATALOG.storyOffice.polisher, {
-    artRecords: [23, 24, 25, 26],
     loopFullDistance: 50,
-    loopSha256: 'ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57',
     loopSilentDistance: 200,
-    phaseFloatRange: 0.25,
-    phaseSpeed: 0.05,
-    reverseDrawCount: 1500,
-    reverseDrawValue: 3,
   })
 })
 

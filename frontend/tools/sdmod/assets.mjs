@@ -19,15 +19,15 @@ export async function runAssetCommand(args, io = console) {
         if (!source) throw new Error(`unknown asset source: ${id}`)
         return source
       })
-  const receipts = []
-  for (const source of selected) receipts.push(await fetchAssetSource(source))
-  io.log(JSON.stringify({ cache: assetCacheRoot(), sources: receipts }, null, 2))
-  return receipts
+  const fetched = []
+  for (const source of selected) fetched.push(await fetchAssetSource(source))
+  io.log(JSON.stringify({ cache: assetCacheRoot(), sources: fetched }, null, 2))
+  return fetched
 }
 
 export async function readAssetSources(path = DEFAULT_SOURCES) {
   const value = JSON.parse(await readFile(path, 'utf8'))
-  if (value.schemaVersion !== 1 || !Array.isArray(value.sources)) {
+  if (!value || typeof value !== 'object' || !Array.isArray(value.sources)) {
     throw new Error('asset source catalog is invalid')
   }
   return value
@@ -76,14 +76,11 @@ export async function fetchAssetSource(source) {
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, bytes)
   }
-  const receipt = {
-    archiveSha256: source.sha256,
+  return {
     id: source.id,
     license: source.license,
     selectedFiles: source.selectedFiles,
   }
-  await writeFile(join(root, 'receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`)
-  return receipt
 }
 
 function validateSource(source) {

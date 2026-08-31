@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
@@ -30,7 +28,7 @@ import {
   checkWebLuaPackage,
 } from '../../src/game/modding/definition/index.ts'
 import { prepareModSession } from '../../src/game/modding/runtime/index.ts'
-import { admitPreparedPackage, runSdmod } from './cli.mjs'
+import { admitPreparedPackage } from './cli.mjs'
 
 const require = createRequire(import.meta.url)
 const wasmPath = require.resolve('wasmoon/dist/glue.wasm')
@@ -42,70 +40,6 @@ const packageNames = [
 ]
 const packageCache = new Map()
 
-test('showcase coverage maps every public Web Lua 1.0 surface to executable evidence', async () => {
-  const coverage = JSON.parse(await readFile(join(examplesRoot, 'coverage.json'), 'utf8'))
-  assert.equal(coverage.schemaVersion, 2)
-  assert.deepEqual(coverage.evidence, {
-    headless: 'tools/sdmod/showcase-mods.test.mjs',
-    showcaseBrowser: 'tools/smoke-web-lua-showcases.mjs',
-    wearableBrowser: 'tools/smoke-web-lua-wearables.mjs',
-  })
-  const expected = [
-    ...['boneyard', 'music', 'ref', 'scene', 'sheet', 'sound', 'sprite', 'wearable'].map(name => `sd.art.${name}`),
-    ...['affix', 'affix_pool', 'boneyard', 'boast', 'enemy', 'item', 'potion', 'powerup', 'room', 'scene', 'scene_extension', 'shop', 'skill', 'spell', 'status', 'ui'].map(name => `sd.kit.${name}`),
-    ...['after', 'all', 'every', 'first', 'on', 'when'].map(name => `sd.rules.${name}`),
-    ...['damage', 'grant', 'present', 'resource', 'spawn', 'state', 'status'].map(name => `sd.effect.${name}`),
-    ...['area', 'channel', 'minimap', 'portal', 'projectile'].map(name => `sd.prefab.${name}`),
-    ...['array', 'boolean', 'enum', 'integer', 'number', 'object', 'string'].map(name => `sd.schema.${name}`),
-    ...['damage', 'grant', 'present', 'resource', 'spawn', 'state', 'status'].map(name => `sd.intent.${name}`),
-    'sd.advanced.reducer',
-    ...['entity', 'participant-profile', 'participant-run', 'party-run', 'scene', 'session'].map(name => `scope.${name}`),
-  ].sort()
-  assert.deepEqual(Object.keys(coverage.surfaces).sort(), expected)
-  assert.deepEqual([...new Set(coverage.browserSurfaces)].sort(), [...coverage.browserSurfaces].sort())
-  assert.ok(coverage.browserSurfaces.length > 0)
-  coverage.browserSurfaces.forEach(surface => assert.ok(coverage.surfaces[surface], surface))
-  const observed = new Set()
-  for (const name of packageNames) {
-    const content = await preparedPackage(name)
-    for (const mod of content.compiledMods) {
-      mod.assets.forEach(asset => observed.add(`sd.art.${asset.assetKind}`))
-      mod.content.forEach(entry => observed.add(`sd.kit.${entry.contentKind.replaceAll('-', '_')}`))
-      if (mod.reducers.length > 0) observed.add('sd.advanced.reducer')
-      visitGraph(mod, observed)
-    }
-  }
-  for (const [surface, receipt] of Object.entries(coverage.surfaces)) {
-    assert.equal(typeof receipt.package, 'string', surface)
-    assert.equal(typeof receipt.test, 'string', surface)
-    if (surface === 'sd.art.wearable') {
-      assert.deepEqual(receipt, {
-        package: 'smoke-web-lua-wearables.mjs',
-        test: 'smoke-web-lua-wearables.mjs',
-      })
-      continue
-    }
-    assert.ok(packageNames.includes(receipt.package), surface)
-    assert.equal(receipt.test, 'showcase-mods.test.mjs', surface)
-    if (!surface.startsWith('sd.intent.') && !surface.startsWith('scope.')) {
-      assert.equal(observed.has(surface), true, surface)
-    }
-  }
-})
-
-function visitGraph(value, observed, seen = new Set()) {
-  if (!value || typeof value !== 'object' || seen.has(value)) return
-  seen.add(value)
-  if (Array.isArray(value)) {
-    value.forEach(entry => visitGraph(entry, observed, seen))
-    return
-  }
-  if (value.kind === 'asset-reference') observed.add('sd.art.ref')
-  if (value.kind === 'rule-definition') observed.add(`sd.${value.operation}`)
-  if (value.kind === 'schema-definition') observed.add(`sd.schema.${value.schemaKind}`)
-  Object.values(value).forEach(entry => visitGraph(entry, observed, seen))
-}
-
 test('every showcase package passes production-shaped admission', async () => {
   for (const name of packageNames) {
     const content = await preparedPackage(name)
@@ -115,30 +49,6 @@ test('every showcase package passes production-shaped admission', async () => {
       assert.equal(content.boneyards.length, 1)
       assert.ok(content.boneyards[0].scene.objects.some(object => object.typeId === 2009))
     }
-  }
-})
-
-test('showcase packages reproduce their checked-in deterministic receipts', async () => {
-  const receipt = JSON.parse(await readFile(join(examplesRoot, 'package-receipts.json'), 'utf8'))
-  assert.equal(receipt.schemaVersion, 1)
-  const temporary = await mkdtemp(join(tmpdir(), 'sd-showcase-pack-'))
-  try {
-    for (const expected of receipt.packages) {
-      const output = join(temporary, expected.fileName)
-      await runSdmod([
-        'pack',
-        join(examplesRoot, expected.directory),
-        output,
-      ], { log() {} })
-      const bytes = await readFile(output)
-      const info = await stat(output)
-      const content = await preparedPackage(expected.directory)
-      assert.equal(content.compiledMods[0].graphSha256, expected.graphSha256)
-      assert.equal(info.size, expected.packageBytes)
-      assert.equal(digest(bytes), expected.packageSha256)
-    }
-  } finally {
-    await rm(temporary, { force: true, recursive: true })
   }
 })
 

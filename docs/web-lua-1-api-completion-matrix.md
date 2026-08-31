@@ -1,6 +1,6 @@
 # Web Lua 1.0 completion matrix
 
-This is the release ledger for the Website-only Web Lua `1.0.0` interface.
+This documents the Website-only Web Lua `1.0.0` interface.
 Native Mod Loader compatibility is not part of this contract.
 
 The interface is intentionally smaller than the original design inventory. A
@@ -21,8 +21,8 @@ being accepted and ignored.
 - **Wearable browser**: the existing Hat, Robe, and Staff smoke covers the
   separate existing-slot wearable path.
 
-The machine-readable mapping is
-[`frontend/examples/web-lua/coverage.json`](../frontend/examples/web-lua/coverage.json).
+The rows below point directly to the executable package, headless, and browser
+coverage for each surface.
 
 ## Root and tools
 
@@ -33,7 +33,7 @@ The machine-readable mapping is
 | `sdmod new` | Complete | Creates a package that immediately passes production-shaped admission |
 | `sdmod check` | Complete | Runs definition, decoded asset, content-catalog, and Boneyard admission |
 | `sdmod test` | Complete | Exposes the actual compiled graph as `mod`; package tests assert their own definitions |
-| `sdmod pack` | Complete | Deterministic ZIP, canonical graph, digest, and checked receipts |
+| `sdmod pack` | Complete | Deterministic ZIP, canonical graph, and digest |
 | generated schema, LuaLS, reference, diagnostics, starter | Complete | Drift-checked generation from the current constructor and field inventory |
 
 ## Assets
@@ -91,7 +91,7 @@ equipment slots, and new player classes are not accepted 1.0 fields.
 | `sd.effect.state` | Complete | Scoped semantic state set or clear |
 | `sd.effect.present` | Complete | Declared sound presentation only |
 | `sd.prefab.area` | Complete | Bounded duration, interval, radius, repeated target selection and browser area VFX |
-| `sd.prefab.projectile` | Complete | Bounded flight, first-hit ledger and browser projectile VFX |
+| `sd.prefab.projectile` | Complete | Bounded flight, first-hit resolution and browser projectile VFX |
 | `sd.prefab.channel` | Complete | Caster-owned line, interval hits and teardown |
 | `sd.prefab.minimap` | Complete | Party, visible-hostile and powerup layers |
 | `sd.prefab.portal` | Complete | Boneyard Monument to declared party scene |
@@ -120,7 +120,7 @@ transition intent; scene transitions use the scene/portal module.
 
 - `showcase-mods.test.mjs` compiles the three real packages, executes their
   transactions, timers, migration, cross-host save restore, reducer circuit,
-  scene stack, audio projection, and deterministic package receipts.
+  scene stack, audio projection, and deterministic package output.
 - `smoke-web-lua-showcases.mjs` runs host and guest through Apothecary purchase
   and reforge, custom Boneyard readiness, Minimap/powerup/enemy replication,
   Keeper combat and XP, shared mod-skill selection, Skill Book/quickbar, portal,

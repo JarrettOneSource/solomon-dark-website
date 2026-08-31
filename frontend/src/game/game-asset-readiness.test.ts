@@ -205,9 +205,6 @@ test('locks every native player-corpse equipment extraction', () => {
     dimensions?: readonly [number, number]
     sha256: string
   }>> = {
-    'player-character-death-hat-anchors.json': {
-      sha256: '7741695f5a6d628412a8aceb30a55650e6f683c2b179f66c81a345bfef55bf1e',
-    },
     'player-character-death-hat-primary-0.png': {
       dimensions: [170, 4080],
       sha256: '79b99cd9cef3f308ffc7575a982d4b77c0fd54b7f327431fd976d4425e46d0e6',

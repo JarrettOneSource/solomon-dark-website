@@ -16,15 +16,6 @@ export type BoneyardCombatPackedFrame = readonly [
   trimY: number,
 ] | null
 
-export const BONEYARD_COMBAT_ATLAS_LAYOUT = 'native-pages' as const
-export const BONEYARD_COMBAT_ATLAS_MAX_PAGE_SIZE = 2048
-export const BONEYARD_COMBAT_ATLAS_DECODED_BYTES = 35651584
-export const BONEYARD_COMBAT_ATLAS_SOURCE_COUNT = 3164
-export const BONEYARD_COMBAT_ATLAS_EMPTY_SOURCE_COUNT = 0
-export const BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = 3164
-export const BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = 30132496
-export const BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = [[2048,2048],[512,512],[2048,2048],[512,512]] as const
-export const BONEYARD_COMBAT_ATLAS_PAGE_SHA256 = ["af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e","0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4","3758ce24d516f0ca6349e57b988d8a84e8d6f89fb3827856d7bb521618281af0","586bb06b4fc69f0d90c90da99871e1cd97d5f250a1e83edbba82a4b7504294ac"] as const
 export const BONEYARD_COMBAT_ATLAS_SOURCES = [page0, page1, page2, page3] as const
 export const BONEYARD_COMBAT_ATLAS_FRAMES: ReadonlyMap<string, BoneyardCombatPackedFrame> = new Map([
   ["boneyard-combat:BadGuys:0", [0,1726,0,4,6,4,6,0,0]],

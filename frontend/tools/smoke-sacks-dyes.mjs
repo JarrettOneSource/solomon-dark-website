@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -26,7 +25,6 @@ import {
   hubInventorySlotPosition,
 } from '../src/game/renderer/hub-inventory-render-contract.ts'
 import {
-  WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
@@ -953,11 +951,8 @@ function createSeededSave() {
     initialTints: robeRecipe.iconTints,
     record: {
       document,
-      formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
       revision: 1,
-      sha256: createHash('sha256').update(document).digest('hex'),
       slot: WEB_GAME_SAVE_SLOT,
-      updatedAtUtc: new Date().toISOString(),
     },
   }
 }

@@ -17,9 +17,6 @@ EXPECTED_HASHES = {
     "spellfacts.txt": "1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17",
     "narration.txt": "5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174",
 }
-EXECUTABLE_SHA256 = "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3"
-
-
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
@@ -327,33 +324,20 @@ def build(source_root: Path) -> dict[str, Any]:
         "interactions": interactions,
         "interruptEulogies": [speech[f"SAY_EULOGY_INTERRUPT{index}"] for index in range(1, 5)],
         "markers": markers,
-        "schema": "solomon-dark-native-hub-npc-interactions-v4",
         "skorcha": {"animationDelay": {"drawCount": 10, "offsetTicks": 20},
-            "animationStateCount": 3, "artRecords": list(range(510, 517)),
+            "animationStateCount": 3,
             "placements": [{"variant": 0, "x": 1437.5, "y": 732.5},
                 {"variant": 1, "x": 1637, "y": 403.5}, {"variant": 2, "x": 669, "y": 705.5}],
             "presenceDrawCount": 3, "presenceDrawValue": 1},
-        "source": {"dialogueHashes": EXPECTED_HASHES, "executableSha256": EXECUTABLE_SHA256,
-            "preferredImageBase": "0x00400000", "retailVersion": "0.72.5"},
         "storyOffice": {
-            "archIntroVoice": {
-                "bytes": 1231088,
-                "sha256": "b819a5aa7397df964ec9f9e03149941450d65d10fe207f71c3643419fd071255",
-            },
             "dialogue": {
                 key: story_dialogue[key]
                 for key in sorted(story_office_required)
             },
             "interactions": story_office_interactions,
             "polisher": {
-                "artRecords": [23, 24, 25, 26],
                 "loopFullDistance": 50,
-                "loopSha256": "ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57",
                 "loopSilentDistance": 200,
-                "phaseFloatRange": 0.25,
-                "phaseSpeed": 0.05,
-                "reverseDrawCount": 1500,
-                "reverseDrawValue": 3,
             },
         },
         "teacherSpells": teacher_spells,

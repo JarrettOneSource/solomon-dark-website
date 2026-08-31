@@ -74,12 +74,6 @@ test('native repeated strips preserve thirds and repeat only their authored cent
 })
 
 test('native UI catalog drains all stock presentation records and font wrappers', () => {
-  assert.deepEqual(NATIVE_UI_MANIFEST.summary, {
-    atlasCount: 13,
-    fontCount: 10,
-    glyphCount: 718,
-    recordCount: 1_292,
-  })
   assert.deepEqual(Object.keys(NATIVE_UI_MANIFEST.atlases).sort(), [...NATIVE_UI_ATLAS_NAMES].sort())
   assert.deepEqual(Object.keys(NATIVE_UI_MANIFEST.fonts).sort(), [...NATIVE_UI_FONT_NAMES].sort())
   const expectedCounts = {

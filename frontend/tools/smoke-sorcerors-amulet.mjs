@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
@@ -19,7 +19,6 @@ import {
 import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
-  WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
@@ -372,11 +371,8 @@ function tutorialStageEightSave() {
     document,
     record: {
       document,
-      formatVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
       revision: 1,
-      sha256: createHash('sha256').update(document).digest('hex'),
       slot: WEB_GAME_SAVE_SLOT,
-      updatedAtUtc: new Date().toISOString(),
     },
   }
 }

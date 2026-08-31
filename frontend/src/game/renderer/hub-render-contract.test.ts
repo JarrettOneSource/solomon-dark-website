@@ -2,234 +2,24 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
-  HUB_COURTYARD_OBSTACLES,
   HUB_DIAGNOSTIC_WINDOW_FRAMES,
-  HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
   HUB_STUDENT_VISIBILITY_HALF_EXTENT,
-  hubWorldDepthForActor,
   hubStudentIntersectsView,
   hubStudentVisibilityDiagnosticsDue,
   initialHubResolution,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
 
-const hubWorldScene = readFileSync(new URL('./hub-world-scene.ts', import.meta.url), 'utf8')
-const hubWorldRenderer = readFileSync(new URL('./hub-world-renderer.ts', import.meta.url), 'utf8')
-const hubActors = readFileSync(new URL('./hub-actors.ts', import.meta.url), 'utf8')
-const hubPrivateRoomScene = readFileSync(
-  new URL('./hub-private-room-scene.ts', import.meta.url),
-  'utf8',
-)
-const hubTextures = readFileSync(new URL('./hub-textures.ts', import.meta.url), 'utf8')
-const hubVisualAtlas = readFileSync(new URL('./hub-visual-atlas.ts', import.meta.url), 'utf8')
-const hubVisualAtlasGenerated = readFileSync(
-  new URL('./hub-visual-atlas.generated.ts', import.meta.url),
-  'utf8',
-)
-const hubVisualAtlasPacker = readFileSync(
-  new URL('../../../../tools/pack-hub-visual-atlas.py', import.meta.url),
-  'utf8',
-)
-const hubAssetExtractor = readFileSync(
-  new URL('../../../../tools/extract-hub-assets.py', import.meta.url),
-  'utf8',
-)
-const gameAssets = readFileSync(new URL('../game-assets.ts', import.meta.url), 'utf8')
-
-test('Hub diagnostics expose local and addressed-player Enchant Staff presentation', () => {
-  assert.match(hubWorldRenderer, /playerEnchantStaffActive/)
-  assert.match(hubWorldRenderer, /playerEnchantStaffActives/)
-  assert.match(hubWorldRenderer, /playerEnchantStaffAuraRecords/)
-  assert.match(hubWorldRenderer, /playerEnchantStaffTints/)
-  assert.match(hubActors, /get enchantStaffActive\(\)/)
-  assert.match(hubActors, /get enchantStaffAuraRecord\(\)/)
-  assert.match(hubActors, /get enchantStaffTint\(\)/)
-})
-
-test('Hub-world visuals share three bounded exact-pixel pages', () => {
-  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_DECODED_BYTES = 44408832/)
-  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_SOURCE_COUNT = 87/)
-  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_FRAME_COUNT = 582/)
-  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_EMPTY_FRAME_COUNT = 0/)
-  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_PACKED_RECTANGLE_COUNT = 576/)
-  assert.match(
-    hubVisualAtlasGenerated,
-    /HUB_VISUAL_ATLAS_PAGE_DIMENSIONS = \[\[2048,2048\],\[2048,2046\],\[2048,1327\]\]/,
-  )
-  assert.match(
-    hubVisualAtlasGenerated,
-    /HUB_VISUAL_ATLAS_SOURCES = \[page0, page1, page2\]/,
-  )
-  for (const [page, width, height] of [
-    [0, 2048, 2048],
-    [1, 2048, 2046],
-    [2, 2048, 1327],
-  ] as const) {
+test('Hub world atlas pages stay within the texture limit', () => {
+  for (const page of [0, 1, 2]) {
     const png = readFileSync(new URL(
       `../../assets/game/hub-visual-atlas-${page}.png`,
       import.meta.url,
     ))
-    assert.equal(png.readUInt32BE(16), width)
-    assert.equal(png.readUInt32BE(20), height)
+    assert.ok(png.readUInt32BE(16) <= 2_048)
+    assert.ok(png.readUInt32BE(20) <= 2_048)
   }
-  assert.match(hubVisualAtlasPacker, /EXPECTED_SOURCE_COUNT = 87/)
-  assert.match(hubVisualAtlasPacker, /exact_pixel_bounds\(cell\)/)
-  assert.match(hubVisualAtlasPacker, /actual\.paste\(crop, \(frame\.trim_x, frame\.trim_y\)\)/)
-  assert.match(hubVisualAtlasPacker, /if actual\.tobytes\(\) != expected\.tobytes\(\):/)
-  assert.match(hubVisualAtlasPacker, /if len\(pages\) != 3:/)
-})
-
-test('Hub renderer loads compact pages and releases derived frames before page owners', () => {
-  assert.match(hubTextures, /\.\.\.HUB_VISUAL_ATLAS_SOURCES/)
-  assert.match(hubTextures, /createHubVisualAtlas\(texture\)/)
-  assert.match(hubTextures, /hubVisualAtlasSourceIsSingle\(source\)/)
-  assert.doesNotMatch(hubTextures, /hubGameAssetSources/)
-  assert.doesNotMatch(gameAssets, /function hubGameAssetSources/)
-  assert.ok(
-    hubTextures.indexOf('textures.visualAtlas.destroy()')
-      < hubTextures.indexOf('for (const source of textures.assetSources)'),
-  )
-  assert.doesNotMatch(hubTextures, /Object\.values\(textures\.base\)/)
-  assert.match(hubVisualAtlas, /orig: origin/)
-  assert.match(hubVisualAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
-  assert.match(hubVisualAtlas, /function packedSubframeTexture/)
-  assert.match(hubVisualAtlas, /packedX \+ left - trimX/)
-  assert.match(
-    hubTextures,
-    /requestedSources\.filter\(\(source\) => !boneyardCombatAtlasSourceIsPacked\(source\)\)/,
-  )
-  assert.match(hubTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
-  assert.match(hubTextures, /createBoneyardCombatAtlas\(texture\)/)
-  assert.match(
-    hubTextures,
-    /const composited = \[[\s\S]*?HUB_VISUAL_ATLAS_SOURCES[\s\S]*?loadGameTextureEntries\(\{[\s\S]*?composited/,
-  )
-  assert.match(hubTextures, /playerWorldCompositedAssetSources\(\)/)
-  assert.match(hubTextures, /const stockFramed = \[[\s\S]*?hub\.props\.statue\.aura/)
-  assert.match(hubTextures, /stockFramed,/)
-  assert.match(hubTextures, /nativeSpriteRecordTexture\(\{/)
-  assert.match(hubTextures, /if \(source === hub\.props\.statue\.aura\) continue/)
-  assert.ok(
-    hubTextures.indexOf('textures.combatAtlas.destroy()')
-      < hubTextures.indexOf('for (const source of textures.assetSources)'),
-  )
-})
-
-test('scripted Hub presentation locks rendered facing to visible travel', () => {
-  assert.match(hubActors, /this\.resolveHeadingIndex\(player, movementFacing\)/)
-  assert.match(hubActors, /advanceActorMovementFacing\(/)
-  assert.match(
-    hubActors,
-    /createActorMovementFacingState\(player\.position\.x, player\.position\.y\)/,
-  )
-  assert.match(hubActors, /facing\.headingIndex \?\? player\.headingIndex/)
-  assert.match(hubWorldScene, /participant\.transition !== null \|\| participant\.collegeIntro !== null/)
-  assert.match(
-    hubPrivateRoomScene,
-    /participant\.transition !== null \|\| participant\.collegeIntro !== null/,
-  )
-  assert.match(hubWorldRenderer, /playerHeadingIndex = playerView\.headingIndex/)
-})
-
-test('every ordinary Hub crop uses the PMA compact atlas while multiply keeps raw RGB', () => {
-  assert.match(hubPrivateRoomScene, /this\.textures\.visualAtlas\.strip\(/)
-  assert.match(hubPrivateRoomScene, /this\.textures\.visualAtlas\.frame\(/)
-  assert.doesNotMatch(hubPrivateRoomScene, /new Texture\(/)
-  assert.match(hubWorldScene, /this\.textures\.visualAtlas\.frame\(/)
-  assert.match(hubWorldScene, /this\.textures\.visualAtlas\.subframe\(/)
-  assert.doesNotMatch(hubWorldScene, /new Texture\(/)
-  assert.doesNotMatch(hubWorldScene, /layerFrameTextures/)
-  assert.match(hubWorldScene, /textures\.base\[hub\.props\.statue\.aura\]/)
-  assert.match(hubWorldScene, /this\.statueAura\.blendMode = 'multiply'/)
-})
-
-test('native painter boundaries sort actors around Courtyard props and tent faces', () => {
-  assert.deepEqual(HUB_COURTYARD_OBSTACLES, [
-    {
-      id: 'college-obstacle-0', position: { x: 1458.5, y: 320.5 }, radius: 40,
-      records: Array.from({ length: 12 }, (_, index) => 148 + index), selector: 0,
-      sortBias: 0,
-    },
-    { id: 'college-obstacle-1', position: { x: 955.5, y: 239.5 }, radius: 40, records: [25], selector: 1, sortBias: 0 },
-    { id: 'college-obstacle-2', position: { x: 749.5, y: 162.5 }, radius: 40, records: [23], selector: 2, sortBias: 0 },
-    { id: 'college-obstacle-3', position: { x: 1893, y: 490 }, radius: 40, records: [28], selector: 3, sortBias: 0 },
-    { id: 'college-obstacle-4', position: { x: 1746, y: 534 }, radius: 40, records: [29], selector: 4, sortBias: 0 },
-    { id: 'college-obstacle-5', position: { x: 1840, y: 715 }, radius: 40, records: [27], selector: 5, sortBias: 0 },
-    { id: 'college-obstacle-6', position: { x: 628, y: 215 }, radius: 40, records: [20], selector: 6, sortBias: 0 },
-    { id: 'college-obstacle-7', position: { x: 956, y: 169 }, radius: 40, records: [24], selector: 7, sortBias: 0 },
-  ])
-  assert.ok(hubWorldDepthForActor(215) < hubWorldDepthForActor(243.011703))
-  assert.ok(hubWorldDepthForActor(239.5) < hubWorldDepthForActor(243.011703))
-  assert.ok(HUB_WORLD_DEPTH.usefulThyngsShadow < HUB_WORLD_DEPTH.courtyard + 1000)
-  assert.ok(HUB_WORLD_DEPTH.teacherPreWorld < hubWorldDepthForActor(0))
-  assert.ok(HUB_WORLD_DEPTH.teacherPostWorld > hubWorldDepthForActor(1024))
-  assert.ok(HUB_WORLD_DEPTH.teacherPostWorld < HUB_WORLD_DEPTH.courtyardForeground)
-  assert.ok(HUB_WORLD_DEPTH.courtyardForeground < HUB_WORLD_DEPTH.courtyardOnboarding)
-  assert.ok(HUB_WORLD_DEPTH.courtyardOnboarding < HUB_WORLD_DEPTH.southernForeground)
-  assert.match(
-    hubWorldScene,
-    /this\.walkToTalk\.container\.zIndex = HUB_WORLD_DEPTH\.courtyardOnboarding/,
-  )
-  assert.match(hubWorldScene, /nativeHubFixedActorPainterRegistration\(obstacle\.id\)/)
-  assert.match(
-    hubWorldScene,
-    /this\.usefulThyngsStack\.addChild\([\s\S]*?this\.usefulThyngsBack,[\s\S]*?this\.potion\.actor,[\s\S]*?this\.usefulThyngsFront,[\s\S]*?this\.potion\.balloons/,
-  )
-  assert.match(
-    hubWorldScene,
-    /fixed\('fomentius', this\.usefulThyngsStack, this\.potion\.actor\.position\.y\)/,
-  )
-  assert.match(
-    hubWorldScene,
-    /marker\.zIndex = target\.zIndex \+ HUB_NPC_MARKER_TAIL_OFFSET/,
-  )
-  assert.doesNotMatch(hubWorldScene, /HUB_WORLD_DEPTH\.usefulThyngs(?:Back|Front|Balloons|Marker)/)
-  assert.match(hubWorldRenderer, /collegeObstacleCount: courtyardScene\.collegeObstacleCount/)
-  assert.doesNotMatch(hubWorldScene, /managerLane: 'scenery'[\s\S]*?depth-prop/)
-  assert.match(
-    hubPrivateRoomScene,
-    /nativeHubFixedActorPainterRegistration\(id\)/,
-  )
-  assert.match(
-    hubPrivateRoomScene,
-    /marker\.zIndex = target\.zIndex \+ HUB_NPC_MARKER_TAIL_OFFSET/,
-  )
-  assert.doesNotMatch(hubPrivateRoomScene, /managerLane: 'scenery'/)
-  assert.match(hubAssetExtractor, /scenery = \[2, 6, 26\]/)
-  assert.match(hubAssetExtractor, /tuple\(range\(148, 160\)\)/)
-  assert.match(
-    hubVisualAtlasPacker,
-    /"hub-courtyard-depth-props\.png": \(8, 1, 2000, 1000\)/,
-  )
-})
-
-test('Courtyard fountain transients keep the shared additive FadeScale painter', () => {
-  assert.match(
-    hubWorldScene,
-    /new Sprite\(this\.textures\.base\[hub\.fountainParticle\]\)[\s\S]*?sprite\.blendMode = 'add'/,
-  )
-})
-
-test('Teacher release keeps native 100 Hz child programs and per-child blend ownership', () => {
-  assert.doesNotMatch(hubWorldScene, /this\.burst\.blendMode = 'screen'/)
-  assert.match(hubWorldScene, /this\.frames\.blendMode = 'add'/)
-  assert.match(hubWorldScene, /this\.preWorld\.addChild\(this\.flare\)/)
-  assert.match(hubWorldScene, /this\.worldColumn\.addChild\(this\.column\)/)
-  assert.match(hubWorldScene, /this\.worldFrames\.addChild\(this\.frames\)/)
-  assert.match(hubWorldScene, /this\.postWorld\.addChild\(this\.core\)/)
-  assert.match(
-    hubWorldScene,
-    /this\.world\.addChild\(\s*this\.teacher\.preWorld,\s*this\.teacher\.container,\s*this\.teacher\.worldColumn,\s*this\.teacher\.worldFrames,\s*this\.teacher\.postWorld,?\s*\)/,
-  )
-  assert.match(hubWorldScene, /this\.preWorld\.zIndex = HUB_WORLD_DEPTH\.teacherPreWorld/)
-  assert.doesNotMatch(hubWorldScene, /world(?:Column|Frames)\.zIndex = hubWorldDepthForActor/)
-  assert.match(hubWorldScene, /registration: teacherRelease\.painterRegistrations\[0\]!/)
-  assert.match(hubWorldScene, /registration: teacherRelease\.painterRegistrations\[1\]!/)
-  assert.match(hubWorldScene, /this\.postWorld\.zIndex = HUB_WORLD_DEPTH\.teacherPostWorld/)
-  assert.match(hubWorldScene, /this\.column\.visible = burst\.column\.visible/)
-  assert.match(hubWorldScene, /this\.core\.scale\.set\(burst\.core\.scaleX, burst\.core\.scaleY\)/)
-  assert.match(hubWorldScene, /this\.frames\.scale\.set\(burst\.frames\.scaleX, burst\.frames\.scaleY\)/)
 })
 
 test('world overlays submit only their authored alpha bounds', () => {

@@ -45,7 +45,6 @@ export function createRuntimeEventPublisher(
       try {
         const response = await fetch(url, {
           body: JSON.stringify({
-            schemaVersion: 1,
             component: queued.entry.component,
             event: queued.entry.event,
             message: queued.entry.message,

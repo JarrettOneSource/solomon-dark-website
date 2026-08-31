@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -18,8 +17,7 @@ export async function renderSprite(args, io = console) {
   const [recipeArg] = args
   if (!recipeArg) throw new Error('usage: sdmod render-sprite <recipe.json>')
   const recipePath = resolve(recipeArg)
-  const recipeBytes = await readFile(recipePath)
-  const recipe = JSON.parse(recipeBytes)
+  const recipe = JSON.parse(await readFile(recipePath, 'utf8'))
   const catalog = await readAssetSources()
   const source = catalog.sources.find(candidate => candidate.id === recipe.source)
   if (!source) throw new Error(`sprite recipe uses unknown asset source: ${recipe.source}`)
@@ -40,19 +38,6 @@ export async function renderSprite(args, io = console) {
   if (!rendered) {
     throw new Error(`Blender sprite render failed:\n${stdout}${stderr}`.trim())
   }
-  const outputBytes = await readFile(output)
-  const receipt = {
-    blender: stdout.match(/Blender ([0-9.]+)/)?.[1] ?? 'unknown',
-    output,
-    outputSha256: sha256(outputBytes),
-    recipeSha256: sha256(recipeBytes),
-    source: source.id,
-    sourceSha256: source.sha256,
-  }
-  io.log(JSON.stringify(receipt, null, 2))
-  return receipt
-}
-
-function sha256(bytes) {
-  return createHash('sha256').update(bytes).digest('hex')
+  io.log(output)
+  return output
 }

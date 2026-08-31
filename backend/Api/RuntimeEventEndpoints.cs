@@ -73,7 +73,6 @@ public static class RuntimeEventEndpoints
     private static bool IsValid(RuntimeEventRequest? request)
     {
         if (request is null ||
-            request.SchemaVersion != 1 ||
             !IsEventName(request.Component, 64) ||
             !IsEventName(request.Event, 96) ||
             !IsText(request.Message, 256) ||
@@ -116,7 +115,6 @@ public static class RuntimeEventEndpoints
         value.All(character => !char.IsControl(character) || character is '\r' or '\n' or '\t');
 
     private sealed record RuntimeEventRequest(
-        int SchemaVersion,
         string Component,
         string Event,
         string Message,

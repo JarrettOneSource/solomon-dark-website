@@ -11,9 +11,6 @@ import type {
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
 
 export const WEB_GAME_SAVE_SCHEMA_VERSION = 26
-export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 16 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
@@ -101,8 +98,10 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
 }
 
 function knownGameSaveSchemaVersion(value: unknown): value is number {
-  return value === WEB_GAME_SAVE_SCHEMA_VERSION
-    || (LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS as readonly unknown[]).includes(value)
+  return typeof value === 'number'
+    && Number.isSafeInteger(value)
+    && value >= 1
+    && value <= WEB_GAME_SAVE_SCHEMA_VERSION
 }
 
 function parseCurrentDocument(

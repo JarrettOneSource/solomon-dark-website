@@ -23,9 +23,6 @@ const capturePath = resolve(captureArgument)
 const outputPath = outputArgument ? resolve(outputArgument) : null
 const capture = JSON.parse(await readFile(capturePath, 'utf8'))
 
-assert.equal(capture.schema, 'solomon-dark-skill-offer-differential-v2')
-assert.equal(capture.experiment.roll_count, 100)
-assert.equal(capture.rolls.length, 100)
 assert.deepEqual(capture.mutations, [])
 
 const frozen = capture.frozen_level_two
@@ -207,7 +204,6 @@ const frequencies = (source) => [...source.entries()]
   .sort(([left], [right]) => left - right)
   .map(([skillId, count]) => ({ count, skillId }))
 const report = {
-  schema: 'solomon-dark-skill-offer-web-comparison-v2',
   capturePath,
   exactOrderedMatches: capture.rolls.length - mismatches.length,
   mismatchCount: mismatches.length,

@@ -2,7 +2,7 @@
    knob 100, edge inset 48, bottom inset 56) and pinned by its contract test. The stage
    the joystick lives in is already safe-area inset by main-menu.css, so the edge insets
    are plain root pixels — adding env() here would inset the sticks twice on a notched
-   phone (ledger 2026-08-23 addendum). */
+   phone. */
 .game-touch-joystick {
   position: absolute;
   z-index: 11000;

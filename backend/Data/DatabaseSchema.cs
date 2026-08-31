@@ -35,12 +35,8 @@ public static class DatabaseSchema
                 Id INTEGER NOT NULL CONSTRAINT PK_WebGameSaves PRIMARY KEY AUTOINCREMENT,
                 UserId INTEGER NOT NULL,
                 Slot INTEGER NOT NULL,
-                FormatVersion INTEGER NOT NULL,
                 Revision INTEGER NOT NULL,
                 Document TEXT NOT NULL,
-                Size INTEGER NOT NULL,
-                Sha256 TEXT NOT NULL,
-                UpdatedAtUtc TEXT NOT NULL,
                 CONSTRAINT FK_WebGameSaves_Users_UserId
                     FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
             );
@@ -50,6 +46,31 @@ public static class DatabaseSchema
                 ON WebGameSaves (UserId);
             """,
             cancellationToken);
+
+        if (await HasColumnAsync(db, "WebGameSaves", "FormatVersion", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE WebGameSaves DROP COLUMN FormatVersion;",
+                cancellationToken);
+        }
+        if (await HasColumnAsync(db, "WebGameSaves", "Size", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE WebGameSaves DROP COLUMN Size;",
+                cancellationToken);
+        }
+        if (await HasColumnAsync(db, "WebGameSaves", "Sha256", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE WebGameSaves DROP COLUMN Sha256;",
+                cancellationToken);
+        }
+        if (await HasColumnAsync(db, "WebGameSaves", "UpdatedAtUtc", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE WebGameSaves DROP COLUMN UpdatedAtUtc;",
+                cancellationToken);
+        }
 
         await db.Database.ExecuteSqlRawAsync(
             """

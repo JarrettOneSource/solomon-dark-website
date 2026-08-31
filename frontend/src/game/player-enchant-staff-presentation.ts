@@ -13,7 +13,6 @@ interface NativeStaffAttachmentProgram {
   readonly bodyLogicalWidths: readonly number[]
   readonly bodyRecords: readonly number[]
   readonly frames: readonly (readonly NativeStaffAttachmentFrame[])[]
-  readonly schema: number
 }
 
 const STAFF_PROGRAM = staffProgramJson as unknown as NativeStaffAttachmentProgram

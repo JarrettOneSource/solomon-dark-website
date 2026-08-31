@@ -67,7 +67,7 @@ export default function About() {
             <li><strong>Play</strong> — the complete authoritative game running directly in the browser.</li>
             <li><strong>The Dark Cloud</strong> — subscribed mods, Boneyards, and browser lobbies in the stock game’s own style.</li>
             <li><strong>The Library</strong> — community web mods, uploaded, versioned, and subscribed by account.</li>
-            <li><strong>Cloud saves</strong> — account-owned save slots with exact mod-list provenance.</li>
+            <li><strong>Cloud saves</strong> — account-owned save slots with their active mod list.</li>
           </ul>
 
           <h2>Credits &amp; thanks</h2>

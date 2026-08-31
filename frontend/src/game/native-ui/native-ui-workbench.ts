@@ -70,9 +70,15 @@ async function start(): Promise<void> {
   host.replaceChildren(gpu.canvas)
   const dom = mountNativeUiDomWorkbench(host)
   dom.setVisible(false)
-  gpu.canvas.dataset.atlasCount = `${NATIVE_UI_MANIFEST.summary.atlasCount}`
-  gpu.canvas.dataset.fontCount = `${NATIVE_UI_MANIFEST.summary.fontCount}`
-  gpu.canvas.dataset.recordCount = `${NATIVE_UI_MANIFEST.summary.recordCount}`
+  const atlasCount = Object.keys(NATIVE_UI_MANIFEST.atlases).length
+  const fontCount = Object.keys(NATIVE_UI_MANIFEST.fonts).length
+  const recordCount = Object.values(NATIVE_UI_MANIFEST.atlases).reduce(
+    (total, atlas) => total + Object.keys(atlas.records).length,
+    0,
+  )
+  gpu.canvas.dataset.atlasCount = `${atlasCount}`
+  gpu.canvas.dataset.fontCount = `${fontCount}`
+  gpu.canvas.dataset.recordCount = `${recordCount}`
 
   const render = (): void => {
     root.removeChildren().forEach((child) => child.destroy({ children: true }))
@@ -89,7 +95,7 @@ async function start(): Promise<void> {
     gpu.canvas.dataset.actionCount = `${plan.actions.length}`
     gpu.canvas.dataset.renderRevision = `${revision}`
     status.value = mode === 'components'
-      ? `12 atlases · 1,259 records · 10 fonts · ${plan.nodes.length} visible plan nodes · ${plan.actions.length} semantic actions`
+      ? `${atlasCount} atlases · ${recordCount.toLocaleString()} records · ${fontCount} fonts · ${plan.nodes.length} visible plan nodes · ${plan.actions.length} semantic actions`
       : mode === 'dom'
         ? 'DOM adapter · exact stock message · 3 semantic stock buttons'
       : `${selectedAtlas()}.${selectedRecord()} · ${formatRecord(selectedAtlas(), selectedRecord())}`

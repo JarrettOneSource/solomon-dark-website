@@ -661,7 +661,6 @@ test('presentation-facing array actions preserve exact strict ends', () => {
     'demon-bomb',
   ] as const) {
     const program = NATIVE_ENEMY_ACTION_PROGRAMS[name]
-    assert.equal(program.provenance, 'native-exact')
     assert.equal(nativeEnemyActionFrame(name, program.strictEnd).complete, false)
     assert.equal(nativeEnemyActionFrame(name, program.strictEnd + 1).complete, true)
   }

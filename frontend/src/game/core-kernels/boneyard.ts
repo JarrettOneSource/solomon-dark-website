@@ -116,7 +116,6 @@ export interface LoadedBoneyard {
 }
 
 export interface NativeBoneyardTemplate {
-  sourceLabel: string
   sourceSha256: string
   geometrySha256: string
   scene: BoneyardScene

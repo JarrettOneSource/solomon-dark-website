@@ -26,7 +26,6 @@ test('the stock right-click atlas membership is complete and every row is regist
       hubWorldAssetSources(): readonly string[]
     }
     const hubVisualAtlas = await server.ssrLoadModule('/src/game/renderer/hub-visual-atlas.ts') as {
-      HUB_VISUAL_ATLAS_DECODED_BYTES: number
       HUB_VISUAL_ATLAS_ORIGINAL_SOURCES: readonly string[]
       HUB_VISUAL_ATLAS_SOURCES: readonly string[]
     }
@@ -92,7 +91,6 @@ test('the stock right-click atlas membership is complete and every row is regist
       module.nativeSecondarySpriteRecord('Clothes', 2).source,
     ])
     const hubSources = new Set(hubTextures.hubWorldAssetSources())
-    assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_DECODED_BYTES, 44_408_832)
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES.length, 3)
     assert.equal(hubVisualAtlas.HUB_VISUAL_ATLAS_ORIGINAL_SOURCES.length, 87)
     for (const source of hubVisualAtlas.HUB_VISUAL_ATLAS_SOURCES) {

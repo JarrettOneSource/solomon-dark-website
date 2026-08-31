@@ -21,7 +21,6 @@ export interface BrowserGameDiagnosticFailure {
 }
 
 export interface BrowserGameDiagnosticReport {
-  schemaVersion: 1
   clientLogId: string
   capturedAtUtc: string
   protocolVersion: number
@@ -124,7 +123,6 @@ export function createGameClientDiagnostics(
     },
     createReport(failure, environment = browserEnvironment(sessionId)) {
       return {
-        schemaVersion: 1,
         clientLogId,
         capturedAtUtc: now().toISOString(),
         protocolVersion: GAME_PROTOCOL_VERSION,

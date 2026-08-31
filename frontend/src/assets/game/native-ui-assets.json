@@ -1,13 +1,10 @@
 {
   "atlases": {
     "Bonedit": {
-      "atlasSha256": "b34b6b130ad199f75d9e1c8f27f6bc713e1a068e1bf400f1d5412f3d4db5a5ec",
-      "bundleSha256": "1db8dacf1739c94dc93ad86ec30ef0d7609840ccf93523e10ff2e594fd580919",
       "dimensions": [
         1024,
         512
       ],
-      "file": "native-ui-bonedit-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -1524,13 +1521,10 @@
       }
     },
     "ControlPanel": {
-      "atlasSha256": "d63bd3ac402fcbc00a60916b6f0aa79f662501acc8f6fbe88ee1676e69b43f86",
-      "bundleSha256": "d779cd056c089ae587f1fb215938516fa299955d48eaf1a96f0a5ce2b2f7d2b6",
       "dimensions": [
         512,
         128
       ],
-      "file": "settings-control-panel-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -3623,13 +3617,10 @@
       }
     },
     "Controls": {
-      "atlasSha256": "28a64ada386aedc180392ea6cd754654ae54dd186888438a02aa7f2c5930a97f",
-      "bundleSha256": "42f875acb13b33b56056278dba7278e348fd1fd35796c61ef0f14f4034ff2046",
       "dimensions": [
         512,
         1024
       ],
-      "file": "native-ui-controls-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -3706,13 +3697,10 @@
       }
     },
     "Create": {
-      "atlasSha256": "9c629ccd3d859384446363ac50e90c19e55f8d5ef8cd17d25604f5a67f3d08eb",
-      "bundleSha256": "b1f5c2ed54daa5ee2260fa179f04a3d51f0eae6b167149c3a2561d160e872d53",
       "dimensions": [
         1024,
         1024
       ],
-      "file": "native-ui-create-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -4149,13 +4137,10 @@
       }
     },
     "Fonts": {
-      "atlasSha256": "dcdcd9697624996376348a4f6d6a2d730adaab98730a7fcbc6ee88f7433db782",
-      "bundleSha256": "048aa22cc715ee633f5e31f0400b4a3a9c0a8c8b49d681419e19d5ff676c214a",
       "dimensions": [
         512,
         256
       ],
-      "file": "skill-picker-fonts-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -15446,13 +15431,10 @@
       }
     },
     "GameOver": {
-      "atlasSha256": "30c07de43c04b4b843ae85b52443d48087259cbd99992bbfaaa2f704d4884443",
-      "bundleSha256": "680d1503b42d0108b66dca28cdd5adc4d8de532a1d133eed730d70aa78881889",
       "dimensions": [
         512,
         256
       ],
-      "file": "native-ui-game-over-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -15511,13 +15493,10 @@
       }
     },
     "Inventory": {
-      "atlasSha256": "527b52fb30453ae9d2bf5a0e1d3b0ee9f822eb7591452a11084e1cf4e2626265",
-      "bundleSha256": "763b826f6b24f872798c4d08ea8d367e31afcba6042cdbd6f38e8b1f87f83b9c",
       "dimensions": [
         1024,
         512
       ],
-      "file": "hub-trader-inventory-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -17034,13 +17013,10 @@
       }
     },
     "LevelPicker": {
-      "atlasSha256": "d97a9f17a1eacdb69835e1f1848ab11416ca450e85cc927c98a25dc40deaf39b",
-      "bundleSha256": "a2ae8f8028d4a4450e7fa0b503b16c57470dfe6afbaa02c56b8d9c791359cfb8",
       "dimensions": [
         1024,
         1024
       ],
-      "file": "native-ui-level-picker-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -17794,13 +17770,10 @@
       }
     },
     "Loader": {
-      "atlasSha256": "73707feca39b56d008a2a0b60950c9d06d01cab8374f5ec66b339d4fdd948722",
-      "bundleSha256": "df1be9c59b86619c0151f5e02ea53eb9bcd5ae0ce692193fd48c7c44c7f5ae9b",
       "dimensions": [
         512,
         256
       ],
-      "file": "native-ui-loader-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -17895,13 +17868,10 @@
       }
     },
     "Skills": {
-      "atlasSha256": "ac1678d6aef8ddefa0def73754b6688c58f1aeaf88c461a4ed6f92c139ed2638",
-      "bundleSha256": "a1efe484b5cbcc5402d48a2a8dc11e1e26c06763dbb612edd66547700d3259cf",
       "dimensions": [
         1024,
         512
       ],
-      "file": "skill-picker-skills-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -20894,13 +20864,10 @@
       }
     },
     "Title": {
-      "atlasSha256": "86b8bb40b3f7ece277cf0d1038b118bf095b8489bdc344738b2fe8cbe1160ff2",
-      "bundleSha256": "f6f1e5956427bfa45bc5e28c87cb2574a25169da96feca62e7efe8691d2b99d8",
       "dimensions": [
         2048,
         1024
       ],
-      "file": "native-ui-title-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -21355,13 +21322,10 @@
       }
     },
     "UI": {
-      "atlasSha256": "37d5e8fc543af12a9d8019e738dbe1e29b648211144a3782c3a32e71f76cd2eb",
-      "bundleSha256": "1db00ea8826e787ca9a320c90a33e726991cae00906baddfdc8bde31da697498",
       "dimensions": [
         1024,
         1024
       ],
-      "file": "skill-picker-ui-atlas.png",
       "records": {
         "0": {
           "frame": [
@@ -25613,7 +25577,6 @@
           ]
         }
       },
-      "group": 8,
       "kerning": [
         [
           49,
@@ -27840,7 +27803,6 @@
           ]
         }
       },
-      "group": 0,
       "kerning": [
         [
           44,
@@ -30352,7 +30314,6 @@
           ]
         }
       },
-      "group": 0,
       "kerning": [
         [
           65,
@@ -31569,7 +31530,6 @@
           ]
         }
       },
-      "group": 4,
       "kerning": [
         [
           44,
@@ -34451,7 +34411,6 @@
           ]
         }
       },
-      "group": 1,
       "kerning": [
         [
           44,
@@ -37198,7 +37157,6 @@
           ]
         }
       },
-      "group": 3,
       "kerning": [
         [
           44,
@@ -38886,7 +38844,6 @@
           ]
         }
       },
-      "group": 5,
       "kerning": [
         [
           65,
@@ -39709,7 +39666,6 @@
           ]
         }
       },
-      "group": 2,
       "kerning": [
         [
           65,
@@ -42196,7 +42152,6 @@
           ]
         }
       },
-      "group": 7,
       "kerning": [
         [
           49,
@@ -43823,7 +43778,6 @@
           ]
         }
       },
-      "group": 6,
       "kerning": [
         [
           65,
@@ -49048,13 +49002,5 @@
       ],
       "spaceAdvance": 5.0
     }
-  },
-  "schema": "solomon-dark-native-ui-assets-v1",
-  "sourceExecutableSha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
-  "summary": {
-    "atlasCount": 13,
-    "fontCount": 10,
-    "glyphCount": 718,
-    "recordCount": 1292
   }
 }

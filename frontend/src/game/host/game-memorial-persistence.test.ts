@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import {
   mkdtempSync,
-  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -42,7 +41,6 @@ test('atomically persists and reopens the exact shared-Hub memorial state', () =
     assert.deepEqual(openGameMemorialPersistence(path).initialState, completed)
     assert.equal(statSync(path).mode & 0o777, 0o600)
     assert.deepEqual(readdirSync(directory), ['memoratorium.json'])
-    assert.equal(JSON.parse(readFileSync(path, 'utf8')).schemaVersion, 1)
   } finally {
     rmSync(directory, { force: true, recursive: true })
   }
@@ -52,7 +50,7 @@ test('rejects malformed durable state instead of silently resetting it', () => {
   const directory = mkdtempSync(join(tmpdir(), 'solomon-memorial-invalid-'))
   const path = join(directory, 'memoratorium.json')
   try {
-    writeFileSync(path, JSON.stringify({ schemaVersion: 1, state: {} }))
+    writeFileSync(path, JSON.stringify({ state: {} }))
     assert.throws(
       () => openGameMemorialPersistence(path),
       /nextAge/,

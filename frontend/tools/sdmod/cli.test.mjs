@@ -17,6 +17,7 @@ import { runSdmod } from './cli.mjs'
 import { fetchAssetSource } from './assets.mjs'
 import { writeDeterministicZip } from './zip.mjs'
 import { readZipEntries } from './zip-reader.mjs'
+import { WEB_LUA_DEFINITION_API_VERSION } from '../../src/game/modding/definition/web-lua-definition-types.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -82,7 +83,7 @@ test('sdmod migrates the retained Invincibility Potion to the v1 kit', async (co
   const manifest = JSON.parse(await readFile(join(target, 'manifest.json'), 'utf8'))
   const script = await readFile(join(target, 'scripts/main.lua'), 'utf8')
 
-  assert.equal(manifest.runtime.apiVersion, '1.0.0')
+  assert.equal(manifest.runtime.apiVersion, WEB_LUA_DEFINITION_API_VERSION)
   assert.equal(manifest.minimumLoaderVersion, undefined)
   assert.equal(manifest.runtime.requiredCapabilities, undefined)
   assert.match(script, /sd\.kit\.potion/)

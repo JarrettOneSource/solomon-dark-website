@@ -1035,7 +1035,6 @@ def write_player_staff_attachment_program(
         "bodyLogicalWidths": [records[index].logical_width for index in range(5, 11)],
         "bodyRecords": list(range(5, 11)),
         "frames": frames,
-        "schema": 1,
     }
     (output_dir / "player-staff-attachment-program.json").write_text(
         json.dumps(payload, indent=2) + "\n",
@@ -1320,7 +1319,6 @@ def write_player_death_anchor_data(
     path = output_dir / "player-character-death-hat-anchors.json"
     path.write_text(json.dumps({
         "offsets": offsets,
-        "schema": "solomon-dark-player-death-hat-anchors-v1",
     }, indent=2) + "\n", encoding="utf-8")
 
 

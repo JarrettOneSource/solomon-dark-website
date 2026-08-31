@@ -457,7 +457,7 @@ test('finite generated-Arena placement resolves the exact production exterior sp
   const radius = 13.156531408429146
   for (const template of NATIVE_GENERATED_BONEYARDS) {
     const created = createBoneyardArenaTransition(template.scene.bounds, template.scene.spawn)
-    assert.ok(created, template.sourceLabel)
+    assert.ok(created)
     let transition = startBoneyardArenaTransition(created)
     for (let tick = 0; tick < 400; tick += 1) {
       transition = stepBoneyardArenaTransition(transition)

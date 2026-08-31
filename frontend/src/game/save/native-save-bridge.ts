@@ -1152,7 +1152,6 @@ interface NativeTemplateJson {
     readonly darkdata?: { readonly base64?: unknown; readonly bytes?: unknown }
     readonly gamestate?: { readonly base64?: unknown; readonly bytes?: unknown }
   }
-  readonly schema?: unknown
 }
 
 export async function loadNativeHubTemplate(
@@ -1161,9 +1160,6 @@ export async function loadNativeHubTemplate(
   const response = await fetcher('/game/native/portable-profile-template.json')
   if (!response.ok) throw new NativeSaveFormatError('native Hub template could not be loaded')
   const value = await response.json() as NativeTemplateJson
-  if (value.schema !== 'native-portable-profile-template-v1') {
-    throw new NativeSaveFormatError('native Hub template schema is invalid')
-  }
   const darkdata = base64Bytes(value.files?.darkdata?.base64, 'native darkdata template')
   const gamestate = base64Bytes(value.files?.gamestate?.base64, 'native gamestate template')
   if (

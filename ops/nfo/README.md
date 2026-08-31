@@ -6,7 +6,7 @@ processes from the same release directory:
 - `solomon-dark-revived.service` serves the site and provisions a private
   endpoint through the loopback supervisor;
 - `solomon-dark-game.service` runs the bundled TypeScript authoritative host on
-  pinned Node `22.17.0`; and
+  the bundled Node runtime; and
 - Caddy terminates TLS and forwards `/game-hub` and `/game-sessions/*` to the
   supervisor.
 

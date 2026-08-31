@@ -7,7 +7,6 @@ import {
   MOBILE_UI_CANONICAL_WIDTH,
   MOBILE_UI_ELEMENT_IDS,
   MOBILE_UI_LAYOUT_STORAGE_KEY,
-  MOBILE_UI_LAYOUT_VERSION,
   MOBILE_UI_PAGE_ZOOM_MAX,
   MOBILE_UI_PAGE_ZOOM_MIN,
   MOBILE_UI_RESIZE_HANDLES,
@@ -118,7 +117,7 @@ test('default projection follows the current device aspect and UI scale without 
   assert.ok(enlarged.layout.leftJoystick.x > DEFAULT_MOBILE_UI_LAYOUT.leftJoystick.x)
 })
 
-test('layout persistence is complete, bounded, versioned, observable, and resettable', () => {
+test('layout persistence is complete, bounded, observable, and resettable', () => {
   resetMobileUiLayoutListenersForTests()
   const storage = new MemoryStorage()
   assert.deepEqual(readMobileUiLayoutState(storage), {
@@ -135,8 +134,7 @@ test('layout persistence is complete, bounded, versioned, observable, and resett
   const unsubscribe = subscribeMobileUiLayout((state) => events.push(state.customized))
   assert.deepEqual(setMobileUiLayout(changed, storage), { customized: true, layout: changed })
   assert.deepEqual(readMobileUiLayoutState(storage), { customized: true, layout: changed })
-  assert.equal(MOBILE_UI_LAYOUT_VERSION, 2)
-  assert.match(storage.values.get(MOBILE_UI_LAYOUT_STORAGE_KEY) ?? '', /"version":2/)
+  assert.ok(storage.values.has(MOBILE_UI_LAYOUT_STORAGE_KEY))
   assert.deepEqual(mobileUiLayoutFromDocument(mobileUiLayoutDocument(changed)), changed)
   resetMobileUiLayout(storage)
   assert.deepEqual(readMobileUiLayoutState(storage), {

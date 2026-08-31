@@ -180,43 +180,22 @@ interface NativeHubNpcCatalog {
       readonly textOffset: Vector2
     }
   }
-  readonly schema: 'solomon-dark-native-hub-npc-interactions-v4'
   readonly skorcha: {
     readonly animationDelay: { readonly drawCount: number; readonly offsetTicks: number }
     readonly animationStateCount: number
-    readonly artRecords: readonly number[]
     readonly placements: readonly { readonly variant: number; readonly x: number; readonly y: number }[]
     readonly presenceDrawCount: number
     readonly presenceDrawValue: number
   }
-  readonly source: {
-    readonly dialogueHashes: Readonly<Record<
-      'books.txt' | 'narration.txt' | 'spellfacts.txt' | 'story.txt' | 'survival.txt',
-      string
-    >>
-    readonly executableSha256: string
-    readonly preferredImageBase: string
-    readonly retailVersion: string
-  }
   readonly storyOffice: {
-    readonly archIntroVoice: {
-      readonly bytes: number
-      readonly sha256: string
-    }
     readonly dialogue: Readonly<Record<string, NativeHubDialogueRecord>>
     readonly interactions: Readonly<Record<
       'arch-chancellor' | 'polisher',
       NativeHubInteractionDefinition
     >>
     readonly polisher: {
-      readonly artRecords: readonly number[]
       readonly loopFullDistance: number
-      readonly loopSha256: string
       readonly loopSilentDistance: number
-      readonly phaseFloatRange: number
-      readonly phaseSpeed: number
-      readonly reverseDrawCount: number
-      readonly reverseDrawValue: number
     }
   }
   readonly teacherSpells: readonly NativeTeacherSpellDefinition[]

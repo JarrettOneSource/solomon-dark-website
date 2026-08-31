@@ -114,10 +114,8 @@ The workflow fixes:
 - frame/heading iteration order;
 - output dimensions and PNG settings.
 
-The command prints source, recipe and output SHA-256 values. The checked-in
-receipt records the pinned Blender version and expected output digest. A
-deliberate Blender upgrade requires regenerating the sheet, reviewing the
-contact sheet, and updating that receipt.
+After a deliberate Blender upgrade, regenerate the sheet and review the contact
+sheet before committing the new pixels.
 
 ## Choosing frames
 

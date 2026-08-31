@@ -14,7 +14,6 @@ import {
   GAME_PROTOCOL_VERSION,
   DEFAULT_GAME_ONLINE_PREFERENCES,
   MAX_LUA_CONSOLE_CODE_LENGTH,
-  PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeServerGameMessage,
   encodeGameMessage,
@@ -1888,8 +1887,7 @@ function copyParticipant(
 
 function supportsLocalPrediction(welcome: ServerWelcomeMessage): boolean {
   const parameters = welcome.kernelParameters
-  return welcome.kernelVersion === PLAYER_CHARACTER_KERNEL_VERSION
-    && parameters.fixedTickSeconds === PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS
+  return parameters.fixedTickSeconds === PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS
     && parameters.movementAcceleration === PLAYER_CHARACTER_INPUT_ACCELERATION
     && parameters.movementLaneCap === PLAYER_CHARACTER_MOVEMENT_LANE_CAP
     && parameters.movementRetention === PLAYER_CHARACTER_MOVEMENT_RETENTION

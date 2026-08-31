@@ -48,31 +48,19 @@ export interface NativeUiGlyphRecord extends NativeUiAtlasRecord {
 export interface NativeUiBitmapFont {
   readonly atlas: 'ControlPanel' | 'Fonts'
   readonly glyphs: Readonly<Record<string, NativeUiGlyphRecord>>
-  readonly group: number
   readonly kerning: readonly (readonly [left: number, right: number, adjustment: number])[]
   readonly metrics: readonly [lineHeight: number, spaceAdvance: number, nativeScale: number]
   readonly spaceAdvance: number
 }
 
 export interface NativeUiAtlas {
-  readonly atlasSha256: string
-  readonly bundleSha256: string
   readonly dimensions: readonly [width: number, height: number]
-  readonly file: string
   readonly records: Readonly<Record<string, NativeUiAtlasRecord>>
 }
 
 interface NativeUiManifest {
   readonly atlases: Readonly<Record<NativeUiAtlasName, NativeUiAtlas>>
   readonly fonts: Readonly<Record<NativeUiFontName, NativeUiBitmapFont>>
-  readonly schema: 'solomon-dark-native-ui-assets-v1'
-  readonly sourceExecutableSha256: string
-  readonly summary: Readonly<{
-    atlasCount: number
-    fontCount: number
-    glyphCount: number
-    recordCount: number
-  }>
 }
 
 export const NATIVE_UI_MANIFEST = nativeUiAssetsJson as unknown as NativeUiManifest

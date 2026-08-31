@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, relative, resolve } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { parseBoneyard } from '../src/editor/format/boneyard.ts'
@@ -23,12 +23,11 @@ if (sources.length === 0) {
 }
 
 const templates = []
-for (const [index, sourcePath] of sources.entries()) {
+for (const sourcePath of sources) {
   const bytes = await readFile(sourcePath)
   const parsed = parseBoneyard(new Uint8Array(bytes))
   const scene = projectBoneyard(parsed)
   templates.push({
-    sourceLabel: sourceLabel(sourcePath, index),
     sourceSha256: sha256(bytes),
     geometrySha256: boneyardGeometrySha256(scene),
     scene,
@@ -47,10 +46,10 @@ const source = [
 
 await writeFile(outputPath, source)
 process.stdout.write(`${relative(process.cwd(), outputPath)}: ${templates.length} native layouts\n`)
-for (const template of templates) {
+for (const [index, template] of templates.entries()) {
   const scene = template.scene
   process.stdout.write(
-    `${template.sourceLabel} ${template.sourceSha256} `
+    `${index + 1} ${template.sourceSha256} `
     + `${scene.objects.length} objects ${scene.sprites.length} sprites `
     + `${scene.roads.length} roads ${scene.fences.length} fences\n`,
   )
@@ -58,11 +57,4 @@ for (const template of templates) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
-}
-
-function sourceLabel(sourcePath, index) {
-  const parts = sourcePath.split(/[\\/]/)
-  const instanceIndex = parts.lastIndexOf('instances')
-  if (instanceIndex >= 0 && parts[instanceIndex + 1]) return parts[instanceIndex + 1]
-  return `${String(index + 1).padStart(2, '0')}-${basename(sourcePath)}`
 }

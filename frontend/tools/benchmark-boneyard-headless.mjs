@@ -38,7 +38,6 @@ for (const workerCount of workerCounts) {
 console.log(JSON.stringify({
   node: process.version,
   results,
-  schema: 'solomon-dark-boneyard-headless-benchmark-v1',
 }, null, 2))
 
 function integerArgument(name, fallback) {

@@ -244,10 +244,7 @@ def main() -> int:
             raise ValueError(f"{atlas_name} unexpectedly contains a rotated record")
         copy_if_changed(image_path, output_dir / output_name)
         atlas_json[atlas_name] = {
-            "file": output_name,
             "dimensions": list(dimensions),
-            "atlasSha256": image_hash,
-            "bundleSha256": bundle_hash,
             "records": {str(index): record_json(record) for index, record in enumerate(records)},
         }
         record_index_by_offset = {record.offset: index for index, record in enumerate(records)}
@@ -257,7 +254,6 @@ def main() -> int:
                 raise ValueError(f"unnamed font wrapper {atlas_name}.{group_index}")
             fonts_json[font_name] = {
                 "atlas": atlas_name,
-                "group": group_index,
                 "metrics": list(group.metrics),
                 "spaceAdvance": group.metrics[1],
                 "kerning": [list(pair) for pair in group.kerning],
@@ -278,14 +274,6 @@ def main() -> int:
     if len(fonts_json) != 10 or total_glyphs != 718:
         raise ValueError("stock UI font census drifted")
     manifest = {
-        "schema": "solomon-dark-native-ui-assets-v1",
-        "sourceExecutableSha256": RETAIL_SHA256,
-        "summary": {
-            "atlasCount": 13,
-            "recordCount": total_records,
-            "fontCount": 10,
-            "glyphCount": total_glyphs,
-        },
         "atlases": atlas_json,
         "fonts": fonts_json,
     }

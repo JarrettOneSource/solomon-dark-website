@@ -63,7 +63,6 @@ interface TemplateFixture {
     darkdata: { base64: string; bytes: number; sha256: string }
     gamestate: { base64: string; bytes: number; sha256: string }
   }
-  schema: string
 }
 
 const fixture = JSON.parse(readFileSync(
@@ -827,11 +826,9 @@ test('web export preserves the native source through schema 17 and returns stock
     [{ bytes: hall, path: 'solomondark/halloffame.dat' }],
   )
   const imported = createWebGameSaveFromPortableProfile(portable)
-  const exportedPortable = await createPortableGameProfileFromWebSave(imported.document)
   const exported = await exportWebGameSaveToNativeArchive(imported.document)
   const archive = await readNativeSaveArchive(exported.archive)
   const wizard = decodeNativeGamestateWizard(archive.gamestate)
-  assert.equal(exportedPortable.version, 1)
   assert.equal(wizard.name, fixture.expected.wizardName)
   assert.equal(wizard.level, fixture.expected.level)
   assert.equal(wizard.rows.length, 83)
