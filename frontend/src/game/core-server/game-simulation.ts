@@ -160,6 +160,7 @@ import {
   applyNativeUnforgeCooldownRejuvenation,
   createNativeSecondarySimulation,
   emitNativePlayerScreenFlash,
+  enrollNativeSecondaryPainterOwners,
   materializeNativePlayerFlashResponse,
   nativeSecondaryManaCeiling,
   nativeSecondaryManaReserve,
@@ -3878,6 +3879,7 @@ function finishGameSimulationTick(
         tick,
       ),
     }
+    const nextSecondaryActorIdBeforeAdvancedBurn = secondaryAbilities.nextActorId
     for (const burn of spellCombat.burns) {
       const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
       const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
@@ -3901,6 +3903,12 @@ function finishGameSimulationTick(
         target,
         worldKey: `boneyard:${boneyardWorld.runId}`,
       })
+    }
+    if (secondaryAbilities.nextActorId !== nextSecondaryActorIdBeforeAdvancedBurn) {
+      secondaryAbilities = enrollNativeSecondaryPainterOwners(
+        secondaryAbilities,
+        worldManagerOrder.register,
+      )
     }
     for (const effect of spellCombat.targetEffects) {
       secondaryAbilities = applyNativeSecondaryTargetEffect(

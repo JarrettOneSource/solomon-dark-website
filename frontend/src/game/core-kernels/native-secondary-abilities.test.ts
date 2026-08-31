@@ -10,9 +10,11 @@ import {
   applyNativeSecondaryTargetEffect,
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryEtherBurn,
+  applyNativeSecondaryFireBurn,
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
+  enrollNativeSecondaryPainterOwners,
   materializeNativePlayerFlashResponse,
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
   NATIVE_MINDBLAST_DIRECT_RADIUS,
@@ -57,6 +59,7 @@ import {
   effectiveSecondaryAbilityRankStats,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
+import { createNativeWorldManagerOrder } from './native-world-manager-order.ts'
 
 const CONFIG = {
   discipline: 'arcane',
@@ -3862,6 +3865,64 @@ test('EtherBurn owns three RNG words, records 246 through 250, target MiscLight,
     target: (_worldKey, targetId) => targetId === target.id ? target : null,
   }).state.actors.find(({ kind }) => kind === 'ether-burn')!
   assert.equal(faded.alpha, Math.fround(49 / 50))
+})
+
+test('late pure-primary Burn parents enroll once in shared transient birth order', () => {
+  const target = {
+    family: 'ZOMBIE',
+    id: 415,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 40, y: 60 },
+    radius: 10,
+    scale: 1.5,
+    shieldHealth: 0,
+  }
+  let state = applyNativeSecondaryFireBurn(createNativeSecondarySimulation(14), {
+    damage: 2,
+    ownerId: 'player',
+    rank: 2,
+    skillId: 22,
+    target,
+    worldKey: 'boneyard:test',
+  })
+  state = applyNativeSecondaryEtherBurn(state, {
+    ownerId: 'player',
+    rank: 2,
+    target,
+    worldKey: 'boneyard:test',
+  })
+
+  const order = createNativeWorldManagerOrder()
+  state = enrollNativeSecondaryPainterOwners(state, order.register)
+  assert.deepEqual(state.actors.map(({ kind, lightRegistration, painterRegistrations }) => ({
+    kind,
+    lightRegistration,
+    painterRegistrations,
+  })), [
+    {
+      kind: 'fire-burn',
+      lightRegistration: TARGET_LIGHT_REGISTRATION,
+      painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 0 }],
+    },
+    {
+      kind: 'ether-burn',
+      lightRegistration: TARGET_LIGHT_REGISTRATION,
+      painterRegistrations: [{ managerLane: 'transient', registrationOrdinal: 1 }],
+    },
+  ])
+
+  const fireRegistration = state.actors[0]!.painterRegistrations
+  state = applyNativeSecondaryFireBurn(state, {
+    damage: 4,
+    ownerId: 'player',
+    rank: 3,
+    skillId: 22,
+    target,
+    worldKey: 'boneyard:test',
+  })
+  state = enrollNativeSecondaryPainterOwners(state, order.register)
+  assert.strictEqual(state.actors[0]!.painterRegistrations, fireRegistration)
+  assert.deepEqual(order.state().nextRegistrationOrdinal, { actor: 0, transient: 2 })
 })
 
 test('toggle reserves stack, release immediately, and overload clears the full set', () => {

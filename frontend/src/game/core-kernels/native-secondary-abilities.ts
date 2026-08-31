@@ -5360,15 +5360,10 @@ export function nativeSecondaryLightDisposition(
   }
 }
 
-function enrollNativeSecondaryLightOwners(
+export function enrollNativeSecondaryPainterOwners(
   source: NativeSecondarySimulationState,
-  context: NativeSecondaryTickContext,
+  register: RegisterNativeWorldPainter,
 ): NativeSecondarySimulationState {
-  const standaloneOrder = createNativeWorldManagerOrder(
-    nativeSecondaryWorldManagerOrderState(source),
-  )
-  const register = context.registerWorldPainter ?? standaloneOrder.register
-  const nextModifierOrdinalByTarget = new Map<string, number>()
   const actors = source.actors.map((actor) => {
     const painterLane = nativeSecondaryPainterManagerLane(actor.kind)
     const existingPainterRegistrations = actor.painterRegistrations ?? []
@@ -5381,17 +5376,34 @@ function enrollNativeSecondaryLightOwners(
     ) {
       throw new Error(`${actor.kind} changed native painter-manager ownership`)
     }
-    const painterRegistration = painterRegistrations[0]!
-    const withPainter = actor.painterRegistrations === painterRegistrations
+    return actor.painterRegistrations === painterRegistrations
       ? actor
       : Object.freeze({ ...actor, painterRegistrations })
+  })
+  return actors.every((actor, index) => actor === source.actors[index])
+    ? source
+    : { ...source, actors }
+}
+
+function enrollNativeSecondaryLightOwners(
+  source: NativeSecondarySimulationState,
+  context: NativeSecondaryTickContext,
+): NativeSecondarySimulationState {
+  const standaloneOrder = createNativeWorldManagerOrder(
+    nativeSecondaryWorldManagerOrderState(source),
+  )
+  const register = context.registerWorldPainter ?? standaloneOrder.register
+  const painterState = enrollNativeSecondaryPainterOwners(source, register)
+  const nextModifierOrdinalByTarget = new Map<string, number>()
+  const actors = painterState.actors.map((actor) => {
+    const painterRegistration = actor.painterRegistrations![0]!
     const disposition = nativeSecondaryLightDisposition(actor)
     if (disposition === 'none') {
       if (actor.lightRegistration === null && actor.miscLightAppendOrdinal === null) {
-        return withPainter
+        return actor
       }
       return Object.freeze({
-        ...withPainter,
+        ...actor,
         lightRegistration: null,
         miscLightAppendOrdinal: null,
       })
@@ -5416,10 +5428,9 @@ function enrollNativeSecondaryLightOwners(
       if (
         actor.lightRegistration === lightRegistration
         && actor.miscLightAppendOrdinal === miscLightAppendOrdinal
-        && actor.painterRegistrations === painterRegistrations
-      ) return withPainter
+      ) return actor
       return Object.freeze({
-        ...withPainter,
+        ...actor,
         lightRegistration,
         miscLightAppendOrdinal,
       })
@@ -5439,17 +5450,16 @@ function enrollNativeSecondaryLightOwners(
     if (
       actor.lightRegistration === lightRegistration
       && actor.miscLightAppendOrdinal === miscLightAppendOrdinal
-      && actor.painterRegistrations === painterRegistrations
-    ) return withPainter
+    ) return actor
     return Object.freeze({
-      ...withPainter,
+      ...actor,
       lightRegistration,
       miscLightAppendOrdinal,
     })
   })
-  return actors.every((actor, index) => actor === source.actors[index])
-    ? source
-    : { ...source, actors }
+  return actors.every((actor, index) => actor === painterState.actors[index])
+    ? painterState
+    : { ...painterState, actors }
 }
 
 function nativeSecondaryWorldManagerOrderState(

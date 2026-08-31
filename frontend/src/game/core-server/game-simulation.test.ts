@@ -3022,6 +3022,73 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   )
 })
 
+test('pure Fire Burn contact is painter-enrolled before its first replicated frame', () => {
+  const fire = {
+    discipline: 'arcane',
+    displayName: 'Burn Caster',
+    element: 'fire',
+  } as const
+  let state = enterBoneyardWorld(
+    withPlayerSkillRank(createGameSimulation({ caster: fire }), 'caster', 22, 2),
+    combatBoneyard('fire-burn-painter-run'),
+  )
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state, 'caster')
+  const targetPosition = { x: player.position.x, y: player.position.y - 110 }
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      caster: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'ZOMBIE',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      position: targetPosition,
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  state = { ...state, world: { ...state.world, enemies: seeded.store } }
+
+  const input = {
+    aim: targetPosition,
+    cast: { primary: true, quickbar: null },
+    movement: { x: 0, y: 0 },
+    viewportHeight: 900,
+    viewportWidth: 1_600,
+  }
+  for (let tick = 0; tick < 100 && !state.secondaryAbilities.actors.some(({ kind }) => (
+    kind === 'fire-burn'
+  )); tick += 1) {
+    state = stepGameSimulationTick(state, { caster: input })
+  }
+
+  const burn = state.secondaryAbilities.actors.find(({ kind }) => kind === 'fire-burn')
+  assert.ok(burn, 'real Fire primary contact did not materialize Burn')
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(createGameSnapshot(state, 'caster'), 0, undefined, true),
+    sequence: 1,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+  const [burnPainter] = burn.painterRegistrations ?? []
+  assert.equal(burn.painterRegistrations?.length, 1)
+  assert.equal(burnPainter?.managerLane, 'transient')
+})
+
 test('Boneyard simulation owns automatic Staff action, contact damage, and retained audio edge', () => {
   const loaded = combatBoneyard('staff-combat-run')
   loaded.scene.spawn.facingDeg = 0

@@ -1,5 +1,12 @@
 # 2026-08-29 — Complete Region world-painter layering audit
 
+> **2026-08-31 advanced-effect birth-edge reopening.** The actor-manager census
+> below did not follow pure-primary Fire/Ether contacts that create their Burn
+> modifier parent after the common secondary-step enrollment barrier. That
+> omitted lifecycle edge produced same-frame empty painter membership in
+> production protocol 113. Entry 210 now owns the complete causal trace,
+> sibling inventory, correction, and validation contract for that branch.
+
 > **2026-08-29 second reopening — prior closure refuted.** The user-visible
 > Solomon Dig burial error and a Courtyard arch painting below Students prove
 > that this entry's earlier “complete” census was not complete. It recovered

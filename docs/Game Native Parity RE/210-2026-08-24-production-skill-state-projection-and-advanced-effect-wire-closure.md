@@ -260,3 +260,183 @@ normalization fallback, or permissive arbitrary skill ID is allowed.
 - No member is browser-blocked and no material unknown remains. Publication,
   guarded deployment observation, and production recurrence sweep remain
   pending.
+
+## 2026-08-31 reopening — same-tick advanced-Burn painter enrollment
+
+### Reported smell and parity question
+
+- Reported web behavior: production protocol 113 repeatedly disconnects a
+  resumed private Boneyard with code `4008` and
+  `frame.secondaryAbilities.actors[0].painterRegistrations must contain exactly 1 roots`.
+  Five consecutive sessions failed between `2026-08-31T19:39:40Z` and
+  `19:44:39Z`; the resident supervisor stayed active with `NRestarts=0`.
+- Earlier closure skipped: this entry proved advanced-effect actor identity and
+  lifetime, while the later Region painter audit added strict manager roots but
+  did not sweep secondary actors born after `stepNativeSecondaryAbilities`
+  returns. The claim that every advanced-effect actor was snapshot-valid on its
+  birth tick was therefore false.
+- Stock behavior to preserve: `Mod_Burn` and `Mod_EtherBurn` are target-owned
+  live modifier actors. Their painter root exists for the first visible frame;
+  their separate target light registration supplies the ordered Region
+  `MiscLight` tail.
+- Falsifiers: Flash or a persisted invalid actor in the affected profile; a
+  compact-only failure; a native zero-root Burn parent; or another post-step
+  actor factory without explicit or subsequent enrollment. The profile,
+  common full/frame decoder, existing native manager evidence, and complete
+  caller sweep falsify those alternatives.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Live production diagnostics | NFO `DiagnosticLogs` 100/101, browser-game protocol 113, deployed Website `41e1525491649235c00e82207f67803084138943` | Both bounded reports contain the exact actor-root rejection after a successful private resume. | high-live |
+| Live production lifecycle | `solomon-dark-game.service` journal and `RuntimeEvents`, `2026-08-31T19:39:40Z..19:44:39Z` | Five independent private sessions close on the same code-4008 reason. Website/game units remain active, health is idle on protocol 113, and the supervisor has zero restarts. | high-live |
+| Bounded affected-save query | `WebGameSaves` slot 0, schema/format 24, revision 2618, saved tick 66000 | The active Fire/Arcane Boneyard has zero persisted secondary actors, Flash rank `0`, and Burn rank `2`. This falsifies Flash and malformed persisted-actor explanations without exposing the save document or rejoin token. | high-live |
+| Existing native instructions | `Mod_Burn 0x00629A40`, `Mod_EtherBurn 0x00623960/0x00629CD0`; complete Region manager evidence in entry 090 | Burn and EtherBurn are live target modifier actors with target-registered `MiscLight`; neither has a native zero-root presentation branch. | high |
+| Web causal trace | `finishGameSimulationTick`, `stepNativeSecondaryAbilities`, `applyNativeSecondaryFireBurn`, `applyNativeSecondaryEtherBurn`, `protocolSecondaryAbilities`, `nativeSecondaryActor` | The secondary step enrolls all actors known at its return. Pure-primary `spellCombat.burns` and `etherBurns` then create parent actors with `painterRegistrations: []`; the same tick projects that raw state and the decoder correctly rejects it. | high |
+| Introduction boundary | Website `ceaabf2863581e9c5e2659bc1afcbbd67e3fa4df`, 2026-08-29 Region painter cutover | The cutover made one secondary painter root mandatory and added end-of-secondary-step enrollment, but left the later pure-primary Burn creation phase outside that barrier. | high |
+
+### System boundary and membership inventory
+
+Native/web system: advanced Burn parent construction from accepted pure or
+category-2 contact through target modifier merge, Region painter/light-manager
+enrollment, fixed-tick child emission, full/compact replication, save, expiry,
+and owner teardown.
+
+| Member (producer/branch/lifecycle) | Native/current source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Pure Fire primary first Burn contact | `Mod_Burn 0x00629A40`; post-secondary `spellCombat.burns` | exact-ported by this reopening | same birth tick has one transient painter root and decodes |
+| Pure Ether Blast first EtherBurn contact | `Mod_EtherBurn 0x00623960/0x00629CD0`; post-secondary `spellCombat.etherBurns` | exact-ported by this reopening | same birth tick has one transient painter root and decodes |
+| Existing Fire Burn merge/refresh | shared target/kind lookup | verified-already-at-parity | retains the original root while age, damage, owner, rank, and position refresh |
+| Existing EtherBurn merge/refresh | shared target/kind lookup | verified-already-at-parity | retains the original root while age, owner, rank, and position refresh |
+| Category-2 Fire Burn producers | skills 21, 23, 50, 73 and shared secondary requests | verified-already-at-parity | births occur inside the secondary step and its existing finalizer enrolls them before return |
+| Fire Burn per-tick flame | `Mod_Burn` child; `fire-burn-flame` | verified-already-at-parity | born inside the secondary step, one transient root, exact source skill retained |
+| EtherBurn per-tick flare | `Mod_EtherBurn`; `ether-burn-flare` | verified-already-at-parity | born inside the secondary step, one transient root, skill 14 retained |
+| Parent painter ownership | native live modifier actor; `nativeSecondaryPainterManagerLane` | exact-ported by this reopening | exactly one `transient` registration allocated at the final actor-birth phase |
+| Parent target light and `MiscLight` ordering | entry 090 complete producer census | verified-already-at-parity | target actor registration remains distinct; per-target append ordinal remains ordered |
+| Flash response grow/fade | pre-secondary harmful-contact phase | out-of-system — the affected profile has no Flash and these births cross the existing enrollment pass | existing row-53 integration and protocol tests |
+| Mindblast/Last Word births | explicit `registerWorldPainter` construction | out-of-system — already registered at construction even when born after the secondary step | existing full/frame and Game Over tests |
+| Full snapshot, compact frame, and recovery keyframe | common secondary projection/decoder | exact-ported by one producer invariant | all three carry the same registered parent; strict malformed-state rejection remains |
+| Save checkpoint and resume | schema-24 secondary state | exact-ported by the same invariant | no same-tick empty-root parent can be persisted; valid root identity survives restore |
+| Target loss, expiry, player removal, run reset, host teardown | existing secondary owner lifecycle | verified-already-at-parity | parent/children and their roots retire with the existing actor owner |
+
+No member is blocked by the browser platform. The existing protocol and save
+field can represent the exact native owner; no decoder widening or migration
+fallback is needed.
+
+### Native ownership thread and recovered behavioral contract
+
+- `finishGameSimulationTick` has two relevant construction phases. The common
+  secondary phase steps category-2 actors and enrolls its complete actor list.
+  Primary spell contact resolves later and may add the pure Fire/Ether advanced
+  modifier parent. That later phase requires its own shared painter-enrollment
+  edge before the state becomes snapshot- or save-observable.
+- Every secondary presentation actor owns exactly one painter root. Burn and
+  EtherBurn use the transient manager. Their `lightRegistration` is instead
+  the struck target's actor-manager registration and must not be reused as the
+  transient painter root.
+- A merge never allocates a second root. Birth increments `nextActorId` and
+  allocates one root; refresh preserves both identities until target loss,
+  expiry, owner removal, world reset, or teardown.
+- The protocol rejection is correct and remains fail-closed. The producer must
+  finish the authoritative state before the common full/frame decoder sees it.
+
+### Nearby-system findings
+
+- Diagnostic row 99 is the earlier schema-24 Road-link restore failure already
+  closed by Website `f1c46c02`; it is not part of this actor crash.
+- Ordinary code-1000 closes and peer-going-away code 1001 entries in the same
+  journal window have no paired decoder failure and are not crash signatures.
+- The complete post-secondary mutation sweep found only the pure Fire and Ether
+  Burn parents using deferred actor construction. Later Last Word/Mindblast
+  already passes the world-manager registrar; target-effect-only mutations do
+  not create painter actors.
+
+### Confidence and open questions
+
+- Confirmed: live signature and recurrence; no service process exit; affected
+  profile element/discipline/ranks and empty saved actor list; exact producer
+  ordering; both sibling late parent factories; strict projection path; native
+  painter and target-light ownership; and the pure Fire `fire-burn` causal
+  attribution through the exact focused red reproduction.
+- Unknown: none material. The bounded production diagnostic omits the raw
+  rejected frame, but the affected profile plus exact call-site reproduction
+  closes the actor identity without adding production instrumentation.
+
+### Web implementation consequence
+
+- Put one shared secondary painter-enrollment barrier after the final
+  cross-system actor-birth phase, using the authoritative
+  `worldManagerOrder.register` owner.
+- Allocate only missing roots and keep the existing manager-lane assertion, so
+  Fire/Ether merges cannot duplicate or reorder roots.
+- Preserve strict protocol count/lane validation, target light ownership,
+  `MiscLight` order, combat timing, damage, audio, saves, and actor IDs. Do not
+  widen the decoder or normalize malformed frames.
+
+### Validation contract
+
+- Red/green focused Fire integration: give a Fire/Arcane player Burn rank 2,
+  resolve a real primary contact against a live Boneyard target, and immediately
+  round-trip the same authoritative frame. Untouched production source must
+  reproduce the exact root-count rejection; the fix must expose one transient
+  root on the first Burn frame.
+- Sibling Ether contract: materialize the post-secondary EtherBurn parent and
+  prove the same first-frame registration, merge retention, and strict
+  full/frame decoding.
+- Regression matrix: category-2 Burn parents, both per-tick child families,
+  target `MiscLight`, root stability, save/restore, expiry, and malformed
+  zero/two/wrong-lane registration rejection.
+- Mac-only complete gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` against
+  the byte-identical candidate.
+- Built Mac Chrome: a real Fire/Arcane Burn-rank Boneyard contact must retain the
+  session past the first Burn frame with empty page, console, failed-response,
+  code-4008, and host-error arrays.
+- After push and guarded deployment, prove the exact deployed SHA, service
+  health/restarts, public route, and no recurrence in a fresh production
+  contact plus a new bounded journal/diagnostic sweep.
+
+### Implementation validation receipt
+
+- `enrollNativeSecondaryPainterOwners` now owns the shared one-root lane
+  invariant independently of light enrollment. The ordinary secondary step
+  reuses it unchanged; the later pure-primary contact phase invokes it only
+  when Fire/Ether contact allocated a new secondary actor. Existing parent
+  merges retain their original registration, while new sibling parents receive
+  distinct transient ordinals in actor-birth order.
+- Protocol 113 and save schema 24 are unchanged. The strict decoder still
+  rejects missing, duplicate, surplus, and wrong-lane roots. Target actor-light
+  registrations, per-target `MiscLight` append ordinals, damage, timing, RNG,
+  audio, actor IDs, and teardown are unchanged.
+- The untouched exact-base Mac red gate reached the registered Boneyard group
+  with every prior test green, then failed only the new real Fire/Arcane
+  Burn-rank-2 contact at `game-simulation.test.ts`. The error was verbatim:
+  `frame.secondaryAbilities.actors[0].painterRegistrations must contain exactly 1 roots`.
+  Red result was `1808/1809`; log SHA-256 is
+  `5a29a42e301bc3e0af0be749ff97522ce044fbd258284962882e063a2169b787`.
+- The byte-identical corrected Mac candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build and `28/28`
+  contracts, formatting/lint/import/generated checks, every registered
+  frontend group including `1810/1810` Boneyard/host tests, five desktop tests,
+  production frontend/GameHost builds, media policy, and bundle budget.
+  `Game-WX6FqkfJ.js` is `277279` raw / `83709` gzip bytes against
+  `524288` / `134144`; green log SHA-256 is
+  `157d20e2afbd30343c84e0cf1dedd5e8a10c83d309d2ffdc47f5ff7484957f6d`.
+- The focused sibling regression creates late Fire Burn and EtherBurn parents,
+  enrolls transient ordinals `0/1`, verifies their target actor-light identity,
+  refreshes Fire Burn without allocating another root, and leaves the manager
+  cursor at two. Existing category-2 parents/children and strict malformed-root
+  tests remained green.
+- Built Mac Chrome `151.0.7922.174` drove a real Fire/Arcane Boneyard, granted
+  authored Burn rank 2 in the task harness, released nine live enemies, cast
+  into one target, and decoded the live parent at age 2. The parent retained
+  skill 22, rank 2,
+  target actor-light registration 3, `MiscLight` ordinal 0, and exactly one
+  transient painter registration at ordinal 1. The session remained live with
+  empty page/console/failed-response arrays. Browser-log SHA-256 is
+  `f33b7e40c84fabd9f3e82b94e14ac22ecb4c1b585cc2ee69f29335d18d961eca`;
+  reviewed impact-frame SHA-256 is
+  `a612b9eceece3deb6dce5e148f8524c41c4f864b1b668560ab5164de244c7cd9`.
+- Temporary browser instrumentation changed no runtime/build byte and was
+  removed after capture. No browser-blocked member or material unknown remains.
+  Push, deployment, and post-deployment recurrence proof remain separate.
