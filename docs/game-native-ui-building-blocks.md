@@ -200,12 +200,14 @@ button layout. Mixed supplied/derived action geometry fails closed.
 generic Chat selector: UI 11 outer frame, UI 50 row frames, menu title/Done,
 special-uppercase labels, medium quoted statements, gold idle text, selected
 green transform, and paired icon records with the right copy mirrored. The
-stock page is always five rows with exact `490x85` row bounds at a 90-pixel
-pitch.
+stock content is five `490x85` rows at a 90-pixel pitch inside the inherited
+`520x400` SwipeBox. Its 495-pixel content extent produces a 95-pixel vertical
+range: four rows and the first 15 pixels of row five appear initially.
 
-The plan returns the same row, Done, and optional page-action rectangles used
-by semantic controls. Pagination uses stock menu-font `PREVIOUS`/`MORE` labels;
-it never repurposes the bottom-only `UI.8` ornament. Rows without
+The plan returns the viewport, content height, clamped offset, maximum offset,
+full row bounds, clipped visible row bounds, and stationary Done action used by
+both renderers and semantic controls. It emits one nested clip node so frames,
+text, and icons share the same scissor contract. Rows without
 `stockIconRecord` return `customIcons`
 placements so an owning renderer can inject one admitted mod sprite through
 the shared mod-texture catalog without teaching the UI Kit about package URLs.
@@ -216,15 +218,16 @@ import { NativeUiBoastMenu } from './native-ui/react.ts'
 <NativeUiBoastMenu
   items={rows}
   onDone={close}
-  onPageChange={setPage}
+  onScrollChange={setScrollY}
   onSelect={selectBoast}
-  pageCount={pageCount}
-  pageIndex={page}
+  scrollY={scrollY}
 />
 ```
 
-Pagination is a Website adaptation and appears only when admitted mod rows
-extend the five stock choices. It never shrinks or reflows the stock page.
+Pointer drag mirrors the stock SwipeBox. Wheel input moves by the recovered
+25-pixel step, with no post-release inertia. There is no scrollbar, page label,
+or Previous/More control. Admitted mod rows extend the same clipped content
+stream and increase its continuous scroll range.
 
 ## Bitmap text
 

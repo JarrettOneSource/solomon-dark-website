@@ -11,6 +11,8 @@ const domScreenshotPath = process.env.SDR_NATIVE_UI_DOM_SCREENSHOT
   || '/tmp/solomon-dark-native-ui-dom-workbench.png'
 const boastScreenshotPath = process.env.SDR_NATIVE_UI_BOAST_SCREENSHOT
   || '/tmp/solomon-dark-native-ui-boast-workbench.png'
+const boastScrolledScreenshotPath = process.env.SDR_NATIVE_UI_BOAST_SCROLLED_SCREENSHOT
+  || '/tmp/solomon-dark-native-ui-boast-workbench-scrolled.png'
 const errors = {
   console: [],
   failedResponses: [],
@@ -98,10 +100,55 @@ try {
   const boastMenu = dom.locator('[data-native-ui-boast-menu]')
   await boastMenu.waitFor()
   assert.equal(await boastMenu.locator('[data-native-ui-boast-action]').count(), 6)
+  assert.equal(await boastMenu.locator('[data-native-ui-clip="boast:swipe-box"]').count(), 1)
   assert.equal(await boastMenu.locator('[data-native-ui-node="native:0:icon-left"]').count(), 1)
   assert.equal(await boastMenu.locator('[data-native-ui-node="native:0:icon-right"]').count(), 1)
+  assert.equal(
+    await boastMenu.locator('[data-native-ui-node="native:0:detail"]')
+      .getAttribute('data-native-ui-text-lines'),
+    '"I can do this entire mission without\ndrinking a single potion of any kind!"',
+  )
+  assert.equal(await boastMenu.getAttribute('data-native-ui-boast-scroll-max'), '95')
+  assert.equal(await boastMenu.getAttribute('data-native-ui-boast-scroll-y'), '0')
+  const boastBounds = await boastMenu.boundingBox()
+  assert.ok(boastBounds)
+  const logicalActionHeight = async id => {
+    const bounds = await boastMenu.locator(`[data-native-ui-boast-action="${id}"]`).boundingBox()
+    assert.ok(bounds)
+    return bounds.height / (boastBounds.height / 900)
+  }
+  assert.ok(Math.abs(await logicalActionHeight('native:4') - 15) < 0.01)
   await waitForDomUiImages(page)
   await page.locator('#native-ui-stage').screenshot({ path: boastScreenshotPath })
+  const scaleX = boastBounds.width / 1_600
+  const scaleY = boastBounds.height / 900
+  await page.mouse.move(boastBounds.x + 800 * scaleX, boastBounds.y + 650 * scaleY)
+  await page.mouse.down()
+  await page.mouse.move(boastBounds.x + 800 * scaleX, boastBounds.y + 450 * scaleY, { steps: 4 })
+  await page.mouse.up()
+  await page.waitForFunction(() => (
+    document.querySelector('[data-native-ui-boast-menu]')
+      ?.getAttribute('data-native-ui-boast-scroll-y') === '95'
+  ))
+  assert.ok(Math.abs(await logicalActionHeight('native:0') - 15) < 0.01)
+  assert.ok(Math.abs(await logicalActionHeight('native:4') - 85) < 0.01)
+  await page.locator('#native-ui-stage').screenshot({ path: boastScrolledScreenshotPath })
+  await boastMenu.locator('[data-native-ui-boast-action="native:3"]').click()
+  assert.equal(
+    await boastMenu.locator('[data-native-ui-boast-action="native:3"]')
+      .getAttribute('aria-pressed'),
+    'true',
+  )
+  await boastMenu.locator('[data-native-ui-boast-action="native:3"]').press('ArrowUp')
+  await page.waitForFunction(() => (
+    document.querySelector('[data-native-ui-boast-menu]')
+      ?.getAttribute('data-native-ui-boast-scroll-y') === '70'
+  ))
+  await boastMenu.locator('[data-native-ui-boast-action="native:3"]').press('PageDown')
+  await page.waitForFunction(() => (
+    document.querySelector('[data-native-ui-boast-menu]')
+      ?.getAttribute('data-native-ui-boast-scroll-y') === '95'
+  ))
   await page.locator('#show-components').click()
   await canvas.waitFor({ state: 'visible' })
 
@@ -135,6 +182,7 @@ try {
     status: 'ok',
     atlasesExercised: Object.keys(atlasCounts),
     boastScreenshotPath,
+    boastScrolledScreenshotPath,
     domScreenshotPath,
     screenshotPath,
     errors,

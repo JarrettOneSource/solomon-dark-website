@@ -877,7 +877,7 @@ art, highlighting, affordability, clipping, empty state, and return action.
 | Shared selector shell, title, clipped box, `DONE` | `0x004F7BA0`, `0x004F6210/0x004F62F0` | exact-ported | exact geometry, UI 11/50, retained-world Pixi frames |
 | Continuous wheel, drag, per-tick delta, bounds | `0x00431400..0x00431E60` | exact-ported | 25 px wheel, direct drag, continuous clamp, clipped partial rows, no stock page buttons or release glide |
 | Machinimbus spell rows | `0x004F8480`, `0x004FECB0` | exact-ported | all eight Skills icons, record-164 root plates, authored descriptions/prices, hover, affordability, purchase omission |
-| Provokatus Boast rows | `0x004F99F0`, `0x004FDEC0` | exact-ported; mod-expanded pagination retained as documented web adaptation | five UI 50/mirrored-art/title/statement rows in the shared retail SwipeBox |
+| Provokatus Boast rows | `0x004F99F0`, `0x004FDEC0` | exact-ported for row art; the pagination disposition is superseded by the immediately following reopening | five UI 50/mirrored-art/title/statement rows in the shared retail SwipeBox |
 | Semicus Book rows | `0x004FC550`, `0x004FE6F0` | exact-ported | 26 deterministic `Library.13..16` title-only rows and Lace omission at recomputed bounds |
 | Gold balance | `UI.21`, SellSpell whole renderer | exact-ported | current participant balance beside exact icon |
 | Teacher all-bought state | `ALL SPELLS\nALREADY BOUGHT!` | exact-ported | centered native empty state with no phantom row actions |
@@ -931,8 +931,8 @@ No member is browser-blocked.
   clipped row bounds and remain keyboard accessible without inventing visible
   paging chrome.
 - Preserve the preceding namespaced Web Lua Boast selection/custom-art seam.
-  Its documented pages remain only for more than five mod-expanded rows; the
-  complete five-row retail membership uses the recovered stock SwipeBox.
+  The immediately following reopening supersedes this pass's mod-page model
+  with one continuous BoastBox content extent.
 - Add the complete hash-pinned `Library` atlas to the maintained extractor and
   native UI manifest. Use the existing `Skills`, `UI`, and bitmap-font assets;
   do not substitute CSS icons or recreated book art.
@@ -953,8 +953,8 @@ No member is browser-blocked.
   surface, `(540,107,520,400)` clip, UI 50 rows at local `(15,25)` with
   `490x85` size and 90-pixel pitch, 25-pixel signed wheel steps, inverse direct
   drag, exact content clamp, partial-row hit rectangles, and no post-release
-  glide. Stock rows have no `MORE/PREVIOUS`; the prior namespaced Web Lua Boast
-  page remains only when admitted mod content exceeds the five retail rows.
+  glide. Stock rows have no `MORE/PREVIOUS`; the immediately following reopening
+  also removes the disproven page adaptation from admitted mod content.
 - SellSpell renders Skills record 164 with the native root tint behind exact
   skill records 99..106 and the scaled Skills 5 frame. Its recovered 0.75
   description scale and 333-pixel wrap boundary reproduce every supplied
@@ -995,3 +995,128 @@ No member is browser-blocked.
   neither is used as acceptance evidence. No selector member remains unknown or
   browser-blocked. The implementation is local, committed, unpushed, and
   undeployed pending separate publication authorization.
+
+## 2026-08-31 — Second reopening: wrapped statements and inherited SwipeBox
+
+### Reported smell and parity question
+
+- Owner report: the published Boast surface is substantially closer, but each
+  statement runs through both sides of its row and all five rows paint through
+  the `DONE` action. The supplied `boast 2 - image.png` instead shows bounded
+  two-line statements and four complete rows plus only the top of row five.
+- This is a secondary report in a system already marked complete. The previous
+  pass stopped at `BoastBox`'s overrides. It did not follow the base constructor
+  into `SwipeBox`, and it treated `0x0043D030` in the statement-construction
+  path as an incidental String copy instead of the native width-bounded wrapper.
+  It consequently documented overflow as authentic and invented page actions
+  for mod rows. Those assumptions are withdrawn for every Boast row.
+- Parity question: recover the complete text-preparation, clipped viewport,
+  content extent, scroll transform, hit testing, input, and sibling membership
+  that `BoastBox` inherits, then replace the whole disproven page model.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Reported web frame | Windows Downloads `boast 1 - image.png`, 1438x806 RGBA, SHA-256 `e85d2ad9e7195328987f692777e928c507dece6da2bb2aed94cefe1378d79ba4` | Records the older web failure-dialog defect; it is not BoastBox chrome and must not be used to infer selector geometry. | high |
+| Reported stock selector | Windows Downloads `boast 2 - image.png`, 532x457 RGB, SHA-256 `7e97c6ff9a5d626667677c029650eb689fa796170b9cb053b74f52e08417c02b` | All four complete visible statements wrap to two centered lines inside the silhouettes. The 400px list viewport clips row five to a 15px top strip while `DONE` remains outside the clip. No scrollbar or page action is visible. | high |
+| Reported stock failure sequence | Windows Downloads `boast 3 - SolomonDark 2026-08-29 21-54-45.mp4`, 1600x900 H.264/AAC, 4.5759s, 138 video frames, SHA-256 `33f1804f879577a154a23dc1070a4d23102fd9be0ac64293ee2fa0be132bc29e` | Confirms Boast failure remains the separate transient red native Notebox path; it adds no selector scroll chrome. | high |
+| Current-web reproduction | clean Mac worktree at Website `41336d3017fed0967769afc1d051abba2c0ff7b2`; Chrome component workbench, 1600x900, SHA-256 `f69f91b0cb866488f7ddc100d3360dc7a058819e62b752b7735492376f1ebaf4` | Current plan emits one unbounded detail line, has no content clip or scroll offset, draws row five over `DONE`, and exposes invented pagination for added rows. | authoritative web defect |
+| Text preparation | `BoastBox` builder `0x004F99F0`, calls `0x004F9B3A/0x004F9BF1/0x004F9CB0/0x004F9D6F/0x004F9E2E`; native wrapper `0x0043D030`; scalar `0x00785D90=150.0` | Every authored statement is copied through the medium-font wrapper at `BoastBox.width - 150`. With the 520px box this is exactly 370px. The wrapper replaces a prior space/hyphen with newline on overflow. | high |
+| Text rendering | exact text renderer `0x0043AFC0`; medium-font line metric | Embedded newlines advance by font line height plus one, exactly 17px for the medium wrapper. The five recovered statements break at the same words visible in the supplied stock frame. | high |
+| Scroll owner and layout | `BoastBox` ctor `0x004F6C00 -> SwipeBox 0x00431400`; outer layout `0x004F6210`; row builder `0x004F99F0`; SwipeBox vtable `0x007DD17C`; BoastBox vtable `0x00790794` | Outer layout gives the embedded box `(90,80,520,400)`. Rows begin at `(15,25)`, are 490x85 at 90px pitch, and content height becomes `lastBottom + 25 = 495`, producing maximum vertical offset 95. | high |
+| Clip/render path | inherited `SwipeBox::Render 0x00431860`; derived draw `0x004FDEC0`; clamp `0x004316D0`; offset setter `0x004315F0` | SwipeBox installs a scissor for its own rectangle, translates descendants by negative scroll offset, renders BoastBox plus child Buttons, restores transform/scissor, and clamps offset to `0..content-viewport`. | high |
+| Pointer/input path | SwipeBox down/move/up `0x00431C80/0x00431CD0/0x00431DA0`; tick `0x00431520`; wheel handler `0x00431E60`; wheel scalar `0x007DE968=25`, retention `0x007DE96C=0.95` | Pointer drag records previous position, applies previous-current delta on the next tick, moves children with the clamped content transform, and clears drag on release. Wheel direction is normalized and advances the vertical offset by 25px; the tick clears its delta before retention, so release has no glide. | high |
+| Sibling sweep | 12 direct callers of `SwipeBox` ctor `0x00431400`; RTTI/class catalog | Direct derived/embedded users are `CPanelRollout`, `TimeLineBox`, `SwipeList<DataPair<int>>`, `BoastBox`, `BookBox`, `SellSpellBox`, item/store `SwipeList`s, `SwipePages`/Inventory, `DarkCloudSwipebox`, `HallOfFameBox`, and `SkillScreen`. | high |
+
+All addresses are preferred-image VAs for retail 0.72.5
+`SolomonDark.exe`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+image base `0x00400000`. Static queries used read-only Ghidra replica 3 through
+Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192` and wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+the dirty Mod Loader checkout was not modified.
+
+### System boundary and membership inventory
+
+Native system: **BoastBox statement preparation and its inherited SwipeBox
+viewport**, from authored strings through wrap, content layout, clip, scroll,
+pointer hit/action coordinates, and teardown.
+
+| Member / branch | Native source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Five statement wrappers | `0x004F99F0 -> 0x0043D030`, width 370 | `exact-ported` | exact two-line arrays and 17px advance |
+| Embedded viewport | `0x004F6210`, 520x400 | `exact-ported` | plan clip bounds `(540,320,520,400)` at 1600x900 |
+| Five stock rows/content extent | `0x004F99F0`, 495px content | `exact-ported` | initial four rows plus 15px of row five; max offset 95 |
+| SwipeBox scissor/translation | `0x00431860` | `exact-ported` | Pixi and DOM use the same nested clip plan |
+| Pointer drag and clamp | `0x00431C80..0x00431DA0`, `0x00431520/0x004316D0` | `exact-ported` | drag changes offset continuously and never exceeds bounds |
+| Row hit regions under scroll | child Buttons rendered under inherited transform | `exact-ported` | actions use viewport intersections and select the transformed row |
+| Wheel branch | `0x00431E60`, signed 25px vertical step | `exact-ported` | continuous bounded movement with no visible scrollbar/page action or release glide |
+| Outer frame/title/Done | prior `Boast` owner | `verified-already-at-parity` | remain outside the list clip and stationary |
+| Row frames/icons/tint | prior `0x004FDEC0` recovery | `verified-already-at-parity` | move and clip with row content |
+| Mod-added rows | no retail producer | `web-adapted` through the same continuous SwipeBox extent | deterministic stock-then-mod order, no page controls |
+| BookBox and SellSpellBox | `0x004F6DE0/0x004F6FA0` | `out-of-system`: separately recovered in the immediately preceding selector reopening | retain their own row renderers and shared continuous SwipeBox input |
+| Other nine SwipeBox callers | caller/RTTI sweep above | `out-of-system`: distinct screen content and existing owners | reusable clip/scroll primitive must not mutate those screens in this pass |
+| Failure/success/score/save/protocol | prior Boast lifecycle | `verified-already-at-parity` | selector correction changes no authority or wire state |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- `Boast::OnLayout 0x004F6210` lays out its embedded `BoastBox` before adding it
+  as a child. `BoastBox::Build 0x004F99F0` wraps all five statements at 370px,
+  constructs every Button, and sets the SwipeBox content height to 495px.
+- `SwipeBox::Render 0x00431860` owns clipping and content translation. The
+  derived `0x004FDEC0` still draws every row; the scissor, not row omission or
+  outer-frame clipping, produces the visible 400px list window.
+- At offset zero, row bounds are `25..110`, `115..200`, `205..290`,
+  `295..380`, and `385..470` in box coordinates. Therefore row five intersects
+  the viewport only at `385..400`. At maximum offset 95, row one retains the
+  reciprocal 15px bottom strip and rows two through five are complete.
+- Drag uses content-space delta `previousPointer - currentPointer`; clamping is
+  exact on both axes. Boast only overflows vertically. The outer frame,
+  `Select a Boast`, and `DONE` never move.
+- The previous `PREVIOUS`/`MORE` controls have no native producer. Added mod
+  rows extend `contentHeight` by the same 90px pitch and remain inside the same
+  continuous viewport.
+
+### Confidence and open questions
+
+- Confirmed: all five wrap callsites, 370px width, exact line breaks, 17px line
+  advance, SwipeBox inheritance, viewport/content dimensions, 95px stock range,
+  scissor order, scroll transform, pointer lifecycle, sibling constructors,
+  and absence of visible scroll/page chrome.
+- Inferred: none required for the stock five-row implementation.
+- Unknown: none material. Wheel and direct drag share the same bounded content
+  offset and neither introduces visible scroll chrome.
+
+### Web implementation consequence
+
+- Extend the UI Kit plan/adapters with one nested clipped-content primitive and
+  one pure bounded SwipeBox offset model; do not add Boast-only CSS clipping.
+- Change `planNativeUiBoastMenu` to accept all rows plus a continuous `scrollY`,
+  wrap details at 370px with 17px advance, compute native content/max extents,
+  and expose only viewport-intersecting semantic action bounds.
+- Remove Boast pagination and its top labels completely. Stock and mod content
+  use the same continuous scrolled list. Keep outer chrome and authority
+  unchanged.
+- Add drag ownership to the semantic DOM adapter and real Hub action surface;
+  inject custom mod icons into the same clipped Pixi/DOM content layer.
+
+### Validation contract
+
+- Mac red test before implementation: current stock plan has no clip node,
+  emits one line per statement, exposes row five at full height, and reports no
+  95px scroll range.
+- Focused plan tests: exact wrap arrays, 520x400 clip, 495 content, 95 max,
+  reciprocal 15px edge rows, stationary chrome, translated icons/text/actions,
+  and mod row extension without page actions.
+- Adapter tests/journey: DOM and Pixi clip partial nine-slices/text/icons;
+  pointer drag reaches max and back; visible row actions follow the transform;
+  custom icons remain clipped and selectable.
+- Mac Chrome stock comparison: initial selector matches `boast 2` membership
+  and line breaks, then dragging reveals row five without moving `DONE`.
+  Mod showcase must drag to its added row rather than page, select it, and keep
+  empty page/console/failed-response arrays.
+- Exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh` on
+  the Mac mini. Publication/deployment require separate authorization.

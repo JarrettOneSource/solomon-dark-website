@@ -35,6 +35,7 @@ assert.ok(
   onlySection === null
     || [
       'courtyard',
+      'boast',
       'fresh-markers',
       'library',
       'mortuary',
@@ -108,9 +109,16 @@ try {
   await enterHub()
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   if (onlySection === 'fresh-markers') await exerciseFreshMarkers(canvas)
-  else if (onlySection === null || onlySection === 'courtyard' || onlySection === 'selectors') {
+  else if (
+    onlySection === null
+    || onlySection === 'boast'
+    || onlySection === 'courtyard'
+    || onlySection === 'selectors'
+  ) {
     await fundNpcSmoke()
   }
+
+  if (onlySection === 'boast') await exerciseProvokatus(canvas)
 
   if (onlySection === null || onlySection === 'courtyard') {
     await visitTrader(canvas, 'hagatha', 'Hagatha', 'WITCH_INTRO', 'Charm Prices?', 'hagatha')
@@ -178,6 +186,7 @@ try {
     'painting-9', 'shlorio', 'skorcha', 'teacher',
   ]
   const sectionInteractions = {
+    boast: ['annalist'],
     courtyard: ['annalist', 'fomentius', 'hagatha', 'luthacus', 'skorcha', 'teacher'],
     'fresh-markers': ['annalist'],
     library: ['librarian', 'shlorio'],
@@ -445,7 +454,9 @@ async function exerciseProvokatus(canvas) {
   await dialog.locator(
     '.hub-inventory-native-canvas[data-native-reveal="settled"]',
   ).waitFor({ timeout: 15_000 })
-  assert.equal(await boastCanvas.getAttribute('data-native-boast-page'), '1/1')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-content-height'), '495')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-scroll-max'), '95')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-scroll-y'), '0')
   assert.equal(await boastCanvas.getAttribute('data-native-boast-rows'), '5')
   assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), '90,91,92,93,94')
   await page.screenshot({ path: `${screenshotRoot}-provokatus-boasts.png` })
@@ -455,6 +466,26 @@ async function exerciseProvokatus(canvas) {
       === 'native:0'
   ))
   await page.screenshot({ path: `${screenshotRoot}-provokatus-boast-hover.png` })
+  const boastActions = dialog.locator('[data-native-selector="boast"]')
+  const boastBounds = await boastActions.boundingBox()
+  assert.ok(boastBounds)
+  await page.mouse.move(boastBounds.x + 800, boastBounds.y + 650)
+  await page.mouse.down()
+  await page.mouse.move(boastBounds.x + 800, boastBounds.y + 450, { steps: 4 })
+  await page.mouse.up()
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-inventory-native-canvas')
+      ?.getAttribute('data-native-boast-scroll-y') === '95'
+  ))
+  assert.equal(
+    (await dialog.locator('[data-native-selector-id="0"]').boundingBox())?.height,
+    15,
+  )
+  assert.equal(
+    (await dialog.locator('[data-native-selector-id="4"]').boundingBox())?.height,
+    85,
+  )
+  await page.screenshot({ path: `${screenshotRoot}-provokatus-boast-scrolled.png` })
   await dialog.locator('[data-native-selector-id="3"]').click()
   await assertSpeech(dialog, 'ANNAL_RANDOMBOAST', 5_000)
   await page.screenshot({ path: `${screenshotRoot}-provokatus-response.png` })

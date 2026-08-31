@@ -21,6 +21,7 @@ import {
   planNativeUiMessageFrame,
   planNativeUiSimpleMenu,
   planNativeUiTabs,
+  type NativeUiNode,
 } from './native-ui-plan.ts'
 
 import {
@@ -33,6 +34,12 @@ import {
   NATIVE_UI_BOAST_TEXT_TINT,
   planNativeUiBoastMenu,
 } from './native-ui-boast-menu.ts'
+import {
+  NATIVE_UI_SWIPE_BOX,
+  clampNativeUiSwipeBoxOffset,
+  dragNativeUiSwipeBoxOffset,
+  nativeUiSwipeBoxMaximumOffset,
+} from './native-ui-swipe-box.ts'
 import {
   NATIVE_BOASTS,
   NATIVE_BOAST_PRESENTATION,
@@ -422,6 +429,14 @@ test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirro
     width: 1_600,
   })
   assert.deepEqual(plan.outerBounds, nativeUiRect(450, 240, 700, 560))
+  assert.deepEqual(plan.viewportBounds, nativeUiRect(540, 320, 520, 400))
+  assert.equal(plan.contentHeight, 495)
+  assert.equal(plan.maximumScrollY, 95)
+  assert.equal(plan.scrollY, 0)
+  assert.deepEqual(NATIVE_BOAST_PRESENTATION.scroll, {
+    pointerDrag: true,
+    wheelStep: NATIVE_UI_SWIPE_BOX.wheelStep,
+  })
   assert.deepEqual(plan.rowBounds.map(({ bounds }) => bounds), [
     nativeUiRect(555, 345, 490, 85),
     nativeUiRect(555, 435, 490, 85),
@@ -429,22 +444,57 @@ test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirro
     nativeUiRect(555, 615, 490, 85),
     nativeUiRect(555, 705, 490, 85),
   ])
+  assert.deepEqual(plan.rowBounds.map(({ visibleBounds }) => visibleBounds), [
+    nativeUiRect(555, 345, 490, 85),
+    nativeUiRect(555, 435, 490, 85),
+    nativeUiRect(555, 525, 490, 85),
+    nativeUiRect(555, 615, 490, 85),
+    nativeUiRect(555, 705, 490, 15),
+  ])
   assert.deepEqual(plan.doneBounds, nativeUiRect(700, 725, 200, 40))
   assert.deepEqual(NATIVE_BOASTS.map(({ iconRecord }) => iconRecord), [90, 91, 92, 93, 94])
   assert.deepEqual(NATIVE_BOAST_PRESENTATION.iconRecords, [90, 91, 92, 93, 94, 95, 96, 97])
-  const frames = plan.nodes.filter(node => node.label?.endsWith(':frame'))
+  const viewport = plan.nodes.find(({ label }) => label === 'boast:swipe-box')
+  assert.ok(viewport?.kind === 'clip')
+  assert.deepEqual(viewport.bounds, plan.viewportBounds)
+  const frames = [
+    ...plan.nodes.filter(node => node.label?.endsWith(':frame')),
+    ...viewport.nodes.filter(node => node.label?.endsWith(':frame')),
+  ]
   assert.deepEqual(frames.map(node => node.kind === 'nine-slice' ? node.record : null), [11, 50, 50, 50, 50, 50])
-  const selectedFrame = plan.nodes.find(({ label }) => label === 'native:1:frame')
+  const selectedFrame = viewport.nodes.find(({ label }) => label === 'native:1:frame')
   assert.ok(selectedFrame?.kind === 'nine-slice')
   assert.equal(selectedFrame.tint, NATIVE_UI_BOAST_SELECTED_TINT)
   for (const boast of NATIVE_BOASTS) {
-    const left = plan.nodes.find(({ label }) => label === `native:${boast.id}:icon-left`)
-    const right = plan.nodes.find(({ label }) => label === `native:${boast.id}:icon-right`)
+    const left: NativeUiNode | undefined = viewport.nodes.find(
+      ({ label }) => label === `native:${boast.id}:icon-left`,
+    )
+    const right: NativeUiNode | undefined = viewport.nodes.find(
+      ({ label }) => label === `native:${boast.id}:icon-right`,
+    )
     assert.ok(left?.kind === 'sprite' && right?.kind === 'sprite')
     assert.equal(left.record, boast.iconRecord)
     assert.equal(right.record, boast.iconRecord)
     assert.equal(right.mirrorX, true)
   }
+  assert.deepEqual(
+    NATIVE_BOASTS.map(boast => {
+      const detail = viewport.nodes.find(({ label }) => label === `native:${boast.id}:detail`)
+      assert.ok(detail?.kind === 'text')
+      return layoutNativeUiText(detail.text).lines.map(({ text }) => text)
+    }),
+    [
+      ['"I can do this entire mission without', 'drinking a single potion of any kind!"'],
+      ['"A true magician does not wear magical', 'clothing, rings, or other implements!"'],
+      ['"The learned wizard need not cast', 'secondary spells at all!"'],
+      ['"A master sorceror does not choose', 'magic, the magic chooses him!"'],
+      ['"A profound practicioner of magic never', 'allows his mana pool to empty!"'],
+    ],
+  )
+  const firstDetail = viewport.nodes.find(({ label }) => label === 'native:0:detail')
+  assert.ok(firstDetail?.kind === 'text')
+  assert.equal(firstDetail.text.maxWidth, 370)
+  assert.equal(firstDetail.text.lineHeight, 17)
   const title = plan.nodes.find(({ label }) => label === 'boast:title')
   const done = plan.nodes.find(({ label }) => label === 'boast:done-label')
   assert.ok(title?.kind === 'text' && done?.kind === 'text')
@@ -456,41 +506,48 @@ test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirro
   ])
 })
 
-test('BoastMenu reserves custom icon placements and paginates without shrinking stock rows', () => {
+test('BoastMenu scrolls one continuous clipped list and extends it for mod rows', () => {
   const plan = planNativeUiBoastMenu({
     height: 900,
-    pageCount: 2,
-    pageIndex: 1,
-    rows: [{ detail: 'CUSTOM DETAIL', id: 'mod:one', label: 'CUSTOM BOAST' }],
+    rows: [
+      ...NATIVE_BOASTS.map(boast => ({
+        detail: boast.statement,
+        id: `native:${boast.id}`,
+        label: boast.label,
+        stockIconRecord: boast.iconRecord,
+      })),
+      { detail: 'CUSTOM DETAIL', id: 'mod:one', label: 'CUSTOM BOAST' },
+    ],
+    scrollY: 1_000,
     width: 1_600,
   })
-  assert.deepEqual(plan.rowBounds[0]?.bounds, nativeUiRect(555, 345, 490, 85))
+  assert.equal(plan.contentHeight, 585)
+  assert.equal(plan.maximumScrollY, 185)
+  assert.equal(plan.scrollY, 185)
+  assert.deepEqual(plan.rowBounds[0]?.bounds, nativeUiRect(555, 160, 490, 85))
+  assert.equal(plan.rowBounds[0]?.visibleBounds, null)
+  assert.deepEqual(plan.rowBounds[1]?.visibleBounds, nativeUiRect(555, 320, 490, 15))
+  assert.deepEqual(plan.rowBounds[5]?.visibleBounds, nativeUiRect(555, 610, 490, 85))
   assert.deepEqual(plan.customIcons, [{
     id: 'mod:one',
     leftEdgeX: 570,
     rightEdgeX: 1_030,
     selected: false,
-    y: 387.5,
+    y: 652.5,
   }])
-  assert.deepEqual(plan.actions.map(({ id }) => id), ['done', 'mod:one', 'previous'])
+  assert.deepEqual(
+    plan.actions.map(({ id }) => id),
+    ['done', 'native:1', 'native:2', 'native:3', 'native:4', 'mod:one'],
+  )
   assert.equal(plan.nodes.some(({ label }) => label === 'boast:next'), false)
-  const previous = plan.nodes.find(({ label }) => label === 'boast:previous')
-  assert.ok(previous?.kind === 'text')
-  assert.deepEqual(
-    [previous.text.font, previous.text.text, previous.text.x, previous.text.y],
-    ['menu', 'PREVIOUS', 535, 304],
-  )
-  assert.equal(
-    plan.nodes.some(node => node.kind === 'sprite' && node.atlas === 'UI' && node.record === 8),
-    false,
-  )
-  assert.deepEqual(
-    plan.actions.find(({ id }) => id === 'previous')?.bounds,
-    nativeUiRect(470, 280, 130, 48),
-  )
-  assert.throws(() => planNativeUiBoastMenu({
-    height: 900,
-    rows: Array.from({ length: 6 }, (_, id) => ({ detail: '', id: `${id}`, label: '' })),
-    width: 1_600,
-  }), /at most 5 rows/)
+  assert.equal(plan.nodes.some(({ label }) => label === 'boast:previous'), false)
+})
+
+test('SwipeBox offset follows native previous-minus-current drag and clamps to content', () => {
+  assert.equal(nativeUiSwipeBoxMaximumOffset(495, 400), 95)
+  assert.equal(clampNativeUiSwipeBoxOffset(-20, 495, 400), 0)
+  assert.equal(clampNativeUiSwipeBoxOffset(200, 495, 400), 95)
+  assert.equal(dragNativeUiSwipeBoxOffset(0, 650, 600, 495, 400), 50)
+  assert.equal(dragNativeUiSwipeBoxOffset(50, 600, 500, 495, 400), 95)
+  assert.equal(dragNativeUiSwipeBoxOffset(95, 500, 650, 495, 400), 0)
 })

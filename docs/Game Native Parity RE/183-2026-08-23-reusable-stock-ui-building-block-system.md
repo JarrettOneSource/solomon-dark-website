@@ -875,3 +875,32 @@ hit geometry, action meaning, or pointer behavior.
   member is browser-blocked and no material unknown remains. No runtime,
   protocol, save, audio, authority, or responsive-layout owner changed.
   Commit, push, deployment, and production restart were not performed.
+
+## 2026-08-31 — Reopened UI Kit boundary: clipped SwipeBox content
+
+The second BoastBox reopening in report 194 disproves the earlier flat-plan
+model. Native BoastBox is not a five-row page: it is a `SwipeBox` with a 400px
+scissor, 495px stock content, bounded content translation, and pointer drag.
+The previous UI Kit exposed no nested clip primitive, so the Boast adapter
+painted all content into the stage and compensated for mod rows with invented
+pagination.
+
+This adds one justified deepening to the supported UI Kit rather than a
+Hub-specific mask:
+
+- the pure plan vocabulary owns a nested clip node whose children retain stage
+  coordinates and painter order;
+- Pixi owns the native-equivalent mask container and DOM owns the matching
+  overflow-hidden viewport; external custom art may enter the named clipped
+  content container without bypassing the plan;
+- a pure SwipeBox helper owns finite content extent and clamped continuous
+  offset. Screen adapters own pointer capture and accessibility inputs, not
+  geometry or bounds;
+- BoastMenu consumes those shared primitives. BookBox and SellSpellBox retain
+  the separately recovered selector contract in report 194; the remaining
+  native SwipeBox-derived screens stay out of scope until their owners are
+  recovered.
+
+Required closure: recursive plan-node tests in both adapters, exact Boast
+viewport/offset tests, DOM workbench drag proof, real Hub stock/mod drag proof,
+the architecture import fence, and the canonical Mac validation gate.

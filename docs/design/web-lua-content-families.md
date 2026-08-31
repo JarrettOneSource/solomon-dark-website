@@ -465,8 +465,8 @@ Framework ownership:
 - Website save persistence and package-removal reconciliation;
 - explicit clearing with a warning on retail export, because native saves
   have only one byte for stock IDs `0..4`;
-- deterministic stock-first ordering and five-row pagination through the same
-  reusable BoastMenu plan;
+- deterministic stock-first ordering in the same clipped, continuously
+  draggable BoastMenu SwipeBox;
 - stock UI records `90..97` or one validated owned sprite frame, mirrored at
   both row ends.
 

@@ -1,6 +1,7 @@
 export * from './native-ui-catalog.ts'
 export * from './native-ui-notebox.ts'
 export * from './native-ui-plan.ts'
+export * from './native-ui-swipe-box.ts'
 export * from './native-ui-boast-menu.ts'
 export * from './native-ui-text.ts'
 export * from './native-settings-contract.ts'

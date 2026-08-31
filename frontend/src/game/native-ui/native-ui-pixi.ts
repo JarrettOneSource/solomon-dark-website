@@ -192,6 +192,20 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
 
   const renderNode = (layer: Container, node: NativeUiNode): void => {
     switch (node.kind) {
+      case 'clip': {
+        const label = node.label ?? 'native-ui-clip'
+        const content = new Container({ label })
+        content.eventMode = 'none'
+        for (const child of node.nodes) renderNode(content, child)
+        const mask = new Graphics()
+          .rect(node.bounds.left, node.bounds.top, node.bounds.width, node.bounds.height)
+          .fill({ color: 0xffffff })
+        mask.label = `${label}:mask`
+        mask.eventMode = 'none'
+        content.mask = mask
+        layer.addChild(content, mask)
+        return
+      }
       case 'solid': {
         const graphic = new Graphics()
           .rect(node.bounds.left, node.bounds.top, node.bounds.width, node.bounds.height)

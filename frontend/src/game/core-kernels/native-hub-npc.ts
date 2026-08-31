@@ -99,6 +99,9 @@ interface NativeHubNpcCatalog {
       readonly top: number
       readonly widthReduction: number
     }
+    readonly contentBottomInset: number
+    readonly detailLineHeight: number
+    readonly detailWidthReduction: number
     readonly doneBottomInset: number
     readonly doneText: string
     readonly edgeUvOrigin: number
@@ -128,6 +131,10 @@ interface NativeHubNpcCatalog {
     readonly rowTextOffsets: { readonly detail: number; readonly label: number }
     readonly selectedBaseTint: readonly [number, number, number, number]
     readonly selectedSaturation: number
+    readonly scroll: {
+      readonly pointerDrag: true
+      readonly wheelStep: number
+    }
     readonly stockRowCount: number
     readonly titleBaselineY: number
     readonly titleText: string

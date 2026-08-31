@@ -19,6 +19,12 @@ interface NativeUiNodeBase {
   readonly label?: string
 }
 
+export interface NativeUiClipNode extends NativeUiNodeBase {
+  readonly bounds: NativeUiRect
+  readonly kind: 'clip'
+  readonly nodes: readonly NativeUiNode[]
+}
+
 export interface NativeUiSpriteNode extends NativeUiNodeBase {
   readonly anchor?: readonly [x: number, y: number]
   readonly atlas: NativeUiAtlasName
@@ -76,6 +82,7 @@ export interface NativeUiTextNode extends NativeUiNodeBase {
 }
 
 export type NativeUiNode =
+  | NativeUiClipNode
   | NativeUiNineSliceNode
   | NativeUiSliceNode
   | NativeUiSolidNode
@@ -233,6 +240,24 @@ export function nativeUiRect(
     throw new RangeError('native UI rectangle must be finite with positive size')
   }
   return { height, left, top, width }
+}
+
+export function intersectNativeUiRects(
+  left: NativeUiRect,
+  right: NativeUiRect,
+): NativeUiRect | null {
+  const intersectionLeft = Math.max(left.left, right.left)
+  const intersectionTop = Math.max(left.top, right.top)
+  const intersectionRight = Math.min(left.left + left.width, right.left + right.width)
+  const intersectionBottom = Math.min(left.top + left.height, right.top + right.height)
+  return intersectionRight <= intersectionLeft || intersectionBottom <= intersectionTop
+    ? null
+    : nativeUiRect(
+        intersectionLeft,
+        intersectionTop,
+        intersectionRight - intersectionLeft,
+        intersectionBottom - intersectionTop,
+      )
 }
 
 /** Exact horizontal thirds emitted by stock repeated-strip helper `0x00415230`. */

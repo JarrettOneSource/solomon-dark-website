@@ -155,16 +155,24 @@ try {
     '.hub-inventory-native-canvas[data-native-reveal="settled"]',
   ).waitFor({ timeout: 15_000 })
   assert.equal(await boastDialog.locator('[data-native-selector-kind="boast"]').count(), 5)
-  assert.equal(await boastCanvas.getAttribute('data-native-boast-page'), '1/2')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-content-height'), '585')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-scroll-max'), '185')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-scroll-y'), '0')
   assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), '90,91,92,93,94')
-  screenshots.boastStock = join(screenshotRoot, 'boast-stock-page.png')
+  screenshots.boastStock = join(screenshotRoot, 'boast-initial.png')
   await hostPage.screenshot({ path: screenshots.boastStock })
-  await boastDialog.getByRole('button', { name: 'More entries' }).click()
+  const boastActions = boastDialog.locator('[data-native-selector="boast"]')
+  const boastBounds = await boastActions.boundingBox()
+  assert.ok(boastBounds)
+  await hostPage.mouse.move(boastBounds.x + 800, boastBounds.y + 650)
+  await hostPage.mouse.down()
+  await hostPage.mouse.move(boastBounds.x + 800, boastBounds.y + 400, { steps: 5 })
+  await hostPage.mouse.up()
   await hostPage.waitForFunction(() => (
-    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastPage === '2/2'
+    document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastScrollY === '185'
   ))
-  assert.equal(await boastCanvas.getAttribute('data-native-boast-rows'), '1')
-  assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), 'mod')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-rows'), '5')
+  assert.equal(await boastCanvas.getAttribute('data-native-boast-icon-records'), '91,92,93,94,mod')
   const modBoastRow = boastDialog.locator(
     `[data-native-selector-kind="boast"][data-native-selector-id="${boastDefinition.definition.contentId}"]`,
   )
@@ -173,7 +181,7 @@ try {
     document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastHighlighted
       === expected
   ), `mod:${boastDefinition.modId}:${boastDefinition.definition.contentId}`)
-  screenshots.boastMod = join(screenshotRoot, 'boast-mod-page.png')
+  screenshots.boastMod = join(screenshotRoot, 'boast-mod-scrolled.png')
   await hostPage.screenshot({ path: screenshots.boastMod })
   await modBoastRow.click()
   await waitUntil(() => {

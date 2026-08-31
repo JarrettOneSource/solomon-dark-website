@@ -293,6 +293,9 @@ def build(source_root: Path) -> dict[str, Any]:
         "boastPresentation": {
             "boxInset": {"heightReduction": 160, "left": 90, "top": 80,
                          "widthReduction": 180},
+            "contentBottomInset": 25,
+            "detailLineHeight": 17,
+            "detailWidthReduction": 150,
             "edgeUvOrigin": 0.95,
             "fadeAlphaStep": 0.10000000149011612,
             "fonts": {"detail": "medium", "label": "special-uppercase",
@@ -307,6 +310,7 @@ def build(source_root: Path) -> dict[str, Any]:
             "rowTextOffsets": {"detail": 5, "label": -15},
             "selectedBaseTint": [0.5, 1.0, 0.5, 1.0],
             "selectedSaturation": 0.6,
+            "scroll": {"pointerDrag": True, "wheelStep": 25},
             "stockRowCount": 5,
             "titleBaselineY": 64,
             "titleText": "Select a Boast",

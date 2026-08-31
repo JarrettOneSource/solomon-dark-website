@@ -111,6 +111,10 @@
   height: 900px;
 }
 
+.hub-native-boast-actions {
+  touch-action: none;
+}
+
 .hub-inventory-native-canvas {
   display: block;
   width: 1600px;

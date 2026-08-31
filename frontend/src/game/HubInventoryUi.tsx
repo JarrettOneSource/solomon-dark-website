@@ -105,6 +105,9 @@ import {
 } from './skill-book-model.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import {
+  NATIVE_UI_SWIPE_BOX,
+  clampNativeUiSwipeBoxOffset,
+  dragNativeUiSwipeBoxOffset,
   planNativeUiBoastMenu,
   type NativeNoteboxKind,
   type NativeNoteboxNotice,
@@ -218,7 +221,6 @@ interface HubNpcChatPresentation {
   readonly acceleratedAtMs: number | null
   readonly content: HubNpcChatContent
   readonly phaseStartedAtMs: number
-  readonly selectorOffset: number
   readonly selectorScroll: number
 }
 
@@ -750,7 +752,6 @@ function NativeHubSurface({
         )
       : { kind: 'choices' },
     phaseStartedAtMs: performance.now(),
-    selectorOffset: 0,
     selectorScroll: 0,
   }))
   const [pendingNpcSelection, setPendingNpcSelection] =
@@ -901,7 +902,6 @@ function NativeHubSurface({
           acceleratedAtMs: null,
           content: response,
           phaseStartedAtMs: performance.now(),
-          selectorOffset: 0,
           selectorScroll: 0,
         })
       }, NATIVE_SELECTOR_ACCEPT_TICKS * 10)
@@ -1032,7 +1032,6 @@ function NativeHubSurface({
       acceleratedAtMs: null,
       content,
       phaseStartedAtMs: performance.now(),
-      selectorOffset: 0,
       selectorScroll: 0,
     })
   }, [])
@@ -1138,7 +1137,6 @@ function NativeHubSurface({
       phaseStartedAtMs: chat.phaseStartedAtMs,
       highlightedSelectorId: highlightedNpcSelectorId,
       selectedSelectorId: pendingNpcSelection?.id ?? null,
-      selectorOffset: chat.selectorOffset,
       selectorScroll: chat.selectorScroll,
       selectorRows,
       storyOffice,
@@ -1520,11 +1518,6 @@ function NativeHubSurface({
                 audio.playSound('click')
                 onAction(action)
               }}
-              onSelectorOffset={(selectorOffset) => setChat(current => ({
-                ...current,
-                selectorOffset,
-                selectorScroll: 0,
-              }))}
               onSelectorScroll={(selectorScroll) => setChat(current => ({
                 ...current,
                 selectorScroll,
@@ -1693,7 +1686,6 @@ function DialogueActions({
   onSelectorHighlight,
   onSelectRow,
   onSelectorDone,
-  onSelectorOffset,
   onSelectorScroll,
   pendingSelection,
   selectorRows,
@@ -1711,7 +1703,6 @@ function DialogueActions({
     id: number | ModBoastSelection,
   ) => void
   onSelectorDone: () => void
-  onSelectorOffset: (offset: number) => void
   onSelectorScroll: (scroll: number) => void
   pendingSelection: boolean
   selectorRows: readonly HubNpcSelectorRow[]
@@ -1750,19 +1741,17 @@ function DialogueActions({
 
   if (chat.content.kind === 'selector') {
     const selector = chat.content.selector
-    if (selector === 'boast' && selectorRows.length > 5) {
-      return (
-        <ExpandedBoastSelectorActions
-          offset={chat.selectorOffset}
-          onDone={onSelectorDone}
-          onHighlight={onSelectorHighlight}
-          onOffset={onSelectorOffset}
-          onSelect={id => onSelectRow(selector, id)}
-          pendingSelection={pendingSelection}
-          rows={selectorRows}
-        />
-      )
-    }
+    if (selector === 'boast') return (
+      <BoastSelectorActions
+        onDone={onSelectorDone}
+        onHighlight={onSelectorHighlight}
+        onScrollY={onSelectorScroll}
+        onSelect={(id) => onSelectRow('boast', id)}
+        pendingSelection={pendingSelection}
+        rows={selectorRows}
+        scrollY={chat.selectorScroll}
+      />
+    )
     const scroll = hubNpcSelectorClampScroll(chat.selectorScroll, selectorRows.length)
     const visibleRows = hubNpcSelectorVisibleRows(selectorRows.length, scroll)
     const wheel = (event: ReactWheelEvent<HTMLElement>) => {
@@ -1903,96 +1892,180 @@ function DialogueActions({
   )
 }
 
-function ExpandedBoastSelectorActions({
-  offset,
+function BoastSelectorActions({
   onDone,
   onHighlight,
-  onOffset,
+  onScrollY,
   onSelect,
   pendingSelection,
   rows,
-}: {
-  offset: number
+  scrollY,
+}: Readonly<{
   onDone: () => void
   onHighlight: (id: number | ModBoastSelection | null) => void
-  onOffset: (offset: number) => void
+  onScrollY: (scrollY: number) => void
   onSelect: (id: number | ModBoastSelection) => void
   pendingSelection: boolean
   rows: readonly HubNpcSelectorRow[]
-}) {
-  const pageSize = 5
-  const maximumOffset = Math.max(0, Math.floor((rows.length - 1) / pageSize) * pageSize)
-  const boundedOffset = Math.min(offset, maximumOffset)
-  const visibleRows = rows.slice(boundedOffset, boundedOffset + pageSize)
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
-  const pageIndex = Math.floor(boundedOffset / pageSize)
+  scrollY: number
+}>) {
+  const dragRef = useRef<{
+    moved: boolean
+    pointerId: number
+    pointerY: number
+    scrollY: number
+    startedY: number
+  } | null>(null)
+  const suppressClickRef = useRef(false)
   const plan = planNativeUiBoastMenu({
     height: HUB_NATIVE_UI_SIZE.height,
-    pageCount,
-    pageIndex,
-    rows: visibleRows.map(row => ({
+    rows: rows.map(row => ({
       detail: row.detail,
       id: hubNpcSelectorRowKey(row),
       label: row.label,
       ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
     })),
+    scrollY,
     width: HUB_NATIVE_UI_SIZE.width,
   })
+  const rowsById = new Map(rows.map(row => [hubNpcSelectorRowKey(row), row]))
+  const updateScrollY = (next: number) => onScrollY(clampNativeUiSwipeBoxOffset(
+    next,
+    plan.contentHeight,
+    plan.viewportBounds.height,
+  ))
+  const beginDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    const point = pointerStagePosition(event)
+    if (!pointInRect(point, nativeUiActionRect(plan.viewportBounds))) return
+    dragRef.current = {
+      moved: false,
+      pointerId: event.pointerId,
+      pointerY: point.y,
+      scrollY: plan.scrollY,
+      startedY: point.y,
+    }
+  }
+  const moveDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const pointerY = pointerStagePosition(event).y
+    const next = dragNativeUiSwipeBoxOffset(
+      drag.scrollY,
+      drag.pointerY,
+      pointerY,
+      plan.contentHeight,
+      plan.viewportBounds.height,
+    )
+    if (!drag.moved && Math.abs(pointerY - drag.startedY) >= 3) {
+      drag.moved = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    drag.pointerY = pointerY
+    drag.scrollY = next
+    if (drag.moved) {
+      event.preventDefault()
+      onHighlight(null)
+      updateScrollY(next)
+    }
+  }
+  const endDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    suppressClickRef.current = drag.moved
+    if (drag.moved) window.setTimeout(() => { suppressClickRef.current = false }, 0)
+    dragRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+  const wheel = (event: ReactWheelEvent<HTMLElement>) => {
+    if (event.deltaY === 0) return
+    const point = pointerStagePosition(event)
+    if (!pointInRect(point, nativeUiActionRect(plan.viewportBounds))) return
+    const next = clampNativeUiSwipeBoxOffset(
+      plan.scrollY + Math.sign(event.deltaY) * NATIVE_UI_SWIPE_BOX.wheelStep,
+      plan.contentHeight,
+      plan.viewportBounds.height,
+    )
+    if (next === plan.scrollY) return
+    event.preventDefault()
+    onHighlight(null)
+    updateScrollY(next)
+  }
+  const keyScroll = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const delta = event.key === 'ArrowUp'
+      ? -NATIVE_UI_SWIPE_BOX.wheelStep
+      : event.key === 'ArrowDown'
+        ? NATIVE_UI_SWIPE_BOX.wheelStep
+        : event.key === 'PageUp'
+          ? -plan.viewportBounds.height
+          : event.key === 'PageDown'
+            ? plan.viewportBounds.height
+            : 0
+    if (delta === 0) return
+    event.preventDefault()
+    onHighlight(null)
+    updateScrollY(plan.scrollY + delta)
+  }
   return (
     <section
       aria-label={hubNpcSelectorTitle('boast')}
-      className="hub-native-dialogue-actions"
+      className="hub-native-dialogue-actions hub-native-boast-actions"
       data-native-selector="boast"
-      data-native-selector-offset={boundedOffset}
-      data-native-selector-scroll="0"
+      data-native-selector-content-height={plan.contentHeight}
+      data-native-selector-scroll-max={plan.maximumScrollY}
+      data-native-selector-scroll-y={plan.scrollY}
+      onLostPointerCapture={() => { dragRef.current = null }}
+      onPointerCancel={endDrag}
+      onPointerDown={beginDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onWheel={wheel}
     >
       <span className="hub-native-ui-semantic" role="status">
-        {`${hubNpcSelectorTitle('boast')}. ${rows.length} entries.`}
+        {`${hubNpcSelectorTitle('boast')}. ${rows.length} entries. Drag to scroll.`}
       </span>
-      {visibleRows.map((row, index) => (
-        <NativeAction
-          data={{
-            'data-native-selector-id': typeof row.id === 'number' ? row.id : row.id.contentId,
-            'data-native-selector-kind': 'boast',
-            'data-native-selector-mod-id': typeof row.id === 'number' ? '' : row.id.modId,
-            'data-native-selector-price': '',
-          }}
-          disabled={pendingSelection}
-          key={hubNpcSelectorRowKey(row)}
-          label={`${row.label}. ${row.detail}`}
-          onBlur={() => onHighlight(null)}
-          onClick={() => onSelect(row.id)}
-          onFocus={() => onHighlight(row.id)}
-          onPointerEnter={() => onHighlight(row.id)}
-          onPointerLeave={() => onHighlight(null)}
-          rect={nativeUiActionRect(plan.rowBounds[index]!.bounds)}
-        />
-      ))}
-      {boundedOffset > 0 ? (
-        <NativeAction
-          label="Previous entries"
-          onClick={() => {
-            onHighlight(null)
-            onOffset(Math.max(0, boundedOffset - pageSize))
-          }}
-          rect={nativeUiActionRect(plan.actions.find(({ id }) => id === 'previous')!.bounds)}
-        />
-      ) : null}
-      {boundedOffset < maximumOffset ? (
-        <NativeAction
-          label="More entries"
-          onClick={() => {
-            onHighlight(null)
-            onOffset(Math.min(maximumOffset, boundedOffset + pageSize))
-          }}
-          rect={nativeUiActionRect(plan.actions.find(({ id }) => id === 'next')!.bounds)}
-        />
-      ) : null}
+      <NativeAction
+        data={{ 'data-native-selector-swipebox': 'true' }}
+        label={`Scroll ${hubNpcSelectorTitle('boast')}`}
+        onKeyDown={keyScroll}
+        rect={nativeUiActionRect(plan.viewportBounds)}
+      />
+      {plan.actions.filter(({ id }) => id !== 'done').map((action) => {
+        const row = rowsById.get(action.id)!
+        return (
+          <NativeAction
+            key={`boast-${action.id}`}
+            data={{
+              'data-native-selector-id': typeof row.id === 'number' ? row.id : row.id.contentId,
+              'data-native-selector-kind': 'boast',
+              'data-native-selector-mod-id': typeof row.id === 'number' ? '' : row.id.modId,
+              'data-native-selector-price': '',
+            }}
+            disabled={pendingSelection}
+            label={`${row.label}. ${row.detail}`}
+            rect={nativeUiActionRect(action.bounds)}
+            onBlur={() => onHighlight(null)}
+            onClick={() => {
+              if (suppressClickRef.current) {
+                suppressClickRef.current = false
+                return
+              }
+              onSelect(row.id)
+            }}
+            onFocus={() => onHighlight(row.id)}
+            onKeyDown={keyScroll}
+            onPointerEnter={() => onHighlight(row.id)}
+            onPointerLeave={() => onHighlight(null)}
+          />
+        )
+      })}
       <NativeAction
         gameBack
         label="Done"
-        onClick={onDone}
         rect={nativeUiActionRect(plan.doneBounds)}
+        onClick={onDone}
       />
     </section>
   )
@@ -3272,7 +3345,7 @@ interface InventoryEquipmentClickPress {
 }
 
 function pointerStagePosition(
-  event: ReactPointerEvent<HTMLElement>,
+  event: ReactPointerEvent<HTMLElement> | ReactWheelEvent<HTMLElement>,
 ): { readonly x: number; readonly y: number } {
   const stage = event.currentTarget.closest('.hub-native-ui-stage')
   if (!(stage instanceof HTMLElement)) return { x: event.clientX, y: event.clientY }

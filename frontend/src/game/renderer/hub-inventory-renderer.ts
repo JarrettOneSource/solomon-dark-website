@@ -34,6 +34,7 @@ import {
   boastSelectionKey,
   type ModBoastSelection,
 } from '../core-kernels/boast.ts'
+import { NATIVE_BOAST_PRESENTATION } from '../core-kernels/native-hub-npc.ts'
 import {
   HUB_TRADER_DIALOGUES,
   equipmentSlotsForItem,
@@ -274,7 +275,6 @@ export type HubInventoryRendererModel =
       readonly phaseStartedAtMs: number
       readonly highlightedSelectorId: number | ModBoastSelection | null
       readonly selectedSelectorId: number | ModBoastSelection | null
-      readonly selectorOffset: number
       readonly selectorScroll: number
       readonly selectorRows: readonly HubNpcSelectorRow[]
       readonly storyOffice: boolean
@@ -578,8 +578,7 @@ export async function createHubInventoryRenderer(
         && currentModel.gold === model.gold
         && currentModel.highlightedSelectorId === model.highlightedSelectorId
         && currentModel.selectedSelectorId === model.selectedSelectorId
-        && currentModel.selectorOffset === model.selectorOffset
-        && !(model.content.selector === 'boast' && model.selectorRows.length > 5)
+        && model.content.selector !== 'boast'
         && chatRenderState
       ) {
         currentModel = model
@@ -613,13 +612,18 @@ export async function createHubInventoryRenderer(
       if (model.kind === 'dialogue'
           && model.content.kind === 'selector'
           && model.content.selector === 'boast') {
-        const pageSize = 5
-        const pageIndex = Math.floor(model.selectorOffset / pageSize)
-        const rows = model.selectorRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
-        gpu.canvas.dataset.nativeBoastMenu = model.selectorRows.length > pageSize
+        const plan = planBoastDialogue(model)
+        const rows = model.selectorRows.filter((_, index) => (
+          plan.rowBounds[index]?.visibleBounds != null
+        ))
+        gpu.canvas.dataset.nativeBoastMenu = (
+          model.selectorRows.length > NATIVE_BOAST_PRESENTATION.stockRowCount
+        )
           ? 'mod-expanded'
           : 'stock'
-        gpu.canvas.dataset.nativeBoastPage = `${pageIndex + 1}/${Math.max(1, Math.ceil(model.selectorRows.length / pageSize))}`
+        gpu.canvas.dataset.nativeBoastContentHeight = `${plan.contentHeight}`
+        gpu.canvas.dataset.nativeBoastScrollMax = `${plan.maximumScrollY}`
+        gpu.canvas.dataset.nativeBoastScrollY = `${plan.scrollY}`
         gpu.canvas.dataset.nativeBoastRows = `${rows.length}`
         gpu.canvas.dataset.nativeBoastIconRecords = rows.map(row => (
           row.boastIcon?.kind === 'stock' ? row.boastIcon.record : 'mod'
@@ -630,8 +634,10 @@ export async function createHubInventoryRenderer(
             ? `native:${model.highlightedSelectorId}`
             : boastSelectionKey(model.highlightedSelectorId)
       } else {
+        delete gpu.canvas.dataset.nativeBoastContentHeight
         delete gpu.canvas.dataset.nativeBoastMenu
-        delete gpu.canvas.dataset.nativeBoastPage
+        delete gpu.canvas.dataset.nativeBoastScrollMax
+        delete gpu.canvas.dataset.nativeBoastScrollY
         delete gpu.canvas.dataset.nativeBoastRows
         delete gpu.canvas.dataset.nativeBoastIconRecords
         delete gpu.canvas.dataset.nativeBoastHighlighted
@@ -1474,7 +1480,7 @@ function buildDialogue(
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
   if (model.content.kind === 'selector') {
-    if (model.content.selector === 'boast' && model.selectorRows.length > 5) {
+    if (model.content.selector === 'boast') {
       return buildBoastDialogue(context, layer, model)
     }
     return buildNpcSelector(context, layer, model)
@@ -1548,28 +1554,16 @@ function buildBoastDialogue(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
-  const pageSize = 5
-  const offset = Math.max(0, Math.floor(model.selectorOffset / pageSize) * pageSize)
-  const rows = model.selectorRows.slice(offset, offset + pageSize)
-  const pageCount = Math.max(1, Math.ceil(model.selectorRows.length / pageSize))
-  const pageIndex = Math.min(pageCount - 1, Math.floor(offset / pageSize))
-  const active = model.highlightedSelectorId ?? model.selectedSelectorId
-  const plan = planNativeUiBoastMenu({
-    height: HUB_NATIVE_UI_SIZE.height,
-    pageCount,
-    pageIndex,
-    rows: rows.map(row => ({
-      detail: row.detail,
-      id: hubNpcSelectorRendererRowKey(row),
-      label: row.label,
-      ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
-      state: selectorIdsEqual(row.id, active) ? 'selected' : 'idle',
-    })),
-    width: HUB_NATIVE_UI_SIZE.width,
-  })
-  layer.addChild(nativeUiPixiFor(context.textures).render(plan, 'native-boast-menu'))
+  const plan = planBoastDialogue(model)
+  const rendered = nativeUiPixiFor(context.textures).render(plan, 'native-boast-menu')
+  const viewport = rendered.children.find(child => child.label === 'boast:swipe-box')
+  if (!(viewport instanceof Container)) {
+    throw new Error('native Boast SwipeBox content layer is missing')
+  }
   for (const placement of plan.customIcons) {
-    const row = rows.find(candidate => hubNpcSelectorRendererRowKey(candidate) === placement.id)
+    const row = model.selectorRows.find(candidate => (
+      hubNpcSelectorRendererRowKey(candidate) === placement.id
+    ))
     const icon = row?.boastIcon
     if (!row || !icon || icon.kind !== 'mod' || typeof row.id === 'number') continue
     const texture = context.modTextures.spriteFrame(
@@ -1591,10 +1585,29 @@ function buildBoastDialogue(
       if (placement.selected) sprite.tint = NATIVE_UI_BOAST_SELECTED_TINT
       sprite.eventMode = 'none'
       sprite.label = `${placement.id}:custom-icon-${side}`
-      layer.addChild(sprite)
+      viewport.addChild(sprite)
     }
   }
+  layer.addChild(rendered)
   return { content: new Container({ label: 'native-boast-static-content' }), contentHeight: 0 }
+}
+
+function planBoastDialogue(
+  model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
+) {
+  const active = model.highlightedSelectorId ?? model.selectedSelectorId
+  return planNativeUiBoastMenu({
+    height: HUB_NATIVE_UI_SIZE.height,
+    rows: model.selectorRows.map(row => ({
+      detail: row.detail,
+      id: hubNpcSelectorRendererRowKey(row),
+      label: row.label,
+      ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
+      state: selectorIdsEqual(row.id, active) ? 'selected' : 'idle',
+    })),
+    scrollY: model.selectorScroll,
+    width: HUB_NATIVE_UI_SIZE.width,
+  })
 }
 
 function hubNpcSelectorRendererRowKey(row: HubNpcSelectorRow): string {
@@ -1618,6 +1631,9 @@ function buildNpcSelector(
     throw new TypeError('native NPC selector renderer requires selector content')
   }
   const selector = model.content.selector
+  if (selector === 'boast') {
+    throw new TypeError('native Boast selector requires the dedicated BoastBox renderer')
+  }
   const [panelLeft, panelTop, panelWidth, panelHeight] = HUB_NPC_SELECTOR.panelRect
   addNativeNineSlice(
     context,
@@ -1692,8 +1708,6 @@ function buildNpcSelector(
     content.addChild(frame)
     if (selector === 'teacher-spells') {
       addTeacherSpellSelectorRow(context, content, row, rowX, rowY, model.gold, rowTint)
-    } else if (selector === 'boast') {
-      addBoastSelectorRow(context, content, row, rowX, rowY, rowTint)
     } else {
       addBookSelectorRow(context, content, row, rowX, rowY, rowTint)
     }
@@ -1788,64 +1802,6 @@ function addTeacherSpellSelectorRow(
       tint: hubNpcSelectorPriceTint(row.price, gold),
     })
   }
-}
-
-function addBoastSelectorRow(
-  context: RenderContext,
-  layer: Container,
-  row: HubNpcSelectorRow,
-  x: number,
-  y: number,
-  tint: number,
-): void {
-  if (typeof row.id !== 'number' || row.boastIcon?.kind !== 'stock') {
-    throw new TypeError('stock Boast selector row requires a numeric stock icon')
-  }
-  const record = row.boastIcon.record
-  const artWidth = nativeUiRecord('UI', record).logicalSize[0]
-  const artCenterY = y + HUB_NPC_SELECTOR.rowHeight / 2
-  const leftArt = addCenteredAtlasSprite(
-    context,
-    layer,
-    'UI',
-    record,
-    x + HUB_NPC_SELECTOR.boastArtInsetX + artWidth / 2,
-    artCenterY,
-  )
-  leftArt.tint = tint
-  const rightArt = addCenteredAtlasSprite(
-    context,
-    layer,
-    'UI',
-    record,
-    x + HUB_NPC_SELECTOR.rowWidth - HUB_NPC_SELECTOR.boastArtInsetX - artWidth / 2,
-    artCenterY,
-    -1,
-    1,
-  )
-  rightArt.tint = tint
-  addBitmapText(
-    context,
-    layer,
-    row.label,
-    'special-uppercase',
-    x + HUB_NPC_SELECTOR.rowWidth / 2,
-    y + HUB_NPC_SELECTOR.rowHeight / 2 - 15,
-    { tint },
-  )
-  addBitmapText(
-    context,
-    layer,
-    row.detail,
-    'medium',
-    x + HUB_NPC_SELECTOR.rowWidth / 2,
-    y + HUB_NPC_SELECTOR.rowHeight / 2 + 5,
-    {
-      lineHeight: 17,
-      maxWidth: 350,
-      tint,
-    },
-  )
 }
 
 function addBookSelectorRow(

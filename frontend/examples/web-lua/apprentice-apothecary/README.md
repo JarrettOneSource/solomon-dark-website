@@ -23,8 +23,9 @@ npm run sdmod -- pack examples/web-lua/apprentice-apothecary /tmp/apprentice-apo
 
 Upload the resulting `.sdmod` on the Website Mods page, subscribe to it, then
 start the game. Pip appears beside the courtyard potion trader. Provokatus's
-Boast menu gains a second page containing `EMPTY HANDS, FULL GLORY!`. The
-Minimap and Survey Orb appear after entering a Boneyard.
+Boast menu gains a sixth scrollable row containing `EMPTY HANDS, FULL GLORY!`.
+Drag the list upward to reach it. The Minimap and Survey Orb appear after
+entering a Boneyard.
 
 The PNG icons and Ogg sounds are human-made CC0 assets from Kenney. See
 [`ASSETS.md`](ASSETS.md).

@@ -9,6 +9,7 @@ import {
 import NativeUiNineSlice from './NativeUiNineSlice.tsx'
 import NativeUiSprite from './NativeUiSprite.tsx'
 import type {
+  NativeUiClipNode,
   NativeUiNode,
   NativeUiPlan,
   NativeUiSliceNode,
@@ -56,6 +57,7 @@ export default function NativeUiPlanView({
 }
 
 function NativeUiPlanNode({ node }: { readonly node: NativeUiNode }) {
+  if (node.kind === 'clip') return renderClip(node)
   if (node.kind === 'sprite') return renderSprite(node)
   if (node.kind === 'slice') return renderSlice(node)
   if (node.kind === 'tile') return renderTile(node)
@@ -91,6 +93,40 @@ function NativeUiPlanNode({ node }: { readonly node: NativeUiNode }) {
         width: node.bounds.width,
       }}
     />
+  )
+}
+
+function renderClip(node: NativeUiClipNode): ReactNode {
+  const label = node.label ?? 'native-ui-clip'
+  return (
+    <span
+      data-native-ui-clip={label}
+      data-native-ui-node={node.label}
+      style={{
+        display: 'block',
+        height: node.bounds.height,
+        left: node.bounds.left,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        position: 'absolute',
+        top: node.bounds.top,
+        width: node.bounds.width,
+      }}
+    >
+      <span style={{
+        display: 'block',
+        height: node.bounds.height,
+        left: -node.bounds.left,
+        pointerEvents: 'none',
+        position: 'absolute',
+        top: -node.bounds.top,
+        width: node.bounds.width,
+      }}>
+        {node.nodes.map((child, index) => (
+          <NativeUiPlanNode key={`${child.label ?? child.kind}:${index}`} node={child} />
+        ))}
+      </span>
+    </span>
   )
 }
 
@@ -227,6 +263,7 @@ function renderText(node: NativeUiTextNode): ReactNode {
     <span
       data-native-ui-font={node.text.font}
       data-native-ui-node={node.label}
+      data-native-ui-text-lines={layout.lines.map(({ text }) => text).join('\n')}
       data-native-ui-unsupported={layout.unsupportedCodePoints.join(',') || undefined}
       style={{ inset: 0, pointerEvents: 'none', position: 'absolute' }}
     >
