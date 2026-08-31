@@ -23,6 +23,7 @@ import {
   type NativeSkillPickerCloseDirection,
 } from './renderer/level-up-presentation.ts'
 import {
+  SKILL_PICKER_INSIGHT_DETAIL_TEXT,
   skillPickerCardCenters,
   skillPickerCardPresentation,
   skillPickerDetailPresentation,
@@ -447,7 +448,7 @@ export default function SkillPicker({
           {offerContentVisible ? displayedOffer.options.map((option, index) => {
             const card = skillPickerCardPresentation(option)
             const insightDetail = option.insight === true
-              ? ' Insight Bonus: Skill +2.'
+              ? ` ${SKILL_PICKER_INSIGHT_DETAIL_TEXT}.`
               : ''
             return (
               <Fragment key={`${index}-${option.skillId}-${option.weldBuildId ?? 0}`}>

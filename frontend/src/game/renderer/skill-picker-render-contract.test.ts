@@ -16,6 +16,8 @@ import {
   SKILL_PICKER_CARD_TEXT,
   SKILL_PICKER_ICON_ANCHOR_OFFSET,
   SKILL_PICKER_ICON_INTER_DRAW_OFFSET,
+  SKILL_PICKER_INSIGHT_COMPOSITE,
+  SKILL_PICKER_INSIGHT_DETAIL_TEXT,
   SKILL_PICKER_INSIGHT_LABEL_Y,
   SKILL_PICKER_INSIGHT_TINT,
   SKILL_PICKER_NATIVE_UI_RECORDS,
@@ -114,6 +116,25 @@ test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlase
 test('the picker presents authoritative Creativity Insight identity and detail', () => {
   assert.equal(SKILL_PICKER_INSIGHT_TINT, 0xd9ba70)
   assert.equal(SKILL_PICKER_INSIGHT_LABEL_Y, 305.5)
+  assert.equal(SKILL_PICKER_INSIGHT_DETAIL_TEXT, 'Insight Bonus: Skill +2')
+  assert.deepEqual(SKILL_PICKER_INSIGHT_COMPOSITE, {
+    constant: {
+      glow: { blendMode: 'add', tint: 0xd9ba70 },
+      text: { blendMode: 'add', tint: 0x808080 },
+    },
+    preserved: {
+      aura: { blendMode: 'normal', tint: 0xffffff },
+      icon: { blendMode: 'normal', tint: 0xffffff },
+      iconShadow: { blendMode: 'normal', tint: 0x000000 },
+    },
+    pulsing: {
+      frame: { blendMode: 'add', tint: 0xd9ba70 },
+      glow: { blendMode: 'add', tint: 0xd9ba70 },
+      label: { blendMode: 'normal', tint: 0xd9ba70 },
+      panel: { blendMode: 'normal', tint: 0xd9ba70 },
+      text: { blendMode: 'add', tint: 0xd9ba70 },
+    },
+  })
   assert.equal(skillPickerInsightAlpha(0), 0.5)
   assert.equal(skillPickerInsightAlpha(45), 1)
   assert.ok(Math.abs(skillPickerInsightAlpha(90) - 0.5) < 1e-12)
@@ -221,6 +242,16 @@ test('every public picker option projects complete authored SkillScreen detail a
         `${skill.name} lost its concentration bonus`,
       )
     }
+    const insight = skillPickerDetailPresentation({
+      insight: true,
+      skillId: skill.id,
+      targetRank: 1,
+    })
+    assert.deepEqual(
+      insight.lines.at(-1),
+      { kind: 'bonus', text: SKILL_PICKER_INSIGHT_DETAIL_TEXT },
+      skill.name,
+    )
   }
   assert.equal(ordinaryCount, 71)
   assert.equal(concentrationCount, 14)
@@ -228,6 +259,11 @@ test('every public picker option projects complete authored SkillScreen detail a
   const ranked = skillPickerDetailPresentation({ insight: true, skillId: 21, targetRank: 3 })
   assert.equal(ranked.row.effectiveRank, 3)
   assert.match(ranked.lines.find(({ kind }) => kind === 'title')?.text ?? '', /3\/5/)
+  assert.equal(
+    skillPickerDetailPresentation({ skillId: 21, targetRank: 3 }).lines
+      .some(({ text }) => text === SKILL_PICKER_INSIGHT_DETAIL_TEXT),
+    false,
+  )
 })
 
 test('every Welding picker detail keeps its synthetic build identity and pair description', () => {
@@ -243,6 +279,16 @@ test('every Welding picker detail keeps its synthetic build identity and pair de
     assert.equal(
       detail.lines.find(({ kind }) => kind === 'description')?.text,
       build.pairDescription,
+    )
+    assert.deepEqual(
+      skillPickerDetailPresentation({
+        insight: true,
+        skillId: 52,
+        targetRank: 1,
+        weldBuildId: build.id,
+      }).lines.at(-1),
+      { kind: 'bonus', text: SKILL_PICKER_INSIGHT_DETAIL_TEXT },
+      build.syntheticName,
     )
   }
 })

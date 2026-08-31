@@ -22,8 +22,8 @@ import {
   SKILL_PICKER_CARD_FRAME,
   SKILL_PICKER_CARD_TEXT,
   SKILL_PICKER_ICON_ANCHOR_OFFSET,
+  SKILL_PICKER_INSIGHT_COMPOSITE,
   SKILL_PICKER_INSIGHT_LABEL_Y,
-  SKILL_PICKER_INSIGHT_TINT,
   SKILL_PICKER_PANEL,
   SKILL_PICKER_SIZE,
   skillPickerCardPresentation,
@@ -52,7 +52,7 @@ interface AnimatedCorner {
 
 interface InsightCardTreatment {
   readonly cardIndex: number
-  readonly container: Container
+  readonly pulsing: readonly Container[]
 }
 
 export interface SkillPickerRenderer {
@@ -190,7 +190,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         ? 0.5
         : skillPickerInsightAlpha(Math.floor((nowMs - nativeScreenStartedAtMs) / 10))
       for (const treatment of insightCardTreatments) {
-        treatment.container.alpha = insightAlpha
+        for (const pulsing of treatment.pulsing) pulsing.alpha = insightAlpha
         insightPanels[treatment.cardIndex]!.alpha = insightAlpha
       }
       application.renderer.render(application.stage)
@@ -257,7 +257,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         const insight = addSkillCard(offerLayer, resources, option, centers[index]!)
         insightPanels[index]!.visible = insight !== null
         if (insight !== null) {
-          insightCardTreatments.push({ cardIndex: index, container: insight })
+          insightCardTreatments.push({ cardIndex: index, pulsing: insight })
         }
       })
       if (specialActionsAvailable) {
@@ -285,95 +285,170 @@ function addSkillCard(
   textures: GameTextureMap,
   option: ProtocolPlayerSkillOfferOption,
   centerX: number,
-): Container | null {
+): readonly Container[] | null {
   const presentation = skillPickerCardPresentation(option)
-  const aura = spriteFor(textures, 'Skills', 13)
-  aura.anchor.set(0.5)
-  aura.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-  aura.scale.set(1.15)
+  const insight = option.insight === true
+  const pulsing: Container[] = []
+  const aura = centeredSkillSprite(textures, 13, centerX, 1.15)
+  aura.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.preserved.aura.blendMode
+  aura.tint = SKILL_PICKER_INSIGHT_COMPOSITE.preserved.aura.tint
   layer.addChild(aura)
 
-  if (presentation.glowTints.length === 2) {
+  if (insight) {
+    const constantGlow = centeredSkillSprite(textures, 164, centerX, 1.15)
+    constantGlow.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.constant.glow.blendMode
+    constantGlow.tint = SKILL_PICKER_INSIGHT_COMPOSITE.constant.glow.tint
+    layer.addChild(constantGlow)
+
+    const pulseGlow = new Container()
+    pulseGlow.alpha = 0
+    const glow = centeredSkillSprite(textures, 164, centerX, 1.15)
+    glow.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.glow.blendMode
+    glow.tint = SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.glow.tint
+    pulseGlow.addChild(glow)
+    layer.addChild(pulseGlow)
+    pulsing.push(pulseGlow)
+  } else if (presentation.glowTints.length === 2) {
     addWeldGlow(layer, textures, presentation.glowTints, centerX)
   } else {
-    const glow = spriteFor(textures, 'Skills', 164)
-    glow.anchor.set(0.5)
-    glow.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-    glow.scale.set(1.15)
+    const glow = centeredSkillSprite(textures, 164, centerX, 1.15)
     glow.tint = presentation.rootTint
     layer.addChild(glow)
   }
 
-  const frame = spriteFor(textures, 'Skills', presentation.frameRecord)
-  frame.anchor.set(0.5)
-  frame.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+  const frame = centeredSkillSprite(textures, presentation.frameRecord, centerX)
   layer.addChild(frame)
 
-  const shadow = spriteFor(textures, 'Skills', presentation.iconRecord)
-  shadow.anchor.set(0.5)
+  if (insight) {
+    const pulseFrame = new Container()
+    pulseFrame.alpha = 0
+    const insightFrame = centeredSkillSprite(textures, presentation.frameRecord, centerX)
+    insightFrame.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.frame.blendMode
+    insightFrame.tint = SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.frame.tint
+    pulseFrame.addChild(insightFrame)
+    layer.addChild(pulseFrame)
+    pulsing.push(pulseFrame)
+  }
+
+  const shadow = centeredSkillSprite(textures, presentation.iconRecord, centerX)
   shadow.position.set(
     centerX + SKILL_PICKER_ICON_ANCHOR_OFFSET.x,
     SKILL_PICKER_CARD_FRAME.y + SKILL_PICKER_ICON_ANCHOR_OFFSET.y,
   )
-  shadow.tint = 0x000000
+  shadow.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.preserved.iconShadow.blendMode
+  shadow.tint = SKILL_PICKER_INSIGHT_COMPOSITE.preserved.iconShadow.tint
   layer.addChild(shadow)
-  const icon = spriteFor(textures, 'Skills', presentation.iconRecord)
-  icon.anchor.set(0.5)
-  icon.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+  const icon = centeredSkillSprite(textures, presentation.iconRecord, centerX)
+  icon.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.preserved.icon.blendMode
+  icon.tint = SKILL_PICKER_INSIGHT_COMPOSITE.preserved.icon.tint
   layer.addChild(icon)
 
-  let insightTreatment: Container | null = null
-  if (option.insight === true) {
-    insightTreatment = new Container()
-    insightTreatment.alpha = 0
-    const insightAura = spriteFor(textures, 'Skills', 13)
-    insightAura.anchor.set(0.5)
-    insightAura.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-    insightAura.scale.set(1.15)
-    insightAura.tint = SKILL_PICKER_INSIGHT_TINT
-    const insightGlow = spriteFor(textures, 'Skills', 164)
-    insightGlow.anchor.set(0.5)
-    insightGlow.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-    insightGlow.scale.set(1.15)
-    insightGlow.tint = SKILL_PICKER_INSIGHT_TINT
-    const insightFrame = spriteFor(textures, 'Skills', presentation.frameRecord)
-    insightFrame.anchor.set(0.5)
-    insightFrame.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-    insightFrame.tint = SKILL_PICKER_INSIGHT_TINT
-    const insightIcon = spriteFor(textures, 'Skills', presentation.iconRecord)
-    insightIcon.anchor.set(0.5)
-    insightIcon.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
-    insightIcon.tint = SKILL_PICKER_INSIGHT_TINT
-    insightTreatment.addChild(insightAura, insightGlow, insightFrame, insightIcon)
+  if (insight) {
+    addInsightCardTextPass(
+      layer,
+      textures,
+      presentation,
+      centerX,
+      SKILL_PICKER_INSIGHT_COMPOSITE.constant.text,
+    )
+    const pulseText = new Container()
+    pulseText.alpha = 0
     addBitmapText(
-      insightTreatment,
+      pulseText,
       textures,
       'Insight',
       'body',
       centerX,
       SKILL_PICKER_INSIGHT_LABEL_Y,
-      { align: 'center', tint: SKILL_PICKER_INSIGHT_TINT },
+      {
+        align: 'center',
+        blendMode: SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.label.blendMode,
+        tint: SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.label.tint,
+      },
     )
-    layer.addChild(insightTreatment)
+    addInsightCardTextPass(
+      pulseText,
+      textures,
+      presentation,
+      centerX,
+      SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.text,
+    )
+    layer.addChild(pulseText)
+    pulsing.push(pulseText)
+  } else {
+    addShadowedBitmapText(
+      layer,
+      textures,
+      presentation.nameLines.join('\n'),
+      'medium',
+      centerX,
+      presentation.nameBaselineY,
+      presentation.rootTint,
+    )
+    addShadowedBitmapText(
+      layer,
+      textures,
+      presentation.familyLabel,
+      'skill',
+      centerX,
+      presentation.familyBaselineY,
+      presentation.rootTint,
+    )
+    addBitmapText(
+      layer,
+      textures,
+      presentation.descriptionLines.join('\n'),
+      'medium',
+      centerX,
+      presentation.descriptionBaselineY,
+      {
+        align: 'center',
+        lineHeight: 17,
+        maxWidth: SKILL_PICKER_CARD_TEXT.wrapWidth,
+        tint: 0xffffff,
+      },
+    )
   }
+  return insight ? Object.freeze(pulsing) : null
+}
 
-  addShadowedBitmapText(
+function centeredSkillSprite(
+  textures: GameTextureMap,
+  record: number,
+  centerX: number,
+  scale = 1,
+): Sprite {
+  const sprite = spriteFor(textures, 'Skills', record)
+  sprite.anchor.set(0.5)
+  sprite.position.set(centerX, SKILL_PICKER_CARD_FRAME.y)
+  sprite.scale.set(scale)
+  return sprite
+}
+
+function addInsightCardTextPass(
+  layer: Container,
+  textures: GameTextureMap,
+  presentation: ReturnType<typeof skillPickerCardPresentation>,
+  centerX: number,
+  treatment: Readonly<{ blendMode: 'add'; tint: number }>,
+): void {
+  addBitmapText(
     layer,
     textures,
     presentation.nameLines.join('\n'),
     'medium',
     centerX,
     presentation.nameBaselineY,
-    presentation.rootTint,
+    { align: 'center', blendMode: treatment.blendMode, lineHeight: 17, tint: treatment.tint },
   )
-  addShadowedBitmapText(
+  addBitmapText(
     layer,
     textures,
     presentation.familyLabel,
     'skill',
     centerX,
     presentation.familyBaselineY,
-    presentation.rootTint,
+    { align: 'center', blendMode: treatment.blendMode, tint: treatment.tint },
   )
   addBitmapText(
     layer,
@@ -384,12 +459,12 @@ function addSkillCard(
     presentation.descriptionBaselineY,
     {
       align: 'center',
+      blendMode: treatment.blendMode,
       lineHeight: 17,
       maxWidth: SKILL_PICKER_CARD_TEXT.wrapWidth,
-      tint: 0xffffff,
+      tint: treatment.tint,
     },
   )
-  return insightTreatment
 }
 
 function addWeldGlow(
@@ -524,7 +599,8 @@ function rebuildPanel(
       centerX - SKILL_PICKER_PANEL.cardWidth / 2,
       SKILL_PICKER_PANEL.cardTop,
     )
-    insightCard.tint = SKILL_PICKER_INSIGHT_TINT
+    insightCard.blendMode = SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.panel.blendMode
+    insightCard.tint = SKILL_PICKER_INSIGHT_COMPOSITE.pulsing.panel.tint
     insightCard.visible = false
     layer.addChild(card, insightCard)
     cards.push(card)
@@ -558,12 +634,13 @@ export function addBitmapText(
   y: number,
   options: {
     align?: 'center' | 'left'
+    blendMode?: 'add' | 'normal'
     lineHeight?: number
     maxWidth?: number
     tint?: number
   } = {},
 ): void {
-  layer.addChild(nativeUiPixiFor(textures).text({
+  const rendered = nativeUiPixiFor(textures).text({
     align: options.align,
     font: nativeUiFontName(fontName),
     lineHeight: options.lineHeight,
@@ -572,7 +649,11 @@ export function addBitmapText(
     tint: options.tint,
     x,
     y,
-  }))
+  })
+  for (const glyph of rendered.children) {
+    glyph.blendMode = options.blendMode ?? 'normal'
+  }
+  layer.addChild(rendered)
 }
 
 function addShadowedBitmapText(

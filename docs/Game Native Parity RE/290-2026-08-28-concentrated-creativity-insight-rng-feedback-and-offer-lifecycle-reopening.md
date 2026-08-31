@@ -277,3 +277,29 @@ font and shared notification renderer can represent every stock surface.
   `13a98c979a5e3fb75a9857fe20ebb22a162cfe386ebd08e9dacf80d962096eae`
   and `5b91fd2f2318b860c69182da4b689b470d272f05f7fc58952aa4a400f9d23fd8`.
   The complete gate is repeated after this receipt and harness-only change.
+
+## 2026-08-31 — Presentation and detail correction
+
+- A new player capture reopens only the marked-card presentation/detail members
+  of this system. RNG source/order, candidate selection, replication, double
+  acquisition, queued rebuild, and teardown remain verified.
+- The earlier “pulsing gold second draw” description was too coarse. Fresh
+  canonical instruction recovery proves that `LevelupScreen_Render 0x0067DF80`
+  has distinct Insight consumers: a normal-blend pulsing Skills.0 panel and
+  label (`0x0067ED01..0x0067EDD0`); constant plus pulsing additive Skills.164
+  glow (`0x0067F91F..0x0067FB13`); white base plus pulsing additive frame
+  (`0x0067FC62..0x0067FD17`); untouched actual glyph
+  (`0x0067FD43..0x0067FE5F`); and gray-constant plus gold-pulsing additive
+  name/family/description text instead of the ordinary text branch
+  (`0x00680084..0x006805E4`).
+- The web violated that membership by normal-alpha tinting the aura, glow,
+  frame, and actual icon while leaving ordinary root/white text. The native
+  detail string at `0x007A0B40` was present only in the card's aria-label; the
+  visible icon popup ignored `option.insight`.
+- Ledger 069's 2026-08-31 entry owns the complete evidence table, every
+  ordinary/Welding/card-count/scene disposition, implementation consequence,
+  and validation contract. This cross-entry supersedes the earlier
+  `card presentation`, `marked-card detail feedback`, and shared-renderer
+  dispositions until that contract has a Mac browser and gate receipt.
+- No gameplay/protocol member is reopened, no member is platform-blocked, and
+  no new native skill named Insight is introduced.

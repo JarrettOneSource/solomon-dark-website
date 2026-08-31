@@ -49,8 +49,27 @@ export const SKILL_PICKER_PANEL = {
   widthPadding: 60,
 } as const
 export const SKILL_PICKER_INSIGHT_TINT = 0xd9ba70
+export const SKILL_PICKER_INSIGHT_DETAIL_TEXT = 'Insight Bonus: Skill +2'
 export const SKILL_PICKER_INSIGHT_LABEL_Y = SKILL_PICKER_PANEL.top + 33
 export const SKILL_PICKER_INSIGHT_PULSE_DEGREES_PER_TICK = 2
+export const SKILL_PICKER_INSIGHT_COMPOSITE = Object.freeze({
+  constant: Object.freeze({
+    glow: Object.freeze({ blendMode: 'add' as const, tint: SKILL_PICKER_INSIGHT_TINT }),
+    text: Object.freeze({ blendMode: 'add' as const, tint: 0x808080 }),
+  }),
+  preserved: Object.freeze({
+    aura: Object.freeze({ blendMode: 'normal' as const, tint: 0xffffff }),
+    icon: Object.freeze({ blendMode: 'normal' as const, tint: 0xffffff }),
+    iconShadow: Object.freeze({ blendMode: 'normal' as const, tint: 0x000000 }),
+  }),
+  pulsing: Object.freeze({
+    frame: Object.freeze({ blendMode: 'add' as const, tint: SKILL_PICKER_INSIGHT_TINT }),
+    glow: Object.freeze({ blendMode: 'add' as const, tint: SKILL_PICKER_INSIGHT_TINT }),
+    label: Object.freeze({ blendMode: 'normal' as const, tint: SKILL_PICKER_INSIGHT_TINT }),
+    panel: Object.freeze({ blendMode: 'normal' as const, tint: SKILL_PICKER_INSIGHT_TINT }),
+    text: Object.freeze({ blendMode: 'add' as const, tint: SKILL_PICKER_INSIGHT_TINT }),
+  }),
+})
 export const SKILL_PICKER_CARD_TEXT = {
   descriptionCenterY: 532.5,
   nameBaselineY: 452.5,
@@ -196,11 +215,17 @@ export function skillPickerDetailPresentation(
     permanentRank: option.targetRank,
     weldBuildId: weldBuild?.id ?? null,
   })
-  const lines = nativeSkillBookTooltipLines(row).map((line) => (
+  const lines: NativeSkillBookTooltipLine[] = nativeSkillBookTooltipLines(row).map((line) => (
     weldBuild && line.kind === 'description'
       ? Object.freeze({ ...line, text: weldBuild.pairDescription })
       : line
   ))
+  if (option.insight === true) {
+    lines.push(Object.freeze({
+      kind: 'bonus',
+      text: SKILL_PICKER_INSIGHT_DETAIL_TEXT,
+    }))
+  }
   return Object.freeze({ lines: Object.freeze(lines), row })
 }
 

@@ -742,3 +742,145 @@ No member is blocked by the browser platform.
   policy on current-main base `e7addc2b`.
 - There are no platform-blocked members or remaining unknowns in this input
   split. Publication and deployment were not requested and were not performed.
+
+## 2026-08-31 — Reopened: complete Creativity Insight card compositing and detail
+
+### Reported smell and parity question
+
+- Reported web behavior: the marked Creativity Insight card has different
+  colors from retail and its icon-owned detail popup omits the Insight boost.
+  The supplied web capture is
+  `C:\Users\User\Downloads\SDB - insight Bugged Visuals.mp4`, 1,386,977 bytes,
+  10.023144 seconds, `1844 x 1080`, SHA-256
+  `57fe693d01cbdc7aa1fd7bb9c427555472c2aec597cf40cb2c706ef4b9562ed0`.
+  Frames at 0.6, 4.0, and 8.0 seconds show Insight Mana Up 3 with a uniformly
+  brown/gold icon treatment; the 0.6-second icon popup ends at
+  `MAX MANA: +300` with no Insight line.
+- Stock behavior to recover: the complete marked-card painter, including which
+  ordinary layers remain untouched, which layers are redrawn, each redraw's
+  blend mode/color/alpha, and the exact detail string. The correction must
+  cover three- and four-card offers, every ordinary row, every Welding build,
+  and every scene using the shared picker.
+- This is a secondary report against both the 2026-08-28 first-presented-card
+  and icon-detail entries above. Those passes recorded only “gold pass” and
+  asserted that Insight metadata was complete. They did not enumerate every
+  `screen + 0xFC` render branch or exercise the visible Insight detail line.
+  That process failure allowed a normal-alpha blanket tint and an aria-only
+  bonus string to be accepted as parity.
+- Falsifiers: retail blanket-tints the white aura or actual skill glyph; retail
+  retains the ordinary root/white text under the Insight pass; the gold redraws
+  use ordinary alpha blending; the detail builder has no Insight-specific line;
+  or any ordinary/Welding/scene consumer owns a separate renderer.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Reported web capture | file and SHA-256 above; frames 0.6/4.0/8.0 seconds | The current shared renderer gold-tints the Mana Up glyph and panel while leaving ordinary Mind/white text, and the detail popup omits the bonus. | high-direct |
+| Retail identity | Beta 0.72.5 `SolomonDarkAbandonware/SolomonDark.exe`, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Canonical image; no runtime or ASLR address is used. | high |
+| Existing stock evidence | settled stock card fixture SHA-256 `96fa5827e56de2a274b44eb9e6ccc10ad6da27fe973c946d76febbb9f7612556`; historical native Insight frame SHA-256 `a299c649f5e4a9c66302dc9cd6704ab0626d421d955075bb9a427469ada20023` | Insight is an additional marked-card treatment over the same authored card membership. | high-live historical |
+| Read-only static tooling | canonical Ghidra 12.0.3 replica slot 03; Mod Loader checkout `08bfba9ef367f7b863848030d0a289dc31e33192`, wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`, `decompile_targets.py` SHA-256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`, `dump_insns_around.py` SHA-256 `79249e8ea5eb04115bb284f1bef9b90d81cd74f2c5301a747d08908a36032b40` | Exact provenance for the instruction evidence below. The dirty shared Mod Loader checkout was not changed. | high |
+| Panel and label instructions | `LevelupScreen_Render 0x0067DF80`; `0x0067ED01..0x0067EDD0`; nine-slice draw `0x004153B0`; string `Insight` at `0x007A0D94` | A marked card redraws only its Skills.0 panel in pulsing gold under ordinary alpha, then draws the case-sensitive body-font label at logical Y `305.5`. | high |
+| Glow instructions/data | `0x0067F91F..0x0067FB13`; Skills vector `+0x0F28`, first/only live member 164 | The ordinary root/split glow is replaced by a constant gold additive draw and a second pulsing gold additive draw of Skills.164. | high |
+| Frame and icon instructions/data | `0x0067FC62..0x0067FD17`; Skills.5 ordinary frame and the recovered Skills.14 Welding branch; glyph array `+0x0ED8` at `0x0067FD43..0x0067FE5F` | The white frame remains and receives one pulsing gold additive redraw. The black-offset and white actual skill glyph draws have no Insight branch and remain untouched. | high |
+| Text instructions | Insight branch `0x00680084..0x006805E4`; ordinary branch begins `0x006805EE` | A marked card does not use the ordinary root/white text path. Name, family, and authored quick description receive a constant additive RGB `(0.5,0.5,0.5)` pass followed by a pulsing additive gold pass. | high |
+| Color/blend instructions | color setter `0x0041FE50`, blend applier `0x004208A0`; floats `0x00784D60=.85`, `0x00788BDC=.73`, `0x00788BE0=.44`, `0x007DE870=.5` | Gold is packed `#D9BA70`; the constant text pass is `#808080`; renderer blend state 1 is additive. Pulse alpha remains `0.5 + 0.5*sin(2*screenAgeTicks degrees)`. | high |
+| Detail instructions | pointer/detail builder `0x00670E20`, `0x00671174..0x0067123C`; string `Insight Bonus: Skill +2` at `0x007A0B40` | The marked option appends the exact native line before presenting its detail object. The binary contains no `Boost:` string for this branch. | high |
+| Current web causal trace | `skill-picker-renderer.ts`, `skill-picker-render-contract.ts`, `SkillPicker.tsx` at base `41e1525491649235c00e82207f67803084138943` | The web adds normal-alpha gold copies of Skills.13, Skills.164, frame, and the actual icon; it then paints ordinary text above them. `skillPickerDetailPresentation` ignores `option.insight`; only the semantic card aria-label contains the bonus. | high |
+
+### System boundary and membership inventory
+
+Native system: the visible `LevelupScreen` Creativity Insight mark, from the
+authoritative option's `insight` identity through the complete panel/card/text
+paint sequence and the Website's existing icon-owned detail projection. RNG,
+double acquisition, authority, persistence, and offer lifecycle remain owned by
+ledger 290 and are re-audited here only at their presentation boundary.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Skills.0 card panel | `0x0067ED01..0x0067ED75` | `exact-ported` by this reopening | base panel plus pulsing normal-blend gold panel; no blanket container blend |
+| `Insight` label | `0x0067ED75..0x0067EDD0` | `verified-already-at-parity` after separating it from the bad blanket tint | body font, case, X center, logical Y `305.5`, pulse |
+| Skills.13 white aura | no `screen + 0xFC` redraw | `exact-ported` by this reopening | one ordinary white draw only |
+| Skills.164 ordinary roots / ten split Welding roots | ordinary card path and `0x00671810` | `verified-already-at-parity` for unmarked cards | all eight roots and ten split builds retain their existing treatment |
+| Skills.164 marked glow | `0x0067F91F..0x0067FB13` | `exact-ported` by this reopening | replace ordinary root/split draw with constant plus pulsing gold additive draws |
+| Skills.5 ordinary frame | `0x0067FC07..0x0067FD17` | `exact-ported` by this reopening | white base plus pulsing gold additive redraw |
+| Skills.14 Welding frame | shared Welding override and same Insight branch | `exact-ported` by this reopening | white base plus pulsing gold additive redraw for all builds `1000..1009` |
+| actual ordinary glyphs `27..122` | array `+0x0ED8`; `0x0067FD43..0x0067FE5F` | `exact-ported` by this reopening | black `(+4,+4)` shadow and white main draw; no gold glyph copy |
+| Welding glyphs `108..117` | same glyph array/override | `exact-ported` by this reopening | same untouched shadow/main rule for all ten builds |
+| marked name text | `0x00680084..0x006805E4` | `exact-ported` by this reopening | no ordinary root text; constant gray plus pulsing gold additive text |
+| marked family text | same branch | `exact-ported` by this reopening | same two-pass treatment and existing exact family copy/anchor |
+| marked quick description | same branch | `exact-ported` by this reopening | same two-pass treatment; authored case/wrap/anchor retained |
+| exact Insight detail line | `0x00670E20`, string `0x007A0B40` | `exact-ported` by this reopening | visible popup contains `Insight Bonus: Skill +2`, not only aria copy |
+| all 71 ordinary public rows `8..79` except 52 | complete authored inventory above | `exact-ported` through shared plan | each row preserves icon/description while accepting the same Insight treatment |
+| all ten Welding builds `1000..1009` | complete build inventory above | `exact-ported` through shared plan | frame/icon/name/pair copy and marked treatment are table-covered |
+| three-card and four-card geometry | shared LevelupScreen renderer | `verified-already-at-parity` | treatment follows marked index at every center |
+| Hub, Boneyard, detached/reconnect picker | shared `SkillPicker` renderer | `exact-ported` through one owner | identical presentation and popup content in every consumer |
+| hover, focus, touch detail | Website icon-detail extension above | `exact-ported` by this reopening | every route consumes the same corrected detail plan |
+| Reroll, Save, queued replacement, automatic choice, close/teardown | existing authoritative offer lifecycle | `verified-already-at-parity` | marker replacement/clear semantics and gameplay state are unchanged |
+| non-Insight offers | `screen + 0xFC != optionId` | `verified-already-at-parity` | no additive treatment or bonus line leaks to siblings |
+| runtime rows 80/81 and reserve 82 | offer exclusion | `out-of-system` (never public picker cards) | existing complete-domain assertion |
+
+There are no browser-platform-blocked members. Pixi/WebGL supports the native
+normal/additive blend split and the extracted bitmap fonts/assets directly.
+
+### Native ownership thread and recovered behavioral contract
+
+- `LevelupScreen` owns one marked skill ID at `+0xFC`; the host-authored
+  protocol option's `insight: true` is the Website representation. The shared
+  renderer consumes it; no scene, hover surface, or React layer may derive a
+  second marker.
+- The panel is the only pulsing normal-blend image. Skills.164 and the frame use
+  additive gold; the aura and actual glyph are not Insight consumers. This
+  painter membership, rather than a different gold constant, explains the
+  reported brown/washed icon.
+- Marked card text enters its own branch instead of painting ordinary text and
+  adding gold behind it. The constant `#808080` additive pass and pulsing
+  `#D9BA70` additive pass cover name, family, and quick description.
+- The native detail builder appends `Insight Bonus: Skill +2` to the marked
+  option. The Website icon popup is a documented extension, but once it
+  projects the native detail object it must include that native line. Aria text
+  is not visible parity.
+- Offer replacement, reroll, save/defer, automatic selection, selection,
+  double apply, close, and teardown continue to own the marker lifetime already
+  documented in ledger 290. Presentation objects are rebuilt from the current
+  immutable option and destroyed with the renderer.
+
+### Confidence and open questions
+
+- Confirmed: every material draw branch, asset record, RGB/alpha constant,
+  blend transition, text member, detail string/xref, current web violation, and
+  shared consumer.
+- The user-referenced native visual was not a separate file in the Downloads
+  folder at investigation time; visual appearance is therefore reconciled from
+  the existing historical native-frame receipt plus fresh canonical
+  instructions. No implementation value depends on an unavailable pixel guess.
+- No material unknown remains and no browser approximation is required.
+
+### Web implementation consequence
+
+- Replace the blanket `insightTreatment` with explicit constant and pulsing
+  members matching the inventory. Use additive blending only where native does.
+- Preserve white aura and actual icon; suppress ordinary root/white text for a
+  marked card and render the exact gray/gold two-pass text treatment instead.
+- Append the exact native bonus line in `skillPickerDetailPresentation` so the
+  one shared visual/semantic detail plan serves hover, focus, touch, and smoke
+  assertions. Remove the duplicate hand-built aria-only suffix.
+- Do not change RNG, protocol, rank application, scene ownership, selection,
+  or card geometry.
+
+### Validation contract
+
+- Focused contract tests must pin the complete preserved/constant/pulsing
+  member inventory, normal versus additive blend, exact tints, pulse endpoints,
+  detail line, non-leakage to ordinary cards, all 71 ordinary rows, all ten
+  Welding builds, and both card counts.
+- The existing Mac creativity-Insight smoke must open the actual marked icon
+  detail in Hub and Boneyard, assert the visible exact bonus line, capture at
+  least two pulse phases, select the marked card, and retain the existing
+  `+2`, gameplay-RNG, secondary-RNG, queue, and error-array assertions.
+- Compare the marked card against the instruction-derived stock membership at
+  `1600 x 900`: white aura/icon, additive gold glow/frame/text, pulsing normal
+  panel/label, and no gold treatment on an unmarked sibling.
+- Run the complete canonical Mac gate on the byte-identical candidate before
+  publication. Implementation, Mac receipt, push receipt, and cleanup remain
+  pending below this entry.

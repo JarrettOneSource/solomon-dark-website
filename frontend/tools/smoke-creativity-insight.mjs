@@ -136,6 +136,12 @@ try {
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
     timeout: 90_000,
   })
+  await page.locator(
+    '.boneyard-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 30_000 })
+  await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]').waitFor({
+    timeout: 30_000,
+  })
   const boneyard = await exerciseInsightOffer('boneyard')
 
   assert.deepEqual(pageErrors, [])
@@ -202,8 +208,27 @@ try {
     assert.equal(await action.count(), 1)
     const label = await action.getAttribute('aria-label') ?? ''
     assert.match(label, /^Insight\..*Insight Bonus: Skill \+2\.$/)
+    const infoAction = picker.locator(
+      `.skill-picker-info-action[data-skill-id="${insightOption.skillId}"]`,
+    )
+    await infoAction.hover()
+    await page.waitForFunction(skillId => (
+      document.querySelector('.skill-picker-stage')?.getAttribute('data-detail-skill-id')
+        === `${skillId}`
+    ), insightOption.skillId)
+    const detailText = await picker.locator('.skill-picker-detail-semantic').innerText()
+    assert.match(detailText, /Insight Bonus: Skill \+2/)
+    const detailScreenshotPath = `${screenshotRoot}-${scene}-detail.png`
+    await page.screenshot({ path: detailScreenshotPath })
+    await page.mouse.move(20, 850)
+    await page.waitForFunction(() => (
+      document.querySelector('.skill-picker-stage')?.getAttribute('data-detail-skill-id') === ''
+    ))
     const screenshotPath = `${screenshotRoot}-${scene}.png`
     await page.screenshot({ path: screenshotPath })
+    await page.waitForTimeout(450)
+    const pulseScreenshotPath = `${screenshotRoot}-${scene}-pulse.png`
+    await page.screenshot({ path: pulseScreenshotPath })
 
     const rankBefore = getPlayerSkillBook(host.state(), playerId)
       .permanentRanks[insightOption.skillId]
@@ -218,9 +243,12 @@ try {
     assert.deepEqual(host.state().gameRng, advanceNativeRngWords(choiceRng, 2))
     assert.strictEqual(host.state().secondaryAbilities.rng, secondaryRng)
     return {
+      detailScreenshotPath,
+      detailText,
       label,
       level: progression.level,
       optionCount: offer.options.length,
+      pulseScreenshotPath,
       rankAfter: getPlayerSkillBook(host.state(), playerId).permanentRanks[insightOption.skillId],
       rankBefore,
       screenshotPath,
