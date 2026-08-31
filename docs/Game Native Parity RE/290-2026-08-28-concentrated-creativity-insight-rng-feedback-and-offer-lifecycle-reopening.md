@@ -303,3 +303,8 @@ font and shared notification renderer can represent every stock surface.
   dispositions until that contract has a Mac browser and gate receipt.
 - No gameplay/protocol member is reopened, no member is platform-blocked, and
   no new native skill named Insight is introduced.
+- The complete corrected implementation, per-member Mac contracts, Hub and
+  Boneyard browser receipt, canonical gate, and evidence hashes are recorded in
+  ledger 069's 2026-08-31 implementation receipt. The three reopened
+  presentation/detail rows are now `exact-ported`; every gameplay/protocol row
+  retains its prior disposition.

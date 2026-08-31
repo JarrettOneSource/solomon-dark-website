@@ -884,3 +884,58 @@ normal/additive blend split and the extracted bitmap fonts/assets directly.
 - Run the complete canonical Mac gate on the byte-identical candidate before
   publication. Implementation, Mac receipt, push receipt, and cleanup remain
   pending below this entry.
+
+### Implementation validation receipt
+
+- `skill-picker-renderer.ts` now consumes one explicit composite contract.
+  Marked cards keep the ordinary white aura, white frame base, black-offset
+  glyph shadow, and white glyph; replace the ordinary root/split glow with
+  constant and pulsing gold additive Skills.164 draws; add the pulsing gold
+  frame; and replace ordinary card copy with constant `#808080` plus pulsing
+  `#D9BA70` additive name/family/description passes. The panel and `Insight`
+  label alone retain pulsing normal blending.
+- `skillPickerDetailPresentation` appends the exact
+  `Insight Bonus: Skill +2` line for marked ordinary and Welding options. The
+  visual HoverBox, live semantic status, and aria label now consume that shared
+  string; unmarked options do not receive it.
+- Regression-first receipt: on the Mac candidate with only the new contract
+  assertions, `npm --prefix frontend run test:native-ui` failed at TypeScript
+  compilation because the composite and detail contract did not exist. After
+  implementation it passed 62 tests on the original base, then 67/67 after the
+  current-main rebase added the reusable native-UI Kit coverage. The sweep
+  includes every ordinary row, every Welding build, detail non-leakage, exact
+  tints/blends/members, and pulse endpoints.
+- The first Mac browser pass exposed a harness-only readiness race: after
+  entering Boneyard the renderer was ready while the page still displayed
+  `RESUMING...`, so the Lua XP grant correctly rejected paused gameplay. The
+  smoke now waits for both
+  `data-gameplay-input-blocked="false"` and
+  `data-gameplay-resume-grace="none"`. No gameplay module changed.
+- Website commit `da8037b1d711f76dfa99a65ea1521e402ec172d7` is the
+  range-diff-identical rebase of the focused implementation onto current-main
+  `90cfe09e6c8a7e30cc56a51096eeab085b33e896`. The seven changed files were
+  SHA-256-identical in the local and detached Mac worktrees before validation.
+- Chrome `151.0.7922.174` on Apple M2/macOS `26.6.2`, WebGL2, exercised one
+  authoritative four-card Insight offer in Hub and Boneyard. Both visible
+  HoverBoxes included the exact bonus line; Magic Circle advanced
+  `0 -> 2 -> 4`; the active gameplay RNG consumed the existing exact words;
+  secondary RNG did not move; page, console, and failed-response arrays were
+  empty. Hub card/detail/pulse SHA-256 values were respectively
+  `4e19ec970488a8f98c19eb4fa5f2749777534b4f73118f3c12ccac0a92c6b83c`,
+  `9e86e726e6bffea3a1f1021e9a8b3839f7f22da6663d95bfcfd92de5cf4a2f12`,
+  and `2f7c07c5dc105c2cb12a42d15c5829da67fb45047322ad6e6dc6b4ad313d6f9f`.
+  Boneyard values were
+  `12ab2eeaca9978396a67ba86f5420d83f129112fb461395e01c4d9866aed436a`,
+  `45030ed94f3a4d9b9860472270b08492c00b75a85c55536625e3033a00d243a4`,
+  and `1999e7ee303b86206f633599133cba739231db44d85e9a643be938d7e25c416a`.
+- The byte-identical rebased candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build/contracts,
+  formatting, lint and architecture boundaries, generated-content checks, all
+  frontend suites (including the 1,811-test Boneyard group), desktop tests,
+  production frontend/game-host builds, bundle budget, and media policy. The
+  19 reported lint warnings were existing warnings and the lint result had zero
+  errors.
+- This receipt is the only tracked edit after that complete gate. The complete
+  gate and browser journey are repeated on the receipt-bearing final tree
+  before publication. All screenshots and worktrees remain task-owned temporary
+  evidence and are removed after the verified push.
