@@ -63,7 +63,10 @@ import {
   type GameActivityPlayer,
   type GameActivitySnapshot,
 } from './game-activity-events.ts'
-import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
+import {
+  boneyardGeometrySha256,
+  SOLOMON_DIG_FRAME_PROGRAM,
+} from './project-boneyard.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 import {
   createGameProfileSaveDocument,
@@ -3659,6 +3662,57 @@ test('private College retires a restored Tutorial when its final actor disconnec
   assert.equal(runtimeEvents.includes('run.retired_empty'), false)
 })
 
+test('shared Hub recovers legacy saved Road links before its first Boneyard payload', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 33),
+  )
+  assert.ok(loadedBoneyard)
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    log: entry => logs.push(entry),
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  context.after(() => socket.close())
+  const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
+  const loadedMessage = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    onlinePreferences: ONLINE_PREFERENCES,
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'ticket-legacy-road-resume',
+    character: FIRST_CHARACTER,
+    save: legacyRoadSaveDocument(savedRunDocument(loadedBoneyard)),
+    saveIntent: 'resume',
+  }))
+
+  const [welcome, loaded] = await Promise.all([welcomeMessage, loadedMessage])
+  assert.equal(welcome.type, 'server-welcome')
+  assert.equal(loaded.type, 'server-boneyard-loaded')
+  assert.deepEqual(
+    loaded.boneyard.scene.roads.map(road => road.linkMask),
+    loadedBoneyard.scene.roads.map(road => road.linkMask),
+  )
+
+  const leave = leaveSaveMessages(socket, 1)
+  socket.send(encodeGameMessage({ type: 'client-save-before-leave', requestId: 1 }))
+  const { checkpoint } = await leave
+  const restored = restoreGameSaveDocument(checkpoint.save)
+  assert.deepEqual(
+    restored.loadedBoneyard?.scene.roads.map(road => road.linkMask),
+    loadedBoneyard.scene.roads.map(road => road.linkMask),
+  )
+  assert.equal(logs.some(entry => entry.level === 'error'), false)
+})
+
 test('solo active-run restart waits for renderer readiness before its countdown', async (context) => {
   const loadedBoneyard = materializeBoneyard(
     createBoneyardCatalog(),
@@ -5481,6 +5535,23 @@ function savedRunDocument(loadedBoneyard: LoadedBoneyard): string {
       loadedBoneyard,
     ),
   })
+}
+
+function legacyRoadSaveDocument(document: string): string {
+  const parsed = JSON.parse(document) as {
+    continuation: {
+      loadedBoneyard: {
+        geometrySha256: string
+        scene: { roads: Record<string, unknown>[] }
+      }
+    }
+  }
+  const scene = parsed.continuation.loadedBoneyard.scene
+  for (const road of scene.roads) delete road.linkMask
+  parsed.continuation.loadedBoneyard.geometrySha256 = boneyardGeometrySha256(
+    scene as unknown as BoneyardScene,
+  )
+  return JSON.stringify(parsed)
 }
 
 interface LeaderboardScenario {

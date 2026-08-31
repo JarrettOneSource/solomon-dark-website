@@ -80,9 +80,10 @@ finite Cast 1 clock.
 
 - The production log search also found one protocol-94 diagnostic for
   `boneyard.scene.roads[0].linkMask must be finite` immediately before protocol
-  95 deployed. No protocol-95 recurrence exists; keep it classified as closed
-  by the intervening Boneyard/protocol release unless a current archive
-  falsifies that disposition.
+  95 deployed. Protocol 113 diagnostic row 99 reproduced it on 2026-08-31 and
+  falsified the release-closed classification. The Road persistence and
+  restored-run lifecycle are reopened in entry 265; this Cast-clock entry does
+  not own that correction.
 - The deployment-unit memorial crashes ended after the release-owned systemd
   unit was installed and reconciled. Current services are active with zero
   restarts and byte-identical live/release unit hashes.

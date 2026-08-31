@@ -281,3 +281,190 @@ No member is blocked by the browser platform.
 - No commit, push, deployment, or production cutover was requested or
   performed. Both isolated worktrees and their task-owned receipts remain for
   review.
+
+## 2026-08-31 — Reopened Road-link persistence and restored-run lifecycle
+
+### Reported smell and parity question
+
+- Reported production behavior: resuming an active run on iPhone Safari
+  reached `connection.ready`, then the browser rejected the first restored
+  Boneyard payload with
+  `boneyard.scene.roads[0].linkMask must be finite` and closed the transport
+  with code `4008`.
+- This is a secondary report against the Road system closed above. The earlier
+  pass made `linkMask` mandatory on fresh projected scenes and the strict wire,
+  but did not enumerate persisted active-run scenes, schema migration,
+  catalog reconciliation, or asynchronous restore teardown. Classifying the
+  first protocol-94 occurrence as release-closed without tracing those owners
+  was the skipped rule.
+- Required behavior: every supported active-run save must recover the exact
+  source-owned Road masks before the Boneyard enters shared/private authority
+  or crosses the wire. A genuinely invalid or unavailable content identity
+  must remain fail-closed; the decoder must not guess a value or relax the
+  native Road contract.
+- Falsifiers: a fresh current projector emitting a missing mask; frontend and
+  host running different protocol revisions; a current checkpoint converting
+  an integer mask to a non-finite JSON value; or persisted geometry alone
+  recovering every native pointer branch exactly.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Live browser diagnostic | NFO SQLite `DiagnosticLogs` row 99 / public id `dd633f19-3fc2-4858-a571-601f8ba1f2df`, captured `2026-08-31T15:00:55.004Z` | Protocol 113 issued a resume admission, authenticated player `player-83hvvICTLsN2oRSf`, reached ready, then rejected `roads[0].linkMask`; the browser sent the bounded report after the clean code-4008 close. | high-live |
+| Live game journal | `solomon-dark-game.service`, `2026-08-31T15:00:53.457Z..15:00:56.411Z`, deployed SHA `3304f22859786b1c15bb7d212632c8d0ad34fb03` | The same reason closed both proxy sides, retired run `72ae68dedb5c276e49fcff3af5dc23fd`, then a pending restore tried to activate a closed prepared-mod host. | high-live |
+| Deployment identity | rollback metadata for the later `2bcbdcf69f6c61e1c8d61bbd531def848302c304` cutover | The incident release and its successor both use protocol 113; the successor changes UI only. Revision skew is falsified. | high-live |
+| Introduction history | Website `ec98c44ec5001802946289e833a3df5a0e8010fb` | `projectRoad` added the exact two-bit mask and protocol 93 made it mandatory, but the commit did not change the save schema, save writer, or restore migration. | high |
+| Current persistence trace | `game-save-document.ts`, `game-save-contract.ts`, `game-host.ts`, schema 24 at `3304f228`/`2bcbdcf` | Checkpoints embed `LoadedBoneyard` unchanged; restore validates its identity and scene only shallowly; `createGameSnapshot` does not consume the scene; the host sends it after welcome, where the browser first performs strict Road validation. | high |
+| Mac catalog sweep | exact `2bcbdcf` detached arm64 worktree, Node 22.17.0; 12 generated templates, Tutorial, and five tracked `.boneyard` fixtures | Endpoint-geometry inference matches all 599 built-in Road rows, but disagrees on 8 of 61 `story0.boneyard` rows. Persisted geometry is therefore not a system-wide substitute for the stripped native UIDs. | high |
+| Existing native evidence | Road builder `0x0064C1F0`, renderer `0x00640750`, and the complete system-B extraction above | Previous/next UID presence, not geometric coincidence, owns endpoint alpha. No new retail extraction is needed; the missing member is web persistence ownership. | high |
+
+### Reopened system boundary and membership inventory
+
+Native system: Road source identity from record-3004 previous/next UIDs through
+projection, active-run checkpoint, catalog-backed resume, shared/private
+authority, strict protocol, renderer, subsequent checkpoints, interruption,
+and teardown.
+
+| Member / branch | Owner | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Twelve fresh default templates / 546 Road rows | immutable native catalog | `verified-already-at-parity` | every row carries its extracted mask and strict round-trip remains unchanged |
+| Fresh stock Tutorial / 53 Road rows | immutable Tutorial catalog | `verified-already-at-parity` | all rows carry their extracted masks |
+| Fresh same-content mod Boneyard | materialized session catalog | `verified-already-at-parity` | `projectRoad` derives masks from the source UIDs |
+| Supported legacy default active-run saves | source identity and exact Road rows matched to immutable catalog | `exact-ported` | resume restores every canonical mask before authority or wire |
+| Supported legacy Tutorial active-run saves | stock Tutorial identity | `exact-ported` | resume rebinds all 53 canonical rows |
+| Supported legacy same-content mod saves | exact active mod entry | `exact-ported` | choice id and source hash select the catalog member; every saved Road row must match it exactly |
+| Current saves that already contain masks | existing save and strict-wire owners | `verified-already-at-parity` | they remain unchanged and preserve same-tab duplicate-admission ordering |
+| Save schemas 1 through 24 and schema-24 documents re-saved after the Road release | active-run continuation owner | `exact-ported` | data-shape recovery is independent of the historical schema number |
+| Removed or changed mod content with an explicitly accepted mismatch | existing mod-mismatch branch | `verified-already-at-parity` | the run returns to Hub instead of inventing Road data |
+| Unknown default identity or same-manifest mod with mismatched content hashes | save/content trust boundary | `exact-ported` | reject before shared/private state insertion or Boneyard wire output |
+| Shared-Hub resume | authenticated per-player content catalog | `exact-ported` | production-shaped restore sends one decodable canonical Boneyard |
+| Private-College resume | host catalog | `exact-ported` | same canonical reconciliation before private ownership |
+| Active-party rejoin | resident run catalog and rejoin token owner | `verified-already-at-parity` | the resident canonical run remains authoritative; saved identity must still match |
+| Developer observer and later party members | resident run projection | `verified-already-at-parity` | all consume the already reconciled scene |
+| Strict protocol rejection of missing/null/out-of-range masks from an untrusted live message | browser/server decoder | `verified-already-at-parity` | malformed wire fixtures remain rejected |
+| Checkpoint after a recovered resume | host save writer | `exact-ported` | the next document persists the recovered scene with canonical masks and cannot perpetuate omission |
+| Disconnect/run retirement while mod/navigation restore is pending | party runtime lifecycle | `exact-ported` | stale completion observes that its scope/run is no longer current and performs no activation or error log |
+| Road collision, simulation, UVs, mesh, styles, draw order, and renderer teardown | existing Road/runtime owners | `verified-already-at-parity` | no gameplay or fresh-scene behavior changes |
+
+There is no `blocked-by-platform` member. Every exact source scene is already
+available to the authoritative host for an admitted resume.
+
+### Causal model and recovered contract
+
+1. `ec98c44e` stripped process-local UIDs into the correct stable two-bit mask
+   and deliberately kept the protocol strict, but an active save continued to
+   embed whichever projected scene it first received. Later save-schema bumps
+   migrated other state and carried that old scene forward unchanged.
+2. Restore accepted the envelope because its `LoadedBoneyard` parser checked
+   only outer identity strings and that `scene` was an object. Snapshot
+   validation could not catch the omission because Road geometry travels in a
+   separate `server-boneyard-loaded` message.
+3. The browser decoded welcome successfully, rejected the following Boneyard,
+   and closed. Run retirement then closed the party mod runtime while its
+   navigation/mod initialization promise was still pending; the stale
+   completion attempted activation and produced the later
+   `prepared mod host is closed` error.
+4. Geometry inference is exact for the bundled templates but refuted as a
+   shared rule by tracked authored content. Recovery must select the already
+   projected scene from the exact admitted catalog using choice/source identity
+   plus an exact comparison of every saved Road row without its missing mask.
+   It must not infer UIDs, default masks to zero, or mutate the strict decoder.
+5. The reconciled `LoadedBoneyard` preserves the saved scene, run id, and seed;
+   fills only the source-owned masks, canonicalizes the choice, and recomputes
+   the derived geometry hash. The same object then owns every player/observer
+   send and subsequent checkpoint.
+
+### Confidence and open questions
+
+- Confirmed: exact production symptom and order; implicated release; absence
+  of revision skew; producer-to-save-to-wire path; missing migration; complete
+  content classes and runtime consumers; insufficiency of geometry inference;
+  and the closed-runtime error as teardown-after-disconnect.
+- Unknown but immaterial: the submitted diagnostic does not retain whether the
+  failed run selected a default or mod Boneyard. Both use the same missing
+  persistence member and are separately covered by exact catalog resolution.
+- No native or platform unknown remains. A save whose exact source is no
+  longer admitted cannot be reconstructed and must follow the existing
+  mismatch/rejection policy.
+
+### Web implementation consequence
+
+- Put canonical saved-run reconciliation beside Boneyard catalog
+  materialization, where all default, Tutorial, and mod source identities are
+  available.
+- Recover every missing Road mask from an exact catalog entry before
+  `restoreSharedGamePlayer`, private state adoption, or any
+  `server-boneyard-loaded` send. Preserve the saved scene, run id, and seed;
+  reject source identity, membership, or Road-geometry disagreement.
+- Keep `game-protocol.ts` strict and keep all fresh projector/render behavior
+  unchanged.
+- Make the pending party restore completion conditional on its runtime scope
+  and run still being current so ordinary disconnect/retirement is silent and
+  idempotent.
+
+### Validation contract
+
+- Mac red/green gate: mutate a real current active-run checkpoint into the
+  historical shape by removing every saved Road mask. Before the fix, the
+  production-shaped shared-Hub resume must fail with the exact diagnostic;
+  after the fix, default, Tutorial, and same-content mod saves must send their
+  complete canonical masks and create the next corrected checkpoint.
+- Catalog contracts: exhaust all built-in rows, preserve current identities,
+  reject unknown/hash-mismatched content, and retain strict malformed-wire
+  tests.
+- Lifecycle contract: close the final restored actor while navigation/mod
+  initialization is pending; assert one ordinary run retirement and no
+  `mods.restore_initialization_failed`, uncaught rejection, or closed-host
+  activation.
+- Mac Chrome: load a built production client with a legacy-shaped active-run
+  document on a task-owned protocol-113 host, enter the restored Boneyard, and
+  observe nonzero linked endpoint masks, continuing snapshots, and empty
+  page/console/failed-response/host-error arrays.
+- Publication: rebase on the then-current `origin/main`, repeat the complete
+  Mac gate/browser journey, fast-forward `main`, and verify CI/CD plus the live
+  deployed revision, supervisor health, service restarts, warning/error
+  journals, and an actual production legacy-resume journey separately.
+
+### Implementation validation receipt
+
+- `boneyard-catalog.ts` now owns legacy Road recovery. It accepts only the
+  historical all-masks-omitted shape, resolves default/Tutorial/mod content by
+  exact admitted source identity, requires every non-mask Road field and EID
+  to match, restores the extracted masks, and updates the derived geometry
+  hash. Current valid saves return unchanged; partial/null masks and changed or
+  unavailable content remain fail-closed.
+- `game-host.ts` performs recovery only when it will adopt a saved run. Live
+  same-tab duplicate ownership is decided first, preserving its established
+  rejection/replacement semantics. A pending party mod/navigation completion
+  now activates only if its exact runtime scope and run remain current, so a
+  retired final-player run cannot call a closed host.
+- Catalog regressions drain all twelve generated templates and Tutorial—599
+  Road rows total—plus a same-content mod entry, current-save identity,
+  partial masks, changed Road geometry, missing content, strict protocol, and
+  a production-shaped shared-Hub resume followed by a corrected leave
+  checkpoint.
+- The Mac red gate over exact Website `2bcbdcf69f6c61e1c8d61bbd531def848302c304`
+  reproduced only the added host regression with
+  `boneyard.scene.roads[0].linkMask must be finite`; red combined-log SHA-256
+  was `68a449849f1974364501c527305ce04341ca104986022322c0c45d8d1df0e8de`.
+- The byte-identical green candidate on arm64 macOS 26.6.2 passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: 28 backend/contracts, strict
+  formatting/lint/import/generated checks, the `1808/1808` broad game group,
+  every registered auxiliary/desktop suite, production builds, media policy,
+  and bundle budget (`277279` raw / `83702` gzip). Green combined-log SHA-256
+  was `959d562a957c059ef18d2246108734e27990d73ba524c9e5cea876558348f928`.
+- Real Chrome 151.0.7922.174 loaded the built production bundle with a
+  schema-24 active run whose 36 masks were all removed. It mounted a WebGL2
+  Boneyard, received mask census `1:3, 2:3, 3:30`, processed 48 continuing
+  snapshots, and wrote a 36-row checkpoint with every mask finite in `0..3`.
+  Page, console, failed-response, disconnect, and host-error arrays were empty;
+  browser combined-log SHA-256 was
+  `bbe019654e5e9fe2d36d1c40d7abbf55731d270de3ce7064f3ccb910d0cdc9f7`.
+  The visually inspected Boneyard capture SHA-256 was
+  `89c9d6a085b7760df14212eb6d736dfd1727cf45d28e554eb8bbb13b8fb9662a`;
+  the temporary script, capture, browser, host, and preview listener were then
+  removed or stopped.
+- No browser-platform approximation, blocked member, native unknown, or
+  retained task evidence remains from this pre-publication receipt. Commit,
+  push, CI/CD, and live deployment verification remain separate pending steps.

@@ -68,6 +68,7 @@ import {
   createBoneyardCatalog,
   materializeBoneyard,
   materializeStockTutorial,
+  recoverSavedBoneyardRoadLinks,
   type BoneyardCatalog,
 } from './boneyard-catalog.ts'
 import {
@@ -1414,6 +1415,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 state = sharedWorlds.hub
               } else {
                 try {
+                  if (restoredBoneyard !== null) {
+                    restoredBoneyard = recoverSavedBoneyardRoadLinks(
+                      createBoneyardCatalog([
+                        ...boneyards.modEntries.values(),
+                        ...(authenticated.content?.boneyards ?? []),
+                      ]),
+                      restoredBoneyard,
+                    )
+                  }
                   sharedWorlds = restoreSharedGamePlayer(
                     sharedWorlds,
                     restoredState,
@@ -1434,6 +1444,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 }
               }
             } else if (!rejoinedParty) {
+              try {
+                if (restoredBoneyard !== null) {
+                  restoredBoneyard = recoverSavedBoneyardRoadLinks(
+                    boneyards,
+                    restoredBoneyard,
+                  )
+                }
+              } catch (error) {
+                disconnect(
+                  socket,
+                  'invalid-message',
+                  error instanceof Error
+                    ? error.message
+                    : 'The saved Boneyard cannot be restored.',
+                )
+                return
+              }
               state = restoredState
               loadedBoneyard = restoredBoneyard
               void preparePrivateNavigation(state)
@@ -1561,9 +1588,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 : Promise.resolve(),
             ]).then(([scope]) => {
               const current = loadedBoneyardForPlayer(playerId)
-              scope.runtime.activateBoneyard(current
-                ? webLuaBoneyardContentId(playerId, current)
-                : null, true)
+              if (
+                current === null
+                || partyModRuntimes.get(restoredParty.id) !== scope
+              ) return
+              scope.runtime.activateBoneyard(
+                webLuaBoneyardContentId(playerId, current),
+                true,
+              )
             }).catch((error) => {
               logGameServerEvent(
                 options.log,

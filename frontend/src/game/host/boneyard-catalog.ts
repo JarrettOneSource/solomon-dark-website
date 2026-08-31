@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { basename } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 
 import { parseBoneyard } from '../../editor/format/boneyard.ts'
 import type {
@@ -89,6 +90,44 @@ export function createBoneyardCatalog(
   }
 }
 
+export function recoverSavedBoneyardRoadLinks(
+  catalog: BoneyardCatalog,
+  loaded: LoadedBoneyard,
+): LoadedBoneyard {
+  if (loaded.scene.roads.every(road => nativeRoadLinkMask(road.linkMask))) {
+    return loaded
+  }
+  if (!loaded.scene.roads.every(road => road.linkMask === undefined)) {
+    throw new Error('saved Boneyard Road links are invalid')
+  }
+
+  const canonical = canonicalSavedBoneyardSource(catalog, loaded)
+  if (canonical === null) throw new Error('saved Boneyard content is unavailable')
+  const canonicalRoads = new Map(canonical.scene.roads.map(road => [road.eid, road]))
+  if (
+    canonicalRoads.size !== canonical.scene.roads.length
+    || new Set(loaded.scene.roads.map(road => road.eid)).size !== loaded.scene.roads.length
+    || canonicalRoads.size !== loaded.scene.roads.length
+  ) throw new Error('saved Boneyard Road membership does not match its source')
+
+  const roads = loaded.scene.roads.map((road) => {
+    const source = canonicalRoads.get(road.eid)
+    if (
+      source === undefined
+      || !isDeepStrictEqual(roadWithoutLinkMask(road), roadWithoutLinkMask(source))
+    ) throw new Error('saved Boneyard Road geometry does not match its source')
+    return { ...road, linkMask: source.linkMask }
+  })
+  const scene = { ...loaded.scene, roads }
+  return {
+    ...loaded,
+    choice: canonical.choice,
+    geometrySha256: boneyardGeometrySha256(scene),
+    scene,
+    sourceSha256: canonical.sourceSha256,
+  }
+}
+
 export function materializeBoneyard(
   catalog: BoneyardCatalog,
   boneyardId: string,
@@ -134,4 +173,38 @@ export function materializeStockTutorial(
     seed: seedBytes.toString('hex'),
     sourceSha256: STOCK_TUTORIAL_BONEYARD.sourceSha256,
   }
+}
+
+function canonicalSavedBoneyardSource(
+  catalog: BoneyardCatalog,
+  loaded: LoadedBoneyard,
+): Pick<ModBoneyardEntry, 'choice' | 'scene' | 'sourceSha256'> | null {
+  if (loaded.choice.source === 'mod') {
+    const entry = catalog.modEntries.get(loaded.choice.id)
+    return entry?.sourceSha256 === loaded.sourceSha256 ? entry : null
+  }
+  if (loaded.choice.id === DEFAULT_BONEYARD_CHOICE.id) {
+    const template = NATIVE_GENERATED_BONEYARDS.find(candidate => (
+      candidate.sourceSha256 === loaded.sourceSha256
+    ))
+    return template ? { ...template, choice: DEFAULT_BONEYARD_CHOICE } : null
+  }
+  if (
+    loaded.choice.id === STOCK_TUTORIAL_CHOICE.id
+    && loaded.sourceSha256 === STOCK_TUTORIAL_BONEYARD.sourceSha256
+  ) {
+    return { ...STOCK_TUTORIAL_BONEYARD, choice: STOCK_TUTORIAL_CHOICE }
+  }
+  return null
+}
+
+function nativeRoadLinkMask(value: unknown): value is 0 | 1 | 2 | 3 {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 3
+}
+
+function roadWithoutLinkMask(
+  road: BoneyardScene['roads'][number],
+): Omit<BoneyardScene['roads'][number], 'linkMask'> {
+  const { linkMask: _linkMask, ...geometry } = road
+  return geometry
 }

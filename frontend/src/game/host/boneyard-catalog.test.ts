@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { nativeSlumpgutRecipe } from '../core-kernels/native-survival-slumpgut.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
+  materializeStockTutorial,
+  recoverSavedBoneyardRoadLinks,
 } from './boneyard-catalog.ts'
 import { NATIVE_GENERATED_BONEYARDS } from './native-generated-boneyards.ts'
 import {
@@ -100,6 +103,80 @@ test('native default bank retains the complete stock generator output-family cen
   assert.deepEqual([...environmentModes].sort((a, b) => a - b), [0, 1, 2])
 })
 
+test('saved runs recover every default and Tutorial Road link from exact source identity', () => {
+  const catalog = createBoneyardCatalog()
+  const loaded = NATIVE_GENERATED_BONEYARDS.map((_, index) => {
+    const seed = Buffer.alloc(16)
+    seed.writeUInt32BE(index)
+    return materializeBoneyard(catalog, 'default-random', seed)!
+  })
+  loaded.push(materializeStockTutorial(Buffer.alloc(16, 19)))
+
+  for (const current of loaded) {
+    assert.strictEqual(recoverSavedBoneyardRoadLinks(catalog, current), current)
+    const legacy = withoutRoadLinks(current)
+    const recovered = recoverSavedBoneyardRoadLinks(catalog, legacy)
+    assert.deepEqual(
+      recovered.scene.roads.map(road => road.linkMask),
+      current.scene.roads.map(road => road.linkMask),
+    )
+    assert.equal(recovered.geometrySha256, boneyardGeometrySha256(recovered.scene))
+    assert.equal(recovered.runId, current.runId)
+    assert.equal(recovered.seed, current.seed)
+  }
+})
+
+test('saved mod runs recover Road links only from the exact admitted catalog entry', () => {
+  const template = NATIVE_GENERATED_BONEYARDS[0]!
+  const choice = {
+    id: 'mod:example:crypt:123456789abc',
+    modId: 'example.crypt',
+    modName: 'Example Crypt',
+    name: 'Crypt',
+    source: 'mod' as const,
+  }
+  const catalog = createBoneyardCatalog([{ ...template, choice }])
+  const loaded = materializeBoneyard(catalog, choice.id, Buffer.alloc(16, 29))!
+  const recovered = recoverSavedBoneyardRoadLinks(catalog, withoutRoadLinks(loaded))
+  assert.deepEqual(recovered.scene.roads, loaded.scene.roads)
+  assert.deepEqual(recovered.choice, choice)
+
+  assert.throws(
+    () => recoverSavedBoneyardRoadLinks(
+      createBoneyardCatalog(),
+      withoutRoadLinks(loaded),
+    ),
+    /content is unavailable/,
+  )
+  assert.throws(
+    () => recoverSavedBoneyardRoadLinks(catalog, {
+      ...withoutRoadLinks(loaded),
+      sourceSha256: '0'.repeat(64),
+    }),
+    /content is unavailable/,
+  )
+})
+
+test('saved Road recovery rejects partial masks and changed source geometry', () => {
+  const catalog = createBoneyardCatalog()
+  const loaded = materializeBoneyard(catalog, 'default-random', Buffer.alloc(16, 31))!
+  const partial = withoutRoadLinks(loaded)
+  partial.scene.roads[0]!.linkMask = loaded.scene.roads[0]!.linkMask
+  partial.geometrySha256 = boneyardGeometrySha256(partial.scene)
+  assert.throws(
+    () => recoverSavedBoneyardRoadLinks(catalog, partial),
+    /Road links are invalid/,
+  )
+
+  const changed = withoutRoadLinks(loaded)
+  changed.scene.roads[0]!.points[0]!.x += 1
+  changed.geometrySha256 = boneyardGeometrySha256(changed.scene)
+  assert.throws(
+    () => recoverSavedBoneyardRoadLinks(catalog, changed),
+    /Road geometry does not match/,
+  )
+})
+
 test('native default openings contain no ground clutter beneath Solomon or rock in his grave', () => {
   const overlaps = NATIVE_GENERATED_BONEYARDS.flatMap((template, templateIndex) => {
     const dig = template.scene.solomonDig
@@ -189,6 +266,21 @@ function squaredDistance(
 ): number {
   return (left.x - right.x) ** 2 + (left.y - right.y) ** 2
 }
+
+function withoutRoadLinks(loaded: LoadedBoneyard): Mutable<LoadedBoneyard> {
+  const copy = structuredClone(loaded) as Mutable<LoadedBoneyard>
+  for (const road of copy.scene.roads) {
+    delete (road as Partial<Mutable<LoadedBoneyard['scene']['roads'][number]>>).linkMask
+  }
+  copy.geometrySha256 = boneyardGeometrySha256(copy.scene)
+  return copy
+}
+
+type Mutable<T> = T extends readonly (infer Entry)[]
+  ? Mutable<Entry>[]
+  : T extends object
+    ? { -readonly [Key in keyof T]: Mutable<T[Key]> }
+    : T
 
 const OPENING_GROUND_CLUTTER_SIZES = new Map<number, readonly [number, number]>([
   [6, [260, 178]],
