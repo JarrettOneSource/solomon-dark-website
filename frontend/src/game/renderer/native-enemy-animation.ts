@@ -96,10 +96,10 @@ export interface NativeEnemyAnimationSample {
   coffinState: NativeEnemyCoffinState
   deathEpoch: number
   deathTick: number
-  demonFrontJointRotationRadians: number
-  demonFrontLimbRotationRadians: number
-  demonRearJointRotationRadians: number
-  demonRearLimbRotationRadians: number
+  demonFrontExtremityOffset: Readonly<{ x: number; y: number }>
+  demonFrontRotationRadians: number
+  demonRearExtremityOffset: Readonly<{ x: number; y: number }>
+  demonRearRotationRadians: number
   effects: readonly NativeEnemyEffectSample[]
   gaitPose: number
   headFacingOffset: NativeSkeletonHeadFacingOffset
@@ -233,10 +233,10 @@ export function nativeEnemyIdleAnimationSample(
     coffinState: 'closed',
     deathEpoch: 0,
     deathTick: 0,
-    demonFrontJointRotationRadians: 0,
-    demonFrontLimbRotationRadians: 0,
-    demonRearJointRotationRadians: 0,
-    demonRearLimbRotationRadians: 0,
+    demonFrontExtremityOffset: { x: 0, y: 0 },
+    demonFrontRotationRadians: 0,
+    demonRearExtremityOffset: { x: 0, y: 0 },
+    demonRearRotationRadians: 0,
     effects: [],
     gaitPose: 0,
     headFacingOffset: 0,

@@ -2086,3 +2086,26 @@ strict retirement, replication, save shape, pause, reset, or teardown.
 Snapshot/entity projection, save serialization, Web Lua/ML observation,
 diagnostics, and tests continue consuming the same rich records. Transport
 quantization and browser state never feed back into the 100 Hz simulation.
+
+## Lesser Demon planted-articulation authority
+
+The Lesser Demon's two planted extremities are fixed-tick actor state, not a
+browser animation. `BoneyardDemonBrain.articulation` owns each endpoint's
+current/start/target point, accelerating step phase, vertical lift, staggered
+replant interval, and two base rotations. Spawn initialization uses the
+authoritative actor position, heading bucket, and config scale. The ordinary
+enemy tick advances that state only outside the bomb/death hold, and the
+native thirty-unit root correction remains simulation-owned.
+
+Protocol 115 projects the two current endpoint offsets alongside the existing
+controller angles. The Boneyard presentation timeline interpolates those six
+continuous lanes; a late client therefore samples the current planted pose
+instead of restarting it. The renderer only consumes that sample to assemble
+the ordered Demon sprites and textured connectors. It never advances an
+endpoint, chooses a new target, or changes gameplay position.
+
+Save schema 27 persists the articulation state. Schema 26 active-run saves
+reconstruct the formerly absent state once from the saved Demon identity,
+position, heading, scale, and spawn tick; schema 27 rejects a missing state.
+Death freezes the last endpoint midpoint while the independent 100-tick body
+strip and terminal-effect stores retain their existing ownership and teardown.

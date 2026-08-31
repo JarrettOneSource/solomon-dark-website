@@ -265,10 +265,26 @@ class NativeEnemyView {
       const sprite = this.sprites[index]
       sprite.label = `${layer.role}:${layer.atlas}:${layer.entry}`
       sprite.texture = requiredTexture(this.textures, record.source)
-      sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
-      sprite.position.set(layer.offset.x, layer.offset.y)
-      sprite.scale.set(layer.scaleX ?? layer.scale, layer.scaleY ?? layer.scale)
-      sprite.rotation = layer.rotationRadians
+      if (layer.stretch) {
+        const deltaX = layer.stretch.end.x - layer.stretch.start.x
+        const deltaY = layer.stretch.end.y - layer.stretch.start.y
+        const length = Math.hypot(deltaX, deltaY)
+        sprite.anchor.set(0.5, 0.5)
+        sprite.position.set(
+          (layer.stretch.start.x + layer.stretch.end.x) * 0.5,
+          (layer.stretch.start.y + layer.stretch.end.y) * 0.5,
+        )
+        sprite.scale.set(
+          layer.scaleX ?? layer.scale,
+          length / record.height * (layer.scaleY ?? 1),
+        )
+        sprite.rotation = Math.atan2(deltaY, deltaX) - Math.PI * 0.5
+      } else {
+        sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
+        sprite.position.set(layer.offset.x, layer.offset.y)
+        sprite.scale.set(layer.scaleX ?? layer.scale, layer.scaleY ?? layer.scale)
+        sprite.rotation = layer.rotationRadians
+      }
       sprite.alpha = layer.alpha
       sprite.blendMode = layer.blendMode
       sprite.tint = layer.tint

@@ -893,6 +893,8 @@ function copyEnemy(enemy: BoneyardEnemySnapshot): BoneyardEnemySnapshot {
     ...enemy,
     animation: {
       ...enemy.animation,
+      demonFrontExtremityOffset: { ...enemy.animation.demonFrontExtremityOffset },
+      demonRearExtremityOffset: { ...enemy.animation.demonRearExtremityOffset },
       effects: enemy.animation.effects.map(copyEnemyEffect),
       maggots: [],
     },
@@ -1033,24 +1035,38 @@ function interpolateEnemyAnimation(
       blend,
     ),
     deathTick: lerp(first.deathTick, second.deathTick, blend),
-    demonFrontJointRotationRadians: lerp(
-      first.demonFrontJointRotationRadians,
-      second.demonFrontJointRotationRadians,
+    demonFrontExtremityOffset: {
+      x: lerp(
+        first.demonFrontExtremityOffset.x,
+        second.demonFrontExtremityOffset.x,
+        blend,
+      ),
+      y: lerp(
+        first.demonFrontExtremityOffset.y,
+        second.demonFrontExtremityOffset.y,
+        blend,
+      ),
+    },
+    demonFrontRotationRadians: lerp(
+      first.demonFrontRotationRadians,
+      second.demonFrontRotationRadians,
       blend,
     ),
-    demonFrontLimbRotationRadians: lerp(
-      first.demonFrontLimbRotationRadians,
-      second.demonFrontLimbRotationRadians,
-      blend,
-    ),
-    demonRearJointRotationRadians: lerp(
-      first.demonRearJointRotationRadians,
-      second.demonRearJointRotationRadians,
-      blend,
-    ),
-    demonRearLimbRotationRadians: lerp(
-      first.demonRearLimbRotationRadians,
-      second.demonRearLimbRotationRadians,
+    demonRearExtremityOffset: {
+      x: lerp(
+        first.demonRearExtremityOffset.x,
+        second.demonRearExtremityOffset.x,
+        blend,
+      ),
+      y: lerp(
+        first.demonRearExtremityOffset.y,
+        second.demonRearExtremityOffset.y,
+        blend,
+      ),
+    },
+    demonRearRotationRadians: lerp(
+      first.demonRearRotationRadians,
+      second.demonRearRotationRadians,
       blend,
     ),
     effects: interpolateEnemyEffects(first.effects, second.effects, blend),

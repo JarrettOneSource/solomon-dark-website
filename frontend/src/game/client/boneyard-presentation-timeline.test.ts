@@ -74,10 +74,10 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       coffinState: 'closed',
       deathEpoch: 0,
       deathTick: 0,
-      demonFrontJointRotationRadians: 0,
-      demonFrontLimbRotationRadians: 0,
-      demonRearJointRotationRadians: 0,
-      demonRearLimbRotationRadians: 0,
+      demonFrontExtremityOffset: { x, y: -x },
+      demonFrontRotationRadians: x / 100,
+      demonRearExtremityOffset: { x: -x, y: x / 2 },
+      demonRearRotationRadians: -x / 200,
       effects: [{
         alpha: x / 1_000,
         atlas: 'BadGuys',
@@ -398,6 +398,22 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.deepEqual(timeline.sample(75).world.encounter?.voiceEvents, [])
   assert.equal(timeline.sample(75).world.enemies[0].position.x, 410)
   assert.equal(timeline.sample(75).world.enemies[0].shieldHealth, 41)
+  assert.deepEqual(
+    timeline.sample(75).world.enemies[0].animation.demonFrontExtremityOffset,
+    { x: 410, y: -410 },
+  )
+  assert.deepEqual(
+    timeline.sample(75).world.enemies[0].animation.demonRearExtremityOffset,
+    { x: -410, y: 205 },
+  )
+  assert.equal(
+    timeline.sample(75).world.enemies[0].animation.demonFrontRotationRadians,
+    4.1,
+  )
+  assert.equal(
+    timeline.sample(75).world.enemies[0].animation.demonRearRotationRadians,
+    -2.05,
+  )
   assert.ok(Math.abs(
     timeline.sample(75).world.enemies[0].animation.effects[0]!.alpha - 0.41,
   ) < 1e-9)

@@ -553,17 +553,35 @@ test('Wraith, Demon, and Coffin preserve their native spawn compositions', () =>
   const demon = nativeEnemyPresentationPlan(enemy('DEMON'), 100)
   const demonBody = demon.layers.filter(({ role }) => !role.startsWith('demon-flame:'))
   const demonFlames = demon.layers.filter(({ role }) => role.startsWith('demon-flame:'))
-  assert.deepEqual(demonBody.map((layer) => layer.entry), [62, 98, 19, 1, 80])
+  assert.deepEqual(demonBody.map((layer) => layer.entry), [
+    62, 98, 62, 98, 19, 1, 18, 80,
+  ])
   assert.deepEqual(
     demonBody.map((layer) => layer.offset),
     [
-      { x: -14, y: -28 },
-      { x: 10, y: -13 },
+      { x: -12, y: -30 },
       { x: 0, y: 0 },
-      { x: 15, y: -28 },
-      { x: -8.5, y: -13 },
+      { x: 12, y: -30 },
+      { x: 0, y: 0 },
+      { x: 0, y: -30 },
+      { x: 22.5, y: -72 },
+      { x: -21, y: -72 },
+      { x: -0.6, y: -84.6 },
     ],
   )
+  assert.deepEqual(demonBody.map(({ scale }) => scale), [
+    0.8, 1, 0.8, 1, 1.2, 1.2, 1.2, 1.2,
+  ])
+  assert.equal(demonBody[6]?.scaleX, -1.2)
+  assert.equal(demonBody[6]?.scaleY, 1.2)
+  assert.deepEqual(demonBody[1]?.stretch, {
+    end: { x: -11, y: -51 },
+    start: { x: -10.2, y: -50.6 },
+  })
+  assert.deepEqual(demonBody[3]?.stretch, {
+    end: { x: 13, y: -51 },
+    start: { x: 12, y: -50.6 },
+  })
   assert.equal(demonFlames.length, 5)
   assert.deepEqual(demonFlames.map(({ scale }) => scale), [0.5, 1.1, 0.5, 0.8, 0.8])
   assert.ok(demonFlames.every(({ atlas, entry }) => (
@@ -1172,13 +1190,22 @@ test('Wraith wisps and Demon flames remain independent ambient members around bo
     ...enemy('DEMON'),
     headingDeg: facing * 20,
   }, 100)).some((plan) => {
-    const bodyIndex = plan.layers.findIndex(({ role }) => role === 'demon-controller-body')
+    const attachedIndex = plan.layers.findIndex(({ role }) => role === 'demon-attached-late')
     const flameIndices = plan.layers.flatMap(({ role }, index) => (
       role.startsWith('demon-flame:') ? [index] : []
     ))
-    return flameIndices.some((index) => index < bodyIndex)
-      && flameIndices.some((index) => index > bodyIndex)
+    return flameIndices.some((index) => index < attachedIndex)
+      && flameIndices.some((index) => index > attachedIndex)
   }))
+  const completeFlameBank = new Set<number>()
+  for (let tick = 100; tick < 228; tick += 1) {
+    for (const layer of nativeEnemyPresentationPlan(enemy('DEMON'), tick).layers) {
+      if (layer.role.startsWith('demon-flame:')) completeFlameBank.add(layer.entry)
+    }
+  }
+  assert.deepEqual([...completeFlameBank].sort((a, b) => a - b), (
+    Array.from({ length: 32 }, (_, index) => 46 + index)
+  ))
 })
 
 test('native hit redraw excludes Zombie gas, flies, and family ambient fire', () => {
@@ -1202,7 +1229,7 @@ test('native hit redraw excludes Zombie gas, flies, and family ambient fire', ()
 test('common native hit redraw covers every survival family body membership', () => {
   const expectedHitLayers = {
     COFFIN: 1,
-    DEMON: 5,
+    DEMON: 8,
     IMP: 2,
     PORTAL: 0,
     SKELETON: 3,
@@ -1395,22 +1422,27 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
     ...enemy('DEMON'),
     animation: nativeEnemyIdleAnimationSample({
       bodyPose: 1,
-      demonFrontJointRotationRadians: 0.1,
-      demonFrontLimbRotationRadians: 0.2,
-      demonRearJointRotationRadians: -0.1,
-      demonRearLimbRotationRadians: -0.2,
+      demonFrontExtremityOffset: { x: 15, y: -31 },
+      demonFrontRotationRadians: 0.2,
+      demonRearExtremityOffset: { x: -14, y: -31 },
+      demonRearRotationRadians: -0.2,
     }),
   }, 100)
   const demonBody = demon.layers.filter(({ role }) => !role.startsWith('demon-flame:'))
-  assert.deepEqual(demonBody.map((layer) => layer.rotationRadians), [-0.2, -0.1, 0, 0.2, 0.1])
-  assert.equal(demonBody[2].entry, 37)
-  assert.deepEqual(demonBody.map((layer) => layer.offset), [
-    { x: -14, y: -31 },
-    { x: 10, y: -13 },
-    { x: 0, y: 0 },
-    { x: 15, y: -31 },
-    { x: -8.5, y: -13 },
+  assert.equal(demonBody.length, 8)
+  assert.equal(demonBody[4]?.entry, 37)
+  assert.deepEqual(
+    demonBody.filter(({ role }) => role.includes('upper-limb'))
+      .map(({ rotationRadians }) => rotationRadians),
+    [0.2, -0.2],
+  )
+  assert.deepEqual(demonBody.slice(0, 4).map(({ role }) => role), [
+    'demon-rear-extremity',
+    'demon-rear-connector',
+    'demon-front-extremity',
+    'demon-front-connector',
   ])
+  assert.deepEqual(demonBody[4]?.offset, { x: 0.5, y: -31 })
 
   const demonBomb = nativeEnemyPresentationPlan({
     ...enemy('DEMON'),

@@ -5,6 +5,13 @@ import {
   stepNativeImpFlight,
   type NativeImpFlightState,
 } from '../core-kernels/boneyard-imp-flight.ts'
+import {
+  createNativeDemonArticulationState,
+  nativeDemonArticulationRoot,
+  NATIVE_DEMON_ROOT_SNAP_DISTANCE,
+  stepNativeDemonArticulation,
+  type NativeDemonArticulationState,
+} from '../core-kernels/boneyard-demon-articulation.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
@@ -336,6 +343,7 @@ export interface BoneyardWraithBrain extends NativeWraithFlightState {
 
 export interface BoneyardDemonBrain {
   readonly actionProgress: number
+  readonly articulation: NativeDemonArticulationState
   readonly family: 'demon'
   readonly markerEmitted: boolean
   readonly phase: 'approach' | 'bomb' | 'death'
@@ -2139,7 +2147,14 @@ function materializeSpawnIntents(
     const bodyGaitPhase = drawLocomotionPhase(work)
     const path = createNativeEnemyPathState(work.steeringRngState)
     work.steeringRngState = path.rngState
-    const createdBrain = createBrain(work, config)
+    const headingDeg = intent.portalEjection?.childHeadingDeg
+      ?? targetHeading(position, targetPlayerId, context.players)
+    const createdBrain = createBrain(work, config, {
+      actorId: work.nextActorId,
+      headingDeg,
+      position,
+      spawnTick: intent.spawnTick,
+    })
     const brain = intent.portalEjection === undefined
       ? createdBrain
       : withPortalEjectionFlight(createdBrain, intent.portalEjection)
@@ -2161,8 +2176,7 @@ function materializeSpawnIntents(
       deathTick: 0,
       gaitPose,
       headFacingOffset: 0,
-      headingDeg: intent.portalEjection?.childHeadingDeg
-        ?? targetHeading(position, targetPlayerId, context.players),
+      headingDeg,
       hurricaneContactCooldown,
       id: work.nextActorId,
       lastDamagedByPlayerId: null,
@@ -2273,6 +2287,12 @@ function validatePortalEjection(
 function createBrain(
   work: WorkingStep,
   config: EvaluatedBoneyardEnemyConfig,
+  owner: Readonly<{
+    actorId: number
+    headingDeg: number
+    position: Readonly<BoneyardPoint>
+    spawnTick: number
+  }>,
 ): BoneyardEnemyBrain {
   switch (config.enemyToken) {
     case 'SKELETON': return {
@@ -2403,6 +2423,13 @@ function createBrain(
     }
     case 'DEMON': return {
       actionProgress: 0,
+      articulation: createNativeDemonArticulationState(
+        owner.actorId,
+        owner.spawnTick,
+        owner.position,
+        owner.headingDeg,
+        config.scale,
+      ),
       family: 'demon',
       markerEmitted: false,
       phase: 'approach',
@@ -2573,9 +2600,10 @@ function stepLivingActor(
   const affected = effect === undefined
     ? source
     : withNativeSecondaryTickScalars(source, effect)
-  const actor = affected.brain.family === 'portal'
+  let actor = affected.brain.family === 'portal'
     ? affected
     : refreshTarget(affected, context)
+  if (actor.brain.family === 'demon') actor = snapDemonRootToExtremities(actor)
   if (actor.brain.family === 'portal') {
     return (effect?.timeScale ?? 1) === 0
       ? stepEnemyLighting(actor)
@@ -3658,7 +3686,10 @@ function stepDemon(
 ): BoneyardEnemyActor {
   if (actor.targetPlayerId === null) {
     const reset = resetDemon(actor, brain)
-    return moveTowardTarget(work, reset, reset.brain, context, 1)
+    return advanceDemonArticulation(
+      moveTowardTarget(work, reset, reset.brain, context, 1),
+      context.tick,
+    )
   }
   if (brain.phase === 'bomb') {
     const previousProgress = brain.actionProgress
@@ -3703,7 +3734,46 @@ function stepDemon(
       brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'bomb' },
     }
   }
-  return moveTowardTarget(work, actor, brain, context, 1)
+  return advanceDemonArticulation(
+    moveTowardTarget(work, actor, brain, context, 1),
+    context.tick,
+  )
+}
+
+function advanceDemonArticulation(
+  actor: BoneyardEnemyActor,
+  tick: number,
+): BoneyardEnemyActor {
+  if (
+    actor.brain.family !== 'demon'
+    || actor.brain.phase !== 'approach'
+    || actor.config.scale <= 0
+  ) return actor
+  return {
+    ...actor,
+    brain: {
+      ...actor.brain,
+      articulation: stepNativeDemonArticulation(actor.brain.articulation, {
+        active: true,
+        actorId: actor.id,
+        headingDeg: actor.headingDeg,
+        position: actor.position,
+        scale: actor.config.scale,
+        spawnTick: actor.spawnTick,
+        tick,
+      }),
+    },
+  }
+}
+
+function snapDemonRootToExtremities(actor: BoneyardEnemyActor): BoneyardEnemyActor {
+  if (actor.brain.family !== 'demon') return actor
+  const root = nativeDemonArticulationRoot(actor.brain.articulation)
+  const deltaX = root.x - actor.position.x
+  const deltaY = root.y - actor.position.y
+  return deltaX * deltaX + deltaY * deltaY <= NATIVE_DEMON_ROOT_SNAP_DISTANCE ** 2
+    ? actor
+    : { ...actor, position: root }
 }
 
 function advanceZombieVisual(

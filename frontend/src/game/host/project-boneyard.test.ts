@@ -442,6 +442,16 @@ test('Demon lethal projection freezes its articulated composite root', () => {
   assert.equal(early.animation.state, 'death')
   assert.equal(late.animation.state, 'death')
   assert.equal(early.animation.verticalOffset, late.animation.verticalOffset)
+  assert.deepEqual(
+    early.animation.demonFrontExtremityOffset,
+    late.animation.demonFrontExtremityOffset,
+  )
+  assert.deepEqual(
+    early.animation.demonRearExtremityOffset,
+    late.animation.demonRearExtremityOffset,
+  )
+  assert.notDeepEqual(early.animation.demonFrontExtremityOffset, { x: 0, y: 0 })
+  assert.notDeepEqual(early.animation.demonRearExtremityOffset, { x: 0, y: 0 })
 })
 
 test('projects Maggot emergence trajectory and vertical launch height', () => {

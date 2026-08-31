@@ -11,6 +11,7 @@ import {
   createNativeWaterHailActor,
 } from '../core-kernels/air-water-spell-actors.ts'
 import {
+  createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
   type BoneyardEnemyDeathEffect,
 } from '../core-server/boneyard-enemy-store.ts'
@@ -183,7 +184,7 @@ test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix
   )))
 })
 
-test('schema 19 compact inventory roots migrate to current addressed slots', () => {
+test('schema 19 compact inventory roots migrate to schema 27 addressed slots', () => {
   const state = createGameSimulation({ owner: OWNER })
   const legacy = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
@@ -274,14 +275,75 @@ test('schema 25 active Wraiths migrate from the fabricated phase brain to native
   assert.ok(brain.currentSpeed >= 20 && brain.currentSpeed < 60)
   assert.ok(brain.restingSpeed >= 0 && brain.restingSpeed < 8)
   assert.ok(brain.flybyTicksRemaining >= 200 && brain.flybyTicksRemaining <= 800)
-  assert.equal(JSON.parse(createGameSaveDocument({
-    integrity: 'global-clean',
+})
+
+test('schema 26 reconstructs missing Demon articulation while schema 27 requires it', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 41),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('saved-demon'), {
+    firstProjectileWorldContact: () => null,
+    players: {
+      owner: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: { x: 500, y: 200 },
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'DEMON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON,
+      position: { x: 100, y: 200 },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+    tick: state.tick,
+  })
+  state = {
+    ...state,
+    world: { ...state.world, enemies: spawned.store },
+  }
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
     loadedBoneyard,
     mods: [],
     modState: {},
     playerId: 'owner',
-    state: restored,
-  })).schemaVersion, 26)
+    state,
+  }))
+  const currentBrain = current.continuation.simulation.world.enemies.actors[0].brain
+  assert.equal(currentBrain.family, 'demon')
+  assert.ok(currentBrain.articulation)
+
+  const legacy = structuredClone(current)
+  legacy.schemaVersion = 26
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.articulation
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const restoredBrain = restored.state.world.enemies.actors[0]?.brain
+  assert.equal(restoredBrain?.family, 'demon')
+  if (restoredBrain?.family !== 'demon') throw new Error('expected Demon brain')
+  assert.deepEqual(restoredBrain.articulation, currentBrain.articulation)
+
+  const missingCurrent = structuredClone(current)
+  delete missingCurrent.continuation.simulation.world.enemies.actors[0].brain.articulation
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrent)),
+    /Demon 0 articulation is missing/,
+  )
 })
 
 test('schema 20 restores complete Hub and Boneyard world-painter ownership', () => {
@@ -1974,7 +2036,7 @@ test('schema-18 retains ordered Hagatha outcomes and schema 16 materializes Toni
   )
 })
 
-test('schema 23 repairs Tonic-inclusive overflow while schema 24 rejects it', () => {
+test('schema 23 repairs Tonic-inclusive overflow while schema 27 rejects it', () => {
   const document = JSON.parse(createGameSaveDocument({
     integrity: 'local-only',
     loadedBoneyard: null,

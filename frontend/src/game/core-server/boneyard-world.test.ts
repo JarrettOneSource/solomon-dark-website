@@ -5,6 +5,7 @@ import test from 'node:test'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
+import { createNativeDemonArticulationState } from '../core-kernels/boneyard-demon-articulation.ts'
 import {
   BONEYARD_ARENA_SEAL_TICKS,
   startBoneyardArenaTransition,
@@ -636,20 +637,34 @@ test('movement contact follows the Coffin hidden-to-rising hostile edge', () => 
           },
         }
       : actor
+    const contactPosition = {
+      x: player.position.x
+        + PLAYER_CHARACTER_RADIUS
+        + configuredActor.config.collisionRadius
+        + 4,
+      y: player.position.y,
+    }
+    const contactBrain = configuredActor.brain.family === 'demon'
+      ? {
+          ...configuredActor.brain,
+          articulation: createNativeDemonArticulationState(
+            configuredActor.id,
+            configuredActor.spawnTick,
+            contactPosition,
+            configuredActor.headingDeg,
+            configuredActor.config.scale,
+          ),
+        }
+      : configuredActor.brain
     world = {
       ...world,
       enemies: {
         ...seeded.store,
         actors: [{
           ...configuredActor,
+          brain: contactBrain,
           nextMovementTick: Number.MAX_SAFE_INTEGER,
-          position: {
-            x: player.position.x
-              + PLAYER_CHARACTER_RADIUS
-              + configuredActor.config.collisionRadius
-              + 4,
-            y: player.position.y,
-          },
+          position: contactPosition,
         }],
       },
     }

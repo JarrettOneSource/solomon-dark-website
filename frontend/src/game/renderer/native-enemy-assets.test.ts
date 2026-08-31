@@ -373,6 +373,12 @@ test('every live combat and Coffin child plan resolves through the runtime prelo
       }, 500))
     }
   }
+  for (let facing = 0; facing < 7; facing += 1) {
+    plans.push(nativeEnemyPresentationPlan({
+      ...enemy('DEMON', 8, facing * 52, []),
+      animation: nativeEnemyIdleAnimationSample({ deathTick: 50, state: 'death' }),
+    }, 500))
+  }
   plans.push(nativeEnemyPresentationPlan({
     ...enemy('COFFIN', 9, 0, []),
     animation: nativeEnemyIdleAnimationSample({

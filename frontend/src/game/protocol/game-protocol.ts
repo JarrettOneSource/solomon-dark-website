@@ -406,7 +406,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 114
+export const GAME_PROTOCOL_VERSION = 115
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -11059,6 +11059,19 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
   }
   const animation = boneyardEnemyAnimation(source.animation, `${field}.animation`)
   if (
+    enemyToken !== 'DEMON'
+    && (
+      animation.demonFrontExtremityOffset.x !== 0
+      || animation.demonFrontExtremityOffset.y !== 0
+      || animation.demonRearExtremityOffset.x !== 0
+      || animation.demonRearExtremityOffset.y !== 0
+    )
+  ) {
+    throw new GameProtocolError(
+      `${field}.animation Demon endpoint offsets require a Demon family`,
+    )
+  }
+  if (
     animation.headFacingOffset !== 0
     && (
       animation.state !== 'action'
@@ -11457,10 +11470,10 @@ function boneyardEnemyAnimation(
     'coffinState',
     'deathEpoch',
     'deathTick',
-    'demonFrontJointRotationRadians',
-    'demonFrontLimbRotationRadians',
-    'demonRearJointRotationRadians',
-    'demonRearLimbRotationRadians',
+    'demonFrontExtremityOffset',
+    'demonFrontRotationRadians',
+    'demonRearExtremityOffset',
+    'demonRearRotationRadians',
     'effects',
     'gaitPose',
     'headFacingOffset',
@@ -11550,21 +11563,21 @@ function boneyardEnemyAnimation(
     coffinState: coffinState as BoneyardEnemyCoffinState,
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
-    demonFrontJointRotationRadians: finite(
-      source.demonFrontJointRotationRadians,
-      `${field}.demonFrontJointRotationRadians`,
+    demonFrontExtremityOffset: boneyardPoint(
+      source.demonFrontExtremityOffset,
+      `${field}.demonFrontExtremityOffset`,
     ),
-    demonFrontLimbRotationRadians: finite(
-      source.demonFrontLimbRotationRadians,
-      `${field}.demonFrontLimbRotationRadians`,
+    demonFrontRotationRadians: finite(
+      source.demonFrontRotationRadians,
+      `${field}.demonFrontRotationRadians`,
     ),
-    demonRearJointRotationRadians: finite(
-      source.demonRearJointRotationRadians,
-      `${field}.demonRearJointRotationRadians`,
+    demonRearExtremityOffset: boneyardPoint(
+      source.demonRearExtremityOffset,
+      `${field}.demonRearExtremityOffset`,
     ),
-    demonRearLimbRotationRadians: finite(
-      source.demonRearLimbRotationRadians,
-      `${field}.demonRearLimbRotationRadians`,
+    demonRearRotationRadians: finite(
+      source.demonRearRotationRadians,
+      `${field}.demonRearRotationRadians`,
     ),
     effects,
     gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),

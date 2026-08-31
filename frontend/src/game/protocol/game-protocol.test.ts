@@ -1307,10 +1307,10 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       coffinState: 'closed',
       deathEpoch: 0,
       deathTick: 0,
-      demonFrontJointRotationRadians: 0,
-      demonFrontLimbRotationRadians: 0,
-      demonRearJointRotationRadians: 0,
-      demonRearLimbRotationRadians: 0,
+      demonFrontExtremityOffset: { x: 0, y: 0 },
+      demonFrontRotationRadians: 0,
+      demonRearExtremityOffset: { x: 0, y: 0 },
+      demonRearRotationRadians: 0,
       effects: [{
         alpha: 1.25,
         atlas: 'BadGuys',
@@ -1567,7 +1567,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    54,
+    56,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -1578,7 +1578,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 54)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 56)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,
@@ -1589,7 +1589,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     decodeServerGameMessage(encodeGameMessage(replicatedMessage)),
     replicatedMessage,
   )
-  assert.equal(replicatedFrame.world.entities.samples[0]?.[42], -1)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.[40], -1)
   const oversizedReplicatedSample = JSON.parse(encodeGameMessage(replicatedMessage))
   oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(20).fill(0))
   assert.throws(
@@ -1686,7 +1686,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 
   const invalidHeadFacing = JSON.parse(encodeGameMessage(replicatedMessage))
-  invalidHeadFacing.frame.world.entities.samples[0][42] = 2
+  invalidHeadFacing.frame.world.entities.samples[0][40] = 2
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidHeadFacing)),
     /invalid registered sample shape/,
@@ -1853,7 +1853,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v114 carries mod Boasts, Portal objectives, Steam detonation presentation, Tonic-inclusive Hagatha capacity, and the complete authoritative game snapshot', () => {
+test('protocol v115 carries Demon endpoints, mod Boasts, Portal objectives, Steam presentation, Hagatha capacity, and the complete game snapshot', () => {
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',

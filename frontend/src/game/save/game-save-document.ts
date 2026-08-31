@@ -1,6 +1,11 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES } from '../core-kernels/boneyard-enemy-config.ts'
 import {
+  assertNativeDemonArticulationState,
+  createNativeDemonArticulationState,
+  type NativeDemonArticulationState,
+} from '../core-kernels/boneyard-demon-articulation.ts'
+import {
   createPlayerCharacter,
   createIdlePlayerPrimaryCast,
   type PlayerCharacterConfig,
@@ -1720,9 +1725,22 @@ function normalizeWorld(
           phase: actor.lifeState === 'alive' ? 'flight' : 'death',
         }
       }
+      const savedBrain = record(brain, `game save Boneyard enemy brain ${index}`)
+      const normalizedBrain = savedBrain.family === 'demon'
+        ? {
+            ...savedBrain,
+            articulation: normalizeSavedDemonArticulation(
+              savedBrain.articulation,
+              actor,
+              config,
+              index,
+              sourceSchemaVersion,
+            ),
+          }
+        : savedBrain
       return {
         ...actor,
-        brain,
+        brain: normalizedBrain,
         config: {
           ...config,
           classification: config.classification ?? 'normal',
@@ -1854,6 +1872,44 @@ function normalizeWorld(
           slumpgutTicksRemaining: waves.slumpgutTicksRemaining ?? 0,
         },
   } as unknown as BoneyardWorldState
+}
+
+function normalizeSavedDemonArticulation(
+  value: unknown,
+  actor: Record<string, unknown>,
+  config: Record<string, unknown>,
+  index: number,
+  sourceSchemaVersion: number,
+): NativeDemonArticulationState {
+  if (value !== undefined) {
+    assertNativeDemonArticulationState(value as NativeDemonArticulationState)
+    return value as NativeDemonArticulationState
+  }
+  if (sourceSchemaVersion >= 27) {
+    throw new Error(`game save Boneyard Demon ${index} articulation is missing`)
+  }
+  const position = record(actor.position, `game save Boneyard Demon ${index} position`)
+  const actorId = finiteNumber(actor.id, `game save Boneyard Demon ${index} id`)
+  const spawnTick = finiteNumber(
+    actor.spawnTick,
+    `game save Boneyard Demon ${index} spawn tick`,
+  )
+  if (!Number.isSafeInteger(actorId) || actorId < 1) {
+    throw new Error(`game save Boneyard Demon ${index} id is invalid`)
+  }
+  if (!Number.isSafeInteger(spawnTick) || spawnTick < 0) {
+    throw new Error(`game save Boneyard Demon ${index} spawn tick is invalid`)
+  }
+  return createNativeDemonArticulationState(
+    actorId,
+    spawnTick,
+    {
+      x: finiteNumber(position.x, `game save Boneyard Demon ${index} x`),
+      y: finiteNumber(position.y, `game save Boneyard Demon ${index} y`),
+    },
+    finiteNumber(actor.headingDeg, `game save Boneyard Demon ${index} heading`),
+    finiteNumber(config.scale, `game save Boneyard Demon ${index} scale`),
+  )
 }
 
 function rejectUnexpectedKeys(

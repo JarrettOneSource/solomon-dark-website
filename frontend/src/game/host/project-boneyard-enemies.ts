@@ -252,7 +252,14 @@ function projectAnimation(
     ? actor.deathStartedTick ?? tick
     : tick
   const demonArticulation = demonBrain
-    ? nativeDemonArticulationSample(demonSampleTick, actor.spawnTick, demonControllerPose)
+    ? nativeDemonArticulationSample(
+        demonBrain.articulation,
+        demonSampleTick,
+        actor.spawnTick,
+        demonControllerPose,
+        actor.position,
+        actor.config.scale,
+      )
     : null
   return {
     action,
@@ -272,10 +279,10 @@ function projectAnimation(
     coffinState: coffin.state,
     deathEpoch: actor.deathEpoch ?? 0,
     deathTick: actor.deathTick,
-    demonFrontJointRotationRadians: demonArticulation?.frontRotationRadians ?? 0,
-    demonFrontLimbRotationRadians: demonArticulation?.frontRotationRadians ?? 0,
-    demonRearJointRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
-    demonRearLimbRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
+    demonFrontExtremityOffset: demonArticulation?.frontExtremityOffset ?? { x: 0, y: 0 },
+    demonFrontRotationRadians: demonArticulation?.frontRotationRadians ?? 0,
+    demonRearExtremityOffset: demonArticulation?.rearExtremityOffset ?? { x: 0, y: 0 },
+    demonRearRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
     effects: projectEnemyEffects(actor, tick),
     gaitPose,
     headFacingOffset: actor.headFacingOffset,
@@ -288,9 +295,10 @@ function projectAnimation(
     maggots: [],
     state,
     stridePhaseDeg: actor.stridePhaseDeg,
-    verticalOffset: impBrain?.verticalOffset
+    verticalOffset: demonBrain
+      ? actor.lifeState === 'dying' ? 0 : demonArticulation?.verticalOffset ?? 0
+      : impBrain?.verticalOffset
       ?? zombieBrain?.verticalOffset
-      ?? demonArticulation?.verticalOffset
       ?? coffin.verticalOffset,
     zombieAngularOffsetDeg: zombieBrain?.angularOffsetDeg ?? 0,
     zombieAttackSide: zombieBrain?.attackSide ?? 0,

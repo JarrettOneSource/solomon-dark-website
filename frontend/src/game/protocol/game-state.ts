@@ -675,10 +675,10 @@ export interface BoneyardEnemyAnimationSnapshot {
   coffinState: BoneyardEnemyCoffinState
   deathEpoch: number
   deathTick: number
-  demonFrontJointRotationRadians: number
-  demonFrontLimbRotationRadians: number
-  demonRearJointRotationRadians: number
-  demonRearLimbRotationRadians: number
+  demonFrontExtremityOffset: Vector2
+  demonFrontRotationRadians: number
+  demonRearExtremityOffset: Vector2
+  demonRearRotationRadians: number
   effects: readonly BoneyardEnemyEffectSnapshot[]
   gaitPose: number
   headFacingOffset: NativeSkeletonHeadFacingOffset

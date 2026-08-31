@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { nativeDemonArticulationSample } from '../core-kernels/boneyard-demon-articulation.ts'
+import {
+  NATIVE_DEMON_CONTROLLER_DRAW_SCALE,
+  NATIVE_DEMON_CONTROLLER_POINT_SCALE,
+  NATIVE_DEMON_EXTREMITY_DRAW_SCALE,
+  NATIVE_DEMON_STEP_INTERVAL_MAXIMUM_TICKS,
+  NATIVE_DEMON_STEP_INTERVAL_MINIMUM_TICKS,
+  createNativeDemonArticulationState,
+  nativeDemonArticulationRoot,
+  nativeDemonArticulationSample,
+  nativeDemonExtremityTarget,
+  stepNativeDemonArticulation,
+} from '../core-kernels/boneyard-demon-articulation.ts'
 import {
   createNativeImpFlightState,
   nativeImpEffectFrame,
@@ -248,13 +259,115 @@ test('Zombie renderer articulation preserves native quantization and attack side
   assert.equal(attack.rearArmRotationRadians, -7 * Math.PI / 180)
 })
 
-test('Demon controller uses native idle joints, action lock, and vertical bob', () => {
-  const idle = nativeDemonArticulationSample(90, 0, 0)
-  assert.equal(idle.frontRotationRadians, 2 * Math.PI / 180)
-  assert.equal(idle.rearRotationRadians, 3 * Math.PI / 180)
-  assert.ok(idle.verticalOffset < 0)
+test('Demon owns native planted endpoints, scale lanes, action lock, and vertical bob', () => {
+  assert.equal(NATIVE_DEMON_EXTREMITY_DRAW_SCALE, 0.8)
+  assert.equal(NATIVE_DEMON_CONTROLLER_DRAW_SCALE, 1.2)
+  assert.equal(NATIVE_DEMON_CONTROLLER_POINT_SCALE, 1.5)
 
-  const bomb = nativeDemonArticulationSample(90, 0, 1)
+  assert.deepEqual(
+    nativeDemonExtremityTarget({ x: 100, y: 200 }, 0, 1, 'front'),
+    { x: 112, y: 170 },
+  )
+  assert.deepEqual(
+    nativeDemonExtremityTarget({ x: 100, y: 200 }, 0, 1, 'rear'),
+    { x: 88, y: 170 },
+  )
+  for (let facing = 0; facing < 18; facing += 1) {
+    const front = nativeDemonExtremityTarget(
+      { x: 100, y: 200 },
+      facing * 20,
+      1,
+      'front',
+    )
+    const rear = nativeDemonExtremityTarget(
+      { x: 100, y: 200 },
+      facing * 20,
+      1,
+      'rear',
+    )
+    assert.ok(Math.abs(Math.hypot(front.x - rear.x, front.y - rear.y) - 24) < 1e-10)
+    assert.ok(Math.abs(Math.hypot(
+      (front.x + rear.x) * 0.5 - 100,
+      (front.y + rear.y) * 0.5 - 200,
+    ) - 30) < 1e-10)
+  }
+  const bucketed = nativeDemonExtremityTarget({ x: 100, y: 200 }, 90, 2, 'front')
+  assert.ok(Math.abs(bucketed.x - 163.25602144473882) < 1e-12)
+  assert.ok(Math.abs(bucketed.y - 213.21649541227717) < 1e-12)
+
+  let state = createNativeDemonArticulationState(
+    7,
+    20,
+    { x: 100, y: 200 },
+    0,
+    1,
+  )
+  assert.ok(state.stepIntervalTicks >= NATIVE_DEMON_STEP_INTERVAL_MINIMUM_TICKS)
+  assert.ok(state.stepIntervalTicks <= NATIVE_DEMON_STEP_INTERVAL_MAXIMUM_TICKS)
+  assert.deepEqual(state.front.current, { x: 112, y: 170 })
+  assert.deepEqual(state.rear.current, { x: 88, y: 170 })
+  assert.deepEqual(nativeDemonArticulationRoot(state), { x: 100, y: 170 })
+  assert.equal(state.front.phase, 1)
+  assert.equal(state.rear.phase, 1)
+
+  const replantTick = state.stepIntervalTicks
+  state = stepNativeDemonArticulation(state, {
+    active: true,
+    actorId: 7,
+    headingDeg: 0,
+    position: { x: 110, y: 200 },
+    scale: 1,
+    spawnTick: 20,
+    tick: replantTick,
+  })
+  assert.equal(state.front.phase, (0 + 0.015) * 1.06)
+  assert.ok(state.front.current.x > 112 && state.front.current.x < 122)
+  assert.ok(state.front.liftY < 0)
+  assert.equal(state.rear.phase, 1)
+
+  const frozen = stepNativeDemonArticulation(state, {
+    active: false,
+    actorId: 7,
+    headingDeg: 0,
+    position: { x: 120, y: 200 },
+    scale: 1,
+    spawnTick: 20,
+    tick: replantTick + 1,
+  })
+  assert.deepEqual(frozen, state)
+
+  for (let tick = replantTick + 1; state.completedSteps === 0; tick += 1) {
+    state = stepNativeDemonArticulation(state, {
+      active: true,
+      actorId: 7,
+      headingDeg: 0,
+      position: { x: 110, y: 200 },
+      scale: 1,
+      spawnTick: 20,
+      tick,
+    })
+  }
+  assert.equal(state.front.phase, 1)
+  assert.equal(state.front.liftY, -Math.sin(Math.PI) * 6)
+  assert.ok(state.frontBaseRotationDeg >= -20 && state.frontBaseRotationDeg < 10)
+  assert.ok(state.rearBaseRotationDeg >= -20 && state.rearBaseRotationDeg < 10)
+
+  const idle = nativeDemonArticulationSample(state, 90, 20, 0, { x: 110, y: 200 }, 1)
+  assert.equal(
+    idle.frontRotationRadians,
+    (2 + state.frontBaseRotationDeg) * Math.PI / 180,
+  )
+  assert.equal(
+    idle.rearRotationRadians,
+    (2 + state.rearBaseRotationDeg) * Math.PI / 180,
+  )
+  assert.ok(idle.verticalOffset < 0)
+  assert.ok(Number.isFinite(idle.frontExtremityOffset.x))
+  assert.ok(Number.isFinite(idle.frontExtremityOffset.y))
+  assert.ok(Number.isFinite(idle.rearExtremityOffset.x))
+  assert.ok(Number.isFinite(idle.rearExtremityOffset.y))
+
+  const bomb = nativeDemonArticulationSample(state, 90, 20, 1, { x: 110, y: 200 }, 1)
   assert.equal(bomb.frontRotationRadians, 40 * Math.PI / 180)
   assert.equal(bomb.rearRotationRadians, -40 * Math.PI / 180)
   assert.equal(bomb.verticalOffset, idle.verticalOffset)

@@ -11,6 +11,8 @@ const screenshotPath = process.env.SDR_ENEMY_VFX_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-enemy-animation-projectile-vfx-20260815.png')
 const deathScreenshotPath = process.env.SDR_ENEMY_DEATH_VFX_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-enemy-death-vfx-20260829.png')
+const demonScreenshotPath = process.env.SDR_DEMON_LIVE_SCREENSHOT
+  || join(tmpdir(), 'solomon-dark-demon-live-composite-20260831.png')
 const impContactScreenshotPath = process.env.SDR_IMP_CONTACT_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-imp-contact-authority-20260823.png')
 const skeletonEarlyScreenshotPath = process.env.SDR_SKELETON_ATTACK_EARLY_SCREENSHOT
@@ -335,10 +337,8 @@ try {
           action: 'demon-bomb',
           actionProgress: advanced ? 7 : 1,
           bodyPose: 1,
-          demonFrontJointRotationRadians: advanced ? radians(40) : radians(8),
-          demonFrontLimbRotationRadians: advanced ? radians(-40) : radians(-8),
-          demonRearJointRotationRadians: advanced ? radians(-40) : radians(-8),
-          demonRearLimbRotationRadians: advanced ? radians(40) : radians(8),
+          demonFrontRotationRadians: advanced ? radians(40) : radians(8),
+          demonRearRotationRadians: advanced ? radians(-40) : radians(-8),
           state: 'action',
           verticalOffset: -3,
         }),
@@ -732,11 +732,14 @@ try {
         enemy,
         121.75,
         (atlas, entry) => assetModule.nativeEnemySpriteRecord(atlas, entry).points,
-      ).layers.map(({ entry, role, rotationRadians, scaleX }) => ({
+      ).layers.map(({ entry, role, rotationRadians, scale, scaleX, scaleY, stretch }) => ({
         entry,
         role,
         rotationRadians,
-        scaleX: scaleX ?? 1,
+        scale,
+        scaleX: scaleX ?? scale,
+        scaleY: scaleY ?? scale,
+        stretch,
       })),
     ]))
     const ambientRequests = ambientAudioModule.nativeBoneyardEnemyAmbientRequests(
@@ -785,7 +788,9 @@ try {
     })
     renderer.canvas.id = 'enemy-animation-projectile-vfx-canvas'
     document.body.append(renderer.canvas)
-    const initialPixels = capture(renderer.canvas)
+    const initialCopy = copyCanvas(renderer.canvas)
+    const initialPixels = capture(initialCopy)
+    const initialDemonPixels = capture(cropCanvas(initialCopy, 810, 430, 280, 260))
     renderer.consumeEnemyEvent({
       actorId: 4,
       eventId: 899,
@@ -818,6 +823,12 @@ try {
     const enemyVfxCopy = copyCanvas(renderer.canvas)
     const advancedPixels = enemyVfxCopy.getContext('2d', { willReadFrequently: true })
       .getImageData(0, 0, enemyVfxCopy.width, enemyVfxCopy.height).data
+    const demonCrop = cropCanvas(enemyVfxCopy, 810, 430, 280, 260)
+    const advancedDemonPixels = capture(demonCrop)
+    const demonImage = document.createElement('img')
+    demonImage.id = 'demon-live-composite-probe'
+    demonImage.src = demonCrop.toDataURL('image/png')
+    document.body.append(demonImage)
     const enemyVfxImage = document.createElement('img')
     enemyVfxImage.id = 'enemy-animation-projectile-vfx-probe'
     enemyVfxImage.src = enemyVfxCopy.toDataURL('image/png')
@@ -1107,6 +1118,7 @@ try {
       coffinRetirement: coffinRetirementReceipt,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       deathFrame,
+      demonAnimationDifference: compare(initialDemonPixels, advancedDemonPixels),
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
       impAuthority: impAuthorityReceipt,
       renderer: renderer.canvas.dataset.gameRenderer,
@@ -1288,6 +1300,28 @@ try {
   assert.equal(receipt.auxiliaryPlans.DEMON.filter(({ role }) => (
     role.startsWith('demon-flame:')
   )).length, 5)
+  const demonBody = receipt.auxiliaryPlans.DEMON.filter(({ role }) => (
+    !role.startsWith('demon-flame:')
+  ))
+  assert.deepEqual(demonBody.map(({ entry, role }) => ({ entry, role })), [
+    { entry: 62, role: 'demon-rear-extremity' },
+    { entry: 98, role: 'demon-rear-connector' },
+    { entry: 62, role: 'demon-front-extremity' },
+    { entry: 98, role: 'demon-front-connector' },
+    { entry: 37, role: 'demon-controller-body' },
+    { entry: 1, role: 'demon-front-upper-limb' },
+    { entry: 18, role: 'demon-rear-upper-limb' },
+    { entry: 80, role: 'demon-attached-late' },
+  ])
+  assert.deepEqual(demonBody.map(({ scaleX }) => scaleX), [
+    0.8, 1, 0.8, 1, 1.2, 1.2, -1.2, 1.2,
+  ])
+  assert.deepEqual(demonBody.map(({ scaleY }) => scaleY), [
+    0.8, 1, 0.8, 1, 1.2, 1.2, 1.2, 1.2,
+  ])
+  assert.equal(demonBody.filter(({ stretch }) => stretch !== undefined).length, 2)
+  assert.ok(receipt.demonAnimationDifference.changedPixels > 1_000)
+  assert.ok(receipt.demonAnimationDifference.channelDelta > 10_000)
   assert.ok(receipt.animationDifference.changedPixels > 1_000)
   assert.ok(receipt.animationDifference.channelDelta > 10_000)
   assert.ok(
@@ -1340,6 +1374,9 @@ try {
   await page.locator('#enemy-death-vfx-probe').screenshot({
     path: deathScreenshotPath,
   })
+  await page.locator('#demon-live-composite-probe').screenshot({
+    path: demonScreenshotPath,
+  })
   await page.locator('#imp-authority-contact-probe').screenshot({
     path: impContactScreenshotPath,
   })
@@ -1362,6 +1399,7 @@ try {
     ...receipt,
     consoleErrors,
     deathScreenshotPath,
+    demonScreenshotPath,
     failedResponses,
     impContactScreenshotPath,
     pageErrors,

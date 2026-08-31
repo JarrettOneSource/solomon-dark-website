@@ -548,3 +548,155 @@ Website's per-object inbound Region tint.
   remaining system unknown requires a web approximation.
 - This receipt is committed only on the focused task branch. It is not pushed,
   deployed, or production-live.
+
+## 2026-08-31 — Lesser Demon composite geometry reopening
+
+### Reported smell and parity question
+
+- The Website Lesser Demon is visibly too small while alive and appears to
+  enlarge when its death presentation replaces the articulated body.
+- The supplied `SDO - Demon Correct Size.mp4` is a `1600 x 900`, 30 fps,
+  4.001944-second native reference (SHA-256
+  `028946c85f8b55cc6fb90f2eda6f7b791b0905ebc179e5c062b0a82a81841f4e`).
+  Its living Demons retain the broad two-extremity silhouette through movement
+  and attacks; death is a distinct whole-body strip, not the first correctly
+  sized live frame.
+- This is a secondary report in a system previously called complete. The
+  earlier pass found the correct record ranges and controller points, but did
+  not drain the render instructions that scale those points, did not recover
+  the planted-extremity writer, treated a stretched textured connector as an
+  ordinary sprite, and omitted the mirrored upper-limb draw. Those skipped
+  geometry and membership rules caused the false closure.
+- Falsifiers were: all living parts use one scale; records `98..115` are
+  ordinary joint sprites; each endpoint is drawn once; controller points are
+  consumed raw; or the death scale is the same composite path as the living
+  body. Fresh instructions falsified every one.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDarkAbandonware/SolomonDark.exe`, Beta 0.72.5, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, re-hashed 2026-08-31 | Matches the canonical analyzed image. | high |
+| Supplied clean observation | `SDO - Demon Correct Size.mp4`, frames 1..120; representative unobscured living body at frame 45 | Living body has the controller, paired extended upper limbs, paired planted extremities/connectors, attached head, and five fires in one broad silhouette. | high for visible membership and relative size; capture-to-executable identity is not independently encoded in the MP4 |
+| Ghidra/tool provenance | canonical `SolomonDark` project through the replica wrapper; read-only Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`; `decompile_targets.py` SHA-256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465` | All addresses below are preferred-image addresses. The canonical project and Mod Loader checkout were not modified. | high |
+| Construction/default scale | `MonsterRecipe::MonsterRecipe 0x006400C0`, config build/apply `0x0046B390/0x00462790`, Demon constructor `0x00479150` | Default recipe `+0x74` is exactly `1`; config application overwrites the constructor-only random scale. The visible mismatch is therefore inside the Demon family compositor, not a missing wave-recipe multiplier. | high |
+| Planted-extremity state | Demon init `0x00487230`, target helper `0x00479620`, tick `0x00487300` | Init plants two endpoints at local `(12,-30)` and `(-12,-30)`, scaled by actor `+0x74` and rotated by the 20-degree facing bucket. Moving idle state replants them at staggered phases of a constructor interval `76..150`, advances `p=(p+.015)*1.06` to one, and adds lift `-6*sin(180*p)`; attacks and death freeze that lane. | high |
+| Living draw instructions | Demon render `0x00498BA0`; scalar data `0x00784818=0.8`, `0x00785360=1.2`, `0x007DE860=1.5`, `0x007DE8D8=5` | Both record-`62..79` endpoint sprites draw at `0.8`; both record-`98..115` textures become stretched quads from the endpoint record's point zero to controller point `6/7`; controller `19..54`, both normal/mirrored `1..18` upper limbs, and attached `80..97` draw at `1.2`; controller attachment geometry and fire bases use the separate `1.5` lane. | high |
+| Death draw instructions | `0x00498C8F..0x00498E49` within renderer `0x00498BA0` | The lethal branch selects `55 + trunc((heading+26)/52) mod 7` and draws three additive passes at actor scale times `1.2`. It never proves that the living composition is unit-sized. | high |
+| Attack/muzzle instructions | `Action_Demon_Spit 0x0044DD40/0x0044DF00`, event `0x0049A270` | Selector sequence remains `[0,0,0,1,1,1,1,1,0]`. Muzzle ownership starts from the live endpoint midpoint plus controller point five before the heading offsets and child births. | high |
+| Mac Website baseline | exact `origin/main` `41e1525491649235c00e82207f67803084138943`, Mac Chrome WebGL2, `smoke-enemy-animation-projectile-vfx.mjs`; live screenshot SHA-256 `9006e4365bf6507f5a05409d9611bde890789647cf68d9812fb71f0142dc11cd` | The real view reports every living Demon layer at scale one, uses raw point offsets, has only five body entries, and renders record 98 as a small sprite. Page, console, and failed-response arrays are empty, so this is a geometry defect rather than a failed asset load. | high |
+
+The attempted supporting live-memory check found no running injected
+`SolomonDark.exe`; no stale PID, ASLR base, or loader observation is used as
+evidence. Static instructions fully determine the material geometry.
+
+### System boundary and membership inventory
+
+Native system: **Lesser Demon live composite, planted-extremity, auxiliary,
+hit, and terminal presentation**, from factory scale and spawn initialization
+through fixed-tick endpoint state, ordered atlas draws, attack muzzle, death
+handoff, replication, and teardown.
+
+| Member / branch | Native source | Disposition | Proof / consequence |
+| --- | --- | --- | --- |
+| Recipe/config scale | `0x006400C0`, `0x0046B390`, `0x00462790`, actor/config `+0x74` | verified-already-at-parity | immutable Website `config.scale` remains the one outer actor-scale lane; no Demon-only recipe patch |
+| Spawn endpoint initialization | `0x00487230 -> 0x00479620` | exact-ported by this reopening | both sides, facing bucket, actor scale, current/start/target state, phase and interval are authoritative |
+| Idle/moving endpoint update | `0x00487300` | exact-ported by this reopening | staggered replant, accelerating phase, lift, planted-world continuity, and base-angle reroll are fixed-tick state |
+| Bomb-action freeze and controller selectors | `0x0044DD40/0x0044DF00` | exact-ported by this reopening | endpoint state freezes while the existing exact nine-selector program runs |
+| Demon `1..18` | renderer `0x00498BA0`, complete 18-facing bank | exact-ported by this reopening | one ordinary upper limb plus one reversed-facing mirrored draw, both at `1.2` and controller points `0/1` scaled by `1.5` |
+| Demon `19..36` | renderer controller pose zero | exact-ported by this reopening | every facing, native origin, actor scale times `1.2` |
+| Demon `37..54` | renderer controller pose one | exact-ported by this reopening | every facing and attack selector, same `1.2` geometry |
+| Demon `55..61` | lethal branch in `0x00498BA0` | verified-already-at-parity | seven directional death records, three additive passes, 100-tick fade, scale `1.2` |
+| Demon `62..79` | endpoint sprites in `0x00498BA0` | exact-ported by this reopening | the selected facing record is drawn twice at the two planted endpoints, scale `0.8`, endpoint-Y order |
+| Demon `80..97` | attached late draw in `0x00498BA0` | exact-ported by this reopening | selected facing record uses controller point five and scale `1.2`; it is not a point-six joint sprite |
+| Demon `98..115` | `0x00498BA0 -> 0x0041F830` | exact-ported by this reopening | selected facing texture is drawn twice as endpoint-to-controller textured quads, not ordinary sprites |
+| DeadHawg `46..77` five persistent fires | constructor/tick/render `0x00479150/0x00487300/0x00498BA0` | exact-ported by this reopening | all 32 records, five phase/offset lanes, scales `[.5,1.1,.5,.8,.8]`, controller points `2/3/4` and two midpoints scaled by `1.5`, point-five split order |
+| Living hit redraw | common damage compositor plus Demon body membership | exact-ported by this reopening | all eight opaque living body/connector submissions redraw red; independent five fires do not |
+| Demon bomb muzzle and DemonBomb child | `0x0049A270`, type `0x7F7` | exact-ported / verified-already-at-parity | muzzle now consumes the replicated live endpoint midpoint; existing burst/projectile clocks, art, light, collision, and teardown stay unchanged |
+| Delayed death fires and clock-95 burst | `0x00487300` | verified-already-at-parity | existing five births and post-world FireBurst remain independent of body geometry |
+| Clock-100 Banish, SpriteArray, split Imps, reward, removal | `0x00482930` and concrete terminal classes | verified-already-at-parity | existing authoritative terminal store and teardown remain unchanged |
+| Skeleton/Archer/Mage, Imp, Zombie, Wraith, Coffin/Maggot, Portal | distinct render slots and authored banks | out-of-system for Demon family-local geometry | shared outer `config.scale`, hit, painter, replication, and teardown contracts remain regression witnesses; no Demon constants are applied to siblings |
+| Enhanced Effects OFF | stock setting gate | out-of-system | Website pins the shipped Enhanced Effects default ON; no mutable OFF producer exists |
+
+No member is blocked by the browser: Pixi/WebGL can represent the ordinary
+sprites, mirrored transform, and textured connector quads exactly.
+
+### Native ownership thread and recovered contract
+
+```text
+MonsterRecipe default/build -> factory/config apply
+  -> Demon::init 0x00487230 (two planted endpoints)
+  -> Demon::tick 0x00487300 (movement/replant/lift or frozen action/death)
+  -> Action_Demon_Spit selector writer 0x0044DF00
+  -> Demon::render 0x00498BA0
+       endpoint sprite + textured connector, twice in endpoint-Y order
+       controller + ordinary/mirrored upper limbs
+       behind fires -> attached late record -> front fires
+  -> event 0x0049A270 / DemonBomb
+  -> lethal 0..100 body and delayed children
+  -> terminal actors, split children, reward, removal
+```
+
+- Outer actor `config.scale` is applied exactly once. Family-local `0.8`,
+  `1.2`, and `1.5` multipliers remain inside the Demon compositor.
+- Endpoint state is simulation-owned and fixed-tick. The renderer samples
+  offsets and angles; it does not advance phases from browser cadence.
+- Connector geometry is one textured rectangle whose long axis joins the two
+  recovered endpoints and whose cross-axis retains the selected record width.
+  A generic line or an ordinary sprite cannot preserve its art or bounds.
+- Endpoint sprites and connectors precede the controller. The two upper limbs
+  follow the controller, with the rear copy using reversed facing and negative
+  X scale. Behind fires precede record `80..97`; front fires follow it.
+- Death, reset, disconnect, late join, and scene teardown retain the existing
+  authoritative actor/effect lifecycle. A late client receives endpoint state
+  rather than restarting the stepping cycle.
+- Native uses the process-global RNG for constructor fire values and step-angle
+  rerolls. Website retains the established actor-owned deterministic visual
+  stream while preserving every native range, timing gate, membership, and
+  ordering; cross-launch RNG word identity is the only substitution.
+
+### Nearby-system findings
+
+- `0x0041F830` is a general textured-quad-between-points primitive. This pass
+  does not reclassify its unrelated callers; it ports the two Demon call sites
+  through a cohesive enemy connector layer.
+- Demon shadow/contact functions consume the endpoint midpoint, confirming
+  that the two endpoint fields are durable actor state rather than temporary
+  renderer locals. Existing collision radius and navigation clearance remain
+  distinct gameplay bounds and are not resized with presentation.
+
+### Web implementation consequence
+
+- Deepen `boneyard-demon-articulation.ts` into the authoritative endpoint
+  state/update owner and project its current offsets through the enemy sample.
+- Replace the four false independent joint rotations with the native paired
+  angle/endpoints contract, cut protocol cleanly, and interpolate continuous
+  offsets without a compatibility decoder.
+- Replace `demonLayers` with the complete ordered membership and exact scale
+  lanes. Render `98..115` through a textured connector primitive and restore
+  the missing mirrored `1..18` limb.
+- Scale persistent-fire bases and split threshold in their authored controller
+  coordinate space. Feed the live endpoint midpoint to the muzzle owner.
+- Do not change Demon collision, navigation clearance, damage, projectile,
+  lighting, terminal output, or any sibling family.
+
+### Validation contract
+
+- Focused kernel tests: both spawn targets for all eighteen facing buckets,
+  actor-scale application, `76..150` interval domain, staggered replant,
+  `(p+.015)*1.06`, `-6*sin(180p)`, planted continuity, action/death freeze,
+  and deterministic base-angle reroll range.
+- Renderer tests: every row in Demon `1..115` and DeadHawg `46..77` is reached;
+  both endpoint sprites and both connector rectangles exist; exact
+  `.8/1.2/1.5` scales, reversed facing/mirror, point indices, endpoint-Y order,
+  fire split, hit membership, death branch, and muzzle midpoint are asserted.
+- Protocol/timeline tests: strict new sample shape, round trip, fractional
+  endpoint/angle interpolation, late join, and no renderer-owned phase advance.
+- Mac Chrome WebGL2: dedicated living/death Demon crops, measurable opaque
+  bounds larger than the old compact body, two visible textured connectors,
+  stable attack transition, empty page/console/failed-response arrays, and the
+  unchanged all-family/projectile/death inventory.
+- Real `/game`: naturally observed living Demon, bomb marker/projectile,
+  lethal `0..100` transition, terminal removal, and second-run reset.
+- The exact rebased candidate must pass focused suites and
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini before push.

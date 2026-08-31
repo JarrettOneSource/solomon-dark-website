@@ -4,6 +4,7 @@ import test from 'node:test'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
+import { nativeDemonArticulationRoot } from '../core-kernels/boneyard-demon-articulation.ts'
 import {
   NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
   NATIVE_BADGUY_GAIT_PHASE_PERIOD,
@@ -877,6 +878,20 @@ test('native zero-speed gates preserve each family recurrence and enrollment rul
     }, 1, FAR_PLAYERS)
     assert.deepEqual(result.store.actors[0]!.lighting, expected, token)
   }
+})
+
+test('Demon root follows the planted-extremity midpoint only beyond thirty units', () => {
+  const spawned = spawnOne('demon-planted-root', 'DEMON', { x: 0, y: 0 }, FAR_PLAYERS)
+  const demon = spawned.store.actors[0]!
+  if (demon.brain.family !== 'demon') throw new Error('expected Demon brain')
+  const plantedRoot = nativeDemonArticulationRoot(demon.brain.articulation)
+  const displaced = {
+    ...demon,
+    position: { x: plantedRoot.x + 31, y: plantedRoot.y },
+    targetPlayerId: null,
+  }
+  const result = step({ ...spawned.store, actors: [displaced] }, 1, {})
+  assert.deepEqual(result.store.actors[0]?.position, plantedRoot)
 })
 
 test('Archer death pose clears charge and every enrolled provider copy', () => {

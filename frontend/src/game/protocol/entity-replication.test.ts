@@ -41,6 +41,11 @@ import {
   BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION,
   boneyardEnemyDeathEffectDescriptor,
 } from './boneyard-enemy-death-effect-replication.ts'
+import {
+  boneyardEnemyDescriptor,
+  boneyardEnemySample,
+  materializeBoneyardEnemy,
+} from './boneyard-enemy-replication.ts'
 
 function hubSnapshot(studentCount: number): GameSnapshot {
   return createGameSnapshot(createGameSimulation({}, {
@@ -358,16 +363,17 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
   assert.equal(frame.world.entities.spawned[0]!.length, 14)
-  assert.equal(frame.world.entities.samples[0]!.length, 54)
+  assert.equal(frame.world.entities.samples[0]!.length, 56)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
   assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0, 1, 0, 1.25])
-  assert.equal(frame.world.entities.samples[0]![32], 25 * 1024)
-  assert.equal(frame.world.entities.samples[0]![33], 50 * 1024)
-  assert.equal(frame.world.entities.samples[0]![38], 1)
-  assert.equal(frame.world.entities.samples[0]![39], 0.375 * 1024)
-  assert.equal(frame.world.entities.samples[0]![40], 0)
-  assert.equal(frame.world.entities.samples[0]![41], 1)
-  assert.equal(frame.world.entities.samples[0]![42], 1)
+  assert.equal(frame.world.entities.samples[0]![30], 25 * 1024)
+  assert.equal(frame.world.entities.samples[0]![31], 50 * 1024)
+  assert.equal(frame.world.entities.samples[0]![36], 1)
+  assert.equal(frame.world.entities.samples[0]![37], 0.375 * 1024)
+  assert.equal(frame.world.entities.samples[0]![38], 0)
+  assert.equal(frame.world.entities.samples[0]![39], 1)
+  assert.equal(frame.world.entities.samples[0]![40], 1)
+  assert.deepEqual(frame.world.entities.samples[0]!.slice(42, 46), [0, 0, 0, 0])
   const legacyFlyblownSideSample = [
     ...frame.world.entities.samples[0]!.slice(0, 31),
     -1,
@@ -410,6 +416,70 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.deepEqual(
     reconstructed.world.mageLightningPulses,
     initial.world.mageLightningPulses,
+  )
+})
+
+test('Demon planted endpoints round-trip only on the Demon family wire', () => {
+  const source: BoneyardEnemySnapshot = {
+    ...enemySnapshot(),
+    animation: {
+      ...enemySnapshot().animation,
+      action: null,
+      demonFrontExtremityOffset: { x: 12, y: -30 },
+      demonFrontRotationRadians: 0.25,
+      demonRearExtremityOffset: { x: -12, y: -30 },
+      demonRearRotationRadians: -0.5,
+      effects: [],
+      headFacingOffset: 0,
+      state: 'locomotion',
+    },
+    armored: false,
+    enemyToken: 'DEMON',
+    flags: [],
+    nativeTypeId: 1009,
+  }
+  const descriptor = boneyardEnemyDescriptor(source)
+  const sample = boneyardEnemySample(source)
+  assert.equal(descriptor.length, 14)
+  assert.equal(sample.length, 56)
+  assert.deepEqual(sample.slice(25, 27), [256, -512])
+  assert.deepEqual(sample.slice(42, 46), [192, -480, -192, -480])
+  assert.deepEqual(
+    materializeBoneyardEnemy(descriptor, sample).animation.demonFrontExtremityOffset,
+    { x: 12, y: -30 },
+  )
+  assert.deepEqual(
+    materializeBoneyardEnemy(descriptor, sample).animation.demonRearExtremityOffset,
+    { x: -12, y: -30 },
+  )
+  assert.equal(
+    materializeBoneyardEnemy(descriptor, sample).animation.demonFrontRotationRadians,
+    0.25,
+  )
+  assert.equal(
+    materializeBoneyardEnemy(descriptor, sample).animation.demonRearRotationRadians,
+    -0.5,
+  )
+
+  const sibling = {
+    ...enemySnapshot(),
+    animation: {
+      ...enemySnapshot().animation,
+      demonFrontExtremityOffset: { x: 1, y: 0 },
+    },
+  }
+  assert.throws(
+    () => boneyardEnemySample(sibling),
+    /require a Demon family/,
+  )
+  const siblingSample = [...boneyardEnemySample(enemySnapshot())]
+  siblingSample[42] = 16
+  assert.throws(
+    () => materializeBoneyardEnemy(
+      boneyardEnemyDescriptor(enemySnapshot()),
+      siblingSample as unknown as ReplicatedEntitySample,
+    ),
+    /do not match the enemy family/,
   )
 })
 
@@ -488,29 +558,29 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 44),
+    ...sample.slice(0, 46),
     1,
-    ...sample.slice(45),
+    ...sample.slice(47),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
-    ...sample.slice(0, 39),
+    ...sample.slice(0, 37),
     1025,
-    ...sample.slice(40),
+    ...sample.slice(38),
   ] as unknown as ReplicatedEntitySample
   const invalidCharge = [
-    ...sample.slice(0, 40),
+    ...sample.slice(0, 38),
     1025,
-    ...sample.slice(41),
+    ...sample.slice(39),
   ] as unknown as ReplicatedEntitySample
   const invalidProviderCopies = [
-    ...sample.slice(0, 41),
+    ...sample.slice(0, 39),
     3,
-    ...sample.slice(42),
+    ...sample.slice(40),
   ] as unknown as ReplicatedEntitySample
   const invalidHeadFacing = [
-    ...sample.slice(0, 42),
+    ...sample.slice(0, 40),
     2,
-    ...sample.slice(43),
+    ...sample.slice(41),
   ] as unknown as ReplicatedEntitySample
   const invalidActorLane = [...descriptor] as [number, number, ...number[]]
   invalidActorLane[8] = 1
@@ -1325,10 +1395,10 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       coffinState: 'closed',
       deathEpoch: 0,
       deathTick: 0,
-      demonFrontJointRotationRadians: 0,
-      demonFrontLimbRotationRadians: 0,
-      demonRearJointRotationRadians: 0,
-      demonRearLimbRotationRadians: 0,
+      demonFrontExtremityOffset: { x: 0, y: 0 },
+      demonFrontRotationRadians: 0,
+      demonRearExtremityOffset: { x: 0, y: 0 },
+      demonRearRotationRadians: 0,
       effects: [{
         alpha: 1.25,
         atlas: 'BadGuys',

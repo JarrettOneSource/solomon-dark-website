@@ -19,7 +19,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 14
-const EFFECT_COMPONENT_OFFSET = 44
+const EFFECT_COMPONENT_OFFSET = 46
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -118,18 +118,19 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[14] >= 0
       && sample[15] >= 0
       && sample[17] >= 0 && sample[17] <= VALUE_SCALE
-      && arrayIndex(sample[29], 2)
-      && sample[30] >= -1 && sample[30] <= 3
-      && sample[31] >= -1 && sample[31] <= 3
-      && sample[32] >= 0
-      && sample[33] >= sample[32]
-      && sample[35] >= 0 && sample[35] <= VALUE_SCALE
-      && sample[39] >= 0 && sample[39] <= VALUE_SCALE
-      && sample[40] >= 0 && sample[40] <= VALUE_SCALE
-      && sample[41] >= 0 && sample[41] <= 2
-      && sample[42] >= -1 && sample[42] <= 1
-      && (sample[42] === 0 || sample[6] === 2)
-      && sample[43] >= 0
+      && arrayIndex(sample[27], 2)
+      && sample[28] >= -1 && sample[28] <= 3
+      && sample[29] >= -1 && sample[29] <= 3
+      && sample[30] >= 0
+      && sample[31] >= sample[30]
+      && sample[33] >= 0 && sample[33] <= VALUE_SCALE
+      && sample[37] >= 0 && sample[37] <= VALUE_SCALE
+      && sample[38] >= 0 && sample[38] <= VALUE_SCALE
+      && sample[39] >= 0 && sample[39] <= 2
+      && sample[40] >= -1 && sample[40] <= 1
+      && (sample[40] === 0 || sample[6] === 2)
+      && sample[41] >= 0
+      && sample.slice(42, 46).every((value) => Math.abs(value) <= POSITION_SCALE * 256)
       && effectComponentsAreValid(sample)
   },
 }
@@ -159,6 +160,9 @@ export function boneyardEnemySample(
   enemy: BoneyardEnemySnapshot,
 ): ReplicatedEntitySample {
   const animation = enemy.animation
+  if (enemy.enemyToken !== 'DEMON' && !demonOffsetsAreZero(animation)) {
+    throw new Error('Boneyard Demon endpoint offsets require a Demon family')
+  }
   if (
     animation.headFacingOffset !== 0
     && (
@@ -197,10 +201,8 @@ export function boneyardEnemySample(
     quantize(animation.zombieFrontArmRotationRadians, VALUE_SCALE),
     quantize(animation.zombieRearArmPose, VALUE_SCALE),
     quantize(animation.zombieRearArmRotationRadians, VALUE_SCALE),
-    quantize(animation.demonFrontJointRotationRadians, VALUE_SCALE),
-    quantize(animation.demonFrontLimbRotationRadians, VALUE_SCALE),
-    quantize(animation.demonRearJointRotationRadians, VALUE_SCALE),
-    quantize(animation.demonRearLimbRotationRadians, VALUE_SCALE),
+    quantize(animation.demonFrontRotationRadians, VALUE_SCALE),
+    quantize(animation.demonRearRotationRadians, VALUE_SCALE),
     animation.zombieAttackSide,
     animation.zombieBodyType,
     animation.zombieHeadType,
@@ -216,6 +218,10 @@ export function boneyardEnemySample(
     enemy.lighting.providerCopies,
     animation.headFacingOffset,
     quantize(animation.stridePhaseDeg, VALUE_SCALE),
+    quantize(animation.demonFrontExtremityOffset.x, POSITION_SCALE),
+    quantize(animation.demonFrontExtremityOffset.y, POSITION_SCALE),
+    quantize(animation.demonRearExtremityOffset.x, POSITION_SCALE),
+    quantize(animation.demonRearExtremityOffset.y, POSITION_SCALE),
     ...effectComponents,
   ]
 }
@@ -235,12 +241,29 @@ export function materializeBoneyardEnemy(
   }
   const family = FAMILIES[descriptor[2]]!
   if (
-    sample[42] !== 0
+    sample[40] !== 0
     && family !== 'SKELETON'
     && family !== 'SKELETONMAGE'
   ) {
     throw new Error('Boneyard enemy head-facing offset is invalid for its family')
   }
+  const demonFrontExtremityOffset = {
+    x: dequantize(sample[42], POSITION_SCALE),
+    y: dequantize(sample[43], POSITION_SCALE),
+  }
+  const demonRearExtremityOffset = {
+    x: dequantize(sample[44], POSITION_SCALE),
+    y: dequantize(sample[45], POSITION_SCALE),
+  }
+  if (
+    family !== 'DEMON'
+    && (
+      demonFrontExtremityOffset.x !== 0
+      || demonFrontExtremityOffset.y !== 0
+      || demonRearExtremityOffset.x !== 0
+      || demonRearExtremityOffset.y !== 0
+    )
+  ) throw new Error('Boneyard Demon endpoint offsets do not match the enemy family')
   return {
     animation: {
       action: ACTIONS[sample[7]]!,
@@ -256,29 +279,29 @@ export function materializeBoneyardEnemy(
       coffinState: COFFIN_STATES[sample[13]]!,
       deathEpoch: sample[14],
       deathTick: sample[15],
-      demonFrontJointRotationRadians: dequantize(sample[25], VALUE_SCALE),
-      demonFrontLimbRotationRadians: dequantize(sample[26], VALUE_SCALE),
-      demonRearJointRotationRadians: dequantize(sample[27], VALUE_SCALE),
-      demonRearLimbRotationRadians: dequantize(sample[28], VALUE_SCALE),
+      demonFrontExtremityOffset,
+      demonFrontRotationRadians: dequantize(sample[25], VALUE_SCALE),
+      demonRearExtremityOffset,
+      demonRearRotationRadians: dequantize(sample[26], VALUE_SCALE),
       effects: decodeEffects(sample),
       gaitPose: dequantize(sample[16], VALUE_SCALE),
-      headFacingOffset: sample[42] as -1 | 0 | 1,
+      headFacingOffset: sample[40] as -1 | 0 | 1,
       hitFlash: dequantize(sample[17], VALUE_SCALE),
       impEffectFrame: sample[18],
-      impBodyRotationRadians: dequantize(sample[34], VALUE_SCALE),
-      impEffectAlpha: dequantize(sample[35], VALUE_SCALE),
+      impBodyRotationRadians: dequantize(sample[32], VALUE_SCALE),
+      impEffectAlpha: dequantize(sample[33], VALUE_SCALE),
       maggots: [],
       state: ANIMATION_STATES[sample[6]]!,
-      stridePhaseDeg: dequantize(sample[43], VALUE_SCALE),
+      stridePhaseDeg: dequantize(sample[41], VALUE_SCALE),
       verticalOffset: dequantize(sample[19], VALUE_SCALE),
       zombieAngularOffsetDeg: dequantize(sample[20], VALUE_SCALE),
-      zombieAttackSide: sample[29] as 0 | 1,
-      zombieBodyRotationRadians: dequantize(sample[36], VALUE_SCALE),
-      zombieBodyType: sample[30],
+      zombieAttackSide: sample[27] as 0 | 1,
+      zombieBodyRotationRadians: dequantize(sample[34], VALUE_SCALE),
+      zombieBodyType: sample[28],
       zombieFrontArmPose: dequantize(sample[21], VALUE_SCALE),
       zombieFrontArmRotationRadians: dequantize(sample[22], VALUE_SCALE),
-      zombieHeadType: sample[31],
-      zombieHeadRotationRadians: dequantize(sample[37], VALUE_SCALE),
+      zombieHeadType: sample[29],
+      zombieHeadRotationRadians: dequantize(sample[35], VALUE_SCALE),
       zombieRearArmPose: dequantize(sample[23], VALUE_SCALE),
       zombieRearArmRotationRadians: dequantize(sample[24], VALUE_SCALE),
     },
@@ -293,9 +316,9 @@ export function materializeBoneyardEnemy(
       registrationOrdinal: descriptor[9],
     },
     lighting: {
-      charge: dequantize(sample[40], VALUE_SCALE),
-      glow: dequantize(sample[39], VALUE_SCALE),
-      providerCopies: sample[41] as 0 | 1 | 2,
+      charge: dequantize(sample[38], VALUE_SCALE),
+      glow: dequantize(sample[37], VALUE_SCALE),
+      providerCopies: sample[39] as 0 | 1 | 2,
     },
     mageCloak: descriptor[10] === 1,
     maximumHealth: descriptor[5],
@@ -305,8 +328,8 @@ export function materializeBoneyardEnemy(
       y: dequantize(sample[3], POSITION_SCALE),
     },
     scale: descriptor[13],
-    shieldHealth: dequantize(sample[32], VALUE_SCALE),
-    shieldMaximumHealth: dequantize(sample[33], VALUE_SCALE),
+    shieldHealth: dequantize(sample[30], VALUE_SCALE),
+    shieldMaximumHealth: dequantize(sample[31], VALUE_SCALE),
     spawnTick: descriptor[4],
   }
 }
@@ -345,7 +368,7 @@ function encodeEffects(effects: readonly BoneyardEnemyEffectSnapshot[]): number[
 }
 
 function decodeEffects(sample: ReplicatedEntitySample): readonly BoneyardEnemyEffectSnapshot[] {
-  return Array.from({ length: sample[38] }, (_, index) => {
+  return Array.from({ length: sample[36] }, (_, index) => {
     const offset = EFFECT_COMPONENT_OFFSET + index * EFFECT_COMPONENT_COUNT
     return {
       alpha: dequantize(sample[offset + 5], VALUE_SCALE),
@@ -365,7 +388,7 @@ function decodeEffects(sample: ReplicatedEntitySample): readonly BoneyardEnemyEf
 }
 
 function effectComponentsAreValid(sample: ReplicatedEntitySample): boolean {
-  const count = sample[38]
+  const count = sample[36]
   if (!Number.isSafeInteger(count) || count < 0 || count > MAX_EFFECTS) return false
   const ids = new Set<number>()
   const roles = new Set<number>()
@@ -432,6 +455,13 @@ function decodeFlags(mask: number): readonly string[] {
   return BONEYARD_ENEMY_FLAGS.filter((_, index) => (
     Math.floor(mask / 2 ** index) % 2 === 1
   ))
+}
+
+function demonOffsetsAreZero(animation: BoneyardEnemySnapshot['animation']): boolean {
+  return animation.demonFrontExtremityOffset.x === 0
+    && animation.demonFrontExtremityOffset.y === 0
+    && animation.demonRearExtremityOffset.x === 0
+    && animation.demonRearExtremityOffset.y === 0
 }
 
 function requiredIndex<T>(source: readonly T[], value: T, label: string): number {
