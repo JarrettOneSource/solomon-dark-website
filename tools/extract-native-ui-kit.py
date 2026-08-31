@@ -30,6 +30,7 @@ ATLAS_SPECS = {
     "GameOver": (3, "680d1503b42d0108b66dca28cdd5adc4d8de532a1d133eed730d70aa78881889", "30c07de43c04b4b843ae85b52443d48087259cbd99992bbfaaa2f704d4884443", (512, 256), "native-ui-game-over-atlas.png"),
     "Inventory": (84, "763b826f6b24f872798c4d08ea8d367e31afcba6042cdbd6f38e8b1f87f83b9c", "527b52fb30453ae9d2bf5a0e1d3b0ee9f822eb7591452a11084e1cf4e2626265", (1024, 512), "hub-trader-inventory-atlas.png"),
     "LevelPicker": (8, "a2ae8f8028d4a4450e7fa0b503b16c57470dfe6afbaa02c56b8d9c791359cfb8", "d97a9f17a1eacdb69835e1f1848ab11416ca450e85cc927c98a25dc40deaf39b", (1024, 1024), "native-ui-level-picker-atlas.png"),
+    "Library": (33, "028308e108b779963cffc1cc506e63a37dfe2a1d931cb25eef02074e86d96f1a", "66fe50d1a29015446b27e32f096a3887c8c6a9a3d0525f6de6459934260a3457", (1024, 1024), "native-ui-library-atlas.png"),
     "Loader": (5, "df1be9c59b86619c0151f5e02ea53eb9bcd5ae0ce692193fd48c7c44c7f5ae9b", "73707feca39b56d008a2a0b60950c9d06d01cab8374f5ec66b339d4fdd948722", (512, 256), "native-ui-loader-atlas.png"),
     "Skills": (166, "a1efe484b5cbcc5402d48a2a8dc11e1e26c06763dbb612edd66547700d3259cf", "ac1678d6aef8ddefa0def73754b6688c58f1aeaf88c461a4ed6f92c139ed2638", (1024, 512), "skill-picker-skills-atlas.png"),
     "Title": (25, "f6f1e5956427bfa45bc5e28c87cb2574a25169da96feca62e7efe8691d2b99d8", "86b8bb40b3f7ece277cf0d1038b118bf095b8489bdc344738b2fe8cbe1160ff2", (2048, 1024), "native-ui-title-atlas.png"),
@@ -272,7 +273,7 @@ def main() -> int:
             total_glyphs += len(group.glyphs)
         total_records += len(records)
 
-    if len(atlas_json) != 12 or total_records != 1_259:
+    if len(atlas_json) != 13 or total_records != 1_292:
         raise ValueError("stock UI atlas census drifted")
     if len(fonts_json) != 10 or total_glyphs != 718:
         raise ValueError("stock UI font census drifted")
@@ -280,7 +281,7 @@ def main() -> int:
         "schema": "solomon-dark-native-ui-assets-v1",
         "sourceExecutableSha256": RETAIL_SHA256,
         "summary": {
-            "atlasCount": 12,
+            "atlasCount": 13,
             "recordCount": total_records,
             "fontCount": 10,
             "glyphCount": total_glyphs,

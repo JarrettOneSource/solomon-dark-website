@@ -152,6 +152,10 @@ import {
   HUB_UNFORGE_TARGET,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  hubNpcSelectorClampScroll,
+  hubNpcSelectorDragScroll,
+  hubNpcSelectorVisibleRows,
+  hubNpcSelectorWheelScroll,
   hubNativeUiCloseReveal,
   hubNativeUiReveal,
   hubDowsingSlotPosition,
@@ -216,6 +220,7 @@ interface HubNpcChatPresentation {
   readonly content: HubNpcChatContent
   readonly phaseStartedAtMs: number
   readonly selectorOffset: number
+  readonly selectorScroll: number
 }
 
 interface PendingHubNpcSelection {
@@ -747,6 +752,7 @@ function NativeHubSurface({
       : { kind: 'choices' },
     phaseStartedAtMs: performance.now(),
     selectorOffset: 0,
+    selectorScroll: 0,
   }))
   const [pendingNpcSelection, setPendingNpcSelection] =
     useState<PendingHubNpcSelection | null>(null)
@@ -897,6 +903,7 @@ function NativeHubSurface({
           content: response,
           phaseStartedAtMs: performance.now(),
           selectorOffset: 0,
+          selectorScroll: 0,
         })
       }, NATIVE_SELECTOR_ACCEPT_TICKS * 10)
       return
@@ -1027,6 +1034,7 @@ function NativeHubSurface({
       content,
       phaseStartedAtMs: performance.now(),
       selectorOffset: 0,
+      selectorScroll: 0,
     })
   }, [])
 
@@ -1125,12 +1133,14 @@ function NativeHubSurface({
     if (surface.kind === 'dialogue') return {
       acceleratedAtMs: chat.acceleratedAtMs,
       content: chat.content,
+      gold: economy.gold,
       interaction: surface.interaction,
       kind: 'dialogue',
       phaseStartedAtMs: chat.phaseStartedAtMs,
       highlightedSelectorId: highlightedNpcSelectorId,
       selectedSelectorId: pendingNpcSelection?.id ?? null,
       selectorOffset: chat.selectorOffset,
+      selectorScroll: chat.selectorScroll,
       selectorRows,
       storyOffice,
     }
@@ -1467,6 +1477,7 @@ function NativeHubSurface({
           ) : surface.kind === 'dialogue' ? (
             <DialogueActions
               chat={chat}
+              gold={economy.gold}
               interaction={surface.interaction}
               pendingSelection={pendingNpcSelection !== null}
               selectorRows={selectorRows}
@@ -1515,6 +1526,11 @@ function NativeHubSurface({
               onSelectorOffset={(selectorOffset) => setChat(current => ({
                 ...current,
                 selectorOffset,
+                selectorScroll: 0,
+              }))}
+              onSelectorScroll={(selectorScroll) => setChat(current => ({
+                ...current,
+                selectorScroll,
               }))}
               onSelectorDone={() => click(() => beginChatContent({ kind: 'choices' }))}
             />
@@ -1671,6 +1687,7 @@ function NativeHubSurface({
 
 function DialogueActions({
   chat,
+  gold,
   interaction,
   onAccelerate,
   onAdvance,
@@ -1680,11 +1697,13 @@ function DialogueActions({
   onSelectRow,
   onSelectorDone,
   onSelectorOffset,
+  onSelectorScroll,
   pendingSelection,
   selectorRows,
   storyOffice,
 }: {
   chat: HubNpcChatPresentation
+  gold: number
   onAccelerate: () => void
   onAdvance: () => void
   onChoice: (choice: HubNpcChatChoice) => void
@@ -1696,11 +1715,20 @@ function DialogueActions({
   ) => void
   onSelectorDone: () => void
   onSelectorOffset: (offset: number) => void
+  onSelectorScroll: (scroll: number) => void
   pendingSelection: boolean
   selectorRows: readonly HubNpcSelectorRow[]
   storyOffice: boolean
   interaction: HubInteractionId
 }) {
+  const selectorPointerRef = useRef<{
+    distance: number
+    lastY: number
+    moved: boolean
+    pointerId: number
+  } | null>(null)
+  const suppressSelectorClickRef = useRef(false)
+
   if (chat.content.kind === 'speech') {
     const speech = chat.content
     return (
@@ -1725,40 +1753,102 @@ function DialogueActions({
 
   if (chat.content.kind === 'selector') {
     const selector = chat.content.selector
-    const maximumOffset = selector === 'boast'
-      ? Math.max(
-          0,
-          Math.floor((selectorRows.length - 1) / HUB_NPC_SELECTOR.rowCount)
-            * HUB_NPC_SELECTOR.rowCount,
-        )
-      : Math.max(0, selectorRows.length - HUB_NPC_SELECTOR.rowCount)
-    const offset = Math.min(chat.selectorOffset, maximumOffset)
-    const visibleRows = selectorRows.slice(offset, offset + HUB_NPC_SELECTOR.rowCount)
-    const boastPlan = selector === 'boast' ? planNativeUiBoastMenu({
-      height: HUB_NATIVE_UI_SIZE.height,
-      pageCount: Math.max(1, Math.ceil(selectorRows.length / HUB_NPC_SELECTOR.rowCount)),
-      pageIndex: Math.floor(offset / HUB_NPC_SELECTOR.rowCount),
-      rows: visibleRows.map(row => ({
-        detail: row.detail,
-        id: hubNpcSelectorRowKey(row),
-        label: row.label,
-        ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
-      })),
-      width: HUB_NATIVE_UI_SIZE.width,
-    }) : null
+    if (selector === 'boast' && selectorRows.length > 5) {
+      return (
+        <ExpandedBoastSelectorActions
+          offset={chat.selectorOffset}
+          onDone={onSelectorDone}
+          onHighlight={onSelectorHighlight}
+          onOffset={onSelectorOffset}
+          onSelect={id => onSelectRow(selector, id)}
+          pendingSelection={pendingSelection}
+          rows={selectorRows}
+        />
+      )
+    }
+    const scroll = hubNpcSelectorClampScroll(chat.selectorScroll, selectorRows.length)
+    const visibleRows = hubNpcSelectorVisibleRows(selectorRows.length, scroll)
+    const wheel = (event: ReactWheelEvent<HTMLElement>) => {
+      if (event.deltaY === 0) return
+      onSelectorScroll(hubNpcSelectorWheelScroll(scroll, event.deltaY, selectorRows.length))
+    }
+    const beginPointer = (event: ReactPointerEvent<HTMLElement>) => {
+      if (event.button !== 0) return
+      selectorPointerRef.current = {
+        distance: 0,
+        lastY: pointerStagePosition(event).y,
+        moved: false,
+        pointerId: event.pointerId,
+      }
+      suppressSelectorClickRef.current = false
+    }
+    const movePointer = (event: ReactPointerEvent<HTMLElement>) => {
+      const press = selectorPointerRef.current
+      if (!press || press.pointerId !== event.pointerId) return
+      const nextY = pointerStagePosition(event).y
+      const deltaY = nextY - press.lastY
+      press.lastY = nextY
+      press.distance += Math.abs(deltaY)
+      if (!press.moved && press.distance >= 4) {
+        press.moved = true
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }
+      if (deltaY !== 0) {
+        onSelectorScroll(hubNpcSelectorDragScroll(scroll, deltaY, selectorRows.length))
+      }
+    }
+    const finishPointer = (event: ReactPointerEvent<HTMLElement>) => {
+      const press = selectorPointerRef.current
+      if (!press || press.pointerId !== event.pointerId) return
+      suppressSelectorClickRef.current = press.moved
+      if (press.moved) window.setTimeout(() => { suppressSelectorClickRef.current = false }, 0)
+      selectorPointerRef.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+    }
+    const keyScroll = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const delta = event.key === 'ArrowUp'
+        ? -HUB_NPC_SELECTOR.wheelStep
+        : event.key === 'ArrowDown'
+          ? HUB_NPC_SELECTOR.wheelStep
+          : event.key === 'PageUp'
+            ? -HUB_NPC_SELECTOR.viewportRect[3]
+            : event.key === 'PageDown'
+              ? HUB_NPC_SELECTOR.viewportRect[3]
+              : 0
+      if (delta === 0) return
+      event.preventDefault()
+      onSelectorScroll(hubNpcSelectorClampScroll(scroll + delta, selectorRows.length))
+    }
     return (
       <section
         className="hub-native-dialogue-actions"
         aria-label={hubNpcSelectorTitle(selector)}
         data-native-selector={selector}
-        data-native-selector-offset={offset}
+        data-native-selector-scroll={scroll}
+        onLostPointerCapture={() => { selectorPointerRef.current = null }}
+        onPointerCancel={finishPointer}
+        onPointerDown={beginPointer}
+        onPointerMove={movePointer}
+        onPointerUp={finishPointer}
+        onWheel={wheel}
       >
         <span className="hub-native-ui-semantic" role="status">
           {visibleRows.length === 0 && selector === 'teacher-spells'
             ? 'ALL SPELLS ALREADY BOUGHT!'
             : `${hubNpcSelectorTitle(selector)}. ${selectorRows.length} entries.`}
         </span>
-        {visibleRows.map((row, index) => (
+        <NativeAction
+          data={{ 'data-native-selector-swipebox': 'true' }}
+          label={`Scroll ${hubNpcSelectorTitle(selector)}`}
+          rect={HUB_NPC_SELECTOR.viewportRect}
+          onKeyDown={keyScroll}
+        />
+        {visibleRows.map(({ index, rect }) => {
+          const row = selectorRows[index]!
+          return (
           <NativeAction
             key={`${selector}-${hubNpcSelectorRowKey(row)}`}
             data={{
@@ -1766,57 +1856,28 @@ function DialogueActions({
               'data-native-selector-kind': selector,
               'data-native-selector-mod-id': typeof row.id === 'number' ? '' : row.id.modId,
               'data-native-selector-price': row.price ?? '',
+              'data-native-selector-affordable': row.price === null || gold >= row.price
+                ? 'true'
+                : 'false',
             }}
             disabled={pendingSelection}
             label={`${row.label}${row.price === null ? '' : `, ${row.price} gold`}. ${row.detail}`}
-            rect={boastPlan
-              ? nativeUiActionRect(boastPlan.rowBounds[index]!.bounds)
-              : [
-                  HUB_NPC_SELECTOR.rowLeft,
-                  HUB_NPC_SELECTOR.rowTop + index * HUB_NPC_SELECTOR.rowHeight,
-                  HUB_NPC_SELECTOR.rowWidth,
-                  HUB_NPC_SELECTOR.rowHeight - 3,
-                ]}
+            rect={rect}
             onBlur={() => onSelectorHighlight(null)}
-            onClick={() => onSelectRow(selector, row.id)}
+            onClick={() => {
+              if (suppressSelectorClickRef.current) {
+                return
+              }
+              onSelectRow(selector, row.id)
+            }}
             onFocus={() => onSelectorHighlight(row.id)}
+            onKeyDown={keyScroll}
             onPointerEnter={() => onSelectorHighlight(row.id)}
             onPointerLeave={() => onSelectorHighlight(null)}
           />
-        ))}
-        {offset > 0 ? (
-          <NativeAction
-            label="Previous entries"
-            rect={boastPlan
-              ? nativeUiActionRect(boastPlan.actions.find(({ id }) => id === 'previous')!.bounds)
-              : HUB_NPC_SELECTOR.previousRect}
-            onClick={() => {
-              onSelectorHighlight(null)
-              onSelectorOffset(Math.max(0, offset - HUB_NPC_SELECTOR.rowCount))
-            }}
-          />
-        ) : null}
-        {offset < maximumOffset ? (
-          <NativeAction
-            label="More entries"
-            rect={boastPlan
-              ? nativeUiActionRect(boastPlan.actions.find(({ id }) => id === 'next')!.bounds)
-              : HUB_NPC_SELECTOR.nextRect}
-            onClick={() => {
-              onSelectorHighlight(null)
-              onSelectorOffset(Math.min(
-                maximumOffset,
-                offset + HUB_NPC_SELECTOR.rowCount,
-              ))
-            }}
-          />
-        ) : null}
-        <NativeAction
-          gameBack
-          label="Done"
-          rect={boastPlan ? nativeUiActionRect(boastPlan.doneBounds) : HUB_CHAT_PANEL.doneRect}
-          onClick={onSelectorDone}
-        />
+          )
+        })}
+        <NativeAction gameBack label="Done" rect={HUB_NPC_SELECTOR.doneRect} onClick={onSelectorDone} />
       </section>
     )
   }
@@ -1842,6 +1903,101 @@ function DialogueActions({
       ))}
       <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onDone} />
     </div>
+  )
+}
+
+function ExpandedBoastSelectorActions({
+  offset,
+  onDone,
+  onHighlight,
+  onOffset,
+  onSelect,
+  pendingSelection,
+  rows,
+}: {
+  offset: number
+  onDone: () => void
+  onHighlight: (id: number | ModBoastSelection | null) => void
+  onOffset: (offset: number) => void
+  onSelect: (id: number | ModBoastSelection) => void
+  pendingSelection: boolean
+  rows: readonly HubNpcSelectorRow[]
+}) {
+  const pageSize = 5
+  const maximumOffset = Math.max(0, Math.floor((rows.length - 1) / pageSize) * pageSize)
+  const boundedOffset = Math.min(offset, maximumOffset)
+  const visibleRows = rows.slice(boundedOffset, boundedOffset + pageSize)
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
+  const pageIndex = Math.floor(boundedOffset / pageSize)
+  const plan = planNativeUiBoastMenu({
+    height: HUB_NATIVE_UI_SIZE.height,
+    pageCount,
+    pageIndex,
+    rows: visibleRows.map(row => ({
+      detail: row.detail,
+      id: hubNpcSelectorRowKey(row),
+      label: row.label,
+      ...(row.boastIcon?.kind === 'stock' ? { stockIconRecord: row.boastIcon.record } : {}),
+    })),
+    width: HUB_NATIVE_UI_SIZE.width,
+  })
+  return (
+    <section
+      aria-label={hubNpcSelectorTitle('boast')}
+      className="hub-native-dialogue-actions"
+      data-native-selector="boast"
+      data-native-selector-offset={boundedOffset}
+      data-native-selector-scroll="0"
+    >
+      <span className="hub-native-ui-semantic" role="status">
+        {`${hubNpcSelectorTitle('boast')}. ${rows.length} entries.`}
+      </span>
+      {visibleRows.map((row, index) => (
+        <NativeAction
+          data={{
+            'data-native-selector-id': typeof row.id === 'number' ? row.id : row.id.contentId,
+            'data-native-selector-kind': 'boast',
+            'data-native-selector-mod-id': typeof row.id === 'number' ? '' : row.id.modId,
+            'data-native-selector-price': '',
+          }}
+          disabled={pendingSelection}
+          key={hubNpcSelectorRowKey(row)}
+          label={`${row.label}. ${row.detail}`}
+          onBlur={() => onHighlight(null)}
+          onClick={() => onSelect(row.id)}
+          onFocus={() => onHighlight(row.id)}
+          onPointerEnter={() => onHighlight(row.id)}
+          onPointerLeave={() => onHighlight(null)}
+          rect={nativeUiActionRect(plan.rowBounds[index]!.bounds)}
+        />
+      ))}
+      {boundedOffset > 0 ? (
+        <NativeAction
+          label="Previous entries"
+          onClick={() => {
+            onHighlight(null)
+            onOffset(Math.max(0, boundedOffset - pageSize))
+          }}
+          rect={nativeUiActionRect(plan.actions.find(({ id }) => id === 'previous')!.bounds)}
+        />
+      ) : null}
+      {boundedOffset < maximumOffset ? (
+        <NativeAction
+          label="More entries"
+          onClick={() => {
+            onHighlight(null)
+            onOffset(Math.min(maximumOffset, boundedOffset + pageSize))
+          }}
+          rect={nativeUiActionRect(plan.actions.find(({ id }) => id === 'next')!.bounds)}
+        />
+      ) : null}
+      <NativeAction
+        gameBack
+        label="Done"
+        onClick={onDone}
+        rect={nativeUiActionRect(plan.doneBounds)}
+      />
+    </section>
   )
 }
 
@@ -3119,7 +3275,7 @@ interface InventoryEquipmentClickPress {
 }
 
 function pointerStagePosition(
-  event: ReactPointerEvent<HTMLButtonElement>,
+  event: ReactPointerEvent<HTMLElement>,
 ): { readonly x: number; readonly y: number } {
   const stage = event.currentTarget.closest('.hub-native-ui-stage')
   if (!(stage instanceof HTMLElement)) return { x: event.clientX, y: event.clientY }

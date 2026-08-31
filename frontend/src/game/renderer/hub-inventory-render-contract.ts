@@ -449,17 +449,161 @@ export const HUB_CHAT_PANEL = {
 } as const
 
 export const HUB_NPC_SELECTOR = {
-  detailTextBaselineY: 350,
-  emptyTextBaselineY: 232,
-  nextRect: [930, 365, 80, 38] as const,
-  previousRect: [590, 365, 80, 38] as const,
-  rowCount: 5,
-  rowHeight: 43,
-  rowLeft: 570,
-  rowTop: 121,
-  rowWidth: 460,
-  titleTextBaselineY: 95,
+  balanceIconCenter: [570, 540] as const,
+  balanceTextBaseline: [580, 555] as const,
+  boastArtInsetX: 15,
+  bookArtInsetX: 15,
+  bookTextInsetX: 100,
+  contentBottomInset: 25,
+  doneRect: [700, 512, 200, 40] as const,
+  doneTextBaselineY: 536,
+  emptyTextBaselineY: 307,
+  panelRect: [450, 27, 700, 560] as const,
+  rowHeight: 85,
+  rowInsetX: 15,
+  rowInsetY: 25,
+  rowPitch: 90,
+  rowRecord: 50,
+  rowTextTint: 0xd9ba70,
+  rowWidth: 490,
+  selectedTint: 0x9feb9f,
+  spellBackingRecord: 164,
+  spellDescriptionLineHeight: 68 / 3,
+  spellDescriptionScale: 0.75,
+  spellDescriptionWidth: 333,
+  spellFrameRecord: 5,
+  spellFrameScale: 0.75,
+  titleTextBaselineY: 91,
+  unaffordableTint: 0xff6680,
+  viewportRect: [540, 107, 520, 400] as const,
+  wheelStep: 25,
 } as const
+
+export type HubNpcSelectorKind = 'boast' | 'books' | 'teacher-spells'
+
+export interface HubNpcSelectorVisibleRow {
+  readonly index: number
+  readonly rect: readonly [left: number, top: number, width: number, height: number]
+}
+
+export function hubNpcSelectorContentHeight(rowCount: number): number {
+  if (!Number.isSafeInteger(rowCount) || rowCount < 0) {
+    throw new RangeError('native selector row count must be a nonnegative safe integer')
+  }
+  if (rowCount === 0) return 0
+  return HUB_NPC_SELECTOR.rowInsetY
+    + (rowCount - 1) * HUB_NPC_SELECTOR.rowPitch
+    + HUB_NPC_SELECTOR.rowHeight
+    + HUB_NPC_SELECTOR.contentBottomInset
+}
+
+export function hubNpcSelectorMaximumScroll(rowCount: number): number {
+  return Math.max(0, hubNpcSelectorContentHeight(rowCount) - HUB_NPC_SELECTOR.viewportRect[3])
+}
+
+export function hubNpcSelectorClampScroll(scroll: number, rowCount: number): number {
+  if (!Number.isFinite(scroll)) throw new RangeError('native selector scroll must be finite')
+  return Math.max(0, Math.min(hubNpcSelectorMaximumScroll(rowCount), scroll))
+}
+
+export function hubNpcSelectorWheelScroll(
+  scroll: number,
+  deltaY: number,
+  rowCount: number,
+): number {
+  if (!Number.isFinite(deltaY)) throw new RangeError('native selector wheel delta must be finite')
+  const direction = deltaY === 0 ? 0 : deltaY > 0 ? 1 : -1
+  return hubNpcSelectorClampScroll(
+    scroll + direction * HUB_NPC_SELECTOR.wheelStep,
+    rowCount,
+  )
+}
+
+export function hubNpcSelectorDragScroll(
+  scroll: number,
+  pointerDeltaY: number,
+  rowCount: number,
+): number {
+  if (!Number.isFinite(pointerDeltaY)) {
+    throw new RangeError('native selector pointer delta must be finite')
+  }
+  return hubNpcSelectorClampScroll(scroll - pointerDeltaY, rowCount)
+}
+
+export function hubNpcSelectorRowRect(
+  index: number,
+  scroll: number,
+): readonly [left: number, top: number, width: number, height: number] {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new RangeError('native selector row index must be a nonnegative safe integer')
+  }
+  const [viewportLeft, viewportTop] = HUB_NPC_SELECTOR.viewportRect
+  return [
+    viewportLeft + HUB_NPC_SELECTOR.rowInsetX,
+    viewportTop + HUB_NPC_SELECTOR.rowInsetY + index * HUB_NPC_SELECTOR.rowPitch - scroll,
+    HUB_NPC_SELECTOR.rowWidth,
+    HUB_NPC_SELECTOR.rowHeight,
+  ]
+}
+
+export function hubNpcSelectorVisibleRows(
+  rowCount: number,
+  scroll: number,
+): readonly HubNpcSelectorVisibleRow[] {
+  const boundedScroll = hubNpcSelectorClampScroll(scroll, rowCount)
+  const [viewportLeft, viewportTop, viewportWidth, viewportHeight] = HUB_NPC_SELECTOR.viewportRect
+  const viewportRight = viewportLeft + viewportWidth
+  const viewportBottom = viewportTop + viewportHeight
+  const result: HubNpcSelectorVisibleRow[] = []
+  for (let index = 0; index < rowCount; index += 1) {
+    const [left, top, width, height] = hubNpcSelectorRowRect(index, boundedScroll)
+    const clippedLeft = Math.max(left, viewportLeft)
+    const clippedTop = Math.max(top, viewportTop)
+    const clippedRight = Math.min(left + width, viewportRight)
+    const clippedBottom = Math.min(top + height, viewportBottom)
+    if (clippedRight <= clippedLeft || clippedBottom <= clippedTop) continue
+    result.push({
+      index,
+      rect: [clippedLeft, clippedTop, clippedRight - clippedLeft, clippedBottom - clippedTop],
+    })
+  }
+  return result
+}
+
+export function hubNpcBoastArtRecord(id: number): number {
+  if (!Number.isSafeInteger(id) || id < 0 || id > 4) {
+    throw new RangeError('native Boast art id must be within [0, 4]')
+  }
+  return 90 + id
+}
+
+export function hubNpcBookTitleHash(title: string): number {
+  let value = 1
+  for (let index = 0; index < title.length; index += 1) {
+    const code = title.charCodeAt(index)
+    value = index % 2 === 0 ? value * code : value + code
+    if (value > 2_000_000) value = Math.trunc(value / index)
+    if (value === 0) value = code
+  }
+  return value
+}
+
+export function hubNpcBookArtRecord(title: string): number {
+  return 13 + hubNpcBookTitleHash(title) % 4
+}
+
+export function hubNpcBookDisplayTitle(title: string): string {
+  return title.toUpperCase()
+}
+
+export function hubNpcSelectorPriceTint(price: number, gold: number): number {
+  if (!Number.isSafeInteger(price) || price < 0 || !Number.isSafeInteger(gold) || gold < 0) {
+    throw new RangeError('native selector price and gold must be nonnegative safe integers')
+  }
+  return gold >= price
+    ? HUB_NPC_SELECTOR.rowTextTint
+    : HUB_NPC_SELECTOR.unaffordableTint
+}
 
 export const HUB_CHAT_INLINE_EMPHASIS = {
   exactTextCommand: 'i',

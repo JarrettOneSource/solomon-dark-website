@@ -59,10 +59,10 @@ try {
     recordCount: element.dataset.recordCount,
   })), {
     actionCount: '6',
-    atlasCount: '12',
+    atlasCount: '13',
     fontCount: '10',
     mode: 'components',
-    recordCount: '1259',
+    recordCount: '1292',
   })
   await canvas.screenshot({ path: screenshotPath })
 

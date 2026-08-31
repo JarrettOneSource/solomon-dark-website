@@ -82,7 +82,7 @@ test('the picker keeps the sealed 1600x900 stock card geometry and records', () 
 
 test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlases', () => {
   assert.equal(nativeAssets.sourceExecutableSha256, '03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3')
-  assert.deepEqual(nativeAssets.summary, { atlasCount: 12, fontCount: 10, glyphCount: 718, recordCount: 1259 })
+  assert.deepEqual(nativeAssets.summary, { atlasCount: 13, fontCount: 10, glyphCount: 718, recordCount: 1292 })
   assert.deepEqual(pngDimensions('skill-picker-ui-atlas.png'), [1024, 1024])
   assert.deepEqual(pngDimensions('skill-picker-skills-atlas.png'), [1024, 512])
   assert.deepEqual(pngDimensions('skill-picker-fonts-atlas.png'), [512, 256])

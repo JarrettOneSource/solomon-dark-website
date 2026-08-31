@@ -22,6 +22,7 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
 import {
+  nativeSkillColorRoot,
   nativeSkillIconRecord,
 } from '../core-kernels/player-progression.ts'
 import {
@@ -56,6 +57,7 @@ import { NATIVE_INVENTORY_GOLD_LEDGER } from '../native-inventory-gold-layout.ts
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
+import { nativeUiAtlasSource } from '../native-ui/native-ui-assets.ts'
 import {
   measureNativeUiText,
   nativeUiAtlas,
@@ -121,6 +123,12 @@ import {
   HUB_UNFORGE_CONFIRMATION,
   HUB_UNFORGE_RESULT,
   HUB_UNFORGE_TARGET,
+  hubNpcBookArtRecord,
+  hubNpcBookDisplayTitle,
+  hubNpcSelectorClampScroll,
+  hubNpcSelectorContentHeight,
+  hubNpcSelectorPriceTint,
+  hubNpcSelectorRowRect,
   hubChatTextRuns,
   hubDowsingFieldTint,
   hubDowsingFlashAlpha,
@@ -153,6 +161,7 @@ import {
   type HubTooltipOptions,
   type HubSackPageDirection,
 } from './hub-inventory-render-contract.ts'
+import { skillPickerRootTint } from './skill-picker-render-contract.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import {
   PLAYER_CHARACTER_ATLAS_SOURCES,
@@ -162,8 +171,8 @@ import {
 } from './player-character-atlas.ts'
 import { createNativeElementVfxTextures, type PlayerWorldTextures } from './world-player-textures.ts'
 
-type AtlasName = 'Inventory' | 'Skills' | 'UI'
-type FontName = 'body' | 'medium' | 'menu' | 'skill'
+type AtlasName = 'Inventory' | 'Library' | 'Skills' | 'UI'
+type FontName = 'body' | 'medium' | 'menu' | 'skill' | 'special-uppercase'
 
 export type HubInventoryPressedControl =
   | 'dowsing'
@@ -259,12 +268,14 @@ export type HubInventoryRendererModel =
   | {
       readonly acceleratedAtMs: number | null
       readonly content: HubNpcChatContent
+      readonly gold: number
       readonly interaction: HubInteractionId
       readonly kind: 'dialogue'
       readonly phaseStartedAtMs: number
       readonly highlightedSelectorId: number | ModBoastSelection | null
       readonly selectedSelectorId: number | ModBoastSelection | null
       readonly selectorOffset: number
+      readonly selectorScroll: number
       readonly selectorRows: readonly HubNpcSelectorRow[]
       readonly storyOffice: boolean
     }
@@ -318,6 +329,7 @@ export async function createHubInventoryRenderer(
           hub.trader.inventoryAtlas,
           hub.trader.skillsAtlas,
           hub.trader.uiAtlas,
+          nativeUiAtlasSource('Library'),
           skillPicker.fontsAtlas,
           BONEYARD_COMBAT_ATLAS_SOURCES[0]!,
         ],
@@ -556,6 +568,27 @@ export async function createHubInventoryRenderer(
       return { chatComplete }
     },
     setModel(model) {
+      if (
+        currentModel?.kind === 'dialogue'
+        && currentModel.content.kind === 'selector'
+        && model.kind === 'dialogue'
+        && model.content.kind === 'selector'
+        && currentModel.content.selector === model.content.selector
+        && currentModel.selectorRows === model.selectorRows
+        && currentModel.gold === model.gold
+        && currentModel.highlightedSelectorId === model.highlightedSelectorId
+        && currentModel.selectedSelectorId === model.selectedSelectorId
+        && currentModel.selectorOffset === model.selectorOffset
+        && !(model.content.selector === 'boast' && model.selectorRows.length > 5)
+        && chatRenderState
+      ) {
+        currentModel = model
+        chatRenderState.content.y = -hubNpcSelectorClampScroll(
+          model.selectorScroll,
+          model.selectorRows.length,
+        )
+        return
+      }
       const feedback = model.kind === 'dialogue' ? null : model.economy.actionFeedback
       const nextActionFeedbackSequence = feedback?.sequence ?? 0
       const nextDowsingFlashSequence = hubDowsingFlashFeedbackSequence(feedback)
@@ -1440,17 +1473,18 @@ function buildDialogue(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
-  if (model.content.kind === 'selector' && model.content.selector === 'boast') {
-    return buildBoastDialogue(context, layer, model)
+  if (model.content.kind === 'selector') {
+    if (model.content.selector === 'boast' && model.selectorRows.length > 5) {
+      return buildBoastDialogue(context, layer, model)
+    }
+    return buildNpcSelector(context, layer, model)
   }
   const dialogue = hubInteractionDialogue(model.interaction, model.storyOffice)
   addChatPanel(context, layer)
   addBitmapText(
     context,
     layer,
-    model.content.kind === 'selector'
-      ? hubNpcSelectorTitle(model.content.selector)
-      : dialogue.name.toUpperCase(),
+    dialogue.name.toUpperCase(),
     'menu',
     HUB_CHAT_PANEL.titleCenterX,
     HUB_CHAT_PANEL.titleTextBaselineY,
@@ -1485,43 +1519,6 @@ function buildDialogue(
           : HUB_CHAT_PANEL.textTint,
       },
     ))
-  } else if (model.content.kind === 'selector') {
-    const rows = model.selectorRows.slice(
-      model.selectorOffset,
-      model.selectorOffset + HUB_NPC_SELECTOR.rowCount,
-    )
-    if (rows.length === 0) {
-      addBitmapText(
-        context,
-        content,
-        model.content.selector === 'teacher-spells'
-          ? 'ALL SPELLS\nALREADY BOUGHT!'
-          : 'NO ENTRIES',
-        'menu',
-        HUB_CHAT_PANEL.contentWidth / 2,
-        HUB_NPC_SELECTOR.emptyTextBaselineY - HUB_CHAT_PANEL.contentTop,
-        { align: 'center', tint: HUB_CHAT_PANEL.textTint },
-      )
-    }
-    rows.forEach((row, index) => {
-      const baselineY = 30 + index * HUB_NPC_SELECTOR.rowHeight
-      const price = row.price === null ? '' : `  $${row.price.toLocaleString()}`
-      addBitmapText(
-        context,
-        content,
-        `${row.label}${price}`,
-        'menu',
-        8,
-        baselineY,
-        {
-          align: 'left',
-          scale: 0.82,
-          tint: row.id === model.selectedSelectorId
-            ? 0xffffff
-            : HUB_CHAT_PANEL.actionTextTint,
-        },
-      )
-    })
   } else {
     const paragraphs = model.content.lines
     const lineHeight = 27
@@ -1543,18 +1540,6 @@ function buildDialogue(
     HUB_CHAT_PANEL.doneTextBaselineY,
     { tint: HUB_CHAT_PANEL.textTint },
   )
-  if (model.content.kind === 'selector') {
-    if (model.selectorOffset > 0) {
-      addBitmapText(context, layer, 'PREVIOUS', 'body', 630, 393, {
-        tint: HUB_CHAT_PANEL.textTint,
-      })
-    }
-    if (model.selectorOffset + HUB_NPC_SELECTOR.rowCount < model.selectorRows.length) {
-      addBitmapText(context, layer, 'MORE', 'body', 970, 393, {
-        tint: HUB_CHAT_PANEL.textTint,
-      })
-    }
-  }
   return { content, contentHeight }
 }
 
@@ -1622,6 +1607,281 @@ function selectorIdsEqual(
 ): boolean {
   if (right === null || typeof left === 'number' || typeof right === 'number') return left === right
   return left.contentId === right.contentId && left.modId === right.modId
+}
+
+function buildNpcSelector(
+  context: RenderContext,
+  layer: Container,
+  model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
+): ChatRenderState {
+  if (model.content.kind !== 'selector') {
+    throw new TypeError('native NPC selector renderer requires selector content')
+  }
+  const selector = model.content.selector
+  const [panelLeft, panelTop, panelWidth, panelHeight] = HUB_NPC_SELECTOR.panelRect
+  addNativeNineSlice(
+    context,
+    layer,
+    'UI',
+    HUB_CHAT_PANEL.uiRecord,
+    panelLeft,
+    panelTop,
+    panelWidth,
+    panelHeight,
+    HUB_CHAT_PANEL.edgeUvOrigin,
+  )
+  addBitmapText(
+    context,
+    layer,
+    hubNpcSelectorTitle(selector),
+    'menu',
+    HUB_CHAT_PANEL.titleCenterX,
+    HUB_NPC_SELECTOR.titleTextBaselineY,
+    { tint: HUB_NPC_SELECTOR.rowTextTint },
+  )
+
+  const [viewportLeft, viewportTop, viewportWidth, viewportHeight] = HUB_NPC_SELECTOR.viewportRect
+  const viewport = new Container()
+  viewport.position.set(viewportLeft, viewportTop)
+  const mask = new Graphics()
+    .rect(0, 0, viewportWidth, viewportHeight)
+    .fill({ color: 0xffffff })
+  const content = new Container()
+  const scroll = hubNpcSelectorClampScroll(model.selectorScroll, model.selectorRows.length)
+  content.position.y = -scroll
+  viewport.addChild(mask, content)
+  viewport.mask = mask
+  layer.addChild(viewport)
+
+  if (model.selectorRows.length === 0) {
+    addBitmapText(
+      context,
+      content,
+      selector === 'teacher-spells' ? 'ALL SPELLS\nALREADY BOUGHT!' : 'NO ENTRIES',
+      'menu',
+      viewportWidth / 2,
+      HUB_NPC_SELECTOR.emptyTextBaselineY - viewportTop,
+      { align: 'center', tint: HUB_NPC_SELECTOR.rowTextTint },
+    )
+  }
+
+  model.selectorRows.forEach((row, index) => {
+    const [, globalTop] = hubNpcSelectorRowRect(index, 0)
+    const rowX = HUB_NPC_SELECTOR.rowInsetX
+    const rowY = globalTop - viewportTop
+    const active = selectorIdsEqual(
+      row.id,
+      model.highlightedSelectorId ?? model.selectedSelectorId,
+    )
+    const rowTint = active
+      ? NATIVE_UI_BOAST_SELECTED_TINT
+      : HUB_NPC_SELECTOR.rowTextTint
+    const frame = new Container()
+    addNativeNineSlice(
+      context,
+      frame,
+      'UI',
+      HUB_NPC_SELECTOR.rowRecord,
+      rowX,
+      rowY,
+      HUB_NPC_SELECTOR.rowWidth,
+      HUB_NPC_SELECTOR.rowHeight,
+      HUB_CHAT_PANEL.edgeUvOrigin,
+    )
+    if (active) frame.tint = HUB_NPC_SELECTOR.selectedTint
+    content.addChild(frame)
+    if (selector === 'teacher-spells') {
+      addTeacherSpellSelectorRow(context, content, row, rowX, rowY, model.gold, rowTint)
+    } else if (selector === 'boast') {
+      addBoastSelectorRow(context, content, row, rowX, rowY, rowTint)
+    } else {
+      addBookSelectorRow(context, content, row, rowX, rowY, rowTint)
+    }
+  })
+
+  if (selector === 'teacher-spells') {
+    addCenteredAtlasSprite(
+      context,
+      layer,
+      'UI',
+      21,
+      ...HUB_NPC_SELECTOR.balanceIconCenter,
+    )
+    addBitmapText(
+      context,
+      layer,
+      `${model.gold}`,
+      'body',
+      ...HUB_NPC_SELECTOR.balanceTextBaseline,
+      { align: 'left', tint: 0xffffff },
+    )
+  }
+  addBitmapText(
+    context,
+    layer,
+    'DONE',
+    'menu',
+    HUB_CHAT_PANEL.titleCenterX,
+    HUB_NPC_SELECTOR.doneTextBaselineY,
+    { tint: HUB_NPC_SELECTOR.rowTextTint },
+  )
+  return {
+    content,
+    contentHeight: hubNpcSelectorContentHeight(model.selectorRows.length),
+  }
+}
+
+function addTeacherSpellSelectorRow(
+  context: RenderContext,
+  layer: Container,
+  row: HubNpcSelectorRow,
+  x: number,
+  y: number,
+  gold: number,
+  tint: number,
+): void {
+  if (typeof row.id !== 'number') throw new TypeError('native Teacher row ID must be numeric')
+  const root = nativeSkillColorRoot(row.id)
+  const centerX = x + 43
+  const centerY = y + HUB_NPC_SELECTOR.rowHeight / 2
+  const backing = addCenteredAtlasSprite(
+    context,
+    layer,
+    'Skills',
+    HUB_NPC_SELECTOR.spellBackingRecord,
+    centerX,
+    centerY,
+  )
+  backing.tint = skillPickerRootTint(root)
+  addCenteredAtlasSprite(
+    context,
+    layer,
+    'Skills',
+    HUB_NPC_SELECTOR.spellFrameRecord,
+    centerX,
+    centerY,
+    HUB_NPC_SELECTOR.spellFrameScale,
+  )
+  const icon = addCenteredAtlasSprite(
+    context,
+    layer,
+    'Skills',
+    nativeSkillIconRecord(row.id),
+    centerX,
+    centerY,
+  )
+  icon.tint = 0xffffff
+  addBitmapText(context, layer, row.label, 'special-uppercase', x + 90, y + 31, {
+    align: 'left',
+    tint,
+  })
+  addBitmapText(context, layer, row.detail.toUpperCase(), 'medium', x + 90, y + 49, {
+    align: 'left',
+    lineHeight: HUB_NPC_SELECTOR.spellDescriptionLineHeight,
+    maxWidth: HUB_NPC_SELECTOR.spellDescriptionWidth,
+    scale: HUB_NPC_SELECTOR.spellDescriptionScale,
+    tint,
+  })
+  if (row.price !== null) {
+    addBitmapText(context, layer, `${row.price}`, 'body', x + HUB_NPC_SELECTOR.rowWidth - 3, y + 80, {
+      align: 'right',
+      tint: hubNpcSelectorPriceTint(row.price, gold),
+    })
+  }
+}
+
+function addBoastSelectorRow(
+  context: RenderContext,
+  layer: Container,
+  row: HubNpcSelectorRow,
+  x: number,
+  y: number,
+  tint: number,
+): void {
+  if (typeof row.id !== 'number' || row.boastIcon?.kind !== 'stock') {
+    throw new TypeError('stock Boast selector row requires a numeric stock icon')
+  }
+  const record = row.boastIcon.record
+  const artWidth = nativeUiRecord('UI', record).logicalSize[0]
+  const artCenterY = y + HUB_NPC_SELECTOR.rowHeight / 2
+  const leftArt = addCenteredAtlasSprite(
+    context,
+    layer,
+    'UI',
+    record,
+    x + HUB_NPC_SELECTOR.boastArtInsetX + artWidth / 2,
+    artCenterY,
+  )
+  leftArt.tint = tint
+  const rightArt = addCenteredAtlasSprite(
+    context,
+    layer,
+    'UI',
+    record,
+    x + HUB_NPC_SELECTOR.rowWidth - HUB_NPC_SELECTOR.boastArtInsetX - artWidth / 2,
+    artCenterY,
+    -1,
+    1,
+  )
+  rightArt.tint = tint
+  addBitmapText(
+    context,
+    layer,
+    row.label,
+    'special-uppercase',
+    x + HUB_NPC_SELECTOR.rowWidth / 2,
+    y + HUB_NPC_SELECTOR.rowHeight / 2 - 15,
+    { tint },
+  )
+  addBitmapText(
+    context,
+    layer,
+    row.detail,
+    'medium',
+    x + HUB_NPC_SELECTOR.rowWidth / 2,
+    y + HUB_NPC_SELECTOR.rowHeight / 2 + 5,
+    {
+      lineHeight: 17,
+      maxWidth: 350,
+      tint,
+    },
+  )
+}
+
+function addBookSelectorRow(
+  context: RenderContext,
+  layer: Container,
+  row: HubNpcSelectorRow,
+  x: number,
+  y: number,
+  tint: number,
+): void {
+  if (typeof row.id !== 'number') throw new TypeError('native Book row ID must be numeric')
+  const record = hubNpcBookArtRecord(row.label)
+  const artWidth = nativeUiRecord('Library', record).logicalSize[0]
+  const art = addCenteredAtlasSprite(
+    context,
+    layer,
+    'Library',
+    record,
+    x + HUB_NPC_SELECTOR.bookArtInsetX + artWidth / 2,
+    y + HUB_NPC_SELECTOR.rowHeight / 2,
+  )
+  art.tint = tint
+  addBitmapText(
+    context,
+    layer,
+    hubNpcBookDisplayTitle(row.label),
+    'special-uppercase',
+    x + HUB_NPC_SELECTOR.bookTextInsetX,
+    y + HUB_NPC_SELECTOR.rowHeight / 2 - 15,
+    {
+      align: 'left',
+      lineHeight: 22,
+      maxWidth: HUB_NPC_SELECTOR.rowWidth - HUB_NPC_SELECTOR.bookTextInsetX - 15,
+      tint,
+    },
+  )
 }
 
 function buildService(

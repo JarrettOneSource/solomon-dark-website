@@ -9,6 +9,7 @@ export const NATIVE_UI_ATLAS_NAMES = [
   'GameOver',
   'Inventory',
   'LevelPicker',
+  'Library',
   'Loader',
   'Skills',
   'Title',

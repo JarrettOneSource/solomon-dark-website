@@ -6,6 +6,7 @@ import fontsAtlas from '../../assets/game/skill-picker-fonts-atlas.png'
 import gameOverAtlas from '../../assets/game/native-ui-game-over-atlas.png'
 import inventoryAtlas from '../../assets/game/hub-trader-inventory-atlas.png'
 import levelPickerAtlas from '../../assets/game/native-ui-level-picker-atlas.png'
+import libraryAtlas from '../../assets/game/native-ui-library-atlas.png'
 import loaderAtlas from '../../assets/game/native-ui-loader-atlas.png'
 import skillsAtlas from '../../assets/game/skill-picker-skills-atlas.png'
 import titleAtlas from '../../assets/game/native-ui-title-atlas.png'
@@ -21,6 +22,7 @@ export const NATIVE_UI_ATLAS_SOURCES = Object.freeze({
   GameOver: gameOverAtlas,
   Inventory: inventoryAtlas,
   LevelPicker: levelPickerAtlas,
+  Library: libraryAtlas,
   Loader: loaderAtlas,
   Skills: skillsAtlas,
   Title: titleAtlas,

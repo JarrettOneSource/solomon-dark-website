@@ -47,6 +47,7 @@ import {
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
+  HUB_NPC_SELECTOR,
   HUB_PRIMARY_SPELL_PANE,
   HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SACK_PAGE_TRANSITION,
@@ -81,6 +82,18 @@ import {
   hubNativeUiCloseReveal,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
+  hubNpcBoastArtRecord,
+  hubNpcBookArtRecord,
+  hubNpcBookDisplayTitle,
+  hubNpcBookTitleHash,
+  hubNpcSelectorClampScroll,
+  hubNpcSelectorContentHeight,
+  hubNpcSelectorDragScroll,
+  hubNpcSelectorMaximumScroll,
+  hubNpcSelectorPriceTint,
+  hubNpcSelectorRowRect,
+  hubNpcSelectorVisibleRows,
+  hubNpcSelectorWheelScroll,
   hubOwnedPerkSlotRect,
   hubInventoryEquipmentSlotRects,
   hubInventoryFlybyFrame,
@@ -996,6 +1009,7 @@ test('every Hub standard button consumes the shared body and UI.54 surround plan
 
 test('the port exports the complete stock UI membership', () => {
   assert.equal(Object.keys(nativeAssetsJson.atlases.Inventory.records).length, 84)
+  assert.equal(Object.keys(nativeAssetsJson.atlases.Library.records).length, 33)
   assert.equal(Object.keys(nativeAssetsJson.atlases.Skills.records).length, 166)
   assert.equal(Object.keys(nativeAssetsJson.atlases.UI.records).length, 113)
   assert.deepEqual(HUB_NATIVE_UI_SURFACES, [
@@ -1017,4 +1031,75 @@ test('the port exports the complete stock UI membership', () => {
     'inventory-unforge-confirmation',
     'inventory-unforge-result',
   ])
+})
+
+test('Hub NPC selectors own the native clipped SwipeBox geometry and continuous input', () => {
+  assert.deepEqual(HUB_NPC_SELECTOR.panelRect, [450, 27, 700, 560])
+  assert.deepEqual(HUB_NPC_SELECTOR.viewportRect, [540, 107, 520, 400])
+  assert.deepEqual(HUB_NPC_SELECTOR.doneRect, [700, 512, 200, 40])
+  assert.equal(HUB_NPC_SELECTOR.rowInsetX, 15)
+  assert.equal(HUB_NPC_SELECTOR.rowInsetY, 25)
+  assert.equal(HUB_NPC_SELECTOR.rowHeight, 85)
+  assert.equal(HUB_NPC_SELECTOR.rowPitch, 90)
+  assert.equal(HUB_NPC_SELECTOR.rowRecord, 50)
+  assert.equal(HUB_NPC_SELECTOR.selectedTint, 0x9feb9f)
+  assert.equal(HUB_NPC_SELECTOR.spellBackingRecord, 164)
+  assert.equal(HUB_NPC_SELECTOR.spellFrameRecord, 5)
+  assert.equal(HUB_NPC_SELECTOR.spellFrameScale, 0.75)
+  assert.equal(HUB_NPC_SELECTOR.spellDescriptionScale, 0.75)
+  assert.equal(HUB_NPC_SELECTOR.spellDescriptionWidth, 333)
+  assert.equal(HUB_NPC_SELECTOR.wheelStep, 25)
+
+  assert.equal(hubNpcSelectorContentHeight(0), 0)
+  assert.equal(hubNpcSelectorContentHeight(5), 495)
+  assert.equal(hubNpcSelectorContentHeight(8), 765)
+  assert.equal(hubNpcSelectorMaximumScroll(8), 365)
+  assert.equal(hubNpcSelectorMaximumScroll(26), 1_985)
+  assert.equal(hubNpcSelectorClampScroll(-1, 8), 0)
+  assert.equal(hubNpcSelectorClampScroll(400, 8), 365)
+  assert.equal(hubNpcSelectorWheelScroll(0, 1, 8), 25)
+  assert.equal(hubNpcSelectorWheelScroll(25, 999, 8), 50)
+  assert.equal(hubNpcSelectorWheelScroll(25, -999, 8), 0)
+  assert.equal(hubNpcSelectorWheelScroll(25, 0, 8), 25)
+  assert.equal(hubNpcSelectorDragScroll(100, -20, 8), 120)
+  assert.equal(hubNpcSelectorDragScroll(100, 20, 8), 80)
+  assert.deepEqual(hubNpcSelectorRowRect(0, 0), [555, 132, 490, 85])
+  assert.deepEqual(hubNpcSelectorRowRect(4, 0), [555, 492, 490, 85])
+  assert.deepEqual(hubNpcSelectorVisibleRows(8, 0), [
+    { index: 0, rect: [555, 132, 490, 85] },
+    { index: 1, rect: [555, 222, 490, 85] },
+    { index: 2, rect: [555, 312, 490, 85] },
+    { index: 3, rect: [555, 402, 490, 85] },
+    { index: 4, rect: [555, 492, 490, 15] },
+  ])
+  assert.deepEqual(hubNpcSelectorVisibleRows(8, 365), [
+    { index: 3, rect: [555, 107, 490, 15] },
+    { index: 4, rect: [555, 127, 490, 85] },
+    { index: 5, rect: [555, 217, 490, 85] },
+    { index: 6, rect: [555, 307, 490, 85] },
+    { index: 7, rect: [555, 397, 490, 85] },
+  ])
+  assert.throws(() => hubNpcSelectorContentHeight(-1), /nonnegative safe integer/)
+  assert.throws(() => hubNpcSelectorClampScroll(Number.NaN, 8), /must be finite/)
+})
+
+test('each native selector row family retains its renderer-owned art and affordability rules', () => {
+  assert.deepEqual(Array.from({ length: 5 }, (_, id) => hubNpcBoastArtRecord(id)), [90, 91, 92, 93, 94])
+  assert.throws(() => hubNpcBoastArtRecord(5), /within \[0, 4\]/)
+  assert.equal(hubNpcBookTitleHash("Merdalf's Hex Handbook Vol One: Elementus Ether"), 2_696_095)
+  assert.equal(hubNpcBookArtRecord("Merdalf's Hex Handbook Vol One: Elementus Ether"), 16)
+  assert.equal(hubNpcBookArtRecord('Wizards in History: The Mild Embarrassment'), 13)
+  assert.equal(hubNpcBookArtRecord("Lace! The Scarlet Witch's Stocking"), 13)
+  assert.equal(
+    hubNpcBookDisplayTitle("Lace! The Scarlet Witch's Stocking"),
+    "LACE! THE SCARLET WITCH'S STOCKING",
+  )
+  assert.equal(hubNpcSelectorPriceTint(5_300, 5_300), HUB_NPC_SELECTOR.rowTextTint)
+  assert.equal(hubNpcSelectorPriceTint(5_301, 5_300), HUB_NPC_SELECTOR.unaffordableTint)
+  assert.throws(() => hubNpcSelectorPriceTint(-1, 0), /nonnegative safe integers/)
+  for (const record of [13, 14, 15, 16]) assert.ok(nativeAssetsJson.atlases.Library.records[`${record}`])
+  for (const record of [90, 91, 92, 93, 94]) assert.ok(nativeAssetsJson.atlases.UI.records[`${record}`])
+  for (const record of [99, 100, 101, 102, 103, 104, 105, 106]) {
+    assert.ok(nativeAssetsJson.atlases.Skills.records[`${record}`])
+  }
 })

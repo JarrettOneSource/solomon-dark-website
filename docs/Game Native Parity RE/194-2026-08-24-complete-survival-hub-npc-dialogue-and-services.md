@@ -827,3 +827,171 @@ evidence about retail content.
 - No material presentation or authority unknown remains. At receipt time the
   work was local, uncommitted, unpushed, and undeployed. A later Git publication
   does not imply production deployment.
+
+## 2026-08-31 — Native selector-row presentation reopening
+
+### Reported smell and parity question
+
+- The supplied clean-stock Machinimbus capture shows a dense, clipped
+  `SELECT A SPELL` surface with framed art rows, authored descriptions,
+  affordability tint, hover outline, and smooth scrolling. The Website renders
+  the same eight actions as a flat five-line Chat list with `MORE` and
+  `PREVIOUS` page jumps.
+- This report reopens the presentation and input half of all three selector
+  families. The 2026-08-24 pass correctly recovered row content, order,
+  actions, authority, persistence, and teardown, but stopped at those data
+  contracts and reused one generic Website list. Stock owns three distinct row
+  renderer classes inside a shared `SwipeBox`; the earlier `exact-ported`
+  disposition therefore did not cover the visible selector system.
+- The immediately preceding BoastBox pass recovered its row chrome and Web Lua
+  extension policy while leaving BookReview and SellSpell generic by design.
+  This reopening preserves that namespaced mod identity and custom-art seam,
+  then closes the shared stock SwipeBox input/clipping owner and the remaining
+  two native row renderers without restoring the generic page-jump path.
+- Falsifiers: a native discrete-page control; a common text-only renderer for
+  all three selectors; Book rows displaying their full response body; spell
+  rows lacking skill art, descriptions, or affordability state; or any normal
+  selector path outside the three recovered box classes.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Supplied clean-stock footage | `Machinimbus - SolomonDark 2026-08-31 02-18-33.mp4`, 1600x900, 4.715633 s, SHA-256 `f2bea20e41af10d32b8bb7d4a81f84d3797aedc67df469b8915467ad55964303` | Eight ordered spell rows; four full rows plus clipped fragments during smooth scroll; framed skill art, gold name/description, right-aligned price, red unaffordable price, green hovered outline, gold balance, and `DONE`. | authoritative |
+| Supplied Boast still/footage | `boast 2 - image.png`, SHA-256 `7e97c6ff9a5d626667677c029650eb689fa796170b9cb053b74f52e08417c02b`; `boast 3 - SolomonDark 2026-08-29 21-54-45.mp4`, SHA-256 `33f1804f879577a154a23dc1070a4d23102fd9be0ac64293ee2fa0be132bc29e` | The sibling Boast selector uses the same shell and clipped scrolling but its own mirrored figure art, title, and quoted statement rows. | high |
+| Retail identity and tooling | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000`; read-only Ghidra replica 3; Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192` | Canonical binary and read-only analysis provenance. | high |
+| Three selector classes | Boast/BoastBox `0x004F7D20/0x004F6C00/0x004FDEC0`; BookReview/BookBox `0x004FA090/0x004F6DE0/0x004FE6F0`; SellSpell/SellSpellBox `0x004F82D0/0x004F6FA0/0x004FECB0` | Each selector owns a distinct inner row renderer and population data while all inherit the same clipped swipe behavior and whole-selector shell. | high |
+| Shared geometry and input | setup `0x004F6210/0x004F62F0`; SwipeBox clamp `0x004316D0`; pointer down/move/up `0x00431C80/0x00431CD0/0x00431DA0`; wheel `0x00431E60`; tick instructions `0x00431520..0x004315EB` | Rows start at local `(15,25)`, measure `(box width - 30)x85`, and repeat every 90 px. Wheel direction is normalized and advances exactly 25 px. Direct drag accumulates inverse pointer delta, applies it on tick, clamps, and zeroes it; the subsequent `0.95` multiply operates on zero and creates no post-release inertia. | high |
+| Renderer-owned art | SellSpell uses `Skills` records by native skill ID plus `UI.21`; Boast uses `UI.90..97`; BookBox uses `Library.13..16` | Spell rows own element/skill art and the balance icon; Boast rows mirror their figure art; Book rows deterministically select one of four book sprites from the authored title hash. | high |
+| Retail Library assets | `Library.bundle`, 33 records, SHA-256 `028308e108b779963cffc1cc506e63a37dfe2a1d931cb25eef02074e86d96f1a`; `Library.png`, 1024x1024, SHA-256 `66fe50d1a29015446b27e32f096a3887c8c6a9a3d0525f6de6459934260a3457` | The maintained native UI kit omitted an atlas consumed by a normal selector renderer; records 13..16 must join the complete extracted vocabulary. | high |
+| Pre-reopen Website trace | `HubInventoryUi.tsx`, `hub-inventory-renderer.ts`, `hub-inventory-render-contract.ts` at rebased base `90cfe09e` | The immediately preceding change gives Boast its recovered UI 50/art/text renderer and preserves explicit pagination only for mod-expanded rows. BookReview and SellSpell still draw `label + price` through generic Chat, while every stock selector still lacks shared continuous SwipeBox input/clipping. | high |
+
+### System boundary and membership inventory
+
+Native system: **the complete survival-Hub selector surface**, from shared
+whole-window layout and SwipeBox input through selector-specific row content,
+art, highlighting, affordability, clipping, empty state, and return action.
+
+| Member / branch | Native source | Closing disposition | Proof |
+| --- | --- | --- | --- |
+| Shared selector shell, title, clipped box, `DONE` | `0x004F7BA0`, `0x004F6210/0x004F62F0` | exact-ported | exact geometry, UI 11/50, retained-world Pixi frames |
+| Continuous wheel, drag, per-tick delta, bounds | `0x00431400..0x00431E60` | exact-ported | 25 px wheel, direct drag, continuous clamp, clipped partial rows, no stock page buttons or release glide |
+| Machinimbus spell rows | `0x004F8480`, `0x004FECB0` | exact-ported | all eight Skills icons, record-164 root plates, authored descriptions/prices, hover, affordability, purchase omission |
+| Provokatus Boast rows | `0x004F99F0`, `0x004FDEC0` | exact-ported; mod-expanded pagination retained as documented web adaptation | five UI 50/mirrored-art/title/statement rows in the shared retail SwipeBox |
+| Semicus Book rows | `0x004FC550`, `0x004FE6F0` | exact-ported | 26 deterministic `Library.13..16` title-only rows and Lace omission at recomputed bounds |
+| Gold balance | `UI.21`, SellSpell whole renderer | exact-ported | current participant balance beside exact icon |
+| Teacher all-bought state | `ALL SPELLS\nALREADY BOUGHT!` | exact-ported | centered native empty state with no phantom row actions |
+| Selector action/authority/persistence/teardown | prior complete membership | verified-already-at-parity | all eight purchases, Boast selection, Lace one-shot, response and return flow remain authoritative |
+
+No member is browser-blocked.
+
+### Native ownership thread and recovered contract
+
+- The whole Boast, BookReview, and SellSpell objects construct different box
+  subclasses, populate parallel authored arrays, and mount the box into the
+  same centered selector shell. Their vtables converge only for shared
+  SwipeBox movement/clamping and whole-window `DONE` behavior; row drawing is
+  intentionally polymorphic.
+- Content begins 25 px below the box origin. Every row is 85 px high, starts
+  15 px from each horizontal edge, and advances by 90 px. The renderer clips
+  the translated content, so scroll can expose partial rows at both edges.
+- `SwipeBox` stores continuous X/Y content offsets. Wheel input reduces any
+  nonzero delta to its sign and adds 25 px on the vertical axis. Pointer move
+  accumulates inverse pointer delta; `0x00431520` applies that delta on the next
+  tick, clamps it through the virtual offset setter, and zeroes both axes. Raw
+  instructions prove the later multiply by the constructor's `0.95` field acts
+  on those zeros, so release does not glide. There are no `MORE` or `PREVIOUS`
+  producers.
+- SellSpellBox draws a framed dark row and green selection outline, derives
+  backing/icon art from the offered skill ID, draws uppercase name and authored
+  quick description, and right-aligns price. Price is gold when current gold is
+  sufficient and pink-red otherwise. The whole owner draws the `UI.21` balance.
+- BoastBox draws the same frame/selection language with one authored
+  `UI.90..97` figure mirrored on both sides, then the short title and quoted
+  statement. BookBox draws title only and deterministically maps the native
+  title hash modulo four to `Library.13..16`; selecting a row owns the response
+  body later.
+
+### Confidence and open questions
+
+- Confirmed: class membership, all normal producers, exact row dimensions and
+  pitch, continuous clipping, wheel step, drag direction and tick consumption, content/order,
+  selector-specific text membership, relevant atlas records, affordability
+  branch, all-bought state, and current Website mismatch.
+- Inferred for implementation: anti-aliased subpixel settling below one display
+  pixel may be rounded by the browser renderer while preserving the recovered
+  continuous offset and absence of post-release glide.
+- Unknown: none material to implementation or acceptance.
+
+### Web implementation consequence and validation contract
+
+- Replace the generic paged selector branch with one shared deep selector
+  presentation/input contract and three explicit row variants. Keep mutations
+  in the existing authority layer. Semantic controls must follow translated,
+  clipped row bounds and remain keyboard accessible without inventing visible
+  paging chrome.
+- Preserve the preceding namespaced Web Lua Boast selection/custom-art seam.
+  Its documented pages remain only for more than five mod-expanded rows; the
+  complete five-row retail membership uses the recovered stock SwipeBox.
+- Add the complete hash-pinned `Library` atlas to the maintained extractor and
+  native UI manifest. Use the existing `Skills`, `UI`, and bitmap-font assets;
+  do not substitute CSS icons or recreated book art.
+- Focused tests must pin every recovered constant, full-row membership and art
+  mapping, book-title hash, price tint boundary, visible clipped controls,
+  continuous wheel/drag clamp with no release glide, empty state, and the
+  absence of page controls.
+- Mac Chrome must traverse Machinimbus, Provokatus, and Semicus in one retained
+  Hub, visually prove each native row family plus wheel and drag scrolling,
+  exercise purchase/read/select actions and Teacher all-bought state, and end
+  with empty page-error, console-error, failed-response, and host-error arrays.
+  The exact rebased candidate must then pass `./scripts/validate.sh` on the M2
+  Mac before any publication claim.
+
+### Selector-row implementation validation receipt
+
+- The shared selector contract now owns the observed `(450,27,700,560)` outer
+  surface, `(540,107,520,400)` clip, UI 50 rows at local `(15,25)` with
+  `490x85` size and 90-pixel pitch, 25-pixel signed wheel steps, inverse direct
+  drag, exact content clamp, partial-row hit rectangles, and no post-release
+  glide. Stock rows have no `MORE/PREVIOUS`; the prior namespaced Web Lua Boast
+  page remains only when admitted mod content exceeds the five retail rows.
+- SellSpell renders Skills record 164 with the native root tint behind exact
+  skill records 99..106 and the scaled Skills 5 frame. Its recovered 0.75
+  description scale and 333-pixel wrap boundary reproduce every supplied
+  stock line break. Current gold drives the exact gold/pink-red boundary and
+  UI 21 balance. BookBox uses the native title hash modulo four for complete
+  `Library.13..16` art and uppercase title-only rows; the maintained UI kit is
+  now 13 atlases / 1,292 records with the hash-pinned retail Library atlas.
+- Pure contracts pin outer/viewport/row geometry, 5/8/26-row bounds, content
+  extents, maximum scroll, wheel sign normalization, drag/clamp, visible
+  intersections, UI 50/Skills 5/164 records, all relevant art rows, book hash
+  outputs, uppercase book text, price equality, and invalid inputs. The Hub UI
+  registered group passed `93/93` on the final candidate rebased onto
+  `41336d3017fed0967769afc1d051abba2c0ff7b2`.
+- The final M2 Mac `/opt/homebrew/bin/bash ./scripts/validate.sh` exited zero:
+  28 backend/contracts tests, every registered frontend and desktop group,
+  production frontend and game-host builds, CSP media policy, and the game
+  entry budget (`263,967` raw / `80,383` gzip bytes) all passed.
+- Chrome `151.0.7922.174` on Apple M2 Metal completed one targeted retained-Hub
+  journey through Provokatus, Machinimbus, and Semicus with `status: ok`.
+  It proved the five stock Boast rows, wheel scroll 25, direct drag scroll 100,
+  red unaffordable rows, all eight spell purchases, the all-bought surface,
+  26 books, bottom-scroll Lace selection, and later 25-row omission. Page,
+  console, failed-response, and host-error arrays were empty.
+- Final visually inspected 1600x900 frame SHA-256 values are
+  `34759da2939ac7699021ad9cabeae985eac613a370385da0d4674db437d42b25`
+  (Boast), `f8b010b4b9dffc7cc5264cf7ec676a38005e0ef80412210b8b434b4c160301a3`
+  (Boast hover), `aae025f0a9cbcdb97a941645b010270901726d30068802661f34a8795603e2b4`
+  (Machinimbus top), `c987555dec8075cc982543afe0f1ee6b6f06558fe2f37a95c92c957f59968ae6`
+  (Machinimbus bottom), `a55c62bae6ba2c93d27e821228ad7e9bc9e6921416a569091a7a5982f2e4e626`
+  (all bought), and `24fb99646e9bae5aecd98f6a8762f998875436ec036038568fe47ad440d07797`
+  (Semicus/Lace). The frames were compared to the supplied stock spell and
+  Boast captures; icon plates, line breaks, prices, clipping, chrome, and row
+  membership match the recovered contract.
+- Two excluded retry failures were environmental/unrelated: the registered
+  courtyard-only harness twice drew stock-absent Skorcha before Machinimbus,
+  and one later retry began after its task-owned server reached its declared
+  30-minute cap. Both had empty arrays before their named precondition failure;
+  neither is used as acceptance evidence. No selector member remains unknown or
+  browser-blocked. The implementation is local, committed, unpushed, and
+  undeployed pending separate publication authorization.

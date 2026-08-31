@@ -17188,6 +17188,611 @@
         }
       }
     },
+    "Library": {
+      "atlasSha256": "66fe50d1a29015446b27e32f096a3887c8c6a9a3d0525f6de6459934260a3457",
+      "bundleSha256": "028308e108b779963cffc1cc506e63a37dfe2a1d931cb25eef02074e86d96f1a",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "file": "native-ui-library-atlas.png",
+      "records": {
+        "0": {
+          "frame": [
+            0,
+            118,
+            949,
+            662
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            21.0,
+            157.0
+          ]
+        },
+        "1": {
+          "frame": [
+            338,
+            74,
+            26,
+            40
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            66.0,
+            536.0
+          ]
+        },
+        "10": {
+          "frame": [
+            141,
+            781,
+            175,
+            86
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            155.0,
+            533.0
+          ]
+        },
+        "11": {
+          "frame": [
+            438,
+            0,
+            174,
+            86
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            659.0,
+            587.0
+          ]
+        },
+        "12": {
+          "frame": [
+            365,
+            74,
+            3,
+            3
+          ],
+          "logicalSize": [
+            3,
+            3
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "13": {
+          "frame": [
+            950,
+            188,
+            55,
+            71
+          ],
+          "logicalSize": [
+            55,
+            71
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "14": {
+          "frame": [
+            141,
+            868,
+            51,
+            66
+          ],
+          "logicalSize": [
+            52,
+            66
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "15": {
+          "frame": [
+            385,
+            0,
+            52,
+            74
+          ],
+          "logicalSize": [
+            53,
+            75
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            1.0
+          ]
+        },
+        "16": {
+          "frame": [
+            950,
+            456,
+            52,
+            68
+          ],
+          "logicalSize": [
+            53,
+            69
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            1.0,
+            0.0
+          ]
+        },
+        "17": {
+          "frame": [
+            950,
+            330,
+            58,
+            64
+          ],
+          "logicalSize": [
+            58,
+            64
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "18": {
+          "frame": [
+            613,
+            0,
+            58,
+            64
+          ],
+          "logicalSize": [
+            58,
+            64
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "19": {
+          "frame": [
+            956,
+            0,
+            58,
+            64
+          ],
+          "logicalSize": [
+            58,
+            64
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "2": {
+          "frame": [
+            385,
+            75,
+            25,
+            39
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            72.0,
+            362.0
+          ]
+        },
+        "20": {
+          "frame": [
+            193,
+            868,
+            58,
+            64
+          ],
+          "logicalSize": [
+            58,
+            64
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "21": {
+          "frame": [
+            338,
+            0,
+            46,
+            73
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            54.0,
+            12.0
+          ]
+        },
+        "22": {
+          "frame": [
+            950,
+            525,
+            46,
+            73
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            54.0,
+            12.0
+          ]
+        },
+        "23": {
+          "frame": [
+            81,
+            850,
+            46,
+            72
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            54.0,
+            13.0
+          ]
+        },
+        "24": {
+          "frame": [
+            950,
+            599,
+            46,
+            71
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            54.0,
+            14.0
+          ]
+        },
+        "25": {
+          "frame": [
+            950,
+            671,
+            46,
+            69
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            52.0,
+            16.0
+          ]
+        },
+        "26": {
+          "frame": [
+            950,
+            260,
+            46,
+            69
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            52.0,
+            16.0
+          ]
+        },
+        "27": {
+          "frame": [
+            950,
+            118,
+            46,
+            69
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            52.0,
+            16.0
+          ]
+        },
+        "28": {
+          "frame": [
+            909,
+            0,
+            46,
+            69
+          ],
+          "logicalSize": [
+            150,
+            150
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            52.0,
+            16.0
+          ]
+        },
+        "29": {
+          "frame": [
+            1,
+            1,
+            336,
+            116
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            336.0,
+            424.0
+          ]
+        },
+        "3": {
+          "frame": [
+            365,
+            78,
+            10,
+            13
+          ],
+          "logicalSize": [
+            10,
+            26
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            4.0
+          ]
+        },
+        "30": {
+          "frame": [
+            1,
+            941,
+            112,
+            66
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            672.0,
+            449.0
+          ]
+        },
+        "31": {
+          "frame": [
+            1,
+            782,
+            139,
+            67
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            784.0,
+            448.0
+          ]
+        },
+        "32": {
+          "frame": [
+            644,
+            782,
+            265,
+            66
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            71.0,
+            449.0
+          ]
+        },
+        "4": {
+          "frame": [
+            438,
+            87,
+            37,
+            10
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            619.0,
+            689.0
+          ]
+        },
+        "5": {
+          "frame": [
+            673,
+            1,
+            235,
+            97
+          ],
+          "logicalSize": [
+            992,
+            1019
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            378.0,
+            819.0
+          ]
+        },
+        "6": {
+          "frame": [
+            317,
+            781,
+            149,
+            178
+          ],
+          "logicalSize": [
+            149,
+            178
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "7": {
+          "frame": [
+            0,
+            850,
+            80,
+            89
+          ],
+          "logicalSize": [
+            80,
+            89
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "8": {
+          "frame": [
+            950,
+            395,
+            60,
+            60
+          ],
+          "logicalSize": [
+            60,
+            60
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "9": {
+          "frame": [
+            467,
+            781,
+            175,
+            89
+          ],
+          "logicalSize": [
+            992,
+            819
+          ],
+          "points": [],
+          "rotated": false,
+          "trimOrigin": [
+            136.0,
+            641.0
+          ]
+        }
+      }
+    },
     "Loader": {
       "atlasSha256": "73707feca39b56d008a2a0b60950c9d06d01cab8374f5ec66b339d4fdd948722",
       "bundleSha256": "df1be9c59b86619c0151f5e02ea53eb9bcd5ae0ce692193fd48c7c44c7f5ae9b",
@@ -48447,9 +49052,9 @@
   "schema": "solomon-dark-native-ui-assets-v1",
   "sourceExecutableSha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
   "summary": {
-    "atlasCount": 12,
+    "atlasCount": 13,
     "fontCount": 10,
     "glyphCount": 718,
-    "recordCount": 1259
+    "recordCount": 1292
   }
 }

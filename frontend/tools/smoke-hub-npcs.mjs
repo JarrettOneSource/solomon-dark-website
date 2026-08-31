@@ -39,6 +39,7 @@ assert.ok(
       'library',
       'mortuary',
       'office',
+      'selectors',
       'skorcha',
       'skorcha-timer-appear',
       'skorcha-timer-disappear',
@@ -107,7 +108,9 @@ try {
   await enterHub()
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   if (onlySection === 'fresh-markers') await exerciseFreshMarkers(canvas)
-  else if (onlySection === null || onlySection === 'courtyard') await fundNpcSmoke()
+  else if (onlySection === null || onlySection === 'courtyard' || onlySection === 'selectors') {
+    await fundNpcSmoke()
+  }
 
   if (onlySection === null || onlySection === 'courtyard') {
     await visitTrader(canvas, 'hagatha', 'Hagatha', 'WITCH_INTRO', 'Charm Prices?', 'hagatha')
@@ -118,6 +121,10 @@ try {
     await exerciseTeacher(canvas)
   }
   if (onlySection === 'skorcha') await exerciseSkorcha(canvas)
+  if (onlySection === 'selectors') {
+    await exerciseProvokatus(canvas)
+    await exerciseTeacher(canvas)
+  }
   if (onlySection === 'skorcha-timer-appear') {
     assert.equal(
       await canvas.evaluate((node) => node.__sdrHubFrame.skorcha),
@@ -133,15 +140,17 @@ try {
     await exerciseSkorchaDisappearance(canvas)
   }
 
-  if (onlySection === null || onlySection === 'library') {
+  if (onlySection === null || onlySection === 'library' || onlySection === 'selectors') {
     await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
     await holdForHubTransition(page, canvas, ['d', 'w'], 'library')
     await waitForSettledHubRegion(page, canvas, 'library')
     await exerciseLibrarian(canvas)
-    await visitTrader(canvas, 'shlorio', 'Shlorio', 'DOWSER_INTRO', 'Dowsing Prices?', 'shlorio')
-    await navigateHubRegion(page, canvas, 'library', { x: 512, y: 850 }, 25, log)
-    await holdForHubTransition(page, canvas, ['s'], 'courtyard')
-    await waitForSettledHubRegion(page, canvas, 'courtyard')
+    if (onlySection !== 'selectors') {
+      await visitTrader(canvas, 'shlorio', 'Shlorio', 'DOWSER_INTRO', 'Dowsing Prices?', 'shlorio')
+      await navigateHubRegion(page, canvas, 'library', { x: 512, y: 850 }, 25, log)
+      await holdForHubTransition(page, canvas, ['s'], 'courtyard')
+      await waitForSettledHubRegion(page, canvas, 'courtyard')
+    }
   }
 
   if (onlySection === null || onlySection === 'mortuary') {
@@ -174,6 +183,7 @@ try {
     library: ['librarian', 'shlorio'],
     mortuary: ['memorator', ...completeInteractions.filter(id => id.startsWith('painting-'))],
     office: ['arch-chancellor'],
+    selectors: ['annalist', 'librarian', 'teacher'],
     skorcha: ['skorcha'],
     'skorcha-timer-appear': ['skorcha'],
     'skorcha-timer-disappear': ['skorcha'],
@@ -427,6 +437,7 @@ async function exerciseProvokatus(canvas) {
   await dialog.getByRole('button', { name: 'Boast' }).click()
   await waitForPhase(dialog, 'selector')
   assert.equal(await dialog.locator('[data-native-selector-kind="boast"]').count(), 5)
+  assert.equal(await dialog.getByRole('button', { name: /More entries|Previous entries/ }).count(), 0)
   const boastCanvas = dialog.locator('.hub-inventory-native-canvas')
   await page.waitForFunction(() => (
     document.querySelector('.hub-inventory-native-canvas')?.dataset.nativeBoastMenu === 'stock'
@@ -544,6 +555,8 @@ async function exerciseSkorchaDisappearance(canvas) {
 }
 
 async function exerciseTeacher(canvas) {
+  const setGold = await page.evaluate(() => window.solomonDark.lua.execute('sd.player.set_gold(5174)'))
+  assert.equal(setGold.ok, true, setGold.error)
   await navigateHubRegion(page, canvas, 'courtyard', {
     x: HUB_INTERACTION_GEOMETRY.teacher.position.x,
     y: HUB_INTERACTION_GEOMETRY.teacher.position.y + 60,
@@ -558,7 +571,29 @@ async function exerciseTeacher(canvas) {
   await dialog.getByRole('button', { name: 'Per$uade' }).click()
   await waitForPhase(dialog, 'selector')
   assert.equal(await dialog.locator('[data-native-selector-kind="teacher-spells"]').count(), 5)
+  assert.equal(await dialog.getByRole('button', { name: /More entries|Previous entries/ }).count(), 0)
+  assert.equal(goldBefore, 5174)
+  assert.equal(
+    await dialog.locator('[data-native-selector-id="79"]').getAttribute('data-native-selector-affordable'),
+    'true',
+  )
   await page.screenshot({ path: `${screenshotRoot}-teacher-spells.png` })
+  await dialog.locator('[data-native-selector-id="75"]').hover()
+  await page.screenshot({ path: `${screenshotRoot}-teacher-spells-hovered.png` })
+  await wheelSelector(dialog, 100, 25)
+  await dragSelector(dialog, -75, 100)
+  assert.equal(
+    await dialog.locator('[data-native-selector-id="78"]').getAttribute('data-native-selector-affordable'),
+    'false',
+  )
+  await page.screenshot({ path: `${screenshotRoot}-teacher-spells-scrolled.png` })
+  await scrollSelectorToRow(dialog, 76)
+  assert.equal(
+    await dialog.locator('[data-native-selector-id="76"]').getAttribute('data-native-selector-affordable'),
+    'false',
+  )
+  await page.screenshot({ path: `${screenshotRoot}-teacher-spells-bottom.png` })
+  await dragSelector(dialog, 365, 0)
   await dialog.locator('[data-native-selector-id="72"]').click()
   await assertSpeech(dialog, 'ACID_RAIN', 5_000)
   assert.equal(Number(await dialog.locator('[data-player-gold]').getAttribute('data-player-gold')), goldBefore - 3000)
@@ -567,9 +602,41 @@ async function exerciseTeacher(canvas) {
   await dialog.getByRole('button', { name: 'Per$uade' }).click()
   await waitForPhase(dialog, 'selector')
   assert.equal(await dialog.locator('[data-native-selector-id="72"]').count(), 0)
+  const refillGold = await page.evaluate(() => window.solomonDark.lua.execute('sd.player.set_gold(100000)'))
+  assert.equal(refillGold.ok, true, refillGold.error)
+  await page.waitForFunction(() => (
+    document.querySelector('[data-player-gold]')?.getAttribute('data-player-gold') === '100000'
+  ))
+  const remainingSpells = [
+    [73, 'FIRE_WALL'],
+    [74, 'ETHER_DRAIN'],
+    [75, 'IRON_GOLEM'],
+    [79, 'REGENERATE'],
+    [78, 'MINDSTAR'],
+    [77, 'TURN_UNDEAD'],
+    [76, 'CALL_COMET'],
+  ]
+  for (const [skillId, responseKey] of remainingSpells) {
+    await scrollSelectorToRow(dialog, skillId)
+    await dialog.locator(`[data-native-selector-id="${skillId}"]`).click()
+    await assertSpeech(dialog, responseKey, 5_000)
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+    await waitForPhase(dialog, 'choices')
+    await dialog.getByRole('button', { name: 'Per$uade' }).click()
+    await waitForPhase(dialog, 'selector')
+  }
+  assert.match(await dialog.getByRole('status').innerText(), /ALL SPELLS ALREADY BOUGHT!/)
+  assert.equal(await dialog.locator('[data-native-selector-kind="teacher-spells"]').count(), 0)
+  await page.screenshot({ path: `${screenshotRoot}-teacher-spells-all-bought.png` })
   await dialog.getByRole('button', { name: 'Done' }).click()
   await finishChoices(dialog)
-  receipts.push({ interaction: 'teacher', purchasedSkillId: 72 })
+  receipts.push({
+    dragScroll: 100,
+    interaction: 'teacher',
+    purchasedSkillIds: [72, ...remainingSpells.map(([skillId]) => skillId)],
+    unaffordableSkillId: 78,
+    wheelScroll: 25,
+  })
 }
 
 async function exerciseLibrarian(canvas) {
@@ -580,11 +647,8 @@ async function exerciseLibrarian(canvas) {
   await dialog.getByRole('button', { name: 'Inquire about Books' }).click()
   await waitForPhase(dialog, 'selector')
   assert.match(await dialog.getByRole('status').innerText(), /26 entries/)
-  for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
-    const more = dialog.getByRole('button', { name: 'More entries' })
-    if (await more.count() === 0) break
-    await more.click()
-  }
+  assert.equal(await dialog.getByRole('button', { name: /More entries|Previous entries/ }).count(), 0)
+  await scrollSelectorToRow(dialog, 25)
   const lace = dialog.locator('[data-native-selector-id="25"]')
   await lace.waitFor()
   await page.screenshot({ path: `${screenshotRoot}-librarian-lace.png` })
@@ -595,10 +659,62 @@ async function exerciseLibrarian(canvas) {
   await dialog.getByRole('button', { name: 'Inquire about Books' }).click()
   await waitForPhase(dialog, 'selector')
   assert.match(await dialog.getByRole('status').innerText(), /25 entries/)
+  await scrollSelectorToRow(dialog, 24)
   assert.equal(await dialog.locator('[data-native-selector-id="25"]').count(), 0)
+  const selectorScroll = Number(await dialog.locator('[data-native-selector]').getAttribute(
+    'data-native-selector-scroll',
+  ))
   await dialog.getByRole('button', { name: 'Done' }).click()
   await finishChoices(dialog)
-  receipts.push({ interaction: 'librarian', laceRemoved: true })
+  receipts.push({
+    interaction: 'librarian',
+    laceRemoved: true,
+    selectorScroll,
+  })
+}
+
+async function wheelSelector(dialog, deltaY, expectedScroll) {
+  const swipeBox = dialog.locator('[data-native-selector-swipebox="true"]')
+  const bounds = await swipeBox.boundingBox()
+  assert.ok(bounds, 'selector SwipeBox has no browser bounds')
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+  await page.mouse.wheel(0, deltaY)
+  await dialog.locator(`[data-native-selector-scroll="${expectedScroll}"]`).waitFor({ state: 'attached' })
+}
+
+async function dragSelector(dialog, deltaY, expectedScroll) {
+  const swipeBox = dialog.locator('[data-native-selector-swipebox="true"]')
+  const bounds = await swipeBox.boundingBox()
+  assert.ok(bounds, 'selector SwipeBox has no browser bounds')
+  const x = bounds.x + bounds.width / 2
+  const y = bounds.y + bounds.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x, y + deltaY, { steps: 8 })
+  await page.mouse.up()
+  await dialog.locator(`[data-native-selector-scroll="${expectedScroll}"]`).waitFor({ state: 'attached' })
+  await waitForPhase(dialog, 'selector')
+}
+
+async function scrollSelectorToRow(dialog, id) {
+  const target = dialog.locator(`[data-native-selector-id="${id}"]`)
+  const selector = dialog.locator('[data-native-selector]')
+  for (let attempt = 0; attempt < 10 && await target.count() === 0; attempt += 1) {
+    const before = Number(await selector.getAttribute('data-native-selector-scroll'))
+    const swipeBox = dialog.locator('[data-native-selector-swipebox="true"]')
+    const bounds = await swipeBox.boundingBox()
+    assert.ok(bounds, 'selector SwipeBox has no browser bounds')
+    const x = bounds.x + bounds.width / 2
+    const y = bounds.y + bounds.height * 0.75
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x, y - 300, { steps: 12 })
+    await page.mouse.up()
+    await page.waitForTimeout(25)
+    const after = Number(await selector.getAttribute('data-native-selector-scroll'))
+    assert.ok(after >= before, `selector scroll moved backwards from ${before} to ${after}`)
+  }
+  await target.waitFor({ timeout: 5_000 })
 }
 
 async function exerciseMemorator(canvas) {
