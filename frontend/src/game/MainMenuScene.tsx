@@ -1663,11 +1663,9 @@ export default function MainMenuScene({
     runtimeSnapshot?.world.kind === 'boneyard'
       ? skillBookOpen
         ? 'skill-book'
-        : hudSkillSelector !== null
-          ? 'skill-selector'
-          : inventoryScreenOpen
-            ? 'inventory'
-            : null
+        : inventoryScreenOpen
+          ? 'inventory'
+          : null
       : null
   const localHubActivity: HubPlayerActivity | null =
     runtimeSnapshot?.world.kind !== 'hub'
