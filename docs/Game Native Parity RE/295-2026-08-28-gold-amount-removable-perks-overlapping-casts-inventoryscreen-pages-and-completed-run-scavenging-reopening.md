@@ -5,6 +5,14 @@
 > model. Stock moves the plaque after the first Tonic, removes it after the
 > second, and paints unlocked empty cells brighter than locked cells.
 
+> **ExactText supersession, 2026-09-01:** the Inventory-specific pen, font-role,
+> case, tint, and chrome findings below remain correct, but its conclusion that
+> the shared font engine had no defect is falsified. Entry 287's sixth report
+> proves that all web glyph output adapters discarded each sprite record's
+> logical canvas and trim origin, producing mixed half-pixel ink shifts across
+> all ten native bitmap fonts. Inventory must inherit that shared correction;
+> no further Inventory-only offset is authorized.
+
 ## 2026-09-01 — InventoryScreen ExactText and outer-chrome secondary-report reopening
 
 ### Reported smell and parity question

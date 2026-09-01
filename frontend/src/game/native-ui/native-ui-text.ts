@@ -34,6 +34,13 @@ export interface NativeUiGlyphLayout extends NativeUiGlyphRecord {
   readonly tint: number
 }
 
+export interface NativeUiGlyphInkBounds {
+  readonly height: number
+  readonly left: number
+  readonly top: number
+  readonly width: number
+}
+
 export interface NativeUiTextLineLayout {
   readonly baselineY: number
   readonly text: string
@@ -66,6 +73,21 @@ export function nativeUiKerning(
 ): number {
   if (left < 0) return 0
   return KERNING.get(fontName)!.get(`${left}:${right}`) ?? 0
+}
+
+/** Tight atlas ink positioned inside the glyph's authored logical sprite quad. */
+export function nativeUiGlyphInkBounds(
+  glyph: NativeUiGlyphLayout,
+): NativeUiGlyphInkBounds {
+  const [, , frameWidth, frameHeight] = glyph.frame
+  const [logicalWidth, logicalHeight] = glyph.logicalSize
+  const [trimX, trimY] = glyph.trimOrigin
+  return {
+    height: frameHeight * glyph.scale,
+    left: glyph.centerX + (trimX - logicalWidth / 2) * glyph.scale,
+    top: glyph.centerY + (trimY - logicalHeight / 2) * glyph.scale,
+    width: frameWidth * glyph.scale,
+  }
 }
 
 export function measureNativeUiText(

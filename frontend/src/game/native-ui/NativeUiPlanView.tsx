@@ -17,7 +17,7 @@ import type {
   NativeUiTextNode,
   NativeUiTileNode,
 } from './native-ui-plan.ts'
-import { layoutNativeUiText } from './native-ui-text.ts'
+import { layoutNativeUiText, nativeUiGlyphInkBounds } from './native-ui-text.ts'
 
 interface NativeUiPlanViewProps {
   readonly className?: string
@@ -268,30 +268,29 @@ function renderText(node: NativeUiTextNode): ReactNode {
       style={{ inset: 0, pointerEvents: 'none', position: 'absolute' }}
     >
       {layout.glyphs.map((glyph, index) => {
-        const [x, y, width, height] = glyph.frame
-        const renderedWidth = width * glyph.scale
-        const renderedHeight = height * glyph.scale
+        const [x, y] = glyph.frame
+        const bounds = nativeUiGlyphInkBounds(glyph)
         return (
           <i
             data-native-ui-glyph={glyph.codePoint}
             key={`${index}:${glyph.codePoint}`}
             style={{
               backgroundColor: color(glyph.tint),
-              height: renderedHeight,
+              height: bounds.height,
               imageRendering: 'pixelated',
-              left: glyph.centerX - renderedWidth / 2,
+              left: bounds.left,
               maskImage: source,
               maskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,
               maskRepeat: 'no-repeat',
               maskSize: `${atlas.dimensions[0] * glyph.scale}px ${atlas.dimensions[1] * glyph.scale}px`,
               opacity: glyph.alpha,
               position: 'absolute',
-              top: glyph.centerY - renderedHeight / 2,
+              top: bounds.top,
               WebkitMaskImage: source,
               WebkitMaskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,
               WebkitMaskRepeat: 'no-repeat',
               WebkitMaskSize: `${atlas.dimensions[0] * glyph.scale}px ${atlas.dimensions[1] * glyph.scale}px`,
-              width: renderedWidth,
+              width: bounds.width,
             }}
           />
         )

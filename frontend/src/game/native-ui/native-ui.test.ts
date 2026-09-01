@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
+
+import { TextureSource } from 'pixi.js'
 
 import {
   NATIVE_UI_ATLAS_NAMES,
   NATIVE_UI_FONT_NAMES,
   NATIVE_UI_MANIFEST,
+  nativeUiAtlas,
   nativeUiFont,
   nativeUiRecord,
 } from './native-ui-catalog.ts'
@@ -28,9 +32,11 @@ import {
 import {
   layoutNativeUiText,
   measureNativeUiText,
+  nativeUiGlyphInkBounds,
   wrapNativeUiMsgBoxText,
   wrapNativeUiText,
 } from './native-ui-text.ts'
+import { nativeUiGlyphRecordTexture } from './native-ui-glyph-texture.ts'
 import {
   NATIVE_UI_BOAST_SELECTED_TINT,
   NATIVE_UI_BOAST_TEXT_TINT,
@@ -134,6 +140,129 @@ test('native bitmap text shares exact measurement, wrapping, kerning, and no-fal
   ])
   assert.deepEqual(layout.unsupportedCodePoints, [0x2603])
 })
+
+test('native bitmap glyph ink retains every authored logical canvas and trim origin', () => {
+  let glyphCount = 0
+  let shiftedTightFrameCount = 0
+  for (const fontName of NATIVE_UI_FONT_NAMES) {
+    for (const codePointText of Object.keys(nativeUiFont(fontName).glyphs)) {
+      const codePoint = Number(codePointText)
+      const layout = layoutNativeUiText({
+        align: 'left',
+        font: fontName,
+        text: String.fromCodePoint(codePoint),
+        x: 100,
+        y: 200,
+      })
+      assert.equal(layout.glyphs.length, 1)
+      const glyph = layout.glyphs[0]!
+      const bounds = nativeUiGlyphInkBounds(glyph)
+      const [, , frameWidth, frameHeight] = glyph.frame
+      const [logicalWidth, logicalHeight] = glyph.logicalSize
+      const [trimX, trimY] = glyph.trimOrigin
+      assert.deepEqual(bounds, {
+        height: frameHeight,
+        left: glyph.centerX + trimX - logicalWidth / 2,
+        top: glyph.centerY + trimY - logicalHeight / 2,
+        width: frameWidth,
+      })
+      if (
+        bounds.left !== glyph.centerX - frameWidth / 2
+        || bounds.top !== glyph.centerY - frameHeight / 2
+      ) shiftedTightFrameCount += 1
+      glyphCount += 1
+    }
+  }
+  assert.equal(glyphCount, 718)
+  assert.equal(shiftedTightFrameCount, 626)
+
+  const representativeBounds = (
+    font: 'body' | 'medium' | 'menu' | 'world-and-roster',
+    character: string,
+  ) => nativeUiGlyphInkBounds(layoutNativeUiText({
+    align: 'left',
+    font,
+    text: character,
+    x: 100,
+    y: 200,
+  }).glyphs[0]!)
+  assert.deepEqual(representativeBounds('menu', 's'), {
+    height: 15,
+    left: 100,
+    top: 186,
+    width: 15,
+  })
+  assert.deepEqual(representativeBounds('medium', 'R'), {
+    height: 13,
+    left: 99,
+    top: 188,
+    width: 15,
+  })
+  assert.deepEqual(representativeBounds('body', 'H'), {
+    height: 11,
+    left: 100,
+    top: 190,
+    width: 11,
+  })
+  assert.deepEqual(representativeBounds('world-and-roster', 'X'), {
+    height: 24,
+    left: 99,
+    top: 184,
+    width: 18,
+  })
+})
+
+test('native point glyph textures and both DOM adapters keep record trim geometry', () => {
+  const atlas = nativeUiAtlas('Fonts')
+  const source = new TextureSource({
+    height: atlas.dimensions[1],
+    width: atlas.dimensions[0],
+  })
+  const glyph = nativeUiFont('menu').glyphs[`${'s'.codePointAt(0)!}`]!
+  const texture = nativeUiGlyphRecordTexture(source, glyph)
+  assert.deepEqual(rectangleValues(texture.frame), {
+    height: 15,
+    width: 15,
+    x: 396,
+    y: 236,
+  })
+  assert.deepEqual(rectangleValues(texture.orig), {
+    height: 48,
+    width: 48,
+    x: 0,
+    y: 0,
+  })
+  assert.ok(texture.trim)
+  assert.deepEqual(rectangleValues(texture.trim), {
+    height: 15,
+    width: 15,
+    x: 17,
+    y: 17,
+  })
+  texture.destroy(true)
+
+  const pixiSource = readFileSync(new URL('./native-ui-pixi.ts', import.meta.url), 'utf8')
+  assert.match(pixiSource, /nativeUiGlyphRecordTexture\(source\.source, glyph\)/)
+  for (const component of ['NativeUiPlanView.tsx', 'NativeBitmapText.tsx']) {
+    const domSource = readFileSync(new URL(`./${component}`, import.meta.url), 'utf8')
+    assert.match(domSource, /nativeUiGlyphInkBounds\(glyph\)/)
+    assert.doesNotMatch(domSource, /glyph\.center[XY] - rendered(?:Width|Height) \/ 2/)
+  }
+})
+
+function rectangleValues(rectangle: Readonly<{
+  height: number
+  width: number
+  x: number
+  y: number
+}>): Readonly<{ height: number; width: number; x: number; y: number }> {
+  return {
+    height: rectangle.height,
+    width: rectangle.width,
+    x: rectangle.x,
+    y: rectangle.y,
+  }
+}
 
 test('native wrapper preserves authored whitespace and its overflow carry', () => {
   assert.deepEqual(

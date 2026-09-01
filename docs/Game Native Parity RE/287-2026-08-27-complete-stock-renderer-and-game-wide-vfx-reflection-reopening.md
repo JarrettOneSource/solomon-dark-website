@@ -7,6 +7,190 @@
 > `PuppetPointer` insertion, `ZAnimSplit` clip slices, Goodie scenery ownership,
 > and direct pre/post-world composition are exact-ported by that entry.
 
+## 2026-09-01 — Sixth report: ExactText glyph logical-trim quad
+
+### Reported smell and parity question
+
+- A player reports that InventoryScreen text still looks subtly unlike stock
+  after its font roles, case-sensitive strings, pen positions, point sampler,
+  and surrounding chrome were corrected. In particular, `stats` looks less
+  clean than retail and the `RESISTANCES`/row copy appears slightly misplaced.
+- A fresh production Mac Chrome capture of current main reproduces the
+  residual. The question is whether this is another Inventory call-site error
+  or a shared ExactText raster-geometry defect.
+- The falsifier for a shared correction is the complete glyph record: if the
+  web preserves the atlas frame, logical canvas, trim origin, metric bearing,
+  point filter, and pen advance at every output adapter, Inventory must not
+  receive another local offset. If any adapter discards record geometry, every
+  native bitmap-font consumer sharing it is reopened.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Clean stock | `SD original - image.png`, 679x694, SHA-256 `e84513ec46b23f893dff87a16eddf14f1b2f619c8346f1b0efae3adf3006c9af` | The lowercase menu-font `stats` ink has stable horizontal alignment inside its shaded header, while the medium/body page copy has the stock crisp point-sampled weight. | high |
+| Current browser reproduction | Website `190f11293e90cf25e9670954e5f54b67f50bb472`; production Mac Chrome, 1600x900; diagnostic frame SHA-256 `3db232253d2ccd7e5f6c66c263c5284c1a4232cfe2ff02573abac59b8cb556f0` | The corrected Inventory composition and pens are present, but the reported slight glyph-position/weight residual remains with empty journey and browser error arrays. | high |
+| Retail instructions | `DarkCloudBrowser_ExactTextRender 0x0043AFC0 -> Glyph_Draw 0x004143D0`, retail `SolomonDark.exe` 0.72.5 at preferred base `0x00400000` | ExactText computes the metric pen/bearing and `Glyph_Draw` submits the glyph sprite record's authored quad. The record's logical canvas and trimmed ink origin therefore remain part of final draw geometry; the native painter does not recenter the tight atlas frame. | high |
+| Extracted asset data | tracked `native-ui-assets.json`; every `NativeUiGlyphRecord` has `frame`, `logicalSize`, `trimOrigin`, and `metrics` | The Website already owns all native inputs. Across 718 glyphs in all ten font families, 626 tight-frame centers differ from their authored logical/trim centers, usually by one half pixel and by as much as one pixel in `world-and-roster`. | high |
+| Web causal trace | `native-ui-pixi.ts`, `NativeUiPlanView.tsx`, `NativeBitmapText.tsx` at the current-main identity above | The ordinary sprite path preserves Pixi `orig` and `trim`; `glyphTexture` supplies only a tight `frame`. Both DOM paths likewise place the tight frame at `center - frame/2`. All three discard `logicalSize`/`trimOrigin` after layout even though the catalog and glyph layout retain them. | high |
+| Existing regression gap | `native-ui.test.ts`, native record texture tests, source contracts | Tests pin point filtering, advance, kerning, wrapping, alignment, centers, records, and tint, but none pins the final trimmed ink rectangle or glyph texture `orig`/`trim`. The false tight-frame implementation is therefore fully green. | high |
+
+All addresses are preferred-image addresses in the canonical unmodified retail
+image, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+No injected runtime evidence is used in this reopening.
+
+### System boundary and membership inventory
+
+Native system: final ExactText glyph geometry from extracted sprite-record
+canvas/trim data through metric layout and every Pixi or DOM submission path.
+
+| Member | Native/data source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| `belt` font, 92 glyphs / 89 affected | complete extracted belt wrapper | `exact-ported` by this reopening | every glyph uses authored logical/trim geometry |
+| `body` font, 92 glyphs / 81 affected | complete extracted body wrapper | `exact-ported` by this reopening | representative page labels plus complete manifest sweep |
+| `control-panel` font, 92 glyphs / 63 affected | complete extracted control-panel wrapper | `exact-ported` by this reopening | representative settings/control copy plus manifest sweep |
+| `heading` font, 42 glyphs / 38 affected | complete extracted heading wrapper | `exact-ported` by this reopening | representative heading copy plus manifest sweep |
+| `medium` font, 92 glyphs / 81 affected | complete extracted medium wrapper | `exact-ported` by this reopening | `RESISTANCES`, values, and complete manifest sweep |
+| `menu` font, 92 glyphs / 64 affected | complete extracted menu wrapper | `exact-ported` by this reopening | lowercase `stats` and complete manifest sweep |
+| `skill-uppercase` font, 26 glyphs / 26 affected | complete extracted skill wrapper | `exact-ported` by this reopening | skill picker capture plus manifest sweep |
+| `special-uppercase` font, 31 glyphs / 30 affected | complete extracted special wrapper | `exact-ported` by this reopening | representative title/special copy plus manifest sweep |
+| `timeline` font, 92 glyphs / 90 affected | complete extracted timeline wrapper | `exact-ported` by this reopening | timeline capture plus manifest sweep |
+| `world-and-roster` font, 67 glyphs / 64 affected | complete extracted world wrapper | `exact-ported` by this reopening | world/nameplate capture plus manifest sweep |
+| shared layout, advance, kerning, alignment, bearings | `0x0043AFC0`; `native-ui-text.ts` | `verified-already-at-parity` | existing exact layout assertions stay unchanged |
+| point-filtered wrap-addressed font page sources | ExactText filter owner; earlier entry-287 census | `verified-already-at-parity` | sampler/source-policy assertions stay unchanged |
+| Pixi plan/text adapter | `native-ui-pixi.ts::text` | `exact-ported` by this reopening | trimmed texture has native `orig` and `trim` |
+| Pixi direct glyph adapter | `native-ui-pixi.ts::glyph`; chat and styled-run callers | `exact-ported` by this reopening | direct glyph sprites share the same trimmed texture |
+| DOM plan adapter | `NativeUiPlanView.tsx::renderText` | `exact-ported` by this reopening | CSS ink bounds derive from logical canvas and trim origin |
+| DOM raw bitmap adapter | `NativeBitmapText.tsx` | `exact-ported` by this reopening | CSS ink bounds share the same geometry helper |
+| Inventory, skills, settings, tabs, buttons, message boxes, noteboxes, tutorial, loot, spectator, game-over, title/create, Hub chat/NPC, HUD/world consumers | complete callers of the four adapters above | `exact-ported` through the shared correction | representative Pixi and DOM browser surfaces plus full gate |
+| protocol, simulation, input, save, audio, RNG | no glyph-quad ownership | `out-of-system` — no state change | source boundary and unchanged suites |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread
+
+- ExactText selects a font wrapper, applies alignment width, kerning, advance,
+  and the per-glyph metric bearing. `Glyph_Draw` then renders the glyph's
+  authored sprite-record quad at that metric position.
+- The extracted record represents that quad as an untrimmed logical canvas and
+  a tight atlas frame at `trimOrigin`. These values remain immutable for the
+  life of the font catalog; only the caller's position, scale, tint, alpha, or
+  intentional italic transform changes per draw.
+- Pixi text plans and direct glyph calls share one cached glyph texture. DOM
+  plans and raw bitmap text share the same pure layout but currently duplicate
+  the final tight-mask placement. Scene close destroys derived Pixi textures;
+  DOM glyph elements leave with their owning component.
+
+### Recovered behavioral contract
+
+- A layout glyph centered at `(cx, cy)` and scaled by `s` submits tight ink at
+  `left = cx + (trimX - logicalWidth/2) * s` and
+  `top = cy + (trimY - logicalHeight/2) * s`, with the atlas frame's scaled
+  width and height. Centering the tight frame instead is not equivalent.
+- Pixi must encode the same rule as texture `orig = [0,0,logicalWidth,
+  logicalHeight]` and `trim = [trimX,trimY,frameWidth,frameHeight]`; anchor
+  `0.5` then remains the native logical-quad anchor.
+- For menu `stats`, the current tight path shifts every glyph 0.5 pixel left;
+  `s/a/s` also shift 0.5 pixel up. For medium `RESISTANCES`, nine of eleven
+  glyphs shift in at least one axis. Body `HEALTH:` and medium `63/63` likewise
+  have mixed half-pixel shifts, explaining the inconsistent apparent weight.
+- Point sampling, native UV endpoints, kerning, advances, baselines, alignment
+  modes, case-sensitive strings, tints, and caller-owned pen positions do not
+  change. There is no font substitution or browser approximation.
+
+### Nearby-system findings
+
+- The regular native sprite adapter already preserves `logicalSize` and
+  `trimOrigin` through the shared `nativeSpriteRecordTexture` constructor.
+  ExactText diverged only because its point-filter source path rebuilt a
+  frame-only texture instead of carrying the same record geometry.
+- The DOM duplication is an independent output-adapter omission with the same
+  root cause. A pure final-ink-bounds helper prevents Pixi truth and DOM truth
+  from drifting again without changing the existing layout ABI.
+
+### Confidence and open questions
+
+- Confirmed: native draw ownership; complete authored glyph membership; exact
+  current-web omission; all four output paths; affected-glyph distribution;
+  stock/current visible residual.
+- Inferred: the user's description of the text as a slightly different font
+  is the perceptual result of inconsistent half-pixel point-sampled ink. This
+  inference is accepted only if corrected browser captures remove the residual.
+- Unknown: no native system member or unavailable browser capability. The
+  final visual result remains subject to stock-versus-web browser review.
+
+### Web implementation consequence
+
+- Preserve logical size and trim origin when the point-filtered Pixi glyph
+  texture is created; keep the shared cache, source policy, anchor, and layout.
+- Add one pure native glyph ink-bounds calculation to `native-ui-text.ts` and
+  make both DOM adapters consume it. Remove their tight-frame-centering math.
+- Do not add Inventory offsets, change a font role, alter atlas pixels, soften
+  the sampler, or introduce CSS/system-font fallbacks.
+
+### Validation contract
+
+- Focused tests must sweep all 718 extracted glyphs and prove final bounds from
+  logical canvas/trim data, pin representative menu/medium/body/world glyphs,
+  and assert that point-glyph Pixi textures retain `orig`/`trim`.
+- Source/adapter coverage must prove both DOM paths consume the shared bounds
+  helper and direct Pixi glyph callers share the corrected texture.
+- Production Mac Chrome must capture Inventory page 1 and the native-UI
+  workbench's Pixi and DOM surfaces with empty page, console, response, WebGL,
+  and host-error arrays. Review `stats`, `RESISTANCES`, body values, and at
+  least one non-Inventory font family against stock/extracted geometry.
+- After the last source edit, run the complete canonical Mac gate. Publication
+  and deployment are separate and are not authorized by this reopening.
+
+### Implementation validation receipt
+
+- `native-ui-glyph-texture.ts` now constructs every point-filtered Pixi glyph
+  texture with the atlas frame plus native `orig` logical canvas and `trim`
+  rectangle. `native-ui-pixi.ts` routes both planned text and direct styled/chat
+  glyphs through that constructor; cache, sampler, UV, tint, alpha, scale, and
+  anchor ownership are unchanged.
+- `native-ui-text.ts` now owns the pure final-ink rectangle formula.
+  `NativeUiPlanView.tsx` and `NativeBitmapText.tsx` both consume it, removing
+  their duplicate tight-frame-centering math. No Inventory offset, font role,
+  atlas asset, metric, pen, or layout contract changed.
+- The focused regression was proven red on the Mac mini at the exact base
+  `190f11293e90cf25e9670954e5f54b67f50bb472`, first failing because both new
+  shared geometry exports were absent. After implementation,
+  `npm run test:native-ui` passed `74/74`. Its new assertions sweep all 718
+  glyph records, pin the 626 non-equivalent tight-frame centers, verify menu,
+  medium, body, and world representatives, inspect actual Pixi
+  `frame`/`orig`/`trim`, and require both DOM adapters to use the shared bounds.
+  Additional Mac suites passed world nameplates/speech `20/20` and Hub UI
+  `94/94`.
+- The candidate was fast-forwarded without conflict through current
+  `origin/main` `521776ac88d3c09af524862562b9c6460e176696`, including its independent
+  primary-spell presentation quality suite. The production Mac build passed
+  TypeScript, Vite, game-host construction, and the bundle budget. Entry
+  `Game-w8dxC8Ou.js` is 263,678 raw / 80,067 gzip bytes, below the 524,288 /
+  134,144 limits.
+- Production Chrome at 1600x900 completed the built Inventory journey through
+  Hub pages `0 -> 1 -> 2`, close/reopen reset, and Boneyard page 1. Page,
+  console, and failed-response arrays were empty. The reviewed Hub and
+  Boneyard attributes frames have SHA-256
+  `65d53adda244c99b0916484ef48553740c2a4aec49cff22e937f970760f8d8d3`
+  and `98c311dd9e83af42da37213bb78918b814dfd8f5d2822c68e23db47eff521d32`.
+  At matched pane scale, `stats`, `RESISTANCES`, labels, and values retain the
+  stock glyph shapes without the mixed half-pixel web shift.
+- The Mac Chrome native-UI workbench exercised all 13 atlases and both Pixi and
+  DOM output adapters with empty page/console/response arrays. Reviewed Pixi
+  and DOM frame hashes are
+  `7df5539579634108b595d212b0b7e7405bee371c9240f8b49fb17c318251a729`
+  and `f0470963ac3fe5c79bffab118c258b01788779f141b15c7c0c6bc0a4dd89bcab`.
+- The no-later-implementation-edit canonical Mac
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate passed every backend,
+  frontend, desktop, lint/boundary, generated-artifact, production build,
+  bundle-budget, media, and CSP stage on that current-main identity. Its
+  16,759-line log SHA-256 is
+  `339c4a0926a3d582b20f2e12ff712e31c2f66312d3abb7a1171d6aa952e9ae20`.
+  No browser approximation, material in-system unknown, publication, or
+  deployment remains hidden in this receipt; publication was not requested.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Acid Rain improved after recovering the Arena shader,

@@ -2,7 +2,11 @@ import type { CSSProperties } from 'react'
 
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
 import { nativeUiAtlas, nativeUiFont, type NativeUiFontName } from './native-ui-catalog.ts'
-import { layoutNativeUiText, type NativeUiTextAlign } from './native-ui-text.ts'
+import {
+  layoutNativeUiText,
+  nativeUiGlyphInkBounds,
+  type NativeUiTextAlign,
+} from './native-ui-text.ts'
 
 interface NativeBitmapTextProps {
   readonly align?: NativeUiTextAlign
@@ -78,30 +82,29 @@ export default function NativeBitmapText({
       }}
     >
       {layout.glyphs.map((glyph, index) => {
-        const [x, y, glyphWidth, glyphHeight] = glyph.frame
-        const renderedWidth = glyphWidth * glyph.scale
-        const renderedHeight = glyphHeight * glyph.scale
+        const [x, y] = glyph.frame
+        const bounds = nativeUiGlyphInkBounds(glyph)
         return (
           <i
             key={`${index}:${glyph.codePoint}`}
             data-native-ui-glyph={glyph.codePoint}
             style={{
               backgroundColor: color,
-              height: renderedHeight,
+              height: bounds.height,
               imageRendering: 'pixelated',
-              left: glyph.centerX - renderedWidth / 2,
+              left: bounds.left,
               maskImage: `url("${source}")`,
               maskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,
               maskRepeat: 'no-repeat',
               maskSize: `${atlas.dimensions[0] * glyph.scale}px ${atlas.dimensions[1] * glyph.scale}px`,
               opacity: glyph.alpha,
               position: 'absolute',
-              top: glyph.centerY - renderedHeight / 2,
+              top: bounds.top,
               WebkitMaskImage: `url("${source}")`,
               WebkitMaskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,
               WebkitMaskRepeat: 'no-repeat',
               WebkitMaskSize: `${atlas.dimensions[0] * glyph.scale}px ${atlas.dimensions[1] * glyph.scale}px`,
-              width: renderedWidth,
+              width: bounds.width,
             }}
           />
         )

@@ -13,6 +13,7 @@ import {
   type NativeUiFontName,
   type NativeUiGlyphRecord,
 } from './native-ui-catalog.ts'
+import { nativeUiGlyphRecordTexture } from './native-ui-glyph-texture.ts'
 import type {
   NativeUiFragment,
   NativeUiNineSliceNode,
@@ -133,10 +134,7 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
       source = nativeStockPointTextureFromImage(image)
       pointFilteredAtlases.set(atlas, source)
     }
-    const result = nativeSpriteRecordTexture({
-      frame: new Rectangle(x, y, width, height),
-      source: source.source,
-    })
+    const result = nativeUiGlyphRecordTexture(source.source, glyph)
     derived.set(key, result)
     return result
   }
