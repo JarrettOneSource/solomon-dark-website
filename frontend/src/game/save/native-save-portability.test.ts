@@ -6,7 +6,16 @@ import { deflateRawSync } from 'node:zlib'
 
 import { createPlayerSkillBook } from '../core-kernels/player-progression.ts'
 import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
-import { createGameSimulation } from '../core-server/game-simulation.ts'
+import {
+  createGameSimulation,
+  enterBoneyardWorld,
+  stepGameSimulationTick,
+} from '../core-server/game-simulation.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import {
+  createBoneyardCatalog,
+  materializeBoneyard,
+} from '../host/boneyard-catalog.ts'
 import {
   decodeNativeDarkdata,
   encodeNativeDarkdata,
@@ -28,11 +37,13 @@ import {
   nativeArchiveCrc32,
   readNativeSaveArchive,
   readZip,
+  WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH,
 } from './native-save-archive.ts'
 import { readNativeSaveFileSelection } from './native-save-files.ts'
 import {
   createPortableGameProfileFromNative,
   encodePortableGameProfile,
+  nativeSourceBytes,
   parsePortableGameProfile,
   portableSha256,
   type PortableGameProfile,
@@ -849,6 +860,126 @@ test('web export preserves the native source through schema 17 and returns stock
     () => parsePortableGameProfile(JSON.stringify(settingsLeak)),
     /retained file 0 is invalid/,
   )
+})
+
+test('stock ZIP export carries one sanitized exact browser Boneyard continuation', async () => {
+  const portable = await createPortableGameProfileFromNative(
+    darkdata,
+    gamestate,
+    fixture.expected.runName,
+  )
+  const imported = createWebGameSaveFromPortableProfile(portable)
+  const hub = restoreGameSaveDocument(imported.document)
+  const loaded = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 41),
+  )
+  assert.ok(loaded)
+  let state = enterBoneyardWorld(hub.state, loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  state = stepGameSimulationTick(state, {}, {
+    enemySpawnIntents: [{
+      enemyToken: 'WRAITH',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+      position: { x: loaded.scene.spawn.x + 100, y: loaded.scene.spawn.y },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+  })
+  const mods = [{
+    contentSha256: 'a'.repeat(64),
+    id: 'tests.support-export',
+    version: '1.0.0',
+  }] as const
+  const modState = { 'tests.support-export': { incident: 'six-coffins' } } as const
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: loaded,
+    mods,
+    modState,
+    nativeSource: hub.nativeSource,
+    partyRejoinToken: `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`,
+    playerId: hub.playerId,
+    state,
+  })
+  const canonical = restoreGameSaveDocument(document)
+  const nativeProjection = nativeSourceBytes(
+    (await createPortableGameProfileFromWebSave(document)).nativeSource,
+  )
+
+  const exported = await exportWebGameSaveToNativeArchive(document)
+  const archive = await readNativeSaveArchive(exported.archive)
+  assert.equal(nativeBytesEqual(archive.darkdata, nativeProjection.darkdata), true)
+  assert.equal(nativeBytesEqual(archive.gamestate, nativeProjection.gamestate), true)
+  const supportFiles = archive.retainedFiles?.filter(({ path }) => (
+    path.toLowerCase() === WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
+  )) ?? []
+  assert.equal(supportFiles.length, 1)
+  const supportDocument = new TextDecoder().decode(supportFiles[0]!.bytes)
+  const supportJson = JSON.parse(supportDocument)
+  assert.equal(supportJson.integrity, 'local-only')
+  assert.equal(supportJson.nativeSource, null)
+  assert.equal(supportJson.continuation.summary.partyRejoinToken, null)
+  assert.equal(supportJson.continuation.simulation.world.kind, 'boneyard')
+  assert.equal(supportJson.continuation.simulation.world.enemies.actors.length, 1)
+
+  const restored = restoreGameSaveDocument(supportDocument)
+  assert.deepEqual(restored.loadedBoneyard, canonical.loadedBoneyard)
+  assert.deepEqual(restored.state, canonical.state)
+  assert.deepEqual(restored.mods, mods)
+  assert.deepEqual(restored.modState, modState)
+})
+
+test('stock import ignores a support sidecar and re-export replaces it without nesting', async () => {
+  const portrait = Uint8Array.of(9, 8, 7)
+  const staleSupport = new TextEncoder().encode('{"stale":true}')
+  const portable = await createPortableGameProfileFromNative(
+    darkdata,
+    gamestate,
+    fixture.expected.runName,
+    [
+      { bytes: staleSupport, path: 'SolomonDark/Browser-Game-Save.json' },
+      { bytes: portrait, path: 'solomondark/Portraits/portrait100.raw' },
+    ],
+  )
+  const first = await exportWebGameSaveToNativeArchive(
+    createWebGameSaveFromPortableProfile(portable).document,
+  )
+  const firstArchive = await readNativeSaveArchive(first.archive)
+  const firstSupportFiles = firstArchive.retainedFiles?.filter(({ path }) => (
+    path.toLowerCase() === WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
+  )) ?? []
+  assert.equal(firstSupportFiles.length, 1)
+  assert.notEqual(new TextDecoder().decode(firstSupportFiles[0]!.bytes), '{"stale":true}')
+  assert.equal(JSON.parse(new TextDecoder().decode(firstSupportFiles[0]!.bytes)).nativeSource, null)
+
+  const reimported = await readNativeSaveFileSelection([
+    selectedFile('browser-support.zip', first.archive),
+  ])
+  assert.deepEqual(
+    reimported.nativeSource.retainedFiles.map(({ path }) => path),
+    ['solomondark/Portraits/portrait100.raw'],
+  )
+  assert.match(reimported.warnings.join('\n'), /1 opaque native slot file/)
+  assert.doesNotMatch(reimported.warnings.join('\n'), /2 opaque native slot files/)
+
+  const second = await exportWebGameSaveToNativeArchive(
+    createWebGameSaveFromPortableProfile(reimported).document,
+  )
+  const secondArchive = await readNativeSaveArchive(second.archive)
+  const secondSupportFiles = secondArchive.retainedFiles?.filter(({ path }) => (
+    path.toLowerCase() === WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
+  )) ?? []
+  assert.equal(secondSupportFiles.length, 1)
+  assert.equal(secondSupportFiles[0]!.bytes.byteLength, firstSupportFiles[0]!.bytes.byteLength)
+  const secondSupport = JSON.parse(new TextDecoder().decode(secondSupportFiles[0]!.bytes))
+  assert.equal(secondSupport.nativeSource, null)
+  assert.equal(secondSupport.continuation.summary.partyRejoinToken, null)
+  assert.equal('stale' in secondSupport, false)
 })
 
 test('a fresh web wizard exports through the controlled native Hub template', async () => {

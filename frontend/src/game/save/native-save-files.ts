@@ -1,4 +1,8 @@
-import { readNativeSaveArchive, readZip } from './native-save-archive.ts'
+import {
+  readNativeSaveArchive,
+  readZip,
+  WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH,
+} from './native-save-archive.ts'
 import { loadNativeHubTemplate } from './native-save-bridge.ts'
 import {
   createPortableGameProfileFromNative,
@@ -49,7 +53,9 @@ export async function readNativeSaveFileSelection(
         archive.darkdata,
         archive.gamestate,
         archive.runName,
-        archive.retainedFiles ?? [],
+        (archive.retainedFiles ?? []).filter(({ path }) => (
+          path.toLowerCase() !== WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
+        )),
       )
     }
     const entries = [...archiveFiles.entries()]

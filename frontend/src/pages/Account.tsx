@@ -231,6 +231,11 @@ function BrowserGameSaveSlot({
           export for stock
         </button>
       </div>
+      {save ? (
+        <p className="mt-2 text-[10px] leading-relaxed text-bone-dim">
+          Stock exports include browser-game-save.json for Website support replay.
+        </p>
+      ) : null}
       {pendingImport ? (
         <div className="mt-3 rounded border border-arcane/30 bg-arcane/5 p-3 text-xs text-bone-dim">
           <div className="font-display text-sm text-bone">

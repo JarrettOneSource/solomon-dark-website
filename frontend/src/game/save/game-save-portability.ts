@@ -36,6 +36,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import {
   createGameSaveDocument,
+  createGameSaveSupportDocument,
   restoreGameSaveDocument,
   restoreGameSaveProfile,
 } from './game-save-document.ts'
@@ -57,7 +58,10 @@ import {
   patchNativeGamestate,
   type NativeGameBoastState,
 } from './native-save-bridge.ts'
-import { createNativeSaveArchive } from './native-save-archive.ts'
+import {
+  createNativeSaveArchive,
+  WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH,
+} from './native-save-archive.ts'
 import { NativeSaveFormatError } from './native-save-codec.ts'
 
 const ELEMENT_BY_ROOT: Readonly<Record<number, WizardElement>> = Object.freeze({
@@ -79,6 +83,7 @@ const STARTING_SKILLS: Readonly<Record<WizardElement, readonly [number, number]>
   fire: Object.freeze([16, 21] as const),
   water: Object.freeze([32, 35] as const),
 })
+const encoder = new TextEncoder()
 
 export interface PortableImportResult {
   readonly character: PlayerCharacterConfig
@@ -555,11 +560,18 @@ export async function exportWebGameSaveToNativeArchive(
 ): Promise<PortableExportResult> {
   const portable = await createPortableGameProfileFromWebSave(document)
   const bytes = nativeSourceBytes(portable.nativeSource)
+  const retainedFiles = bytes.retainedFiles.filter(({ path }) => (
+    path.toLowerCase() !== WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
+  ))
+  retainedFiles.push(Object.freeze({
+    bytes: encoder.encode(createGameSaveSupportDocument(document)),
+    path: WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH,
+  }))
   return Object.freeze({
     archive: await createNativeSaveArchive({
       darkdata: bytes.darkdata,
       gamestate: bytes.gamestate,
-      retainedFiles: bytes.retainedFiles,
+      retainedFiles,
       runName: portable.nativeSource.runName,
     }),
     portable,

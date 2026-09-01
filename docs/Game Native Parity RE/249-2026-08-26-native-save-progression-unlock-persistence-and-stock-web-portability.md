@@ -389,3 +389,179 @@ legacy migration and does not weaken current schema-28 ownership.
   is the only bounded data-loss migration. This receipt is the only tracked
   change after the cited gate, so the gate and built journeys are repeated on
   the receipt-bearing tree before publication.
+
+## 2026-09-01 - Browser-continuation support file in stock ZIP exports
+
+### Reported smell and parity question
+
+- The player-facing `solomon-dark-stock-save-*.zip` export was used as a bug
+  attachment for an active Boneyard run. Its native files carried the wizard's
+  progression but could not replay the reported Arena, actors, or positions.
+- The user requested that the same ZIP include the authoritative browser save
+  as an extra file so a supplied archive can reproduce the Website run.
+- The stock projection and browser continuation must remain separate owners:
+  retail still consumes `darkdata.cfg` plus `gamestate.sav`, while support
+  diagnostics consume the normalized Website document.
+- Falsifiers are that the existing ZIP already contains the normalized
+  continuation, the launcher rejects a manifest-listed ordinary savegame file,
+  the continuation can be shared without removing its party-rejoin capability,
+  or repeated stock -> web -> stock transfer can retain old support state
+  without making the attachment stale or recursively larger.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Submitted export | `solomon-dark-stock-save-1788225845832.zip`, SHA-256 `8619d9a29f4678dfc190386a46d5671bc108e412c86db4ff898348a7710f5ac3` | The manifest names only `solomondark/darkdata.cfg` and one `_survival/gamestate.sav`; exact template-patch equality proves neither member carries the live Website Boneyard. | high |
+| Current browser document | schema 28 `game-save-document.ts` / `game-save-contract.ts` at Website `78644867` | `continuation.loadedBoneyard` plus the owner-projected simulation carries the materialized scene, run/tick/RNG, player, waves, encounter, enemies, loot, spells, and other authoritative runtime state required by Last Game. | high |
+| Current export path | `exportWebGameSaveToNativeArchive` -> `createNativeSaveArchive`; `NativeSaveTransferSettings`, Account slot I | The exporter validates the browser continuation, patches a native base/template, and writes only native semantic and opaque retained files. Both player-facing export surfaces call this same owner. | high |
+| Launcher archive reader | read-only `CloudSaveArchive.ValidateAndExtract` in the existing Mod Loader checkout | A manifest-listed file under `savegames/solomondark/` is hash-, size-, path-, count-, and expansion-validated and restored without an allow-list of retail filenames. | high static |
+| Capability boundary | schema-28 `summary.partyRejoinToken`; `nativeSource` attachment | The rejoin token is a live signed capability and must not enter a player-shared support artifact. Retaining `nativeSource` would duplicate the native files inside the sidecar and permit recursive growth after import/re-export. | high |
+
+No new stock executable claim is needed. This is a Website support-extension
+member carried beside, rather than inside, the byte-compatible retail files.
+
+### Reopened system boundary and complete membership
+
+Native/web system: one player-requested stock ZIP from authoritative browser
+slot through native projection, manifest construction, support-sidecar
+sanitization, launcher preservation, support extraction, stock import, repeated
+export, and exact Website replay.
+
+| Member | Disposition | Proof contract |
+| --- | --- | --- |
+| `darkdata.cfg` profile projection | `verified-already-at-parity` | bytes and decoded profile remain unchanged by adding the sidecar |
+| `gamestate.sav` wizard projection | `verified-already-at-parity` | bytes, bindings, and retail run name remain unchanged |
+| launcher manifest membership/hash/size | `exact-ported` for the Website extension | the support file is listed once and its byte hash/size verify |
+| support path `solomondark/browser-game-save.json` | `exact-ported` | one compact UTF-8 schema-28 document appears under `savegames/` |
+| Hub continuation | `exact-ported` | sidecar restores the same owner/profile state while Hub keeps its existing regeneration contract |
+| active Boneyard continuation | `exact-ported` | loaded scene, run id, tick, RNG, player, encounter, waves, enemies, loot, spells, and secondary state survive sidecar restore |
+| multiplayer owner projection | `verified-already-at-parity` | no peer player entity is added to the support document |
+| signed party-rejoin capability | `out-of-system` for a shareable attachment | sidecar summary always carries `partyRejoinToken: null` |
+| account/global integrity authority | `out-of-system` for a shareable attachment | sidecar is always `local-only` and cannot create authoritative leaderboard/account provenance |
+| native source attachment | `out-of-system` for the sidecar | `nativeSource: null` prevents duplicated native bytes and recursive archive nesting |
+| active mods and bounded mod state | `exact-ported` | identities/state remain present for diagnosis and ordinary mismatch confirmation |
+| existing opaque native retained files | `verified-already-at-parity` | all non-sidecar members remain byte-identical |
+| stale support file from an imported prior export | `exact-ported` replacement lifecycle | stock import ignores it as web authority; re-export removes it and writes exactly one current sidecar |
+| malformed or hostile sidecar in an otherwise stock archive | `out-of-system` for stock semantic import | manifest integrity remains mandatory, but stock import neither executes nor resumes the sidecar |
+| automatic player-facing browser-sidecar import | `out-of-system` for this request | the file is a support/replay artifact; the existing explicit stock import continues to create a settled Hub |
+| profile-only document without a current wizard | `out-of-system` under the existing exporter contract | no Boneyard/support continuation exists to package |
+| archive size/file-count limits | `verified-already-at-parity` fail-closed boundary | the existing 16 MiB ZIP, 64 MiB expanded, and bounded-file contracts still reject overflow without dropping opaque files |
+
+There is no browser-platform block. Abrupt termination can still leave the
+ordinary browser slot at its latest acknowledged checkpoint; the export must
+carry exactly the document selected by the player, not claim a later tick.
+
+### Ownership thread and recovered behavioral contract
+
+- The game host remains the only producer of authoritative state. Cloud or
+  IndexedDB slot zero remains the durable resume owner; the export action reads
+  one already-accepted document from that coordinator.
+- Native portability still maps only the stock-representable wizard/profile
+  fields into `darkdata.cfg` and `gamestate.sav`. The new file does not change
+  or reinterpret either native serializer.
+- Sidecar construction must restore and re-encode the document through the
+  strict current codec. That canonicalizes legacy schemas and proves the
+  continuation before any bytes are shared.
+- Sanitization removes the signed party-rejoin token, removes `nativeSource`,
+  and marks the result `local-only`; it retains the complete owner-projected
+  simulation, loaded Boneyard, content identities, and mod state.
+- The ZIP manifest owns the sidecar's path, byte count, and SHA-256 alongside
+  the native members. A launcher may preserve the unknown ordinary file, while
+  retail continues reading only its known native save members.
+- Stock import deliberately filters the support path before constructing a
+  portable profile. A later export therefore writes current Website state and
+  cannot preserve an old sidecar or nest one inside another.
+
+### Nearby-system findings
+
+- The existing export label describes only the native projection even though
+  support reports use the entire ZIP as an incident artifact. The settings
+  copy must state that a sanitized Website continuation is included for
+  support and that stock ignores it.
+- A raw authoritative slot is not safe to publish unchanged because its
+  Boneyard summary may carry a signed party-rejoin capability. The sanitizer,
+  not user instructions, owns that boundary.
+
+### Confidence and open questions
+
+- Confirmed: current archive membership, exact report ZIP contents, schema-28
+  Boneyard ownership, both export callers, native retained-file path rules,
+  launcher extraction behavior, and the signed capability/source-attachment
+  fields that must be removed.
+- Inferred: retail ignores the additional ordinary filename because no
+  recovered retail save/load path names it; native compatibility remains
+  measurable through unchanged semantic-file bytes and launcher acceptance.
+- Unknown: none material to the Website support-sidecar implementation.
+
+### Web implementation consequence and validation contract
+
+- Add one archive-owned support path constant and one canonical shareable-save
+  encoder. The exporter appends its UTF-8 bytes after filtering any prior
+  case-insensitive instance of that path.
+- Keep the native archive schema, native files, stock import action, and browser
+  save schema unchanged. Do not add an alternate snapshot serializer or embed
+  state in `gamestate.sav`.
+- Focused Mac tests must prove Hub and active-Boneyard round trips, complete
+  authoritative state equality, `local-only`, null capability/source, exact
+  native semantic bytes, manifest integrity, stale-sidecar replacement, no
+  recursive growth, and stock-import filtering.
+- Built Mac Chrome must enter a real Boneyard, force a durable Leave Game
+  checkpoint, download the ZIP, extract and validate the support document,
+  replace local slot zero with that document, and resume the same run through
+  a fresh host with empty page/console/response arrays.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the Mac mini. Publication and deployment remain separately unauthorized.
+
+### Implementation validation receipt
+
+- `createGameSaveSupportDocument` now restores through the strict current codec
+  and re-encodes one `local-only` continuation with `partyRejoinToken: null`
+  and `nativeSource: null`. `exportWebGameSaveToNativeArchive` appends those
+  UTF-8 bytes at `solomondark/browser-game-save.json`, replacing any prior
+  case-insensitive member. Stock import filters that path before constructing
+  the portable Hub profile. Native `darkdata.cfg`, `gamestate.sav`, opaque
+  sibling files, archive schema, browser schema, and protocol are unchanged.
+- Mac red proof passed all 17 existing portability tests and failed only the
+  two new contracts: the Boneyard export found zero support files, and an old
+  support member remained stale. Combined-log SHA-256 is
+  `5635daf728d5ae6eb6e24317b04d6fd811db58a30c71010ce075eeaf712ce538`.
+  The final focused suite passed `19/19`, including one authoritative Wraith,
+  exact complete-state equality, unchanged native projections, capability and
+  source removal, manifest integrity, case-insensitive stale replacement,
+  stable repeated-export size, and stock-import filtering. Combined-log
+  SHA-256 is
+  `9d46790fe1be73fe76336462fbf883d3d908d338f070c7471c58e55a635cf617`.
+- Built Mac Chrome/WebGL2 passed the anonymous active-Boneyard and authenticated
+  cloud journeys with empty page, console, failed-response, and request-failure
+  arrays. The anonymous final Leave Game advanced slot revision `1 -> 4`,
+  downloaded a 786,450-byte ZIP, extracted a 757,531-byte schema-28 support
+  document at tick 9, replaced IndexedDB slot zero with that exact sidecar, and
+  resumed run `135c3088ac460a9ad2a6bbf6e918a929` through a fresh host with its
+  authoritative Wraith intact. The cloud journey advanced revision `1 -> 2`
+  and exported the same support member from the Account surface. Browser-log
+  SHA-256 is
+  `17fc583102077542d778de4d5ef3aedce2b2c94c884e415e0b9b8fe74eed1656`.
+- Independent archive inspection found exactly `manifest.json`, native
+  `darkdata.cfg`, native `_survival/gamestate.sav`, and
+  `browser-game-save.json`. The ZIP SHA-256 is
+  `b9b589271bde615b7545d47c479658a6f9ed5b9763fbad7697a1058a85568cc4`;
+  the manifest hashes the sidecar as
+  `4ea3efa6de3b29da504277d3121918fc5bbb0c84c3c4fe41bc0527978f764b17`.
+  The three run ids agree, `activeRun` is true, integrity is `local-only`, and
+  both capability/source fields are null. The inspected resumed frame is
+  visually coherent; screenshot SHA-256 is
+  `fe171da33c8cea4b0424f0fd6255bf679749b46515775e8bd7f32fe39d61b0ac`.
+- The final receipt-bearing Mac tree passed `/opt/homebrew/bin/bash
+  ./scripts/validate.sh`: 19 backend/integration contracts, the complete
+  `1,753/1,753` broad Boneyard/runtime suite, every later frontend/desktop
+  suite, production frontend and GameHost builds, bundle budget, and media/CSP
+  policy. The game entry is 263,678 raw / 80,232 gzip bytes against 524,288 /
+  134,144 limits.
+- Preliminary browser harnesses exposed and corrected stale test assumptions:
+  the Tutorial discriminator belongs to the stage wrapper, Account no longer
+  renders revision text, post-load input remains blocked until resume grace
+  completes, and test enemies must enter through the simulation's world-manager
+  registration lane. Those corrections changed maintained acceptance code,
+  not product behavior. No member remains browser-blocked or unknown. The
+  implementation is uncommitted and unpushed; deployment was not requested.

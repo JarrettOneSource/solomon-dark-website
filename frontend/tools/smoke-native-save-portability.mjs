@@ -8,23 +8,40 @@ import {
   createStoredZip,
   readNativeSaveArchive,
   readZip,
+  WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH,
 } from '../src/game/save/native-save-archive.ts'
 import {
   decodeNativeDarkdataProfile,
   decodeNativeGamestateWizard,
 } from '../src/game/save/native-save-bridge.ts'
 import { parseNativeSyncBuffer } from '../src/game/save/native-save-codec.ts'
+import {
+  createGameSaveDocument,
+  restoreGameSaveDocument,
+} from '../src/game/save/game-save-document.ts'
+import {
+  createBoneyardCatalog,
+  materializeBoneyard,
+} from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import {
+  enterBoneyardWorld,
+  stepGameSimulationTick,
+} from '../src/game/core-server/game-simulation.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-director.ts'
 
 const baseUrl = process.env.SDR_NATIVE_SAVE_SMOKE_URL || 'http://127.0.0.1:4187'
 const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
 const screenshotRoot = process.env.SDR_NATIVE_SAVE_SMOKE_SCREENSHOT_ROOT || '/tmp'
 const localCredential = 'native-save-browser-parity'
+const hostLogs = []
 const localHost = new URL(baseUrl).protocol === 'https:'
   ? null
   : await startGameHost({
       allowedOrigins: [new URL(baseUrl).origin],
       authentication: { credential: localCredential, kind: 'shared' },
+      log: entry => hostLogs.push(entry),
+      resetWhenEmpty: true,
       snapshotRate: 100,
     })
 const runtime = localHost
@@ -122,22 +139,31 @@ async function runAnonymousJourney(browser) {
     const imported = await readLocalSave(page)
     assertImportedWebSave(imported)
 
-    await resumeLastGame(page)
-    await returnToTitle(page)
+    const preparedBoneyard = prepareBoneyardDocument(imported.document)
+    await replaceLocalSave(page, preparedBoneyard.document, imported.revision)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForTitle(page)
+    const enteredBoneyard = await resumeLastGame(page, 'boneyard')
+    assert.equal(enteredBoneyard.runId, preparedBoneyard.runId)
+    await leaveBoneyard(page)
+    await waitForHostReset()
     const persisted = await readLocalSave(page)
-    assertImportedWebSave(persisted)
+    assertBoneyardWebSave(persisted, enteredBoneyard.runId)
     assert.ok(persisted.revision >= imported.revision)
 
     const exported = await exportFromTitleSettings(page)
-    await assertStockExport(exported)
+    const support = await assertStockExport(exported, persisted.document)
     const archivePath = `${screenshotRoot}/solomon-dark-native-save-anonymous.zip`
     await writeFile(archivePath, exported)
     await page.getByRole('button', { name: 'BACK', exact: true }).click()
     await page.getByRole('button', { name: 'DONE', exact: true }).click()
+    await replaceLocalSave(page, support.document, persisted.revision)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForTitle(page)
-    await resumeLastGame(page)
+    const resumedBoneyard = await resumeLastGame(page, 'boneyard')
+    assert.equal(resumedBoneyard.runId, enteredBoneyard.runId)
+    assert.ok(resumedBoneyard.tick >= support.tick)
     await page.waitForTimeout(2_500)
     await page.screenshot({
       path: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
@@ -146,10 +172,14 @@ async function runAnonymousJourney(browser) {
     return {
       exportedBytes: exported.byteLength,
       archivePath,
+      boneyardRunId: enteredBoneyard.runId,
       importedRevision: imported.revision,
       previewScreenshot: `${screenshotRoot}/solomon-dark-native-save-anonymous-preview.png`,
       resumedRevision: persisted.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
+      supportBytes: support.bytes,
+      supportEnemyCount: support.enemyCount,
+      supportTick: support.tick,
     }
   } finally {
     await context.close()
@@ -186,8 +216,7 @@ async function runCloudJourney(browser, token) {
     ))
     await page.getByRole('button', { name: /write slot I|replace slot I/i }).click()
     assert.ok((await importResponse).ok())
-    await page.getByText(/revision 1/).waitFor({ timeout: 15_000 })
-    const imported = await readCloudSave(page, token)
+    const imported = await waitForCloudSave(page, token, save => save?.revision === 1)
     assertImportedWebSave(imported)
 
     await openGameTitle(page)
@@ -203,12 +232,12 @@ async function runCloudJourney(browser, token) {
       page,
       page.getByRole('button', { name: /export for stock/i }),
     )
-    await assertStockExport(exported)
+    await assertStockExport(exported, persisted.document)
     const archivePath = `${screenshotRoot}/solomon-dark-native-save-cloud.zip`
     await writeFile(archivePath, exported)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await page.getByText(new RegExp(`revision ${persisted.revision}`)).waitFor({ timeout: 30_000 })
+    await waitForCloudSave(page, token, save => save?.revision === persisted.revision)
     await openGameTitle(page)
     await resumeLastGame(page)
     await page.waitForTimeout(2_500)
@@ -237,8 +266,10 @@ async function openGameTitle(page) {
 
 async function waitForTitle(page) {
   await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
-  const tutorial = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
-  if (await tutorial.isVisible()) {
+  const tutorial = page.locator('.stock-prompt-stage[data-prompt-kind="tutorial"]')
+  const tutorialVisible = await tutorial.waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true, () => false)
+  if (tutorialVisible) {
     await tutorial.getByRole('button', { name: 'NO', exact: true }).click()
     await tutorial.waitFor({ state: 'detached' })
   }
@@ -278,13 +309,62 @@ async function assertImportPreview(preview) {
   }
 }
 
-async function resumeLastGame(page) {
+async function resumeLastGame(page, worldKind = 'hub') {
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   const lastGame = page.getByRole('button', { name: 'Last game', exact: true })
   assert.equal(await lastGame.isEnabled(), true)
   await lastGame.click()
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 45_000 })
+  if (worldKind === 'boneyard') {
+    try {
+      await page.locator('.boneyard-scene[data-renderer-state="ready"]')
+        .waitFor({ timeout: 30_000 })
+    } catch (cause) {
+      const browserState = await page.evaluate(() => ({
+        body: document.body.innerText.slice(0, 2_000),
+        loading: document.querySelector('.match-loading-screen')?.textContent ?? null,
+        title: document.querySelector('.main-menu-page') !== null,
+        url: location.href,
+      }))
+      const taskHostState = localHost
+        ? {
+            loadedRunId: localHost.loadedBoneyard()?.runId ?? null,
+            playerCount: localHost.humanPlayerCount(),
+            tick: localHost.state().tick,
+            worldKind: localHost.state().world.kind,
+          }
+        : null
+      throw new Error(`Boneyard support-save resume did not become ready: ${JSON.stringify({
+        browserState,
+        hostLogs: hostLogs.slice(-20),
+        taskHostState,
+      })}`, { cause })
+    }
+    return readBoneyardFrame(page)
+  }
+  await page.locator('.hub-scene[data-renderer-state="ready"]')
+    .waitFor({ timeout: 45_000 })
   await page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]').waitFor()
+  return null
+}
+
+async function leaveBoneyard(page) {
+  const scene = page.locator('.boneyard-scene[data-gameplay-input-blocked="false"]')
+  await scene.waitFor({ timeout: 30_000 })
+  await scene.focus()
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.waitFor({ timeout: 15_000 })
+  await pause.getByRole('button', { name: 'LEAVE GAME', exact: true }).click()
+  await waitForTitle(page)
+}
+
+function readBoneyardFrame(page) {
+  return page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.runId && frame.runPhase === 'active'
+      ? { runId: frame.runId, tick: frame.tick }
+      : null
+  }, undefined, { timeout: 30_000 }).then(handle => handle.jsonValue())
 }
 
 async function returnToTitle(page) {
@@ -317,7 +397,7 @@ async function captureDownload(page, button) {
   }
 }
 
-async function assertStockExport(bytes) {
+async function assertStockExport(bytes, browserDocument) {
   const archive = await readNativeSaveArchive(bytes)
   const profile = decodeNativeDarkdataProfile(archive.darkdata)
   const wizard = decodeNativeGamestateWizard(archive.gamestate)
@@ -328,6 +408,38 @@ async function assertStockExport(bytes) {
   assert.equal(wizard.disciplineRoot, expectedWizard.disciplineRoot)
   assert.equal(wizard.rows.length, 83)
   assert.equal(bindingIntegerCount(archive.gamestate), expectedBindingIntegerCount)
+  const supportFiles = (archive.retainedFiles ?? []).filter(({ path }) => (
+    path.toLowerCase() === WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
+  ))
+  assert.equal(supportFiles.length, 1)
+  const document = new TextDecoder().decode(supportFiles[0].bytes)
+  const raw = JSON.parse(document)
+  assert.equal(raw.integrity, 'local-only')
+  assert.equal(raw.nativeSource, null)
+  assert.equal(raw.continuation.summary.partyRejoinToken, null)
+  const support = restoreGameSaveDocument(document)
+  const source = restoreGameSaveDocument(browserDocument)
+  assert.equal(support.state.world.kind, source.state.world.kind)
+  if (source.state.world.kind === 'boneyard') {
+    assert.ok(source.state.world.enemies.actors.length > 0)
+    assert.deepEqual(support.loadedBoneyard, source.loadedBoneyard)
+    assert.deepEqual(support.state, source.state)
+  } else {
+    assert.deepEqual(support.state.playerEntities.configs, source.state.playerEntities.configs)
+    assert.deepEqual(
+      support.state.playerEntities.progressions,
+      source.state.playerEntities.progressions,
+    )
+  }
+  return {
+    bytes: supportFiles[0].bytes.byteLength,
+    document,
+    enemyCount: support.state.world.kind === 'boneyard'
+      ? support.state.world.enemies.actors.length
+      : 0,
+    runId: support.state.world.kind === 'boneyard' ? support.state.world.runId : null,
+    tick: support.state.tick,
+  }
 }
 
 function assertImportedWebSave(record) {
@@ -349,6 +461,51 @@ function assertImportedWebSave(record) {
   )
   assert.equal(document.nativeSource.darkdataSha256, fixture.files.darkdata.sha256)
   assert.equal(document.nativeSource.gamestateSha256, expectedGamestateSha256)
+}
+
+function prepareBoneyardDocument(document) {
+  const restored = restoreGameSaveDocument(document)
+  const loaded = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 41),
+  )
+  assert.ok(loaded)
+  let state = enterBoneyardWorld(restored.state, loaded)
+  assert.equal(state.world.kind, 'boneyard')
+  state = stepGameSimulationTick(state, {}, {
+    enemySpawnIntents: [{
+      enemyToken: 'WRAITH',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+      position: { x: loaded.scene.spawn.x + 100, y: loaded.scene.spawn.y },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+  })
+  return {
+    document: createGameSaveDocument({
+      integrity: restored.integrity,
+      loadedBoneyard: loaded,
+      mods: restored.mods,
+      modState: restored.modState,
+      nativeSource: restored.nativeSource,
+      playerId: restored.playerId,
+      state,
+    }),
+    runId: loaded.runId,
+  }
+}
+
+function assertBoneyardWebSave(record, runId) {
+  assert.ok(record)
+  const document = JSON.parse(record.document)
+  assert.equal(document.continuation.simulation.world.kind, 'boneyard')
+  assert.equal(document.continuation.simulation.world.runId, runId)
+  assert.equal(document.continuation.loadedBoneyard.runId, runId)
+  assert.equal(document.continuation.summary.activeRun, true)
 }
 
 function bindingIntegerCount(bytes) {
@@ -410,6 +567,35 @@ function readLocalSave(page) {
   }))
 }
 
+function replaceLocalSave(page, document, revision) {
+  return page.evaluate(({ document: replacement, revision: currentRevision }) => (
+    new Promise((resolve, reject) => {
+      const open = indexedDB.open('solomon-dark-game-saves', 1)
+      open.onerror = () => reject(open.error)
+      open.onsuccess = () => {
+        const transaction = open.result.transaction('slots', 'readwrite')
+        transaction.onerror = () => reject(transaction.error)
+        transaction.oncomplete = () => resolve()
+        transaction.objectStore('slots').put({
+          document: replacement,
+          revision: currentRevision + 1,
+          slot: 0,
+        })
+      }
+    })
+  ), { document, revision })
+}
+
+async function waitForHostReset() {
+  if (!localHost) return
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    if (localHost.humanPlayerCount() === 0 && localHost.loadedBoneyard() === null) return
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  throw new Error('the local host did not reset after the Boneyard leave')
+}
+
 function readCloudSave(page, token) {
   return page.evaluate(async (bearer) => {
     const response = await fetch('/api/game/saves/0', {
@@ -418,6 +604,16 @@ function readCloudSave(page, token) {
     if (!response.ok) throw new Error(`cloud save read failed (${response.status})`)
     return response.json().then(({ save }) => save)
   }, token)
+}
+
+async function waitForCloudSave(page, token, predicate, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const save = await readCloudSave(page, token)
+    if (predicate(save)) return save
+    await page.waitForTimeout(100)
+  }
+  throw new Error('timed out waiting for the cloud game save')
 }
 
 async function registerSmokeAccount(username, password) {

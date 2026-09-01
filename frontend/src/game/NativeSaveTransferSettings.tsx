@@ -90,7 +90,7 @@ export default function NativeSaveTransferSettings({
       anchor.download = `solomon-dark-stock-save-${Date.now()}.zip`
       anchor.click()
       URL.revokeObjectURL(url)
-      setStatus('Stock-compatible archive downloaded.')
+      setStatus('Stock-compatible archive with browser support state downloaded.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The stock save could not be exported.')
     } finally {
@@ -102,7 +102,8 @@ export default function NativeSaveTransferSettings({
     <div className="native-save-transfer-settings">
       <p className="native-save-transfer-intro">
         Move permanent wizard progression between stock Solomon Dark and this browser slot.
-        Imports resume in the Hub; an in-progress Boneyard run does not cross engines.
+        Stock imports resume in the Hub. Exports also include browser-game-save.json so a
+        Website run can be supplied for support; retail Solomon Dark ignores that file.
       </p>
       <NativeUiSettingsGroup title="IMPORT FROM STOCK">
           <input

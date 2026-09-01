@@ -313,6 +313,20 @@ export function createGameSaveDocument(
   })
 }
 
+export function createGameSaveSupportDocument(document: string): string {
+  const restored = restoreGameSaveDocument(document)
+  return createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: restored.loadedBoneyard,
+    mods: restored.mods,
+    modState: restored.modState,
+    nativeSource: null,
+    partyRejoinToken: null,
+    playerId: restored.playerId,
+    state: restored.state,
+  })
+}
+
 export function createGameProfileSaveDocument(
   options: CreateGameProfileSaveDocumentOptions,
 ): string {

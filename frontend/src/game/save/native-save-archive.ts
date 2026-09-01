@@ -11,6 +11,9 @@ const ZIP_UTF8 = 0x0800
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
+export const WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH =
+  'solomondark/browser-game-save.json'
+
 export interface NativeArchiveFile {
   readonly bytes: Uint8Array
   readonly path: string
