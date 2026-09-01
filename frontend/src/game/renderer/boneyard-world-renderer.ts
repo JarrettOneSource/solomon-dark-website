@@ -128,6 +128,7 @@ import {
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NativeBoneyardLightIndex,
   NATIVE_PLAYER_LIGHT_RADIUS,
+  nativeArenaDisplacementCoverPlan,
   nativeBoulderLightSource,
   nativeBoneyardLightScalar,
   nativeBoneyardSurfaceLightScalar,
@@ -687,6 +688,42 @@ function drawSecondaryScreenFlash(
     .fill({ color: 0xffffff })
 }
 
+function drawArenaDisplacementCover(
+  graphic: Graphics,
+  canvas: HTMLCanvasElement,
+  displacement: Readonly<{ x: number; y: number }>,
+  viewport: Readonly<{ height: number; width: number }>,
+  complexLighting: boolean,
+  worldTransform: Readonly<{
+    position: Readonly<{ x: number; y: number }>
+    scale: number
+  }>,
+): void {
+  const plan = nativeArenaDisplacementCoverPlan(
+    displacement,
+    viewport,
+    complexLighting,
+  )
+  graphic.clear()
+  graphic.visible = plan !== null
+  canvas.dataset.displacementCoverRectangles = JSON.stringify(plan?.rectangles ?? [])
+  canvas.dataset.displacementCoverVisible = `${plan !== null}`
+  if (plan === null) {
+    graphic.position.set(0, 0)
+    return
+  }
+  graphic.position.set(0, 0)
+  for (const rectangle of plan.rectangles) {
+    graphic.rect(
+      (plan.position.x + rectangle.x - worldTransform.position.x) / worldTransform.scale,
+      (plan.position.y + rectangle.y - worldTransform.position.y) / worldTransform.scale,
+      rectangle.width / worldTransform.scale,
+      rectangle.height / worldTransform.scale,
+    )
+  }
+  graphic.fill({ color: 0x000000 })
+}
+
 export async function createBoneyardWorldRenderer(
   options: BoneyardWorldRendererOptions,
 ): Promise<BoneyardWorldRenderer> {
@@ -804,6 +841,11 @@ export async function createBoneyardWorldRenderer(
     initialResolution,
     lightQuality,
   )
+  const displacementCover = new Graphics({ label: 'native-arena-displacement-cover' })
+  displacementCover.eventMode = 'none'
+  displacementCover.visible = false
+  displacementCover.zIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX
+  world.addChild(displacementCover)
   const secondaryScreenFlash = new Graphics({ label: 'native-secondary-screen-flash' })
   secondaryScreenFlash.eventMode = 'none'
   secondaryScreenFlash.visible = false
@@ -855,6 +897,8 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.weatherSplashAsset = 'DeadHawg:24'
   canvas.dataset.weatherSplashBlend = 'add'
   canvas.dataset.weatherStreakRenderer = 'pixi-particle-batch'
+  canvas.dataset.displacementCoverRectangles = '[]'
+  canvas.dataset.displacementCoverVisible = 'false'
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`
   canvas.dataset.viewportHeight = `${viewport.height}`
@@ -862,6 +906,7 @@ export async function createBoneyardWorldRenderer(
 
   let destroyed = false
   let frameCount = 0
+  let currentWorldDisplacement: Readonly<{ x: number; y: number }> = { x: 0, y: 0 }
   let worldSpeeches: readonly GameWorldSpeech[] = []
   let armedLevelUpPresentationId: number | null = null
   let lastLevelUpPresentationId: number | null = null
@@ -1211,6 +1256,7 @@ export async function createBoneyardWorldRenderer(
       regionLightField.setCompositeZIndex(
         painter.weatherLightingOrder.lightCompositeZIndex,
       )
+      displacementCover.zIndex = painter.weatherLightingOrder.lightCompositeZIndex
       regionLightField.render(
         application.renderer,
         scene.currentLightSources,
@@ -1256,10 +1302,6 @@ export async function createBoneyardWorldRenderer(
         })
       }
       const sampledFeedback = worldFeedback.sample(snapshot.tick)
-      const sampledWorldShake = nativeSecondaryWorldShake(
-        snapshot.secondaryAbilities.actors,
-        `boneyard:${snapshot.world.runId}`,
-      )
       const sampledSecondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
         snapshot.tick,
       )
@@ -1267,25 +1309,37 @@ export async function createBoneyardWorldRenderer(
         snapshot.tick,
       )
       const feedbackMagnitude = settings.zoomEffects ? sampledFeedback.magnitude : 0
-      const worldShake = settings.zoomEffects
-        ? sampledWorldShake
-        : { magnitude: 0, x: 0, y: 0 }
       const secondaryCameraMagnitude = settings.zoomEffects
         ? sampledSecondaryCameraMagnitude
         : 0
       const secondaryCameraDisplacement = settings.zoomEffects
         ? sampledSecondaryCameraDisplacement
         : { x: 0, y: 0 }
+      currentWorldDisplacement = settings.zoomEffects
+        ? nativeSecondaryWorldShake(
+            snapshot.secondaryAbilities.actors,
+            `boneyard:${snapshot.world.runId}`,
+            secondaryCameraDisplacement,
+          )
+        : { x: 0, y: 0 }
       const worldTransform = nativeEnemyWorldFeedbackTransform(
         camera,
         viewport,
         player.position,
-        Math.max(feedbackMagnitude, worldShake.magnitude, secondaryCameraMagnitude),
+        Math.max(feedbackMagnitude, secondaryCameraMagnitude),
       )
       world.scale.set(worldTransform.scale)
       world.position.set(
-        worldTransform.position.x + worldShake.x + secondaryCameraDisplacement.x,
-        worldTransform.position.y + worldShake.y + secondaryCameraDisplacement.y,
+        worldTransform.position.x + currentWorldDisplacement.x,
+        worldTransform.position.y + currentWorldDisplacement.y,
+      )
+      drawArenaDisplacementCover(
+        displacementCover,
+        canvas,
+        currentWorldDisplacement,
+        viewport,
+        settings.complexLighting,
+        { position: world.position, scale: world.scale.x },
       )
       const worldScreenTransform = {
         position: { x: world.position.x, y: world.position.y },
@@ -1567,8 +1621,8 @@ export async function createBoneyardWorldRenderer(
       )
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
       frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
-      frameDiagnostics.worldShakeX = worldShake.x
-      frameDiagnostics.worldShakeY = worldShake.y
+      frameDiagnostics.worldShakeX = currentWorldDisplacement.x
+      frameDiagnostics.worldShakeY = currentWorldDisplacement.y
       frameDiagnostics.secondaryAbilityCount = scene.secondaryAbilityCount
       frameDiagnostics.secondaryAbilityKinds = scene.secondaryAbilityKinds
       frameDiagnostics.secondaryAbilityPrimitiveCount = scene.secondaryAbilityPrimitiveCount
@@ -1600,8 +1654,8 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.seekerSegmentCount = `${scene.seekerSegmentCount}`
       canvas.dataset.worldFeedbackMagnitude = `${feedbackMagnitude}`
       canvas.dataset.secondaryCameraMagnitude = `${secondaryCameraMagnitude}`
-      canvas.dataset.worldShakeX = `${worldShake.x}`
-      canvas.dataset.worldShakeY = `${worldShake.y}`
+      canvas.dataset.worldShakeX = `${currentWorldDisplacement.x}`
+      canvas.dataset.worldShakeY = `${currentWorldDisplacement.y}`
       canvas.dataset.secondaryScreenFlashAlpha = `${screenOverlay?.alpha ?? 0}`
       canvas.dataset.solomonGraveMarkPassCount = `${scene.solomonGraveMarkPassCount}`
       canvas.dataset.weatherDropCount = `${scene.weatherDropCount}`
@@ -1632,6 +1686,14 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
       frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
       drawSecondaryScreenFlash(secondaryScreenFlash, viewport)
+      drawArenaDisplacementCover(
+        displacementCover,
+        canvas,
+        currentWorldDisplacement,
+        viewport,
+        settings.complexLighting,
+        { position: world.position, scale: world.scale.x },
+      )
       canvas.dataset.resolution = `${resolution}`
       canvas.dataset.viewportHeight = `${viewport.height}`
       canvas.dataset.viewportWidth = `${viewport.width}`
@@ -1659,6 +1721,21 @@ export async function createBoneyardWorldRenderer(
       cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
       lightQuality = gameLightQuality(settings)
       regionLightField.setQuality(lightQuality, viewport, resolution)
+      if (!settings.zoomEffects) {
+        currentWorldDisplacement = { x: 0, y: 0 }
+        frameDiagnostics.worldShakeX = 0
+        frameDiagnostics.worldShakeY = 0
+        canvas.dataset.worldShakeX = '0'
+        canvas.dataset.worldShakeY = '0'
+      }
+      drawArenaDisplacementCover(
+        displacementCover,
+        canvas,
+        currentWorldDisplacement,
+        viewport,
+        settings.complexLighting,
+        { position: world.position, scale: world.scale.x },
+      )
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
       frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
       canvas.dataset.cameraZoom = `${cameraZoom}`
@@ -1680,6 +1757,8 @@ export async function createBoneyardWorldRenderer(
       worldNameplates.destroy()
       worldSpeech.destroy()
       application.stage.removeChild(secondaryScreenFlash)
+      world.removeChild(displacementCover)
+      displacementCover.destroy()
       scene.destroy()
       regionLightField.destroy()
       secondaryScreenFlash.destroy()

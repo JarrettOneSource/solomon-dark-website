@@ -204,6 +204,10 @@ try {
           actors: frame.secondaryAbilitySamples.map((actor) => ({ ...actor })),
           cameraMagnitude: Number(canvas.dataset.secondaryCameraMagnitude || 0),
           cameraZoom: frame.cameraZoom,
+          displacementCoverRectangles: JSON.parse(
+            canvas.dataset.displacementCoverRectangles || '[]',
+          ),
+          displacementCoverVisible: canvas.dataset.displacementCoverVisible === 'true',
           flashAlpha: frame.secondaryScreenFlashAlpha,
           flashColor: frame.secondaryScreenFlashColor,
           frameCount: frame.frameCount,
@@ -221,6 +225,8 @@ try {
           playerAttachmentPose: frame.playerAttachmentPose,
           primitiveCount: frame.secondaryAbilityPrimitiveCount,
           tick: frame.tick,
+          worldShakeX: Number(canvas.dataset.worldShakeX || 0),
+          worldShakeY: Number(canvas.dataset.worldShakeY || 0),
         })
         if (samples.length > 10_000) samples.shift()
       }
@@ -607,6 +613,7 @@ try {
     let framePacing = null
     let golemAssemblyAudio = null
     let playerPresentation = null
+    let displacementCover = null
     if (contract.skillId === 46 || contract.skillId === 54) {
       playerPresentation = await waitForPlayerPresentation(
         page,
@@ -790,8 +797,21 @@ try {
       await page.waitForTimeout(contract.skillId === 21 ? 250 : 120)
     }
 
+    if (contract.skillId === 41 && requestedScene === 'boneyard') {
+      displacementCover = await captureArenaDisplacementCover(page)
+      assert.equal(displacementCover.rectangles.length, 2)
+      assert.ok(displacementCover.regions.length > 0)
+      assert.ok(displacementCover.regions.every(({ blackFraction }) => blackFraction >= 0.8))
+    }
+
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
     await page.screenshot({ path: screenshotPath })
+    if (displacementCover) {
+      displacementCover = {
+        ...displacementCover,
+        settings: await verifyArenaDisplacementCoverSettings(page),
+      }
+    }
     if (contract.skillId === 72) {
       await page.waitForTimeout(500)
       framePacing = await captureFramePacing(page, 3_000)
@@ -863,6 +883,7 @@ try {
       cooldownTiming,
       combatProof,
       dampenCancellation,
+      displacementCover,
       eventCues: events.flatMap(({ cue }) => cue === null ? [] : [cue]),
       flashObserved,
       framePacing,
@@ -2822,6 +2843,134 @@ function ringSampleSummary(samples) {
     first: ring[0] ?? null,
     kinds: [...new Set(ring.flatMap(({ kinds }) => kinds))],
     last: ring.at(-1) ?? null,
+  }
+}
+
+async function captureArenaDisplacementCover(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const deadline = performance.now() + 5_000
+    const inspect = () => {
+      const canvas = document.querySelector('.boneyard-world-canvas')
+      const frame = canvas?.__sdrBoneyardFrame
+      const x = Number(canvas?.dataset.worldShakeX || 0)
+      const y = Number(canvas?.dataset.worldShakeY || 0)
+      if (
+        canvas
+        && frame
+        && canvas.dataset.displacementCoverVisible === 'true'
+        && frame.secondaryScreenFlashAlpha <= 0
+        && (x >= 1 || y >= 1)
+      ) {
+        const viewportWidth = Number(canvas.dataset.viewportWidth)
+        const viewportHeight = Number(canvas.dataset.viewportHeight)
+        const resolutionX = canvas.width / viewportWidth
+        const resolutionY = canvas.height / viewportHeight
+        const copy = document.createElement('canvas')
+        copy.width = canvas.width
+        copy.height = canvas.height
+        const context = copy.getContext('2d', { willReadFrequently: true })
+        if (!context) {
+          reject(new Error('Earthquake cover pixel probe has no 2D context'))
+          return
+        }
+        context.drawImage(canvas, 0, 0)
+        const regions = []
+        const measure = (name, regionX, regionY, width, height) => {
+          const pixels = context.getImageData(regionX, regionY, width, height).data
+          let black = 0
+          let maximum = 0
+          let totalMaximum = 0
+          for (let index = 0; index < pixels.length; index += 4) {
+            const value = Math.max(pixels[index], pixels[index + 1], pixels[index + 2])
+            if (value <= 4) black += 1
+            maximum = Math.max(maximum, value)
+            totalMaximum += value
+          }
+          const pixelCount = pixels.length / 4
+          regions.push({
+            blackFraction: black / pixelCount,
+            height,
+            maximum,
+            meanMaximum: totalMaximum / pixelCount,
+            name,
+            width,
+          })
+        }
+        if (x >= 1) {
+          measure('left', 0, 0, Math.max(1, Math.ceil(x * resolutionX)), canvas.height)
+        }
+        if (y >= 1) {
+          measure('top', 0, 0, canvas.width, Math.max(1, Math.ceil(y * resolutionY)))
+        }
+        resolve({
+          rectangles: JSON.parse(canvas.dataset.displacementCoverRectangles || '[]'),
+          regions,
+          worldShake: { x, y },
+        })
+        return
+      }
+      if (performance.now() >= deadline) {
+        reject(new Error('Earthquake never presented a positive covered edge after its flash'))
+        return
+      }
+      requestAnimationFrame(inspect)
+    }
+    requestAnimationFrame(inspect)
+  }))
+}
+
+async function verifyArenaDisplacementCoverSettings(page) {
+  const scene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  await scene.focus()
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.waitFor({ timeout: 10_000 })
+  await page.waitForTimeout(350)
+  await pause.getByRole('button', { name: 'GAME SETTINGS' }).click()
+  const dialog = page.locator('.game-settings-dialog')
+  await dialog.waitFor({ timeout: 10_000 })
+  await dialog.getByRole('button', { name: 'TWEAK GAME' }).click()
+  const canvas = page.locator('.boneyard-world-canvas')
+  const complexLighting = dialog.getByRole('button', { name: 'COMPLEX LIGHTING' })
+  assert.equal(await complexLighting.getAttribute('aria-pressed'), 'true')
+  await complexLighting.click()
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    return canvas?.dataset.complexLighting === 'false'
+      && canvas.dataset.displacementCoverVisible === 'false'
+  })
+  const complexOffHidden = await canvas.getAttribute('data-displacement-cover-visible')
+  await complexLighting.click()
+  await page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')?.dataset.complexLighting === 'true'
+  ))
+  const cameraShake = dialog.getByRole('button', { name: 'CAMERA SHAKE' })
+  assert.equal(await cameraShake.getAttribute('aria-pressed'), 'true')
+  await cameraShake.click()
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    return canvas?.dataset.zoomEffects === 'false'
+      && canvas.dataset.displacementCoverVisible === 'false'
+      && canvas.dataset.worldShakeX === '0'
+      && canvas.dataset.worldShakeY === '0'
+  })
+  const cameraOffHidden = await canvas.getAttribute('data-displacement-cover-visible')
+  await cameraShake.click()
+  await page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')?.dataset.zoomEffects === 'true'
+  ))
+  await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
+  await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  if (await pause.isVisible().catch(() => false)) {
+    await pause.getByRole('button', { name: 'RESUME GAME' }).dispatchEvent('click')
+  }
+  await pause.waitFor({ state: 'detached', timeout: 10_000 })
+  return {
+    cameraOffHidden: cameraOffHidden === 'false',
+    complexOffHidden: complexOffHidden === 'false',
+    restoredCameraShake: true,
+    restoredComplexLighting: true,
   }
 }
 

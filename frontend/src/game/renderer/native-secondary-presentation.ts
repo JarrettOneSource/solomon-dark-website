@@ -118,7 +118,6 @@ export interface NativeStormWeatherComposite {
 }
 
 export interface NativeSecondaryWorldShake {
-  readonly magnitude: number
   readonly x: number
   readonly y: number
 }
@@ -206,16 +205,20 @@ export function nativePlayerMagicShieldPlan(
 export function nativeSecondaryWorldShake(
   actors: readonly NativeSecondaryActorState[],
   worldKey: string,
+  current: Readonly<Vector2> = { x: 0, y: 0 },
 ): NativeSecondaryWorldShake {
-  let selected: NativeSecondaryWorldShake = { magnitude: 0, x: 0, y: 0 }
-  let selectedMagnitudeSquared = 0
+  let selected: NativeSecondaryWorldShake = {
+    x: Math.fround(current.x),
+    y: Math.fround(current.y),
+  }
+  let selectedMagnitudeSquared = selected.x * selected.x + selected.y * selected.y
   for (const actor of actors) {
     if (actor.worldKey !== worldKey) continue
     if (actor.kind === 'earthquake') {
       const magnitudeSquared = actor.velocity.x * actor.velocity.x
         + actor.velocity.y * actor.velocity.y
       if (magnitudeSquared > selectedMagnitudeSquared) {
-        selected = { ...selected, x: actor.velocity.x, y: actor.velocity.y }
+        selected = { x: actor.velocity.x, y: actor.velocity.y }
         selectedMagnitudeSquared = magnitudeSquared
       }
       continue

@@ -49,6 +49,7 @@ import {
   nativeLanternLightSource,
   nativeMissileLightSource,
   nativePlayerLightSource,
+  nativeArenaDisplacementCoverPlan,
   nativeRegionLightManagerPlan,
   nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
@@ -773,6 +774,69 @@ test('pins the live stock Region manager scale, top-left, and active rectangles'
     targetWidth: 71.1111068725586,
     topLeft: { x: 207.40740966796875, y: 116.66666412353516 },
   })
+})
+
+test('plans the native Arena displacement cover after the complex-light composite', () => {
+  const viewport = { height: 900, width: 1_600 }
+  assert.deepEqual(nativeArenaDisplacementCoverPlan(
+    { x: 3, y: 4 },
+    viewport,
+    true,
+  ), {
+    position: { x: 3, y: 4 },
+    rectangles: [
+      { height: 4, width: 1_606, x: -3, y: -4 },
+      { height: 908, width: 3, x: -3, y: -4 },
+    ],
+  })
+  assert.deepEqual(nativeArenaDisplacementCoverPlan(
+    { x: -3, y: 4 },
+    viewport,
+    true,
+  ), {
+    position: { x: -3, y: 4 },
+    rectangles: [
+      { height: 4, width: 1_594, x: 3, y: -4 },
+      { height: 908, width: -3, x: 3, y: -4 },
+    ],
+  })
+  assert.deepEqual(nativeArenaDisplacementCoverPlan(
+    { x: 3, y: -4 },
+    viewport,
+    true,
+  ), {
+    position: { x: 3, y: -4 },
+    rectangles: [
+      { height: -4, width: 1_606, x: -3, y: 4 },
+      { height: 892, width: 3, x: -3, y: 4 },
+    ],
+  })
+  assert.deepEqual(nativeArenaDisplacementCoverPlan(
+    { x: -3, y: -4 },
+    viewport,
+    true,
+  ), {
+    position: { x: -3, y: -4 },
+    rectangles: [
+      { height: -4, width: 1_594, x: 3, y: 4 },
+      { height: 892, width: -3, x: 3, y: 4 },
+    ],
+  })
+  assert.equal(nativeArenaDisplacementCoverPlan(
+    { x: 0.999, y: 0 },
+    viewport,
+    true,
+  ), null)
+  assert.notEqual(nativeArenaDisplacementCoverPlan(
+    { x: 1, y: 0 },
+    viewport,
+    true,
+  ), null)
+  assert.equal(nativeArenaDisplacementCoverPlan(
+    { x: 3, y: 4 },
+    viewport,
+    false,
+  ), null)
 })
 
 test('publishes currently modeled Ether and Earth providers through native defaults', () => {

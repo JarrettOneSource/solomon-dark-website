@@ -72,7 +72,7 @@ disposition and is not a completion claim until the receipt below is filled.
 | five primaries and ten welded primaries, all persistent/impact/child actors | primary/weld catalogs and class-state programs | `verified-already-at-parity`; complete primary/reflection matrix closed | all-build deterministic capture set |
 | every secondary/advanced member in `native-secondary-ability-catalog.json`, including Acid, Storm, Leviathan, Golem, Comet, Magic Circle/Trap/Shield and nested children | secondary catalog plus complete renderer membership | `exact-ported`; reflection reopened the missing Ring-of-Fire shared Fire explosion/Ember bank `401..433` | all-secondary deterministic capture set |
 | Orb, Gold, Sack, Bonus, potion/powerup/item drops and pickup children | loot/reward renderers | `verified-already-at-parity` | loot journey and blend inventory |
-| screen flashes, darkness, camera feedback and world shake | Region feedback plus camera `0x0063EEB0/0x0046F100..0x0046F276` | `verified-already-at-parity`; deterministic local-player pulse retained | camera/flash capture with settings gate |
+| screen flashes, darkness, camera feedback and world shake | Region feedback plus camera `0x0063EEB0/0x0046F100..0x0046F276` | `exact-ported` by the 2026-08-31 reopening below, including the final vector reducer and Arena complex-light edge cover | camera/flash capture with settings gate and edge-pixel proof |
 | Bonedit and portrait/offscreen capture | `0x004D5F40`, `0x005BED10` | `verified-already-at-parity` for active Website editor; portrait capture is `out-of-system` for `/game` | editor screenshot/contract |
 | Website chat, party, diagnostics, mod panels/minimap/custom VFX | no retail member | `out-of-system` with separate browser/mod ownership | must not alter stock pixels when inactive |
 
@@ -1110,3 +1110,229 @@ resize/context replay, and destruction.
   `verified-already-at-parity`, or explicitly `out-of-system`; no active stock
   record constructor, loose GPU crop family, resize branch, or lifecycle
   unknown remains open.
+
+## 2026-08-31 — Fifth edge report: Arena displacement cover after Region light
+
+### Reported smell and parity question
+
+- Reported web behavior: a player capture titled
+  `SDB - Earthquake Screen Edge Bug.mp4` shows thin bright bands at the gameplay
+  viewport edge while Earthquake shakes the Arena.
+- Stock behavior to recover: the final reduced Region displacement vector, the
+  pre-main complex-light composite, and the native edge-cover pass that keeps
+  the shifted light target from exposing fully bright world pixels.
+- Reproduction inputs/scenes: generated Boneyard with Complex Lighting and
+  Camera Shake enabled; Earthquake skill `41`; positive and negative vector
+  components; squared magnitudes below, at, and above one; live resize; Camera
+  Shake off; Flash and Meteor as the other current Website vector producers.
+- Process failure: the original renderer closure classified camera feedback
+  and world shake as verified after checking the displacement transform and
+  settings gate, but it did not inspect Arena instructions
+  `0x0046FB13..0x0046FC31` or assert viewport-edge pixels while the Region
+  multiply target was displaced. The later record-edge passes exercised other
+  lines and explicitly falsified Region layering only for those record-boundary
+  symptoms; they did not cover this vector/light interaction.
+- Falsifiers: a solid clear-color band instead of textured world; the artifact
+  with no Region light target; a stock branch that pads or recenters the target
+  rather than drawing cover geometry; a cover threshold other than squared
+  length one; a Hub/private-room cover despite the absence of an Arena Region
+  light manager; or a cover that paints above screen flash/HUD ownership.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player capture | Windows Downloads video, 1920x1080, 15.379833 seconds, SHA-256 `8090726d8db157e305d05f1b13dd037c5fc68f92da3d0171360dacd5b8f63de2`; inspected frame at approximately 5.0 seconds SHA-256 `e15a9db57e0d607ad0982ce699c91c322428889b409270f944d82f3951db46b4` | The exposed left-edge band contains recognizable ground texture at far-field brightness. It is not the black Pixi clear color, so insufficient world geometry/culling is falsified; the pre-main multiply coverage ends inside the viewport. | high direct observation |
+| Current Website causal trace | `nativeSecondaryWorldShake`, `NativeSecondaryScreenFeedbackPresentation`, `boneyard-world-renderer.ts`, `BoneyardRegionLightField` at final integrated base `b964dde51bd18041dd16ff08a5096db5c77cde3f` | Earthquake, Flash, and Meteor produce displacement consumed by `world.position`; the Region light composite is a child of that same shifted world. No stage or world child paints the newly exposed edge. Earthquake and event lanes are reduced separately and then added, so concurrent vectors also violate the one native reducer. | high |
+| Retail identity and tooling | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`; canonical Ghidra 12.0.3 read-only replica; Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49` | Same sealed executable and read-only toolchain as the renderer and Region-light closures. | high |
+| Region reducer | `0x00448590`; fresh decompile and all-reference trace | The helper replaces `Region+0x8E0C/+0x8E10` only when the incoming vector has greater squared magnitude. The binary has 28 direct callsites in 24 functions; Earthquake `0x00613200` is one producer, not a special render branch. | high instruction-derived |
+| Arena render order | `Arena::Render 0x0046EC80`; raw `0x0046F007..0x0046FC31`; light composite `0x0057D670`; rectangle helper `0x0041DD70` | Arena applies the vector to Graphics before world painting. With Complex Lighting on, it composites the Region target, tests `dx*dx + dy*dy >= 1`, selects opaque black, and submits two rectangles before restoring white. Complex Lighting off skips this block and composites the target later. | high instruction-derived |
+| Exact cover geometry | raw `0x0046FB51..0x0046FC0C`; `0x0041DD70` decompile | Rectangle one is `(x=-dx, y=-dy, width=W+2*dx, height=dy)`. Rectangle two is `(x=-dx, y=-dy, width=dx, height=H+2*dy)`. Negative dimensions retain native signed geometry; there is no guessed padding, CSS mask, or zoom surrogate. | high instruction-derived |
+
+No injected runtime or stale ASLR address is used. The player video proves the
+web pixel result; the preferred-image instructions prove the stock owner,
+threshold, geometry, setting branch, and painter order.
+
+### System boundary and membership inventory
+
+Native system: **Arena complex-light displacement edge cover**, beginning with
+the already reduced Region vector at `+0x8E0C/+0x8E10`, continuing through the
+Arena world transform and pre-main Region-light composite, and ending with the
+two black cover rectangles before later screen/UI painters.
+
+| Member / branch | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| largest-vector reducer and reset/decay lane | `0x00448590`, Region tick `0x0063EFC0` | `exact-ported` by this correction across current Website producers | one strict largest-squared reduction over decayed carry plus live Earthquake proposals; `.75` event decay |
+| Earthquake continuous vector | `0x00613200 -> 0x00448590`; skill `41` | `verified-already-at-parity` for vector generation; consumer cover `exact-ported` by this correction | deterministic positive/negative components and edge pixels |
+| Flash response vector | `0x00649890 -> 0x00448590`; skill `53` | `verified-already-at-parity` for event/decay; consumer cover `exact-ported` by this correction | magnitude-three event, decay, threshold crossing |
+| Meteor impact vector | `0x00610880 -> 0x00448590`; Weld `1007` | `verified-already-at-parity` for impact event/decay; consumer cover `exact-ported` by this correction | magnitude-ten impact and retained cover during decay |
+| other reducer callers: Demonskull Flair/Mouth Beam `0x00448BE0/0x0044FFE0`; UltraBanish/general fade `0x00460AB0`; Skeleton/Heartmonger `0x00477580`; Demon `0x00487300`; Portal `0x00489CC0`; DemonSkull `0x004963C0`; DireFaculty `0x0049D0D0`; Coffin `0x004A2760`; Flame Lash/Blizzard Beam `0x005408F0/0x00541870`; PlaneOrb `0x005FB460`; Shockwave/FreezeWave/Knockback `0x005FF8C0/0x005FFDC0/0x00600220`; DemonBomb `0x00603CA0`; OffscreenMagic `0x00607B60`; Leviathan/Golem/EtherDrain/Comet `0x006145D0/0x00615CD0/0x0061CF20/0x006220D0` | remaining 25 callsites in the complete 28-callsite xref set | `out-of-system` for this consumer correction: each producer formula/lifecycle belongs to its existing enemy, primary, secondary, or welded-effect owner; whenever that owner publishes a nonzero final Region vector, the shared cover consumes it without a member-specific branch | xref census remains closed; no producer-specific cover path exists |
+| Complex Lighting on | global `0x00B3BCA8 != 0`; first `0x0057D670` call at `0x0046FAFA` | `exact-ported` by this correction | cover is present only after the pre-main multiply composite |
+| Complex Lighting off | branch to late composite at `0x00470102` | `verified-already-at-parity`; no cover | no artificial black band when the pre-main target is absent |
+| squared magnitude below one / at one | `0x0046FB13..0x0046FB26` | `exact-ported` by this correction | `<1` hidden, `==1` visible |
+| signed X/Y geometry at every viewport size | `0x0046FB51..0x0046FC0C` | `exact-ported` by this correction | exact two-rectangle plan before/after resize |
+| Boneyard generated modes and Tutorial Arena | shared `Arena::Render` | `exact-ported` through one Boneyard renderer owner | ordinary, generated, and Tutorial journeys |
+| Hub Courtyard/private rooms | no Arena light manager/composite branch | `out-of-system`; displacement remains, cover does not | Hub negative assertion |
+| Camera Shake off | Website adaptation of `Game.ZoomFX` | `verified-already-at-parity`; zero final vector means no cover | persisted setting journey |
+| world nameplates/speech, screen flash, DOM HUD and modal UI | later stage/DOM painters | `verified-already-at-parity` after inserting cover directly above the world and below these consumers | stage-child order contract and browser capture |
+| resize, scene replacement, context restore, destroy | Arena/application lifecycle | `exact-ported` by retained viewport-sized cover owner | redraw dimensions, no stale graphics/resources |
+
+There is no browser-platform blocker. Pixi Graphics can express the exact two
+signed black quads and stage order.
+
+### Native ownership thread and recovered behavioral contract
+
+- Region producers compete through one largest-squared-vector reducer. Arena
+  consumes only the final vector; the cover has no actor, skill, or scene-asset
+  switch.
+- Arena applies the vector before its camera-scale/world transforms. The Region
+  light target is composited on the complex-light path under that displaced
+  transform, so its camera-visible top/left boundary can enter the viewport.
+- Native does not resize, pad, recenter, or zoom the light target to hide the
+  exposure. It paints two opaque-black signed rectangles after the multiply
+  composite whenever squared displacement is at least one.
+- The two rectangles share origin `(-dx,-dy)`. Their dimensions are
+  `(W+2*dx,dy)` and `(dx,H+2*dy)`. This covers only the target-leading edge
+  represented by the signed vector and preserves the stock black boundary;
+  replacing it with duplicated world pixels or an arbitrary overscan would be
+  visibly different.
+- The block exists only when Complex Lighting is enabled. With Complex
+  Lighting disabled, Arena skips it and performs the Region composite later.
+- The cover is world-adjacent presentation state: it paints above Arena world
+  pixels and the pre-main multiply result, but below nameplates, speech, screen
+  flash, HUD, pause, and other browser UI. It has no gameplay, collision,
+  audio, replication, save, or input state.
+- Resize changes `W/H` on the next plan. Camera Shake off supplies a zero final
+  vector. Scene destruction releases the one retained Graphics object with the
+  renderer.
+
+### Nearby-system findings
+
+- The fresh reducer xref sweep found 28 native callsites in 24 functions. The
+  earlier top-level renderer row did not record that producer membership. This
+  correction closes the edge-cover consumer independently of those effects'
+  already separate mechanic/presentation ledgers and records the complete xref
+  set above so a later producer audit cannot mistake Earthquake for the only
+  native vector writer.
+- `NativeSecondaryWorldShake.magnitude` remains zero by construction. That is
+  not this defect: the Region vector lane is a pixel displacement, while the
+  separate scalar `+0x8E04` lane owns zoom feedback. Feeding raw vector length
+  into scalar zoom would create a many-times world scale and is falsified by
+  the native two-rectangle branch.
+
+### Confidence and open questions
+
+- Confirmed: reported pixel class; exact native branch, threshold, color,
+  rectangles, setting gate, painter order, reducer xref count, current Website
+  displacement/light ownership.
+- Inferred: none used to choose implementation.
+- Unknown: none material to this consumer correction. Per-producer mechanics
+  remain governed by their existing owning ledgers rather than duplicated here.
+
+### Web implementation consequence
+
+- Add a pure native displacement-cover plan beside the shared camera-feedback
+  presentation, preserving the exact squared threshold and two signed native
+  rectangles.
+- Give Boneyard one retained Pixi Graphics owner directly above the world and
+  below nameplates, speech, and screen flash. Redraw it from the final gated
+  displacement, current viewport, and live Complex Lighting setting each frame.
+- Replace the current cross-lane sum with one native largest-squared reduction:
+  seed it from the decaying event-owned displacement, then apply live
+  Earthquake proposals in actor-manager order. Use that final vector for both
+  world translation and cover; do not add an Earthquake-only cover branch.
+- Clear the Graphics object for Complex Lighting off, Camera Shake off,
+  squared magnitude below one, scene replacement, and destroy. Do not change
+  Region target sizing, world culling, camera FOV/zoom, CSS, or assets.
+
+### Validation contract
+
+- Focused unit contract: exact two signed rectangles for all four sign
+  quadrants; `<1` versus `==1`; Complex Lighting off; resize dimensions; zero
+  vector; combined current Website displacement input.
+- Renderer contract: cover stage order is world, cover, nameplates/speech,
+  screen flash; one retained owner is redrawn rather than allocated per frame;
+  settings and resize update it; destroy releases it.
+- Mac Chrome/WebGL2: cast Earthquake naturally in a generated Boneyard with
+  Complex Lighting and Camera Shake on; sample frames with positive X/Y;
+  require the exposed edge interval to be predominantly opaque black rather
+  than a bright textured world band. Repeat Camera Shake off and Complex
+  Lighting off negative branches. Focused reducer contracts retain the
+  already recovered Flash and Meteor event displacement as the shared seed.
+- Capture page, console, failed-response, WebGL, vector, cover-rectangle, and
+  edge-pixel diagnostics. All error arrays must be empty. Run the exact
+  candidate through `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac.
+
+### Implementation validation receipt
+
+- Implementation: `nativeArenaDisplacementCoverPlan` now owns the exact
+  squared-length-one branch and both signed rectangles. Boneyard retains one
+  Graphics owner at the Region-composite Z interval, after the composite and
+  before the shared world queue; its screen geometry is inverse-projected into
+  the transformed world so camera/FOV feedback cannot move it away from the
+  viewport edge. Resize and live settings redraw or clear that owner, and
+  renderer destruction releases it.
+- Reducer correction: `nativeSecondaryWorldShake` now seeds from the decaying
+  event displacement and applies live Earthquake proposals with the native
+  strict largest-squared comparison. Boneyard no longer adds two independently
+  reduced vectors, and the obsolete always-zero pseudo-magnitude no longer
+  participates in scalar zoom.
+- Red/green regression: the pre-fix Mac gate reached the new tests and failed
+  exactly on the obsolete `{magnitude:0,x,y}` result and missing cross-lane
+  reducer contract. The corrected focused contracts cover all four signed
+  cover quadrants, `<1`/`==1`, Complex Lighting off, viewport dimensions, zero
+  displacement, retained event-vector priority, and larger Earthquake
+  replacement.
+- Pre-final-rebase canonical Mac gate
+  `job_20260901T002046Z_e5fecfeab6` exited zero. The central Boneyard group
+  passed `1,752/1,752`; the renderer/UI group passed `92/92`; backend,
+  remaining frontend, desktop, TypeScript, lint/boundary, optimized frontend
+  and game-host builds, media, and CSP stages all passed. Production entry
+  `Game-C2JcaZLz.js` measured `263,738` raw / `80,238` gzip bytes within
+  budget. Combined log SHA-256 is
+  `b0c2f0a4bb3a0ca0e198b6f2d26a04e1ab12a6d6117876059004c00d910f6cf7`.
+  One immediately preceding unchanged attempt saw the unrelated
+  `developer observer watches one private run` timing assertion observe tick
+  `100` instead of `93`; that test passed in the canonical repeat and no
+  unrelated source was changed.
+- Built physical-Mac Chrome/WebGL2 acceptance
+  `job_20260901T002435Z_3aa0729e7f` naturally cast Earthquake in a generated
+  Boneyard and exited zero with empty page, console, HTTP-response, and WebGL
+  error arrays. At final vector `(-0.1795605086, 8.3982518315)`, the renderer
+  emitted native rectangles
+  `(0.1795605123,-8.3982515335,1599.6408691406,8.3982515335)` and
+  `(0.1795605123,-8.3982515335,-0.1795605123,916.7965087891)`.
+  The resulting `1600x9` top-edge interval was `92.0556%` black, with mean
+  maximum channel `1.49264`; sparse nonblack pixels are later queue/weather
+  painters above the native cover rather than exposed bright terrain.
+- The same browser journey proved both setting branches while the Arena was
+  paused on the live effect: Complex Lighting off cleared the cover, Camera
+  Shake off zeroed the final vector and cleared it, and both persisted settings
+  were restored before resume. Earthquake audio, floor/child presentation,
+  cooldown, and `27` observed animation ticks remained live. Acceptance log
+  SHA-256 is
+  `60f530141f40066261483701b0f339b3f0bb01b33225bd6637eed8c0cb8760e5`;
+  the inspected frame SHA-256 is
+  `e437dfebaf3511c31c767bd50090f01043021a64ee52386542ea454fb40cdfa2`.
+- Final integration: `origin/main` advanced through the broad cleanup and
+  Hagatha presentation commits while this task was being validated. The patch
+  rebased cleanly onto final base
+  `b964dde51bd18041dd16ff08a5096db5c77cde3f`; byte-identical files were
+  transferred into a fresh detached Mac worktree. Canonical gate
+  `job_20260901T003237Z_7dc429716b` exited zero with the integrated central
+  Boneyard group `1,749/1,749`, renderer/UI `92/92`, every other gate stage,
+  and production entry `Game-idbAKnzv.js` at `263,743` raw / `80,255` gzip.
+  Combined log SHA-256 is
+  `db37294ad88f0da3dd6965d4044f39273eec64dbd5e06f5d5b6b1ecb53506b08`.
+- Final built Chrome/WebGL2 job `job_20260901T003618Z_4a6e9ebc76` also exited
+  zero on that integrated bundle. Vector
+  `(-0.7204929247,6.0073274422)` produced the exact signed rectangles and a
+  `1600x7` top-edge sample that was `99.0982%` black with mean maximum channel
+  `0.50545`; both settings-off branches passed and all browser error arrays
+  remained empty. Log SHA-256 is
+  `11565b7d937ed3774f594fa6f9275acc0f42b42bea9a36b847bd1969d6943746`;
+  inspected frame SHA-256 is
+  `2718c82cdddeef44ef7fed0e5e8d1ac883d3e846e9d6b053b592d4709552f266`.
+- No browser-platform approximation or remaining consumer unknown exists.
+  Commit and push were authorized by the subsequent user instruction;
+  deployment and live-production proof remain separate and were not requested.

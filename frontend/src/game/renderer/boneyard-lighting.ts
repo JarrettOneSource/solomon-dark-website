@@ -141,6 +141,50 @@ export interface NativeBoneyardWeatherLightingOrder {
   readonly streakZIndex: number
 }
 
+export interface NativeArenaDisplacementCoverRectangle {
+  readonly height: number
+  readonly width: number
+  readonly x: number
+  readonly y: number
+}
+
+export interface NativeArenaDisplacementCoverPlan {
+  readonly position: Vec2
+  readonly rectangles: readonly [
+    NativeArenaDisplacementCoverRectangle,
+    NativeArenaDisplacementCoverRectangle,
+  ]
+}
+
+export function nativeArenaDisplacementCoverPlan(
+  displacement: Readonly<Vec2>,
+  viewport: NativeRegionLightViewport,
+  complexLighting: boolean,
+): NativeArenaDisplacementCoverPlan | null {
+  const x = Math.fround(displacement.x)
+  const y = Math.fround(displacement.y)
+  const magnitudeSquared = Math.fround(x * x + y * y)
+  if (!complexLighting || !Number.isFinite(magnitudeSquared) || magnitudeSquared < 1) {
+    return null
+  }
+  const origin = Object.freeze({ x: Math.fround(-x), y: Math.fround(-y) })
+  return Object.freeze({
+    position: Object.freeze({ x, y }),
+    rectangles: Object.freeze([
+      Object.freeze({
+        height: y,
+        width: Math.fround(viewport.width + x + x),
+        ...origin,
+      }),
+      Object.freeze({
+        height: Math.fround(viewport.height + y + y),
+        width: x,
+        ...origin,
+      }),
+    ] as const),
+  })
+}
+
 export function nativeBoneyardWeatherLightingOrder(
   foregroundZIndex: number,
   complexLighting: boolean,

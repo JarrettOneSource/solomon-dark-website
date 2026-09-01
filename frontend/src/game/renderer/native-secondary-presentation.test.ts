@@ -1149,11 +1149,7 @@ test('Magic Trap draws the armed stock body, selector shimmer, and full terminal
   assert.deepEqual(nativeSecondaryWorldShake([{
     ...actor('magic-trap-burst'),
     ageTicks: 1,
-  }], 'boneyard:test'), {
-    magnitude: 0,
-    x: 0,
-    y: 0,
-  })
+  }], 'boneyard:test'), { x: 0, y: 0 })
 })
 
 test('Magic Trap ElectricBurn is light-only and owns no FadeLightning sprite at chain count zero', () => {
@@ -2189,11 +2185,13 @@ test('Earthquake uses the exact floor-copy thresholds and Region largest-vector 
     quake,
     { ...actor('shield-explosion'), ageTicks: 1, id: 4 },
     { ...quake, id: 3, worldKey: 'hub:courtyard', velocity: { x: 99, y: 99 } },
-  ], 'boneyard:test'), {
-    magnitude: 0,
-    x: -2,
-    y: 8,
-  })
+  ], 'boneyard:test'), { x: -2, y: 8 })
+  assert.deepEqual(nativeSecondaryWorldShake([
+    { ...quake, id: 2, velocity: { x: 3, y: 0 } },
+  ], 'boneyard:test', { x: 6, y: 0 }), { x: 6, y: 0 })
+  assert.deepEqual(nativeSecondaryWorldShake([
+    { ...quake, id: 2, velocity: { x: 8, y: 0 } },
+  ], 'boneyard:test', { x: 6, y: 0 }), { x: 8, y: 0 })
 })
 
 test('Earthquake children own record 62, brown FadeSin dust, and the enhanced lit boulder underlay', () => {
