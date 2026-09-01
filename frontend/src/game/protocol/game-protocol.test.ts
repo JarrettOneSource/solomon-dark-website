@@ -25,6 +25,7 @@ import {
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
+import { NATIVE_ENEMY_WORLD_FEEDBACK } from '../core-kernels/native-enemy-world-feedback.ts'
 import {
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
@@ -2149,6 +2150,28 @@ test('protocol v42 strictly owns the generated-arena transition', () => {
   invalidEnemyFeedback.frame.world.enemyWorldFeedback.accumulator = 4
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidEnemyFeedback)),
+    /enemy-feedback bounds/,
+  )
+
+  const maximumEnemyFeedback = JSON.parse(encodeGameMessage(message))
+  maximumEnemyFeedback.frame.world.enemyWorldFeedback.accumulator =
+    NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorCap
+  maximumEnemyFeedback.frame.world.enemyWorldFeedback.magnitude =
+    NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap
+  const decodedMaximum = decodeServerGameMessage(JSON.stringify(maximumEnemyFeedback))
+  assert.equal(decodedMaximum.type, 'server-snapshot')
+  assert.equal(
+    decodedMaximum.frame.world.kind === 'boneyard'
+      ? decodedMaximum.frame.world.enemyWorldFeedback.magnitude
+      : null,
+    NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap,
+  )
+
+  const excessEnemyFeedback = structuredClone(maximumEnemyFeedback)
+  excessEnemyFeedback.frame.world.enemyWorldFeedback.magnitude =
+    NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap + Number.EPSILON
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessEnemyFeedback)),
     /enemy-feedback bounds/,
   )
 

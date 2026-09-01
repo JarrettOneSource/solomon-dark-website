@@ -8,6 +8,7 @@ export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
   impSplitIntensity: 0.05,
   impTerminalIntensity: 0.1,
   portalIntensity: 0.2,
+  magnitudeCap: 0.20000000298023224,
   magnitudeCutoff: 0.001,
   magnitudeRetentionPerTick: 0.94,
   skeletonIntensity: 0.1,

@@ -46,6 +46,7 @@ import {
   STOCK_TUTORIAL_BONEYARD_ID,
 } from '../core-kernels/native-tutorial.ts'
 import {
+  buildPlayerSkillOffer,
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
   isNativeBeltSkill,
@@ -435,7 +436,6 @@ function diskPlayerStoreProjection(
     ...progression,
     damageX4TicksRemaining: 0,
     mindChugTicksRemaining: 0,
-    pendingOffer: null,
   }))
   const skillBooks: PlayerSkillBookComponent[] = []
   const skillRuntimes: PlayerSkillRuntimeComponent[] = []
@@ -482,6 +482,56 @@ function diskSecondaryProjection(
       })]),
     )),
   }
+}
+
+function restorePendingLevelUpOffers(
+  source: GameSimulationState,
+  sourceSchemaVersion: number,
+): GameSimulationState {
+  const barrier = source.levelUpBarrier
+  if (barrier === null) return source
+  const progressions = [...source.playerEntities.progressions]
+  let gameRng = source.gameRng
+  let changed = false
+  for (const playerId of barrier.pendingPlayerIds) {
+    const index = source.playerEntities.identities.findIndex(
+      identity => identity.playerId === playerId,
+    )
+    const progression = progressions[index]
+    const skillBook = source.playerEntities.skillBooks[index]
+    if (index < 0 || progression === undefined || skillBook === undefined) {
+      throw new Error('game save level-up barrier pending player is absent')
+    }
+    if (progression.pendingOffer !== null) continue
+    if (
+      sourceSchemaVersion >= WEB_GAME_SAVE_SCHEMA_VERSION
+      || progression.pendingLevels.length === 0
+    ) {
+      throw new Error('game save level-up barrier pending player has no skill offer')
+    }
+    const rebuilt = buildPlayerSkillOffer(
+      progression,
+      skillBook,
+      progression.revision,
+      gameRng,
+    )
+    progressions[index] = Object.freeze({
+      ...progression,
+      pendingOffer: rebuilt.offer,
+    })
+    gameRng = rebuilt.rng
+    changed = true
+  }
+  return changed
+    ? {
+        ...source,
+        gameRng,
+        playerEntities: {
+          ...source.playerEntities,
+          progressions: Object.freeze(progressions),
+        },
+      }
+    : source
 }
 
 export function restoreGameSaveDocument(document: string): RestoredGameSaveDocument {
@@ -625,6 +675,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     ...state,
     gameRng: selectionRng,
   }
+  state = restorePendingLevelUpOffers(state, parsed.sourceSchemaVersion)
   const config = state.playerEntities.configs[0]
   if (!sameCharacter(config, continuation.summary.character)) {
     throw new Error('game save owner character summary drifted')

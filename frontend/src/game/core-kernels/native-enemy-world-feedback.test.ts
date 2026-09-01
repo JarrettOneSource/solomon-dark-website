@@ -43,3 +43,14 @@ test('shares the exact float32 accumulator transition used by score and presenta
     Math.fround(0.1),
   )
 })
+
+test('retains the exact float32 terminal magnitude maximum', () => {
+  for (const output of ['coffin-break', 'demon-split', 'portal-break'] as const) {
+    const [intensity] = nativeEnemyWorldFeedbackImpulses(output)
+    const feedback = applyNativeEnemyWorldFeedback(
+      { accumulator: 1, magnitude: 0 },
+      intensity!,
+    )
+    assert.equal(feedback.magnitude, NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap)
+  }
+})

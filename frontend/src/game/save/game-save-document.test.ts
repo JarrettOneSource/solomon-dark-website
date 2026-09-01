@@ -55,7 +55,14 @@ import {
   materializeStockTutorial,
 } from '../host/boneyard-catalog.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
-import { createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
+import {
+  createGameSnapshotFrame,
+  createReplicatedEntityBaseline,
+} from '../protocol/entity-replication.ts'
+import {
+  decodeServerGameMessage,
+  encodeGameMessage,
+} from '../protocol/game-protocol.ts'
 import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
@@ -66,6 +73,7 @@ import {
 } from './game-save-document.ts'
 import {
   MAX_WEB_GAME_SAVE_BYTES,
+  WEB_GAME_SAVE_SCHEMA_VERSION,
   readGameSaveSummary,
 } from './game-save-contract.ts'
 
@@ -127,6 +135,54 @@ test('current Hub restore allocates its reconstructed students after persisted o
   assert.ok(
     restored.worldManagerOrder.nextRegistrationOrdinal.actor
       > Math.max(...actorRegistrations.map(({ registrationOrdinal }) => registrationOrdinal)),
+  )
+})
+
+test('checkpoints retain pending offers and schema 27 repairs the erased offer once', () => {
+  const state = createGameSimulation({ owner: OWNER }, { initialPlayerExperience: 100 })
+  const expectedOffer = state.playerEntities.progressions[0]!.pendingOffer
+  assert.ok(expectedOffer)
+  assert.ok(state.levelUpBarrier)
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  assert.equal(current.schemaVersion, WEB_GAME_SAVE_SCHEMA_VERSION)
+  assert.deepEqual(
+    current.continuation.simulation.playerEntities.progressions[0].pendingOffer,
+    expectedOffer,
+  )
+
+  const decodeCheckpoint = (document: string) => {
+    const restored = restoreGameSaveDocument(document)
+    const snapshot = createGameSnapshot(restored.state, restored.playerId)
+    return decodeServerGameMessage(encodeGameMessage({
+      type: 'server-snapshot',
+      acknowledgedInputSequence: 0,
+      frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+      sequence: 1,
+    }))
+  }
+  const currentMessage = decodeCheckpoint(JSON.stringify(current))
+  assert.equal(currentMessage.type, 'server-snapshot')
+
+  const legacy = structuredClone(current)
+  legacy.schemaVersion = WEB_GAME_SAVE_SCHEMA_VERSION - 1
+  legacy.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
+  const legacyMessage = decodeCheckpoint(JSON.stringify(legacy))
+  assert.equal(legacyMessage.type, 'server-snapshot')
+  assert.ok(legacyMessage.frame.players.owner?.progression.pendingOffer)
+  assert.deepEqual(legacyMessage.frame.levelUpBarrier?.pendingPlayerIds, ['owner'])
+
+  const malformedCurrent = structuredClone(current)
+  malformedCurrent.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformedCurrent)),
+    /level-up barrier pending player has no skill offer/,
   )
 })
 

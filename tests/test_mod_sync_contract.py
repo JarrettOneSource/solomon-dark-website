@@ -913,7 +913,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 19,
+                "schemaVersion": 28,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
@@ -990,6 +990,19 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=auth,
             json_body={
                 "document": json.dumps(bad_native_hash, separators=(",", ":")),
+                "expectedRevision": 0,
+            },
+        )
+        self.assertEqual(status, 400, rejected)
+
+        future_schema = json.loads(document)
+        future_schema["schemaVersion"] = 29
+        status, rejected = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={
+                "document": json.dumps(future_schema, separators=(",", ":")),
                 "expectedRevision": 0,
             },
         )

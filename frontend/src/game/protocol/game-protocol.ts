@@ -43,7 +43,10 @@ import {
 } from '../core-kernels/native-world-manager-order.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
-import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
+import {
+  NATIVE_ENEMY_WORLD_FEEDBACK,
+  type NativeEnemyWorldFeedbackKernelState,
+} from '../core-kernels/native-enemy-world-feedback.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import {
   HUB_MEMORIAL_FIRST_EXTERNAL_PORTRAIT_ID,
@@ -406,7 +409,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 115
+export const GAME_PROTOCOL_VERSION = 116
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -9546,7 +9549,10 @@ function nativeEnemyWorldFeedbackState(
   onlyKeys(source, field, ['accumulator', 'magnitude'])
   const accumulator = nonnegativeFinite(source.accumulator, `${field}.accumulator`)
   const magnitude = nonnegativeFinite(source.magnitude, `${field}.magnitude`)
-  if (accumulator > 3.5 || magnitude > 0.2) {
+  if (
+    accumulator > NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorCap
+    || magnitude > NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap
+  ) {
     throw new GameProtocolError(`${field} exceeds the native enemy-feedback bounds`)
   }
   return { accumulator, magnitude }

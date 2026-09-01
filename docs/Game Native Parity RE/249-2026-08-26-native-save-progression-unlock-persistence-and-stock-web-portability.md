@@ -285,3 +285,107 @@ browser party capability.
   no physical-iPhone automation receipt is claimed. That optional device proof
   is separate from the completed real-Chrome, Windows-launcher, and retail
   compatibility gates. No production deployment was performed.
+
+## 2026-09-01 - Pending-offer checkpoint and legacy barrier reopening
+
+### Reported smell and causal evidence
+
+- A live census of all 11 retained production slot-0 documents found one
+  current crash candidate: save row 30, revision 125, schema 22. It owns an
+  active level-20 Boneyard run and a one-player barrier whose pending player
+  has `pendingLevels: [20]` but `pendingOffer: null`.
+- On exact current main, the document restores and keyframes, then the real
+  protocol decoder fails with
+  `frame.levelUpBarrier pending player has no skill offer`. The other ten
+  documents across schemas 3, 15, 18, 19, 22, 24, and 27 restore, keyframe,
+  decode, checkpoint, reload, and decode; their two active Boneyards contain
+  10 and 27 live enemies.
+- Causal trace: `createGameSaveDocument` first projects the single owner and
+  correctly reconciles the multiplayer barrier through player removal. Its
+  `diskPlayerStoreProjection`, introduced by `b1073b1164d0b3ff661038b30e3e6fb6d8e0f658`,
+  then unconditionally replaces the authoritative pending offer with null
+  while leaving the queued level, barrier, offer seed/cycle, revision, and
+  gameplay RNG. Resume preserves that contradiction until the strict client
+  decoder rejects the first frame.
+- This falsifies the earlier implementation receipt, not the native model.
+  The retail `Skills +0x14` disk lane persists pending/deferred choices and
+  offer seed, and the later offer-lifecycle ledger already requires an
+  already-pending web offer to serialize without rerolling.
+
+### Reopened system boundary and complete membership
+
+Native/web system: player-owned pending skill choice from offer construction
+through barrier freeze, owner-only checkpoint, cloud/local storage, restore,
+keyframe/full snapshot, selection/defer/reroll, queued follow-up, disconnect,
+and teardown.
+
+| Member | Disposition | Proof contract |
+| --- | --- | --- |
+| current pending offer identity/options/Insight/Weld data | `exact-ported` in schema 28 | writer preserves exact bytes; restore does not reroll |
+| queued `pendingLevels` and deferred choices | `verified-already-at-parity` | order/count survive checkpoint |
+| offer seed, cycle, revision, gameplay RNG | `verified-already-at-parity` | unchanged for current exact offer |
+| one-player Hub/Boneyard barrier | `exact-ported` | save -> restore -> full/keyframe decode retains freeze and picker |
+| multiplayer owner-only checkpoint | `exact-ported` | removed peers leave one coherent cohort and owner offer |
+| selected owner while peers remain pending | `verified-already-at-parity` | owner projection retires the now-empty local barrier |
+| Reroll, Save Skill, automatic choice, queued next offer | `verified-already-at-parity` | existing authoritative transitions remain unchanged |
+| legacy schemas 1..27 with queued levels and erased offer | `exact-ported` recovery of a legal pending choice | rebuild once at the persisted sequence/cycle, advance the saved gameplay RNG, then emit schema 28 |
+| exact historical cards erased by the old writer | `out-of-system` due irreversible historical data loss | migration makes no claim to recover missing option bytes; it constructs one lawful replacement from retained book/seed/RNG state |
+| legacy/current barrier with neither offer nor queued level | `out-of-system` malformed state | fail closed before snapshot publication |
+| schema 28 with a missing pending offer | `out-of-system` malformed current state | fail closed; no compatibility repair |
+| backend slot storage schemas 1..28 | `exact-ported` bounded admission | current accepted, legacy retained, 29/future rejected |
+| Game Over/loadout/profile-only saves | `verified-already-at-parity` separate lifecycle | no active barrier checkpoint is synthesized |
+
+No member is browser-blocked. One historical option set is unknowable because
+the old web writer deleted it; that data-loss limitation is confined to the
+legacy migration and does not weaken current schema-28 ownership.
+
+### Implementation and validation contract
+
+- Stop deleting `pendingOffer` from the disk player projection. Keep the
+  existing explicit resets for nonpersistent combat/toggle state.
+- For schemas 1..27 only, rebuild a missing offer when both the barrier and
+  nonempty queued levels prove the choice is owed. Preserve offer
+  sequence/cycle metadata and advance the persisted gameplay RNG through the
+  ordinary builder. Schema 28 and unreconstructible state fail closed.
+- Advance the frontend/backend save contract to schema 28 and make the
+  backend reject future schemas instead of storing a document the game host
+  cannot load. Advance the exact-match game protocol to 116.
+- Regress exact current-offer round trip, synthetic schema-27 repair,
+  malformed schema-28 rejection, backend current/future admission, and the
+  real keyframe decoder. Repeat all 11 retained production saves through
+  restore/keyframe and checkpoint/reload on the exact Mac candidate.
+- Run the canonical Mac gate and a built Chrome pending-picker save/reload
+  journey. Final validation, publication, and cleanup receipts follow after
+  those gates complete.
+
+### Implementation validation receipt
+
+- Schema 28 keeps `pendingOffer` in the owner-only disk projection. Schemas
+  1..27 rebuild only a missing offer backed by a nonempty queued-level list,
+  at the persisted sequence/cycle; current malformed state fails before
+  snapshot publication. The backend accepts 1..28 and rejects 29/future.
+- Focused Mac coverage passed all 74 save/protocol/kernel tests and the live
+  backend slot integration contract. A complete production census then
+  restored, keyframed, decoded, checkpointed, rewrote, reloaded, and decoded
+  all 11 retained saves across schemas 3, 15, 18, 19, 22, 24, and 27. Row
+  30 was the sole repaired document; every output was schema 28 and the
+  failure array was empty.
+- Built Mac Chrome/WebGL2 created a real level-2 offer with sequence 2 and
+  options `67/50/18`, checkpointed it as schema 28, restored it into the live
+  host byte-for-byte, retained the modal, selected through the ordinary
+  browser action, and released the barrier. Page, console, and failed-response
+  arrays were empty under protocol 116. The inspected PNG SHA-256 is
+  `8154d09f42081a00f40f93c54397e43c376f2868d9baf005c624ac7e09a4153a`;
+  the compact browser log SHA-256 is
+  `1de053d7a51968b6995f9c6f67e4133246318714ee10090ff59c4d1b5f46e08b`.
+- Two preliminary browser harnesses armed the barrier before post-Create Hub
+  input admission and timed out waiting for presentation. Adding the same
+  authoritative movement precondition used by the maintained picker smoke
+  produced the successful receipt above; no product source changed for that
+  harness correction.
+- The complete gate and bundle receipt are recorded in entry 081. No current
+  offer member is browser-blocked. The exact historical cards erased by the
+  old writer remain explicitly unrecoverable; the legal legacy replacement
+  is the only bounded data-loss migration. This receipt is the only tracked
+  change after the cited gate, so the gate and built journeys are repeated on
+  the receipt-bearing tree before publication.

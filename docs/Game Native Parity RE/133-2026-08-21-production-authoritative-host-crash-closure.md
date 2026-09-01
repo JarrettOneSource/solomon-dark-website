@@ -476,3 +476,34 @@ authoritative native producer proves the state legal.
 - No member is browser-blocked and no material unknown remains. Production is
   still deployed at `ebf693b4`, protocol 109; this candidate has not been
   pushed or deployed at the time of this receipt.
+
+## 2026-09-01 - Protocol-115 production crash census
+
+Live NFO evidence from the prior incident cutoff through current deployment
+found three protocol-113 process exits from a persisted non-finite enemy
+sample, four late secondary-painter disconnects, one legacy Road `linkMask`
+disconnect, one stale death-owner checkpoint error, one prepared-mod-host
+cleanup consequence, and one protocol-115 enemy-feedback disconnect. Current
+main `419699d10457a22897cdb3fdb8bb7938c5141117` is deployed and healthy on
+protocol 115 with zero restarts and no failure event since its
+`2026-09-01T12:42:01Z` start.
+
+The protocol-113 painter and Road failures are already closed by entries 210
+and 265. Current main restored and decoded every retained enemy sample across
+all 11 production saves, including 37 live Boneyard enemies; this also
+dispositions the older non-finite/death-owner signatures against the current
+schema-27 Wraith/Demon/death-owner migrations. The prepared-mod-host error
+followed the rejected Road restore and is not an independent current defect.
+
+Two current defects reproduced and remain owned by their system ledgers:
+entry 081 owns the decimal-versus-float32 terminal-feedback bound, and entry
+249 owns the checkpoint writer that erased pending skill offers plus the one
+retained legacy barrier it stranded. Their joint candidate is protocol 116,
+save schema 28. Push, deployment, and post-deployment proof remain separate.
+
+The candidate passed the complete Mac gate, the all-production-save
+restore/checkpoint/reload census, an optimized Portal terminal journey, and an
+optimized pending-picker checkpoint/restore/selection journey. Detailed
+receipts and artifact hashes are recorded in entries 081 and 249. The receipt
+lines are the only tracked post-gate change; final exact-tree repetition,
+publication identity, and cleanup remain required before closure.

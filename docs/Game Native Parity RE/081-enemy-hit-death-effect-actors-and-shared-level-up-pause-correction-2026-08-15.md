@@ -224,3 +224,97 @@ Visual receipts are
 (`67d1ee5dcc2ba258ba5150ac9897c51134b7c5be9e008a44656b45a048dc789a`),
 and `.../solomon-dark-multiplayer-level-up-waiting.png`
 (`51b7b2eefa20579c55e4e2d9cff179129a19b5637462cf949454293da2f7f2bb`).
+
+## 2026-09-01 - Protocol-115 enemy-feedback float32 boundary reopening
+
+### Reported smell and causal evidence
+
+- Production diagnostic row 102, captured at `2026-09-01T01:29:09.061Z`
+  from browser protocol 115, rejected
+  `frame.world.enemyWorldFeedback exceeds the native enemy-feedback bounds`
+  and closed the otherwise healthy private session with code 4008.
+- The retained production schema-27 continuation had 27 valid enemies and a
+  legal feedback accumulator of `3.339996337890625`. On the exact current
+  `419699d10457a22897cdb3fdb8bb7938c5141117` Mac tree, that save restored,
+  keyframed, encoded, and decoded cleanly before the terminal pulse.
+- The shared authoritative kernel computes a Coffin, Demon, or Portal pulse
+  as `Math.fround(min(accumulator, 1) * 0.2)`. At accumulator one this is
+  exactly `0.20000000298023224`, while the protocol decoder compared against
+  the double-precision decimal literal `0.2`. The host produced the former
+  and the client rejected it solely because it is greater than the latter.
+- A Mac reproduction passed the production save through
+  `restoreGameSaveDocument -> createGameSnapshot -> createGameSnapshotFrame
+  -> encodeGameMessage -> decodeServerGameMessage`; replacing only the
+  feedback state with the real Coffin pulse reproduced the exact row-102
+  error deterministically.
+
+### Reopened system boundary and complete membership
+
+Native system: terminal enemy output through the Region-owned feedback
+accumulator, fixed-tick decay, full/keyframe and compact/delta transport,
+local presentation, save/rejoin, and teardown.
+
+| Member | Native value / owner | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Skeleton, Archer, Mage shatter | intensity `0.1` | `verified-already-at-parity` | exact pulse and full/compact decode |
+| Imp split with children | intensity `0.05` | `verified-already-at-parity` | exact branch and decode |
+| terminal Imp, Zombie collapse | intensity `0.1` | `verified-already-at-parity` | exact pulse and decode |
+| Wraith fragments | two ordered `0.1` impulses | `verified-already-at-parity` | both requests, final state, and decode |
+| Coffin break | intensity `0.2` -> float32 magnitude `0.20000000298023224` | `exact-ported` decoder boundary | exact maximum accepted; greater value rejected |
+| Demon split | same exact maximum | `exact-ported` decoder boundary | exact maximum accepted; greater value rejected |
+| Portal break | same exact maximum | `exact-ported` decoder boundary | exact maximum accepted; greater value rejected |
+| accumulator floor/loss/impulse/cap | `0.1`, `0.0025`, `0.20000000298023224`, `3.5` | `verified-already-at-parity` | long decay and cap assertions |
+| magnitude retention/cutoff | `0.94`, `0.001` | `verified-already-at-parity` | fixed-tick decay and zero crossing |
+| authoritative Boneyard producer | terminal retirement observer | `verified-already-at-parity` | current all-family producer tests |
+| full snapshot and compact frame | one shared decoder | `exact-ported` boundary correction | keyframe and delta accept the exact native maximum |
+| player, observer, welcome, resume, baseline recovery | shared snapshot owners | `exact-ported` through the same predicate | each transport path cannot retain the old decimal cap |
+| save/rejoin and renderer-local feedback | persisted kernel state and `NativeEnemyWorldFeedbackPresentation` | `verified-already-at-parity` | retained production save plus presentation contracts |
+| Hub and nonterminal enemy state | no terminal Region feedback producer | `out-of-system` | zero-state negative assertion |
+
+No member is browser-blocked. The browser and JSON number lanes represent the
+exact float32 value. The fix gives the kernel table one named magnitude cap
+and makes protocol admission consume that value instead of a second decimal
+approximation. Protocol 116 separates clients carrying the corrected
+contract. No producer, camera transform, event order, save field, or renderer
+formula changes.
+
+### Validation contract
+
+- Pin the exact maximum for Coffin, Demon, and Portal and retain every lower
+  terminal family. Accept the maximum through a real keyframe decoder and
+  reject the next representable excess.
+- Repeat the retained production-save control and injected terminal-pulse
+  differential on the exact Mac candidate.
+- Run the canonical Mac Website gate and a built Chrome Boneyard terminal
+  journey with empty page, console, response, wire, and host-error arrays.
+- Final validation, publication, and cleanup receipts are appended after the
+  exact candidate is proven.
+
+### Implementation validation receipt
+
+- `NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCap` now owns the exact float32
+  maximum `0.20000000298023224`. The full/keyframe and compact/delta decoder
+  consumes the shared accumulator and magnitude caps; no producer or
+  presentation formula changed. The exact-match protocol is 116.
+- Focused Mac tests passed all 74 kernel, protocol, and save-document tests.
+  The exact production schema-27 continuation restored 27 live enemies and
+  decoded as a control; its injected real terminal pulse also decoded after
+  reproducing the row-102 error on untouched main.
+- The complete Mac gate job `job_20260901T132528Z_9fb2e10557` exited zero
+  through backend build and 19 integration contracts, every frontend/host/
+  desktop suite, TypeScript, lint/boundaries, optimized frontend and GameHost
+  builds, bundle budget, media policy, and CSP. Production entry
+  `Game-B5ot6qwA.js` measured 263,721 raw / 80,244 gzip bytes. The combined
+  pre-receipt log SHA-256 is
+  `a63c34bbba342699079ef84dec72f26264ddbd5c6acf2914d228bbd5a41347f6`.
+- Built Mac Chrome/WebGL2 ran the optimized Portal journey under protocol
+  116. It emitted the terminal Portal audio family, 36 semantic events, 128
+  descriptor retirements, one connected socket, and zero page, response, or
+  wire errors. Visual inspection found the live Arena/Portal frame coherent;
+  its PNG SHA-256 is
+  `cc3696ec13a184dd6cd8350073b45e29609b17538b35d4dffd99556cd1f7f7c2`
+  and the compact browser log SHA-256 is
+  `5ce69b9a9e3c2ba8d2fd2933aa4616e505a28ff41f7e54d179d48b07e628dd42`.
+- No browser-platform exception or material unknown remains. This receipt is
+  the only tracked change after the cited gate; the complete gate and built
+  journeys are repeated on the receipt-bearing tree before publication.
