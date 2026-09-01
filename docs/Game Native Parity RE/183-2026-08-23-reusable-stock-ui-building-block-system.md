@@ -1045,3 +1045,287 @@ No member is blocked by the browser platform.
 - No browser-platform approximation or material unknown remains. No economy,
   equipment, protocol, save, audio, or lifecycle behavior changed. Commit,
   push, deployment, and production restart were not requested or performed.
+
+## 2026-09-01 — Reopened: native content-sized Hub MsgBox construction
+
+### Reported smell and parity question
+
+- The owner reports that `A WIZARD WOULD NEVER REMOVE HIS ROBE!` still does
+  not match stock: its title face/size is wrong, its button appears too narrow,
+  and its panel needs more height. The owner also requests the same RE for both
+  `YOUR MIND IS FULL!` branches (the report said “mine”; retail text and the
+  Website source both say `MIND`).
+- This is a secondary report in a covered system. The 2026-08-31 long-notice
+  reopening explicitly substituted a Website-only `roomy` layout, changed the
+  protected-garment title from the native menu wrapper to the body wrapper,
+  and treated a fixed Dowsing frame as if native MsgBox construction did not
+  size itself from its complete line vector. That skipped the extractable
+  constructor, wrapping, measurement, and finalizer rules. The `roomy` branch
+  and title-font override are therefore refuted for every member that uses
+  them, not tuned again.
+- Stock questions: which wrapper each caller passes; how `Dialog_AddLine`
+  wraps, measures, and advances each authored line; how the root panel and
+  action rectangle derive from those lines; which callers share the path; and
+  whether the suggested wider button is stock fact or a visual hypothesis.
+- Falsifiers: protected-garment titles use a smaller wrapper; a long line is
+  clipped rather than mutated at the native threshold; the panel is fixed;
+  Hagatha and Inventory pass an authored wide action; or a sibling standard
+  notice uses a different constructor/finalizer.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | task-owned clean copy of unmodified `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000` | Exact retail 0.72.5 image; the task copy contained no `.sdmod` or mods directory and was launched directly. | high |
+| Clean-stock robe observation | direct process PID `21268`, start `2026-09-01`, ASLR base `0x009E0000`; settled 1600 by 900 client capture `/mnt/c/Users/User/Documents/GitHub/SB Modding/Solomon Dark/.codex-tmp/hub-msgbox-stock-20260901-root/robe-dialog-2.png`, SHA-256 `95f340e85c677a53f368a91731922895cab39d24607ac83bcca523f553a27c6c` | The title uses the large stock menu face and wraps as `A WIZARD WOULD NEVER` / `REMOVE HIS ROBE!`; both body paragraphs retain their exact native breaks and the double space before `And`; the action is visibly the compact stock `OKAY`. | high |
+| Clean-stock object read | same direct process; preferred global `0x00819EDC` rebased to `0x00DF9EDC` -> MsgBox `0x152A3740`; runtime vtable `0x00D68E04` maps to preferred `0x00788E04` | Root panel `[584.5,262.5,431,375]`; primary action `[702,543,196,69]`; five DataLines have extents `60,51,17,85,17`, fonts menu then medium, and the exact mutated strings visible in the frame. No injected loader was present and no memory write occurred. | high |
+| Clean-stock systemic check | fresh direct process PID `25752`, ASLR base `0x009E0000`; beta MsgBox `0x035DBE30` | Twelve live DataLine extents sum to `438`; root height is exactly `438 - 12 + 50 + 100 = 576`. Panel `[580,162,440,576]` and action `[702,643.5,196,69]` reconcile the same line-advance, padding, footer, and button formulas. | high |
+| String/caller instructions | canonical Ghidra 12.0.3 read-only replica; `A WIZARD...ROBE` at `0x00795690` -> `0x0056FC90`; `YOUR MIND IS FULL` at `0x00795418` -> `0x0056C340`; `NOT ENOUGH GOLD` at `0x00794F18` -> `0x0055FAF0` | Inventory constructs Hat/Robe with title, paragraph, blank, paragraph, trailing blank; Hagatha constructs one Tonic body or paragraph/blank/paragraph; Dowsing constructs title/body/trailing blank. Every title passes `Fonts + 0xE7D98`; body and blank rows pass `Fonts + 0x4D530`. | high |
+| Shared builder instructions | ctor `0x004A98E0`; `Dialog_AddLine 0x005BCCB0`; native wrapper `0x0043D030`; width/height `0x0043C870/0x0043B5B0`; finalizer `0x005AB2C0`; renderer `0x005C4530`; primary/secondary builders `0x005AB7E0/0x005AB980` | MsgBox owns a mutable DataLine vector, content-sized root rect, one or two embedded Buttons, reveal/close state, rendering, hit rectangles, and teardown. | high |
+| Raw constants/data | `0x0078E600` double `400`; `0x00787110` float `400`; `0x007DE968` float `25`; `0x007DE908` double `100`; `0x00799D54=196`; `0x0079250C=69`; `0x007849A0` double `60`; menu/medium live wrapper metrics `24/16` | Lines wider than 400 are mutated by the native wrapper; panel padding is 25 each side; action footer is 100; primary body is always 196 by 69 and sits 60 pixels above the panel bottom by its center. | high |
+| Current web causal trace | `hub-inventory-render-contract.ts`, `hub-inventory-renderer.ts`, `HubInventoryUi.tsx`, `native-ui-text.ts`, `native-ui-plan.ts` at Website `419699d10457a22897cdb3fdb8bb7938c5141117` | Five standard notices share a fixed 529 by 384 Dowsing frame; four select an invented 250-wide row at y 450, Hat/Robe force `titleFont: 'body'`, and the generic web wrapper collapses whitespace and performs ordinary word wrapping instead of the recovered native mutation loop. | high |
+
+Ghidra provenance: canonical project `SolomonDark/SolomonDark.exe`, preferred
+base `0x00400000`, invoked through the existing Mod Loader checkout read-only at
+revision `08bfba9ef367f7b863848030d0a289dc31e33192`. Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`search_terms_refs.py`, `decompile_targets.py`,
+`trace_call_arguments.py`, `dump_function_instructions.py`,
+`dump_insns_around.py`, and `dump_floats_at.py` were used through the replica
+pool. The already-dirty Mod Loader checkout was not changed.
+
+### System boundary and membership inventory
+
+Native system: content-sized, one-action Hub/Inventory `MsgBox` construction
+from authored DataLine calls through native wrapping/measurement, root-panel
+finalization, frame/text/Button painting, semantic action dispatch, close
+animation, and destruction. The reusable wrapper and MsgBox primitives are
+inside the boundary; unrelated caller state/economy/equipment transactions are
+not.
+
+| Member / branch | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| Dowsing insufficient-gold notice | `0x0055FAF0`, three lines, primary action | `exact-ported` | native title/body/trailing blank derive panel/action; no fixed-layout exception |
+| Hagatha ordinary full-mind notice | `0x0056C340`, title + paragraph + blank + paragraph | `exact-ported` | exact four-line-object construction and computed `[702,414,196,69]` action |
+| Hagatha Tonic full-mind notice | `0x0056C340`, title + one body | `exact-ported` | exact two-line-object construction and computed `[702,381,196,69]` action |
+| protected Hat notice | `0x0056FC90`, five line objects | `exact-ported` | menu title wraps to two lines; computed `[702,534.5,196,69]` action |
+| protected Robe notice | `0x0056FC90`, five line objects | `exact-ported` | clean-stock line vector, `431x375` root, and `[702,543,196,69]` action |
+| one-line, wrapped, blank, and explicit double-space input | `0x0043D030`, `0x0043C870`, `0x0043B5B0` | `exact-ported` | mutation-loop golden cases include Robe, both Mind branches, Hat, Dowsing, hard spaces, and existing newline input |
+| menu title wrapper and medium body wrapper | caller operands `Fonts + 0xE7D98/+0x4D530` | `exact-ported` | no caller font override; 24/25 and 16/17 height/pitch contracts |
+| dynamic root panel | `Dialog_AddLine`, `0x005AB2C0` | `exact-ported` | `max wrapped width + 50`; `sum(text height + authored gap) + 150`; caller anchor/clamps retained |
+| embedded primary Button | `0x005AB2C0`, `0x005C4530` | `verified-already-at-parity` | fixed 196 by 69; UI.101/.102/.54, `[6,6]` press, label, and HotRect remain shared |
+| frame/background/header/arrows | `MsgBox::Render 0x005C4530`, existing UI-kit records | `exact-ported` | existing exact chrome consumes the computed frame rectangle instead of one fixed Dowsing rectangle |
+| pointer, keyboard, dismissal, reveal/close, curtain, and teardown | `0x005AB710`, Button handlers, owner removal | `verified-already-at-parity` | only geometry/text plan changes; one accepted action closes once and resources remain owner-scoped |
+| Unforge content-sized confirmation/result | different explicit two-action/result caller contracts | `out-of-system` (not a standard Hub notice) | existing dedicated rectangles and tests remain unchanged |
+| title Kill/Tutorial MsgBoxes | different two-action Title callers with already recovered explicit bounds | `out-of-system` (not one-action Hub/Inventory construction) | shared wrapping regression coverage remains; title prompt geometry is unchanged |
+
+No member is blocked by the browser platform. In particular, browser bitmap
+text can preserve the retail whitespace mutation and half-pixel rectangles;
+there is no justification for a smaller title face or a guessed roomy row.
+
+The complete direct `Dialog_AddLine` xref sweep found 194 calls in 22 owner
+functions. Each owner is dispositioned below; counts are the complete direct
+xref membership, not samples.
+
+| Owner | AddLine xrefs | Primary / secondary xrefs | Disposition for this boundary |
+| --- | ---: | ---: | --- |
+| `WaveEditor_Generate 0x004BE620` | 2 | 1 / 1 | `out-of-system` editor-only two-action owner; xrefs inspected, caller preparation unchanged |
+| `0x0050E5E0` | 2 | 1 / 0 | `out-of-system` separate caller content; xrefs inspected, caller preparation unchanged |
+| `0x00554690` | 2 | 0 / 0 | `out-of-system` HoverBox-only owner; xrefs inspected, caller preparation unchanged |
+| `0x0055E2C0` | 3 | 0 / 0 | `out-of-system` HoverBox-only owner; xrefs inspected, caller preparation unchanged |
+| `0x0055FAF0` | 3 | 1 / 0 | `exact-ported` Dowsing member |
+| `0x0056C340` | 4 | 1 / 0 | `exact-ported` two Hagatha branches |
+| `0x0056D1B0` | 2 | 1 / 0 | `out-of-system` separate caller content; xrefs inspected, caller preparation unchanged |
+| `0x0056EC30` | 7 | 2 / 1 | `out-of-system` separate one/two-action content; xrefs inspected, caller preparation unchanged |
+| `0x0056FC90` | 8 | 1 / 0 | `exact-ported` Hat/Robe branches (shared body/trailing-blank callsites account for eight xrefs) |
+| `0x00573E90` | 7 | 0 / 0 | `out-of-system` line-only owner; xrefs inspected, caller preparation unchanged |
+| `0x0057C4B0` | 15 | 0 / 0 | `out-of-system` line-only owner; xrefs inspected, caller preparation unchanged |
+| `0x0058DB90` | 12 | 1 / 0 | `out-of-system` beta/startup owner; clean systemic geometry check retained as evidence |
+| `0x0058E260` | 3 | 1 / 1 | `out-of-system` separate two-action owner; xrefs inspected, caller preparation unchanged |
+| `0x0058F500` | 2 | 1 / 1 | `out-of-system` separate two-action owner; xrefs inspected, caller preparation unchanged |
+| `0x0058FEE0` | 3 | 1 / 0 | `out-of-system` separate caller content; xrefs inspected, caller preparation unchanged |
+| `0x005901E0` | 2 | 1 / 0 | `out-of-system` separate caller content; xrefs inspected, caller preparation unchanged |
+| `0x00590470` | 19 | 6 / 0 | `out-of-system` multi-branch caller content; xrefs inspected, caller preparation unchanged |
+| `0x005910B0` | 2 | 1 / 0 | `out-of-system` separate caller content; xrefs inspected, caller preparation unchanged |
+| `0x00591AD0` | 4 | 2 / 0 | `out-of-system` separate caller content; xrefs inspected, caller preparation unchanged |
+| `UiOwner_DispatchControlAction 0x005A5530` | 5 | 2 / 1 | `out-of-system` dynamic owner content; xrefs inspected, caller preparation unchanged |
+| `0x0066B990` | 85 | 0 / 0 | `out-of-system` large line-only authored-dialogue owner; xrefs inspected, caller preparation unchanged |
+| `0x00670E20` | 2 | 0 / 0 | `out-of-system` line-only owner; xrefs inspected, caller preparation unchanged |
+
+### Native ownership thread and recovered contract
+
+- `MsgBox` construction at `0x004A98E0` owns a zeroed root rectangle at
+  `+0x78..+0x84`, a DataLine pointer list/count at `+0xA0/+0x94`, two embedded
+  Buttons at `+0xC4/+0x178`, labels at `+0x22C/+0x248`, and reveal/close state
+  at `+0xBC/+0xC0`.
+- `Dialog_AddLine 0x005BCCB0` chooses the caller wrapper (defaulting to the
+  menu wrapper only when null). If unwrapped width exceeds 400 it calls
+  `0x0043D030` with an exact 400-pixel boundary. That routine mutates the
+  retained string in place: it walks per-glyph advances without render
+  kerning, backtracks to a space/hyphen on strict overflow, replaces that byte
+  with newline, preserves authored repeated spaces elsewhere, and carries the
+  overflowing glyph advance into the new-line scan. That carry is why ordinary
+  greedy wrapping is observably wrong even when its final measured line is at
+  most 400.
+- Native exact rendering still uses wrapper kerning. Menu text is 24 pixels
+  high with 25-pixel newline pitch; medium is 16 with 17-pixel pitch. A
+  DataLine stores render advance `measuredHeight + authoredGap + 1`; the panel
+  accumulates `measuredHeight + authoredGap`. Hub titles pass gap 10; body and
+  blank lines pass zero.
+- `0x005AB2C0` adds 25 pixels on every panel side and a 100-pixel footer, then
+  positions/clamps the panel at the caller anchor. Hagatha/Dowsing anchor at
+  `(800,350)`; protected garment warnings use the screen-centered Inventory
+  anchor `(800,450)`.
+- Settled text starts at `(panel.left + 25,
+  panel.top + 20 + firstWrapper.lineHeight)`. Each subsequent DataLine starts
+  after the previous stored render advance. This naturally moves the body down
+  when the protected title wraps to two lines.
+- The primary Button is always centered horizontally at width 196, height 69.
+  Its top is `panel.bottom - 60 - 69/2`. The owner’s wider-button hypothesis is
+  therefore falsified by both instructions and clean live fields; Website’s
+  250-wide `roomy` body is wider than stock, not narrower.
+- At settled reveal, the established UI-kit MsgBox chrome maps the computed
+  panel into its background/frame/header/arrow rectangle and retains the
+  existing deterministic painter order. Button art remains after text/frame
+  construction, and the semantic HotRect remains the 196 by 69 body.
+- Owner state (gold/capacity/equipment), modal pause, dismissal callback,
+  sounds, authority, save/protocol state, and teardown do not move into the
+  layout module.
+
+### Fully extracted target rows
+
+| Notice | Native wrapped rows | Root panel | Primary action |
+| --- | --- | --- | --- |
+| Dowsing insufficient gold | menu title; five medium body rows; trailing blank | `[585.5,208,429,284]` instruction/data result | `[702,397.5,196,69]` |
+| ordinary full mind | menu title; three medium rows; blank; four medium rows | `[580.5,191.5,439,317]` | `[702,414,196,69]` |
+| Tonic full mind | menu title; four medium body rows | `[577.5,224.5,445,251]` | `[702,381,196,69]` |
+| protected Hat | two menu rows; four medium rows; blank; three medium rows; trailing blank | `[579,271,442,358]` | `[702,534.5,196,69]` |
+| protected Robe | two menu rows; three medium rows; blank; five medium rows; trailing blank | `[584.5,262.5,431,375]` clean-live confirmed | `[702,543,196,69]` clean-live confirmed |
+
+The complete exact Robe mutation is:
+
+```text
+A WIZARD WOULD NEVER
+REMOVE HIS ROBE!
+
+A long, intimidating flowing robe looks
+debonaire on both a gluttonously fat slob
+and a pathetically wasted weakling.
+
+Strip away the robe and people might make
+comments about the kind of physique you
+get from years in wizarding school.  And
+then you'd have a completely avoidable
+disintegration on your conscience.
+```
+
+### Confidence and open questions
+
+- Confirmed: retail identity; every target caller/string/line branch; all
+  direct AddLine/primary/secondary xref owners; exact wrapper mutation;
+  font/line metrics; panel formula; anchors; text origins; fixed Button size
+  and footer placement; clean-stock Robe line vector/rectangles; systemic beta
+  reconciliation; ownership and lifecycle boundary.
+- Inferred: human-readable names for several out-of-system owner functions;
+  their exact addresses and xref counts are instruction-derived and do not
+  depend on those names.
+- Unknown: none material to the target or shared wrapper. No approximation is
+  required.
+
+### Web implementation consequence
+
+- Add the exact native `0x0043D030` mutation as the MsgBox DataLine-preparation
+  seam; preserve repeated spaces, existing line breaks, overflow carry, and the
+  hard-break hyphen branch. Keep renderer-level wrapping separate for callers
+  such as Boast whose already-prepared stock rows have their own proved owner.
+- Add one pure content-sized MsgBox layout owner beside the existing UI plan.
+  It accepts authored DataLines/anchor/action count and returns wrapped rows,
+  root/frame rectangles, text baselines, and action rectangles from the
+  recovered formulas.
+- Make standard Hub notice painting and `NativeAction` consume that single
+  result. Delete `compact`/`roomy`, `standardLayout`, `titleFont`, and the fixed
+  generic-notice geometry. Do not retain aliases or title-string branches.
+- Keep Unforge and title two-action caller contracts separate; retain their
+  shared Button/frame primitives and validate that the corrected wrapper does
+  not change their authored rows unexpectedly.
+
+### Validation contract
+
+- Focused red/green coverage: exact native wrapper mutation (including overflow
+  carry, double spaces, existing newline, and no-wrap input); all five notice
+  DataLine inventories; every wrapped row; root/frame/text/action geometry;
+  fixed 196 by 69 action; painter and semantic bounds from one layout result;
+  absence of the refuted `roomy`/font-override path.
+- Shared-consumer coverage: message plan and all five target DataLine inventories
+  consume the new mutation seam; title prompts, Boast, skill cards, NPC
+  selector, hover boxes, and other bounded renderer callers retain their
+  previously proved rows unchanged.
+- Mac Chrome 1600 by 900: exercise ordinary/Tonic full-mind, protected Hat and
+  Robe, and Dowsing; compare Robe against the clean stock frame and require the
+  exact menu title rows, body rows, panel/action rectangles, idle/pressed
+  chrome, one dismissal, retained equipment, and empty page/console/network/
+  WebGL/host error arrays.
+- Run focused native-UI/Hub-UI/economy suites and the exact candidate through
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini.
+
+### Implementation validation receipt
+
+- `native-ui-text.ts` now exposes the recovered MsgBox-only in-place mutation
+  loop, including strict overflow, carried overflow advance, preserved repeated
+  spaces/newlines, and native hard-break insertion. Renderer-level greedy wrap
+  remains separate; the stock-proved Boast rows and every other bounded-text
+  sibling retained their prior tests.
+- `native-ui-plan.ts` owns one pure single-action layout. It derives wrapped
+  DataLines, exact text height/pitch, root/frame rectangles, baselines, the
+  fixed 196 by 69 action, and label baseline. `hub-inventory-render-contract.ts`
+  supplies explicit title/paragraph/blank membership and anchors for Dowsing,
+  ordinary/Tonic Mind, Hat, and Robe. Pixi and `NativeAction` consume the same
+  result. The fixed Dowsing frame, `compact`/`roomy`, `standardLayout`, and
+  protected-title font override are removed completely.
+- The Mac red pass failed at the intended seam with `TS2305` for missing
+  `layoutNativeUiSingleActionMessage`. The final focused Mac receipts pass
+  native UI `71/71`, Hub UI `93/93`, and Hub economy `50/50`; coverage includes
+  every target row/rectangle, the hard-break and whitespace branches, unchanged
+  Boast rows, shared Button chrome, Unforge isolation, and the concurrently
+  published inventory-stats composition.
+- The exact runtime/source/test manifest SHA-256 is
+  `ec3c0d178410653e7917e1c939d741c5b5b905ecade9e5e89c5e688ab3036553`
+  on Website base `63bd0757d9759ea7663a44a57cb1cfe7ba921184`; every listed file was
+  byte-identical in the local and clean detached Mac worktrees. The final Mac
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` stdout hashes to
+  `c33259880ce65315abf7b625a42f36be50eecbb03c7d5a842ae6ec5494b9aaaf`.
+  It passed backend Release build with zero warnings/errors, 19 backend
+  contracts, lint with nine existing warnings and zero errors, prerequisite
+  groups through `339/339`, broad Boneyard `1751/1751`, Hub UI `93/93`, desktop
+  `4/4`, production frontend/game-host builds, media policy, and the Game bundle
+  at `263,678` raw / `80,225` gzip bytes.
+- Mac Chrome production-bundle receipt
+  `cb32cdddf23e6a47f82e81423c45fa08ccefdd3ea89390ae807f111133a214cd`
+  exercised both Mind branches and real protected Hat/Robe drags. Actions were
+  Tonic `[702,381,196,69]`, ordinary `[702,414,196,69]`, Hat
+  `[702,534.5,196,69]`, and Robe `[702,543,196,69]`; both idle and pressed
+  surrounds retained populated ends/connectors, copy was unobscured, and both
+  garments remained equipped. Reviewed idle frames hash to
+  `2222889b98d2232c569578a584a8d5ba1b2fc8fefbaf1c47144176ab18e47a66`,
+  `f9a3e9f84a92d79e09a2765cadb9b4691ab2c09d157bdb9ee4d57cd26fd13937`,
+  `c2c7b37ea2997d7673a09aed667990f38e646c1633cdd2d80381b7b8eae7e20f`,
+  and `19425382693b2fb2e41bcd2e0255ee8c80af8b1376609c0fa180f611bb8e9474`.
+- Focused Dowsing production-bundle receipt
+  `9b5f2086112eb2266ee8daed8b23349b9d55ba589ad76e84568bdf146f3d0b04`
+  used a zero-gold saved profile and the real Shlorio action. It confirmed root
+  `[585.5,208,429,284]`, frame `[536.5,158,527,384]`, action
+  `[702,397.5,196,69]`, populated idle/pressed chrome, and reviewed frame
+  `e7824dbde218a9c0967513108139df83ffd7e59aa5868c545ca4a5c31c8ddedf`.
+  Both successful journeys had empty page, console, failed-request,
+  failed-response, WebGL-loss, wire-error, and host-error arrays; Dowsing alone
+  recorded one expected aborted favicon request.
+- The older shared-sibling lane still samples the DOWSE pre-roll button during
+  a dark service reveal and can miss its brightness threshold; its rectangle
+  remained exact and it is not MsgBox evidence. The focused rejection lane
+  above replaces it for Dowsing MsgBox acceptance without weakening that
+  separate diagnostic.
+- No browser approximation or material unknown remains. No economy,
+  equipment, pause, audio, protocol, save, authority, or teardown behavior
+  changed. At this validation-receipt point, commit, push, deployment, and
+  production restart had not yet been performed; publication state is reported
+  separately at handoff.

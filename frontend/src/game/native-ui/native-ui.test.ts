@@ -12,6 +12,7 @@ import {
   NATIVE_UI_BUTTON,
   NATIVE_UI_MESSAGE,
   NATIVE_UI_TAB,
+  layoutNativeUiSingleActionMessage,
   nativeUiMessageActionBounds,
   nativeUiRect,
   nativeUiStripPieces,
@@ -27,6 +28,7 @@ import {
 import {
   layoutNativeUiText,
   measureNativeUiText,
+  wrapNativeUiMsgBoxText,
   wrapNativeUiText,
 } from './native-ui-text.ts'
 import {
@@ -131,6 +133,64 @@ test('native bitmap text shares exact measurement, wrapping, kerning, and no-fal
     { centerX: 37, centerY: 12, record: 269, tint: 0xd9ba70 },
   ])
   assert.deepEqual(layout.unsupportedCodePoints, [0x2603])
+})
+
+test('native wrapper preserves authored whitespace and its overflow carry', () => {
+  assert.deepEqual(
+    wrapNativeUiMsgBoxText(
+      "Strip away the robe and people might make comments about the kind of physique you get from years in wizarding school.  And then you'd have a completely avoidable disintegration on your conscience.",
+      'medium',
+      400,
+    ),
+    [
+      'Strip away the robe and people might make',
+      'comments about the kind of physique you',
+      'get from years in wizarding school.  And',
+      "then you'd have a completely avoidable",
+      'disintegration on your conscience.',
+    ],
+  )
+  assert.deepEqual(wrapNativeUiMsgBoxText('ONE  TWO', 'medium', 400), ['ONE  TWO'])
+  assert.deepEqual(wrapNativeUiMsgBoxText('ONE\nTWO', 'medium', 400), ['ONE', 'TWO'])
+  assert.deepEqual(wrapNativeUiMsgBoxText('AV AV', 'menu', 40), ['AV', '-', 'AV'])
+})
+
+test('native single-action MsgBox derives the clean-stock Robe geometry from DataLines', () => {
+  const layout = layoutNativeUiSingleActionMessage({
+    anchorX: 800,
+    anchorY: 450,
+    height: 900,
+    lines: [
+      { font: 'menu', gapAfter: 10, text: 'A WIZARD WOULD NEVER REMOVE HIS ROBE!' },
+      {
+        font: 'medium',
+        text: 'A long, intimidating flowing robe looks debonaire on both a gluttonously fat slob and a pathetically wasted weakling.',
+      },
+      { font: 'medium', text: '' },
+      {
+        font: 'medium',
+        text: "Strip away the robe and people might make comments about the kind of physique you get from years in wizarding school.  And then you'd have a completely avoidable disintegration on your conscience.",
+      },
+      { font: 'medium', text: '' },
+    ],
+    width: 1_600,
+  })
+  assert.deepEqual(layout.panelBounds, nativeUiRect(584.5, 262.5, 431, 375))
+  assert.deepEqual(layout.frameBounds, nativeUiRect(535.5, 212.5, 529, 475))
+  assert.deepEqual(layout.actionBounds, nativeUiRect(702, 543, 196, 69))
+  assert.deepEqual(layout.lines.map(({ baselineY, text }) => ({ baselineY, text })), [
+    { baselineY: 306.5, text: 'A WIZARD WOULD NEVER\nREMOVE HIS ROBE!' },
+    {
+      baselineY: 366.5,
+      text: 'A long, intimidating flowing robe looks\ndebonaire on both a gluttonously fat slob\nand a pathetically wasted weakling.',
+    },
+    { baselineY: 417.5, text: '' },
+    {
+      baselineY: 434.5,
+      text: "Strip away the robe and people might make\ncomments about the kind of physique you\nget from years in wizarding school.  And\nthen you'd have a completely avoidable\ndisintegration on your conscience.",
+    },
+    { baselineY: 519.5, text: '' },
+  ])
 })
 
 test('stock button plans share visible and semantic geometry for every state', () => {

@@ -31,6 +31,11 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from '../core-kernels/player-character.ts'
+import {
+  layoutNativeUiSingleActionMessage,
+  type NativeUiMessageDataLineSpec,
+  type NativeUiSingleActionMessageLayout,
+} from '../native-ui/core.ts'
 import { skillPickerRootTint } from './skill-picker-render-contract.ts'
 
 export const HUB_NATIVE_UI_SIZE = { height: 900, width: 1600 } as const
@@ -796,38 +801,62 @@ export const HUB_DOWSING_PREROLL = {
   referenceDropRect: [750, 101, 100, 149] as const,
 } as const
 
-export const HUB_DOWSING_MSGBOX = {
-  arrowCentersAndScales: [[800, 592, 1], [725, 579, 0.75], [875, 579, 0.75]] as const,
-  bodyLeft: 609,
-  bodyMaxWidth: 382,
-  bodyTextBaselineY: 287.5,
+export const HUB_MSGBOX_ART = {
   horizontalEdgeRecord: 10,
   interiorBackgroundRecord: 49,
-  interiorClipRect: [535.5, 158, 529, 384] as const,
   interiorFill: 'tiled-clipped',
   innerPanelEdgeUvOrigin: 0.95,
   innerPanelRecord: 17,
-  innerPanelRect: [540.5, 163, 519, 374] as const,
-  innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]] as const,
-  outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]] as const,
   primaryButtonTextTint: 0xd9ba70,
-  skullHeaderCenter: [800, 121] as const,
-  titleTextBaselineY: 252,
   verticalEdgeRecord: 79,
 } as const
 
-export const HUB_STANDARD_NOTICE_BUTTON_LAYOUTS = {
-  compact: {
-    actionRect: [702, 397.5, 196, 69] as const,
-    textBaselineY: 440,
-  },
-  roomy: {
-    actionRect: [675, 450, 250, 69] as const,
-    textBaselineY: 492.5,
-  },
-} as const
+export interface HubStandardNotice {
+  readonly actionLabel: string
+  readonly body: string
+  readonly nativeAnchorY: number
+  readonly nativeLines: readonly NativeUiMessageDataLineSpec[]
+  readonly title: string
+  readonly variant: 'standard'
+}
 
-export type HubStandardNoticeLayout = keyof typeof HUB_STANDARD_NOTICE_BUTTON_LAYOUTS
+interface HubStandardNoticeSpec {
+  readonly anchorY: number
+  readonly paragraphs: readonly string[]
+  readonly title: string
+  readonly trailingBlank?: boolean
+}
+
+function createHubStandardNotice(spec: HubStandardNoticeSpec): HubStandardNotice {
+  const nativeLines: NativeUiMessageDataLineSpec[] = [
+    { font: 'menu', gapAfter: 10, text: spec.title },
+  ]
+  spec.paragraphs.forEach((paragraph, index) => {
+    if (index > 0) nativeLines.push({ font: 'medium', text: '' })
+    nativeLines.push({ font: 'medium', text: paragraph })
+  })
+  if (spec.trailingBlank) nativeLines.push({ font: 'medium', text: '' })
+  return Object.freeze({
+    actionLabel: 'OKAY',
+    body: spec.paragraphs.join('\n\n'),
+    nativeAnchorY: spec.anchorY,
+    nativeLines: Object.freeze(nativeLines),
+    title: spec.title,
+    variant: 'standard',
+  })
+}
+
+export function hubStandardNoticeLayout(
+  notice: Pick<HubStandardNotice, 'nativeAnchorY' | 'nativeLines'>,
+): NativeUiSingleActionMessageLayout {
+  return layoutNativeUiSingleActionMessage({
+    anchorX: HUB_NATIVE_UI_SIZE.width / 2,
+    anchorY: notice.nativeAnchorY,
+    height: HUB_NATIVE_UI_SIZE.height,
+    lines: notice.nativeLines,
+    width: HUB_NATIVE_UI_SIZE.width,
+  })
+}
 
 export const HUB_NATIVE_UI_TIMING = {
   chatAcceleratedScrollPerTick: 0.8,
@@ -889,38 +918,47 @@ export const HUB_DOWSING_FIELD = {
   periodTicks: 720,
 } as const
 
-export const HUB_DOWSING_INSUFFICIENT_GOLD = {
-  actionLabel: 'OKAY',
-  body: 'Peering into the mirror at the endless, swirling, impossible colors of the ether is debilitating.  It is unthinkable that anyone would do so without just compensation, plus a little extra.',
+export const HUB_DOWSING_INSUFFICIENT_GOLD = createHubStandardNotice({
+  anchorY: 350,
+  paragraphs: [
+    'Peering into the mirror at the endless, swirling, impossible colors of the ether is debilitating.  It is unthinkable that anyone would do so without just compensation, plus a little extra.',
+  ],
   title: 'NOT ENOUGH GOLD!',
-} as const
+  trailingBlank: true,
+})
 
 export function hubHagathaFullMindNotice(selector: number) {
-  return {
-    actionLabel: 'OKAY',
-    body: selector === 27
-      ? "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!"
-      : "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
-    standardLayout: 'roomy',
+  return createHubStandardNotice({
+    anchorY: 350,
+    paragraphs: selector === 27
+      ? ["Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!"]
+      : [
+          'The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!',
+          "Drinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
+        ],
     title: 'YOUR MIND IS FULL!',
-  } as const
+  })
 }
 
-export const HUB_HAT_REMOVAL_MSGBOX = {
-  actionLabel: 'OKAY',
-  body: "A wizard might switch hats.  A wizard might even wear his hat at a jaunty angle.  But a wizard would never, under any circumstances, remove his hat altogether.\n\nAfter all, if you're not wearing a wizard hat, how would people know to be awed by the presence of a wizard?",
-  standardLayout: 'roomy',
+export const HUB_HAT_REMOVAL_MSGBOX = createHubStandardNotice({
+  anchorY: 450,
+  paragraphs: [
+    'A wizard might switch hats.  A wizard might even wear his hat at a jaunty angle.  But a wizard would never, under any circumstances, remove his hat altogether.',
+    "After all, if you're not wearing a wizard hat, how would people know to be awed by the presence of a wizard?",
+  ],
   title: 'A WIZARD WOULD NEVER REMOVE HIS HAT!',
-  titleFont: 'body',
-} as const
+  trailingBlank: true,
+})
 
-export const HUB_ROBE_REMOVAL_MSGBOX = {
-  actionLabel: 'OKAY',
-  body: "A long, intimidating flowing robe looks debonaire on both a gluttonously fat slob and a pathetically wasted weakling.\n\nStrip away the robe and people might make comments about the kind of physique you get from years in wizarding school.  And then you'd have a completely avoidable disintegration on your conscience.",
-  standardLayout: 'roomy',
+export const HUB_ROBE_REMOVAL_MSGBOX = createHubStandardNotice({
+  anchorY: 450,
+  paragraphs: [
+    'A long, intimidating flowing robe looks debonaire on both a gluttonously fat slob and a pathetically wasted weakling.',
+    "Strip away the robe and people might make comments about the kind of physique you get from years in wizarding school.  And then you'd have a completely avoidable disintegration on your conscience.",
+  ],
   title: 'A WIZARD WOULD NEVER REMOVE HIS ROBE!',
-  titleFont: 'body',
-} as const
+  trailingBlank: true,
+})
 
 export const HUB_NATIVE_UI_SURFACES = [
   'dialogue',

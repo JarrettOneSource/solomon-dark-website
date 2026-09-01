@@ -71,9 +71,11 @@ import {
   nativeUiRect,
   planNativeUiBoastMenu,
   planNativeUiButtonChrome,
+  planNativeUiMessageFrame,
   wrapNativeUiText,
   type NativeUiAtlasRecord,
   type NativeUiFontName,
+  type NativeUiSingleActionMessageLayout,
 } from '../native-ui/core.ts'
 import {
   destroyNativeUiPixiFor,
@@ -98,7 +100,6 @@ import {
 import {
   HUB_DYE_CLOTHING,
   HUB_DOWSING_GRID,
-  HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
   HUB_CHAT_INLINE_EMPHASIS,
   HUB_CHAT_PANEL,
@@ -115,6 +116,7 @@ import {
   HUB_INVENTORY_STATS_PAGES,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_MODAL_HUD_CONTROLS,
+  HUB_MSGBOX_ART,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NPC_SELECTOR,
@@ -122,7 +124,6 @@ import {
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
-  HUB_STANDARD_NOTICE_BUTTON_LAYOUTS,
   HUB_STOREGRID_SELECTED_RECORDS,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
   HUB_UNFORGE_CONFIRMATION,
@@ -162,11 +163,12 @@ import {
   hubShopSlideOffset,
   hubSackPageOffsets,
   hubShopSlotPosition,
+  hubStandardNoticeLayout,
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
   type HubTooltipLine,
   type HubTooltipOptions,
-  type HubStandardNoticeLayout,
+  type HubStandardNotice,
   type HubSackPageDirection,
 } from './hub-inventory-render-contract.ts'
 import { skillPickerRootTint } from './skill-picker-render-contract.ts'
@@ -188,17 +190,17 @@ export type HubInventoryPressedControl =
   | 'message-secondary'
   | null
 
-export interface HubInventoryRendererNotice {
+interface HubContentSizedRendererNotice {
   readonly actionLabel: string
   readonly body: string
   readonly outcomeTint?: number
   readonly secondaryActionLabel?: string
-  readonly standardLayout?: HubStandardNoticeLayout
   readonly summary?: string
   readonly title: string
-  readonly titleFont?: 'body' | 'menu'
-  readonly variant?: 'standard' | 'unforge-confirmation' | 'unforge-result'
+  readonly variant: 'unforge-confirmation' | 'unforge-result'
 }
+
+export type HubInventoryRendererNotice = HubStandardNotice | HubContentSizedRendererNotice
 
 export interface HubInventorySelectionModel {
   readonly equipmentSlot: EquipmentSlot | null
@@ -2180,71 +2182,27 @@ function buildNotice(
   notice: HubInventoryRendererNotice,
   pressedControl: HubInventoryPressedControl,
 ): void {
-  if (notice.variant === 'unforge-confirmation' || notice.variant === 'unforge-result') {
+  if (notice.variant !== 'standard') {
     buildUnforgeNotice(context, layer, notice, pressedControl)
     return
   }
   const noticeLayer = new Container()
   noticeLayer.label = 'native-notice'
-  noticeLayer.addChild(new Graphics()
-    .rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height)
-    .fill({ color: 0x000000, alpha: 0.75 }))
-  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, 607, 151.5, 386, 19)
-  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, 607, 529.5, 386, 19)
-  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, 529, 234.5, 21, 231)
-  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, 1050, 234.5, 21, 231)
-
-  HUB_DOWSING_MSGBOX.outerCornerCenters.forEach(([x, y], index) => {
-    addCenteredAtlasSprite(context, noticeLayer, 'UI', 107 + index, x, y)
+  const layout = hubStandardNoticeLayout(notice)
+  const frame = planNativeUiMessageFrame({
+    bounds: layout.frameBounds,
+    dimAlpha: 0.75,
+    height: HUB_NATIVE_UI_SIZE.height,
+    lines: layout.lines,
+    width: HUB_NATIVE_UI_SIZE.width,
   })
-  addTiledAtlas(
-    context,
-    noticeLayer,
-    'UI',
-    HUB_DOWSING_MSGBOX.interiorBackgroundRecord,
-    ...HUB_DOWSING_MSGBOX.interiorClipRect,
-  )
-  addNativeNineSlice(
-    context,
-    noticeLayer,
-    'UI',
-    HUB_DOWSING_MSGBOX.innerPanelRecord,
-    ...HUB_DOWSING_MSGBOX.innerPanelRect,
-    HUB_DOWSING_MSGBOX.innerPanelEdgeUvOrigin,
-  )
-  const skullHeader = addCenteredAtlasSprite(
-    context,
-    noticeLayer,
-    'UI',
-    18,
-    ...HUB_DOWSING_MSGBOX.skullHeaderCenter,
-  )
-  skullHeader.rotation = Math.PI / 2
-  for (const [x, y, scale] of HUB_DOWSING_MSGBOX.arrowCentersAndScales) {
-    addCenteredAtlasSprite(context, noticeLayer, 'UI', 8, x, y, scale)
-  }
-
-  addBitmapText(
-    context,
-    noticeLayer,
-    notice.title,
-    notice.titleFont ?? 'menu',
-    HUB_DOWSING_MSGBOX.bodyLeft,
-    HUB_DOWSING_MSGBOX.titleTextBaselineY,
-    { align: 'left', tint: 0xffffff },
-  )
-  addBitmapText(context, noticeLayer, notice.body, 'medium', HUB_DOWSING_MSGBOX.bodyLeft, HUB_DOWSING_MSGBOX.bodyTextBaselineY, {
-    align: 'left',
-    lineHeight: 17,
-    maxWidth: HUB_DOWSING_MSGBOX.bodyMaxWidth,
-    tint: 0xffffff,
-  })
+  noticeLayer.addChild(nativeUiPixiFor(context.textures).render(frame, 'message-frame'))
   addMessageBoxButton(
     context,
     noticeLayer,
     notice.actionLabel,
     pressedControl === 'message-primary',
-    notice.standardLayout ?? 'compact',
+    layout,
   )
   layer.addChild(noticeLayer)
 }
@@ -2252,7 +2210,7 @@ function buildNotice(
 function buildUnforgeNotice(
   context: RenderContext,
   layer: Container,
-  notice: HubInventoryRendererNotice,
+  notice: HubContentSizedRendererNotice,
   pressedControl: HubInventoryPressedControl,
 ): void {
   const confirmation = notice.variant === 'unforge-confirmation'
@@ -2349,10 +2307,10 @@ function addContentSizedMessageBox(
   innerRect: readonly [number, number, number, number],
 ): void {
   const [x, y, width, height] = innerRect
-  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, x + 66.5, y - 11.5, width - 133, 19)
-  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, x + 66.5, y + height - 7.5, width - 133, 19)
-  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, x - 11.5, y + 71.5, 21, height - 143)
-  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, x + width - 9.5, y + 71.5, 21, height - 143)
+  addTiledAtlas(context, layer, 'UI', HUB_MSGBOX_ART.horizontalEdgeRecord, x + 66.5, y - 11.5, width - 133, 19)
+  addTiledAtlas(context, layer, 'UI', HUB_MSGBOX_ART.horizontalEdgeRecord, x + 66.5, y + height - 7.5, width - 133, 19)
+  addTiledAtlas(context, layer, 'UI', HUB_MSGBOX_ART.verticalEdgeRecord, x - 11.5, y + 71.5, 21, height - 143)
+  addTiledAtlas(context, layer, 'UI', HUB_MSGBOX_ART.verticalEdgeRecord, x + width - 9.5, y + 71.5, 21, height - 143)
   const corners = [
     [x + 24, y + 27],
     [x + width - 24, y + 27],
@@ -2366,7 +2324,7 @@ function addContentSizedMessageBox(
     context,
     layer,
     'UI',
-    HUB_DOWSING_MSGBOX.interiorBackgroundRecord,
+    HUB_MSGBOX_ART.interiorBackgroundRecord,
     x - 5,
     y - 5,
     width + 10,
@@ -2376,12 +2334,12 @@ function addContentSizedMessageBox(
     context,
     layer,
     'UI',
-    HUB_DOWSING_MSGBOX.innerPanelRecord,
+    HUB_MSGBOX_ART.innerPanelRecord,
     x,
     y,
     width,
     height,
-    HUB_DOWSING_MSGBOX.innerPanelEdgeUvOrigin,
+    HUB_MSGBOX_ART.innerPanelEdgeUvOrigin,
   )
   const centerX = x + width / 2
   const skull = addCenteredAtlasSprite(context, layer, 'UI', 18, centerX, y - 42)
@@ -2877,18 +2835,18 @@ function addMessageBoxButton(
   layer: Container,
   label: string,
   pressed: boolean,
-  standardLayout: HubStandardNoticeLayout,
+  layout: Pick<NativeUiSingleActionMessageLayout, 'actionBounds' | 'actionTextBaselineY'>,
 ): void {
-  const layout = HUB_STANDARD_NOTICE_BUTTON_LAYOUTS[standardLayout]
+  const { height, left, top, width } = layout.actionBounds
   addNativeButton(
     context,
     layer,
     'message-primary',
     label,
-    layout.actionRect,
+    [left, top, width, height],
     pressed,
-    800,
-    layout.textBaselineY,
+    left + width / 2,
+    layout.actionTextBaselineY,
   )
 }
 
@@ -2916,7 +2874,7 @@ function addNativeButton(
     'menu',
     labelCenterX + copyOffset,
     labelBaselineY + copyOffset,
-    { tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint },
+    { tint: HUB_MSGBOX_ART.primaryButtonTextTint },
   )
   return copyOffset
 }

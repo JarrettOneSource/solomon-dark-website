@@ -114,6 +114,77 @@ export function wrapNativeUiText(
   return lines
 }
 
+/** Exact in-place mutation performed while native MsgBox stores a DataLine. */
+export function wrapNativeUiMsgBoxText(
+  text: string,
+  fontName: NativeUiFontName,
+  maxWidth: number,
+): readonly string[] {
+  if (!Number.isFinite(maxWidth) || maxWidth < 0) {
+    throw new RangeError('native UI MsgBox wrap width must be finite and nonnegative')
+  }
+  const font = nativeUiFont(fontName)
+  const characters = [...text]
+  let index = 0
+  let lineStart = 0
+  let lineWidth = 0
+  let wrapped = false
+
+  while (index < characters.length) {
+    let character = characters[index]!
+    if (character === '\n' || character === '\r') lineWidth = 0
+
+    let advance = 0
+    if (character === ' ') {
+      if (wrapped) {
+        let count = 1
+        while (characters[index + count] === ' ') count += 1
+        characters.splice(index, count)
+        index -= 1
+      } else advance = font.spaceAdvance
+    } else {
+      const glyph = font.glyphs[`${character.codePointAt(0)!}`]
+      if (glyph) {
+        wrapped = false
+        advance = glyph.metrics[0]
+      }
+    }
+
+    let nextLineStart = lineStart
+    if (lineWidth + advance > maxWidth) {
+      lineWidth = 0
+      let breakAt = index
+      let cursor = index - 1
+      if (cursor !== lineStart) {
+        do {
+          breakAt = cursor
+          if (characters[cursor] === ' ' || characters[cursor] === '-') break
+          cursor -= 1
+          breakAt = index
+        } while (cursor !== lineStart)
+      }
+
+      character = characters[breakAt]!
+      index = breakAt
+      if (character === ' ' || character === '-') characters[breakAt] = '\n'
+      else {
+        if (breakAt > 1) index = breakAt - 1
+        characters.splice(index, 0, '-', '\n')
+      }
+      wrapped = true
+      nextLineStart = breakAt
+    }
+
+    // MsgBox intentionally carries the glyph that overflowed into the scan of
+    // the new line. This differs from renderer-level greedy word wrapping.
+    lineWidth += advance
+    index += 1
+    lineStart = nextLineStart
+  }
+
+  return characters.join('').split('\n')
+}
+
 export function layoutNativeUiText(spec: NativeUiTextSpec): NativeUiTextLayout {
   const font = nativeUiFont(spec.font)
   const scale = spec.scale ?? 1

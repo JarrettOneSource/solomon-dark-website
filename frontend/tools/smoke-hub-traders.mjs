@@ -37,6 +37,8 @@ const singleClient = process.env.SDR_GAME_TRADER_SINGLE_CLIENT === '1'
 const hagathaCapacityOnly = process.argv.includes('--hagatha-capacity-only')
 const hagathaLayoutOnly = process.argv.includes('--hagatha-layout-only')
 const focusedHagatha = hagathaCapacityOnly || hagathaLayoutOnly
+const dowsingMessageOnly = process.argv.includes('--dowsing-message-only')
+const focusedSave = focusedHagatha || dowsingMessageOnly
 const rendererLifecycleOnly = process.argv.includes('--renderer-lifecycle-only')
 const productionBuild = process.env.SDR_GAME_TRADER_PRODUCTION === '1'
 let staticServer = null
@@ -47,8 +49,8 @@ if (productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
   staticServer = await startStaticClientServer({
     root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
   })
-  gameCredential = focusedHagatha
-    ? 'hagatha-capacity-browser-acceptance'
+  gameCredential = focusedSave
+    ? 'focused-msgbox-browser-acceptance'
     : 'hub-trader-browser-acceptance'
   gameHost = await startGameHost({
     allowedOrigins: [staticServer.origin],
@@ -150,9 +152,9 @@ for (const page of [hostPage, guestPage]) {
 }
 
 try {
-  if (focusedHagatha) {
+  if (focusedSave) {
     step('seeding the focused cheat-mode Hub save')
-    await seedLocalSave(hostPage, createHagathaCapacitySave())
+    await seedLocalSave(hostPage, createHagathaCapacitySave(dowsingMessageOnly ? 0 : 100_000))
     step('entering the saved host Hub')
     await enterSavedHub(hostPage)
   } else {
@@ -172,14 +174,39 @@ try {
   if (!singleClient) assert.equal(await inventoryGold(guestPage), 500)
   await focusPage(hostPage)
   const hostStartingGold = await inventoryGold(hostPage, true)
-  assert.equal(hostStartingGold, focusedHagatha ? 100_000 : 500)
-  step(focusedHagatha
-    ? 'focused host restored the cheat-funded 100,000 gold save'
-    : 'both participants start with the retail 500 gold')
+  assert.equal(hostStartingGold, dowsingMessageOnly ? 0 : focusedHagatha ? 100_000 : 500)
+  step(dowsingMessageOnly
+    ? 'focused host restored the zero-gold Dowsing save'
+    : focusedHagatha
+      ? 'focused host restored the cheat-funded 100,000 gold save'
+      : 'both participants start with the retail 500 gold')
+  if (dowsingMessageOnly) {
+    const dowsingNotice = await exerciseDowsingInsufficientGoldNotice(hostPage)
+    assert.deepEqual(browserErrors, [])
+    assert.deepEqual(failedRequests, [])
+    assert.deepEqual(failedResponses, [])
+    assert.deepEqual(await hostPage.evaluate(() => window.__sdrSmokeWebGlContextLosses), [])
+    const receipt = {
+      abortedRequests,
+      browserErrors,
+      dowsingNotice,
+      failedRequests,
+      failedResponses,
+      host: await pageReceipt(hostPage),
+      status: 'ok',
+    }
+    await writeFile(`${screenshotRoot}-dowsing-message-receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`)
+    process.stdout.write(`${JSON.stringify(receipt)}\n`)
+    step('focused Dowsing insufficient-gold MsgBox receipt complete')
+    await gameHost?.close()
+    await browser.close()
+    await staticServer?.close()
+    process.exit(0)
+  }
   if (focusedHagatha) {
     await hostPage.locator('.main-menu-page[data-session-cheats-enabled="true"]').waitFor()
     const hagathaCapacity = await exerciseHagathaCapacity(hostPage)
-    const roomyRobeNotice = await exerciseRoomyRobeNotice(hostPage)
+    const protectedGarmentNotices = await exerciseProtectedGarmentNotices(hostPage)
     const sharedButtons = hagathaCapacityOnly
       ? await exerciseSharedButtonSiblings(hostPage)
       : null
@@ -194,7 +221,7 @@ try {
       failedResponses,
       hagathaCapacity,
       host: await pageReceipt(hostPage),
-      roomyRobeNotice,
+      protectedGarmentNotices,
       sharedButtons,
       status: 'ok',
     }
@@ -818,7 +845,7 @@ async function continueLocalPlay(page) {
   if (await action.isVisible()) await action.click()
 }
 
-function createHagathaCapacitySave() {
+function createHagathaCapacitySave(gold = 100_000) {
   const playerId = 'hagatha-capacity-owner'
   const character = {
     discipline: 'arcane',
@@ -830,7 +857,7 @@ function createHagathaCapacitySave() {
   const playerEntities = replacePlayerEconomy(initial.playerEntities, playerId, {
     ...economy,
     collegeIntroPending: false,
-    gold: 100_000,
+    gold,
     tutorialPending: false,
   })
   const state = {
@@ -1171,7 +1198,26 @@ async function rejectHagathaSelector(
 
   const okay = hagatha.getByRole('button', { name: 'OKAY' })
   const buttonBox = await okay.boundingBox()
-  assertBoxNear(buttonBox, { height: 69, width: 250, x: 675, y: 450 })
+  const expectedLayout = selector === 27
+    ? {
+        action: { height: 69, width: 196, x: 702, y: 381 },
+        frame: '528.5,174.5,543,351',
+        panel: '577.5,224.5,445,251',
+      }
+    : {
+        action: { height: 69, width: 196, x: 702, y: 414 },
+        frame: '531.5,141.5,537,417',
+        panel: '580.5,191.5,439,317',
+      }
+  assertBoxNear(buttonBox, expectedLayout.action)
+  assert.equal(await hagatha.getAttribute('data-native-msgbox-action'), [
+    expectedLayout.action.x,
+    expectedLayout.action.y,
+    expectedLayout.action.width,
+    expectedLayout.action.height,
+  ].join(','))
+  assert.equal(await hagatha.getAttribute('data-native-msgbox-frame'), expectedLayout.frame)
+  assert.equal(await hagatha.getAttribute('data-native-msgbox-panel'), expectedLayout.panel)
   const idleChrome = captureButton ? await nativeButtonChromeReceipt(page, buttonBox) : null
   await page.screenshot({ path: `${screenshotRoot}-${screenshotSuffix}.png` })
 
@@ -1203,38 +1249,69 @@ async function hagathaOfferLayout(hagatha, selectors) {
   })))
 }
 
-async function exerciseRoomyRobeNotice(page) {
+async function exerciseProtectedGarmentNotices(page) {
   await page.keyboard.press('i')
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
-  const robe = inventory.getByRole('button', { exact: true, name: 'Robe, Robe' })
-  await dragInventoryPointer(page, inventory, robe, { x: 800, y: 650 })
-  const notice = inventory.getByRole('alert')
-  await notice.waitFor()
-  await waitForNativeNoticeSettled(inventory)
-  assert.match(await notice.innerText(), /A WIZARD WOULD NEVER REMOVE HIS ROBE!/)
-  assert.match(await notice.innerText(), /avoidable disintegration/)
-  const okay = inventory.getByRole('button', { name: 'OKAY' })
-  const buttonBox = await okay.boundingBox()
-  assertBoxNear(buttonBox, { height: 69, width: 250, x: 675, y: 450 })
-  const idleChrome = await nativeButtonChromeReceipt(page, buttonBox)
-  await page.screenshot({ path: `${screenshotRoot}-inventory-robe-warning.png` })
-  await page.mouse.move(
-    buttonBox.x + buttonBox.width / 2,
-    buttonBox.y + buttonBox.height / 2,
-  )
-  await page.mouse.down()
-  await inventory.locator(
-    'xpath=self::*[@data-native-pressed-control="message-primary"]',
-  ).waitFor()
-  const pressedChrome = await nativeButtonChromeReceipt(page, buttonBox)
-  await page.screenshot({ path: `${screenshotRoot}-inventory-robe-warning-pressed.png` })
-  await page.mouse.up()
-  await notice.waitFor({ state: 'detached' })
-  await inventory.getByRole('button', { exact: true, name: 'Robe, Robe' }).waitFor()
+  const receipts = {}
+  for (const spec of [
+    {
+      action: { height: 69, width: 196, x: 702, y: 534.5 },
+      copy: /jaunty angle/,
+      frame: '530,221,540,458',
+      item: 'Hat, Hat',
+      key: 'hat',
+      panel: '579,271,442,358',
+      title: /A WIZARD WOULD NEVER REMOVE HIS HAT!/,
+    },
+    {
+      action: { height: 69, width: 196, x: 702, y: 543 },
+      copy: /avoidable disintegration/,
+      frame: '535.5,212.5,529,475',
+      item: 'Robe, Robe',
+      key: 'robe',
+      panel: '584.5,262.5,431,375',
+      title: /A WIZARD WOULD NEVER REMOVE HIS ROBE!/,
+    },
+  ]) {
+    const item = inventory.getByRole('button', { exact: true, name: spec.item })
+    await dragInventoryPointer(page, inventory, item, { x: 800, y: 650 })
+    const notice = inventory.getByRole('alert')
+    await notice.waitFor()
+    await waitForNativeNoticeSettled(inventory)
+    assert.match(await notice.innerText(), spec.title)
+    assert.match(await notice.innerText(), spec.copy)
+    assert.equal(await inventory.getAttribute('data-native-msgbox-frame'), spec.frame)
+    assert.equal(await inventory.getAttribute('data-native-msgbox-panel'), spec.panel)
+    const okay = inventory.getByRole('button', { name: 'OKAY' })
+    const buttonBox = await okay.boundingBox()
+    assertBoxNear(buttonBox, spec.action)
+    assert.equal(await inventory.getAttribute('data-native-msgbox-action'), [
+      spec.action.x,
+      spec.action.y,
+      spec.action.width,
+      spec.action.height,
+    ].join(','))
+    const idleChrome = await nativeButtonChromeReceipt(page, buttonBox)
+    await page.screenshot({ path: `${screenshotRoot}-inventory-${spec.key}-warning.png` })
+    await page.mouse.move(
+      buttonBox.x + buttonBox.width / 2,
+      buttonBox.y + buttonBox.height / 2,
+    )
+    await page.mouse.down()
+    await inventory.locator(
+      'xpath=self::*[@data-native-pressed-control="message-primary"]',
+    ).waitFor()
+    const pressedChrome = await nativeButtonChromeReceipt(page, buttonBox)
+    await page.screenshot({ path: `${screenshotRoot}-inventory-${spec.key}-warning-pressed.png` })
+    await page.mouse.up()
+    await notice.waitFor({ state: 'detached' })
+    await inventory.getByRole('button', { exact: true, name: spec.item }).waitFor()
+    receipts[spec.key] = { buttonBox, idleChrome, pressedChrome }
+  }
   await closeInventory(page, inventory)
-  return { buttonBox, idleChrome, pressedChrome }
+  return receipts
 }
 
 async function nativeButtonChromeReceipt(page, bodyBox) {
@@ -1306,6 +1383,56 @@ async function nativeButtonChromeReceipt(page, bodyBox) {
   assert.ok(receipt.topConnectorBright > 20, JSON.stringify(receipt))
   assert.ok(receipt.bottomConnectorBright > 20, JSON.stringify(receipt))
   return receipt
+}
+
+async function exerciseDowsingInsufficientGoldNotice(page) {
+  const canvas = page.locator('.hub-world-canvas')
+  await navigateRegion(page, canvas, 'courtyard', { x: 1800, y: 650 })
+  await holdUntilTransition(page, canvas, ['d', 'w'], 'library')
+  await waitForSettledRegion(page, canvas, 'library')
+  await navigateRegion(page, canvas, 'library', HUB_TRADER_GEOMETRY.shlorio.position, 60)
+  await openNearbyTrader(page, 'shlorio')
+  const dialogue = page.getByRole('dialog', { name: 'Talking to Shlorio' })
+  await dialogue.waitFor()
+  await waitForNativeSurfaceSettled(dialogue)
+  await advanceDialogue(dialogue)
+  await dialogue.locator('[data-service-trader="shlorio"]').click()
+  const shlorio = page.getByRole('dialog', { name: "SHLORIO'S DISCOUNT DOWSING" })
+  await shlorio.waitFor()
+  await waitForNativeSurfaceSettled(shlorio)
+  const dowse = shlorio.getByRole('button', { name: /DOWSE\s+650 gold/ })
+  assertBoxNear(await dowse.boundingBox(), { height: 69, width: 250, x: 675, y: 265.5 })
+  await dowse.click()
+
+  const notice = shlorio.getByRole('alert')
+  await notice.waitFor()
+  await waitForNativeNoticeSettled(shlorio)
+  assert.match(await notice.innerText(), /NOT ENOUGH GOLD!/)
+  assert.match(await notice.innerText(), /endless, swirling, impossible colors/)
+  assert.equal(await shlorio.getAttribute('data-native-msgbox-panel'), '585.5,208,429,284')
+  assert.equal(await shlorio.getAttribute('data-native-msgbox-frame'), '536.5,158,527,384')
+  assert.equal(await shlorio.getAttribute('data-native-msgbox-action'), '702,397.5,196,69')
+
+  const okay = shlorio.getByRole('button', { name: 'OKAY' })
+  const buttonBox = await okay.boundingBox()
+  assertBoxNear(buttonBox, { height: 69, width: 196, x: 702, y: 397.5 })
+  const idleChrome = await nativeButtonChromeReceipt(page, buttonBox)
+  await page.screenshot({ path: `${screenshotRoot}-shlorio-insufficient-gold.png` })
+  await page.mouse.move(
+    buttonBox.x + buttonBox.width / 2,
+    buttonBox.y + buttonBox.height / 2,
+  )
+  await page.mouse.down()
+  await shlorio.locator(
+    'xpath=self::*[@data-native-pressed-control="message-primary"]',
+  ).waitFor()
+  const pressedChrome = await nativeButtonChromeReceipt(page, buttonBox)
+  await page.screenshot({ path: `${screenshotRoot}-shlorio-insufficient-gold-pressed.png` })
+  await page.mouse.up()
+  await notice.waitFor({ state: 'detached' })
+  await shlorio.getByRole('button', { name: 'Done' }).click()
+  await shlorio.waitFor({ state: 'detached' })
+  return { buttonBox, idleChrome, pressedChrome }
 }
 
 async function exerciseSharedButtonSiblings(page) {

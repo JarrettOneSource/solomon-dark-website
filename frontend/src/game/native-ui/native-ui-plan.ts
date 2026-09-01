@@ -1,5 +1,13 @@
-import type { NativeUiAtlasName } from './native-ui-catalog.ts'
-import type { NativeUiTextSpec } from './native-ui-text.ts'
+import {
+  nativeUiFont,
+  type NativeUiAtlasName,
+  type NativeUiFontName,
+} from './native-ui-catalog.ts'
+import {
+  layoutNativeUiText,
+  wrapNativeUiMsgBoxText,
+  type NativeUiTextSpec,
+} from './native-ui-text.ts'
 
 export interface NativeUiRect {
   readonly height: number
@@ -142,12 +150,48 @@ export interface NativeUiMessageAction {
   readonly state?: NativeUiButtonState
 }
 
+export interface NativeUiMessageDataLineSpec {
+  readonly font: NativeUiFontName
+  readonly gapAfter?: number
+  readonly text: string
+  readonly tint?: number
+}
+
+export interface NativeUiMessageDataLineLayout {
+  readonly baselineY: number
+  readonly font: NativeUiFontName
+  readonly gapAfter: number
+  readonly height: number
+  readonly lineHeight: number
+  readonly text: string
+  readonly tint: number
+  readonly width: number
+  readonly x: number
+}
+
+export interface NativeUiSingleActionMessageLayoutSpec {
+  readonly anchorX: number
+  readonly anchorY: number
+  readonly height: number
+  readonly lines: readonly NativeUiMessageDataLineSpec[]
+  readonly width: number
+}
+
+export interface NativeUiSingleActionMessageLayout {
+  readonly actionBounds: NativeUiRect
+  readonly actionTextBaselineY: number
+  readonly frameBounds: NativeUiRect
+  readonly lines: readonly NativeUiMessageDataLineLayout[]
+  readonly panelBounds: NativeUiRect
+}
+
 export interface NativeUiMessageFrameSpec {
-  readonly body: string
+  readonly body?: string
   readonly bounds: NativeUiRect
   readonly dimAlpha?: number
   readonly height: number
-  readonly title: string
+  readonly lines?: readonly NativeUiMessageDataLineLayout[]
+  readonly title?: string
   readonly width: number
 }
 
@@ -196,6 +240,11 @@ export const NATIVE_UI_TAB = Object.freeze({
 })
 
 export const NATIVE_UI_MESSAGE = Object.freeze({
+  actionFooterHeight: 100,
+  actionHeight: 69,
+  actionLabelBaselineOffset: 42.5,
+  actionPanelBottomOffset: 60,
+  actionWidth: 196,
   arrowRecord: 8,
   backgroundRecord: 49,
   bodyBaselineOffset: 130.5,
@@ -207,10 +256,103 @@ export const NATIVE_UI_MESSAGE = Object.freeze({
   horizontalEdgeRecord: 10,
   innerEdgeUvOrigin: 0.95,
   innerFrameRecord: 17,
+  panelPadding: 25,
+  panelToFrameX: 49,
+  panelToFrameY: 50,
+  storedLineAdvance: 1,
+  textPanelInsetX: 25,
+  textPanelInsetY: 20,
   textInsetX: 76,
   titleBaselineOffset: 95,
   verticalEdgeRecord: 79,
+  wrapWidth: 400,
 })
+
+export function layoutNativeUiSingleActionMessage(
+  spec: NativeUiSingleActionMessageLayoutSpec,
+): NativeUiSingleActionMessageLayout {
+  nativeUiRect(0, 0, spec.width, spec.height)
+  if (spec.lines.length === 0) throw new RangeError('native UI MsgBox requires at least one DataLine')
+  if (![spec.anchorX, spec.anchorY].every(Number.isFinite)) {
+    throw new RangeError('native UI MsgBox anchor must be finite')
+  }
+
+  const prepared = spec.lines.map((line) => {
+    const gapAfter = line.gapAfter ?? 0
+    if (!Number.isFinite(gapAfter) || gapAfter < 0) {
+      throw new RangeError('native UI MsgBox DataLine gap must be finite and nonnegative')
+    }
+    const font = nativeUiFont(line.font)
+    const text = wrapNativeUiMsgBoxText(
+      line.text,
+      line.font,
+      NATIVE_UI_MESSAGE.wrapWidth,
+    ).join('\n')
+    const layout = layoutNativeUiText({
+      font: line.font,
+      lineHeight: font.metrics[0] + NATIVE_UI_MESSAGE.storedLineAdvance,
+      text,
+      x: 0,
+      y: 0,
+    })
+    return { font, gapAfter, layout, source: line, text }
+  })
+  const contentWidth = Math.max(...prepared.map(({ layout }) => layout.width))
+  const contentHeight = prepared.reduce(
+    (height, { gapAfter, layout }) => height + layout.height + gapAfter,
+    0,
+  )
+  const panelWidth = contentWidth + NATIVE_UI_MESSAGE.panelPadding * 2
+  const panelHeight = contentHeight
+    + NATIVE_UI_MESSAGE.panelPadding * 2
+    + NATIVE_UI_MESSAGE.actionFooterHeight
+  const panelBounds = nativeUiRect(
+    spec.anchorX - panelWidth / 2,
+    spec.anchorY - panelHeight / 2,
+    panelWidth,
+    panelHeight,
+  )
+  const frameBounds = nativeUiRect(
+    panelBounds.left - NATIVE_UI_MESSAGE.panelToFrameX,
+    panelBounds.top - NATIVE_UI_MESSAGE.panelToFrameY,
+    panelBounds.width + NATIVE_UI_MESSAGE.panelToFrameX * 2,
+    panelBounds.height + NATIVE_UI_MESSAGE.panelToFrameY * 2,
+  )
+  const textX = panelBounds.left + NATIVE_UI_MESSAGE.textPanelInsetX
+  let baselineY = panelBounds.top
+    + NATIVE_UI_MESSAGE.textPanelInsetY
+    + prepared[0]!.font.metrics[0]
+  const lines = prepared.map(({ font, gapAfter, layout, source, text }) => {
+    const line: NativeUiMessageDataLineLayout = {
+      baselineY,
+      font: source.font,
+      gapAfter,
+      height: layout.height,
+      lineHeight: font.metrics[0] + NATIVE_UI_MESSAGE.storedLineAdvance,
+      text,
+      tint: source.tint ?? 0xffffff,
+      width: layout.width,
+      x: textX,
+    }
+    baselineY += layout.height + gapAfter + NATIVE_UI_MESSAGE.storedLineAdvance
+    return Object.freeze(line)
+  })
+  const actionBounds = nativeUiRect(
+    panelBounds.left + panelBounds.width / 2 - NATIVE_UI_MESSAGE.actionWidth / 2,
+    panelBounds.top + panelBounds.height
+      - NATIVE_UI_MESSAGE.actionPanelBottomOffset
+      - NATIVE_UI_MESSAGE.actionHeight / 2,
+    NATIVE_UI_MESSAGE.actionWidth,
+    NATIVE_UI_MESSAGE.actionHeight,
+  )
+  return Object.freeze({
+    actionBounds,
+    actionTextBaselineY: actionBounds.top + NATIVE_UI_MESSAGE.actionLabelBaselineOffset,
+    frameBounds,
+    lines: Object.freeze(lines),
+    panelBounds,
+  })
+}
 
 export const NATIVE_UI_SIMPLE_MENU = Object.freeze({
   arrowRecord: 8,
@@ -464,6 +606,14 @@ export function planNativeUiTabs(spec: NativeUiTabsSpec): NativeUiPlan {
 }
 
 export function planNativeUiMessageFrame(spec: NativeUiMessageFrameSpec): NativeUiPlan {
+  const hasDataLines = spec.lines !== undefined
+  const hasLegacyContent = spec.title !== undefined || spec.body !== undefined
+  if (hasDataLines === hasLegacyContent) {
+    throw new TypeError('native UI message frame requires DataLines or title/body content')
+  }
+  if (!hasDataLines && (spec.title === undefined || spec.body === undefined)) {
+    throw new TypeError('native UI message title and body must be supplied together')
+  }
   const { bounds } = spec
   const centerX = bounds.left + bounds.width / 2
   const inner = nativeUiRect(bounds.left + 5, bounds.top + 5, bounds.width - 10, bounds.height - 10)
@@ -553,34 +703,52 @@ export function planNativeUiMessageFrame(spec: NativeUiMessageFrameSpec): Native
       x: centerX,
       y: bounds.top - 37,
     },
-    {
-      kind: 'text',
-      label: 'message:title',
-      text: {
-        align: 'left',
-        font: 'menu',
-        maxWidth: 400,
-        text: spec.title,
-        tint: 0xffffff,
-        x: bounds.left + NATIVE_UI_MESSAGE.textInsetX,
-        y: bounds.top + NATIVE_UI_MESSAGE.titleBaselineOffset,
-      },
-    },
-    {
-      kind: 'text',
-      label: 'message:body',
-      text: {
-        align: 'left',
-        font: 'medium',
-        lineHeight: NATIVE_UI_MESSAGE.bodyLineHeight,
-        maxWidth: 400,
-        text: spec.body,
-        tint: 0xffffff,
-        x: bounds.left + NATIVE_UI_MESSAGE.textInsetX,
-        y: bounds.top + NATIVE_UI_MESSAGE.bodyBaselineOffset,
-      },
-    },
   )
+  if (spec.lines) {
+    nodes.push(...spec.lines.map((line, index): NativeUiTextNode => ({
+      kind: 'text',
+      label: `message:line-${index}`,
+      text: {
+        align: 'left',
+        font: line.font,
+        lineHeight: line.lineHeight,
+        text: line.text,
+        tint: line.tint,
+        x: line.x,
+        y: line.baselineY,
+      },
+    })))
+  } else {
+    nodes.push(
+      {
+        kind: 'text',
+        label: 'message:title',
+        text: {
+          align: 'left',
+          font: 'menu',
+          maxWidth: NATIVE_UI_MESSAGE.wrapWidth,
+          text: spec.title!,
+          tint: 0xffffff,
+          x: bounds.left + NATIVE_UI_MESSAGE.textInsetX,
+          y: bounds.top + NATIVE_UI_MESSAGE.titleBaselineOffset,
+        },
+      },
+      {
+        kind: 'text',
+        label: 'message:body',
+        text: {
+          align: 'left',
+          font: 'medium',
+          lineHeight: NATIVE_UI_MESSAGE.bodyLineHeight,
+          maxWidth: NATIVE_UI_MESSAGE.wrapWidth,
+          text: spec.body!,
+          tint: 0xffffff,
+          x: bounds.left + NATIVE_UI_MESSAGE.textInsetX,
+          y: bounds.top + NATIVE_UI_MESSAGE.bodyBaselineOffset,
+        },
+      },
+    )
+  }
   for (const [x, y, scale] of [
     [centerX, bounds.top + bounds.height + 50, 1],
     [centerX - 75, bounds.top + bounds.height + 37, 0.75],

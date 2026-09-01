@@ -153,7 +153,6 @@ import {
   HUB_UNFORGE_TARGET,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
-  HUB_STANDARD_NOTICE_BUTTON_LAYOUTS,
   hubNpcSelectorClampScroll,
   hubNpcSelectorDragScroll,
   hubNpcSelectorVisibleRows,
@@ -174,6 +173,8 @@ import {
   hubInventoryVisibleSlot,
   hubOwnedPerkSlotRect,
   hubShopSlotPosition,
+  hubStandardNoticeLayout,
+  type HubStandardNotice,
 } from './renderer/hub-inventory-render-contract.ts'
 import './hub-inventory.css'
 
@@ -214,8 +215,15 @@ interface InventoryFlybyState extends HubInventoryFlybyModel {
   readonly feedbackSequence: number
 }
 
-interface HubInventoryUiNotice extends HubInventoryRendererNotice {
+type HubInventoryUiNotice = HubInventoryRendererNotice & {
   readonly unforgeItemId?: number
+}
+
+function hubStandardNoticeActionRect(
+  notice: HubStandardNotice,
+): readonly [number, number, number, number] {
+  const { height, left, top, width } = hubStandardNoticeLayout(notice).actionBounds
+  return [left, top, width, height]
 }
 
 interface HubNpcChatPresentation {
@@ -1354,6 +1362,8 @@ function NativeHubSurface({
         surface.kind === 'service' ? surface.trader : 'hagatha',
       )
     : null
+  const standardNotice = notice?.variant === 'standard' ? notice : null
+  const nativeNoticeLayout = standardNotice ? hubStandardNoticeLayout(standardNotice) : null
 
   return (
     <div
@@ -1376,6 +1386,33 @@ function NativeHubSurface({
           ? chat.content.key
           : ''}
         data-native-notice={notice?.title ?? ''}
+        data-native-msgbox-action={nativeNoticeLayout
+          ? [
+              nativeNoticeLayout.actionBounds.left,
+              nativeNoticeLayout.actionBounds.top,
+              nativeNoticeLayout.actionBounds.width,
+              nativeNoticeLayout.actionBounds.height,
+            ].join(',')
+          : ''}
+        data-native-msgbox-lines={nativeNoticeLayout
+          ? nativeNoticeLayout.lines.map(({ text }) => text.replaceAll('\n', '\\n')).join('|')
+          : ''}
+        data-native-msgbox-frame={nativeNoticeLayout
+          ? [
+              nativeNoticeLayout.frameBounds.left,
+              nativeNoticeLayout.frameBounds.top,
+              nativeNoticeLayout.frameBounds.width,
+              nativeNoticeLayout.frameBounds.height,
+            ].join(',')
+          : ''}
+        data-native-msgbox-panel={nativeNoticeLayout
+          ? [
+              nativeNoticeLayout.panelBounds.left,
+              nativeNoticeLayout.panelBounds.top,
+              nativeNoticeLayout.panelBounds.width,
+              nativeNoticeLayout.panelBounds.height,
+            ].join(',')
+          : ''}
         data-native-inventory-selection={inventorySelection
           ? `${inventorySelection.owner}:${inventorySelection.equipmentSlot ?? inventorySelection.id}`
           : ''}
@@ -1435,17 +1472,15 @@ function NativeHubSurface({
           ) : notice ? (
             <>
               <span className="hub-native-ui-semantic" role="alert">
-                {notice.title} {notice.summary ? `${notice.summary} ` : ''}{notice.body}
+                {notice.title} {'summary' in notice && notice.summary ? `${notice.summary} ` : ''}{notice.body}
               </span>
               <NativeAction
                 label={notice.actionLabel}
-                rect={notice.variant === 'unforge-confirmation'
-                  ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
-                  : notice.variant === 'unforge-result'
-                    ? HUB_UNFORGE_RESULT.primaryButtonRect
-                    : HUB_STANDARD_NOTICE_BUTTON_LAYOUTS[
-                        notice.standardLayout ?? 'compact'
-                      ].actionRect}
+                rect={notice.variant === 'standard'
+                  ? hubStandardNoticeActionRect(notice)
+                  : notice.variant === 'unforge-confirmation'
+                    ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
+                    : HUB_UNFORGE_RESULT.primaryButtonRect}
                 onClick={() => {
                   setPressedControl(null)
                   click(() => {

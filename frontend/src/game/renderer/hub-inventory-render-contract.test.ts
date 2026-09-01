@@ -21,15 +21,12 @@ import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   nativeTutorialAmuletItem,
 } from '../core-kernels/native-tutorial.ts'
-import { NATIVE_UI_BUTTON } from '../native-ui/native-ui-plan.ts'
-import { layoutNativeUiText, measureNativeUiText } from '../native-ui/native-ui-text.ts'
 import {
   HAGATHA_NATIVE_TOOLTIP_LINES,
   HUB_CHAT_PANEL,
   HUB_CHAT_INLINE_EMPHASIS,
   HUB_DOWSING_FIELD,
   HUB_DYE_CLOTHING,
-  HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
   HUB_DOWSING_FLASH,
   HUB_DOWSING_INSUFFICIENT_GOLD,
@@ -48,6 +45,7 @@ import {
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_MODAL_HUD_CONTROLS,
+  HUB_MSGBOX_ART,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
@@ -57,7 +55,6 @@ import {
   HUB_SACK_PAGE_TRANSITION,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
-  HUB_STANDARD_NOTICE_BUTTON_LAYOUTS,
   HUB_STOREGRID_SELECTED_RECORDS,
   HUB_SHOP_TEXT,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
@@ -73,6 +70,7 @@ import {
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
   hubHagathaFullMindNotice,
+  hubStandardNoticeLayout,
   hubHagathaOfferSlotPosition,
   hubHagathaPerkSlotAlpha,
   hubHagathaTonicPromptCenter,
@@ -959,28 +957,17 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
   })
   assert.equal(HUB_DOWSING_INSUFFICIENT_GOLD.title, 'NOT ENOUGH GOLD!')
   assert.match(HUB_DOWSING_INSUFFICIENT_GOLD.body, /endless, swirling, impossible colors/)
-  assert.deepEqual(hubHagathaFullMindNotice(27), {
-    actionLabel: 'OKAY',
-    body: "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!",
-    standardLayout: 'roomy',
-    title: 'YOUR MIND IS FULL!',
-  })
-  assert.deepEqual(hubHagathaFullMindNotice(0), {
-    actionLabel: 'OKAY',
-    body: "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
-    standardLayout: 'roomy',
-    title: 'YOUR MIND IS FULL!',
-  })
-  assert.deepEqual(HUB_STANDARD_NOTICE_BUTTON_LAYOUTS, {
-    compact: {
-      actionRect: [702, 397.5, 196, 69],
-      textBaselineY: 440,
-    },
-    roomy: {
-      actionRect: [675, 450, 250, 69],
-      textBaselineY: 492.5,
-    },
-  })
+  const tonicFull = hubHagathaFullMindNotice(27)
+  const ordinaryFull = hubHagathaFullMindNotice(0)
+  assert.equal(tonicFull.title, 'YOUR MIND IS FULL!')
+  assert.equal(
+    tonicFull.body,
+    "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!",
+  )
+  assert.equal(
+    ordinaryFull.body,
+    "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
+  )
   assert.deepEqual(HUB_DOWSING_PREROLL, {
     buttonActionRect: [675, 265.5, 250, 69],
     feeTextBaselineY: 322.5,
@@ -988,54 +975,15 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     mirrorPromptRect: [693, 54.5, 214, 41],
     referenceDropRect: [750, 101, 100, 149],
   })
-  assert.deepEqual(HUB_DOWSING_MSGBOX, {
-    arrowCentersAndScales: [[800, 592, 1], [725, 579, 0.75], [875, 579, 0.75]],
-    bodyLeft: 609,
-    bodyMaxWidth: 382,
-    bodyTextBaselineY: 287.5,
+  assert.deepEqual(HUB_MSGBOX_ART, {
     horizontalEdgeRecord: 10,
     interiorBackgroundRecord: 49,
-    interiorClipRect: [535.5, 158, 529, 384],
     interiorFill: 'tiled-clipped',
     innerPanelEdgeUvOrigin: 0.95,
     innerPanelRecord: 17,
-    innerPanelRect: [540.5, 163, 519, 374],
-    innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]],
-    outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]],
     primaryButtonTextTint: 0xd9ba70,
-    skullHeaderCenter: [800, 121],
-    titleTextBaselineY: 252,
     verticalEdgeRecord: 79,
   })
-  const standardNotices = [
-    HUB_DOWSING_INSUFFICIENT_GOLD,
-    hubHagathaFullMindNotice(0),
-    hubHagathaFullMindNotice(27),
-    HUB_HAT_REMOVAL_MSGBOX,
-    HUB_ROBE_REMOVAL_MSGBOX,
-  ] as const
-  for (const notice of standardNotices) {
-    const standardLayout = 'standardLayout' in notice ? notice.standardLayout : 'compact'
-    const titleFont = 'titleFont' in notice ? notice.titleFont : 'menu'
-    const body = layoutNativeUiText({
-      font: 'medium',
-      lineHeight: 17,
-      maxWidth: HUB_DOWSING_MSGBOX.bodyMaxWidth,
-      text: notice.body,
-      x: HUB_DOWSING_MSGBOX.bodyLeft,
-      y: HUB_DOWSING_MSGBOX.bodyTextBaselineY,
-    })
-    const button = HUB_STANDARD_NOTICE_BUTTON_LAYOUTS[standardLayout]
-    assert.ok(
-      HUB_DOWSING_MSGBOX.bodyTextBaselineY + body.height
-        < button.actionRect[1] - NATIVE_UI_BUTTON.surround,
-      `${notice.title} body collides with its action chrome`,
-    )
-    assert.ok(
-      measureNativeUiText(notice.title, titleFont) <= HUB_DOWSING_MSGBOX.bodyMaxWidth,
-      `${notice.title} exceeds its title lane`,
-    )
-  }
   assert.deepEqual(HUB_HAGATHA_PERK_PANE, {
     columns: 3,
     innerHeight: 230,
@@ -1111,11 +1059,85 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
   }), null)
 })
 
+test('all standard Hub notices derive their native content-sized panels and compact action', () => {
+  const cases = [
+    [
+      HUB_DOWSING_INSUFFICIENT_GOLD,
+      [585.5, 208, 429, 284],
+      [702, 397.5, 196, 69],
+      [
+        'NOT ENOUGH GOLD!',
+        'Peering into the mirror at the endless,\nswirling, impossible colors of the ether is\ndebilitating.  It is unthinkable that anyone\nwould do so without just compensation,\nplus a little extra.',
+        '',
+      ],
+    ],
+    [
+      hubHagathaFullMindNotice(0),
+      [580.5, 191.5, 439, 317],
+      [702, 414, 196, 69],
+      [
+        'YOUR MIND IS FULL!',
+        'The Thaumic Covalence Meridian of your\ncortex is full and cannot hold more\ncharms!',
+        '',
+        "Drinking Hagatha's tonic can sublimate the\nmemetic sensorial pathways to allow\nmore charms, but only if you're not\nalready overloaded.",
+      ],
+    ],
+    [
+      hubHagathaFullMindNotice(27),
+      [577.5, 224.5, 445, 251],
+      [702, 381, 196, 69],
+      [
+        'YOUR MIND IS FULL!',
+        'Because the divinatorial phlogiston of your\nneurologic peridium is already at full\ncapacity, drinking Hagatha\'s tonic would\ncause your head to explode!',
+      ],
+    ],
+    [
+      HUB_HAT_REMOVAL_MSGBOX,
+      [579, 271, 442, 358],
+      [702, 534.5, 196, 69],
+      [
+        'A WIZARD WOULD NEVER\nREMOVE HIS HAT!',
+        'A wizard might switch hats.  A wizard might\neven wear his hat at a jaunty angle.  But a\nwizard would never, under any\ncircumstances, remove his hat altogether.',
+        '',
+        "After all, if you're not wearing a wizard\nhat, how would people know to be awed by\nthe presence of a wizard?",
+        '',
+      ],
+    ],
+    [
+      HUB_ROBE_REMOVAL_MSGBOX,
+      [584.5, 262.5, 431, 375],
+      [702, 543, 196, 69],
+      [
+        'A WIZARD WOULD NEVER\nREMOVE HIS ROBE!',
+        'A long, intimidating flowing robe looks\ndebonaire on both a gluttonously fat slob\nand a pathetically wasted weakling.',
+        '',
+        "Strip away the robe and people might make\ncomments about the kind of physique you\nget from years in wizarding school.  And\nthen you'd have a completely avoidable\ndisintegration on your conscience.",
+        '',
+      ],
+    ],
+  ] as const
+  for (const [notice, panelBounds, actionBounds, lines] of cases) {
+    const layout = hubStandardNoticeLayout(notice)
+    assert.deepEqual(
+      [layout.panelBounds.left, layout.panelBounds.top, layout.panelBounds.width, layout.panelBounds.height],
+      panelBounds,
+    )
+    assert.deepEqual(
+      [layout.actionBounds.left, layout.actionBounds.top, layout.actionBounds.width, layout.actionBounds.height],
+      actionBounds,
+    )
+    assert.deepEqual(layout.lines.map(({ text }) => text), lines)
+  }
+})
+
 test('every Hub standard button consumes the shared body and UI.54 surround plan', () => {
   assert.equal(hubInventoryRendererSource.match(/addNativeButton\(/g)?.length, 4)
   assert.equal(hubInventoryRendererSource.match(/planNativeUiButtonChrome\(/g)?.length, 1)
+  assert.match(hubInventoryRendererSource, /planNativeUiMessageFrame\(/)
+  assert.match(hubInventoryRendererSource, /hubStandardNoticeLayout\(notice\)/)
   assert.doesNotMatch(hubInventoryRendererSource, /buttonSideCenters|primaryButtonSideCenters/)
   assert.doesNotMatch(hubInventoryRendererSource, /hubNativeLabeledControlPresentation/)
+  assert.doesNotMatch(hubInventoryRendererSource, /standardLayout|notice\.titleFont|HUB_DOWSING_MSGBOX/)
   assert.match(hubInventoryRendererSource, /pressedControl === 'message-secondary'/)
 })
 
