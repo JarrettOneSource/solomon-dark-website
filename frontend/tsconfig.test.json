@@ -81,6 +81,7 @@
     "src/game/client/boneyard-presentation-timeline.test.ts",
     "src/game/client/hub-presentation-timeline.ts",
     "src/game/client/hub-presentation-timeline.test.ts",
+    "src/game/client/primary-spell-presentation-quality.test.ts",
     "src/game/input/movement-input.ts",
     "src/game/input/movement-input.test.ts",
     "src/game/input/gamepad-menu-navigation.ts",
