@@ -35,13 +35,15 @@ const hostElement = process.env.SDR_GAME_TRADER_HOST_ELEMENT || 'Fire'
 const screenshotRoot = process.env.SDR_GAME_TRADER_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-trader'
 const singleClient = process.env.SDR_GAME_TRADER_SINGLE_CLIENT === '1'
 const hagathaCapacityOnly = process.argv.includes('--hagatha-capacity-only')
+const hagathaLayoutOnly = process.argv.includes('--hagatha-layout-only')
+const focusedHagatha = hagathaCapacityOnly || hagathaLayoutOnly
 const rendererLifecycleOnly = process.argv.includes('--renderer-lifecycle-only')
 const productionBuild = process.env.SDR_GAME_TRADER_PRODUCTION === '1'
 let staticServer = null
 let gameHost = null
 let gameCredential = null
 let baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
-if (hagathaCapacityOnly && productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
+if (focusedHagatha && productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
   staticServer = await startStaticClientServer({
     root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
   })
@@ -73,7 +75,7 @@ const browserErrors = []
 const failedRequests = []
 const failedResponses = []
 for (const page of [hostPage, guestPage]) {
-  if (hagathaCapacityOnly) {
+  if (focusedHagatha) {
     await page.addInitScript((key) => {
       const current = JSON.parse(localStorage.getItem(key) || '{}')
       localStorage.setItem(key, JSON.stringify({ ...current, enableCheats: true }))
@@ -146,7 +148,7 @@ for (const page of [hostPage, guestPage]) {
 }
 
 try {
-  if (hagathaCapacityOnly) {
+  if (focusedHagatha) {
     step('seeding the focused cheat-mode Hub save')
     await seedLocalSave(hostPage, createHagathaCapacitySave())
     step('entering the saved host Hub')
@@ -168,14 +170,17 @@ try {
   if (!singleClient) assert.equal(await inventoryGold(guestPage), 500)
   await focusPage(hostPage)
   const hostStartingGold = await inventoryGold(hostPage, true)
-  assert.equal(hostStartingGold, hagathaCapacityOnly ? 100_000 : 500)
-  step(hagathaCapacityOnly
+  assert.equal(hostStartingGold, focusedHagatha ? 100_000 : 500)
+  step(focusedHagatha
     ? 'focused host restored the cheat-funded 100,000 gold save'
     : 'both participants start with the retail 500 gold')
-  if (hagathaCapacityOnly) {
+  if (focusedHagatha) {
     await hostPage.locator('.main-menu-page[data-session-cheats-enabled="true"]').waitFor()
     const hagathaCapacity = await exerciseHagathaCapacity(hostPage)
-    const sharedButtons = await exerciseSharedButtonSiblings(hostPage)
+    const roomyRobeNotice = await exerciseRoomyRobeNotice(hostPage)
+    const sharedButtons = hagathaCapacityOnly
+      ? await exerciseSharedButtonSiblings(hostPage)
+      : null
     assert.deepEqual(browserErrors, [])
     assert.deepEqual(failedRequests, [])
     assert.deepEqual(failedResponses, [])
@@ -187,10 +192,12 @@ try {
       failedResponses,
       hagathaCapacity,
       host: await pageReceipt(hostPage),
+      roomyRobeNotice,
       sharedButtons,
       status: 'ok',
     }
-    await writeFile(`${screenshotRoot}-hagatha-capacity-receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`)
+    const receiptKind = hagathaLayoutOnly ? 'hagatha-layout' : 'hagatha-capacity'
+    await writeFile(`${screenshotRoot}-${receiptKind}-receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`)
     process.stdout.write(`${JSON.stringify(receipt)}\n`)
     step('focused Tonic-inclusive Hagatha capacity receipt complete')
     await gameHost?.close()
@@ -1037,8 +1044,14 @@ async function exerciseHagathaCapacity(page) {
   await hagatha.waitFor()
   await waitForNativeSurfaceSettled(hagatha)
   hagatha = await captureHagathaCapacityPresentation(page, hagatha, 3)
+  const initialOfferLayout = await hagathaOfferLayout(hagatha, [0, 1, 6, 7])
+  assertBoxNear(initialOfferLayout[0], { height: 72, width: 72, x: 539, y: 56.5 })
+  assertBoxNear(initialOfferLayout[1], { height: 72, width: 72, x: 614, y: 56.5 })
+  assertBoxNear(initialOfferLayout[6], { height: 72, width: 72, x: 989, y: 56.5 })
+  assertBoxNear(initialOfferLayout[7], { height: 72, width: 72, x: 539, y: 131.5 })
 
   const purchases = []
+  let postPurchaseOfferLayout = null
   for (const [selector, count, capacity] of [
     [27, 1, 6],
     [0, 2, 6],
@@ -1048,6 +1061,11 @@ async function exerciseHagathaCapacity(page) {
     [4, 6, 6],
   ]) {
     purchases.push(await buyHagathaSelector(page, hagatha, selector, count, capacity))
+    if (selector === 0) {
+      postPurchaseOfferLayout = await hagathaOfferLayout(hagatha, [1, 2])
+      assertBoxNear(postPurchaseOfferLayout[1], { height: 72, width: 72, x: 539, y: 56.5 })
+      assertBoxNear(postPurchaseOfferLayout[2], { height: 72, width: 72, x: 614, y: 56.5 })
+    }
     if (selector === 27) {
       hagatha = await captureHagathaCapacityPresentation(page, hagatha, capacity)
     }
@@ -1119,10 +1137,12 @@ async function exerciseHagathaCapacity(page) {
     capacity: 9,
     fullMindTonic,
     goldAfterRejection: ordinaryFullMind.goldBefore,
+    initialOfferLayout,
     ordinaryFullMind,
     outcomes,
     presentationCapacities: [3, 6, 9],
     purchases,
+    postPurchaseOfferLayout,
     rejectedSelector,
   }
 }
@@ -1149,7 +1169,7 @@ async function rejectHagathaSelector(
 
   const okay = hagatha.getByRole('button', { name: 'OKAY' })
   const buttonBox = await okay.boundingBox()
-  assertBoxNear(buttonBox, { height: 69, width: 196, x: 702, y: 397.5 })
+  assertBoxNear(buttonBox, { height: 69, width: 250, x: 675, y: 450 })
   const idleChrome = captureButton ? await nativeButtonChromeReceipt(page, buttonBox) : null
   await page.screenshot({ path: `${screenshotRoot}-${screenshotSuffix}.png` })
 
@@ -1171,6 +1191,48 @@ async function rejectHagathaSelector(
   }
   await notice.waitFor({ state: 'detached' })
   return { buttonBox, goldBefore, idleChrome, pressedChrome, selector }
+}
+
+async function hagathaOfferLayout(hagatha, selectors) {
+  return Object.fromEntries(await Promise.all(selectors.map(async (selector) => {
+    const box = await hagatha.locator(`[data-hagatha-selector="${selector}"]`).boundingBox()
+    assert.ok(box, `Hagatha selector ${selector} has no browser geometry`)
+    return [selector, box]
+  })))
+}
+
+async function exerciseRoomyRobeNotice(page) {
+  await page.keyboard.press('i')
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
+  const robe = inventory.getByRole('button', { exact: true, name: 'Robe, Robe' })
+  await dragInventoryPointer(page, inventory, robe, { x: 800, y: 650 })
+  const notice = inventory.getByRole('alert')
+  await notice.waitFor()
+  await waitForNativeNoticeSettled(inventory)
+  assert.match(await notice.innerText(), /A WIZARD WOULD NEVER REMOVE HIS ROBE!/)
+  assert.match(await notice.innerText(), /avoidable disintegration/)
+  const okay = inventory.getByRole('button', { name: 'OKAY' })
+  const buttonBox = await okay.boundingBox()
+  assertBoxNear(buttonBox, { height: 69, width: 250, x: 675, y: 450 })
+  const idleChrome = await nativeButtonChromeReceipt(page, buttonBox)
+  await page.screenshot({ path: `${screenshotRoot}-inventory-robe-warning.png` })
+  await page.mouse.move(
+    buttonBox.x + buttonBox.width / 2,
+    buttonBox.y + buttonBox.height / 2,
+  )
+  await page.mouse.down()
+  await inventory.locator(
+    'xpath=self::*[@data-native-pressed-control="message-primary"]',
+  ).waitFor()
+  const pressedChrome = await nativeButtonChromeReceipt(page, buttonBox)
+  await page.screenshot({ path: `${screenshotRoot}-inventory-robe-warning-pressed.png` })
+  await page.mouse.up()
+  await notice.waitFor({ state: 'detached' })
+  await inventory.getByRole('button', { exact: true, name: 'Robe, Robe' }).waitFor()
+  await closeInventory(page, inventory)
+  return { buttonBox, idleChrome, pressedChrome }
 }
 
 async function nativeButtonChromeReceipt(page, bodyBox) {

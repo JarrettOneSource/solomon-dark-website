@@ -119,6 +119,7 @@ import {
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
+  HUB_STANDARD_NOTICE_BUTTON_LAYOUTS,
   HUB_STOREGRID_SELECTED_RECORDS,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
   HUB_UNFORGE_CONFIRMATION,
@@ -140,6 +141,7 @@ import {
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
   hubHagathaPerkSlotAlpha,
+  hubHagathaOfferSlotPosition,
   hubHagathaTonicPromptCenter,
   hubInventoryEquipmentSlotRects,
   hubInventoryFlybyFrame,
@@ -160,6 +162,7 @@ import {
   hubUnforgeTargetTint,
   type HubTooltipLine,
   type HubTooltipOptions,
+  type HubStandardNoticeLayout,
   type HubSackPageDirection,
 } from './hub-inventory-render-contract.ts'
 import { skillPickerRootTint } from './skill-picker-render-contract.ts'
@@ -186,8 +189,10 @@ export interface HubInventoryRendererNotice {
   readonly body: string
   readonly outcomeTint?: number
   readonly secondaryActionLabel?: string
+  readonly standardLayout?: HubStandardNoticeLayout
   readonly summary?: string
   readonly title: string
+  readonly titleFont?: 'body' | 'menu'
   readonly variant?: 'standard' | 'unforge-confirmation' | 'unforge-result'
 }
 
@@ -2130,7 +2135,7 @@ function buildNotice(
     context,
     noticeLayer,
     notice.title,
-    'menu',
+    notice.titleFont ?? 'menu',
     HUB_DOWSING_MSGBOX.bodyLeft,
     HUB_DOWSING_MSGBOX.titleTextBaselineY,
     { align: 'left', tint: 0xffffff },
@@ -2146,6 +2151,7 @@ function buildNotice(
     noticeLayer,
     notice.actionLabel,
     pressedControl === 'message-primary',
+    notice.standardLayout ?? 'compact',
   )
   layer.addChild(noticeLayer)
 }
@@ -2321,8 +2327,11 @@ function addStoreGrid(
   const addressedItems = owner === 'storage'
     ? new Map(projectInventoryRootSlots(items).map(({ item, slot }) => [slot, item] as const))
     : null
+  const slotPosition = model.trader === 'hagatha'
+    ? hubHagathaOfferSlotPosition
+    : hubShopSlotPosition
   for (let index = 0; index < HUB_SHOP_GRID.retainedCapacity; index += 1) {
-    const { x, y } = hubShopSlotPosition(index)
+    const { x, y } = slotPosition(index)
     const slot = addAtlasSprite(context, layer, 'Inventory', 10, x, y)
     slot.alpha = HUB_SHOP_GRID.slotAlpha
     const item = addressedItems?.get(index) ?? items[index]
@@ -2498,7 +2507,7 @@ function addServiceInspection(
     )
     const offer = model.economy.hagathaOffers[index]
     if (!offer || inspection.owner !== null) return
-    const { x, y } = hubShopSlotPosition(index)
+    const { x, y } = hubHagathaOfferSlotPosition(index)
     addNativeContextualHoverBox(
       context,
       layer,
@@ -2771,16 +2780,18 @@ function addMessageBoxButton(
   layer: Container,
   label: string,
   pressed: boolean,
+  standardLayout: HubStandardNoticeLayout,
 ): void {
+  const layout = HUB_STANDARD_NOTICE_BUTTON_LAYOUTS[standardLayout]
   addNativeButton(
     context,
     layer,
     'message-primary',
     label,
-    HUB_DOWSING_MSGBOX.primaryButtonActionRect,
+    layout.actionRect,
     pressed,
     800,
-    HUB_DOWSING_MSGBOX.primaryButtonTextBaselineY,
+    layout.textBaselineY,
   )
 }
 

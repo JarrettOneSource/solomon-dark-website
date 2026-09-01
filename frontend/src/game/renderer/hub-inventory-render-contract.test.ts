@@ -21,6 +21,8 @@ import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   nativeTutorialAmuletItem,
 } from '../core-kernels/native-tutorial.ts'
+import { NATIVE_UI_BUTTON } from '../native-ui/native-ui-plan.ts'
+import { layoutNativeUiText, measureNativeUiText } from '../native-ui/native-ui-text.ts'
 import {
   HAGATHA_NATIVE_TOOLTIP_LINES,
   HUB_CHAT_PANEL,
@@ -53,6 +55,7 @@ import {
   HUB_SACK_PAGE_TRANSITION,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  HUB_STANDARD_NOTICE_BUTTON_LAYOUTS,
   HUB_STOREGRID_SELECTED_RECORDS,
   HUB_SHOP_TEXT,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
@@ -68,6 +71,7 @@ import {
   hubDyeSelectedPulse,
   hubDyeSwatchRect,
   hubHagathaFullMindNotice,
+  hubHagathaOfferSlotPosition,
   hubHagathaPerkSlotAlpha,
   hubHagathaTonicPromptCenter,
   hubChatTextRuns,
@@ -759,6 +763,16 @@ test('shop and dowsing screens use the recovered stock grids without invented pa
   assert.deepEqual(hubShopSlotPosition(4), { x: 614, y: 56.5 })
   assert.deepEqual(hubShopSlotPosition(27), { x: 989, y: 281.5 })
   assert.throws(() => hubShopSlotPosition(28), /\[0, 27\]/)
+  assert.deepEqual(hubHagathaOfferSlotPosition(0), { x: 539, y: 56.5 })
+  assert.deepEqual(hubHagathaOfferSlotPosition(1), { x: 614, y: 56.5 })
+  assert.deepEqual(hubHagathaOfferSlotPosition(6), { x: 989, y: 56.5 })
+  assert.deepEqual(hubHagathaOfferSlotPosition(7), { x: 539, y: 131.5 })
+  assert.deepEqual(hubHagathaOfferSlotPosition(27), { x: 989, y: 281.5 })
+  assert.equal(new Set(Array.from({ length: 28 }, (_, index) => {
+    const { x, y } = hubHagathaOfferSlotPosition(index)
+    return `${x}:${y}`
+  })).size, 28)
+  assert.throws(() => hubHagathaOfferSlotPosition(28), /\[0, 27\]/)
   assert.deepEqual(HUB_DOWSING_GRID, {
     cellSize: 72,
     columns: 3,
@@ -889,12 +903,24 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
   assert.deepEqual(hubHagathaFullMindNotice(27), {
     actionLabel: 'OKAY',
     body: "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!",
+    standardLayout: 'roomy',
     title: 'YOUR MIND IS FULL!',
   })
   assert.deepEqual(hubHagathaFullMindNotice(0), {
     actionLabel: 'OKAY',
     body: "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
+    standardLayout: 'roomy',
     title: 'YOUR MIND IS FULL!',
+  })
+  assert.deepEqual(HUB_STANDARD_NOTICE_BUTTON_LAYOUTS, {
+    compact: {
+      actionRect: [702, 397.5, 196, 69],
+      textBaselineY: 440,
+    },
+    roomy: {
+      actionRect: [675, 450, 250, 69],
+      textBaselineY: 492.5,
+    },
   })
   assert.deepEqual(HUB_DOWSING_PREROLL, {
     buttonActionRect: [675, 265.5, 250, 69],
@@ -917,13 +943,40 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     innerPanelRect: [540.5, 163, 519, 374],
     innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]],
     outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]],
-    primaryButtonActionRect: [702, 397.5, 196, 69],
-    primaryButtonTextBaselineY: 440,
     primaryButtonTextTint: 0xd9ba70,
     skullHeaderCenter: [800, 121],
     titleTextBaselineY: 252,
     verticalEdgeRecord: 79,
   })
+  const standardNotices = [
+    HUB_DOWSING_INSUFFICIENT_GOLD,
+    hubHagathaFullMindNotice(0),
+    hubHagathaFullMindNotice(27),
+    HUB_HAT_REMOVAL_MSGBOX,
+    HUB_ROBE_REMOVAL_MSGBOX,
+  ] as const
+  for (const notice of standardNotices) {
+    const standardLayout = 'standardLayout' in notice ? notice.standardLayout : 'compact'
+    const titleFont = 'titleFont' in notice ? notice.titleFont : 'menu'
+    const body = layoutNativeUiText({
+      font: 'medium',
+      lineHeight: 17,
+      maxWidth: HUB_DOWSING_MSGBOX.bodyMaxWidth,
+      text: notice.body,
+      x: HUB_DOWSING_MSGBOX.bodyLeft,
+      y: HUB_DOWSING_MSGBOX.bodyTextBaselineY,
+    })
+    const button = HUB_STANDARD_NOTICE_BUTTON_LAYOUTS[standardLayout]
+    assert.ok(
+      HUB_DOWSING_MSGBOX.bodyTextBaselineY + body.height
+        < button.actionRect[1] - NATIVE_UI_BUTTON.surround,
+      `${notice.title} body collides with its action chrome`,
+    )
+    assert.ok(
+      measureNativeUiText(notice.title, titleFont) <= HUB_DOWSING_MSGBOX.bodyMaxWidth,
+      `${notice.title} exceeds its title lane`,
+    )
+  }
   assert.deepEqual(HUB_HAGATHA_PERK_PANE, {
     columns: 3,
     innerHeight: 238,

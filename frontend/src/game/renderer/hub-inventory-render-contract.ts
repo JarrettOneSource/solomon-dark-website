@@ -762,13 +762,24 @@ export const HUB_DOWSING_MSGBOX = {
   innerPanelRect: [540.5, 163, 519, 374] as const,
   innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]] as const,
   outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]] as const,
-  primaryButtonActionRect: [702, 397.5, 196, 69] as const,
-  primaryButtonTextBaselineY: 440,
   primaryButtonTextTint: 0xd9ba70,
   skullHeaderCenter: [800, 121] as const,
   titleTextBaselineY: 252,
   verticalEdgeRecord: 79,
 } as const
+
+export const HUB_STANDARD_NOTICE_BUTTON_LAYOUTS = {
+  compact: {
+    actionRect: [702, 397.5, 196, 69] as const,
+    textBaselineY: 440,
+  },
+  roomy: {
+    actionRect: [675, 450, 250, 69] as const,
+    textBaselineY: 492.5,
+  },
+} as const
+
+export type HubStandardNoticeLayout = keyof typeof HUB_STANDARD_NOTICE_BUTTON_LAYOUTS
 
 export const HUB_NATIVE_UI_TIMING = {
   chatAcceleratedScrollPerTick: 0.8,
@@ -842,6 +853,7 @@ export function hubHagathaFullMindNotice(selector: number) {
     body: selector === 27
       ? "Because the divinatorial phlogiston of your neurologic peridium is already at full capacity, drinking Hagatha's tonic would cause your head to explode!"
       : "The Thaumic Covalence Meridian of your cortex is full and cannot hold more charms!\n\nDrinking Hagatha's tonic can sublimate the memetic sensorial pathways to allow more charms, but only if you're not already overloaded.",
+    standardLayout: 'roomy',
     title: 'YOUR MIND IS FULL!',
   } as const
 }
@@ -849,13 +861,17 @@ export function hubHagathaFullMindNotice(selector: number) {
 export const HUB_HAT_REMOVAL_MSGBOX = {
   actionLabel: 'OKAY',
   body: "A wizard might switch hats.  A wizard might even wear his hat at a jaunty angle.  But a wizard would never, under any circumstances, remove his hat altogether.\n\nAfter all, if you're not wearing a wizard hat, how would people know to be awed by the presence of a wizard?",
+  standardLayout: 'roomy',
   title: 'A WIZARD WOULD NEVER REMOVE HIS HAT!',
+  titleFont: 'body',
 } as const
 
 export const HUB_ROBE_REMOVAL_MSGBOX = {
   actionLabel: 'OKAY',
   body: "A long, intimidating flowing robe looks debonaire on both a gluttonously fat slob and a pathetically wasted weakling.\n\nStrip away the robe and people might make comments about the kind of physique you get from years in wizarding school.  And then you'd have a completely avoidable disintegration on your conscience.",
+  standardLayout: 'roomy',
   title: 'A WIZARD WOULD NEVER REMOVE HIS ROBE!',
+  titleFont: 'body',
 } as const
 
 export const HUB_NATIVE_UI_SURFACES = [
@@ -1337,6 +1353,16 @@ export function hubShopSlotPosition(index: number): { x: number; y: number } {
   return {
     x: HUB_SHOP_GRID.left + Math.floor(index / HUB_SHOP_GRID.rows) * HUB_SHOP_GRID.pitchX,
     y: HUB_SHOP_GRID.top + (index % HUB_SHOP_GRID.rows) * HUB_SHOP_GRID.pitchY,
+  }
+}
+
+export function hubHagathaOfferSlotPosition(index: number): { x: number; y: number } {
+  if (!Number.isInteger(index) || index < 0 || index >= HUB_SHOP_GRID.retainedCapacity) {
+    throw new RangeError('Hagatha offer slot index must be within [0, 27]')
+  }
+  return {
+    x: HUB_SHOP_GRID.left + (index % HUB_SHOP_GRID.columns) * HUB_SHOP_GRID.pitchX,
+    y: HUB_SHOP_GRID.top + Math.floor(index / HUB_SHOP_GRID.columns) * HUB_SHOP_GRID.pitchY,
   }
 }
 

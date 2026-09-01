@@ -904,3 +904,144 @@ Hub-specific mask:
 Required closure: recursive plan-node tests in both adapters, exact Boast
 viewport/offset tests, DOM workbench drag proof, real Hub stock/mod drag proof,
 the architecture import fence, and the canonical Mac validation gate.
+
+## 2026-08-31 — Reopened: long Hub notices and readable action-row geometry
+
+### Reported smell and parity question
+
+- The owner reports that Hagatha's `YOUR MIND IS FULL!` `OKAY` control covers
+  the message copy, is too narrow, and should move down. The separately reached
+  `A WIZARD WOULD NEVER REMOVE HIS ROBE!` warning is also visibly broken.
+- This is a secondary report in the shared Hub MsgBox path. The preceding
+  Button reopening proved the stock compact HotRect and chrome, but treated
+  placement as safe without measuring every complete authored message against
+  that row. The missing membership check was content clearance.
+- Stock retains the compact one-button row. The owner explicitly requests a
+  Website presentation extension for the long Hagatha and protected-garment
+  warnings: use the existing 250-pixel standard-button width and move its row
+  down while preserving the fixed frame, copy, action, press state, and
+  lifecycle.
+- Falsifiers are a body layout whose last glyph clears the current surround, a
+  protected-garment title which fits the current menu-font lane, a separate
+  renderer/action rectangle which does not share the notice layout, or a
+  short Dowsing message which must change to fix the reported members.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Owner report | 2026-08-31 report in this task | Hagatha's full-mind button covers copy and should be lower/wider; the robe-removal message is awkward and broken | high for desired Website behavior |
+| Current Mac browser | Website `26f042ff7b5a04076e4afe320b7f51e582933eea`, macOS Chrome production bundle, 1600 by 900; temporary `/tmp/hagatha-dialog-grid-baseline-hagatha-capacity-rejected.png`, SHA-256 `b2f9ec603dd3f87482f8242e1d7923b904edda9ac185c207175045130fb6de2f` | The ordinary full-mind last line is painted through the narrow `OKAY` surround. The body is visibly occluded rather than merely close to the hit rectangle | high |
+| Exact text-layout probe | `layoutNativeUiText`, `Fonts` medium/menu metrics, current authored strings and `HUB_DOWSING_MSGBOX` at the same Website revision | Ordinary full mind and Hat use eight body lines ending at baseline `406.5`; Robe uses nine ending at `423.5`; the current button body begins at `397.5` and its surround at `391.5`. Hat/Robe menu titles measure `596/617` pixels against the 382-pixel copy lane | high |
+| Existing retail evidence | `MsgBox::Render 0x005C4530`, action constructor `0x005AB5C0`, shared `UiLabeledControl_Render 0x005C60F0`, retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Stock owns the 196 by 69 compact one-button body at y `397.5`; `UI.101/.102/.54`, pressed `[6,6]`, and 196-pixel HotRect remain the native baseline already recovered above | high |
+| Current causal trace | `hub-inventory-render-contract.ts`, `hub-inventory-renderer.ts`, `HubInventoryUi.tsx` | Full-mind, Dowsing, Hat, and Robe all default to one frame and one button rectangle. Visible chrome and the semantic `NativeAction` both consume that rectangle, so a layout change must be shared by both consumers | high |
+
+The baseline smoke completed both Hagatha rejection branches with empty page,
+console, failed-request, failed-response, and WebGL-loss arrays. Its later
+Shlorio sibling leg encountered a black canvas before its chrome probe; that
+later unrelated failure is not used as evidence for this change.
+
+### System boundary and membership inventory
+
+Native system: the fixed Hub one-button MsgBox from complete authored title/body
+content through text layout, button chrome and HotRect, input state, dismissal,
+and teardown.
+
+| Member / branch | Native/current source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Hagatha ordinary full-mind warning | PerkShop rejection, shared MsgBox | `out-of-system` for compact placement by explicit owner request; stock copy/action retained | exact line-layout clearance plus Mac capture |
+| Hagatha Tonic full-mind warning | selector-27 rejection, same MsgBox | `out-of-system` for shared Hagatha layout; stock copy/action retained | same roomy row and pressed-state browser assertion |
+| protected Hat warning | InventoryScreen equipment rejection | `out-of-system` for shared protected-garment readability; stock copy/action retained | title-fit and body-clearance test |
+| protected Robe warning | InventoryScreen equipment rejection | `out-of-system` for requested readable layout; stock copy/action retained | dedicated browser capture and title/body clearance |
+| Dowsing insufficient-gold warning | DowsingShop rejection | `verified-already-at-parity`; compact native row remains | unchanged `[702,397.5,196,69]` contract |
+| standard button idle/pressed/surround | `UI.101/.102/.54`, `0x005C60F0` | `verified-already-at-parity` | both compact and roomy rows use the same shared chrome plan and `[6,6]` press offset |
+| semantic pointer/keyboard action | `Button` state writers plus Website accessibility adapter | `exact-ported` within each chosen body rectangle | visual and semantic rectangles come from one selected layout |
+| notice reveal, curtain, audio, dismissal, and teardown | existing Hub renderer/UI owner | `verified-already-at-parity` | no state-machine or authority changes |
+| Unforge content-sized primary/secondary/result messages | separate content-sized MsgBox branch | `out-of-system` for this reopening | existing geometry/tests remain unchanged |
+| title Kill/Tutorial DOM MsgBoxes and SimpleMenu rows | reusable UI kit outside Hub standard notice owner | `out-of-system` | no caller consumes the Hub roomy layout |
+
+No member is blocked by the browser platform.
+
+### Ownership and behavioral contract
+
+- The notice value selects compact versus roomy presentation; the renderer and
+  semantic action layer must consume the same selected rectangle. The message
+  still has one action and dismisses only on that action or its existing back
+  route.
+- Compact Dowsing remains `[702,397.5,196,69]`. The roomy row is centered at
+  x `800`, uses the established DOWSE body width `250`, begins at y `450`,
+  and keeps the established label baseline offset `42.5`, yielding baseline
+  y `492.5`.
+- The roomy surround begins at y `444`; the longest authored Robe body ends at
+  baseline `423.5` and its full text layout ends at `439.5`, leaving a
+  measurable glyph-to-chrome gap. Its body ends at y `519` and surround at
+  `525`, inside the fixed inner panel ending at
+  y `537`.
+- Full-mind titles retain menu font. Hat/Robe titles use the existing body
+  bitmap font so their measured widths `329/341` fit the 382-pixel text lane;
+  body copy remains medium font with exact authored words and line breaks.
+- This extension changes no economy rejection, equipment ownership, input
+  suspension, gold, audio, network state, save state, or renderer lifetime.
+
+### Web implementation consequence
+
+- Represent the roomy row as an explicit standard-notice layout contract, not
+  a title-string check or renderer-only offset.
+- Tag both full-mind variants and both protected-garment warnings with that
+  layout; keep Dowsing on compact native geometry and Unforge on its separate
+  content-sized branch.
+- Make the Pixi painter and `NativeAction` read the same button rectangle.
+  Retain the common Button chrome/pressed owner without local sprite assembly.
+- Select the smaller stock bitmap font for both protected-garment titles. Do
+  not paraphrase, truncate, CSS-scale, or hide their authored copy.
+
+### Validation contract
+
+- Focused contracts pin compact and roomy rectangles, label baselines, all five
+  notice dispositions, exact line endings, positive body-to-surround clearance,
+  protected-title width, and shared renderer/action geometry.
+- Mac Chrome at 1600 by 900 exercises ordinary and Tonic full-mind rejection,
+  then the Robe warning. Each reports the roomy 250 by 69 action at
+  `[675,450]`, retains populated idle/pressed `UI.54` chrome, shows complete
+  unobscured copy, dismisses once, and leaves page/console/network/WebGL errors
+  empty.
+- Dowsing retains the compact `[702,397.5,196,69]` action, and Unforge retains
+  its existing two-button/result layouts.
+- The exact Mac candidate must pass the focused native-UI/Hub-UI suites and
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+
+### Implementation validation receipt
+
+- `hub-inventory-render-contract.ts` now owns explicit compact and roomy
+  standard-notice button layouts. Full-mind and protected-garment notices
+  select roomy data; Hat/Robe select the existing body bitmap font for their
+  title. `hub-inventory-renderer.ts` and `HubInventoryUi.tsx` consume the same
+  selected action rectangle, so visible chrome and semantic input cannot drift.
+- The Mac red gate reached Hub UI with 64 sibling tests passing and failed only
+  because the new `HUB_STANDARD_NOTICE_BUTTON_LAYOUTS` export did not yet
+  exist. After implementation, the rebased `53ded170` candidate passed the
+  complete `/opt/homebrew/bin/bash ./scripts/validate.sh` gate: 19 backend
+  contracts, formatting/lint with zero errors,
+  every frontend suite including Hub UI `92/92` and the complete Boneyard group,
+  desktop `4/4`, production builds, media policy, and bundle budget. The Game
+  entry remains below the 524,288 raw / 134,144 gzip limits.
+- Mac Chrome at 1600 by 900 exercised ordinary and Tonic full-mind rejection
+  and a real protected-Robe drag. Every `OKAY` action measured
+  `[675,450,250,69]`; idle/pressed surrounds retained both ends and connector
+  pixels, authored copy was unobscured, and Robe remained equipped after
+  dismissal. The structured receipt has SHA-256
+  `9754d79dce2cbedff3cb623bad06d1f0c9fb2fcff01dbf4ad4688676d130111f`;
+  reviewed ordinary, Tonic, and pressed-Robe frames hash to
+  `daf934022bf06f7dda6b224ce0508a09e9f320d30f249a953d55886ea268403c`,
+  `cd6619725d6068c61090cc00244a82aa1ea06e315f3e1ffbf9730702fc6e565f`,
+  and `4ae8b8cbf88a785afab92713e1c59bd87bca442484d3b4a6d33a996356182ba4`.
+  Browser page, console, failed-request, failed-response, and WebGL-loss arrays
+  were empty.
+- Dowsing retains compact `[702,397.5,196,69]`; Unforge retains its established
+  primary/secondary/result layouts. The older broad trader smoke's later
+  DOWSE-chrome pixel threshold remains a separate current-main diagnostic and
+  was neither weakened nor counted as this task's receipt; the task-owned
+  `--hagatha-layout-only` lane stops after the affected members.
+- No browser-platform approximation or material unknown remains. No economy,
+  equipment, protocol, save, audio, or lifecycle behavior changed. Commit,
+  push, deployment, and production restart were not requested or performed.

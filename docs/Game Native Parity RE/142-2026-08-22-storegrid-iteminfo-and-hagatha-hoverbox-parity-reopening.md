@@ -319,3 +319,119 @@ authority, or audio.
   changes them.
 - Publication is authorized after validation but remains pending at this
   receipt point. No deployment or production restart is implied.
+
+## 2026-08-31 — Reopened: Hagatha offer-grid purchase compaction order
+
+### Reported smell and parity question
+
+- The owner requests that Hagatha's charm inventory move left-to-right after a
+  purchase instead of compacting from down to up.
+- The current painter, semantic actions, empty-cell targets, selection, and
+  HoverBox source all consume the common 7-column by 4-row StoreGrid function.
+  That function maps indices column-major: `0..3` descend the first column,
+  then index 4 begins the next column. Removing a purchased offer therefore
+  shifts the following offer upward before it ever shifts left.
+- Retail StoreGrid is column-major and remains the baseline for Fomentius and
+  Luthacus. This task records an explicit owner-authorized Website extension
+  only for Hagatha's offer list: use row-major `0..6` across the first row,
+  then continue on the second row.
+- Falsifiers are an already row-major Hagatha painter, a separate semantic
+  position owner, an economy list which reorders rather than filters after
+  purchase, or a shared StoreGrid change which would be required for Hagatha.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Owner report | 2026-08-31 report in this task | Purchased charms should compact left-to-right, not down-to-up | high for desired Website behavior |
+| Current Mac browser | Website `26f042ff7b5a04076e4afe320b7f51e582933eea`, 1600 by 900 production bundle; capacity-3/6 captures SHA-256 `c03314f1e2ca5b00fdefaa39720be64cc796b592958a2feb9289c71389ffb30f` and `3ee0e666dbcb3ac3f0e2eceef096347a370f6461e1237b9484addef68577f40d` | Hagatha offers visibly descend a column before advancing right; purchase rebuild compacts the filtered list through that same mapping | high |
+| Current causal trace | `hagathaOffers`, `serviceItems`, `addStoreGrid`, `ShopAction`, `EmptyStoreGridActions`, `addServiceInspection`, `hubShopSlotPosition` | Authority preserves selector order and filters the bought selector. Every visual/input/tooltip consumer independently calls the shared column-major position function | high |
+| Existing native evidence | StoreGrid/Shop family in this entry; `HUB_SHOP_GRID` 7 by 4 mapping recovered from retail 0.72.5 | Retail common StoreGrid is column-major. The 3 by 3 owned-perk pane is separately row-major and is not the reported moving offer list | high |
+
+### System boundary and membership inventory
+
+Native system: Hagatha's current offer-vector projection from authoritative
+selector order through StoreGrid painter, selection/input, empty cells,
+contextual HoverBox, purchase rebuild, and teardown.
+
+| Member / branch | Native/current source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Hagatha offer painter, indices 0..27 | `addStoreGrid` plus Skills icons | `out-of-system` for native column-major order by explicit owner request; row-major Website extension | first row indices 0..6 and second-row index 7 |
+| Hagatha offer semantic actions | `ShopAction` | `exact-ported` to the requested projection | action boxes equal painted slot boxes for all 28 indices |
+| Hagatha empty-cell actions | `EmptyStoreGridActions` | `exact-ported` to the requested projection | first empty follows the same row-major occupied prefix |
+| Hagatha selected/special cell | StoreGrid selected records 84/46 | `verified-already-at-parity` apart from projected coordinates | selected art follows the chosen row-major cell |
+| Hagatha offer HoverBox source | `addServiceInspection` | `exact-ported` to the requested projection | source center matches painted/action cell before and after purchase |
+| purchase filter/rebuild and selector order | `hagathaOffers`, `buyHagathaPerk` | `verified-already-at-parity` | no sorting or authority change; next selector shifts left into the vacated prefix |
+| Bargain Bundle and Tonic rows | selector `-1` and 27 offer branches | `exact-ported` to requested projection | both use their vector index; membership/price unchanged |
+| Hagatha owned-perk pane and InventoryScreen page 2 | separate row-major 3 by 3 owner | `verified-already-at-parity` | existing `hubOwnedPerkSlotRect` remains unchanged |
+| Fomentius ordinary StoreGrid | shared retail 7 by 4 owner | `verified-already-at-parity` | remains column-major |
+| Luthacus addressed storage StoreGrid | shared retail 7 by 4 owner plus addressed slots | `verified-already-at-parity` | remains column-major and preserves holes |
+| Shlorio 3 by 3 Dowsing grid | separate `hubDowsingSlotPosition` | `verified-already-at-parity` | existing row-major mapping unchanged |
+| economy, protocol, save, gameplay effects, gold, audio | upstream/downstream non-presentation owners | `out-of-system` | no state or transaction change |
+
+No member is blocked by the browser platform.
+
+### Ownership and behavioral contract
+
+- Authority continues to expose the ordered `hagathaOffers` vector. Buying one
+  member filters/rebuilds that vector; presentation alone maps its current
+  indices into cells.
+- Hagatha maps `x = 539 + (index % 7) * 75` and
+  `y = 56.5 + floor(index / 7) * 75`. Thus indices 0, 1, 6, 7, and 27 are
+  `(539,56.5)`, `(614,56.5)`, `(989,56.5)`, `(539,131.5)`, and
+  `(989,281.5)`.
+- After selector 0 is bought, selector 1 becomes index 0 at `(539,56.5)` and
+  selector 2 becomes index 1 at `(614,56.5)`: compaction is visibly leftward.
+- Painter, action, selected art, empty-cell action, and HoverBox source must
+  consume this exact one projection. Fomentius/Luthacus keep the common
+  column-major mapper; Shlorio and owned perks keep their existing row-major
+  mappers.
+
+### Web implementation consequence
+
+- Add a named Hagatha offer-slot projection beside the native StoreGrid
+  projection. Do not change `hubShopSlotPosition` or reorder the authoritative
+  offer array.
+- Route only Hagatha painter/action/empty/selection/HoverBox consumers through
+  the new projection and remove no common StoreGrid behavior.
+- Keep all offer IDs, prices, tooltips, two-stage activation, purchase results,
+  capacity rejection, and teardown unchanged.
+
+### Validation contract
+
+- Focused tests pin the complete 28-index Hagatha bijection and representative
+  positions 0/1/6/7/27, retain native column-major StoreGrid positions
+  0/1/4/27, and retain the separate Dowsing/owned-perk mappings.
+- A source/component contract proves painter, actions, empty targets, and
+  HoverBox all select Hagatha's mapper without title or selector special cases.
+- Mac Chrome records the first eight offer boxes, buys selector 0, and proves
+  selectors 1 and 2 occupy the first two cells left-to-right. It then completes
+  the existing capacity/rejection path with exact gold and empty error arrays.
+- The exact Mac candidate must pass focused Hub UI tests and the complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate.
+
+### Implementation validation receipt
+
+- `hubHagathaOfferSlotPosition` now owns Hagatha's requested 7-column
+  row-major projection. The Pixi StoreGrid painter and HoverBox source use it;
+  `HubInventoryUi` supplies the same positions to occupied and empty semantic
+  cells. `hubShopSlotPosition`, Dowsing, and owned-perk mappings are unchanged.
+- Focused coverage pins representative row-major indices 0/1/6/7/27, all 28
+  unique cells, invalid bounds, and the existing column-major StoreGrid rows.
+  The exact rebased Mac candidate passed Hub UI `92/92` inside the complete
+  canonical validation receipt recorded in entry 183 above.
+- Mac Chrome recorded initial selector boxes 0, 1, 6, and 7 at
+  `[539,56.5]`, `[614,56.5]`, `[989,56.5]`, and `[539,131.5]`. After selector
+  0 was purchased, selectors 1 and 2 compacted left-to-right into
+  `[539,56.5]` and `[614,56.5]`. Every box remained 72 by 72, the full
+  capacity/rejection/bundle journey completed with exact gold and ordered
+  outcomes, and all browser error arrays were empty.
+- The reviewed initial row-major frame hashes to
+  `0afe18aeeaf3537974dbb58822bf670b70e4ee53490c754f82d04728ee848812`;
+  the complete structured receipt hashes to
+  `9754d79dce2cbedff3cb623bad06d1f0c9fb2fcff01dbf4ad4688676d130111f`.
+  Task-owned captures and receipts are disposable after this ledger result.
+- No member is browser-blocked and no presentation unknown remains. Authority,
+  offer order, prices, purchases, capacity, gameplay effects, protocol, save,
+  and audio are unchanged. Commit, push, and deployment were not requested or
+  performed.

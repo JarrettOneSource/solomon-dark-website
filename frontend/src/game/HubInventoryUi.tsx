@@ -136,7 +136,6 @@ import {
   HUB_DOWSING_GRID,
   HUB_DYE_CLOTHING,
   HUB_DOWSING_INSUFFICIENT_GOLD,
-  HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
@@ -154,6 +153,7 @@ import {
   HUB_UNFORGE_TARGET,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  HUB_STANDARD_NOTICE_BUTTON_LAYOUTS,
   hubNpcSelectorClampScroll,
   hubNpcSelectorDragScroll,
   hubNpcSelectorVisibleRows,
@@ -164,6 +164,7 @@ import {
   hubDyeItemLayerRects,
   hubDyeSwatchRect,
   hubHagathaFullMindNotice,
+  hubHagathaOfferSlotPosition,
   hubHagathaTooltipLines,
   hubInventoryEquipmentSlotRects,
   hubInventoryRootSlot,
@@ -1442,7 +1443,9 @@ function NativeHubSurface({
                   ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
                   : notice.variant === 'unforge-result'
                     ? HUB_UNFORGE_RESULT.primaryButtonRect
-                    : HUB_DOWSING_MSGBOX.primaryButtonActionRect}
+                    : HUB_STANDARD_NOTICE_BUTTON_LAYOUTS[
+                        notice.standardLayout ?? 'compact'
+                      ].actionRect}
                 onClick={() => {
                   setPressedControl(null)
                   click(() => {
@@ -2314,6 +2317,7 @@ function ServiceActions({
             label={`Buy ${offer.name} for ${offer.price} gold`}
             data={{ 'data-hagatha-selector': offer.selector }}
             price={offer.price}
+            position={hubHagathaOfferSlotPosition(index)}
             selected={selection?.id === offer.selector && selection.owner === null}
             onBlur={() => onFocusInspection(null)}
             onClick={() => activateSelection(
@@ -2340,6 +2344,7 @@ function ServiceActions({
         ))}
         <EmptyStoreGridActions
           fromIndex={economy.hagathaOffers.length}
+          positionAt={hubHagathaOfferSlotPosition}
           onClear={() => {
             if (selection === null) return
             onInteractionSound('shop-activation')
@@ -3556,6 +3561,7 @@ function ShopAction({
   onFocus,
   onPointerEnter,
   onPointerLeave,
+  position,
   price,
   selected,
 }: {
@@ -3568,17 +3574,19 @@ function ShopAction({
   onFocus: () => void
   onPointerEnter: () => void
   onPointerLeave: () => void
+  position?: { readonly x: number; readonly y: number }
   price: number
   selected: boolean
 }) {
-  const position = dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index)
+  const slotPosition = position
+    ?? (dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index))
   return (
     <NativeAction
       data={{ ...data, 'data-selected': selected ? 'true' : 'false' }}
       label={label}
       rect={[
-        position.x,
-        position.y,
+        slotPosition.x,
+        slotPosition.y,
         dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
         dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
       ]}
@@ -3601,11 +3609,13 @@ function EmptyStoreGridActions({
   fromIndex,
   occupiedSlots,
   onClear,
+  positionAt,
 }: {
   dowsing?: boolean
   fromIndex: number
   occupiedSlots?: readonly number[]
   onClear: () => void
+  positionAt?: (index: number) => { readonly x: number; readonly y: number }
 }) {
   const capacity = dowsing
     ? HUB_DOWSING_GRID.retainedCapacity
@@ -3615,7 +3625,8 @@ function EmptyStoreGridActions({
     ? Array.from({ length: Math.max(0, capacity - fromIndex) }, (_, offset) => fromIndex + offset)
     : Array.from({ length: capacity }, (_, index) => index).filter((index) => !occupied.has(index))
   return indices.map((index) => {
-    const position = dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index)
+    const position = positionAt?.(index)
+      ?? (dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index))
     return (
       <NativeAction
         key={`empty-store-${index}`}
