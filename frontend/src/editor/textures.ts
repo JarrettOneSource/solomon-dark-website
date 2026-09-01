@@ -18,7 +18,6 @@ import road2Url from '../assets/game/boneyard/textures/road2.png'
 import road3Url from '../assets/game/boneyard/textures/road3.png'
 import road4Url from '../assets/game/boneyard/textures/road4.png'
 import road5Url from '../assets/game/boneyard/textures/road5.png'
-import { spriteImage } from './assets'
 
 export const GROUND_TEXTURE = groundUrl
 
@@ -41,8 +40,3 @@ export const FENCE_GRATE_TEXTURE = fenceGrateUrl
 /** Native road half-width in world pixels at width scale 1 (from the 69-byte
  * record's derived quad). */
 export const ROAD_HALF_WIDTH = 55
-
-/** Shared image cache with the sprite pipeline. */
-export function textureImage(src: string, onReady?: () => void): HTMLImageElement {
-  return spriteImage(src, onReady)
-}

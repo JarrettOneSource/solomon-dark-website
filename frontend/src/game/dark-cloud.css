@@ -654,8 +654,7 @@
 
 /* Developer presence ------------------------------------------------------ */
 
-/* Dev-only roster under the party rows. The backend 404s the feed for
-   everyone else, so styling never has to hide it — it simply never mounts. */
+/* Dev-only roster under the party rows; the backend omits the feed otherwise. */
 .dark-cloud-dev-presence {
   margin: 14px 4px 4px;
   border: 1px solid rgb(147 124 66 / 0.35);

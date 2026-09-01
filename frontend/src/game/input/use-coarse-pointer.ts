@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
  */
 export const COARSE_POINTER_QUERY = '(hover: none) and (pointer: coarse)'
 
-export function coarsePointerActive(): boolean {
+function coarsePointerActive(): boolean {
   return typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia(COARSE_POINTER_QUERY).matches

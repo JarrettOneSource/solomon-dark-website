@@ -22,7 +22,6 @@ import {
   drawNativeWeldDamage,
   nativeWeldAudioPlan,
   nativeGroundSparkPrivateWord,
-  nativeWeldMissileFanHeading,
   releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
   stepNativeWeldProjectile,
@@ -158,17 +157,6 @@ test('Crawling Shock consumes signed pitch then private seed and age per actor',
   assert.deepEqual(spawned.projectiles.map(({ speed }) => speed), [4, 3, 3])
   assert.deepEqual(spawned.rng, age2.state)
   assert.equal(spawned.projectiles[0]!.castPlaybackRate, Math.fround(1 + pitch.value))
-})
-
-test('weld missile fan matches the retail alternating geometry', () => {
-  assert.deepEqual(
-    Array.from({ length: 5 }, (_, index) => nativeWeldMissileFanHeading(0, 5, index)),
-    [0, 340, 20, 320, 40],
-  )
-  assert.deepEqual(
-    Array.from({ length: 4 }, (_, index) => nativeWeldMissileFanHeading(350, 4, index)),
-    [0, 340, 20, 320],
-  )
 })
 
 test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact ticks', () => {

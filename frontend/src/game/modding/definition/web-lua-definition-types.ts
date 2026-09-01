@@ -64,8 +64,6 @@ export const WEB_LUA_RULE_EVENT_NAMES = [
   'wave.started',
 ] as const
 
-export type WebLuaRuleEventName = typeof WEB_LUA_RULE_EVENT_NAMES[number]
-
 export interface WebLuaModIdentity {
   readonly id: string
   readonly name: string

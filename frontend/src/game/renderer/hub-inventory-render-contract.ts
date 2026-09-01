@@ -479,8 +479,6 @@ export const HUB_NPC_SELECTOR = {
   wheelStep: 25,
 } as const
 
-export type HubNpcSelectorKind = 'boast' | 'books' | 'teacher-spells'
-
 export interface HubNpcSelectorVisibleRow {
   readonly index: number
   readonly rect: readonly [left: number, top: number, width: number, height: number]

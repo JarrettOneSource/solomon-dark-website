@@ -85,11 +85,6 @@ export type GameConnectionStage =
   | 'connecting_transport'
   | 'receiving_host_checkpoint'
 
-export const ENGINE_STATUS = 'ready' as const
-
-/** Set when the packaged desktop rebuild has a published release artifact. */
-export const OFFLINE_BUILD_URL: string | null = null
-
 export async function bootGame(options: SessionOptions): Promise<GameSession> {
   validateEndpoint(options.endpoint)
   options.diagnostics?.setEndpoint(options.endpoint.url)

@@ -253,7 +253,7 @@ export function stepBoneyardWaveDirector(
   }
 }
 
-export function stepBoneyardPortalProgram(
+function stepBoneyardPortalProgram(
   source: BoneyardWaveDirectorState,
   context: BoneyardWaveDirectorTickContext,
 ): BoneyardWaveDirectorTickResult {

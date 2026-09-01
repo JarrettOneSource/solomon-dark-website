@@ -286,7 +286,7 @@ function applyDraw(node: HTMLElement, draw: NativeElementVfxDraw, scale: number)
  * The staff orb VFX (`nativeElementVfxPlan`) driven on the 100 Hz game tick;
  * the DOM pool is updated imperatively so the row never re-renders per tick.
  */
-export function HallElementOrb({ element, scale, x, y }: HallElementOrbProps) {
+function HallElementOrb({ element, scale, x, y }: HallElementOrbProps) {
   const root = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const container = root.current

@@ -1,6 +1,6 @@
 import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
 import '@fontsource/cinzel/500.css'
 import '@fontsource/cinzel/700.css'
@@ -38,14 +38,6 @@ const Boneyard = lazy(() => import('./pages/Boneyard'))
 // Library should be made to download a renderer.
 const Game = lazy(() => import('./pages/Game'))
 
-// The party list lived at /classes before the Search Parties rename. The
-// loader's hand-off deep links (/classes?lobby=<id>) and old bookmarks still
-// knock on the old door, so it forwards — query string and all.
-function LegacyClassesRedirect() {
-  const { search } = useLocation()
-  return <Navigate to={{ pathname: '/parties', search }} replace />
-}
-
 const router = createBrowserRouter([
   {
     path: '/boneyards',
@@ -75,7 +67,6 @@ const router = createBrowserRouter([
         ),
       },
       { path: '/parties', element: <SearchParties /> },
-      { path: '/classes', element: <LegacyClassesRedirect /> },
       { path: '/mods', element: <Mods /> },
       { path: '/mods/upload', element: <ModUpload /> },
       { path: '/mods/:slug', element: <ModDetail /> },

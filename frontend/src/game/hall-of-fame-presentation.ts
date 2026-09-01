@@ -129,11 +129,8 @@ export const HALL_PEN_Y = 15
 export const HALL_PEN_X = { kills: 25, perks: 10, survival: -10 } as const
 export const HALL_TILE = { columns: 5, record: 49, rows: 4, size: 264 } as const
 export const HALL_GOLD = 0xd9ba70
-export const HALL_GOLD_RGB = [217, 186, 112] as const
 export const HALL_WHITE = 0xffffff
-export const HALL_BADGE_ALPHA = 0.5
 export const HALL_TICK_MS = 10
-export const HALL_PULSE_PERIOD_TICKS = 120
 export const HALL_OTHER_FRAME_ALPHA = 0.2
 export const HALL_KILLS_FRAME_ALPHA = 0.5
 export const HALL_WIZARD_SCALE = 1.25
@@ -247,7 +244,7 @@ export function hallTileOffset(scrollTop: number): number {
   return offset < 0 ? offset + HALL_TILE.size : offset
 }
 
-export function hallRowHeight(expanded: boolean): number {
+function hallRowHeight(expanded: boolean): number {
   return HALL_ROW_HEIGHT + (expanded ? HALL_EXPANDED_HEIGHT : 0)
 }
 
@@ -357,7 +354,7 @@ export function hallChevronPlacement(centerX: number, centerY: number, expanded:
   }
 }
 
-export function hallExpandedLayout(top: number): HallExpandedLayout {
+function hallExpandedLayout(top: number): HallExpandedLayout {
   const survivalX = HALL_PEN_X.survival
   const perksX = HALL_PEN_X.perks
   const killsX = HALL_PEN_X.kills

@@ -59,22 +59,21 @@ export default function About() {
           <h2>The resurrection</h2>
           <p>
             Solomon Darker is a community web port that raises the unfinished game
-            directly in the browser: an authoritative multiplayer runtime, a sandboxed Lua runtime with the{' '}
-            <span className="font-mono text-sm">sd.*</span> API for community mods,
-            cloud saves, and the Dark Cloud content browser the beta only hinted at.
+            in the browser with multiplayer, community Lua mods, cloud saves, and
+            the Dark Cloud the beta only hinted at.
           </p>
           <ul>
-            <li><strong>Play</strong> — the complete authoritative game running directly in the browser.</li>
-            <li><strong>The Dark Cloud</strong> — subscribed mods, Boneyards, and browser lobbies in the stock game’s own style.</li>
-            <li><strong>The Library</strong> — community web mods, uploaded, versioned, and subscribed by account.</li>
-            <li><strong>Cloud saves</strong> — account-owned save slots with their active mod list.</li>
+            <li><strong>Play</strong> — Solomon Dark running directly in the browser.</li>
+            <li><strong>The Dark Cloud</strong> — mods, Boneyards, and parties in the stock game’s own style.</li>
+            <li><strong>The Library</strong> — publish and subscribe to community web mods.</li>
+            <li><strong>Cloud saves</strong> — sync saves and active mods across machines.</li>
           </ul>
 
           <h2>Credits &amp; thanks</h2>
           <ul>
             <li><strong>Raptisoft</strong> — for the games. This is a love letter, not a heist.</li>
             <li><strong>The preservation community</strong> — for keeping the builds alive.</li>
-            <li><strong>The Solomon Darker project</strong> — reverse engineering, web runtime, Lua mods, and multiplayer.</li>
+            <li><strong>The Solomon Darker project</strong> — for rebuilding the game and its community tools.</li>
           </ul>
           <p>
             Sources:{' '}

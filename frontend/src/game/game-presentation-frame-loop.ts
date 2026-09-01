@@ -250,16 +250,16 @@ let gamePresentationUncapped = false
 
 const gamePresentationScheduler = new GamePresentationFrameScheduler()
 
-export function isGamePresentationUncapped(): boolean {
+function isGamePresentationUncapped(): boolean {
   return gamePresentationUncapped
 }
 
-export function setGamePresentationUncapped(enabled: boolean): void {
+function setGamePresentationUncapped(enabled: boolean): void {
   gamePresentationUncapped = enabled
   gamePresentationScheduler.presentationPolicyChanged()
 }
 
-export function toggleGamePresentationUncapped(): boolean {
+function toggleGamePresentationUncapped(): boolean {
   setGamePresentationUncapped(!gamePresentationUncapped)
   return gamePresentationUncapped
 }

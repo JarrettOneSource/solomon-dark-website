@@ -52,7 +52,6 @@ export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
 export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
 export const NATIVE_FLASH_RESPONSE_RADIUS = 100
-export const NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR = NATIVE_HAGATHA_FACTORS.life
 
 export type PlayerConcentrationSlot = 'a' | 'b'
 export type PlayerStaffDamageLane = 'primary' | 'secondary'
@@ -835,7 +834,7 @@ export function isPlayerSkillConcentrated(
     || source.concentrationSkillIdB === skillId
 }
 
-export function creativityRecognizesConcentration(
+function creativityRecognizesConcentration(
   source: Pick<PlayerSkillRuntimeComponent, 'concentrationSkillIdA'>,
 ): boolean {
   return source.concentrationSkillIdA === 63
@@ -898,19 +897,6 @@ export function nativeSkillClass(skillId: number): number {
   const root = nativeSkillRoot(skillId)
   if (root === null) throw new RangeError(`skill ${skillId} has no native class`)
   return root
-}
-
-export function playerSecondaryRechargeFactor(
-  derived: Pick<PlayerSkillDerivedStats, 'secondaryRechargeFactor'>,
-  modifiers: NativeEquipmentModifiers,
-  skillId: number,
-): number {
-  const classRecharge = modifiers.classRecharge[nativeSkillClass(skillId)]
-  if (classRecharge === undefined) return derived.secondaryRechargeFactor
-  return Math.max(
-    derived.secondaryRechargeFactor,
-    applyNativeEquipmentTransform(classRecharge, 1),
-  )
 }
 
 function applyClassCastSpeed(

@@ -1,7 +1,3 @@
-// Publication papers: compile the plot, lodge it in the Annals, and enter it
-// into the Library as a Boneyard tome. The Librarian's standards apply,
-// eventually.
-
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { bytesToBase64, compileNative, docFileValue } from '../../editor/io'

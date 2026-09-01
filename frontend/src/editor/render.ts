@@ -320,7 +320,7 @@ function worldPattern(
 
 // ---------- road geometry (mirrors the native quad derivation) ----------
 
-export function roadQuad(points: Vec2[], startScale: number, endScale: number): Vec2[] {
+function roadQuad(points: Vec2[], startScale: number, endScale: number): Vec2[] {
   const dx = points[1].x - points[0].x
   const dy = points[1].y - points[0].y
   const length = Math.hypot(dx, dy)
@@ -602,31 +602,6 @@ export function drawStage(
   drawTransientOverlays(ctx, ui, cam, cssW, cssH)
 }
 
-/** Retail Boneyard world painter: no editor grid, vignette, boundary, or
- * interaction chrome. Dynamic actors are presented by the game scene. */
-export function drawNativeBoneyardWorld(
-  ctx: CanvasRenderingContext2D,
-  cssW: number,
-  cssH: number,
-  cam: Camera,
-  doc: EditorDoc,
-  gateLeaves: readonly NativeGateLeafOverride[] = [],
-  skip: ReadonlySet<string> = EMPTY_SET,
-) {
-  const gateOverrides = gateOverrideMap(gateLeaves)
-  paintWorld(
-    ctx,
-    cssW,
-    cssH,
-    cam,
-    doc,
-    { selected: EMPTY_SET, hover: null, showGrid: false },
-    skip.size > 0 ? skip : undefined,
-    true,
-    gateOverrides,
-  )
-}
-
 export function nativeBoneyardMainLayers(doc: EditorDoc): readonly MainLayer[] {
   return actorOccludingMainItems(doc).map((item) => item.layer)
 }
@@ -641,29 +616,6 @@ export function nativeBoneyardProxyLayers(
   doc: EditorDoc,
 ): readonly ObjectSpriteLayer[] {
   return renderSceneFor(doc).proxyLayers
-}
-
-export function drawNativeBoneyardBase(
-  ctx: CanvasRenderingContext2D,
-  cssW: number,
-  cssH: number,
-  cam: Camera,
-  doc: EditorDoc,
-  gateLeaves: readonly NativeGateLeafOverride[] = [],
-  skip: ReadonlySet<string> = EMPTY_SET,
-) {
-  paintWorld(
-    ctx,
-    cssW,
-    cssH,
-    cam,
-    doc,
-    { selected: EMPTY_SET, hover: null, showGrid: false },
-    skip.size > 0 ? skip : undefined,
-    true,
-    gateOverrideMap(gateLeaves),
-    'runtime-base',
-  )
 }
 
 export function drawNativeBoneyardPostRoadBase(
@@ -1651,27 +1603,6 @@ function strokePath(ctx: CanvasRenderingContext2D, pts: Vec2[]) {
   ctx.beginPath()
   pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
   ctx.stroke()
-}
-
-/** Evenly spaced points along a polyline, endpoints included. */
-export function postsAlong(points: Vec2[], spacing: number): Vec2[] {
-  const out: Vec2[] = []
-  if (points.length === 0) return out
-  out.push(points[0])
-  let carry = 0
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1]
-    const z = points[i]
-    const len = Math.hypot(z.x - a.x, z.y - a.y)
-    if (len === 0) continue
-    let d = spacing - carry
-    while (d <= len) {
-      out.push({ x: a.x + ((z.x - a.x) * d) / len, y: a.y + ((z.y - a.y) * d) / len })
-      d += spacing
-    }
-    carry = (len + carry) % spacing
-  }
-  return out
 }
 
 // ---------- hit testing ----------

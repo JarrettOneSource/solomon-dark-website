@@ -90,10 +90,6 @@ const FLAG_TOKENS = new Set([...WAVE_FLAGS, ...WAVE_IGNORED_FLAGS])
  * exceeds its composition row limit. */
 export const WAVE_COMPOSITION_MAX_ROWS = 20
 
-export function enemyLabel(token: string): string {
-  return WAVE_ENEMIES.find((e) => e.token === token)?.label ?? token
-}
-
 export function defaultWave(index: number, count: number): WaveDef {
   return {
     spawn: 14,

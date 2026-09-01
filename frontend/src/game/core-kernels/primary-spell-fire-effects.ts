@@ -20,7 +20,6 @@ import type { PrimarySpellTarget } from './primary-spell-targeting.ts'
 import type { NativeWorldManagerRegistration } from './native-world-manager-order.ts'
 import type { Vector2 } from './vector.ts'
 
-export const NATIVE_FIRE_BURN_TICKS = 200
 export const NATIVE_FIRE_EMBER_INITIAL_HEIGHT = -6
 export const NATIVE_FIRE_EMBER_INITIAL_LIFE = 3
 export const NATIVE_FIRE_EMBER_GRAVITY = Math.fround(0.15)
@@ -693,7 +692,7 @@ export function nativeFireDirectDamage(
   return Math.max(0, damage)
 }
 
-export function nativeFireExplosion(
+function nativeFireExplosion(
   payload: Pick<NativeFireProjectilePayload, 'burnDamage' | 'explodeDamage' | 'explodeRadius'>,
   origin: Readonly<Vector2>,
   ownerId: string,

@@ -64,7 +64,7 @@ export function configuredGameEndpoint(): GameEndpoint | null {
     : { kind: 'localhost', sessionKind: 'standalone', url, credential }
 }
 
-export async function resolveGameEndpoint(
+async function resolveGameEndpoint(
   token: string | null = null,
   request: typeof fetch = fetch,
 ): Promise<GameEndpoint> {

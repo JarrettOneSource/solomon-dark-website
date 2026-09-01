@@ -7,7 +7,6 @@ import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-
 import {
   primaryCastPresentationPose,
   primarySpellEmitterOffset,
-  staffAttachmentEmitterOffset,
   playerStaffAttachmentOffset,
   type PlayerStaffAttachmentPose,
   type PrimarySpellTransientState,
@@ -153,7 +152,7 @@ export function createPlayerCharacterDrawPlan(
       elementEffectPhase,
     ),
     orbOffset: secondaryCastActive
-      ? staffAttachmentEmitterOffset(state.headingIndex, 9)
+      ? playerStaffAttachmentOffset(state.headingIndex, 9)
       : playerStaffAttachmentOffset(state.headingIndex, attachmentPose),
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,

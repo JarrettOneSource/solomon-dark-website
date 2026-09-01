@@ -57,7 +57,7 @@ export function createHubSkorchaPopulation(seed: number): HubSkorchaPopulationRe
   return drawHubSkorchaPopulation(createNativeRng(seed ^ 5007))
 }
 
-export function drawHubSkorchaPopulation(
+function drawHubSkorchaPopulation(
   sourceRng: NativeRngState,
 ): HubSkorchaPopulationResult {
   const presence = drawNativeInteger(

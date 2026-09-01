@@ -368,8 +368,6 @@ export interface SpawnNativeWeldOneShotResult {
 
 export const NATIVE_WELD_CHANNEL_VISIBLE_TICKS = 2
 export const NATIVE_WELD_IMPACT_VISIBLE_TICKS = 20
-export const NATIVE_WELD_METEOR_CADENCE_TICKS = 25
-export const NATIVE_WELD_METEOR_FALL_STEP = Math.fround(0.02)
 export const NATIVE_WELD_METEOR_IMPACT_TICKS = 200
 export const NATIVE_WELD_METEOR_PULSE_TICKS = 10
 export const NATIVE_WELD_ETHEREAL_BOULDER_HELD_SCALE_CEILING = Math.fround(0.75)
@@ -534,7 +532,7 @@ export function spawnNativeWeldOneShot(
   for (let index = 0; index < quantity; index += 1) {
     const headingDegrees = profile.buildId === 1009
       ? normalizeDegrees(aimHeading + (index === 0 ? 0 : index === 1 ? -30 : 30))
-      : nativeWeldMissileFanHeading(aimHeading, quantity, index)
+      : nativeMissileFanHeading(aimHeading, quantity, index)
     const direction = directionFromHeading(headingDegrees)
     const position = Object.freeze({
       x: input.origin.x,
@@ -1621,14 +1619,6 @@ export function drawNativeWeldDamage(
   }
 }
 
-export function nativeWeldMissileFanHeading(
-  aimHeading: number,
-  quantity: number,
-  index: number,
-): number {
-  return nativeMissileFanHeading(aimHeading, quantity, index)
-}
-
 function nativeWeldMissileReacquiresTarget(
   buildId: NativeWeldOneShotBuildId,
   speedFactor: number,
@@ -1642,7 +1632,7 @@ function nativeWeldMissileReacquiresTarget(
   }
 }
 
-export function isOneShotBuild(buildId: NativeWeldBuildId): buildId is NativeWeldOneShotBuildId {
+function isOneShotBuild(buildId: NativeWeldBuildId): buildId is NativeWeldOneShotBuildId {
   return buildId === 1000 || buildId === 1001 || buildId === 1002 || buildId === 1009
 }
 

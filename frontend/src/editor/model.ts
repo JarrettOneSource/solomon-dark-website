@@ -41,8 +41,6 @@ export const NATIVE = {
   terrain: 3009,
 } as const
 
-export type NativeClassKey = keyof typeof NATIVE
-
 export const NATIVE_LABEL: Record<number, string> = {
   [NATIVE.tree]: 'Tree',
   [NATIVE.monument]: 'Monument',
@@ -192,10 +190,6 @@ export function createDoc(name: string): EditorDoc {
   }
 }
 
-export type Placeable =
-  | { kind: 'object'; value: PlacedObject }
-  | { kind: 'sprite'; value: StaticSprite }
-
 export type SelKind = 'object' | 'sprite' | 'road' | 'fence' | 'terrain'
 
 /** One selectable thing on the stage. */
@@ -222,17 +216,6 @@ export function sameEntry(a: SelEntry | null, b: SelEntry | null): boolean {
 /** The single held thing, when exactly one is held. */
 export function soleSelection(sel: Selection): SelEntry | null {
   return sel.length === 1 ? sel[0] : null
-}
-
-/** Every entry in the doc, with its kind. */
-export function allEntries(doc: EditorDoc): SelEntry[] {
-  return [
-    ...doc.objects.map((o): SelEntry => ({ kind: 'object', eid: o.eid })),
-    ...doc.sprites.map((s): SelEntry => ({ kind: 'sprite', eid: s.eid })),
-    ...doc.roads.map((r): SelEntry => ({ kind: 'road', eid: r.eid })),
-    ...doc.fences.map((f): SelEntry => ({ kind: 'fence', eid: f.eid })),
-    ...doc.terrain.map((t): SelEntry => ({ kind: 'terrain', eid: t.eid })),
-  ]
 }
 
 /** Grow a selection to cover whole groups and whole chains: picking one
@@ -286,11 +269,4 @@ export function expandSelection(doc: EditorDoc, entries: SelEntry[]): SelEntry[]
 
 export function countResidents(doc: EditorDoc): number {
   return doc.objects.length + doc.sprites.length + doc.roads.length + doc.fences.length + doc.terrain.length
-}
-
-export function clampToBounds(p: Vec2, b: Rect): Vec2 {
-  return {
-    x: Math.min(b.x + b.w, Math.max(b.x, p.x)),
-    y: Math.min(b.y + b.h, Math.max(b.y, p.y)),
-  }
 }

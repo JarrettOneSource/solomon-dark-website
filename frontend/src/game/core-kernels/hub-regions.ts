@@ -44,8 +44,6 @@ export type HubTransitionPhase =
   | 'incoming'
 
 export const HUB_COLLEGE_INTRO_FADE_RATE = 0.01
-export const HUB_COLLEGE_INTRO_FADE_TICKS = 100
-export const HUB_COLLEGE_INTRO_OFFICE_POSITION = Object.freeze({ x: 512, y: 562 })
 
 export interface HubParticipantTransition {
   alpha: number
@@ -267,7 +265,7 @@ export function hubIncomingPlacement(
   }
 }
 
-export function hubScriptedDelta(
+function hubScriptedDelta(
   position: Vector2,
   target: Vector2,
   speed: number,

@@ -10,14 +10,8 @@ import {
   HUB_USEFUL_THYNGS_SHADOW_DEPTH,
   hubActorDepth,
 } from '../hub-depth.ts'
-import {
-  GAME_VIEWPORT_MIN_HEIGHT,
-  GAME_VIEWPORT_MIN_WIDTH,
-} from './game-viewport.ts'
 import { NATIVE_HUB_COURTYARD_OBSTACLES } from '../core-kernels/native-hub-world-membership.ts'
 
-export const HUB_RENDER_WIDTH = GAME_VIEWPORT_MIN_WIDTH
-export const HUB_RENDER_HEIGHT = GAME_VIEWPORT_MIN_HEIGHT
 export const HUB_RENDER_MIN_RESOLUTION = 0.5
 export const HUB_RENDER_MAX_RESOLUTION = 1.5
 export const HUB_STUDENT_VISIBILITY_HALF_EXTENT = 120

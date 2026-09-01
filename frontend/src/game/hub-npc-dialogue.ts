@@ -109,7 +109,7 @@ export function createHubNpcChatContent(
   )
 }
 
-export function hubMemorialInspectionLines(
+function hubMemorialInspectionLines(
   portrait: HubMemorialPortrait,
 ): readonly string[] {
   const identity = portrait.accountUsername === null

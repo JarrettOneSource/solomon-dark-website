@@ -46,7 +46,7 @@ export function earthBoulderFlightOrientationStep(
   )
 }
 
-export function earthBoulderOrientationAxis(direction: Vector2): EarthBoulderVector3 {
+function earthBoulderOrientationAxis(direction: Vector2): EarthBoulderVector3 {
   const raw = {
     x: -direction.y,
     y: direction.x / AXIS_YZ_NORMALIZER,

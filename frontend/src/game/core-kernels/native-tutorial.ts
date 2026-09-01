@@ -14,10 +14,7 @@ import type { HubInventoryItem } from './hub-economy.ts'
 import { PLAYER_CHARACTER_STEADY_SPEED } from './player-character.ts'
 
 export const STOCK_TUTORIAL_BONEYARD_ID = 'stock-tutorial'
-export const NATIVE_TUTORIAL_TICK_RATE = 100
 export const NATIVE_TUTORIAL_ACID_RAIN_SKILL_ID = 72
-export const NATIVE_TUTORIAL_STARTING_PRIMARY_SKILL_ID = 8
-export const NATIVE_TUTORIAL_STARTING_SECONDARY_SKILL_ID = 11
 export const NATIVE_TUTORIAL_AMULET_DESCRIPTION =
   'A dull trinket, carved with a few beneficial runes'
 export const NATIVE_TUTORIAL_AMULET_IDENTITY = Object.freeze({
@@ -288,13 +285,6 @@ export const NATIVE_TUTORIAL_CAMERA_TRIGGER = Object.freeze({
   w: 2099.2255859375,
   x: -77.77447509765625,
   y: -55.6324462890625,
-})
-
-export const NATIVE_TUTORIAL_CAMERA_LOCK = Object.freeze({
-  h: 887.3675537109375,
-  w: 2675.215576171875,
-  x: -35.53448486328125,
-  y: -37.4495849609375,
 })
 
 export const NATIVE_TUTORIAL_LEVEL_BOUNDS = Object.freeze({
@@ -785,10 +775,6 @@ export function nativeTutorialPresentation(
 
 export function nativeTutorialHostileScenePaused(state: NativeTutorialState): boolean {
   return state.active && !state.introActive && state.stage === 2
-}
-
-export function nativeTutorialPlayerMovementPaused(state: NativeTutorialState): boolean {
-  return nativeTutorialHostileScenePaused(state)
 }
 
 export function nativeTutorialInstructionBaselines(

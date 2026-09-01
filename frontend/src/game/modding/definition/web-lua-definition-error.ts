@@ -34,7 +34,7 @@ export class WebLuaDefinitionError extends Error {
   }
 }
 
-export function formatWebLuaDefinitionIssues(
+function formatWebLuaDefinitionIssues(
   issues: readonly WebLuaDefinitionIssue[],
 ): string {
   return issues.map((issue) => {

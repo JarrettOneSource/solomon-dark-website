@@ -46,11 +46,6 @@ export const CREATE_STOCK_ASSET_SOURCES = [
   NATIVE_UI_ATLAS_SOURCES.UI,
 ] as const
 export const CREATE_STOCK_POINT_ASSET_SOURCES = [NATIVE_UI_ATLAS_SOURCES.Fonts] as const
-export const CREATE_GAME_ASSET_SOURCES = collectAssetSources({
-  composites: CREATE_COMPOSITED_ASSET_SOURCES,
-  point: CREATE_STOCK_POINT_ASSET_SOURCES,
-  stock: CREATE_STOCK_ASSET_SOURCES,
-})
 export const MATCH_LOADING_GAME_ASSET_SOURCES = collectAssetSources(matchLoading)
 export const GAME_STARTUP_IMAGE_SOURCES = collectAssetSources([
   LOADER_ASSET_SOURCES,

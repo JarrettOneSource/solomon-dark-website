@@ -217,7 +217,7 @@ export function stepHubParticipantMovement(
   return stepped
 }
 
-export function stepHubParticipantTransition(
+function stepHubParticipantTransition(
   participant: HubParticipantState,
   player: PlayerCharacterState,
   collegeIntroPending: boolean,
@@ -311,7 +311,7 @@ export function stepHubParticipantTransition(
   }
 }
 
-export function nativeCollegeArchContactEligible(
+function nativeCollegeArchContactEligible(
   position: Readonly<Vector2>,
   pathTarget: Readonly<Vector2>,
 ): boolean {

@@ -1,6 +1,5 @@
 import {
   NativeRegionPainterOrderPlanner,
-  nativeRegionPainterRow,
   type NativeRegionPainterInsertion,
   type NativeRegionPainterRegistration,
 } from './region-painter-order.ts'
@@ -51,10 +50,6 @@ interface ReusableNativeRegionPainterEntry {
   sortBias: number
   visible: boolean
   worldY: number
-}
-
-export function nativePainterRow(worldY: number, sortBias: number, referenceY: number): number {
-  return nativeRegionPainterRow(worldY, sortBias, referenceY)
 }
 
 export function buildBoneyardPainterOrder({

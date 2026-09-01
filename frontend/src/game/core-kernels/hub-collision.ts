@@ -160,7 +160,7 @@ export const HUB_STOREROOM_STORY_BARRIER: HubSegment = {
   y2: 180,
 }
 
-export function nearestPointOnHubSegment(point: Vector2, segment: HubSegment): Vector2 {
+function nearestPointOnHubSegment(point: Vector2, segment: HubSegment): Vector2 {
   const segmentX = segment.x2 - segment.x1
   const segmentY = segment.y2 - segment.y1
   const lengthSquared = segmentX * segmentX + segmentY * segmentY
@@ -408,7 +408,7 @@ export function moveWithHubCollision(
   return moveWithHubCollisionState(position, delta, radius, 0x51a7c011).position
 }
 
-export function moveWithHubCollisionState(
+function moveWithHubCollisionState(
   position: Vector2,
   delta: Vector2,
   radius: number,

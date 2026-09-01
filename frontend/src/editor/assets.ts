@@ -19,13 +19,13 @@ const spriteFiles = {
 
 export const BONEYARD_SPRITE_SOURCES = [...new Set(Object.values(spriteFiles))]
 
-export function spriteUrl(atlas: string, id: number): string | null {
+function spriteUrl(atlas: string, id: number): string | null {
   const entry = atlasManifests[atlas]?.entries[id]
   if (!entry || !entry.file) return null
   return spriteFiles[`../assets/game/boneyard/${entry.file}`] ?? null
 }
 
-export function atlasEntry(atlas: string, id: number): AtlasEntry | null {
+function atlasEntry(atlas: string, id: number): AtlasEntry | null {
   return atlasManifests[atlas]?.entries[id] ?? null
 }
 

@@ -215,7 +215,7 @@ export function encodeNativeSyncBuffer(buffer: NativeSyncBuffer): Uint8Array {
   return concat([encodeNode(buffer.root), u32(named.length), ...named])
 }
 
-export function xorNativeDarkdata(bytes: Uint8Array): Uint8Array {
+function xorNativeDarkdata(bytes: Uint8Array): Uint8Array {
   return Uint8Array.from(bytes, (value, index) => (
     value ^ NATIVE_DARKDATA_KEY[index % NATIVE_DARKDATA_KEY.byteLength]!
   ))
@@ -263,7 +263,7 @@ function encodeVarint(source: number): Uint8Array {
   ))
 }
 
-export function decompressNativeDarkdata(bytes: Uint8Array): Uint8Array {
+function decompressNativeDarkdata(bytes: Uint8Array): Uint8Array {
   if (bytes.byteLength === 0) throw new NativeSaveFormatError('darkdata codec input is empty')
   const marker = bytes[0]!
   let offset = 1
@@ -304,7 +304,7 @@ export function decompressNativeDarkdata(bytes: Uint8Array): Uint8Array {
   return Uint8Array.from(output)
 }
 
-export function compressNativeDarkdata(bytes: Uint8Array): Uint8Array {
+function compressNativeDarkdata(bytes: Uint8Array): Uint8Array {
   if (bytes.byteLength === 0) return new Uint8Array()
   const frequencies = new Uint32Array(256)
   for (const value of bytes) frequencies[value] = frequencies[value]! + 1

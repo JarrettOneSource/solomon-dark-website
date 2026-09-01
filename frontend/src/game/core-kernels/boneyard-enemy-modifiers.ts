@@ -14,9 +14,6 @@ export const BOUNDED_ENEMY_POISON_DURATION_SECONDS = 3
 export const BOUNDED_MAGE_SHIELD_INTERVAL_TICKS_PER_CONFIG_UNIT = 100
 export const BOUNDED_MAGE_ALLY_SHIELD_RANGE = 240
 
-/** Exact lightning persistence is open; recovered fork records remain actor-coupled. */
-export const BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS = 4
-
 /**
  * Mod_Dazzle tick 0x00623490 multiplies actor +0x120 by progress after
  * advancing progress by 1/duration. The first affected movement tick is 1/50.

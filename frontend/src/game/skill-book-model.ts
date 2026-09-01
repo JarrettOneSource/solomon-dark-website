@@ -323,7 +323,7 @@ export function selectablePrimarySkillRows(
   return nativeSkillBookRows(progression).filter(({ category }) => category === 1)
 }
 
-export function nativeSkillBookMaximumRank(row: NativeSkillBookRow): number {
+function nativeSkillBookMaximumRank(row: NativeSkillBookRow): number {
   const config = NATIVE_SKILL_CATALOG[row.id]?.config
   return typeof config?.mCapLevel === 'number' && config.mCapLevel > 0
     ? config.mCapLevel

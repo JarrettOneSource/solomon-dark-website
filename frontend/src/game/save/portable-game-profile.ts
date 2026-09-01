@@ -113,7 +113,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-export function portableBase64ToBytes(value: string, claim: string): Uint8Array {
+function portableBase64ToBytes(value: string, claim: string): Uint8Array {
   try {
     const binary = atob(value)
     return Uint8Array.from(binary, character => character.charCodeAt(0))

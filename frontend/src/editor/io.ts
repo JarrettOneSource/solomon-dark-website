@@ -14,7 +14,7 @@ export function formatReady(): boolean {
   return FORMAT_READY
 }
 
-export class FormatPendingError extends Error {
+class FormatPendingError extends Error {
   constructor() {
     super('The native compiler is still in the vault. Drafts and JSON export work; .boneyard comes with the format layer.')
   }
@@ -70,11 +70,6 @@ function applySpawn(target: BoneyardDoc, spawn: EditorDoc['spawn']) {
   if (!spawn) return
   target.geometry.playerSpawn = { x: spawn.x, y: spawn.y }
   target.geometry.playerSpawnFacingDeg = spawn.facingDeg
-}
-
-export function exportNative(doc: EditorDoc): Uint8Array {
-  if (!FORMAT_READY) throw new FormatPendingError()
-  return serializeBoneyard(doc)
 }
 
 // The blank editor save from the stock Create New Boneyard flow: the envelope

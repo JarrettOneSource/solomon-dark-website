@@ -2,9 +2,6 @@ import bonedit from './bonedit.json'
 import classes from './classes.json'
 import deadhawg from './deadhawg.json'
 import palette from './palette.json'
-// badguys.json (869 KB) stays out of the static graph: its records are
-// secondary effects, not placement variants. Load through badguysManifest()
-// if a consumer ever needs it.
 
 export interface Point {
   x: number
@@ -102,10 +99,6 @@ export interface ClassesManifest {
 export const atlasManifests: Readonly<Record<string, AtlasManifest>> = {
   Bonedit: bonedit,
   DeadHawg: deadhawg,
-}
-
-export function badguysManifest(): Promise<AtlasManifest> {
-  return import('./badguys.json').then((m) => m.default as AtlasManifest)
 }
 
 export const paletteManifest = palette as PaletteManifest

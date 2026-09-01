@@ -152,7 +152,7 @@ export class NativeBoneyardWeatherView {
   }
 }
 
-export function nativeBoneyardWeatherStreakRampPixels(): Uint8Array {
+function nativeBoneyardWeatherStreakRampPixels(): Uint8Array {
   const pixels = new Uint8Array(WEATHER_STREAK_RAMP_HEIGHT * 4)
   for (let row = 0; row < WEATHER_STREAK_RAMP_HEIGHT; row += 1) {
     const offset = row * 4

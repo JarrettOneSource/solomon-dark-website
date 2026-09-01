@@ -59,11 +59,6 @@ interface ParsedWebSessionMod extends Omit<WebSessionModPayload, 'files'> {
   readonly files: readonly ParsedWebModPackageFile[]
 }
 
-export interface WebSessionContentPayload {
-  readonly manifestSha256: string
-  readonly mods: readonly WebSessionModPayload[]
-}
-
 export interface MaterializedWebSessionContent {
   readonly assets: readonly GameModAsset[]
   readonly boneyards: readonly ModBoneyardEntry[]

@@ -6,7 +6,6 @@ import type {
 import {
   nativeLeviathanAppendageLocalRoot,
   nativeLeviathanAppendageRecord,
-  nativeLeviathanDirectionFrame,
 } from '../core-kernels/native-secondary-leviathan.ts'
 import {
   advanceNativeRngWords,
@@ -1921,7 +1920,7 @@ export function nativeGolemPresentationPlan(
   }
 }
 
-export function nativeGolemDeathPresentationPlan(
+function nativeGolemDeathPresentationPlan(
   actor: NativeSecondaryActorState,
 ): NativeSecondaryPresentationPlan {
   if (actor.kind !== 'golem-death' || actor.presentationRng === null) {
@@ -2337,10 +2336,6 @@ function packNormalizedRgb(red: number, green: number, blue: number): number {
 
 function degreesToRadians(degrees: number): number {
   return degrees * Math.PI / 180
-}
-
-export function leviathanDirectionFrame(headingDegrees: number): number {
-  return nativeLeviathanDirectionFrame(headingDegrees)
 }
 
 export function nativeEtherFadeScalar(

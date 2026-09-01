@@ -89,7 +89,7 @@ function GolemChip() {
   )
 }
 
-export function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
+function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
   return (
     <div
       className="hub-hud-allies"

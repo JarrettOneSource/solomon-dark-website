@@ -33,7 +33,6 @@ export function onSpell(handler: (e: SpellEvent) => void): () => void {
 // effects rail (the key is only ever present when someone turned it on).
 
 const CURSOR_FX_KEY = 'sdr:mouse-fx'
-const LEGACY_CURSOR_FX_KEY = 'sdr:no-mouse-fx'
 const CURSOR_FX_EVENT = 'sdr:mousefx'
 
 export function mouseFxEnabled(): boolean {
@@ -43,7 +42,6 @@ export function mouseFxEnabled(): boolean {
 export function setMouseFxEnabled(on: boolean) {
   if (on) localStorage.setItem(CURSOR_FX_KEY, '1')
   else localStorage.removeItem(CURSOR_FX_KEY)
-  localStorage.removeItem(LEGACY_CURSOR_FX_KEY)
   window.dispatchEvent(new CustomEvent(CURSOR_FX_EVENT, { detail: on }))
 }
 

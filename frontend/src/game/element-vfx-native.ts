@@ -61,13 +61,6 @@ export const NATIVE_ELEMENT_VFX_RECORDS: Readonly<Record<NativeElementVfxSprite,
   water: Object.freeze([271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282]),
 })
 
-export const NATIVE_SELECTED_PRIMARY_VFX_RECORDS = Object.freeze({
-  airCompanion: Object.freeze([1836, 1837, 1838, 1839]),
-  aura: 15,
-  core: 110,
-  steam: Object.freeze([2002, 2003, 2004, 2005, 2006, 2007]),
-})
-
 export const NATIVE_ELEMENT_VFX_SCALE = {
   held: 6,
   picker: 2,

@@ -6,11 +6,11 @@ export const MAX_TAGS = 5
 /** Client-side mirror of the backend's filing rules (ModEndpoints tag helpers):
  * lowercase, whitespace collapsed, 2–24 chars of letters/numbers/spaces/hyphens,
  * starting and ending on a letter or digit. */
-export function normalizeTag(raw: string): string {
+function normalizeTag(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-export function tagProblem(tag: string): string | null {
+function tagProblem(tag: string): string | null {
   return /^[a-z0-9][a-z0-9 -]{0,22}[a-z0-9]$/.test(tag)
     ? null
     : 'Tags are 2–24 plain characters — letters, numbers, spaces, hyphens.'

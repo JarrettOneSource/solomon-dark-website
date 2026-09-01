@@ -8,7 +8,6 @@ import type {
 
 export const GAME_CHAT_HISTORY_LIMIT = 80
 export const GAME_CHAT_INACTIVITY_HOLD_MS = 5_000
-export const GAME_CHAT_FADE_TRANSITION_MS = 650
 
 export type GameChatWorldKind = 'boneyard' | 'hub'
 

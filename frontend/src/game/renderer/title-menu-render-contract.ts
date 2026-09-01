@@ -1,6 +1,5 @@
 export const TITLE_RENDER_WIDTH = 1600
 export const TITLE_RENDER_HEIGHT = 900
-export const TITLE_HORIZON_Y = 522
 export const TITLE_CLOUD_HEIGHT = 553
 export const TITLE_CLOUD_WIDTH = (512 * TITLE_CLOUD_HEIGHT) / 218
 export const TITLE_DETAIL_PHASE = 0.384

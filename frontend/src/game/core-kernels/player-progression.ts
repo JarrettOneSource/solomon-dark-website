@@ -25,7 +25,6 @@ export const MAX_PLAYER_LEVEL = 75
 export const MAX_PLAYER_EXPERIENCE = 10_000_000
 export const SPELL_WELDING_SKILL_ID = 52
 export const INITIAL_WELD_OFFER_MARKER = 9_999
-export const SPELL_WELDING_QUICK_DESCRIPTION = 'TWO ATTACK SPELLS TO COMBINE'
 export const RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR = 0.425
 export const NATIVE_DAMAGE_X4_BONUS_TICKS = 1_500
 export const NATIVE_DAMAGE_X4_POTION_TICKS = 6_000
@@ -426,20 +425,6 @@ export function activePlayerWeldBuildId(
     : null
 }
 
-export function refreshPlayerSkillBookMindstar(
-  skillBook: PlayerSkillBookComponent,
-  active: boolean,
-): PlayerSkillBookComponent {
-  const effectiveRanks = skillBook.permanentRanks.map((permanentRank, skillId) => {
-    if (!active || skillId < 8 || skillId > 77 || permanentRank < 1) return permanentRank
-    const maximumLevel = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
-    return Math.min(maximumLevel, permanentRank + 1)
-  })
-  return effectiveRanks.every((rank, index) => rank === skillBook.effectiveRanks[index])
-    ? skillBook
-    : { ...skillBook, effectiveRanks: Object.freeze(effectiveRanks) }
-}
-
 function nativePrimarySkillRankStats(
   skillId: number,
   rank: number | undefined,
@@ -533,34 +518,6 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
     learnedSkillOrder: Object.freeze([primarySkillId, secondarySkillId]),
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId,
-    weldBuildId: null,
-    weldComponentRanks: null,
-  }
-}
-
-export function reselectPlayerLoadout(
-  source: PlayerSkillBookComponent,
-  config: PlayerCharacterConfig,
-): PlayerSkillBookComponent {
-  const selected = createPlayerSkillBook(config)
-  const permanentRanks = [...source.permanentRanks]
-  for (let skillId = 0; skillId < selected.permanentRanks.length; skillId += 1) {
-    if (selected.permanentRanks[skillId]! > permanentRanks[skillId]!) {
-      permanentRanks[skillId] = selected.permanentRanks[skillId]!
-    }
-  }
-  const learnedSkillOrder = [...source.learnedSkillOrder]
-  for (const skillId of selected.learnedSkillOrder) {
-    if (!learnedSkillOrder.includes(skillId)) learnedSkillOrder.push(skillId)
-  }
-  return {
-    ...source,
-    disciplineRoot: selected.disciplineRoot,
-    effectiveRanks: Object.freeze([...permanentRanks]),
-    elementRoot: selected.elementRoot,
-    learnedSkillOrder: Object.freeze(learnedSkillOrder),
-    permanentRanks: Object.freeze(permanentRanks),
-    primarySkillId: selected.primarySkillId,
     weldBuildId: null,
     weldComponentRanks: null,
   }
@@ -928,7 +885,7 @@ export function evaluateBoneyardEnemyExperience(familyBaseline: number): number 
   return familyBaseline * RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR
 }
 
-export function survivalExperienceLevelFactor(level: number): number {
+function survivalExperienceLevelFactor(level: number): number {
   if (!Number.isSafeInteger(level) || level < 1 || level > MAX_PLAYER_LEVEL) {
     throw new RangeError('survival experience level is out of range')
   }

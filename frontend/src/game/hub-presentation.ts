@@ -471,10 +471,6 @@ export function hubRunEntryPresentation(
   }
 }
 
-export function hubColorCss(color: HubColor): string {
-  return `rgba(${Math.round(color.red * 255)}, ${Math.round(color.green * 255)}, ${Math.round(color.blue * 255)}, ${color.alpha})`
-}
-
 export function hubFountainParticleAlpha(particle: ProtocolFountainParticleState): number {
   return Math.min(particle.remaining, FOUNTAIN_ALPHA_LIMIT)
 }

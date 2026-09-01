@@ -426,7 +426,7 @@ function CooldownSector({ capacity, remaining }: { capacity: number; remaining: 
   )
 }
 
-export function NativeQuickbarBinding({ text }: { text: string }) {
+function NativeQuickbarBinding({ text }: { text: string }) {
   const layout = layoutNativeQuickbarBinding(text)
   const maskImage = `url("${hub.hud.fontAtlas}")`
   const backingImage = `url("${hub.hud.keyBacking}")`

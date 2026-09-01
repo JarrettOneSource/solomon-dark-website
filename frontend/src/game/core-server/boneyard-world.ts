@@ -39,7 +39,7 @@ import {
   nativeTutorialEnemyCameraPositionIsAllowed,
   nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialHealthPotionItem,
-  nativeTutorialPlayerMovementPaused,
+  nativeTutorialHostileScenePaused,
   type NativeTutorialState,
 } from '../core-kernels/native-tutorial.ts'
 import {
@@ -434,7 +434,7 @@ export function stepBoneyardWorldTick(
     ? world.bounds
     : boneyardActiveBounds(arenaTransition)
   const tutorialMovementPaused = world.tutorial !== null
-    && nativeTutorialPlayerMovementPaused(world.tutorial)
+    && nativeTutorialHostileScenePaused(world.tutorial)
   const plans = Object.entries(players).map(([playerId, player]) => {
     const locked = tutorialMovementPaused || (
       world.encounter !== null

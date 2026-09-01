@@ -644,16 +644,6 @@ test('enemy roots enter the shared painter queue at actor Y', () => {
   })
 })
 
-test('unknown family tokens fail instead of producing a generic marker', () => {
-  assert.throws(
-    () => nativeEnemyPresentationPlan({
-      ...enemy('IMP'),
-      enemyToken: 'SPIDER' as NativeEnemyVisualSnapshot['enemyToken'],
-    }, 100),
-    /unsupported native enemy family SPIDER/,
-  )
-})
-
 test('action programs fail closed when sampled for the wrong family', () => {
   assert.throws(
     () => nativeEnemyPresentationPlan({

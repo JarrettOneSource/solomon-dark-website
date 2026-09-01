@@ -13,7 +13,6 @@ import {
 } from './primary-spells.ts'
 import type { Vector2 } from './vector.ts'
 
-export const NATIVE_STORM_QUERY_RADIUS = 500
 export const NATIVE_STORM_FADE_PER_TICK = 0.01
 export const NATIVE_STORM_FADE_TICKS = 101
 export const NATIVE_STORM_ALPHA_GAIN_PER_TICK = 0.05
@@ -22,11 +21,6 @@ export const NATIVE_TORNADO_MOVEMENT_PER_TICK = Math.fround(0.349999994)
 export const NATIVE_TORNADO_HEADING_STEP_MAXIMUM = 2
 export const NATIVE_STORM_STRIKE_DELAY_MINIMUM = 30
 export const NATIVE_STORM_STRIKE_DELAY_MAXIMUM = 120
-export const NATIVE_STORM_STRIKE_SOURCE_HEIGHT = 175
-export const NATIVE_STORM_STRIKE_SOURCE_RADIUS = 100
-export const NATIVE_STORM_STRIKE_MIDPOINT_HEIGHT = 90
-export const NATIVE_STORM_STRIKE_MIDPOINT_RADIUS = 200
-export const NATIVE_STORM_STRIKE_TARGET_HEIGHT = 15
 export const NATIVE_FREEZE_WAVE_INITIAL_LIFE = Math.fround(0.924)
 export const NATIVE_FREEZE_WAVE_LIFE_PER_TICK = 0.01
 export const NATIVE_FREEZE_WAVE_FADE_THRESHOLD = 0.12375
@@ -34,7 +28,6 @@ export const NATIVE_FREEZE_WAVE_ALPHA_FACTOR = 0.9
 export const NATIVE_FREEZE_WAVE_INITIAL_RADIUS = 75
 export const NATIVE_FREEZE_WAVE_RADIUS_PER_TICK = 6
 export const NATIVE_FREEZE_WAVE_QUERY_INTERVAL_TICKS = 10
-export const NATIVE_FREEZE_WAVE_LIFETIME_TICKS = 93
 export const NATIVE_HAIL_INITIAL_LIFE = Math.fround(2)
 export const NATIVE_HAIL_LIFE_PER_TICK = Math.fround(0.015)
 export const NATIVE_HAIL_BOUNCE_PROGRESS_PER_TICK = Math.fround(0.02)
@@ -195,17 +188,6 @@ export function drawNativeSpellDamage(
   }
   const draw = drawNativeFloat(source, maximum - minimum)
   return { rng: draw.state, value: Math.fround(minimum + draw.value) }
-}
-
-export function drawNativePercentile(
-  source: NativeRngState,
-  chance: number,
-): { readonly rng: NativeRngState; readonly success: boolean } {
-  if (!Number.isInteger(chance) || chance < 0 || chance > 100) {
-    throw new RangeError('native percentile chance must be an integer within [0,100]')
-  }
-  const draw = drawNativeInteger(source, 100)
-  return { rng: draw.state, success: draw.value < chance }
 }
 
 /**

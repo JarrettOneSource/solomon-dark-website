@@ -74,36 +74,6 @@ interface EncodedHeader {
 const MAGIC = Uint8Array.from([0x53, 0x44, 0x4d, 0x4c, 0x56, 0x37, 0x00, 0x01])
 const PREFIX_BYTES = MAGIC.length + 4
 
-export function createZeroMlBotPolicyCheckpoint(seed: number): MlBotPolicyCheckpoint {
-  requireUint32(seed, 'ML bot policy seed')
-  const tensors = Object.fromEntries(Object.entries(ML_BOT_POLICY_TENSOR_SPECS).map(
-    ([name, shape]) => [name, new Float32Array(elementCount(shape))],
-  )) as MlBotPolicyTensors
-  return {
-    metadata: {
-      actionHeads: ML_BOT_POLICY_ACTION_HEADS,
-      architecture: ML_BOT_POLICY_ARCHITECTURE,
-      choiceCoverage: Object.freeze({}),
-      choiceHiddenSize: 128,
-      choicePolicyMode: 'scripted',
-      choiceTemperature: 1.25,
-      choiceTrajectoryVersion: 7,
-      hiddenSizes: Object.freeze([512, 256]),
-      mainTrajectoryVersion: 7,
-      modelFormat: ML_BOT_POLICY_MODEL_FORMAT,
-      modelVersion: 7,
-      observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
-      observationVersion: 7,
-      optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
-      primaryCurriculum: ML_BOT_POLICY_SPEC.primaryCurriculum,
-      seed,
-      trainedEnvironmentSteps: 0,
-      trainedUpdates: 0,
-    },
-    tensors,
-  }
-}
-
 export function validateMlBotPolicyCheckpoint(checkpoint: MlBotPolicyCheckpoint): void {
   const { metadata, tensors } = checkpoint
   if (metadata.modelFormat !== ML_BOT_POLICY_MODEL_FORMAT) {
@@ -118,7 +88,7 @@ export function validateMlBotPolicyCheckpoint(checkpoint: MlBotPolicyCheckpoint)
     ['main trajectory', metadata.mainTrajectoryVersion],
     ['choice trajectory', metadata.choiceTrajectoryVersion],
   ] as const) {
-    if (value !== 7) throw new Error(`ML bot policy ${label} version 7 is required; legacy artifacts have no shim`)
+    if (value !== 7) throw new Error(`ML bot policy ${label} version must be 7`)
   }
   requireNames(metadata.observationNames, ML_BOT_POLICY_OBSERVATION_NAMES, 'observation names')
   requireNames(

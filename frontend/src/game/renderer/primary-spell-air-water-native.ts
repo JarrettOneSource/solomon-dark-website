@@ -100,8 +100,6 @@ export function nativeWaterAuraVisualPlan(
   })
 }
 
-export type NativeAirWaterSpriteKey = keyof typeof NATIVE_AIR_WATER_SPRITES
-
 export const NATIVE_AIR_WATER_SPRITES = Object.freeze({
   coldAura: nativeEnemySpriteRegistration('BadGuys', 14),
   hail: nativeEnemySpriteRegistration('BadGuys', 32),

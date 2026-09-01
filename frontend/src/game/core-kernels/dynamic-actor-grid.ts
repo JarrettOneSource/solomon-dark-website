@@ -165,12 +165,6 @@ export class DynamicActorGrid implements ActorMotionBroadphase {
   }
 }
 
-export function actorGridCellSize(bodies: readonly ActorPhysicsBody[]): number {
-  let maximumRadius = 16
-  for (const body of bodies) maximumRadius = Math.max(maximumRadius, body.radius)
-  return maximumRadius * 2
-}
-
 function bodyBounds(body: Readonly<ActorPhysicsBody>): SpatialBounds {
   return {
     maximumX: body.position.x + body.radius,

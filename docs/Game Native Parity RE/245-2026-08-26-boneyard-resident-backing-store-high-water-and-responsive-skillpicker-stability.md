@@ -418,11 +418,10 @@ not a level-up leak or thermal failure.
   mobile browser journeys must perform a real movement attempt during the hold
   and retain empty page/console/network error arrays.
 
-- `nativeTutorialPlayerMovementPaused` now derives from the same authoritative
-  stage-2 predicate as the hostile hold. `stepBoneyardWorldTick` composes it
-  with Solomon's existing movement lock and feeds `planPlayerCharacterTick`
-  zero prior velocity, idle movement input, and scale zero. Cast input never
-  enters that movement-only seal.
+- `stepBoneyardWorldTick` uses the same authoritative stage-2 predicate as the
+  hostile hold, composes it with Solomon's existing movement lock, and feeds
+  `planPlayerCharacterTick` zero prior velocity, idle movement input, and scale
+  zero. Cast input never enters that movement-only seal.
 - Focused Mac coverage begins stage 2 with velocity `(100,-50)` and held
   movement, then proves exact player position, zero velocity, unchanged gait
   and walk cycle, no movement contacts, ten byte-stable Skeletons, accepted

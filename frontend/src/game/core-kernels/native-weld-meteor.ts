@@ -6,14 +6,9 @@ import {
 } from './native-rng.ts'
 import type { Vector2 } from './vector.ts'
 
-export const NATIVE_WELD_METEOR_MARKER_RECORD = 51
 export const NATIVE_WELD_METEOR_MARKER_ALPHA_STEP = Math.fround(0.025)
 export const NATIVE_WELD_METEOR_MARKER_SCALE = 3.5
 export const NATIVE_WELD_METEOR_MARKER_REACH = 160
-export const NATIVE_WELD_METEOR_FALL_HEIGHT = 768
-export const NATIVE_WELD_METEOR_IMPACT_FLASH_RECORD = 15
-export const NATIVE_WELD_METEOR_IMPACT_FLASH_SCALE = 6
-export const NATIVE_WELD_METEOR_IMPACT_FLASH_ALPHA = 2
 export const NATIVE_WELD_METEOR_IMPACT_DEBRIS_COUNT = 5
 export const NATIVE_WELD_METEOR_IMPACT_DEBRIS_RECORDS = [2008, 2009, 2010] as const
 
@@ -24,7 +19,6 @@ const NATIVE_METEOR_VERTICAL_POINT_SCALE = Math.fround(0.8)
 const NATIVE_METEOR_FALL_BASE_STEP = Math.fround(0.02)
 const NATIVE_METEOR_IMPACT_BASE_TICKS = 200
 const NATIVE_METEOR_IMPACT_TOUGHNESS_TICKS = 50
-const NATIVE_METEOR_IMPACT_PULSE_TICKS = 10
 const NATIVE_METEOR_IMPACT_RADIUS_FACTOR = 45
 const NATIVE_METEOR_DIRECT_RADIUS = 45
 
@@ -287,10 +281,6 @@ export function nativeWeldMeteorDirectRadius(): number {
 
 export function nativeWeldMeteorPulseRadius(impactRadiusScalar: number): number {
   return Math.fround(impactRadiusScalar * NATIVE_METEOR_IMPACT_RADIUS_FACTOR)
-}
-
-export function nativeWeldMeteorPulseTicks(): number {
-  return NATIVE_METEOR_IMPACT_PULSE_TICKS
 }
 
 function drawNativeUnitVector(

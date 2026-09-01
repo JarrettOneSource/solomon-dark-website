@@ -313,7 +313,7 @@ export function nativePrimarySkillProfile(
   }
 }
 
-export function nativeWeldPrimarySkillProfile(
+function nativeWeldPrimarySkillProfile(
   skillBook: PlayerSkillBookComponent,
   statBook: PlayerStatBookComponent,
   factors: NativeOffensiveSpellFactors,

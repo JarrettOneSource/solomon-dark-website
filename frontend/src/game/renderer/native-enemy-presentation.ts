@@ -166,10 +166,7 @@ export function nativeEnemyFacingBucket(
   if (family === 'IMP') {
     return positiveModulo(Math.trunc((headingDeg + 15) / 30), 12)
   }
-  if (isNativeEnemyFamily(family)) {
-    return nativeEighteenWayFacingBucket(headingDeg)
-  }
-  throw new Error(`unsupported native enemy family ${String(family)}`)
+  return nativeEighteenWayFacingBucket(headingDeg)
 }
 
 export function nativeEnemyPresentationPlan(
@@ -178,9 +175,6 @@ export function nativeEnemyPresentationPlan(
   authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemyPresentationPlan {
   const family = enemy.enemyToken
-  if (!isNativeEnemyFamily(family)) {
-    throw new Error(`unsupported native enemy family ${String(family)}`)
-  }
   const animation = enemy.animation
   const sampledHeading = family === 'ZOMBIE'
     ? enemy.headingDeg + (animation?.zombieAngularOffsetDeg ?? 0)
@@ -1700,10 +1694,6 @@ function finiteOrZero(value: number): number {
 
 function positiveModulo(value: number, divisor: number): number {
   return ((value % divisor) + divisor) % divisor
-}
-
-function isNativeEnemyFamily(value: string): value is NativeEnemyFamily {
-  return (NATIVE_ENEMY_FAMILIES as readonly string[]).includes(value)
 }
 
 function isNativeEnemyActionProgramName(

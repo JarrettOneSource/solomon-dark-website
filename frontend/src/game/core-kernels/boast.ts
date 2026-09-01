@@ -59,17 +59,6 @@ export function boastSelectionKey(selection: BoastSelection): string {
     : `mod:${selection.modId}:${selection.contentId}`
 }
 
-export function boastSelectionsEqual(
-  left: BoastSelection | null,
-  right: BoastSelection | null,
-): boolean {
-  if (left === right) return true
-  if (left === null || right === null || typeof left === 'number' || typeof right === 'number') {
-    return false
-  }
-  return left.contentId === right.contentId && left.modId === right.modId
-}
-
 export function selectBoast(
   source: BoastState,
   definition: BoastDefinition,
@@ -140,22 +129,6 @@ export function boastUsesRandomSkillChoices(
 ): boolean {
   if (state.selected === null || state.failed) return false
   return resolve(state.selected)?.randomSkillChoices === true
-}
-
-export function boastStateIsConsistent(
-  state: BoastState,
-  resolve: BoastResolver,
-): boolean {
-  if (
-    !Number.isSafeInteger(state.failureSequence)
-    || state.failureSequence < 0
-    || state.failureSequence > 1
-    || state.failed !== (state.failureSequence === 1)
-    || state.failed && state.succeeded
-    || state.selected === null && (state.failed || state.succeeded)
-  ) return false
-  const definition = state.selected === null ? null : resolve(state.selected)
-  return state.selected === null || definition !== null
 }
 
 function freezeSelection(selection: BoastSelection): BoastSelection {

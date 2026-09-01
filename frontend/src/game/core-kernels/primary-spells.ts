@@ -159,37 +159,6 @@ import {
 } from './player-lighting.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
-export type PrimarySpellTransientKind =
-  | 'air'
-  | 'air-hurricane'
-  | 'earth-boulder-bit'
-  | 'earth-called-rock'
-  | 'earth-impact'
-  | 'ether-blast'
-  | 'ether-impact'
-  | 'ether-pierce-streak'
-  | 'fire'
-  | 'fire-ember'
-  | 'fire-explosion'
-  | 'fire-good-imp'
-  | 'fire-impact'
-  | NativePlayerStaffTransient['kind']
-  | 'fire-patch'
-  | 'water'
-  | 'water-aura'
-  | 'water-hail'
-  | 'weld-blizzard-chain-frost'
-  | 'weld-blizzard-glow'
-  | 'weld-channel'
-  | 'weld-boulder-debris'
-  | 'weld-frost-fade'
-  | 'weld-ground-spark-fade'
-  | 'weld-hail-rock-fade'
-  | 'weld-impact'
-  | 'weld-meteor'
-  | 'weld-meteor-marker'
-  | 'weld-persistent'
-  | 'weld-steam'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
 interface PrimarySpellProjectileBaseState extends NativeWorldPainterOwner {
@@ -336,14 +305,6 @@ export interface PrimarySpellAirStormState extends PrimarySpellOwnedTransientBas
   position: Vector2
   scale: number
   strikeTicksRemaining: number
-}
-
-export interface PrimarySpellAirStormStrikeState extends PrimarySpellOwnedTransientBase {
-  kind: 'air-storm-strike'
-  midpoint: Vector2
-  origin: Vector2
-  targetId: string
-  targetPosition: Vector2
 }
 
 export interface PrimarySpellAirPrismaticState extends PrimarySpellOwnedTransientBase {
@@ -625,7 +586,6 @@ export const PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS = NATIVE_ETHER_IMPACT_VIS
 export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
 export const PRIMARY_SPELL_PRISMATIC_LIFETIME_TICKS = 100
-export const PRIMARY_SPELL_STORM_STRIKE_LIFETIME_TICKS = 1
 export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 6
 export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 20
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
@@ -864,7 +824,7 @@ export function nativePrimaryPainterRegistrationContract(
   }
 }
 
-export function enrollPrimarySpellPainterRegistrations(
+function enrollPrimarySpellPainterRegistrations(
   source: PrimarySpellSimulationState,
   registerWorldPainter: RegisterNativeWorldPainter,
 ): PrimarySpellSimulationState {
@@ -978,7 +938,7 @@ function primaryCastCompletionProgress(element: WizardElement): number {
   return 4 / primaryCastRate(element)
 }
 
-export function primarySpellEmitter(
+function primarySpellEmitter(
   player: Pick<PlayerCharacterState, 'config' | 'headingIndex' | 'position' | 'primaryCast'>,
   selectedElement: WizardElement = player.config.element,
 ): Vector2 {
@@ -1001,13 +961,6 @@ export function primarySpellEmitterOffset(
   element: WizardElement = 'fire',
 ): Vector2 {
   const pose = primaryCastPose(actionTick, channelActive, element)
-  return playerStaffAttachmentOffset(headingIndex, pose)
-}
-
-export function staffAttachmentEmitterOffset(
-  headingIndex: number,
-  pose: PlayerStaffAttachmentPose,
-): Vector2 {
   return playerStaffAttachmentOffset(headingIndex, pose)
 }
 
@@ -3010,55 +2963,36 @@ function advanceProjectile(
   }
 }
 
-function transientLifetime(effect: PrimarySpellTransientState): number {
+type TimedPrimarySpellTransient = Extract<
+  PrimarySpellTransientState,
+  { kind:
+    | 'air'
+    | 'earth-impact'
+    | 'ether-blast'
+    | 'ether-impact'
+    | 'ether-pierce-streak'
+    | 'fire'
+    | 'fire-explosion'
+    | 'fire-impact'
+    | 'water'
+    | 'water-aura'
+  }
+>
+
+function transientLifetime(effect: TimedPrimarySpellTransient): number {
   switch (effect.kind) {
     case 'air': return effect.underpowered
       ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
       : PRIMARY_SPELL_AIR_LIFETIME_TICKS
-    case 'air-hurricane': throw new Error('Hurricane lifetime is player-runtime driven')
-    case 'earth-boulder-bit': throw new Error('Earth BoulderBit lifetime is state driven')
-    case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
     case 'ether-blast': return NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS
     case 'ether-pierce-streak': return 10
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
-    case 'fire-ember': throw new Error('Ember lifetime is state driven')
     case 'fire-explosion': return NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS
-    case 'fire-good-imp': throw new Error('GoodImp lifetime is state driven')
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
-    case 'fire-patch': throw new Error('Fire patch lifetime is state driven')
-    case 'player-staff-contact':
-    case 'player-staff-contact-knockback':
-    case 'player-staff-knockback':
-    case 'player-staff-melee':
-    case 'player-staff-move-fade':
-    case 'player-staff-perspective-fade':
-    case 'player-staff-smoke':
-    case 'player-staff-spin':
-    case 'player-staff-pike-break': throw new Error('Staff transient lifetime is system owned')
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
     case 'water-aura': return effect.durationTicks
-    case 'water-hail': throw new Error('Hail lifetime is state driven')
-    case 'weld-boulder-debris': throw new Error('Weld boulder debris lifetime is state driven')
-    case 'weld-blizzard-chain-frost': throw new Error('Weld chaining Frost lifetime is state driven')
-    case 'weld-blizzard-glow': throw new Error('Weld Blizzard glow lifetime is state driven')
-    case 'weld-channel': throw new Error('Weld channel lifetime is state driven')
-    case 'weld-frost-fade': throw new Error('Weld Frost fade lifetime is state driven')
-    case 'weld-flame-lash-fade': throw new Error('Weld Flame Lash fade lifetime is state driven')
-    case 'weld-ground-spark-fade': throw new Error('Weld GroundSpark fade lifetime is state driven')
-    case 'weld-hail-flash': throw new Error('Weld Hail flash lifetime is state driven')
-    case 'weld-hail-knockback': throw new Error('Weld Hail Knockback lifetime is combat owned')
-    case 'weld-hail-line': throw new Error('Weld Hail line lifetime is state driven')
-    case 'weld-hail-rock-fade': throw new Error('Weld Hail fade lifetime is state driven')
-    case 'weld-hail-terrain-bouncer': throw new Error('Weld Hail bouncer lifetime is state driven')
-    case 'weld-hail-terrain-particle': throw new Error('Weld Hail particle lifetime is state driven')
-    case 'weld-impact': throw new Error('Weld impact lifetime is state driven')
-    case 'weld-meteor': throw new Error('Weld meteor lifetime is state driven')
-    case 'weld-meteor-flash': throw new Error('Weld Meteor flash lifetime is state driven')
-    case 'weld-meteor-marker': throw new Error('Weld Meteor marker lifetime is state driven')
-    case 'weld-persistent': throw new Error('Weld persistent lifetime is cast driven')
-    case 'weld-steam': throw new Error('Weld Steam lifetime is state driven')
   }
 }
 

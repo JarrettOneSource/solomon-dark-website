@@ -4,7 +4,3 @@ export const NATIVE_SECONDARY_ABILITY_IDS = Object.freeze([
 ] as const)
 
 export type NativeSecondaryAbilityId = typeof NATIVE_SECONDARY_ABILITY_IDS[number]
-
-export const NATIVE_SECONDARY_BELT_SLOT_COUNT = 8
-export const NATIVE_SECONDARY_RIGHT_MOUSE_SLOT = 0
-export const NATIVE_SECONDARY_KEYBOARD_SLOTS = Object.freeze([1, 2, 3, 4, 5, 6, 7] as const)

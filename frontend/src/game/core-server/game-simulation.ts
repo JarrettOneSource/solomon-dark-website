@@ -1834,7 +1834,7 @@ export function bindGameSimulationPlayerSkillQuickbar(
   }
 }
 
-export function bindGameSimulationPlayerBeltItem(
+function bindGameSimulationPlayerBeltItem(
   state: GameSimulationState,
   playerId: PlayerId,
   itemId: number,

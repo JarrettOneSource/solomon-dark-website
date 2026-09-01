@@ -1,8 +1,5 @@
 import type { NativeEquipmentModifiers } from './native-equipment-effects.ts'
-import {
-  nativeSkillRoot,
-  type NativePrimarySkillRankStats,
-} from './player-progression.ts'
+import { nativeSkillRoot } from './player-progression.ts'
 
 export const NATIVE_OFFENSIVE_SKILL_IDS = Object.freeze([
   8, 9, 10, 11, 13,
@@ -141,26 +138,6 @@ export function resolveNativeSkillManaCostValue(
     return 0
   }
   return resolveNativeSkillManaCost(skillId, factors, { baseManaCost: manaCost })
-}
-
-export function resolveNativePrimarySkillStats(
-  source: NativePrimarySkillRankStats,
-  factors: NativeOffensiveSpellFactors,
-): NativePrimarySkillRankStats {
-  return Object.freeze({
-    ...source,
-    damageMaximum: resolveNativeSkillDamageValue(
-      source.skillId,
-      source.damageMaximum,
-      factors,
-    ),
-    damageMinimum: resolveNativeSkillDamageValue(
-      source.skillId,
-      source.damageMinimum,
-      factors,
-    ),
-    manaCost: resolveNativeSkillManaCostValue(source.skillId, source.manaCost, factors),
-  })
 }
 
 export function validateOffensiveFactors(factors: NativeOffensiveSpellFactors): void {

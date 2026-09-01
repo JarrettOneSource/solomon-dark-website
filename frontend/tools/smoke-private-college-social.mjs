@@ -103,7 +103,6 @@ try {
   await sendChat(target, 'global', 'Invite me from this message')
   await waitForChatMessage(resident, 'global', 'Invite me from this message')
 
-  const sourceChat = source.getByLabel('Game chat')
   const targetMessage = await waitForChatMessage(
     source,
     'global',

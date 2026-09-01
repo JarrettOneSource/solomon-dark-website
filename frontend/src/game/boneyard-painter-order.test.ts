@@ -4,7 +4,6 @@ import test from 'node:test'
 import {
   BoneyardPainterOrderPlanner,
   buildBoneyardPainterOrder,
-  nativePainterRow,
 } from './boneyard-painter-order.ts'
 import {
   NativeRegionPainterOrderPlanner,
@@ -217,13 +216,6 @@ test('ZAnimSplit uses bottom-anchored 25/50-unit clipped AnimPointer bands', () 
     { id: 'air:1:body:band-2', worldY: 44 },
   ])
   assert.deepEqual(buildNativeZAnimSplitBands('empty', { height: 0, y: 5 }, true), [])
-})
-
-test('uses the stock two-world-unit effective-Y row formula', () => {
-  assert.equal(nativePainterRow(100.9, 0, 150.9), -25)
-  assert.equal(nativePainterRow(100.9, -15, 150.9), -32)
-  assert.equal(nativePainterRow(151.9, 0, 150.9), 0)
-  assert.equal(nativePainterRow(152.1, 0, 150.9), 1)
 })
 
 test('splits scenery into bands so an actor can pass behind a Tree or Gravestone', () => {

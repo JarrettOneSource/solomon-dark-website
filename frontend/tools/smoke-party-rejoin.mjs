@@ -839,21 +839,6 @@ async function waitForHost(predicate, label) {
   }
 }
 
-async function moveHubAxis(page, key, axis, target, direction) {
-  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
-  await page.keyboard.down(key)
-  try {
-    await page.waitForFunction(({ axis: coordinate, direction: comparison, target: limit }) => {
-      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[coordinate]
-      return typeof value === 'number'
-        && (comparison === 'at-least' ? value >= limit : value <= limit)
-    }, { axis, direction, target }, { timeout: 15_000 })
-  } finally {
-    await page.keyboard.up(key)
-    await page.waitForTimeout(150)
-  }
-}
-
 async function waitForLocalSave(page, predicate) {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {

@@ -114,23 +114,6 @@ export function TagBadge({
   )
 }
 
-export function PlayerBar({ players, max }: { players: number; max: number }) {
-  const pct = max > 0 ? Math.min(100, (players / max) * 100) : 0
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-2.5 w-24 overflow-hidden rounded-sm border border-black/70 bg-[#0c0a10] shadow-[inset_0_1px_2px_rgba(0,0,0,.8)]">
-        <div
-          className="h-full rounded-sm bg-gradient-to-b from-[#9ecf7e] to-[#537f3c] shadow-[0_0_8px_rgba(127,179,95,.5)] transition-[width] duration-500"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="font-mono text-xs text-bone-dim">
-        {players}/{max}
-      </span>
-    </div>
-  )
-}
-
 /** Gold-framed stat tile (slot-frame energy from the skill picker). */
 export function StatTile({
   icon,

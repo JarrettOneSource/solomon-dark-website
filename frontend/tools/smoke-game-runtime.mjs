@@ -732,32 +732,6 @@ async function enterHub(page, element) {
   await page.getByLabel(/College courtyard/).waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
 }
 
-async function moveHubAxis(page, key, axis, target, direction) {
-  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
-  await page.keyboard.down(key)
-  try {
-    await page.waitForFunction(({ axis, direction, target }) => {
-      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-      const value = frame?.[axis]
-      return typeof value === 'number'
-        && (direction === 'at-least' ? value >= target : value <= target)
-    }, { axis, direction, target }, { timeout: 15_000 })
-  } catch (error) {
-    const receipt = await page.evaluate(() => ({
-      frame: document.querySelector('.hub-world-canvas')?.__sdrHubFrame ?? null,
-      surface: document.querySelector('.hub-native-ui-stage')
-        ?.getAttribute('aria-label') ?? null,
-    }))
-    throw new Error(
-      `Hub movement ${key}/${axis}/${direction}/${target} failed: ${JSON.stringify(receipt)}`,
-      { cause: error },
-    )
-  } finally {
-    await page.keyboard.up(key)
-    await page.waitForTimeout(150)
-  }
-}
-
 async function allyRosterReceipt(page) {
   return page.locator('.hub-hud-allies').evaluate((roster) => {
     const requireElement = (value, label) => {

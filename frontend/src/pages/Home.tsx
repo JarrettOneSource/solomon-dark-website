@@ -22,7 +22,7 @@ const FEATURES = [
     icon: skillIcons.book,
     title: 'Lua Modding',
     body:
-      'A sandboxed authoritative Lua runtime exposing the sd.* API. Browse, subscribe, and enable mods from the Dark Cloud, in-game.',
+      'Build, browse, and play community Lua mods through the Dark Cloud.',
     to: '/game',
     label: 'Open the Dark Cloud',
   },

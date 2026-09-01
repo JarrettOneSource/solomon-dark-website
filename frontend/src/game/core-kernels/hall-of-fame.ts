@@ -78,7 +78,3 @@ export function formatHallOfFameTime(elapsedTicks: number): string {
   const seconds = totalSeconds % 60
   return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
-
-export function isHallOfFameBoard(value: string): value is HallOfFameBoard {
-  return HALL_OF_FAME_BOARDS.some((board) => board === value)
-}
