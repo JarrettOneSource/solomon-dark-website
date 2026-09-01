@@ -2723,6 +2723,81 @@ test('Imp contact is an immediate landing edge with native escape, VFX, and audi
   )
 })
 
+test('Imp post-contact escape releases only when authoritative movement changes its root', () => {
+  const players = { player: livingTarget(-500, 0) }
+  const cases = [
+    {
+      label: 'identity',
+      resolve: (request: BoneyardEnemyMovementRequest) => request.requestedPosition,
+      retained: true,
+    },
+    {
+      label: 'boundary stop',
+      resolve: (request: BoneyardEnemyMovementRequest) => request.position,
+      retained: false,
+    },
+    {
+      label: 'scenery slide',
+      resolve: (request: BoneyardEnemyMovementRequest) => ({
+        x: request.position.x,
+        y: request.requestedPosition.y,
+      }),
+      retained: false,
+    },
+    {
+      label: 'dynamic separation',
+      resolve: (request: BoneyardEnemyMovementRequest) => ({
+        x: request.requestedPosition.x - 0.25,
+        y: request.requestedPosition.y,
+      }),
+      retained: false,
+    },
+  ] as const
+
+  for (const entry of cases) {
+    const spawned = spawnOne(`imp-escape-${entry.label}`, 'IMP', { x: 10, y: 20 }, players)
+    const actor = spawned.store.actors[0]!
+    if (actor.brain.family !== 'imp') throw new Error('expected Imp brain')
+    const store: BoneyardEnemyStore = {
+      ...spawned.store,
+      actors: [{
+        ...actor,
+        brain: {
+          ...actor.brain,
+          escapeHeadingDeg: 90,
+          verticalOffset: -10,
+          verticalVelocity: 0,
+        },
+        headingDeg: 90,
+        nextMovementTick: 2,
+      }],
+    }
+    const requests: BoneyardEnemyMovementRequest[] = []
+    const stepped = stepBoneyardEnemyStore(store, {
+      clipSpellSegment: CLEAR_SPELL_SEGMENT,
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players,
+      resolveMovement: (request) => {
+        requests.push(request)
+        return entry.resolve(request)
+      },
+      resolveSpawnIntents: () => [],
+      tick: 2,
+    })
+    const result = stepped.store.actors[0]!
+    if (result.brain.family !== 'imp') throw new Error('expected Imp brain')
+    assert.equal(requests.length, 1, entry.label)
+    assert.equal(
+      result.brain.escapeHeadingDeg !== null,
+      entry.retained,
+      entry.label,
+    )
+    assert.equal(stepped.events.length, 0, entry.label)
+    assert.equal(stepped.playerDamage.length, 0, entry.label)
+    assert.equal(stepped.store.rngState, store.rngState, entry.label)
+  }
+})
+
 test('Demon bomb keeps its action-entry facing and consumes raw FireBurst RNG first', () => {
   const players = { player: livingTarget(100, 0) }
   let result = spawnOne('demon-bomb-muzzle-rng', 'DEMON', { x: 0, y: 0 }, players)

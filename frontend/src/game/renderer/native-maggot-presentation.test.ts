@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { BoneyardMaggotSnapshot } from '../protocol/game-state.ts'
-import { nativeMaggotPresentationPlan } from './native-maggot-presentation.ts'
+import {
+  nativeMaggotIsVisible,
+  nativeMaggotPresentationPlan,
+  nativeMaggotVisualBounds,
+} from './native-maggot-presentation.ts'
 
 test('Maggot crawl, bite, facing, and death select recovered native records', () => {
   assert.deepEqual(entries(maggot({ headingDeg: 0, pose: 0 })), [{
@@ -80,6 +84,56 @@ test('Maggot ballistic lane enumerates all five phases and ten orientations', ()
   }
   assert.deepEqual([...entries].sort((left, right) => left - right),
     Array.from({ length: 50 }, (_, index) => 2013 + index))
+})
+
+test('Maggot visibility bounds contain complete crawl, bite, death, and emergence art', () => {
+  const requestedEntries = new Set<number>()
+  const resolve = (_atlas: string, entry: number) => {
+    requestedEntries.add(entry)
+    return { anchorX: 5, anchorY: 10, height: 30, width: 20 }
+  }
+  const positioned = maggot({
+    hitFlash: 1,
+    position: { x: 100, y: 200 },
+    verticalOffset: -20,
+    visualScale: 2,
+  })
+  assert.deepEqual(nativeMaggotVisualBounds(positioned, resolve), {
+    h: 60,
+    w: 40,
+    x: 90,
+    y: 160,
+  })
+  assert.equal(nativeMaggotIsVisible(
+    positioned,
+    { h: 60, w: 40, x: 50, y: 100 },
+    resolve,
+  ), true, 'exact edge contact remains visible')
+  assert.equal(nativeMaggotIsVisible(
+    positioned,
+    { h: 59.999, w: 40, x: 50, y: 100 },
+    resolve,
+  ), false, 'complete art outside the guarded view is culled')
+
+  for (let facing = 0; facing < 18; facing += 1) {
+    nativeMaggotVisualBounds(maggot({ headingDeg: facing * 20 }), resolve)
+    nativeMaggotVisualBounds(maggot({ headingDeg: facing * 20, state: 'bite' }), resolve)
+  }
+  nativeMaggotVisualBounds(maggot({ state: 'death' }), resolve)
+  for (let phase = 0; phase < 5; phase += 1) {
+    for (let orientation = 0; orientation < 10; orientation += 1) {
+      nativeMaggotVisualBounds(maggot({
+        emergencePhase: phase,
+        emergenceOrientation: orientation,
+        state: 'emerging',
+      }), resolve)
+    }
+  }
+  assert.deepEqual([...requestedEntries].sort((left, right) => left - right), [
+    28,
+    ...Array.from({ length: 36 }, (_, index) => 202 + index),
+    ...Array.from({ length: 50 }, (_, index) => 2013 + index),
+  ])
 })
 
 function entries(snapshot: BoneyardMaggotSnapshot) {

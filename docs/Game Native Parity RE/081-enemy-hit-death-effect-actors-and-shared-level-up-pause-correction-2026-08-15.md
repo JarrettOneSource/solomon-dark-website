@@ -318,3 +318,31 @@ formula changes.
 - No browser-platform exception or material unknown remains. This receipt is
   the only tracked change after the cited gate; the complete gate and built
   journeys are repeated on the receipt-bearing tree before publication.
+
+## 2026-09-01 — Player-report correlation and deployed protocol-116 receipt
+
+- The supplied archive filename timestamp is
+  `2026-09-01T01:24:05.832Z`. Its decoded wizard is Soggy, matching the exact
+  production browser diagnostic and game-host disconnect rows.
+- At `01:29:06.036Z` the browser rejected
+  `frame.world.enemyWorldFeedback exceeds the native enemy-feedback bounds`.
+  At `01:29:07.057Z` the proxy closed code 4008 with the same reason, and the
+  diagnostic submission was captured at `01:29:09.061Z`. The player had
+  resumed successfully eight seconds earlier. This proves the reported
+  “crash on loading back in” is this decoder boundary, not corrupt native ZIP
+  bytes or a failed save parser.
+- The attachment itself is a byte-exact settled-Hub template after semantic
+  profile/progression patching. It cannot and does not carry the live feedback
+  accumulator; the browser diagnostic plus retained production continuation,
+  not the ZIP, are the causal evidence.
+- Commit `de0f28aae43733729440af0aba34237ec88ef6f8` corrected the shared
+  float32 maximum and protocol 116 before this report was triaged. Current
+  production publicly identifies revision
+  `46ec87a732b5330dbcab2850da7a4a9298810608`, which contains that fix.
+  Live loopback health reports `solomon-dark/116`; Website and game services
+  are active/running with successful results and zero restarts since the
+  current release entered service at `2026-09-01T15:25:04Z`.
+- This correlation changes no implementation. Coffin, Demon, and Portal still
+  share exact maximum `0.20000000298023224`; every transport path continues to
+  consume the shared bound. The separate Imp reachability and six-Coffin
+  presentation-load findings are recorded in entries 051 and 254.

@@ -3247,17 +3247,19 @@ function stepImp(
 ): BoneyardEnemyActor {
   if (brain.phase === 'death') return actor
   const moved = moveImp(actor, brain, work, context)
+  const movedBrain = moved.brain
+  if (movedBrain.family !== 'imp') throw new Error('Imp movement changed brain family')
   let visualRngState = brain.visualRngState
   const random = (): number => {
     const draw = nextBoneyardWaveRandom(visualRngState)
     visualRngState = draw.state
     return draw.value
   }
-  const flight = stepNativeImpFlight(brain, random)
+  const flight = stepNativeImpFlight(movedBrain, random)
   let stepped: BoneyardEnemyActor = {
     ...moved,
     brain: {
-      ...brain,
+      ...movedBrain,
       ...flight.state,
       visualRngState,
     },
@@ -3431,16 +3433,17 @@ function moveImp(
     path = steering.state
   }
   const distance = Math.hypot(delta.x, delta.y)
+  const requestedPosition = {
+    x: actor.position.x + delta.x,
+    y: actor.position.y + delta.y,
+  }
   const position = context.resolveMovement({
     actorId: actor.id,
     delta,
     position: actor.position,
     purpose: 'movement',
     radius: actor.config.collisionRadius,
-    requestedPosition: {
-      x: actor.position.x + delta.x,
-      y: actor.position.y + delta.y,
-    },
+    requestedPosition,
   })
   validatePoint(position, 'resolved Imp position')
   const traveled = Math.hypot(
@@ -3461,7 +3464,10 @@ function moveImp(
   work.steeringRngState = recovery.rngState
   return {
     ...actor,
-    brain,
+    brain: brain.escapeHeadingDeg !== null
+      && (position.x !== requestedPosition.x || position.y !== requestedPosition.y)
+      ? { ...brain, escapeHeadingDeg: null }
+      : brain,
     headingDeg,
     lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
     nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,

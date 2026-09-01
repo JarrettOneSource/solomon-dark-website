@@ -732,3 +732,178 @@ No member is blocked by the browser platform.
 - This candidate is locally committed and validated. Publication is recorded
   separately by Git history and the task handoff; deployment and
   live-production proof remain separately authorized receipts.
+
+## 2026-09-01 — Post-contact Imp playable-domain retention reopening
+
+### Reported smell and parity question
+
+- Player report: several Imps accumulated at the top-right Arena edge and
+  could be hit by Ring of Fire but were effectively unreachable to shorter-
+  range classes. The same run later had a severe six-Coffin stall and a resume
+  failure; those are dispositioned in entries 254 and 081 respectively.
+- The supplied launcher archive
+  `solomon-dark-stock-save-1788225845832.zip` is 28,689 bytes with SHA-256
+  `8619d9a29f4678dfc190386a46d5671bc108e412c86db4ff898348a7710f5ac3`.
+  Its filename timestamp is `2026-09-01T01:24:05.832Z`. Strict archive and
+  native decoding recovers the level-17 Fire/Body wizard Soggy, but the
+  `darkdata.cfg` and `gamestate.sav` are byte-exact results of applying those
+  semantic profile/progression patches to Website's settled-Hub template.
+  They contain no live Arena, wave, Coffin, Imp, or position state.
+- The closest retained server-side checkpoint for the same three-player
+  lineage is schema 22 at tick 110,360, document SHA-256
+  `50dc785dfb889c15ee610803690dcf07a2a5552f553354090db9d6ae6793f18a`.
+  It is not claimed as the exact export instant, but it contains the reported
+  Fire wizard and independently reproduces the reported population shape.
+- Parity question: preserve stock Imp flight/contact motion until world
+  collision actually changes the requested post-contact escape step, then
+  extend the Website's already-declared playable-domain safety policy so the
+  Imp relinquishes the outward escape latch and returns to common target
+  steering instead of remaining at an Arena edge indefinitely.
+
+This is a secondary report in the placement/movement system. Entry 72 proved
+local birth mobility, and the 2026-08-30 Portal reopening proved player-
+connected birth placement. Neither pass followed an already-valid Imp through
+contact, its persistent escape heading, collision clipping, and later target
+reacquisition. Birth reachability was incorrectly treated as lifetime
+reachability.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| External attachment | exact ZIP and decoded native members above | The wizard/profile chronology agrees with the report, while exact template-patch equality proves the ZIP cannot be used as a live-world replay. | high bytes and lifecycle boundary |
+| Browser diagnostics | submitted browser protocol-115 log captured `2026-09-01T01:29:09.061Z` | Soggy resumed the same private run three times. The final resume failed on the separately fixed enemy-feedback bound; this establishes the report's runtime/protocol lineage without inventing state from the ZIP. | high-live |
+| Retained production continuation | post-incident database backup; schema 22, tick 110,360, document hash above | All eight living Imps are pressed against the east/southeast combat edge. X roots are `1818.618..1835.787` in combat bounds ending at `1843.530`; two roots are also at Y `3922.432..3923.557` in bounds ending at `3931.470`. Their radii make the roots exactly edge-clamped. | high-live for the retained lineage |
+| Retained Imp state | same continuation | Every Imp has a non-null escape heading `125.751..176.293` equal to its actor heading. Ages are 4,834..12,727 ticks; two last moved at ticks 99,548 and 100,362 despite checkpoint tick 110,360. No actor has returned to ordinary target steering. | high-live causal state |
+| Native instructions already recovered | Imp movement `0x00478560`, tick `0x00485DC0`, contact/base slots `0x00478A20/0x00474000`, common movement executor `0x00525800`; entry 179 | A landing contact authors the persistent escape heading. Native collision can alter the requested root, but no recovered Imp branch clears that heading afterward. The stock defect is therefore real, not a browser-only timing guess. | high instruction-derived |
+| Current Website trace | `boneyard-enemy-store.ts` at `46ec87a7` | `moveImp` bypasses route construction whenever `escapeHeadingDeg` is non-null. It submits the outward step to collision and records reduced/zero travel in path recovery, but returns the same escape heading forever, so recovery state can never affect the chosen vector. | high static causal trace |
+
+Raw production and attachment bytes remain external evidence. The sanitized
+task copy removes the party-rejoin capability before analysis and is not a
+tracked artifact.
+
+### System boundary and membership inventory
+
+Native/product system: **hostile Imp post-contact escape ownership**, from a
+landing contact through the special outward vector, collision submission,
+common path recovery, target retention/reacquisition, save/replication, and
+death/run teardown.
+
+| Member / branch | Source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Pre-contact hostile Imp flight | `0x00478560/0x00485DC0`; entry 179 | `verified-already-at-parity` | unchanged target steering, bounce, vertical motion, VFX, audio, and contact edge |
+| Contact-authored escape heading | same tick/contact branch | `verified-already-at-parity` | exact RNG/order and initial outward heading remain unchanged |
+| Unobstructed post-contact escape | special Imp vector plus `0x00525800` | `verified-already-at-parity` | requested and resolved positions agree; latch and all motion bytes remain exact |
+| First clipped/deflected post-contact step | Website combat-confinement policy over native collision result | `exact-ported` as named product safety extension | clear only the escape latch when the authoritative result differs from the requested root; consume no RNG and do not move twice |
+| Subsequent ordinary pursuit | common Badguy path/target owner | `exact-ported` after safety release | retained eligible target and path state steer the same actor inward on later movement epochs |
+| Raw boundary stop, scenery collision, and dynamic-body deflection | shared movement resolver result | `exact-ported` through one collision-result predicate | all three changed-result forms release the same latch; no edge-specific coordinate check |
+| Ordinary wave Imp | retail schedule/factory | `exact-ported` through shared Imp brain | production-shaped regression |
+| Recursive Imp child | terminal Imp split helper | `exact-ported` through shared Imp brain | no child-only branch |
+| Demon-split Imp child | Demon terminal helper | `exact-ported` through shared Imp brain | no parent-specific branch |
+| Portal-ejected Imp child | Portal tick/direct child construction | `exact-ported` through shared Imp brain after the existing reachable birth correction | inherited flight values remain exact; later collision releases the same latch only after contact |
+| Custom/mod-authored hostile Imp | shared closed enemy factory | `exact-ported` | source identity does not bypass the brain owner |
+| GoodImp/GreenImp | separate ally/story owners | `out-of-system` — they do not consume this hostile store brain | negative factory census |
+| Wraith direct flyby | `0x00478EA0` and entry 273's explicit collision bypass | `out-of-system` — distinct native special-vector owner, no Imp escape latch | existing Wraith exact-flight matrix remains unchanged |
+| Skeleton/Archer/Mage/Zombie/Demon common movement | common routed path owner | `verified-already-at-parity` | no escape field and no behavior change |
+| Coffin/Portal stationary roots and Coffin Maggots | separate stationary/Maggot owners | `out-of-system` | no escape field; Maggot presentation/load is entry 254 |
+| Save schemas 1..28, resume, keyframe/delta, late join | retained Imp brain and existing sample | `exact-ported` without schema/protocol change | old stuck continuation restores; first changed movement releases latch; no client inference |
+| Pause, level picker, Game Over, death, new run | existing fixed-tick/lifecycle owners | `verified-already-at-parity` | paused state holds; teardown removes actor and latch |
+
+No member is browser-blocked. The deliberate visible difference from stock is
+that a post-contact Imp turns back toward play after its outward step first
+hits an obstacle or combat edge instead of preserving a now-unsatisfiable
+escape direction forever.
+
+### Native ownership thread and recovered behavioral contract
+
+- Contact remains landing-only and authors escape direction after all recovered
+  vocal, Bite, FireBurst, damage, and RNG work. The new safety predicate cannot
+  run at contact construction or alter that edge.
+- Each represented movement epoch still computes the exact outward delta and
+  submits it once through the existing authoritative collision/dynamic-body
+  owner. Requested-versus-resolved root equality is the only release signal.
+  Bounds, obstacle geometry, actor crowding, and movement cadence therefore
+  stay outside the Imp brain.
+- An identity result retains `escapeHeadingDeg` byte-for-byte. A changed result
+  keeps the resolved root and current heading for that epoch but clears the
+  latch. The next movement epoch enters the already-recovered common target,
+  route, gradual-turn, and stalled-recovery owner. No teleport, guessed inward
+  offset, timer, random reroll, or client-side rescue is introduced.
+- Save/rejoin carries the authoritative brain as before. The correction is
+  self-healing for existing edge-stuck saves because the first attempted
+  outward movement against the restored collision world releases the latch.
+
+### Confidence and open questions
+
+- Confirmed: attachment lifetime boundary; exact production diagnostic
+  lineage; eight edge-clamped roots; all eight retained escape headings;
+  current bypass; native persistent field; shared collision result; all Imp
+  producers and lifecycle consumers.
+- Inferred: the retained party checkpoint is the same reported run lineage,
+  not the exact attachment millisecond. The matching wizard/class,
+  six-Coffin/eight-Imp population, timing, and diagnostic sequence support that
+  inference; implementation does not depend on exact checkpoint identity.
+- Unknown: none material. The policy deliberately corrects a native dead-end
+  rather than claiming stock clears the field.
+
+### Web implementation and validation contract
+
+- Make `moveImp` release `escapeHeadingDeg` only when its one authoritative
+  movement result differs from the requested position. `stepImp` must retain
+  that returned brain instead of rebuilding from the pre-move brain.
+- Regression-first store coverage must prove exact identity retention,
+  boundary clipping release, scenery/dynamic deflection release, no additional
+  RNG/event/damage, and later inward common steering. All four hostile Imp
+  producer paths and save restore remain covered.
+- A production-shaped deterministic world test must run the eight retained
+  position/heading ranges without retaining an outward latch after contact
+  with the combat edge; all other living actors stay collision-valid.
+- Built Mac Chrome must exercise a natural authored Imp contact, drive it into
+  a combat edge, observe the same actor turn back and become conventionally
+  targetable, and retain empty page/console/response/wire/host-error arrays.
+  The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+
+### Implementation validation receipt
+
+- Implementation: `moveImp` still computes and submits the exact native
+  post-contact escape delta once. When the authoritative movement result is
+  numerically identical to the requested root, the escape latch is retained.
+  When bounds, scenery, or dynamic separation changes that result, the same
+  resolved root is kept and only `escapeHeadingDeg` is cleared. `stepImp` now
+  carries the movement-returned brain into the existing flight/contact tick,
+  so a later landing can still author a fresh native contact escape normally.
+  No timer, teleport, inward offset, extra movement, event, protocol field,
+  schema field, or random draw was added.
+- Red/green proof on the Mac: the new boundary-stop case failed on untouched
+  `46ec87a7` with an escape latch still present. The final identity/stop/slide/
+  dynamic-separation matrix passes and proves unchanged gameplay RNG, damage,
+  and event output. The combined focused enemy-store and Maggot presentation
+  run passes `96/96`; test TypeScript passes.
+- Production-shaped continuation: the capability-free schema-22 checkpoint
+  restored all eight edge-clamped Imps. After 1,000 current-candidate ticks,
+  all eight retained actor IDs, none retained an escape latch, none touched a
+  combat edge, and their roots had returned to X `914.261..1630.457` instead
+  of the prior east-edge X `1818.618..1835.787`. The native population
+  continued from 269 to 298 Maggots; no actor was teleported or dropped.
+  Simulation mean/p95/p99 were `1.132/1.619/3.377 ms` with one
+  `34.229 ms` maximum, inside the 100-Hz steady-state budget.
+- Mac Chrome source-browser acceptance retained the exact landing/contact
+  result: one damage, native escape heading `95.69782266882248`, both sounds,
+  FireBurst/landing children, and readable Imp pixels. A controlled collision
+  then released the latch with zero events and unchanged gameplay RNG. The
+  complete eight-family compositor, Maggot visibility checks, and page,
+  console, and failed-response arrays were clean. The inspected Imp crop is
+  SHA-256 `8c778d616ff41b8728f75abb119912416a0d6c7678a8719176d016acc353dc53`;
+  the complete frame is
+  `144cd7d5a328452972c5bbe1bdc0572f52935f8b3883ad77feb614976491ee6c`.
+- The first exact-tree Mac canonical gate exited zero: 19 backend/integration
+  contracts, all `1,753/1,753` broad Boneyard/runtime tests, every later
+  frontend/desktop suite, production frontend and GameHost builds, bundle
+  budget, media policy, and CSP. `Game-BBQPglmZ.js` measured 263,678 raw /
+  80,232 gzip bytes. Pre-receipt combined log SHA-256 is
+  `f0b8992806fbbbb21ebc97274fb320596a753219724ec16fd9ac54a8c2b08f16`.
+- No browser-platform exception remains. The only intentional difference is
+  the declared Website safety release after collision. At this validation
+  receipt cutoff, publication and deployment were separate: the candidate
+  remained uncommitted in the isolated task worktree and had not been pushed
+  or deployed.

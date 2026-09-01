@@ -360,7 +360,9 @@ interface BoneyardRendererFrameDiagnostics {
   maxDynamicZIndex: number
   maxMainLightScalar: number
   maxMainZIndex: number
+  maggotCulledCount: number
   maggotCount: number
+  maggotVisibleCount: number
   lootCount: number
   modEffectCount: number
   mageLightningCount: number
@@ -980,7 +982,9 @@ export async function createBoneyardWorldRenderer(
     maxDynamicZIndex: 0,
     maxMainLightScalar: 0,
     maxMainZIndex: 0,
+    maggotCulledCount: 0,
     maggotCount: 0,
+    maggotVisibleCount: 0,
     lootCount: 0,
     modEffectCount: 0,
     mageLightningCount: 0,
@@ -1455,7 +1459,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.maxDynamicZIndex = painter.maxDynamicZIndex
       frameDiagnostics.maxMainLightScalar = painter.maxMainLightScalar
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
+      frameDiagnostics.maggotCulledCount = scene.maggotCulledCount
       frameDiagnostics.maggotCount = scene.maggotCount
+      frameDiagnostics.maggotVisibleCount = scene.maggotVisibleCount
       frameDiagnostics.lootCount = scene.lootCount
       frameDiagnostics.modEffectCount = scene.modEffectCount
       frameDiagnostics.mageLightningCount = scene.mageLightningCount
@@ -1645,7 +1651,9 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.minTreeAlpha = `${painter.minTreeAlpha}`
       canvas.dataset.minTreeLightScalar = `${painter.minTreeLightScalar}`
       canvas.dataset.enemyProjectileCount = `${scene.enemyProjectileCount}`
+      canvas.dataset.maggotCulledCount = `${scene.maggotCulledCount}`
       canvas.dataset.maggotCount = `${scene.maggotCount}`
+      canvas.dataset.maggotVisibleCount = `${scene.maggotVisibleCount}`
       canvas.dataset.lootCount = `${scene.lootCount}`
       canvas.dataset.modEffectCount = `${scene.modEffectCount}`
       canvas.dataset.goodieCount = `${scene.goodieCount}`
@@ -2083,13 +2091,15 @@ class BoneyardDynamicScene {
     this.gates.update(snapshot.world.gateLeaves)
     this.goodies.update(snapshot.world.goodies, snapshot.tick)
     this.enemies.update(enemySnapshots, snapshot.tick)
+    const visibleWorldBounds = boneyardVisibleWorldBounds(camera, viewport)
     this.enemyDeathEffects.update(
       snapshot.world.deathEffects,
-      boneyardVisibleWorldBounds(camera, viewport),
+      visibleWorldBounds,
     )
     this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects)
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
-    this.maggots.update(snapshot.world.maggots)
+    this.maggots.update(snapshot.world.maggots, visibleWorldBounds)
+    const visibleMaggots = this.maggots.visibleSnapshots
     this.loot.update(snapshot.world.loot)
     this.seeker.update(snapshot, localPlayerId)
     this.modEffects.update(snapshot)
@@ -2642,7 +2652,7 @@ class BoneyardDynamicScene {
         nativeBoneyardLightTint(worldLightScalar(effect.position)),
       )
     }
-    for (const maggot of snapshot.world.maggots) {
+    for (const maggot of visibleMaggots) {
       this.maggots.setTint(
         maggot.id,
         nativeBoneyardLightTint(worldLightScalar(maggot.position)),
@@ -2777,7 +2787,7 @@ class BoneyardDynamicScene {
         sortBias: layer.sortBias,
       })
     }
-    for (const maggot of snapshot.world.maggots) {
+    for (const maggot of visibleMaggots) {
       dynamicLayers.push({
         id: `maggot:${maggot.id}`,
         queueFamily: 'ordinary-dynamic',
@@ -2980,7 +2990,7 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`enemy-projectile-effect:${effect.id}`)?.zIndex ?? 1,
       )
     }
-    for (const maggot of snapshot.world.maggots) {
+    for (const maggot of visibleMaggots) {
       this.maggots.setDepth(
         maggot.id,
         positionedDynamics.get(`maggot:${maggot.id}`)?.zIndex ?? 1,
@@ -3129,6 +3139,14 @@ class BoneyardDynamicScene {
 
   get maggotCount(): number {
     return this.maggots.size
+  }
+
+  get maggotVisibleCount(): number {
+    return this.maggots.visibleSize
+  }
+
+  get maggotCulledCount(): number {
+    return this.maggots.size - this.maggots.visibleSize
   }
 
   get lootCount(): number {

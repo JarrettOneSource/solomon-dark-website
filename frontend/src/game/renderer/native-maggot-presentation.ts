@@ -1,4 +1,6 @@
+import type { BoneyardBounds } from '../core-kernels/boneyard.ts'
 import type { BoneyardMaggotSnapshot } from '../protocol/game-state.ts'
+import { boneyardResidentIsVisible } from './boneyard-render-contract.ts'
 import {
   nativeEnemyFacingBucket,
   type NativeEnemySpriteLayer,
@@ -6,6 +8,13 @@ import {
 
 export interface NativeMaggotPresentationPlan {
   readonly layers: readonly NativeEnemySpriteLayer[]
+}
+
+export interface NativeMaggotArtRecord {
+  readonly anchorX: number
+  readonly anchorY: number
+  readonly height: number
+  readonly width: number
 }
 
 export function nativeMaggotPresentationPlan(
@@ -41,6 +50,39 @@ export function nativeMaggotPresentationPlan(
           },
         ],
   }
+}
+
+export function nativeMaggotVisualBounds(
+  maggot: BoneyardMaggotSnapshot,
+  resolveArt: (
+    atlas: NativeEnemySpriteLayer['atlas'],
+    entry: number,
+  ) => NativeMaggotArtRecord,
+  plan = nativeMaggotPresentationPlan(maggot),
+): BoneyardBounds {
+  const layer = plan.layers[0]!
+  const art = resolveArt(layer.atlas, layer.entry)
+  return {
+    h: art.height * layer.scale,
+    w: art.width * layer.scale,
+    x: maggot.position.x + layer.offset.x - art.anchorX * layer.scale,
+    y: maggot.position.y + layer.offset.y - art.anchorY * layer.scale,
+  }
+}
+
+export function nativeMaggotIsVisible(
+  maggot: BoneyardMaggotSnapshot,
+  visibleBounds: Readonly<BoneyardBounds>,
+  resolveArt: (
+    atlas: NativeEnemySpriteLayer['atlas'],
+    entry: number,
+  ) => NativeMaggotArtRecord,
+  plan = nativeMaggotPresentationPlan(maggot),
+): boolean {
+  return boneyardResidentIsVisible(
+    nativeMaggotVisualBounds(maggot, resolveArt, plan),
+    visibleBounds,
+  )
 }
 
 function maggotRecord(maggot: BoneyardMaggotSnapshot): {

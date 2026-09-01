@@ -416,3 +416,183 @@ derived authoritative state; no approximation or compatibility layer is needed.
 - Unknowns / platform differences: none. Push and deployment were not requested
   or performed. This receipt is the only tracked post-gate write; the exact
   final documented tree must pass the canonical gate before completion.
+
+## 2026-09-01 — Six-Coffin native population and retained Maggot-view reopening
+
+### Reported smell and parity question
+
+- Player report: a very large lag spike coincided with five or more Coffins
+  appearing and behaving strangely. The supplied stock-export archive was
+  downloaded at the point the player left the run, but exact template-patch
+  equality proves it carries progression only and cannot replay live Coffins.
+- The closest retained server-side checkpoint for the same three-player
+  lineage contains six living open Coffins, 269 living Coffin-owned Maggots,
+  30 ordinary enemy actors, 118 death effects, and nine loot actors at tick
+  110,360. Each Coffin owns 30..53 children.
+- Native behavior to preserve: Coffin state-3 charge emission, up to 30
+  inactive plus the configured active grounded population per owner, all
+  ballistic/crawl/bite/death frames, lighting, painter registration, fixed-
+  tick movement, replication, save/rejoin, and parent teardown.
+- Parity question: retain the complete native population and every live sample
+  while preventing fully off-camera Maggots from constructing/updating Pixi
+  sprites, entering frame-local light queries, or entering frame-local painter
+  traversal until their complete transformed art can touch the guarded view.
+- Falsifiers: the private authoritative host itself missed its 100-Hz budget;
+  the 269 count exceeds native admission; off-camera Maggots own audible,
+  collision, light-provider, or proxy output that requires a Pixi submission;
+  transformed emergence/death art can enter before its root; or re-entry uses
+  a stale sample/depth/tint.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retained production continuation | schema-22 post-incident backup, tick 110,360, document SHA-256 `50dc785dfb889c15ee610803690dcf07a2a5552f553354090db9d6ae6793f18a` | Six open Coffins own 52, 51, 32, 51, 30, and 53 Maggots. Population is 269 Maggots: 260 crawling, nine emerging, 80 combat-active, 189 inactive. | high-live for retained lineage |
+| Native system evidence | this entry's `0x004A2760/0x00479C30/0x0048B2A0/0x004889B0/0x00487FD0` trace | Open Coffins intentionally continue emission; each owner may retain 30 inactive children plus its configured active capacity. A count cap or early retirement would violate stock. | high instruction-derived |
+| Exact browser diagnostics | protocol-115 submission captured `2026-09-01T01:29:09.061Z`; production journal | The client recorded `pingMs=1212`, later `pingMs=2845`, and the host recorded a missing replication baseline. The private session recorded no `simulation.tick_lag`; two nearby 45/49-ms lag warnings belonged to the empty shared Hub and are not this run. | high-live causal separation |
+| Current Mac exact-state host replay | detached `origin/main` `46ec87a7`, M2 Mac mini, Node 22.17.0; sanitized capability-free continuation | Restore 28.08 ms; 1,000 live ticks mean 1.097 ms, p95 1.568, p99 2.945, one 36.543-ms maximum; population grew from 269 to 298 Maggots. The 100-Hz authority is inside its 10-ms steady-state budget. | high diagnostic |
+| Current projection replay | same exact state | Snapshot projection is 0.961 ms; keyframe decode 7.169 ms; keyframe wire JSON 96,467 bytes, same-state compact frame 70,909 bytes, and materialized snapshot JSON 277,800 bytes. Projection plus browser work is the pressure lane, not Coffin scheduling. | high diagnostic |
+| Current renderer trace | `native-maggot-view.ts`, `boneyard-world-renderer.ts` at `46ec87a7` | Every replicated Maggot updates a retained view each rendered frame. All Maggots then receive a radial light query, a dynamic painter row, and a depth lookup even when their complete art is far outside the camera. Unlike death effects, Maggots have no guarded transformed-art visibility owner. | high static causal trace |
+| Existing visibility contract | entry 039 plus entry 273 death-effect reopening; `boneyardVisibleWorldBounds`, `boneyardResidentIsVisible`, `boneyardTransformedArtBounds` | A resident can skip only frame-local drawing/traversal when its full transformed authored rectangle plus the 32-unit interpolation guard misses the view. Identity, state, registration, and teardown remain live. | high existing product contract |
+
+The raw save and capability-bearing party state remain external evidence. The
+Mac diagnostic used a task-owned copy with the party-rejoin capability removed;
+that file is temporary and must not be retained after the result is recorded.
+
+### System boundary and membership inventory
+
+Native/web system: **retained browser presentation of Coffin-owned Maggots**,
+from compact descriptor/sample reconstruction through interpolation, complete
+art bounds, Pixi child ownership, Region lighting, painter submission, re-
+entry, retirement, run replacement, and renderer teardown.
+
+| Member / branch | Disposition | Required proof |
+| --- | --- | --- |
+| Coffin hidden/rising/holding/open body and charge emission | `verified-already-at-parity` | no schedule, emission, count, RNG, or body change |
+| 30 inactive and configured active Maggots per owner | `verified-already-at-parity` | production-shaped six-owner population remains 269+ and no child is dropped |
+| Emerging `edge` and `lid` trajectories | `exact-ported` guarded view over all BadGuys `2013..2062` rows | transformed offset/scale bounds cover all five phases and ten orientations before culling |
+| Crawl 18 facings and bite 18 facings | `exact-ported` guarded view over BadGuys `202..237` | exact record/anchor/scale bounds and re-entry sample |
+| Maggot death DeadHawg 28 | `exact-ported` guarded view | death alpha/scale/position remain current |
+| Red hit redraw | `exact-ported` as same-geometry child union | visible actor owns both layers; offscreen actor owns no submitted sprite children until entry |
+| Retained view map and semantic IDs | `exact-ported` | every live descriptor retains one view row; no offscreen retirement or ID coalescing |
+| Complete protocol samples and presentation interpolation | `verified-already-at-parity`; retained | all 269 samples continue to decode/interpolate; no lower cadence or client simulation |
+| World-light tint query | `exact-ported` visible-only evaluation | current sample receives tint before its first entering frame; invisible pixels require no query |
+| World-sorted painter registration/depth | `exact-ported` visible-only traversal | native registration stays in state; visible rows alone enter the frame-local queue and receive current depth |
+| Offscreen-to-visible transition | `exact-ported` | current plan, texture, transform, tint, and depth apply in the same frame `renderable` becomes true |
+| Visible-to-offscreen transition | `exact-ported` | retained view becomes non-renderable without stale painter/light submission |
+| Pause/SkillPicker/global actor-root hide | `verified-already-at-parity` | parent actor root remains the global visibility owner |
+| Parent death, Maggot death, Game Over, save/rejoin, new run, renderer destroy | `exact-ported` lifecycle | all retained containers/sprites destroy once; no prior-run view survives |
+| Enemy bodies, ordinary enemy auxiliaries, hostile projectiles, loot, and death effects | `out-of-system` for this Maggot-view change | their separate visibility/lifecycle owners remain unchanged |
+| Host simulation, native population, collision, damage, audio, wave counts | `out-of-system` for representation optimization | exact production replay hashes/counts remain the authority |
+
+No member is browser-blocked. There is no intended visible difference: a
+Maggot whose complete authored art cannot touch the guarded camera contributes
+no pixels; it is fully current on the first frame where it can.
+
+### Native ownership thread and recovered behavioral contract
+
+- Authority continues to create, move, admit, damage, and retire every Maggot
+  at native fixed ticks. The protocol and interpolation timeline retain every
+  semantic member; population reduction is forbidden.
+- The browser retained-view map is distinct from the frame-local Pixi/painter
+  submission. Each live ID keeps a lightweight container row. Sprite children
+  and per-frame transforms are required only when complete transformed art
+  overlaps `boneyardVisibleWorldBounds`, which already includes the 32-unit
+  interpolation guard.
+- Visibility uses authored record width, height, anchor, current vertical
+  offset, current scale, and rotation for every reachable record. Root-only or
+  radius-only culling is invalid for airborne emergence.
+- An invisible Maggot skips its sprite mutation, light lookup, painter-row
+  insertion, and depth lookup. Its current snapshot remains available. On
+  entry the renderer applies the complete current plan before tint/depth and
+  before Pixi submission; on retirement the retained container and any lazily
+  created sprites are destroyed exactly once.
+
+### Confidence and open questions
+
+- Confirmed: native 50-per-owner membership shape; retained six-Coffin/269-
+  Maggot state; private-host versus client/projection causal separation;
+  current snapshot sizes/timings; missing Maggot visibility owner; every
+  reachable Maggot atlas family and lifecycle branch.
+- Inferred: the retained three-player checkpoint is the same reported lineage,
+  not the exact export millisecond. The matching wizard/class, six-Coffin
+  population, and diagnostic chronology support that inference. The visibility
+  implementation depends only on the exact native population contract.
+- Unknown before browser validation: the exact share of the 2.845-second
+  latency sample attributable to browser work versus network transport. The
+  candidate must therefore report frame/task improvement without claiming
+  that every latency source is local rendering.
+
+### Web implementation and validation contract
+
+- Add one pure complete-art bounds function for every Maggot state/record.
+  Deepen `NativeMaggotViews` with retained visible membership and lazy sprite
+  mutation. Reuse the existing guarded world bounds; do not add a count,
+  quality, device, or distance threshold.
+- Make lighting, painter-row construction, and depth assignment consume the
+  same visible-ID predicate. Add visible/culled diagnostics while retaining
+  total `maggotCount`.
+- Red/green coverage must enumerate all 50 emergence rows, 36 crawl/bite rows,
+  death, hit redraw, exact camera-edge contact, offscreen retention, re-entry,
+  retirement, and destroy.
+- Re-run the sanitized six-Coffin state on the Mac. Host state/counts and
+  snapshot bytes must remain unchanged. A production Chrome A/B/A profile at
+  matching camera/population and CPU throttle must show identical visible
+  Maggot plans/painter order with materially lower browser task/frame tails.
+- Built Chrome must resume the production-shaped state, report total and
+  visible/culled Maggots, pan or move across an entering child, and retain
+  empty page/console/response/wire/host-error arrays. The exact candidate must
+  pass `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+
+### Implementation validation receipt
+
+- Implementation preserves the complete authoritative and replicated Maggot
+  population. `nativeMaggotVisualBounds` derives the current authored record,
+  anchor, vertical offset, and scale for crawl, bite, death, and every
+  emergence phase/orientation. `NativeMaggotViews` retains one row per live ID
+  but creates/mutates sprite children only for guarded visible art. One retained
+  visible-snapshot list drives tint, painter insertion, and depth, removing
+  three repeated all-population traversals. Static sprite metadata is cached;
+  retirement and renderer destruction remain exact.
+- Automated coverage enumerates all 50 BadGuys `2013..2062` emergence rows,
+  all 36 BadGuys `202..237` crawl/bite rows, DeadHawg 28 death, hit redraw,
+  exact camera-edge inclusion, and fully outside rejection. The combined
+  focused enemy-store/Maggot suite passes `96/96`; test TypeScript passes.
+- Deterministic Mac Chrome camera acceptance retained two Maggot IDs while
+  moving from camera `(592.593,500)` to `(2407.407,1500)`. Both frames reported
+  total two, visible one, culled one; the initially visible west actor cannot
+  intersect the later guarded view, so the later visible row proves the east
+  actor materialized its current state on entry. Page, console, and failed-
+  response arrays were empty.
+- The capability-free production-shaped save resumed in built Mac Chrome with
+  the six native Coffins and a growing 300-plus child population. At the first
+  observed camera it retained 300 total / 209 visible / 91 culled. A later
+  active frame retained 312 total / 15 visible / 297 culled with all 30
+  ordinary enemies inside combat bounds and empty page, console, response,
+  wire, and host-error arrays. Visual inspection found the active Arena frame
+  coherent; SHA-256 is
+  `abfee4a6f0a2c046c871cbce9ccf93ab3b57f9ebad6a46f076ffde24aecb2447`.
+- Production-build 4x-CPU A/B/A/A used the same sanitized continuation and
+  viewport. Baseline samples delivered 576 and 588 frames over ten seconds;
+  candidate samples delivered 588 and 589. Steady p95 remained `16.8 ms` in
+  all samples; one baseline sample had `33.4 ms` p99 while the other baseline
+  and both candidates had `16.8 ms`. Candidate sampled CPU time averaged
+  10,816.9 ms versus baseline 10,946.5 ms, a bounded 1.18% reduction. This is
+  recorded as removal of proven redundant work, not as proof that a remote
+  2.845-second latency incident was entirely renderer-caused.
+- The unchanged compact wire remains 70,909 raw / 16,062 deflate-level-3
+  bytes for the retained checkpoint; 269 Maggot rows account for 17,117 raw
+  bytes. No protocol weakening, view-distance replication, count cap, or
+  client-side simulation was introduced.
+- The first exact-tree Mac canonical gate exited zero: 19 backend/integration
+  contracts, all `1,753/1,753` broad Boneyard/runtime tests, every later
+  frontend/desktop suite, production frontend and GameHost builds, bundle
+  budget, media policy, and CSP. `Game-BBQPglmZ.js` measured 263,678 raw /
+  80,232 gzip bytes. Pre-receipt combined log SHA-256 is
+  `f0b8992806fbbbb21ebc97274fb320596a753219724ec16fd9ac54a8c2b08f16`.
+- No visible Maggot behavior or browser-platform exception remains. The exact
+  network-versus-client share of the historical high-latency samples is not
+  recoverable from the bounded submitted log; current code closes the proven
+  renderer/painter waste without inventing a network fix. At this validation
+  receipt cutoff, publication and deployment remained separate and had not
+  occurred.

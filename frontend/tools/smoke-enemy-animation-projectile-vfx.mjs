@@ -726,6 +726,88 @@ try {
     }
 
     const initialSnapshot = snapshotAt(120, false)
+    const visibilityRunId = `${runId}-maggot-visibility`
+    const visibilityLoaded = {
+      ...loaded,
+      runId: visibilityRunId,
+      scene: {
+        ...loaded.scene,
+        bounds: { h: 2_000, w: 3_000, x: 0, y: 0 },
+        spawn: { facingDeg: 0, x: 500, y: 500 },
+      },
+    }
+    const visibilityMaggots = [
+      { id: 401, position: { x: 500, y: 500 }, registrationOrdinal: 201 },
+      { id: 402, position: { x: 2_500, y: 1_500 }, registrationOrdinal: 202 },
+    ]
+    const maggotVisibilitySnapshot = (position, tick) => {
+      const source = snapshotAt(tick, false)
+      return {
+        ...source,
+        players: {
+          ...source.players,
+          local: { ...source.players.local, position },
+        },
+        run: { ...source.run, runId: visibilityRunId },
+        world: {
+          ...source.world,
+          deathEffects: [],
+          enemies: [],
+          enemyEvents: [],
+          enemyProjectileEffects: [],
+          enemyProjectiles: [],
+          loot: [],
+          mageLightningPulses: [],
+          maggots: visibilityMaggots.map((maggot) => ({
+            alpha: 1,
+            currentHealth: 2,
+            deathEpoch: 0,
+            deathTick: 0,
+            emergencePhase: 0,
+            emergenceOrientation: 0,
+            emergenceTick: 24,
+            headingDeg: 0,
+            hitFlash: 0,
+            id: maggot.id,
+            launchTrajectory: 'edge',
+            lightRegistration: {
+              managerLane: 'actor',
+              registrationOrdinal: maggot.registrationOrdinal,
+            },
+            maximumHealth: 2,
+            ownerCoffinActorId: 1,
+            pose: 0,
+            position: maggot.position,
+            spawnTick: 0,
+            state: 'crawl',
+            verticalOffset: 0,
+            visualScale: 1,
+          })),
+          runId: visibilityRunId,
+        },
+      }
+    }
+    const maggotVisibilityRenderer = await rendererModule.createBoneyardWorldRenderer({
+      boneyard: visibilityLoaded,
+      devicePixelRatio: 1,
+      initialSnapshot: maggotVisibilitySnapshot({ x: 500, y: 500 }, 120),
+      modAssets: [],
+      modCatalog: [],
+      playerId: 'local',
+      viewport,
+    })
+    const initialMaggotVisibility = structuredClone(
+      maggotVisibilityRenderer.canvas.__sdrBoneyardFrame,
+    )
+    for (let tick = 121; tick <= 180; tick += 1) {
+      maggotVisibilityRenderer.render(
+        maggotVisibilitySnapshot({ x: 2_500, y: 1_500 }, tick),
+      )
+    }
+    const enteredMaggotVisibility = structuredClone(
+      maggotVisibilityRenderer.canvas.__sdrBoneyardFrame,
+    )
+    maggotVisibilityRenderer.destroy()
     const auxiliaryPlans = Object.fromEntries(enemiesAt(true).map((enemy) => [
       enemy.enemyToken,
       presentationModule.nativeEnemyPresentationPlan(
@@ -998,20 +1080,37 @@ try {
     if (!impActor || impActor.brain.family !== 'imp') {
       throw new Error('controlled Imp authority lost its actor')
     }
+    const impContactDamageCount = impAuthority.playerDamage.length
+    const impContactEvents = impAuthority.events
+    const impContactRngState = impAuthority.store.rngState
+    impAuthority = enemyStoreModule.stepBoneyardEnemyStore(impAuthority.store, {
+      firstProjectileWorldContact: () => null,
+      players: { local: impTarget },
+      resolveMovement: ({ position }) => position,
+      resolveSpawnIntents: () => [],
+      tick: 4,
+    })
+    const releasedImpActor = impAuthority.store.actors[0]
+    if (!releasedImpActor || releasedImpActor.brain.family !== 'imp') {
+      throw new Error('collision-released Imp authority lost its actor')
+    }
     const impAuthorityReceipt = {
       action: impContactSnapshot.world.enemies[0]?.animation.action,
       auxiliaryEffectCount: impRenderer.canvas.__sdrBoneyardFrame.enemyAuxiliaryEffectCount,
       auxiliaryEffectLanes:
         impRenderer.canvas.__sdrBoneyardFrame.enemyAuxiliaryEffectLanes,
-      damageCount: impAuthority.playerDamage.length,
+      damageCount: impContactDamageCount,
       escapeHeadingDeg: impActor.brain.escapeHeadingDeg,
+      escapeReleasedAfterCollision: releasedImpActor.brain.escapeHeadingDeg === null,
       horizontalSpeed: impActor.brain.horizontalSpeed,
+      collisionReleaseEventCount: impAuthority.events.length,
+      collisionReleaseRngUnchanged: impAuthority.store.rngState === impContactRngState,
       phase: impActor.brain.phase,
       pixelDifference: compare(impBeforePixels, impContactPixels),
-      sounds: impAuthority.events
+      sounds: impContactEvents
         .filter(({ type }) => type === 'enemy-action-sound')
         .map(({ sound }) => sound),
-      types: impAuthority.events.map(({ type }) => type),
+      types: impContactEvents.map(({ type }) => type),
       upperAlpha: impActor.brain.effectAlpha,
       verticalOffset: impActor.brain.verticalOffset,
     }
@@ -1121,6 +1220,22 @@ try {
       demonAnimationDifference: compare(initialDemonPixels, advancedDemonPixels),
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
       impAuthority: impAuthorityReceipt,
+      maggotVisibility: {
+        entered: {
+          cameraX: enteredMaggotVisibility.cameraX,
+          cameraY: enteredMaggotVisibility.cameraY,
+          culled: enteredMaggotVisibility.maggotCulledCount,
+          total: enteredMaggotVisibility.maggotCount,
+          visible: enteredMaggotVisibility.maggotVisibleCount,
+        },
+        initial: {
+          cameraX: initialMaggotVisibility.cameraX,
+          cameraY: initialMaggotVisibility.cameraY,
+          culled: initialMaggotVisibility.maggotCulledCount,
+          total: initialMaggotVisibility.maggotCount,
+          visible: initialMaggotVisibility.maggotVisibleCount,
+        },
+      },
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
       skillOffers: skillOfferReceipt,
@@ -1206,6 +1321,18 @@ try {
   assert.deepEqual(receipt.frame.enemyProjectileIds, [101, 102, 103, 104, 105, 106, 107, 108])
   assert.deepEqual(receipt.frame.enemyProjectileEffectIds, [201, 202, 203, 204, 205, 206, 207, 208, 209])
   assert.equal(receipt.frame.maggotCount, 1)
+  assert.equal(receipt.frame.maggotVisibleCount, 1)
+  assert.equal(receipt.frame.maggotCulledCount, 0)
+  assert.equal(receipt.maggotVisibility.initial.total, 2)
+  assert.equal(receipt.maggotVisibility.initial.visible, 1)
+  assert.equal(receipt.maggotVisibility.initial.culled, 1)
+  assert.ok(receipt.maggotVisibility.initial.cameraX < 1_000)
+  assert.ok(receipt.maggotVisibility.initial.cameraY < 1_000)
+  assert.equal(receipt.maggotVisibility.entered.total, 2)
+  assert.equal(receipt.maggotVisibility.entered.visible, 1)
+  assert.equal(receipt.maggotVisibility.entered.culled, 1)
+  assert.ok(receipt.maggotVisibility.entered.cameraX > 2_000)
+  assert.ok(receipt.maggotVisibility.entered.cameraY > 1_000)
   assert.equal(receipt.frame.mageLightningCount, 1)
   assert.equal(receipt.impAuthority.action, null)
   assert.equal(receipt.impAuthority.auxiliaryEffectCount, 2)
@@ -1216,6 +1343,9 @@ try {
   assert.equal(receipt.impAuthority.damageCount, 1)
   assert.equal(receipt.impAuthority.phase, 'flight')
   assert.ok(receipt.impAuthority.escapeHeadingDeg !== null)
+  assert.equal(receipt.impAuthority.escapeReleasedAfterCollision, true)
+  assert.equal(receipt.impAuthority.collisionReleaseEventCount, 0)
+  assert.equal(receipt.impAuthority.collisionReleaseRngUnchanged, true)
   assert.ok(
     receipt.impAuthority.horizontalSpeed >= 4.5
       && receipt.impAuthority.horizontalSpeed <= 11.25,
