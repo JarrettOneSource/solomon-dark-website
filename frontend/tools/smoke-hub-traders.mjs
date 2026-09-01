@@ -43,11 +43,13 @@ let staticServer = null
 let gameHost = null
 let gameCredential = null
 let baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
-if (focusedHagatha && productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
+if (productionBuild && !process.env.SDR_GAME_TRADER_SMOKE_URL) {
   staticServer = await startStaticClientServer({
     root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
   })
-  gameCredential = 'hagatha-capacity-browser-acceptance'
+  gameCredential = focusedHagatha
+    ? 'hagatha-capacity-browser-acceptance'
+    : 'hub-trader-browser-acceptance'
   gameHost = await startGameHost({
     allowedOrigins: [staticServer.origin],
     authentication: { kind: 'shared', credential: gameCredential },

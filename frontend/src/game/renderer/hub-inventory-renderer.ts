@@ -1,6 +1,7 @@
 import {
   Container,
   Graphics,
+  NineSliceSprite,
   Sprite,
   Texture,
 } from 'pixi.js'
@@ -106,6 +107,8 @@ import {
   HUB_HOVER_BOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_FLYBY,
+  HUB_INVENTORY_IDENTITY_PAGE,
+  HUB_INVENTORY_INFO_FRAME,
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ATTRIBUTES_PAGE,
   HUB_INVENTORY_INTERACTION,
@@ -149,6 +152,7 @@ import {
   hubHagathaTooltipLines,
   hubItemTooltipLines,
   hubInventoryPrimarySpellLines,
+  hubInventoryPrimarySpellTint,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
   hubInventoryWizardIdentityText,
@@ -1161,6 +1165,17 @@ function addStats(
   addCenteredAtlasSprite(context, content, 'Inventory', 16, 169 + decorationShift, 284.5)
   addCenteredAtlasSprite(context, content, 'Inventory', 16, 319 + decorationShift, 256.5)
   addCenteredAtlasSprite(context, content, 'Inventory', 16, 119 + decorationShift, 367.5)
+  for (const [x, y] of HUB_INVENTORY_ATTRIBUTES_PAGE.decorationCenters) {
+    addCenteredAtlasSprite(context, content, 'Inventory', 16, x + contentShift, y)
+  }
+  addCenteredAtlasSprite(
+    context,
+    content,
+    'Inventory',
+    HUB_PRIMARY_SPELL_PANE.gemRecord,
+    HUB_PRIMARY_SPELL_PANE.gemCenter[0] + contentShift,
+    HUB_PRIMARY_SPELL_PANE.gemCenter[1],
+  )
   const indicatorX = companion
     ? HUB_INVENTORY_STATS_PAGES.companionIndicatorX
     : HUB_INVENTORY_STATS_PAGES.standaloneIndicatorX
@@ -1179,24 +1194,63 @@ function addStats(
       -1,
     )
   }
-  addInset(content, 86 + contentShift, 112, 227, 29)
-  addInset(content, 86 + contentShift, 143, 227, 43)
-  addInset(
+  addInventoryInfoFrame(
+    context,
+    content,
+    HUB_INVENTORY_IDENTITY_PAGE.headingRect[0] + contentShift,
+    HUB_INVENTORY_IDENTITY_PAGE.headingRect[1],
+    HUB_INVENTORY_IDENTITY_PAGE.headingRect[2],
+    HUB_INVENTORY_IDENTITY_PAGE.headingRect[3],
+  )
+  addInventoryInfoFrame(
+    context,
+    content,
+    HUB_INVENTORY_IDENTITY_PAGE.bodyRect[0] + contentShift,
+    HUB_INVENTORY_IDENTITY_PAGE.bodyRect[1],
+    HUB_INVENTORY_IDENTITY_PAGE.bodyRect[2],
+    HUB_INVENTORY_IDENTITY_PAGE.bodyRect[3],
+  )
+  addInventoryInfoFrame(
+    context,
     content,
     HUB_PRIMARY_SPELL_PANE.headingRect[0] + contentShift,
     HUB_PRIMARY_SPELL_PANE.headingRect[1],
     HUB_PRIMARY_SPELL_PANE.headingRect[2],
     HUB_PRIMARY_SPELL_PANE.headingRect[3],
   )
-  addInset(
+  addInventoryInfoFrame(
+    context,
     content,
     HUB_PRIMARY_SPELL_PANE.bodyRect[0] + contentShift,
     HUB_PRIMARY_SPELL_PANE.bodyRect[1],
     HUB_PRIMARY_SPELL_PANE.bodyRect[2],
     HUB_PRIMARY_SPELL_PANE.bodyRect[3],
   )
-  addInset(content, 86 + contentShift, 330, 227, 54)
-  addBitmapText(context, content, model.config.displayName.toUpperCase(), 'menu', 96 + contentShift, 136, { align: 'left', tint: 0xffffff })
+  addInventoryInfoFrame(
+    context,
+    content,
+    HUB_PRIMARY_SPELL_PANE.meleeHeadingRect[0] + contentShift,
+    HUB_PRIMARY_SPELL_PANE.meleeHeadingRect[1],
+    HUB_PRIMARY_SPELL_PANE.meleeHeadingRect[2],
+    HUB_PRIMARY_SPELL_PANE.meleeHeadingRect[3],
+  )
+  addInventoryInfoFrame(
+    context,
+    content,
+    HUB_PRIMARY_SPELL_PANE.meleeBodyRect[0] + contentShift,
+    HUB_PRIMARY_SPELL_PANE.meleeBodyRect[1],
+    HUB_PRIMARY_SPELL_PANE.meleeBodyRect[2],
+    HUB_PRIMARY_SPELL_PANE.meleeBodyRect[3],
+  )
+  addBitmapText(
+    context,
+    content,
+    model.config.displayName.toUpperCase(),
+    'menu',
+    HUB_INVENTORY_IDENTITY_PAGE.textLeft + contentShift,
+    HUB_INVENTORY_IDENTITY_PAGE.nameTextBaselineY,
+    { align: 'left', tint: 0xffffff },
+  )
   addBitmapText(
     context,
     content,
@@ -1206,15 +1260,32 @@ function addStats(
       model.config.discipline,
     ),
     'medium',
-    96 + contentShift,
-    159,
-    { align: 'left', tint: 0xe4c56d },
+    HUB_INVENTORY_IDENTITY_PAGE.textLeft + contentShift,
+    HUB_INVENTORY_IDENTITY_PAGE.identityTextBaselineY,
+    { align: 'left', tint: HUB_INVENTORY_IDENTITY_PAGE.textTint },
   )
-  addBitmapText(context, content, 'MELEE DAMAGE', 'medium', 96 + contentShift, 348, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, content, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, {
-    align: 'left',
-    tint: HUB_PRIMARY_SPELL_PANE.textTint,
-  })
+  const primaryTextTint = hubInventoryPrimarySpellTint(model.config.element)
+  addBitmapText(
+    context,
+    content,
+    'MELEE DAMAGE',
+    HUB_PRIMARY_SPELL_PANE.headingFont,
+    HUB_PRIMARY_SPELL_PANE.textLeft + contentShift,
+    HUB_PRIMARY_SPELL_PANE.meleeHeadingTextBaselineY,
+    { align: 'left', tint: HUB_PRIMARY_SPELL_PANE.headingTint },
+  )
+  addBitmapText(
+    context,
+    content,
+    '0.5 - 1 / WHACK',
+    HUB_PRIMARY_SPELL_PANE.contentFont,
+    HUB_PRIMARY_SPELL_PANE.textLeft + contentShift,
+    HUB_PRIMARY_SPELL_PANE.meleeValueTextBaselineY,
+    {
+      align: 'left',
+      tint: primaryTextTint,
+    },
+  )
 
   const primarySpellLines = hubInventoryPrimarySpellLines(
     model.config.element,
@@ -1228,7 +1299,7 @@ function addStats(
     HUB_PRIMARY_SPELL_PANE.headingFont,
     primaryTextLeft,
     HUB_PRIMARY_SPELL_PANE.headingTextBaselineY,
-    { align: 'left', tint: 0xe4c56d },
+    { align: 'left', tint: HUB_PRIMARY_SPELL_PANE.headingTint },
   )
   primarySpellLines.forEach((line, index) => addBitmapTextRuns(
     context,
@@ -1248,7 +1319,7 @@ function addStats(
     HUB_PRIMARY_SPELL_PANE.contentFont,
     primaryTextLeft,
     HUB_PRIMARY_SPELL_PANE.contentTextBaselines[index]!,
-    HUB_PRIMARY_SPELL_PANE.textTint,
+    primaryTextTint,
   ))
 
   addInventoryAttributePage(context, content, model.progression, contentShift)
@@ -1262,32 +1333,54 @@ function addInventoryAttributePage(
   shiftX: number,
 ): void {
   const page = HUB_INVENTORY_ATTRIBUTES_PAGE
-  addInset(layer, page.attributesHeadingRect[0] + shiftX, page.attributesHeadingRect[1], page.attributesHeadingRect[2], page.attributesHeadingRect[3])
-  addInset(layer, page.attributesBodyRect[0] + shiftX, page.attributesBodyRect[1], page.attributesBodyRect[2], page.attributesBodyRect[3])
-  addInset(layer, page.resistancesHeadingRect[0] + shiftX, page.resistancesHeadingRect[1], page.resistancesHeadingRect[2], page.resistancesHeadingRect[3])
-  addInset(layer, page.resistancesBodyRect[0] + shiftX, page.resistancesBodyRect[1], page.resistancesBodyRect[2], page.resistancesBodyRect[3])
-  addBitmapText(context, layer, 'ATTRIBUTES', 'body', page.titleCenterX + shiftX, page.attributesHeadingTextBaselineY, { tint: 0xe4c56d })
-  addBitmapText(context, layer, 'RESISTANCES', 'body', page.titleCenterX + shiftX, page.resistancesHeadingTextBaselineY, { tint: 0xe4c56d })
+  for (const rect of [
+    page.attributesHeadingRect,
+    page.attributesBodyRect,
+    HUB_INVENTORY_ATTRIBUTES_PAGE.attributesValueRect,
+    page.resistancesHeadingRect,
+    page.resistancesBodyRect,
+    HUB_INVENTORY_ATTRIBUTES_PAGE.resistancesValueRect,
+  ]) {
+    addInventoryInfoFrame(context, layer, rect[0] + shiftX, rect[1], rect[2], rect[3])
+  }
+  addBitmapText(
+    context,
+    layer,
+    'ATTRIBUTES',
+    page.headingFont,
+    page.titleCenterX + shiftX,
+    page.attributesHeadingTextBaselineY,
+    { tint: page.headingTint },
+  )
+  addBitmapText(
+    context,
+    layer,
+    'RESISTANCES',
+    page.headingFont,
+    page.titleCenterX + shiftX,
+    page.resistancesHeadingTextBaselineY,
+    { tint: page.headingTint },
+  )
   const attributeRows = [
-    ['HEALTH:', `${nativeRoundedStat(progression.currentHealth)}/${nativeRoundedStat(progression.maximumHealth)}`],
-    ['MANA:', `${nativeRoundedStat(progression.currentMana)}/${nativeRoundedStat(progression.maximumMana)}`],
-    ['CAST SPEED:', `${nativeRoundedStat(progression.inventoryStats.castSpeedPercent)}%`],
-    ['WALK SPEED:', `${nativeRoundedStat(progression.inventoryStats.walkSpeedPercent)}%`],
+    ['HEALTH:', `${nativeRoundedStat(progression.currentHealth)}/${nativeRoundedStat(progression.maximumHealth)}`, page.rowTints.red],
+    ['MANA:', `${nativeRoundedStat(progression.currentMana)}/${nativeRoundedStat(progression.maximumMana)}`, page.rowTints.blue],
+    ['CAST SPEED:', `${nativeRoundedStat(progression.inventoryStats.castSpeedPercent)}%`, page.rowTints.green],
+    ['WALK SPEED:', `${nativeRoundedStat(progression.inventoryStats.walkSpeedPercent)}%`, page.rowTints.green],
   ] as const
-  attributeRows.forEach(([label, value], index) => {
+  attributeRows.forEach(([label, value, tint], index) => {
     const y = page.attributesRows[index]!
-    addBitmapText(context, layer, label, 'medium', page.labelRight + shiftX, y, { align: 'right', tint: 0xffffff })
-    addBitmapText(context, layer, value, 'medium', page.valueLeft + shiftX, y, { align: 'left', tint: 0xffffff })
+    addBitmapText(context, layer, label, page.labelFont, page.labelRight + shiftX, y, { align: 'right', tint })
+    addBitmapText(context, layer, value, page.valueFont, page.valueLeft + shiftX, y, { align: 'left', tint })
   })
   const resistanceRows = [
-    ['PAIN:', progression.inventoryStats.painResistancePercent],
-    ['MAGIC:', progression.inventoryStats.magicResistancePercent],
-    ['POISON:', progression.inventoryStats.poisonResistancePercent],
+    ['PAIN:', progression.inventoryStats.painResistancePercent, page.rowTints.red],
+    ['MAGIC:', progression.inventoryStats.magicResistancePercent, page.rowTints.blue],
+    ['POISON:', progression.inventoryStats.poisonResistancePercent, page.rowTints.green],
   ] as const
-  resistanceRows.forEach(([label, value], index) => {
+  resistanceRows.forEach(([label, value, tint], index) => {
     const y = page.resistanceRows[index]!
-    addBitmapText(context, layer, label, 'medium', page.labelRight + shiftX, y, { align: 'right', tint: 0xffffff })
-    addBitmapText(context, layer, `${nativeRoundedStat(value)}%`, 'medium', page.valueLeft + shiftX, y, { align: 'left', tint: 0xffffff })
+    addBitmapText(context, layer, label, page.labelFont, page.labelRight + shiftX, y, { align: 'right', tint })
+    addBitmapText(context, layer, `${nativeRoundedStat(value)}%`, page.valueFont, page.valueLeft + shiftX, y, { align: 'left', tint })
   })
 }
 
@@ -2687,10 +2780,14 @@ function addHagathaInventoryPane(
     addCenteredAtlasSprite(context, layer, 'Inventory', 16, x + offsetX, y + offsetY)
   }
   addAtlasSprite(context, layer, 'Inventory', 3, 362 + offsetX, 218 + offsetY)
-  layer.addChild(new Graphics()
-    .rect(left, top, HUB_HAGATHA_PERK_PANE.innerWidth, HUB_HAGATHA_PERK_PANE.innerHeight)
-    .fill({ color: HUB_HAGATHA_PERK_PANE.innerPanelTint })
-    .stroke({ color: 0xffffff, width: 1 }))
+  addInventoryInfoFrame(
+    context,
+    layer,
+    left,
+    top,
+    HUB_HAGATHA_PERK_PANE.innerWidth,
+    HUB_HAGATHA_PERK_PANE.innerHeight,
+  )
   addBitmapText(
     context,
     layer,
@@ -2828,9 +2925,29 @@ function addHorizontalChain(context: RenderContext, layer: Container, x: number,
   addTiledAtlas(context, layer, 'UI', 10, x, y, width, 24, 1.25)
 }
 
-function addInset(layer: Container, x: number, y: number, width: number, height: number): void {
-  layer.addChild(new Graphics().rect(x, y, width, height).fill({ color: 0x191916 }))
-  addPrimitiveFrame(layer, x + 1, y, width, height)
+function addInventoryInfoFrame(
+  context: RenderContext,
+  layer: Container,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): void {
+  layer.addChild(new Graphics()
+    .rect(x, y, width, height)
+    .fill({ color: HUB_INVENTORY_INFO_FRAME.fillTint }))
+  const frame = new NineSliceSprite({
+    bottomHeight: HUB_INVENTORY_INFO_FRAME.sourceThird,
+    height,
+    leftWidth: HUB_INVENTORY_INFO_FRAME.sourceThird,
+    rightWidth: HUB_INVENTORY_INFO_FRAME.sourceThird,
+    texture: atlasTexture(context, 'Inventory', HUB_INVENTORY_INFO_FRAME.frameRecord),
+    topHeight: HUB_INVENTORY_INFO_FRAME.sourceThird,
+    width,
+  })
+  frame.label = 'native-inventory-info-frame'
+  frame.position.set(x, y)
+  layer.addChild(frame)
 }
 
 function addPrimitiveFrame(layer: Container, x: number, y: number, width: number, height: number): void {

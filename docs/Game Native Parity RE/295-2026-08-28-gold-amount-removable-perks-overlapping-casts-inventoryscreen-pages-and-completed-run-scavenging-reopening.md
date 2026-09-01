@@ -5,6 +5,236 @@
 > model. Stock moves the plaque after the first Tonic, removes it after the
 > second, and paints unlocked empty cells brighter than locked cells.
 
+## 2026-09-01 — Corrective InventoryScreen STATS composition reopening
+
+### Reported smell and parity question
+
+- A player reports that the scrollable `STATS` region inside InventoryScreen
+  still does not look like stock and supplies two stock crops plus the current
+  web crop. The web attributes page has thin procedural outlines, no framed
+  value column, uniform white copy, the wrong fonts, incorrect panel heights,
+  and no page-local filigree. The supplied page-0 stock crop also falsifies the
+  web renderer's combined `MELEE DAMAGE` box and missing primary-spell gem.
+- This reopens the `InventoryScreen SwipePages` presentation rows below. The
+  2026-08-28 pass recovered the three-page state, clipping, inputs, values, and
+  page transitions, but it did not follow the panel helper called by the page
+  painter or enumerate that helper's xrefs. It substituted `addInset` graphics,
+  then accepted a browser journey that proved navigation and values without a
+  matched stock-versus-web composition comparison. Calling page presentation
+  exact-ported was therefore incorrect.
+- Stock behavior to recover is the complete three-page painter beneath the
+  already-correct SwipePages owner: every panel rectangle, nested value frame,
+  atlas record, font wrapper, row tint, decoration, companion shift, and
+  painter order. Paging, input, host state, save state, and teardown are
+  falsifiers: none may change as a side effect of this presentation correction.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| User stock observation | `SD original - image.png`, 679x694, SHA-256 `e84513ec46b23f893dff87a16eddf14f1b2f619c8346f1b0efae3adf3006c9af`; `SD original 2 - image.png`, 702x728, SHA-256 `4484fe75af8a155f3833d001bfa8c6bbc5488a12ea232be202aa814435cf9c8e` | Page 1 has two wide gold-framed split panels, stock row colors, and page-local filigree. Page 0 has independently framed heading/body pairs and the red primary-spell gem. | high for visible appearance |
+| User web observation | `Web Port broken - image.png`, 462x460, SHA-256 `9ecdd71e0b43e1e00e2ceeba1407bc6b0490a0149c1b4457e6268b5356895634` | The current web page reproduces the report: thin hand-drawn borders, narrow/incorrect bodies, no value divider, wrong font roles, white rows, and missing page decoration. | high |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Same canonical image as the established InventoryScreen ledger. No runtime/ASLR address is used. | high |
+| Complete panel-xref sweep | `InventoryScreen::Render 0x00562520`; all references to shared inset painter `0x00550CC0` | Exactly 13 calls exist, all in `0x00562520`: `0x00562AA6`, `0x00562AF5`, `0x0056301F`, `0x005631C4`, `0x005634D2`, `0x00563652`, `0x005639C7`, `0x00563B80`, `0x00563BD4`, `0x00564235`, `0x005643EE`, `0x00564442`, and `0x00564B2C`. There is no sibling caller outside InventoryScreen. | high |
+| Panel helper instructions | `0x00550CC0`; fill `0x0041DD70`; frame `0x004153B0` | Each panel first fills RGB `(0.1,0.1,0.09)`, then nine-slices Inventory record 10 (`Inventory+0x07E0`) as three equal source bands. The web `0x191916` fill plus four procedural strokes is not the native painter. | high |
+| Page-0 instructions | `0x00562943..0x00563774` | Local frame rectangles are name `[0,65,228,32]` and `[0,93,228,50]`; primary `[0,161,228,27]` and `[0,184,228,80]`; melee `[0,283,228,27]` and `[0,306,228,32]`. Primary and melee body text use the selected skill root color brightened by 1.25; Inventory record 3 paints the primary gem. | high |
+| Page-1 instructions | `0x005637C3..0x00564820`; viewport height field `+0x98 = 320` | With page origin `p`, frames are attributes `[0,p+85,228,32]`, body `[0,p+113,228,80]`, value frame `[120,p+113,108,80]`; resistances `[0,p+233,228,32]`, body `[0,p+261,228,60]`, value frame `[120,p+261,108,60]`. Titles use medium; labels use body right-aligned at body x+105; values use medium at body x+120. | high |
+| Page-1 color instructions | saturation helper `0x0040FC60`; text blocks `0x00563BF0..0x005640A3` and `0x0056445E..0x00564804` | Health/Pain derive from `(1,.75,.75)` at saturation `.5`; Mana/Magic from `(.75,.75,1)` at `.5`; Cast/Walk/Poison from `(.75,1,.75)` at `.75`. Quantized web tints are `#E9C9C9`, `#C2C2E2`, and `#C9F9C9`. Attributes baselines relative to its body are `21,35,54,68`; resistances are `21,35,49`. | high |
+| Page-2 instructions | `0x00564822..0x00564FA5`; rectangle inset `0x0042D1B0` | The CHARMS/CURSES owner starts from a 240-square rectangle and applies `-5`, yielding one centered 230-square record-10 frame. It is not a 227x238 white-stroked rectangle. Slot/capacity/Tonic logic remains the separately recovered exact member. | high |
+| Asset data | tracked `native-ui-assets.json`; Inventory records 3, 10, 13, and 16 | Record 10 is the exact 72x72 gold frame source split into 24-pixel thirds; record 3 is the 18x18 red gem; record 13 is the 16x14 page indicator; record 16 is the 190x109 trimmed page filigree. | high |
+| Current web causal trace | Website `419699d1`; `hub-inventory-render-contract.ts`, `hub-inventory-renderer.ts`, tests | `addInset` never samples record 10; page 1 has no right subframes or record-16 draws; labels and values both use medium/white; primary and melee use fixed cyan; page 2 draws a plain white stroke. The incorrect constants are asserted as the contract. | high |
+
+Static queries used the canonical read-only replica workflow through the
+existing Mod Loader checkout at `08bfba9ef367f7b863848030d0a289dc31e33192`.
+Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+material scripts were `decompile_targets.py`
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+`search_terms_refs.py`
+`83af550e3f8e03bee390b077bd7da128f4ec02e2d44ede3a9e2f87a0409a2f9f`,
+`dump_insns_around.py`
+`79249e8ea5eb04115bb284f1bef9b90d81cd74f2c5301a747d08908a36032b40`,
+`dump_function_instructions.py`
+`273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef`,
+and `dump_floats_at.py`
+`925d7d6f1655937180655da8767b518d904a743d0a3bad4597c9d31b0d50b15a`.
+
+### System boundary and membership inventory
+
+Native system: InventoryScreen's nested three-page STATS presentation from
+the 320x320 clip through its 13 shared inset-painter calls, exact text/art
+membership, standalone/service projection, and owner-local teardown.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| page-0 name heading frame | `0x00562AA6` | exact-ported by this corrective pass | record 10, `[0,65,228,32]` |
+| page-0 identity body frame | `0x00562AF5` | exact-ported by this corrective pass | record 10, `[0,93,228,50]` |
+| page-0 primary heading frame | `0x0056301F` | exact-ported by this corrective pass | record 10, `[0,161,228,27]` |
+| page-0 primary body frame | `0x005631C4` | exact-ported by this corrective pass | record 10, `[0,184,228,80]` |
+| page-0 melee heading frame | `0x005634D2` | exact-ported by this corrective pass | record 10, `[0,283,228,27]` |
+| page-0 melee body frame | `0x00563652` | exact-ported by this corrective pass | record 10, `[0,306,228,32]` |
+| page-1 attributes heading frame | `0x005639C7` | exact-ported by this corrective pass | record 10, `p+85`, 228x32 |
+| page-1 attributes body frame | `0x00563B80` | exact-ported by this corrective pass | record 10, `p+113`, 228x80 |
+| page-1 attributes value subframe | `0x00563BD4` | exact-ported by this corrective pass | x+120, 108x80 |
+| page-1 resistances heading frame | `0x00564235` | exact-ported by this corrective pass | record 10, `p+233`, 228x32 |
+| page-1 resistances body frame | `0x005643EE` | exact-ported by this corrective pass | record 10, `p+261`, 228x60 |
+| page-1 resistances value subframe | `0x00564442` | exact-ported by this corrective pass | x+120, 108x60 |
+| page-2 CHARMS/CURSES frame | `0x00564B2C` | exact-ported by this corrective pass | centered record-10 230-square frame |
+| record-10 fill/frame painter | `0x00550CC0 -> 0x0041DD70/0x004153B0` | exact-ported by this corrective pass | RGB fill plus three-band 72x72 nine-slice; all 13 callers |
+| page-0 display/identity copy | `0x00562B1C..0x00562DD8` | verified content already; frame/gold projection corrected | menu name, medium `LEVEL/title` |
+| page-0 primary and melee copy | `0x005630A1..0x00563774` | exact-ported by this corrective pass | body headings, medium values, root tint, record-3 gem |
+| page-1 attributes rows | `0x00563BF0..0x005640A3` | exact-ported by this corrective pass | medium title, body labels, medium values, four exact baselines/tints |
+| page-1 resistance rows | `0x0056445E..0x00564804` | exact-ported by this corrective pass | medium title, body labels, medium values, three exact baselines/tints |
+| page-local record-16 filigree | `0x00563858..0x0056420C` | exact-ported by this corrective pass | page-1 attribute/resistance draws added; page-0 draws retained |
+| page-2 slots, capacity alpha, Tonic plaque | `0x00564C39..0x00564FA5`; entry 175 correction | verified-already-at-parity apart from corrected enclosing frame | all nine cells, capacities 3/6/9, two plaque positions |
+| page indicators and three-page clip | `SwipePages`; record 13 | verified-already-at-parity | 320x320 over 960, pages 0/1/2, hard clipping |
+| wheel, drag, requested click/keyboard/touch page actions | existing SwipePages controller | verified-already-at-parity | unchanged bounded page owner and input tests |
+| standalone InventoryScreen | Game Inventory pointer | exact-ported by shared correction | x projection without service shift |
+| ordinary Fomentius/Luthacus/Shlorio companion Inventory | same painter, +53 x shift | exact-ported by shared correction | every page and nested value frame shifts together |
+| Hagatha fixed companion pane | PerkShop replacement | exact-ported by shared page-2 frame correction; no SwipePages input | same slots/frame presentation, fixed owner |
+| Hub and Boneyard consumers | shared InventoryScreen owner | exact-ported by shared correction | identical fixed-stage painter and teardown |
+| host simulation, protocol, save, replication, audio, RNG | no presentation ownership | out-of-system: no state or cue is changed | existing state/input/lifecycle coverage remains unchanged |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- InventoryScreen constructs one SwipePages child and owns its page offset,
+  clipping, input capture, and teardown. `0x00562520` is the sole STATS painter;
+  the 13-call xref sweep closes the entire inset-frame membership.
+- Painter order is page-local record-16 filigree, inset fill and record-10
+  frame(s), gold heading copy, row-specific copy, then page indicator. The
+  primary gem is record 3. Page 1 nests its right value frame after the body
+  frame, so the divider is textured rather than a line primitive.
+- The inset helper fills `(0.1,0.1,0.09,1)`, restores white, and renders
+  Inventory record 10 with source thirds. The 72x72 source therefore has exact
+  24-pixel corner/edge/center bands; procedural strokes are not equivalent.
+- Primary and melee value color is not fixed cyan. The selected primary skill
+  supplies its native root color and `0x0040FD00` applies the stock 1.25
+  brightening/clamp. Page-1 row colors instead use the three saturation recipes
+  recorded above.
+- Standalone and ordinary companion Inventory share every page and differ only
+  by the established 53-pixel horizontal projection. Hagatha replaces the
+  scroller with its fixed page-2 pane; Hub and Boneyard share the same owner.
+  No frame, text, decoration, or page state survives close/replacement.
+
+### Nearby-system findings
+
+- Inventory record 10 already renders the equipment cells, but the STATS
+  painter uses the same record as a three-band nine-slice. Treating the cell
+  sprite and scalable inset frame as unrelated allowed the procedural fallback
+  to survive despite the complete atlas being present.
+- The exact root-color tint table already serves SkillPicker. Inventory's
+  primary/melee copy is another native consumer of that shared presentation
+  truth; it must not retain a second fixed tint.
+
+### Confidence and open questions
+
+- Confirmed: retail identity; all 13 panel xrefs; every frame rectangle and
+  subframe; fill, atlas record, thirds; font roles; page-1 baselines and colors;
+  primary/melee root-color ownership; all page/scene/companion variants.
+- Inferred: none used as a shipped native fact.
+- Unknown: no material in-system unknown. Browser rasterization must still be
+  compared against the supplied stock crops because D3D9 and Pixi implement
+  undersized nine-slice corners differently internally; the stock pixel result,
+  not either API's incidental tessellation, is the acceptance oracle.
+
+### Web implementation consequence
+
+- Replace `addInset` and the page-2 white-stroke rectangle with one exact
+  Inventory record-10 inset renderer using the recovered RGB fill and 24-pixel
+  source thirds. Use it for all 13 members; remove the procedural STATS path.
+- Correct page-0 paired frame geometry, split melee heading/body, add the
+  primary record-3 gem, and derive primary/melee tint from the shared native
+  skill-root palette.
+- Correct page-1 header/body geometry, add both 108-pixel value subframes, add
+  missing page-local record-16 filigree, use medium headings/body labels/medium
+  values, and apply the exact baselines and three row tints.
+- Correct the common page-2/Hagatha enclosing frame to 230 square while
+  preserving all recovered slot, capacity, Tonic, inspection, and action logic.
+- Do not change SwipePages state, page actions, clipping, pause/input ownership,
+  host/protocol/save data, or screen lifecycle.
+
+### Validation contract
+
+- Focused contract coverage must pin all 13 xrefs as web frame members, record
+  10, 24-pixel thirds, fill color, all page rectangles/subframes, page-1 font
+  roles/baselines/tints, root-colored page-0 values, record-3 gem, page-1
+  filigree, standalone/companion shifts, and page-2 230-square ownership.
+- On the Mac mini, run the focused Inventory renderer/behavior suites and the
+  canonical `/opt/homebrew/bin/bash ./scripts/validate.sh` against the exact
+  candidate tree.
+- Real Mac Chrome must traverse pages `0 -> 1 -> 2` in standalone Hub and an
+  ordinary companion, inspect fixed Hagatha, repeat Inventory in Boneyard, and
+  return empty page/console/failed-response/WebGL/host-error arrays.
+- Stock-versus-web crops at the same 1600x900 fixed stage must visibly match
+  the supplied page-0 and page-1 references for gold frame weight, separate
+  bodies, value dividers, filigree/gem membership, font roles, row positions,
+  and per-row/root colors.
+
+### Implementation validation receipt
+
+- `hub-inventory-renderer.ts` now routes all 13 InventoryScreen panel members
+  through one `NineSliceSprite` owner using tracked Inventory record 10 with
+  exact 24-pixel source thirds and the recovered `(0.1,0.1,0.09)` fill. The
+  procedural `addInset` path and page-2 white-stroke rectangle are gone.
+- Page 0 owns the exact paired name/identity, primary, and melee rectangles;
+  the primary record-3 gem; gold body headings; and root-colored primary/melee
+  copy. Page 1 owns both textured 108-pixel value subframes, the missing five
+  record-16 filigree draws, medium headings, body labels, medium values, exact
+  baselines, and red/blue/green row tints. The common page-2/Hagatha frame is
+  the recovered 230 square while slot, capacity, Tonic, removal, and inspection
+  behavior remains unchanged.
+- The render contract and focused test now pin every recovered dimension,
+  record, source third, font role, tint, baseline, gem, filigree member, and
+  source-path removal. `smoke-sacks-dyes.mjs` retains page-0/1/2 visual
+  receipts and now repeats page 1 in Boneyard; `smoke-hub-traders.mjs` can
+  self-host its production build so the four-service renderer lifecycle is
+  independently reproducible.
+- The Mac red run passed TypeScript and 67/68 focused tests; its sole failure
+  was the expected surviving `addInset` source assertion. After implementation,
+  the exact candidate passed TypeScript and all 68 native-UI tests; focused log
+  SHA-256 is
+  `1308b18a046f0b112e7e5246479eb9437ff9e6e3991e9c1e0c0497f76d1d3020`.
+- The production-bundle Hub/Boneyard journey traversed Hub
+  `0 -> 1 -> 2 -> 1 -> 0 -> close -> reopen 0`, then Boneyard
+  `0 -> 1 -> close`, preserved owner-local input blocking, and returned empty
+  page, console, and failed-response arrays. Log SHA-256 is
+  `2019bcfabbbd27f0ad7dcfe37e5276848db0e1aeb45f2aec3d42c0a99e830089`.
+  Reviewed page-0, Hub page-1, Hub page-2, and Boneyard page-1 frame hashes are
+  `3d4edd6bff1985c195a021d3dc9e1cd1d28ac694ad47a23b9f188000218e0cbd`,
+  `9943ea26391361b0fd01a9e84e4dc00616470111276ba7f3bb896422b90559f4`,
+  `5703146ab00f52ec6e1d8ad3cbe4d3b0ae4b868d69f0a12a5aea737fedf3c88b`,
+  and `13e8cec8b409d70a57c97e8520386e492d65384f8b91251e92c57e3f6869ab92`.
+- Mac Chrome also exercised capacities 3/6/9 in fixed Hagatha and ordinary
+  Inventory page 2 with empty browser/response/WebGL-error arrays; representative
+  hashes are `845ebb2d1963cdeb42bf7efd3e31306265d3f9b1a1c2eceeaf4ef115b5a41125`
+  and `a894004b30fee2b196b776abc68b9654b310b231fd7b8fe1158aac0085729631`.
+  The production companion lifecycle then proved standalone Inventory plus
+  Hagatha, Fomentius, Luthacus, and Shlorio each retained one scene-owned
+  painted renderer with empty browser/request/response/WebGL-error arrays;
+  receipt SHA-256 is
+  `046a760a50da7a3e62365d67eb6cfc385afef8e2259cf117b21ae494bd3c3569`.
+- The first full exact-source Mac gate passed: Release backend build with zero
+  warnings/errors, 19 backend contracts, lint with nine pre-existing warnings
+  and zero errors, frontend groups including native UI and Hub UI `92/92`, the
+  338-test prerequisite set and 1,749-test broad Boneyard set, desktop `4/4`,
+  production frontend/game-host builds, bundle budget (`263,673` raw / `80,226`
+  gzip), and media policy. Pre-receipt gate log SHA-256 is
+  `d34eed140e8afd72201db59aa13c530a4fda147def29a4ac8c1a0489d7e09a22`.
+- Initial Mac `tsc` did not run through an inherited empty dependency symlink;
+  a clean task-local `npm ci` corrected the environment. Two early Boneyard
+  attempts proved the seeded scene was still input-blocked; scoping the journey
+  to the ready/unblocked Boneyard owner closed the harness race. A later full
+  trader run passed the relevant all-service renderer checkpoint before its
+  unrelated funding phase requested an optional Lua runtime; the maintained
+  lifecycle-only run above ended cleanly at the in-system boundary. None of
+  these harness corrections changed product behavior.
+- This tracked receipt is the only edit after the passing full gate. A
+  no-later-edit exact-tree Mac gate is the final handoff gate. Publication and
+  deployment were not requested and were not performed. No member is
+  browser-blocked and no material in-system unknown remains.
+
 ## 2026-08-28 — Assigned wizard class-title secondary-report reopening
 
 ### Reported smell and parity question

@@ -4,6 +4,7 @@ import {
 } from '../core-kernels/player-combat.ts'
 import {
   NATIVE_SKILL_CATALOG,
+  nativeSkillColorRoot,
   playerStatBook,
 } from '../core-kernels/player-progression.ts'
 import {
@@ -30,6 +31,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from '../core-kernels/player-character.ts'
+import { skillPickerRootTint } from './skill-picker-render-contract.ts'
 
 export const HUB_NATIVE_UI_SIZE = { height: 900, width: 1600 } as const
 
@@ -295,22 +297,45 @@ export const HUB_EQUIPMENT_SINK_RENDER = {
   tallPrimitiveOutline: true,
 } as const
 
+export const HUB_INVENTORY_INFO_FRAME = {
+  fillTint: 0x1a1a17,
+  frameRecord: 10,
+  sourceSize: 72,
+  sourceThird: 24,
+} as const
+
+export const HUB_INVENTORY_IDENTITY_PAGE = {
+  bodyRect: [86, 139, 228, 50] as const,
+  companionShift: 53,
+  headingRect: [86, 111, 228, 32] as const,
+  identityTextBaselineY: 159,
+  nameTextBaselineY: 136,
+  textLeft: 96,
+  textTint: 0xd9ba70,
+} as const
+
 export const HUB_PRIMARY_SPELL_PANE = {
-  bodyRect: [86, 230, 227, 79] as const,
+  bodyRect: [86, 230, 228, 80] as const,
   companionShift: 53,
   contentAdvanceScale: 0.9,
   contentFont: 'medium',
   contentTextBaselines: [251, 273, 286, 299] as const,
-  headingRect: [86, 207, 227, 24] as const,
+  gemCenter: [319, 256.5] as const,
+  gemRecord: 3,
+  headingRect: [86, 207, 228, 27] as const,
   headingFont: 'body',
-  headingTextBaselineY: 226,
+  headingTextBaselineY: 225,
+  headingTint: 0xd9ba70,
   inlineUnit: {
     italic: true,
     offset: [0, 1] as const,
     scale: 0.7,
   },
+  meleeBodyRect: [86, 352, 228, 32] as const,
+  meleeHeadingRect: [86, 329, 228, 27] as const,
+  meleeHeadingTextBaselineY: 347,
+  meleeValueTextBaselineY: 374,
   textLeft: 95,
-  textTint: 0xc8f3f3,
 } as const
 
 export const HUB_INVENTORY_STATS_PAGES = {
@@ -335,18 +360,41 @@ export function hubInventoryWizardIdentityText(
 }
 
 export const HUB_INVENTORY_ATTRIBUTES_PAGE = {
-  attributesBodyRect: [86, 475, 227, 109] as const,
-  attributesHeadingRect: [86, 452, 227, 24] as const,
-  attributesHeadingTextBaselineY: 471,
-  attributesRows: [500, 516, 548, 564] as const,
-  labelRight: 207,
-  resistancesBodyRect: [86, 649, 227, 63] as const,
-  resistancesHeadingRect: [86, 626, 227, 24] as const,
-  resistancesHeadingTextBaselineY: 645,
-  resistanceRows: [670, 686, 702] as const,
-  titleCenterX: 199.5,
-  valueLeft: 218,
+  attributesBodyRect: [86, 479, 228, 80] as const,
+  attributesHeadingRect: [86, 451, 228, 32] as const,
+  attributesHeadingTextBaselineY: 472,
+  attributesRows: [500, 514, 533, 547] as const,
+  attributesValueRect: [206, 479, 108, 80] as const,
+  decorationCenters: [
+    [114, 475],
+    [114, 542],
+    [256, 505],
+    [114, 640],
+    [41, 680],
+  ] as const,
+  headingFont: 'medium',
+  headingTint: 0xd9ba70,
+  labelFont: 'body',
+  labelRight: 191,
+  resistancesBodyRect: [86, 627, 228, 60] as const,
+  resistancesHeadingRect: [86, 599, 228, 32] as const,
+  resistancesHeadingTextBaselineY: 620,
+  resistancesValueRect: [206, 627, 108, 60] as const,
+  resistanceRows: [648, 662, 676] as const,
+  rowTints: {
+    blue: 0xc2c2e2,
+    green: 0xc9f9c9,
+    red: 0xe9c9c9,
+  },
+  titleCenterX: 200,
+  valueFont: 'medium',
+  valueLeft: 206,
 } as const
+
+export function hubInventoryPrimarySpellTint(element: WizardElement): number {
+  const skillId = PRIMARY_SKILL_BY_ELEMENT[element]
+  return skillPickerRootTint(nativeSkillColorRoot(skillId))
+}
 
 export function hubInventoryStatsPage(value: number): 0 | 1 | 2 {
   if (!Number.isInteger(value) || value < 0 || value >= HUB_INVENTORY_STATS_PAGES.pageCount) {
@@ -653,10 +701,10 @@ export const HUB_SHOP_TEXT = {
 
 export const HUB_HAGATHA_PERK_PANE = {
   columns: 3,
-  innerHeight: 238,
-  innerPanelTint: 0x191916,
-  innerWidth: 227,
-  left: 139,
+  innerHeight: 230,
+  innerPanelTint: HUB_INVENTORY_INFO_FRAME.fillTint,
+  innerWidth: 230,
+  left: 138,
   lockedSlotAlpha: 0.5,
   rows: 3,
   slotCenterOrigin: [193, 198] as const,
@@ -664,10 +712,10 @@ export const HUB_HAGATHA_PERK_PANE = {
   slotScale: 0.8,
   titleTint: 0xd9ba70,
   titleCenterX: 253,
-  titleTextBaselineY: 152.5,
+  titleTextBaselineY: 152,
   tonicPromptCenters: [[253, 288], [253, 318]] as const,
   tonicPromptRecord: 5,
-  top: 129,
+  top: 127,
 } as const
 
 export function hubHagathaPerkSlotAlpha(index: number, charmCapacity: number): number {

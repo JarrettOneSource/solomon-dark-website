@@ -121,6 +121,8 @@ try {
   resumeControlReceipts.push(await inventoryResumeControlReceipt(inventory, ''))
   if (reportedParityOnly) {
     assert.equal(await inventory.getAttribute('data-native-stats-page'), '0')
+    const overviewScreenshot = `${screenshotRoot}-reported-stats-overview.png`
+    await page.screenshot({ path: overviewScreenshot })
     await inventory.getByRole('button', { name: 'Next player stats page' }).click()
     await inventory.locator('xpath=self::*[@data-native-stats-page="1"]').waitFor()
     const attributesScreenshot = `${screenshotRoot}-reported-stats-attributes.png`
@@ -161,6 +163,31 @@ try {
     await inventory.getByRole('button', { name: 'Close inventory' }).click()
     await inventory.waitFor({ state: 'detached' })
 
+    await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+    const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
+    if (await picker.count()) await picker.getByRole('button').first().click()
+    const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+    await boneyard.waitFor({ timeout: 90_000 })
+    await boneyard.locator(
+      'xpath=self::*[@data-gameplay-input-blocked="false"]',
+    ).waitFor({ timeout: 30_000 })
+    await boneyard.getByRole('button', { name: /Open inventory/ }).click()
+    const boneyardInventory = page.getByRole('dialog', { name: 'Inventory' })
+    await boneyardInventory.waitFor({ timeout: 10_000 })
+    await boneyardInventory.locator(
+      '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+    ).waitFor()
+    await boneyardInventory.getByRole('button', { name: 'Next player stats page' }).click()
+    await boneyardInventory.locator('xpath=self::*[@data-native-stats-page="1"]').waitFor()
+    assert.equal(await boneyard.getAttribute('data-gameplay-input-blocked'), 'true')
+    const boneyardAttributesScreenshot = `${screenshotRoot}-reported-boneyard-stats-attributes.png`
+    await page.screenshot({ path: boneyardAttributesScreenshot })
+    await boneyardInventory.getByRole('button', { name: 'Close inventory' }).click()
+    await boneyardInventory.waitFor({ state: 'detached' })
+    await boneyard.locator(
+      'xpath=self::*[@data-gameplay-input-blocked="false"]',
+    ).waitFor({ timeout: 15_000 })
+
     assert.deepEqual(pageErrors, [])
     assert.deepEqual(consoleErrors, [])
     assert.deepEqual(failedResponses, [])
@@ -174,8 +201,17 @@ try {
       consoleErrors,
       failedResponses,
       pageErrors,
-      screenshots: [attributesScreenshot, perksScreenshot, removedScreenshot],
-      statsPages: [0, 1, 2, 1, 0, 'closed', 0],
+      screenshots: [
+        overviewScreenshot,
+        attributesScreenshot,
+        perksScreenshot,
+        removedScreenshot,
+        boneyardAttributesScreenshot,
+      ],
+      statsPages: {
+        boneyard: [0, 1, 'closed'],
+        hub: [0, 1, 2, 1, 0, 'closed', 0],
+      },
       status: 'ok',
       viewport,
     }, null, 2)}\n`)

@@ -39,6 +39,8 @@ import {
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_FLYBY,
+  HUB_INVENTORY_IDENTITY_PAGE,
+  HUB_INVENTORY_INFO_FRAME,
   HUB_INVENTORY_INTERACTION,
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ATTRIBUTES_PAGE,
@@ -76,6 +78,7 @@ import {
   hubHagathaTonicPromptCenter,
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
+  hubInventoryPrimarySpellTint,
   hubInventoryWizardIdentityText,
   hubInventoryStatsArrowRect,
   hubInventoryStatsPage,
@@ -672,19 +675,44 @@ test('stock equipment icons retain class-owned natural transforms and starter ap
 })
 
 test('stock inventory derives every elemental primary stat pane from native skill ranks', () => {
+  assert.deepEqual(HUB_INVENTORY_INFO_FRAME, {
+    fillTint: 0x1a1a17,
+    frameRecord: 10,
+    sourceSize: 72,
+    sourceThird: 24,
+  })
+  assert.deepEqual(HUB_INVENTORY_IDENTITY_PAGE, {
+    bodyRect: [86, 139, 228, 50],
+    companionShift: 53,
+    headingRect: [86, 111, 228, 32],
+    identityTextBaselineY: 159,
+    nameTextBaselineY: 136,
+    textLeft: 96,
+    textTint: 0xd9ba70,
+  })
   assert.deepEqual(HUB_PRIMARY_SPELL_PANE, {
-    bodyRect: [86, 230, 227, 79],
+    bodyRect: [86, 230, 228, 80],
     companionShift: 53,
     contentAdvanceScale: 0.9,
     contentFont: 'medium',
     contentTextBaselines: [251, 273, 286, 299],
-    headingRect: [86, 207, 227, 24],
+    gemCenter: [319, 256.5],
+    gemRecord: 3,
+    headingRect: [86, 207, 228, 27],
     headingFont: 'body',
-    headingTextBaselineY: 226,
+    headingTextBaselineY: 225,
+    headingTint: 0xd9ba70,
     inlineUnit: { italic: true, offset: [0, 1], scale: 0.7 },
+    meleeBodyRect: [86, 352, 228, 32],
+    meleeHeadingRect: [86, 329, 228, 27],
+    meleeHeadingTextBaselineY: 347,
+    meleeValueTextBaselineY: 374,
     textLeft: 95,
-    textTint: 0xc8f3f3,
   })
+  assert.deepEqual(
+    ['ether', 'fire', 'air', 'water', 'earth'].map(element => hubInventoryPrimarySpellTint(element as Parameters<typeof hubInventoryPrimarySpellTint>[0])),
+    [0xffe5ff, 0xffcbcb, 0xe5ffff, 0xcbcbff, 0xcbffcb],
+  )
   assert.deepEqual(hubInventoryPrimarySpellLines('ether', [[8, 1, 1]]), [
     { text: 'MAGIC MISSILE', unit: null },
     { text: 'DAMAGE: 1 - 2', unit: null },
@@ -730,8 +758,39 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
     standaloneClipRect: [50, 89, 320, 320],
     standaloneIndicatorX: 338,
   })
-  assert.deepEqual(HUB_INVENTORY_ATTRIBUTES_PAGE.attributesRows, [500, 516, 548, 564])
-  assert.deepEqual(HUB_INVENTORY_ATTRIBUTES_PAGE.resistanceRows, [670, 686, 702])
+  assert.deepEqual(HUB_INVENTORY_ATTRIBUTES_PAGE, {
+    attributesBodyRect: [86, 479, 228, 80],
+    attributesHeadingRect: [86, 451, 228, 32],
+    attributesHeadingTextBaselineY: 472,
+    attributesRows: [500, 514, 533, 547],
+    attributesValueRect: [206, 479, 108, 80],
+    decorationCenters: [
+      [114, 475],
+      [114, 542],
+      [256, 505],
+      [114, 640],
+      [41, 680],
+    ],
+    headingFont: 'medium',
+    headingTint: 0xd9ba70,
+    labelFont: 'body',
+    labelRight: 191,
+    resistancesBodyRect: [86, 627, 228, 60],
+    resistancesHeadingRect: [86, 599, 228, 32],
+    resistancesHeadingTextBaselineY: 620,
+    resistancesValueRect: [206, 627, 108, 60],
+    resistanceRows: [648, 662, 676],
+    rowTints: { blue: 0xc2c2e2, green: 0xc9f9c9, red: 0xe9c9c9 },
+    titleCenterX: 200,
+    valueFont: 'medium',
+    valueLeft: 206,
+  })
+  assert.deepEqual(nativeAssetsJson.atlases.Inventory.records['10']?.frame, [352, 333, 72, 72])
+  assert.doesNotMatch(hubInventoryRendererSource, /function addInset|addInset\(/)
+  assert.match(hubInventoryRendererSource, /NineSliceSprite/)
+  assert.match(hubInventoryRendererSource, /HUB_INVENTORY_ATTRIBUTES_PAGE\.attributesValueRect/)
+  assert.match(hubInventoryRendererSource, /HUB_INVENTORY_ATTRIBUTES_PAGE\.decorationCenters/)
+  assert.match(hubInventoryRendererSource, /HUB_PRIMARY_SPELL_PANE\.gemRecord/)
   assert.equal(hubInventoryStatsPage(2), 2)
   assert.throws(() => hubInventoryStatsPage(3), /within \[0,2\]/)
   assert.equal(hubInventoryStatsArrowRect(0, 'up', false), null)
@@ -979,10 +1038,10 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
   }
   assert.deepEqual(HUB_HAGATHA_PERK_PANE, {
     columns: 3,
-    innerHeight: 238,
-    innerPanelTint: 0x191916,
-    innerWidth: 227,
-    left: 139,
+    innerHeight: 230,
+    innerPanelTint: 0x1a1a17,
+    innerWidth: 230,
+    left: 138,
     lockedSlotAlpha: 0.5,
     rows: 3,
     slotCenterOrigin: [193, 198],
@@ -990,10 +1049,10 @@ test('native shop message boxes preserve Dowsing and Hagatha rejection copy', ()
     slotScale: 0.8,
     titleTint: 0xd9ba70,
     titleCenterX: 253,
-    titleTextBaselineY: 152.5,
+    titleTextBaselineY: 152,
     tonicPromptCenters: [[253, 288], [253, 318]],
     tonicPromptRecord: 5,
-    top: 129,
+    top: 127,
   })
   assert.deepEqual(nativeAssetsJson.atlases.Inventory.records['5']?.frame, [429, 0, 92, 50])
   assert.deepEqual(
