@@ -309,6 +309,52 @@ export const HUB_INVENTORY_INFO_FRAME = {
   sourceThird: 24,
 } as const
 
+export const HUB_INVENTORY_ROOT_CHROME = {
+  backpackHeader: {
+    baselineY: 489,
+    centerX: 800,
+    frameTop: 460,
+    text: 'Backpack',
+  },
+  companionPaneLeft: {
+    left: 103,
+    right: 1177,
+  },
+  cornerRecords: [107, 108, 109, 110] as const,
+  edgeUvOrigin: 0.95,
+  frameRecord: 8,
+  horizontalChain: {
+    bottomOffset: -5,
+    record: 10,
+    size: [106, 19] as const,
+    topOffset: -12,
+  },
+  paneSize: [320, 320] as const,
+  paneTop: 89,
+  sectionHeader: {
+    font: 'menu',
+    frameHeight: 40,
+    horizontalPadding: 20,
+    record: 4,
+    tint: 0x808080,
+  },
+  sideHeader: {
+    baselineY: 91,
+    frameTop: 66,
+    titles: {
+      left: 'stats',
+      right: 'equip',
+    },
+  },
+  standaloneOutwardShift: 53,
+  verticalChain: {
+    leftOffset: -10,
+    record: 79,
+    rightOffset: -7,
+    size: [21, 108] as const,
+  },
+} as const
+
 export const HUB_INVENTORY_IDENTITY_PAGE = {
   bodyRect: [86, 139, 228, 50] as const,
   companionShift: 53,
@@ -380,7 +426,7 @@ export const HUB_INVENTORY_ATTRIBUTES_PAGE = {
   headingFont: 'medium',
   headingTint: 0xd9ba70,
   labelFont: 'body',
-  labelRight: 191,
+  labelRight: 201,
   resistancesBodyRect: [86, 627, 228, 60] as const,
   resistancesHeadingRect: [86, 599, 228, 32] as const,
   resistancesHeadingTextBaselineY: 620,
@@ -393,7 +439,7 @@ export const HUB_INVENTORY_ATTRIBUTES_PAGE = {
   },
   titleCenterX: 200,
   valueFont: 'medium',
-  valueLeft: 206,
+  valueLeft: 216,
 } as const
 
 export function hubInventoryPrimarySpellTint(element: WizardElement): number {

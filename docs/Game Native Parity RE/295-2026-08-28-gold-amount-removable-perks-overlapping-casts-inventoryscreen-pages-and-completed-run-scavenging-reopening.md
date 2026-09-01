@@ -5,6 +5,211 @@
 > model. Stock moves the plaque after the first Tonic, removes it after the
 > second, and paints unlocked empty cells brighter than locked cells.
 
+## 2026-09-01 — InventoryScreen ExactText and outer-chrome secondary-report reopening
+
+### Reported smell and parity question
+
+- A player reports that the corrected page-1 copy still sits incorrectly:
+  values cross the textured separator in ATTRIBUTES/RESISTANCES, the visible
+  font appears unlike stock, the STATS word does not sit cleanly inside its
+  shaded rail, and the stock chain border is absent. The player also asks
+  whether the font defect is game-wide.
+- This is a secondary report in the system closed immediately below. The
+  earlier correction stopped at the 13 inner record-10 frames. It did not
+  enumerate the later InventoryScreen root-chrome pass, and it transcribed the
+  page content base as the frame left `86` instead of the instruction-derived
+  inset `96`. It therefore placed label/value pens ten pixels left, submitted
+  uppercase replacement literals, rendered only four UI-4 corners instead of
+  the complete shaded helper, and left both native chain axes out of the web
+  membership. Calling the complete Inventory presentation exact was wrong.
+- The falsifier for a global font-engine change is the shared ExactText ABI:
+  if its width, kerning, alignment, glyph placement, or point sampler differs,
+  every consumer must be corrected. If those shared rules already match, the
+  fix must remain in the Inventory call-site contract and must not perturb
+  Title/Create/MsgBox/Hall/Skill surfaces.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| User stock observation | `SD original - image.png`, 679x694, SHA-256 `e84513ec46b23f893dff87a16eddf14f1b2f619c8346f1b0efae3adf3006c9af`; `SD original 2 - image.png`, 702x728, SHA-256 `4484fe75af8a155f3833d001bfa8c6bbc5488a12ea232be202aa814435cf9c8e` | Page-1 labels finish just before the separator and values begin after a clear inset. The left pane owns horizontal and vertical chain runs, a continuous black STATS backing, and menu glyphs distinct from the web capitals. | high |
+| Current-main browser reproduction | Website `46ec87a732b5330dbcab2850da7a4a9298810608`; production Mac Chrome at 1600x900; `baseline-reported-stats-attributes.png` SHA-256 `f4c2d659687d11ae988ff74304411f72dad44ac46a0425d86debdb9161f41a56` | The first value glyph starts at x=206 directly on the gold subframe edge; labels end at x=191. UI-10/UI-79 chains are absent, UI-4 has only corner sprites, and STATS/EQUIP/BACKPACK use replacement uppercase strings and `#AAA2A6`. Page/console/response arrays were empty, proving a presentation defect rather than a failed journey. | high |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, preferred base `0x00400000`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Same canonical image used by the parent Inventory entries; all addresses below are preferred-image addresses. | high |
+| ExactText ABI and alignment | `DarkCloudBrowser_ExactTextRender 0x0043AFC0`; width `0x0043CB00`; right/center/left wrappers `0x0042D610`, `0x004A57C0`, `0x00551410`; renderer entry `0x00421560`; entry 287 complete 78-call/34-owner sampler census | Native mode `-1` subtracts the exact advance width, mode `0` subtracts half, and mode `1` leaves the pen. Glyph advance/kerning and point-filtered wrap-addressed sources already match `native-ui-text.ts`/`native-ui-pixi.ts`. There is no game-wide font-engine defect to patch. | high |
+| Page-1 pen instructions | `InventoryScreen::Render 0x00562520`; content-base construction near `0x005628F8`; page-1 calls `0x00563CEE..0x005640A8` and `0x00564535..0x00564804`; constants `0x00795170=114`, `0x007DE810=10`, `0x00793970=105`, `0x0078E470=120` | Pane center is 200. The content base is `(200-114)+10 = 96`, not frame left 86. Body labels right-align at `96+105 = 201`; medium values left-align at `96+120 = 216`. The previous 191/206 contract dropped the shared ten-pixel content inset. Fonts, row baselines, tints, and subframe rectangles remain correct. | high |
+| Left root-chrome instructions | `0x005652D0..0x00565AC1` in `0x00562520`; Inventory record 8; UI records 10, 79, 4; strings `stats` at `0x00795040`; UI corner vector consumed at `0x0056592F..0x00565AC1` | After page content, stock overlays the mirrored record-8 helper, UI-10 top/bottom runs, UI-79 left/right runs, one measured UI-4 shaded header, lowercase `stats` in group-3/menu at RGB `.5`, then four authored corner overlays. | high |
+| Right root-chrome sibling | equipment renderer `0x00561300`, root range `0x00561DAE..0x005622FB`; string `equip` at `0x00795028` | EQUIP repeats the same record-8/UI-10/UI-79/UI-4/chrome sequence and lowercase menu-literal rule at the mirrored pane. Fixing only STATS would retain the same refuted path in its sibling. | high |
+| Backpack header sibling | `InventoryGrid` detail/root renderer `0x00556940`, string `Backpack` at `0x007948F8` | BACKPACK uses the same group-3 font, `.5` tint, measured width plus 40, height 40, and UI-4 mirrored nine-slice. The web already retained its native 175x40 bounds but used uppercase copy and four disconnected corners. | high |
+| Asset data | tracked `native-ui-assets.json`; Inventory 8 is 73x73; UI 10 is 106x19; UI 79 is 21x108; UI 4 is 20x20; UI 107..110 are the authored outer corner overlays | All required pixels are already Website-tracked. The omission is renderer membership/order, not an unavailable asset or browser limitation. | high |
+
+Static queries used the canonical read-only replica wrapper from the existing
+Mod Loader checkout at `08bfba9ef367f7b863848030d0a289dc31e33192`.
+Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+material script SHA-256 values are `search_terms_refs.py`
+`83af550e3f8e03bee390b077bd7da128f4ec02e2d44ede3a9e2f87a0409a2f9f`,
+`decompile_targets.py`
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+`dump_function_instructions.py`
+`273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef`,
+and `dump_floats_at.py`
+`925d7d6f1655937180655da8767b518d904a743d0a3bad4597c9d31b0d50b15a`.
+
+### System boundary and membership inventory
+
+Native system: InventoryScreen fixed-stage text anchoring and root chrome from
+the shared ExactText call modes through the left/right pane overlays and the
+Backpack section header, across standalone, companion, Hub, and Boneyard
+owners.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| shared font atlas, glyph advance, kerning, point sampler | `0x0043AFC0`, `0x00421560`; entry 287 complete census | `verified-already-at-parity` | shared native-ui unit contract remains unchanged |
+| right/center/left alignment modes | `0x0042D610`, `0x004A57C0`, `0x00551410` | `verified-already-at-parity` | exact width/anchor assertions; no Inventory-only alignment shim |
+| page-1 attribute label pens | content x 96 plus 105 | `exact-ported` by this reopening | every label right edge is 201 |
+| page-1 resistance label pens | same shared call path | `exact-ported` by this reopening | every label right edge is 201 |
+| page-1 attribute value pens | content x 96 plus 120 | `exact-ported` by this reopening | every value left pen is 216 |
+| page-1 resistance value pens | same shared call path | `exact-ported` by this reopening | every value left pen is 216 |
+| left pane textured underlay and existing filigree | pre-content root pass | `verified-already-at-parity` | stays behind all page content |
+| right pane textured underlay and equipment content | equipment/root pass | `verified-already-at-parity` | stays behind equipment sinks/content |
+| left/right Inventory-record-8 outer helpers | `0x0056531C`, mirrored equipment sibling | `exact-ported` by this reopening | stock 0.95-edge mirrored helper overlays content |
+| four horizontal chain runs | UI 10; top `paneTop-12`, bottom `paneBottom-5` on both panes | `exact-ported` by this reopening | 106x19 authored tiles, bounded by the pane owner |
+| four vertical chain runs | UI 79; left `paneLeft-10`, right `paneRight-7` on both panes | `exact-ported` by this reopening | 21x108 authored tiles, bounded by the pane owner |
+| STATS shaded header | UI 4; measured `stats` width 72 plus 40; 112x40 | `exact-ported` by this reopening | lowercase literal, group-3/menu, centered, `#808080` |
+| EQUIP shaded header | UI 4; measured `equip` width 72 plus 40; 112x40 | `exact-ported` by this reopening | lowercase literal, mirrored pane, same font/tint |
+| Backpack shaded header | UI 4; measured `Backpack` width 135 plus 40; 175x40 | `exact-ported` by this reopening | title-case literal and continuous backing |
+| UI 107..110 left/right outer corner overlays | terminal pane-root draws | `verified-already-at-parity`, order corrected | four corners remain above content/chains |
+| page-0/page-1/page-2 inner painters | preceding corrective entry | `verified-already-at-parity` except the shared page-1 x pens above | geometry, colors, fonts, gem, filigree retained |
+| standalone InventoryScreen | left/right outward projection | `exact-ported` by shared correction | chrome and content use the same owner/order |
+| ordinary service companion Inventory | inward 53-pixel projection | `exact-ported` by shared correction | every root-chrome member shifts with its pane |
+| Hagatha fixed left pane and common EQUIP pane | service replacement | `exact-ported` by shared correction | fixed content retains common surrounding chrome |
+| Hub and Boneyard | common InventoryScreen renderer | `exact-ported` by shared correction | identical pixels and teardown |
+| protocol, save, simulation, audio, RNG | no text/chrome ownership | `out-of-system` — no state/cue change | source manifest and lifecycle tests remain unchanged |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- The UI-49/textured underlay and ornamental content are earlier painters.
+  Page/equipment content follows. The record-8 overlay, both chain axes,
+  measured UI-4 title backing, title text, and authored corner overlays are a
+  terminal root-chrome pass. Rendering the entire side panel before page
+  content reverses that native ownership even when individual coordinates are
+  correct.
+- UI-10 settles at each pane's `top-12` and `bottom-5`; UI-79 settles at
+  `left-10` and `right-7`. Both axes repeat their natural record sizes and are
+  clipped/covered by the same pane/corner owner. They are not filigree and may
+  not be substituted by Inventory record 16.
+- `FUN_00417760` draws full mirrored corner records, uses the final five
+  percent of the source for stretched edges/interior, and optionally fills the
+  center. Inventory record 8 and UI record 4 therefore require the existing
+  native mirrored-nine-slice helper, not Pixi's equal-third NineSliceSprite or
+  four disconnected sprites.
+- ExactText strings are case-sensitive record selectors. `stats`, `equip`,
+  and `Backpack` intentionally address different group-3 glyphs from the web's
+  all-uppercase replacements. All three titles modulate exact grayscale `.5`;
+  their continuous UI-4 backing supplies the black shading visible in stock.
+- Page-1 x ownership starts at content x=96. Frame x=86 is a separate value.
+  Labels use right mode at 201 and values use left mode at 216; the value
+  subframe remains at x=206. This produces the visible 10-pixel value inset
+  without moving the native separator.
+
+### Nearby-system findings
+
+- The player's broader-font suspicion was a valid falsifier, but the complete
+  render-pipeline ledger and fresh instruction trace close it: the shared
+  font ABI, sampler, width, and alignment modes are already exact. The visible
+  font mismatch comes from case-sensitive replacement literals and wrong
+  Inventory pen coordinates. No unrelated app-wide font change is justified.
+- The existing `addNativeNineSlice` helper already implements
+  `FUN_00417760`. Reusing it closes both record-8 pane overlays and all three
+  UI-4 headers without another rendering abstraction.
+
+### Web implementation consequence
+
+- Split side-panel construction into backdrop and terminal chrome so stats,
+  equipment, and service content paint between the two native owners.
+- Retain UI-49/ornamental backdrop members. Replace the four record-8 corner
+  approximation with the complete native mirrored helper; add both UI-10 and
+  UI-79 axes; retain UI 107..110 above them.
+- Replace disconnected UI-4 corners for STATS/EQUIP/Backpack with the native
+  mirrored helper. Submit the exact `stats`, `equip`, and `Backpack` strings in
+  menu/group 3 at `#808080`.
+- Move both page-1 label and value pens ten pixels right to 201/216. Do not
+  move frames, baselines, page clipping, row tints, or the shared ExactText
+  renderer.
+
+### Validation contract
+
+- Focused tests must pin the content base 96, label right 201, value left 216,
+  the three case-sensitive literals/widths/tint, record-8/UI-4 helper type,
+  UI-10/UI-79 records and all relative chain offsets, and backdrop/content/
+  chrome painter order for both pane sides and every companion shift.
+- A source contract must reject uppercase replacement literals, disconnected
+  title corners, missing vertical chains, and page content painted after root
+  chrome. Shared `native-ui-text.ts`, point-filter policy, and font manifest
+  hashes must remain unchanged.
+- Mac Chrome must capture pages 0/1/2 in standalone Hub, page 1 in Boneyard,
+  ordinary companion Inventory, and fixed Hagatha. Reviewed crops must show a
+  clear divider-to-value gap, continuous shaded STATS/EQUIP/Backpack headers,
+  correct menu glyphs, and all four chain sides, with empty page/console/
+  response/WebGL/host-error arrays.
+- The exact candidate must pass focused native-ui/Hub suites, the production
+  build/budget, and `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac
+  mini. No publication or deployment is implied by this reopening.
+
+### Implementation validation receipt
+
+- `hub-inventory-render-contract.ts` now owns one complete root-chrome
+  contract: record 8 and UI-4 native mirrored helpers, UI-10/UI-79 chain
+  records and offsets, UI 107..110 corners, companion/outward projections,
+  exact-case title strings, grayscale tint, and header geometry. Page-1 label
+  and value pens are corrected from 191/206 to the instruction-derived
+  201/216 while the record-10 frames remain unchanged.
+- `hub-inventory-renderer.ts` separates pane backdrop from terminal chrome.
+  Stats/Hagatha and equipment content paint between those owners; record 8,
+  both chain axes, shaded header, and corner overlays paint afterward. The
+  existing `addNativeNineSlice` now exposes the native optional-center flag so
+  record 8 omits its center while UI 4 retains it. `stats`, `equip`, and
+  `Backpack` consume the existing menu font and point sampler without any
+  shared font-engine change.
+- The Mac red native-UI run compiled and passed 70/72. Its only failures were
+  the expected old 191/206 pen values and missing backdrop/chrome source
+  owner; stdout SHA-256 is
+  `3be8128b3bf141d2e64deff41309e6b8ffe0271c70cd7a33db1538725ba82e98`.
+  The implemented tree passed native UI 72/72 and Hub UI 94/94; stdout hashes
+  are `c51be1be6c02109d58f0c47ba8ce82e4c00846db6a86c8b2aa1500b0d88bc91a`
+  and `0183f6ba37ca8027c1b977756c9df3b45f8ded72c5173a9b9f8a293ceb66e8bd`.
+- The production build and bundle budget passed at 263,678 raw / 80,231 gzip
+  bytes; stdout SHA-256 is
+  `082d58c4a87df4763fc9b9144fc19d951c343e75ce444a185a3f6f38f628b9b4`.
+  The production Chrome stats journey repeated Hub pages
+  `0 -> 1 -> 2 -> 1 -> 0 -> close -> reopen 0` and Boneyard
+  `0 -> 1 -> close`, with empty page/console/failed-response arrays; stdout
+  SHA-256 is
+  `a974132dc47f2a3c5e12d296627dc9ce84ce31b75b5e038a36362743af9231ca`.
+- Manual matched-stage inspection confirms labels terminate at x=201, the
+  gold divider stays at x=206, and values begin at x=216 with a clear gap.
+  The reviewed Hub page-1, page-0, and page-2 SHA-256 values are
+  `0e06fc61ca15938c9f39329880b5556153c7da8fa0dc0454544ddc18fb5322af`,
+  `e6144389c37e983337eebb25f111547ea56206fc5e098321ba9c02ae25b2d509`,
+  and `ea960b028d72526dbfd6412f9d39d9b03d8005f696f0c321f6b60b5feafde4e0`.
+  They visibly retain stock-case menu glyphs, continuous black UI-4 backing,
+  record-8 edges, and all four chain sides on STATS and EQUIP. Backpack uses
+  the same shaded-title owner.
+- Focused Hagatha capacities 3/6/9 and the standalone-plus-four-service
+  renderer lifecycle both passed with empty browser/request/response/WebGL
+  errors. Their stdout SHA-256 values are
+  `fad2ca18fd48568d519bd1e98dd64d6fcd0ce47bdd259567976e9f6f7d99b732`
+  and `6a6992416f8df21bf54d68b35570f83bfd44930dd7ac2df3e518c0a3f7dfe3d5`;
+  reviewed fixed-Hagatha and companion-lifetime frame hashes are
+  `a23a9754b3fe3dda0111c83b9a073b5f5e90ce0310bc99f203ec1a1d5d13a729`
+  and `d9229511b6fd41ed886fe9c6b3342f75d0980878f52d3b861468b638d71590fe`.
+- No platform approximation or material in-system unknown remains. The
+  shared ExactText implementation and every non-Inventory font consumer are
+  unchanged. The next validation action is the no-later-edit complete Mac
+  gate; publication and deployment were not requested.
+
 ## 2026-09-01 — Corrective InventoryScreen STATS composition reopening
 
 ### Reported smell and parity question

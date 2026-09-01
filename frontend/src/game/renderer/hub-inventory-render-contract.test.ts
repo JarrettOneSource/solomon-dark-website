@@ -21,6 +21,7 @@ import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   nativeTutorialAmuletItem,
 } from '../core-kernels/native-tutorial.ts'
+import { measureNativeUiText } from '../native-ui/core.ts'
 import {
   HAGATHA_NATIVE_TOOLTIP_LINES,
   HUB_CHAT_PANEL,
@@ -38,6 +39,7 @@ import {
   HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_IDENTITY_PAGE,
   HUB_INVENTORY_INFO_FRAME,
+  HUB_INVENTORY_ROOT_CHROME,
   HUB_INVENTORY_INTERACTION,
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ATTRIBUTES_PAGE,
@@ -772,7 +774,7 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
     headingFont: 'medium',
     headingTint: 0xd9ba70,
     labelFont: 'body',
-    labelRight: 191,
+    labelRight: 201,
     resistancesBodyRect: [86, 627, 228, 60],
     resistancesHeadingRect: [86, 599, 228, 32],
     resistancesHeadingTextBaselineY: 620,
@@ -781,7 +783,7 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
     rowTints: { blue: 0xc2c2e2, green: 0xc9f9c9, red: 0xe9c9c9 },
     titleCenterX: 200,
     valueFont: 'medium',
-    valueLeft: 206,
+    valueLeft: 216,
   })
   assert.deepEqual(nativeAssetsJson.atlases.Inventory.records['10']?.frame, [352, 333, 72, 72])
   assert.doesNotMatch(hubInventoryRendererSource, /function addInset|addInset\(/)
@@ -796,6 +798,58 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
   assert.deepEqual(hubInventoryStatsArrowRect(1, 'up', true), [373, 101, 36, 36])
   assert.deepEqual(hubInventoryStatsArrowRect(1, 'down', true), [373, 361, 36, 36])
   assert.equal(hubInventoryStatsArrowRect(2, 'down', false), null)
+})
+
+test('InventoryScreen root chrome retains exact case-sensitive titles, shaded rails, and both chain axes', () => {
+  assert.deepEqual(HUB_INVENTORY_ROOT_CHROME, {
+    backpackHeader: { baselineY: 489, centerX: 800, frameTop: 460, text: 'Backpack' },
+    companionPaneLeft: { left: 103, right: 1177 },
+    cornerRecords: [107, 108, 109, 110],
+    edgeUvOrigin: 0.95,
+    frameRecord: 8,
+    horizontalChain: { bottomOffset: -5, record: 10, size: [106, 19], topOffset: -12 },
+    paneSize: [320, 320],
+    paneTop: 89,
+    sectionHeader: {
+      font: 'menu',
+      frameHeight: 40,
+      horizontalPadding: 20,
+      record: 4,
+      tint: 0x808080,
+    },
+    sideHeader: {
+      baselineY: 91,
+      frameTop: 66,
+      titles: { left: 'stats', right: 'equip' },
+    },
+    standaloneOutwardShift: 53,
+    verticalChain: { leftOffset: -10, record: 79, rightOffset: -7, size: [21, 108] },
+  })
+  assert.deepEqual([
+    measureNativeUiText('stats', 'menu'),
+    measureNativeUiText('equip', 'menu'),
+    measureNativeUiText('Backpack', 'menu'),
+  ], [72, 72, 135])
+  assert.notEqual(measureNativeUiText('stats', 'menu'), measureNativeUiText('STATS', 'menu'))
+  assert.notEqual(measureNativeUiText('equip', 'menu'), measureNativeUiText('EQUIP', 'menu'))
+  assert.notEqual(measureNativeUiText('Backpack', 'menu'), measureNativeUiText('BACKPACK', 'menu'))
+  assert.deepEqual(nativeAssetsJson.atlases.Inventory.records['8']?.logicalSize, [73, 73])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['4']?.logicalSize, [20, 20])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['10']?.logicalSize, [106, 19])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['79']?.logicalSize, [21, 108])
+  assert.match(hubInventoryRendererSource, /function addInventorySidePanelBackdrop/)
+  assert.match(hubInventoryRendererSource, /function addInventorySidePanelChrome/)
+  assert.match(hubInventoryRendererSource, /chrome\.sideHeader\.titles\[side\]/)
+  assert.match(hubInventoryRendererSource, /HUB_INVENTORY_ROOT_CHROME\.backpackHeader/)
+  assert.match(hubInventoryRendererSource, /chrome\.horizontalChain\.record/)
+  assert.match(hubInventoryRendererSource, /chrome\.verticalChain\.record/)
+  const backdropIndex = hubInventoryRendererSource.indexOf("addInventorySidePanelBackdrop(context, layer, 'left'")
+  const contentIndex = hubInventoryRendererSource.indexOf('else addStats(context, layer, model, companion, model.statsPage)')
+  const chromeIndex = hubInventoryRendererSource.indexOf("addInventorySidePanelChrome(context, layer, 'left'")
+  assert.ok(backdropIndex >= 0 && backdropIndex < contentIndex && contentIndex < chromeIndex)
+  assert.doesNotMatch(hubInventoryRendererSource, /function addInventoryPaneCorners/)
+  assert.doesNotMatch(hubInventoryRendererSource, /addSectionHeader\(context, layer, 'STATS'/)
+  assert.doesNotMatch(hubInventoryRendererSource, /addBitmapText\(context, layer, 'BACKPACK'/)
 })
 
 test('InventoryScreen assigns the retail class title instead of exposing its component pair', () => {

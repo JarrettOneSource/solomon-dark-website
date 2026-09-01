@@ -110,6 +110,7 @@ import {
   HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_IDENTITY_PAGE,
   HUB_INVENTORY_INFO_FRAME,
+  HUB_INVENTORY_ROOT_CHROME,
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_INVENTORY_ATTRIBUTES_PAGE,
   HUB_INVENTORY_INTERACTION,
@@ -787,8 +788,8 @@ function buildInventory(
   const background = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
   layer.addChild(background)
 
-  addInventorySidePanel(context, layer, 'left', companion)
-  addInventorySidePanel(context, layer, 'right', companion)
+  addInventorySidePanelBackdrop(context, layer, 'left', companion)
+  addInventorySidePanelBackdrop(context, layer, 'right', companion)
   if (model.leftPane === 'hagatha') addHagathaInventoryPane(context, layer, economy)
   else addStats(context, layer, model, companion, model.statsPage)
   if (!companion && model.leftPane !== 'hagatha' && model.statsPage === 2
@@ -806,12 +807,13 @@ function buildInventory(
     companion,
     model.config.element,
   )
+  addInventorySidePanelChrome(context, layer, 'left', companion)
+  addInventorySidePanelChrome(context, layer, 'right', companion)
 
   addTiledAtlas(context, layer, 'UI', 49, 0, 490, 1600, 310)
   addHorizontalChain(context, layer, 0, 470, 1600)
   addHorizontalChain(context, layer, 0, 800, 1600)
   addBackpackFrame(context, layer)
-  addBitmapText(context, layer, 'BACKPACK', 'menu', 800, 489, { tint: 0xaaa2a6 })
 
   let sackPages: InventorySackPages | null = null
   if (model.sackTransition) {
@@ -1043,13 +1045,16 @@ function updateInventoryFlybyView(view: InventoryFlybyView, nowMs: number): void
   }
 }
 
-function addInventorySidePanel(
+function addInventorySidePanelBackdrop(
   context: RenderContext,
   layer: Container,
   side: 'left' | 'right',
   companion: boolean,
 ): void {
-  const shift = companion ? 0 : side === 'left' ? -53 : 53
+  const chrome = HUB_INVENTORY_ROOT_CHROME
+  const shift = companion ? 0 : side === 'left'
+    ? -chrome.standaloneOutwardShift
+    : chrome.standaloneOutwardShift
   if (side === 'left') {
     for (const x of [233, 24]) {
       addCenteredAtlasSprite(context, layer, 'UI', 30, x + shift, 429)
@@ -1076,45 +1081,131 @@ function addInventorySidePanel(
     addCenteredAtlasSprite(context, layer, 'UI', 20, 1549 + shift, 119)
   }
 
-  const paneLeft = (side === 'left' ? 103 : 1177) + shift
-  addTiledAtlas(context, layer, 'UI', 49, paneLeft, 89, 320, 320)
-  addInventoryPaneCorners(context, layer, paneLeft, 89)
-
-  const cornerCenters = side === 'left'
-    ? [[107, 128], [108, 398], [109, 128], [110, 398]] as const
-    : [[107, 1202], [108, 1472], [109, 1202], [110, 1472]] as const
-  cornerCenters.forEach(([record, x], index) => {
-    addCenteredAtlasSprite(context, layer, 'UI', record, x + shift, index < 2 ? 114 : 384)
-  })
-  if (side === 'left') addSectionHeader(context, layer, 'STATS', 217 + shift, 309 + shift, 263 + shift)
-  else addSectionHeader(context, layer, 'EQUIP', 1291 + shift, 1383 + shift, 1337 + shift)
+  const paneLeft = chrome.companionPaneLeft[side] + shift
+  addTiledAtlas(
+    context,
+    layer,
+    'UI',
+    49,
+    paneLeft,
+    chrome.paneTop,
+    chrome.paneSize[0],
+    chrome.paneSize[1],
+  )
 }
 
-function addInventoryPaneCorners(
+function addInventorySidePanelChrome(
   context: RenderContext,
   layer: Container,
-  left: number,
-  top: number,
+  side: 'left' | 'right',
+  companion: boolean,
 ): void {
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 36.5, top + 36.5)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 283.5, top + 36.5, -1, 1)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 36.5, top + 283.5, 1, -1)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 283.5, top + 283.5, -1, -1)
+  const chrome = HUB_INVENTORY_ROOT_CHROME
+  const shift = companion ? 0 : side === 'left'
+    ? -chrome.standaloneOutwardShift
+    : chrome.standaloneOutwardShift
+  const paneLeft = chrome.companionPaneLeft[side] + shift
+  const [paneWidth, paneHeight] = chrome.paneSize
+  const paneTop = chrome.paneTop
+
+  addNativeNineSlice(
+    context,
+    layer,
+    'Inventory',
+    chrome.frameRecord,
+    paneLeft,
+    paneTop,
+    paneWidth,
+    paneHeight,
+    chrome.edgeUvOrigin,
+    false,
+  )
+  addTiledAtlas(
+    context,
+    layer,
+    'UI',
+    chrome.horizontalChain.record,
+    paneLeft,
+    paneTop + chrome.horizontalChain.topOffset,
+    paneWidth,
+    chrome.horizontalChain.size[1],
+  )
+  addTiledAtlas(
+    context,
+    layer,
+    'UI',
+    chrome.horizontalChain.record,
+    paneLeft,
+    paneTop + paneHeight + chrome.horizontalChain.bottomOffset,
+    paneWidth,
+    chrome.horizontalChain.size[1],
+  )
+  addTiledAtlas(
+    context,
+    layer,
+    'UI',
+    chrome.verticalChain.record,
+    paneLeft + chrome.verticalChain.leftOffset,
+    paneTop,
+    chrome.verticalChain.size[0],
+    paneHeight,
+  )
+  addTiledAtlas(
+    context,
+    layer,
+    'UI',
+    chrome.verticalChain.record,
+    paneLeft + paneWidth + chrome.verticalChain.rightOffset,
+    paneTop,
+    chrome.verticalChain.size[0],
+    paneHeight,
+  )
+
+  addInventorySectionHeader(
+    context,
+    layer,
+    chrome.sideHeader.titles[side],
+    paneLeft + paneWidth / 2,
+    chrome.sideHeader.frameTop,
+    chrome.sideHeader.baselineY,
+  )
+
+  const cornerX = side === 'left' ? [128, 398] as const : [1202, 1472] as const
+  chrome.cornerRecords.forEach((record, index) => {
+    addCenteredAtlasSprite(
+      context,
+      layer,
+      'UI',
+      record,
+      cornerX[index % 2]! + shift,
+      index < 2 ? 114 : 384,
+    )
+  })
 }
 
-function addSectionHeader(
+function addInventorySectionHeader(
   context: RenderContext,
   layer: Container,
   label: string,
-  leftX: number,
-  rightX: number,
-  textX: number,
+  centerX: number,
+  frameTop: number,
+  baselineY: number,
 ): void {
-  addCenteredAtlasSprite(context, layer, 'UI', 4, leftX, 76)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, rightX, 76, -1, 1)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, leftX, 96, 1, -1)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, rightX, 96, -1, -1)
-  addBitmapText(context, layer, label, 'menu', textX, 96, { tint: 0xaaa2a6 })
+  const header = HUB_INVENTORY_ROOT_CHROME.sectionHeader
+  const frameWidth = measureNativeUiText(label, header.font)
+    + header.horizontalPadding * 2
+  addNativeNineSlice(
+    context,
+    layer,
+    'UI',
+    header.record,
+    centerX - frameWidth / 2,
+    frameTop,
+    frameWidth,
+    header.frameHeight,
+    HUB_INVENTORY_ROOT_CHROME.edgeUvOrigin,
+  )
+  addBitmapText(context, layer, label, header.font, centerX, baselineY, { tint: header.tint })
 }
 
 function addBackpackFrame(context: RenderContext, layer: Container): void {
@@ -1126,10 +1217,15 @@ function addBackpackFrame(context: RenderContext, layer: Container): void {
   addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 481)
   addCenteredAtlasSprite(context, layer, 'UI', 71, 21, 809)
   addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 809)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, 722.5, 470)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, 877.5, 470, -1, 1)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, 722.5, 490, 1, -1)
-  addCenteredAtlasSprite(context, layer, 'UI', 4, 877.5, 490, -1, -1)
+  const header = HUB_INVENTORY_ROOT_CHROME.backpackHeader
+  addInventorySectionHeader(
+    context,
+    layer,
+    header.text,
+    header.centerX,
+    header.frameTop,
+    header.baselineY,
+  )
 }
 
 function addStats(
@@ -3257,6 +3353,7 @@ function addNativeNineSlice(
   width: number,
   height: number,
   edgeUvOrigin: number,
+  fill = true,
 ): void {
   const definition = nativeUiRecord(atlas, record)
   const [cornerWidth, cornerHeight] = definition.logicalSize
@@ -3278,7 +3375,7 @@ function addNativeNineSlice(
   addStretchedTexture(layer, horizontalEdge, x + cornerWidth, y + height - cornerHeight, middleWidth, cornerHeight, false, true)
   addStretchedTexture(layer, verticalEdge, x, y + cornerHeight, cornerWidth, middleHeight)
   addStretchedTexture(layer, verticalEdge, x + width - cornerWidth, y + cornerHeight, cornerWidth, middleHeight, true)
-  addStretchedTexture(layer, center, x + cornerWidth, y + cornerHeight, middleWidth, middleHeight)
+  if (fill) addStretchedTexture(layer, center, x + cornerWidth, y + cornerHeight, middleWidth, middleHeight)
 }
 
 function addStretchedTexture(
