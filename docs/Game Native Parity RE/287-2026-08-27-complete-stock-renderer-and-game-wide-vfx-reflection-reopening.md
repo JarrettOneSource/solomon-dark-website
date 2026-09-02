@@ -1520,3 +1520,15 @@ signed black quads and stage order.
 - No browser-platform approximation or remaining consumer unknown exists.
   Commit and push were authorized by the subsequent user instruction;
   deployment and live-production proof remain separate and were not requested.
+
+## 2026-09-02 — Secondary plane-galaxy primitive supersession
+
+The renderer-wide `exact-ported` rows above are superseded for Plane Orb and
+Leviathan by the final section of
+`084-2026-08-20-secondary-ability-native-ownership-correction.md`. The earlier
+reflection pass verified mesh geometry and the global NPM/blend pipeline but
+did not prove that `NativeSecondaryMeshDraw` retained Plane Orb's native packed
+vertex colors. It also accepted Leviathan's target owner without recovering
+the complete direct record-75/38 parent program, record-39 multiply-mask role,
+lower clear, and two target-output passes. The 2026-09-02 reopening owns the
+complete membership, correction, and current validation receipt.

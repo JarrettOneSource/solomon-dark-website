@@ -25,6 +25,7 @@ import {
   NativeSecondaryPresentationScratch,
   nativeGolemFacing,
   nativeGolemPresentationPlan,
+  nativeLeviathanCompositePlan,
   nativePlayerMagicShieldPlan,
   nativePlayerMaterialTint,
   nativeEtherFadeScalar,
@@ -302,14 +303,58 @@ test('Leviathan owns the portal redraw, authored appendage bank, EtherBolt, Fade
     alpha: 0.8,
     rotationRadians: 0.25,
     scale: 0.75,
-  })
-  assert.deepEqual(portal.draws.map(({ alpha, blend, entry, rotationRadians, scaleX }) => ({
-    alpha, blend, entry, rotationRadians, scaleX,
+  }, 10)
+  assert.deepEqual(portal.draws.map(({
+    alpha,
+    blend,
+    entry,
+    rotationRadians,
+    scaleX,
+    scaleY,
+    tint,
+  }) => ({
+    alpha, blend, entry, rotationRadians, scaleX, scaleY, tint,
   })), [
-    { alpha: 0.8, blend: 'normal', entry: 39, rotationRadians: 0.25, scaleX: 0.75 },
-    { alpha: 0.4, blend: 'add', entry: 39, rotationRadians: 0.25, scaleX: 0.75 },
+    {
+      alpha: 1,
+      blend: 'add',
+      entry: 75,
+      rotationRadians: 30 * Math.PI / 180,
+      scaleX: -0.8 * 0.75,
+      scaleY: 0.48,
+      tint: 0xff80ff,
+    },
+    {
+      alpha: 1,
+      blend: 'normal',
+      entry: 38,
+      rotationRadians: 0,
+      scaleX: 0.75,
+      scaleY: 0.75,
+      tint: 0xffffff,
+    },
   ])
   assert.equal(portal.queueFamily, 'ordinary-dynamic')
+  assert.deepEqual(nativeLeviathanCompositePlan(0.75), {
+    clear: {
+      blend: 'multiply',
+      color: 0x000000,
+      height: 1_000,
+      width: 256,
+      x: 0,
+      y: 128 + 64 * 0.75,
+    },
+    mask: {
+      blend: 'multiply',
+      clipTop: 128,
+      entry: 39,
+      scale: 0.75,
+    },
+    outputs: [
+      { alpha: 1, blend: 'normal' },
+      { alpha: 0.5, blend: 'add' },
+    ],
+  })
 
   const appendage = nativeSecondaryPresentationPlan({
     ...actor('leviathan-appendage'),
@@ -433,6 +478,16 @@ test('Plane Orb owns the exact core, repeating ether-plane mesh, and perspective
   assert.equal(mesh.vertices.length, 30)
   assert.equal(mesh.uvs.length, 30)
   assert.equal(mesh.indices.length, 63)
+  assert.deepEqual(mesh.vertexColors, [
+    0xffffffff,
+    0xffffffff, 0,
+    0xffffffff, 0,
+    0xffffffff, 0,
+    0xffffffff, 0,
+    0xffffffff, 0,
+    0xffffffff, 0,
+    0xffffffff, 0,
+  ])
   assert.deepEqual(mesh.uvs.slice(0, 2), [0.5, 1])
   const firstX = Math.fround(Math.sin(10 * Math.PI / 180) * 50)
   const firstY = Math.fround(-Math.cos(10 * Math.PI / 180) * 50 * 0.8)
@@ -444,6 +499,12 @@ test('Plane Orb owns the exact core, repeating ether-plane mesh, and perspective
   assert.equal(enhanced.vertices.length, 62)
   assert.equal(enhanced.uvs.length, 62)
   assert.equal(enhanced.indices.length, 135)
+  assert.equal(enhanced.vertexColors.length, 31)
+  assert.equal(enhanced.vertexColors[0], 0xffffffff)
+  for (let vertex = 1; vertex < enhanced.vertexColors.length; vertex += 2) {
+    assert.equal(enhanced.vertexColors[vertex], 0xffffffff)
+    assert.equal(enhanced.vertexColors[vertex + 1], 0)
+  }
 
   const particle = nativeSecondaryPresentationPlan({
     ...actor('plane-orb-particle'),

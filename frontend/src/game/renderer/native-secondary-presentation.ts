@@ -67,7 +67,31 @@ export interface NativeSecondaryMeshDraw {
   readonly texture: 'ether-plane'
   readonly tint: number
   readonly uvs: readonly number[]
+  readonly vertexColors: readonly number[]
   readonly vertices: readonly number[]
+}
+
+export const NATIVE_LEVIATHAN_RENDER_TARGET_SIZE = 256
+
+export interface NativeLeviathanCompositePlan {
+  readonly clear: Readonly<{
+    blend: 'multiply'
+    color: number
+    height: number
+    width: number
+    x: number
+    y: number
+  }>
+  readonly mask: Readonly<{
+    blend: 'multiply'
+    clipTop: number
+    entry: 39
+    scale: number
+  }>
+  readonly outputs: readonly Readonly<{
+    alpha: number
+    blend: 'add' | 'normal'
+  }>[]
 }
 
 export interface NativeSecondaryGradientDraw {
@@ -350,6 +374,29 @@ export function nativeSecondaryCompositeOwnerEntries(
       ? [[actor.id, parentId] as const]
       : []
   })
+}
+
+export function nativeLeviathanCompositePlan(scale: number): NativeLeviathanCompositePlan {
+  return {
+    clear: {
+      blend: 'multiply',
+      color: 0x000000,
+      height: 1_000,
+      width: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
+      x: 0,
+      y: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2 + 64 * scale,
+    },
+    mask: {
+      blend: 'multiply',
+      clipTop: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2,
+      entry: 39,
+      scale,
+    },
+    outputs: [
+      { alpha: 1, blend: 'normal' },
+      { alpha: 0.5, blend: 'add' },
+    ],
+  }
 }
 
 const WHITE = 0xffffff
@@ -780,13 +827,20 @@ function buildNativeSecondaryPresentationPlan(
   switch (actor.kind) {
     case 'leviathan':
       return plan([
-        draw('BadGuys', 39, {
-          rotationRadians: actor.rotationRadians,
-        }),
-        draw('BadGuys', 39, {
-          alpha: actor.alpha * 0.5,
+        draw('BadGuys', 75, {
+          alpha: 1,
           blend: 'add',
-          rotationRadians: actor.rotationRadians,
+          role: 'leviathan-plane-galaxy',
+          rotationRadians: (presentationFrame % 120) * 3 * Math.PI / 180,
+          scaleX: -0.8 * actor.scale,
+          scaleY: 0.64 * actor.scale,
+          tint: 0xff80ff,
+        }),
+        draw('BadGuys', 38, {
+          alpha: 1,
+          role: 'leviathan-plane-shimmer',
+          scaleX: actor.scale,
+          scaleY: actor.scale,
         }),
       ], 'ordinary-dynamic', -0.11)
     case 'leviathan-appendage': {
@@ -1437,16 +1491,20 @@ function planeOrbMesh(
   const vertices: number[] = [0, 0]
   const uvs: number[] = [actor.position.x / 192, actor.position.y / 192]
   const indices: number[] = []
+  const vertexColors: number[] = [0xffffffff]
   const initialHeading = presentationFrame % 360
   for (let segment = 0; segment < segmentCount; segment += 1) {
     const heading = initialHeading + segment * 360 / segmentCount
     const radians = heading * Math.PI / 180
     const x = Math.fround(Math.sin(radians))
     const y = Math.fround(-Math.cos(radians))
-    for (const radius of [25 * actor.scale, 50 * actor.scale]) {
+    const radii = [25 * actor.scale, 50 * actor.scale] as const
+    for (let radiusIndex = 0; radiusIndex < radii.length; radiusIndex += 1) {
+      const radius = radii[radiusIndex]!
       const localX = Math.fround(x * radius)
       const localY = Math.fround(y * radius * 0.8)
       vertices.push(localX, localY)
+      vertexColors.push(radiusIndex === 0 ? 0xffffffff : 0)
       uvs.push(
         Math.fround((actor.position.x + localX) / 192),
         Math.fround((actor.position.y + localY) / 192),
@@ -1472,6 +1530,7 @@ function planeOrbMesh(
     texture: 'ether-plane',
     tint: WHITE,
     uvs,
+    vertexColors,
     vertices,
   }
 }

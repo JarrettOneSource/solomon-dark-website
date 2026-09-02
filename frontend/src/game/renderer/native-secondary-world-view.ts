@@ -28,9 +28,12 @@ import {
 } from './native-secondary-assets.ts'
 import {
   NativeSecondaryPresentationScratch,
+  NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
+  nativeLeviathanCompositePlan,
   nativeSecondaryCompositeOwnerEntries,
   updateNativeSecondaryPresentationPlan,
   type NativeSecondaryGradientDraw,
+  type NativeLeviathanCompositePlan,
   type NativeSecondaryMeshDraw,
   type NativeSecondaryPresentationPlan,
   type NativeSecondaryQuadDraw,
@@ -46,7 +49,6 @@ import {
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 const STORM_RENDER_TARGET_SIZE = 256
-const LEVIATHAN_RENDER_TARGET_SIZE = 256
 const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
   'acid-rain',
   'dampen-wave',
@@ -55,7 +57,9 @@ const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
   'golem',
   'leviathan',
   'leviathan-appendage',
+  'plane-orb-shot',
   'storm-cloud',
+  'ether-drain',
 ])
 
 function hotDropUsesDirectPrimitives(kind: NativeSecondaryActorState['kind']): boolean {
@@ -99,6 +103,8 @@ export interface NativeSecondaryDiagnosticSample {
   readonly kind: NativeSecondaryActorState['kind']
   readonly mainDrawMembers: readonly string[]
   readonly mainDrawOffsetsY: readonly number[]
+  readonly meshVertexColors: readonly (readonly number[])[]
+  readonly leviathanCompositePlan: NativeLeviathanCompositePlan | null
   readonly primitiveCount: number
   readonly sortBias: number
   readonly underlayDepth: number | null
@@ -144,6 +150,7 @@ class NativeSecondaryActorView {
   private readonly meshIndices: Uint32Array[] = []
   private readonly meshMeshes: MeshSimple[] = []
   private readonly meshUvs: Float32Array[] = []
+  private readonly meshVertexColors: Uint32Array[] = []
   private readonly meshVertices: Float32Array[] = []
   private readonly quadMeshes: MeshSimple[] = []
   private readonly quadVertices: Float32Array[] = []
@@ -264,6 +271,7 @@ class NativeSecondaryActorView {
         this.meshVertices[index]!,
         this.meshUvs[index]!,
         this.meshIndices[index]!,
+        this.meshVertexColors[index]!,
         this.plan.meshes[index]!,
         this.specialTextures,
         index,
@@ -460,6 +468,8 @@ class NativeSecondaryActorView {
         `${atlas}:${entry}:${blend}`
       )),
       mainDrawOffsetsY: this.plan.draws.map(({ offset }) => offset.y),
+      meshVertexColors: this.plan.meshes.map(({ vertexColors }) => vertexColors),
+      leviathanCompositePlan: null,
       primitiveCount: this.primitiveCount,
       sortBias: this.plan.sortBias,
       underlayDepth: this.plan.underlayDraws.length > 0
@@ -503,6 +513,10 @@ class NativeSecondaryActorView {
 
   get kind(): NativeSecondaryActorState['kind'] {
     return this.currentKind
+  }
+
+  get leviathanScale(): number {
+    return this.state.scale
   }
 
   get usesDirectPrimitives(): boolean {
@@ -553,6 +567,7 @@ class NativeSecondaryActorView {
     this.meshIndices.length = 0
     this.meshMeshes.length = 0
     this.meshUvs.length = 0
+    this.meshVertexColors.length = 0
     this.meshVertices.length = 0
     this.quadMeshes.length = 0
     this.quadVertices.length = 0
@@ -583,6 +598,7 @@ class NativeSecondaryActorView {
   private addMesh(draw: NativeSecondaryMeshDraw): void {
     const indices = new Uint32Array(draw.indices)
     const uvs = new Float32Array(draw.uvs)
+    const vertexColors = new Uint32Array(draw.vertexColors)
     const vertices = new Float32Array(draw.vertices)
     const mesh = new MeshSimple({
       indices,
@@ -592,9 +608,11 @@ class NativeSecondaryActorView {
       vertices,
     })
     mesh.eventMode = 'none'
+    setNativeArenaVertexColors(mesh, vertexColors)
     this.meshIndices.push(indices)
     this.meshMeshes.push(mesh)
     this.meshUvs.push(uvs)
+    this.meshVertexColors.push(vertexColors)
     this.meshVertices.push(vertices)
     this.container.addChild(mesh)
   }
@@ -632,6 +650,7 @@ class NativeSecondaryActorView {
     const mesh = this.meshMeshes.pop()!
     this.meshIndices.pop()
     this.meshUvs.pop()
+    this.meshVertexColors.pop()
     this.meshVertices.pop()
     this.container.removeChild(mesh)
     mesh.destroy()
@@ -719,27 +738,73 @@ class NativeStormWeatherView {
 class NativeLeviathanCompositeView {
   readonly container = new Container({ label: 'leviathan-render-target-owner' })
   readonly memberIds = new Set<number>()
-  private readonly composite: Sprite
+  private readonly appendageSource = new Container({ label: 'leviathan-appendage-target-source' })
+  private readonly clear: Sprite
+  private readonly compositeGlow: Sprite
+  private readonly compositeNormal: Sprite
+  private readonly mask: Sprite
+  private readonly maskClip: Sprite
+  private readonly memberViews = new Map<number, NativeSecondaryActorView>()
+  private plan = nativeLeviathanCompositePlan(0)
   private readonly renderTexture: RenderTexture
   private readonly source = new Container({ label: 'leviathan-render-target-source' })
 
-  constructor() {
+  constructor(textures: PlayerWorldTextures) {
     this.container.eventMode = 'none'
+    this.container.sortableChildren = true
     this.source.eventMode = 'none'
     this.source.sortableChildren = true
+    this.appendageSource.eventMode = 'none'
+    this.appendageSource.sortableChildren = true
     this.renderTexture = RenderTexture.create({
       alphaMode: 'no-premultiply-alpha',
       dynamic: true,
-      height: LEVIATHAN_RENDER_TARGET_SIZE,
+      height: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
       resolution: 1,
       scaleMode: 'linear',
-      width: LEVIATHAN_RENDER_TARGET_SIZE,
+      width: NATIVE_LEVIATHAN_RENDER_TARGET_SIZE,
     })
-    this.composite = new Sprite(this.renderTexture)
-    this.composite.anchor.set(0.5)
-    this.composite.eventMode = 'none'
-    this.composite.label = 'leviathan-render-target-composite'
-    this.container.addChild(this.composite)
+    this.compositeNormal = new Sprite(this.renderTexture)
+    this.compositeNormal.anchor.set(0.5)
+    this.compositeNormal.eventMode = 'none'
+    this.compositeNormal.label = 'leviathan-render-target-composite-normal'
+    this.compositeNormal.zIndex = 1
+    this.compositeGlow = new Sprite(this.renderTexture)
+    this.compositeGlow.alpha = 0.5
+    this.compositeGlow.anchor.set(0.5)
+    this.compositeGlow.blendMode = 'add'
+    this.compositeGlow.eventMode = 'none'
+    this.compositeGlow.label = 'leviathan-render-target-composite-add'
+    this.compositeGlow.zIndex = 2
+
+    const maskRecord = nativeSecondarySpriteRecord('BadGuys', 39)
+    const maskTexture = textures.secondary[nativeSecondarySpriteKey('BadGuys', 39)]
+    if (!maskTexture) throw new Error('Native Leviathan mask texture was not loaded')
+    this.mask = new Sprite(maskTexture)
+    this.mask.anchor.set(
+      maskRecord.anchorX / maskRecord.width,
+      maskRecord.anchorY / maskRecord.height,
+    )
+    this.mask.blendMode = 'multiply'
+    this.mask.eventMode = 'none'
+    this.mask.label = 'leviathan-appendage-lower-mask'
+    this.mask.position.set(
+      NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2,
+      NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2,
+    )
+    this.mask.zIndex = 1
+    this.maskClip = new Sprite(Texture.WHITE)
+    this.maskClip.eventMode = 'none'
+    this.maskClip.label = 'leviathan-appendage-mask-clip'
+    this.mask.mask = this.maskClip
+    this.clear = new Sprite(Texture.WHITE)
+    this.clear.blendMode = 'multiply'
+    this.clear.eventMode = 'none'
+    this.clear.label = 'leviathan-appendage-lower-clear'
+    this.clear.tint = 0x000000
+    this.clear.zIndex = 2
+    this.source.addChild(this.appendageSource, this.mask, this.maskClip, this.clear)
+    this.container.addChild(this.compositeNormal, this.compositeGlow)
   }
 
   update(
@@ -748,20 +813,42 @@ class NativeLeviathanCompositeView {
     renderer: Renderer,
     root: Container,
   ): void {
-    for (const child of [...this.source.children]) root.addChild(child)
+    this.releaseMembers(root)
     const parentSample = parent.diagnosticSample(0, 0)
     this.container.position.set(parentSample.worldX, parentSample.worldY)
-    this.memberIds.clear()
     for (const { id, view } of members) {
       this.memberIds.add(id)
+      this.memberViews.set(id, view)
+      if (view === parent) {
+        view.container.position.set(0, 0)
+        view.container.zIndex = 0
+        this.container.addChild(view.container)
+        continue
+      }
       const layer = view.painterLayer(id, id)
       view.container.zIndex = layer.worldY + layer.sortBias
-      this.source.addChild(view.container)
+      this.appendageSource.addChild(view.container)
     }
-    this.source.position.set(
-      LEVIATHAN_RENDER_TARGET_SIZE / 2 - parentSample.worldX,
-      LEVIATHAN_RENDER_TARGET_SIZE / 2 - parentSample.worldY,
+    this.appendageSource.position.set(
+      NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2 - parentSample.worldX,
+      NATIVE_LEVIATHAN_RENDER_TARGET_SIZE / 2 - parentSample.worldY,
     )
+    const plan = nativeLeviathanCompositePlan(parent.leviathanScale)
+    this.plan = plan
+    this.mask.blendMode = plan.mask.blend
+    this.mask.scale.set(plan.mask.scale)
+    this.maskClip.position.set(0, plan.mask.clipTop)
+    this.maskClip.width = plan.clear.height
+    this.maskClip.height = plan.clear.height
+    this.clear.blendMode = plan.clear.blend
+    this.clear.position.set(plan.clear.x, plan.clear.y)
+    this.clear.tint = plan.clear.color
+    this.clear.width = plan.clear.width
+    this.clear.height = plan.clear.height
+    this.compositeNormal.alpha = plan.outputs[0]!.alpha
+    this.compositeNormal.blendMode = plan.outputs[0]!.blend
+    this.compositeGlow.alpha = plan.outputs[1]!.alpha
+    this.compositeGlow.blendMode = plan.outputs[1]!.blend
     renderer.render({
       clear: true,
       clearColor: [0, 0, 0, 0],
@@ -771,12 +858,26 @@ class NativeLeviathanCompositeView {
   }
 
   releaseMembers(root: Container): void {
-    for (const child of [...this.source.children]) root.addChild(child)
+    for (const view of this.memberViews.values()) {
+      const sample = view.diagnosticSample(0, 0)
+      view.container.position.set(sample.worldX, sample.worldY)
+      root.addChild(view.container)
+    }
+    this.memberViews.clear()
     this.memberIds.clear()
+  }
+
+  forgetMember(id: number): void {
+    this.memberIds.delete(id)
+    this.memberViews.delete(id)
   }
 
   setDepth(depth: number): void {
     this.container.zIndex = depth
+  }
+
+  get diagnosticPlan(): NativeLeviathanCompositePlan {
+    return this.plan
   }
 
   setRenderable(renderable: boolean): void {
@@ -788,11 +889,11 @@ class NativeLeviathanCompositeView {
   }
 
   destroy(): void {
-    this.source.removeChildren()
-    this.source.destroy()
+    this.source.destroy({ children: true })
     this.container.destroy({ children: true })
     this.renderTexture.destroy(true)
     this.memberIds.clear()
+    this.memberViews.clear()
   }
 }
 
@@ -894,6 +995,7 @@ export class NativeSecondaryWorldView {
       this.diagnosticViewIds.delete(id)
       this.removeKind(view.kind)
       this.totalPrimitiveCount -= view.primitiveCount
+      this.compositeForMember(id)?.forgetMember(id)
       view.destroy()
       this.views.delete(id)
     }
@@ -984,7 +1086,11 @@ export class NativeSecondaryWorldView {
       const ownerId = this.compositeOwnerByActorId.get(id) ?? id
       const sample = view.diagnosticSample(id, ownerId)
       const composite = this.leviathanComposites.get(ownerId)
-      samples.push(composite ? { ...sample, depth: composite.container.zIndex } : sample)
+      samples.push(composite ? {
+        ...sample,
+        depth: composite.container.zIndex,
+        leviathanCompositePlan: composite.diagnosticPlan,
+      } : sample)
     }
     return samples
   }
@@ -1059,7 +1165,7 @@ export class NativeSecondaryWorldView {
       if (!parent) continue
       let composite = this.leviathanComposites.get(parentId)
       if (!composite) {
-        composite = new NativeLeviathanCompositeView()
+        composite = new NativeLeviathanCompositeView(this.textures)
         this.leviathanComposites.set(parentId, composite)
         this.root.addChild(composite.container)
       }
@@ -1192,6 +1298,7 @@ function applyMesh(
   vertices: Float32Array,
   uvs: Float32Array,
   indices: Uint32Array,
+  vertexColors: Uint32Array,
   draw: NativeSecondaryMeshDraw,
   textures: PlayerWorldTextures['secondarySpecial'],
   sourceOrder: number,
@@ -1199,6 +1306,7 @@ function applyMesh(
   vertices.set(draw.vertices)
   uvs.set(draw.uvs)
   indices.set(draw.indices)
+  vertexColors.set(draw.vertexColors)
   mesh.label = `secondary:${draw.role}:${draw.texture}`
   mesh.texture = textures.etherPlane
   mesh.alpha = draw.alpha

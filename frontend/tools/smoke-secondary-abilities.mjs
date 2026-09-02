@@ -574,7 +574,7 @@ try {
     if (contract.skillId === 12) {
       await page.waitForFunction(() => (
         document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
-          ?.getAttribute('aria-label')?.endsWith(', active')
+          ?.getAttribute('aria-label')?.includes(', active')
       ))
       await castPrimaryPointer(page, target)
     }
@@ -1564,6 +1564,35 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       ))
       assert.ok(composite.some(({ kind }) => kind === 'leviathan'))
       assert.equal(composite.filter(({ kind }) => kind === 'leviathan-appendage').length >= 5, true)
+      const parentSamples = composite.filter(({ kind }) => kind === 'leviathan')
+      assert.ok(parentSamples.length > 0)
+      for (const { mainDrawMembers } of parentSamples) {
+        assert.deepEqual(mainDrawMembers, [
+          'BadGuys:75:add',
+          'BadGuys:38:normal',
+        ])
+        assert.equal(mainDrawMembers.includes('BadGuys:39:normal'), false)
+        assert.equal(mainDrawMembers.includes('BadGuys:39:add'), false)
+      }
+      const portal = parentSamples.find(({ leviathanCompositePlan }) => (
+        leviathanCompositePlan?.mask.scale > 0
+      ))?.leviathanCompositePlan
+      assert.ok(portal)
+      assert.deepEqual(portal.mask, {
+        blend: 'multiply',
+        clipTop: 128,
+        entry: 39,
+        scale: portal.mask.scale,
+      })
+      assert.equal(portal.clear.blend, 'multiply')
+      assert.equal(portal.clear.color, 0x000000)
+      assert.equal(portal.clear.width, 256)
+      assert.equal(portal.clear.height, 1_000)
+      assert.equal(portal.clear.y, 128 + 64 * portal.mask.scale)
+      assert.deepEqual(portal.outputs, [
+        { alpha: 1, blend: 'normal' },
+        { alpha: 0.5, blend: 'add' },
+      ])
       const compositeFrames = samples.map(({ actors }) => actors.filter(({ compositeOwnerId }) => (
         compositeOwnerId === parent.id
       ))).filter(({ length }) => length > 0)
@@ -1573,6 +1602,28 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       return {
         compositeDepths: [...new Set(compositeFrames.map((members) => members[0].depth))],
         maximumCompositeMembers: Math.max(...compositeFrames.map(({ length }) => length)),
+        portal,
+      }
+    }
+    case 12: {
+      const shots = actorSamples.filter(({ kind }) => kind === 'plane-orb-shot')
+      assert.ok(shots.length > 0)
+      const shot = shots.find(({ meshVertexColors }) => meshVertexColors[0]?.length > 0)
+      assert.ok(shot)
+      assert.deepEqual(shot.mainDrawMembers, ['BadGuys:75:add'])
+      const colors = shot.meshVertexColors[0]
+      assert.ok(colors)
+      const segments = (colors.length - 1) / 2
+      assert.ok(segments === 7 || segments === 15)
+      assert.equal(colors[0], 0xffffffff)
+      for (let vertex = 1; vertex < colors.length; vertex += 2) {
+        assert.equal(colors[vertex], 0xffffffff)
+        assert.equal(colors[vertex + 1], 0)
+      }
+      return {
+        opaqueVertices: segments + 1,
+        segments,
+        transparentBlackVertices: segments,
       }
     }
     case 21: {
@@ -1614,6 +1665,18 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
         proxyWorldY: storm.position.y + 350,
         stormPosition: storm.position,
       }
+    }
+    case 74: {
+      const drain = actorSamples.find(({ kind }) => kind === 'ether-drain')
+      assert.ok(drain)
+      assert.deepEqual(drain.mainDrawMembers.slice(0, 5), [
+        'BadGuys:75:add',
+        'BadGuys:75:add',
+        'BadGuys:75:add',
+        'BadGuys:75:add',
+        'BadGuys:38:normal',
+      ])
+      return { sharedGalaxyLayers: 4, shimmerRecord: 38 }
     }
     case 35:
       assert.ok(actorSamples.some(({ kind, primitiveCount }) => (
