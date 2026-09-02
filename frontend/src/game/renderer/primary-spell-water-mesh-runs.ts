@@ -14,6 +14,7 @@ import {
 import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
+  PrimarySpellWaterAuraState,
   PrimarySpellWaterHailState,
   PrimarySpellWaterTransientState,
 } from '../core-kernels/primary-spells.ts'
@@ -30,9 +31,13 @@ import {
   nativeArenaSaturateSample,
   type NativeArenaRgba,
 } from './native-arena-render-pipeline.ts'
-import { NATIVE_AIR_WATER_SPRITES } from './primary-spell-air-water-native.ts'
+import {
+  NATIVE_AIR_WATER_SPRITES,
+  nativeWaterAuraVisualPlan,
+} from './primary-spell-air-water-native.ts'
 
 export type NativeWaterMeshActorState =
+  | PrimarySpellWaterAuraState
   | PrimarySpellWaterHailState
   | PrimarySpellWaterTransientState
 
@@ -48,6 +53,7 @@ export interface NativeWaterMeshPainterLayer {
 }
 
 export interface NativeWaterMeshTextures {
+  aura: Texture
   core: Texture
   glint: Texture
   hail: Texture
@@ -73,6 +79,7 @@ interface NativeWaterTextureLayout {
 }
 
 interface NativeWaterTextureLayouts {
+  aura: NativeWaterTextureLayout
   core: NativeWaterTextureLayout
   glint: NativeWaterTextureLayout
   hail: NativeWaterTextureLayout
@@ -129,6 +136,7 @@ const NATIVE_WATER_MESH_BIT_GL = {
 
 export class NativeWaterMeshRuns {
   private activeRunCount = 0
+  private activeAuraCount = 0
   private activeHailCount = 0
   private activeNormalFrostCount = 0
   private readonly depths: number[] = []
@@ -154,6 +162,7 @@ export class NativeWaterMeshRuns {
   }
 
   beginFrame(): void {
+    this.activeAuraCount = 0
     this.activeHailCount = 0
     this.activeNormalFrostCount = 0
     this.liveIds.clear()
@@ -163,7 +172,8 @@ export class NativeWaterMeshRuns {
     const created = !this.stateById.has(state.id)
     const registration = nativeWaterMeshPainterRegistration(state)
     this.liveIds.add(state.id)
-    if (state.kind === 'water-hail') this.activeHailCount += 1
+    if (state.kind === 'water-aura') this.activeAuraCount += 1
+    else if (state.kind === 'water-hail') this.activeHailCount += 1
     else this.activeNormalFrostCount += 1
     this.stateById.set(state.id, state)
     if (state.kind === 'water') this.planById.set(state.id, waterFrostJetPlan(state))
@@ -173,7 +183,7 @@ export class NativeWaterMeshRuns {
         id: `primary-spell:${state.id}`,
         lane: 'world-sorted',
         meshActorId: state.id,
-        queueFamily: state.kind === 'water-hail' ? 'ordinary-dynamic' : 'zanim',
+        queueFamily: state.kind === 'water' ? 'zanim' : 'ordinary-dynamic',
         regionLightPoint: null,
         registration,
         sortBias: 0,
@@ -209,7 +219,7 @@ export class NativeWaterMeshRuns {
     return this.stateById.has(id)
   }
 
-  kind(id: number): 'water' | 'water-hail' | undefined {
+  kind(id: number): 'water' | 'water-aura' | 'water-hail' | undefined {
     return this.stateById.get(id)?.kind
   }
 
@@ -295,6 +305,10 @@ export class NativeWaterMeshRuns {
     return this.stateById.size
   }
 
+  get auraCount(): number {
+    return this.activeAuraCount
+  }
+
   get hailCount(): number {
     return this.activeHailCount
   }
@@ -320,6 +334,7 @@ export class NativeWaterMeshRuns {
     this.runQuadCounts.length = 0
     this.sortedIds.length = 0
     this.activeRunCount = 0
+    this.activeAuraCount = 0
     this.activeHailCount = 0
     this.activeNormalFrostCount = 0
     this.depths.length = 0
@@ -352,7 +367,8 @@ export class NativeWaterMeshRuns {
 export function isNativeWaterMeshActorState(
   state: PrimarySpellProjectileState | PrimarySpellTransientState,
 ): state is NativeWaterMeshActorState {
-  return state.kind === 'water-hail'
+  return state.kind === 'water-aura'
+    || state.kind === 'water-hail'
     || (state.kind === 'water' && waterFrostJetKind(state.id, state.underpowered) === 'normal')
 }
 
@@ -388,7 +404,7 @@ function nativeWaterMeshPainterRegistration(
 ): NativeWorldManagerRegistration {
   const painterRegistrations = state.painterRegistrations
   const registration = painterRegistrations?.[0]
-  const expectedLane = state.kind === 'water-hail' ? 'actor' : 'transient'
+  const expectedLane = state.kind === 'water' ? 'transient' : 'actor'
   if (
     painterRegistrations?.length !== 1
     || registration?.managerLane !== expectedLane
@@ -402,6 +418,7 @@ function nativeWaterMeshWorldY(
   state: NativeWaterMeshActorState,
   plan: WaterFrostJetPlan | undefined,
 ): number {
+  if (state.kind === 'water-aura') return state.origin.y
   return state.kind === 'water-hail' ? state.position.y : plan!.worldY
 }
 
@@ -409,7 +426,7 @@ function nativeWaterMeshQuadCount(
   state: NativeWaterMeshActorState,
   plan: WaterFrostJetPlan | undefined,
 ): number {
-  return state.kind === 'water-hail' ? 1 : plan!.draws.length
+  return state.kind === 'water' ? plan!.draws.length : 1
 }
 
 function writeNativeWaterMeshActor(
@@ -419,6 +436,19 @@ function writeNativeWaterMeshActor(
   plan: WaterFrostJetPlan | undefined,
   layouts: NativeWaterTextureLayouts,
 ): number {
+  if (state.kind === 'water-aura') {
+    const plan = nativeWaterAuraVisualPlan(state)
+    writeNativeWaterMeshQuad(vertices, firstQuad, {
+      additive: true,
+      alpha: quantizeAlpha(plan.alpha),
+      layout: layouts.aura,
+      position: state.origin,
+      rotation: plan.rotationRadians,
+      scale: plan.scale,
+      tint: plan.tint,
+    })
+    return firstQuad + 1
+  }
   if (state.kind === 'water-hail') {
     writeNativeWaterMeshQuad(vertices, firstQuad, {
       additive: false,
@@ -624,24 +654,45 @@ function requireCommonWaterAtlasSource(
   textures: NativeWaterMeshTextures,
 ): NativeWaterMeshTextures['core']['source'] {
   const source = textures.core.source
-  if (textures.glint.source !== source || textures.hail.source !== source) {
+  if (
+    textures.aura.source !== source
+    || textures.glint.source !== source
+    || textures.hail.source !== source
+  ) {
     throw new Error('Water mesh textures must share one packed atlas source')
   }
   return source
 }
 
 function waterTextureLayouts(textures: NativeWaterMeshTextures): NativeWaterTextureLayouts {
+  const aura = NATIVE_AIR_WATER_SPRITES.coldAura
   const hail = NATIVE_AIR_WATER_SPRITES.hail
   return {
+    aura: registeredTextureLayout(textures.aura, aura),
     core: centeredTextureLayout(textures.core),
     glint: centeredTextureLayout(textures.glint),
-    hail: {
-      bottom: hail.height - hail.anchorY,
-      left: -hail.anchorX,
-      right: hail.width - hail.anchorX,
-      top: -hail.anchorY,
-      uvs: textureUvs(textures.hail),
-    },
+    hail: registeredTextureLayout(textures.hail, hail),
+  }
+}
+
+function registeredTextureLayout(
+  texture: Texture,
+  registration: Readonly<{
+    anchorX: number
+    anchorY: number
+    height: number
+    width: number
+  }>,
+): NativeWaterTextureLayout {
+  const trim = texture.trim
+  const left = (trim?.x ?? 0) - registration.anchorX
+  const top = (trim?.y ?? 0) - registration.anchorY
+  return {
+    bottom: top + (trim?.height ?? registration.height),
+    left,
+    right: left + (trim?.width ?? registration.width),
+    top,
+    uvs: textureUvs(texture),
   }
 }
 

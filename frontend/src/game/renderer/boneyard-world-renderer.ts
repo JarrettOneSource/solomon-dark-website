@@ -427,6 +427,7 @@ interface BoneyardRendererFrameDiagnostics {
   primaryHailMeshCount: number
   primaryHailMeshRunCount: number
   primarySpellKinds: readonly string[]
+  primaryWaterAuraMeshCount: number
   primaryWaterMeshActorCount: number
   primaryWaterMeshNormalFrostCount: number
   primaryWaterMeshRunCount: number
@@ -1043,6 +1044,7 @@ export async function createBoneyardWorldRenderer(
     primaryHailMeshCount: 0,
     primaryHailMeshRunCount: 0,
     primarySpellKinds: [],
+    primaryWaterAuraMeshCount: 0,
     primaryWaterMeshActorCount: 0,
     primaryWaterMeshNormalFrostCount: 0,
     primaryWaterMeshRunCount: 0,
@@ -1502,6 +1504,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.primaryHailMeshCount = scene.primaryHailMeshCount
       frameDiagnostics.primaryHailMeshRunCount = scene.primaryHailMeshRunCount
       frameDiagnostics.primarySpellKinds = scene.primarySpellKinds
+      frameDiagnostics.primaryWaterAuraMeshCount = scene.primaryWaterAuraMeshCount
       frameDiagnostics.primaryWaterMeshActorCount = scene.primaryWaterMeshActorCount
       frameDiagnostics.primaryWaterMeshNormalFrostCount = (
         scene.primaryWaterMeshNormalFrostCount
@@ -3231,6 +3234,10 @@ class BoneyardDynamicScene {
 
   get primaryWaterMeshActorCount(): number {
     return this.primarySpells.waterMeshActorCount
+  }
+
+  get primaryWaterAuraMeshCount(): number {
+    return this.primarySpells.waterAuraMeshCount
   }
 
   get primaryWaterMeshNormalFrostCount(): number {

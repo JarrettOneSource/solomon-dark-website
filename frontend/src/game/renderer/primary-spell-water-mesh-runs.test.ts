@@ -12,11 +12,13 @@ import {
 } from 'pixi.js'
 
 import type {
+  PrimarySpellWaterAuraState,
   PrimarySpellWaterHailState,
   PrimarySpellWaterTransientState,
 } from '../core-kernels/primary-spells.ts'
 import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
+import { NATIVE_AIR_WATER_SPRITES } from './primary-spell-air-water-native.ts'
 import {
   isNativeWaterMeshActorState,
   nativeWaterMeshComposite,
@@ -37,22 +39,29 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
     rotationDegrees: 0,
     scale: 2,
   }))
+  runs.update(aura(2))
   runs.update(water(firstFrost))
   runs.update(water(secondFrost))
   runs.endFrame()
   runs.beginDepths()
   runs.appendDepth(1, 10)
-  runs.appendDepth(firstFrost, 11)
-  runs.appendDepth(secondFrost, 13)
+  runs.appendDepth(2, 11)
+  runs.appendDepth(firstFrost, 12)
+  runs.appendDepth(secondFrost, 14)
   runs.commitDepths()
 
-  assert.equal(runs.count, 3)
+  assert.equal(runs.count, 4)
+  assert.equal(runs.auraCount, 1)
   assert.equal(runs.hailCount, 1)
   assert.equal(runs.normalFrostCount, 2)
   assert.equal(runs.runCount, 2)
   assert.deepEqual(runs.painterLayer(1)?.registration, {
     managerLane: 'actor',
     registrationOrdinal: 2_001,
+  })
+  assert.deepEqual(runs.painterLayer(2)?.registration, {
+    managerLane: 'actor',
+    registrationOrdinal: 3_002,
   })
   assert.deepEqual(runs.painterLayer(firstFrost)?.registration, {
     managerLane: 'transient',
@@ -65,7 +74,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   const first = root.children[0]
   assert.ok(first instanceof Mesh)
   assert.equal(first.zIndex, 10)
-  assert.equal(first.geometry.getIndex().data.length, 24)
+  assert.equal(first.geometry.getIndex().data.length, 48)
   const vertices = first.geometry.getBuffer('aPosition').data
   const indices = first.geometry.getIndex().data
   assert.ok(vertices instanceof Float32Array)
@@ -76,17 +85,23 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
     const offset = vertex(0, corner)
     return [vertices[offset], vertices[offset + 1]]
   }), [-9, -7, 29, -7, 29, 33, -9, 33])
+  assert.deepEqual([0, 1, 2, 3].flatMap((corner) => {
+    const offset = vertex(1, corner)
+    return [vertices[offset], vertices[offset + 1]]
+  }), [35, 39.5, 98, 39.5, 98, 99.5, 35, 99.5])
   assertClose(vertexUv(vertices, vertex(0, 0)), textureUv(textures.hail))
-  assertClose(vertexUv(vertices, vertex(1, 0)), textureUv(textures.core))
-  assertClose(vertexUv(vertices, vertex(3, 0)), textureUv(textures.glint))
+  assertClose(vertexUv(vertices, vertex(1, 0)), textureUv(textures.aura))
+  assertClose(vertexUv(vertices, vertex(2, 0)), textureUv(textures.core))
+  assertClose(vertexUv(vertices, vertex(4, 0)), textureUv(textures.glint))
   assert.equal(vertices[vertex(0, 0) + 8], 0)
-  assert.equal(vertices[vertex(1, 0) + 8], 0)
-  assert.equal(vertices[vertex(2, 0) + 8], 1)
+  assert.equal(vertices[vertex(1, 0) + 8], 1)
+  assert.equal(vertices[vertex(2, 0) + 8], 0)
   assert.equal(vertices[vertex(3, 0) + 8], 1)
+  assert.equal(vertices[vertex(4, 0) + 8], 1)
 
   const second = root.children[1]
   assert.ok(second instanceof Mesh)
-  assert.equal(second.zIndex, 13)
+  assert.equal(second.zIndex, 14)
   assert.equal(second.geometry.getIndex().data.length, 24)
   assert.deepEqual([...second.geometry.getIndex().data.slice(18)], [0, 0, 0, 0, 0, 0])
 
@@ -99,7 +114,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   assert.equal(root.children[0], first)
   assert.equal(first.geometry.getBuffer('aPosition').data, vertices)
   assert.equal(first.geometry.getIndex().data, indices)
-  assert.deepEqual([...indices.slice(18)], [0, 0, 0, 0, 0, 0])
+  assert.deepEqual([...indices.slice(18, 24)], [0, 0, 0, 0, 0, 0])
 
   runs.beginFrame()
   runs.update(hail(1, {
@@ -117,7 +132,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   runs.commitDepths()
   assert.equal(first.geometry.getBuffer('aPosition').data, vertices)
   assert.equal(first.geometry.getIndex().data, indices)
-  assert.deepEqual([...indices.slice(18)], [12, 13, 14, 12, 14, 15])
+  assert.deepEqual([...indices.slice(18, 24)], [12, 13, 14, 12, 14, 15])
 
   runs.beginFrame()
   runs.endFrame()
@@ -134,11 +149,13 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
 test('combined Water mesh requires one packed atlas source', () => {
   assert.notEqual(Texture.EMPTY.source, Texture.WHITE.source)
   assert.throws(() => new NativeWaterMeshRuns(new Container(), {
+    aura: Texture.EMPTY,
     core: Texture.EMPTY,
     glint: Texture.WHITE,
     hail: Texture.EMPTY,
   }, testShader()), /share one packed atlas source/)
   assert.throws(() => new NativeWaterMeshRuns(new Container(), {
+    aura: Texture.WHITE,
     core: Texture.WHITE,
     glint: Texture.WHITE,
     hail: Texture.WHITE,
@@ -150,7 +167,7 @@ test('combined Water records remain packed on one combat-atlas page', () => {
     new URL('./boneyard-combat-atlas.generated.ts', import.meta.url),
     'utf8',
   )
-  for (const entry of [28, 30, 32]) {
+  for (const entry of [14, 28, 30, 32]) {
     const key = boneyardCombatAtlasSource('BadGuys', entry)
     assert.equal(
       generated.includes(`[${JSON.stringify(key)}, [0,`),
@@ -162,6 +179,7 @@ test('combined Water records remain packed on one combat-atlas page', () => {
 
 test('combined Water mesh rejects a depth stream outside global painter order', () => {
   const runs = new NativeWaterMeshRuns(new Container(), {
+    aura: Texture.EMPTY,
     core: Texture.EMPTY,
     glint: Texture.EMPTY,
     hail: Texture.EMPTY,
@@ -176,9 +194,10 @@ test('combined Water mesh rejects a depth stream outside global painter order', 
   runs.destroy()
 })
 
-test('combined Water mesh admits Hail and normal Frost but leaves Frost-over on its native lane', () => {
+test('combined Water mesh admits Aura, Hail, and normal Frost but leaves Frost-over native', () => {
   const normal = water(normalWaterId(100))
   const over = water(overWaterId(100))
+  assert.equal(isNativeWaterMeshActorState(aura(99)), true)
   assert.equal(isNativeWaterMeshActorState(hail(1)), true)
   assert.equal(isNativeWaterMeshActorState(normal), true)
   assert.equal(isNativeWaterMeshActorState(over), false)
@@ -242,6 +261,27 @@ function water(id: number): PrimarySpellWaterTransientState {
   }
 }
 
+function aura(
+  id: number,
+  overrides: Partial<PrimarySpellWaterAuraState> = {},
+): PrimarySpellWaterAuraState {
+  return {
+    ageTicks: 0,
+    alphaDecay: Math.fround(0.15 / 720),
+    birthTick: 0,
+    durationTicks: 720,
+    id,
+    initialRotationDegrees: 0,
+    kind: 'water-aura',
+    origin: { x: 70, y: 80 },
+    ownerId: 'wizard',
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: id + 3_000 }],
+    rotationStepDegrees: 0,
+    worldKey: 'boneyard:combined-water-mesh',
+    ...overrides,
+  }
+}
+
 function hail(
   id: number,
   overrides: Partial<PrimarySpellWaterHailState> = {},
@@ -293,24 +333,32 @@ function assertClose(actual: readonly number[], expected: readonly number[]): vo
 function testAtlasTextures(): NativeWaterMeshTexturesForTest {
   const source = new BufferImageSource({
     alphaMode: 'no-premultiply-alpha',
-    height: 1,
-    resource: new Uint8Array(12),
-    width: 3,
+    height: 145,
+    resource: new Uint8Array(256 * 145 * 4),
+    width: 256,
   })
   return {
-    core: new Texture({ frame: new Rectangle(0, 0, 1, 1), source }),
-    glint: new Texture({ frame: new Rectangle(1, 0, 1, 1), source }),
-    hail: new Texture({ frame: new Rectangle(2, 0, 1, 1), source }),
+    aura: new Texture({
+      frame: new Rectangle(122, 0, 63, 60),
+      orig: new Rectangle(0, 0, 63, 63),
+      source,
+      trim: new Rectangle(0, 2, 63, 60),
+    }),
+    core: new Texture({ frame: new Rectangle(0, 0, 93, 145), source }),
+    glint: new Texture({ frame: new Rectangle(93, 0, 10, 8), source }),
+    hail: new Texture({ frame: new Rectangle(103, 0, 19, 20), source }),
   }
 }
 
 type NativeWaterMeshTexturesForTest = Readonly<{
+  aura: Texture
   core: Texture
   glint: Texture
   hail: Texture
 }>
 
 function destroyTestAtlasTextures(textures: NativeWaterMeshTexturesForTest): void {
+  textures.aura.destroy(false)
   textures.core.destroy(false)
   textures.glint.destroy(false)
   textures.hail.destroy(true)

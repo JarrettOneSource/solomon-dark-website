@@ -116,6 +116,7 @@ export class PrimarySpellWorldView {
   ): PrimarySpellWorldView {
     const view = new PrimarySpellWorldView(root, textures)
     view.waterMeshes = new NativeWaterMeshRuns(root, {
+      aura: textures.primarySpells.airWaterActors.coldAura,
       core: textures.primarySpells.frost.core,
       glint: textures.primarySpells.frost.over,
       hail: textures.primarySpells.airWaterActors.hail,
@@ -376,6 +377,10 @@ export class PrimarySpellWorldView {
 
   get waterMeshActorCount(): number {
     return this.waterMeshes?.count ?? 0
+  }
+
+  get waterAuraMeshCount(): number {
+    return this.waterMeshes?.auraCount ?? 0
   }
 
   get waterMeshNormalFrostCount(): number {

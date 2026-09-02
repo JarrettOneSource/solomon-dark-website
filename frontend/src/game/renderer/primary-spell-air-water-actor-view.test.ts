@@ -52,7 +52,7 @@ test('Air/Water world view routes all three primary-owned actors through stock t
   view.destroy()
 })
 
-test('Boneyard Hail mesh retains every actor row and exact painter partition', () => {
+test('Boneyard Air/Water mesh retains every actor row and exact painter partition', () => {
   const root = new Container()
   const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), testShader())
   view.update(actorFixture(), WORLD_KEY, 100)
@@ -68,18 +68,20 @@ test('Boneyard Hail mesh retains every actor row and exact painter partition', (
   ], 40)
   assert.equal(view.count, 3)
   assert.equal(view.hailMeshCount, 1)
-  assert.equal(view.hailMeshRunCount, 1)
-  assert.equal(view.waterMeshActorCount, 1)
+  assert.equal(view.hailMeshRunCount, 2)
+  assert.equal(view.waterMeshActorCount, 2)
+  assert.equal(view.waterAuraMeshCount, 1)
   assert.equal(view.waterMeshNormalFrostCount, 0)
-  assert.equal(view.waterMeshRunCount, 1)
+  assert.equal(view.waterMeshRunCount, 2)
   assert.equal(root.children.filter(({ label }) => label === 'water-hail').length, 0)
-  assert.equal(root.children.filter(({ label }) => label.startsWith('primary-water-mesh-run')).length, 1)
+  assert.equal(root.children.filter(({ label }) => label.startsWith('primary-water-mesh-run')).length, 2)
 
   view.update({ nextId: 4, projectiles: [], transients: [] }, WORLD_KEY)
   view.applyBoneyardPainterDepths([], 1)
   assert.equal(view.count, 0)
   assert.equal(view.hailMeshCount, 0)
   assert.equal(view.hailMeshRunCount, 0)
+  assert.equal(view.waterAuraMeshCount, 0)
   view.destroy()
   assert.equal(root.children.length, 0)
 })

@@ -1667,3 +1667,85 @@ teardown, and exercise the real packed-atlas load. A focused gate, production
 build, exact Mac runtime, and fresh physical iPhone Water A/B are required. The
 candidate is rejected if it changes pixels or membership, produces a browser
 error, or fails to materially improve the admitted physical Water row.
+
+## Single-sampler Cold Aura integration experiment
+
+The earlier combined Water/Hail/Aura candidate `22886e80` remains physically
+rejected as implemented. It added a fourth sampler and another varying-selected
+fragment branch to the dominant mixed shader while also moving Aura into the
+combined affine owner. Its `19.75` FPS result therefore closes that exact
+four-sampler representation, but it does not isolate the affine owner after
+the shared-page fact above removes every texture-selection branch.
+
+This follow-up is deliberately staged only after the single-sampler Water/Hail
+candidate. It adds `BadGuys:14` Cold Aura through the same already-bound page
+zero source and direct page UVs. One unchanged affine quad carries the existing
+trimmed texture, native anchor/logical bounds, owner-following origin,
+age-derived float32 scale, rotation, tint, quantized alpha, additive encoding,
+actor registration, world Y, and painter depth. Consecutive Water/Hail/Aura
+depths may share a run; every other global painter gap still splits it. The
+candidate adds no sampler, texture-id varying, or fragment branch.
+
+Simulation identity, Aura birth/lifetime/RNG, gameplay slow/damage, audio,
+protocol, painter membership, per-quad blend order, resolution, and all Hub
+presentation remain unchanged. Regression coverage must prove exact Aura
+geometry/UV/color/alpha, actor-manager registration, run gaps, census,
+retirement, and source-policy failure. It is rejected unless a fresh physical
+iPhone row materially beats the single-sampler Water/Hail result with all
+visuals enabled; Mac-only run reduction is not promotion evidence.
+
+## Physical single-sampler decision and closure
+
+Both candidates were served from clean detached Mac checkouts through the same
+Tailscale route and exercised on the same USB-attached iPhone XR running iOS
+18.7.6. Each run used complex lighting and shadows, native resolution, normal
+WebGL submission, and the complete Water presentation; no diagnostic hide,
+clamp, discard, or input-activity override was enabled.
+
+The Water/Hail-only candidate
+`7458d4e0299afd848066f4e71ea9fb3faa075816` materially improves the reopened
+`8b47431f` row but does not recover the previously admitted Water range:
+
+- Hub is `60.00` FPS and empty Boneyard is `55.15` FPS;
+- max Water is `16.43` FPS with p50/p95/p99 `52/80/201 ms`, a `1,106-ms`
+  maximum, and 145 measured intervals over 34 ms;
+- the 1,473-primary peak includes 1,278 combined mesh actors, 1,030 Hail Mesh,
+  256 normal Frost Mesh, 134 ordinary Cold Aura views, and 60 combined runs;
+- host simulation remains `99.54 Hz`, gameplay input remains unblocked, and
+  the browser-error array is empty;
+- battery temperature falls from `36.09` to `35.50 C`;
+- receipt `/private/tmp/iphone-final-7458d4e0-ios-element-water.json`, SHA-256
+  `d985d7b596bf9d44a460205d899a7f40cfb45862dd0f97d7f4c7759e0578a8a7`.
+
+The single-sampler Cold Aura candidate
+`2fbb40937527a1143e2e08baca49d6a5cfe1eb61` wins the direct device comparison:
+
+- Hub is `60.00` FPS and empty Boneyard is `59.68` FPS;
+- max Water is `22.62` FPS with p50/p95/p99 `43/64/121 ms`, a `205-ms`
+  maximum, and 144 measured intervals over 34 ms;
+- the 1,473-primary peak includes 1,405 combined Water/Hail/Aura mesh actors,
+  1,038 Hail Mesh, 255 normal Frost Mesh, 133 Cold Aura Mesh, and 59 combined
+  runs;
+- host simulation is `100.00 Hz`, gameplay input remains unblocked, and the
+  browser-error array is empty;
+- battery temperature falls from `36.19` to `36.00 C`;
+- receipt `/private/tmp/iphone-aura-2fbb4093-ios-element-water.json`, SHA-256
+  `1222fc7a4a637929fc184453fa3e46dd52fee7cea4a3bf33a5caaa81de43427c`.
+
+Against the immediately preceding single-sampler row, integrating Aura raises
+average max-Water throughput by `37.6%`, lowers p50/p95/p99 by
+`17.3%/20.0%/39.8%`, and cuts the maximum observed interval by `81.5%` without
+changing the effect census, host cadence, or error state. Against the reopened
+clean `8b47431f` row it approximately doubles max-Water throughput. Its Mac
+receipt also holds max Water at `59.75` FPS with the same 1,474-primary class of
+load and no errors.
+
+The experiment is therefore promoted. Before this receipt-only closure was
+appended, its cherry-picked inspection-branch tree was
+`228fb3bf0a2eb5d4d571f46b56bf1aab7d38946d`, exactly matching the physically
+exercised candidate tree. This closes the four-sampler rejection while
+accepting only the guarded one-source representation: Cold Aura joins the
+existing page-zero mesh without adding a sampler or fragment branch. The
+pathological maximum Water load remains the device floor; ordinary Hub,
+Boneyard, modal, movement, enemy, and non-Water elemental rows retain their
+separately recorded higher results.
