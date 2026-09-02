@@ -31,6 +31,7 @@ import {
   nativeSecondaryPresentationPlan,
   nativeSecondaryCompositeOwnerEntries,
   nativeRegionPointGain,
+  presentNativeSecondaryScreenOverlay,
   NativeSecondaryScreenFeedbackPresentation,
   nativeSecondaryWorldShake,
   updateNativeSecondaryPresentationPlan,
@@ -1599,6 +1600,21 @@ test('Region point gain follows the native quarter-width through 1.1-width ramp'
     nativeRegionPointGain({ x: 675, y: 0 }, camera, 1_000, true),
     Math.fround(0.05),
   )
+})
+
+test('reduced screen flashes scale only the final Region overlay alpha', () => {
+  const white = { alpha: 1, color: 0xffffff }
+  const cyanAtHalfPointGain = { alpha: 0.5, color: 0xe6ffff }
+  assert.equal(presentNativeSecondaryScreenOverlay(null, true), null)
+  assert.equal(presentNativeSecondaryScreenOverlay(white, false), white)
+  assert.deepEqual(presentNativeSecondaryScreenOverlay(white, true), {
+    alpha: 0.2,
+    color: 0xffffff,
+  })
+  assert.deepEqual(presentNativeSecondaryScreenOverlay(cyanAtHalfPointGain, true), {
+    alpha: 0.1,
+    color: 0xe6ffff,
+  })
 })
 
 test('Region screen feedback is one overwrite lane with exact float32 decay', () => {

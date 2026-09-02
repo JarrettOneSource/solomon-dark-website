@@ -612,6 +612,7 @@ export default function BoneyardScene({
       complexShadows: settings.complexShadows,
       lightQualityPercent: settings.lightQualityPercent,
       multipleShadows: settings.multipleShadows,
+      reducedScreenFlashes: settings.reducedScreenFlashes,
       zoomEffects: settings.zoomEffects,
     })
   }, [
@@ -620,6 +621,7 @@ export default function BoneyardScene({
     settings.complexShadows,
     settings.lightQualityPercent,
     settings.multipleShadows,
+    settings.reducedScreenFlashes,
     settings.zoomEffects,
   ])
 

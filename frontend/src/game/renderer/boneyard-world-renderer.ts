@@ -226,6 +226,7 @@ import {
   NativeSecondaryScreenFeedbackPresentation,
   nativeRegionPointGain,
   nativeSecondaryWorldShake,
+  presentNativeSecondaryScreenOverlay,
 } from './native-secondary-presentation.ts'
 import { PlayerDeathBurstViews } from './player-death-burst-view.ts'
 import { PlayerDeathWeaponViews } from './player-death-weapon-view.ts'
@@ -595,6 +596,7 @@ export type BoneyardWorldPresentationSettings = Pick<
   | 'complexShadows'
   | 'lightQualityPercent'
   | 'multipleShadows'
+  | 'reducedScreenFlashes'
   | 'zoomEffects'
 >
 
@@ -1388,7 +1390,10 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.worldSpeechMaximumAlpha = `${worldSpeechDiagnostics.maximumAlpha}`
       canvas.dataset.worldSpeechPlayerIds = worldSpeechDiagnostics.playerIds.join(',')
       canvas.dataset.worldSpeechSequences = worldSpeechDiagnostics.sequences.join(',')
-      const screenOverlay = secondaryScreenFeedback.sample(snapshot.tick)
+      const screenOverlay = presentNativeSecondaryScreenOverlay(
+        secondaryScreenFeedback.sample(snapshot.tick),
+        settings.reducedScreenFlashes,
+      )
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
       secondaryScreenFlash.visible = screenOverlay !== null
@@ -1774,6 +1779,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.complexShadowsEnabled = `${settings.complexShadows}`
       canvas.dataset.lightQuality = `${lightQuality}`
       canvas.dataset.multipleShadows = `${settings.multipleShadows}`
+      canvas.dataset.reducedScreenFlashes = `${settings.reducedScreenFlashes}`
       canvas.dataset.zoomEffects = `${settings.zoomEffects}`
     },
     setWorldSpeeches(speeches) {

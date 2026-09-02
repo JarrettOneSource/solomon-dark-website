@@ -46,6 +46,7 @@ export interface GameSettings {
   readonly lightQualityPercent: number
   readonly musicVolumePercent: number
   readonly multipleShadows: boolean
+  readonly reducedScreenFlashes: boolean
   readonly soundVolumePercent: number
   readonly submitRunsToServer: boolean
   readonly uiScalePercent: number
@@ -93,6 +94,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = Object.freeze({
   lightQualityPercent: 100,
   musicVolumePercent: 100,
   multipleShadows: true,
+  reducedScreenFlashes: false,
   soundVolumePercent: 100,
   submitRunsToServer: true,
   uiScalePercent: 100,
@@ -113,19 +115,26 @@ const GAME_SETTINGS_KEYS = Object.freeze([
   'lightQualityPercent',
   'musicVolumePercent',
   'multipleShadows',
+  'reducedScreenFlashes',
   'soundVolumePercent',
   'submitRunsToServer',
   'uiScalePercent',
   'zoomEffects',
 ] as const)
 
-const DEPLOYED_GAME_SETTINGS_KEYS = Object.freeze(GAME_SETTINGS_KEYS.filter((key) => ![
-  'enableActivityMessages',
-  'enableGlobalChat',
-  'enableOnlineFeatures',
-  'enableSharedHub',
-  'submitRunsToServer',
-].includes(key)))
+const PRE_REDUCED_SCREEN_FLASH_SETTINGS_KEYS = Object.freeze(GAME_SETTINGS_KEYS.filter((key) => (
+  key !== 'reducedScreenFlashes'
+)))
+
+const PRE_ONLINE_GAME_SETTINGS_KEYS = Object.freeze(
+  PRE_REDUCED_SCREEN_FLASH_SETTINGS_KEYS.filter((key) => ![
+    'enableActivityMessages',
+    'enableGlobalChat',
+    'enableOnlineFeatures',
+    'enableSharedHub',
+    'submitRunsToServer',
+  ].includes(key)),
+)
 
 const listeners = new Set<(settings: GameSettings) => void>()
 
@@ -266,7 +275,7 @@ function parseGameSettings(serialized: string | null): GameSettings {
         enableCheats: source.enableCheats === true,
       })
     }
-    const migrated = sameKeys(sourceKeys, DEPLOYED_GAME_SETTINGS_KEYS)
+    const onlineMigrated = sameKeys(sourceKeys, PRE_ONLINE_GAME_SETTINGS_KEYS)
       ? {
           ...source,
           enableActivityMessages: true,
@@ -276,6 +285,12 @@ function parseGameSettings(serialized: string | null): GameSettings {
           submitRunsToServer: true,
         }
       : source
+    const migrated = sameKeys(
+      Object.keys(onlineMigrated).sort(),
+      PRE_REDUCED_SCREEN_FLASH_SETTINGS_KEYS,
+    )
+      ? { ...onlineMigrated, reducedScreenFlashes: false }
+      : onlineMigrated
     if (!sameKeys(Object.keys(migrated).sort(), GAME_SETTINGS_KEYS)) {
       return DEFAULT_GAME_SETTINGS
     }
@@ -292,6 +307,7 @@ function parseGameSettings(serialized: string | null): GameSettings {
       || typeof complete.enableOnlineFeatures !== 'boolean'
       || typeof complete.enableSharedHub !== 'boolean'
       || typeof complete.multipleShadows !== 'boolean'
+      || typeof complete.reducedScreenFlashes !== 'boolean'
       || typeof complete.submitRunsToServer !== 'boolean'
       || typeof complete.zoomEffects !== 'boolean'
       || !integerInRange(complete.cameraFovPercent, CAMERA_FOV_MIN_PERCENT, CAMERA_FOV_MAX_PERCENT)
@@ -330,6 +346,7 @@ function normalizedGameSettings(settings: GameSettings): GameSettings {
     ),
     musicVolumePercent: boundedInteger(settings.musicVolumePercent, 0, 100),
     multipleShadows: settings.multipleShadows === true,
+    reducedScreenFlashes: settings.reducedScreenFlashes === true,
     soundVolumePercent: boundedInteger(settings.soundVolumePercent, 0, 100),
     submitRunsToServer: settings.submitRunsToServer === true,
     uiScalePercent: boundedInteger(

@@ -317,6 +317,19 @@ export interface NativeSecondaryScreenOverlay {
   readonly color: number
 }
 
+const REDUCED_SCREEN_FLASH_ALPHA_SCALE = 0.2
+
+export function presentNativeSecondaryScreenOverlay(
+  overlay: NativeSecondaryScreenOverlay | null,
+  reducedScreenFlashes: boolean,
+): NativeSecondaryScreenOverlay | null {
+  if (overlay === null || !reducedScreenFlashes) return overlay
+  return {
+    alpha: overlay.alpha * REDUCED_SCREEN_FLASH_ALPHA_SCALE,
+    color: overlay.color,
+  }
+}
+
 export interface NativeSecondaryScreenFeedbackContext {
   readonly cameraCenter: Vector2
   readonly localPlayerAlternate: boolean

@@ -404,9 +404,10 @@ export default function HubScene({
   useLayoutEffect(() => {
     rendererRef.current?.setSettings({
       cameraFovPercent: settings.cameraFovPercent,
+      reducedScreenFlashes: settings.reducedScreenFlashes,
       zoomEffects: settings.zoomEffects,
     })
-  }, [settings.cameraFovPercent, settings.zoomEffects])
+  }, [settings.cameraFovPercent, settings.reducedScreenFlashes, settings.zoomEffects])
 
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {

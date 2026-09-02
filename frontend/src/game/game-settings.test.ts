@@ -59,6 +59,7 @@ test('complete Settings defaults retain native presentation and enable online ex
     lightQualityPercent: 100,
     musicVolumePercent: 100,
     multipleShadows: true,
+    reducedScreenFlashes: false,
     soundVolumePercent: 100,
     submitRunsToServer: true,
     uiScalePercent: 100,
@@ -86,6 +87,7 @@ test('complete Settings persist exactly and migrate every deployed record shape'
     controls: rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'moveUp', 'ArrowUp'),
     lightQualityPercent: 24,
     musicVolumePercent: 35,
+    reducedScreenFlashes: true,
     soundVolumePercent: 70,
     uiScalePercent: 150,
     zoomEffects: false,
@@ -93,15 +95,28 @@ test('complete Settings persist exactly and migrate every deployed record shape'
   assert.deepEqual(setGameSettings(changed, storage), changed)
   assert.deepEqual(readGameSettings(storage), changed)
 
+  const deployedBeforeReducedScreenFlashes = Object.fromEntries(
+    Object.entries(changed).filter(([key]) => key !== 'reducedScreenFlashes'),
+  )
+  storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(deployedBeforeReducedScreenFlashes))
+  assert.deepEqual(readGameSettings(storage), {
+    ...changed,
+    reducedScreenFlashes: false,
+  })
+
   const deployedComplete = Object.fromEntries(Object.entries(changed).filter(([key]) => ![
     'enableActivityMessages',
     'enableGlobalChat',
     'enableOnlineFeatures',
     'enableSharedHub',
+    'reducedScreenFlashes',
     'submitRunsToServer',
   ].includes(key)))
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify(deployedComplete))
-  assert.deepEqual(readGameSettings(storage), changed)
+  assert.deepEqual(readGameSettings(storage), {
+    ...changed,
+    reducedScreenFlashes: false,
+  })
 
   const deployedBeforeCheatMenu = {
     ...changed,
@@ -135,6 +150,11 @@ test('complete Settings persist exactly and migrate every deployed record shape'
   storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
     ...changed,
     cameraFovPercent: 126,
+  }))
+  assert.deepEqual(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
+  storage.values.set(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
+    ...changed,
+    reducedScreenFlashes: 'yes',
   }))
   assert.deepEqual(readGameSettings(storage), DEFAULT_GAME_SETTINGS)
 })

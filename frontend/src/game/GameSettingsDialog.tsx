@@ -485,6 +485,11 @@ function PerformanceSettings({
       </NativeUiSettingsGroup>
       <NativeUiSettingsGroup title="SPECIAL EFFECTS">
         <NativeUiSettingsToggle
+          checked={settings.reducedScreenFlashes}
+          label="REDUCED SCREEN FLASHES"
+          onChange={(reducedScreenFlashes) => onChange({ ...settings, reducedScreenFlashes })}
+        />
+        <NativeUiSettingsToggle
           checked={settings.zoomEffects}
           label="CAMERA SHAKE"
           onChange={(zoomEffects) => onChange({ ...settings, zoomEffects })}

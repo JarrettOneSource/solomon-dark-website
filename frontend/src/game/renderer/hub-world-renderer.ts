@@ -39,6 +39,7 @@ import {
 import {
   NativeSecondaryScreenFeedbackPresentation,
   nativeRegionPointGain,
+  presentNativeSecondaryScreenOverlay,
 } from './native-secondary-presentation.ts'
 import {
   NativeWorldNameplateLayer,
@@ -174,7 +175,7 @@ export interface HubWorldRenderer {
 
 export type HubWorldPresentationSettings = Pick<
   GameSettings,
-  'cameraFovPercent' | 'zoomEffects'
+  'cameraFovPercent' | 'reducedScreenFlashes' | 'zoomEffects'
 >
 
 interface HubWorldRendererOptions {
@@ -203,6 +204,8 @@ export async function createHubWorldRenderer(
     HUB_CAMERA_SCALE,
     options.settings?.cameraFovPercent ?? DEFAULT_GAME_SETTINGS.cameraFovPercent,
   )
+  let reducedScreenFlashes = options.settings?.reducedScreenFlashes
+    ?? DEFAULT_GAME_SETTINGS.reducedScreenFlashes
   let zoomEffects = options.settings?.zoomEffects ?? DEFAULT_GAME_SETTINGS.zoomEffects
   const initialResolution = initialHubResolution({
     devicePixelRatio,
@@ -739,7 +742,10 @@ export async function createHubWorldRenderer(
           worldKey: effect.worldKey,
         })
       }
-      const screenOverlay = screenFeedback.sample(snapshot.tick)
+      const screenOverlay = presentNativeSecondaryScreenOverlay(
+        screenFeedback.sample(snapshot.tick),
+        reducedScreenFlashes,
+      )
       const secondaryCameraMagnitude = zoomEffects
         ? screenFeedback.sampleCameraMagnitude(snapshot.tick)
         : 0
@@ -939,8 +945,10 @@ export async function createHubWorldRenderer(
     setSettings(settings) {
       if (destroyed) return
       baseCameraScale = cameraZoomForFov(HUB_CAMERA_SCALE, settings.cameraFovPercent)
+      reducedScreenFlashes = settings.reducedScreenFlashes
       zoomEffects = settings.zoomEffects
       canvas.dataset.cameraZoom = `${baseCameraScale}`
+      canvas.dataset.reducedScreenFlashes = `${reducedScreenFlashes}`
       canvas.dataset.zoomEffects = `${zoomEffects}`
     },
     setUiSurface(surface) {

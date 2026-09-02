@@ -482,3 +482,194 @@ counts, geometry, real-touch ranges, and empty error arrays; their current title
 captures hash to
 `d991afe1c307237317bb24ea5f12ab875bfaafee6c29defadcc5c29701b6bbd4`
 and `fe9aa95e30ecc696a3337da2f3dd9d64daac5028596de526b2e265ae909ce93b`.
+
+## 2026-09-02 — Reduced screen-flash accessibility extension
+
+### Reported smell and parity question
+
+- The owner reports that gameplay effects such as defensive Flash and Ring of
+  Ice paint a bright near-white color over the whole screen and are difficult
+  to look at. A persisted lowered-flash mode is requested in Settings.
+- The stock behavior is already closed by entries 083, 101, 122, 123, and 287:
+  one Region-owned RGBA lane is overwritten by ordered gameplay events, loses
+  its stored alpha once per 100 Hz tick, and is painted after world/effects but
+  below the HUD. The accessibility mode must not reinterpret that owner.
+- Falsifiers are a local setting that changes authoritative events or protocol,
+  changes flash color or duration, suppresses actor-local VFX/audio/camera
+  feedback, affects only the two reported skills, misses a Hub region, or
+  resets an existing deployed Settings record.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Settled native instruction evidence | entry 083, Region helper `0x00448600`, Region tick `0x0063EFC0`, Region render `0x0046EC80`; retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Region owns one screen-fixed overwrite lane; point gain, RGBA, float32 decay, ordering, and all category-2 writers are already instruction-closed. | high |
+| Settled native sibling evidence | entries 101, 122, and 123 | Pike break, defensive Flash 53, and primary Ether Blast 14 also write or feed the same Region screen-feedback presentation. | high |
+| Current Website causal trace | `game-settings.ts`, `GameSettingsDialog.tsx`, `MainMenuScene.tsx`, `HubScene.tsx`, `BoneyardScene.tsx`, `native-secondary-presentation.ts`, `hub-world-renderer.ts`, `boneyard-world-renderer.ts` at base `252ad56019e2e0e1eb2fd714fbf4d8c7783156b8` | Settings is persisted locally and passed live to both renderers. Both renderers consume the same native feedback state and assign its sampled alpha directly to one retained full-viewport white Graphics quad. | high |
+| Current Website membership sweep | all `screenFlash` producers plus both `consumePrimaryEtherBlast` call sites at the same base | All gameplay full-screen flash producers converge before the two final alpha assignments. Actor-local sprite flashes and the Create-menu transition flash do not use the Region lane. | high |
+
+No new native extraction is required: this is an explicitly designed browser
+accessibility extension over a previously closed native owner. The stock lane
+remains the identity branch and oracle.
+
+### System boundary and membership inventory
+
+Native/web system: the Region gameplay screen-feedback lane, every event that
+writes it, each Region renderer that paints it, and the local Settings branch
+that may reduce only its final presented alpha.
+
+| Member (class/variant/scene/branch) | Native/current source | Disposition | Proof |
+| --- | --- | --- | --- |
+| Reduced Screen Flashes Off/default | stock Region lane; `DEFAULT_GAME_SETTINGS` | `verified-already-at-parity` | sampled alpha/color and exact float32 lifetime remain unchanged |
+| Reduced Screen Flashes On | Website accessibility extension | `exact-ported as designed-not-observed` | final screen-quad alpha is `nativeAlpha * 0.2`; color and native lane state are unchanged |
+| persisted current Settings record without the new key | deployed `solomon-dark-game-settings-v1` shape | `exact-ported` migration | record retains every existing value and gains `reducedScreenFlashes: false` |
+| title, gameplay-pause, and Dark Cloud Settings contexts | shared `GameSettingsDialog` Performance page | `exact-ported as designed-not-observed` | one live toggle, same modal/Back/Done lifecycle in all contexts |
+| primary Ether Blast 14 | entry 123; `consumePrimaryEtherBlast` | `exact-ported` | shared final-alpha policy covers the purple Region flash without changing charge/camera state |
+| Call Leviathan 11 | entry 083 Region write census | `exact-ported` | shared point-gain flash path |
+| Planewalker 12 and Plane Orb | entry 083 Region write census | `exact-ported` | shared fixed flash path, including Plane Orb alpha `.1` |
+| Phasing 15 | entry 083 Region write census | `exact-ported` | accepted-traversal flash only remains authoritative |
+| Ring of Fire 21 | entry 083 Region write census | `exact-ported` | shared flash is reduced; separate `.25` camera magnitude is unchanged |
+| Firewalker 23 | entry 083 Region write census | `exact-ported` | both toggle writes share the policy |
+| Magic Storm 27 | entry 083 no-Region-write row | `out-of-system` (cloud-owned compositor, not the screen-feedback lane) | no invented reduction of local weather sprites |
+| Prismatic Shock 30 | entry 083 five-color Region table | `exact-ported` | selected RGB is unchanged; only final alpha scales |
+| Ring of Ice 35 | entry 083 Region write census | `exact-ported` | initial cyan-white overlay is presented at 20 percent of native alpha |
+| Earthquake 41 | entry 083 Region write census | `exact-ported` | fixed green-white flash scales; separate displacement is unchanged |
+| Raise Golem 45 | entry 083 no-Region-write row | `out-of-system` (no screen flash) | no new presentation branch |
+| Stoneskin 46 | entry 083 Region write census | `exact-ported` | fixed white flash shares the policy |
+| Teleport 48 source and destination | entry 083 ordered Region writes | `exact-ported` | destination still overwrites source; both use the final-alpha policy |
+| Magic Circle 49 | entry 083 Region write census | `exact-ported` | age-two write and lifetime remain native |
+| Magic Trap 50 initialization and trigger | entry 083 selector table and ordered writes | `exact-ported` | selector RGB, fixed/point gain, and trigger overwrite remain native |
+| Dampen 51 | entry 083 no-Region-write row | `out-of-system` (actor-local additive VFX only) | no actor sprite suppression |
+| defensive Flash 53 | entry 122 | `exact-ported` | white point-gain screen overlay scales; all 12 actors, Dazzle, displacement, and audio remain unchanged |
+| Magic Shield 54 apply and Explosive Shield break | entry 083 ordered Region writes | `exact-ported` | both cyan-white writes scale; absorb/explosion/camera owners remain unchanged |
+| Acid Rain 72 | entry 083 no-Region-write row | `out-of-system` (weather actors only) | no weather attenuation |
+| Fire Wall 73 | entry 083 Region write census | `exact-ported` | point-gain orange overlay shares the policy |
+| Ether Drain 74 | entry 083 Region write census | `exact-ported` | first scale-in write shares the policy |
+| Call Comet 76 | entry 083 Region write census | `exact-ported` | long white fade keeps its 201-update retirement while every visible alpha is multiplied by `.2` |
+| Turn Undead 77 | entry 083 no-Region-write row | `out-of-system` (no screen flash) | no unrelated effect change |
+| Mindstar 78 | entry 083 Region write census | `exact-ported` | both toggle writes share the policy |
+| Regenerate 79 | entry 083 Region write census | `exact-ported` | both toggle writes share the policy |
+| Ether pike-break equipment response | entry 101; `emitNativePlayerScreenFlash` | `exact-ported` | fixed white Region write scales; debris/audio/knockback remain unchanged |
+| Courtyard Region | `hub-world-renderer.ts`, `hub:courtyard` lane | `exact-ported` | live setting changes the retained quad only |
+| Mortuary private Region | `hub-world-renderer.ts`, region-keyed lane | `exact-ported` | no cross-room replay or lane loss |
+| Library private Region | `hub-world-renderer.ts`, region-keyed lane | `exact-ported` | no cross-room replay or lane loss |
+| StoreRoom private Region | `hub-world-renderer.ts`, region-keyed lane | `exact-ported` | no cross-room replay or lane loss |
+| Office private Region | `hub-world-renderer.ts`, region-keyed lane | `exact-ported` | no cross-room replay or lane loss |
+| Boneyard modes 0, 1, and 2 | `boneyard-world-renderer.ts`, run-keyed lane | `exact-ported` | one shared final-alpha policy across every Arena mode |
+| transition cover, HUD, modal UI, and actor-local hit/impact flashes | existing later painters and independent sprite owners | `out-of-system` (not Region full-screen flash) | stage order and local effect alpha remain unchanged |
+| Create-menu entry/selection flash | `create-menu-renderer.ts` | `out-of-system` (menu transition owner, not a gameplay effect) | current reduced-motion contract remains its owner |
+
+There is no `blocked-by-platform` member. The browser can scale the retained
+screen quad's alpha directly.
+
+### Native ownership thread and recovered contract
+
+- Authoritative simulation and protocol continue to produce exact event RGBA,
+  point attenuation metadata, event tick, world key, and overwrite order.
+- `NativeSecondaryScreenFeedbackPresentation` continues to own trigger-time
+  local point gain, float32 decay, late-event catch-up, region/run identity,
+  and the separate camera magnitude/displacement lanes.
+- The local renderer setting is read only after `sample(tick)`. Off returns the
+  sampled native alpha exactly. On multiplies that final alpha by `0.2` for the
+  retained viewport quad. It does not feed the scaled value back into lane
+  state, so timing and later overwrites cannot drift.
+- Both Hub and Boneyard update this display policy live through their existing
+  `setSettings` lifecycle. Region replacement and renderer destruction retain
+  their existing state and resource teardown.
+- The preference never enters authoritative save data, session protocol, or
+  host state. Each observer chooses its own local presentation independently.
+
+### Nearby-system findings
+
+- The Create-menu white rectangle is a transition presentation already gated
+  by the separate reduced-motion contract. It does not consume Region events
+  and is intentionally outside this gameplay-flash setting.
+- Camera Shake remains orthogonal. Turning it off suppresses camera magnitude,
+  displacement, and world shake while retaining full native screen flash;
+  Reduced Screen Flashes suppresses only screen-quad alpha and retains camera
+  feedback. Enabling both composes without a hidden shared gate.
+
+### Confidence and open questions
+
+- Confirmed: native Region ownership, complete category-2 writer census,
+  defensive Flash, Ether Blast, pike-break siblings, Hub/Boneyard consumers,
+  ordering, timing, persistence owner, and live renderer-setting seam.
+- Designed-not-observed: the `0.2` accessibility multiplier and Settings label.
+  They are Website policy, not attributed to retail Solomon Dark.
+- Unknown: none material. A different preferred reduction strength would be a
+  product choice, not missing native evidence.
+
+### Web implementation consequence
+
+- Add `reducedScreenFlashes` to the strict local Settings record with default
+  Off and a one-step migration for every currently deployed complete record.
+- Expose `REDUCED SCREEN FLASHES` beside Camera Shake under Special Effects.
+- Put the alpha policy in one pure shared presentation function and consume it
+  at both final Region quad assignments. Do not edit any event producer,
+  protocol type, simulation rule, flash color, decay, or actor-local VFX.
+
+### Validation contract
+
+- Focused Settings contracts: default Off, exact persistence, current-record
+  migration, corrupt-type rejection, and `1 -> 0.2` alpha policy while Off is
+  the identity branch.
+- Focused presentation contract: white Flash/Ring-of-Ice-equivalent, colored,
+  partial point-gain, long-decay, and null overlays preserve color/lifetime and
+  receive the same display multiplier; camera magnitude/displacement samples
+  are unchanged.
+- Renderer/source contract: Hub and Boneyard setting picks, live update paths,
+  diagnostics, and canvas data expose the actually presented alpha.
+- Mac Chrome journey: toggle the row in gameplay Settings, inject or naturally
+  trigger one white Region flash, prove displayed alpha changes from `1` to
+  `0.2` without changing color, camera state, or lane lifetime, reload and
+  prove persistence, then repeat the consumer check in the sibling renderer.
+  Page, console, and failed-response arrays must be empty.
+- The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  on the Mac mini.
+
+### Implementation validation receipt
+
+- Base `252ad56019e2e0e1eb2fd714fbf4d8c7783156b8` remained equal to current
+  `origin/main` on both machines after validation. The local and Mac task
+  worktrees had byte-identical SHA-256 manifests for all 11 changed files
+  before the gates ran.
+- `game-settings.ts` now owns `reducedScreenFlashes`, default Off, strict Boolean
+  validation, normalization, and migrations for both the immediately previous
+  complete record and the older pre-online record. `GameSettingsDialog` paints
+  `REDUCED SCREEN FLASHES` in the shared Special Effects page.
+- `presentNativeSecondaryScreenOverlay` is the only reduction rule. Hub and
+  Boneyard call it after sampling the native Region lane and expose the actual
+  presented alpha in their existing frame diagnostics. Both scene setting
+  subscriptions update the rule live. No simulation, event, protocol, audio,
+  camera, actor, color, point-gain, overwrite, or decay code changed.
+- The final isolated Mac canonical gate exited zero. It included backend build
+  and 19 backend contracts, lint with the same 11 existing warnings and zero
+  errors, the 344-test prerequisite set, the 1,795-test broad game set, every
+  remaining focused suite, four desktop tests, production build, media policy,
+  and bundle budget. The built game entry was `Game-Bj0Et5Cx.js`, 265,204 raw
+  and 80,811 gzip bytes. An earlier gate overlapped a foreign heavyweight test
+  process and produced seven unrelated host/supervisor timeouts; the isolated
+  rerun passed those tests and the complete gate.
+- Mac Chrome at 1600 by 900 returned `status: ok`, empty page/console/failed-
+  response arrays, persisted the toggle On, and presented injected white
+  Region flashes at `0.1880000114440918` in Hub and `0.19200000762939454` in
+  Boneyard while both renderers reported mode `true` and color `0xffffff`.
+  Those samples are below the `0.2` ceiling because the authoritative lane had
+  already consumed several 100 Hz decay ticks before the browser frame.
+- Mac Chrome's DPR-2 touch journey at 896 by 414 also returned `status: ok` with
+  empty errors. The clamped 600 by 389.1875 Settings panel kept the new row
+  usable and persisted; Hub and Boneyard each presented the same white test
+  flash at `0.19000000953674318`, with mode `true`. Existing real-touch range,
+  audio, FOV, UI-scale, lighting, shadow, and camera-shake checks also passed.
+- Desktop title/Dark Cloud/Boneyard capture SHA-256 values were respectively
+  `0ee8487fcbc532bb2e64196ceced612529cc78c6e9ec058348e40b861df810d4`,
+  `e04f1a527b1e605529a68485e09b2acc1907d11422c46ddfe731de80598844fc`,
+  and `d5cccb25c8df49677d22c482eb73c7eea8fd19006788e6c77e446467b8d36ab7`.
+  Mobile equivalents were
+  `669a95317385c8842099449298f7414f34201491d477cbbc29efed7fcd12448e`,
+  `bb2b8a753033a9dafb0bd59d5fe0f452f341f68228b8bf7cfad86e7e634dd89c`,
+  and `44aaeb1bed5efaf7bf20c2edcb837634bd6a9126d65ffd4e0dfc977b8757b1ea`.
+  They were temporary acceptance evidence and were deleted after these results
+  were recorded.
+- No push, deployment, or production restart was requested or performed. The
+  focused local worktree remains the handoff owner.

@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
+import { emitNativePlayerScreenFlash } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 
@@ -236,6 +237,12 @@ try {
   assert.equal(await manaPotion.getAttribute('data-binding-code'), 'KeyJ')
   await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
   await dialog.locator('[data-game-default-focus="true"]').waitFor()
+  await dialog.getByRole('button', { name: 'TWEAK GAME' }).click()
+  const reducedScreenFlashes = dialog.getByRole('button', { name: 'REDUCED SCREEN FLASHES' })
+  assert.equal(await reducedScreenFlashes.getAttribute('aria-pressed'), 'false')
+  await reducedScreenFlashes.click()
+  assert.equal(await reducedScreenFlashes.getAttribute('aria-pressed'), 'true')
+  await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
   await nextPaint(page)
   await page.screenshot({ path: screenshots.title })
   await dialog.getByRole('button', { exact: true, name: 'DONE' }).click()
@@ -257,6 +264,7 @@ try {
       sharedHub: persistedTitle.enableSharedHub,
       submitRuns: persistedTitle.submitRunsToServer,
     },
+    reducedScreenFlashes: persistedTitle.reducedScreenFlashes,
     soundVolumePercent: persistedTitle.soundVolumePercent,
     uiScalePercent: persistedTitle.uiScalePercent,
   }, {
@@ -274,6 +282,7 @@ try {
       sharedHub: true,
       submitRuns: true,
     },
+    reducedScreenFlashes: true,
     soundVolumePercent: 65,
     uiScalePercent: 150,
   })
@@ -333,6 +342,12 @@ try {
   await page.locator('.hub-hud-quickbar-slot[data-entry-kind="mana-potion"][data-binding-code="KeyJ"]').waitFor()
 
   const hubCanvas = page.locator('.hub-world-canvas')
+  const hubScreenFlash = await captureReducedScreenFlash(
+    page,
+    hubCanvas,
+    host,
+    '.hub-world-canvas',
+  )
   const beforeMove = await hubCanvas.evaluate((canvas) => canvas.__sdrHubFrame.playerX)
   await page.keyboard.down('z')
   await page.waitForTimeout(350)
@@ -351,6 +366,7 @@ try {
     chatBinding: persistedTitle.controls.openChat,
     movementDelta: afterMove - beforeMove,
     potionBindings: ['H', 'J'],
+    screenFlash: hubScreenFlash,
     uiScale: Number(await hubScene.getAttribute('data-ui-scale')),
   }
 
@@ -370,6 +386,13 @@ try {
   }
   await boneyardScene.waitFor({ timeout: 90_000 })
   assert.equal(await boneyardScene.getAttribute('data-camera-zoom'), '1.08')
+  const boneyardCanvas = page.locator('.boneyard-world-canvas')
+  const boneyardScreenFlash = await captureReducedScreenFlash(
+    page,
+    boneyardCanvas,
+    host,
+    '.boneyard-world-canvas',
+  )
   await boneyardScene.focus()
   await page.keyboard.press('Escape')
   const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
@@ -381,6 +404,11 @@ try {
   await assertNativeSettingsPresentation(dialog, { desktop: !mobile })
   assert.equal(await dialog.getAttribute('data-settings-context'), 'gameplay')
   await dialog.getByRole('button', { name: 'TWEAK GAME' }).click()
+  assert.equal(
+    await dialog.getByRole('button', { name: 'REDUCED SCREEN FLASHES' })
+      .getAttribute('aria-pressed'),
+    'true',
+  )
   for (const label of ['COMPLEX LIGHTING', 'COMPLEX SHADOWS', 'MULTIPLE SHADOWS']) {
     const toggle = dialog.getByRole('button', { name: label })
     assert.equal(await toggle.getAttribute('aria-pressed'), 'true')
@@ -392,7 +420,6 @@ try {
   assert.equal(await cameraShake.getAttribute('aria-pressed'), 'false')
   await setRange(dialog.getByRole('slider', { name: 'LIGHT QUALITY' }), 24)
 
-  const boneyardCanvas = page.locator('.boneyard-world-canvas')
   await page.waitForFunction(() => {
     const canvas = document.querySelector('.boneyard-world-canvas')
     return canvas?.dataset.complexLighting === 'false'
@@ -427,6 +454,7 @@ try {
       lightQuality: Number(await boneyardCanvas.getAttribute('data-light-quality')),
       lowQualityRegionTarget,
       multipleShadows: await boneyardCanvas.getAttribute('data-multiple-shadows'),
+      screenFlash: boneyardScreenFlash,
       zoomEffects: await boneyardCanvas.getAttribute('data-zoom-effects'),
     },
     darkCloudPaint,
@@ -656,6 +684,47 @@ async function assertNativeSettingsPresentation(dialog, { desktop }) {
 
 async function storedSettings(page) {
   return page.evaluate((key) => JSON.parse(localStorage.getItem(key)), GAME_SETTINGS_STORAGE_KEY)
+}
+
+async function captureReducedScreenFlash(page, canvas, host, selector) {
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const state = host.state()
+  const player = getPlayerCharacter(state, playerId)
+  const worldKey = state.world.kind === 'hub'
+    ? `hub:${state.world.participants[playerId]?.region ?? 'courtyard'}`
+    : `boneyard:${state.world.runId}`
+  state.secondaryAbilities = emitNativePlayerScreenFlash(state.secondaryAbilities, {
+    ownerId: playerId,
+    position: player.position,
+    screenFlash: {
+      alpha: 1,
+      blue: 1,
+      decayPerTick: Math.fround(0.01),
+      green: 1,
+      pointAttenuated: false,
+      red: 1,
+    },
+    tick: state.tick,
+    worldKey,
+  })
+  await page.waitForFunction((selector) => {
+    const node = document.querySelector(selector)
+    const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
+    return (frame?.secondaryScreenFlashAlpha ?? 0) > 0
+  }, selector)
+  const receipt = await canvas.evaluate((node) => {
+    const frame = node.__sdrHubFrame ?? node.__sdrBoneyardFrame
+    return {
+      alpha: frame.secondaryScreenFlashAlpha,
+      color: frame.secondaryScreenFlashColor,
+      mode: node.dataset.reducedScreenFlashes,
+    }
+  })
+  assert.equal(receipt.mode, 'true')
+  assert.equal(receipt.color, 0xffffff)
+  assert.ok(receipt.alpha > 0 && receipt.alpha <= 0.2, JSON.stringify(receipt))
+  return receipt
 }
 
 async function nextPaint(page) {
