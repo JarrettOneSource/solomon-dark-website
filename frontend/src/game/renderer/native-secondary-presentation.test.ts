@@ -166,6 +166,47 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
   }
 })
 
+test('Phasing keeps its native bright-then-fade record-53 painter without a screen proxy', () => {
+  const born = nativeSecondaryPresentationPlan({
+    ...actor('phase-burst'),
+    alpha: 2,
+    position: { x: 120, y: 240 },
+    rotationRadians: 0.25,
+    scale: 2,
+    skillId: 15,
+  })
+  assert.deepEqual({
+    alpha: born.draws[0]?.alpha,
+    atlas: born.draws[0]?.atlas,
+    blend: born.draws[0]?.blend,
+    entry: born.draws[0]?.entry,
+    rotationRadians: born.draws[0]?.rotationRadians,
+    scaleX: born.draws[0]?.scaleX,
+    scaleY: born.draws[0]?.scaleY,
+    queueFamily: born.queueFamily,
+    sortBias: born.sortBias,
+    worldY: born.worldY,
+  }, {
+    alpha: 1,
+    atlas: 'BadGuys',
+    blend: 'add',
+    entry: 53,
+    rotationRadians: 0.25 + Math.PI / 2,
+    scaleX: 2,
+    scaleY: 2,
+    queueFamily: 'zanim',
+    sortBias: 15,
+    worldY: 240,
+  })
+
+  const fading = nativeSecondaryPresentationPlan({
+    ...actor('phase-burst'),
+    alpha: Math.fround(0.9),
+    skillId: 15,
+  })
+  assert.equal(fading.draws[0]?.alpha, Math.fround(0.9))
+})
+
 test('view-owned secondary scratch reproduces every plan and reuses hot draw storage', () => {
   const scratch = new NativeSecondaryPresentationScratch()
   for (const kind of KINDS) {

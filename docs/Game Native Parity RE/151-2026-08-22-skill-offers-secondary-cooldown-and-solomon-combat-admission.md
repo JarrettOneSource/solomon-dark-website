@@ -193,8 +193,11 @@ There are no `blocked-by-platform` members and no browser approximation.
   remained green.
 - The focused Mac secondary journey cast Phasing `15` and Teleport `48` in
   WebGL2. Phasing emitted one traversal actor and the common-gate square fan;
-  Teleport emitted two bursts and its longer row-timer fan. Both exact audio/
-  flash families appeared, with empty page and console errors. Automated
+  Teleport emitted two bursts and its longer row-timer fan. Both exact audio
+  families appeared and Teleport painted its flash; the cyan Phasing flash
+  recorded by this historical run was later proven web-only and removed by the
+  2026-09-02 row-15 instruction/pixel reopening. Page and console errors were
+  empty. Automated
   coverage separately proves the concentrated-Focus `75..99` branch leaves
   row and global currents at zero while retaining 51-tick StaffCast2.
 - Mac captures: combat

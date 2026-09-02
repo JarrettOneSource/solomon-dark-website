@@ -485,6 +485,13 @@ and `fe9aa95e30ecc696a3337da2f3dd9d64daac5028596de526b2e265ae909ce93b`.
 
 ## 2026-09-02 — Reduced screen-flash accessibility extension
 
+> **2026-09-02 Phasing correction:** fresh instruction recovery at
+> `0x0054D9A1..0x0054DA1F`, `0x0052A0B0`, and sole helper `0x0063FEE0`
+> proves row 15 never writes Region feedback. The earlier census mistook the
+> Region vtable `+0x100` point-audio gain call for a screen flash. Phasing is
+> outside this accessibility branch; its magenta BadGuys-53 traversal remains
+> actor-local.
+
 ### Reported smell and parity question
 
 - The owner reports that gameplay effects such as defensive Flash and Ring of
@@ -503,7 +510,7 @@ and `fe9aa95e30ecc696a3337da2f3dd9d64daac5028596de526b2e265ae909ce93b`.
 
 | Evidence class | Exact source | Observation | Confidence |
 | --- | --- | --- | --- |
-| Settled native instruction evidence | entry 083, Region helper `0x00448600`, Region tick `0x0063EFC0`, Region render `0x0046EC80`; retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Region owns one screen-fixed overwrite lane; point gain, RGBA, float32 decay, ordering, and all category-2 writers are already instruction-closed. | high |
+| Settled native instruction evidence | entry 083, Region helper `0x00448600`, Region tick `0x0063EFC0`, Region render `0x0046EC80`; retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Region owns one screen-fixed overwrite lane; point gain, RGBA, float32 decay, ordering, and the true category-2 writers are instruction-closed. Fresh row-15 recovery explicitly excludes Phasing. | high |
 | Settled native sibling evidence | entries 101, 122, and 123 | Pike break, defensive Flash 53, and primary Ether Blast 14 also write or feed the same Region screen-feedback presentation. | high |
 | Current Website causal trace | `game-settings.ts`, `GameSettingsDialog.tsx`, `MainMenuScene.tsx`, `HubScene.tsx`, `BoneyardScene.tsx`, `native-secondary-presentation.ts`, `hub-world-renderer.ts`, `boneyard-world-renderer.ts` at base `252ad56019e2e0e1eb2fd714fbf4d8c7783156b8` | Settings is persisted locally and passed live to both renderers. Both renderers consume the same native feedback state and assign its sampled alpha directly to one retained full-viewport white Graphics quad. | high |
 | Current Website membership sweep | all `screenFlash` producers plus both `consumePrimaryEtherBlast` call sites at the same base | All gameplay full-screen flash producers converge before the two final alpha assignments. Actor-local sprite flashes and the Create-menu transition flash do not use the Region lane. | high |
@@ -527,7 +534,7 @@ that may reduce only its final presented alpha.
 | primary Ether Blast 14 | entry 123; `consumePrimaryEtherBlast` | `exact-ported` | shared final-alpha policy covers the purple Region flash without changing charge/camera state |
 | Call Leviathan 11 | entry 083 Region write census | `exact-ported` | shared point-gain flash path |
 | Planewalker 12 and Plane Orb | entry 083 Region write census | `exact-ported` | shared fixed flash path, including Plane Orb alpha `.1` |
-| Phasing 15 | entry 083 Region write census | `exact-ported` | accepted-traversal flash only remains authoritative |
+| Phasing 15 | entry 083 corrected instruction census | `out-of-system` (no Region screen flash; `+0x100` computes point-audio gain) | reduced-flash mode leaves its actor-local BadGuys-53 streak unchanged |
 | Ring of Fire 21 | entry 083 Region write census | `exact-ported` | shared flash is reduced; separate `.25` camera magnitude is unchanged |
 | Firewalker 23 | entry 083 Region write census | `exact-ported` | both toggle writes share the policy |
 | Magic Storm 27 | entry 083 no-Region-write row | `out-of-system` (cloud-owned compositor, not the screen-feedback lane) | no invented reduction of local weather sprites |

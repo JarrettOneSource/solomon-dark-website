@@ -756,6 +756,7 @@ const EMPTY_SECONDARY_QUADS: readonly NativeSecondaryQuadDraw[] = []
 const EMPTY_SECONDARY_DRAW_OPTIONS: Partial<
   Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>
 > = {}
+const PHASE_BURST_SORT_BIAS = 15
 const ZERO_SECONDARY_DRAW_OFFSET: Readonly<Vector2> = { x: 0, y: 0 }
 
 function buildNativeSecondaryPresentationPlan(
@@ -926,9 +927,10 @@ function buildNativeSecondaryPresentationPlan(
       })])
     case 'phase-burst':
       return plan([draw('BadGuys', 53, {
+        alpha: Math.min(actor.alpha, 1),
         blend: 'add',
         rotationRadians: actor.rotationRadians + Math.PI / 2,
-      })])
+      })], 'zanim', PHASE_BURST_SORT_BIAS)
     case 'moving-fire':
     case 'fire-patch':
       {

@@ -68,7 +68,7 @@ layout—owns the hint tails below the screen.
 | --- | --- | --- | --- |
 | `11` Call Leviathan | Aimed Leviathan scales in for 40 ticks, attacks for 1,600 ticks, scales out for 25 ticks, and emits 100-tick EtherBolts. | BadGuys `343..372,11,39`; `LeviathanRoar`, `PlaneCross` loop. | exact-ported |
 | `12` Planewalker | Self toggle installs `Mod_Planewalker`, forces Plane Orb `80`, preserves/restores the prior spell, and expires after `mDuration*100`. Each orb stores per-tick damage `2*sum(effective ranks 8,10,9,13,14,15,12)/100`; Call Leviathan `11` is deliberately excluded. | PlaneOrb actor; on/off streams and `PlaneCross` loop. | exact-ported |
-| `15` Phasing | Heading cast probes exactly 20 collision-safe destinations at distances `80..270` and relocates only to the first accepted probe. A fully blocked cast still spends mana and enters cooldown. | One additive BadGuys `53` traversal streak at old-position plus 10 units along the successful path, scale `2`, 20-tick fade; `phase` only on success. | exact-ported |
+| `15` Phasing | Heading cast probes exactly 20 collision-safe destinations at distances `80..270` and relocates only to the first accepted probe. A fully blocked cast still spends mana and enters cooldown. | One additive BadGuys `53` traversal streak at old-position plus 10 units along the successful path, scale `2`, alpha `2` with loss `.1` and draw clamp `1`, 20-tick life; `phase` only on success; no Region flash. | exact-ported |
 | `21` Ring of Fire | Thirty MovingFire segments at 12-degree steps plus a unique-target Shockwave query every 10 ticks. | DeadHawg `46..77`; `bigfire`, then `nuke`. | exact-ported |
 | `23` Firewalker | Toggle-on immediately creates one contact-enabled Fire_Goodguy, then global 10-tick trail births cycle contact geometry `true,false,false`; all births consume the exact seven-word program, and old patches outlive toggle-off. The toggle reserves an absolute 50 MP. | DeadHawg `46..77` only for the patch; target-owned Burn separately uses BadGuys `333..342`; `ignite` is toggle-on-only, toggle-off is silent, and retained patches renew the `lowfire` loop. | exact-ported |
 | `27` Magic Storm | Aimed StormCloud lives 1000 active ticks, queries 500 units, rerolls strikes in `30..120`, then fades and stops querying. | Native cloud/lightning children and replicated three-point bolt geometry; `magicstorm`, `lightningstart`, `thunder`, rain/wind loops. | exact-ported |
@@ -93,11 +93,16 @@ layout—owns the hint tails below the screen.
 Phasing helper `0x0052A0B0` is a post-payment relocation attempt, not a second
 cast-acceptance gate. All twenty failed probes preserve the already accepted
 mana debit and row-relative cooldown but emit no semantic presentation edge:
-no fizzle, `phase` audio, Region write, or world actor. On success the helper
+no fizzle, `phase` audio, or world actor. On success the helper
 registers exactly one additive BadGuys record 53 actor at
 `oldPosition + heading * 10`, aligned to the traversal, with initial scale `2`
-and alpha reduced by `0.05` for each of its twenty native ticks. It does not
-create origin and destination bursts or grow the sprite while it fades.
+and alpha `2`. Shared `Anim_FadeAdditive` update `0x00454000` subtracts the
+constructor-default `.1` each tick; draw `0x004560A0` clamps alpha to one, so
+the streak is fully bright for the first ten updates and fades for the final
+ten before retirement. It does not create origin and destination bursts or
+grow the sprite while it fades. Neither success nor failure writes Region
+screen feedback: the Region vtable `+0x100` call in helper `0x0063FEE0`
+computes point-audio gain consumed by `0x00407B70` for `phase`.
 
 Teleport dispatcher block `0x0054D625..0x0054D728` calls the source burst
 before world virtual `+0x12C` and the destination burst after committing the
@@ -495,7 +500,7 @@ before the transition cover and DOM HUD.
 | --- | --- |
 | Call Leviathan `11` | first scale-in update `(1,.5,1,pointGain)`, loss `.05` |
 | Planewalker `12` | enable-only fixed `(1,0,1,1)`, loss `.1`; disable has none |
-| Phasing `15` | accepted traversal `(0,1,1,pointGain)`, loss `.025` |
+| Phasing `15` | no Region write; helper `0x0063FEE0` uses Region vtable `+0x100` only to compute point gain for the `phase` audio request |
 | Ring of Fire `21` | creation `(1,.5,0,pointGain)`, loss `.01` |
 | Firewalker `23` | every toggle `(1,.5,0,pointGain)`, loss `.1` |
 | Magic Storm `27` | no Region write; its cloud-owned weather compositor remains separate |
@@ -906,7 +911,7 @@ traversal presentation, replication, and retirement.
 | Boneyard generated arenas | Arena bounds/static collision branch | `verified-already-at-parity` for collision; direction owner corrected | every accepted destination remains collinear with heading |
 | successful probe | helper `0x0052A0B0` | `exact-ported` | first accepted distance remains one of `80..270` in 10-unit steps |
 | all twenty probes blocked | helper `0x0052A0B0` | `verified-already-at-parity` | mana/action/cooldown remain accepted; no relocation, streak, cue, or flash |
-| traversal streak, `phase` cue, and Region flash | BadGuys `53`, source plus heading times 10 | `exact-ported` | position and rotation use the same heading vector as relocation |
+| traversal streak and `phase` cue; no Region flash | BadGuys `53`, source plus heading times 10; `0x0063FEE0` | `exact-ported` | position and rotation use the same heading vector as relocation; no screen-feedback event exists |
 | host/observer snapshots and late join | authoritative player position plus semantic actor/event wire | `verified-already-at-parity` | host commits once; observers receive the same destination/effect |
 | other 22 category-2 rows | dispatcher `0x0054CC50` membership | `out-of-system` because their recovered aimed/self/caster targeting remains distinct | closed contract enumeration remains unchanged |
 
@@ -924,8 +929,9 @@ No member is blocked by the browser platform.
   before the otherwise retained Region callback can run.
 - Success commits the accepted point and creates one BadGuys-53 streak at
   `oldPosition + heading * 10`, rotated along the same heading, with scale two
-  and the existing 20-tick fade. It also emits the existing `phase` cue and
-  cyan Region flash.
+  and the existing 20-tick fade. It also emits the existing `phase` cue. Fresh
+  instruction recovery in the 2026-09-02 reopening proves there is no Region
+  flash on this path.
 - Failure after all probes preserves the already-paid cast, StaffCast2, row
   cooldown capacity, and common cooldown behavior, while emitting no semantic
   presentation edge.
@@ -938,8 +944,9 @@ No member is blocked by the browser platform.
 - `native-secondary-abilities.ts` must derive a Phasing-local vector from
   `authority.character.headingIndex`; the shared `unit(origin, aim)` value
   remains untouched for every aimed secondary sibling.
-- Destination probing, phase-marker placement, streak rotation, cue/flash,
-  cooldown, and replication must consume that one heading vector.
+- Destination probing, phase-marker placement, streak rotation, cue, cooldown,
+  and replication must consume that one heading vector; no Region flash is
+  emitted.
 - A focused red/green regression must set heading north and aim east, observe
   the direction handed to `phasingDestination`, and assert northward
   relocation/streak geometry while retaining accepted-failure coverage.
@@ -975,7 +982,9 @@ No member is blocked by the browser platform.
   80 units north to `(1710.2249755859375,909.7750244140625)`; the traversal
   marker was exactly 10 units north at
   `(1710.2249755859375,979.7750244140625)`. One phase actor, one `phase` cue,
-  cyan flash, native square cooldown, and 65 presented ticks were observed.
+  an at-the-time cyan web flash, native square cooldown, and 65 presented
+  ticks were observed. The 2026-09-02 instruction/pixel reopening below proves
+  that flash was an invented web effect and supersedes it as parity evidence.
   Page, console, and response error arrays were empty. Log SHA-256 is
   `567bc7e4d39ae34ba929911478f718b7987a5f46e3ee3e22503b4098efb60df8`;
   the main capture hash is
@@ -1593,3 +1602,237 @@ No member is blocked by the browser platform.
 - A final exact-tree Mac gate follows this docs-only receipt update and is the
   handoff acceptance. Git publication and deployment remain separate and were
   not authorized by this report.
+
+## 2026-09-02 — Phasing traversal-blip pixel reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: a successful Phasing cast is missing the stock purple
+  blip. The user supplied `SDO - Correct Phasing.mp4` as the original-version
+  visual reference.
+- Stock behavior to recover: successful row-15 traversal must paint its one
+  heading-aligned magenta BadGuys-53 streak at the old position plus ten world
+  units along the accepted path, with the `phase` cue, relocation, and exact
+  twenty-tick retirement but no Region screen flash.
+- Reproduction inputs/scenes: learn/equip Phasing, enter a generated Boneyard,
+  stop on a collision-clear heading, cast through the ordinary category-2
+  input edge, and inspect every presented frame from acceptance through actor
+  retirement. Repeat with the default screen-flash setting and the optional
+  reduced-flash browser extension to prove neither branch invents a Phasing
+  overlay.
+- Falsifiers: a pixel-visible magenta BadGuys-53 streak with no screen overlay
+  on current `origin/main` would make this only an observation-timing problem;
+  a missing semantic actor would move the defect back to host/wire ownership;
+  any native instruction between dispatcher case 15 and retirement that writes
+  Region feedback would preserve rather than remove the current web overlay.
+
+This is a process-failure reopen of the earlier `exact-ported` presentation
+claim. The prior acceptance proved a `phase-burst` actor, one renderer
+primitive, audio, flash, and geometry, but never asserted that the primitive
+produced the distinctive BadGuys-53 pixels during its short visible lifetime.
+Its saved screenshot was not tied to a named actor age or a stock-versus-web
+pixel criterion. Semantic existence was incorrectly treated as visual proof.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| User-supplied original capture | `/mnt/c/Users/User/Downloads/SDO - Correct Phasing.mp4`; SHA-256 `33a81d90726bafb671939132752056c5b4b735d01a988b32061eb0ae241dc221`; H.264 1600 x 900 at 30000/1001 fps; 15.982633 s | Exact audio correlation finds accepted `phase` samples at about 5.6615, 9.3315, and 14.8415 seconds. Matching frames stay dark and show a bright, heading-aligned magenta streak/blip behind the newly centered wizard; there is no cyan full-screen wash. | high for appearance and lifecycle; medium for executable provenance because the capture itself does not expose the running image hash |
+| Authored asset/manifest | Website `frontend/src/assets/game/boneyard/badguys/0053.png`; SHA-256 `baf5c0c622972949604ba84525c0b76f6c31bbcab10fa910894ccd96e15b30ff`; `badguys.json` record 53 | The exact stock-framed member is a 28 x 58 magenta traversal glyph with origin `(0,0)`. The packed combat atlas retains the same logical 28 x 58 frame. | high |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | The local retail image still matches the established secondary-system oracle. | high |
+| Fresh instructions | canonical Ghidra 12.0.3 read-only replica 3; dispatcher `0x0054CC50` around call `0x0054DA15`; relocation helper `0x0052A0B0`; sole-caller effect helper `0x0063FEE0`; Anim constructor/update/draw `0x00452E20/0x00454000/0x004560A0`; Region-effect registration `0x0063E5E0` | Case 15 calls only the relocation helper. On success it creates one `Anim_FadeAdditive`, binds `BadGuys[53]`, writes alpha and X/Y scale `2`, registers with sort bias `15`, computes point-audio gain through Region vtable `+0x100`, and calls audio path `0x00407B70`. No Region screen-feedback setter is called. | high |
+| Region write census | direct xrefs to `0x00448600`: ten total; dispatcher callsites `0x0054CDAB`, `0x0054D8B5`, `0x0054DF84`, `0x0054F6E0`, `0x0054FF5E`, `0x0055002D` | The Phasing case at `0x0054D9A1..0x0054DA1F` has no direct or inlined Region write. The prior census mistook point-audio gain for screen feedback. | high |
+| Static constants | `0x007DE810=10.0` double, `0x007852D0=7.0` double, `0x007DE9D0=2.0f`, `0x007845E8=.1f`, `0x00784998=15.0f` | Probes begin at 80; marker offset is 10; alpha/scale are two; fade loss is `.1`; ZAnim sort bias is 15. | high |
+| Current Website causal trace | `origin/main` `8ac56e987ae98437b3e4320fc6a59672c017a08b`; `native-secondary-abilities.ts`, `native-secondary-presentation.ts`, `native-secondary-world-view.ts`, packed combat atlas | Host state creates one 20-tick `phase-burst`; the plan names BadGuys 53/additive/scale two and the shared renderer reports one primitive. Existing coverage stops before framebuffer pixels. | high |
+| Mac baseline | detached Mac worktree at the exact SHA above; hardware Chrome WebGL2; `smoke-secondary-abilities.mjs` row 15; actor-age-7 capture SHA-256 `70053c91f5ce0b0aeff82179e337d2c6055c74acf9f7341aed07f13953bbd2a2` | Host/wire/browser diagnostics observe the actor and one primitive. At age seven, the invented cyan Region overlay remains about `.825` and turns the expected magenta glyph into a barely distinguishable cyan ghost. The stock frame at the same phase stays dark with a bright magenta glyph. | high |
+
+The canonical wrapper was invoked through the absolute Windows PowerShell path
+because it is not on this shell's `PATH`. It leased replica 3 read-only with
+wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`
+and tool revision `08bfba9ef367f7b863848030d0a289dc31e33192`; no canonical project,
+Mod Loader file, or replica lock was changed.
+
+### System boundary and membership inventory
+
+Native system: **Phasing row-15 successful-traversal presentation**, from the
+accepted heading/collision probe through semantic actor registration, packed
+record sampling, painter/Region ordering, observer presentation, and exact
+retirement.
+
+| Member / branch | Native source | Disposition in this reopening | Proof |
+| --- | --- | --- | --- |
+| heading-owned 80..270 relocation | `0x0054CC50 -> 0x0052A0B0` | `verified-already-at-parity` | retained orthogonal aim/heading differential |
+| all twenty probes blocked | `0x0052A0B0` failure branch | `verified-already-at-parity` | debit/cooldown without actor, cue, or flash |
+| successful semantic actor birth | helper success branch; one BadGuys-53 `Anim_FadeAdditive` | `verified-already-at-parity` for host/wire identity | exactly one row-15 actor at source plus heading times ten |
+| BadGuys record 53 source and packed frame | `BadGuys[53]`, 28 x 58, origin `(0,0)` | `exact-ported` | source/packed-frame pixel equivalence plus rendered-pixel assertion |
+| additive draw, heading rotation, scale two | `0x0063FEE0`, draw `0x004560A0` | `exact-ported` | actor-age-bound framebuffer crop matches the magenta glyph footprint |
+| alpha two, draw clamp one, loss `.1`, twenty ticks | constructor/update/draw `0x00452E20/0x00454000/0x004560A0` | `exact-ported` | ages 0..10 stay fully bright, ages 11..19 fade, update 20 retires |
+| transient-manager painter registration and sort bias 15 | `0x0063FEE0 -> 0x0063E5E0`, constant `0x00784998` | `exact-ported` | sprite remains visible at its world marker with nearby dynamic actors |
+| absence of Region flash | dispatcher case 15 and sole helper/callee census | `exact-ported` | no screen-feedback event or full-screen color appears on success or failure |
+| reduced-screen-flash preference | Website accessibility extension | `out-of-system` for Phasing because there is no native Region write to reduce | both setting branches retain the same world sprite and no overlay |
+| `phase` point cue | helper success branch | `verified-already-at-parity` | one accepted-success request and none on blocked traversal |
+| authoritative owner and observer snapshots | semantic actor/event wire | `verified-already-at-parity` | protocol carries the same actor ID, marker, age, and draw state to the shared renderer; the owner browser proves its pixels |
+| Boneyard generated arenas | live combat scene | `exact-ported` | normal-input hardware-Chrome journey with exact-frame pixels |
+| Hub Courtyard/private rooms | shared-Hub combat seal | `out-of-system` because category-2 casts are rejected before Phasing | retained no-spend/no-effect Hub contract |
+| primary Ether pierce use of BadGuys 53 | separate Magic Missile contact family | `out-of-system`; shared packed-frame sampling must not regress | retained primary presentation contract |
+| other 22 category-2 rows | dispatcher membership | `out-of-system`; they retain their recovered actor/self/area owners | closed 23-row regression stays green |
+| death, disconnect, run replacement, reset | shared secondary-world teardown | `verified-already-at-parity` | no retained row-15 actor or replayed cue/flash |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- The authoritative helper commits relocation first and creates a separate
+  transient presentation object only on success. The sprite is not inferred
+  from the position jump and is not a Teleport-style source/destination pair.
+- The actor uses the exact BadGuys-53 raster, additive blend, scale `(2,2)`,
+  and heading alignment. Its root is `oldPosition + heading * 10`; after the
+  camera follows the destination, the blip therefore appears behind the
+  player by `acceptedDistance - 10` world units.
+- Alpha starts at two, is clamped to one for draw, loses float32 `.1` once per
+  100 Hz native update, and retires after twenty updates. There is no Phasing
+  Region screen state; the point-gain virtual is consumed only by audio.
+- Host position, actor birth/age, event order, cue, and teardown remain
+  authoritative. Rendering owns only atlas sampling, interpolation-free fixed
+  actor state, painter placement, and blend; unrelated Region overlays remain
+  a separate renderer owner.
+
+### Confidence and open questions
+
+- Confirmed: stock-visible magenta glyph; exact tracked record and dimensions;
+  sole native helper/caller; alpha/scale/loss/sort constants; current host/wire
+  actor; current WebGL primitive; invented web-only Region flash; incorrect web
+  alpha curve and missing sort bias.
+- No native data remains to approximate and no material unknown remains inside
+  the declared boundary.
+
+### Web implementation consequence
+
+- Keep relocation, collision, mana, cooldown, cue, and the exact raster recipe
+  in their current cohesive owners. Remove the invented row-15 Region flash.
+- Start the phase actor at alpha two, retain `.1` fixed-tick loss and the native
+  draw clamp, and give its ZAnim painter the recovered sort bias 15.
+- Add an actor-age-bound renderer/browser assertion that proves magenta pixels
+  at the projected world marker; actor kind and primitive count alone are no
+  longer acceptable evidence for short-lived effects.
+- Preserve packed record sampling and the separate primary-pierce BadGuys-53
+  path; neither is the defect. Do not add a row-15 overlay or duplicate sprite.
+
+### Validation contract
+
+- Focused kernel/presentation tests retain one successful actor, zero blocked
+  actors, exact record 53/additive/scale/rotation, alpha-two/.1-loss/clamp-one
+  curve, sort bias 15, no Region flash, and twenty-tick retirement.
+- A red/green Mac Chrome probe captures an early Phasing actor age before the
+  screenshot harness advances past retirement. It projects the semantic marker
+  into screen space and requires a magenta-dominant footprint of the expected
+  scaled glyph size in default stock mode. The existing reduced-flash setting
+  contracts prove that branch only scales a present Region overlay and cannot
+  create one for Phasing.
+- The same owner journey plus protocol/renderer contracts check exact
+  destination/marker geometry, one cue, zero Region flashes, cooldown,
+  observer-equivalent actor state, and absence after retirement, with empty
+  page, console, host, protocol, and failed-response lanes.
+- Run the closed 23-member focused suites and
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact Mac candidate.
+
+### Implementation validation receipt
+
+- Implementation: `native-secondary-abilities.ts` no longer emits the invented
+  row-15 Region flash. Its one `phase-burst` now starts at alpha two and loses
+  float32 `.1` per 100 Hz update. `native-secondary-presentation.ts` clamps the
+  draw alpha to one and registers the ZAnim with native sort bias 15. Position,
+  heading, collision, twenty-tick lifetime, cooldown, cue, packed record 53,
+  protocol identity, and teardown are otherwise unchanged.
+- Durable coverage: the kernel test now excludes Phasing from the complete
+  23-row Region-writer matrix and locks alpha/loss/retirement; the renderer test
+  locks record 53, additive blend, rotation, scale, draw clamp, sort bias, and
+  fading alpha. The focused browser harness pins a deterministic valid
+  Boneyard, captures before retirement, projects the semantic marker, measures
+  magenta pixels, requires flash alpha zero, and retains the ordinary heading,
+  cue, cooldown, wire, and error checks.
+- Red Mac receipt on the untouched implementation: the focused pair ran
+  131/133. Kernel row 15 produced alpha one instead of two; the renderer passed
+  alpha two through unclamped and returned sort bias zero instead of 15. The
+  earlier hardware-Chrome age-seven frame contained the actor/primitive but the
+  `.825` cyan web overlay reduced the magenta streak to a pale cyan ghost;
+  capture SHA-256
+  `70053c91f5ce0b0aeff82179e337d2c6055c74acf9f7341aed07f13953bbd2a2`.
+- Initial validation-base integration: `origin/main` advanced by two unrelated
+  commits during investigation. The isolated branch rebased cleanly onto
+  `f03d1d3a2cb9b5643476b32fa807f0c426822566`; all eight changed files were
+  SHA-256-identical in detached Mac worktree
+  `/Users/jarrett/codex-acceptance/phasing-blip-20260902-current` before those
+  gates.
+- Focused Mac green: the kernel and renderer pair passed 133/133. Hardware
+  Chrome WebGL2 then cast Phasing through normal input with heading north and
+  retained aim east. Source `(1050.7149658203125,2007.2149915769696)` moved
+  exactly 80 north to `(1050.7149658203125,1927.2149915769696)`; the actor
+  marker was exactly ten north of source at
+  `(1050.7149658203125,1997.2149658203125)`. At age eight the actor retained
+  alpha `1.1999998092651367`, the draw had zero screen-flash alpha, and the
+  projected 180 x 180 marker crop contained 1,505 magenta-dominant pixels.
+  One `phase` cue, one actor kind, one primitive, 78 presented ticks overall,
+  and empty page/console/failed-response arrays were recorded. Crop SHA-256 is
+  `2267fcbbed5837d11c676a424f544eded27128559ca417d05cf2f5995f6c2a73`;
+  structured receipt SHA-256 is
+  `c55d688fafba384aee056d22674202b3c32c748d70284ff29725d83c0153df01`.
+- Canonical Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` exited zero
+  on the exact current-base candidate. Backend Release build and 19 contracts,
+  every frontend/desktop group (2,586 tests total), lint/boundary/generated
+  checks, production frontend and game-host builds, bundle budget, and media
+  policy passed. The Game entry is 265,203 raw / 80,825 gzip bytes. Gate log
+  SHA-256 is
+  `c083a23a46ce30738247bcf8347e44a9e7142e3e7fc54dac8dd990df33395b72`.
+- Two browser attempts were rejected before Phasing because an unrelated live
+  generated-wave path threw `no dark collision-safe spawn placement`. The
+  final proof uses the repository's established all-zero deterministic
+  Boneyard seed and changes no product spawn behavior.
+- Publication-base integration: after push authorization, `origin/main`
+  advanced again to Turn Undead commit
+  `84ec6244e04303e1546c2796e06fab1a829fbb7b`. Kernel/test changes merged
+  automatically. The sole ledger conflict was resolved by preserving the
+  complete Turn Undead reopening first and the complete Phasing reopening
+  second; normalized section hashes match both source stages exactly. The
+  subsequent Seeker's Charm commit
+  `b6e9c6bafe30ca1d5c7dab72697a2268cfc9cd43` rebased without conflict. This
+  tree owns the recorded publication-step proof below. While that receipt was
+  being recorded, the already-running native plane-portal publication advanced
+  `origin/main` to `2922d56c1e934d9ce59239e4fe2457cef332a88d`; Phasing then rebased over
+  it without conflict. That final fast-forward candidate owns the newest-base
+  proof below.
+- Publication-base revalidation: the focused kernel/renderer pair passed
+  133/133 on the byte-identical detached Mac candidate. Hardware Chrome WebGL2
+  repeated the ordinary-input cast with exact 80-unit north displacement and
+  the marker ten units north of source. At actor age ten, alpha was
+  `0.9999997615814209`, screen-flash alpha was zero, and the projected crop
+  contained 2,121 magenta-dominant pixels. One `phase` cue, one actor/primitive,
+  74 presented ticks overall, and empty page/console/failed-response arrays
+  remained. Crop SHA-256 is
+  `2c47fc8010c5419a0aac815c5689d2b944f3fe66c99293c5b9cd079767cf55fc`;
+  structured receipt SHA-256 is
+  `151ac3783667e5a2ef0d2d909e339771792e517d6d02202dcd7ef35f2874d687`.
+  The complete Mac gate then passed 19 backend contracts and all 2,588
+  frontend/desktop tests, lint/boundary/generated checks, both production
+  builds, media policy, and a 265,203-raw / 80,817-gzip Game bundle. Gate log
+  SHA-256 is
+  `2b4ff304e195db465daad9821e84192910c8b8ea8578a759c1f6dc13c21acd6a`.
+- Final publication-base revalidation: on top of plane-portal commit
+  `2922d56c1e934d9ce59239e4fe2457cef332a88d`, the focused pair again passed
+  133/133. Hardware Chrome WebGL2 repeated the exact 80-unit north cast and
+  ten-unit marker. At age nine the actor held alpha `1.0999997854232788`, the
+  screen-flash alpha remained zero, and the crop contained 1,897
+  magenta-dominant pixels. One cue, one actor/primitive, 75 presented ticks,
+  and empty page/console/failed-response arrays remained. Crop SHA-256 is
+  `a1288bbd4764da4b9a956377090ee1076630108ba6c39df04fd3f4217be7b704`;
+  structured receipt SHA-256 is
+  `ca070fb2106166ba4b9a6d3642ee5c789ec7eb2e16b3a2107e45b7c71064a1aa`.
+  The complete gate again passed 19 backend contracts, all 2,588
+  frontend/desktop tests, lint/boundary/generated checks, both production
+  builds, media policy, and a 265,203-raw / 80,820-gzip Game bundle. Gate log
+  SHA-256 is
+  `a705c1d50a91052b69ade4416e409c93be27eeaa5e6b06b3d888d30eb4c56d8d`.
+- No member is blocked by the browser platform and no material implementation
+  unknown remains. The initial focused commit was local and unpushed at the end
+  of the implementation pass; deployment and production restart remain
+  separate operations.

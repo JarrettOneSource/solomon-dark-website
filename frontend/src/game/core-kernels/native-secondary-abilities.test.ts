@@ -869,7 +869,7 @@ test('Phasing preserves native accepted-failure and single traversal-streak sema
     rotationRadians: streak.rotationRadians,
     scale: streak.scale,
   }, {
-    alpha: 1,
+    alpha: 2,
     lifetimeTicks: 20,
     position: expectedStreakPosition,
     rotationRadians: Math.atan2(east.y, east.x),
@@ -878,14 +878,14 @@ test('Phasing preserves native accepted-failure and single traversal-streak sema
   assert.deepEqual(
     successful.state.events.filter(({ screenFlash }) => screenFlash !== null)
       .map(({ position }) => position),
-    [expectedStreakPosition],
+    [],
   )
   assert.equal(successful.state.events.filter(({ cue }) => cue === 'phase').length, 1)
 
   let state = successful.state
   state = stepNativeSecondaryAbilities(state, context(15, 2, null)).state
   const faded = state.actors.find(({ id }) => id === streak.id)!
-  assert.equal(faded.alpha, Math.fround(1 - Math.fround(0.05)))
+  assert.equal(faded.alpha, Math.fround(2 - Math.fround(0.1)))
   assert.equal(faded.scale, 2)
   for (let tick = 3; tick <= 20; tick += 1) {
     state = stepNativeSecondaryAbilities(state, context(15, tick, null)).state
@@ -1362,7 +1362,6 @@ test('Magic Circle performs its stock first pulse, light RNG, parity emitter, an
 test('the complete 23-member cast matrix owns exactly the native Region-lane writers', () => {
   const immediate = new Map<NativeSecondaryAbilityId, readonly ReturnType<typeof expectedScreenFlash>[]>([
     [12, [expectedScreenFlash(1, 0, 1, 0.1, false)]],
-    [15, [expectedScreenFlash(0, 1, 1, 0.025, true)]],
     [21, [expectedScreenFlash(1, 0.5, 0, 0.01, true)]],
     [23, [expectedScreenFlash(1, 0.5, 0, 0.1, true)]],
     [35, [expectedScreenFlash(0.9, 1, 1, 0.01, true)]],

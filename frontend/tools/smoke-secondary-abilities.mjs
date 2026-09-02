@@ -61,6 +61,7 @@ const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
 const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === '1'
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 const primaryOverlap = process.env.SDR_SECONDARY_PRIMARY_OVERLAP === '1'
+const phasingFrameCapture = process.env.SDR_PHASING_FRAME_CAPTURE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (comparisonCapture) assert.equal(retainNativeViewport, true)
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
@@ -70,7 +71,7 @@ if (primaryOverlap) assert.equal(requestedScene, 'boneyard')
 const PROOFS = Object.freeze({
   11: { audio: 'leviathan-roar', flash: true, kinds: ['leviathan', 'leviathan-appendage'] },
   12: { audio: 'planewalker-on', flash: true, kinds: ['plane-orb-particle', 'plane-orb-shot'] },
-  15: { audio: 'phase', flash: true, kinds: ['phase-burst'] },
+  15: { audio: 'phase', flash: false, kinds: ['phase-burst'] },
   21: { audio: 'big-fire', flash: true, kinds: ['moving-fire', 'shockwave'] },
   23: { audio: 'ignite', flash: true, kinds: ['fire-patch'] },
   27: { audio: 'magic-storm', flash: false, kinds: ['storm-cloud'] },
@@ -138,6 +139,7 @@ if (!baseUrl && productionBuild) {
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
+  ...(phasingFrameCapture ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
   snapshotRate: 20,
 })
 const browser = await chromium.launch({
@@ -274,7 +276,7 @@ try {
     canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
     await canvas.waitFor({ timeout: 90_000 })
     await openBoneyardCombat(page, host, playerId)
-    if (cooldownOnly) stabilizeBoneyardCooldownEnemies(host)
+    if (cooldownOnly || phasingFrameCapture) stabilizeBoneyardCooldownEnemies(host)
     const state = host.state()
     assert.equal(state.world.kind, 'boneyard')
     boneyardEnemyBaseline = structuredClone(state.world.enemies)
@@ -319,6 +321,10 @@ try {
       break
     }
     if (boneyardEnemyBaseline) restoreBoneyardEnemies(host, boneyardEnemyBaseline)
+    if (contract.skillId === 15 && phasingFrameCapture) {
+      stabilizeBoneyardProofPlayer(host, playerId)
+      stabilizeBoneyardCooldownEnemies(host)
+    }
     const proof = PROOFS[contract.skillId]
     await waitForFlashClear(page)
     await waitForStableHostCadence(host)
@@ -450,6 +456,9 @@ try {
     const manaAfterCast = committedState.playerEntities
       .progressions[committedPlayerIndex].currentMana
     const positionAfterCast = structuredClone(getPlayerCharacter(committedState, playerId).position)
+    const phasingFrames = contract.skillId === 15 && phasingFrameCapture
+      ? await capturePhasingFrames(page, host, playerId, screenshotRoot, committedState)
+      : null
     const dampenCancellation = dampenSetup === null
       ? null
       : await captureDampenCancellation(
@@ -472,7 +481,7 @@ try {
       : null
     const phasing = contract.skillId === 15
       ? phasingDirectionReceipt(
-          host.state(),
+          committedState,
           playerId,
           phasingSetup,
           positionBeforeCast,
@@ -579,7 +588,7 @@ try {
       await castPrimaryPointer(page, target)
     }
 
-    if (proof.kinds.length > 0) {
+    if (proof.kinds.length > 0 && phasingFrames === null) {
       try {
         await page.waitForFunction((expectedKinds) => {
           const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
@@ -894,6 +903,7 @@ try {
       maximumSet,
       name: contract.name,
       phasing,
+      phasingFrames,
       playerPresentation,
       quickbar: {
         cooldown: cooldownQuickbar,
@@ -978,6 +988,120 @@ try {
   await host.close()
   await vite?.close()
   await staticServer?.close()
+}
+
+async function capturePhasingFrames(page, host, playerId, screenshotRoot, committedState) {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.secondaryAbilityKinds.includes('phase-burst')
+  }, undefined, { timeout: 2_000 })
+  const frames = []
+  for (let attempt = 0; attempt < 1; attempt += 1) {
+    const actor = host.state().secondaryAbilities.actors.find(({ kind, ownerId }) => (
+      kind === 'phase-burst' && ownerId === playerId
+    )) ?? committedState.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+      kind === 'phase-burst' && ownerId === playerId
+    ))
+    if (!actor) break
+    const projection = await page.evaluate(() => {
+      const canvas = document.querySelector('.boneyard-world-canvas')
+      const sample = canvas?.__sdrBoneyardFrame
+      if (!canvas || !sample) return null
+      const bounds = canvas.getBoundingClientRect()
+      const resolution = Number(canvas.dataset.resolution || 1)
+      return {
+        bounds: {
+          height: bounds.height,
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width,
+        },
+        cameraZoom: sample.cameraZoom,
+        flashAlpha: sample.secondaryScreenFlashAlpha,
+        flashColor: sample.secondaryScreenFlashColor,
+        frameCount: sample.frameCount,
+        logicalHeight: canvas.height / resolution,
+        logicalWidth: canvas.width / resolution,
+        playerScreenX: sample.playerScreenX,
+        playerScreenY: sample.playerScreenY,
+        tick: sample.tick,
+      }
+    })
+    assert.ok(projection)
+    const destination = getPlayerCharacter(host.state(), playerId).position
+    const logicalMarker = {
+      x: projection.playerScreenX + (actor.position.x - destination.x) * projection.cameraZoom,
+      y: projection.playerScreenY + (actor.position.y - destination.y) * projection.cameraZoom,
+    }
+    const marker = {
+      x: projection.bounds.left + logicalMarker.x * projection.bounds.width / projection.logicalWidth,
+      y: projection.bounds.top + logicalMarker.y * projection.bounds.height / projection.logicalHeight,
+    }
+    const halfSide = 90
+    const viewport = page.viewportSize()
+    assert.ok(viewport)
+    const clip = {
+      x: Math.max(0, Math.min(viewport.width - halfSide * 2, marker.x - halfSide)),
+      y: Math.max(0, Math.min(viewport.height - halfSide * 2, marker.y - halfSide)),
+      width: halfSide * 2,
+      height: halfSide * 2,
+    }
+    const screenshotPath = `${screenshotRoot}/15-phasing-age-${actor.ageTicks}.png`
+    const screenshot = await page.screenshot({ clip, path: screenshotPath })
+    const pixels = await measureMagentaPixels(page, screenshot)
+    assert.equal(projection.flashAlpha, 0)
+    assert.ok(
+      pixels.magentaPixelCount >= 20,
+      `Phasing marker painted only ${pixels.magentaPixelCount} magenta pixels`,
+    )
+    frames.push({
+      actor: {
+        ageTicks: actor.ageTicks,
+        alpha: actor.alpha,
+        position: actor.position,
+        rotationRadians: actor.rotationRadians,
+        scale: actor.scale,
+      },
+      clip,
+      marker,
+      pixels,
+      projection,
+      screenshotPath,
+    })
+  }
+  return frames
+}
+
+async function measureMagentaPixels(page, screenshot) {
+  return page.evaluate(async (source) => {
+    const image = new Image()
+    image.src = `data:image/png;base64,${source}`
+    await image.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context) throw new Error('Phasing pixel probe has no 2D context')
+    context.drawImage(image, 0, 0)
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+    let magentaPixelCount = 0
+    let maximumBlueMinusGreen = 0
+    let maximumRedMinusGreen = 0
+    for (let index = 0; index < data.length; index += 4) {
+      const red = data[index]
+      const green = data[index + 1]
+      const blue = data[index + 2]
+      maximumBlueMinusGreen = Math.max(maximumBlueMinusGreen, blue - green)
+      maximumRedMinusGreen = Math.max(maximumRedMinusGreen, red - green)
+      if (
+        red >= 120
+        && blue >= 120
+        && red - green >= 20
+        && blue - green >= 20
+      ) magentaPixelCount += 1
+    }
+    return { magentaPixelCount, maximumBlueMinusGreen, maximumRedMinusGreen }
+  }, screenshot.toString('base64'))
 }
 
 async function capturePrimaryStatusEffectExpiry(

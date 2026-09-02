@@ -782,7 +782,6 @@ const REGION_FLASH_MINDSTAR = screenFlash(0, 0.5, 1, 0.1, true)
 const REGION_FLASH_PLANES = screenFlash(1, 0.5, 1, 0.05, true)
 const REGION_FLASH_PLANEWALKER = screenFlash(1, 0, 1, 0.1, false)
 const REGION_FLASH_PLANE_ORB = screenFlash(1, 0, 1, 0.1, false, 0.1)
-const REGION_FLASH_PHASING = screenFlash(0, 1, 1, 0.025, true)
 const REGION_FLASH_RING_FIRE = screenFlash(1, 0.5, 0, 0.01, true)
 const REGION_FLASH_RING_ICE = screenFlash(0.9, 1, 1, 0.01, true)
 const REGION_FLASH_STONESKIN = screenFlash(1, 1, 1, 0.1, false)
@@ -3531,7 +3530,7 @@ export function stepNativeSecondaryAbilities(
         actor = {
           ...actor,
           alpha: Math.max(0, Math.fround(
-            sourceActor.alpha - Math.fround(0.05),
+            sourceActor.alpha - Math.fround(0.1),
           )),
         }
         break
@@ -4077,6 +4076,7 @@ function castAbility(
         y: Math.fround(origin.y + phasingDirection.y * 10),
       }
       spawnActor({
+        alpha: 2,
         kind: 'phase-burst',
         lifetimeTicks: 20,
         position: phaseMarker,
@@ -4087,7 +4087,6 @@ function castAbility(
       state = emit(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
         position: phaseMarker,
-        screenFlash: REGION_FLASH_PHASING,
       })
       break
     }
