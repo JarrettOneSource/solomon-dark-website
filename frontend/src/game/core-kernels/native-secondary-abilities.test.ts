@@ -2411,9 +2411,9 @@ test('Dampen and Turn Undead consume their complete native child-animation RNG p
   const children = undead.actors.filter(({ kind }) => kind === 'turn-undead')
   assert.equal(children.length, 35)
   const firstHeading = drawNativeFloat(undeadInitial, 360)
-  const firstScale = drawNativeFloat(firstHeading.state, 1)
+  const firstScale = drawNativeFloat(firstHeading.state, 0.5)
   const firstIncrement = drawNativeFloat(firstScale.state, 40)
-  const secondScale = drawNativeFloat(firstIncrement.state, 1)
+  const secondScale = drawNativeFloat(firstIncrement.state, 0.5)
   assert.equal(children[0]?.rotationRadians, firstHeading.value * Math.PI / 180)
   assert.equal(children[0]?.scale, 1 + firstScale.value)
   assert.equal(
@@ -2421,6 +2421,7 @@ test('Dampen and Turn Undead consume their complete native child-animation RNG p
     Math.fround(firstHeading.value + 20 + firstIncrement.value) * Math.PI / 180,
   )
   assert.equal(children[1]?.scale, 1 + secondScale.value)
+  assert.ok(children.every(({ scale }) => scale >= 1 && scale <= 1.5))
   assert.deepEqual(undead.rng, advanceNativeRngWords(undeadInitial, 71))
 })
 

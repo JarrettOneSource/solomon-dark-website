@@ -4705,7 +4705,7 @@ function castAbility(
       {
         let heading = drawNativeFloat(state.rng, 360); state = { ...state, rng: heading.state }
         for (let index = 0; index < 35; index += 1) {
-          const scale = drawNativeFloat(state.rng, 1); state = { ...state, rng: scale.state }
+          const scale = drawNativeFloat(state.rng, 0.5); state = { ...state, rng: scale.state }
           spawnActor({
             kind: 'turn-undead',
             lifetimeTicks: 20,

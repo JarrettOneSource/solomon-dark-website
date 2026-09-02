@@ -86,7 +86,7 @@ layout—owns the hint tails below the screen.
 | `73` Fire Wall | Builds one 300-unit aim-perpendicular line from exactly eleven independent Fire_Goodguy patches, spaced 30 units apart; life scalar `7` reaches zero after 700 ticks at `-0.01/tick`, with contact every 3 ticks. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-ported |
 | `74` Ether Drain | Aimed field scales in for 40 ticks, owns 1,000 active ticks, scales out for 20 ticks, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-ported |
 | `76` Call Comet | Aimed countdown lasts 400 ticks, creates one trail per fall tick, starts the whistle below 175 ticks remaining, and impacts on tick 400 with damage/freeze, FreezeWave, debris, and world-color restoration. | DeadHawg `5,203..207,6`, BadGuys `51,15`; comet loop/whistle and four impact layers. | exact-ported |
-| `77` Turn Undead | Aimed area affects only Skeleton, Archer, Mage, and Zombie and assigns `mFlee*100` behavior. | 35 gray perspective BadGuys `48` fades with exact 20-tick growth; the same `levelup` sample at pitches 2, then 3. | exact-ported |
+| `77` Turn Undead | Aimed area affects only Skeleton, Archer, Mage, and Zombie and assigns `mFlee*100` behavior. | 35 gray perspective BadGuys `48` fades born at scale `1+Float(.5)` with exact 20-tick growth; the same `levelup` sample at pitches 2, then 3. | exact-ported; birth-scale domain corrected by the 2026-09-02 reopening below |
 | `78` Mindstar | Self toggle changes byte `+0x8DD`, reserves/removes mana, and refreshes temporary ranks immediately and on normal progression refresh. | Cyan Region feedback only; exact shared `mindstar__stream`; no actor or caster overlay. | exact-ported |
 | `79` Regenerate | Self toggle changes byte `+0x8DE`, reserves/removes mana, heals `1.5/tickRate`, and stops on overload/death/session teardown. | Orange Region feedback only; exact shared `mindstar__stream`; no actor or caster overlay. | exact-ported |
 
@@ -661,7 +661,7 @@ are distinct owners and must not be collapsed into one expanding sprite.
 
 Turn Undead helper `0x00647EF0` creates 35 source-over perspective record-48
 children tinted `(0.5,0.5,0.5,1)`. They start at alpha one, scale
-`1+Float(1)`, recur by `*1.1`, and lose `.05` alpha per tick. The first angle
+`1+Float(.5)`, recur by `*1.1`, and lose `.05` alpha per tick. The first angle
 is `Float(360)` and native consumes `Float(40)+20` after every child, including
 one discarded final increment, so this VFX consumes 71 RNG words rather than
 70.
@@ -1437,3 +1437,159 @@ unseen successful SD frame.
   publication is a separate authorized receipt; a main push is not a
   deployment, and no deployment, production restart, or live-service claim is
   made here.
+
+## 2026-09-02 — Turn Undead birth-scale domain reopening
+
+### Reported smell and parity question
+
+- The player supplied `SDB - Turn Undead Visual Bug.mp4` (2,603,585 bytes,
+  SHA-256 `ac6143dacd41915ab93d7fb86faf071c8df9a9258bba789a4cd241ba23f6b6f8`)
+  and `SDO - Turn Undead Original.mp4` (3,804,719 bytes, SHA-256
+  `89f4f0143e15cb036edd6bf78778f94bb0b51448a5633ba4a1ed2a85db4c176d`).
+  The Website capture is 1864x1080 for 5.013 seconds; the clean-stock capture
+  is 1308x900 for 12.246 seconds. Both are H.264 at about 29.97 FPS.
+- Matched 30-FPS cast sequences show the same record-48 arc, five captured
+  frames of visible life, gray source-over color, and outward growth. The
+  Website fans the arcs across a dense nest of separated radii; stock groups
+  them into a much narrower set of coherent expanding bands.
+- Falsifiers were the child count, lifetime, growth factor, alpha loss, blend,
+  tint, record selection, record registration, and initial random scale domain.
+  Only the scale domain differs: the Website sampled `Float(1)`, while retail
+  instructions sample `Float(.5)` and then add one.
+- This is a secondary report in a system previously marked closed. The earlier
+  pass trusted a decompiler-level constant interpretation and did not inspect
+  the raw x87 operand at the Turn Undead call site. That skipped raw-instruction
+  check is the process failure reopened here.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player comparison | the two Windows Downloads captures above; matched frames around Website 4.35--4.52 s and stock 11.18--11.35 s | Both effects occupy the same short clock, but Website arcs have the wider radial spread predicted by a doubled jitter bound. | high |
+| Retail instructions | unmodified 0.72.5 `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000`; helper `0x00647EF0`, instruction window `0x00648068..0x006480A4` | The scale call loads float `0.5` from `0x007DE870`, passes unsigned mode zero to `0x00401310`, adds double `1.0` from `0x007DE820`, and stores the one result into both scale axes. | high |
+| Retail class lifecycle | base constructor `0x00452E20`; `Anim_FadeScale_Perspective` vtable `0x00785624`; update `0x00452ED0`; draw `0x00456340` | Birth alpha is one; constructor loss is halved to `.05`; update multiplies both axes by `1.1`; draw clamps alpha, uses normal/source-over blend, applies rotation, and applies `.8` only to Y scale. | high |
+| Asset/data | BadGuys field `+0x24F8`, record 48; manifest rect `72x18` at `(1017,771)`, origin `(1,43.5)`; crop SHA-256 `ce2b3bd3a9ad81af9118c9992e6ec43573a256b49d3591fbc9de89f88342d0a0`; exact BadGuys page SHA-256 `af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e` | The arc pixels, native off-image pivot, complete-page sampling, and source registration are already exact and must not be replaced or masked. | high |
+| Current Website | `native-secondary-abilities.ts` at base `8ac56e987ae98437b3e4320fc6a59672c017a08b` | Row 77 consumes the right 71 RNG words and creates the right 35 children, but uses `drawNativeFloat(state.rng, 1)`, yielding birth scales `[1,2]` instead of `[1,1.5]`. | high |
+| Tool provenance | read-only Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`; decompiler SHA-256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`; instruction dumper SHA-256 `273f6426824849790041dcd0f7a0b25ad9e700458827f3a9db3c34ec3ad50cef` | Ghidra ran read-only through the canonical replica pool; no injected runtime address is used. | high |
+
+### System boundary and membership inventory
+
+Native system: **Turn Undead admission, target mutation, record-48 child
+construction, shared perspective-fade lifecycle, painter registration, audio,
+replication, and teardown**, including every native record-48 producer and
+every `Anim_FadeScale_Perspective` construction sibling checked by the sweep.
+
+| Member / branch | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| row-77 mana, common cooldown, row cooldown, and Cast2 admission | dispatcher `0x0054CC50` | `verified-already-at-parity` | existing admission/cooldown tests and unchanged cast path |
+| Skeleton, SkeletonArcher, SkeletonMage, and Zombie target filter | helper `0x00647EF0`, types `0x3E9/0x3EA/0x3EB/0x3EE` | `verified-already-at-parity` | existing family and negative Demon regression |
+| flee heading/timestamp and one-time weaken write | helper `0x00647EF0` | `verified-already-at-parity` | existing target-state and repeated-tick regressions |
+| 35 Turn Undead record-48 children | `0x00647EF0`, `Anim_FadeScale_Perspective`, BadGuys `48` | `exact-ported` by this reopening | 71-word construction test with `[1,1.5]` birth-scale ceiling and browser capture |
+| child update, draw, painter registration, and 20-tick teardown | `0x00452ED0/0x00456340`, world registration virtual `+0x10` | `verified-already-at-parity` | `.05` loss, `1.1` recurrence, `.8` Y perspective, normal blend, gray tint, actor-count and teardown checks |
+| two `levelup` sample requests | `0x00647F6B/0x00647FBE` | `verified-already-at-parity` | pitches two then three; no Region light or screen write |
+| Magic Circle record-48 producer | `0x005F3CA0`, `Anim_SpinAwayAdditive` | `verified-already-at-parity` | separate `[.975,1]` scale factor, additive blend, angular velocity, and persistent-circle tests; the Turn Undead bound does not flow here |
+| TragicCircle record-48 producer | `0x005EBE20`, `Anim_SpinAway` | `out-of-system` — DireFaculty/story enemy ability is not a maintained Website actor | complete native xref is recorded; no fabricated current-scene producer |
+| Dampen record-48 producer | `0x00648DF0`, `Anim_FadeAdditive_Perspective` | `verified-already-at-parity` under the 2026-08-30 crash-debt repair | separate `.75+Float(4.75)` program sampled to three bounded arcs; no shared Turn Undead bound |
+| Golem record-62 perspective-scale sibling | `0x00615CD0`, same vtable | `verified-already-at-parity` | its independently authored integer scale and 180-tick quake program remain unchanged |
+| common record-63 perspective-scale sibling | `0x00649D10`, same vtable; nine native callers | `verified-already-at-parity` | caller-supplied scale/life contract used by existing rain/impact families; no `0x007DE870` Turn Undead operand |
+| Hub rejection, multiplayer observers, reset, and scene teardown | shared secondary authority/snapshot/world-view owners | `verified-already-at-parity` | no Hub mutation; host creates all 35 actors; observers consume snapshots; generic reset removes them |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- Accepted row 77 calls `0x00647EF0`. The helper creates and registers all 35
+  presentation actors, then applies the family-filtered hostile query and
+  requests the two sounds. The Website keeps authority on the host and does not
+  introduce renderer-local RNG or lifetime.
+- Construction consumes `Float(360)` once for the first heading. Every child
+  then consumes unsigned `Float(.5)` for scale, is born at `1+draw`, and
+  consumes `Float(40)` for the next heading increment `20+draw`; the final
+  increment is deliberately discarded. Total consumption remains 71 words.
+- Each child uses exact BadGuys record 48, the manifest-derived off-image pivot,
+  source-over blend, RGBA `(.5,.5,.5,1)`, alpha one, loss `.05`, growth `1.1`,
+  and draw-time Y perspective `.8`. It retires after the twentieth update.
+- The erroneous `[1,2]` birth domain widens the largest initial radius by one
+  third relative to the native maximum and preserves that separation through
+  every multiplicative growth tick. The corrected `[1,1.5]` domain lets the 35
+  rotated arc segments overlap into the narrow coherent bands visible in the
+  stock capture; child count, asset, anchor, and blend stay unchanged.
+- Magic Circle, TragicCircle, and Dampen share record 48 but not this constructor
+  argument. Golem and the record-63 helper share the class but not this call-site
+  scale draw. The falsified constant therefore changes row 77 only.
+
+### Nearby-system findings
+
+- The tan straight segments visible before and during the Website cast are
+  already-live Arrow projectiles held through the resume sequence. They are not
+  record-48 pixels and are outside this Turn Undead correction.
+- The Website's exact reconstructed BadGuys page, native UV endpoints, record
+  pivot, normal blend, tint, and fixed-tick lifetime all predict the stock
+  effect once the constructor domain is corrected. No texture replacement,
+  clipping mask, opacity reduction, or child-count approximation is justified.
+
+### Confidence and open questions
+
+- Confirmed: capture mismatch; raw `.5` operand and added one; complete 35-child
+  count; 71-word order; record/pivot; class lifecycle; blend/tint; record-48
+  producers; perspective-scale constructor siblings; Website divergence.
+- Inferred: none inside the implementation boundary.
+- Unknown: none. The browser exposes every required transform and blend.
+
+### Web implementation consequence
+
+- Change the row-77 scale RNG bound from `1` to `.5` in the authoritative
+  secondary kernel. Keep the returned RNG state and every later draw unchanged.
+- Strengthen the existing construction regression to pin the first two exact
+  scales and the complete 35-child `[1,1.5]` domain while retaining the 71-word
+  terminal state.
+- Do not alter record 48, `native-secondary-presentation.ts`, Magic Circle,
+  Dampen, Arrow, protocol schema, audio, target mechanics, or painter order.
+
+### Validation contract
+
+- Red/green focused test on the Mac mini: the unchanged row-77 implementation
+  must fail the `.5`-bound expected scales; the corrected implementation must
+  pass exact first/second scales, all 35 bounds, and terminal RNG state.
+- Run the renderer/secondary focused tests and the complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate on the exact Mac candidate.
+- In Mac hardware Chrome, cast only Turn Undead in a real Boneyard scene. Require
+  35 host-owned/replicated children, record-48 primitives during the five-frame
+  visual window, two `level-up` cues, no Region flash, complete teardown, and
+  empty page/console/failed-response arrays. Inspect the captured cast frame
+  against the supplied stock sequence: narrow overlapping expanding bands,
+  without the Website's former separated loop nest.
+
+### Implementation validation receipt
+
+- Implementation: row 77 now draws its second RNG word from the exact `.5`
+  domain. The existing 35 actor births, 71-word terminal state, headings,
+  growth, loss, art, blend, tint, authority, target mechanics, audio, protocol,
+  painter order, and teardown are unchanged. The strengthened regression pins
+  the first two exact scales and every child's inclusive `[1,1.5]` range.
+- Red receipt: on detached current-main base
+  `8efce567d5fb88506580a78bdd181b1407c0e8fb`, the Mac focused file passed 90
+  tests and failed only the new Turn Undead assertion. The first child was
+  `1.3102700114250183` under the old bound instead of native
+  `1.1551350057125092`.
+- Green focused receipt: the same Mac worktree with the one-line kernel fix
+  passed all 132 combined secondary-kernel and renderer tests. Magic Circle,
+  Dampen, Golem record 62, weather/impact record 63, and every other closed
+  secondary member remained green.
+- Mac hardware-Chrome receipt: WebGL2 completed a natural Boneyard row-77 cast
+  with 35 authoritative actors, 35 simultaneous record-48 primitives, 14
+  observed animation ticks, exactly two `level-up` cues, no Region flash, and
+  empty page, console, and failed-response arrays. The inspected corrected cast
+  frame shows the 35 arcs confined to overlapping bands rather than the former
+  wide separated nest; its SHA-256 is
+  `acd1d2672f7d9e62ba857ff5901151208d4ecf44c6ab41516bc982e535b5230b`.
+- Pre-receipt complete Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh`
+  passed the implementation candidate. It built the backend, passed 19 Python
+  contracts/integration tests and 2,580 Node tests with zero failures, passed
+  lint/boundaries/generated-spec checks, desktop tests, production frontend and
+  game-host builds, media/CSP policy, and the bundle budget at 265,203 raw /
+  80,814 gzip bytes. The 17,522-line gate log SHA-256 is
+  `1dd25747023b4730b0a9e31ef9a6a2d9a80890307eef601481baef2456075b69`.
+- A final exact-tree Mac gate follows this docs-only receipt update and is the
+  handoff acceptance. Git publication and deployment remain separate and were
+  not authorized by this report.
