@@ -436,3 +436,209 @@ blend mode, source/contact relationship, art records, audio edges, world
 placement, and teardown. Confidence is medium for a deterministic web sample's
 individual bends because native process-global RNG state is intentionally not
 replicated.
+
+## 2026-09-02 — Player-reported saved-wave firing performance reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: `solomon-dark-stock-save-1788300803421.zip` becomes
+  "very laggy" when the player fires from the supplied point. The archive is a
+  Website support export containing schema-28 continuation tick `53666`, not a
+  request to reconstruct the report from the retail-only `gamestate.sav`.
+- Reproduction state: Soggy, Air/Body, level 11, selected primary `24`, Chain
+  rank 3, wave 9 in a storm-mode 444-object random Boneyard. The restored frame
+  begins with 29 Skeleton/Archer actors, 361 five-to-ten-second death fragments,
+  one Magic Storm cloud plus 165 drops, and no live primary actor.
+- Parity question: does current `252ad560` still preserve the recovered
+  two-tick body, one-tick source, five-tick contact, chained-bolt, painter-band,
+  and direct-factory sibling output while bounding browser object/buffer work at
+  the native lifetime edges?
+- Falsifiers: a changed ribbon vertex/UV/index, branch, band, painter depth,
+  corona member, alpha, light, actor count, or five-tick teardown; a direct
+  Storm/Mage bolt gaining `ZAnimSplit`; a shared buffer destroyed while another
+  band still references it; retained GPU geometry after the last band dies; or
+  no material reduction in the exact-save pressured firing row.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player archive | Windows Downloads `solomon-dark-stock-save-1788300803421.zip`, 1,204,393 bytes, SHA-256 `135ce962c0bef783c0878ed39c5975577ea01772c687a5bb29ce098e801c1d47`; embedded browser document SHA-256 `98e985ea25591c625c94b147666d868fb6ce6d942e245cddad6eca5c6fe9cc27` | Exact support continuation and the complete dense scene/effect census above. | high |
+| Existing retail instructions | retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; player handler `0x0053F9C0`, factory `0x00531640`, body tick/render `0x00453BD0/0x004575D0`, contact `0x00452E20/0x00476230/0x004572C0`, `ZAnimSplit 0x005E0230`, Storm caller `0x006021A0`, Mage caller `0x00490860` | Geometry is constructed once per semantic bolt. Player bodies alone are split into shared-child 25/50-unit clipped draws. Body/source/contact live 2/1/5 ticks; Storm and Mage call the body factory directly. | high |
+| Current web causal trace | Website `252ad56019e2e0e1eb2fd714fbf4d8c7783156b8`; `primary-spell-air-view.ts`, `primary-spell-world-view.ts`, `native-secondary-world-view.ts`, `native-mage-lightning-pulse-view.ts`; PixiJS 8.19 `MeshSimple`/`Mesh` | Every newly observed Air actor constructs an age-zero body and both coronas even when its first visible age is already 2..4. Each split band constructs fresh `MeshGeometry`/three Buffers for identical immutable arrays. `Mesh.destroy()` detaches but does not destroy Geometry; the Air owner never destroys it. Repeated depth lookup also rebuilds every band insertion before doing an O(1)-capable band lookup. Storm strikes unnecessarily use the split resource path inside one direct owner. | high |
+| Exact Mac browser | clean detached production build at `252ad560`; Chrome/ANGLE Metal, Apple M2, 1600x900; supplied archive injected as local slot 0 | Full save holds `60.04 FPS` during an eight-second Air hold, p95/p99 `23.8/24.4 ms`, zero long tasks and empty page/console/network/host errors, but allocates about `36.45 MB` of JS heap in that firing window. | high |
+| Pressured causal A/B | same exact build/save/browser with Chrome 6x CPU throttle; saved secondary/death arrays removed only in diagnostic copies | With both pre-existing effect families absent, idle is `59.99 FPS`; Air firing falls to `31.26 FPS`, p95/p99 `70.3/101.1 ms`, then recovery returns to `59.50 FPS`. A steady host sample contains ten Air actors, two each at ages `0..4`; every 20 Hz snapshot replaces the five-tick set. The two age-zero sampled bodies require 9 and 5 split bands and currently allocate 36 and 15 duplicate Mesh geometries where only 4 and 3 immutable geometries exist. | high |
+
+The unthrottled current build has already absorbed the Water/Hail/Aura changes
+made after the report, so the original headline lag no longer reproduces on the
+M2. The pressured A/B is not relabeled as player hardware. It is the falsifier
+that separates the remaining Air firing owner from the saved Storm/death load
+and makes the missed lifetime/resource defect measurable.
+
+### System boundary and membership inventory
+
+Native system: normal Air lightning factory presentation from semantic birth
+through body/source/contact painting and browser resource teardown. The player
+`ZAnimSplit` wrapper is in-system; callers that invoke the same factory without
+that wrapper remain direct.
+
+| Member (class/variant/scene/branch) | Native source | Disposition required by this reopening | Proof |
+| --- | --- | --- | --- |
+| Player Air body, normal and underpowered | `0x0053F9C0 -> 0x00531640`, body ages `0..1` | `exact-ported` with one immutable geometry per ribbon/branch shared by all clipped band views | geometry identity, complete vertex/UV/index equality, age matrix |
+| Player Air source glow | factory one-shot `Anim_SpellGlow`, age `0` | `exact-ported` with no source resources when first visible age is later | age/container/resource matrix |
+| Player Air contact, normal/underpowered and chain hops | `Anim_FadeLightning`, normal ages `0..4`, weak shortened fade | `verified-already-at-parity`; retain exact six-sprite corona and contact bias | alpha/member/painter tests and exact-save census |
+| Player Air `ZAnimSplit` bands | `0x005E0230`, Enhanced 25 / standard 50, clip width 10,000 | `exact-ported` with retained band descriptors, direct band-container lookup, and shared child geometry | band order/depth/clip and no-quadratic-allocation contract |
+| Hub, Tutorial, ordinary Boneyard, multiplayer observer | same replicated player actor and view | `exact-ported` through the one shared owner; no scene/mobile branch | existing journeys plus exact-save browser run |
+| Magic Storm direct bolt and contact | `StormCloud 0x006021A0 -> 0x00531640`, no `ZAnimSplit` owner | `exact-ported` as one unsplit body draw owner; remove masked split duplication | secondary view structure and Magic Storm browser journey |
+| Skeleton Mage world/target lightning | `0x00490860 -> 0x00531640`, direct body plus separate contact ownership | `exact-ported` with shared immutable body geometry and explicit final geometry destruction; remains unsplit | Mage world/target tests and enemy browser journey |
+| Electric Burn and Ball Lightning contact siblings | `0x00628F10` and `Anim_FadeLightning` xrefs | `verified-already-at-parity`; their separate secondary/Weld views do not instantiate this retained Air owner | caller/constructor source sweep |
+| Flame Lash and Blizzard `ZAnimSplit` siblings | installers recovered in entry 297; separate `WeldPrimarySpellView` | `out-of-system` for Air-factory resources; generic direct band-container lookup applies without changing their view program | existing 26-band Blizzard and Weld tests |
+| `Anim_DarkLightningBolt` | vtable `0x00785598` | `out-of-system`: distinct dark renderer and no active Website actor | existing xref disposition |
+| Faculty lightning | action `0x00451DC0` | `out-of-system`: Faculty gameplay is not materialized | entry 297 disposition retained |
+
+No member is `blocked-by-platform`. WebGL/Pixi can share immutable geometry
+between multiple independently transformed/clipped Mesh views and can destroy
+the owner Geometry exactly once after those views detach.
+
+### Native ownership thread and recovered behavioral contract
+
+- Simulation and replication remain authoritative and unchanged. At 100 Hz a
+  Chain-rank-3 contact in this save emits the primary and one accepted hop per
+  tick. Each normal actor remains visible for exactly five ticks. The 20 Hz
+  client therefore receives a steady ten-actor age lattice `0,0,1,1,...,4,4`.
+- Native constructs each bolt's immutable ribbons/optional branches once. Its
+  `ZAnimSplit` repeatedly draws that same child under different clips; it does
+  not clone vertex/index storage per clip. The web geometry owner must match
+  that lifetime while retaining one independently depthable Mesh view per band.
+- An actor first appearing at age 2..4 can never return to body age 0..1; an
+  actor first appearing after age 0 can never regain its source glow. Allocating
+  those unreachable resources is browser debt, not parity work.
+- Storm and Mage are direct factory consumers. Mage already passes `split=false`;
+  Storm currently reconstructs a whole body from co-depth masked slices inside
+  one parent, which is pixel-redundant and not its native owner.
+- Pixi 8.19 documents MeshGeometry as shareable. `Mesh.destroy()` removes its
+  update listener but deliberately does not destroy the Geometry. The body view
+  therefore owns shared Geometry destruction after every child Mesh is detached.
+- Ribbon samples, textures, tint, blend, transforms, masks, painter insertion
+  sequence, contact light/audio/gameplay, authority cadence, and saved state do
+  not change. There is no quality mode, culling shortcut, or platform fallback.
+
+### Nearby-system findings
+
+- `WeldPrimarySpellView` independently rebuilds every Flame Lash/Blizzard split
+  child for every band on each presentation update. That is not an Air-factory
+  member and this evidence does not authorize changing its dynamic plan here;
+  the retained direct band lookup nevertheless removes the shared O(band-count
+  squared) depth-read path. A future Weld performance report must reopen entry
+  123/297 with its own exact physical A/B rather than silently borrowing Air's
+  immutable-geometry conclusion.
+- The saved Magic Storm field and 361 skeleton fragments are independent
+  pressure owners. Removing Storm lifts the initial 6x row from about 30 to 54
+  FPS; removing both restores 60. Their present representations are not the
+  firing-specific regression because the stripped save still falls only while
+  Air is held. Keep their evidence explicit rather than folding their behavior
+  into an Air-only quality downgrade.
+
+### Confidence and open questions
+
+- Confirmed: archive/state provenance; native caller and lifetime membership;
+  exact current browser object/resource ownership; 20 Hz/5-tick replacement;
+  duplicate geometry count; missing explicit geometry destruction; clean M2 and
+  pressured A/B behavior.
+- Inferred: the player's original hardware severity was amplified by the same
+  short-lived allocation path. The report contains no device trace, so the
+  implementation is accepted on exact-cause structural proof plus controlled
+  before/after evidence, not that hardware attribution.
+- Unknown: none material to implementation. Native per-pixel appearance and RNG
+  remain the already recorded medium-confidence deterministic projection; this
+  resource-only correction changes neither.
+
+### Web implementation consequence and validation contract
+
+- `NativeAirLightningBodyView` owns one immutable `MeshGeometry` for each body
+  ribbon/optional branch, shares it across the exact clipped Mesh views, and
+  destroys it once after all band/direct views detach.
+- `AirPrimarySpellView` constructs only body/source/contact resources reachable
+  from the actor's first presented age and reuses its immutable factory plan
+  instead of re-tessellating the body during age-only updates.
+- Air painter roots and insertion descriptors remain retained by the view.
+  `PrimarySpellWorldView` resolves an insertion container before asking a view
+  to enumerate roots, removing the repeated full-band rebuild/scan.
+- Magic Storm explicitly selects the direct unsplit factory body. Mage remains
+  direct and adopts the same geometry-owner teardown.
+- Focused tests must fail first on late-age body/source allocation, per-band
+  Geometry duplication, retained painter descriptor identity, direct Storm/Mage
+  ownership, and post-destroy Geometry state. Existing geometry, five-age,
+  underpowered, chain, band, Mage, Storm, protocol, lighting, and painter tests
+  remain mandatory.
+- Exact candidate acceptance runs on the Mac mini only: focused tests, the full
+  supplied-save journey unthrottled with empty error arrays and unchanged actor/
+  effect membership, the stripped diagnostic at 6x showing a material firing
+  FPS/tail/allocation improvement and immediate recovery, Magic Storm plus Mage
+  browser coverage, then `/opt/homebrew/bin/bash ./scripts/validate.sh` on the
+  exact candidate tree.
+
+### Implementation validation receipt
+
+- `primary-spell-air-view.ts` now constructs only the body/source/contact
+  resources reachable from the actor's first presented age. One immutable
+  `MeshGeometry` per ribbon or optional branch is shared by every exact split
+  band and destroyed with all three owned buffers after the band Mesh views
+  detach. The actor retains its factory geometry and painter root/insertion
+  records across age-only presentation updates.
+- `primary-spell-air-native.ts` separates full construction from age projection
+  and fails closed if an owner attempts to rewind into an unconstructed body or
+  source lifetime. `primary-spell-world-view.ts` resolves split insertion
+  containers directly before enumerating roots. No simulation, protocol, save,
+  input, light, audio, geometry value, painter registration, or visual member
+  changed.
+- `native-secondary-world-view.ts` now selects the recovered direct, unsplit
+  factory path for `storm-strike` and explicitly tears down that owned Air view.
+  `native-mage-lightning-pulse-view.ts` retains its already-direct body and now
+  delegates teardown to the shared geometry/corona owners.
+- The focused regression was proven red on the Mac mini against exact base
+  `252ad56019e2e0e1eb2fd714fbf4d8c7783156b8`: 12/14 passed, with failures for
+  retained painter identity and direct-factory split bands. The completed Air +
+  Mage set passes 19/19; the wider Air/Mage/Weld/secondary/painter/quality/render
+  matrix passes 117/117. TypeScript test-project checking is clean.
+- Controlled 6x-CPU A/B/A uses the supplied continuation with saved aim, all 29
+  targets made nonterminal, and only pre-existing Storm/death arrays removed.
+  The two exact-base legs record `35.78` and `34.88 FPS`, p95 `50.2/54.5 ms`,
+  p99 `57.3/57.3 ms`, and `51/50` frames over 34 ms. The final candidate records
+  `46.06 FPS`, p95/p99 `31.5/37.1 ms`, and seven frames over 34 ms with the same
+  1..20 Air-actor range, 29 enemies, empty error arrays, and 60-FPS recovery.
+  Against the base mean that is 30.4% higher throughput, 39.8% lower p95, and
+  86.1% fewer over-34-ms frames.
+- The untouched full archive is also positive under the same pressure: current
+  base records `24.62 FPS` and 48.47 MB firing-window heap growth; the candidate
+  records `28.04 FPS` and 28.56 MB while preserving the dense Storm/death/Air
+  membership. This dynamic-wave row supports the isolated result rather than
+  replacing its controlled census.
+- Final production Chrome on Apple M2/ANGLE Metal at 1600x900 restores the
+  untouched archive and holds `60.02 FPS` through an eight-second Air cast.
+  P95/p99/max are `22.8/24.1/31.5 ms`, there are zero long tasks or frames over
+  34 ms, and page, console, response, request, and host error arrays are empty.
+  The live ranges include 1..20 Air actors, 103..252 death fragments, 0..167
+  secondary actors, and 554..587 weather drops; idle and post-release recovery
+  remain 59.91/60.00 FPS.
+- The production Magic Storm browser journey reaches one cloud, the complete
+  165-drop field, and a live `storm-strike`; maximum secondary membership is
+  166 actors / 167 primitives with correct row-275 proxy ownership and empty
+  page/console/response errors. The full enemy browser fixture renders one Mage
+  lightning pulse and the complete enemy/projectile/death families on WebGL
+  with empty page/console/response errors. Its temporary audio-worklet preload
+  adjustment was removed after the receipt and is not part of this change.
+- `/opt/homebrew/bin/bash ./scripts/validate.sh` passes from the byte-identical
+  isolated Mac worktree after the final implementation edit: backend and Website
+  contracts, lint/import boundaries, 2,576 Node tests across the emitted suite
+  summaries, TypeScript, desktop tests, frontend/game-host production builds,
+  bundle budget, and media/CSP policy. The final Game entry is 265,078 raw /
+  80,770 gzip bytes. The 17,455-line stdout log has SHA-256
+  `93ee8331819dcd8241fff247072360295571b5795b55bb0765ba8d79c50b4589`.
+- The focused source/test diff SHA-256 is
+  `bcdb0109ea3186fb39b8046ee2c068275140f947f489929fb34a4367473f2c5a`.
+  No browser-platform exception or material in-system unknown remains.
+  Publication was authorized after this implementation receipt; the final
+  commit and remote identity are recorded in the external completion receipt
+  because a tracked document cannot self-identify its own commit. Deployment
+  remains a separate, unauthorized operation.

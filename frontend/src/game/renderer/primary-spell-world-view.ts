@@ -315,8 +315,11 @@ export class PrimarySpellWorldView {
   setDepth(id: string, depth: number): void {
     const parsed = parsePainterId(id)
     const view = this.views.get(parsed.numericId)
-    const painterRoot = view?.painterRoots().find(({ suffix }) => suffix === parsed.suffix)
-    const container = painterRoot?.container ?? view?.painterContainer?.(parsed.suffix)
+    const insertedContainer = view?.painterContainer?.(parsed.suffix)
+    const painterRoot = insertedContainer
+      ? null
+      : view?.painterRoots().find(({ suffix }) => suffix === parsed.suffix)
+    const container = insertedContainer ?? painterRoot?.container
     if (container) container.zIndex = depth
   }
 

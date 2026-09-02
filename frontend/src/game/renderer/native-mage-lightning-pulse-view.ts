@@ -179,10 +179,9 @@ export class NativeMageLightningPulseView {
   }
 
   destroy(): void {
-    for (const container of this.containers) {
-      container.removeFromParent()
-      container.destroy({ children: true })
-    }
+    this.body.destroy()
+    this.source.destroy()
+    this.contact.destroy()
     this.currentPlan = null
   }
 

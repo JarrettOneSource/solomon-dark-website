@@ -196,6 +196,7 @@ class NativeSecondaryActorView {
       ? new AirPrimarySpellView(
           stormStrikeTransient(state),
           textures.primarySpells.air,
+          { split: false },
         )
       : null
     if (this.stormLightning) {
@@ -527,6 +528,12 @@ class NativeSecondaryActorView {
       this.container.removeChild(this.stormWeather.composite)
       this.stormWeather.destroy()
       this.stormWeather = null
+    }
+    if (this.stormLightning) {
+      for (const container of this.stormLightning.containers) {
+        container.removeFromParent()
+      }
+      this.stormLightning.destroy()
     }
     if (this.directPrimitives) {
       for (const mesh of this.gradientMeshes) {

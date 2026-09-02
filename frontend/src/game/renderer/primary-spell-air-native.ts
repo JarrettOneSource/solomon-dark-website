@@ -206,8 +206,23 @@ interface NativeAirContactSamples {
 export function buildNativeAirLightningPlan(
   input: NativeAirLightningInput,
 ): NativeAirLightningPlan {
+  return buildNativeAirLightningPlanFromFactory(
+    input,
+    buildNativeAirLightningFactoryPlan(input),
+  )
+}
+
+export function buildNativeAirLightningPlanFromFactory(
+  input: Pick<NativeAirLightningInput, 'ageTicks' | 'id' | 'underpowered'>,
+  factory: NativeAirLightningFactoryPlan,
+): NativeAirLightningPlan {
   const nativeAge = Math.max(0, Math.floor(input.ageTicks))
-  const factory = buildNativeAirLightningFactoryPlan(input)
+  if (nativeAge < AIR_LIGHTNING_BODY_LIFETIME_TICKS && factory.body === null) {
+    throw new Error('Air lightning body resources cannot re-enter an earlier lifetime')
+  }
+  if (nativeAge < 1 && factory.sourceCorona === null) {
+    throw new Error('Air lightning source resources cannot re-enter age zero')
+  }
   const contactSamples = nativeContactSamples(input.id)
   const contactCenter = {
     x: factory.endpoint.x
@@ -223,6 +238,7 @@ export function buildNativeAirLightningPlan(
 
   return {
     ...factory,
+    body: nativeAge < AIR_LIGHTNING_BODY_LIFETIME_TICKS ? factory.body : null,
     contactCorona: buildNativeAirCoronaPlan({
       alpha: contactAlpha,
       angle: contactAngle,
@@ -237,6 +253,7 @@ export function buildNativeAirLightningPlan(
       position: contactCenter,
       underpowered: input.underpowered,
     }),
+    sourceCorona: nativeAge < 1 ? factory.sourceCorona : null,
   }
 }
 

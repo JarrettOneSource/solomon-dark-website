@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Texture } from 'pixi.js'
+import { Container, Mesh, Texture } from 'pixi.js'
 
 import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
 import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
@@ -507,3 +507,128 @@ test('Air contact bias paints after struck enemies and Gravestones but stays in 
   assert.ok(contactDepth < laterResidentDepth)
   view.destroy()
 })
+
+test('Air view bounds transient resources to reachable ages and shares split geometry', () => {
+  const birth = airViewState(0, 81)
+  const view = new AirPrimarySpellView(birth, AIR_VIEW_TEXTURES)
+  const firstRoots = view.painterRoots()
+  const secondRoots = view.painterRoots()
+  assert.equal(secondRoots, firstRoots)
+  assert.equal(secondRoots[0]!.insertions, firstRoots[0]!.insertions)
+
+  const bodyRoot = firstRoots.find(({ suffix }) => suffix === 'body')!
+  const bandCount = bodyRoot.insertions?.length ?? 0
+  assert.ok(bandCount > 1)
+  const meshes = descendantMeshes(view.containers)
+  const geometries = new Set(meshes.map(({ geometry }) => geometry))
+  const plan = buildNativeAirLightningPlan({
+    ageTicks: birth.ageTicks,
+    birthTick: birth.birthTick,
+    endpoint: {
+      x: birth.endpoint.x - birth.origin.x,
+      y: birth.endpoint.y - birth.origin.y,
+    },
+    id: birth.id,
+    midpoint: {
+      x: birth.midpoint.x - birth.origin.x,
+      y: birth.midpoint.y - birth.origin.y,
+    },
+  })
+  const geometryCount = plan.body!.layers.reduce(
+    (count, layer) => count + 1 + Number(layer.branch !== null),
+    0,
+  )
+  assert.equal(meshes.length, geometryCount * bandCount)
+  assert.equal(geometries.size, geometryCount)
+
+  const destroyed = new Set<unknown>()
+  for (const geometry of geometries) {
+    geometry.on('destroy', () => destroyed.add(geometry))
+  }
+  view.destroy()
+  assert.equal(destroyed.size, geometryCount)
+
+  const contactOnly = new AirPrimarySpellView(airViewState(4, 82), AIR_VIEW_TEXTURES)
+  assert.deepEqual(
+    contactOnly.containers.map(({ label }) => label),
+    ['air-contact-corona'],
+  )
+  assert.deepEqual(contactOnly.painterRoots().map(({ suffix }) => suffix), ['contact'])
+  contactOnly.destroy()
+
+  const bodyAndContact = new AirPrimarySpellView(airViewState(1, 83), AIR_VIEW_TEXTURES)
+  assert.equal(
+    bodyAndContact.containers.some(({ label }) => label === 'air-source-corona'),
+    false,
+  )
+  assert.deepEqual(
+    bodyAndContact.painterRoots().map(({ suffix }) => suffix),
+    ['body', 'contact'],
+  )
+  bodyAndContact.destroy()
+})
+
+test('direct Air factory consumers do not allocate ZAnimSplit bands', () => {
+  const direct = new AirPrimarySpellView(
+    airViewState(0, 91),
+    AIR_VIEW_TEXTURES,
+    { split: false },
+  )
+  assert.deepEqual(
+    direct.containers.map(({ label }) => label),
+    ['air-body', 'air-source-corona', 'air-contact-corona'],
+  )
+  assert.equal(
+    direct.containers.some(({ label }) => label.startsWith('air-body-band-')),
+    false,
+  )
+  assert.deepEqual(direct.painterRoots().map(({ suffix }) => suffix), [
+    'body',
+    'source',
+    'contact',
+  ])
+  direct.destroy()
+})
+
+const AIR_VIEW_TEXTURES = {
+  branches: [Texture.EMPTY, Texture.EMPTY],
+  circle: Texture.EMPTY,
+  forks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
+  ribbon: Texture.EMPTY,
+} as const
+
+function airViewState(ageTicks: number, id: number): PrimarySpellTransientState {
+  return {
+    ageTicks,
+    birthTick: 800,
+    direction: { x: 1, y: 0 },
+    endpoint: { x: 490, y: 240 },
+    hurricaneCharge: 0,
+    id,
+    kind: 'air',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: id },
+    midpoint: { x: 300, y: 150 },
+    origin: { x: 100, y: 100 },
+    ownerId: 'wizard',
+    painterRegistrations: [0, 1, 2].map((registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal: id * 3 + registrationOrdinal,
+    })),
+    targetId: 'enemy:1',
+    underpowered: false,
+    variant: 0,
+    worldKey: 'boneyard:test',
+  }
+}
+
+function descendantMeshes(containers: readonly Container[]): Mesh[] {
+  const meshes: Mesh[] = []
+  const visit = (container: Container) => {
+    for (const child of container.children) {
+      if (child instanceof Mesh) meshes.push(child)
+      if (child instanceof Container) visit(child)
+    }
+  }
+  for (const container of containers) visit(container)
+  return meshes
+}

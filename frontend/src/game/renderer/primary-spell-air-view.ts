@@ -1,7 +1,8 @@
 import {
   Container,
   Graphics,
-  MeshSimple,
+  Mesh,
+  MeshGeometry,
   Sprite,
   type Texture,
 } from 'pixi.js'
@@ -21,6 +22,7 @@ import {
   AIR_LIGHTNING_CONTACT_SORT_BIAS,
   AIR_LIGHTNING_CORONA_FORK_RECORDS,
   buildNativeAirLightningPlan,
+  buildNativeAirLightningPlanFromFactory,
   type NativeAirCoronaPlan,
   type NativeAirLightningFactoryPlan,
 } from './primary-spell-air-native.ts'
@@ -40,32 +42,64 @@ const FORK_REGISTRATION = [
 ] as const
 
 export class AirPrimarySpellView {
-  private readonly body: NativeAirLightningBodyView
+  private readonly activePainterRoots: AirPainterRoot[] = []
+  private readonly body: NativeAirLightningBodyView | null
+  private readonly bodyPainterRoot: AirPainterRoot | null
   readonly containers: readonly Container[]
-  private readonly contactCorona: NativeAirCoronaView
+  private readonly contactCorona: NativeAirCoronaView | null
+  private readonly contactPainterRoot: AirPainterRoot | null
+  private readonly factory: NativeAirLightningFactoryPlan
   readonly kind = 'air'
   private plan: ReturnType<typeof buildNativeAirLightningPlan>
   private state: NativeAirLightningViewState
-  private readonly sourceCorona: NativeAirCoronaView
+  private readonly sourceCorona: NativeAirCoronaView | null
+  private readonly sourcePainterRoot: AirPainterRoot | null
 
-  constructor(state: NativeAirLightningViewState, textures: NativeAirVfxTextures) {
+  constructor(
+    state: NativeAirLightningViewState,
+    textures: NativeAirVfxTextures,
+    options: { split?: boolean } = {},
+  ) {
     this.state = state
     const construction = buildNativeAirLightningPlan({
-      ageTicks: 0,
+      ageTicks: state.ageTicks,
       birthTick: state.birthTick,
       ...localAirGeometry(state),
       id: state.id,
       underpowered: state.underpowered,
     })
-    this.body = new NativeAirLightningBodyView('air-body', construction.body, textures)
-    this.sourceCorona = new NativeAirCoronaView('air-source-corona', textures)
-    this.contactCorona = new NativeAirCoronaView('air-contact-corona', textures)
+    this.factory = construction
+    this.body = construction.body
+      ? new NativeAirLightningBodyView(
+          'air-body',
+          construction.body,
+          textures,
+          options.split ?? true,
+        )
+      : null
+    this.sourceCorona = construction.sourceCorona
+      ? new NativeAirCoronaView('air-source-corona', textures)
+      : null
+    this.contactCorona = construction.contactCorona.alpha > 0
+      ? new NativeAirCoronaView('air-contact-corona', textures)
+      : null
     this.containers = [
-      ...this.body.containers,
-      this.sourceCorona.container,
-      this.contactCorona.container,
+      ...(this.body?.containers ?? []),
+      ...(this.sourceCorona ? [this.sourceCorona.container] : []),
+      ...(this.contactCorona ? [this.contactCorona.container] : []),
     ]
     this.plan = construction
+    this.bodyPainterRoot = this.body ? bodyPainterRoot(this.body, state) : null
+    this.sourcePainterRoot = this.sourceCorona
+      ? coronaPainterRoot(this.sourceCorona.container, 'source', 0)
+      : null
+    this.contactPainterRoot = this.contactCorona
+      ? coronaPainterRoot(
+          this.contactCorona.container,
+          'contact',
+          AIR_LIGHTNING_CONTACT_SORT_BIAS,
+        )
+      : null
     this.update(state)
   }
 
@@ -76,67 +110,27 @@ export class AirPrimarySpellView {
   ): void {
     if (!('origin' in state) || state.kind !== 'air') return
     this.state = state
-    this.body.setOrigin(state.origin)
-    const plan = buildNativeAirLightningPlan({
+    const plan = buildNativeAirLightningPlanFromFactory({
       ageTicks: state.ageTicks,
-      birthTick: state.birthTick,
-      ...localAirGeometry(state),
       id: state.id,
       underpowered: state.underpowered,
-    })
+    }, this.factory)
     this.plan = plan
-    this.body.update(plan.body)
-    this.sourceCorona.update(plan.sourceCorona, state.origin)
-    this.contactCorona.update(plan.contactCorona, state.origin)
+    if (this.body) {
+      this.body.setOrigin(state.origin)
+      this.body.update(plan.body)
+    }
+    this.sourceCorona?.update(plan.sourceCorona, state.origin)
+    this.contactCorona?.update(plan.contactCorona, state.origin)
+    this.updatePainterRoots()
   }
 
   painterRoots(): readonly AirPainterRoot[] {
-    const roots: AirPainterRoot[] = []
-    if (this.plan.body) {
-      roots.push({
-        container: this.body.container,
-        insertions: this.body.bands.map((band, index) => ({
-          sortBias: 0,
-          suffix: `body-band-${index}`,
-          visible: true,
-          worldY: this.state.origin.y + band.painterY,
-        })),
-        lane: 'world-sorted',
-        queueFamily: 'ordinary-dynamic',
-        regionLightPoint: null,
-        sortBias: 0,
-        suffix: 'body',
-        visible: false,
-        worldY: this.state.origin.y + this.body.boundsY,
-      })
-    }
-    if (this.plan.sourceCorona) {
-      roots.push({
-        container: this.sourceCorona.container,
-        lane: 'world-sorted',
-        queueFamily: 'ordinary-dynamic',
-        regionLightPoint: null,
-        sortBias: 0,
-        suffix: 'source',
-        worldY: this.state.origin.y + this.plan.sourceCorona.center.y,
-      })
-    }
-    if (this.plan.contactCorona.alpha > 0) {
-      roots.push({
-        container: this.contactCorona.container,
-        lane: 'world-sorted',
-        queueFamily: 'ordinary-dynamic',
-        regionLightPoint: null,
-        sortBias: AIR_LIGHTNING_CONTACT_SORT_BIAS,
-        suffix: 'contact',
-        worldY: this.state.origin.y + this.plan.contactCorona.center.y,
-      })
-    }
-    return roots
+    return this.activePainterRoots
   }
 
   setTint(suffix: string, tint: number): void {
-    const bodyBand = this.body.bandContainer(suffix)
+    const bodyBand = this.body?.bandContainer(suffix)
     if (bodyBand) {
       bodyBand.tint = tint
       return
@@ -146,11 +140,40 @@ export class AirPrimarySpellView {
   }
 
   painterContainer(suffix: string): Container | null {
-    return this.body.bandContainer(suffix)
+    return this.body?.bandContainer(suffix) ?? null
   }
 
   destroy(): void {
-    for (const container of this.containers) container.destroy({ children: true })
+    this.body?.destroy()
+    this.sourceCorona?.destroy()
+    this.contactCorona?.destroy()
+    this.activePainterRoots.length = 0
+  }
+
+  private updatePainterRoots(): void {
+    const roots = this.activePainterRoots
+    roots.length = 0
+    if (this.plan.body && this.bodyPainterRoot && this.body) {
+      this.bodyPainterRoot.worldY = this.state.origin.y + this.body.boundsY
+      for (let index = 0; index < this.body.painterInsertions.length; index += 1) {
+        this.body.painterInsertions[index]!.worldY = (
+          this.state.origin.y + this.body.bands[index]!.painterY
+        )
+      }
+      roots.push(this.bodyPainterRoot)
+    }
+    if (this.plan.sourceCorona && this.sourcePainterRoot) {
+      this.sourcePainterRoot.worldY = (
+        this.state.origin.y + this.plan.sourceCorona.center.y
+      )
+      roots.push(this.sourcePainterRoot)
+    }
+    if (this.plan.contactCorona.alpha > 0 && this.contactPainterRoot) {
+      this.contactPainterRoot.worldY = (
+        this.state.origin.y + this.plan.contactCorona.center.y
+      )
+      roots.push(this.contactPainterRoot)
+    }
   }
 }
 
@@ -172,12 +195,7 @@ function localAirGeometry(state: NativeAirLightningViewState): {
 
 interface AirPainterRoot {
   container: Container
-  insertions?: readonly Readonly<{
-    sortBias: number
-    suffix: string
-    visible: boolean
-    worldY: number
-  }>[]
+  insertions?: readonly AirPainterInsertion[]
   lane: 'world-sorted'
   queueFamily: 'ordinary-dynamic'
   regionLightPoint: { x: number, y: number } | null
@@ -187,13 +205,56 @@ interface AirPainterRoot {
   worldY: number
 }
 
+interface AirPainterInsertion {
+  readonly sortBias: 0
+  readonly suffix: string
+  readonly visible: true
+  worldY: number
+}
+
+function bodyPainterRoot(
+  body: NativeAirLightningBodyView,
+  state: NativeAirLightningViewState,
+): AirPainterRoot {
+  const split = body.bands.length > 0
+  return {
+    container: body.container,
+    ...(split ? { insertions: body.painterInsertions } : {}),
+    lane: 'world-sorted',
+    queueFamily: 'ordinary-dynamic',
+    regionLightPoint: null,
+    sortBias: 0,
+    suffix: 'body',
+    ...(split ? { visible: false } : {}),
+    worldY: state.origin.y + body.boundsY,
+  }
+}
+
+function coronaPainterRoot(
+  container: Container,
+  suffix: 'contact' | 'source',
+  sortBias: number,
+): AirPainterRoot {
+  return {
+    container,
+    lane: 'world-sorted',
+    queueFamily: 'ordinary-dynamic',
+    regionLightPoint: null,
+    sortBias,
+    suffix,
+    worldY: 0,
+  }
+}
+
 export class NativeAirLightningBodyView {
   readonly container: Container
   readonly containers: readonly Container[]
   readonly bands: readonly NativeZAnimSplitBand[]
   readonly boundsY: number
+  readonly painterInsertions: readonly AirPainterInsertion[]
   private readonly bandContainers: readonly Container[]
   private readonly masks: Graphics[]
+  private readonly meshResources: readonly AirBodyMeshResource[]
 
   constructor(
     label: string,
@@ -212,13 +273,20 @@ export class NativeAirLightningBodyView {
           NATIVE_BROWSER_ENHANCED_EFFECTS,
         )
       : Object.freeze([])
+    this.painterInsertions = Object.freeze(this.bands.map((band, index) => ({
+      sortBias: 0 as const,
+      suffix: `body-band-${index}`,
+      visible: true as const,
+      worldY: band.painterY,
+    })))
+    this.meshResources = createAirBodyMeshResources(body, textures)
     this.masks = []
     this.bandContainers = this.bands.map((band, bandIndex) => {
       const root = new Container({ label: `${label}-band-${bandIndex}` })
       root.eventMode = 'none'
       const content = new Container({ label: `${label}-band-content-${bandIndex}` })
       content.eventMode = 'none'
-      const meshes = createAirBodyMeshes(body, textures)
+      const meshes = createAirBodyMeshes(this.meshResources)
       content.addChild(...meshes)
       const mask = new Graphics()
         .rect(0, band.clip.y, band.clip.width, band.clip.height)
@@ -229,7 +297,7 @@ export class NativeAirLightningBodyView {
       this.masks.push(mask)
       return root
     })
-    if (!split) this.container.addChild(...createAirBodyMeshes(body, textures))
+    if (!split) this.container.addChild(...createAirBodyMeshes(this.meshResources))
     this.containers = Object.freeze([this.container, ...this.bandContainers])
     this.update(body)
   }
@@ -252,6 +320,15 @@ export class NativeAirLightningBodyView {
     const index = Number(suffix.slice('body-band-'.length))
     return Number.isSafeInteger(index) ? this.bandContainers[index] ?? null : null
   }
+
+  destroy(): void {
+    for (const container of this.containers) {
+      container.removeFromParent()
+      container.destroy({ children: true })
+    }
+    for (const resource of this.meshResources) resource.geometry.destroy(true)
+    this.masks.length = 0
+  }
 }
 
 function airBodyBounds(
@@ -268,40 +345,59 @@ function airBodyBounds(
   return { height: maximum - minimum, y: minimum }
 }
 
-function createAirBodyMeshes(
+interface AirBodyMeshResource {
+  readonly alpha: number
+  readonly geometry: MeshGeometry
+  readonly texture: Texture
+  readonly tint: number
+}
+
+function createAirBodyMeshResources(
   body: NativeAirLightningFactoryPlan['body'],
   textures: NativeAirVfxTextures,
-): MeshSimple[] {
+): readonly AirBodyMeshResource[] {
   return body?.layers.flatMap((layer) => {
-    const mesh = new MeshSimple({
-      indices: layer.indices,
+    const resources: AirBodyMeshResource[] = [{
+      alpha: layer.alpha,
+      geometry: new MeshGeometry({
+        indices: layer.indices,
+        positions: layer.vertices,
+        topology: 'triangle-list',
+        uvs: layer.uvs,
+      }),
       texture: textures.ribbon,
-      topology: 'triangle-list',
-      uvs: layer.uvs,
-      vertices: layer.vertices,
-    })
-    mesh.alpha = layer.alpha
-    mesh.autoUpdate = false
-    mesh.blendMode = 'add'
-    mesh.eventMode = 'none'
-    mesh.tint = layer.tint
-    if (!layer.branch) return [mesh]
-    const branch = new MeshSimple({
-      indices: layer.branch.indices,
+      tint: layer.tint,
+    }]
+    if (!layer.branch) return resources
+    resources.push({
+      alpha: layer.alpha,
+      geometry: new MeshGeometry({
+        indices: layer.branch.indices,
+        positions: layer.branch.vertices,
+        topology: 'triangle-list',
+        uvs: layer.branch.uvs,
+      }),
       texture: textures.branches[
         AIR_LIGHTNING_BRANCH_RECORDS.indexOf(layer.branch.textureRecord)
       ],
-      topology: 'triangle-list',
-      uvs: layer.branch.uvs,
-      vertices: layer.branch.vertices,
+      tint: layer.tint,
     })
-    branch.alpha = layer.alpha
-    branch.autoUpdate = false
-    branch.blendMode = 'add'
-    branch.eventMode = 'none'
-    branch.tint = layer.tint
-    return [mesh, branch]
+    return resources
   }) ?? []
+}
+
+function createAirBodyMeshes(resources: readonly AirBodyMeshResource[]): Mesh[] {
+  return resources.map((resource) => {
+    const mesh = new Mesh({
+      geometry: resource.geometry,
+      texture: resource.texture,
+    })
+    mesh.alpha = resource.alpha
+    mesh.blendMode = 'add'
+    mesh.eventMode = 'none'
+    mesh.tint = resource.tint
+    return mesh
+  })
 }
 
 function vertexYs(vertices: ArrayLike<number>): number[] {
@@ -349,6 +445,11 @@ export class NativeAirCoronaView {
       sprite.scale.set(fork.scale)
       sprite.tint = fork.tint
     }
+  }
+
+  destroy(): void {
+    this.container.removeFromParent()
+    this.container.destroy({ children: true })
   }
 }
 
