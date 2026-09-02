@@ -8,6 +8,9 @@ import {
   NATIVE_HAGATHA_LAST_WORD_DAMAGE,
   NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
   NATIVE_HAGATHA_LAST_WORD_RADIUS,
+  NATIVE_HAGATHA_SEEKER_PROGRAM,
+  NATIVE_HAGATHA_SEEKER_RAMP_RGBA,
+  NATIVE_HAGATHA_SEEKER_RAMP_U,
   NATIVE_HAGATHA_SELECTORS,
   applyNativeHagathaPurchaseRuntime,
   clearNativeHagathaUntilHurt,
@@ -18,6 +21,7 @@ import {
   nativeHagathaDrinkerShouldUseHealthPotion,
   nativeHagathaDrinkerShouldUseManaPotion,
   nativeHagathaRevelationRank,
+  nativeHagathaSeekerMeshPlan,
   nativeHagathaSeekerSegments,
   removeNativeHagathaRuntime,
 } from './native-hagatha-effects.ts'
@@ -127,6 +131,12 @@ test('Seeker plans the owner-local two-segment native gradient without RNG', () 
     5,
   )
   assert.equal(segments.length, 2)
+  const expectedAlpha = Math.fround(
+    0.25 + 0.1 * Math.fround(Math.sin(Math.fround(115 * Math.fround(Math.PI) / 180))),
+  )
+  assert.equal(segments[0]?.alpha, expectedAlpha)
+  assert.equal(segments[1]?.alpha, expectedAlpha)
+  assert.ok(expectedAlpha >= 0.15 && expectedAlpha <= 0.35)
   assert.deepEqual(segments.map((segment) => ({
     end: segment.end,
     endVisible: segment.endVisible,
@@ -152,4 +162,115 @@ test('Seeker plans the owner-local two-segment native gradient without RNG', () 
       width: 3,
     },
   ])
+})
+
+test('Seeker tessellates native butt-ended quads with reversible hidden-RGB ramps', () => {
+  assert.deepEqual(NATIVE_HAGATHA_SEEKER_PROGRAM, {
+    distanceCap: 300,
+    distanceCutoff: 100,
+    endDistanceFactor: 0.5,
+    idPhaseDegrees: 35,
+    innerRadius: 35,
+    joinRadius: 50,
+    pulseAmplitude: 0.1,
+    pulseBase: 0.25,
+    tickPhaseDegrees: 2,
+    transparentColor: 0xffffff,
+    visibleColor: 0xd8ba70,
+    width: 3,
+  })
+  assert.deepEqual(NATIVE_HAGATHA_SEEKER_RAMP_RGBA, [
+    255, 255, 255, 0,
+    216, 186, 112, 255,
+  ])
+  assert.deepEqual(NATIVE_HAGATHA_SEEKER_RAMP_U, {
+    transparent: 0.25,
+    visible: 0.75,
+  })
+
+  const fadeIn = nativeHagathaSeekerMeshPlan({
+    alpha: 0.25,
+    end: { x: 20, y: 20 },
+    endVisible: true,
+    start: { x: 10, y: 20 },
+    startVisible: false,
+    targetId: 1,
+    targetKind: 'gold',
+    width: 3,
+  })
+  assert.deepEqual(fadeIn.vertices, [
+    10, 18.5,
+    10, 21.5,
+    20, 18.5,
+    20, 21.5,
+  ])
+  assert.deepEqual(fadeIn.uvs, [
+    0.25, 0.5,
+    0.25, 0.5,
+    0.75, 0.5,
+    0.75, 0.5,
+  ])
+  assert.equal(fadeIn.alphaByte, 63)
+  assert.equal(fadeIn.alpha, 63 / 255)
+
+  const fadeOut = nativeHagathaSeekerMeshPlan({
+    alpha: 0.35,
+    end: { x: 20, y: 20 },
+    endVisible: false,
+    start: { x: 20, y: 10 },
+    startVisible: true,
+    targetId: 2,
+    targetKind: 'sack',
+    width: 3,
+  })
+  assert.deepEqual(fadeOut.vertices, [
+    21.5, 10,
+    18.5, 10,
+    21.5, 20,
+    18.5, 20,
+  ])
+  assert.deepEqual(fadeOut.uvs, [
+    0.75, 0.5,
+    0.75, 0.5,
+    0.25, 0.5,
+    0.25, 0.5,
+  ])
+  assert.equal(fadeOut.alphaByte, 89)
+  assert.equal(fadeOut.alpha, 89 / 255)
+  assert.throws(() => nativeHagathaSeekerMeshPlan({
+    alpha: 0.25,
+    end: { x: 1, y: 1 },
+    endVisible: true,
+    start: { x: 1, y: 1 },
+    startVisible: false,
+    targetId: 3,
+    targetKind: 'bonus',
+    width: 3,
+  }), /distinct endpoints/)
+})
+
+test('Seeker admits every Goodie family and excludes the strict cutoff', () => {
+  const segments = nativeHagathaSeekerSegments(
+    { x: 0, y: 0 },
+    [
+      { id: 1, kind: 'gold', position: { x: 101, y: 0 } },
+      { id: 2, kind: 'sack', position: { x: 0, y: 150 } },
+      { id: 3, kind: 'bonus', position: { x: -301, y: 0 } },
+      { id: 4, kind: 'gold', position: { x: 100, y: 0 } },
+    ],
+    0,
+  )
+  assert.deepEqual(
+    segments.filter((_, index) => index % 2 === 0).map(({ targetId, targetKind }) => ({
+      targetId,
+      targetKind,
+    })),
+    [
+      { targetId: 1, targetKind: 'gold' },
+      { targetId: 2, targetKind: 'sack' },
+      { targetId: 3, targetKind: 'bonus' },
+    ],
+  )
+  assert.equal(segments[5]?.end.x, -150)
+  assert.equal(segments[5]?.end.y, 0)
 })

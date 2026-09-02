@@ -54,6 +54,28 @@ export const NATIVE_HAGATHA_LAST_WORD_ARCHIVE_TICK = 300
 export const NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE = 15
 export const NATIVE_HAGATHA_LAST_WORD_RADIUS = 825
 export const NATIVE_HAGATHA_LAST_WORD_DAMAGE = 5_000
+export const NATIVE_HAGATHA_SEEKER_PROGRAM = Object.freeze({
+  distanceCap: 300,
+  distanceCutoff: 100,
+  endDistanceFactor: 0.5,
+  idPhaseDegrees: 35,
+  innerRadius: 35,
+  joinRadius: 50,
+  pulseAmplitude: 0.1,
+  pulseBase: 0.25,
+  tickPhaseDegrees: 2,
+  transparentColor: 0xffffff,
+  visibleColor: 0xd8ba70,
+  width: 3,
+} as const)
+export const NATIVE_HAGATHA_SEEKER_RAMP_RGBA = Object.freeze([
+  0xff, 0xff, 0xff, 0x00,
+  0xd8, 0xba, 0x70, 0xff,
+] as const)
+export const NATIVE_HAGATHA_SEEKER_RAMP_U = Object.freeze({
+  transparent: 0.25,
+  visible: 0.75,
+} as const)
 export const NATIVE_HAGATHA_LAST_WORD_SACK_SUFFIXES = Object.freeze([
   'Earthly Possessions',
   'Stuff',
@@ -106,6 +128,13 @@ export interface NativeHagathaSeekerSegment {
   readonly targetId: number
   readonly targetKind: NativeHagathaSeekerTargetKind
   readonly width: number
+}
+
+export interface NativeHagathaSeekerMeshPlan {
+  readonly alpha: number
+  readonly alphaByte: number
+  readonly uvs: readonly number[]
+  readonly vertices: readonly number[]
 }
 
 export function ownsNativeHagathaSelector(
@@ -310,13 +339,21 @@ export function nativeHagathaSeekerSegments(
     const deltaX = target.position.x - playerPosition.x
     const deltaY = target.position.y - playerPosition.y
     const distance = Math.hypot(deltaX, deltaY)
-    if (!(distance > 100)) continue
+    if (!(distance > NATIVE_HAGATHA_SEEKER_PROGRAM.distanceCutoff)) continue
     const directionX = deltaX / distance
     const directionY = deltaY / distance
-    const cappedDistance = Math.min(distance, 300)
-    const phaseDegrees = 2 * tick + 35 * target.id
+    const cappedDistance = Math.min(distance, NATIVE_HAGATHA_SEEKER_PROGRAM.distanceCap)
+    const phaseDegrees = Math.fround(
+      NATIVE_HAGATHA_SEEKER_PROGRAM.tickPhaseDegrees * tick
+      + NATIVE_HAGATHA_SEEKER_PROGRAM.idPhaseDegrees * target.id,
+    )
+    const phaseRadians = Math.fround(
+      phaseDegrees * Math.fround(Math.PI) / 180,
+    )
     const alpha = Math.fround(
-      0.75 + 0.5 * Math.sin(phaseDegrees * Math.PI / 180),
+      NATIVE_HAGATHA_SEEKER_PROGRAM.pulseBase
+      + NATIVE_HAGATHA_SEEKER_PROGRAM.pulseAmplitude
+      * Math.fround(Math.sin(phaseRadians)),
     )
     const point = (distanceAlong: number): Vector2 => ({
       x: Math.fround(playerPosition.x + directionX * distanceAlong),
@@ -325,25 +362,67 @@ export function nativeHagathaSeekerSegments(
     segments.push(
       Object.freeze({
         alpha,
-        end: point(50),
+        end: point(NATIVE_HAGATHA_SEEKER_PROGRAM.joinRadius),
         endVisible: true,
-        start: point(35),
+        start: point(NATIVE_HAGATHA_SEEKER_PROGRAM.innerRadius),
         startVisible: false,
         targetId: target.id,
         targetKind: target.kind,
-        width: 3,
+        width: NATIVE_HAGATHA_SEEKER_PROGRAM.width,
       }),
       Object.freeze({
         alpha,
-        end: point(cappedDistance * 0.5),
+        end: point(cappedDistance * NATIVE_HAGATHA_SEEKER_PROGRAM.endDistanceFactor),
         endVisible: false,
-        start: point(50),
+        start: point(NATIVE_HAGATHA_SEEKER_PROGRAM.joinRadius),
         startVisible: true,
         targetId: target.id,
         targetKind: target.kind,
-        width: 3,
+        width: NATIVE_HAGATHA_SEEKER_PROGRAM.width,
       }),
     )
   }
   return Object.freeze(segments)
+}
+
+export function nativeHagathaSeekerMeshPlan(
+  segment: NativeHagathaSeekerSegment,
+): NativeHagathaSeekerMeshPlan {
+  const deltaX = segment.end.x - segment.start.x
+  const deltaY = segment.end.y - segment.start.y
+  const length = Math.hypot(deltaX, deltaY)
+  if (!(length > 0) || !Number.isFinite(segment.width) || segment.width <= 0) {
+    throw new RangeError('Seeker mesh segment must have distinct endpoints and positive width')
+  }
+  const halfWidth = segment.width * 0.5
+  const perpendicularX = -deltaY / length * halfWidth
+  const perpendicularY = deltaX / length * halfWidth
+  const vertex = (value: number): number => Math.fround(value)
+  const startU = segment.startVisible
+    ? NATIVE_HAGATHA_SEEKER_RAMP_U.visible
+    : NATIVE_HAGATHA_SEEKER_RAMP_U.transparent
+  const endU = segment.endVisible
+    ? NATIVE_HAGATHA_SEEKER_RAMP_U.visible
+    : NATIVE_HAGATHA_SEEKER_RAMP_U.transparent
+  const alphaByte = Math.trunc(Math.min(1, Math.max(0, segment.alpha)) * 0xff)
+  return Object.freeze({
+    alpha: alphaByte / 0xff,
+    alphaByte,
+    uvs: Object.freeze([
+      startU, 0.5,
+      startU, 0.5,
+      endU, 0.5,
+      endU, 0.5,
+    ]),
+    vertices: Object.freeze([
+      vertex(segment.start.x - perpendicularX),
+      vertex(segment.start.y - perpendicularY),
+      vertex(segment.start.x + perpendicularX),
+      vertex(segment.start.y + perpendicularY),
+      vertex(segment.end.x - perpendicularX),
+      vertex(segment.end.y - perpendicularY),
+      vertex(segment.end.x + perpendicularX),
+      vertex(segment.end.y + perpendicularY),
+    ]),
+  })
 }

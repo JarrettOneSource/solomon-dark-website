@@ -1,20 +1,31 @@
-import { Container, FillGradient, Graphics } from 'pixi.js'
+import {
+  BufferImageSource,
+  Container,
+  MeshSimple,
+  Texture,
+} from 'pixi.js'
 
 import {
+  NATIVE_HAGATHA_SEEKER_RAMP_RGBA,
   NATIVE_HAGATHA_SELECTORS,
+  nativeHagathaSeekerMeshPlan,
   nativeHagathaSeekerSegments,
 } from '../core-kernels/native-hagatha-effects.ts'
 import type { GameSnapshot } from '../protocol/game-protocol.ts'
 
+const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
+
 export class NativeHagathaSeekerView {
   readonly container = new Container({ label: 'hagatha-seeker' })
-  private readonly fills: FillGradient[] = []
-  private readonly lines: Graphics[] = []
+  private readonly meshes: MeshSimple[] = []
+  private readonly rampTexture: Texture
   private renderedSegmentCount = 0
   private readonly root: Container
+  private readonly vertices: Float32Array[] = []
 
   constructor(root: Container) {
     this.root = root
+    this.rampTexture = seekerRampTexture()
     this.container.eventMode = 'none'
     this.root.addChild(this.container)
   }
@@ -22,7 +33,7 @@ export class NativeHagathaSeekerView {
   update(snapshot: GameSnapshot, localPlayerId: string): void {
     this.renderedSegmentCount = 0
     if (snapshot.world.kind !== 'boneyard') {
-      this.syncLineCount(0)
+      this.syncMeshCount([])
       return
     }
     const player = snapshot.players[localPlayerId]
@@ -30,7 +41,7 @@ export class NativeHagathaSeekerView {
       player === undefined
       || !player.economy.ownedPerkSelectors.includes(NATIVE_HAGATHA_SELECTORS.seeker)
     ) {
-      this.syncLineCount(0)
+      this.syncMeshCount([])
       return
     }
     const segments = nativeHagathaSeekerSegments(
@@ -43,22 +54,11 @@ export class NativeHagathaSeekerView {
       snapshot.tick,
     )
     this.renderedSegmentCount = segments.length
-    this.syncLineCount(segments.length)
+    this.syncMeshCount(segments)
     for (const [index, segment] of segments.entries()) {
-      const line = this.lines[index]!
-      const fill = this.fills[index]!
-      fill.start = segment.start
-      fill.end = segment.end
-      fill._tick += 1
-      line.alpha = Math.max(0, Math.min(1, segment.alpha))
-      line.clear()
-        .moveTo(segment.start.x, segment.start.y)
-        .lineTo(segment.end.x, segment.end.y)
-        .stroke({
-          cap: 'butt',
-          fill,
-          width: segment.width,
-        })
+      const plan = nativeHagathaSeekerMeshPlan(segment)
+      this.vertices[index]!.set(plan.vertices)
+      this.meshes[index]!.alpha = plan.alpha
     }
   }
 
@@ -73,39 +73,53 @@ export class NativeHagathaSeekerView {
   destroy(): void {
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
-    for (const fill of this.fills) fill.destroy()
-    this.fills.length = 0
-    this.lines.length = 0
+    this.rampTexture.destroy(true)
+    this.meshes.length = 0
+    this.vertices.length = 0
   }
 
-  private syncLineCount(count: number): void {
-    while (this.lines.length < count) {
-      const line = new Graphics({ label: 'hagatha-seeker-segment' })
-      const fadeOut = this.lines.length % 2 === 1
-      line.eventMode = 'none'
-      this.lines.push(line)
-      this.fills.push(seekerGradient(fadeOut ? 1 : 0, fadeOut ? 0 : 1))
-      this.container.addChild(line)
+  private syncMeshCount(
+    segments: ReturnType<typeof nativeHagathaSeekerSegments>,
+  ): void {
+    while (this.meshes.length < segments.length) {
+      const segment = segments[this.meshes.length]!
+      const plan = nativeHagathaSeekerMeshPlan(segment)
+      const vertices = new Float32Array(plan.vertices)
+      const mesh = new MeshSimple({
+        indices: QUAD_INDICES,
+        texture: this.rampTexture,
+        topology: 'triangle-list',
+        uvs: new Float32Array(plan.uvs),
+        vertices,
+      })
+      mesh.alpha = plan.alpha
+      mesh.eventMode = 'none'
+      mesh.label = 'hagatha-seeker-segment'
+      this.meshes.push(mesh)
+      this.vertices.push(vertices)
+      this.container.addChild(mesh)
     }
-    while (this.lines.length > count) {
-      const line = this.lines.pop()!
-      const fill = this.fills.pop()!
-      this.container.removeChild(line)
-      line.destroy()
-      fill.destroy()
+    while (this.meshes.length > segments.length) {
+      const mesh = this.meshes.pop()!
+      this.vertices.pop()
+      this.container.removeChild(mesh)
+      mesh.destroy()
     }
   }
 }
 
-function seekerGradient(startAlpha: number, endAlpha: number): FillGradient {
-  const color = (alpha: number) => `rgba(217,186,112,${alpha})`
-  return new FillGradient({
-    colorStops: [
-      { color: color(startAlpha), offset: 0 },
-      { color: color(endAlpha), offset: 1 },
-    ],
-    end: { x: 0, y: 1 },
-    start: { x: 0, y: 0 },
-    textureSpace: 'global',
+function seekerRampTexture(): Texture {
+  return new Texture({
+    label: 'hagatha-seeker-gradient-ramp',
+    source: new BufferImageSource({
+      addressMode: 'clamp-to-edge',
+      alphaMode: 'no-premultiply-alpha',
+      format: 'rgba8unorm',
+      height: 1,
+      label: 'hagatha-seeker-gradient-ramp-source',
+      resource: new Uint8Array(NATIVE_HAGATHA_SEEKER_RAMP_RGBA),
+      scaleMode: 'linear',
+      width: 2,
+    }),
   })
 }

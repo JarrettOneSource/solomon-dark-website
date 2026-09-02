@@ -1121,7 +1121,10 @@ export async function createBoneyardWorldRenderer(
     value: frameDiagnostics,
     writable: false,
   })
-  if (import.meta.env.DEV) {
+  const rendererPixelProbesEnabled = import.meta.env.DEV || (
+    globalThis as typeof globalThis & { __sdrRendererPixelProbes?: boolean }
+  ).__sdrRendererPixelProbes === true
+  if (rendererPixelProbesEnabled) {
     const weatherSplashRoot = world.children.find(
       ({ label }) => label === 'native-boneyard-weather-splashes',
     )
@@ -1145,6 +1148,53 @@ export async function createBoneyardWorldRenderer(
           ?? null
         ),
         splashViewCount: () => weatherSplashRoot.children.length,
+      },
+      writable: false,
+    })
+    const seekerRoot = world.children.find(({ label }) => label === 'hagatha-seeker')
+    if (!(seekerRoot instanceof Container)) {
+      throw new Error('Hagatha Seeker root is unavailable.')
+    }
+    Object.defineProperty(canvas, '__sdrSeekerPixelProbe', {
+      configurable: false,
+      enumerable: false,
+      value: {
+        alphaMode: () => (
+          (seekerRoot.children[0] as MeshSimple | undefined)?.texture.source.alphaMode
+          ?? null
+        ),
+        meshAlphas: () => seekerRoot.children.map(({ alpha }) => alpha),
+        meshCount: () => seekerRoot.children.length,
+        meshVertices: () => seekerRoot.children.map(child => (
+          [...(child as MeshSimple).vertices]
+        )),
+        renderCurrent: () => application.render(),
+        renderIsolated: (renderable: boolean) => {
+          const stageRenderable = application.stage.children.map(child => child.renderable)
+          const worldRenderable = world.children.map(child => child.renderable)
+          try {
+            for (const child of application.stage.children) child.renderable = child === world
+            for (const child of world.children) child.renderable = child === seekerRoot
+            seekerRoot.renderable = renderable
+            application.render()
+          } finally {
+            application.stage.children.forEach((child, index) => {
+              child.renderable = stageRenderable[index]!
+            })
+            world.children.forEach((child, index) => {
+              child.renderable = worldRenderable[index]!
+            })
+          }
+        },
+        scaleMode: () => (
+          (seekerRoot.children[0] as MeshSimple | undefined)?.texture.source.style.scaleMode
+          ?? null
+        ),
+        worldTransform: () => ({
+          scale: world.scale.x,
+          x: world.position.x,
+          y: world.position.y,
+        }),
       },
       writable: false,
     })

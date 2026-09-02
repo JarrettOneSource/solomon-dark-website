@@ -1036,3 +1036,224 @@ No member is blocked by the browser platform.
   are accounted for, none is browser-blocked, and no material unknown remains.
   Publication is authorized by the follow-up request; deployment and production
   restart remain out of scope and were not performed.
+## 2026-09-02 — Seeker's Charm moving-gradient and pulse correction
+
+### Reported smell and parity question
+
+- Reported web behavior: Seeker's Charm rays are flat, bright rectangular
+  strokes. They do not grow faint toward the indicated object like retail.
+- Stock behavior to recover: the complete owner-local Seeker painter, including
+  target membership, distance branches, pulse range, endpoint colors, exact
+  line tessellation, motion, painter state, and teardown.
+- Reproduction inputs/scenes: a selector-5 local player in Boneyard with Gold,
+  Sack, Bonus, and Orb actors; targets at, below, and above the 100/300-unit
+  boundaries; a moving player and moving/retired targets; zero, one, and
+  multiple eligible targets; a remote participant; run exit and view teardown.
+- Falsifiers: a ray becomes fully opaque; RGB/alpha are constant along either
+  segment; the gradient remains at an earlier world position after movement;
+  an Orb or remote participant produces a ray; an endpoint is rounded/capped;
+  or a retained gradient resource survives teardown.
+
+This is a secondary report in a system that the 2026-08-23 pass declared
+closed. That pass stopped at a four-segment diagnostic count and did not test
+rendered pixel alpha, endpoint color, or movement after the first frame. It
+also failed to inspect the raw double operands at `0x0052AA44` and
+`0x0052AA53`; the earlier recorded `0.75 + 0.5*sin(...)` pulse is false and is
+superseded below.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player captures | `seeker's charm - web port.png`, 1107 by 619 RGBA, SHA-256 `4908e34b60d8b89fdc91fe4c7420b23d55e9434125ab864d039c2a64a5606fd3`; `seeker's charm - original.png`, 1005 by 659 RGBA, SHA-256 `e79bb6d5f3c0c8f713caba97f9d739b5dd422de223204658ab5a816785bafbbc`, both supplied in Windows Downloads | The web rays are solid gold bars. Nineteen samples across the upper-left ray's interior retain RGB within `206..216 / 185..195 / 137..145` despite changing scenery. Retail shows a soft ray whose outer half diminishes into the ground before the target. | high for the reported rendered difference |
+| Retail identity | unmodified `SolomonDarkAbandonware/SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`, re-hashed 2026-09-02 | Sealed native oracle used by the existing Hagatha ledger. | high |
+| Player draw instructions | `Player/PlayerTarget::Draw 0x0052A640`, raw `0x0052A9C6..0x0052AC25` | Distance must be strictly above double `100`; it is capped at float `300`. Phase is `2 * globalTick + 35 * actorId`. The stored float alpha is `0.25 + 0.1 * sin(float(phase * pi / 180))`, so it remains about `0.15..0.35`. Two width-3 gradient lines cover radii `35 -> 50` and `50 -> 0.5 * cappedDistance`. | high |
+| Endpoint-color instructions | color constructors `0x0040F9C0/0x0040F9E0`; calls at `0x0052AB44/0x0052AC25`; constants `0x00784D60=0.85f`, `0x00788BDC=0.73f`, `0x00788BE0=0.44f` | The inner line interpolates transparent white to pulsing gold; the outer line interpolates pulsing gold to transparent white. Native byte packing truncates the visible RGB to `216,186,112` (`0xD8BA70`), not the web's rounded red `217`. | high |
+| Shared line primitive | color-multiplying wrapper `0x00455840`; quad builder `0x0041FB90` | The wrapper packs both endpoint colors independently. The builder uses a normalized perpendicular scaled by `width / 2`, emits start-minus/start-plus/end-minus/end-plus, duplicates the start color for the first pair and the end color for the second pair, then submits one four-vertex quad with butt ends. | high |
+| Shared-helper xref sweep | all ten xrefs to `0x00455840`: `0x00459CAB`, `0x0052AB44`, `0x0052AC25`, `0x005A4F7D`, `0x005A5053`, `0x00611BC9`, `0x004588AB`, `0x0060F75E`, `0x0045ACF4`, `0x0045AD8D` | Seven callers consume the primitive: `Anim_WeatherRaindrop`, Player/PlayerTarget Seeker, HallOfFameBox, Hailstones, Anim_Line, Arrow/Silk, and Anim_FadeLine. Only Player's two calls consume selector 5, the Goodie list, and the Seeker clock. No hidden Seeker variant or table row exists. | high |
+| Current web causal trace | Website `1cb1463b`; `native-hagatha-effects.ts`, `native-hagatha-seeker-view.ts`, and `smoke-hagatha-effects.mjs`; pinned PixiJS 8.19.0 `FillGradient.mjs` | The kernel uses the false `0.75/0.5` pulse. The view gives both gradient stops RGB `217,186,112`, mutates `FillGradient.start/end`, and increments `_tick`. Pixi's `buildLinearGradient()` returns immediately once `texture` exists, so its transform remains at the first submitted world endpoints; later moving strokes clamp to one edge texel and become flat. The browser smoke asserts only segment count. | high |
+
+Fresh static queries used canonical program `SolomonDark/SolomonDark.exe` in a
+read-only replica through Mod Loader revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`. Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+`decompile_targets.py`, `dump_function_instructions.py`,
+`dump_insns_around.py`, `dump_floats_at.py`, and
+`refs_to_addr_decompile.py` were used. The dirty Mod Loader checkout was not
+changed.
+
+### System boundary and membership inventory
+
+Native system: Player/PlayerTarget's selector-5 owner-local Boneyard guidance,
+from the participant's durable Hagatha flag and Arena Goodie membership through
+fixed-tick planning, two-color line submission, post-main painter ordering, and
+view teardown. The generic line primitive's independent callers are swept
+below but do not share Seeker state or lifetime.
+
+| Member / branch | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| local Player or PlayerTarget with selector 5 | local-player equality and `Skills+0x7D1` at `0x0052A8EC..0x0052A92E` | `exact-ported` | owner-local mesh and pulse contracts plus Mac pixels |
+| local player without selector 5 | same gate | `verified-already-at-parity` | zero retained rays |
+| remote participants | local-player equality gate | `verified-already-at-parity` | another participant's flag never creates a local view |
+| Gold | Arena Goodie list consumed from Player's Region | `exact-ported` | one two-segment ray and browser profile |
+| Sack | same Goodie list | `exact-ported` | one two-segment ray and browser profile |
+| Bonus | same Goodie list | `exact-ported` | focused Goodie-family census |
+| Orb and all non-Goodie actors | absent from the native list | `verified-already-at-parity` | equal-distance Orb remains excluded in browser and kernel tests |
+| distance `<= 100` | strict compare at `0x0052A9C6` | `verified-already-at-parity` | no segment at exactly 100 |
+| distance `(100,300)` | uncapped distance branch | `exact-ported` | `35 -> 50 -> distance/2` geometry assertions |
+| distance `>= 300` | cap at `0x0052A9DB..0x0052A9F4` | `exact-ported` | `35 -> 50 -> 150` geometry assertions |
+| inner transparent-white to gold segment | first `0x00455840` call | `exact-ported` | two-texel forward ramp and rising pixel samples |
+| outer gold to transparent-white segment | second `0x00455840` call | `exact-ported` | reversed ramp and monotonically falling objectward samples |
+| fixed-tick target phase | `2*tick + 35*actorId` | `exact-ported` | final float and truncated byte stay within `0.15..0.35` |
+| stationary endpoints | shared quad builder | `exact-ported` | current-frame two-way fade measured on both axes |
+| moving player or target | per-draw rebuilt quad | `exact-ported` | rotated targets retain the same measured fade without a cached transform |
+| zero/one/many target add/remove order | Goodie list traversal | `exact-ported` | exactly two retained meshes per eligible actor and tail removal |
+| Boneyard exit, charm removal, run replacement, and destroy | owner/view lifecycle | `exact-ported` | inactive updates remove meshes; destroy releases the one shared ramp source |
+
+### Shared primitive xref dispositions
+
+| Caller family | Relation to Seeker | Disposition for this reopening |
+| --- | --- | --- |
+| `Anim_WeatherRaindrop::Draw 0x00459B60` | same native quad helper, independent weather state and same-RGB alpha ramp | `verified-already-at-parity` under entries 111/148 through its retained unpremultiplied ramp texture |
+| `Anim_Line::Draw 0x00458800` | generic authored endpoints/colors, no selector/Goodie/Player owner | `out-of-system` — independent animation instances retain their owning VFX contracts |
+| `Anim_FadeLine::Draw 0x0045AC40` | generic two-line fading actor, no Seeker owner | `out-of-system` — independent animation instances retain their owning VFX contracts |
+| `HallOfFameBox::Render 0x005A2C80` | two menu separator calls | `out-of-system` — fixed UI system with no Arena or Seeker lifecycle |
+| `Arrow/Silk::Draw 0x0060F590` | projectile trail call | `out-of-system` — enemy-projectile state and renderer are owned by entries 098/273 |
+| `Hailstones::Draw 0x00611160` | Weld rock/contact line call | `out-of-system` — Hail authority and presentation are owned by entries 123/268/279 |
+| Player/PlayerTarget `0x0052A640` | both Seeker calls | `exact-ported` through the complete in-system inventory above |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- `ActorProgression` selector 5 is durable participant state. The render branch
+  additionally requires the drawn Player/PlayerTarget to be the active local
+  player. It spends no gameplay RNG and writes no protocol state.
+- Player draw traverses the Arena Goodie list in stable order. Gold, Sack, and
+  Bonus are admitted by that list; Orb and enemy registries are not lateral
+  target families.
+- Distance is computed from current player and target positions every draw.
+  Values at or below 100 submit nothing. Longer rays stop halfway toward a
+  target, with the source distance capped at 300 before halving.
+- Each eligible target owns two contiguous width-3 butt-ended quads. The first
+  covers 35 to 50 units and fades transparent-white to gold. The second starts
+  at the same gold midpoint and fades to transparent-white at half the capped
+  target distance. Four independent endpoint vertices preserve the fade under
+  translation, rotation, and length changes.
+- The visible endpoint alpha is the final float result of
+  `0.25 + 0.1*sin(float((2*tick + 35*actorId)*pi/180))`, then native color
+  packing truncates each channel after multiplying by 255. The pulse is subtle
+  and never reaches opacity one.
+- Arena saturation `0.65` and selector-0 source-alpha blending consume the
+  unpremultiplied interpolated RGB/alpha. A two-texel unpremultiplied ramp with
+  transparent-white and opaque `0xD8BA70`, sampled between texel centers and
+  multiplied by the packed pulse alpha, is algebraically identical to the
+  retail per-vertex line under the existing Arena shader.
+- The existing post-main Player painter position remains authoritative. Scene
+  exit, charm removal, and target retirement remove the associated meshes;
+  renderer destruction owns the single shared ramp texture and source.
+
+### Nearby-system findings
+
+- Pixi 8.19.0's `FillGradient._tick` invalidates a style key; it does not rebuild
+  the cached texture transform after `start/end` mutation. No other Website
+  renderer mutates those fields, so the falsified moving-gradient assumption is
+  isolated to Seeker.
+- The current Arena unpremultiplied texture/shader path already represents the
+  native hidden RGB beneath alpha zero. Reusing that path avoids a custom
+  shader and avoids changing the independently accepted global renderer.
+- The prior browser screenshot was retained as a receipt despite asserting no
+  pixel slope. Future visual acceptance must make the claimed property
+  machine-measurable, not infer it from object counts.
+
+### Confidence and open questions
+
+- Confirmed: retail identity; exact double/float constants; threshold/cap;
+  target phase; both endpoint-color orders; quad tessellation; width; all xrefs;
+  local-player gate; current Pixi cache behavior; captured flat pixels.
+- Inferred: none required for implementation.
+- Unknown: none material. Browser raster coverage and background composition
+  vary by camera/frame, so acceptance compares alpha/luminance ordering across
+  the ray rather than demanding identical final screenshot bytes.
+
+### Web implementation consequence
+
+- Correct the fixed-tick alpha base/amplitude in the Hagatha effect kernel and
+  pin the exact computed values in focused tests.
+- Replace the mutable global `FillGradient`/`Graphics` strokes with retained
+  four-vertex meshes matching `0x0041FB90`.
+- Give all meshes one two-texel, linear, clamp-to-edge, unpremultiplied ramp:
+  `[255,255,255,0] -> [216,186,112,255]`. Map each endpoint to its texel center
+  and reverse the U coordinates for the outer segment. Quantize the per-mesh
+  pulse to the same truncated alpha byte before Pixi packs it.
+- Preserve target selection, segment planning, painter depth, participant
+  authority, protocol, saves, and all other Hagatha effects. Remove the stale
+  `FillGradient` resources completely.
+
+### Validation contract
+
+- Focused kernel coverage: exact pulse at multiple tick/actor phases, range
+  `0.15..0.35`, strict 100 and cap-300 branches, all three target kinds, Orb
+  exclusion, and two segments per eligible actor.
+- Focused renderer contract: exact two ramp texels, texel-center forward/reverse
+  UVs, native perpendicular quad vertices for horizontal/vertical/diagonal
+  segments, truncated alpha byte, shared texture ownership, and no
+  `FillGradient` dependency.
+- Existing Hagatha authority/effect suites remain green for every selector and
+  two-participant isolation.
+- Real Mac Chrome/WebGL2 production journey: render Gold and Sack with an
+  equidistant Orb, sample both rays on a controlled background, translate and
+  rotate their target endpoints after the first rendered frame, and prove the current
+  inner rise/outer fall remains measurable. Retire targets, remove the charm,
+  close the renderer, and prove no stale meshes or WebGL resources. Page, console,
+  failed-response, WebGL, wire, and host-error arrays must remain empty.
+- Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact byte-identical
+  candidate tree on the Mac mini.
+
+### Implementation validation receipt
+
+- `native-hagatha-effects.ts` now owns the corrected `100/300/35/50/0.5/3`
+  geometry program, final-float `0.25 + 0.1*sin(...)` pulse, truncated
+  `0xD8BA70` visible color, transparent-white endpoint, and exact perpendicular
+  quad plan. Focused tests pin every Goodie kind, the strict cutoff, capped and
+  uncapped lengths, both ramp directions, horizontal/vertical geometry, and
+  alpha-byte truncation.
+- `NativeHagathaSeekerView` no longer creates or mutates `FillGradient` or
+  `Graphics` strokes. It retains one two-texel `rgba8unorm`, linear,
+  clamp-to-edge, no-premultiply texture and one four-vertex `MeshSimple` per
+  native segment. Vertices and packed pulse alpha update in place; add/remove,
+  inactive-scene, and destroy paths own all meshes and the shared texture.
+- The Hagatha browser harness now has an explicit Seeker pixel/lifecycle path,
+  follows current Tutorial and first-College admission, waits for actual
+  replicated loot births instead of sleeping, and supplies the current death-
+  weapon painter registration to its retained Last Word half. Both
+  `--seeker-only` and the complete Seeker/Last Word journey exit cleanly.
+- On the Mac mini, focused Hagatha coverage passed `12/12`; TypeScript and the
+  production Vite/game-host build passed; frontend lint reported zero errors
+  and the same eleven pre-existing warnings. The complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate on the final
+  `f03d1d3a2cb9b5643476b32fa807f0c426822566`-based candidate exited zero:
+  backend build/19 contracts, formatting, architecture, all configured frontend
+  suites, desktop `4/4`, production build, bundle budget, and media policy all
+  passed. `Game-BMOn24k2.js` measured 265,203 raw / 80,823 gzip bytes, below
+  the 524,288 / 134,144-byte limits.
+- Real Mac Chrome/WebGL2 served the built production bundle at `1600x900` and
+  rendered four meshes for Gold and Sack while the equidistant Orb remained
+  excluded. On the initial right/down rays,
+  luma samples at world radii `38/47/55/75/95` were respectively
+  `17/35/34/23/7` and `13/27/27/20/11`. After rotating the same targets to
+  up/left, they were `12/26/27/18/6` and `12/26/27/21/12`. Thus each inner
+  segment rises into the 50-unit join and each outer segment fades toward the
+  object side after motion. Per-target mesh alpha remained in the native packed
+  range (`0.1529..0.1922` in the captured frames), and removing/re-adding the
+  charm changed retained mesh count exactly `4 -> 0 -> 4`.
+- The complete browser journey also retained Last Word's Mindblast siblings and
+  archive behavior. Page errors, console errors, failed responses, WebGL/wire
+  errors, and host errors were empty. The inspected initial/moved Seeker frames
+  hash to `43b9fed5dc00eb3b62197df94bd0c7cfb8242e15a8dfbf7a97922c4ae8d74d6c`
+  and `13e650b928ca05a821cbbac0e8e21b346657e58c226c0e59be74eaa4ce9e33ca`.
+- Every in-system member has a final disposition, no member is browser-blocked,
+  and no material unknown remains. The local task worktree and Mac acceptance
+  worktree remain focused and retained because publication was not requested.
+  One local focused commit records the validated tree; no push, deployment, or
+  production restart is claimed by this receipt.
