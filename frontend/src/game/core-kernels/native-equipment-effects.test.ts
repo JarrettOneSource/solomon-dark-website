@@ -18,6 +18,7 @@ import {
   nativeEquipmentHasFeature,
   nativeEquipmentRecipeEffects,
   nativeEquipmentSetEffects,
+  nativeEquipmentTooltipSets,
   resolveEquippedNativeEffects,
   resolveNativeEquipmentEffects,
 } from './native-equipment-effects.ts'
@@ -67,6 +68,48 @@ test('equipment skill pass preserves Grant-last ordering, learned gates, and cap
   assert.equal(result.effectiveRanks[11], 2)
   assert.equal(result.effectiveRanks[13], 3)
   assert.equal(permanent[11], 0)
+})
+
+test('Revelation composes with every authored equipment skill-effect row', () => {
+  const rows = [
+    ...Array.from({ length: NATIVE_EQUIPMENT_RECIPE_COUNT }, (_, recipeIndex) => (
+      nativeEquipmentRecipeEffects(recipeIndex).map((effect, effectIndex) => ({
+        effect,
+        label: `recipe ${recipeIndex} effect ${effectIndex}`,
+      }))
+    )).flat(),
+    ...nativeEquipmentTooltipSets().flatMap((set, setIndex) => (
+      set.effects.map((effect, effectIndex) => ({
+        effect,
+        label: `set ${setIndex} effect ${effectIndex}`,
+      }))
+    )),
+  ].filter(({ effect }) => effect.kind >= 4 && effect.kind <= 8)
+  assert.deepEqual(Object.fromEntries([4, 5, 6, 7, 8].map(kind => [
+    kind,
+    rows.filter(({ effect }) => effect.kind === kind).length,
+  ])), { 4: 2, 5: 6, 6: 2, 7: 19, 8: 1 })
+
+  for (const { effect, label } of rows) {
+    const permanent = new Array<number>(83).fill(0)
+    if (effect.kind === 5 || effect.kind === 6 || effect.kind === 8) {
+      permanent.fill(1, 8, 80)
+    }
+    const permanentBefore = [...permanent]
+    const source = [{ effects: [effect], recipeIndex: null }]
+    const neutral = resolveNativeEquipmentEffects(permanent, source)
+    const revelation = resolveNativeEquipmentEffects(permanent, source, [6])
+    if (effect.kind === 4 || effect.kind === 7) {
+      assert.equal(
+        revelation.effectiveRanks[effect.target],
+        Math.max(2, neutral.effectiveRanks[effect.target] ?? 0),
+        label,
+      )
+    } else {
+      assert.deepEqual(revelation.effectiveRanks, neutral.effectiveRanks, label)
+    }
+    assert.deepEqual(permanent, permanentBefore, `${label} permanent ranks`)
+  }
 })
 
 test('equipment stat pass preserves every split lane, transform, class, and feature family', () => {

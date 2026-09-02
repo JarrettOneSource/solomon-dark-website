@@ -20,6 +20,7 @@ import {
   NATIVE_MIND_CHUG_TICKS,
   NATIVE_WELD_BUILDS,
   SPELL_WELDING_SKILL_ID,
+  applyNativeRevelationToStartingSkills,
   applyPlayerSkillChoice as applyPlayerSkillChoiceWithGameplayRng,
   applyPlayerDamageX4Bonus,
   applyPlayerPotionEffect,
@@ -75,6 +76,27 @@ const FIRE_BODY = {
   displayName: 'Pyrros',
   element: 'fire',
 } as const
+
+test('Revelation starter refresh is idempotent and preserves higher effective ranks', () => {
+  const source = createPlayerSkillBook(FIRE_BODY)
+  const permanentRanks = [...source.permanentRanks]
+  const effectiveRanks = [...source.effectiveRanks]
+  permanentRanks[16] = 3
+  effectiveRanks[16] = 5
+  effectiveRanks[21] = 4
+  permanentRanks[57] = 1
+  effectiveRanks[57] = 1
+  const book = { ...source, effectiveRanks, permanentRanks }
+
+  const applied = applyNativeRevelationToStartingSkills(book, FIRE_BODY)
+  assert.equal(applied.permanentRanks[16], 3)
+  assert.equal(applied.effectiveRanks[16], 5)
+  assert.equal(applied.permanentRanks[21], 2)
+  assert.equal(applied.effectiveRanks[21], 4)
+  assert.equal(applied.permanentRanks[57], 1)
+  assert.equal(applied.effectiveRanks[57], 1)
+  assert.strictEqual(applyNativeRevelationToStartingSkills(applied, FIRE_BODY), applied)
+})
 
 function offerGameplayRng(progression: Pick<PlayerProgressionComponent, 'offerSeed'>) {
   return createNativeRng(progression.offerSeed)

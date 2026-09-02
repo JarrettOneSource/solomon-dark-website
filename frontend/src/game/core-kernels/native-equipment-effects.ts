@@ -5,6 +5,7 @@ import type {
   HubInventoryItem,
   NativeEquipmentEffect,
 } from './hub-economy.ts'
+import { nativeHagathaRevelationRank } from './native-hagatha-effects.ts'
 import {
   NATIVE_SKILL_CATALOG,
   NATIVE_SKILL_ROW_COUNT,
@@ -144,10 +145,12 @@ const NATIVE_EQUIPMENT_TOOLTIP_SETS = Object.freeze(CATALOG.sets.map((set) => Ob
 export function resolveEquippedNativeEffects(
   permanentRanks: readonly number[],
   equipment: HubEquipmentState,
+  ownedHagathaSelectors: readonly number[] = [],
 ): NativeEquipmentResolution {
   return resolveNativeEquipmentEffects(
     permanentRanks,
     equippedNativeEffectSources(equipment),
+    ownedHagathaSelectors,
   )
 }
 
@@ -200,6 +203,7 @@ export function nativeEquipmentSetEffects(
 export function resolveNativeEquipmentEffects(
   permanentRanks: readonly number[],
   equippedSources: readonly NativeEquipmentEffectSource[],
+  ownedHagathaSelectors: readonly number[] = [],
 ): NativeEquipmentResolution {
   if (permanentRanks.length !== NATIVE_SKILL_ROW_COUNT) {
     throw new RangeError(`native permanent ranks must contain ${NATIVE_SKILL_ROW_COUNT} rows`)
@@ -225,7 +229,12 @@ export function resolveNativeEquipmentEffects(
   ]
   for (const source of skillPassSources) {
     for (const effect of source.effects) {
-      applyNativeEquipmentSkillEffect(effectiveRanks, permanentRanks, effect)
+      applyNativeEquipmentSkillEffect(
+        effectiveRanks,
+        permanentRanks,
+        effect,
+        ownedHagathaSelectors,
+      )
     }
   }
 
@@ -312,11 +321,17 @@ function applyNativeEquipmentSkillEffect(
   effectiveRanks: number[],
   permanentRanks: readonly number[],
   effect: NativeEquipmentEffect,
+  ownedHagathaSelectors: readonly number[],
 ): void {
   if (effect.kind < 4 || effect.kind > 8) return
   const magnitude = Math.round(effect.magnitude)
   if (effect.kind === 4) {
-    setMinimumSkillRank(effectiveRanks, effect.target, magnitude)
+    setNativeGrantedSkillRank(
+      effectiveRanks,
+      effect.target,
+      magnitude,
+      ownedHagathaSelectors,
+    )
     return
   }
   if (effect.kind === 5) {
@@ -333,7 +348,12 @@ function applyNativeEquipmentSkillEffect(
   }
   if (effect.kind === 7) {
     if ((effectiveRanks[effect.target] ?? 0) < 1) {
-      setMinimumSkillRank(effectiveRanks, effect.target, magnitude)
+      setNativeGrantedSkillRank(
+        effectiveRanks,
+        effect.target,
+        magnitude,
+        ownedHagathaSelectors,
+      )
     } else {
       addLearnedSkillRank(effectiveRanks, effect.target, magnitude)
     }
@@ -517,6 +537,22 @@ function setMinimumSkillRank(ranks: number[], skillId: number, magnitude: number
     nativeSkillMaximumLevel(skillId),
     Math.max(ranks[skillId] ?? 0, magnitude),
   )
+}
+
+function setNativeGrantedSkillRank(
+  ranks: number[],
+  skillId: number,
+  magnitude: number,
+  ownedHagathaSelectors: readonly number[],
+): void {
+  const current = ranks[skillId] ?? 0
+  setMinimumSkillRank(ranks, skillId, magnitude)
+  if (current <= magnitude) {
+    ranks[skillId] = nativeHagathaRevelationRank(
+      ranks[skillId] ?? 0,
+      ownedHagathaSelectors,
+    )
+  }
 }
 
 function addLearnedSkillRank(ranks: number[], skillId: number, magnitude: number): void {

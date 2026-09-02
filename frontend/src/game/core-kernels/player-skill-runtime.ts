@@ -177,6 +177,7 @@ export function createPlayerSkillRuntime(
     equipmentModifiers: resolveEquippedNativeEffects(
       skillBook.permanentRanks,
       economy.equipment,
+      economy.ownedPerkSelectors,
     ).modifiers,
     hardenArmor: 0,
     hardenArmorMaximum: 0,
@@ -201,6 +202,7 @@ export function refreshPlayerSkillRuntime(
   const equipment = resolveEquippedNativeEffects(
     skillBook.permanentRanks,
     economy.equipment,
+    economy.ownedPerkSelectors,
   )
   const effectiveRanks = applyNativeMindstarRanks(
     energizeNativeWeldComponents(

@@ -56,7 +56,7 @@ disposition.
 | 3 Item | item candidate bound `*= 0.75` | verified working | seeded drop branch |
 | 4 Gold | Gold bound `*= 0.75`; amount `*= 1.25` | verified working | chance and exact amount |
 | 5 Seeker's | player vslot `+0x24`, `0x0052A640`; procedural gold lines to ground Gold/Sacks/Bonus | missing | exact membership, geometry, pulse, painter/teardown |
-| 6 Revelation | rank writers `0x00660320/0x00660580` clamp raised ranks to at least two; purchase refresh also fixes selected A/B | missing | learn/set/purchase-concentration branches |
+| 6 Revelation | rank writers `0x00660320/0x00660580` clamp raised ranks to at least two; purchase refresh also fixes selected A/B | missing | Historical field ownership was wrong here: selected A/B are the creation starter primary/secondary, not concentrations. See the 2026-09-02 reopening below. |
 | 7 Cheat Death | one charge at `+0x820`; lethal path restores `0.5 * max HP` before death and consumes it | missing | Drinker ordering, one-use/save/replication/VFX |
 | 8 Perky | catalog row exists; retail offer builder excludes it | native-dormant | out-of-system builder proof |
 | 9 Scatter | Orb bound `*= 0.5`; larger-value flag | verified working | chance/value seeded branch |
@@ -118,8 +118,10 @@ No member is blocked by the browser platform.
   `0.5 * cappedDistance`, width 3. Gold is `(0.85,0.73,0.44)` and alpha is
   `0.75 + 0.5*sin((2*tick + 35*actorId) degrees)`. It is owner-local,
   source-alpha, and paints in the player post-main vslot before later managers.
-- Revelation clamps only a skill being raised/set, plus the two selected
-  concentration rows during purchase refresh; buying it does not upgrade the
+- Revelation clamps a skill routed through the native increment/set writers,
+  plus the two creation starter rows during purchase refresh. The earlier
+  concentration interpretation was falsified and is superseded by the
+  2026-09-02 field-writer reopening below. Buying it still does not sweep the
   entire old skill book.
 - A Weld records its component ranks at construction. Without Spellwelder that
   vector stays frozen; with the charm, refresh rebuilds from current effective
@@ -172,7 +174,8 @@ No member is blocked by the browser platform.
   negative Water/Steam/Blizzard direct-handler push cases.
 - Runtime matrix: direct/poison/shielded hurt, Drinker-before-Cheat, spent flags,
   save/restore, and two-owner isolation.
-- Progression matrix: Revelation increment/set/concentration purchase, all ten
+- Progression matrix: Revelation increment/set/starter-pair purchase, negative
+  selected-concentration coverage, all ten
   frozen/rebuilt Welds, Weird Caster RNG/bias/Revelation composition, and
   Sorceror/Split Mind nonregression.
 - Last Word: exact death ticks, 825/5,000 target boundary, complete Mindblast
@@ -201,7 +204,7 @@ documents fail closed on malformed charges or Weld caches.
 | 3 Item | verified retained | seeded item candidate bound |
 | 4 Gold | verified retained | seeded Gold bound and `1.25` amount |
 | 5 Seeker's | verified implemented | Mac WebGL2 rendered four segments for two eligible actors while the Orb was excluded; exact 100/300/35/50 geometry is table-tested |
-| 6 Revelation | verified implemented | purchase concentration and new learned/Weird rows clamp to rank two |
+| 6 Revelation | superseded by the 2026-09-02 reopening below | purchase-time creation starter rows, later learned/Weird rows, and effective-rank equipment grants clamp to rank two; selected concentrations do not receive a purchase-time rewrite |
 | 7 Cheat Death | verified implemented | one charge restores half maximum HP; Drinker wins first; spent state saves and replicates |
 | 8 Perky | exact native dormant | both offer builders exclude the catalog row |
 | 9 Scatter | verified retained | seeded Orb chance/value branches |
@@ -772,3 +775,264 @@ offer, effect, or lifecycle change follows from this report.
   behavior changed. No Hagatha member is browser-blocked and no material
   unknown remains. Commit, push, deployment, and production restart were not
   performed.
+
+## 2026-09-02 — Revelation creation-starter and rank-writer ownership correction
+
+### Reported smell and parity question
+
+- Reported web behavior: buying Revelation makes later learned skills start at
+  rank two, but the two skills created with the wizard remain rank one. A Fire
+  wizard therefore keeps Fireball and Ring of Fire at rank one.
+- Stock behavior to recover: Revelation's complete permanent/effective-rank
+  floor, including its purchase-time targets, every later rank writer, the
+  complete authored equipment skill-effect table, Tutorial setup, authority,
+  persistence, and removal/rebuy boundaries.
+- Reproduction inputs/scenes: all five creation elements; Fireball/Ring of Fire
+  as the reported pair; a pre-existing nonstarter skill; selected concentration
+  A/B; normal and Insight level choices; Weird Caster; Tutorial Acid Rain;
+  every authored equipment kind-4/7 row; save/resume; and two participants.
+- Falsifiers: `+0x86C/+0x870` are concentration fields; purchase refresh walks
+  every learned row; one of the five creation pairs does not pass through those
+  fields; `0x00660580` omits selector flag `+0x7D2`; or the web purchase already
+  changes either starter rank.
+
+This is a secondary report in a covered system. The 2026-08-23 pass stopped at
+the reads in `0x0067C360` and labeled `+0x86C/+0x870` as concentration A/B
+without sweeping their writers. That skipped the ownership and membership
+rules: fresh-character setup `0x005D0290` proves they are the creation starter
+primary and secondary, while concentration selection lives on a separate
+surface. The same pass named both rank writers but did not compose Revelation
+with the authored equipment effects routed through `0x00660580`. This reopening
+replaces both falsified assumptions across the complete rank-floor system.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Player stock/web comparison | issue report, 2026-09-02 | Stock raises Fireball and Ring of Fire to rank two when Revelation is acquired; current web leaves both at one while later acquisitions use rank two. | high for the observed pair |
+| Retail identity | unmodified `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same sealed 0.72.5 image as the prior Hagatha, skill, equipment, and Tutorial entries. | high |
+| Creation instructions | `0x005D0290`, raw `0x005D0468..0x005D04C8` | The five element branches call increment writer `0x00660320` for root, starting primary, and starting secondary, then write the primary to `+0x86C` and the secondary to `+0x870`. Fire writes `16` and `21`. | high |
+| Revelation refresh instructions | selector apply `0x0066EF70`; refresh `0x0065F9A0`; Skills vslot `+0x60 -> 0x0067C360`; raw `0x0067C541..0x0067C645` | Selector flag 6 is byte `+0x7D2`. When set, refresh reads the two IDs at `+0x86C/+0x870` and writes `max(2, permanentRank)` to each addressed row. It does not scan the skill table or read concentration actions. | high |
+| Rank-writer xref sweep | `0x00660320`: 19 refs in seven functions; `0x00660580`: two refs in `0x00576AA0`; `0x0067C360`: two Skills vtable entries at `0x0079FF5C/0x007A0D34` | Covers fresh setup, normal/Insight choices, Weird Caster, Tutorial/script/Book paths, and the two equipment set/grant calls. Both writers enforce the same selector-6 minimum. | high |
+| Tutorial instructions | `0x005D5CF0` | Tutorial grants skill 72 through `0x00660320`, then replaces `+0x870` with 72 before refresh. A pre-owned Revelation therefore composes with the authored Tutorial grant. | high |
+| Equipment instructions and static catalog | effect dispatcher `0x00576AA0`; setter `0x00660580`; Website `native-equipment-effects-catalog.json` | Exactly 30 authored skill-effect rows exist: kinds 4/5/6/7/8 count `2/6/2/19/1`. Only the 21 kind-4/7 rows route a zero-rank set/grant through the Revelation-aware setter; nine add/class/all-learned rows do not. | high |
+| Current web causal trace | Website `252ad560`; `applyPlayerEntityHagathaPurchaseEffects`, `applyNativeRevelationToConcentrations`, `applyPlayerSkillChoice`, `grantNativeWeirdCasterSkill`, `resolveNativeEquipmentEffects`, `preparePlayerEntityTutorialLoadout` | Purchase incorrectly sends selected concentration IDs to the two-row helper. Ordinary and Weird acquisitions already floor permanent rank. Tutorial and equipment one-rank grants do not consume Revelation ownership. | high |
+
+Fresh static queries used canonical project `SolomonDark/SolomonDark.exe`
+through the read-only replica wrapper from dirty, unmodified Mod Loader revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`. Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+The queried `decompile_targets.py`, `refs_to_addr_decompile.py`,
+`find_offset_accesses.py`, `find_writes_to_offset.py`, and
+`dump_insns_around.py` hashes are respectively
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`,
+`c6844b842ccd87aa70d290ae34553d874a8f90866eb234425f7c51fd8a438c4b`,
+`b66a0ddd1dc1fe1304156189c14700b394b9e87f845dfa616541ebc769f93738`,
+`500ace7391799ef3a93cc2c3b11828dde18c5eefd55c2f64694d29051b1538c4`,
+and `79249e8ea5eb04115bb284f1bef9b90d81cd74f2c5301a747d08908a36032b40`.
+No Mod Loader file was changed.
+
+### System boundary and membership inventory
+
+Native system: selector-6 Revelation's participant-owned minimum-rank rule,
+from PerkShop apply/refresh through the two retained creation-starter IDs, every
+permanent/effective rank writer, authored equipment rows, Tutorial override,
+derived refresh, replication, persistence, removal, and generation teardown.
+
+| Member / branch | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| selector-6 direct or bundle purchase | `0x0056C340 -> 0x0066EF70 -> 0x0065F9A0` | `exact-ported` by this reopening | accepted first acquisition floors only the two retained starter targets; rejection/removal/rebuy cannot add ranks above two |
+| Ether: Magic Missile 8 + Call Leviathan 11 | `0x005D0290` case 0 | `exact-ported` by this reopening | both permanent/effective ranks become two |
+| Fire: Fireball 16 + Ring of Fire 21 | `0x005D0290` case 1 | `exact-ported` by this reopening | reported pair both become two |
+| Air: Lightning 24 + Magic Storm 27 | `0x005D0290` case 2 | `exact-ported` by this reopening | both become two |
+| Water: Frost Jet 32 + Ring of Ice 35 | `0x005D0290` case 3 | `exact-ported` by this reopening | both become two |
+| Earth: Boulder 40 + Raise Golem 45 | `0x005D0290` case 4 | `exact-ported` by this reopening | both become two |
+| element/discipline roots 0..7 | separate `+0x82C/+0x830` fields and root rows | `out-of-system` — they are eligibility roots, not `+0x86C/+0x870` starter targets | remain rank one on purchase |
+| pre-existing learned nonstarter rows | no loop in `0x0067C541..0x0067C645` | `verified-already-at-parity` | buying Revelation does not bulk-promote the old skill book |
+| selected concentration A/B | separate Game/SettingsControl actions; no `0x0067C360` read | `exact-ported` by removal of the false web path | rank-one selected concentrations remain one at purchase; later acquisition still uses the common writer |
+| normal and Creativity Insight choices | `0x00671470 -> 0x00660320` | `verified-already-at-parity` | a newly learned row starts at two; an Insight double increment remains two or higher and respects maximum |
+| Weird Caster random secondary | `0x0067C360 -> 0x00660320` | `verified-already-at-parity` | selected unlearned category-2 row starts at two when selector 6 is already/in the same bundle |
+| random Book/increment paths | `0x0056D1B0`, `0x005D5910`, `0x00689750` xrefs to `0x00660320` | `verified-already-at-parity` | only a learned row can be incremented; rank one naturally becomes two and no purchase-time sweep is introduced |
+| Tutorial Acid Rain 72 | `0x005D5CF0 -> 0x00660320`, then `+0x870=72` | `exact-ported` by this reopening | a profile already owning Revelation receives Tutorial rank two; neutral Tutorial remains rank one |
+| equipment kinds 5, 6, and 8: 6/2/1 authored rows | direct learned/class/all-learned add branches in `0x00576AA0` | `verified-already-at-parity` | they never call the set writer; learned rank-one additions already produce at least two |
+| Website developer `sd.dev.grant_skill`/Weld grants | explicit account-bound Website extension in entry 202 | `out-of-system` — no retail entitlement or command exists | retains its requested exact bounded rank count and does not infer Hagatha semantics |
+| save, protocol, portable import, Hall, run replacement | existing skill/economy owners | `verified-already-at-parity` | changed permanent/effective ranks and selector ownership already replicate and persist; no schema/protocol field is added |
+| participant authority and peers | player entity/economy owner | `verified-already-at-parity` | one participant's purchase/equipment/Tutorial refresh never changes another book |
+| Revelation removal and Game Over/new generation | requested removal extension; fresh `0x005D0290` equivalent | `verified-already-at-parity` | removal does not downgrade historical ranks; a new generation reconstructs rank-one starters until Revelation is acquired again |
+
+Every authored equipment row routed through the Revelation-aware native setter
+has an explicit disposition below. `kind` is the catalog effect number.
+
+| Authored equipment effect row | kind / target / magnitude | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| recipe 0 Pentaclostic Ring effect 0 | 7 / 11 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 1 Arcanoric Robe effect 0 | 7 / 27 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 1 Arcanoric Robe effect 1 | 7 / 28 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 2 Cosmofluxic Wand effect 0 | 7 / 49 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 2 Cosmofluxic Wand effect 1 | 7 / 51 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 3 Theptoplasmar Amulet effect 0 | 7 / 21 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 4 Synertauxic Ring effect 0 | 7 / 35 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 5 Sublunarous Hat effect 0 | 7 / 45 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 5 Sublunarous Hat effect 1 | 7 / 41 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 13 Bug-Master's Wand effect 0 | 7 / 11 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 15 Pan-Dimensional Strangler effect 0 | 4 / 11 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 19 Storm Choker effect 0 | 7 / 27 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 26 Clayshaper's Ring effect 0 | 7 / 45 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 27 Claybaker's Ring effect 0 | 7 / 45 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 28 Kiln effect 0 | 7 / 16 / 2 | `verified-already-at-parity` with composed coverage | already two; Revelation is idempotent |
+| recipe 33 Absolox's Boomstick effect 0 | 7 / 16 / 2 | `verified-already-at-parity` with composed coverage | already two; Revelation is idempotent |
+| recipe 33 Absolox's Boomstick effect 1 | 7 / 40 / 2 | `verified-already-at-parity` with composed coverage | already two; Revelation is idempotent |
+| recipe 35 Ringwall effect 0 | 4 / 54 / 2 | `verified-already-at-parity` with composed coverage | already two; Revelation is idempotent |
+| recipe 40 Yzmar's Handicap effect 0 | 7 / 64 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| recipe 40 Yzmar's Handicap effect 1 | 7 / 56 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+| set 3 Tempest Kit effect 1 | 7 / 29 / 1 | `exact-ported` | neutral 1, Revelation 2 |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread
+
+- Owner and construction: `Skills_Wizard` owns the 0x70-byte rank rows and the
+  retained creation IDs. `0x005D0290` derives all five pairs, increments them,
+  and stores primary at `+0x86C` and secondary at `+0x870`. Current selection,
+  concentrations, belt bindings, and Weld identity are separate owners.
+- Upstream producers: PerkShop appends selector 6 and sets byte `+0x7D2` through
+  `0x0066EF70`; accepted single and bundle purchases then invoke the common
+  refresh. Normal choices, Tutorial/script/Book grants, Weird Caster, and
+  equipment effects feed one of the two rank writers.
+- State transitions: purchase refresh floors only the two retained IDs.
+  `0x00660320` floors the permanent rank it increments; `0x00660580` floors the
+  effective rank it sets for equipment kind 4/7. The floor is monotonic and
+  idempotent: ranks above two are unchanged and removal never downgrades them.
+- Downstream consumers: derived skill runtime, spell damage/mana/cooldowns,
+  SkillScreen/HUD/quickbar, Weld caches, protocol snapshots, browser/native
+  saves, Hall data, and peer presentation already consume the same ranks.
+- Entry/reset/teardown: save/resume and ordinary run replacement retain the
+  ranks. Tutorial temporarily writes skill 72 into the exceptional secondary
+  field. Game Over/Create establishes a new pair at rank one and retains only
+  durable profile ownership according to the existing generation boundary.
+
+### Recovered behavioral contract
+
+- On accepted Revelation acquisition, exactly the creation element's two
+  starter rows become `max(currentPermanentRank, 2)` in both permanent and
+  refreshed effective state. No current-primary, concentration, learned-order,
+  category, or whole-book scan selects those targets.
+- Subsequent permanent-rank acquisitions and the Tutorial grant go through
+  `0x00660320`; a newly learned rank one is immediately two while any higher
+  result is retained and bounded by its authored maximum.
+- Equipment kind 4 and the unlearned branch of kind 7 go through `0x00660580`.
+  Selector 6 floors their effective result to two for the lifetime of the
+  equipment source. Unequipping reverts to permanent rank; no permanent grant
+  or learned-order entry is invented.
+- The setter clamps to the skill's authored maximum before applying the
+  selector-6 floor. Dampen 51 therefore reaches effective rank two from the
+  Cosmofluxic Wand even though its authored maximum is one. The web preserves
+  that stock ordering rather than re-clamping Revelation away.
+- Equipment kinds 5, 6, and 8 do not read Revelation. They add only to learned
+  effective rows, so a rank-one row already reaches at least two through the
+  authored magnitude. All 30 authored skill-effect rows are accounted for.
+- Purchase, rank, equipment, Tutorial, replication, and persistence state are
+  participant-owned. There is no timing, RNG, presentation, audio, collision,
+  protocol, or browser approximation in this correction.
+
+### Nearby-system findings
+
+- `+0x82C/+0x830` retain the creation element and discipline roots;
+  `+0x86C/+0x870` retain the creation primary and secondary/exceptional grant.
+  The four fields are serialized together, which explains the misleading old
+  `appearance_primary_*` labels but does not make them concentration actions.
+- Tutorial `0x005D5CF0` overwrites `+0x870` with Acid Rain 72 after granting it.
+  This is a real sibling of the same Revelation refresh, not a reason to infer
+  the currently selected secondary or concentration in ordinary play.
+- The equipment catalog contains 30 rank effects in the exact `2/6/2/19/1`
+  kind distribution above. The 21 set/grant rows are the only equipment members
+  requiring explicit Revelation ownership.
+
+### Confidence and open questions
+
+- Confirmed: retail/tool identity; all writers of the four retained fields;
+  raw creation and floor instructions; every xref of both rank writers and the
+  Revelation refresh; all five starter pairs; all 30 equipment rows; current
+  web call graph; authority and lifecycle owners.
+- Inferred: none required for implementation.
+- Unknown: none material.
+
+### Web implementation consequence
+
+- Replace the concentration-named helper with one creation-config-owned starter
+  helper. Derive the exact pair from the stored character element and call it
+  only when selector 6 is newly accepted.
+- Delete the purchase-time concentration read. Keep normal/Insight and Weird
+  acquisition on the existing shared minimum-rank helper.
+- Thread the participant's owned selectors into equipment rank resolution and
+  apply the same minimum only to kind 4/7 set/grant branches. Keep modifiers,
+  source ordering, permanent ranks, learned order, and neutral callers intact.
+- Compose Tutorial skill 72 with the same minimum when a retained profile owns
+  Revelation. No protocol/save schema or renderer change is required.
+
+### Validation contract
+
+- Focused progression coverage: all five exact starter pairs; rank-one to two;
+  ranks already two/higher; nonstarter and selected-concentration negatives;
+  ordinary, Insight, Weird Caster, and removal nonregressions.
+- Equipment coverage: enumerate all 30 authored kind-4..8 rows; assert exact
+  `2/6/2/19/1` membership; every one-rank kind-4/7 result becomes two only with
+  selector 6; magnitude-two and kinds 5/6/8 remain unchanged; unequip restores
+  permanent rank.
+- Authority coverage: accepted Fire purchase changes 16/21, not selected
+  concentration or another participant; bundle composition and Tutorial 72
+  use the same rule; snapshot/save round trip retains the result.
+- Complete Mac mini `/opt/homebrew/bin/bash ./scripts/validate.sh` against the
+  exact candidate tree.
+- Real Mac Chrome production-bundle journey: create a Fire wizard, buy
+  Revelation, open the Skill Book, and prove Fireball/Ring of Fire both show
+  level two. Focused authority coverage owns the nonstarter/concentration
+  negatives; page, console, failed-response, WebGL, and wire-error arrays must
+  be empty and the authoritative host must close cleanly.
+
+### Implementation validation receipt
+
+- Website authority now derives the purchase-time targets from the stored
+  character element through `applyNativeRevelationToStartingSkills`; the false
+  selected-concentration read is gone. The helper floors the exact five
+  creation pairs in place, refreshes effective rank, preserves higher ranks,
+  and runs only after an accepted selector-6 acquisition.
+- The participant's owned Hagatha selectors now reach equipment resolution.
+  Kind 4 and unlearned kind 7 use the native set-writer ordering: authored-max
+  clamp first, Revelation floor second. Tutorial Acid Rain 72 uses the same
+  selector-owned minimum. Kinds 5/6/8, permanent rank, learned order, source
+  ordering, neutral callers, protocol, and save schema are unchanged.
+- The Mac mini red run had 45 tests: 41 passed and the four missing contracts
+  failed at the one-rank equipment grant, all starter pairs, accepted Fire
+  purchase, and Tutorial Acid Rain. After implementation, the expanded focused
+  progression/equipment/entity/runtime set passed 217/217 and
+  `npx tsc -p tsconfig.test.json --noEmit` passed.
+- After `origin/main` advanced during acceptance and publication preparation,
+  the isolated candidate rebased cleanly through both non-overlapping changes
+  to `8efce567d5fb88506580a78bdd181b1407c0e8fb`. The final exact-tree Mac mini
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` passed: backend build had zero
+  warnings/errors; all 19 backend/contract tests,
+  the 1,802-test main frontend suite, supplemental portal/cheat/HUD/weather/
+  party/level-up/Tutorial/diagnostics/Hall/Hub UI suites, and 4/4 desktop tests
+  passed. Formatting, lint, architecture, production build, and media policy
+  gates passed. `Game-DTIQbzKb.js` measured 265,203 raw / 80,818 gzip bytes,
+  below the 524,288 / 134,144-byte limits.
+- Real Mac Chrome exercised the built production bundle and authoritative
+  loopback host through Hagatha selector-6 purchase, then opened the rendered
+  Skill Book. Its semantic receipt returned `Fireball, rank 2, assign to
+  selected belt slot` and `Ring of Fire, rank 2, assign to selected belt slot`;
+  visual inspection showed `FIREBALL 2` and `RING OF FIRE 2`. Browser/console
+  errors, failed and aborted requests/responses, WebGL losses, and wire errors
+  were empty. The websocket opened, the final Hub renderer was ready, and the
+  focused harness disconnected Chrome before host shutdown, exited zero, and
+  released both task ports.
+  The receipt SHA-256 is
+  `9910e2ee4f7ccdc2f9c8add1d284fa1f46db259094d9e43f2825d8012792b131`;
+  the inspected 1600x900 frame hashes to
+  `bffa38a6d7c2797ef6908e33a38bc778d74fd511f9352cb33ea64e1f7849b5f5`.
+- Focused authority tests carry the negative proof: a pre-existing nonstarter,
+  selected concentrations, another participant, rejection, removal/rebuy, and
+  save/snapshot round trips are not incorrectly rewritten. All native members
+  are accounted for, none is browser-blocked, and no material unknown remains.
+  Publication is authorized by the follow-up request; deployment and production
+  restart remain out of scope and were not performed.

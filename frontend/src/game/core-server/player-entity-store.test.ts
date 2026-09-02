@@ -49,6 +49,7 @@ import {
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
   playerStatBookAt,
+  preparePlayerEntityTutorialLoadout,
   removePlayerEntity,
   replacePlayerEconomy,
   replacePlayerCharacter,
@@ -65,6 +66,7 @@ import {
 
 const FIRST = { discipline: 'arcane', displayName: 'First', element: 'ether' } as const
 const SECOND = { discipline: 'mind', displayName: 'Second', element: 'water' } as const
+const FIRE = { discipline: 'body', displayName: 'Fire', element: 'fire' } as const
 
 test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   let store = createPlayerEntityStore()
@@ -874,12 +876,65 @@ test('direct rank grants reseed once per actually applied native rank', () => {
   assert.deepEqual(granted.rng, secondSeed.state)
 })
 
+test('Revelation purchase promotes both creation starters for every element and not concentrations', () => {
+  const cases = [
+    ['ether', 8, 11],
+    ['fire', 16, 21],
+    ['air', 24, 27],
+    ['water', 32, 35],
+    ['earth', 40, 45],
+  ] as const
+  for (const [element, primarySkillId, secondarySkillId] of cases) {
+    const config = { discipline: 'arcane', displayName: element, element } as const
+    let store = addPlayerEntity(
+      createPlayerEntityStore(),
+      'first',
+      config,
+      createPlayerCharacter(config, { x: 0, y: 0 }),
+      10,
+    )
+    store = replacePlayerEconomy(store, 'first', {
+      ...playerEconomyAt(store, 'first')!,
+      ownedPerkSelectors: [6],
+    })
+    const sourceBook = playerSkillBookAt(store, 'first')!
+    const permanentRanks = [...sourceBook.permanentRanks]
+    const effectiveRanks = [...sourceBook.effectiveRanks]
+    permanentRanks[57] = 1
+    effectiveRanks[57] = 1
+    store = {
+      ...store,
+      skillBooks: [{
+        ...sourceBook,
+        effectiveRanks,
+        learnedSkillOrder: [...sourceBook.learnedSkillOrder, 57],
+        permanentRanks,
+      }],
+      skillRuntimes: [{
+        ...store.skillRuntimes[0]!,
+        concentrationSkillIdA: 57,
+      }],
+    }
+
+    const applied = applyPlayerEntityHagathaPurchaseEffects(
+      store,
+      'first',
+      [6],
+      createNativeRng(123),
+    )
+    const book = playerSkillBookAt(applied.store, 'first')!
+    assert.equal(book.permanentRanks[primarySkillId], 2, `${element} primary`)
+    assert.equal(book.permanentRanks[secondarySkillId], 2, `${element} secondary`)
+    assert.equal(book.permanentRanks[57], 1, `${element} selected concentration`)
+  }
+})
+
 test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias atomically', () => {
   let store = addPlayerEntity(
     createPlayerEntityStore(),
     'first',
-    FIRST,
-    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    FIRE,
+    createPlayerCharacter(FIRE, { x: 0, y: 0 }),
     10,
   )
   store = replacePlayerEconomy(store, 'first', {
@@ -888,9 +943,19 @@ test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias a
   })
   store = {
     ...store,
+    skillBooks: [{
+      ...store.skillBooks[0]!,
+      effectiveRanks: store.skillBooks[0]!.effectiveRanks.map((rank, skillId) => (
+        skillId === 57 ? 1 : rank
+      )),
+      learnedSkillOrder: [...store.skillBooks[0]!.learnedSkillOrder, 57],
+      permanentRanks: store.skillBooks[0]!.permanentRanks.map((rank, skillId) => (
+        skillId === 57 ? 1 : rank
+      )),
+    }],
     skillRuntimes: [{
       ...store.skillRuntimes[0]!,
-      concentrationSkillIdA: 11,
+      concentrationSkillIdA: 57,
     }],
   }
   const applied = applyPlayerEntityHagathaPurchaseEffects(
@@ -900,11 +965,30 @@ test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias a
     createNativeRng(123),
   )
   const book = playerSkillBookAt(applied.store, 'first')!
-  assert.equal(book.permanentRanks[11], 2)
+  assert.equal(book.permanentRanks[16], 2)
+  assert.equal(book.permanentRanks[21], 2)
+  assert.equal(book.permanentRanks[57], 1)
   assert.notEqual(applied.weirdCasterSkillId, null)
   assert.equal(book.permanentRanks[applied.weirdCasterSkillId!], 2)
   assert.equal(playerProgressionAt(applied.store, 'first')?.disciplineOfferBias, true)
   assert.notEqual(playerProgressionAt(applied.store, 'first')?.offerSeed, 10)
+})
+
+test('Tutorial Acid Rain grant composes with a retained Revelation charm', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [6],
+  })
+  const prepared = preparePlayerEntityTutorialLoadout(store, 'first')
+  assert.equal(playerSkillBookAt(prepared, 'first')?.permanentRanks[72], 2)
+  assert.equal(playerSkillBookAt(prepared, 'first')?.effectiveRanks[72], 2)
 })
 
 test('Hagatha removal refreshes derived state and clears retained one-shot runtime', () => {

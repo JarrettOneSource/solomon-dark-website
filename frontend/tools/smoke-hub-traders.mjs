@@ -229,8 +229,8 @@ try {
     await writeFile(`${screenshotRoot}-${receiptKind}-receipt.json`, `${JSON.stringify(receipt, null, 2)}\n`)
     process.stdout.write(`${JSON.stringify(receipt)}\n`)
     step('focused Tonic-inclusive Hagatha capacity receipt complete')
-    await gameHost?.close()
     await browser.close()
+    await gameHost?.close()
     await staticServer?.close()
     process.exit(0)
   }
@@ -1160,6 +1160,8 @@ async function exerciseHagathaCapacity(page) {
   await page.waitForTimeout(250)
   await page.screenshot({ path: `${screenshotRoot}-hagatha-capacity-bundle.png` })
   await reopened.getByRole('button', { name: 'Done' }).click()
+  await reopened.waitFor({ state: 'detached' })
+  const revelationStarterRanks = await captureRevelationStarterRanks(page)
 
   return {
     bundleTooltip,
@@ -1173,7 +1175,34 @@ async function exerciseHagathaCapacity(page) {
     purchases,
     postPurchaseOfferLayout,
     rejectedSelector,
+    revelationStarterRanks,
   }
+}
+
+async function captureRevelationStarterRanks(page) {
+  await page.getByRole('button', { name: 'Open skills' }).click()
+  const skills = page.getByRole('dialog', { name: 'Skills' })
+  await skills.waitFor()
+  await page.locator(
+    '.skill-book-stage[role="dialog"][aria-label="Skills"]'
+      + '[data-transition-phase="settled"][data-renderer-state="ready"]',
+  ).waitFor({ timeout: 10_000 })
+  const entries = {
+    fireball: skills.locator('[data-skill-id="16"]'),
+    ringOfFire: skills.locator('[data-skill-id="21"]'),
+  }
+  const labels = {}
+  for (const [name, entry] of Object.entries(entries)) {
+    await entry.waitFor()
+    labels[name] = await entry.getAttribute('aria-label')
+  }
+  assert.match(labels.fireball, /^Fireball, rank 2(?:,|$)/)
+  assert.match(labels.ringOfFire, /^Ring of Fire, rank 2(?:,|$)/)
+  await page.waitForTimeout(250)
+  await page.screenshot({ path: `${screenshotRoot}-hagatha-revelation-fire-starters.png` })
+  await skills.getByRole('button', { name: 'Close skills' }).click()
+  await skills.waitFor({ state: 'detached' })
+  return labels
 }
 
 async function rejectHagathaSelector(

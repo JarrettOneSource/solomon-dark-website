@@ -141,6 +141,38 @@ test('native refresh replaces an invalid selected primary after concentration la
   assert.equal(result.rng.indexA, 1)
 })
 
+test('Revelation raises one-rank equipment grants in effective state only', () => {
+  const book = createPlayerSkillBook(CONFIG)
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find(({ sourceIndex }) => sourceIndex === 1)
+  assert.ok(recipe)
+  const equipment = {
+    ...base.equipment,
+    robe: createEquipmentInventoryItem(recipe, base.nextItemId),
+  }
+  const neutralEconomy = { ...base, equipment }
+  const neutral = createPlayerSkillRuntime(book, statBook, neutralEconomy)
+  assert.equal(neutral.skillBook.permanentRanks[27], 0)
+  assert.equal(neutral.skillBook.permanentRanks[28], 0)
+  assert.equal(neutral.skillBook.effectiveRanks[27], 1)
+  assert.equal(neutral.skillBook.effectiveRanks[28], 1)
+
+  const revelationEconomy = { ...neutralEconomy, ownedPerkSelectors: [6] }
+  const revelation = createPlayerSkillRuntime(book, statBook, revelationEconomy)
+  assert.equal(revelation.skillBook.permanentRanks[27], 0)
+  assert.equal(revelation.skillBook.permanentRanks[28], 0)
+  assert.equal(revelation.skillBook.effectiveRanks[27], 2)
+  assert.equal(revelation.skillBook.effectiveRanks[28], 2)
+
+  const unequipped = createPlayerSkillRuntime(book, statBook, {
+    ...revelationEconomy,
+    equipment: base.equipment,
+  })
+  assert.equal(unequipped.skillBook.effectiveRanks[27], 0)
+  assert.equal(unequipped.skillBook.effectiveRanks[28], 0)
+})
+
 test('unforge bonuses enter the native base stat and offensive consumer lanes', () => {
   const book = createPlayerSkillBook(CONFIG)
   const statBook = playerStatBook()

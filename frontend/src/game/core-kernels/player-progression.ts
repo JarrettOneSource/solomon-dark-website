@@ -1207,21 +1207,20 @@ export function grantNativeWeirdCasterSkill(
   }
 }
 
-/** Native Revelation immediately promotes only the two selected concentration rows. */
-export function applyNativeRevelationToConcentrations(
+/** Native Revelation purchase refresh promotes the two creation starter rows. */
+export function applyNativeRevelationToStartingSkills(
   skillBook: PlayerSkillBookComponent,
-  concentrationSkillIds: readonly (number | null)[],
+  config: Pick<PlayerCharacterConfig, 'element'>,
 ): PlayerSkillBookComponent {
   const permanentRanks = [...skillBook.permanentRanks]
   const effectiveRanks = [...skillBook.effectiveRanks]
   let changed = false
-  for (const skillId of new Set(concentrationSkillIds)) {
-    if (skillId === null) continue
+  for (const skillId of STARTING_SKILLS[config.element]) {
     const rank = permanentRanks[skillId] ?? 0
     const maximum = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
-    if (rank !== 1 || maximum < 2) continue
+    if (rank >= 2 || maximum < 2) continue
     permanentRanks[skillId] = 2
-    effectiveRanks[skillId] = 2
+    effectiveRanks[skillId] = Math.max(2, effectiveRanks[skillId] ?? 0)
     changed = true
   }
   return changed

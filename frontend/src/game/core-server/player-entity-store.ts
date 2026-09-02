@@ -33,7 +33,7 @@ import {
 } from '../core-kernels/player-combat.ts'
 import {
   applyNativeSkillAcquisitionOfferSeeds,
-  applyNativeRevelationToConcentrations,
+  applyNativeRevelationToStartingSkills,
   applyPlayerDamageX4Bonus,
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
@@ -97,6 +97,7 @@ import {
   consumeNativeHagathaCheatDeath,
   nativeHagathaDrinkerShouldUseHealthPotion,
   nativeHagathaDrinkerShouldUseManaPotion,
+  nativeHagathaRevelationRank,
   ownsNativeHagathaSelector,
   removeNativeHagathaRuntime,
 } from '../core-kernels/native-hagatha-effects.ts'
@@ -631,12 +632,14 @@ export function preparePlayerEntityTutorialLoadout(
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
   const current = source.skillBooks[index]!
+  let economy = source.economies[index]!
   const permanentRanks = [...current.permanentRanks]
   const effectiveRanks = [...current.effectiveRanks]
+  const tutorialRank = nativeHagathaRevelationRank(1, economy.ownedPerkSelectors)
   permanentRanks[11] = 0
   effectiveRanks[11] = 0
-  permanentRanks[72] = Math.max(1, permanentRanks[72] ?? 0)
-  effectiveRanks[72] = Math.max(1, effectiveRanks[72] ?? 0)
+  permanentRanks[72] = Math.max(tutorialRank, permanentRanks[72] ?? 0)
+  effectiveRanks[72] = Math.max(tutorialRank, effectiveRanks[72] ?? 0)
   const skillBook: PlayerSkillBookComponent = {
     ...current,
     effectiveRanks: Object.freeze(effectiveRanks),
@@ -649,7 +652,6 @@ export function preparePlayerEntityTutorialLoadout(
     weldBuildId: null,
     weldComponentRanks: null,
   }
-  let economy = source.economies[index]!
   for (const subtype of [0, 1] as const) {
     const potion = firstNativePotion(economy, subtype)
     if (potion === null) continue
@@ -966,11 +968,7 @@ export function applyPlayerEntityHagathaPurchaseEffects(
     progression = { ...progression, hagathaRuntime }
   }
   if (purchasedSelectors.includes(NATIVE_HAGATHA_SELECTORS.revelation)) {
-    const runtime = source.skillRuntimes[index]!
-    skillBook = applyNativeRevelationToConcentrations(skillBook, [
-      runtime.concentrationSkillIdA,
-      runtime.concentrationSkillIdB,
-    ])
+    skillBook = applyNativeRevelationToStartingSkills(skillBook, source.configs[index]!)
   }
   let weirdCasterSkillId: number | null = null
   if (purchasedSelectors.includes(NATIVE_HAGATHA_SELECTORS.weirdCaster)) {
