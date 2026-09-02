@@ -1,10 +1,14 @@
 import {
   activePlayerWeldBuildId,
+  nativeWeldBuild,
+  NATIVE_SKILL_CATALOG,
   SPELL_WELDING_SKILL_ID,
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from './player-progression.ts'
 import {
+  resolveNativeSkillDamageValue,
+  resolveNativeSkillManaCostValue,
   validateOffensiveFactors,
   type NativeOffensiveSpellFactors,
 } from './native-offensive-resolution.ts'
@@ -108,6 +112,30 @@ export type NativePrimarySkillProfile =
 
 export type NativePrimaryCastMode = 'continuous' | 'one-shot'
 
+export const NATIVE_PRIMARY_EARTH_INITIAL_CHARGE = Math.fround(0.18)
+
+export type NativePrimarySpellDamageUnit =
+  | 'bolt'
+  | 'boulder'
+  | 'impact'
+  | 'rock'
+  | 'second'
+
+export type NativePrimarySpellManaUnit = 'cast' | 'sec'
+
+export interface NativePrimarySpellDescriptor {
+  readonly damageRange: boolean
+  readonly damageUnit: NativePrimarySpellDamageUnit
+  readonly manaUnit: NativePrimarySpellManaUnit
+  readonly name: string
+}
+
+export interface NativePrimarySpellSummary {
+  readonly damageMaximum: number
+  readonly damageMinimum: number
+  readonly manaCost: number
+}
+
 export function nativePrimaryCastMode(
   skillId: 8 | 16 | 24 | 32 | 40,
 ): NativePrimaryCastMode {
@@ -146,13 +174,25 @@ export function nativePrimarySkillProfile(
   const rank = effectiveRank(skillBook, primarySkillId, true)
   const rawDamageMinimum = damageValue(statBook, primarySkillId, rank, 'minimum')
   const rawDamageMaximum = damageValue(statBook, primarySkillId, rank, 'maximum')
-  const damageMinimum = rawDamageMinimum * factors.damage
-  const damageMaximum = rawDamageMaximum * factors.damage
+  const damageMinimum = resolveNativeSkillDamageValue(
+    primarySkillId,
+    rawDamageMinimum,
+    factors,
+  )
+  const damageMaximum = resolveNativeSkillDamageValue(
+    primarySkillId,
+    rawDamageMaximum,
+    factors,
+  )
   const common = {
     damageMaximum,
     damageMinimum,
     damageRollCount: rawDamageMaximum - rawDamageMinimum + 1,
-    manaCost: primaryManaCost(skillBook, statBook, primarySkillId) * factors.manaCost,
+    manaCost: resolveNativeSkillManaCostValue(
+      primarySkillId,
+      primaryManaCost(skillBook, statBook, primarySkillId),
+      factors,
+    ),
     rank,
     skillId: primarySkillId,
   }
@@ -335,17 +375,111 @@ function nativeWeldPrimarySkillProfile(
     buildId: vector.buildId,
     castKind: vector.castKind,
     damageFactor: factors.damage,
-    damageMaximum: vector.values[damageMaximumIndex]! * factors.damage,
-    damageMinimum: vector.values[damageMinimumIndex]! * factors.damage,
+    damageMaximum: resolveNativeSkillDamageValue(
+      SPELL_WELDING_SKILL_ID,
+      vector.values[damageMaximumIndex]!,
+      factors,
+    ),
+    damageMinimum: resolveNativeSkillDamageValue(
+      SPELL_WELDING_SKILL_ID,
+      vector.values[damageMinimumIndex]!,
+      factors,
+    ),
     damageRollCount: 1,
     kind: 'weld',
-    manaCost: vector.values[vector.castKind === 'one-shot' && vector.buildId !== 1009 ? 2 : 1]!
-      * factors.manaCost,
+    manaCost: resolveNativeSkillManaCostValue(
+      SPELL_WELDING_SKILL_ID,
+      vector.values[vector.castKind === 'one-shot' && vector.buildId !== 1009 ? 2 : 1]!,
+      factors,
+    ),
     rank,
     skillId: vector.buildId,
     vector,
   })
 }
+
+export function nativePrimarySpellDescriptor(
+  selectedPrimarySkillId: number,
+  weldBuildId: number | null,
+): NativePrimarySpellDescriptor {
+  if ((PRIMARY_SKILL_IDS as readonly number[]).includes(selectedPrimarySkillId)) {
+    const skillId = selectedPrimarySkillId as typeof PRIMARY_SKILL_IDS[number]
+    const skill = NATIVE_SKILL_CATALOG[skillId]
+    if (!skill) throw new RangeError(`native primary skill ${skillId} is missing`)
+    switch (skillId) {
+      case 8:
+        return Object.freeze({ damageRange: true, damageUnit: 'bolt', manaUnit: 'cast', name: skill.name })
+      case 16:
+        return Object.freeze({ damageRange: false, damageUnit: 'bolt', manaUnit: 'cast', name: skill.name })
+      case 24:
+      case 32:
+        return Object.freeze({ damageRange: false, damageUnit: 'second', manaUnit: 'sec', name: skill.name })
+      case 40:
+        return Object.freeze({ damageRange: true, damageUnit: 'boulder', manaUnit: 'sec', name: skill.name })
+    }
+  }
+  if (selectedPrimarySkillId !== SPELL_WELDING_SKILL_ID) {
+    throw new RangeError(`skill ${selectedPrimarySkillId} is not a native selected primary`)
+  }
+  const build = nativeWeldBuild(weldBuildId ?? Number.NaN)
+  if (!build) throw new RangeError('selected Spell Welding primary has no native build')
+  switch (build.id) {
+    case 1000:
+    case 1001:
+    case 1002:
+      return Object.freeze({ damageRange: true, damageUnit: 'bolt', manaUnit: 'cast', name: build.syntheticName })
+    case 1003:
+    case 1004:
+    case 1005:
+      return Object.freeze({ damageRange: false, damageUnit: 'second', manaUnit: 'sec', name: build.syntheticName })
+    case 1006:
+      return Object.freeze({ damageRange: true, damageUnit: 'boulder', manaUnit: 'sec', name: build.syntheticName })
+    case 1007:
+      return Object.freeze({ damageRange: true, damageUnit: 'impact', manaUnit: 'sec', name: build.syntheticName })
+    case 1008:
+      return Object.freeze({ damageRange: false, damageUnit: 'rock', manaUnit: 'sec', name: build.syntheticName })
+    case 1009:
+      return Object.freeze({ damageRange: false, damageUnit: 'bolt', manaUnit: 'cast', name: build.syntheticName })
+    default:
+      throw new RangeError(`native Weld build ${build.id} has no Inventory summary`)
+  }
+}
+
+export function nativePrimarySpellSummary(
+  skillBook: PlayerSkillBookComponent,
+  statBook: PlayerStatBookComponent,
+  factors: NativeOffensiveSpellFactors,
+): NativePrimarySpellSummary {
+  const profile = nativePrimarySkillProfile(skillBook, statBook, factors)
+  let damageMinimum = profile.damageMinimum
+  if (profile.kind === 'earth') {
+    const rawDamage = damageValue(statBook, 40, profile.rank, 'minimum')
+    damageMinimum = boulderDisplayMinimum(rawDamage, 40, factors)
+  } else if (profile.kind === 'weld' && profile.buildId === 1006) {
+    damageMinimum = boulderDisplayMinimum(
+      profile.vector.values[0]!,
+      SPELL_WELDING_SKILL_ID,
+      factors,
+    )
+  }
+  return Object.freeze({
+    damageMaximum: profile.damageMaximum,
+    damageMinimum,
+    manaCost: profile.manaCost,
+  })
+}
+
+function boulderDisplayMinimum(
+  rawDamage: number,
+  skillId: number,
+  factors: NativeOffensiveSpellFactors,
+): number {
+  const initialDamage = Math.fround(
+    rawDamage * NATIVE_PRIMARY_EARTH_INITIAL_CHARGE * NATIVE_PRIMARY_EARTH_INITIAL_CHARGE,
+  )
+  return Math.max(1, resolveNativeSkillDamageValue(skillId, initialDamage, factors))
+}
+
 function primaryManaCost(
   skillBook: PlayerSkillBookComponent,
   statBook: PlayerStatBookComponent,

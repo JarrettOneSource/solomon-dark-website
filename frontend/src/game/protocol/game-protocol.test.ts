@@ -1219,8 +1219,14 @@ test('server welcome round-trips content, kernel, character, and world ownership
     inventoryStats: {
       castSpeedPercent: 100,
       magicResistancePercent: 0,
+      manaRecoveryPerSecond: 10,
       painResistancePercent: 0,
       poisonResistancePercent: 0,
+      primarySpell: {
+        damageMaximum: 2,
+        damageMinimum: 1,
+        manaCost: 6,
+      },
       walkSpeedPercent: 100,
     },
     learnedSkills: [
@@ -2681,6 +2687,17 @@ test('protocol validates active primary and concentration selections against eff
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(message(inactivePrimary))),
     /selectedPrimarySkillId is not a learned primary/,
+  )
+
+  const invertedPrimaryStats = JSON.parse(JSON.stringify(baseFrame))
+  invertedPrimaryStats.players['player-1'].progression.inventoryStats.primarySpell = {
+    damageMaximum: 1,
+    damageMinimum: 2,
+    manaCost: 6,
+  }
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(message(invertedPrimaryStats))),
+    /primarySpell damage range is inverted/,
   )
 
   const effectiveOnlyQuickbar = JSON.parse(JSON.stringify(baseFrame))

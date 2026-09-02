@@ -204,6 +204,7 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.maximumMana, 200)
   assert.equal(derived.maximumHealth, 100)
   assert.equal(derived.manaRecoveryPerTick, 0.125)
+  assert.equal(derived.manaRecoveryPerSecond, 12.5)
   assert.equal(derived.meditationIdleDelayTicks, 350)
   assert.equal(derived.meditationRecoveryMultiplier, 4)
   assert.equal(derived.offensiveManaCostFactor, 0.9)
@@ -218,6 +219,29 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.deflectChancePercent, 10)
   assert.equal(derived.poisonResistance, 0.2)
   assert.equal(derived.castProgressFactor, 1.1)
+})
+
+test('mana recovery applies native flat equipment in per-second units', () => {
+  const book = rankedBook({})
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  const created = createPlayerSkillRuntime(book, statBook, economy)
+  const runtime = {
+    ...created.runtime,
+    equipmentModifiers: {
+      ...created.runtime.equipmentModifiers,
+      manaRecovery: { offset: 5, scale: 1 },
+    },
+  }
+  const derived = playerSkillDerivedStats(
+    runtime,
+    created.skillBook,
+    statBook,
+    progression(),
+    economy,
+  )
+  assert.equal(derived.manaRecoveryPerSecond, 15)
+  assert.equal(derived.manaRecoveryPerTick, 0.15)
 })
 
 test('Rush, concentration, and the sole authored walk-speed item compose above one', () => {

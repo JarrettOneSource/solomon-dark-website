@@ -49,6 +49,7 @@ import { effectiveSkillNumericValue } from '../core-kernels/player-skill-runtime
 import {
   nativeSecondaryAbilityManaCost,
 } from '../core-kernels/native-secondary-abilities.ts'
+import { nativePrimarySpellSummary } from '../core-kernels/native-primary-skill-profile.ts'
 import {
   NATIVE_SECONDARY_ABILITY_IDS,
 } from '../core-kernels/native-secondary-ability-contract.ts'
@@ -285,6 +286,7 @@ function protocolPlayerState(
     globalManaReduction: derived.offensiveManaCostReduction,
     manaCost: derived.offensiveManaCostFactor,
   }
+  const primarySpell = nativePrimarySpellSummary(skillBook, statBook, offensiveFactors)
   const learnedSkills: Array<readonly [number, number, number]> = []
   for (let skillId = 0; skillId < skillBook.permanentRanks.length; skillId += 1) {
     const permanentRank = skillBook.permanentRanks[skillId] ?? 0
@@ -390,8 +392,10 @@ function protocolPlayerState(
       inventoryStats: {
         castSpeedPercent: Math.fround(derived.castProgressFactor * 100),
         magicResistancePercent: Math.fround(derived.magicResistance * 100),
+        manaRecoveryPerSecond: derived.manaRecoveryPerSecond,
         painResistancePercent: Math.fround(derived.damageResistance * 100),
         poisonResistancePercent: Math.fround(derived.poisonResistance * 100),
+        primarySpell,
         walkSpeedPercent: Math.fround(derived.movementFactor * 100),
       },
       learnedSkills,

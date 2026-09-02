@@ -1,12 +1,12 @@
 import {
-  PLAYER_COMBAT_TICKS_PER_SECOND,
-  PLAYER_MANA_RECOVERY_PER_TICK,
-} from '../core-kernels/player-combat.ts'
-import {
   NATIVE_SKILL_CATALOG,
   nativeSkillColorRoot,
-  playerStatBook,
 } from '../core-kernels/player-progression.ts'
+import {
+  nativePrimarySpellDescriptor,
+  type NativePrimarySpellDamageUnit,
+  type NativePrimarySpellManaUnit,
+} from '../core-kernels/native-primary-skill-profile.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
@@ -31,6 +31,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from '../core-kernels/player-character.ts'
+import type { ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import {
   layoutNativeUiSingleActionMessage,
   type NativeUiMessageDataLineSpec,
@@ -442,9 +443,8 @@ export const HUB_INVENTORY_ATTRIBUTES_PAGE = {
   valueLeft: 216,
 } as const
 
-export function hubInventoryPrimarySpellTint(element: WizardElement): number {
-  const skillId = PRIMARY_SKILL_BY_ELEMENT[element]
-  return skillPickerRootTint(nativeSkillColorRoot(skillId))
+export function hubInventoryPrimarySpellTint(selectedPrimarySkillId: number): number {
+  return skillPickerRootTint(nativeSkillColorRoot(selectedPrimarySkillId))
 }
 
 export function hubInventoryStatsPage(value: number): 0 | 1 | 2 {
@@ -1516,65 +1516,42 @@ export function hubDowsingFieldTint(nativeTick: number): number {
   return (0xff << 16) | (green << 8) | 0xff
 }
 
-const PRIMARY_SKILL_BY_ELEMENT: Readonly<Record<WizardElement, number>> = {
-  air: 24,
-  earth: 40,
-  ether: 8,
-  fire: 16,
-  water: 32,
-}
-
 export interface HubInventoryPrimarySpellLine {
   readonly text: string
-  readonly unit: ' / SEC' | ' / SECOND' | null
+  readonly unit: ` / ${NativePrimarySpellDamageUnit | NativePrimarySpellManaUnit}` | null
 }
 
+type HubInventoryPrimarySpellSource = Pick<
+  ProtocolPlayerProgression,
+  'inventoryStats' | 'selectedPrimarySkillId' | 'weldBuildId'
+>
+
 export function hubInventoryPrimarySpellLines(
-  element: WizardElement,
-  learnedSkills: readonly (readonly [number, number, number])[],
+  source: HubInventoryPrimarySpellSource,
 ): readonly HubInventoryPrimarySpellLine[] {
-  const skillId = PRIMARY_SKILL_BY_ELEMENT[element]
-  const learned = learnedSkills.find(([candidate]) => candidate === skillId)
-  if (!learned) throw new RangeError(`${element} primary skill ${skillId} is not learned`)
-  const rank = learned[2]
-  const entry = playerStatBook().entries[skillId]
-  if (!entry || rank < 1 || rank > entry.maximumLevel) {
-    throw new RangeError(`${element} primary skill ${skillId} has invalid rank ${rank}`)
-  }
-  const damageMinimum = rankedStatValue(
-    entry.numericProperties.mDamage ?? entry.numericProperties.mDamage1,
-    rank,
+  const descriptor = nativePrimarySpellDescriptor(
+    source.selectedPrimarySkillId,
+    source.weldBuildId,
   )
-  const damageMaximum = rankedStatValue(
-    entry.numericProperties.mDamage ?? entry.numericProperties.mDamage2,
-    rank,
-  )
-  const manaCost = rankedStatValue(entry.numericProperties.mManaCost, rank)
-  const damage = damageMinimum === damageMaximum
-    ? nativeStatNumber(damageMinimum)
-    : `${nativeStatNumber(damageMinimum)} - ${nativeStatNumber(damageMaximum)}`
-  const channelled = element === 'air' || element === 'water'
-  const damageLine = element === 'earth'
-    ? `TOTAL DAMAGE: ${damage} X SIZE`
-    : `DAMAGE: ${damage}`
-  const manaHeal = PLAYER_MANA_RECOVERY_PER_TICK * PLAYER_COMBAT_TICKS_PER_SECOND
+  const { primarySpell, manaRecoveryPerSecond } = source.inventoryStats
+  const damage = descriptor.damageRange
+    ? `${nativePrimaryStatNumber(primarySpell.damageMinimum)} - ${nativePrimaryStatNumber(primarySpell.damageMaximum)}`
+    : nativePrimaryStatNumber(primarySpell.damageMaximum)
   return [
-    { text: NATIVE_SKILL_CATALOG[skillId]!.name.toUpperCase(), unit: null },
-    { text: damageLine, unit: channelled ? ' / SECOND' : null },
+    { text: descriptor.name, unit: null },
+    { text: `damage: ${damage}`, unit: ` / ${descriptor.damageUnit}` },
     {
-      text: `MANA COST: ${nativeStatNumber(manaCost)}`,
-      unit: channelled || element === 'earth' ? ' / SEC' : null,
+      text: `mana cost: ${nativePrimaryStatNumber(primarySpell.manaCost)}`,
+      unit: ` / ${descriptor.manaUnit}`,
     },
-    { text: `MANA HEAL: ${nativeStatNumber(manaHeal)}`, unit: ' / SEC' },
+    {
+      text: `mana heal: ${nativePrimaryStatNumber(manaRecoveryPerSecond)}`,
+      unit: ' / sec',
+    },
   ]
 }
 
-function rankedStatValue(source: number | readonly number[] | undefined, rank: number): number {
-  const value = typeof source === 'number' ? source : source?.[rank]
-  if (value === undefined || !Number.isFinite(value)) throw new RangeError(`missing native rank ${rank} stat`)
-  return value
-}
-
-function nativeStatNumber(value: number): string {
-  return Number.isInteger(value) ? `${value}` : `${value}`.replace(/0+$/, '').replace(/\.$/, '')
+function nativePrimaryStatNumber(value: number): string {
+  if (!Number.isFinite(value)) throw new RangeError('native primary stat value must be finite')
+  return value.toFixed(1)
 }

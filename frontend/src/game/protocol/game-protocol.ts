@@ -419,7 +419,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 116
+export const GAME_PROTOCOL_VERSION = 117
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4488,8 +4488,10 @@ function playerInventoryStats(
   onlyKeys(source, field, [
     'castSpeedPercent',
     'magicResistancePercent',
+    'manaRecoveryPerSecond',
     'painResistancePercent',
     'poisonResistancePercent',
+    'primarySpell',
     'walkSpeedPercent',
   ])
   const resistance = (name: 'magicResistancePercent' | 'painResistancePercent' | 'poisonResistancePercent') => {
@@ -4497,11 +4499,40 @@ function playerInventoryStats(
     if (value > 100) throw new GameProtocolError(`${field}.${name} is out of range`)
     return value
   }
+  const primarySpellSource = record(source.primarySpell, `${field}.primarySpell`)
+  onlyKeys(primarySpellSource, `${field}.primarySpell`, [
+    'damageMaximum',
+    'damageMinimum',
+    'manaCost',
+  ])
+  const damageMinimum = nonnegativeFinite(
+    primarySpellSource.damageMinimum,
+    `${field}.primarySpell.damageMinimum`,
+  )
+  const damageMaximum = nonnegativeFinite(
+    primarySpellSource.damageMaximum,
+    `${field}.primarySpell.damageMaximum`,
+  )
+  if (damageMaximum < damageMinimum) {
+    throw new GameProtocolError(`${field}.primarySpell damage range is inverted`)
+  }
   return {
     castSpeedPercent: nonnegativeFinite(source.castSpeedPercent, `${field}.castSpeedPercent`),
     magicResistancePercent: resistance('magicResistancePercent'),
+    manaRecoveryPerSecond: nonnegativeFinite(
+      source.manaRecoveryPerSecond,
+      `${field}.manaRecoveryPerSecond`,
+    ),
     painResistancePercent: resistance('painResistancePercent'),
     poisonResistancePercent: resistance('poisonResistancePercent'),
+    primarySpell: {
+      damageMaximum,
+      damageMinimum,
+      manaCost: nonnegativeFinite(
+        primarySpellSource.manaCost,
+        `${field}.primarySpell.manaCost`,
+      ),
+    },
     walkSpeedPercent: nonnegativeFinite(source.walkSpeedPercent, `${field}.walkSpeedPercent`),
   }
 }

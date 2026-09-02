@@ -710,40 +710,79 @@ test('stock inventory derives every elemental primary stat pane from native skil
     textLeft: 95,
   })
   assert.deepEqual(
-    ['ether', 'fire', 'air', 'water', 'earth'].map(element => hubInventoryPrimarySpellTint(element as Parameters<typeof hubInventoryPrimarySpellTint>[0])),
-    [0xffe5ff, 0xffcbcb, 0xe5ffff, 0xcbcbff, 0xcbffcb],
+    [8, 16, 24, 32, 40, 52].map(hubInventoryPrimarySpellTint),
+    [0xffe5ff, 0xffcbcb, 0xe5ffff, 0xcbcbff, 0xcbffcb, 0xe5e5e5],
   )
-  assert.deepEqual(hubInventoryPrimarySpellLines('ether', [[8, 1, 1]]), [
-    { text: 'MAGIC MISSILE', unit: null },
-    { text: 'DAMAGE: 1 - 2', unit: null },
-    { text: 'MANA COST: 6', unit: null },
-    { text: 'MANA HEAL: 10', unit: ' / SEC' },
+  assert.deepEqual(hubInventoryPrimarySpellLines(primarySpell(8, null, 1, 2, 6)), [
+    { text: 'Magic Missile', unit: null },
+    { text: 'damage: 1.0 - 2.0', unit: ' / bolt' },
+    { text: 'mana cost: 6.0', unit: ' / cast' },
+    { text: 'mana heal: 10.0', unit: ' / sec' },
   ])
-  assert.deepEqual(hubInventoryPrimarySpellLines('fire', [[16, 1, 1]]), [
-    { text: 'FIREBALL', unit: null },
-    { text: 'DAMAGE: 4', unit: null },
-    { text: 'MANA COST: 12', unit: null },
-    { text: 'MANA HEAL: 10', unit: ' / SEC' },
+  assert.deepEqual(hubInventoryPrimarySpellLines(primarySpell(16, null, 4, 4, 12, 22.5)), [
+    { text: 'Fireball', unit: null },
+    { text: 'damage: 4.0', unit: ' / bolt' },
+    { text: 'mana cost: 12.0', unit: ' / cast' },
+    { text: 'mana heal: 22.5', unit: ' / sec' },
   ])
-  assert.deepEqual(hubInventoryPrimarySpellLines('air', [[24, 1, 1]]), [
-    { text: 'LIGHTNING', unit: null },
-    { text: 'DAMAGE: 2.5', unit: ' / SECOND' },
-    { text: 'MANA COST: 12', unit: ' / SEC' },
-    { text: 'MANA HEAL: 10', unit: ' / SEC' },
+  assert.deepEqual(hubInventoryPrimarySpellLines(primarySpell(24, null, 2.5, 2.5, 12)), [
+    { text: 'Lightning', unit: null },
+    { text: 'damage: 2.5', unit: ' / second' },
+    { text: 'mana cost: 12.0', unit: ' / sec' },
+    { text: 'mana heal: 10.0', unit: ' / sec' },
   ])
-  assert.deepEqual(hubInventoryPrimarySpellLines('water', [[32, 1, 1]]), [
-    { text: 'FROST JET', unit: null },
-    { text: 'DAMAGE: 2.5', unit: ' / SECOND' },
-    { text: 'MANA COST: 12.5', unit: ' / SEC' },
-    { text: 'MANA HEAL: 10', unit: ' / SEC' },
+  assert.deepEqual(hubInventoryPrimarySpellLines(primarySpell(32, null, 2.5, 2.5, 12.5)), [
+    { text: 'Frost Jet', unit: null },
+    { text: 'damage: 2.5', unit: ' / second' },
+    { text: 'mana cost: 12.5', unit: ' / sec' },
+    { text: 'mana heal: 10.0', unit: ' / sec' },
   ])
-  assert.deepEqual(hubInventoryPrimarySpellLines('earth', [[40, 1, 1]]), [
-    { text: 'BOULDER', unit: null },
-    { text: 'TOTAL DAMAGE: 10 X SIZE', unit: null },
-    { text: 'MANA COST: 12', unit: ' / SEC' },
-    { text: 'MANA HEAL: 10', unit: ' / SEC' },
+  assert.deepEqual(hubInventoryPrimarySpellLines(primarySpell(40, null, 1, 10, 12)), [
+    { text: 'Boulder', unit: null },
+    { text: 'damage: 1.0 - 10.0', unit: ' / boulder' },
+    { text: 'mana cost: 12.0', unit: ' / sec' },
+    { text: 'mana heal: 10.0', unit: ' / sec' },
   ])
+
+  const welds = [
+    [1000, 'Burning Bolt', ' / bolt', ' / cast', true],
+    [1001, 'Frost Missile', ' / bolt', ' / cast', true],
+    [1002, 'Ball Lightning', ' / bolt', ' / cast', true],
+    [1003, 'Flame Lash', ' / second', ' / sec', false],
+    [1004, 'Blizzard Beam', ' / second', ' / sec', false],
+    [1005, 'Steam Jet', ' / second', ' / sec', false],
+    [1006, 'Ethereal Boulder', ' / boulder', ' / sec', true],
+    [1007, 'Meteor Swarm', ' / impact', ' / sec', true],
+    [1008, 'Hailstones', ' / rock', ' / sec', false],
+    [1009, 'Crawling Shock', ' / bolt', ' / cast', false],
+  ] as const
+  for (const [buildId, name, damageUnit, manaUnit, range] of welds) {
+    assert.deepEqual(hubInventoryPrimarySpellLines(primarySpell(52, buildId, 3, 7, 11)), [
+      { text: name, unit: null },
+      { text: range ? 'damage: 3.0 - 7.0' : 'damage: 7.0', unit: damageUnit },
+      { text: 'mana cost: 11.0', unit: manaUnit },
+      { text: 'mana heal: 10.0', unit: ' / sec' },
+    ])
+  }
 })
+
+function primarySpell(
+  selectedPrimarySkillId: number,
+  weldBuildId: number | null,
+  damageMinimum: number,
+  damageMaximum: number,
+  manaCost: number,
+  manaRecoveryPerSecond = 10,
+) {
+  return {
+    inventoryStats: {
+      manaRecoveryPerSecond,
+      primarySpell: { damageMaximum, damageMinimum, manaCost },
+    },
+    selectedPrimarySkillId,
+    weldBuildId,
+  }
+}
 
 test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow actions', () => {
   assert.deepEqual(HUB_INVENTORY_STATS_PAGES, {
@@ -791,6 +830,8 @@ test('InventoryScreen owns three clipped 320-pixel stat pages and bounded arrow 
   assert.match(hubInventoryRendererSource, /HUB_INVENTORY_ATTRIBUTES_PAGE\.attributesValueRect/)
   assert.match(hubInventoryRendererSource, /HUB_INVENTORY_ATTRIBUTES_PAGE\.decorationCenters/)
   assert.match(hubInventoryRendererSource, /HUB_PRIMARY_SPELL_PANE\.gemRecord/)
+  assert.match(hubInventoryRendererSource, /dataset\.nativePrimarySpellLines/)
+  assert.match(hubInventoryRendererSource, /hubInventoryPrimarySpellLines\(model\.progression\)/)
   assert.equal(hubInventoryStatsPage(2), 2)
   assert.throws(() => hubInventoryStatsPage(3), /within \[0,2\]/)
   assert.equal(hubInventoryStatsArrowRect(0, 'up', false), null)

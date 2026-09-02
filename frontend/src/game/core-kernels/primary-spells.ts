@@ -9,11 +9,12 @@ import {
   type PlayerPrimaryCastState,
   type WizardElement,
 } from './player-character.ts'
-import type {
-  NativeAirPrimarySkillProfile,
-  NativePrimarySkillProfile,
-  NativeWaterPrimarySkillProfile,
-  NativeWeldPrimarySkillProfile,
+import {
+  NATIVE_PRIMARY_EARTH_INITIAL_CHARGE,
+  type NativeAirPrimarySkillProfile,
+  type NativePrimarySkillProfile,
+  type NativeWaterPrimarySkillProfile,
+  type NativeWeldPrimarySkillProfile,
 } from './native-primary-skill-profile.ts'
 import {
   drawNativeFloat,
@@ -588,7 +589,7 @@ export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFET
 export const PRIMARY_SPELL_PRISMATIC_LIFETIME_TICKS = 100
 export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 6
 export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 20
-export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
+export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = NATIVE_PRIMARY_EARTH_INITIAL_CHARGE
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
 export const PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE = 75

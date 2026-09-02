@@ -621,6 +621,19 @@ export async function createHubInventoryRenderer(
       previousNoticeTitle = nextNotice?.title ?? null
       currentKind = model.kind
       currentModel = model
+      if (model.kind === 'dialogue') {
+        delete gpu.canvas.dataset.nativePrimarySpellBuild
+        delete gpu.canvas.dataset.nativePrimarySpellId
+        delete gpu.canvas.dataset.nativePrimarySpellLines
+      } else {
+        gpu.canvas.dataset.nativePrimarySpellBuild = model.progression.weldBuildId === null
+          ? ''
+          : `${model.progression.weldBuildId}`
+        gpu.canvas.dataset.nativePrimarySpellId = `${model.progression.selectedPrimarySkillId}`
+        gpu.canvas.dataset.nativePrimarySpellLines = JSON.stringify(
+          hubInventoryPrimarySpellLines(model.progression),
+        )
+      }
       if (model.kind === 'dialogue'
           && model.content.kind === 'selector'
           && model.content.selector === 'boast') {
@@ -1362,7 +1375,9 @@ function addStats(
     HUB_INVENTORY_IDENTITY_PAGE.identityTextBaselineY,
     { align: 'left', tint: HUB_INVENTORY_IDENTITY_PAGE.textTint },
   )
-  const primaryTextTint = hubInventoryPrimarySpellTint(model.config.element)
+  const primaryTextTint = hubInventoryPrimarySpellTint(
+    model.progression.selectedPrimarySkillId,
+  )
   addBitmapText(
     context,
     content,
@@ -1385,10 +1400,7 @@ function addStats(
     },
   )
 
-  const primarySpellLines = hubInventoryPrimarySpellLines(
-    model.config.element,
-    model.progression.learnedSkills,
-  )
+  const primarySpellLines = hubInventoryPrimarySpellLines(model.progression)
   const primaryTextLeft = HUB_PRIMARY_SPELL_PANE.textLeft + contentShift
   addBitmapText(
     context,

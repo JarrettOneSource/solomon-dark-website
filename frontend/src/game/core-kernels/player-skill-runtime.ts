@@ -19,6 +19,7 @@ import {
   type NativeEquipmentModifiers,
 } from './native-equipment-effects.ts'
 import {
+  PLAYER_COMBAT_TICKS_PER_SECOND,
   PLAYER_HEALTH_RECOVERY_PER_TICK,
   PLAYER_INITIAL_HEALTH,
   PLAYER_INITIAL_MANA,
@@ -93,6 +94,7 @@ export interface PlayerSkillDerivedStats {
   readonly incomingDamageFactor: number
   readonly magicResistance: number
   readonly manaRecoveryPerTick: number
+  readonly manaRecoveryPerSecond: number
   readonly maximumHealth: number
   readonly maximumMana: number
   readonly meditationConcentrated: boolean
@@ -400,6 +402,13 @@ export function playerSkillDerivedStats(
   )
     ? NATIVE_HAGATHA_FACTORS.mana
     : 1
+  const manaRecoveryPerSecond = applyNativeEquipmentTransform(
+    modifiers.manaRecovery,
+    PLAYER_MANA_RECOVERY_PER_TICK
+      * PLAYER_COMBAT_TICKS_PER_SECOND
+      * (1 + channelMana / 100)
+      * (selected(57) ? 1 + value(57, 'mConcentration') / 100 : 1),
+  )
   return Object.freeze({
     castProgressFactor,
     damageResistance: clampUnit(modifiers.damageResistance),
@@ -419,12 +428,8 @@ export function playerSkillDerivedStats(
       (resistMagic + (selected(62) ? value(62, 'mConcentration') : 0)) / 100
       + modifiers.magicResistance,
     ),
-    manaRecoveryPerTick: applyNativeEquipmentTransform(
-      modifiers.manaRecovery,
-      PLAYER_MANA_RECOVERY_PER_TICK
-        * (1 + channelMana / 100)
-        * (selected(57) ? 1 + value(57, 'mConcentration') / 100 : 1),
-    ),
+    manaRecoveryPerSecond,
+    manaRecoveryPerTick: manaRecoveryPerSecond / PLAYER_COMBAT_TICKS_PER_SECOND,
     maximumHealth: Math.fround(
       applyNativeEquipmentTransform(
         modifiers.maximumHealth,

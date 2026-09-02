@@ -13,6 +13,225 @@
 > all ten native bitmap fonts. Inventory must inherit that shared correction;
 > no further Inventory-only offset is authorized.
 
+## 2026-09-02 — Inventory primary-spell summary formatter reopening
+
+### Reported smell and parity question
+
+- The stock page-0 witness `SD original 2 - image.png` visibly appends the
+  small italic continuations `/ bolt`, `/ cast`, and `/ sec`, while the Website
+  Ether summary omits the first two. The owner requested a stock re-audit of
+  every spell rather than an Ether-only suffix patch.
+- This is a secondary report against the page-0 primary-spell row marked
+  `verified-already-at-parity` below. That disposition was unsupported: the web
+  implementation sampled raw rank tables for five elemental roots, ignored the
+  selected Spell Welding primary, discarded the common damage/mana/equipment
+  resolvers, collapsed native fixed-one-decimal formatting, substituted
+  uppercase literals, and represented only `/ sec` and `/ second` units.
+- Falsifier: if the complete `Skills_Wizard` formatter dispatch, its upstream
+  effective-stat inputs, and all reachable selected-primary rows are represented
+  by one host-authoritative summary and one renderer formatter, no element- or
+  build-specific string exception is necessary.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Clean stock | `C:\Users\User\Downloads\SD original 2 - image.png`, 702x728, SHA-256 `4484fe75af8a155f3833d001bfa8c6bbc5488a12ea232be202aa814435cf9c8e` | Fireball visibly reads `damage: 122.1 / bolt`, `mana cost: 22.2 / cast`, and `mana heal: 22.5 / sec`; the glyph family itself matches the corrected native bitmap path. | high |
+| Retail identity | unmodified `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Canonical executable and analyzed Ghidra program used by the existing Inventory ledger. | high |
+| Inventory producer | refresh owner `0x00553EC0`; `Skills_Wizard` vtable `0x007A0CD4`, formatter slot `+0x84 -> 0x00663B30` | The refresh calls `DAMAGETYPE`, `DAMAGE`, `MANACOST`, and `MANARECOVERY` with selected id `-1` and the unit flag enabled, then InventoryScreen renders the resulting strings. It does not ask for the character element's rank-one root. | high |
+| Inventory consumer | `InventoryScreen::Render 0x00562520`, page-0 text range `0x005630A1..0x005633D4` | The painter consumes cached strings at InventoryScreen `+0x4B0/+0x4D0/+0x508/+0x55C`, prefixes the last three with exact lowercase `damage: %s`, `mana cost: %s`, and `mana heal: %s`, and submits them through medium ExactText. | high |
+| Damage formatter | `Skills_Wizard::FormatStat 0x00663B30`, `DAMAGE` dispatch `0x00663F08..0x0066508F`; damage resolver `0x0065FFF0` | All five elemental roots and all fifteen native build selectors have explicit value-shape/unit branches. The ten reachable mixed builds are enumerated below. Resolver order is base plus global/skill/class/equipment flats, then multipliers, then Siege/global offensive factor, with a nonnegative clamp. | high |
+| Mana formatter | `0x00663B30`, `MANACOST` dispatch `0x0066519C..0x00665ADF`; aggregate resolver `0x006741B0 -> 0x006600F0` | Root plus learned upgrade costs are aggregated before the common resolver runs once for the selected primary. One-shot rows append `/ cast`; continuous rows append `/ sec`. Equipment/global reductions and flat/multiplier lanes are presentation inputs, not combat-only state. | high |
+| Recovery formatter | `0x00663B30` `0x00665B85..0x00665C1C`; base refresh `0x0065F5B0`; Channel Mana `0x00661530/0x00661FD0` | `MANARECOVERY` formats `Skills_Wizard+0x98` directly with `%.1f` and inline `/ sec`. Native initializes that field to `10`, applies Channel Mana/concentration and equipment in per-second units, then the combat tick divides by 100. | high |
+| Authored strings/data | `.rdata` `0x007A00E0`, `0x007A0190`, `0x007A01C8..0x007A02C7`, `0x007A02D0..0x007A03EB`; `native-skill-catalog.json`; `NATIVE_WELD_BUILDS` | Numbers use `%.1F`; ranges use `%s - %s`; unit commands are scale `.7`, offset `(0,1)`, italic. Native names and prefixes are case-sensitive mixed/lowercase strings. | high |
+| Current web causal trace | task base `252ad560`; `native-primary-skill-profile.ts`, `player-skill-runtime.ts`, `game-snapshot.ts`, `game-state.ts`, `hub-inventory-render-contract.ts`, `hub-inventory-renderer.ts` | Runtime already owns selected primary/weld identity and most native formula inputs, but the profile regressed from full `0x0065FFF0/0x006600F0` resolution to bare global factors. Snapshot omits primary summary values and per-second recovery. The renderer ignores selected id/build, recomputes rank-only elemental values, uppercases all copy, collapses `.0`, and cannot represent `/ bolt`, `/ cast`, `/ boulder`, `/ impact`, or `/ rock`. | high |
+
+Static queries used the canonical read-only Ghidra replica workflow through the
+existing Mod Loader checkout at `08bfba9ef367f7b863848030d0a289dc31e33192`.
+Wrapper SHA-256 is
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+material scripts were `decompile_targets.py`
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`
+and `refs_to_addr_decompile.py`
+`c6844b842ccd87aa70d290ae34553d874a8f90866eb234425f7c51fd8a438c4b`.
+Raw instruction checks used GNU `objdump` against the same byte-verified image.
+
+### System boundary and membership inventory
+
+Native system: the selected primary-spell summary prepared by `Skills_Wizard`
+and painted by InventoryScreen page 0, including every reachable elemental and
+Spell Welding member, effective damage/mana/recovery inputs, exact string case,
+number formatting, inline unit commands, standalone/service projection, and
+refresh lifetime.
+
+| Selected member | Native damage presentation | Native mana presentation | Disposition / proof |
+| --- | --- | --- | --- |
+| `8` Magic Missile | resolved minimum - maximum `/ bolt` | resolved aggregate `/ cast` | `exact-ported` by this reopening; focused row plus modifier matrix |
+| `16` Fireball | resolved scalar `/ bolt` | resolved aggregate `/ cast` | `exact-ported`; stock witness plus focused row |
+| `24` Lightning | resolved scalar `/ second` | resolved aggregate `/ sec` | `exact-ported`; focused row |
+| `32` Frost Jet | resolved scalar `/ second` | resolved aggregate `/ sec` | `exact-ported`; focused row |
+| `40` Boulder | `max(1, resolve(raw * f32(.18)^2)) - resolve(raw)` `/ boulder` | resolved aggregate `/ sec` | `exact-ported`; endpoint and floor assertions |
+| `1000` Burning Bolt | resolved vector `[0] - [1]` `/ bolt` | resolved vector `[2]` `/ cast` | `exact-ported`; full weld table assertion |
+| `1001` Frost Missile | resolved vector `[0] - [1]` `/ bolt` | resolved vector `[2]` `/ cast` | `exact-ported`; full weld table assertion |
+| `1002` Ball Lightning | resolved vector `[0] - [1]` `/ bolt` | resolved vector `[2]` `/ cast` | `exact-ported`; full weld table assertion |
+| `1003` Flame Lash | resolved vector `[0]` `/ second` | resolved vector `[1]` `/ sec` | `exact-ported`; full weld table assertion |
+| `1004` Blizzard Beam | resolved vector `[0]` `/ second` | resolved vector `[1]` `/ sec` | `exact-ported`; full weld table assertion |
+| `1005` Steam Jet | resolved vector `[0]` `/ second` | resolved vector `[1]` `/ sec` | `exact-ported`; full weld table assertion |
+| `1006` Ethereal Boulder | `max(1, resolve(vector[0] * f32(.18)^2)) - resolve(vector[0])` `/ boulder` | resolved vector `[1]` `/ sec` | `exact-ported`; endpoint and floor assertions |
+| `1007` Meteor Swarm | resolved vector `[0] - [1]` `/ impact` | resolved vector `[2]` `/ sec` | `exact-ported`; full weld table assertion |
+| `1008` Hailstones | resolved vector `[0]` `/ rock` | resolved vector `[1]` `/ sec` | `exact-ported`; full weld table assertion |
+| `1009` Crawling Shock | resolved vector `[0]` `/ bolt` | resolved vector `[1]` `/ cast` | `exact-ported`; full weld table assertion |
+| internal `1010..1014` names/unit branches | Ether Rift `/ cast`, Cremator `/ sec`, Call Comet `/ comet`, Skyfire `/ sec`, Crust Breaker `/ fissure` | matching internal units | `out-of-system` — internal single-root formatter programs are not selectable Spell Welding builds or protocol primary identities |
+| `MANARECOVERY` | exact per-second derived scalar, one decimal, `/ sec` | independent of selected primary | `exact-ported`; base, Channel Mana/concentration, and flat/percent equipment assertions |
+| selected-primary tint | `Skills_Wizard` selected row color root | same for primary and melee values | `exact-ported`; pure roots and Spell Welding root 7 |
+| exact mixed/lowercase source strings | stock name bank plus `damage`, `mana cost`, `mana heal` | medium group-1 glyphs; no case substitution | `exact-ported`; literal and rendered-glyph assertions |
+| fixed page geometry, frame/gem, baselines, `.9` main advance and `.7` italic unit run | existing page-0 renderer contract | unchanged | `verified-already-at-parity` |
+| standalone, Fomentius/Luthacus/Shlorio companion, Hub and Boneyard | one shared InventoryScreen owner | same summary at owner-local x projection | `exact-ported` through shared correction and browser journey |
+| Hagatha replacement pane | no page-0 primary summary while PerkShop owns the left pane | no formatter consumer | `out-of-system` |
+| protocol input, save shape, RNG, audio, collision, painter order outside page 0 | no formatter ownership | unchanged | `out-of-system` |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered contract
+
+- `0x00553EC0` refreshes the complete Inventory string set from the current
+  local wizard. Passing `-1` makes `0x00663B30` read the selected primary id;
+  the final boolean enables authored inline units. InventoryScreen only caches
+  and paints those results, so element-only reconstruction in the renderer is
+  the wrong ownership model.
+- Base and welded damage both pass through `0x0065FFF0`. Base mana aggregates
+  every learned upgrade named by `0x006741B0`; welded mana reads the rebuilt
+  `+0x774` vector. `0x006600F0` then applies the common reduction, minimum-one,
+  Battle Mage, flat, class/skill/equipment multiplier, and clamp sequence once.
+- The ten reachable welds are the complete mixed-primary table `1000..1009`.
+  Formatter rows `1010..1014` are internal single-root programs and are not
+  selectable primary identities in retail or Website state.
+- Boulder and Ethereal Boulder are the two damage-display exceptions: the low
+  endpoint is the initial charge `f32(.18)` squared before damage resolution,
+  then clamped to at least one. They do not display the web-invented
+  `TOTAL DAMAGE: ... X SIZE` string.
+- Stock formatting is semantic data. `Magic Missile`, `Fireball`, and the weld
+  names remain mixed case; `damage`, `mana cost`, `mana heal`, and unit words
+  remain lowercase. The medium bitmap font makes them read as small caps.
+  Uppercasing selects different glyph records and is not equivalent.
+- `Skills_Wizard+0x98` is per-second mana recovery. Combat consumes that value
+  divided by the 100 Hz tick rate. Equipment flat additions must therefore be
+  applied before division; applying a native `+5` to a per-tick `0.1` value is
+  a hundredfold error.
+
+### Nearby-system findings
+
+- `native-primary-skill-profile.ts` originally called the shared damage/mana
+  resolvers, but a later primary/weld refactor regressed the common profile to
+  bare `* factors.damage` / `* factors.manaCost` while retaining unused
+  equipment/global fields in the factor type. Actual primary casts and the
+  Inventory display must be corrected at that shared profile boundary.
+- Fire child damage, Hail/Hurricane damage, and Rock Surge mana are nearby
+  per-skill contact members, not values rendered by this Inventory summary.
+  Their established gameplay contracts remain unchanged by this correction;
+  no Inventory-only compensation is applied to them.
+
+### Confidence and open questions
+
+- Confirmed: owner/caller/callee chain; exact executable and addresses; all
+  five elemental and ten selectable weld branches; names, value shapes, units,
+  format strings, case, resolver ordering, Boulder low endpoint, recovery unit,
+  scenes, and current web omissions.
+- Unknown: none in the active membership. Internal formatter rows `1010..1014`
+  are explicitly dispositioned rather than exposed as invented Website builds.
+
+### Web implementation consequence
+
+- Restore the full native resolver calls inside the shared primary profile so
+  casting and display consume identical effective values, including equipment,
+  passive, concentration, Hagatha, unforge, and weld-effect inputs.
+- Preserve a per-second mana-recovery value through derived state and divide
+  only at the combat-tick boundary.
+- Project one host-authoritative selected-primary summary in the player
+  snapshot. Format it in the Inventory contract with exact one-decimal,
+  mixed/lowercase, range, and inline-unit rules for all fifteen reachable rows.
+- Remove the element-to-rank-table reconstruction and element-only tint from
+  the renderer. Keep the existing shared ExactText geometry and page layout.
+
+### Validation contract
+
+- Red/green focused tests: all five elemental and ten weld rows; one-decimal
+  and case-sensitive strings; every unit; Boulder/Ethereal Boulder low floor;
+  selected identity/tint; complete effective-rank upgrade costs; global,
+  class, skill, equipment, Battle/Siege, Hagatha, unforge, Channel Mana,
+  concentration, and flat/percent recovery examples; invalid protocol shapes.
+- Regression: primary cast payload and mana debit must equal the snapshot
+  summary for representative one-shot, continuous, Earth, and weld members.
+- Mac mini: focused protocol/profile/native-UI/Hub suites, complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`, and a production-bundle Chrome
+  journey through standalone Hub and Boneyard Inventory plus an ordinary
+  companion. The journey must select at least Ether, Fire, Air, Water, Earth,
+  and one welded build and assert visible exact strings with empty page,
+  console, failed-response, WebGL, wire, and host-error arrays.
+- Stock comparison: match the supplied Fire witness and exact instruction
+  matrix; no screenshot-only font judgement substitutes for string assertions.
+
+### Implementation validation receipt
+
+- Implementation restores the shared native damage and mana resolvers in
+  `native-primary-skill-profile.ts`, adds one selected-primary summary for the
+  five elemental roots and ten reachable welds, and shares the recovered
+  float32 `0.18^2` Boulder display floor with the Earth cast path. Fire child
+  damage, Hurricane/Hail child damage, and Rock Surge remain on their
+  independently recovered contact paths.
+- `player-skill-runtime.ts` now owns mana recovery in native per-second units
+  and divides by the 100 Hz combat rate only at the tick consumer. The game
+  snapshot carries that scalar and the host-authoritative selected-primary
+  damage/cost tuple through strict protocol 117 validation. Inventory formats
+  only that tuple and the selected id/build; it no longer reconstructs values
+  from `config.element` or raw rank tables.
+- The required red run on the isolated M2 Mac candidate failed at the intended
+  missing summary/recovery fields and old renderer API. After implementation,
+  TypeScript plus the offensive resolver, primary profile, weld profile,
+  player runtime, primary-spell, Inventory renderer, and protocol suites passed
+  `175/175`. This includes every reachable primary, both Boulder floors, every
+  native unit, the complete modifier lane, and strict malformed-wire cases.
+- `npm --prefix frontend run build` exited zero. The production bundle budget
+  accepted `Game-CEG5dpGs.js` at 265,083 raw / 80,592 gzip bytes against the
+  524,288 / 134,144-byte limits.
+- A real production-bundle Chrome journey on the M2 Mac exercised all fifteen
+  summaries in standalone Hub Inventory, the shared ordinary Fomentius
+  companion, and Boneyard Inventory. Standalone examples included
+  `Magic Missile` `damage: 1.0 - 2.0 / bolt`, `mana cost: 11.0 / cast`;
+  `Boulder` `damage: 1.0 - 10.0 / boulder`; all weld names/units from Burning
+  Bolt through Crawling Shock; and fixed one-decimal recovery. The companion
+  repeated the Boulder tuple, while Boneyard Steam Jet reflected live
+  concentrated recovery as `mana heal: 14.4 / sec`, proving host projection
+  rather than copied fixture text. Page, console, failed-request, and response
+  error arrays were empty; the existing HUD, quickbar, selector, shield,
+  Planewalker, and Boneyard assertions also stayed green.
+- The Mac Fireball screenshot at
+  `/tmp/solomon-dark-native-primary-spell-summary.png` was visually compared
+  with the supplied stock witness. It visibly retains the corrected bitmap
+  glyph path and now paints the smaller italic `/ bolt`, `/ cast`, and `/ sec`
+  continuations in the recovered inline layout. The task-owned screenshot is
+  diagnostic only and is not a repository artifact.
+- The complete canonical Mac `./scripts/validate.sh` was attempted on the exact
+  candidate. Backend build passed with zero warnings/errors, backend/contracts
+  passed `19/19`, and lint completed with zero errors and the repository's 11
+  existing warnings. The command then stopped in the pre-existing host timing
+  portion of `test:boneyard`: `1790/1797` passed and seven unchanged
+  host/supervisor message waits failed. The decisive named case,
+  `game session supervisor admits independent players to one shared Hub and
+  removes lobby routes`, fails with the same buffered-snapshot timeout on an
+  untouched detached `252ad560` Mac worktree under both the installed
+  Node 22.23.2/npm 10.9.8 and the repository-pinned Node 22.17.0/npm 10.9.2.
+  It is therefore a current-main baseline blocker rather than a regression in
+  this change; no unrelated timeout or supervisor code was altered.
+- Every canonical suite after that early stop was run explicitly under the
+  pinned toolchain and passed: Portal `6/6`, cheat menu `5/5`, HUD selector
+  `5/5`, weather `9/9`, parties `60/60`, level-up `17/17`, Tutorial `47/47`,
+  diagnostics `7/7`, Hall `37/37`, Hub UI `94/94`, desktop `4/4`, and the
+  production media policy. The two observed heartbeat-close failures also
+  passed individually on both candidate and baseline. The canonical aggregate
+  command itself is not claimed green while the reproducible current-main
+  supervisor blocker remains.
+
 ## 2026-09-01 — InventoryScreen ExactText and outer-chrome secondary-report reopening
 
 ### Reported smell and parity question

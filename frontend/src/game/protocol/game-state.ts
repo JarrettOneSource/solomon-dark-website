@@ -128,9 +128,17 @@ export interface ProtocolPlayerSkillOffer {
 export interface ProtocolPlayerInventoryStats {
   castSpeedPercent: number
   magicResistancePercent: number
+  manaRecoveryPerSecond: number
   painResistancePercent: number
   poisonResistancePercent: number
+  primarySpell: ProtocolPlayerPrimarySpellStats
   walkSpeedPercent: number
+}
+
+export interface ProtocolPlayerPrimarySpellStats {
+  damageMaximum: number
+  damageMinimum: number
+  manaCost: number
 }
 
 export interface ProtocolPlayerProgression {

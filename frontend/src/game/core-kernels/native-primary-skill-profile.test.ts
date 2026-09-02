@@ -4,10 +4,14 @@ import test from 'node:test'
 import type { WizardElement } from './player-character.ts'
 import {
   createPlayerSkillBook,
+  NATIVE_WELD_BUILDS,
   playerStatBook,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
-import { nativePrimarySkillProfile } from './native-primary-skill-profile.ts'
+import {
+  nativePrimarySkillProfile,
+  nativePrimarySpellSummary,
+} from './native-primary-skill-profile.ts'
 import { createNativeEquipmentModifiers } from './native-equipment-effects.ts'
 
 const FACTORS = Object.freeze({ damage: 1.5, manaCost: 0.75 })
@@ -334,6 +338,86 @@ test('resolves the selected welded build ahead of the elemental primary', () => 
   if (boosted.kind !== 'weld') return
   assert.equal(boosted.vector.values[0], 2.5)
   assert.equal(boosted.damageMinimum, 3.75)
+})
+
+test('primary profiles and Inventory summaries share every native modifier lane', () => {
+  const source = book('ether', { 8: 1 })
+  const base = createNativeEquipmentModifiers()
+  const skillDamageFlat = [...base.skillDamageFlat]
+  const skillDamageMultiplier = [...base.skillDamageMultiplier]
+  const classDamageFlat = [...base.classDamageFlat]
+  const classDamageMultiplier = [...base.classDamageMultiplier]
+  const classManaCostFlat = [...base.classManaCostFlat]
+  const classManaCostMultiplier = [...base.classManaCostMultiplier]
+  skillDamageFlat[8] = 1
+  skillDamageMultiplier[8] = 2
+  classDamageFlat[0] = 4
+  classDamageMultiplier[0] = 1.25
+  classManaCostFlat[0] = 2
+  classManaCostMultiplier[0] = 1.5
+  const factors = {
+    damage: 1.5,
+    equipment: {
+      ...base,
+      classDamageFlat,
+      classDamageMultiplier,
+      classManaCostFlat,
+      classManaCostMultiplier,
+      globalDamageFlat: 2,
+      globalDamageMultiplier: 1.5,
+      globalManaCostFlat: 3,
+      globalManaCostMultiplier: 0.5,
+      skillDamageFlat,
+      skillDamageMultiplier,
+    },
+    globalFlatDamage: 3,
+    globalManaReduction: 1,
+    manaCost: 0.75,
+  }
+  const profile = nativePrimarySkillProfile(source, playerStatBook(), factors)
+  assert.equal(profile.damageMinimum, 61.875)
+  assert.equal(profile.damageMaximum, 67.5)
+  assert.equal(profile.manaCost, 6.5625)
+  assert.deepEqual(nativePrimarySpellSummary(source, playerStatBook(), factors), {
+    damageMaximum: 67.5,
+    damageMinimum: 61.875,
+    manaCost: 6.5625,
+  })
+})
+
+test('Inventory summary drains every pure and welded primary plus both Boulder floors', () => {
+  const statBook = playerStatBook()
+  const neutral = { damage: 1, manaCost: 1 }
+  for (const [element, skillId] of [
+    ['ether', 8], ['fire', 16], ['air', 24], ['water', 32], ['earth', 40],
+  ] as const) {
+    const source = book(element, { [skillId]: 1 })
+    const summary = nativePrimarySpellSummary(source, statBook, neutral)
+    assert.ok(summary.damageMinimum <= summary.damageMaximum, element)
+    assert.ok(summary.manaCost > 0, element)
+  }
+  assert.deepEqual(nativePrimarySpellSummary(book('earth', { 40: 1 }), statBook, neutral), {
+    damageMaximum: 10,
+    damageMinimum: 1,
+    manaCost: 12,
+  })
+
+  for (let buildId = 1000; buildId <= 1009; buildId += 1) {
+    const build = NATIVE_WELD_BUILDS[buildId - 1000]!
+    const ranks = Object.fromEntries([
+      [52, 1],
+      ...build.componentSkillIds.map(skillId => [skillId, 1] as const),
+    ])
+    const source = {
+      ...book('ether', ranks),
+      primarySkillId: 52 as const,
+      weldBuildId: buildId,
+    }
+    const summary = nativePrimarySpellSummary(source, statBook, neutral)
+    assert.ok(summary.damageMinimum <= summary.damageMaximum, `${buildId}`)
+    assert.ok(summary.manaCost > 0, `${buildId}`)
+    if (buildId === 1006) assert.equal(summary.damageMinimum, 1)
+  }
 })
 
 function book(

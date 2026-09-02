@@ -5,36 +5,69 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import {
   bindGameSimulationPlayerSkillQuickbar,
   getPlayerEconomy,
   selectGameSimulationPlayerConcentration,
 } from '../src/game/core-server/game-simulation.ts'
 import { applyNativeSecondaryPlayerDamage } from '../src/game/core-kernels/native-secondary-abilities.ts'
+import { grantPlayerWeldBuild } from '../src/game/core-kernels/player-progression.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotPath = process.env.SDR_DERIVED_HUD_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-native-derived-hud.png'
+const primarySpellScreenshotPath = process.env.SDR_DERIVED_HUD_PRIMARY_SCREENSHOT
+  || '/tmp/solomon-dark-native-primary-spell-summary.png'
+const productionBuild = process.env.SDR_DERIVED_HUD_PRODUCTION === '1'
 const credential = randomBytes(32).toString('base64url')
 const pageErrors = []
 const consoleErrors = []
 const networkErrors = []
 
-const vite = await createViteServer({
-  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
-  logLevel: 'error',
-  root: frontendRoot,
-  server: { host: '127.0.0.1', port: 0 },
-})
-await vite.listen()
-const viteAddress = vite.httpServer?.address()
-if (!viteAddress || typeof viteAddress === 'string') {
-  await vite.close()
-  throw new Error('Vite did not expose its local smoke-test port')
+const primarySpellCases = Object.freeze([
+  { buildId: null, damageRange: true, damageUnit: ' / bolt', manaUnit: ' / cast', name: 'Magic Missile', skillId: 8 },
+  { buildId: null, damageRange: false, damageUnit: ' / bolt', manaUnit: ' / cast', name: 'Fireball', skillId: 16 },
+  { buildId: null, damageRange: false, damageUnit: ' / second', manaUnit: ' / sec', name: 'Lightning', skillId: 24 },
+  { buildId: null, damageRange: false, damageUnit: ' / second', manaUnit: ' / sec', name: 'Frost Jet', skillId: 32 },
+  { buildId: null, damageRange: true, damageUnit: ' / boulder', manaUnit: ' / sec', name: 'Boulder', skillId: 40 },
+  { buildId: 1000, damageRange: true, damageUnit: ' / bolt', manaUnit: ' / cast', name: 'Burning Bolt', skillId: 52 },
+  { buildId: 1001, damageRange: true, damageUnit: ' / bolt', manaUnit: ' / cast', name: 'Frost Missile', skillId: 52 },
+  { buildId: 1002, damageRange: true, damageUnit: ' / bolt', manaUnit: ' / cast', name: 'Ball Lightning', skillId: 52 },
+  { buildId: 1003, damageRange: false, damageUnit: ' / second', manaUnit: ' / sec', name: 'Flame Lash', skillId: 52 },
+  { buildId: 1004, damageRange: false, damageUnit: ' / second', manaUnit: ' / sec', name: 'Blizzard Beam', skillId: 52 },
+  { buildId: 1005, damageRange: false, damageUnit: ' / second', manaUnit: ' / sec', name: 'Steam Jet', skillId: 52 },
+  { buildId: 1006, damageRange: true, damageUnit: ' / boulder', manaUnit: ' / sec', name: 'Ethereal Boulder', skillId: 52 },
+  { buildId: 1007, damageRange: true, damageUnit: ' / impact', manaUnit: ' / sec', name: 'Meteor Swarm', skillId: 52 },
+  { buildId: 1008, damageRange: false, damageUnit: ' / rock', manaUnit: ' / sec', name: 'Hailstones', skillId: 52 },
+  { buildId: 1009, damageRange: false, damageUnit: ' / bolt', manaUnit: ' / cast', name: 'Crawling Shock', skillId: 52 },
+])
+
+let vite = null
+let staticServer = null
+let baseUrl
+if (productionBuild) {
+  staticServer = await startStaticClientServer({
+    root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+  })
+  baseUrl = staticServer.origin
+} else {
+  vite = await createViteServer({
+    configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+    logLevel: 'error',
+    root: frontendRoot,
+    server: { host: '127.0.0.1', port: 0 },
+  })
+  await vite.listen()
+  const viteAddress = vite.httpServer?.address()
+  if (!viteAddress || typeof viteAddress === 'string') {
+    await vite.close()
+    throw new Error('Vite did not expose its local smoke-test port')
+  }
+  baseUrl = `http://127.0.0.1:${viteAddress.port}`
 }
-const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
@@ -75,8 +108,13 @@ try {
   })
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
-  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
-  if (await tutorialPrompt.isVisible()) {
+  const tutorialPrompt = page.locator(
+    '[data-prompt-kind="tutorial"] .stock-prompt-dialog',
+  )
+  const tutorialPromptVisible = await tutorialPrompt
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true, () => false)
+  if (tutorialPromptVisible) {
     await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
     await tutorialPrompt.waitFor({ state: 'detached' })
   }
@@ -121,6 +159,11 @@ try {
 
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
+  const primarySpellSummaryReceipt = await exercisePrimarySpellInventory(
+    page,
+    host,
+    playerId,
+  )
   setPlayerVitalComposition(host.state(), playerId, {
     currentHealth: 36,
     maximumHealth: 50,
@@ -321,9 +364,13 @@ try {
   })
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
-  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+  const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  await boneyardScene.waitFor({
     timeout: 90_000,
   })
+  await boneyardScene.locator(
+    'xpath=self::*[@data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 30_000 })
   const boneyardSteamHudIcon = page.locator(
     '.hub-hud-selected-skill[data-binding="12"][data-record="113"]',
   )
@@ -337,6 +384,21 @@ try {
     quickbar: Number(await boneyardSteamQuickbarIcon.getAttribute('data-record')),
   }
   assert.deepEqual(boneyardSteamRecords, { hud: 113, quickbar: 113 })
+  await page.keyboard.press('i')
+  const boneyardInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await boneyardInventory.waitFor({ timeout: 10_000 })
+  await boneyardInventory.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor({ state: 'attached', timeout: 30_000 })
+  const boneyardPrimarySpellSummary = await readPrimarySpellSummary(
+    boneyardInventory,
+    primarySpellCases[10],
+  )
+  await page.keyboard.press('i')
+  await boneyardInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  await page.locator(
+    '.boneyard-scene[data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 10_000 })
   const boneyardMaximumHealth = playerProgression(host.state(), playerId).maximumHealth
   setPlayerVitalComposition(host.state(), playerId, {
     currentHealth: boneyardMaximumHealth * 0.72,
@@ -365,6 +427,7 @@ try {
     boneyardShieldAfterHit,
     charmedHud,
     consoleErrors,
+    boneyardPrimarySpellSummary,
     boneyardSteamRecords,
     damagedHud,
     defaultHud,
@@ -375,6 +438,9 @@ try {
     planeOrbSelectorGate: true,
     planewalkerHud,
     poisonedShield,
+    primarySpellScreenshotPath,
+    primarySpellSummaryReceipt,
+    productionBuild,
     screenshotPath,
     shieldAfterHit,
     shieldBeforeHit,
@@ -388,7 +454,110 @@ try {
 } finally {
   await browser.close()
   await host.close()
-  await vite.close()
+  await vite?.close()
+  await staticServer?.close()
+}
+
+async function exercisePrimarySpellInventory(page, host, playerId) {
+  const learnedSkillIds = [
+    8, 9, 10,
+    16, 17, 18,
+    24, 25, 26,
+    32, 33, 34,
+    40, 42, 43,
+  ]
+  mutatePlayer(host.state(), playerId, {
+    learnedSkillIds,
+    primarySkillId: 8,
+    weldBuildId: null,
+  })
+  await page.keyboard.press('i')
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor({ timeout: 10_000 })
+  await inventory.locator(
+    'xpath=self::*[@data-renderer-state="ready"]',
+  ).waitFor({ state: 'attached', timeout: 30_000 })
+  await inventory.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor({ state: 'attached', timeout: 30_000 })
+
+  const summaries = []
+  for (const expected of primarySpellCases) {
+    mutatePlayer(host.state(), playerId, {
+      primarySkillId: expected.skillId,
+      weldBuildId: expected.buildId,
+    })
+    const summary = await readPrimarySpellSummary(inventory, expected)
+    summaries.push({ buildId: expected.buildId, lines: summary, skillId: expected.skillId })
+    if (expected.skillId === 16) {
+      await page.waitForTimeout(100)
+      await page.screenshot({ path: primarySpellScreenshotPath })
+    }
+  }
+
+  mutatePlayer(host.state(), playerId, { primarySkillId: 40 })
+  await readPrimarySpellSummary(inventory, {
+    ...primarySpellCases[4],
+    buildId: 1009,
+  })
+  await page.keyboard.press('i')
+  await inventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  await page.locator(
+    '.hub-scene[data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 10_000 })
+
+  await page.getByRole('button', { name: 'Open Fomentius interaction' }).click()
+  const fomentius = page.getByRole('dialog', { name: "FOMENTIUS' USEFUL THYNGS" })
+  await fomentius.waitFor({ timeout: 10_000 })
+  await fomentius.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor({ state: 'attached', timeout: 30_000 })
+  const companion = await readPrimarySpellSummary(fomentius, {
+    ...primarySpellCases[4],
+    buildId: 1009,
+  })
+  await fomentius.getByRole('button', { name: 'Done' }).click()
+  await fomentius.waitFor({ state: 'hidden', timeout: 10_000 })
+  await page.locator(
+    '.hub-scene[data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 10_000 })
+  return { companion, standalone: summaries }
+}
+
+async function readPrimarySpellSummary(inventory, expected) {
+  const build = expected.buildId === null ? '' : `${expected.buildId}`
+  const canvas = inventory.locator(
+    `.hub-inventory-native-canvas[data-native-primary-spell-id="${expected.skillId}"]`
+      + `[data-native-primary-spell-build="${build}"]`,
+  )
+  await canvas.waitFor({ state: 'attached', timeout: 10_000 })
+  const serialized = await canvas.getAttribute('data-native-primary-spell-lines')
+  assert.ok(serialized)
+  const lines = JSON.parse(serialized)
+  assert.equal(lines.length, 4)
+  assert.deepEqual(lines.map(({ unit }) => unit), [
+    null,
+    expected.damageUnit,
+    expected.manaUnit,
+    ' / sec',
+  ])
+  assert.equal(lines[0].text, expected.name)
+  assert.match(
+    lines[1].text,
+    expected.damageRange
+      ? /^damage: \d+\.\d - \d+\.\d$/
+      : /^damage: \d+\.\d$/,
+  )
+  assert.match(lines[2].text, /^mana cost: \d+\.\d$/)
+  assert.match(lines[3].text, /^mana heal: \d+\.\d$/)
+  if (expected.damageRange) {
+    const [minimum, maximum] = lines[1].text
+      .slice('damage: '.length)
+      .split(' - ')
+      .map(Number)
+    assert.ok(minimum <= maximum)
+  }
+  return lines
 }
 
 function mutatePlayer(state, playerId, {
@@ -410,15 +579,21 @@ function mutatePlayer(state, playerId, {
     effectiveRanks[skillId] = 1
     if (!learnedSkillOrder.includes(skillId)) learnedSkillOrder.push(skillId)
   }
-  const skillBooks = [...state.playerEntities.skillBooks]
-  skillBooks[index] = {
+  let skillBook = {
     ...sourceBook,
     effectiveRanks,
     learnedSkillOrder,
     permanentRanks,
     primarySkillId: primarySkillId ?? sourceBook.primarySkillId,
-    weldBuildId: weldBuildId ?? sourceBook.weldBuildId,
   }
+  if (weldBuildId === null) {
+    skillBook = { ...skillBook, weldBuildId: null, weldComponentRanks: null }
+  } else if (weldBuildId !== undefined) {
+    skillBook = grantPlayerWeldBuild(skillBook, weldBuildId)
+  }
+  if (primarySkillId !== undefined) skillBook = { ...skillBook, primarySkillId }
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = skillBook
   const economy = getPlayerEconomy(state, playerId)
   const nextEconomy = ownedPerkSelectors === undefined
     ? economy
