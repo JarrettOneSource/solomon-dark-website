@@ -232,7 +232,7 @@ smokeFlow: try {
   if (invitationEvidencePath) await first.page.screenshot({ path: invitationEvidencePath })
   await invitation.getByRole('button', { name: 'Deny' }).click()
   await invitation.waitFor({ state: 'detached' })
-  assert.equal(await first.page.locator('[data-party-member]').count(), 1)
+  assert.equal(await first.page.locator('[data-native-ui-party-chip="member"]').count(), 1)
 
   const secondInviteClickCountBefore = await soundCount(first.page, 'click')
   host.invitePlayer(first.playerId)
@@ -1090,7 +1090,7 @@ async function waitForPlayers(page, count) {
 
 async function waitForPartySize(page, size) {
   await page.waitForFunction((expected) => (
-    document.querySelectorAll('[data-party-member]').length === expected
+    document.querySelectorAll('[data-native-ui-party-chip="member"]').length === expected
   ), size, { timeout: 15_000 })
 }
 

@@ -199,7 +199,7 @@ try {
     member.accept(memberInvitation.state.invitations[0].id)
   }
   await page.waitForFunction(() => (
-    document.querySelectorAll('[data-party-member]').length === 3
+    document.querySelectorAll('[data-native-ui-party-chip="member"]').length === 3
   ))
   const leaderParty = await leader.next(message => (
     message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 3

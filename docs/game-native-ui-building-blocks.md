@@ -18,7 +18,7 @@ import implementation files from outside `native-ui/`.
 - `native-ui/react-raw.ts`: exact low-level React sprite, strip, nine-slice,
   bitmap-text, and plan adapters.
 - `native-ui/react.ts`: semantic Button, MsgBox, Tabs, SimpleMenu, BoastMenu,
-  Settings, and Notebox modules.
+  PartyMenu, Settings, and Notebox modules.
 
 An architecture test rejects every external import that bypasses these seams.
 Use the semantic interface whenever the stock composition already exists; the
@@ -138,11 +138,19 @@ const tabs = planNativeUiTabs({
 The selected id must name one supplied tab. Disabled tabs keep their semantic
 rectangle but return `disabled: true` and render at native disabled alpha.
 
+Between the two brackets the plan stretches the last column of `UI.13` as a
+`slice` node labelled `<id>:plate`, the same trick the stock button plays with
+`UI.54`, so a wide tab keeps its stone band behind the label instead of showing
+the scene through the gap. A tab exactly two brackets wide gets no plate.
+
 ## Buttons and SimpleMenu
 
 `planNativeUiButton` owns the stock `UI.101` idle body, `UI.102` pressed/
 explicit-selected body, Fonts group 3 label, native gold tint, and disabled
 alpha. Its states are `idle`, `focused`, `pressed`, `selected`, and `disabled`.
+Pass `scale` to draw the same chrome smaller: the surround, the pressed label
+drop, and the label glyphs scale together, the minimum width applies to the
+unscaled body, and a scale of 1 emits exactly the nodes it always did.
 `focused` preserves the idle body because retail hover/focus state does not
 enter the render branch; the DOM adapter supplies a separate browser-required
 focus-visible outline. `pressed` and explicit `selected` use `UI.102` and move
@@ -234,6 +242,61 @@ Pointer drag mirrors the stock SwipeBox. Wheel input moves by the recovered
 25-pixel step, with no post-release inertia. There is no scrollbar, page label,
 or Previous/More control. Admitted mod rows extend the same clipped content
 stream and increase its continuous scroll range.
+
+## Party menu
+
+`planNativeUiPartyMenu` composes the hub party menu from stock parts: the
+message-box frame and curtain, a `menu` title, a `planNativeUiTabs` band with
+Members, Mods, and Settings, `UI.50` corner brackets around every row, and
+stock buttons drawn through `planNativeUiButton` at scale 0.55 inside rows and
+at full size in the footer. The Members tab is a swipe box: pass `scrollY` and
+read back `scrollY`, `maximumScrollY`, `contentHeight`, and `viewportBounds`.
+Row nodes are clipped to the viewport and only buttons that intersect it become
+`actions`, while `rowActions` lists every row button so a semantic adapter can
+reach off-screen rows from the keyboard. Join requests render first with
+`accept:<id>` and `deny:<id>` buttons, members carry LEADER, YOU, and OFFLINE
+tags, and `kick:<id>` appears only on removable members. The Settings tab draws
+the three-way visibility control from `UI.67` and `UI.105` plates, the Party ID
+row with `copy`, and the New party ID row with `generate`; a non-leader sees the
+plates disabled and a note instead of the code rows. Action ids parse back with
+`parseNativeUiPartyMenuAction`.
+
+`NativeUiPartyMenu` renders the plan through `NativeUiPlanView` and layers the
+semantic controls over it: a `tablist`, a `radiogroup` for visibility, the row
+buttons inside a clipped viewport that scrolls the plan when one gains focus,
+and the loose footer buttons. CLOSE carries `data-game-back` and
+`data-game-default-focus`, and the module handles wheel, drag, Escape, and
+outside-frame pointer dismissal. `HubScene` portals it over the scene inside
+`.hub-party-menu-overlay` with `curtainAlpha={0}` so the overlay dims the
+letterboxed edges evenly. The workbench PARTY tab shows the leader view.
+
+## Party chip and invitation
+
+`planNativeUiPartyChip(spec)` in `native-ui-party-chip.ts` draws the hub's party chip
+from the menu's own chrome at card size: a UI.49 marble tile under four scaled UI.17
+corners with the record's edge strips stretched between them (0.4 with rows, 0.3 as a
+bare 50 px header), the UI.38 skull, PARTY in the menu face, the boneyard editor's
+Bonedit.54 gear tinted gold where the member count used to sit, and the ControlPanel.0
+arrow. Members and pending requests hang under the header as the same UI.50 bracket rows
+the menu's Members tab uses (`nativeUiPartyMenuBracketRowNodes`), with the roster face
+at 0.65 and body-face YOU, LEADER, OFFLINE, or WANTS TO JOIN tags right-aligned. An
+action error is one medium-face line under the header. The plan is 236 px wide and its
+height follows the body; the host places and scales the card (1:1 at 11, 174 on a
+pointer, 0.55 in screen pixels under the pause skull on touch).
+
+Actions are `header`, `settings` (only when the spec asks for the gear), and one
+`member:<id>` or `request:<id>` per row; `parseNativeUiPartyChipAction` splits them.
+`NativeUiPartyChip` (`react.ts`) renders the plan with a transparent button per action:
+on a pointer the header opens the menu on Members and the gear opens it on Settings; on
+touch (`collapsible`) the header collapses and expands the rows and the arrow points down
+while they show. The party menu takes `initialTab` for this.
+
+`NativeUiPartyInvitation` is the stock message box titled PARTY INVITATION with the
+inviter's name in the body and ACCEPT and DENY on the party menu's footer line
+(`nativeUiPartyInvitationActionBounds`, 125 px above the frame bottom, 36 px apart); DENY
+is the back action. The workbench PARTY CHIP tab shows the desktop chip with a request,
+a chip with an error line and no gear, the touch chip collapsed and expanded at 0.55,
+and the invitation box.
 
 ## Bitmap text
 

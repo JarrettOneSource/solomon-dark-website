@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import type {
   HubGameSnapshot,
   HubPresentationFrame,
@@ -17,7 +18,6 @@ import {
 } from './core-kernels/hub-regions.ts'
 import type { NativeCollegeIntroState } from './core-kernels/native-college-intro.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
-import { art } from '../lib/assets.ts'
 import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
@@ -69,8 +69,10 @@ import type {
   ModContentProjection,
 } from './protocol/game-protocol.ts'
 import type { LocalPartyState, PartyVisibility } from './protocol/party-state.ts'
-import PartySettingsDialog from './PartySettingsDialog.tsx'
-import PartySettingsGearIcon from './PartySettingsGearIcon.tsx'
+import type { NativeUiPartyMenuTabId } from './native-ui/core.ts'
+import { NativeUiPartyChip, NativeUiPartyInvitation, NativeUiPartyMenu } from './native-ui/react.ts'
+import { partyMenuModel, partyMenuVisibility } from './party-menu-presentation.ts'
+import './party-menu.css'
 import { useCoarsePointer } from './input/use-coarse-pointer.ts'
 import type {
   ProtocolPlayerEconomy,
@@ -255,17 +257,51 @@ export default function HubScene({
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
   const [partySettingsOpen, setPartySettingsOpen] = useState(false)
+  const [partyMenuTab, setPartyMenuTab] = useState<NativeUiPartyMenuTabId>('members')
+  const [partyCodeCopied, setPartyCodeCopied] = useState(false)
+  const partyCodeCopiedTimeoutRef = useRef<number | null>(null)
+  // The chip and the menu share one model: the chip shows it under the skull, the menu
+  // opens on whichever tab the chip was pressed for (header: Members, gear: Settings).
+  const partyChip = partyState ? partyMenuModel(partyState, playerId, sessionKind) : null
+  const partyMenuOpen = partySettingsOpen && partyChip !== null
+  const partyMenu = partyMenuOpen ? partyChip : null
+  const openPartyMenu = (tab: NativeUiPartyMenuTabId) => {
+    setPartyMenuTab(tab)
+    setPartySettingsOpen(true)
+  }
+  useEffect(() => () => {
+    if (partyCodeCopiedTimeoutRef.current !== null) window.clearTimeout(partyCodeCopiedTimeoutRef.current)
+  }, [])
+  const copyPartyCode = () => {
+    const joinCode = partyState?.party.joinCode
+    if (!joinCode) return
+    if (partyCodeCopiedTimeoutRef.current !== null) {
+      window.clearTimeout(partyCodeCopiedTimeoutRef.current)
+      partyCodeCopiedTimeoutRef.current = null
+    }
+    const write = navigator.clipboard?.writeText(joinCode)
+    if (!write) return
+    void write.then(
+      () => {
+        setPartyCodeCopied(true)
+        partyCodeCopiedTimeoutRef.current = window.setTimeout(() => {
+          setPartyCodeCopied(false)
+          partyCodeCopiedTimeoutRef.current = null
+        }, 1_500)
+      },
+      () => setPartyCodeCopied(false),
+    )
+  }
   const [partyExpanded, setPartyExpanded] = useState(false)
   const [playerActivities, setPlayerActivities] = useState(() => (
     hubPlayerActivities(hubInitialSnapshot.world.participants)
   ))
   const [memorial, setMemorial] = useState(hubInitialSnapshot.world.memorial)
   const coarsePointer = useCoarsePointer()
-  // Touch: every state that extends the party column below the chip (member card,
-  // action error, invitation toast) makes the ally roster under the chip yield.
-  const partyColumnOpen = partyExpanded
-    || Boolean(partyActionError)
-    || (partyState?.invitations.length ?? 0) > 0
+  // Touch: whatever hangs from the chip's header (the rows tapped open, an action error
+  // line) makes the ally roster under the chip yield. Invitations are a message box over
+  // the scene and leave the column alone.
+  const partyColumnOpen = partyExpanded || Boolean(partyActionError)
   const selectedPlayerIdRef = useRef<string | null>(null)
   selectedPlayerIdRef.current = selectedPlayerId
   const inventoryRequestRef = useRef(inventoryRequestSequence)
@@ -328,7 +364,7 @@ export default function HubScene({
     audio.stopLoop('polisher-wipe', 'story-office-polisher')
   }, [audio])
   const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
-    || partySettingsOpen
+    || partyMenuOpen
   modalOpenRef.current = modalOpen
 
   useEffect(() => {
@@ -982,140 +1018,84 @@ export default function HubScene({
           transitionActive={transitionActive}
         />
 
-        {partyState && (
+        {partyState && partyChip ? (
           <section
             className="hub-party-panel"
             aria-label="Party"
             data-party-id={partyState.party.id}
             data-party-expanded={!coarsePointer || partyExpanded}
           >
-            <h2>
-              {coarsePointer ? (
-                <button
-                  type="button"
-                  className="hub-party-toggle"
-                  aria-expanded={partyExpanded}
-                  aria-controls="hub-party-members"
-                  onClick={() => setPartyExpanded((open) => !open)}
-                >
-                  <img src={art.skullGold} alt="" aria-hidden />
-                  Party
-                  <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
-                  <span className="hub-party-toggle-chevron" aria-hidden />
-                </button>
-              ) : (
-                <>
-                  <img src={art.skullGold} alt="" aria-hidden />
-                  Party
-                  <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
-                </>
-              )}
-              {partyState.party.leaderPlayerId === playerId
+            <NativeUiPartyChip
+              collapsible={coarsePointer}
+              error={partyActionError}
+              expanded={!coarsePointer || partyExpanded}
+              members={partyChip.members}
+              onMember={openMemberCard}
+              onOpen={() => openPartyMenu('members')}
+              onRequest={() => openPartyMenu('members')}
+              onSettings={() => openPartyMenu('settings')}
+              onToggle={() => setPartyExpanded(open => !open)}
+              requests={partyChip.requests}
+              settings={partyState.party.leaderPlayerId === playerId
                 || partyState.party.memberPlayerIds.length > 1
-                || sessionKind === 'private-college' ? (
-                <button
-                  className="hub-party-settings-open"
-                  type="button"
-                  aria-label="Party settings"
-                  onClick={() => setPartySettingsOpen(true)}
-                ><PartySettingsGearIcon /></button>
-              ) : null}
-            </h2>
-            {partyActionError ? (
-              <p className="hub-party-error" role="alert">{partyActionError}</p>
-            ) : null}
-            <div
-              className="hub-party-members"
-              id="hub-party-members"
-              role="list"
-              hidden={coarsePointer && !partyExpanded}
-            >
-              {partyState.party.memberPlayerIds.map((memberPlayerId) => {
-                const profile = partyState.hubPlayers.find(({ playerId: id }) => (
-                  id === memberPlayerId
-                ))
-                const rosterPlayer = partyState.partyRoster.find(({ playerId: id }) => (
-                  id === memberPlayerId
-                ))
-                const isLeader = memberPlayerId === partyState.party.leaderPlayerId
-                return (
-                  <div
-                    key={memberPlayerId}
-                    role="listitem"
-                    className="hub-party-member"
-                    data-party-member={memberPlayerId}
-                    data-party-leader={isLeader}
-                    data-party-connected={rosterPlayer?.connected ?? false}
-                  >
-                    <button
-                      type="button"
-                      className="hub-party-member-open"
-                      onClick={() => openMemberCard(memberPlayerId)}
-                    >
-                      <img
-                        className="hub-party-member-marker"
-                        src={isLeader ? art.skullGold : art.skullWhite}
-                        alt=""
-                        aria-hidden
-                      />
-                      <span className="hub-party-member-name">
-                        {profile?.displayName ?? rosterPlayer?.displayName ?? memberPlayerId}
-                      </span>
-                      {memberPlayerId === playerId && (
-                        <span className="hub-party-member-tag hub-party-member-you">You</span>
-                      )}
-                      {isLeader && (
-                        <span className="hub-party-member-tag hub-party-member-host">Leader</span>
-                      )}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-            {partyState.invitations.map((invitation) => (
-              <div
-                className="hub-party-invitation"
-                data-party-invitation={invitation.id}
-                key={invitation.id}
-              >
-                <span className="hub-party-invitation-text">
-                  <strong>{invitation.inviter.displayName}</strong> invited you
-                </span>
-                <div className="hub-party-invitation-actions">
-                  <button
-                    type="button"
-                    onClick={() => onAcceptPartyInvitation(invitation.id)}
-                  >
-                    Accept
-                  </button>
-                  <button
-                    type="button"
-                    className="hub-party-invitation-deny"
-                    onClick={() => onDenyPartyInvitation(invitation.id)}
-                  >
-                    Deny
-                  </button>
-                </div>
-              </div>
-            ))}
+                || sessionKind === 'private-college'}
+            />
           </section>
-        )}
-
-        {partySettingsOpen && partyState ? (
-          <PartySettingsDialog
-            error={partyActionError}
-            onAcceptRequest={onAcceptPartyJoinRequest}
-            onClose={() => setPartySettingsOpen(false)}
-            onDenyRequest={onDenyPartyJoinRequest}
-            onKick={onKickPartyPlayer}
-            onLeave={onLeaveParty}
-            onRotateCode={onPartyRotateCode}
-            onVisibility={onPartyVisibility}
-            playerId={playerId}
-            sessionKind={sessionKind}
-            state={partyState}
-          />
         ) : null}
+
+        {partyMenu && sceneRef.current ? createPortal(
+          <div
+            className="hub-party-menu-overlay"
+            onPointerDown={(event) => {
+              if (event.target === event.currentTarget) setPartySettingsOpen(false)
+            }}
+          >
+            <div className="hub-party-menu-stage" style={nativeUiStageStyle}>
+              <NativeUiPartyMenu
+                code={partyMenu.code}
+                copied={partyCodeCopied}
+                curtainAlpha={0}
+                error={partyActionError}
+                initialTab={partyMenuTab}
+                leader={partyMenu.leader}
+                leaveLabel={partyMenu.leaveLabel}
+                members={partyMenu.members}
+                onAcceptRequest={onAcceptPartyJoinRequest}
+                onClose={() => setPartySettingsOpen(false)}
+                onCopyCode={copyPartyCode}
+                onDenyRequest={onDenyPartyJoinRequest}
+                onGenerateCode={onPartyRotateCode}
+                onKick={onKickPartyPlayer}
+                onLeave={onLeaveParty}
+                onVisibility={(visibilityId) => {
+                  const visibility = partyMenuVisibility(visibilityId)
+                  if (visibility) onPartyVisibility(visibility)
+                }}
+                requests={partyMenu.requests}
+                visibility={partyMenu.visibility}
+                visibilityOptions={partyMenu.visibilityOptions}
+              />
+            </div>
+          </div>,
+          sceneRef.current,
+        ) : null}
+        {(() => {
+          const invitation = partyState?.invitations[0]
+          if (!invitation || !sceneRef.current) return null
+          return createPortal(
+            <div className="hub-party-menu-overlay" data-party-invitation={invitation.id}>
+              <div className="hub-party-menu-stage" style={nativeUiStageStyle}>
+                <NativeUiPartyInvitation
+                  dimAlpha={0}
+                  inviter={invitation.inviter.displayName}
+                  onAccept={() => onAcceptPartyInvitation(invitation.id)}
+                  onDeny={() => onDenyPartyInvitation(invitation.id)}
+                />
+              </div>
+            </div>,
+            sceneRef.current,
+          )
+        })()}
 
         {selectedPlayerId && (() => {
           const profile = partyState?.hubPlayers.find(({ playerId: id }) => (

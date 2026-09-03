@@ -2,8 +2,11 @@ import { useState } from 'react'
 
 import { NATIVE_BOASTS } from '../core-kernels/native-hub-npc.ts'
 import NativeUiBoastMenu from './NativeUiBoastMenu.tsx'
+import NativeUiPartyMenu from './NativeUiPartyMenu.tsx'
 import NativeUiButton from './NativeUiButton.tsx'
 import NativeUiMessageBox from './NativeUiMessageBox.tsx'
+import NativeUiPartyChip from './NativeUiPartyChip.tsx'
+import NativeUiPartyInvitation from './NativeUiPartyInvitation.tsx'
 import {
   NativeUiSettingsAction,
   NativeUiSettingsRange,
@@ -13,8 +16,35 @@ import NativeUiSimpleMenu from './NativeUiSimpleMenu.tsx'
 import NativeUiStoneButton from './NativeUiStoneButton.tsx'
 import NativeUiTabs from './NativeUiTabs.tsx'
 import { nativeUiRect } from './native-ui-plan.ts'
+import type {
+  NativeUiPartyMenuMember,
+  NativeUiPartyMenuRequest,
+  NativeUiPartyMenuVisibilityOption,
+} from './native-ui-party-menu.ts'
+
+const WORKBENCH_PARTY_MEMBERS: readonly NativeUiPartyMenuMember[] = [
+  { id: 'solomon', name: 'Solomon', removable: false, tags: ['you', 'leader'] },
+  { id: 'ash', name: 'Ash Whitlock', removable: true, tags: [] },
+  { id: 'mira', name: 'Mira', removable: true, tags: ['offline'] },
+  { id: 'ted', name: 'Ted Bramble', removable: true, tags: [] },
+  { id: 'una', name: 'Una', removable: true, tags: [] },
+  { id: 'vex', name: 'Vex Morrow', removable: true, tags: [] },
+  { id: 'wren', name: 'Wren', removable: true, tags: [] },
+]
+const WORKBENCH_CHIP_MEMBERS = WORKBENCH_PARTY_MEMBERS.slice(0, 3)
+
+const WORKBENCH_PARTY_REQUESTS: readonly NativeUiPartyMenuRequest[] = [
+  { id: 'r1', name: 'Zed Halloway' },
+]
+
+const WORKBENCH_PARTY_VISIBILITY: readonly NativeUiPartyMenuVisibilityOption[] = [
+  { id: 'public', label: 'PUBLIC' },
+  { id: 'invite-only', label: 'INVITE ONLY' },
+  { id: 'private', label: 'PRIVATE' },
+]
 
 export default function NativeUiDomWorkbenchPreview() {
+  const [chipExpanded, setChipExpanded] = useState(false)
   const [enabled, setEnabled] = useState(true)
   const [selectedTab, setSelectedTab] = useState('messages')
   const [selectedBoast, setSelectedBoast] = useState<string | null>(null)
@@ -27,14 +57,16 @@ export default function NativeUiDomWorkbenchPreview() {
         onSelect={setSelectedTab}
         selectedId={selectedTab}
         tabs={[
-          { bounds: nativeUiRect(185, 28, 220, 69), id: 'messages', label: 'MESSAGES' },
-          { bounds: nativeUiRect(405, 28, 260, 69), id: 'menus', label: 'SIMPLE MENUS' },
-          { bounds: nativeUiRect(665, 28, 250, 69), id: 'settings', label: 'SETTINGS' },
-          { bounds: nativeUiRect(915, 28, 260, 69), id: 'boasts', label: 'BOAST MENU' },
+          { bounds: nativeUiRect(60, 28, 220, 69), id: 'messages', label: 'MESSAGES' },
+          { bounds: nativeUiRect(280, 28, 260, 69), id: 'menus', label: 'SIMPLE MENUS' },
+          { bounds: nativeUiRect(540, 28, 250, 69), id: 'settings', label: 'SETTINGS' },
+          { bounds: nativeUiRect(790, 28, 260, 69), id: 'boasts', label: 'BOAST MENU' },
+          { bounds: nativeUiRect(1050, 28, 260, 69), id: 'party', label: 'PARTY' },
+          { bounds: nativeUiRect(1310, 28, 240, 69), id: 'chip', label: 'PARTY CHIP' },
         ]}
         width={1_600}
       />
-      <div style={{ visibility: selectedTab === 'boasts' ? 'hidden' : undefined }}>
+      <div style={{ visibility: selectedTab === 'boasts' || selectedTab === 'party' || selectedTab === 'chip' ? 'hidden' : undefined }}>
         <NativeUiMessageBox
         body="Every panel, glyph, button, and tab in this preview is composed from the stock atlas record and bitmap-font ABI."
         bounds={nativeUiRect(500, 125, 600, 400)}
@@ -101,6 +133,56 @@ export default function NativeUiDomWorkbenchPreview() {
           onSelect={setSelectedBoast}
           selectedId={selectedBoast}
         />
+      ) : null}
+      {selectedTab === 'party' ? (
+        <NativeUiPartyMenu
+          code="ABC123"
+          leader
+          leaveLabel="LEAVE PARTY"
+          members={WORKBENCH_PARTY_MEMBERS}
+          onClose={() => setSelectedTab('messages')}
+          requests={WORKBENCH_PARTY_REQUESTS}
+          visibility="invite-only"
+          visibilityOptions={WORKBENCH_PARTY_VISIBILITY}
+        />
+      ) : null}
+      {selectedTab === 'chip' ? (
+        <>
+          <NativeUiPartyChip
+            expanded
+            members={WORKBENCH_PARTY_MEMBERS}
+            requests={WORKBENCH_PARTY_REQUESTS}
+            settings
+            style={{ left: 11, position: 'absolute', top: 174 }}
+          />
+          <NativeUiPartyChip
+            error="Only the party leader can do that."
+            expanded
+            members={WORKBENCH_CHIP_MEMBERS}
+            style={{ left: 280, position: 'absolute', top: 174 }}
+          />
+          <NativeUiPartyChip
+            collapsible
+            expanded={chipExpanded}
+            members={WORKBENCH_CHIP_MEMBERS}
+            onToggle={() => setChipExpanded(open => !open)}
+            settings
+            style={{ left: 280, position: 'absolute', top: 420, transform: 'scale(0.55)', transformOrigin: 'top left' }}
+          />
+          <NativeUiPartyChip
+            collapsible
+            expanded
+            members={WORKBENCH_CHIP_MEMBERS}
+            settings
+            style={{ left: 420, position: 'absolute', top: 420, transform: 'scale(0.55)', transformOrigin: 'top left' }}
+          />
+          <NativeUiPartyInvitation
+            dimAlpha={0}
+            inviter="Wren Holloway"
+            onAccept={() => setSelectedTab('messages')}
+            onDeny={() => setSelectedTab('messages')}
+          />
+        </>
       ) : null}
     </>
   )

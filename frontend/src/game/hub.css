@@ -67,7 +67,7 @@
 
 /* On touch the roster yields to an open party column through the `hidden` attribute
    (Tailwind's preflight forces `[hidden]` to `display: none !important`; this rule states
-   the intent beside the grid rule above, as `.hub-party-members[hidden]` does). */
+   the intent beside the grid rule above). */
 .hub-hud-allies[hidden] { display: none; }
 
 .hub-hud-ally-row[data-ally-element='ether'] { --element-accent: #b98fe6; }
@@ -614,193 +614,17 @@
   cursor: pointer;
 }
 
+/* The party chip is the native kit's marble card (NativeUiPartyChip); this rule only
+   places it: under the stock skull and the frame counter, in stage pixels, above the
+   scene. */
 .hub-party-panel {
   position: absolute;
   z-index: 15000;
   top: 174px;
   left: 11px;
-  box-sizing: border-box;
-  min-width: 198px;
-  width: min(236px, 100%);
-  max-width: 236px;
-  overflow: hidden;
-  padding: 8px 10px 10px;
-  border: 1px solid rgb(216 188 114 / 0.5);
-  border-radius: 4px;
-  background:
-    linear-gradient(
-      160deg,
-      rgb(30 25 15 / 0.92),
-      rgb(5 7 10 / 0.93) 55%,
-      rgb(10 12 17 / 0.94)
-    );
-  box-shadow:
-    0 0 0 1px rgb(64 50 22 / 0.85),
-    0 10px 26px rgb(0 0 0 / 0.5),
-    inset 0 0 20px rgb(0 0 0 / 0.5);
-  color: #dfd0a0;
-  font: 13px 'IM FELL English', Georgia, serif;
   pointer-events: auto;
-  text-shadow: 0 1px 2px #000;
 }
 
-.hub-party-panel h2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 7px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgb(194 161 88 / 0.3);
-  color: #f3d994;
-  font: 700 12px Cinzel, Georgia, serif;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.hub-party-panel h2 img {
-  width: 13px;
-  height: auto;
-  filter: drop-shadow(0 1px 1px #000);
-}
-
-.hub-party-count {
-  margin-left: auto;
-  color: #a49c89;
-  font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-.hub-party-error {
-  margin: 0 0 7px;
-  color: #e6a89e;
-  font-size: 12px;
-}
-
-.hub-party-settings-open {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 1px solid rgb(202 168 84 / 0.5);
-  border-radius: 50%;
-  background: #171208;
-  color: #f3d994;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.hub-party-members {
-  display: grid;
-  gap: 2px;
-}
-
-/* The touch chip collapses the member list through the `hidden` attribute. Tailwind's
-   preflight (`index.css`, `@layer base`) already forces `[hidden]` to `display: none
-   !important`; this rule states the intent beside the grid rule above. */
-.hub-party-members[hidden] { display: none; }
-
-.hub-party-settings-gear {
-  display: block;
-  width: 15px;
-  height: 15px;
-}
-
-.hub-party-member-open {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  text-shadow: inherit;
-}
-
-.hub-party-member-open:hover,
-.hub-party-member-open:focus-visible {
-  background: rgb(218 176 77 / 0.13);
-  outline: none;
-}
-
-.hub-party-member-marker {
-  flex: none;
-  width: 11px;
-  height: auto;
-  filter: drop-shadow(0 1px 1px #000);
-}
-
-.hub-party-member-name {
-  display: block;
-  width: 0;
-  overflow: hidden;
-  min-width: 0;
-  flex: 1;
-  color: #eee4ca;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hub-party-member-tag {
-  flex: none;
-  padding: 1px 7px 2px;
-  border: 1px solid rgb(202 168 84 / 0.5);
-  border-radius: 8px;
-  color: #f3d994;
-  font: 700 9px Cinzel, Georgia, serif;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.hub-party-member-you {
-  border-color: rgb(141 200 227 / 0.45);
-  color: #a9d9ef;
-}
-
-.hub-party-invitation {
-  display: grid;
-  gap: 8px;
-  margin-top: 9px;
-  padding: 8px 9px 9px;
-  border: 1px solid rgb(216 188 114 / 0.5);
-  border-radius: 3px;
-  background: linear-gradient(180deg, rgb(218 176 77 / 0.13), rgb(0 0 0 / 0.28));
-  animation: hub-party-invitation-in 240ms ease-out both;
-}
-
-@keyframes hub-party-invitation-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-}
-
-.hub-party-invitation-text {
-  color: #eee4ca;
-  font-size: 14px;
-}
-
-.hub-party-invitation-text strong {
-  color: #f3d994;
-  font-weight: 700;
-}
-
-.hub-party-invitation-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.hub-party-invitation button,
 .hub-player-profile button {
   min-height: 34px;
   padding: 6px 12px;
@@ -815,27 +639,11 @@
   text-transform: uppercase;
 }
 
-.hub-party-invitation button:hover,
-.hub-party-invitation button:focus-visible,
 .hub-player-profile button:hover,
 .hub-player-profile button:focus-visible {
   border-color: #e4c36d;
   color: #fff0bc;
   outline: none;
-}
-
-.hub-party-invitation-actions button { flex: 1 1 0; }
-
-.hub-party-invitation .hub-party-invitation-deny {
-  background: linear-gradient(180deg, #2a1b16, #120b08);
-  border-color: rgb(173 116 105 / 0.55);
-  color: #c9aaa1;
-}
-
-.hub-party-invitation .hub-party-invitation-deny:hover,
-.hub-party-invitation .hub-party-invitation-deny:focus-visible {
-  border-color: #ad7469;
-  color: #f1c8bd;
 }
 
 .hub-player-profile-backdrop {
@@ -1330,164 +1138,16 @@
   /* Social column in true screen pixels: the panel sits outside the HUD root but inside
      the display-scaled frame, hence the 1 / display-scale counter-scale and the divided
      offsets. Top-left row: pause skull 4..48, chat opener 56..86 (game-chat.css); the
-     party chip starts 6 px under the skull. Collapsed (the default) it is a 22 px pill
-     (skull, PARTY, count, chevron) plus the 22 px gear; tapped open the pill squares
-     into a tab and the 96 px member card hangs from it (owner pick "mini" + chevron,
-     2026-08-23). The ally roster continues the column 6 px under the pill (hub-hud-allies
-     below) and yields while anything opens under the chip. */
+     party chip starts 6 px under the skull. It is the same native card as on a pointer
+     (NativeUiPartyChip) drawn at 0.55, so collapsed it is a 27.5 px pill (skull, PARTY,
+     gear, arrow) and tapped open its bracket rows hang from it. The ally roster continues
+     the column under the pill (hub-hud-allies below) and yields while rows or an error
+     line open under the header. */
   .hub-party-panel {
     top: calc(54px / var(--hud-display-scale, 1));
     left: calc(6px / var(--hud-display-scale, 1));
-    display: grid;
-    gap: 0;
-    width: max-content;
-    min-width: 0;
-    max-width: 164px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    font-size: 10px;
-    justify-items: start;
-    transform: scale(calc(1 / var(--hud-display-scale, 1)));
+    transform: scale(calc(0.55 / var(--hud-display-scale, 1)));
     transform-origin: top left;
-  }
-
-  .hub-party-panel h2 {
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  .hub-party-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 22px;
-    padding: 0 6px;
-    border: 1px solid rgb(216 188 114 / 0.55);
-    border-radius: 11px;
-    background: linear-gradient(160deg, rgb(30 25 15 / 0.94), rgb(5 7 10 / 0.95));
-    box-shadow: 0 0 0 1px rgb(64 50 22 / 0.85), 0 3px 8px rgb(0 0 0 / 0.5);
-    color: #f3d994;
-    cursor: pointer;
-    font: 700 8px Cinzel, Georgia, serif;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  .hub-party-toggle img {
-    width: 10px;
-    height: auto;
-    filter: drop-shadow(0 1px 1px #000);
-  }
-
-  .hub-party-toggle .hub-party-count {
-    display: grid;
-    min-width: 13px;
-    height: 13px;
-    margin-left: 1px;
-    padding: 0 3px;
-    border-radius: 7px;
-    background: #e9cd7c;
-    color: #1b150a;
-    font-size: 8px;
-    font-weight: 700;
-    line-height: 13px;
-    place-items: center;
-  }
-
-  .hub-party-toggle-chevron {
-    width: 0;
-    height: 0;
-    border-top: 4px solid currentColor;
-    border-right: 3.5px solid transparent;
-    border-left: 3.5px solid transparent;
-    transition: transform 160ms ease;
-  }
-
-  .hub-party-panel[data-party-expanded='true'] .hub-party-toggle-chevron { transform: rotate(180deg); }
-
-  /* Tapped open: the pill becomes the tab the member card hangs from. */
-  .hub-party-panel[data-party-expanded='true'] .hub-party-toggle {
-    border-radius: 3px 3px 0 0;
-    box-shadow: none;
-  }
-
-  .hub-party-error {
-    margin: 3px 0;
-    font-size: 9.5px;
-  }
-
-  /* Gear beside the chip: 22 px disc, 44 px hit halo. */
-  .hub-party-settings-open {
-    position: relative;
-    width: 22px;
-    height: 22px;
-  }
-
-  .hub-party-settings-open::after {
-    content: '';
-    position: absolute;
-    inset: -11px;
-  }
-
-  .hub-party-settings-gear {
-    width: 12px;
-    height: 12px;
-  }
-
-  .hub-party-members {
-    box-sizing: border-box;
-    width: 96px;
-    padding: 2px 4px 3px;
-    border: 1px solid rgb(216 188 114 / 0.5);
-    border-radius: 0 3px 3px 3px;
-    background:
-      linear-gradient(
-        160deg,
-        rgb(30 25 15 / 0.92),
-        rgb(5 7 10 / 0.93) 55%,
-        rgb(10 12 17 / 0.94)
-      );
-    box-shadow: 0 0 0 1px rgb(64 50 22 / 0.85), 0 6px 16px rgb(0 0 0 / 0.5);
-    gap: 0;
-  }
-
-  .hub-party-member-open {
-    min-height: 18px;
-    gap: 4px;
-    padding: 0 3px;
-  }
-
-  .hub-party-member-marker { width: 8px; }
-
-  .hub-party-member-name { font-size: 9.5px; }
-
-  .hub-party-member-tag {
-    padding: 0 3px 1px;
-    border-radius: 6px;
-    font-size: 7px;
-  }
-
-  .hub-party-invitation {
-    box-sizing: border-box;
-    width: 150px;
-    gap: 4px;
-    margin: 4px 0 0;
-    padding: 4px 5px 5px;
-  }
-
-  .hub-party-invitation-text { font-size: 10.5px; }
-
-  .hub-party-invitation-actions { gap: 4px; }
-
-  .hub-party-invitation button {
-    min-height: 28px;
-    padding: 3px 5px;
-    font-size: 8.5px;
   }
 
   .hub-player-profile {
@@ -1595,14 +1255,14 @@
     font-size: 14px;
   }
 
-  /* Touch ally roster: the social column continues under the party chip. The anchor is
-     screen px like the skull (chip 54 + 22 px pill + 6 px gap = 82); 164 root px wide at
-     72 % so the rows read 118 px, the width of the chip-and-gear row, and grow with the
-     UI scale like every HUD-root member. The Boneyard has no chip and takes the chip's
-     anchor (boneyard.css). While the party column is open below the chip (member card,
-     invitation toast, action error) HubScene sets `hidden` and the roster yields. */
+  /* Touch ally roster: the social column continues under the party chip, which is the
+     native card at 0.55 in screen pixels (130 px wide, 27.5 px tall collapsed), so the
+     roster starts 6 px under it (54 + 27.5 + 6 = 88) and keeps its 118 px rows, growing
+     with the UI scale like every HUD-root member. The Boneyard has no chip and takes the
+     chip's anchor (boneyard.css). While the chip's rows or an error line hang from its
+     header HubScene sets `hidden` and the roster yields. */
   .hub-hud-allies {
-    top: calc(82px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    top: calc(88px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
     left: calc(6px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
     width: 164px;
     transform: scale(calc(0.72 / var(--hud-display-scale, 1)));

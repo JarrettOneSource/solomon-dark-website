@@ -1,0 +1,26 @@
+/* Party menu staging: the stock 1600x900 plan is portaled over the hub scene
+   the same way the inventory surface is, so it escapes the HUD display scale.
+   The overlay carries the curtain so letterboxed edges dim along with the stage. */
+.hub-party-menu-overlay {
+  position: absolute;
+  z-index: 30000;
+  inset: 0;
+  overflow: hidden;
+  background: rgb(0 0 0 / 0.75);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.hub-party-menu-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+  transform-origin: 0 0;
+  user-select: none;
+}

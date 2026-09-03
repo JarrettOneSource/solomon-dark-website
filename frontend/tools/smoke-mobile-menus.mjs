@@ -181,8 +181,8 @@ try {
   await page.locator(PAUSE).waitFor({ state: 'detached', timeout: 10_000 })
   await hubScene.waitFor({ timeout: 10_000 })
 
-  await page.locator('.hub-party-toggle').tap()
-  await page.locator('.hub-party-member-open').first().tap()
+  await page.locator('[data-native-ui-party-chip="header"]').tap()
+  await page.locator('[data-native-ui-party-chip="member"]').first().tap()
   const profile = page.locator('.hub-player-profile')
   await profile.waitFor({ timeout: 10_000 })
   const card = await capture('hub-player-card', {
@@ -194,8 +194,8 @@ try {
   // The card keeps its compact 30 px touch buttons (2026-08-23 touch HUD rounds).
   assertDialogFits(card, 'hub-player-card', { button: 'close', dialog: 'card', minButtonHeight: 30 })
   await backWithSkull('hub-player-card', '.hub-player-profile', 'the skull presses Close on the player card')
-  await page.locator('.hub-party-toggle').tap()
-  await page.locator('.hub-party-members[hidden]').waitFor({ state: 'attached', timeout: 10_000 })
+  await page.locator('[data-native-ui-party-chip="header"]').tap()
+  await page.locator('.hub-party-panel[data-party-expanded="false"]').waitFor({ state: 'attached', timeout: 10_000 })
 
   if (!throughHubOnly) {
     await page.getByRole('button', { name: 'Enter the Boneyard' }).tap()

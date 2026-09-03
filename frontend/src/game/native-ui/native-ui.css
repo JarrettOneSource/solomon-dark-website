@@ -114,3 +114,67 @@
 }
 
 .native-ui-tabs-action:disabled { cursor: default; }
+
+.native-ui-party-menu {
+  display: block;
+  isolation: isolate;
+  left: 0;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+}
+
+/* Row buttons live at their unclipped positions so keyboard focus can reach
+   every member; the viewport clips them the way the plan clips the rows. */
+.native-ui-party-menu-viewport {
+  overflow: clip;
+  position: absolute;
+  z-index: 1;
+}
+
+.native-ui-party-menu-action {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: transparent;
+  font-size: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.native-ui-party-menu-action:disabled { cursor: default; }
+
+.native-ui-party-menu-action:focus-visible {
+  outline: 2px solid rgb(239 209 125 / 0.9);
+  outline-offset: 3px;
+}
+
+.native-ui-party-chip {
+  display: block;
+  position: relative;
+}
+
+/* Header, gear, and row hit boxes over the chip plan; the gear button follows the
+   header button in DOM order so it wins the overlap. */
+.native-ui-party-chip-action {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: transparent;
+  font-size: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.native-ui-party-chip-action:focus-visible {
+  outline: 2px solid rgb(239 209 125 / 0.9);
+  outline-offset: 3px;
+}

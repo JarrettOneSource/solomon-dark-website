@@ -119,8 +119,11 @@ export interface NativeUiPlan extends NativeUiFragment {
 export type NativeUiButtonState = 'disabled' | 'focused' | 'idle' | 'pressed' | 'selected'
 
 export interface NativeUiButtonChromeSpec {
+  /** Body rectangle at the requested scale; the surround extends outside it. */
   readonly bounds: NativeUiRect
   readonly id: string
+  /** Uniform scale of the stock chrome and label. Defaults to 1. */
+  readonly scale?: number
   readonly state?: NativeUiButtonState
 }
 
@@ -246,6 +249,7 @@ export const NATIVE_UI_STONE_BUTTON = Object.freeze({
 export const NATIVE_UI_TAB = Object.freeze({
   bracketRecord: 13,
   bracketWidth: 34,
+  plateUvOrigin: 0.95,
   restingBottomTrim: 6,
   restingHeight: 51,
   restingTopTrim: 8,
@@ -463,19 +467,30 @@ export function nativeUiPlan(
   }
 }
 
+function nativeUiButtonScale(scale: number | undefined): number {
+  if (scale === undefined) return 1
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new RangeError('native UI button scale must be a positive finite number')
+  }
+  return scale
+}
+
 export function planNativeUiButtonChrome(spec: NativeUiButtonChromeSpec): NativeUiFragment {
   const state = spec.state ?? 'idle'
   const disabled = state === 'disabled'
   const pressed = state === 'pressed' || state === 'selected'
-  if (spec.bounds.width < NATIVE_UI_BUTTON.minWidth) {
+  const scale = nativeUiButtonScale(spec.scale)
+  if (spec.bounds.width / scale < NATIVE_UI_BUTTON.minWidth) {
     throw new RangeError(`native UI button width must be at least ${NATIVE_UI_BUTTON.minWidth}`)
   }
   const { left, top, width, height } = spec.bounds
-  const surroundLeft = left - NATIVE_UI_BUTTON.surround
-  const surroundTop = top - NATIVE_UI_BUTTON.surround
-  const surroundRight = left + width + NATIVE_UI_BUTTON.surround
-  const endWidth = 70
-  const endHeight = 85
+  const surround = NATIVE_UI_BUTTON.surround * scale
+  const surroundLeft = left - surround
+  const surroundTop = top - surround
+  const surroundRight = left + width + surround
+  const endWidth = 70 * scale
+  const endHeight = 85 * scale
+  const endSize = scale === 1 ? {} : { height: endHeight, width: endWidth }
   const connectorWidth = Math.max(0, surroundRight - surroundLeft - endWidth * 2)
   const alpha = disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1
   const nodes: NativeUiNode[] = [
@@ -498,6 +513,7 @@ export function planNativeUiButtonChrome(spec: NativeUiButtonChromeSpec): Native
       record: NATIVE_UI_BUTTON.surroundEndRecord,
       x: surroundLeft,
       y: surroundTop,
+      ...endSize,
     },
     {
       alpha,
@@ -517,6 +533,7 @@ export function planNativeUiButtonChrome(spec: NativeUiButtonChromeSpec): Native
       record: NATIVE_UI_BUTTON.surroundEndRecord,
       x: surroundRight,
       y: surroundTop,
+      ...endSize,
     },
   ]
   return { actions: [], nodes }
@@ -527,7 +544,8 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
   const disabled = state === 'disabled'
   const pressed = state === 'pressed' || state === 'selected'
   const alpha = disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1
-  const labelOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset : 0
+  const scale = nativeUiButtonScale(spec.scale)
+  const labelOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset * scale : 0
   const chrome = planNativeUiButtonChrome(spec)
   const nodes: NativeUiNode[] = [
     ...chrome.nodes,
@@ -541,7 +559,8 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
         tint: NATIVE_UI_BUTTON.textTint,
         x: spec.bounds.left + spec.bounds.width / 2 + labelOffset,
         y: spec.bounds.top + spec.bounds.height / 2
-          + NATIVE_UI_BUTTON.labelYOffset + labelOffset,
+          + NATIVE_UI_BUTTON.labelYOffset * scale + labelOffset,
+        ...(scale === 1 ? {} : { scale }),
       },
     },
   ]
@@ -629,9 +648,30 @@ export function planNativeUiTabs(spec: NativeUiTabsSpec): NativeUiPlan {
         ] as const
     const labelBaselineY = (tab.labelBaselineY ?? tab.bounds.top + 44)
       - (selected ? NATIVE_UI_TAB.selectedRise : 0)
+    const plateWidth = tab.bounds.width - NATIVE_UI_TAB.bracketWidth * 2
+    // UI.13 carries the tab's dark plate and gold top edge along with the bracket.
+    // Retail stretches its last column across the middle, the way the button
+    // stretches UI.54, so the plate reaches from bracket to bracket.
+    const plate: NativeUiNode[] = plateWidth > 0
+      ? [{
+          alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
+          atlas: 'UI',
+          bounds: nativeUiRect(
+            tab.bounds.left + NATIVE_UI_TAB.bracketWidth,
+            top,
+            plateWidth,
+            bracketHeight,
+          ),
+          kind: 'slice',
+          label: `${tab.id}:plate`,
+          record: NATIVE_UI_TAB.bracketRecord,
+          sourceUv: [NATIVE_UI_TAB.plateUvOrigin, sourceUv[1], 1, sourceUv[3]],
+        }]
+      : []
     return {
       actions: [{ bounds: tab.bounds, disabled: tab.disabled ?? false, id: tab.id, role: 'tab' }],
       nodes: [
+        ...plate,
         {
           alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
           atlas: 'UI',
@@ -824,18 +864,26 @@ export function planNativeUiMessageFrame(spec: NativeUiMessageFrameSpec): Native
   return nativeUiPlan(spec.width, spec.height, { actions: [], nodes })
 }
 
+export interface NativeUiMessageActionLayout {
+  /** Horizontal gap between two actions. Defaults to the stock 8. */
+  readonly gap?: number
+  /** Top edge of the action row. Defaults to 92 above the frame bottom. */
+  readonly top?: number
+}
+
 export function nativeUiMessageActionBounds(
   bounds: NativeUiRect,
   actionCount: 1 | 2,
+  layout: NativeUiMessageActionLayout = {},
 ): readonly NativeUiRect[] {
-  const actionGap = 8
+  const actionGap = layout.gap ?? 8
   const availableWidth = bounds.width - 80
   const actionWidth = actionCount === 1
     ? Math.min(353, availableWidth)
     : Math.min(260, (availableWidth - actionGap) / 2)
   const actionsWidth = actionWidth * actionCount + actionGap * (actionCount - 1)
   const centerX = bounds.left + bounds.width / 2
-  const actionTop = bounds.top + bounds.height - 92
+  const actionTop = layout.top ?? bounds.top + bounds.height - 92
   return Object.freeze(Array.from({ length: actionCount }, (_, index) => nativeUiRect(
     centerX - actionsWidth / 2 + index * (actionWidth + actionGap),
     actionTop,

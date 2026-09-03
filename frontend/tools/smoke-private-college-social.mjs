@@ -56,7 +56,7 @@ try {
   assert.equal(await source.locator('.main-menu-page').getAttribute('data-session-kind'), 'private-college')
   assert.equal(await source.locator('.main-menu-page').getAttribute('data-session-cheats-enabled'), 'true')
   assert.equal(latestWelcome(source).content.manifestSha256, active.manifestSha256)
-  const sourceName = (await source.locator('.hub-party-member-name').first().innerText()).trim()
+  const sourceName = (await source.locator('[data-native-ui-party-chip-name]').first().innerText()).trim()
   assert.ok(sourceName.length > 0)
 
   const target = await gamePage('Target Guest', {
@@ -180,7 +180,7 @@ try {
     && health.hubPlayers === 1
   ), 'the source private College did not retire after the invited player transferred')
   await source.waitForFunction(() => (
-    document.querySelectorAll('[data-party-member]').length === 2
+    document.querySelectorAll('[data-native-ui-party-chip="member"]').length === 2
   ), undefined, { timeout: 30_000 })
 
   await source.getByRole('button', { name: 'Party settings' }).click()

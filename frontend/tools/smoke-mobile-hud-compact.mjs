@@ -71,17 +71,17 @@ const MEMBER_SELECTORS = Object.freeze({
   meterHealth: '.hub-hud-meter-health',
   meterMana: '.hub-hud-meter-mana',
   partyInvitation: '[data-party-invitation]',
-  partyMembers: '.hub-party-member-open',
+  partyMembers: '[data-native-ui-party-chip="member"]',
   partyPanel: '.hub-party-panel',
   partySettingsDialog: '.party-settings-dialog',
-  partySettingsOpen: '.hub-party-settings-open',
+  partySettingsOpen: '[data-native-ui-party-chip="settings"]',
   playerProfile: '.hub-player-profile',
   potionBlue: '.hub-hud-quickbar-slot[data-entry-kind="mana-potion"]',
   potionRed: '.hub-hud-quickbar-slot[data-entry-kind="health-potion"]',
   quickbarSlots: '.hub-hud-quickbar-slot',
   partyMembersList: '.hub-party-members',
   partySettingsGear: '.hub-party-settings-gear',
-  partyToggle: '.hub-party-toggle',
+  partyToggle: '[data-native-ui-party-chip="header"]',
   pauseOverlay: '.gameplay-pause-overlay',
   selectedSkills: '.hub-hud-selected-skill',
   skull: '.game-menu-skull img',
@@ -1276,7 +1276,7 @@ function rawMessageQueue(socket) {
 
 async function waitForPartySize(page, size) {
   await page.waitForFunction((expected) => (
-    document.querySelectorAll('[data-party-member]').length === expected
+    document.querySelectorAll('[data-native-ui-party-chip="member"]').length === expected
   ), size, { timeout: 15_000 })
 }
 
