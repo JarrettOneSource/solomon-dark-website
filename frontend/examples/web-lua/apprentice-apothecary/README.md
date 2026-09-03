@@ -1,9 +1,10 @@
 # Apprentice Apothecary
 
 This is the beginner Web Lua example. Read
-[`scripts/main.lua`](scripts/main.lua) from top to bottom: assets come first,
-then one small definition for each feature, and finally `sd.mod` gathers the
-parts into a package.
+[`scripts/main.lua`](scripts/main.lua) from top to bottom: two named sounds come
+first, then one small definition for each feature, then the rules. There is no
+`sd.mod` call. The game collects everything the script creates, content refers
+to other content by key, and art fields take a path.
 
 The mod adds Moondust, a Ward Tonic, a Survey Orb pickup, one robe affix, a
 courtyard shop, a Provokatus Boast with custom icon art, and a Minimap. It

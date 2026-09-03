@@ -14,6 +14,8 @@ export const WEB_LUA_DEV_CONSOLE_MOD = Object.freeze({
 })
 export const WEB_LUA_VM_MEMORY_BYTES = 16 * 1024 * 1024
 export const WEB_LUA_EXECUTION_TIMEOUT_MS = 4
+/** Wall-clock budget for running one mod definition script before play. */
+export const WEB_LUA_DEFINITION_TIMEOUT_MS = 250
 export const WEB_LUA_CALLBACK_TIMEOUT_MS = 2
 export const WEB_LUA_TICK_BUDGET_MS = 4
 export const WEB_LUA_MAX_PENDING_EXECUTIONS = 8

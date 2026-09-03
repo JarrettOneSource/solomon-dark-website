@@ -29,6 +29,10 @@ coverage for each surface.
 | Surface | Status | Decisive evidence |
 | --- | --- | --- |
 | `sd.mod`, mandatory content `key`, root `systems` | Complete | Definition VM, graph compiler, generated LuaLS declarations, all three packages |
+| Short names (`sd.item`, `sd.on`, `sd.sprite`), optional `sd.mod`, name-derived keys, string references, art path shorthand, potion defaults, effect lists | Complete | Definition runtime lowering, friendly runtime tests, Invincibility Potion and Apprentice Apothecary in the short form with unchanged content identities |
+| `sd.include` with pack-time bundling and digest equivalence | Complete | Script bundle module, package authoring scripts map, `sdmod pack`, CLI bundling test |
+| Predicate grammar (`equals`, `not_equals`, `above`, `below`, `at_least`, `at_most`, `all`, `any`, `none`) | Complete | Schema validator, rule engine, compiler and engine tests |
+| Line-numbered script diagnostics with hints and close-name suggestions | Complete | `E_SCRIPT`, strict globals, read-only `sd`, suggestions module, generated DIAGNOSTICS.md |
 | `sd.ref`, `sd.art.ref` | Complete | Typed local/dependency/stock references, asset ownership, cycle and missing-reference rejection |
 | `sdmod new` | Complete | Creates a package that immediately passes production-shaped admission |
 | `sdmod check` | Complete | Runs definition, decoded asset, content-catalog, and Boneyard admission |

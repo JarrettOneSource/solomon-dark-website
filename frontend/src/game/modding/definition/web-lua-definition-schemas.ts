@@ -12,6 +12,27 @@ import {
   webLuaDefinitionIssue,
   type WebLuaDefinitionIssue,
 } from './web-lua-definition-error.ts'
+import { didYouMean, listChoices } from './web-lua-suggestions.ts'
+
+/** Every field a rules.when predicate table may carry. */
+export const WEB_LUA_PREDICATE_FIELDS = Object.freeze([
+  'above',
+  'all',
+  'any',
+  'at_least',
+  'at_most',
+  'below',
+  'context',
+  'equals',
+  'event',
+  'none',
+  'not_equals',
+] as const)
+const PREDICATE_FIELD_SET: ReadonlySet<string> = new Set(WEB_LUA_PREDICATE_FIELDS)
+const PREDICATE_COMPARISONS = ['above', 'at_least', 'at_most', 'below', 'equals', 'not_equals'] as const
+const PREDICATE_NUMERIC_COMPARISONS: ReadonlySet<string> = new Set(['above', 'at_least', 'at_most', 'below'])
+const PREDICATE_GROUPS = ['all', 'any', 'none'] as const
+const MAXIMUM_PREDICATE_DEPTH = 8
 
 interface ContentSchema {
   readonly allowed: ReadonlySet<string>
@@ -512,20 +533,72 @@ function validatePredicate(
   path: string,
   owner: Pick<WebLuaRuleDefinition, 'source'>,
   issues: WebLuaDefinitionIssue[],
+  depth = 0,
 ): void {
   if (typeof value === 'boolean') return
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    issues.push(webLuaDefinitionIssue('E_SCHEMA', path, 'rules.when predicate must be boolean or a predicate table', { source: owner.source }))
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA',
+      path,
+      'rules.when predicate must be true, false, or a table such as {context = "wave", at_least = 5}',
+      { source: owner.source },
+    ))
+    return
+  }
+  if (depth > MAXIMUM_PREDICATE_DEPTH) {
+    issues.push(webLuaDefinitionIssue('E_SCHEMA', path, 'predicate nests too deeply', { source: owner.source }))
     return
   }
   const fields = value as Readonly<Record<string, WebLuaDefinitionValue>>
-  validateUnknownFields(fields, new Set(['context', 'equals', 'event']), path, owner, issues)
+  validateUnknownFields(fields, PREDICATE_FIELD_SET, path, owner, issues)
   const hasEvent = typeof fields.event === 'string' && fields.event.length > 0
   const hasContext = typeof fields.context === 'string' && fields.context.length > 0
-  if (hasEvent === hasContext || (hasEvent && fields.equals !== undefined)) issues.push(webLuaDefinitionIssue(
-    'E_SCHEMA', path, 'predicate requires exactly one of event or context; equals is valid only with context',
-    { source: owner.source },
-  ))
+  const groups = PREDICATE_GROUPS.filter(key => fields[key] !== undefined)
+  const subjects = Number(hasEvent) + Number(hasContext) + groups.length
+  if (subjects !== 1) {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA',
+      path,
+      'predicate requires exactly one of event or context, or one group of all, any, or none',
+      { source: owner.source },
+    ))
+    return
+  }
+  const comparisons = PREDICATE_COMPARISONS.filter(key => fields[key] !== undefined)
+  if (comparisons.length > 1) {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA',
+      path,
+      `predicate may use only one comparison; found ${comparisons.join(', ')}`,
+      { source: owner.source },
+    ))
+  }
+  if (comparisons.length > 0 && !hasContext) {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA',
+      path,
+      `${comparisons[0]} is valid only with context`,
+      { source: owner.source },
+    ))
+  }
+  for (const key of comparisons) {
+    if (PREDICATE_NUMERIC_COMPARISONS.has(key) && typeof fields[key] !== 'number') {
+      issues.push(webLuaDefinitionIssue('E_SCHEMA', `${path}.${key}`, `${key} must be a number`, { source: owner.source }))
+    }
+  }
+  for (const key of groups) {
+    const entries = fields[key]
+    if (!Array.isArray(entries) || entries.length === 0) {
+      issues.push(webLuaDefinitionIssue(
+        'E_SCHEMA',
+        `${path}.${key}`,
+        `${key} must be a nonempty list of predicates`,
+        { source: owner.source },
+      ))
+      continue
+    }
+    entries.forEach((entry, index) => validatePredicate(entry, `${path}.${key}[${index}]`, owner, issues, depth + 1))
+  }
 }
 
 function validateMinimap(
@@ -611,10 +684,11 @@ function validateEventName(
   if (typeof value === 'string' && WEB_LUA_RULE_EVENT_NAMES.includes(
     value as typeof WEB_LUA_RULE_EVENT_NAMES[number],
   )) return
+  const label = typeof value === 'string' ? ` "${value}"${didYouMean(value, WEB_LUA_RULE_EVENT_NAMES)}` : ''
   issues.push(webLuaDefinitionIssue(
     'E_SCHEMA',
     path,
-    `unknown event; expected one of ${WEB_LUA_RULE_EVENT_NAMES.join(', ')}`,
+    `unknown event${label}; expected one of ${WEB_LUA_RULE_EVENT_NAMES.join(', ')}`,
     { source: owner.source },
   ))
 }
@@ -669,12 +743,15 @@ function validateUnknownFields(
   definition: Pick<WebLuaContentDefinition, 'source'>,
   issues: WebLuaDefinitionIssue[],
 ): void {
+  const choices = [...allowed].sort()
   for (const key of Object.keys(fields)) {
     if (allowed.has(key)) continue
+    const hint = didYouMean(key, choices)
+      || (choices.length > 0 && choices.length <= 12 ? `; the fields here are ${listChoices(choices)}` : '')
     issues.push(webLuaDefinitionIssue(
       'E_UNKNOWN_FIELD',
       `${path}.${key}`,
-      `field is not supported by this 1.0 definition`,
+      `field is not supported by this 1.0 definition${hint}`,
       { source: definition.source },
     ))
   }

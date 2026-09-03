@@ -7,6 +7,19 @@
 ---@alias SdIntentValue table
 ---@alias SdSchemaDefinition table
 
+---@class SdPredicate
+---@field event? SdEventName
+---@field context? string
+---@field equals? boolean|number|string
+---@field not_equals? boolean|number|string
+---@field above? number
+---@field below? number
+---@field at_least? number
+---@field at_most? number
+---@field all? SdPredicate[]
+---@field any? SdPredicate[]
+---@field none? SdPredicate[]
+
 ---@class SdUiBinding
 ---@field state string
 
@@ -28,14 +41,14 @@
 ---@field migrations? table<integer, function>
 
 ---@class SdAffixSpec
----@field key string
+---@field key? string
 ---@field applies_to? string[]
 ---@field description? string
 ---@field modifiers table
 ---@field name string
 
 ---@class SdAffixPoolSpec
----@field key string
+---@field key? string
 ---@field applies_to? string[]
 ---@field description? string
 ---@field entries table[]
@@ -44,19 +57,23 @@
 ---@field rolls? integer
 
 ---@class SdBoneyardSpec
----@field key string
+---@field key? string
 ---@field anchors? table
 ---@field art? table
 ---@field description? string
 ---@field environment? table
 ---@field name string
----@field roster? table[]
+---@field roster? (string|table)[]
 ---@field source string
 ---@field triggers? SdRule[]
 ---@field waves? table[]
+---@field ambience? string|table
+---@field layout? string|table
+---@field loop? string|table
+---@field music? string|table
 
 ---@class SdBoastSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field fail_on? ("magical-equipment"|"mana-underflow"|"potion-use"|"secondary-cast")[]
@@ -68,67 +85,86 @@
 ---@field statement string
 ---@field stock_icon? integer
 ---@field success_wave? integer
+---@field icon? string|table
 
 ---@class SdEnemySpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field loot? table
 ---@field name string
 ---@field stats? table
+---@field atlas? string|table
+---@field attack_sound? string|table
+---@field death_sound? string|table
+---@field sound? string|table
 
 ---@class SdItemSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field equipment? table
 ---@field name string
 ---@field stack? table
----@field use? SdRule
+---@field use? SdRule|SdRule[]
+---@field icon? string|table
+---@field icon_trim? string|table
+---@field worn? string|table
+---@field worn_trim? string|table
 
 ---@class SdPotionSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field duration SdDuration
 ---@field loot? table
 ---@field name string
----@field on_use SdRule
+---@field on_use SdRule|SdRule[]
 ---@field presentation? table
----@field status? table
+---@field status? string|table
+---@field icon? string|table
 
 ---@class SdPowerupSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
----@field effect SdRule
+---@field effect SdRule|SdRule[]
 ---@field name string
 ---@field pickup? table
+---@field sound? string|table
+---@field world? string|table
 
 ---@class SdRoomSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field geometry table
 ---@field name? string
 ---@field props? table
+---@field ambience? string|table
+---@field loop? string|table
+---@field music? string|table
 
 ---@class SdSceneSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field name? string
----@field rooms table[]
+---@field rooms (string|table)[]
+---@field ambience? string|table
+---@field layout? string|table
+---@field loop? string|table
+---@field music? string|table
 
 ---@class SdSceneExtensionSpec
----@field key string
+---@field key? string
 ---@field description? string
 ---@field features SdRule[]
 ---@field name? string
 ---@field scene "stock.boneyard"
 
 ---@class SdShopSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
 ---@field mount? table
@@ -140,29 +176,33 @@
 ---@field stock_scope? "party"|"player"|"session"
 
 ---@class SdSkillSpec
----@field key string
+---@field key? string
 ---@field art? table
 ---@field description? string
----@field grants? table
+---@field grants? (string|table)[]
 ---@field maximum_rank? integer
 ---@field name string
 ---@field offer? table
----@field parent? table
----@field prerequisites? table[]
+---@field parent? string|table
+---@field prerequisites? (string|table)[]
 ---@field ranks table[]
+---@field icon? string|table
 
 ---@class SdSpellSpec
----@field key string
+---@field key? string
 ---@field art? table
----@field behavior SdRule
+---@field behavior SdRule|SdRule[]
 ---@field cooldown? SdDuration
 ---@field description? string
 ---@field mana? number
 ---@field name string
 ---@field slot "primary"|"secondary"
+---@field effect? string|table
+---@field icon? string|table
+---@field sound? string|table
 
 ---@class SdStatusSpec
----@field key string
+---@field key? string
 ---@field description? string
 ---@field duration? SdDuration
 ---@field modifiers? table
@@ -170,18 +210,18 @@
 ---@field stacking? "ignore"|"refresh"|"replace"|"stack"
 
 ---@class SdUiSpec
----@field key string
+---@field key? string
 ---@field accessible_name? string
 ---@field actions? string[]
 ---@field bindings? table<string, SdUiBinding>
 ---@field description? string
 ---@field mount "hud.bottom_left"|"hud.bottom_right"|"hud.overlay"|"hud.top_left"|"hud.top_right"
 ---@field name? string
----@field view SdRule
+---@field view SdRule|SdRule[]
 ---@field visible? SdUiVisibility
 
 ---@class SdModSpec
----@field api "1.0.0"
+---@field api? "1.0.0"
 ---@field assets? table<string, table>
 ---@field content? table[]
 ---@field rules? SdRule[]
@@ -189,13 +229,13 @@
 
 ---@class SdArt
 ---@field boneyard fun(spec: string|table): table
----@field music fun(path: string, options?: table): table
 ---@field ref fun(key: string): table
 ---@field scene fun(spec: string|table): table
+---@field music fun(path: string, options?: table): table
 ---@field sheet fun(spec: table): table
 ---@field sound fun(path: string, options?: table): table
 ---@field sprite fun(path: string, options?: table): table
----@field wearable fun(path: string): table
+---@field wearable fun(path: string, options?: table): table
 
 ---@class SdKit
 ---@field affix fun(spec: SdAffixSpec): table
@@ -216,12 +256,12 @@
 ---@field ui fun(spec: SdUiSpec): table
 
 ---@class SdRules
----@field on fun(event: SdEventName, node: SdRule): SdRule
----@field all fun(nodes: SdRule[]): SdRule
----@field first fun(nodes: SdRule[]): SdRule
----@field when fun(predicate: boolean|table, yes: SdRule, no?: SdRule): SdRule
----@field after fun(duration: SdDuration, node: SdRule): SdRule
----@field every fun(interval: SdDuration, node: SdRule, options: {times: integer}): SdRule
+---@field on fun(event: SdEventName, ...: SdRule): SdRule
+---@field all fun(...: SdRule|SdRule[]): SdRule
+---@field first fun(...: SdRule|SdRule[]): SdRule
+---@field when fun(predicate: boolean|SdPredicate, yes: SdRule, no?: SdRule): SdRule
+---@field after fun(duration: SdDuration, ...: SdRule): SdRule
+---@field every fun(interval: SdDuration, node: SdRule, times?: integer|{times: integer}): SdRule
 
 ---@class SdEffect
 ---@field damage fun(spec: table): SdRule
@@ -264,6 +304,7 @@
 ---@field advanced SdAdvanced
 ---@field art SdArt
 ---@field effect SdEffect
+---@field include fun(path: string): any
 ---@field intent SdIntent
 ---@field kit SdKit
 ---@field mod fun(spec: SdModSpec): table
@@ -271,6 +312,33 @@
 ---@field ref fun(kind: string, key: string, mod_id?: string): table
 ---@field rules SdRules
 ---@field schema SdSchema
+---@field affix fun(spec: SdAffixSpec): table
+---@field affix_pool fun(spec: SdAffixPoolSpec): table
+---@field boneyard fun(spec: SdBoneyardSpec): table
+---@field boast fun(spec: SdBoastSpec): table
+---@field enemy fun(spec: SdEnemySpec): table
+---@field item fun(spec: SdItemSpec): table
+---@field potion fun(spec: SdPotionSpec): table
+---@field powerup fun(spec: SdPowerupSpec): table
+---@field room fun(spec: SdRoomSpec): table
+---@field scene fun(spec: SdSceneSpec): table
+---@field scene_extension fun(spec: SdSceneExtensionSpec): table
+---@field shop fun(spec: SdShopSpec): table
+---@field skill fun(spec: SdSkillSpec): table
+---@field spell fun(spec: SdSpellSpec): table
+---@field status fun(spec: SdStatusSpec): table
+---@field ui fun(spec: SdUiSpec): table
+---@field on fun(event: SdEventName, ...: SdRule): SdRule
+---@field all fun(...: SdRule|SdRule[]): SdRule
+---@field first fun(...: SdRule|SdRule[]): SdRule
+---@field when fun(predicate: boolean|SdPredicate, yes: SdRule, no?: SdRule): SdRule
+---@field after fun(duration: SdDuration, ...: SdRule): SdRule
+---@field every fun(interval: SdDuration, node: SdRule, times?: integer|{times: integer}): SdRule
+---@field music fun(path: string, options?: table): table
+---@field sheet fun(spec: table): table
+---@field sound fun(path: string, options?: table): table
+---@field sprite fun(path: string, options?: table): table
+---@field wearable fun(path: string, options?: table): table
 
 ---@type Sd
 sd = {}

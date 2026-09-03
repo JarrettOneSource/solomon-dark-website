@@ -2,12 +2,14 @@ import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import {
+  copyFile,
   mkdir,
   mkdtemp,
   readFile,
   rm,
   writeFile,
 } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -17,7 +19,14 @@ import { runSdmod } from './cli.mjs'
 import { fetchAssetSource } from './assets.mjs'
 import { writeDeterministicZip } from './zip.mjs'
 import { readZipEntries } from './zip-reader.mjs'
+import {
+  compileWebLuaDefinition,
+  WebLuaDefinitionRuntime,
+} from '../../src/game/modding/definition/index.ts'
 import { WEB_LUA_DEFINITION_API_VERSION } from '../../src/game/modding/definition/web-lua-definition-types.ts'
+
+const require = createRequire(import.meta.url)
+const wasmPath = require.resolve('wasmoon/dist/glue.wasm')
 
 const execFileAsync = promisify(execFile)
 
@@ -53,7 +62,10 @@ test('sdmod creates, checks, tests, packs, and generates one deterministic v1 mo
     'THIRD_PARTY_ASSETS.md',
   ])
   assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /---@field potion/)
-  assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /wearable fun\(path: string\)/)
+  assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /wearable fun\(path: string, options\?: table\)/)
+  assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /---@class SdPredicate/)
+  assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /sd\.include/)
+  assert.match(await readFile(join(generated, 'DIAGNOSTICS.md'), 'utf8'), /E_SCRIPT/)
   assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /scene-extension/)
   assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /sd\.art\.wearable/)
   assert.ok(messages.some(message => message.includes('graphSha256')))
@@ -145,4 +157,61 @@ test('asset tooling verifies downloads and reads only requested ZIP entries', as
     await readFile(join(root, 'cache/example-model-1.0/model.blend')),
     sourceBytes,
   )
+})
+
+test('sdmod folds included scripts into the packed entry script and keeps the generated starter valid', async (context) => {
+  const root = await mkdtemp(join(tmpdir(), 'sdmod-include-'))
+  context.after(() => rm(root, { force: true, recursive: true }))
+  const io = { log: () => {} }
+  const mod = join(root, 'split-mod')
+  const output = join(root, 'split-mod.zip')
+
+  await runSdmod(['new', mod], io)
+  await writeFile(join(mod, 'scripts/items.lua'), [
+    'local items = {}',
+    'items.stone = sd.item({name = "Moon Stone", icon = "art/icon.png"})',
+    'return items',
+    '',
+  ].join('\n'))
+  await writeFile(join(mod, 'scripts/main.lua'), [
+    'local items = sd.include("scripts/items.lua")',
+    'sd.potion({',
+    '  name = "Stone Tonic",',
+    '  duration = "2s",',
+    '  icon = "art/icon.png",',
+    '  on_use = sd.effect.grant({target = "user", item = items.stone}),',
+    '})',
+    '',
+  ].join('\n'))
+  const checked = await runSdmod(['check', mod], io)
+  assert.deepEqual(checked.compiled.content.map(entry => entry.key), ['moon_stone', 'stone_tonic'])
+  await runSdmod(['pack', mod, output], io)
+  const entries = Object.fromEntries(readZipEntries(
+    await readFile(output),
+    ['scripts/main.lua', 'scripts/items.lua', 'compiled/graph.sha256'],
+  ))
+  const packedEntry = entries['scripts/main.lua'].toString('utf8')
+  assert.match(packedEntry, /^--@sd-bundle \{"scripts\/items\.lua":/m)
+  assert.equal(entries['scripts/items.lua'].toString('utf8').split('\n')[0], 'local items = {}')
+  const identity = { id: checked.manifest.id, name: checked.manifest.name, version: checked.manifest.version }
+  const runtime = await WebLuaDefinitionRuntime.create({ entryScript: 'scripts/main.lua', identity, wasmPath })
+  try {
+    const packed = compileWebLuaDefinition(identity, runtime.run(packedEntry))
+    assert.equal(packed.graphSha256, entries['compiled/graph.sha256'].toString('utf8').trim())
+    assert.equal(packed.graphSha256, checked.compiled.graphSha256)
+  } finally {
+    runtime.close()
+  }
+
+  const generated = join(root, 'generated')
+  await runSdmod(['generate', generated], io)
+  const starter = join(root, 'starter')
+  await runSdmod(['new', starter], io)
+  await copyFile(join(generated, 'STARTER.lua'), join(starter, 'scripts/main.lua'))
+  const starterChecked = await runSdmod(['check', starter], io)
+  assert.deepEqual(
+    starterChecked.compiled.content.map(entry => `${entry.contentKind}:${entry.key}`),
+    ['item:example_item', 'potion:example_potion', 'status:example_tough'],
+  )
+  assert.equal(starterChecked.compiled.rules.length, 1)
 })

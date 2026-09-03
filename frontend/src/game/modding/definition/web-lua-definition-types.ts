@@ -64,6 +64,29 @@ export const WEB_LUA_RULE_EVENT_NAMES = [
   'wave.started',
 ] as const
 
+/**
+ * Art slots each content family accepts. The definition runtime lowers friendly
+ * shorthand into these slots and the content catalog enforces them.
+ */
+export const WEB_LUA_CONTENT_ART_SLOTS: Readonly<Record<WebLuaContentKind, readonly string[]>> = Object.freeze({
+  affix: Object.freeze([]),
+  'affix-pool': Object.freeze([]),
+  boneyard: Object.freeze(['ambience', 'layout', 'loop', 'music']),
+  boast: Object.freeze(['icon']),
+  enemy: Object.freeze(['atlas', 'attack_sound', 'death_sound', 'sound']),
+  item: Object.freeze(['icon', 'icon_trim', 'worn', 'worn_trim']),
+  potion: Object.freeze(['icon']),
+  powerup: Object.freeze(['sound', 'world']),
+  room: Object.freeze(['ambience', 'loop', 'music']),
+  scene: Object.freeze(['ambience', 'layout', 'loop', 'music']),
+  'scene-extension': Object.freeze([]),
+  shop: Object.freeze(['npc']),
+  skill: Object.freeze(['icon']),
+  spell: Object.freeze(['effect', 'icon', 'sound']),
+  status: Object.freeze([]),
+  ui: Object.freeze([]),
+})
+
 export interface WebLuaModIdentity {
   readonly id: string
   readonly name: string
@@ -86,6 +109,8 @@ export interface WebLuaDefinitionSource {
   readonly column: number | null
   readonly file: string
   readonly line: number | null
+  /** Creation sequence of the node inside one definition run. Never part of the graph digest. */
+  readonly node?: number
 }
 
 export interface WebLuaAssetDefinition {

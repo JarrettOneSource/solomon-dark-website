@@ -7,6 +7,7 @@ import {
 } from './web-lua-definition-compiler.ts'
 import { WEB_LUA_DEFINITION_API_VERSION } from './web-lua-definition-types.ts'
 import { WebLuaDefinitionRuntime } from './web-lua-definition-runtime.ts'
+import { validateWebLuaScriptSet, WEB_LUA_SCRIPT_PATH } from './web-lua-script-bundle.ts'
 
 const PACKAGE_ID = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/
 const VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/
@@ -37,6 +38,8 @@ export interface CheckedWebLuaPackage {
   readonly files: ReadonlyMap<string, Uint8Array>
   readonly manifest: WebLuaAuthorManifest
   readonly root: string
+  /** Package scripts other than the entry script, keyed by portable path, for sd.include. */
+  readonly scripts: ReadonlyMap<string, string>
 }
 
 export async function checkWebLuaPackage(
@@ -54,10 +57,13 @@ export async function checkWebLuaPackage(
   if (Buffer.byteLength(entryScript, 'utf8') > MAX_ENTRY_SCRIPT_BYTES) {
     throw new Error(`entry script exceeds ${MAX_ENTRY_SCRIPT_BYTES} bytes`)
   }
-  const files = await packageFiles(root)
+  const paths = await walk(root)
+  const files = await packageFiles(root, paths)
+  const scripts = await packageScripts(root, paths, manifest.runtime.entryScript)
   const runtime = await WebLuaDefinitionRuntime.create({
     entryScript: manifest.runtime.entryScript,
     identity: { id: manifest.id, name: manifest.name, version: manifest.version },
+    scripts,
     wasmPath,
   })
   try {
@@ -75,6 +81,7 @@ export async function checkWebLuaPackage(
       files,
       manifest,
       root,
+      scripts,
     })
   } finally {
     runtime.close()
@@ -139,8 +146,25 @@ function manifestValue(value: unknown): WebLuaAuthorManifest {
   })
 }
 
-async function packageFiles(root: string): Promise<ReadonlyMap<string, Uint8Array>> {
-  const paths = await walk(root)
+async function packageScripts(
+  root: string,
+  paths: readonly string[],
+  entryScript: string,
+): Promise<ReadonlyMap<string, string>> {
+  const result = new Map<string, string>()
+  for (const path of paths) {
+    if (path === entryScript || !WEB_LUA_SCRIPT_PATH.test(path)) continue
+    const bytes = await readFile(resolveInside(root, path))
+    if (bytes.length > MAX_ENTRY_SCRIPT_BYTES) {
+      throw new Error(`package script exceeds ${MAX_ENTRY_SCRIPT_BYTES} bytes: ${path}`)
+    }
+    result.set(path, bytes.toString('utf8'))
+  }
+  validateWebLuaScriptSet(result)
+  return result
+}
+
+async function packageFiles(root: string, paths: readonly string[]): Promise<ReadonlyMap<string, Uint8Array>> {
   const assets = paths.filter(path => ASSET_PATH.test(path))
   if (assets.length > MAX_PACKAGE_FILES) {
     throw new Error(`package has more than ${MAX_PACKAGE_FILES} typed asset files`)

@@ -13,13 +13,14 @@ import {
   type BoastFailureProducer,
   type ModBoastSelection,
 } from '../../core-kernels/boast.ts'
-import type {
-  CompiledWebLuaContent,
-  CompiledWebLuaMod,
-  ResolvedWebLuaContentReference,
-  WebLuaContentKind,
-  WebLuaDefinitionValue,
-  WebLuaRuleDefinition,
+import {
+  WEB_LUA_CONTENT_ART_SLOTS,
+  type CompiledWebLuaContent,
+  type CompiledWebLuaMod,
+  type ResolvedWebLuaContentReference,
+  type WebLuaContentKind,
+  type WebLuaDefinitionValue,
+  type WebLuaRuleDefinition,
 } from '../definition/index.ts'
 import {
   PreparedModAssetCatalog,
@@ -41,24 +42,7 @@ const BOAST_FAILURE_PRODUCERS = new Set<BoastFailureProducer>([
 const STACKING = new Set<ModStatusStacking>(['ignore', 'refresh', 'replace', 'stack'])
 const EQUIPMENT_TYPES = new Set(['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'])
 const textEncoder = new TextEncoder()
-const CONTENT_ART_SLOTS: Readonly<Record<WebLuaContentKind, readonly string[]>> = Object.freeze({
-  affix: Object.freeze([]),
-  'affix-pool': Object.freeze([]),
-  boneyard: Object.freeze(['ambience', 'layout', 'loop', 'music']),
-  boast: Object.freeze(['icon']),
-  enemy: Object.freeze(['atlas', 'attack_sound', 'death_sound', 'sound']),
-  item: Object.freeze(['icon', 'icon_trim', 'worn', 'worn_trim']),
-  potion: Object.freeze(['icon']),
-  powerup: Object.freeze(['sound', 'world']),
-  room: Object.freeze(['ambience', 'loop', 'music']),
-  scene: Object.freeze(['ambience', 'layout', 'loop', 'music']),
-  'scene-extension': Object.freeze([]),
-  shop: Object.freeze(['npc']),
-  skill: Object.freeze(['icon']),
-  spell: Object.freeze(['effect', 'icon', 'sound']),
-  status: Object.freeze([]),
-  ui: Object.freeze([]),
-})
+const CONTENT_ART_SLOTS = WEB_LUA_CONTENT_ART_SLOTS
 
 export type ModStatusStacking = 'ignore' | 'refresh' | 'replace' | 'stack'
 

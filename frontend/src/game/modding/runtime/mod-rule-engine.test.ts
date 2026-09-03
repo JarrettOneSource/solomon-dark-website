@@ -239,3 +239,33 @@ local system = sd.advanced.reducer({
 })
 return sd.mod({api = "1.0.0", systems = {system}})
 `
+
+const PREDICATE_SCRIPT = `
+sd.on("wave.completed",
+  sd.when({context = "wave", at_least = 3}, sd.effect.state({key = "late", value = true})),
+  sd.when({any = {{context = "wave", equals = 1}, {context = "boss", equals = true}}}, sd.effect.state({key = "special", value = true})),
+  sd.when({none = {{context = "wave", above = 10}}}, sd.effect.state({key = "early", value = true})),
+  sd.when({all = {{context = "wave", below = 3}, {context = "label", not_equals = "skip"}}}, sd.effect.state({key = "fresh", value = true}))
+)
+`
+
+test('when predicates compare context values and combine with all, any, and none', async () => {
+  const runtime = await createRuntime()
+  const compiled = compileWebLuaDefinition(identity, runtime.run(PREDICATE_SCRIPT))
+  const engine = new ModRuleEngine({ tickBudgetMs: 1_000 })
+  engine.register(compiled, runtime)
+  const scope = { id: 'run-1', kind: 'party-run' } as const
+  const keys = (context: Record<string, boolean | number | string>) => engine.dispatch({
+    context,
+    event: 'wave.completed',
+    payload: {},
+    scope,
+    tick: 10,
+  }).intents.map(intent => intent.fields.key)
+  assert.deepEqual(keys({ wave: 3 }), ['late', 'early'])
+  assert.deepEqual(keys({ label: 'skip', wave: 1 }), ['special', 'early'])
+  assert.deepEqual(keys({ boss: true, wave: 11 }), ['late', 'special'])
+  assert.deepEqual(keys({ label: 'go', wave: 2 }), ['early', 'fresh'])
+  assert.deepEqual(keys({}), ['early'])
+  engine.close()
+})

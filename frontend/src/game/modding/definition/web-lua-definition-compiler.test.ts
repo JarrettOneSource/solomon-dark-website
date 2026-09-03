@@ -270,3 +270,72 @@ function reference(
 ): WebLuaContentReference {
   return { key, kind: 'content-reference', modId: null, targetKind }
 }
+
+test('compiler suggests close names and validates the predicate grammar', () => {
+  const state = (key: string) => ({
+    fields: { key, value: true },
+    kind: 'rule-definition' as const,
+    operation: 'effect.state',
+    source: SOURCE,
+  })
+  const when = (predicate: unknown) => ({
+    fields: { predicate: predicate as never, yes: state('ready') },
+    kind: 'rule-definition' as const,
+    operation: 'rules.when',
+    source: SOURCE,
+  })
+  const on = (event: string, node: unknown) => ({
+    fields: { event, node: node as never },
+    kind: 'rule-definition' as const,
+    operation: 'rules.on',
+    source: SOURCE,
+  })
+  assert.throws(
+    () => compileWebLuaDefinition(IDENTITY, {
+      ...definition([
+        content('status', 'invincible', { duration: '3m' }),
+        content('potion', 'ward', {
+          duration: '3m',
+          name: 'Ward',
+          on_use: {
+            fields: { status: reference('status', 'invincble'), target: 'user' },
+            kind: 'rule-definition',
+            operation: 'effect.status',
+            source: SOURCE,
+          },
+        }),
+        content('item', 'ring', { art: { icon: { key: 'icno', kind: 'asset-reference' } }, name: 'Ring' }),
+      ]),
+      assets: [{
+        assetKind: 'sprite',
+        fields: { path: 'art/icon.png' },
+        key: 'icon',
+        kind: 'asset-definition',
+        source: SOURCE,
+      }],
+      rules: [
+        on('run.start', when({ at_least: 'five', context: 'wave' })),
+        on('run.started', when({ above: 2, context: 'wave', equals: 1 })),
+        on('run.started', when({ all: [] })),
+        on('run.started', when({ any: [{ contest: 'wave' }] })),
+        on('run.started', when({ at_most: 3, event: 'run.started' })),
+        on('run.started', when({ none: [{ context: 'wave', below: 2 }, { context: 'boss', equals: true }] })),
+      ],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof WebLuaDefinitionError)
+      const messages = error.issues.map(({ message }) => message)
+      const has = (pattern: RegExp) => assert.ok(messages.some(message => pattern.test(message)), `${pattern} in ${messages.join('\n')}`)
+      has(/unknown event "run\.start"; did you mean run\.started\?/)
+      has(/at_least must be a number/)
+      has(/only one comparison; found above, equals/)
+      has(/all must be a nonempty list/)
+      has(/did you mean context\?/)
+      has(/at_most is valid only with context/)
+      has(/unknown status reference .*invincble; did you mean invincible\?/)
+      has(/unknown asset: icno; did you mean icon\?/)
+      assert.ok(!error.issues.some(({ path }) => path.includes('none')), 'nested none predicates are valid')
+      return true
+    },
+  )
+})

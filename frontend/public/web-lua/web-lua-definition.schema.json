@@ -330,6 +330,98 @@
       "object"
     ]
   },
+  "aliases": {
+    "art": [
+      "sprite",
+      "sheet",
+      "wearable",
+      "sound",
+      "music"
+    ],
+    "kit": [
+      "affix",
+      "affix_pool",
+      "boneyard",
+      "boast",
+      "enemy",
+      "item",
+      "potion",
+      "powerup",
+      "room",
+      "scene",
+      "scene_extension",
+      "shop",
+      "skill",
+      "spell",
+      "status",
+      "ui"
+    ],
+    "rules": [
+      "on",
+      "all",
+      "first",
+      "when",
+      "after",
+      "every"
+    ]
+  },
+  "artSlots": {
+    "affix": [],
+    "affix-pool": [],
+    "boneyard": [
+      "ambience",
+      "layout",
+      "loop",
+      "music"
+    ],
+    "boast": [
+      "icon"
+    ],
+    "enemy": [
+      "atlas",
+      "attack_sound",
+      "death_sound",
+      "sound"
+    ],
+    "item": [
+      "icon",
+      "icon_trim",
+      "worn",
+      "worn_trim"
+    ],
+    "potion": [
+      "icon"
+    ],
+    "powerup": [
+      "sound",
+      "world"
+    ],
+    "room": [
+      "ambience",
+      "loop",
+      "music"
+    ],
+    "scene": [
+      "ambience",
+      "layout",
+      "loop",
+      "music"
+    ],
+    "scene-extension": [],
+    "shop": [
+      "npc"
+    ],
+    "skill": [
+      "icon"
+    ],
+    "spell": [
+      "effect",
+      "icon",
+      "sound"
+    ],
+    "status": [],
+    "ui": []
+  },
   "diagnostics": [
     "E_API_VERSION",
     "E_ASSET",
@@ -341,7 +433,25 @@
     "E_MOUNT_CONFLICT",
     "E_REFERENCE",
     "E_SCHEMA",
+    "E_SCRIPT",
     "E_UNKNOWN_FIELD"
+  ],
+  "include": {
+    "maximumScripts": 64,
+    "maximumBytes": 262144
+  },
+  "predicateFields": [
+    "above",
+    "all",
+    "any",
+    "at_least",
+    "at_most",
+    "below",
+    "context",
+    "equals",
+    "event",
+    "none",
+    "not_equals"
   ],
   "scopes": [
     "entity",

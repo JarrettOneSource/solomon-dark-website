@@ -27,7 +27,7 @@ test('definition VM builds and compiles the complete family census without runti
   })
   try {
     const definition = runtime.run(`
-      assert(io == nil and os == nil and package == nil and require == nil)
+      assert(rawget(_G, "io") == nil and rawget(_G, "os") == nil and rawget(_G, "package") == nil and rawget(_G, "require") == nil)
       local icon = sd.art.sprite("art/icon.png")
       local worn = sd.art.wearable("art/worn.png")
       local state = sd.schema.object({
@@ -121,7 +121,7 @@ test('definition VM builds and compiles the complete family census without runti
       new Set(WEB_LUA_CONTENT_KINDS),
     )
     assert.equal(compiled.assets[0]?.key, 'icon')
-    assert.deepEqual(compiled.assets[1]?.fields, {
+    assert.deepEqual(compiled.assets.find(({ key }) => key === 'worn')?.fields, {
       animations: { wearable: [1] },
       frame: { height: 170, width: 170 },
       image: 'art/worn.png',
@@ -152,7 +152,7 @@ test('definition VM rejects an entrypoint without one sd.mod definition', async 
     wasmPath,
   })
   try {
-    assert.throws(() => runtime.run('return true'), /must return the receipt from sd\.mod/)
+    assert.throws(() => runtime.run('return true'), /unexpected value/)
   } finally {
     runtime.close()
   }

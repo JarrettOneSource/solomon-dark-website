@@ -721,19 +721,56 @@ function intent(
   })
 }
 
-function predicate(value: unknown, input: ModRuleDispatchInput): boolean {
+const PREDICATE_FIELDS: ReadonlySet<string> = new Set([
+  'above',
+  'all',
+  'any',
+  'at_least',
+  'at_most',
+  'below',
+  'context',
+  'equals',
+  'event',
+  'none',
+  'not_equals',
+])
+const PREDICATE_NUMERIC_COMPARISONS: ReadonlyArray<readonly [string, (actual: number, expected: number) => boolean]> = [
+  ['above', (actual, expected) => actual > expected],
+  ['at_least', (actual, expected) => actual >= expected],
+  ['at_most', (actual, expected) => actual <= expected],
+  ['below', (actual, expected) => actual < expected],
+]
+const MAXIMUM_PREDICATE_DEPTH = 8
+
+function predicate(value: unknown, input: ModRuleDispatchInput, depth = 0): boolean {
   if (typeof value === 'boolean') return value
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('rules.when predicate is invalid')
   }
+  if (depth > MAXIMUM_PREDICATE_DEPTH) throw new Error('rules.when predicate nests too deeply')
   const source = value as Record<string, unknown>
-  const unknown = Object.keys(source).filter(key => key !== 'context' && key !== 'equals' && key !== 'event')
+  const unknown = Object.keys(source).filter(key => !PREDICATE_FIELDS.has(key))
   if (unknown.length > 0) throw new Error(`rules.when predicate has unknown fields: ${unknown.join(', ')}`)
   if (typeof source.event === 'string') return source.event === input.event
-  if (typeof source.context === 'string') return source.equals === undefined
-    ? Boolean(input.context[source.context])
-    : input.context[source.context] === source.equals
-  throw new Error('rules.when predicate requires event or context')
+  if (typeof source.context === 'string') {
+    const actual = input.context[source.context]
+    if (source.equals !== undefined) return actual === source.equals
+    if (source.not_equals !== undefined) return actual !== source.not_equals
+    for (const [field, compare] of PREDICATE_NUMERIC_COMPARISONS) {
+      const expected = source[field]
+      if (expected === undefined) continue
+      return typeof actual === 'number'
+        && typeof expected === 'number'
+        && Number.isFinite(actual)
+        && Number.isFinite(expected)
+        && compare(actual, expected)
+    }
+    return Boolean(actual)
+  }
+  if (Array.isArray(source.all)) return source.all.every(entry => predicate(entry, input, depth + 1))
+  if (Array.isArray(source.any)) return source.any.some(entry => predicate(entry, input, depth + 1))
+  if (Array.isArray(source.none)) return !source.none.some(entry => predicate(entry, input, depth + 1))
+  throw new Error('rules.when predicate requires event, context, all, any, or none')
 }
 
 function ruleNodes(rule: WebLuaRuleDefinition, field: string): readonly WebLuaRuleDefinition[] {

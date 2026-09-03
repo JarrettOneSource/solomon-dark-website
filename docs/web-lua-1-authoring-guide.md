@@ -49,67 +49,97 @@ behavior you authored.
 
 ## Entry script
 
-Every entry script must call and return exactly one `sd.mod` definition:
+The entry script creates things. Each `sd.*` call tells the game about one
+thing, and the game collects everything the script created when it ends:
 
 ```lua
-local icon = sd.art.sprite("art/invincibility.png")
+-- A status is a temporary effect on a character. Its key is its permanent id.
+local invincible = sd.status({
+  key = "invincible",
+  duration = "3m",
+  stacking = "refresh",
+  modifiers = {incoming_damage = 0, mana_spend = 0},
+})
+
+-- A potion applies its status when used. The icon path declares the art.
+sd.potion({
+  key = "invincibility_potion",
+  name = "Invincibility Potion",
+  description = "Grants invincibility and unlimited mana for 3 minutes.",
+  status = invincible,
+  on_use = {
+    sd.effect.resource({target = "user", mana = "full"}),
+    sd.effect.status({target = "user", status = invincible}),
+  },
+  loot = {ordinary = 0.5, boss = 1.0},
+  icon = "art/invincibility_potion.png",
+})
+```
+
+What the script relies on:
+
+- `sd.status` and `sd.potion` are short names for `sd.kit.status` and
+  `sd.kit.potion`. Every content kind has one: `sd.item`, `sd.enemy`,
+  `sd.spell`, `sd.shop`, `sd.boneyard`, and so on.
+- `status = invincible` hands the created status to the potion. Writing
+  `status = "invincible"` means the same thing.
+- `icon = "art/invincibility_potion.png"` declares the sprite and references
+  it. Under the hood this is `sd.art.sprite(...)` plus
+  `art = {icon = sd.art.ref(...)}`.
+- `on_use = {a, b}` is a list of effects, which the game reads as
+  `sd.all(a, b)`.
+- The potion's `duration` is taken from its status when it is left out.
+- Nothing is returned. The game gathers the status, the potion, the sprite, and
+  any `sd.on` rules in the order they were created.
+
+The canonical working version is in
+[`frontend/examples/web-lua/invincibility-potion`](../frontend/examples/web-lua/invincibility-potion/).
+
+### Explicit form
+
+Large packages, and packages with advanced reducers, may gather their parts
+explicitly with `sd.mod`. It accepts `api`, `assets`, `content`, `rules`, and
+`systems`, may be called once, and produces the same graph as the short form:
+
+```lua
+local icon = sd.art.sprite("art/invincibility_potion.png")
 
 return sd.mod({
   api = "1.0.0",
-
-  assets = {
-    potion_icon = icon,
-  },
-
+  assets = {invincibility_potion = icon},
   content = {
     sd.kit.status({
       key = "invincible",
       duration = "3m",
       stacking = "refresh",
-      modifiers = {
-        incoming_damage = 0,
-        mana_spend = 0,
-      },
+      modifiers = {incoming_damage = 0, mana_spend = 0},
     }),
-
     sd.kit.potion({
       key = "invincibility_potion",
       name = "Invincibility Potion",
       description = "Grants invincibility and unlimited mana for 3 minutes.",
       duration = "3m",
       status = sd.ref("status", "invincible"),
-
       on_use = sd.rules.all({
-        sd.effect.resource({
-          target = "user",
-          mana = "full",
-        }),
-        sd.effect.status({
-          target = "user",
-          status = sd.ref("status", "invincible"),
-        }),
+        sd.effect.resource({target = "user", mana = "full"}),
+        sd.effect.status({target = "user", status = sd.ref("status", "invincible")}),
       }),
-
-      loot = {
-        ordinary = 0.5,
-        boss = 1.0,
-      },
-
-      art = {
-        icon = sd.art.ref("potion_icon"),
-      },
+      loot = {ordinary = 0.5, boss = 1.0},
+      art = {icon = sd.art.ref("invincibility_potion")},
     }),
   },
 })
 ```
 
-The canonical working version is in
-[`frontend/examples/web-lua/invincibility-potion`](../frontend/examples/web-lua/invincibility-potion/).
+Content created outside the `sd.mod` lists is still collected. The two forms
+compile to the identical graph digest, so a package can start short and grow
+into the explicit form without changing its content identities.
 
 Three larger copyable examples live beside it:
 
 - [Apprentice Apothecary](../frontend/examples/web-lua/apprentice-apothecary/README.md)
-  covers items, potions, status, pickups, affixes, shops, UI, and audio;
+  covers items, potions, status, pickups, affixes, shops, UI, and audio in the
+  short form;
 - [Gravity Lesson](../frontend/examples/web-lua/gravity-lesson/README.md) covers
   offered parent/child skills, all three spell prefabs, timers, migrations, and
   participant/session reducers;
@@ -163,38 +193,68 @@ Key syntax rules:
 - Durations accept values such as `"250ms"`, `"30s"`, `"3m"`, `"1h"`, or
   nonnegative integer milliseconds.
 - Stacking modes are `refresh`, `stack`, `replace`, and `ignore`.
-- Every content definition has a stable `key`.
+- Every content definition has a stable `key`. When `key` is left out, the game
+  derives one from `name` (`"Ward Tonic"` becomes `ward_tonic`). Write the key
+  yourself once players have saves, because it is the content's permanent id.
+- An unknown `sd` name or a misspelled global is an error that names the file
+  and line and suggests the closest name. `sd` names are read-only.
 
 ## Content and asset references
 
-References are typed and resolve after the complete definition graph has been
-assembled. Declaration order therefore does not create dependencies.
+Content refers to other content by the created value or by its key. Both forms
+mean the same thing, and both resolve after the complete definition graph has
+been assembled, so declaration order does not create dependencies:
 
 ```lua
--- Content in this package
-sd.ref("status", "invincible")
+local warded = sd.status({
+  key = "warded",
+  duration = "20s",
+  modifiers = {incoming_damage = {multiply = 0.75}},
+})
 
--- Content in a declared dependency
-sd.ref("item", "ember_key", "example.other-mod")
+sd.potion({name = "Ward Tonic", status = warded, icon = "art/star.png"})
+sd.potion({name = "Ward Tonic", status = "warded", icon = "art/star.png"})
+```
 
--- Supported stock content
-sd.ref("affix", "maximum_health", "stock")
+Keys as strings are accepted wherever the field's kind is known: a potion's
+`status`, a shop's `stock[].item` (an item, or a potion from this package) and
+`services[].pool`, an affix pool's `entries[].affix`, a skill's `parent`,
+`prerequisites`, `grants`, and rank grants, a scene's `rooms`, local enemies in
+a Boneyard roster, `sd.effect.status`, `sd.effect.grant`, `sd.effect.spawn`
+(a powerup under `content`, an enemy under `enemy`), and a portal's
+`destination`.
 
--- A named asset from the root assets table
-sd.art.ref("potion_icon")
+`sd.ref` remains the explicit form, and is required for content in another
+package or in stock content:
+
+```lua
+sd.ref("status", "invincible")                    -- this package
+sd.ref("item", "ember_key", "example.other-mod")  -- a declared dependency
+sd.ref("affix", "maximum_health", "stock")        -- supported stock content
 ```
 
 Content identity is derived from the package ID and content key. Renaming a key
 is deletion plus addition unless an explicit migration maps the old identity.
 
-Typed asset constructors include:
+Art fields accept a path. `icon = "art/star.png"` declares a sprite named
+`star` and references it; `sound = "audio/coin.ogg"` declares a sound; `music`,
+`ambience`, and `loop` declare music; `worn` and `worn_trim` declare wearable
+sheets; a Boneyard's `source` declares its layout. The generated reference
+lists the shorthand art fields of every kind. Two fields need more: an enemy
+`atlas` needs `sd.sheet(path, {frame = ..., animations = ...})` so the game
+knows the frame grid, and a shop portrait goes under `art = {npc = ...}`
+because the shop's `npc` field is the character itself.
+
+Typed asset constructors remain available, with short names, and every one
+accepts `key = "name"` in its options. A created asset can be passed straight
+into an art field or referenced with `sd.art.ref(key)`:
 
 ```lua
-sd.art.sprite(path, options)
-sd.art.sheet(spec)
-sd.art.wearable(path)
-sd.art.sound(path, options)
-sd.art.music(path, options)
+sd.sprite(path, options)     -- sd.art.sprite
+sd.sheet(spec)               -- sd.art.sheet
+sd.wearable(path, options)   -- sd.art.wearable
+sd.sound(path, options)      -- sd.art.sound
+sd.music(path, options)      -- sd.art.music
 sd.art.scene(spec)
 sd.art.boneyard(spec)
 ```
@@ -203,6 +263,34 @@ Admission validates asset ownership, paths, hashes, decoded bytes, dimensions,
 animation frames, audio format and duration, scene structure, and Boneyard
 structure before play. Browsers receive immutable content-addressed assets, not
 package filesystem paths.
+
+## Splitting a mod across files
+
+`sd.include("scripts/items.lua")` runs another package script once and returns
+whatever that script returns. Included scripts see the same `sd` and the same
+strict globals, so a large package can keep items, enemies, scenes, and rules
+in separate files:
+
+```lua
+-- scripts/items.lua
+local items = {}
+items.moondust = sd.item({name = "Moondust", icon = "art/moondust.png"})
+return items
+```
+
+```lua
+-- scripts/main.lua
+local items = sd.include("scripts/items.lua")
+sd.include("scripts/enemies.lua")
+
+sd.on("run.started", sd.effect.grant({target = "user", item = items.moondust, quantity = 1}))
+```
+
+`sdmod pack` folds every `scripts/*.lua` file into the entry script, compiles
+the folded script again, and refuses to pack unless it produces the identical
+graph digest. The sources stay in the package. A package may include at most
+64 extra scripts and 256 KB of Lua in total, and scripts may not include each
+other in a cycle.
 
 ## Supported mod families
 
@@ -396,15 +484,25 @@ trusted mod scene is active.
 
 ## Rules and effects
 
-Common behavior uses finite, serializable rules rather than retained callbacks:
+Common behavior uses finite, serializable rules rather than retained callbacks.
+`sd.on` attaches a rule to an event, and the game collects it like content:
 
 ```lua
-sd.rules.on(event, node)
-sd.rules.all(nodes)
-sd.rules.first(nodes)
-sd.rules.when(predicate, yes, no)
-sd.rules.after(duration, node)
-sd.rules.every(interval, node, {times = count})
+sd.on("wave.completed",
+  sd.when({context = "wave", at_least = 5}, sd.effect.resource({target = "user", mana = 5})),
+  sd.every("2s", sd.effect.resource({target = "user", mana = 1}), 3)
+)
+```
+
+The rule constructors and their long names:
+
+```lua
+sd.on(event, ...)                -- sd.rules.on; several rules run in order
+sd.all(...)                      -- sd.rules.all; run every rule
+sd.first(...)                    -- sd.rules.first; the first rule that produces an effect
+sd.when(predicate, yes, no)      -- sd.rules.when
+sd.after(duration, ...)          -- sd.rules.after
+sd.every(interval, rule, times)  -- sd.rules.every; times is a number or {times = n}
 
 sd.effect.damage(spec)
 sd.effect.resource(spec)
@@ -415,6 +513,11 @@ sd.effect.state(spec)
 sd.effect.present(spec)
 ```
 
+A list of effects is accepted wherever one rule is expected, so
+`on_use = {a, b}` means `on_use = sd.all(a, b)`. An effect that is created but
+never placed inside a rule, a content field, or `sd.mod` is an error, so nothing
+is dropped silently.
+
 Reusable Website-owned behaviors include:
 
 ```lua
@@ -424,6 +527,25 @@ sd.prefab.channel(spec)
 sd.prefab.minimap(spec)
 sd.prefab.portal(spec)
 ```
+
+### Predicates
+
+`sd.when` takes `true`, `false`, or a table with exactly one subject:
+
+```lua
+{event = "wave.completed"}               -- the event being handled
+{context = "participant_id"}             -- the context value is set
+{context = "action", equals = "ping"}    -- equals, not_equals
+{context = "wave", at_least = 5}         -- above, below, at_least, at_most
+{all = {{context = "wave", above = 3}, {context = "boss", equals = true}}}
+{any = {...}}
+{none = {...}}
+```
+
+A predicate table uses at most one comparison, comparisons apply only to
+`context`, and the numeric comparisons are false unless both sides are numbers.
+The context fields available to a rule depend on the event; the Apprentice
+Apothecary uses `participant_id` on shop purchases and `action` on UI actions.
 
 ### Event names
 
@@ -444,9 +566,9 @@ Event names are closed and typo-checked by `sdmod check`:
 Rules can distinguish declared UI actions through context:
 
 ```lua
-sd.rules.on("action.ui.action", sd.rules.when(
+sd.on("action.ui.action", sd.when(
   {context = "action", equals = "ping"},
-  sd.effect.present({sound = sd.art.ref("page_sound")})
+  sd.effect.present({sound = "audio/bookOpen.ogg"})
 ))
 ```
 
@@ -528,7 +650,9 @@ Web Lua does not permit:
 - direct Pixi or renderer-object access;
 - filesystem, sockets, Node modules, or native addresses;
 - `io`, `os`, `require`, `package`, `debug`, `load`, coroutines, or dynamic code
-  loading;
+  loading (`sd.include` is the supported way to split a package across files);
+- definition scripts that run longer than 250 ms; definitions describe content
+  and leave gameplay to rules;
 - per-frame custom rendering callbacks;
 - a second physics, collision, or pathfinding implementation; or
 - dynamic content registration after session admission.
@@ -561,8 +685,18 @@ save-schema checks, and capability inference without launching the game.
 
 `new` creates a valid item package with a CC0 starter icon. `test` runs package
 tests under the bounded Lua environment and exposes the actual compiled graph
-as the global `mod` table. `pack` validates the package and emits a deterministic
-ZIP containing the canonical compiled graph and graph digest.
+as the global `mod` table. `pack` validates the package, folds included scripts
+into the entry script and proves the folded script compiles to the same digest,
+then emits a deterministic ZIP containing the canonical compiled graph and graph
+digest.
+
+Every diagnostic carries a stable code, the graph path, and the script file and
+line that created the value:
+
+```text
+E_SCRIPT script scripts/main.lua:4: ')' expected (to close '(' at line 1) near <eof>; Lua tables use braces, so write sd.item({key = "my_item"}) or sd.item{key = "my_item"}
+E_REFERENCE content[1].fields.status scripts/main.lua:12: unknown status reference example.my-mod:invincble; did you mean invincible?
+```
 
 The migration command is currently specialized for the retained 0.2
 Invincibility Potion package:
@@ -581,3 +715,4 @@ npm run sdmod -- migrate path/to/0.2-mod path/to/1.0-mod
 - [Framework design history](design/web-lua-framework-1.0.md)
 - [Content-family design inventory](design/web-lua-content-families.md)
 - [Progressive definition graph ADR](adr/0001-web-lua-progressive-definition-graph.md)
+- [Friendly authoring layer ADR](adr/0002-web-lua-friendly-authoring-layer.md)

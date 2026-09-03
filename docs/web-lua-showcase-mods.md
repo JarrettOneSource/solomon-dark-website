@@ -7,7 +7,9 @@ bottom. Shared engine behavior belongs in Web Lua, not in copied helper code.
 ## Teaching rules
 
 - One idea per short local variable.
-- Define assets first, content second, and `sd.mod` last.
+- The beginner packages create content in reading order and let the game
+  collect it; the reducer packages gather their parts with `sd.mod` so that
+  `systems` is explicit.
 - Prefer `sd.kit`, `sd.rules`, `sd.effect`, and `sd.prefab` over reducers.
 - Use a reducer only when the example genuinely needs persistent procedural
   state.

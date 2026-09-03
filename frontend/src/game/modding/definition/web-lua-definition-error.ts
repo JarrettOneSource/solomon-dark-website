@@ -11,6 +11,7 @@ export const WEB_LUA_DEFINITION_ERROR_CODES = [
   'E_MOUNT_CONFLICT',
   'E_REFERENCE',
   'E_SCHEMA',
+  'E_SCRIPT',
   'E_UNKNOWN_FIELD',
 ] as const
 

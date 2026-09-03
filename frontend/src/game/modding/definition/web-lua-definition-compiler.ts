@@ -33,6 +33,7 @@ import {
   validateWebLuaContentSchema,
   validateWebLuaDefinitionNodes,
 } from './web-lua-definition-schemas.ts'
+import { didYouMean } from './web-lua-suggestions.ts'
 
 export interface WebLuaDefinitionDependency {
   readonly content: readonly Readonly<{
@@ -432,7 +433,10 @@ function resolveValue(
   if (isAssetReference(value)) {
     if (!context.assets.has(value.key)) {
       context.issues.push(webLuaDefinitionIssue(
-        'E_REFERENCE', path, `unknown asset: ${value.key}`, { source },
+        'E_REFERENCE',
+        path,
+        `unknown asset: ${value.key}${didYouMean(value.key, [...context.assets.keys()])}`,
+        { source },
       ))
     }
     return value
@@ -452,6 +456,35 @@ function resolveValue(
     ])))
   }
   return value
+}
+
+function referenceHint(
+  reference: WebLuaContentReference,
+  modId: string,
+  context: CompileContext,
+): string {
+  const candidates: string[] = []
+  if (modId === context.identity.id) {
+    const other = context.content.get(reference.key)
+    if (other && other.definition.contentKind !== reference.targetKind) {
+      return `; ${reference.key} is a ${other.definition.contentKind}, not a ${reference.targetKind}`
+    }
+    for (const [key, entry] of context.content) {
+      if (entry.definition.contentKind === reference.targetKind) candidates.push(key)
+    }
+  } else if (modId === 'stock') {
+    const prefix = `${reference.targetKind}:`
+    for (const id of context.stockContent.keys()) {
+      if (id.startsWith(prefix)) candidates.push(id.slice(prefix.length))
+    }
+  } else {
+    const dependency = context.dependencies.get(modId)
+    if (!dependency) return `; ${modId} is not a dependency of this mod`
+    for (const entry of dependency.content) {
+      if (entry.contentKind === reference.targetKind) candidates.push(entry.key)
+    }
+  }
+  return didYouMean(reference.key, candidates)
 }
 
 function resolveContentReference(
@@ -482,7 +515,7 @@ function resolveContentReference(
     context.issues.push(webLuaDefinitionIssue(
       'E_REFERENCE',
       path,
-      `unknown ${reference.targetKind} reference ${modId}:${reference.key}`,
+      `unknown ${reference.targetKind} reference ${modId}:${reference.key}${referenceHint(reference, modId, context)}`,
       { source },
     ))
     return Object.freeze({
