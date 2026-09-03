@@ -23,7 +23,7 @@ test('pins the first story Office Polisher art, animation, and wipe attenuation'
       new URL(`../../assets/game/${filename}`, import.meta.url),
     )).digest('hex'), digest)
   }
-  const clock = createHubPolisherClock(0x5011)
+  const clock = createHubPolisherClock(0x5011, 0)
   const frames = Array.from({ length: 500 }, (_, tick) => clock.advanceTo(tick))
   assert.ok(frames.every(frame => frame >= 0 && frame < 4))
   assert.deepEqual([...new Set(frames)].sort(), [0, 1, 2, 3])
