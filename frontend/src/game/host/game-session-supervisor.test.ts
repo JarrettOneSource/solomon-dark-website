@@ -2002,7 +2002,13 @@ function messageQueue(socket: WebSocket) {
     }
     const waiterIndex = waiters.findIndex(({ predicate }) => predicate(message))
     if (waiterIndex < 0) {
-      buffered.push(message)
+      const replaceable = message.type === 'server-snapshot'
+        || message.type === 'server-mod-runtime'
+      const replaceableIndex = replaceable
+        ? buffered.findIndex(candidate => candidate.type === message.type)
+        : -1
+      if (replaceableIndex < 0) buffered.push(message)
+      else buffered[replaceableIndex] = message
       return
     }
     const [waiter] = waiters.splice(waiterIndex, 1)
