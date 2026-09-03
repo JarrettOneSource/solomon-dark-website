@@ -98,6 +98,29 @@ export function createSharedGameWorlds(
   }
 }
 
+function resetEmptySharedHub(hub: GameSimulationState): GameSimulationState {
+  if (hub.world.kind !== 'hub') throw new Error('shared-game reset requires a Hub world')
+  if (hub.playerEntities.identities.length > 0 || hub.tick === 0) return hub
+  const reset = createGameSimulation({}, {
+    gameRngSeed: hub.world.traderAnimationSeed,
+    ...(hub.world.skorchaHiddenTicks === null
+      ? {}
+      : { hubSkorchaHiddenTicks: hub.world.skorchaHiddenTicks }),
+    ...(hub.world.skorchaVisibleTicks === null
+      ? {}
+      : { hubSkorchaVisibleTicks: hub.world.skorchaVisibleTicks }),
+    hubTraderAnimationSeed: hub.world.traderAnimationSeed,
+  })
+  if (reset.world.kind !== 'hub') throw new Error('shared-game reset did not create a Hub world')
+  return {
+    ...reset,
+    world: {
+      ...reset.world,
+      memorial: copyHubMemorialState(hub.world.memorial),
+    },
+  }
+}
+
 export function addSharedHubPlayer(
   state: SharedGameWorldsState,
   playerId: PlayerId,
@@ -437,9 +460,11 @@ export function stepSharedGameWorlds(
   if (state.hub.world.kind !== 'hub') {
     throw new Error('shared-game Hub owner is not a Hub world')
   }
-  const hub = stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs), {
-    ...(collegeIntroReadyPlayerIds === null ? {} : { collegeIntroReadyPlayerIds }),
-  })
+  const hub = state.hub.playerEntities.identities.length === 0
+    ? resetEmptySharedHub(state.hub)
+    : stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs), {
+        ...(collegeIntroReadyPlayerIds === null ? {} : { collegeIntroReadyPlayerIds }),
+      })
   if (hub.world.kind !== 'hub') throw new Error('shared-game Hub stepped out of its world')
   let memorial = hub.world.memorial
   const runs = state.runs.map((run): SharedPartyRun => {

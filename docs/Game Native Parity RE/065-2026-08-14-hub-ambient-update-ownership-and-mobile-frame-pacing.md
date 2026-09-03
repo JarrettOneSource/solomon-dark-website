@@ -148,3 +148,105 @@ report exposed.
   no tick rewind, stable Student ownership, and no browser error. It passed the
   explicit `60 FPS` floor, `20 ms` p99 ceiling, `40 ms` absolute ceiling, and
   zero-multiframe-stall threshold.
+
+## 2026-09-02 reopening - shared-Hub age replay during late join
+
+### Reported smell and controlled production reproduction
+
+- Reported behavior: a shared Hub which remains live becomes slow to join and
+  initially laggy. Restarting the Hub removes the delay.
+- The production host was healthy at tick `1,441,232`, approximately four
+  hours of `100 Hz` authority. Direct health sampling remained fast across
+  `240` requests: median `0.578 ms`, p95 `1.315 ms`, and maximum `2.980 ms`.
+  The process had no tick-lag event, failed tick, crash, socket imbalance, or
+  replication-recovery backlog during the reproduction.
+- A raw public admission completed the API request in `284.95 ms`, WebSocket
+  open in `155.46 ms`, `client-hello` to `server-welcome` in `46.96 ms`, and
+  welcome to the first snapshot in `25.16 ms`. The welcome was only `24,757`
+  bytes. This falsifies the host, proxy, snapshot size, and transport as the
+  owner of the visible pause.
+- Two isolated production-browser journeys reproduced `18.19 s` and `20.05 s`
+  from discipline confirmation to a ready Hub. The deep trace initiated zero
+  network resources and zero audio decodes during that window. It recorded
+  `36` main-thread long tasks totaling `11.672 s`, including one `7.364 s`
+  block; JavaScript heap grew from `18.2 MB` to `107.3 MB` and peaked at
+  `131.8 MB`.
+- A sampled renderer CPU profile placed approximately `5.2 s` of self time in
+  the Hub stochastic-state checkpoint expansion bundled in the production
+  `native-world-speech` chunk. The hot `Hagatha` state function grows its
+  checkpoint array to `floor(absoluteTick / 512)` and executes every omitted
+  `stepHagatha` update. Static inspection found the same absolute-tick cold
+  path in the common traders, Office polisher, and both PotionGuy clocks.
+
+This is a second report in the system covered by this ledger entry. The 2026-08-14
+pass correctly moved Astronomer and PotionGuy hot-frame work into retained
+clocks, but it did not make the clock epoch part of the factory contract. The
+Astronomer view later supplied a local Courtyard epoch externally; PotionGuy
+continued to receive the absolute shared-Hub tick. Hagatha, Luthacus, Shlorio,
+and the Office polisher were subsequently added with the same omitted epoch.
+The earlier adjacency inventory was therefore incomplete.
+
+### Reopened system boundary and membership
+
+| Member | Current ownership finding | Disposition |
+| --- | --- | --- |
+| Astronomer crew, telescope, poses, and pulses | already subtracts Courtyard construction tick at its view call site, but the factory accepts an unsafe absolute tick | `exact-ported`: clock owns a required scene epoch |
+| Hagatha body and cross-fade particle field | cold clock reconstructs every update from shared-Hub tick zero | `exact-ported`: clock advances only elapsed scene ticks |
+| Luthacus and Shlorio inherited idle gestures | per-seed checkpoint maps expand to the absolute shared-Hub tick | `exact-ported`: both clocks own the same scene epoch |
+| PotionGuy inherited gesture | global checkpoint array expands to the absolute shared-Hub tick | `exact-ported`: clock advances only elapsed scene ticks |
+| PotionGuy balloon frame, endpoint holds, and drift | global checkpoint array and drift consume the absolute shared-Hub tick | `exact-ported`: both consume the same elapsed scene tick |
+| Story Office polisher | per-seed checkpoint map expands on first Office presentation | `exact-ported`: private-room clock owns the renderer epoch |
+| Empty shared Hub world | kept stepping for the process lifetime even with no resident actor | `exact-ported`: reconstruct once at tick zero and hold until admission; parties, active runs, and Memorial remain separate owners |
+| Departed-player social reference | retained in a process-lifetime map after ordinary disconnect | `exact-ported`: delete on final membership release and recovery-lineage retirement |
+| Teacher, fountain, seals, statue, Students, and Skorcha | bounded while occupied and replaced together at the empty-world lifecycle edge | `exact-ported` through the shared reset boundary |
+| Pure random-access frame functions | test-only parity oracles and exceptional local seeks | `verified-already-at-parity`; retained outside the production late-join path |
+| Hub/player texture catalog construction | fixed per-renderer cost which does not grow with Hub tick or uptime | `out-of-system`; no evidence supports changing asset membership in this closure |
+| Occupied Hub, active Boneyards, parties, and Memorial | independent authoritative owners | `verified-already-at-parity`; never reset by an age threshold |
+| GameHost process, WebSocket proxy, snapshots, and protocol | healthy and outside the reproduced long task | `verified-already-at-parity` |
+
+No member is blocked by the browser platform.
+
+### Corrected ownership contract and implementation consequence
+
+- Every retained client-only stochastic Hub clock owns the absolute tick at
+  which its renderer was constructed. Its public `advanceTo` input remains an
+  authoritative snapshot tick, but the clock converts that value to
+  nonnegative elapsed scene ticks before stepping or seeking.
+- Clock factories require the epoch argument. An omitted epoch is a type error,
+  preventing a later view from silently restoring absolute-uptime replay.
+- Courtyard and private-room views share the initial Hub snapshot tick. Actors
+  therefore retain their native scene-construction phase relationships while
+  independent late joiners do no work proportional to server uptime.
+- The process-wide shared host remains resident. Its Hub world is live only
+  while at least one actor resides there. The first fixed step after the last
+  resident leaves reconstructs a fresh empty Hub, preserves the ten-slot
+  Memorial, leaves parties and active Boneyards untouched, and then holds the
+  empty Hub at tick zero until the next admission.
+- No arbitrary age threshold may reset an occupied Hub. The scene-epoch rule
+  removes late-join age cost without interrupting players; the empty boundary
+  resets Students, ambient actors, runtime grids, painter counters, and Hub RNG
+  only when those transient owners have no consumer.
+- The pure parity oracles, authored constants, RNG order, fixed update cadence,
+  frames, particles, painter order, texture residency, `100 Hz` host, and
+  `20 Hz` snapshots are unchanged while the Hub is occupied.
+
+### Regression and validation contract
+
+- At an initial snapshot tick of `1,500,000`, every affected late-join clock
+  must match a fresh tick-zero clock at elapsed offsets `0`, `1`, `37`, `512`,
+  and `1,025`. This covers Astronomer, Hagatha, both common-trader seeds,
+  PotionGuy actor/balloon/drift, and the Office polisher.
+- Existing sequential, repeated fractional, checkpoint-boundary, forward-jump,
+  and rewind parity comparisons remain required with explicit epoch zero.
+- Shared-world coverage must age an occupied Hub, move its last resident into
+  an active Boneyard, then prove that the Hub resets once and remains at tick
+  zero while the run advances. Memorial and party identity must survive, and a
+  new Hub resident must begin advancing from zero.
+- The exact candidate requires the complete Mac Website gate and a built Mac
+  Chrome production journey against an artificially aged shared Hub. The
+  browser receipt must show bounded discipline-to-ready time, no absolute-tick
+  checkpoint expansion in the CPU profile, no long task attributable to these
+  clocks, and empty page/console/network/host-error arrays.
+
+Implementation in this source change is complete; validation, publication, and
+deployment are separate receipts below.

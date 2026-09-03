@@ -249,6 +249,7 @@ export async function createHubWorldRenderer(
   )
   const privateRoomScene = new HubPrivateRoomScene(
     textures,
+    options.initialSnapshot.tick,
     traderAnimationSeed,
     application.renderer,
     modTextures,

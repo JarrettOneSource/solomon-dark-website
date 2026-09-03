@@ -3440,6 +3440,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         disconnectedState,
         disconnectedPartyId,
       )
+      if (!retainedPartyMembership) playerReferences.delete(client.playerId)
       if (retainedPartyMembership) {
         beginPartyRejoinWaitIfNeeded(
           client.playerId,
@@ -5135,6 +5136,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     for (const member of lineage.partyRoster) {
       if (!connected.has(member.playerId)) {
         parties = removePrivatePartyPlayer(parties, member.playerId)
+        playerReferences.delete(member.playerId)
       }
     }
     if (sharedWorlds) {

@@ -34,7 +34,6 @@ import { createNativeWorldManagerOrder } from './core-kernels/native-world-manag
 import {
   createHubAstronomerClock,
   hubAstronomerFrameAt,
-  hubAstronomerLocalTick,
 } from './hub-astronomer.ts'
 import {
   HUB_ASTRONOMER_ROOT,
@@ -50,6 +49,7 @@ import {
   HUB_STATUE_ROOT,
   createHubCommonTraderClock,
   createHubHagathaClock,
+  createHubPolisherClock,
   createHubPotionTraderClock,
   hubCommonTraderFrameAt,
   hubFountainParticleAlpha,
@@ -320,19 +320,16 @@ test('Astronomer reconstructs the native roots, crew, and telescope cycle', () =
   assert.deepEqual(hubAstronomerFrameAt(2048), hubAstronomerFrameAt(2048))
 })
 
-test('Astronomer starts from its local Courtyard construction tick', () => {
+test('Astronomer clock owns its local Courtyard construction tick', () => {
   const createdAtTick = 17_000
-  assert.equal(hubAstronomerLocalTick(createdAtTick - 1, createdAtTick), 0)
-  assert.equal(hubAstronomerLocalTick(createdAtTick, createdAtTick), 0)
-  assert.equal(hubAstronomerLocalTick(createdAtTick + 381.9, createdAtTick), 381)
-  assert.deepEqual(
-    hubAstronomerFrameAt(hubAstronomerLocalTick(createdAtTick, createdAtTick)),
-    hubAstronomerFrameAt(0),
-  )
+  const clock = createHubAstronomerClock(createdAtTick)
+  assert.deepEqual(clock.advanceTo(createdAtTick - 1), hubAstronomerFrameAt(0))
+  assert.deepEqual(clock.advanceTo(createdAtTick), hubAstronomerFrameAt(0))
+  assert.deepEqual(clock.advanceTo(createdAtTick + 381.9), hubAstronomerFrameAt(381))
 })
 
 test('Astronomer clock advances native state instead of replaying it on each draw', () => {
-  const clock = createHubAstronomerClock()
+  const clock = createHubAstronomerClock(0)
   let frame = clock.advanceTo(0)
   assert.deepEqual(frame, hubAstronomerFrameAt(0))
   assert.equal(clock.advanceTo(0.99), frame)
@@ -394,7 +391,7 @@ test('Luthacus and Shlorio common animation reaches every recovered frame from t
       (_, tick) => hubCommonTraderFrameAt(tick, seed),
     ))
     assert.deepEqual([...frames].sort(), [0, 1, 2, 3])
-    const clock = createHubCommonTraderClock(seed)
+    const clock = createHubCommonTraderClock(seed, 0)
     for (const tick of [0, 1, 511, 512, 2_049, 37]) {
       assert.equal(clock.advanceTo(tick), hubCommonTraderFrameAt(tick, seed))
     }
@@ -405,7 +402,7 @@ test('Hagatha reaches all body frames and emits every cross-fade member once per
   const seed = 0x5eedc0de ^ 5001
   const bodyFrames = new Set<number>()
   const crossfadeFrames = new Set<number>()
-  const scanClock = createHubHagathaClock(seed)
+  const scanClock = createHubHagathaClock(seed, 0)
   for (let tick = 0; tick < 20_000; tick += 1) {
     const frame = scanClock.advanceTo(tick)
     bodyFrames.add(frame.bodyFrame)
@@ -418,7 +415,7 @@ test('Hagatha reaches all body frames and emits every cross-fade member once per
   assert.ok(hubHagathaFrameAt(150, seed).particles.length >= 125)
   assert.ok(hubHagathaFrameAt(150, seed).particles.length <= 150)
 
-  const clock = createHubHagathaClock(seed)
+  const clock = createHubHagathaClock(seed, 0)
   for (const tick of [0, 1, 511, 512, 8_193, 77]) {
     assert.deepEqual(clock.advanceTo(tick), hubHagathaFrameAt(tick, seed))
   }
@@ -445,7 +442,7 @@ test('PotionGuy balloons replay their five-frame clock and vertical drift', () =
 })
 
 test('PotionGuy clock advances both native states once per fixed tick', () => {
-  const clock = createHubPotionTraderClock()
+  const clock = createHubPotionTraderClock(0)
   let frame = clock.advanceTo(0)
   assert.deepEqual(frame, {
     actorFrame: hubPotionTraderActorFrameAt(0),
@@ -470,6 +467,54 @@ test('PotionGuy clock advances both native states once per fixed tick', () => {
       balloonFrame: hubPotionTraderBalloonFrameAt(tick),
       balloonOffsetY: hubPotionTraderBalloonOffsetYAt(tick),
     })
+  }
+})
+
+test('late-join Hub clocks advance from a bounded scene epoch', () => {
+  const createdAtTick = 1_500_000
+  const luthacusSeed = 0x5eedc0de ^ 5005
+  const shlorioSeed = 0x5eedc0de ^ 5016
+  const hagathaSeed = 0x5eedc0de ^ 5001
+  const polisherSeed = 0x5eedc0de ^ 5011
+  const lateAstronomer = createHubAstronomerClock(createdAtTick)
+  const freshAstronomer = createHubAstronomerClock(0)
+  const lateHagatha = createHubHagathaClock(hagathaSeed, createdAtTick)
+  const freshHagatha = createHubHagathaClock(hagathaSeed, 0)
+  const lateLuthacus = createHubCommonTraderClock(luthacusSeed, createdAtTick)
+  const freshLuthacus = createHubCommonTraderClock(luthacusSeed, 0)
+  const lateShlorio = createHubCommonTraderClock(shlorioSeed, createdAtTick)
+  const freshShlorio = createHubCommonTraderClock(shlorioSeed, 0)
+  const latePotion = createHubPotionTraderClock(createdAtTick)
+  const freshPotion = createHubPotionTraderClock(0)
+  const latePolisher = createHubPolisherClock(polisherSeed, createdAtTick)
+  const freshPolisher = createHubPolisherClock(polisherSeed, 0)
+
+  for (const elapsedTick of [0, 1, 37, 512, 1_025]) {
+    const absoluteTick = createdAtTick + elapsedTick
+    assert.deepEqual(
+      lateAstronomer.advanceTo(absoluteTick),
+      freshAstronomer.advanceTo(elapsedTick),
+    )
+    assert.deepEqual(
+      lateHagatha.advanceTo(absoluteTick),
+      freshHagatha.advanceTo(elapsedTick),
+    )
+    assert.equal(
+      lateLuthacus.advanceTo(absoluteTick),
+      freshLuthacus.advanceTo(elapsedTick),
+    )
+    assert.equal(
+      lateShlorio.advanceTo(absoluteTick),
+      freshShlorio.advanceTo(elapsedTick),
+    )
+    assert.deepEqual(
+      latePotion.advanceTo(absoluteTick),
+      freshPotion.advanceTo(elapsedTick),
+    )
+    assert.equal(
+      latePolisher.advanceTo(absoluteTick),
+      freshPolisher.advanceTo(elapsedTick),
+    )
   }
 })
 

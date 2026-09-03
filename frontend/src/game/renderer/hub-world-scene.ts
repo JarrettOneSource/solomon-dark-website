@@ -12,7 +12,6 @@ import {
 } from '../hub-camera-presentation.ts'
 import {
   createHubAstronomerClock,
-  hubAstronomerLocalTick,
   type HubAstronomerAssistantFrame,
   type HubAstronomerMainActorFrame,
 } from '../hub-astronomer.ts'
@@ -181,11 +180,15 @@ export class HubWorldScene {
 
     this.addNpc(hub.npcs.annalist, 895.5, 455.5)
 
-    this.hagatha = new HubHagathaView(textures, traderAnimationSeed ^ 5001)
-    this.luthacus = new HubCommonTraderView(textures, traderAnimationSeed ^ 5005)
+    this.hagatha = new HubHagathaView(textures, traderAnimationSeed ^ 5001, createdAtTick)
+    this.luthacus = new HubCommonTraderView(
+      textures,
+      traderAnimationSeed ^ 5005,
+      createdAtTick,
+    )
     this.world.addChild(this.hagatha.container, this.luthacus.container)
 
-    this.potion = new HubPotionTraderView(textures)
+    this.potion = new HubPotionTraderView(textures, createdAtTick)
     this.usefulThyngsStack.sortableChildren = true
     this.usefulThyngsStack.eventMode = 'none'
     this.usefulThyngsBack = this.worldLayer(
@@ -887,14 +890,13 @@ class HubAstronomerView {
   private readonly purple: Sprite
   private readonly brownShadow: Sprite
   private readonly brown: Sprite
-  private readonly clock = createHubAstronomerClock()
-  private readonly createdAtTick: number
+  private readonly clock: ReturnType<typeof createHubAstronomerClock>
   private readonly textures: HubWorldTextures
   private currentTelescopeFrame = 0
 
   constructor(textures: HubWorldTextures, createdAtTick: number) {
     this.textures = textures
-    this.createdAtTick = createdAtTick
+    this.clock = createHubAstronomerClock(createdAtTick)
     this.behind.sortableChildren = true
     this.behind.position.set(HUB_ASTRONOMER_ROOT.x, HUB_ASTRONOMER_ROOT.y)
     this.behind.zIndex = HUB_WORLD_DEPTH.astronomer
@@ -942,7 +944,7 @@ class HubAstronomerView {
   }
 
   update(tick: number): void {
-    const frame = this.clock.advanceTo(hubAstronomerLocalTick(tick, this.createdAtTick))
+    const frame = this.clock.advanceTo(tick)
     this.redShadow.zIndex = frame.active ? 2 : 0
     this.red.zIndex = frame.active ? 3 : 1
     this.greenShadow.zIndex = frame.active ? 0 : 2
@@ -1020,9 +1022,9 @@ class HubHagathaView {
   private readonly particles = new Map<number, Sprite>()
   private readonly textures: HubWorldTextures
 
-  constructor(textures: HubWorldTextures, seed: number) {
+  constructor(textures: HubWorldTextures, seed: number, createdAtTick: number) {
     this.textures = textures
-    this.clock = createHubHagathaClock(seed)
+    this.clock = createHubHagathaClock(seed, createdAtTick)
     this.container.sortableChildren = true
     this.container.position.set(1340, 280)
     this.container.zIndex = hubWorldDepthForActor(280)
@@ -1083,9 +1085,9 @@ class HubCommonTraderView {
   private readonly sprite: Sprite
   private readonly textures: HubWorldTextures
 
-  constructor(textures: HubWorldTextures, seed: number) {
+  constructor(textures: HubWorldTextures, seed: number, createdAtTick: number) {
     this.textures = textures
-    this.clock = createHubCommonTraderClock(seed)
+    this.clock = createHubCommonTraderClock(seed, createdAtTick)
     this.container.sortableChildren = true
     this.container.position.set(1700.5, 449.5)
     this.container.zIndex = hubWorldDepthForActor(449.5)
@@ -1139,12 +1141,13 @@ class HubSkorchaView {
 class HubPotionTraderView {
   readonly actor = new Container({ label: 'potion-trader' })
   readonly balloons: Sprite
-  private readonly clock = createHubPotionTraderClock()
+  private readonly clock: ReturnType<typeof createHubPotionTraderClock>
   private readonly sprite: Sprite
   private readonly textures: HubWorldTextures
 
-  constructor(textures: HubWorldTextures) {
+  constructor(textures: HubWorldTextures, createdAtTick: number) {
     this.textures = textures
+    this.clock = createHubPotionTraderClock(createdAtTick)
     this.actor.position.set(1397, 664)
     this.actor.zIndex = HUB_USEFUL_THYNGS_CHILD_DEPTH.trader
     this.actor.eventMode = 'none'

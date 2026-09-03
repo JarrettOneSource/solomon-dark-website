@@ -223,6 +223,49 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
   assert.equal(worlds.runs[0]!.state.tick, runTick + 1)
 })
 
+test('empty shared Hub resets once and stays frozen while an active run advances', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  for (let tick = 0; tick < 10; tick += 1) worlds = stepSharedGameWorlds(worlds, {})
+  if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
+  const memorial = {
+    ...worlds.hub.world.memorial,
+    nextAge: worlds.hub.world.memorial.nextAge + 1,
+  }
+  worlds = {
+    ...worlds,
+    hub: {
+      ...worlds.hub,
+      world: { ...worlds.hub.world, memorial },
+    },
+  }
+  worlds = startSharedPartyRun(
+    worlds,
+    'player-a',
+    loadedBoneyardFixture('empty-hub-reset'),
+  ).state
+  assert.equal(worlds.hub.playerEntities.identities.length, 0)
+  assert.equal(worlds.hub.tick, 10)
+  const parties = worlds.parties
+  const runTick = worlds.runs[0]!.state.tick
+
+  worlds = stepSharedGameWorlds(worlds, {})
+  assert.equal(worlds.hub.tick, 0)
+  assert.equal(worlds.hub.playerEntities.identities.length, 0)
+  assert.deepEqual(worlds.hub.world.memorial, memorial)
+  assert.notEqual(worlds.hub.world.memorial, memorial)
+  assert.equal(worlds.parties, parties)
+  assert.equal(worlds.runs[0]!.state.tick, runTick + 1)
+
+  worlds = stepSharedGameWorlds(worlds, {})
+  assert.equal(worlds.hub.tick, 0)
+  assert.equal(worlds.runs[0]!.state.tick, runTick + 2)
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = stepSharedGameWorlds(worlds, {})
+  assert.equal(worlds.hub.tick, 1)
+  assert.equal(worlds.runs[0]!.state.tick, runTick + 3)
+})
+
 test('party launch freezes members from different stable Hub rooms and still rejects a room fade', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))

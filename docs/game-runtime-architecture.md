@@ -485,8 +485,12 @@ world speech. Current Player Card data resolves separately on demand. Client
 history is an 80-event presentation buffer, not an authority store.
 
 The browser supervisor owns one shared-Hub host for its process lifetime and a
-bounded set of single-use admission tickets. The host owns a shared Hub simulation plus zero or more
-party-scoped Boneyard simulations. Each socket receives snapshots only for its
+bounded set of single-use admission tickets. The host owns a shared Hub
+simulation while it has resident actors, plus zero or more party-scoped
+Boneyard simulations. After the last Hub resident leaves, the coordinator
+reconstructs only that empty world at tick zero and holds it until admission;
+the process, parties, active Boneyards, social broker, and persisted Memorial
+keep their independent lifetimes. Each socket receives snapshots only for its
 current world instance, while party-control messages remain session-wide.
 Before a newly created or restored Boneyard is exposed to its participants,
 the host's loading owner prepares the immutable ordinary, Demon, and Solomon
@@ -524,8 +528,8 @@ levels append to the detached sequence. The final choice atomically imports at
 the authored Boneyard spawn with transient input, casts, projectiles, and
 modifiers cleared. If the run is terminal or empty, the capability is invalid
 and ordinary owner-save resume remains the fallback. An
-empty run retires independently, and an empty shared Hub remains ready for the
-next ticket. Health reports active players, parties, runs, and
+empty run retires independently, and an empty shared Hub resets once and remains
+ready at tick zero for the next ticket. Health reports active players, parties, runs, and
 deployment-drain state. A validated release closes admissions, freezes
 authoritative hosts, requests one final owner checkpoint from every connected
 browser player, and only then disconnects occupied sessions for cutover; an
@@ -542,16 +546,18 @@ actor is one atomic run-owned transition: if another materialized actor remains,
 the run and detached capability survive; if none remains, the run, every
 run-scoped capability/reservation, gameplay pause, and prepared mod scene retire
 together. A private College then becomes empty and closes; the process-lifetime
-shared Hub remains available without retaining the party Boneyard. The fixed
-step scheduler therefore receives either a nonempty active run or no run—never
+shared-Hub host remains available without retaining the party Boneyard. Its
+empty Hub world is fresh and frozen rather than an unobserved process-age clock.
+The fixed-step scheduler therefore receives either a nonempty active run or no run—never
 an active `GameSimulationState` with zero player entities.
 
-The shared Hub also owns the session-global conditional-NPC clock. Skorcha's
-host fixed-tick schedule alternates visible/absent windows independently of
-participant count and room occupancy; snapshots publish only the current
+The shared Hub also owns the conditional-NPC clock while the world is occupied.
+Skorcha's host fixed-tick schedule alternates visible/absent windows
+independently of room occupancy; snapshots publish only the current
 authoritative actor state. Phase changes are immediate and remove or restore
-collision, prompts, rendering, and local dialogue ownership together. This
-timer is shared-world state, not player-save state.
+collision, prompts, rendering, and local dialogue ownership together. Empty
+Hub reconstruction restarts this transient scene clock; it is shared-world
+state, not player-save or process-lifetime state.
 
 NPC and trader progression remains at the existing player-entity boundary.
 Gold, shops/offers, inventory/storage, Boast, Lace, Hagatha ownership, and

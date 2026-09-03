@@ -487,13 +487,17 @@ export function hubCommonTraderFrameAt(tick: number, seed: number): number {
   return potionTraderActorFrame(commonTraderStateAt(fixedTick, seed))
 }
 
-export function createHubCommonTraderClock(seed: number): HubCommonTraderClock {
+export function createHubCommonTraderClock(
+  seed: number,
+  createdAtTick: number,
+): HubCommonTraderClock {
+  const epochTick = Math.max(0, Math.floor(createdAtTick))
   let currentTick = 0
   let state = initialCommonTraderState(seed)
   let frame = 0
   return {
     advanceTo(tick) {
-      const fixedTick = Math.max(0, Math.floor(tick))
+      const fixedTick = Math.max(0, Math.floor(tick) - epochTick)
       if (fixedTick < currentTick || fixedTick - currentTick >= POTION_TRADER_ACTOR_CHECKPOINT_TICKS) {
         state = commonTraderStateAt(fixedTick, seed)
         currentTick = fixedTick
@@ -509,13 +513,17 @@ export function createHubCommonTraderClock(seed: number): HubCommonTraderClock {
   }
 }
 
-export function createHubPolisherClock(seed: number): HubPolisherClock {
+export function createHubPolisherClock(
+  seed: number,
+  createdAtTick: number,
+): HubPolisherClock {
+  const epochTick = Math.max(0, Math.floor(createdAtTick))
   let currentTick = 0
   let state = initialPolisherState(seed)
   let frame = 0
   return {
     advanceTo(tick) {
-      const fixedTick = Math.max(0, Math.floor(tick))
+      const fixedTick = Math.max(0, Math.floor(tick) - epochTick)
       if (
         fixedTick < currentTick
         || fixedTick - currentTick >= POTION_TRADER_ACTOR_CHECKPOINT_TICKS
@@ -540,13 +548,17 @@ export function hubHagathaFrameAt(tick: number, seed: number): HubHagathaFrame {
   return presentHagatha(hagathaStateAt(fixedTick, seed))
 }
 
-export function createHubHagathaClock(seed: number): HubHagathaClock {
+export function createHubHagathaClock(
+  seed: number,
+  createdAtTick: number,
+): HubHagathaClock {
+  const epochTick = Math.max(0, Math.floor(createdAtTick))
   let currentTick = 0
   let state = initialHagathaState(seed)
-  let frame = hubHagathaFrameAt(0, seed)
+  let frame = presentHagatha(state)
   return {
     advanceTo(tick) {
-      const fixedTick = Math.max(0, Math.floor(tick))
+      const fixedTick = Math.max(0, Math.floor(tick) - epochTick)
       if (fixedTick < currentTick || fixedTick - currentTick >= POTION_TRADER_ACTOR_CHECKPOINT_TICKS) {
         state = hagathaStateAt(fixedTick, seed)
         currentTick = fixedTick
@@ -590,7 +602,8 @@ export function hubPotionTraderBalloonOffsetYAt(tick: number): number {
 }
 
 /** Advances both PotionGuy-owned native states once per elapsed fixed tick. */
-export function createHubPotionTraderClock(): HubPotionTraderClock {
+export function createHubPotionTraderClock(createdAtTick: number): HubPotionTraderClock {
+  const epochTick = Math.max(0, Math.floor(createdAtTick))
   let currentTick = 0
   let actorState = POTION_TRADER_ACTOR_CHECKPOINTS[0]
   let balloonState = POTION_TRADER_BALLOON_CHECKPOINTS[0]
@@ -598,7 +611,7 @@ export function createHubPotionTraderClock(): HubPotionTraderClock {
 
   return {
     advanceTo(tick) {
-      const fixedTick = Math.max(0, Math.floor(tick))
+      const fixedTick = Math.max(0, Math.floor(tick) - epochTick)
       if (fixedTick === currentTick) return frame
       if (
         fixedTick < currentTick

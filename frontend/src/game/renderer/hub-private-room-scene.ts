@@ -117,14 +117,15 @@ export class HubPrivateRoomScene {
 
   constructor(
     textures: HubWorldTextures,
+    createdAtTick: number,
     traderAnimationSeed: number,
     renderer: Renderer,
     modTextures: ModPresentationTextures,
   ) {
     this.textures = textures
     this.modTextures = modTextures
-    this.dowserClock = createHubCommonTraderClock(traderAnimationSeed ^ 5016)
-    this.polisherClock = createHubPolisherClock(traderAnimationSeed ^ 5011)
+    this.dowserClock = createHubCommonTraderClock(traderAnimationSeed ^ 5016, createdAtTick)
+    this.polisherClock = createHubPolisherClock(traderAnimationSeed ^ 5011, createdAtTick)
     this.world.sortableChildren = true
     this.world.eventMode = 'none'
     this.rooms = {

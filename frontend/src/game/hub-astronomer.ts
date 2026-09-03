@@ -130,19 +130,16 @@ export function hubAstronomerFrameAt(tick: number): HubAstronomerFrame {
   return presentAstronomer(astronomerStateAt(fixedTick))
 }
 
-export function hubAstronomerLocalTick(tick: number, createdAtTick: number): number {
-  return Math.max(0, Math.floor(tick - createdAtTick))
-}
-
 /** Advances the Courtyard-owned native state once per elapsed fixed tick. */
-export function createHubAstronomerClock(): HubAstronomerClock {
+export function createHubAstronomerClock(createdAtTick: number): HubAstronomerClock {
+  const epochTick = Math.max(0, Math.floor(createdAtTick))
   let currentTick = 0
   let state = ASTRONOMER_CHECKPOINTS[0]
   let frame = presentAstronomer(state)
 
   return {
     advanceTo(tick) {
-      const fixedTick = Math.max(0, Math.floor(tick))
+      const fixedTick = Math.max(0, Math.floor(tick) - epochTick)
       if (fixedTick === currentTick) return frame
       if (fixedTick < currentTick || fixedTick - currentTick >= CHECKPOINT_TICKS) {
         state = astronomerStateAt(fixedTick)

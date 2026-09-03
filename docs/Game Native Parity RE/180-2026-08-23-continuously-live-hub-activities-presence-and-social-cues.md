@@ -227,3 +227,15 @@ No member is blocked by the browser platform.
   The Player Card label was asserted in the same real-browser journeys. No
   member is browser-blocked. Nothing was pushed, deployed, or restarted in
   production.
+
+## 2026-09-02 empty-world lifecycle clarification
+
+The continuously live contract applies while at least one participant resides
+in the Hub. Entry 065's late-join reopening proved that advancing an empty Hub
+for the process lifetime gives its next browser an unbounded presentation age
+without serving a player. The process-wide host remains continuously available,
+but its empty Hub world is now reconstructed once at tick zero and held there
+until admission. Party-scoped Boneyards continue independently, and the
+persisted Memorial crosses this boundary unchanged. Optional activities still
+never pause an occupied Hub; this clarification changes only the no-resident
+lifecycle and supersedes any earlier implication that an empty world must tick.
