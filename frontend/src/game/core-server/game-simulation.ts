@@ -758,8 +758,9 @@ export function rejoinGameSimulationPlayer(
   ) throw new Error('active-run rejoin requires one detached matching player')
 
   const detachedProgression = playerProgressionAt(detached.playerEntities, playerId)
+  const detachedLighting = playerLightingAt(detached.playerEntities, playerId)
   const config = detached.playerEntities.configs[0]
-  if (!detachedProgression || !config) {
+  if (!detachedProgression || !detachedLighting || !config) {
     throw new Error('active-run rejoin detached player state is incomplete')
   }
   if (milestone !== null) {
@@ -775,14 +776,22 @@ export function rejoinGameSimulationPlayer(
   }
 
   const worldManagerOrder = createNativeWorldManagerOrder(target.worldManagerOrder)
+  const lightRegistration = worldManagerOrder.register('actor')
   let playerEntities = importPlayerEntity(
     target.playerEntities,
     detached.playerEntities,
     playerId,
     playerId,
-    worldManagerOrder.register('actor'),
+    lightRegistration,
     spawnPlayerCharacterInBoneyard(config, target.world),
   )
+  if (detachedLighting.deathWeaponPainterRegistration !== null) {
+    playerEntities = setPlayerDeathWeaponPainterRegistration(
+      playerEntities,
+      playerId,
+      worldManagerOrder.register('actor'),
+    )
+  }
   let gameRng = target.gameRng
   if (milestone !== null && milestone.crossedLevels.length > 0) {
     const synchronized = synchronizePlayerEntityLevelMilestone(

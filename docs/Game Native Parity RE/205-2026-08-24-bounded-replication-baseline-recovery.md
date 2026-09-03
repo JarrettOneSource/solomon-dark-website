@@ -193,3 +193,178 @@ the existing supported transport contract, not a new approximation.
   `6a773b9d4ea65297f16bcc4d9d505375641d5a87f010089793bba2a2e1875c24`.
 - No protocol/save schema, client decoder, native report, or browser-platform
   approximation changed. Publication and deployment remain separate receipts.
+
+## 2026-09-03 — Proactive slow-peer flow-control reopening
+
+### Reported smell and parity question
+
+- The bounded recovery state above stopped the former infinite warning/send
+  loop after a peer crossed the 64-baseline retention edge. It did not stop a
+  healthy host from first placing 64 expensive snapshots into a browser's
+  ordered application queue. In a live five-player run, four clients repeatedly
+  reached that edge and spent seconds replaying already-obsolete snapshots
+  before reaching the repair keyframe.
+- The user authorized fixing the measured lag causes before reconsidering the
+  renderer. This reopens the complete player/observer replication flow, not
+  snapshot contents, authoritative timing, or native presentation membership.
+- The parity question is whether the host can detect application-level ACK lag
+  before baseline eviction, stop building snapshots only for that peer, and
+  resume from current authority after the already-sent finite prefix drains.
+- Falsifiers are: kernel/Caddy backpressure rather than application ACK lag; an
+  unordered transport; a client which requires every intermediate snapshot for
+  simulation truth; or a global sequence jump which the existing strict
+  reconstructor cannot apply against an acknowledged baseline. Live and source
+  evidence reject each falsifier.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Live five-player run | NFO run `adea92b9b842f8859f618f8a970fa2d8`, revision `a2b19c2f`, `2026-09-03T03:20:59Z..03:40:23Z` | 46 missing-baseline episodes affected four of five players. ACK distance was 63..74 snapshots (median 64); recovery was 168..20,754 ms (median 4,224 ms), with each episode consuming the same 63..74 stale ACK prefix. | high-live |
+| Live recovered continuation | revision `de814b46`, three-player continuation to wave 29 | seven further episodes occurred without a private `simulation.tick_lag`; ACK distance was 63..67 and recovery was 3,111..10,694 ms (median 5,884 ms). Slow-client saturation therefore survives independently of authoritative tick health. | high-live |
+| NFO TCP/process sampling | same run, four sustained browser lanes | public lanes carried about 195..209 KiB/s each at 33..72 ms RTT, loopback/public send queues repeatedly drained to zero, scheduler pressure was negligible, and the game service averaged far below one CPU core. Transport capacity did not own the multi-second application queue. | high-live |
+| Current host source | `game-host.ts` at task base `f74a441c` | ordinary sends continue until an ACK names an evicted member of the 64-entry map. Only then does the existing recovery state append one keyframe and stop that peer. | high-static |
+| Current client source | `game-client-session.ts`, `game-observer-session.ts`, and presentation timelines at `f74a441c` | each fully decoded snapshot is ACKed; timelines retain at most eight snapshots; authoritative simulation never runs in the browser. Intermediate snapshots are presentation samples, not required gameplay decisions. | high-static |
+| Existing recovery proof | this entry's prior Mac two-browser five-second stall receipt | once a recovery keyframe is appended, pausing only that peer is valid over the reliable ordered WebSocket and a later global sequence/tick jump already reconstructs correctly. | high-existing |
+
+This remains a Website transport adaptation with no retail multiplayer analogue.
+No native executable fact, Mod Loader artifact, protocol message shape, or save
+schema changes.
+
+### System boundary and membership inventory
+
+Website system: per-peer authoritative snapshot admission, retained baselines,
+ACK processing, proactive high/low-water flow control, true-gap keyframe
+recovery, logging, and teardown across every supported game-host topology.
+
+| Member (role/branch/lifecycle) | Current owner | Disposition | Required proof |
+| --- | --- | --- | --- |
+| player welcome baseline | host/client reconstructor | `verified-already-at-parity` | welcome remains a complete acknowledged starting point |
+| observer welcome baseline | host/observer reconstructor | `verified-already-at-parity` | read-only role starts identically without participant mutation |
+| healthy player ACK lane | shared replication peer | `verified-already-at-parity`; bounded admission added | 20-Hz production traffic continues while actual unacknowledged membership remains below high water |
+| healthy observer ACK lane | same shared owner | `verified-already-at-parity`; bounded admission added | identical admission rule without player-only state |
+| eight-frame high water | host sent-baseline membership plus client eight-snapshot history | `exact-ported` Website flow control | no ninth ordinary snapshot is built or sent for that peer |
+| two-frame low water | per-peer flow-control state | `exact-ported` hysteresis | a paused lane stays closed until the finite prefix is almost drained, preventing start/stop oscillation |
+| snapshots skipped while flow-controlled | `broadcastSnapshot` player/observer loops | `exact-ported` | other peers, fixed ticks, input, chat, saves, heartbeat, and control messages remain live |
+| global sequence/tick jump after resume | existing frame/reconstructor contract | `verified-already-at-parity`; coverage expanded | first resumed delta names a retained acknowledged baseline and represents current authority without replay |
+| client-requested keyframe during flow control | existing recovery owner | `exact-ported` precedence | true reconstruction gap supersedes admission pause and sends one complete keyframe |
+| ACK for an actually evicted baseline | existing recovery owner | `verified-already-at-parity` fallback | one warning, one keyframe, finite stale prefix, one completion |
+| periodic five-second keyframe | shared snapshot clock | `verified-already-at-parity` | remains a healthy-lane refresh; a paused lane does not receive it until admitted again |
+| Hub/Boneyard identity keyframe | frame constructor | `verified-already-at-parity` | world transition remains complete and strict |
+| shared Hub, private College, standalone desktop | common `GameHost` | `exact-ported` through shared flow state | no topology-specific exception |
+| slow player beside healthy player/observer | per-peer admission | `exact-ported` isolation | healthy lanes keep current cadence and do not inherit the slow peer's backlog |
+| connection replacement, disconnect, observed-run end, host close | peer lifetime | `exact-ported` | flow state and retained baselines die with the socket; no timer or reference survives |
+| flow-control telemetry | structured game-host journal | `exact-ported` bounded evidence | one warning opens and one info row closes an episode with role, high water, skipped count, duration, and no credential/payload |
+
+No member is blocked by the browser platform. Reliable ordered WebSocket
+delivery is the existing supported rail, and the browser already treats
+snapshots as authoritative presentation samples rather than simulation steps.
+
+### Ownership thread and recovered behavioral contract
+
+- The host owns authoritative fixed ticks and decides whether a current
+  presentation sample is admitted to each peer. The client ACK owns proof that
+  one exact frame was completely reconstructed.
+- High water is counted from retained baseline entries newer than the current
+  acknowledged sequence, not numeric sequence distance. This remains correct
+  after one peer skips global broadcasts and later receives a noncontiguous
+  current sequence.
+- At eight actual unacknowledged frames, ordinary frame projection, JSON
+  encoding, compression submission, and socket send stop for that peer. The
+  already-sent prefix remains reliable and ordered. At two or fewer, the next
+  admitted frame is current authority projected against the retained ACK.
+- The true-gap recovery state from the earlier closure remains stronger than
+  flow control: an explicit client keyframe request or genuinely evicted ACK
+  sends one complete frame and then waits for its exact ACK.
+- Flow control never slows fixed ticks or a healthy peer and never drops input,
+  save checkpoints, chat, party state, heartbeat, disconnect, or deployment
+  messages. It coalesces only replaceable world snapshots.
+
+### Nearby-system findings
+
+- Increasing the 64-frame map would enlarge heap and delay the same failure.
+  The live ACK distances clustering exactly at 63..74 validate the earlier
+  decision not to enlarge history.
+- TCP `bufferedAmount`/kernel send queues are insufficient signals here: the
+  network accepted bytes while browser main-thread decode/presentation fell
+  behind. Host-visible ACK membership is the causal feedback loop.
+- Per-session worker/process isolation would contain an arbitrary future
+  synchronous stall but would not stop one slow browser's 3.2-second queue.
+  Proactive admission is required regardless of process topology.
+
+### Web implementation consequence
+
+- Add one shared `ReplicationFlowControlState` to player and observer peers.
+  Count actual unacknowledged sent baselines, pause at eight, and resume at two.
+- Check admission before constructing a peer's frame. Recovery keyframes bypass
+  ordinary high water; existing malformed/future/duplicate ACK behavior stays
+  strict.
+- Emit one `replication.flow_control_started` warning and one
+  `replication.flow_control_recovered` info record per episode. Do not add a
+  polling timer, disconnect timeout, adaptive authority rate, guessed client
+  state, larger baseline history, or protocol compatibility branch.
+- Reuse the current snapshot projection for healthy peers sharing one
+  world/authority so a slow peer also avoids work before JSON encoding.
+
+### Validation contract
+
+- Player red/green: untouched main exceeds eight unacknowledged frames; the
+  candidate stops exactly at eight, logs once, lets a healthy sibling continue,
+  resumes only after low water, emits a current noncontiguous sequence against
+  the retained ACK, and never opens `baseline_missing`.
+- Observer red/green: identical flow control while player count, party state,
+  observed run, and healthy player cadence remain unchanged.
+- Recovery precedence: a client-requested keyframe during admission pause still
+  sends one complete frame, pauses behind it, and resumes only on its exact ACK.
+- Existing strict branches: duplicate/older/future ACKs, periodic and world
+  keyframes, true evicted-baseline recovery, disconnect/replacement, observer
+  target end, and host teardown retain coverage.
+- Projection equivalence: cached and uncached snapshot-frame construction are
+  deeply equal for Hub/Boneyard keyframes and deltas; shared cache ownership
+  never crosses different world states or authority players.
+- Mac production-browser receipt: hold one page's main thread, require the host
+  to cap its snapshot prefix at eight while a healthy page remains near 20 Hz,
+  then require bounded current-state recovery with empty page, console,
+  failed-response, disconnect, and host-error arrays.
+- Controlled base/candidate Mac receipt records maximum pending snapshots,
+  bytes, recovery duration, host ticks, healthy-peer cadence, process memory,
+  and flow telemetry at production 20 Hz.
+- Run the complete Mac `/opt/homebrew/bin/bash ./scripts/validate.sh` gate on
+  the byte-identical final candidate.
+
+### Implementation validation receipt for proactive admission
+
+- Player and observer peers now share one high-water/low-water admission
+  state. At eight actual retained baselines newer than the peer ACK, ordinary
+  projection and send stop for that peer; at two or fewer, its next frame is
+  current authority based on the retained ACK. True keyframe recovery remains
+  stronger. One bounded start row and one recovery row record role, duration,
+  skipped frames, and no payload or credential.
+- One immutable entity projection is now reused for each shared
+  state/authority/Hub-activity combination inside a broadcast. The projection
+  cache also reuses Hub activity membership and avoids a per-peer serialized
+  cache key. Hub/Boneyard keyframe and delta equivalence tests compare cached
+  and uncached frames deeply. On the candidate's 256-student, five-peer A/B,
+  median frame construction fell from `85.608 ms` uncached to `19.578 ms`
+  cached, a `77.1%` reduction within the same candidate process.
+- Three alternating base/candidate Mac samples held the healthy sibling at
+  `22` frames in the benchmark window. The unacknowledged slow peer fell from
+  `22` sent frames on base to the exact cap of `8`; it resumed across a
+  current-state sequence gap of `17` without any `baseline_missing` event.
+- The physical Mac Chrome stall journey held one renderer task for `1,200 ms`.
+  The host opened flow control at eight outstanding frames, the healthy page
+  received `21` consecutive snapshots in the measured window, and the stalled
+  page resumed on sequences `64,65,66` across an 18-sequence current-state
+  jump. Page and console errors were empty. The separate steady-state receipt
+  delivered `100` snapshots and `100` ACKs to each of two pages in `5.002 s`
+  (`19.991 Hz`), with zero sequence gaps and about `48.69 KiB/s` estimated
+  compressed snapshots per lane.
+- Back-to-back unacknowledged world changes exposed one older strictness gap:
+  Hub -> Boneyard -> Hub could compare the new Hub only with the older ACKed
+  Hub and emit a delta after the client had already seen Boneyard. The host now
+  also compares the current world identity with the last sent baseline and
+  forces a keyframe on either mismatch. The Tutorial Game Over regression
+  asserts that exact Hub keyframe.
+- The same exact source passed the canonical Mac gate described in entry 154,
+  including `2601/2601` Node tests and the production builds. No protocol or
+  save schema changed, and no production push or deployment was performed.

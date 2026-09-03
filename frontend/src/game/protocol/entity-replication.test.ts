@@ -31,6 +31,7 @@ import {
   REPLICATED_ENTITY_TYPES,
   REPLICATED_ENTITY_TYPE_REGISTRY,
   createGameSnapshotFrame,
+  createGameSnapshotProjection,
   createReplicatedEntityBaseline,
 } from './entity-replication.ts'
 import { PrimarySpellWaterHailFrameRows } from './primary-spell-hail-frame.ts'
@@ -139,6 +140,38 @@ function boneyardSnapshot(runId: string): GameSnapshot {
     },
   }
 }
+
+test('one immutable snapshot projection produces equivalent frames for different peer baselines', () => {
+  const hub = hubSnapshot(32)
+  const hubProjection = createGameSnapshotProjection(hub)
+  const hubBaseline = createReplicatedEntityBaseline(hubSnapshot(16))
+  assert.deepEqual(
+    createGameSnapshotFrame(hub, 41, hubBaseline),
+    createGameSnapshotFrame(hub, 41, hubBaseline, false, hubProjection),
+  )
+  assert.deepEqual(
+    createGameSnapshotFrame(hub, 0, undefined, true),
+    createGameSnapshotFrame(hub, 0, undefined, true, hubProjection),
+  )
+
+  const boneyard = boneyardSnapshot('projection-reuse')
+  const boneyardProjection = createGameSnapshotProjection(boneyard)
+  const boneyardBaseline = createReplicatedEntityBaseline(
+    boneyardSnapshot('projection-reuse'),
+  )
+  assert.deepEqual(
+    createGameSnapshotFrame(boneyard, 72, boneyardBaseline),
+    createGameSnapshotFrame(boneyard, 72, boneyardBaseline, false, boneyardProjection),
+  )
+  assert.deepEqual(
+    createGameSnapshotFrame(boneyard, 0, undefined, true),
+    createGameSnapshotFrame(boneyard, 0, undefined, true, boneyardProjection),
+  )
+  assert.throws(
+    () => createGameSnapshotFrame(hubSnapshot(32), 0, undefined, true, hubProjection),
+    /different snapshot/,
+  )
+})
 
 test('registry gives Students stable static descriptors and compact dynamic samples', () => {
   assert.equal(REPLICATED_ENTITY_TYPE_REGISTRY.has(REPLICATED_ENTITY_TYPES.student), true)

@@ -13,6 +13,8 @@ import {
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
 } from '../src/game/core-server/game-simulation.ts'
+import { setPlayerDeathWeaponPainterRegistration } from '../src/game/core-server/player-entity-store.ts'
+import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
@@ -240,11 +242,14 @@ try {
   leader.readyResumeGrace(leaderStart.grace.sequence)
   member.readyResumeGrace(memberStart.grace.sequence)
   await initialWaiting.waitFor({ state: 'detached', timeout: 1_000 })
-  assert.equal(await page.locator(
+  const initialProgress = page.locator(
     '.gameplay-resume-progress-overlay'
     + '[data-gameplay-resume-grace-reason="game-started"]'
-    + '[data-gameplay-resume-grace-phase="progress"]',
-  ).count(), 0)
+    + '[data-gameplay-resume-grace-phase="progress"]'
+  )
+  await initialProgress.waitFor()
+  assert.equal(await page.getByRole('progressbar', { name: 'Resuming gameplay' }).count(), 1)
+  await initialProgress.waitFor({ state: 'detached', timeout: 5_000 })
   assert.equal(await page.getByRole('progressbar', { name: 'Resuming gameplay' }).count(), 0)
   await waitForHost(
     () => host.playerState(leader.playerId).tick > initialHeldTick,
@@ -314,20 +319,7 @@ try {
   await waitForHost(() => host.playerState(leader.playerId)?.levelUpBarrier === null, 'stacked peers done')
 
   const leaderState = host.playerState(leader.playerId)
-  const leaderIndex = leaderState.playerEntities.identities.findIndex(({ playerId }) => (
-    playerId === leader.playerId
-  ))
-  assert.ok(leaderIndex >= 0)
-  Object.assign(leaderState, {
-    playerEntities: {
-      ...leaderState.playerEntities,
-      progressions: leaderState.playerEntities.progressions.map((progression, index) => (
-        index === leaderIndex
-          ? { ...progression, currentHealth: 0, lifeState: 'spectating' }
-          : progression
-      )),
-    },
-  })
+  markPlayerSpectating(leaderState, leader.playerId)
   leader.flushSnapshot()
   leader.setVisibility('private')
   const deadVisualHandle = await page.waitForFunction(playerId => {
@@ -470,20 +462,7 @@ try {
   assert.equal(host.partyRejoinTarget(oldToken)?.status, 'connected')
 
   const browserState = host.playerState(browserPlayerId)
-  const browserIndex = browserState.playerEntities.identities.findIndex(({ playerId }) => (
-    playerId === browserPlayerId
-  ))
-  assert.ok(browserIndex >= 0)
-  Object.assign(browserState, {
-    playerEntities: {
-      ...browserState.playerEntities,
-      progressions: browserState.playerEntities.progressions.map((progression, index) => (
-        index === browserIndex
-          ? { ...progression, currentHealth: 0, lifeState: 'spectating' }
-          : progression
-      )),
-    },
-  })
+  markPlayerSpectating(browserState, browserPlayerId)
   const memberCheckpoint = await member.checkpointBeforeLeave(702)
   const rejoinWait = page.locator(
     '.gameplay-resume-progress-overlay'
@@ -591,7 +570,11 @@ try {
     failedResponses: [],
     hostErrors: [],
     pageErrors: [],
-  })
+  }, JSON.stringify({
+    browserPlayerId,
+    leaderPlayerId: leader.playerId,
+    memberPlayerId: member.playerId,
+  }))
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     sessionKind,
@@ -620,6 +603,27 @@ try {
   await browser.close()
   await host.close()
   await staticServer?.close()
+}
+
+function markPlayerSpectating(state, playerId) {
+  const playerIndex = state.playerEntities.identities.findIndex(identity => (
+    identity.playerId === playerId
+  ))
+  assert.ok(playerIndex >= 0)
+  const painterOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const progressions = state.playerEntities.progressions.map((progression, index) => (
+    index === playerIndex
+      ? { ...progression, currentHealth: 0, lifeState: 'spectating' }
+      : progression
+  ))
+  Object.assign(state, {
+    playerEntities: setPlayerDeathWeaponPainterRegistration(
+      { ...state.playerEntities, progressions },
+      playerId,
+      painterOrder.register('actor'),
+    ),
+    worldManagerOrder: painterOrder.state(),
+  })
 }
 
 function endpoint(credential) {

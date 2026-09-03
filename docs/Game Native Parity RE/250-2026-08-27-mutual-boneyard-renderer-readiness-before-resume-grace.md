@@ -205,3 +205,32 @@ DOM visibility or elapsed time.
   catch-up frame hashes are
   `f7cec241ed989109419855d1660f53cba5e0da1ec95a8c1f91f8e97651348962`
   and `f275fcf404ff63cf2be4f655ab80a6c09e915e51fdf33f3061e5e991cf14bdb2`.
+
+## 2026-09-03 — staged-ready and dead-player painter lifecycle residual
+
+- The complete global-Hub rejoin browser journey exposed two members that its
+  earlier early-exit assertion had not reached. A staged returner can report
+  `client-ready-boneyard` before it is materialized into the shared run;
+  resolving it through `stateForPlayer` dereferenced an intentionally absent
+  actor and terminated the host. The host now ignores that premature receipt.
+  The authoritative rejoin hold still accepts readiness only after ordinary
+  materialization and retains its exact sequence/set ownership.
+- A detached dead player retained its native death-weapon painter registration,
+  but `rejoinGameSimulationPlayer` imported only a new destination body/light
+  registration. Its `spectating` progression then reached the renderer with a
+  null death-weapon registration and correctly failed closed every frame. The
+  importer now allocates a fresh destination actor registration whenever the
+  detached source owns that death weapon; it never reuses the source world's
+  ordinal. A focused kernel regression pins body-then-weapon order and advances
+  the destination actor ordinal twice.
+- The browser fixture itself now models the same valid death transition and
+  the already-established two-second `game-started` progress phase rather than
+  manufacturing a painter-less spectator or expecting the progress surface to
+  vanish immediately. With those corrections, the full three-human journey
+  passed: run `ad01325e82bbb59fc72387fe290f6294`, authority held at tick `1235`,
+  resumed at `1246`, resolved offer sequences `[4,6,8,10,12,14,16,18]`, and
+  advanced local save revision `2 -> 6`. Page, console, failed-response,
+  failed-request, and host-error arrays were empty.
+- The staging-ready host regression, death-registration kernel regression,
+  full party-rejoin browser journey, and canonical Mac gate all pass. This
+  residual changes no message/save shape and no native ready or painter order.

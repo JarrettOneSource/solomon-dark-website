@@ -70,13 +70,20 @@ export interface ParsedGameSaveDocument {
 }
 
 const encoder = new TextEncoder()
+const MAX_UNMEASURED_SAVE_UTF16_CODE_UNITS = Math.floor(MAX_WEB_GAME_SAVE_BYTES / 3)
 const MAX_WEB_GAME_MOD_STATE_BYTES = 60 * 1024
+
+export function gameSaveDocumentFitsByteLimit(document: string): boolean {
+  if (document.length <= MAX_UNMEASURED_SAVE_UTF16_CODE_UNITS) return true
+  if (document.length > MAX_WEB_GAME_SAVE_BYTES) return false
+  return encoder.encode(document).byteLength <= MAX_WEB_GAME_SAVE_BYTES
+}
 
 export function parseGameSaveDocument(document: string): ParsedGameSaveDocument {
   if (
     typeof document !== 'string'
     || document.length === 0
-    || encoder.encode(document).byteLength > MAX_WEB_GAME_SAVE_BYTES
+    || !gameSaveDocumentFitsByteLimit(document)
   ) throw new Error('game save exceeds its size limit')
 
   let parsed: unknown

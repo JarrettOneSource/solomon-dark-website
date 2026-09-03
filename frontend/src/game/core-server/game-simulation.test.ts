@@ -138,6 +138,7 @@ import {
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
   selectPlayerEntityConcentration,
+  setPlayerDeathWeaponPainterRegistration,
   setPlayerEntityMana,
 } from './player-entity-store.ts'
 
@@ -2367,6 +2368,56 @@ test('active-run rejoin imports one durable actor and queues every missed person
   assert.equal(choices, 3)
   assert.equal(together.levelUpBarrier, null)
   assert.equal(stepGameSimulationTick(together, {}).tick, tickBefore + 1)
+})
+
+test('active-run rejoin re-registers a detached death weapon in destination painter order', () => {
+  const first = { discipline: 'arcane', displayName: 'First', element: 'ether' } as const
+  const second = { discipline: 'mind', displayName: 'Second', element: 'water' } as const
+  let state = enterBoneyardWorld(
+    createGameSimulation({ first, second }),
+    combatBoneyard('dead-player-rejoin'),
+  )
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const secondIndex = state.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === 'second'
+  ))
+  assert.ok(secondIndex >= 0)
+  const progressions = state.playerEntities.progressions.map((progression, index) => (
+    index === secondIndex
+      ? { ...progression, currentHealth: 0, lifeState: 'spectating' as const }
+      : progression
+  ))
+  state = {
+    ...state,
+    playerEntities: setPlayerDeathWeaponPainterRegistration(
+      { ...state.playerEntities, progressions },
+      'second',
+      order.register('actor'),
+    ),
+    worldManagerOrder: order.state(),
+  }
+  const sourceRegistration = playerLightingAt(
+    state.playerEntities,
+    'second',
+  )?.deathWeaponPainterRegistration
+  assert.ok(sourceRegistration)
+  const detached = detachGameSimulationPlayer(state, 'second')
+  state = removePlayerCharacter(state, 'second')
+  const nextActorOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.actor
+
+  const rejoined = rejoinGameSimulationPlayer(state, detached, 'second', null)
+  assert.deepEqual(
+    playerLightingAt(rejoined.playerEntities, 'second')?.deathWeaponPainterRegistration,
+    { managerLane: 'actor', registrationOrdinal: nextActorOrdinal + 1 },
+  )
+  assert.notDeepEqual(
+    playerLightingAt(rejoined.playerEntities, 'second')?.deathWeaponPainterRegistration,
+    sourceRegistration,
+  )
+  assert.equal(
+    rejoined.worldManagerOrder.nextRegistrationOrdinal.actor,
+    nextActorOrdinal + 2,
+  )
 })
 
 test('detached catch-up stacks live milestones without joining or pausing the run', () => {

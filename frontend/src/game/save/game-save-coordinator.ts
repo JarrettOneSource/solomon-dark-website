@@ -9,6 +9,16 @@ interface AcceptedGameSaveCheckpoint {
   settled: boolean
 }
 
+interface PersistenceWaiter {
+  readonly reject: (error: Error) => void
+  readonly resolve: () => void
+}
+
+interface PendingPersistence {
+  document: string
+  readonly waiters: PersistenceWaiter[]
+}
+
 export class GameSaveCoordinator {
   private record: StoredGameSave | null = null
   private streamId: number | null = null
@@ -16,7 +26,8 @@ export class GameSaveCoordinator {
   private lastSequence = 0
   private lastOutcome: Promise<void> = Promise.resolve()
   private readonly accepted = new Map<number, AcceptedGameSaveCheckpoint>()
-  private pending: Promise<void> = Promise.resolve()
+  private activePersistence: Promise<void> | null = null
+  private pendingPersistence: PendingPersistence | null = null
   private readonly store: GameSaveStore
   private readonly onChange: (record: StoredGameSave | null) => void
   private readonly onError: (error: Error) => void
@@ -91,22 +102,23 @@ export class GameSaveCoordinator {
   }
 
   private persist(document: string): Promise<void> {
-    const operation = this.pending.then(async () => {
-      if (this.record?.document === document) return
-      this.record = await this.store.write(
-        document,
-        this.record?.revision ?? 0,
-      )
-      this.onChange(this.record)
+    let resolve!: () => void
+    let reject!: (error: Error) => void
+    const outcome = new Promise<void>((resolveOutcome, rejectOutcome) => {
+      resolve = resolveOutcome
+      reject = rejectOutcome
     })
-    this.lastOutcome = operation.catch((error: unknown) => {
-      const failure = error instanceof Error ? error : new Error('Game save failed.')
-      this.onError(failure)
-      throw failure
-    })
-    void this.lastOutcome.catch(() => {})
-    this.pending = this.lastOutcome.catch(() => {})
-    return this.lastOutcome
+    const waiter = { reject, resolve }
+    if (this.pendingPersistence) {
+      this.pendingPersistence.document = document
+      this.pendingPersistence.waiters.push(waiter)
+    } else {
+      this.pendingPersistence = { document, waiters: [waiter] }
+    }
+    this.lastOutcome = outcome
+    void outcome.catch(() => {})
+    this.startPersistence()
+    return outcome
   }
 
   current(): StoredGameSave | null {
@@ -115,6 +127,38 @@ export class GameSaveCoordinator {
 
   idle(): Promise<void> {
     return this.lastOutcome
+  }
+
+  private startPersistence(): void {
+    if (this.activePersistence) return
+    const active = this.drainPersistence()
+    this.activePersistence = active
+    void active.finally(() => {
+      if (this.activePersistence !== active) return
+      this.activePersistence = null
+      if (this.pendingPersistence) this.startPersistence()
+    })
+  }
+
+  private async drainPersistence(): Promise<void> {
+    while (this.pendingPersistence) {
+      const pending = this.pendingPersistence
+      this.pendingPersistence = null
+      try {
+        if (this.record?.document !== pending.document) {
+          this.record = await this.store.write(
+            pending.document,
+            this.record?.revision ?? 0,
+          )
+          this.onChange(this.record)
+        }
+        for (const waiter of pending.waiters) waiter.resolve()
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error('Game save failed.')
+        this.onError(failure)
+        for (const waiter of pending.waiters) waiter.reject(failure)
+      }
+    }
   }
 
   private pruneAccepted(): void {

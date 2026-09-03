@@ -55,6 +55,15 @@ try {
   if (!context) throw new Error('CDP browser has no default context')
   for (let index = 0; index < 2; index += 1) {
     const page = await context.newPage()
+    await page.route('**/deployment.json*', route => {
+      const revision = new URL(route.request().url()).searchParams.get('current') || 'local'
+      return route.fulfill({
+        body: JSON.stringify({ revision }),
+        contentType: 'application/json',
+        headers: { 'cache-control': 'no-store' },
+        status: 200,
+      })
+    })
     await page.setViewportSize({ width: 1600, height: 900 })
     page.on('pageerror', (error) => errors.push(`client-${index + 1}: ${error.message}`))
     page.on('console', (message) => {
@@ -196,6 +205,11 @@ try {
 async function enterHub(page, element) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorial = page.locator('[data-prompt-kind="tutorial"] .stock-prompt-dialog')
+  if (await tutorial.isVisible()) {
+    await tutorial.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorial.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({

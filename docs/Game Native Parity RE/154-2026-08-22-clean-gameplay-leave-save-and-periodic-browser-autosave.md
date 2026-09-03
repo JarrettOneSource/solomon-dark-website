@@ -206,3 +206,188 @@ and connected until storage completes.
   most recent semantic/30-second checkpoint bounds that loss; explicit in-game
   leave has the exact durable acknowledgement. Publication is authorized and
   pending; deployment remains a separate unauthorized operation.
+
+## 2026-09-03 — Five-player checkpoint storm and latest-progress persistence reopening
+
+### Reported smell and parity question
+
+- A live five-player production run on the NFO host repeatedly stalled while
+  ordinary gameplay and level-up choices produced very large owner saves. The
+  user explicitly rejected constantly writing cloud saves and authorized
+  correcting every measured lag owner before considering a renderer pivot.
+- This reopens the browser adaptation in this entry, not the retail save
+  lifecycle. The earlier pass correctly bounded abrupt-loss exposure to 30
+  seconds and made leave/deployment terminal edges durable, but it treated
+  every intermediate semantic state as a separately required cloud write and
+  performed every owner projection synchronously in one event-loop turn.
+- The parity question is whether the Website can retain one authoritative
+  owner continuation, exact final leave, update-safe recovery, and Game Over
+  invalidation while coalescing superseded progress and never serializing an
+  entire multiplayer party in one uninterrupted burst.
+- Falsifiers are: a skipped intermediate document is the only owner of a
+  durable terminal edge; a later document can precede an older revision in
+  storage; a level-up choice must resume combat before the group barrier
+  closes; or one-client-per-turn publication changes the represented
+  authoritative state rather than only when its bytes are materialized.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Live NFO authority | production run `adea92b9b842f8859f618f8a970fa2d8`, revision `a2b19c2f`, `2026-09-03T03:20:59Z..03:40:23Z`; structured `solomon-dark-game.service` journal | 38 private `simulation.tick_lag` episodes occurred in 19m25s. The 25-step catch-up cap means each represented at least 253..431 ms of lateness; 36 also stalled the empty shared Hub and 17 landed immediately after a 3,000-tick autosave boundary. | high-live |
+| Cloud persistence | `solomon-dark-revived.service` EF command metadata and `/var/lib/solomon-dark-revived/sdr.db`, same pre-update window | 602 owner-slot updates wrote 534.04 MiB; median document size was about 863 KiB and the database command itself was only 2 ms median. Persistence frequency and upstream document work, not SQLite throughput, owned the volume. | high-live |
+| Recovered owner documents | read-only slot-zero summaries during waves 18..21 | individual documents were approximately 0.74..1.21 MiB and repeated one generated scene with 445 objects, 234 sprites, 36 roads, 27 fences, and three 300-plus-row scenery-target collections alongside the changing run. | high-live shape; no capability retained |
+| Recovered continuation | revision `de814b46`, three-player update-safe continuation through wave 29, `2026-09-03T03:40:24Z..03:52:34Z` | no private tick-drop warning occurred at the lower load, but 131 site-wide owner writes still moved 116.51 MiB before the recovered session closed. The database remained 2 ms median. | high-live; includes brief concurrent sessions and is therefore site-wide rather than run-exclusive |
+| Current host causal trace | `game-host.ts` at task base `f74a441c`: every `publishSaveCheckpoint` call loops all connected clients; level-up selection, reroll/save, pause, quickbar, primary/concentration, Hub, mod, tutorial, and lifecycle branches call it directly | one player's intermediate action can synchronously project, stringify, size-check, compress, and send every participant's 0.7-plus-MiB document. Five players choosing once is an N-by-N publication pattern. | high-static |
+| Current browser causal trace | `GameSaveCoordinator.accept`/`persist` at `f74a441c` | every accepted sequence appends another store write to a promise chain. A newer progress checkpoint cannot supersede an older queued one even though only the newest continuation can be resumed. | high-static |
+| Existing stock proof | retail 0.72.5 destructor/writer/loader evidence earlier in this entry | stock requires semantic/final writes and clean-destruction ordering but has no periodic cloud writer, browser revision queue, multiplayer owner fan-out, or network round trip. | high instruction-derived |
+
+No raw production document, party-rejoin capability, credential, account ID,
+or database copy is retained by this task. Counts and bounded structural
+summaries are the durable evidence.
+
+### System boundary and membership inventory
+
+Native system: retail profile/run persistence and clean destruction. Website
+adaptation: host-authored owner projections, checkpoint scheduling, browser
+cloud/IndexedDB persistence, update-safe party recovery, and terminal invalidation.
+
+| Member (scene/branch/lifecycle) | Native or Website owner | Disposition | Required proof |
+| --- | --- | --- | --- |
+| 30-second active progress checkpoint | browser abrupt-loss adaptation | `exact-ported` retained cadence | one owner document per connected participant, no NFO tick burst, at most 30 seconds of active progress exposed to abrupt process loss |
+| intermediate multiplayer skill choices | mandatory native SkillPicker barrier plus Website owner save | `exact-ported` as one completed-barrier publication | choices remain authoritative in memory while the world is held; the final choice schedules one owner document per participant rather than one party-wide batch per click |
+| level-up reroll | Website-only offer control | `out-of-system` as an individual durable write | no cloud write until a final choice/barrier completion, forced lifecycle edge, or periodic checkpoint |
+| quickbar, selected primary, concentration, Hub inventory/service, tutorial, and player-local mod mutation | owner-specific durable profile state | `exact-ported` target-only publication | only the affected owner is scheduled; unrelated participants are not rewritten |
+| pause-menu, Inventory, and SkillScreen open/close | no retail durable mutation | `out-of-system` as a save trigger | no checkpoint merely because presentation was paused |
+| run entry, Tutorial entry, loadout completion, and party-recovery topology rotation | shared run/continuation lifecycle | `exact-ported` group publication | every affected participant receives one current owner projection |
+| participant disconnect | recovery-lineage and remaining roster mutation | `exact-ported` group publication | surviving members receive current recovery ownership; the departing socket owns no later queued send |
+| explicit gameplay leave | retail clean destruction plus Website durable acknowledgement | `verified-already-at-parity` forced synchronous edge | exact checkpoint sequence reaches durable storage before disconnect/title |
+| deployment restart | Website update-safe recovery | `verified-already-at-parity` forced frozen-world edge | every connected owner acknowledges the target-revision checkpoint before code 1012 |
+| Game Over | native resumable-run invalidation | `verified-already-at-parity` forced profile-only edge | pending progress is superseded and no later active continuation can recreate the run |
+| host progress queue | Website event-loop adaptation | `exact-ported` latest-per-owner scheduling | requests coalesce by player and at most one expensive projection executes per event-loop turn |
+| cloud and IndexedDB write queue | Website storage adaptation | `exact-ported` latest-wins pending persistence | first in-flight work may complete; all not-yet-started progress collapses to the newest document and every covered promise resolves only after that newer state is durable |
+| optimistic revision conflict and write failure | Website storage adapter | `verified-already-at-parity`; coverage expanded | failed actual writes reject every covered waiter once and surface the existing diagnostic without pretending success |
+| stream replacement, duplicate sequence, stale stream, and title replacement | `GameSaveCoordinator` | `verified-already-at-parity`; coverage expanded | strict ordering remains; replacement seals the old stream and cannot be overwritten by queued progress |
+| UTF-8 16-MiB limit | save encoder/decoder | `exact-ported` allocation-safe check | ordinary small documents avoid a full temporary byte array; non-ASCII and near-limit documents retain the exact byte bound |
+| host close/socket teardown | game host and scheduler | `exact-ported` | pending callbacks are cancelled and retain no client, document, or timer |
+
+The existing `blocked-by-platform` member is unchanged: abrupt browser or
+power loss cannot guarantee completion of an asynchronous cloud/IndexedDB
+write. The user-authorized policy continues to bound that visible difference
+to the latest 30-second or lifecycle checkpoint.
+
+### Native ownership thread and recovered contract
+
+- Retail still owns profile/run semantics, clean destruction, Last Game, and
+  Game Over invalidation. The browser host remains the only save-document
+  producer and storage adapters remain byte consumers.
+- A progress checkpoint is replaceable only before its store write begins.
+  Once a write is in flight its revision transaction completes normally; the
+  newest pending document follows it and covers every superseded waiter.
+- Explicit leave, deployment restart, and Game Over are nonreplaceable
+  lifecycle outcomes. They cancel older unsent host work and remain directly
+  awaited through their existing checkpoint sequence.
+- The authoritative level-up barrier already prevents combat from advancing
+  between party choices. Persisting its completed state once per owner retains
+  every chosen skill without serializing each intermediate pending-player set.
+- Host scheduling may delay byte materialization across event-loop turns, but
+  cannot change simulation ticks, RNG, player choices, party membership,
+  owner-only projection, save schema, revision order, or terminal behavior.
+
+### Nearby-system findings
+
+- `encodeDocument` currently performs `JSON.stringify` and then allocates a
+  second complete `TextEncoder` result only to reject values over 16 MiB. A
+  UTF-16 string shorter than one third of that limit is provably within the
+  UTF-8 bound and needs no second allocation; larger/non-ASCII edges retain the
+  exact measurement.
+- The NFO database is not the optimization target. Its median update was 2 ms;
+  reducing SQLite durability or weakening optimistic revisions would preserve
+  the host/browser amplification and lose correctness.
+- The same Node process owns shared Hub and private hosts. Removing long
+  uninterrupted save batches addresses the measured cross-session stall; host
+  process isolation remains a separate adoption decision only if controlled
+  post-fix evidence still shows shared event-loop blockage.
+
+### Web implementation consequence
+
+- Add one host-owned latest-per-player checkpoint scheduler. Route ordinary
+  progress through it, perform one projection per `setImmediate` turn, and
+  publish one bounded batch-completion diagnostic with sources, target count,
+  emitted bytes, synchronous work, and coalesced request counts.
+- Replace level-up N-by-N publication with one group request when the barrier
+  closes. Rerolls and pause presentation do not save independently; local
+  mutations schedule only their owner; shared run/topology edges schedule the
+  affected group.
+- Deepen `GameSaveCoordinator` so a pending document can be replaced by a
+  newer accepted sequence while all superseded sequence promises resolve or
+  reject with the actual write that covered them.
+- Preserve the current 30-second cadence, schema 28 bytes, forced lifecycle
+  writes, cloud/IndexedDB adapters, party recovery claims, and strict revision
+  checks. No compatibility format or second save path is introduced.
+
+### Validation contract
+
+- Host red/green regression: a five-player level-up barrier produces five
+  final owner documents, not 25 intermediate documents; rerolls and pause do
+  not publish; target-local settings publish only that owner; run/topology and
+  periodic paths still cover their complete membership.
+- Scheduler regression: repeated requests coalesce per player, publication
+  executes once per event-loop turn, forced terminal publication cancels stale
+  pending work, disconnected clients receive no later send, and close clears
+  every callback/reference.
+- Coordinator regression: while one store write is in flight, arbitrary
+  progress sequences collapse to the newest pending document; duplicate and
+  per-sequence outcomes remain stable; Game Over/replacement wins; a failed
+  actual write rejects all waiters it covers, while `idle()` follows the newest
+  requested checkpoint and is not poisoned after a later successful write.
+- Encoder regression: ordinary ASCII documents avoid full byte materialization;
+  multi-byte values on both sides of the 16-MiB edge retain exact admission.
+- Mac browser journeys: anonymous and authenticated progress, multiplayer
+  level-up, leave/resume, Game Over, deployment restart, revision conflict, and
+  recovery all retain empty unexpected error arrays and exact persisted state.
+- Controlled base/candidate Mac receipt: compare owner documents emitted,
+  storage writes, peak uninterrupted checkpoint work, host tick cadence,
+  process memory, and bytes under the same five-player scripted barrier/load.
+- Run the complete Mac `/opt/homebrew/bin/bash ./scripts/validate.sh` gate on
+  the byte-identical final candidate.
+
+### Implementation validation receipt for the 2026-09-03 reopening
+
+- `GameSaveCheckpointScheduler` now retains only the newest pending source per
+  owner and publishes at most one owner document per `setImmediate` turn.
+  Pause, level-up reroll, and intermediate choice states no longer publish;
+  the completed SkillPicker barrier publishes once per owner. Local durable
+  mutations target only their owner, while run/topology boundaries retain
+  group coverage. Forced leave, deployment, and Game Over still bypass the
+  scheduler and cancel an older unsent owner projection.
+- `GameSaveCoordinator` completes the first in-flight storage transaction and
+  replaces every not-yet-started document with the newest checkpoint. All
+  superseded callers wait for the write that actually covers them. A failed
+  transaction rejects only its covered callers; a subsequent successful
+  checkpoint restores the newest `idle()` outcome. Exact stream, duplicate,
+  replacement, optimistic-revision, and terminal ordering remain intact.
+- Small save documents now use the provable UTF-16-to-UTF-8 upper bound before
+  allocating a complete `TextEncoder` buffer. Documents in the ambiguous
+  range still receive exact UTF-8 measurement, and both ASCII and three-byte
+  Unicode 16-MiB edges have focused coverage.
+- Three alternating measured Mac samples at production snapshot rate used the
+  same benchmark source on untouched base `f74a441c` and the candidate. Median
+  five-player, twenty-choice SkillPicker output fell from `100` to `5` owner
+  messages and from `5,456,389` to `273,677` bytes: `95.0%` fewer messages and
+  `95.0%` fewer payload bytes. A 100-request, 5-ms-store burst fell from `100`
+  writes / `623.598 ms` to `2` writes / `11.180 ms`, with final document 100
+  retained.
+- The Mac browser save journey advanced local revision `1 -> 2`, persisted
+  tick `398`, and resumed X `1039.0505779667071` after movement from X
+  `950.64`; page, console, and unexpected-warning arrays were empty. The full
+  deployment-restart journey passed for anonymous and authenticated owners,
+  advanced each final revision `2 -> 4`, preserved the moved continuation,
+  retained Game Over/profile-only behavior, and reported one saved and zero
+  unacknowledged players on the second drain.
+- The exact candidate passed the canonical Mac gate: zero-warning/error
+  backend Release build, `19/19` Website/backend contracts, lint and generated
+  boundaries, `2601/2601` Node tests across every frontend/desktop group,
+  production frontend and game-host builds, media policy, and bundle budget.
+  `Game-B8oK0i5p.js` measured `265,780` raw / `80,974` gzip bytes against
+  `524,288` / `134,144` limits. No production push or deployment was performed.

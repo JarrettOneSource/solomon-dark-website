@@ -74,6 +74,7 @@ import {
 import {
   MAX_WEB_GAME_SAVE_BYTES,
   WEB_GAME_SAVE_SCHEMA_VERSION,
+  gameSaveDocumentFitsByteLimit,
   readGameSaveSummary,
 } from './game-save-contract.ts'
 
@@ -87,6 +88,21 @@ const GUEST = {
   displayName: 'Vibia',
   element: 'water',
 } as const
+
+test('save byte admission keeps the exact UTF-8 limit without measuring ordinary small documents', () => {
+  const guaranteedThreeByteLength = Math.floor(MAX_WEB_GAME_SAVE_BYTES / 3)
+  assert.equal(gameSaveDocumentFitsByteLimit('ordinary checkpoint'), true)
+  assert.equal(
+    gameSaveDocumentFitsByteLimit('\u2603'.repeat(guaranteedThreeByteLength)),
+    true,
+  )
+  assert.equal(
+    gameSaveDocumentFitsByteLimit('\u2603'.repeat(guaranteedThreeByteLength + 1)),
+    false,
+  )
+  assert.equal(gameSaveDocumentFitsByteLimit('x'.repeat(MAX_WEB_GAME_SAVE_BYTES)), true)
+  assert.equal(gameSaveDocumentFitsByteLimit('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)), false)
+})
 const MODS = [{
   contentSha256: 'a'.repeat(64),
   id: 'tests.save-mod',

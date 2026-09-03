@@ -53,6 +53,8 @@ import {
   type ModBoneyardEntry,
 } from './boneyard-catalog.ts'
 import {
+  GAME_REPLICATION_HIGH_WATER_MARK,
+  GAME_REPLICATION_LOW_WATER_MARK,
   GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
   startGameHost,
   type GameHostAdmission,
@@ -497,41 +499,45 @@ test('developer observer watches one private run without joining or mutating par
     const message = decodeServerGameMessage(data.toString())
     if (message.type === 'server-snapshot') stalledSnapshots.push(message)
   })
-  await waitFor(() => stalledSnapshots.length >= 80)
-  const observerBacklog = [...stalledSnapshots]
-  const observerRecoveryFloor = observerBacklog.at(-1)!.sequence
-  for (const message of observerBacklog) {
-    stalledObserver.send(encodeGameMessage({
-      type: 'client-snapshot-ack',
-      requireKeyframe: false,
-      sequence: message.sequence,
-    }))
-  }
-  await waitFor(() => stalledSnapshots.some(message => (
-    message.sequence > observerRecoveryFloor
-    && message.frame.world.entities.keyframe
-  )))
-  const observerRecovery = stalledSnapshots.find(message => (
-    message.sequence > observerRecoveryFloor
-    && message.frame.world.entities.keyframe
-  ))!
-  const observerFramesAtRecovery = stalledSnapshots.length
+  await waitFor(() => stalledSnapshots.length >= GAME_REPLICATION_HIGH_WATER_MARK)
+  const observerFramesAtHighWater = stalledSnapshots.length
   await new Promise(resolve => setTimeout(resolve, 100))
-  assert.equal(stalledSnapshots.length, observerFramesAtRecovery)
+  assert.equal(observerFramesAtHighWater, GAME_REPLICATION_HIGH_WATER_MARK)
+  assert.equal(stalledSnapshots.length, GAME_REPLICATION_HIGH_WATER_MARK)
+  assert.equal(logs.filter(entry => (
+    entry.event === 'replication.flow_control_started'
+    && entry.details?.observerId === stalledObserverId
+  )).length, 1)
+  assert.equal(logs.some(entry => (
+    entry.event === 'replication.baseline_missing'
+    && entry.details?.observerId === stalledObserverId
+  )), false)
+  const observerAcknowledged = stalledSnapshots.at(-(GAME_REPLICATION_LOW_WATER_MARK + 1))!
   stalledObserver.send(encodeGameMessage({
     type: 'client-snapshot-ack',
     requireKeyframe: false,
-    sequence: observerRecovery.sequence,
+    sequence: observerAcknowledged.sequence,
   }))
-  await waitFor(() => stalledSnapshots.length > observerFramesAtRecovery)
+  await waitFor(() => stalledSnapshots.length > observerFramesAtHighWater)
+  const observerResumed = stalledSnapshots[observerFramesAtHighWater]!
+  assert.ok(observerResumed.sequence > observerAcknowledged.sequence + 1)
+  assert.equal(
+    observerResumed.frame.world.entities.baselineSequence,
+    observerAcknowledged.sequence,
+  )
   await waitFor(() => logs.some(entry => (
-    entry.event === 'replication.baseline_recovered'
+    entry.event === 'replication.flow_control_recovered'
     && entry.details?.observerId === stalledObserverId
   )))
-  assert.equal(logs.filter(entry => (
-    entry.event === 'replication.baseline_missing'
+  const observerFlowRecovered = logs.find(entry => (
+    entry.event === 'replication.flow_control_recovered'
     && entry.details?.observerId === stalledObserverId
-  )).length, 1)
+  ))
+  assert.equal(
+    observerFlowRecovered?.details?.highWaterMark,
+    GAME_REPLICATION_HIGH_WATER_MARK,
+  )
+  assert.ok(Number(observerFlowRecovered?.details?.skippedSnapshotCount) > 0)
   assert.equal(host.capacityParticipantCount(), 2)
   assert.equal(host.presence().length, 2)
   leader.socket.off('message', countPlayerFacingCue)
@@ -1891,6 +1897,15 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   await initialReady
   logs.length = 0
   runtimeEvents.length = 0
+  let pauseCheckpointCount = 0
+  const countPauseCheckpoint = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-save-checkpoint') pauseCheckpointCount += 1
+  }
+  first.socket.on('message', countPauseCheckpoint)
+  second.socket.on('message', countPauseCheckpoint)
+  context.after(() => first.socket.off('message', countPauseCheckpoint))
+  context.after(() => second.socket.off('message', countPauseCheckpoint))
   assert.equal(host.state().world.kind, 'boneyard')
 
   const pausedA = nextMessage(first.socket, (message) => (
@@ -1978,6 +1993,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
     event === 'gameplay.paused' || event === 'gameplay.resumed'
   )), [])
   assert.ok(host.state().tick - heldTick <= 10, 'Boneyard release must not replay paused wall time')
+  assert.equal(pauseCheckpointCount, 0)
   await new Promise((resolve) => setTimeout(resolve, 1_500))
   assert.equal(host.state().tick, heldTick)
   await graceCompleted
@@ -2611,6 +2627,22 @@ test('multiplayer SkillPicker holds through final close then resumes without a t
   assert.ok(getPlayerProgression(host.state(), first.welcome.playerId).pendingOffer)
   assert.ok(getPlayerProgression(host.state(), second.welcome.playerId).pendingOffer)
 
+  const barrierCheckpoints = new Map<string, number>([
+    [first.welcome.playerId, 0],
+    [second.welcome.playerId, 0],
+  ])
+  const countBarrierCheckpoint = (playerId: string) => (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type !== 'server-save-checkpoint' || message.reason !== 'progress') return
+    barrierCheckpoints.set(playerId, (barrierCheckpoints.get(playerId) ?? 0) + 1)
+  }
+  const countFirstCheckpoint = countBarrierCheckpoint(first.welcome.playerId)
+  const countSecondCheckpoint = countBarrierCheckpoint(second.welcome.playerId)
+  first.socket.on('message', countFirstCheckpoint)
+  second.socket.on('message', countSecondCheckpoint)
+  context.after(() => first.socket.off('message', countFirstCheckpoint))
+  context.after(() => second.socket.off('message', countSecondCheckpoint))
+
   let graceMessages = 0
   const observeGrace = (data: WebSocket.RawData) => {
     if (decodeServerGameMessage(data.toString()).type === 'server-gameplay-resume-grace') {
@@ -2653,6 +2685,15 @@ test('multiplayer SkillPicker holds through final close then resumes without a t
     skillId: finalOffer.options[0]!.skillId,
   }))
   const pendingGrace = await graceStarted
+  await waitFor(() => [...barrierCheckpoints.values()].every(count => count >= 1))
+  await new Promise(resolve => setTimeout(resolve, 30))
+  assert.deepEqual(
+    Object.fromEntries(barrierCheckpoints),
+    {
+      [first.welcome.playerId]: 1,
+      [second.welcome.playerId]: 1,
+    },
+  )
   assert.equal(pendingGrace.type, 'server-gameplay-resume-grace')
   assert.equal(pendingGrace.grace?.reason, 'skill-picker-closed')
   assert.equal(pendingGrace.grace?.remainingMs, null)
@@ -2752,6 +2793,7 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   context.after(() => client.socket.close())
   const playerId = client.welcome.playerId
+  await new Promise(resolve => setTimeout(resolve, 30))
 
   const current = host.state()
   const withCharm = {
@@ -2763,6 +2805,13 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   }
   Object.assign(current, grantGameSimulationPlayerExperience(withCharm, playerId, 300))
   const firstOffer = getPlayerProgression(host.state(), playerId).pendingOffer!
+  let intermediateCheckpointCount = 0
+  const countIntermediateCheckpoint = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-save-checkpoint') intermediateCheckpointCount += 1
+  }
+  client.socket.on('message', countIntermediateCheckpoint)
+  context.after(() => client.socket.off('message', countIntermediateCheckpoint))
 
   const rerolledSnapshot = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
@@ -2809,6 +2858,8 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   assert.equal(saved.snapshot.players[playerId].progression.deferredSkillChoices, 1)
   assert.ok(saved.snapshot.players[playerId].progression.pendingOffer)
   assert.equal(saved.snapshot.players[playerId].progression.sorcerorsCharmAvailable, true)
+  await new Promise(resolve => setTimeout(resolve, 30))
+  assert.equal(intermediateCheckpointCount, 0)
 })
 
 test('game host authoritatively projects each player belt and rejects unlearned selections', async (context) => {
@@ -3170,7 +3221,7 @@ test('game host sends a complete keyframe when a client requests recovery', asyn
   )
 })
 
-test('game host bounds stale baseline recovery while healthy peers keep receiving', async (context) => {
+test('game host bounds a slow player before baseline eviction while healthy peers continue', async (context) => {
   const logs: GameServerLogEntry[] = []
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
@@ -3185,71 +3236,57 @@ test('game host bounds stale baseline recovery while healthy peers keep receivin
 
   const stalledSnapshots: ServerSnapshotMessage[] = []
   const healthySnapshots: ServerSnapshotMessage[] = []
+  stalled.stopSnapshotAcknowledgements()
   stalled.socket.on('message', (data) => {
     const message = decodeServerGameMessage(data.toString())
     if (message.type === 'server-snapshot') stalledSnapshots.push(message)
   })
   healthy.socket.on('message', (data) => {
-    const message = decodeServerGameMessage(data.toString())
-    if (message.type !== 'server-snapshot') return
-    healthySnapshots.push(message)
-    healthy.socket.send(encodeGameMessage({
-      type: 'client-snapshot-ack',
-      requireKeyframe: false,
-      sequence: message.sequence,
-    }))
+    const message = materializeServerMessage(
+      healthy.socket,
+      decodeServerGameMessage(data.toString()),
+    )
+    if (message.type === 'server-snapshot') healthySnapshots.push(message)
   })
 
-  await waitFor(() => stalledSnapshots.length >= 80 && healthySnapshots.length >= 80)
-  const backlog = [...stalledSnapshots]
-  const recoveryFloor = backlog.at(-1)!.sequence
-  for (const message of backlog) {
-    stalled.socket.send(encodeGameMessage({
-      type: 'client-snapshot-ack',
-      requireKeyframe: false,
-      sequence: message.sequence,
-    }))
-  }
-  await waitFor(() => stalledSnapshots.some(message => (
-    message.sequence > recoveryFloor
-    && message.frame.world.entities.keyframe
-  )))
-  const recovery = stalledSnapshots.find(message => (
-    message.sequence > recoveryFloor
-    && message.frame.world.entities.keyframe
-  ))!
-  const stalledFramesAtRecovery = stalledSnapshots.length
-  const healthyFramesAtRecovery = healthySnapshots.length
+  await waitFor(() => (
+    stalledSnapshots.length >= GAME_REPLICATION_HIGH_WATER_MARK
+    && healthySnapshots.length >= GAME_REPLICATION_HIGH_WATER_MARK
+  ))
+  const stalledAtHighWater = stalledSnapshots.length
+  const healthyAtHighWater = healthySnapshots.length
   await new Promise(resolve => setTimeout(resolve, 100))
 
-  assert.equal(stalledSnapshots.length, stalledFramesAtRecovery)
-  assert.ok(healthySnapshots.length > healthyFramesAtRecovery)
-  const warnings = logs.filter(entry => (
-    entry.event === 'replication.baseline_missing'
+  assert.equal(stalledAtHighWater, GAME_REPLICATION_HIGH_WATER_MARK)
+  assert.equal(stalledSnapshots.length, GAME_REPLICATION_HIGH_WATER_MARK)
+  assert.ok(healthySnapshots.length > healthyAtHighWater)
+  assert.equal(logs.filter(entry => (
+    entry.event === 'replication.flow_control_started'
     && entry.details?.connectionRole === 'player'
-  ))
-  assert.equal(warnings.length, 1)
-  assert.equal(logs.some(entry => entry.event === 'replication.baseline_recovered'), false)
+  )).length, 1)
+  assert.equal(logs.some(entry => entry.event === 'replication.baseline_missing'), false)
 
+  const acknowledged = stalledSnapshots.at(-(GAME_REPLICATION_LOW_WATER_MARK + 1))!
   stalled.socket.send(encodeGameMessage({
     type: 'client-snapshot-ack',
     requireKeyframe: false,
-    sequence: recovery.sequence,
+    sequence: acknowledged.sequence,
   }))
-  await waitFor(() => stalledSnapshots.length > stalledFramesAtRecovery)
-  const resumed = stalledSnapshots[stalledFramesAtRecovery]!
+  await waitFor(() => stalledSnapshots.length > stalledAtHighWater)
+  const resumed = stalledSnapshots[stalledAtHighWater]!
+  assert.ok(resumed.sequence > acknowledged.sequence + 1)
   assert.equal(resumed.frame.world.entities.keyframe, false)
-  assert.equal(resumed.frame.world.entities.baselineSequence, recovery.sequence)
+  assert.equal(resumed.frame.world.entities.baselineSequence, acknowledged.sequence)
   await waitFor(() => logs.some(entry => (
-    entry.event === 'replication.baseline_recovered'
+    entry.event === 'replication.flow_control_recovered'
     && entry.details?.connectionRole === 'player'
   )))
   const recovered = logs.find(entry => (
-    entry.event === 'replication.baseline_recovered'
+    entry.event === 'replication.flow_control_recovered'
     && entry.details?.connectionRole === 'player'
   ))
-  assert.equal(recovered?.details?.recoveryKeyframeSequence, recovery.sequence)
-  assert.ok(Number(recovered?.details?.staleAcknowledgementCount) > 1)
+  assert.equal(recovered?.details?.highWaterMark, GAME_REPLICATION_HIGH_WATER_MARK)
+  assert.ok(Number(recovered?.details?.skippedSnapshotCount) > 0)
   assert.equal(stalled.socket.readyState, WebSocket.OPEN)
   assert.equal(healthy.socket.readyState, WebSocket.OPEN)
 })
@@ -3495,7 +3532,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
 
-test('Tutorial Game Over clears its Boneyard before the first College checkpoint', async (context) => {
+test('Tutorial Game Over forces a Hub keyframe and clears Boneyard before the College checkpoint', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -3508,6 +3545,9 @@ test('Tutorial Game Over clears its Boneyard before the first College checkpoint
     message.type === 'server-save-checkpoint'
     && JSON.parse(message.save).continuation?.simulation?.world?.kind === 'hub'
   ))
+  const collegeSnapshot = nextMessage(client.socket, message => (
+    message.type === 'server-snapshot' && message.snapshot.world.kind === 'hub'
+  ))
   Object.assign(host.state().run, {
     gameOverEventId: 1,
     gameOverExitKind: 'automatic',
@@ -3517,8 +3557,10 @@ test('Tutorial Game Over clears its Boneyard before the first College checkpoint
     phase: 'game-over',
   })
 
-  const message = await checkpoint
+  const [message, college] = await Promise.all([checkpoint, collegeSnapshot])
   assert.equal(message.type, 'server-save-checkpoint')
+  assert.equal(college.type, 'server-snapshot')
+  assert.equal(college.frame.world.entities.keyframe, true)
   const raw = JSON.parse(message.save)
   assert.equal(raw.continuation.loadedBoneyard, null)
   const restored = restoreGameSaveDocument(message.save)
@@ -4413,6 +4455,8 @@ test('saved party member catches up detached while the live party run continues'
   }))
   const [welcome, leaderView] = await Promise.all([returningWelcome, detachedLeader])
   if (welcome.type !== 'server-welcome') assert.fail('expected rejoin welcome')
+  const stopReturningSnapshotAcknowledgements = installSnapshotAcknowledgements(returningSocket)
+  context.after(stopReturningSnapshotAcknowledgements)
   assert.equal(leaderView.type, 'server-snapshot')
   assert.equal(welcome.playerId, member.welcome.playerId)
   assert.equal(welcome.snapshot.world.kind, 'boneyard')
@@ -4427,6 +4471,15 @@ test('saved party member catches up detached while the live party run continues'
   assert.ok(welcome.snapshot.players[welcome.playerId].progression.pendingOffer)
   assert.equal(host.playerState(welcome.playerId), null)
   assert.equal(host.partyRejoinTarget(token)?.status, 'staging')
+  const stagingPong = nextMessage(returningSocket, message => (
+    message.type === 'server-pong' && message.nonce === 901
+  ))
+  returningSocket.send(encodeGameMessage({
+    type: 'client-ready-boneyard',
+    runId: memberRun.boneyard.runId,
+  }))
+  returningSocket.send(encodeGameMessage({ type: 'client-ping', nonce: 901 }))
+  assert.equal((await stagingPong).type, 'server-pong')
   assert.deepEqual(welcome.gameplayResumeGrace, {
     reason: 'game-rejoined',
     remainingMs: null,
@@ -5461,7 +5514,16 @@ async function join(
   }))
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
-  return { socket, welcome }
+  const stopSnapshotAcknowledgements = installSnapshotAcknowledgements(socket)
+  return { socket, stopSnapshotAcknowledgements, welcome }
+}
+
+function installSnapshotAcknowledgements(socket: WebSocket): () => void {
+  const acknowledgeSnapshots = (data: WebSocket.RawData) => {
+    materializeServerMessage(socket, decodeServerGameMessage(data.toString()))
+  }
+  socket.on('message', acknowledgeSnapshots)
+  return () => socket.off('message', acknowledgeSnapshots)
 }
 
 async function completeInitialGameplayReadiness(

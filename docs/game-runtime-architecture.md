@@ -943,6 +943,20 @@ the same episode, not new warnings or new keyframe requests. Other peers,
 fixed-step authority, sideband messages, and transport heartbeats remain live;
 the keyframe acknowledgement resumes current-state deltas from the repaired
 baseline.
+
+Ordinary snapshot admission now prevents that recovery edge instead of waiting
+for a browser to fall through the 64-baseline history. Each player and observer
+may own at most eight sent baselines newer than its current acknowledgement,
+matching the bounded client presentation history. At that high water the host
+does not project, encode, compress, or send another ordinary snapshot for that
+peer. The reliable ordered prefix drains while all other peers and fixed-step
+authority continue; at two or fewer outstanding baselines, the lane resumes
+with the current global sequence projected against its retained acknowledged
+baseline. Membership, rather than numeric sequence distance, owns the count, so
+skipped global broadcasts do not look like queued frames. One bounded warning
+and one recovery record expose duration, skipped broadcasts, role, and high
+water without logging payloads or credentials. A true reconstruction gap still
+supersedes flow control and uses the complete-keyframe lifecycle above.
 Authenticated clients also measure application-level transport RTT with a
 nonce ping that the host echoes immediately outside the simulation and snapshot
 clocks. The measurement is client-local diagnostics state and never enters an
@@ -1104,13 +1118,17 @@ RNG order, before publishing the next progression revision.
   continuation state remains exact.
 - Save checkpoint sequence is scoped to one `GameClientSession`; a local stream
   id disambiguates a later host that restarts numbering at one. The coordinator
-  returns the exact persistence promise for an accepted `(stream, sequence)`,
+  returns a stable persistence promise for an accepted `(stream, sequence)`,
   while cloud/IndexedDB revision remains the independent cross-tab/device write
-  order. A deployment may wait for checkpoint N after N+1 without relabeling N
-  invalid or writing it again. Replacement seals the current stream, older
-  stream ids cannot return, and the coordinator retains only pending outcomes
-  plus the latest settled checkpoint rather than every document in a long
-  session.
+  order. One already-started store transaction completes normally; later
+  queued progress documents collapse to the newest sequence, and every covered
+  promise resolves only after that newer document is durable. A deployment or
+  explicit leave may wait for checkpoint N after N+1 without relabeling N
+  invalid or writing it again. Game Over and title replacement supersede queued
+  active-run progress, seal the current stream where applicable, and cannot be
+  overwritten by an older in-flight checkpoint. Older stream ids cannot return,
+  and the coordinator retains only pending outcomes plus the latest settled
+  checkpoint rather than every document in a long session.
 - Fresh player construction uses retail initializer `0x005A8390`'s 500 gold.
   It also carries the initializer's durable `tutorialPending` bit. Existing
   schemas migrate that bit false so already-playing web wizards do not enter a
@@ -1131,17 +1149,24 @@ RNG order, before publishing the next progression revision.
 - The public supervisor proxy and inner authoritative host share one exported
   WebSocket payload bound sized above the 8-MiB document maximum. The proxy may
   not close a valid save-bearing hello before the host's strict decoder sees it.
-- Semantic publication remains immediate and periodic browser autosave runs on
-  a 30-second authoritative-tick cadence. Both cover every connected player,
-  across the global Hub and private Colleges. In a party world, the host projects the same
-  authoritative state to one owner at a time, so every participant can resume
-  an individual continuation without serializing another player's actor into
-  their slot. Selecting gameplay `MAIN MENU` requests one forced final owner
-  checkpoint and keeps the session/menu alive until the selected cloud or
-  IndexedDB adapter confirms that exact sequence; only then does the client
-  disconnect and return to Title. A failed store write leaves the game paused
-  and connected for retry. Deployment-final publication uses the same durable
-  acknowledgement contract for every connected player.
+- Browser progress publication is owner-scoped and coalesced. Player-local
+  mutations schedule only that owner; multiplayer level-up choices remain
+  authoritative behind the mandatory held-world barrier and schedule one
+  participant-complete group checkpoint only when the barrier closes. Rerolls
+  and presentation-only pause/open/close actions are not independent durable
+  edges. Run entry, party-recovery topology changes, and other shared lifecycle
+  boundaries schedule the affected group. Periodic browser autosave remains the
+  30-second authoritative-tick fallback across the global Hub and private
+  Colleges. A host-owned latest-per-player queue materializes at most one
+  expensive owner document per event-loop turn. In a party world, the host
+  projects the same authoritative state to one owner at a time, so every
+  participant can resume an individual continuation without serializing another
+  player's actor into their slot. Selecting gameplay `MAIN MENU` still requests
+  one forced final owner checkpoint and keeps the session/menu alive until the
+  selected cloud or IndexedDB adapter confirms that exact sequence; only then
+  does the client disconnect and return to Title. A failed store write leaves
+  the game paused and connected for retry. Game Over and deployment-final
+  publication retain their forced all-owner durable acknowledgement contracts.
 - Website slot writes use optimistic revision checks and a content hash. The
   document is capped at 8 MiB. Schema 4 carries integrity, the immutable session
   content manifest, and one bounded normalized `sd.state` snapshot per active
@@ -2046,6 +2071,14 @@ acknowledges its exact sequence from the Boneyard renderer's ready edge; the
 clock waits for every addressed returner and for older gameplay pause/level-up
 owners to clear. This prevents grace from expiring beneath loading or another
 modal.
+
+A staged active-party returner is connected but deliberately absent from the
+shared simulation until catch-up materialization completes. A premature
+`client-ready-boneyard` receipt from that staging socket is ignored rather than
+resolved through shared player state. When a detached dead player is imported,
+the destination world registers both its ordinary player/light root and a new
+death-weapon actor root in that order; a source-world registration ordinal is
+never reused across the ownership boundary.
 
 Protocol 83 introduced `gameplayResumeGrace` in welcome and live messages as
 `{ sequence, reason, remainingMs }`. `remainingMs=null` means the run is held

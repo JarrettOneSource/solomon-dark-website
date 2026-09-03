@@ -106,7 +106,9 @@ import { createGameSnapshot } from './game-snapshot.ts'
 import { prepareBoneyardWorldNavigationAsync } from './boneyard-navigation-preparer.ts'
 import {
   createGameSnapshotFrame,
+  createGameSnapshotProjection,
   createReplicatedEntityBaseline,
+  type GameSnapshotProjection,
   type ReplicatedEntityBaseline,
 } from '../protocol/entity-replication.ts'
 import {
@@ -119,6 +121,7 @@ import {
   logGameServerEvent,
   type GameServerLogSink,
 } from './game-server-logger.ts'
+import { GameSaveCheckpointScheduler } from './game-save-checkpoint-scheduler.ts'
 import {
   deriveGameActivityEvents,
   projectGameActivity,
@@ -231,6 +234,9 @@ import type {
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
+export const GAME_REPLICATION_HIGH_WATER_MARK = 8
+export const GAME_REPLICATION_LOW_WATER_MARK = 2
+const NO_HUB_ACTIVITIES: Readonly<Record<string, HubPlayerActivity | null>> = Object.freeze({})
 const DEFAULT_DEPLOYMENT_SAVE_TIMEOUT_MS = 30_000
 const GAME_CHAT_RATE_LIMIT = 5
 const GAME_CHAT_RATE_WINDOW_MS = 5_000
@@ -471,6 +477,7 @@ interface HostClient {
   queuedInputs: Map<number, QueuedClientInput>
   pendingLuaRequestIds: Set<number>
   replicationRecovery: ReplicationRecoveryState | null
+  replicationFlowControl: ReplicationFlowControlState | null
   resumeToken: string
   socialConnection: GameSocialConnection | null
   playerReference: string
@@ -487,6 +494,7 @@ interface HostObserver {
   readonly requestedByUserId: number
   readonly requestedByUsername: string
   replicationRecovery: ReplicationRecoveryState | null
+  replicationFlowControl: ReplicationFlowControlState | null
   readonly runId: string
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   readonly socket: WebSocket
@@ -497,7 +505,19 @@ interface ReplicationPeer {
   acknowledgedSnapshotSequence: number
   lastSentSnapshotSequence: number
   replicationRecovery: ReplicationRecoveryState | null
+  replicationFlowControl: ReplicationFlowControlState | null
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
+}
+
+interface ReplicationFlowControlState {
+  readonly highWaterMark: number
+  readonly startedAtMs: number
+  skippedSnapshotCount: number
+}
+
+interface CompletedReplicationFlowControl {
+  readonly cause: 'keyframe-recovery' | 'low-water'
+  readonly state: ReplicationFlowControlState
 }
 
 interface ReplicationRecoveryState {
@@ -767,6 +787,50 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     message,
     occurredAtUtc: new Date().toISOString(),
   })
+  const saveCheckpointScheduler = new GameSaveCheckpointScheduler({
+    onBatch: receipt => {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'info',
+        'save.checkpoint_batch_completed',
+        'A coalesced game-save checkpoint batch completed.',
+        logDetails({
+          elapsedMs: Math.round(receipt.elapsedMs),
+          maximumSynchronousPublishMs: Math.round(receipt.maximumSynchronousPublishMs),
+          publishedBytes: receipt.publishedBytes,
+          publishedCount: receipt.publishedCount,
+          requestCount: receipt.requestCount,
+          sources: receipt.sources,
+          synchronousPublishMs: Math.round(receipt.synchronousPublishMs),
+          targetRequestCount: receipt.targetRequestCount,
+        }),
+      )
+    },
+    onError: (playerId, error) => {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'error',
+        'save.checkpoint_scheduler_failed',
+        'The game-save checkpoint scheduler could not publish an owner document.',
+        logDetails({ playerId, ...gameServerErrorDetails(error) }),
+      )
+    },
+    publish: (playerId, source) => {
+      const client = [...clients.values()].find(candidate => candidate.playerId === playerId)
+      if (!client) return { documentBytes: 0, published: false }
+      const previousSequence = saveSequences.get(playerId) ?? 0
+      const sequence = publishSaveCheckpointForClient(client, source)
+      const published = sequence > previousSequence
+      return {
+        documentBytes: published
+          ? Buffer.byteLength(saveDocuments.get(playerId) ?? '', 'utf8')
+          : 0,
+        published,
+      }
+    },
+  })
   const server = createServer((request, response) => {
     if (request.url === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -946,6 +1010,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               { observerId: observer.observerId },
             )
           }
+          const completedFlowControl = completeReplicationFlowControl(observer, result)
+          if (completedFlowControl) {
+            logReplicationFlowControlRecovered(
+              options.log,
+              logDetails,
+              observer,
+              'observer',
+              completedFlowControl,
+              { observerId: observer.observerId },
+            )
+          }
           return
         }
         if (message.type === 'client-disconnect') {
@@ -1012,6 +1087,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             requestedByUserId: observerAdmission.userId,
             requestedByUsername: observerAdmission.username,
             replicationRecovery: null,
+            replicationFlowControl: null,
             runId: observerAdmission.runId,
             sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
             socket,
@@ -1776,6 +1852,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
           replicationRecovery: null,
+          replicationFlowControl: null,
           resumeToken,
           socialConnection: null,
           playerReference,
@@ -1930,7 +2007,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               : undefined,
           )
         }
-        publishSaveCheckpoint('connected')
+        scheduleSaveCheckpointForClient(joinedClient, 'connected')
         const connectedPause = stagedPartyRejoin
           ? gameplayPauseForPartyRejoin(stagedPartyRejoin)
           : gameplayPauseForPlayer(playerId)
@@ -1972,6 +2049,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
 
       if (message.type === 'client-ready-boneyard') {
+        if (client.partyRejoinSlot) return
         const activeState = stateForPlayer(client.playerId)
         if (
           activeState.world.kind === 'boneyard'
@@ -2058,7 +2136,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           })
           stopWorldClientInputs(client.playerId)
           if (!sharedWorlds) resetNextTickDeadline()
-          publishSaveCheckpoint('pause')
           broadcastGameplayPause(client.playerId)
           logGameServerEvent(
             options.log,
@@ -2146,7 +2223,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           replacePartyRejoinRunState(slot, selected.state)
           slot.detachedState = selected.detached
-          if (!slot.detachedState.playerEntities.progressions[0]?.pendingOffer) {
+          const completedBarrier = !slot.detachedState.playerEntities.progressions[0]?.pendingOffer
+          if (completedBarrier) {
             const rejection = materializePartyRejoinSlot(slot, null)
             if (rejection !== null) {
               disconnect(socket, 'invalid-message', rejection)
@@ -2161,7 +2239,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.activeInput = createIdlePlayerCharacterInput()
           client.queuedInputs.clear()
           broadcastSnapshot()
-          publishSaveCheckpoint('skill-selected')
+          if (completedBarrier) scheduleSaveCheckpoint('skill-picker-closed')
           return
         }
         const activeState = stateForPlayer(client.playerId)
@@ -2177,9 +2255,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (barrierBefore !== null && selected.levelUpBarrier === null) {
           stopWorldClientInputs(client.playerId)
           beginSurfaceResumeGrace(client.playerId, 'skill-picker-closed')
+          scheduleSaveCheckpoint('skill-picker-closed')
         }
         broadcastSnapshot()
-        publishSaveCheckpoint('skill-selected')
         return
       }
       if (message.type === 'client-skill-quickbar-bind') {
@@ -2209,7 +2287,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        publishSaveCheckpoint('skill-quickbar-bound')
+        scheduleSaveCheckpointForClient(client, 'skill-quickbar-bound')
         return
       }
       if (message.type === 'client-select-primary-skill') {
@@ -2238,7 +2316,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        publishSaveCheckpoint('primary-skill-selected')
+        scheduleSaveCheckpointForClient(client, 'primary-skill-selected')
         return
       }
       if (message.type === 'client-select-concentration') {
@@ -2264,7 +2342,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        publishSaveCheckpoint('concentration-selected')
+        scheduleSaveCheckpointForClient(client, 'concentration-selected')
         return
       }
       if (message.type === 'client-select-concentration-slot') {
@@ -2291,7 +2369,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        publishSaveCheckpoint('concentration-selected')
+        scheduleSaveCheckpointForClient(client, 'concentration-selected')
         return
       }
       if (message.type === 'client-mod-cast') {
@@ -2424,7 +2502,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           broadcastPreparedModProjection(client.playerId, modHost)
           broadcastSnapshot()
-          publishSaveCheckpoint('mod-action')
+          scheduleSaveCheckpointForClient(client, 'mod-action')
         } catch (error) {
           logGameServerEvent(
             options.log,
@@ -2462,7 +2540,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           replacePartyRejoinRunState(slot, applied.state)
           slot.detachedState = applied.detached
-          if (!slot.detachedState.playerEntities.progressions[0]?.pendingOffer) {
+          const completedBarrier = !slot.detachedState.playerEntities.progressions[0]?.pendingOffer
+          if (completedBarrier) {
             const rejection = materializePartyRejoinSlot(slot, null)
             if (rejection !== null) {
               disconnect(socket, 'invalid-message', rejection)
@@ -2477,7 +2556,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.activeInput = createIdlePlayerCharacterInput()
           client.queuedInputs.clear()
           broadcastSnapshot()
-          publishSaveCheckpoint('level-up-action')
+          if (completedBarrier) scheduleSaveCheckpoint('skill-picker-closed')
           return
         }
         const activeState = stateForPlayer(client.playerId)
@@ -2495,9 +2574,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (barrierBefore !== null && applied.levelUpBarrier === null) {
           stopWorldClientInputs(client.playerId)
           beginSurfaceResumeGrace(client.playerId, 'skill-picker-closed')
+          scheduleSaveCheckpoint('skill-picker-closed')
         }
         broadcastSnapshot()
-        publishSaveCheckpoint('level-up-action')
         return
       }
       if (message.type === 'client-hub-action') {
@@ -2534,7 +2613,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        if (accepted) publishSaveCheckpoint('hub-action')
+        if (accepted) scheduleSaveCheckpointForClient(client, 'hub-action')
         return
       }
       if (message.type === 'client-player-card-request') {
@@ -3166,6 +3245,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             { playerId: client.playerId },
           )
         }
+        const completedFlowControl = completeReplicationFlowControl(client, result)
+        if (completedFlowControl) {
+          logReplicationFlowControlRecovered(
+            options.log,
+            logDetails,
+            client,
+            'player',
+            completedFlowControl,
+            { playerId: client.playerId },
+          )
+        }
         return
       }
       if (message.type === 'client-start-match') {
@@ -3267,7 +3357,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         replaceStateForPlayer(client.playerId, next)
         stopWorldClientInputs(client.playerId)
         broadcastSnapshot()
-        publishSaveCheckpoint('tutorial-action')
+        scheduleSaveCheckpointForClient(client, 'tutorial-action')
         return
       }
       if (message.type === 'client-continue-game-over') {
@@ -3304,7 +3394,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           broadcastPartyState()
           broadcastSnapshot()
           if (sharedGameStateForPlayer(sharedWorlds, client.playerId)?.run.phase === 'hub') {
-            publishSaveCheckpoint('loadout-confirmed')
+            scheduleSaveCheckpoint('loadout-confirmed')
           }
           return
         }
@@ -3314,7 +3404,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         state = confirmed
         if (privateParties) broadcastPartyState()
         broadcastSnapshot()
-        if (state.run.phase === 'hub') publishSaveCheckpoint('loadout-confirmed')
+        if (state.run.phase === 'hub') scheduleSaveCheckpoint('loadout-confirmed')
         return
       }
       if (message.type === 'client-save-before-leave') {
@@ -3415,6 +3505,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       publishPlayerActivity(client, 'left-game')
       client.socialConnection?.close()
       clients.delete(socket)
+      saveCheckpointScheduler.cancel(client.playerId)
       collegeIntroReadyPlayerIds.delete(client.playerId)
       const activeDeploymentRestart = deploymentRestart
       if (activeDeploymentRestart?.pending.delete(socket)) {
@@ -3548,7 +3639,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       } else broadcastSnapshot()
       if (sharedWorlds || privateParties) broadcastPartyState()
       if (clients.size > 0 && !deploymentRestart) {
-        publishSaveCheckpoint('participant-disconnected')
+        scheduleSaveCheckpoint('participant-disconnected')
       }
     }
     socket.once('close', (code, reason) => release(code, reason.toString()))
@@ -3715,7 +3806,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             const client = [...clients.values()].find((candidate) => (
               candidate.playerId === playerId
             ))
-            if (client) publishSaveCheckpointForClient(client, 'college-intro-complete')
+            if (client) scheduleSaveCheckpointForClient(client, 'college-intro-complete')
           }
           if (completedCollegeIntros.length > 0) lifecycleBoundary = true
           for (const steppedRun of [...sharedWorlds.runs]) {
@@ -3768,7 +3859,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             const tutorialBoundary = tutorialSaveBoundaryKey(before.state)
               !== tutorialSaveBoundaryKey(run.state)
             if (tutorialBoundary) {
-              publishSharedPartyCheckpoint(run.partyId, 'tutorial-boundary')
+              scheduleSharedPartyCheckpoint(run.partyId, 'tutorial-boundary')
               lifecycleBoundary = true
             }
             if (enteredGameOver) publishSharedProfileCheckpoint(run.partyId)
@@ -3785,7 +3876,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             || sharedHostTick % ticksPerSnapshot === 0
           ) broadcastSnapshot()
           if (sharedHostTick % GAME_SAVE_AUTOSAVE_INTERVAL_TICKS === 0) {
-            publishSaveCheckpoint('periodic')
+            scheduleSaveCheckpoint('periodic')
           }
           continue
         }
@@ -3851,7 +3942,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           const client = [...clients.values()].find((candidate) => (
             candidate.playerId === playerId
           ))
-          if (client) publishSaveCheckpointForClient(client, 'college-intro-complete')
+          if (client) scheduleSaveCheckpointForClient(client, 'college-intro-complete')
         }
         if (runtimes.length > 0) {
           const events = [
@@ -3883,7 +3974,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const tutorialBoundary = tutorialSaveBoundaryKey(stateBeforeLua)
           !== tutorialSaveBoundaryKey(state)
         if (completedGameOver) loadedBoneyard = null
-        if (tutorialBoundary) publishSaveCheckpoint('tutorial-boundary')
+        if (tutorialBoundary) scheduleSaveCheckpoint('tutorial-boundary')
         if (enteredGameOver) publishProfileCheckpoint()
         if (enteredGameOver || completedGameOver) stopAllClientInputs()
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
@@ -3901,7 +3992,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (
           state.tick !== previousTick
           && state.tick % GAME_SAVE_AUTOSAVE_INTERVAL_TICKS === 0
-        ) publishSaveCheckpoint('periodic')
+        ) scheduleSaveCheckpoint('periodic')
       }
       pruneLeaderboardRunState()
       prunePartyRejoinSlots()
@@ -3949,10 +4040,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }, 1_000)
   partyAccessTimer.unref()
 
-  function publishSaveCheckpoint(source: string): void {
-    for (const client of clients.values()) {
-      publishSaveCheckpointForClient(client, source)
-    }
+  function scheduleSaveCheckpoint(source: string): void {
+    saveCheckpointScheduler.enqueue(
+      [...clients.values()].map(client => client.playerId),
+      source,
+    )
+  }
+
+  function scheduleSaveCheckpointForClient(client: HostClient, source: string): void {
+    saveCheckpointScheduler.enqueue([client.playerId], source)
   }
 
   function publishProfileCheckpoint(): void {
@@ -3973,14 +4069,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
-  function publishSharedPartyCheckpoint(partyId: string, source: string): void {
+  function scheduleSharedPartyCheckpoint(partyId: string, source: string): void {
     if (!sharedWorlds) return
     const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
     if (!party) return
     const memberIds = new Set(party.memberPlayerIds)
-    for (const client of clients.values()) {
-      if (memberIds.has(client.playerId)) publishSaveCheckpointForClient(client, source)
-    }
+    saveCheckpointScheduler.enqueue(
+      [...clients.values()].flatMap(client => (
+        memberIds.has(client.playerId) ? [client.playerId] : []
+      )),
+      source,
+    )
   }
 
   function publishSaveCheckpointForClient(
@@ -3990,6 +4089,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     includeTerminalProfile = false,
     targetRevision: string | null = partyRecoveryRevision,
   ): number {
+    if (force || includeTerminalProfile) saveCheckpointScheduler.cancel(client.playerId)
     if (client.socket.readyState !== WebSocket.OPEN) return 0
     if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
       return 0
@@ -4100,11 +4200,58 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function broadcastSnapshot(): void {
-    const defaultSnapshot = sharedWorlds ? null : createGameSnapshot(
-      state,
-      hostPlayerId,
-      hubActivitiesForSnapshot(state),
-    )
+    type ProjectedSnapshot = {
+      readonly projection: GameSnapshotProjection
+      readonly snapshot: ReturnType<typeof createGameSnapshot>
+    }
+    type StateProjectionCache = {
+      readonly withHubActivities: Map<string | null, ProjectedSnapshot>
+      readonly withoutHubActivities: Map<string | null, ProjectedSnapshot>
+    }
+    const hubActivityCache = new Map<
+      GameSimulationState,
+      ReturnType<typeof hubActivitiesForSnapshot>
+    >()
+    const projectionCache = new Map<GameSimulationState, StateProjectionCache>()
+    const projectState = (
+      activeState: GameSimulationState,
+      authorityPlayerId: string | null,
+      includeHubActivities: boolean,
+    ): ProjectedSnapshot => {
+      let cachedState = projectionCache.get(activeState)
+      if (!cachedState) {
+        cachedState = {
+          withHubActivities: new Map(),
+          withoutHubActivities: new Map(),
+        }
+        projectionCache.set(activeState, cachedState)
+      }
+      const byAuthority = includeHubActivities
+        ? cachedState.withHubActivities
+        : cachedState.withoutHubActivities
+      const cached = byAuthority.get(authorityPlayerId)
+      if (cached) return cached
+      let hubActivities = NO_HUB_ACTIVITIES
+      if (includeHubActivities) {
+        const cachedActivities = hubActivityCache.get(activeState)
+        if (cachedActivities) hubActivities = cachedActivities
+        else {
+          hubActivities = hubActivitiesForSnapshot(activeState)
+          hubActivityCache.set(activeState, hubActivities)
+        }
+      }
+      const snapshot = createGameSnapshot(
+        activeState,
+        authorityPlayerId,
+        hubActivities,
+      )
+      const projected = {
+        projection: createGameSnapshotProjection(snapshot),
+        snapshot,
+      }
+      byAuthority.set(authorityPlayerId, projected)
+      return projected
+    }
     const snapshotSequence = nextSnapshotSequence
     nextSnapshotSequence += 1
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
@@ -4122,29 +4269,49 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.replicationRecovery
         && client.replicationRecovery.keyframeSequence !== null
       ) continue
-      const snapshot = client.partyRejoinSlot
-        ? {
-            ...createGameSnapshot(
-              partyRejoinStagingState(client.partyRejoinSlot),
-              activePartySystem()?.parties.find(({ id }) => (
-                id === client.partyRejoinSlot!.partyId
-              ))?.leaderPlayerId ?? null,
-            ),
-            materializingPlayerIds: [client.playerId],
-          }
-        : defaultSnapshot ?? createGameSnapshot(
-            stateForPlayer(client.playerId),
-            authorityForPlayer(client.playerId),
-            hubActivitiesForSnapshot(stateForPlayer(client.playerId)),
-          )
-      const currentBaseline = createReplicatedEntityBaseline(snapshot)
+      if (pauseReplicationAtHighWater(
+        options.log,
+        logDetails,
+        client,
+        'player',
+        { playerId: client.playerId },
+      )) continue
+      let projected: ProjectedSnapshot
+      const rejoinSlot = client.partyRejoinSlot
+      if (rejoinSlot) {
+        const snapshot = {
+          ...createGameSnapshot(
+            partyRejoinStagingState(rejoinSlot),
+            activePartySystem()?.parties.find(({ id }) => (
+              id === rejoinSlot.partyId
+            ))?.leaderPlayerId ?? null,
+          ),
+          materializingPlayerIds: [client.playerId],
+        }
+        projected = {
+          projection: createGameSnapshotProjection(snapshot),
+          snapshot,
+        }
+      } else {
+        projected = projectState(
+          stateForPlayer(client.playerId),
+          authorityForPlayer(client.playerId),
+          true,
+        )
+      }
+      const { projection, snapshot } = projected
+      const currentBaseline = projection.baseline
       const acknowledgedBaseline = client.sentReplicationBaselines.get(
         client.acknowledgedSnapshotSequence,
+      )
+      const lastSentBaseline = client.sentReplicationBaselines.get(
+        client.lastSentSnapshotSequence,
       )
       const recoveryKeyframe = client.replicationRecovery !== null
       const forceKeyframe = periodicKeyframe
         || recoveryKeyframe
         || !acknowledgedBaseline
+        || lastSentBaseline?.worldIdentity !== currentBaseline.worldIdentity
       client.socket.send(encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: client.acknowledgedSequence,
@@ -4153,6 +4320,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.acknowledgedSnapshotSequence,
           acknowledgedBaseline,
           forceKeyframe,
+          projection,
         ),
         sequence: snapshotSequence,
       }))
@@ -4183,15 +4351,30 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         observer.socket.close(1000, 'observed match ended')
         continue
       }
-      const snapshot = createGameSnapshot(observed.state, observed.authorityPlayerId, {})
-      const currentBaseline = createReplicatedEntityBaseline(snapshot)
+      if (pauseReplicationAtHighWater(
+        options.log,
+        logDetails,
+        observer,
+        'observer',
+        { observerId: observer.observerId },
+      )) continue
+      const { projection, snapshot } = projectState(
+        observed.state,
+        observed.authorityPlayerId,
+        false,
+      )
+      const currentBaseline = projection.baseline
       const acknowledgedBaseline = observer.sentReplicationBaselines.get(
         observer.acknowledgedSnapshotSequence,
+      )
+      const lastSentBaseline = observer.sentReplicationBaselines.get(
+        observer.lastSentSnapshotSequence,
       )
       const recoveryKeyframe = observer.replicationRecovery !== null
       const forceKeyframe = periodicKeyframe
         || recoveryKeyframe
         || !acknowledgedBaseline
+        || lastSentBaseline?.worldIdentity !== currentBaseline.worldIdentity
       observer.socket.send(encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: 0,
@@ -4200,6 +4383,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           observer.acknowledgedSnapshotSequence,
           acknowledgedBaseline,
           forceKeyframe,
+          projection,
         ),
         sequence: snapshotSequence,
       }))
@@ -4280,7 +4464,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (privateParties) broadcastPartyState()
     broadcastSnapshot()
     if (beganLoadingGrace) broadcastGameplayResumeGrace()
-    publishSaveCheckpoint(tutorial ? 'tutorial-entry' : 'boneyard-entry')
+    scheduleSaveCheckpoint(tutorial ? 'tutorial-entry' : 'boneyard-entry')
   }
 
   async function preparePrivateNavigation(activeState: GameSimulationState): Promise<boolean> {
@@ -7064,7 +7248,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           sharedGameplayPauseScopeForParty(party.id),
         )
       }
-      publishSaveCheckpoint('boneyard-entry')
+      scheduleSaveCheckpoint('boneyard-entry')
     } catch (error) {
       logGameServerEvent(
         options.log,
@@ -7236,6 +7420,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (closed) return
       closed = true
       clearInterval(timer)
+      saveCheckpointScheduler.close()
       deploymentRestart?.resolveReady()
       clearInterval(partyAccessTimer)
       removeAllBots('game host closed')
@@ -7589,6 +7774,93 @@ function logReplicationBaselineRecovered(
       staleAcknowledgementCount: recovery.staleAcknowledgementCount,
     }),
   )
+}
+
+function pauseReplicationAtHighWater(
+  log: GameServerLogSink | undefined,
+  logDetails: (details?: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>>,
+  peer: ReplicationPeer,
+  connectionRole: 'observer' | 'player',
+  identity: Readonly<Record<string, unknown>>,
+): boolean {
+  if (peer.replicationRecovery !== null) return false
+  if (peer.replicationFlowControl !== null) {
+    peer.replicationFlowControl.skippedSnapshotCount += 1
+    return true
+  }
+  const outstandingSnapshotCount = unacknowledgedSnapshotCount(peer)
+  if (outstandingSnapshotCount < GAME_REPLICATION_HIGH_WATER_MARK) return false
+  peer.replicationFlowControl = {
+    highWaterMark: outstandingSnapshotCount,
+    skippedSnapshotCount: 0,
+    startedAtMs: performance.now(),
+  }
+  logGameServerEvent(
+    log,
+    'game-host',
+    'warning',
+    'replication.flow_control_started',
+    'A replication peer reached the unacknowledged snapshot high-water mark.',
+    logDetails({
+      connectionRole,
+      highWaterMark: GAME_REPLICATION_HIGH_WATER_MARK,
+      ...identity,
+      outstandingSnapshotCount,
+    }),
+  )
+  peer.replicationFlowControl.skippedSnapshotCount += 1
+  return true
+}
+
+function completeReplicationFlowControl(
+  peer: ReplicationPeer,
+  acknowledgement: ReplicationAcknowledgementResult,
+): CompletedReplicationFlowControl | null {
+  const state = peer.replicationFlowControl
+  if (!state) return null
+  const keyframeRecovery = acknowledgement.kind === 'recovery-pending'
+    && acknowledgement.started
+  const lowWater = (
+    acknowledgement.kind === 'accepted'
+    || acknowledgement.kind === 'recovered'
+  ) && unacknowledgedSnapshotCount(peer) <= GAME_REPLICATION_LOW_WATER_MARK
+  if (!keyframeRecovery && !lowWater) return null
+  peer.replicationFlowControl = null
+  return { cause: keyframeRecovery ? 'keyframe-recovery' : 'low-water', state }
+}
+
+function logReplicationFlowControlRecovered(
+  log: GameServerLogSink | undefined,
+  logDetails: (details?: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>>,
+  peer: ReplicationPeer,
+  connectionRole: 'observer' | 'player',
+  completed: CompletedReplicationFlowControl,
+  identity: Readonly<Record<string, unknown>>,
+): void {
+  logGameServerEvent(
+    log,
+    'game-host',
+    'info',
+    'replication.flow_control_recovered',
+    'A replication peer drained its bounded snapshot backlog.',
+    logDetails({
+      cause: completed.cause,
+      connectionRole,
+      durationMs: Math.max(0, Math.round(performance.now() - completed.state.startedAtMs)),
+      highWaterMark: GAME_REPLICATION_HIGH_WATER_MARK,
+      ...identity,
+      remainingUnacknowledgedSnapshots: unacknowledgedSnapshotCount(peer),
+      skippedSnapshotCount: completed.state.skippedSnapshotCount,
+    }),
+  )
+}
+
+function unacknowledgedSnapshotCount(peer: ReplicationPeer): number {
+  let count = 0
+  for (const sequence of peer.sentReplicationBaselines.keys()) {
+    if (sequence > peer.acknowledgedSnapshotSequence) count += 1
+  }
+  return count
 }
 
 function pruneReplicationBaselines(client: ReplicationPeer): void {

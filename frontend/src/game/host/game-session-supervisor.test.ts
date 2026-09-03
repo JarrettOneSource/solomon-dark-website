@@ -1993,6 +1993,13 @@ function messageQueue(socket: WebSocket) {
   }> = []
   socket.on('message', (data) => {
     const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-snapshot') {
+      socket.send(encodeGameMessage({
+        type: 'client-snapshot-ack',
+        requireKeyframe: false,
+        sequence: message.sequence,
+      }))
+    }
     const waiterIndex = waiters.findIndex(({ predicate }) => predicate(message))
     if (waiterIndex < 0) {
       buffered.push(message)

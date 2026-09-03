@@ -269,6 +269,8 @@ async function exercisePlayer({ account, label }) {
     const finalTick = finalDocument.continuation.summary.savedAtTick
     const finalX = finalDocument.continuation.simulation
       .playerEntities.locomotions[0].position.x
+    const finalY = finalDocument.continuation.simulation
+      .playerEntities.locomotions[0].position.y
     assert.ok(finalTick >= initialTick)
 
     replacementSupervisor = await startSupervisor(targetRevision)
@@ -320,8 +322,9 @@ async function exercisePlayer({ account, label }) {
       x: node.__sdrHubFrame.playerX,
       y: node.__sdrHubFrame.playerY,
     }))
-    assert.ok(Math.abs(resumed.x - 950.64) < 0.01, JSON.stringify({ finalX, initialX, resumed }))
-    assert.ok(Math.abs(resumed.y - 164.04) < 0.01, JSON.stringify({ finalX, initialX, resumed }))
+    assert.ok(finalX > initialX + 20, JSON.stringify({ finalX, initialX, resumed }))
+    assert.ok(Math.abs(resumed.x - finalX) < 5, JSON.stringify({ finalX, initialX, resumed }))
+    assert.ok(Math.abs(resumed.y - finalY) < 5, JSON.stringify({ finalY, resumed }))
     const resumedDrainResponse = fetchWithRetry(`${replacementSupervisor.url}/admin/deployments/restart`, {
       method: 'POST',
       headers: {
@@ -351,6 +354,8 @@ async function exercisePlayer({ account, label }) {
       finalRevision: finalSave.revision,
       finalDocument: finalSave.document,
       finalTick,
+      finalX,
+      finalY,
       initialRevision: initialSave.revision,
       initialTick,
       initialX,

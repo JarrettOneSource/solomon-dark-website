@@ -28,6 +28,15 @@ try {
     await context.addInitScript((token) => localStorage.setItem('sdr.token', token), accountToken)
   }
   const page = await context.newPage()
+  await page.route('**/deployment.json*', route => {
+    const revision = new URL(route.request().url()).searchParams.get('current') || 'local'
+    return route.fulfill({
+      body: JSON.stringify({ revision }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    })
+  })
   const pageErrors = []
   const consoleErrors = []
   const consoleWarnings = []
@@ -39,6 +48,11 @@ try {
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorial = page.locator('[data-prompt-kind="tutorial"] .stock-prompt-dialog')
+  if (await tutorial.isVisible()) {
+    await tutorial.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorial.waitFor({ state: 'detached' })
+  }
   await assertTitleIdentity(page, accountUsername || 'Not logged in')
   await page.getByRole('button', { name: 'Play' }).click()
   const unavailableLastGame = page.getByRole('button', { name: 'Last game' })

@@ -115,8 +115,8 @@ import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   MAX_WEB_GAME_SAVE_JSON_DEPTH,
   MAX_WEB_GAME_SAVE_JSON_NODES,
-  MAX_WEB_GAME_SAVE_BYTES,
   WEB_GAME_SAVE_SCHEMA_VERSION,
+  gameSaveDocumentFitsByteLimit,
   type GameSaveIntegrity,
   type ParsedGameSaveContinuation,
   onlyKeys,
@@ -253,7 +253,6 @@ const HUB_STUDENT_POPULATION_KEYS = [
   'spawnTickerCounter',
   'students',
 ] as const
-const encoder = new TextEncoder()
 
 export function createGameSaveDocument(
   options: CreateGameSaveDocumentOptions,
@@ -372,7 +371,7 @@ export function retireGameSaveWizard(document: string): string {
 
 function encodeDocument(document: Omit<Record<string, unknown>, 'schemaVersion'>): string {
   const encoded = JSON.stringify({ ...document, schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION })
-  if (encoder.encode(encoded).byteLength > MAX_WEB_GAME_SAVE_BYTES) {
+  if (!gameSaveDocumentFitsByteLimit(encoded)) {
     throw new Error('game save exceeds its size limit')
   }
   return encoded

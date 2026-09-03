@@ -100,6 +100,13 @@ export interface ReplicatedEntityBaseline {
   readonly worldIdentity: string
 }
 
+export interface GameSnapshotProjection {
+  readonly baseline: ReplicatedEntityBaseline
+  readonly entitySamples: ReplicatedEntitySample[]
+  readonly primarySpells: ReturnType<typeof createPrimarySpellSimulationFrame>
+  readonly snapshot: GameSnapshot
+}
+
 export interface ReplicatedEntityTypeRegistration {
   readonly name: string
   readonly typeId: number
@@ -254,16 +261,39 @@ export function createReplicatedEntityBaseline(
   }
 }
 
+export function createGameSnapshotProjection(snapshot: GameSnapshot): GameSnapshotProjection {
+  return {
+    baseline: createReplicatedEntityBaseline(snapshot),
+    entitySamples: snapshot.world.kind === 'hub'
+      ? snapshot.world.students.map((student) => studentCodec.sample(student))
+      : [
+          ...snapshot.world.enemies.map(boneyardEnemySample),
+          ...snapshot.world.deathEffects.map(boneyardEnemyDeathEffectSample),
+          ...snapshot.world.enemyProjectiles.map(boneyardEnemyProjectileSample),
+          ...snapshot.world.enemyProjectileEffects.map(boneyardEnemyProjectileEffectSample),
+          ...snapshot.world.maggots.map(boneyardMaggotSample),
+          ...snapshot.world.loot.map(boneyardLootSample),
+          ...snapshot.world.goodies.map(boneyardGoodieSample),
+        ],
+    primarySpells: createPrimarySpellSimulationFrame(snapshot.primarySpells),
+    snapshot,
+  }
+}
+
 export function createGameSnapshotFrame(
   snapshot: GameSnapshot,
   baselineSequence: number,
   baseline: ReplicatedEntityBaseline | undefined,
   forceKeyframe = false,
+  projection = createGameSnapshotProjection(snapshot),
 ): GameSnapshotFrame {
-  const currentDescriptors = descriptorMap(snapshot)
+  if (projection.snapshot !== snapshot) {
+    throw new Error('snapshot projection belongs to a different snapshot')
+  }
+  const currentDescriptors = projection.baseline.descriptors
   const keyframe = forceKeyframe
     || !baseline
-    || baseline.worldIdentity !== replicatedWorldIdentity(snapshot)
+    || baseline.worldIdentity !== projection.baseline.worldIdentity
   const spawned: ReplicatedEntityDescriptor[] = []
   const retired: ReplicatedEntityKey[] = []
   for (const [key, descriptor] of currentDescriptors) {
@@ -275,22 +305,11 @@ export function createGameSnapshotFrame(
       if (!currentDescriptors.has(key)) retired.push([descriptor[0], descriptor[1]])
     }
   }
-  const samples = snapshot.world.kind === 'hub'
-    ? snapshot.world.students.map((student) => studentCodec.sample(student))
-    : [
-        ...snapshot.world.enemies.map(boneyardEnemySample),
-        ...snapshot.world.deathEffects.map(boneyardEnemyDeathEffectSample),
-        ...snapshot.world.enemyProjectiles.map(boneyardEnemyProjectileSample),
-        ...snapshot.world.enemyProjectileEffects.map(boneyardEnemyProjectileEffectSample),
-        ...snapshot.world.maggots.map(boneyardMaggotSample),
-        ...snapshot.world.loot.map(boneyardLootSample),
-        ...snapshot.world.goodies.map(boneyardGoodieSample),
-      ]
   const entities: ReplicatedEntityFrame = {
     baselineSequence: keyframe ? 0 : baselineSequence,
     keyframe,
     retired,
-    samples,
+    samples: projection.entitySamples,
     spawned,
   }
   const common = {
@@ -299,7 +318,7 @@ export function createGameSnapshotFrame(
     materializingPlayerIds: snapshot.materializingPlayerIds,
     modEffects: snapshot.modEffects,
     players: playerSnapshotFrames(snapshot.players, baseline, keyframe),
-    primarySpells: createPrimarySpellSimulationFrame(snapshot.primarySpells),
+    primarySpells: projection.primarySpells,
     secondaryAbilities: snapshot.secondaryAbilities,
     run: snapshot.run,
     tick: snapshot.tick,
