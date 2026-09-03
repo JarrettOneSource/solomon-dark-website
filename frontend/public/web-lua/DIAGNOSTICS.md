@@ -1,6 +1,6 @@
 # Web Lua diagnostics
 
-Run `sdmod check <directory>`. Definition issues include a stable code, a graph path, and the script file and line that created the value. Prepared package errors name the content or asset field that failed admission.
+From `frontend/`, run `npm run sdmod -- check <directory>`. Definition issues include a stable code, a graph path, and the script file and line that created the value. Prepared package errors name the content or asset field that failed admission.
 
 - `E_API_VERSION`: Use api = "1.0.0" or leave api out.
 - `E_ASSET`: Fix the declared path, type, bytes, dimensions, or audio header.

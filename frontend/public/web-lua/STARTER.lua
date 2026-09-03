@@ -1,5 +1,6 @@
 -- Web Lua starter. Each sd.* call tells the game about one thing.
--- Save this as scripts/main.lua, put a PNG at art/icon.png, and run "sdmod check".
+-- Save this as scripts/main.lua, put a PNG at art/icon.png, then from frontend run:
+-- npm run sdmod -- check path/to/my-mod
 
 -- A status is a temporary effect on a character.
 local tough = sd.status({

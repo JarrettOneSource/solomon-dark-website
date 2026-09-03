@@ -116,10 +116,10 @@
 ---@field key? string
 ---@field art? table
 ---@field description? string
----@field duration SdDuration
+---@field duration? SdDuration
 ---@field loot? table
 ---@field name string
----@field on_use SdRule|SdRule[]
+---@field on_use? SdRule|SdRule[]
 ---@field presentation? table
 ---@field status? string|table
 ---@field icon? string|table
@@ -232,7 +232,7 @@
 ---@field ref fun(key: string): table
 ---@field scene fun(spec: string|table): table
 ---@field music fun(path: string, options?: table): table
----@field sheet fun(spec: table): table
+---@field sheet fun(path_or_spec: string|table, options?: table): table
 ---@field sound fun(path: string, options?: table): table
 ---@field sprite fun(path: string, options?: table): table
 ---@field wearable fun(path: string, options?: table): table
@@ -259,9 +259,9 @@
 ---@field on fun(event: SdEventName, ...: SdRule): SdRule
 ---@field all fun(...: SdRule|SdRule[]): SdRule
 ---@field first fun(...: SdRule|SdRule[]): SdRule
----@field when fun(predicate: boolean|SdPredicate, yes: SdRule, no?: SdRule): SdRule
+---@field when fun(predicate: boolean|SdPredicate, yes: SdRule|SdRule[], no?: SdRule|SdRule[]): SdRule
 ---@field after fun(duration: SdDuration, ...: SdRule): SdRule
----@field every fun(interval: SdDuration, node: SdRule, times?: integer|{times: integer}): SdRule
+---@field every fun(interval: SdDuration, node: SdRule|SdRule[], times?: integer|{times: integer}): SdRule
 
 ---@class SdEffect
 ---@field damage fun(spec: table): SdRule
@@ -331,11 +331,11 @@
 ---@field on fun(event: SdEventName, ...: SdRule): SdRule
 ---@field all fun(...: SdRule|SdRule[]): SdRule
 ---@field first fun(...: SdRule|SdRule[]): SdRule
----@field when fun(predicate: boolean|SdPredicate, yes: SdRule, no?: SdRule): SdRule
+---@field when fun(predicate: boolean|SdPredicate, yes: SdRule|SdRule[], no?: SdRule|SdRule[]): SdRule
 ---@field after fun(duration: SdDuration, ...: SdRule): SdRule
----@field every fun(interval: SdDuration, node: SdRule, times?: integer|{times: integer}): SdRule
+---@field every fun(interval: SdDuration, node: SdRule|SdRule[], times?: integer|{times: integer}): SdRule
 ---@field music fun(path: string, options?: table): table
----@field sheet fun(spec: table): table
+---@field sheet fun(path_or_spec: string|table, options?: table): table
 ---@field sound fun(path: string, options?: table): table
 ---@field sprite fun(path: string, options?: table): table
 ---@field wearable fun(path: string, options?: table): table

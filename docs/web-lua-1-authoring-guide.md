@@ -7,6 +7,19 @@ networking, saves, replication, presentation, rollback, and teardown.
 
 The Website is the only supported target. The native Mod Loader is deprecated.
 
+## Five-minute start
+
+From `frontend/`, create a complete working mod and check it:
+
+```sh
+npm run sdmod -- new mods/my-first-mod
+npm run sdmod -- check mods/my-first-mod
+```
+
+Open `mods/my-first-mod/scripts/main.lua`, rename the generated item, and run
+the check command again. The scaffold already contains a valid manifest and a
+CC0 icon, so the first edit can stay in Lua.
+
 ## Package structure
 
 A typical package contains:
@@ -41,7 +54,7 @@ The manifest selects Web Lua API 1.0.0:
 The package version and API version are separate. A package may advance its own
 version while continuing to target API `1.0.0`.
 
-`sdmod check` runs the complete local admission path: manifest and Lua graph,
+`npm run sdmod -- check <mod-directory>` runs the complete local admission path: manifest and Lua graph,
 owned paths and hashes, decoded PNG/audio/document assets, prepared content
 catalog, and Boneyard parsing. A package that passes this command has crossed
 the same format boundary used by the game host; play tests still verify the
@@ -223,6 +236,10 @@ Keys as strings are accepted wherever the field's kind is known: a potion's
 a Boneyard roster, `sd.effect.status`, `sd.effect.grant`, `sd.effect.spawn`
 (a powerup under `content`, an enemy under `enemy`), and a portal's
 `destination`.
+
+Stock enemies use names such as `stock.skeleton` and
+`stock.skeleton_mage`. The same names work in Boneyard rosters and
+`sd.effect.spawn`; `sdmod check` validates and typo-checks them before play.
 
 `sd.ref` remains the explicit form, and is required for content in another
 package or in stock content:

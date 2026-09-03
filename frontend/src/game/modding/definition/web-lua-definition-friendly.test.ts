@@ -112,7 +112,7 @@ test('friendly style compiles to the same graph digest as the explicit style', a
 test('friendly style collects content, strings as references, art paths, and loose rules', async () => {
   const compiled = await compileScript(`
     local page = sd.sound("audio/bookOpen.ogg", {key = "page_sound", volume = 0.45})
-    sd.item({name = "Moondust", description = "Ground moon.", stack = {max = 20}, icon = "art/information.png"})
+    sd.item({name = "Moondust", description = "Ground moon.", stack = {maximum = 20}, icon = "art/information.png"})
     sd.status({key = "warded", duration = "20s", modifiers = {incoming_damage = {multiply = 0.75}}})
     sd.potion({
       name = "Ward Tonic",
@@ -211,6 +211,131 @@ test('script errors carry the file, the line, and a hint', async () => {
   assert.match(slow[0]?.message ?? '', /250 ms/)
 })
 
+test('definition globals and every sd namespace are actually read-only', async () => {
+  const cases = [
+    ['accidental_global = 42\n', /global 'accidental_global' cannot be assigned; write local accidental_global =/],
+    ['sd = nil\n', /global 'sd' cannot be assigned/],
+    ['print = nil\n', /global 'print' cannot be assigned/],
+    ['_G.sd = nil\n', /global 'sd' cannot be assigned/],
+    ['sd.item = sd.potion\n', /sd\.item cannot be assigned/],
+    ['sd.effect.grant = sd.effect.damage\n', /sd\.effect\.grant cannot be assigned/],
+    ['rawset(sd, "item", sd.potion)\n', /rawset is not available inside Web Lua mods/],
+    ['setmetatable(sd, nil)\n', /cannot change a protected metatable/],
+  ] as const
+
+  for (const [code, message] of cases) {
+    const issues = await issuesOf(code)
+    assert.equal(issues[0]?.code, 'E_SCRIPT')
+    assert.equal(issues[0]?.source.file, 'scripts/main.lua')
+    assert.equal(issues[0]?.source.line, 1)
+    assert.match(issues[0]?.message ?? '', message)
+  }
+})
+
+test('friendly lowering rejects malformed art, reference typos, and invalid predicates', async () => {
+  const art = await issuesOf('sd.item({name = "Thing", art = 5, icon = "art/icon.png"})\n')
+  assert.ok(art.some(({ code, message }) => (
+    code === 'E_SCHEMA' && /art must be a table/.test(message)
+  )))
+
+  const ruleEnemy = await issuesOf(`
+    sd.enemy({name = "Grave Keeper"})
+    sd.on("run.started", sd.effect.spawn({enemy = "grave_keper", x = 1, y = 1}))
+  `)
+  assert.ok(ruleEnemy.some(({ code, message }) => (
+    code === 'E_REFERENCE' && /unknown enemy reference .*grave_keper; did you mean grave_keeper\?/.test(message)
+  )))
+
+  const rosterEnemy = await issuesOf(`
+    sd.enemy({name = "Grave Keeper"})
+    sd.boneyard({name = "Yard", source = "levels/yard.boneyard", roster = {"grave_keper"}})
+  `)
+  assert.ok(rosterEnemy.some(({ code, message }) => (
+    code === 'E_REFERENCE' && /unknown enemy reference .*grave_keper; did you mean grave_keeper\?/.test(message)
+  )))
+
+  const shopUnion = await issuesOf(`
+    sd.potion({
+      name = "Health Tonic",
+      duration = "1s",
+      on_use = sd.effect.resource({target = "user", health = 1}),
+      icon = "art/tonic.png",
+    })
+    sd.shop({name = "Shop", stock = {{item = "health_tonci", price = 1}}})
+  `)
+  assert.ok(shopUnion.some(({ code, message }) => (
+    code === 'E_REFERENCE' && /unknown potion reference .*health_tonci; did you mean health_tonic\?/.test(message)
+  )))
+
+  const grantUnion = await issuesOf(`
+    sd.ui({
+      key = "quest_panel",
+      mount = "hud.overlay",
+      view = sd.prefab.minimap({range = 100, size = {width = 100, height = 100}}),
+    })
+    sd.skill({name = "Quest Skill", ranks = {{grant = "quest_pnael"}}})
+  `)
+  assert.ok(grantUnion.some(({ code, message }) => (
+    code === 'E_REFERENCE' && /unknown ui reference .*quest_pnael; did you mean quest_panel\?/.test(message)
+  )))
+
+  const event = await issuesOf(`
+    sd.on("run.started", sd.when(
+      {event = "run.start"},
+      sd.effect.state({key = "seen", value = true})
+    ))
+  `)
+  assert.ok(event.some(({ code, message }) => (
+    code === 'E_SCHEMA' && /unknown event "run\.start"; did you mean run\.started\?/.test(message)
+  )))
+
+  const comparison = await issuesOf(`
+    sd.on("run.started", sd.when(
+      {context = "wave", equals = {1}},
+      sd.effect.state({key = "seen", value = true})
+    ))
+  `)
+  assert.ok(comparison.some(({ code, message }) => (
+    code === 'E_SCHEMA' && /equals must be boolean, number, or string/.test(message)
+  )))
+
+  const extraInvalidSubject = await issuesOf(`
+    sd.on("run.started", sd.when(
+      {event = 5, all = {{context = "wave"}}},
+      sd.effect.state({key = "seen", value = true})
+    ))
+  `)
+  assert.ok(extraInvalidSubject.some(({ code, message }) => (
+    code === 'E_SCHEMA' && /requires exactly one/.test(message)
+  )))
+  assert.ok(extraInvalidSubject.some(({ code, path }) => (
+    code === 'E_SCHEMA' && path.endsWith('.event')
+  )))
+
+  const stock = await compileScript(`
+    sd.on("run.started", sd.effect.spawn({enemy = "stock.skeleton", x = 1, y = 1}))
+  `)
+  const on = stock.rules[0]?.fields.node as { fields?: { enemy?: unknown } }
+  assert.equal(on.fields?.enemy, 'SKELETON')
+
+  const localNamedLikeStock = await compileScript(`
+    sd.enemy({key = "skeleton", name = "Clockwork Skeleton"})
+    sd.on("run.started", sd.effect.spawn({enemy = "skeleton", x = 1, y = 1}))
+  `)
+  const localOn = localNamedLikeStock.rules[0]?.fields.node as {
+    fields?: { enemy?: { key?: unknown; targetKind?: unknown } }
+  }
+  assert.equal(localOn.fields?.enemy?.key, 'skeleton')
+  assert.equal(localOn.fields?.enemy?.targetKind, 'enemy')
+
+  const stockTypo = await issuesOf(`
+    sd.on("run.started", sd.effect.spawn({token = "SKELETONN", x = 1, y = 1}))
+  `)
+  assert.ok(stockTypo.some(({ code, message }) => (
+    code === 'E_REFERENCE' && /unknown stock enemy SKELETONN; did you mean SKELETON\?/.test(message)
+  )))
+})
+
 test('compile issues point at the line that created the definition', async () => {
   const issues = await issuesOf(`
     sd.item({name = "Fine"})
@@ -229,6 +354,7 @@ test('sd.include loads package scripts once and packs into one equivalent entry 
     ['scripts/loops/a.lua', 'return sd.include("scripts/loops/b.lua")\n'],
     ['scripts/loops/b.lua', 'return sd.include("scripts/loops/a.lua")\n'],
     ['scripts/broken.lua', 'local thing = nil\nthing()\n'],
+    ['scripts/global.lua', 'included_global = true\n'],
   ])
   const main = `
     local items = sd.include("scripts/items.lua")
@@ -258,4 +384,15 @@ test('sd.include loads package scripts once and packs into one equivalent entry 
   const broken = await issuesOf('sd.include("scripts/broken.lua")\n', scripts)
   assert.equal(broken[0]?.source.file, 'scripts/broken.lua')
   assert.equal(broken[0]?.source.line, 2)
+
+  const global = await issuesOf('sd.include("scripts/global.lua")\n', scripts)
+  assert.equal(global[0]?.source.file, 'scripts/global.lua')
+  assert.equal(global[0]?.source.line, 1)
+  assert.match(global[0]?.message ?? '', /global 'included_global' cannot be assigned/)
+
+  const ordinaryMarkerComment = await compileScript(`
+    --@sd-bundle this is an ordinary comment, not trailing package metadata
+    sd.item({name = "Marker Note"})
+  `)
+  assert.deepEqual(ordinaryMarkerComment.content.map(({ key }) => key), ['marker_note'])
 })

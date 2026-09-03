@@ -23,6 +23,7 @@ import {
   compileWebLuaDefinition,
   WebLuaDefinitionRuntime,
 } from '../../src/game/modding/definition/index.ts'
+import { WEB_LUA_MAX_SCRIPT_BYTES } from '../../src/game/modding/definition/web-lua-script-bundle.ts'
 import { WEB_LUA_DEFINITION_API_VERSION } from '../../src/game/modding/definition/web-lua-definition-types.ts'
 
 const require = createRequire(import.meta.url)
@@ -62,13 +63,26 @@ test('sdmod creates, checks, tests, packs, and generates one deterministic v1 mo
     'THIRD_PARTY_ASSETS.md',
   ])
   assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /---@field potion/)
-  assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /wearable fun\(path: string, options\?: table\)/)
+  const luaLs = await readFile(join(generated, 'sd.lua'), 'utf8')
+  assert.match(luaLs, /wearable fun\(path: string, options\?: table\)/)
+  assert.match(luaLs, /sheet fun\(path_or_spec: string\|table, options\?: table\)/)
+  const potionSpec = luaLs.slice(luaLs.indexOf('---@class SdPotionSpec'), luaLs.indexOf('---@class SdPowerupSpec'))
+  assert.match(potionSpec, /---@field duration\? SdDuration/)
+  assert.match(potionSpec, /---@field on_use\? SdRule\|SdRule\[\]/)
   assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /---@class SdPredicate/)
-  assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /sd\.include/)
+  const reference = await readFile(join(generated, 'REFERENCE.md'), 'utf8')
+  assert.match(reference, /sd\.include/)
+  assert.match(reference, /Reducers are collected automatically/)
+  assert.match(reference, /npm run sdmod -- check/)
   assert.match(await readFile(join(generated, 'DIAGNOSTICS.md'), 'utf8'), /E_SCRIPT/)
   assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /scene-extension/)
   assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /sd\.art\.wearable/)
+  assert.match(await readFile(join(generated, 'STARTER.lua'), 'utf8'), /npm run sdmod -- check/)
+  const inventory = JSON.parse(await readFile(join(generated, 'web-lua-definition.schema.json'), 'utf8'))
+  assert.deepEqual(inventory.content.potion.required, ['name'])
+  assert.deepEqual(inventory.contentIdentity, { oneOf: ['key', 'name'] })
   assert.ok(messages.some(message => message.includes('graphSha256')))
+  assert.ok(messages.some(message => message.includes('Next: npm run sdmod -- check')))
 })
 
 test('sdmod migrates the retained Invincibility Potion to the v1 kit', async (context) => {
@@ -214,4 +228,21 @@ test('sdmod folds included scripts into the packed entry script and keeps the ge
     ['item:example_item', 'potion:example_potion', 'status:example_tough'],
   )
   assert.equal(starterChecked.compiled.rules.length, 1)
+})
+
+test('sdmod check rejects a source tree that cannot fit in the packed script budget', async (context) => {
+  const root = await mkdtemp(join(tmpdir(), 'sdmod-packed-budget-'))
+  context.after(() => rm(root, { force: true, recursive: true }))
+  const mod = join(root, 'too-large-when-bundled')
+  const io = { log: () => {} }
+  await runSdmod(['new', mod], io)
+
+  const half = Math.floor(WEB_LUA_MAX_SCRIPT_BYTES / 2)
+  await writeFile(join(mod, 'scripts/main.lua'), `--${'a'.repeat(half)}\nsd.item({name = "Thing", icon = "art/icon.png"})\n`)
+  await writeFile(join(mod, 'scripts/extra.lua'), `--${'b'.repeat(half)}\nreturn {}\n`)
+
+  await assert.rejects(
+    () => runSdmod(['check', mod], io),
+    new RegExp(`entry script and its included scripts total \\d+ bytes, above the ${WEB_LUA_MAX_SCRIPT_BYTES} byte limit`),
+  )
 })

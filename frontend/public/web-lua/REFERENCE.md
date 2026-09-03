@@ -7,6 +7,13 @@ API: `1.0.0`
 A mod is a script that creates things. Each `sd.*` call tells the game about
 one thing, and the game collects everything the script created when it ends.
 
+From `frontend/`, scaffold and check a mod with:
+
+```sh
+npm run sdmod -- new path/to/my-mod
+npm run sdmod -- check path/to/my-mod
+```
+
 ```lua
 local tough = sd.status({key = "tough", duration = "5s", modifiers = {incoming_damage = {multiply = 0.8}}})
 
@@ -72,7 +79,7 @@ and 262144 bytes of Lua in total are allowed.
 | `boast` | `instruction`, `name`, `response`, `statement` | `key`, `art`, `description`, `fail_on`, `instruction`, `name`, `random_skill_choices`, `response`, `score_multiplier`, `statement`, `stock_icon`, `success_wave` | `icon` |
 | `enemy` | `name` | `key`, `art`, `description`, `loot`, `name`, `stats` | `atlas`, `attack_sound`, `death_sound`, `sound` |
 | `item` | `name` | `key`, `art`, `description`, `equipment`, `name`, `stack`, `use` | `icon`, `icon_trim`, `worn`, `worn_trim` |
-| `potion` | `duration`, `name`, `on_use` | `key`, `art`, `description`, `duration`, `loot`, `name`, `on_use`, `presentation`, `status` | `icon` |
+| `potion` | `name` | `key`, `art`, `description`, `duration`, `loot`, `name`, `on_use`, `presentation`, `status` | `icon` |
 | `powerup` | `effect`, `name` | `key`, `art`, `description`, `effect`, `name`, `pickup` | `sound`, `world` |
 | `room` | `geometry` | `key`, `art`, `description`, `geometry`, `name`, `props` | `ambience`, `loop`, `music` |
 | `scene` | `rooms` | `key`, `art`, `description`, `name`, `rooms` | `ambience`, `layout`, `loop`, `music` |
@@ -144,6 +151,8 @@ the `action` context field and the framework action family in `action_kind`.
 
 `sd.effect.grant` and `sd.effect.status` accept content keys as strings.
 `sd.effect.present` accepts a sound path.
+`sd.effect.spawn` accepts a local enemy key or a stock name such as
+`stock.skeleton`; both forms are validated during `check`.
 
 ## Prefabs
 
@@ -155,7 +164,7 @@ the `action` context field and the framework action family in `action_kind`.
 
 ## Advanced reducers
 
-`sd.advanced.reducer(spec)` declares a scoped reducer. Versions above 1 require a pure migration for every prior version in `migrations`. Reducers must be listed under `systems` in `sd.mod`.
+`sd.advanced.reducer(spec)` declares a scoped reducer. Versions above 1 require a pure migration for every prior version in `migrations`. Reducers are collected automatically; list them under `systems` only when using `sd.mod` to make their order explicit.
 
 ## UI state shapes
 

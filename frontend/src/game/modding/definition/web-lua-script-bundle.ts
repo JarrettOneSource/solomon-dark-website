@@ -17,31 +17,35 @@ export function bundleWebLuaEntryScript(
   entryScript: string,
   scripts: ReadonlyMap<string, string>,
 ): string {
-  if (scripts.size === 0) return entryScript
+  validateWebLuaScriptSet(scripts)
+  if (scripts.size === 0) {
+    validateBundledScriptSize(entryScript)
+    return entryScript
+  }
   const bundle: Record<string, string> = {}
   for (const path of [...scripts.keys()].sort()) {
-    if (!WEB_LUA_SCRIPT_PATH.test(path)) throw new Error(`bundled script path is invalid: ${path}`)
     bundle[path] = scripts.get(path)!
   }
   const line = `${WEB_LUA_BUNDLE_MARKER}${JSON.stringify(bundle)}`
   if (line.includes('\n') || line.includes('\r')) throw new Error('bundled scripts must serialize to one line')
   const separator = entryScript.endsWith('\n') ? '' : '\n'
-  return `${entryScript}${separator}${line}\n`
+  const bundled = `${entryScript}${separator}${line}\n`
+  validateBundledScriptSize(bundled)
+  return bundled
 }
 
 export function readWebLuaScriptBundle(
   entryScript: string,
 ): ReadonlyMap<string, string> | null {
   const lines = entryScript.split('\n')
-  let bundleLine: string | null = null
+  let bundleLine = ''
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const candidate = lines[index]!.replace(/\r$/, '')
-    if (candidate.startsWith(WEB_LUA_BUNDLE_MARKER)) {
-      bundleLine = candidate
-      break
-    }
+    if (candidate.trim().length === 0) continue
+    bundleLine = candidate
+    break
   }
-  if (bundleLine === null) return null
+  if (!bundleLine.startsWith(WEB_LUA_BUNDLE_MARKER)) return null
   let parsed: unknown
   try {
     parsed = JSON.parse(bundleLine.slice(WEB_LUA_BUNDLE_MARKER.length))
@@ -73,5 +77,14 @@ export function validateWebLuaScriptSet(scripts: ReadonlyMap<string, string>): v
   }
   if (total > WEB_LUA_MAX_SCRIPT_BYTES) {
     throw new Error(`included scripts exceed ${WEB_LUA_MAX_SCRIPT_BYTES} bytes in total`)
+  }
+}
+
+function validateBundledScriptSize(script: string): void {
+  const bytes = Buffer.byteLength(script, 'utf8')
+  if (bytes > WEB_LUA_MAX_SCRIPT_BYTES) {
+    throw new Error(
+      `the entry script and its included scripts total ${bytes} bytes, above the ${WEB_LUA_MAX_SCRIPT_BYTES} byte limit; move large tables into assets or trim the scripts`,
+    )
   }
 }

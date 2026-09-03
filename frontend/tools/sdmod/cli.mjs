@@ -25,10 +25,17 @@ import {
   WEB_LUA_DEFINITION_API_VERSION,
   WEB_LUA_MAX_INCLUDED_SCRIPTS,
   WEB_LUA_MAX_SCRIPT_BYTES,
-  WEB_LUA_PREDICATE_FIELDS,
   WEB_LUA_RULE_EVENT_NAMES,
   WEB_LUA_SCOPE_KINDS,
 } from '../../src/game/modding/definition/index.ts'
+import {
+  WEB_LUA_ART_ALIAS_NAMES as ART_ALIASES,
+  WEB_LUA_EFFECT_NAMES as EFFECTS,
+  WEB_LUA_PREDICATE_FIELDS,
+  WEB_LUA_PREFAB_NAMES as PREFABS,
+  WEB_LUA_RULE_NAMES as RULES,
+  WEB_LUA_SCHEMA_NAMES as SCHEMAS,
+} from '../../src/game/modding/definition/web-lua-definition-language.ts'
 import {
   compileModAssets,
 } from '../../src/game/modding/assets/index.ts'
@@ -42,12 +49,6 @@ import { renderSprite } from './render-sprite.mjs'
 
 const require = createRequire(import.meta.url)
 const wasmPath = require.resolve('wasmoon/dist/glue.wasm')
-const RULES = ['on', 'all', 'first', 'when', 'after', 'every']
-const EFFECTS = ['damage', 'resource', 'status', 'spawn', 'grant', 'state', 'present']
-const PREFABS = ['projectile', 'area', 'channel', 'minimap', 'portal']
-const SCHEMAS = ['boolean', 'integer', 'number', 'string', 'enum', 'array', 'object']
-const ART_ALIASES = ['sprite', 'sheet', 'wearable', 'sound', 'music']
-
 export async function runSdmod(argv, io = console) {
   const [command, ...args] = argv
   switch (command) {
@@ -94,7 +95,10 @@ async function newMod(args, io) {
 `)
   const checked = await checkWebLuaPackage(root, wasmPath)
   admitPreparedPackage(checked)
-  io.log(`Created valid starter mod at ${root}`)
+  io.log([
+    `Created valid starter mod at ${root}`,
+    `Next: npm run sdmod -- check ${JSON.stringify(root)}`,
+  ].join('\n'))
 }
 
 async function checkMod(args, io) {
@@ -198,12 +202,6 @@ async function packMod(args, io) {
 // to prove it produces the exact graph the source tree produced.
 async function bundledEntryScript(checked) {
   const bundled = bundleWebLuaEntryScript(checked.entryScript, checked.scripts)
-  const bytes = Buffer.byteLength(bundled, 'utf8')
-  if (bytes > WEB_LUA_MAX_SCRIPT_BYTES) {
-    throw new Error(
-      `the entry script and its included scripts total ${bytes} bytes, above the ${WEB_LUA_MAX_SCRIPT_BYTES} byte limit; move large tables into assets or trim the scripts`,
-    )
-  }
   const identity = { id: checked.manifest.id, name: checked.manifest.name, version: checked.manifest.version }
   const runtime = await WebLuaDefinitionRuntime.create({
     entryScript: checked.entryScriptPath,
@@ -265,11 +263,12 @@ async function generateReference(args, io) {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     title: 'Solomon Dark Web Lua 1.0 definition inventory',
     apiVersion: WEB_LUA_DEFINITION_API_VERSION,
+    contentIdentity: { oneOf: ['key', 'name'] },
     content: Object.fromEntries(WEB_LUA_CONTENT_KINDS.map(kind => [
       kind,
       {
         allowed: ['key', ...WEB_LUA_CONTENT_SCHEMA_FIELDS[kind].allowed],
-        required: ['key', ...WEB_LUA_CONTENT_SCHEMA_FIELDS[kind].required],
+        required: friendlyRequiredFields(kind),
       },
     ])),
     constructors: {
@@ -396,7 +395,7 @@ function displayName(value) {
 }
 
 function starterModTemplate(name) {
-  return `-- ${name}: a starter mod. Rename things, save, and run "sdmod check".
+  return `-- ${name}: a starter mod. Rename things, save, and run the check command printed by sdmod new.
 -- Each sd.* call below tells the game about one thing.
 
 sd.item({
@@ -444,6 +443,7 @@ return sd.mod({
 function luaLsStub() {
   const specs = WEB_LUA_CONTENT_KINDS.map(kind => {
     const fields = WEB_LUA_CONTENT_SCHEMA_FIELDS[kind]
+    const required = new Set(friendlyRequiredFields(kind))
     const shorthand = WEB_LUA_CONTENT_ART_SLOTS[kind]
       .filter(slot => !fields.allowed.includes(slot))
       .map(slot => `---@field ${slot}? string|table`)
@@ -451,7 +451,7 @@ function luaLsStub() {
       `---@class Sd${pascal(kind)}Spec`,
       '---@field key? string',
       ...fields.allowed.map(field => (
-        `---@field ${field}${fields.required.includes(field) ? '' : '?'} ${luaFieldType(kind, field)}`
+        `---@field ${field}${required.has(field) ? '' : '?'} ${luaFieldType(kind, field)}`
       )),
       ...shorthand,
     ].join('\n')
@@ -466,13 +466,13 @@ function luaLsStub() {
     '---@field on fun(event: SdEventName, ...: SdRule): SdRule',
     '---@field all fun(...: SdRule|SdRule[]): SdRule',
     '---@field first fun(...: SdRule|SdRule[]): SdRule',
-    '---@field when fun(predicate: boolean|SdPredicate, yes: SdRule, no?: SdRule): SdRule',
+    '---@field when fun(predicate: boolean|SdPredicate, yes: SdRule|SdRule[], no?: SdRule|SdRule[]): SdRule',
     '---@field after fun(duration: SdDuration, ...: SdRule): SdRule',
-    '---@field every fun(interval: SdDuration, node: SdRule, times?: integer|{times: integer}): SdRule',
+    '---@field every fun(interval: SdDuration, node: SdRule|SdRule[], times?: integer|{times: integer}): SdRule',
   ].join('\n')
   const artSignatures = [
     '---@field music fun(path: string, options?: table): table',
-    '---@field sheet fun(spec: table): table',
+    '---@field sheet fun(path_or_spec: string|table, options?: table): table',
     '---@field sound fun(path: string, options?: table): table',
     '---@field sprite fun(path: string, options?: table): table',
     '---@field wearable fun(path: string, options?: table): table',
@@ -575,8 +575,9 @@ sd = {}
 function referenceMarkdown() {
   const rows = WEB_LUA_CONTENT_KINDS.map(kind => {
     const value = WEB_LUA_CONTENT_SCHEMA_FIELDS[kind]
+    const required = friendlyRequiredFields(kind)
     const shorthand = WEB_LUA_CONTENT_ART_SLOTS[kind].filter(slot => !value.allowed.includes(slot))
-    return `| \`${kind}\` | ${value.required.map(field => `\`${field}\``).join(', ') || 'none'} | ${['key', ...value.allowed].map(field => `\`${field}\``).join(', ')} | ${shorthand.map(field => `\`${field}\``).join(', ') || 'none'} |`
+    return `| \`${kind}\` | ${required.map(field => `\`${field}\``).join(', ') || 'none'} | ${['key', ...value.allowed].map(field => `\`${field}\``).join(', ')} | ${shorthand.map(field => `\`${field}\``).join(', ') || 'none'} |`
   }).join('\n')
   const list = (root, values) => values.map(value => `- \`${root}.${value}(spec)\``).join('\n')
   return `# Web Lua 1.0 generated reference
@@ -587,6 +588,13 @@ API: \`${WEB_LUA_DEFINITION_API_VERSION}\`
 
 A mod is a script that creates things. Each \`sd.*\` call tells the game about
 one thing, and the game collects everything the script created when it ends.
+
+From \`frontend/\`, scaffold and check a mod with:
+
+\`\`\`sh
+npm run sdmod -- new path/to/my-mod
+npm run sdmod -- check path/to/my-mod
+\`\`\`
 
 \`\`\`lua
 local tough = sd.status({key = "tough", duration = "5s", modifiers = {incoming_damage = {multiply = 0.8}}})
@@ -687,6 +695,8 @@ ${list('sd.effect', EFFECTS)}
 
 \`sd.effect.grant\` and \`sd.effect.status\` accept content keys as strings.
 \`sd.effect.present\` accepts a sound path.
+\`sd.effect.spawn\` accepts a local enemy key or a stock name such as
+\`stock.skeleton\`; both forms are validated during \`check\`.
 
 ## Prefabs
 
@@ -694,7 +704,7 @@ ${list('sd.prefab', PREFABS)}
 
 ## Advanced reducers
 
-\`sd.advanced.reducer(spec)\` declares a scoped reducer. Versions above 1 require a pure migration for every prior version in \`migrations\`. Reducers must be listed under \`systems\` in \`sd.mod\`.
+\`sd.advanced.reducer(spec)\` declares a scoped reducer. Versions above 1 require a pure migration for every prior version in \`migrations\`. Reducers are collected automatically; list them under \`systems\` only when using \`sd.mod\` to make their order explicit.
 
 ## UI state shapes
 
@@ -741,7 +751,7 @@ function diagnosticsMarkdown() {
   }
   return `# Web Lua diagnostics
 
-Run \`sdmod check <directory>\`. Definition issues include a stable code, a graph path, and the script file and line that created the value. Prepared package errors name the content or asset field that failed admission.
+From \`frontend/\`, run \`npm run sdmod -- check <directory>\`. Definition issues include a stable code, a graph path, and the script file and line that created the value. Prepared package errors name the content or asset field that failed admission.
 
 ${WEB_LUA_DEFINITION_ERROR_CODES.map(code => `- \`${code}\`: ${descriptions[code]}`).join('\n')}
 `
@@ -749,7 +759,8 @@ ${WEB_LUA_DEFINITION_ERROR_CODES.map(code => `- \`${code}\`: ${descriptions[code
 
 function starterLua() {
   return `-- Web Lua starter. Each sd.* call tells the game about one thing.
--- Save this as scripts/main.lua, put a PNG at art/icon.png, and run "sdmod check".
+-- Save this as scripts/main.lua, put a PNG at art/icon.png, then from frontend run:
+-- npm run sdmod -- check path/to/my-mod
 
 -- A status is a temporary effect on a character.
 local tough = sd.status({
@@ -780,6 +791,12 @@ sd.on("run.started", sd.effect.grant({target = "user", item = "example_potion", 
 
 function pascal(value) {
   return value.split('-').map(part => part[0].toUpperCase() + part.slice(1)).join('')
+}
+
+function friendlyRequiredFields(kind) {
+  return WEB_LUA_CONTENT_SCHEMA_FIELDS[kind].required.filter(field => (
+    kind !== 'potion' || (field !== 'duration' && field !== 'on_use')
+  ))
 }
 
 function luaFieldType(kind, field) {

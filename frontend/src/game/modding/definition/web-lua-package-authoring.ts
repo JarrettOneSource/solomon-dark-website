@@ -7,7 +7,7 @@ import {
 } from './web-lua-definition-compiler.ts'
 import { WEB_LUA_DEFINITION_API_VERSION } from './web-lua-definition-types.ts'
 import { WebLuaDefinitionRuntime } from './web-lua-definition-runtime.ts'
-import { validateWebLuaScriptSet, WEB_LUA_SCRIPT_PATH } from './web-lua-script-bundle.ts'
+import { bundleWebLuaEntryScript, WEB_LUA_SCRIPT_PATH } from './web-lua-script-bundle.ts'
 
 const PACKAGE_ID = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/
 const VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/
@@ -60,6 +60,7 @@ export async function checkWebLuaPackage(
   const paths = await walk(root)
   const files = await packageFiles(root, paths)
   const scripts = await packageScripts(root, paths, manifest.runtime.entryScript)
+  bundleWebLuaEntryScript(entryScript, scripts)
   const runtime = await WebLuaDefinitionRuntime.create({
     entryScript: manifest.runtime.entryScript,
     identity: { id: manifest.id, name: manifest.name, version: manifest.version },
@@ -160,7 +161,6 @@ async function packageScripts(
     }
     result.set(path, bytes.toString('utf8'))
   }
-  validateWebLuaScriptSet(result)
   return result
 }
 

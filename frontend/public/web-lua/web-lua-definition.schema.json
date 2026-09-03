@@ -2,6 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Solomon Dark Web Lua 1.0 definition inventory",
   "apiVersion": "1.0.0",
+  "contentIdentity": {
+    "oneOf": [
+      "key",
+      "name"
+    ]
+  },
   "content": {
     "affix": {
       "allowed": [
@@ -12,7 +18,6 @@
         "name"
       ],
       "required": [
-        "key",
         "modifiers",
         "name"
       ]
@@ -28,7 +33,6 @@
         "rolls"
       ],
       "required": [
-        "key",
         "entries"
       ]
     },
@@ -46,7 +50,6 @@
         "waves"
       ],
       "required": [
-        "key",
         "name",
         "source"
       ]
@@ -67,7 +70,6 @@
         "success_wave"
       ],
       "required": [
-        "key",
         "instruction",
         "name",
         "response",
@@ -84,7 +86,6 @@
         "stats"
       ],
       "required": [
-        "key",
         "name"
       ]
     },
@@ -99,7 +100,6 @@
         "use"
       ],
       "required": [
-        "key",
         "name"
       ]
     },
@@ -116,10 +116,7 @@
         "status"
       ],
       "required": [
-        "key",
-        "duration",
-        "name",
-        "on_use"
+        "name"
       ]
     },
     "powerup": {
@@ -132,7 +129,6 @@
         "pickup"
       ],
       "required": [
-        "key",
         "effect",
         "name"
       ]
@@ -147,7 +143,6 @@
         "props"
       ],
       "required": [
-        "key",
         "geometry"
       ]
     },
@@ -160,7 +155,6 @@
         "rooms"
       ],
       "required": [
-        "key",
         "rooms"
       ]
     },
@@ -173,7 +167,6 @@
         "scene"
       ],
       "required": [
-        "key",
         "features",
         "scene"
       ]
@@ -192,7 +185,6 @@
         "stock_scope"
       ],
       "required": [
-        "key",
         "name",
         "stock"
       ]
@@ -211,7 +203,6 @@
         "ranks"
       ],
       "required": [
-        "key",
         "name",
         "ranks"
       ]
@@ -228,7 +219,6 @@
         "slot"
       ],
       "required": [
-        "key",
         "behavior",
         "name",
         "slot"
@@ -243,9 +233,7 @@
         "name",
         "stacking"
       ],
-      "required": [
-        "key"
-      ]
+      "required": []
     },
     "ui": {
       "allowed": [
@@ -260,7 +248,6 @@
         "visible"
       ],
       "required": [
-        "key",
         "mount",
         "view"
       ]

@@ -12,27 +12,17 @@ import {
   webLuaDefinitionIssue,
   type WebLuaDefinitionIssue,
 } from './web-lua-definition-error.ts'
+import {
+  WEB_LUA_MAXIMUM_PREDICATE_DEPTH,
+  WEB_LUA_NUMERIC_PREDICATE_COMPARISONS,
+  WEB_LUA_PREDICATE_COMPARISONS,
+  WEB_LUA_PREDICATE_FIELDS,
+  WEB_LUA_PREDICATE_GROUPS,
+} from './web-lua-definition-language.ts'
 import { didYouMean, listChoices } from './web-lua-suggestions.ts'
 
-/** Every field a rules.when predicate table may carry. */
-export const WEB_LUA_PREDICATE_FIELDS = Object.freeze([
-  'above',
-  'all',
-  'any',
-  'at_least',
-  'at_most',
-  'below',
-  'context',
-  'equals',
-  'event',
-  'none',
-  'not_equals',
-] as const)
 const PREDICATE_FIELD_SET: ReadonlySet<string> = new Set(WEB_LUA_PREDICATE_FIELDS)
-const PREDICATE_COMPARISONS = ['above', 'at_least', 'at_most', 'below', 'equals', 'not_equals'] as const
-const PREDICATE_NUMERIC_COMPARISONS: ReadonlySet<string> = new Set(['above', 'at_least', 'at_most', 'below'])
-const PREDICATE_GROUPS = ['all', 'any', 'none'] as const
-const MAXIMUM_PREDICATE_DEPTH = 8
+const PREDICATE_NUMERIC_COMPARISON_SET: ReadonlySet<string> = new Set(WEB_LUA_NUMERIC_PREDICATE_COMPARISONS)
 
 interface ContentSchema {
   readonly allowed: ReadonlySet<string>
@@ -545,16 +535,25 @@ function validatePredicate(
     ))
     return
   }
-  if (depth > MAXIMUM_PREDICATE_DEPTH) {
+  if (depth > WEB_LUA_MAXIMUM_PREDICATE_DEPTH) {
     issues.push(webLuaDefinitionIssue('E_SCHEMA', path, 'predicate nests too deeply', { source: owner.source }))
     return
   }
   const fields = value as Readonly<Record<string, WebLuaDefinitionValue>>
   validateUnknownFields(fields, PREDICATE_FIELD_SET, path, owner, issues)
-  const hasEvent = typeof fields.event === 'string' && fields.event.length > 0
-  const hasContext = typeof fields.context === 'string' && fields.context.length > 0
-  const groups = PREDICATE_GROUPS.filter(key => fields[key] !== undefined)
+  const hasEvent = fields.event !== undefined
+  const hasContext = fields.context !== undefined
+  const groups = WEB_LUA_PREDICATE_GROUPS.filter(key => fields[key] !== undefined)
   const subjects = Number(hasEvent) + Number(hasContext) + groups.length
+  if (hasEvent) validateEventName(fields.event, `${path}.event`, owner, issues)
+  if (hasContext && (typeof fields.context !== 'string' || fields.context.length === 0)) {
+    issues.push(webLuaDefinitionIssue(
+      'E_SCHEMA',
+      `${path}.context`,
+      'context must be nonempty text',
+      { source: owner.source },
+    ))
+  }
   if (subjects !== 1) {
     issues.push(webLuaDefinitionIssue(
       'E_SCHEMA',
@@ -564,7 +563,7 @@ function validatePredicate(
     ))
     return
   }
-  const comparisons = PREDICATE_COMPARISONS.filter(key => fields[key] !== undefined)
+  const comparisons = WEB_LUA_PREDICATE_COMPARISONS.filter(key => fields[key] !== undefined)
   if (comparisons.length > 1) {
     issues.push(webLuaDefinitionIssue(
       'E_SCHEMA',
@@ -582,8 +581,16 @@ function validatePredicate(
     ))
   }
   for (const key of comparisons) {
-    if (PREDICATE_NUMERIC_COMPARISONS.has(key) && typeof fields[key] !== 'number') {
+    if (PREDICATE_NUMERIC_COMPARISON_SET.has(key) && typeof fields[key] !== 'number') {
       issues.push(webLuaDefinitionIssue('E_SCHEMA', `${path}.${key}`, `${key} must be a number`, { source: owner.source }))
+    }
+    if ((key === 'equals' || key === 'not_equals') && !['boolean', 'number', 'string'].includes(typeof fields[key])) {
+      issues.push(webLuaDefinitionIssue(
+        'E_SCHEMA',
+        `${path}.${key}`,
+        `${key} must be boolean, number, or string`,
+        { source: owner.source },
+      ))
     }
   }
   for (const key of groups) {

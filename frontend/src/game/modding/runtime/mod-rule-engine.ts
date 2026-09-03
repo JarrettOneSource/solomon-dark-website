@@ -6,6 +6,11 @@ import type {
   WebLuaRuleDefinition,
 } from '../definition/index.ts'
 import {
+  WEB_LUA_MAXIMUM_PREDICATE_DEPTH,
+  WEB_LUA_NUMERIC_PREDICATE_COMPARISONS,
+  WEB_LUA_PREDICATE_FIELDS,
+} from '../definition/web-lua-definition-language.ts'
+import {
   ModLifecycleSupervisor,
   type ModLifecycleScope,
 } from './mod-lifecycle-supervisor.ts'
@@ -721,49 +726,30 @@ function intent(
   })
 }
 
-const PREDICATE_FIELDS: ReadonlySet<string> = new Set([
-  'above',
-  'all',
-  'any',
-  'at_least',
-  'at_most',
-  'below',
-  'context',
-  'equals',
-  'event',
-  'none',
-  'not_equals',
-])
-const PREDICATE_NUMERIC_COMPARISONS: ReadonlyArray<readonly [string, (actual: number, expected: number) => boolean]> = [
-  ['above', (actual, expected) => actual > expected],
-  ['at_least', (actual, expected) => actual >= expected],
-  ['at_most', (actual, expected) => actual <= expected],
-  ['below', (actual, expected) => actual < expected],
-]
-const MAXIMUM_PREDICATE_DEPTH = 8
+const PREDICATE_FIELD_SET: ReadonlySet<string> = new Set(WEB_LUA_PREDICATE_FIELDS)
 
 function predicate(value: unknown, input: ModRuleDispatchInput, depth = 0): boolean {
   if (typeof value === 'boolean') return value
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('rules.when predicate is invalid')
   }
-  if (depth > MAXIMUM_PREDICATE_DEPTH) throw new Error('rules.when predicate nests too deeply')
+  if (depth > WEB_LUA_MAXIMUM_PREDICATE_DEPTH) throw new Error('rules.when predicate nests too deeply')
   const source = value as Record<string, unknown>
-  const unknown = Object.keys(source).filter(key => !PREDICATE_FIELDS.has(key))
+  const unknown = Object.keys(source).filter(key => !PREDICATE_FIELD_SET.has(key))
   if (unknown.length > 0) throw new Error(`rules.when predicate has unknown fields: ${unknown.join(', ')}`)
   if (typeof source.event === 'string') return source.event === input.event
   if (typeof source.context === 'string') {
     const actual = input.context[source.context]
     if (source.equals !== undefined) return actual === source.equals
     if (source.not_equals !== undefined) return actual !== source.not_equals
-    for (const [field, compare] of PREDICATE_NUMERIC_COMPARISONS) {
+    for (const field of WEB_LUA_NUMERIC_PREDICATE_COMPARISONS) {
       const expected = source[field]
       if (expected === undefined) continue
       return typeof actual === 'number'
         && typeof expected === 'number'
         && Number.isFinite(actual)
         && Number.isFinite(expected)
-        && compare(actual, expected)
+        && comparePredicateNumbers(field, actual, expected)
     }
     return Boolean(actual)
   }
@@ -771,6 +757,19 @@ function predicate(value: unknown, input: ModRuleDispatchInput, depth = 0): bool
   if (Array.isArray(source.any)) return source.any.some(entry => predicate(entry, input, depth + 1))
   if (Array.isArray(source.none)) return !source.none.some(entry => predicate(entry, input, depth + 1))
   throw new Error('rules.when predicate requires event, context, all, any, or none')
+}
+
+function comparePredicateNumbers(
+  field: typeof WEB_LUA_NUMERIC_PREDICATE_COMPARISONS[number],
+  actual: number,
+  expected: number,
+): boolean {
+  switch (field) {
+    case 'above': return actual > expected
+    case 'at_least': return actual >= expected
+    case 'at_most': return actual <= expected
+    case 'below': return actual < expected
+  }
 }
 
 function ruleNodes(rule: WebLuaRuleDefinition, field: string): readonly WebLuaRuleDefinition[] {
