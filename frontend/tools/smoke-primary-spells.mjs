@@ -72,6 +72,7 @@ const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
 const heldFacingAcceptance = process.env.SDR_PRIMARY_HELD_FACING === '1'
 const heldPoseAcceptance = process.env.SDR_PRIMARY_HELD_POSE === '1'
 const performanceAcceptance = process.env.SDR_PRIMARY_PERFORMANCE === '1'
+const frostReactivationAcceptance = process.env.SDR_PRIMARY_FROST_REACTIVATION === '1'
 const nativePhaseExpectation = process.env.SDR_PRIMARY_EXPECT_NATIVE_PHASE === '1'
 const combatAdmissionAcceptance = process.env.SDR_PRIMARY_SPELL_COMBAT_ADMISSION === '1'
 const replicationAcceptance = process.env.SDR_PRIMARY_SPELL_REPLICATION_ACCEPTANCE === '1'
@@ -124,6 +125,13 @@ if (nativePhaseExpectation && !performanceAcceptance) {
 }
 if (boneyardOnlyAcceptance && selectedSpells.length !== 1) {
   throw new Error('Boneyard-only acceptance requires one SDR_PRIMARY_SPELL_KIND')
+}
+if (frostReactivationAcceptance && (
+  !boneyardOnlyAcceptance
+  || selectedSpells.length !== 1
+  || selectedSpells[0].kind !== 'water'
+)) {
+  throw new Error('Frost reactivation acceptance requires Boneyard-only Water')
 }
 if (replicationAcceptance && (
   !boneyardOnlyAcceptance
@@ -625,7 +633,7 @@ async function enterHub(page, element) {
     waitUntil: 'domcontentloaded',
   })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
-  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  const tutorialPrompt = page.locator('[data-prompt-kind="tutorial"] .stock-prompt-dialog')
   if (await tutorialPrompt.isVisible()) {
     await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
     await tutorialPrompt.waitFor({ state: 'detached' })
@@ -1609,7 +1617,11 @@ async function castWaterInBoneyard(page) {
       ), undefined, { timeout: 90_000 }).then(() => ({ fixture: 'host-opened-boneyard' }))
     : await enableSolomonCombat(page, scene)
   const eventStart = await audioEventCount(page)
-  const target = await castTarget(canvas, 0.67, 0.38)
+  const target = await castTarget(
+    canvas,
+    frostReactivationAcceptance ? 0.25 : 0.67,
+    frostReactivationAcceptance ? 0.30 : 0.38,
+  )
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/ice-start.wav', 'play')
@@ -1631,7 +1643,49 @@ async function castWaterInBoneyard(page) {
   await page.screenshot({ path: heldScreenshotPath })
   await page.mouse.up({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'pause')
-  return { combatAdmission, gate, held, heldScreenshotPath, wire }
+  const reactivation = frostReactivationAcceptance
+    ? await captureFrostReactivation(page, canvas)
+    : null
+  return { combatAdmission, gate, held, heldScreenshotPath, reactivation, wire }
+}
+
+async function captureFrostReactivation(page, canvas) {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame
+      && frame.primarySpellCount === 0
+      && frame.primaryWaterMeshActorCount === 0
+      && frame.primaryWaterMeshRunCount === 0
+  }, undefined, { timeout: 10_000 })
+  const retired = await boneyardFrame(page)
+  const eventStart = await audioEventCount(page)
+  const target = await castTarget(canvas, 0.75, 0.70)
+  await page.mouse.move(target.x, target.y)
+  await page.mouse.down({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/ice-start.wav', 'play')
+  await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'play')
+  await waitForBoneyardSpell(page, 'water')
+  await page.waitForTimeout(500)
+  const active = await boneyardFrame(page)
+  assert.ok(active.primarySpellCount > 0 && active.primarySpellCount <= 64)
+  assert.ok(active.primaryWaterMeshActorCount > 0)
+  const screenshotPath = `${screenshotRoot}/solomon-primary-water-boneyard-reactivated.png`
+  await page.screenshot({ path: screenshotPath })
+  await page.mouse.up({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'pause')
+  return {
+    active: {
+      primarySpellCount: active.primarySpellCount,
+      primaryWaterMeshActorCount: active.primaryWaterMeshActorCount,
+      primaryWaterMeshRunCount: active.primaryWaterMeshRunCount,
+    },
+    retired: {
+      primarySpellCount: retired.primarySpellCount,
+      primaryWaterMeshActorCount: retired.primaryWaterMeshActorCount,
+      primaryWaterMeshRunCount: retired.primaryWaterMeshRunCount,
+    },
+    screenshotPath,
+  }
 }
 
 async function latestWireTick(page) {

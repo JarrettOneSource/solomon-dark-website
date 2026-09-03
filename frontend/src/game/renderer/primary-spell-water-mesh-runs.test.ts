@@ -146,6 +146,55 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   destroyTestAtlasTextures(textures)
 })
 
+test('combined Water mesh carries retired GPU index high water into smaller reactivation', () => {
+  const root = new Container()
+  const textures = testAtlasTextures()
+  const runs = new NativeWaterMeshRuns(root, textures, testShader())
+  const frostId = normalWaterId(10)
+
+  runs.beginFrame()
+  runs.update(water(frostId))
+  runs.update(hail(1))
+  runs.update(aura(2))
+  runs.endFrame()
+  runs.beginDepths()
+  runs.appendDepth(frostId, 10)
+  runs.appendDepth(1, 11)
+  runs.appendDepth(2, 12)
+  runs.commitDepths()
+
+  const mesh = root.children[0]
+  assert.ok(mesh instanceof Mesh)
+  const indexBuffer = mesh.geometry.getIndex()
+  const retainedIndices = indexBuffer.data
+  const firstUpdateBytes = (indexBuffer as typeof indexBuffer & { _updateSize: number })._updateSize
+  assert.equal(firstUpdateBytes, 5 * 6 * Uint32Array.BYTES_PER_ELEMENT)
+
+  runs.beginFrame()
+  runs.endFrame()
+  runs.beginDepths()
+  runs.commitDepths()
+  assert.equal(mesh.renderable, false)
+
+  runs.beginFrame()
+  runs.update(hail(3))
+  runs.endFrame()
+  runs.beginDepths()
+  runs.appendDepth(3, 10)
+  runs.commitDepths()
+
+  assert.equal(mesh.renderable, true)
+  assert.equal(indexBuffer.data, retainedIndices)
+  assert.equal(
+    (indexBuffer as typeof indexBuffer & { _updateSize: number })._updateSize,
+    firstUpdateBytes,
+  )
+  assert.deepEqual([...indexBuffer.data.slice(6, 30)], new Array(24).fill(0))
+
+  runs.destroy()
+  destroyTestAtlasTextures(textures)
+})
+
 test('combined Water mesh requires one packed atlas source', () => {
   assert.notEqual(Texture.EMPTY.source, Texture.WHITE.source)
   assert.throws(() => new NativeWaterMeshRuns(new Container(), {

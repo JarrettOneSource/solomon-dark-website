@@ -1749,3 +1749,166 @@ existing page-zero mesh without adding a sampler or fragment branch. The
 pathological maximum Water load remains the device floor; ordinary Hub,
 Boneyard, modal, movement, enemy, and non-Water elemental rows retain their
 separately recorded higher results.
+
+## 2026-09-03 — retained Water index-upload lifecycle reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: repeated Frost Jet casts leave prior spray geometry
+  visible when a later cast begins. The artifacts accumulate while Water is
+  held and disappear when Water stops rendering.
+- This reopens the combined Water/Hail/Aura mesh closure above. That pass
+  proved CPU arrays, retained allocation, actor expiry, and physical throughput,
+  but its lifecycle test inspected only the zeroed JavaScript index array. It
+  did not model Pixi WebGL's lazy buffer upload while an owning Mesh is hidden.
+- Stock behavior remains closed by the Frost entries: Normal and Over children
+  expire independently after 32 or 33 completed 100-Hz updates, release stops
+  new births, and no retired child can re-enter a later cast. The question is
+  whether the packed web representation preserves that destruction boundary
+  across asynchronous CPU-to-GPU delivery.
+- Falsifiers: authoritative or presentation Frost IDs survive past their native
+  lifetime; the ordinary Over Sprite path leaks; the default framebuffer is not
+  cleared; a full dirty index-range upload leaves the old-direction geometry;
+  or the same lazy-retirement error cannot affect Hail and Cold Aura, which
+  share the buffer owner.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Existing native instruction evidence | retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Frost constructors/update/renders `0x00453550`, `0x00453840`, `0x00453670`, `0x00457720`, `0x00457A00`; handler `0x00543860` | Frost children own independent 32/33-tick lives and destruction. Release changes birth/audio ownership, not the lifetime of already-born children. | high-existing |
+| Current Website causal trace | `origin/main` `286d0d0c8c981736421f2434af74b256b73ca5d7`; `primary-spell-water-mesh-runs.ts`; installed PixiJS 8.19 `Buffer` and WebGL buffer/mesh adaptors | A retained run has a full-capacity index array. Retirement zeroes only the former active prefix and calls `Buffer.update(formerBytes)`, then hides the Mesh. Reactivation can call `Buffer.update(smallerBytes)` before either update reaches WebGL. Pixi retains only the later update size, while its Mesh adaptor draws the complete index-array length. | high-static |
+| Exact Mac Chrome reproduction | clean detached current-main build; four release-to-zero casts followed by one uninterrupted four-direction cast; each direction held two seconds, beyond Frost lifetime and snapshot interpolation; 1600 x 900 headless Chrome | Every release reached zero authoritative/presentation/mesh actors and every held sample stayed at 62..64 live Frost actors. Wire directions contained only the current quadrant, but old-quadrant spray remained visible after reactivation. Page/wire errors were empty. Disposable control sweep image SHA-256 values were `ebc29eea29e16f80c9a4afe8a4ac20e3c867d12161e3047bd32d5eb75d4ee07b`, `55dd50ab6591bfc00af593e13bd9d924d8d7fd3a42275fedeb2c921ddd20f687`, `79b781df80886176dcece6c647c428929d437184c56a2aff641fdc303ba32ecb`, and `87bf1ccc65757900c9e553a7a4188faf2a295f6e552baa7dd6756fcf5be037ac`. | high-browser |
+| One-variable browser probe | same clean current-main build and journey; only the index update size changed to the complete retained index array | Old-quadrant spray disappeared while actor counts, directions, lifetime, shader, draw order, and all spell state remained unchanged. Disposable probe image SHA-256 values were `cb1556a9f6bfcb7f9ac3f1b60a07f25096b98d8de4e31e92016583f2f332c928`, `4a4f5c3152ef65c2e0107785838eaf157c27b9021bc73fe7c77134dd86537bec`, `c8512401959fa23a1461886bdaee1811a95438ca58452bcea42d4cd0a487d344`, and `23e988ac9fb8bd2d6498998c64495cc8d68891548e72fe5679ae8d73456d0bad`. | high-browser |
+
+All diagnostic screenshots, temporary source changes, and local/Mac diagnostic
+worktrees were removed after the findings above were recorded. No production
+runtime or occupied foreign Mac process was changed.
+
+### System boundary and membership inventory
+
+Native system: destruction of independently registered Water-family visual
+children. Web boundary: the Boneyard-only retained affine-mesh index lifecycle
+from active draw membership through shrink, empty retirement, reactivation,
+capacity replacement, and renderer teardown.
+
+| Member | Native source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| Normal Frost core/additive/glint quads | `0x00453550`, `0x00453670`, `0x00457720` | `exact-ported` after this reopening | a smaller later cast cannot draw an index used by an expired earlier cast |
+| Over Frost Sprite path | `0x00453840`, `0x00453670`, `0x00457A00` | `verified-already-at-parity`; out of the packed mesh | repeated-cast census and browser frames show no retained View or old-direction Sprite |
+| Hail affine quad | `Anim_Hail` vtable `0x0078501C`, Bouncer tick `0x00458D80` | `exact-ported` through the shared correction | retirement and later smaller Water-family activation cannot resurrect a Hail index |
+| Cold Aura affine quad | `0x0045AF20`, `0x0045AFB0`, vtable `0x00785540` | `exact-ported` through the shared correction | owner loss/expiry and later activation cannot resurrect an Aura index |
+| active run growth | packed Website representation only | `exact-ported` optimization boundary | newly activated indices upload through the retained typed array without changing resource identity |
+| active run shrink | packed Website representation only | `exact-ported` optimization boundary | every formerly drawable index in the dirty high-water range reaches WebGL as zero |
+| empty hidden run and later reactivation | packed Website representation only | `exact-ported` optimization boundary | a lazy hidden update cannot be superseded by a smaller visible prefix |
+| power-of-two capacity replacement | packed Website representation only | `verified-already-at-parity` | replacement starts zeroed, preserves painter slot, and destroys the old GPU resource |
+| Boneyard painter-run partition | native actor/transient manager order recovered above | `verified-already-at-parity` | run count/depth/order and common-atlas shader output remain unchanged |
+| Hub Water Sprite renderer | same stock Frost classes through the non-packed Website view | `out-of-system` for this buffer defect | Hub owns no `NativeWaterMeshRuns`; existing expiry/teardown coverage remains |
+| simulation, snapshots, interpolation, observer and save state | shared authoritative Water lifecycle | `verified-already-at-parity` | 32/33-tick IDs and current aim remain bounded and unchanged |
+| renderer/world destruction | stock child destruction plus Website scene owner | `verified-already-at-parity` | all Mesh, Geometry, Shader, maps, and arrays still destroy exactly once |
+
+No member is blocked by the browser platform. The fix is WebGL resource
+lifecycle bookkeeping and changes no native-visible mechanic or pixel.
+
+### Ownership thread and recovered behavioral contract
+
+- The host remains the sole owner of Water IDs, birth, age, direction, and
+  retirement. The presentation timeline may retain object storage only until
+  the next synchronous sample. Neither owner leaked in the reproduced run.
+- `NativeWaterMeshRuns` owns one long-lived CPU typed array and one GPU buffer
+  per painter run. `activeQuadCount` describes current CPU membership; it is
+  not proof of the largest nonzero range still resident on the GPU.
+- Pixi coalesces multiple pre-render `Buffer.update(size)` calls into the latest
+  update size. A hidden Mesh can therefore carry an undelivered larger clear
+  across frames. The web owner must retain a monotonic per-resource activated
+  index high water and include that complete range in every later size-changing
+  index upload.
+- Vertices need only the current active prefix because indices outside that
+  prefix are guaranteed zero after the corrected upload. Capacity replacement
+  resets the high water with a newly zeroed array and new GPU resource.
+- Release, owner removal, world replacement, and destruction retain their
+  existing behavior. The correction changes no actor count, lifetime, shader,
+  texture, UV, alpha, blend, depth, or draw partition.
+
+### Nearby-system findings
+
+- The existing combined-mesh regression proves CPU index zeros but cannot
+  prove lazy GPU delivery. This is why the earlier green test admitted a real
+  browser resurrection.
+- The existing primary-spell browser driver used a stale selector that looked
+  for `data-prompt-kind` on the dialog instead of its prompt-stage owner. A
+  current-main clean run exposed that harness defect before the Frost journey;
+  the maintained selector must follow the current native prompt ownership so
+  the new browser regression remains executable.
+
+### Confidence and open questions
+
+- Confirmed: bounded authoritative/presentation membership, exact old-direction
+  browser reproduction, full-range one-variable falsification, Pixi 8.19 lazy
+  update-size overwrite, and complete shared mesh membership.
+- Inferred: none used to select the owner.
+- Unknown: no native or browser semantic unknown. The exact minimum upload range
+  is the greatest index ever activated in the current retained GPU resource;
+  bytes above it have never contained drawable indices.
+
+### Web implementation consequence
+
+- Add a per-run activated-index high water initialized with each new retained
+  resource. Never lower it while that resource lives.
+- When active quad count changes, upload indices through that high water, not
+  merely through the newest or immediately previous CPU count. Continue
+  uploading only the active vertex prefix.
+- Add a failing regression for `larger active -> hidden empty -> smaller active`
+  that asserts the smaller visible update still covers and zeros the previously
+  drawable index range. Preserve stable typed-array/resource identity.
+- Repair only the stale tutorial-prompt selector needed by the maintained
+  browser journey; add no compatibility fallback or product behavior.
+
+### Validation contract
+
+- Focused Mac test: combined Water mesh growth, shrink, hidden empty, smaller
+  reactivation, common-source shader, painter partition, and destroy coverage.
+- Exact Mac browser: repeated release-to-zero casts plus a continuous
+  four-direction sweep; hold each direction longer than 33 ticks and the
+  presentation interval; assert bounded current wire directions/counts and
+  visually inspect that no old quadrant returns.
+- Performance guard: retained array and GPU resource identities remain stable;
+  index upload is bounded by the resource's activated high water and vertex
+  upload remains bounded by current quads.
+- Complete exact-tree Mac `./scripts/validate.sh`, production build/bundle gate,
+  empty browser page/console/failed-response/wire-error arrays, then rebase and
+  repeat if `origin/main` changes before publication.
+
+### Implementation validation receipt
+
+- `NativeWaterMeshRuns` now retains `activatedQuadHighWater` for the lifetime
+  of each concrete index-buffer resource. Any growth, shrink, empty retirement,
+  or reactivation uploads indices through that greatest activated range, while
+  the current vertex upload remains bounded to active quads. Power-of-two
+  replacement still creates a fresh zeroed resource and resets the high water.
+- The focused Mac regression first failed on untouched current main with
+  `24 !== 120`: after a five-quad Frost/Hail/Aura run retired while hidden, its
+  one-quad reactivation replaced the pending 120-byte clear with a 24-byte
+  update. The implementation passes `7/7`; the reactivation update remains 120
+  bytes, the retired tail is zero, and the retained typed-array identity is
+  unchanged.
+- The maintained Water browser journey now has an explicit
+  `SDR_PRIMARY_FROST_REACTIVATION=1` branch and follows the current tutorial
+  prompt-stage owner. Exact Mac Chrome job
+  `job_20260903T134255Z_950697ce96` cast up-left, reached zero primary actors,
+  zero Water mesh actors, and zero runs, then cast down-right with 62 current
+  Frost actors, 46 mesh actors, and 10 runs. The combined page, console, and
+  HTTP-response error array was empty. Visual inspection found no up-left spray
+  in the reactivated down-right frame. Disposable held/reactivated image
+  SHA-256 values were
+  `149b09f170cad87ea7941ecc470f10a3d22dfef28b34e6979c21a60506952b6e`
+  and
+  `52c8d23a8049911fde8091323f9bf06510ae5d8637b61ff78527338c60d74ceb`.
+- Initial exact-tree Mac gate `job_20260903T134438Z_4565074b6a` passed the
+  zero-warning/error backend Release build, all 19 Website/backend contracts,
+  formatting, lint/import/generated checks, the complete frontend and desktop
+  test matrix including the 1,813-case broad group and focused 7-case Water
+  mesh group, production frontend/game-host builds, media policy, and bundle
+  budget. `Game-iCeVVE1l.js` measured 262,676 raw / 79,196 gzip bytes against
+  524,288 / 134,144 limits. This receipt is the sole post-gate write; no
+  runtime, test, build, or browser source changed after that gate.

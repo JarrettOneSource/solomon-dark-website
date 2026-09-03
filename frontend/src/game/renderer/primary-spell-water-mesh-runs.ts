@@ -61,6 +61,7 @@ export interface NativeWaterMeshTextures {
 
 interface NativeWaterMeshRun {
   activeQuadCount: number
+  activatedQuadHighWater: number
   capacity: number
   geometry: Geometry
   indexBuffer: Buffer
@@ -577,6 +578,7 @@ function createNativeWaterMeshRun(
   mesh.renderable = false
   return {
     activeQuadCount: 0,
+    activatedQuadHighWater: 0,
     capacity,
     geometry,
     indexBuffer,
@@ -601,8 +603,13 @@ function updateRunActiveQuads(run: NativeWaterMeshRun, count: number): void {
     )
   }
   if (count !== previousCount) {
+    run.activatedQuadHighWater = Math.max(
+      run.activatedQuadHighWater,
+      count,
+      previousCount,
+    )
     run.indexBuffer.update(
-      Math.max(count, previousCount)
+      run.activatedQuadHighWater
         * INDICES_PER_QUAD
         * Uint32Array.BYTES_PER_ELEMENT,
     )
