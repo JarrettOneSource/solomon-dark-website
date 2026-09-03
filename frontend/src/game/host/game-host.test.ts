@@ -4323,7 +4323,7 @@ test('host forces one correlated owner checkpoint before an explicit leave', asy
   assert.deepEqual(await closed, { code: 1000, reason: 'client disconnect' })
 })
 
-test('thirty-second autosave publishes owner-only saves to a party leader and guest', async (context) => {
+test('thirty-second autosave publishes latest owner-only saves to a party leader and guest', async (context) => {
   assert.equal(GAME_SAVE_AUTOSAVE_INTERVAL_TICKS, 3_000)
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,
@@ -4359,17 +4359,25 @@ test('thirty-second autosave publishes owner-only saves to a party leader and gu
     message.type === 'server-save-checkpoint'
     && message.reason === 'progress'
     && JSON.parse(message.save).continuation.summary.savedAtTick
-      === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
+      >= GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
   ))
   const guestSave = nextMessage(guest.socket, message => (
     message.type === 'server-save-checkpoint'
     && message.reason === 'progress'
     && JSON.parse(message.save).continuation.summary.savedAtTick
-      === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
+      >= GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
   ))
   const [leaderCheckpoint, guestCheckpoint] = await Promise.all([leaderSave, guestSave])
   assert.equal(leaderCheckpoint.type, 'server-save-checkpoint')
   assert.equal(guestCheckpoint.type, 'server-save-checkpoint')
+  assert.ok(
+    JSON.parse(leaderCheckpoint.save).continuation.summary.savedAtTick
+      >= GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
+  )
+  assert.ok(
+    JSON.parse(guestCheckpoint.save).continuation.summary.savedAtTick
+      >= GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
+  )
   assert.equal(
     JSON.parse(leaderCheckpoint.save).continuation.summary.playerId,
     leader.welcome.playerId,

@@ -361,6 +361,11 @@ to the latest 30-second or lifecycle checkpoint.
   mutations target only their owner, while run/topology boundaries retain
   group coverage. Forced leave, deployment, and Game Over still bypass the
   scheduler and cancel an older unsent owner projection.
+- The periodic boundary enqueues at tick 3,000; deferred materialization
+  deliberately records the latest current tick rather than a stale copy of
+  exactly 3,000. The regression therefore requires `savedAtTick >= 3000`,
+  which remains bounded by the scheduler turns while preserving newer progress
+  during CPU catch-up.
 - `GameSaveCoordinator` completes the first in-flight storage transaction and
   replaces every not-yet-started document with the newest checkpoint. All
   superseded callers wait for the write that actually covers them. A failed

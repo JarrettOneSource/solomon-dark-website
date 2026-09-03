@@ -1,7 +1,7 @@
 # Renderer and engine options for Solomon Dark `/game`
 
-**Research date:** 2026-09-03  
-**Checkout inspected:** `f74a441c21f83521e1786ccb355fe5de34261a0e`  
+**Research date:** 2026-09-03
+**Checkout inspected:** `f74a441c21f83521e1786ccb355fe5de34261a0e`
 **Decision scope:** renderer/engine direction for the existing React/TypeScript browser game, with physical iPhone XR on iOS 18 as the floor, host-authoritative 100 Hz simulation and 20 Hz snapshots, and exact stock presentation parity as a hard requirement.
 
 This is an architecture recommendation, not a renderer-migration plan. No source reviewed establishes that changing engines would fix the measured lag, and a renderer migration should not be bundled into the current performance work.
