@@ -43,17 +43,19 @@ const browser = cdpUrl
       executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
       headless: true,
     })
+const ownedContexts = []
 const pages = []
 const sessions = []
 const lanes = []
 const errors = []
 
 try {
-  const context = cdpUrl
-    ? browser.contexts()[0]
-    : await browser.newContext({ viewport: { width: 1600, height: 900 } })
-  if (!context) throw new Error('CDP browser has no default context')
+  const sharedContext = cdpUrl ? browser.contexts()[0] : null
+  if (cdpUrl && !sharedContext) throw new Error('CDP browser has no default context')
   for (let index = 0; index < 2; index += 1) {
+    const context = sharedContext
+      ?? await browser.newContext({ viewport: { width: 1600, height: 900 } })
+    if (!sharedContext) ownedContexts.push(context)
     const page = await context.newPage()
     await page.route('**/deployment.json*', route => {
       const revision = new URL(route.request().url()).searchParams.get('current') || 'local'
@@ -199,6 +201,7 @@ try {
   })}\n`)
 } finally {
   await Promise.allSettled(sessions.map((session) => session.detach()))
+  await Promise.allSettled(ownedContexts.map((context) => context.close()))
   await browser.close()
 }
 
