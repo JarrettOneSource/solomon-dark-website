@@ -250,6 +250,8 @@ test('Settings presentation pins the complete stock shell and control vocabulary
     ['rowPlate', ['ControlPanel', 3, [26, 0, 315, 44]]],
     ['sliderThumb', ['ControlPanel', 18, [26, 45, 64, 25]]],
     ['sliderTrack', ['ControlPanel', 4, [342, 0, 106, 29]]],
+    ['stoneButtonIdle', ['UI', 105, [421, 0, 141, 41]]],
+    ['stoneButtonPressed', ['UI', 106, [877, 282, 141, 41]]],
     ['toggleOff', ['ControlPanel', 8, [92, 46, 82, 30]]],
     ['toggleOn', ['ControlPanel', 9, [407, 31, 82, 30]]],
   ] as const) {
@@ -257,6 +259,27 @@ test('Settings presentation pins the complete stock shell and control vocabulary
     assert.deepEqual([source.atlas, source.record], expected.slice(0, 2))
     assert.deepEqual(nativeUiRecord(source.atlas, source.record).frame, expected[2])
   }
+})
+
+test('Settings root preserves the stock group order and moves dense web controls to its child', () => {
+  const source = readFileSync(new URL('./GameSettingsDialog.tsx', import.meta.url), 'utf8')
+  const rootStart = source.indexOf('function RootSettings')
+  const childStart = source.indexOf('function CloudSettings')
+  assert.ok(rootStart >= 0 && childStart > rootStart)
+  const root = source.slice(rootStart, childStart)
+  const groups = [
+    'SOUND AND MUSIC',
+    'VIDEO SETTINGS',
+    'DARK CLOUD SETTINGS',
+    'CONTROLS',
+    'PERFORMANCE',
+  ]
+  assert.deepEqual([...root.matchAll(/NativeUiSettingsGroup title="([^"]+)"/g)].map(match => match[1]), groups)
+  assert.equal(root.includes('ENABLE ONLINE FEATURES'), false)
+  const child = source.slice(childStart, source.indexOf('function ControlsSettings'))
+  assert.match(child, /ENABLE ONLINE FEATURES/)
+  assert.match(child, /STOCK \/ BROWSER SAVE/)
+  assert.match(child, /ENABLE CHEATS/)
 })
 
 test('browser Lua console installs only for enabled host and rechecks both gates per call', async () => {

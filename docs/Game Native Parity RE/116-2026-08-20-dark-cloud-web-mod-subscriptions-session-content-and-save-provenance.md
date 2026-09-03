@@ -178,3 +178,157 @@ provenance to that boundary.
   `C:/sdw/receipts/solomon-dark-cloud-web-mods-20260821.png`.
 - Remaining scope: no required member remains. Deployment and production
   verification are separate from this implementation receipt.
+
+## 2026-09-02 — Reopened: complete stock Dark Cloud scene composition
+
+### Reported smell and parity question
+
+- Owner report: make the web Dark Cloud look like the stock game under the same
+  stock-asset/UI-system standard as Settings; current Website-only catalog
+  content may remain.
+- This is a secondary report against the earlier visual closures. Those passes
+  proved full-viewport responsive behavior and reused several stock crops, but
+  did not enumerate the complete stock scene painter membership. The browser
+  accepted rounded CSS tabs, OS-font headings/rows, CSS-gradient footer plates,
+  four list corners without the second gold corner set, only two of the six
+  figure/side ornaments, and one-corner-set modals even though the settled
+  fixtures contain all of those extractable members. The skipped rule was the
+  complete asset/painter membership sweep.
+- Falsifiers are any rounded tab or generic card skin, any visible primary
+  chrome label in an OS font, any missing stock scene/frame/footer member, a
+  Search/Sort sheet with an invented Done footer, a Website-only branch that
+  abandons the shared native vocabulary, or a mobile projection that makes the
+  exact members unusable.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000` | Same retail 0.72.5 image as the recovered `DarkCloud` owner. | high |
+| Clean-stock root | `dark-cloud-browser.png`, 1600 by 900, SHA-256 `6fcef51cb2071b117edd87b0a816caf9849562c2041464939a5e28d21f6cf4d1`, plus paired live layout JSON | The root is an authored scene: exact heading/account band, bracket tabs, framed Swipebox, simple bitmap rows, and three distinct footer control families. | high |
+| Clean-stock children | `dark-cloud-search.png` `e61cf40e1ba4f4e8305a0967e4c36d1d400ba577b4bc290493b649cd0bdced58`; `dark-cloud-sort.png` `b6f25f0f312c4adcc8d4442cd536d15a51b6c3147aa47c6535249fc55902d880`; `dark-cloud-options.png` `9d385875a1aee88affec81099c8bc22fc5db838c1ff1fe3fb5b5bbad0de67e49`; `dark-cloud-login-settings.png` `27259c1b5936949030d24f11abaf3686aab75f008b6017d1a3b1c9c903de42fe` | Search and Sort are action-complete framed sheets with no green Done footer. Framed children use two nested `UI.17 x4` corner sets plus two `UI.18` side flourishes; account/settings-style children add the stock green footer. | high |
+| Exact layout membership | `dark-cloud-browser.json` art/action census | Root art is `UI.29 x2`, `UI.31 x2`, `UI.32 x2`, `UI.20 x4`, `UI.107/.108/.109/.110`, `UI.17 x4`, `UI.13 x8`, `UI.101`, `UI.54 x2`, `UI.103 x3`, `UI.53 x6`, `UI.58`, `UI.66`, and `UI.42`; primary geometry is list `[55,173,1545,800]`, tabs `[460,128,1342,197]`, Search `[390,818,480,870]`, Sort `[495,818,585,870]`, primary `[623.5,809.5,976.5,878.5]`, Options `[1017.5,818,1202.5,870]`. | high |
+| Font census | fixture text hooks and Website generated catalog | Root chrome uses `Fonts.308..349` (`heading`) for `THE DARK CLOUD` and `Fonts.216..307` (`menu`) for account, tabs, headings, and footer labels. | high |
+| Current Mac browser baseline | Website `origin/main` `a2b19c2f5ab698fbc28e6e01d3cda94cfe025f1e`; Chrome captures: desktop root `b6dad37b284b1cfd269d8acc964a4a1b52fbec214b1c4da813a68d0046307c7d`, detail `38ff2a85c3c3a30f3897d1afba829b96c5c252d89443b62b86408537e387361b`, portrait `3e97e6886da43ae3b1d84f9995fd09d2b13d4b09d4b1c01abf7b5202a03c4c9a`, landscape `94e34fea3455a3bcf6a1f191eb51aa7bcd53d42c0ebf128bdbc197057c24a124` | The current root is recognizably themed but reads as a modern catalog: rounded border tabs, card rows/thumbnails, CSS button skins, missing stock background ornaments, and incomplete native frames. The journey completed; only Vite's expected missing `deployment.json` produced two 404s. | high |
+
+### System boundary and membership inventory
+
+Native system: **Dark Cloud presentation owner**, from full-stage background
+composition through account heading, tab selection, Swipebox/list states,
+footer controls, Search/Sort/Options/detail children, interruption, responsive
+projection, and teardown. Subscription, party, layout-sharing, comment, and
+content-download semantics remain with their current Website owners.
+
+| Member / branch | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| full 1600 by 900 scene and stone/leather surfaces | `DarkCloud::Render 0x00594FC0`; root capture | `exact-ported` | desktop coordinates match; smaller viewports project the same vocabulary |
+| top flourishes and six figure/side ornaments | `UI.29 x2`, `UI.31 x2`, `UI.32 x2`, `UI.20 x4` | `exact-ported` | every record exists once at each authored side/edge; responsive hiding is explicit platform projection |
+| Swipebox outer stone and inner gold corners | `UI.107/.108/.109/.110` plus `UI.17 x4` | `exact-ported` | both corner families paint; neither is replaced by plain CSS borders |
+| heading, beta, account, column, tab, and footer type | heading and menu bitmap wrappers | `exact-ported` | no second visible OS-font copy in primary chrome |
+| four visible Website tabs | native `UI.13` tab family; native three controls plus Multiplayer label | `exact-ported` visual vocabulary; Website labels remain designed extensions | two exact brackets per tab, fixed X, selected eight-pixel rise |
+| Mods, Subscribed, Parties, and Layouts list bodies | `DarkCloudSwipebox` plus Website data owners | `exact-ported` stock list vocabulary; Website content is `out-of-system` semantics | simple row stream, stock selection colour/order, no rounded/card container |
+| loading, empty, error, retry, and developer-presence rows | Website states | `out-of-system` semantics; exact stock row/inset vocabulary | every branch stays inside the same Swipebox grammar |
+| Search and Sort footer controls | `UI.103/.104`, `UI.53 x2`, `UI.58` or `.66` | `exact-ported` | exact idle/pressed art and HotRects `[390,818,480,870]` / `[495,818,585,870]` |
+| primary footer control | `UI.101/.102`, `UI.54 x2` | `exact-ported` | exact 353 by 69 body, pressed offset/art, and semantic rectangle |
+| Options footer control | `UI.103/.104`, `UI.53 x2`, menu label | `exact-ported` | exact 185 by 52 body and selected-content action without an inert row |
+| Search child | clean Search capture, 520 by 205 inner panel | `exact-ported` | two frame-corner sets, two flourishes, field/action rows, no invented Done footer |
+| Sort child | clean Sort capture, 320-pixel inner panel | `exact-ported` | two frame-corner sets, two flourishes, native inset options, no invented Done footer |
+| selected-content Options and Website mod details | native Options/account dialog family plus Website content | `exact-ported` frame/control vocabulary; content semantics `out-of-system` | double frame, stock heading/inset/action/footer families; scroll remains browser policy |
+| party and layout-sharing content | Website extensions | `out-of-system` semantics; exact stock list/panel vocabulary | no separate modern card skin |
+| Esc menu | `SimpleMenu` entry 140 | `verified-already-at-parity` and out of this repaint | existing exact row/chrome/lifecycle path remains untouched |
+| portrait and short-landscape touch projection | browser platform policy | `exact-ported` web projection | no horizontal overflow; visible actions at least 44 CSS pixels; stock members keep identity |
+
+No member is blocked by the browser platform. Responsive reflow is a Website
+projection because retail is fixed at 1600 by 900, but the browser can preserve
+the exact assets, typography, state substitutions, and painter grouping.
+
+### Native ownership thread and recovered contract
+
+- `DarkCloud` owns one retained scene, its `DarkCloudSwipebox`, selection,
+  account band, footer controls, and modal children. Search/Sort/Options return
+  to that retained scene; Esc raises the independent shared `SimpleMenu`.
+- The root's painter order is background stone, upper flourishes/figures,
+  Swipebox surface and both frame families, tab brackets/text, list text, then
+  footer bodies/surrounds/icons/text. Modal dim overlays the retained root and
+  paints the double frame, body, inset controls, and any owned footer.
+- Native tabs move only their label and bracket Y state. Footer families use
+  distinct records; a CSS gradient cannot substitute for any of them.
+- Website rows may contain thumbnails, versions, subscriptions, parties, and
+  layouts, but those additions consume the stock row/inset vocabulary. Data
+  fetching, mutations, download state, comments, input ownership, account
+  authority, and teardown do not become UI-kit state.
+
+### Web implementation consequence
+
+- Add one pure Dark Cloud presentation contract and one semantic React module
+  behind the maintained native UI kit. It owns exact record membership,
+  desktop rectangles, tab state, double-frame children, and the three footer
+  button families.
+- Recompose `DarkCloudScene`, `DarkCloudPanel`, and the mod-detail shell through
+  that module. Remove rounded CSS tabs, generic gradient plates, duplicated raw
+  atlas-coordinate knowledge, and the incomplete one-corner-set panel path.
+- Preserve every Website content/action branch. Search and Sort close from their
+  committing action or Back/Escape and no longer grow an unobserved Done footer.
+
+### Validation contract
+
+- Focused tests pin every root/modal record, exact desktop rectangles, font
+  wrappers, four-tab selected/resting geometry, idle/pressed footer art, and
+  absence of generic tab/footer skins.
+- Mac Chrome 1600 by 900 must exercise Mods, Subscribed Mods, Parties, Layouts,
+  selection, Search, Sort, Options/detail, account state, and Esc Settings
+  return. Root/list/tab/footer/modal bounds and record counts are compared with
+  the clean stock fixtures; page, console, failed-response, and unsupported
+  bitmap-glyph arrays must be empty.
+- Mac Chrome DPR-2 portrait 390 by 844 and landscape 844 by 390 must retain zero
+  horizontal overflow, list scrolling, and at least 44-pixel visible actions.
+  The exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh`.
+
+### Implementation validation receipt
+
+- `native-dark-cloud-contract.ts` now owns the complete root record inventory,
+  exact 1600 by 900 rectangles, four Website-tab bands over the recovered
+  `UI.13` grammar, and pure `UI.103/.104 + UI.53` tool-control plans.
+  `NativeDarkCloudPresentation.tsx` is the semantic React owner for heading,
+  bitmap text, stage art, both list-frame corner families, scaled tabs, exact
+  Search/Sort/Options controls, the standard primary control, and double-frame
+  child panels.
+- `DarkCloudScene`, `DarkCloudPanel`, and `DarkCloudModDetail` now compose those
+  modules. The rounded CSS tabs, CSS-gradient primary/tool/green controls,
+  incomplete one-frame child, and raw per-crop imports are gone. Sixteen
+  zero-consumer duplicate crops were deleted; the generated stock UI atlas is
+  the sole chrome source, while exact `leather.png` and `stone-wall.png` remain
+  only because CSS tiles those repeatable surfaces.
+- Desktop Mac Chrome returned `status: ok` and exact recovered geometry: list
+  `[55,173,1490,627]`, tabs `[460,128,882,69]`, selected/resting left brackets
+  `[460,128,34,65]` / `[630,136,34,51]`, Search `[390,818,90,52]`, Sort
+  `[495,818,90,52]`, primary `[623.5,809.5,353,69]`, and Options
+  `[1017.5,818,185,52]`. The root exposed the full ten scene ornaments, eight
+  list-corner records, eight tab brackets, and exact footer record families;
+  Search/Sort had eight `UI.17` corners plus two `UI.18` flourishes and no
+  invented Done, while detail used the same double frame plus `UI.105`.
+- The same journey exercised idle/pressed substitutions for Search
+  (`UI.103/.104`), primary (`UI.101/.102`), Options (`UI.103/.104`), all four
+  tabs, selection, Search, Sort, Options and double-click detail entry,
+  comments, subscribe/disable/enable/unsubscribe, Parties, Layouts, sign-out,
+  guest re-entry, and the shared Esc menu. Page, console, failed-response, and
+  unsupported-bitmap-glyph arrays were empty.
+- DPR-2 portrait 390 by 844 measured list `[7,124,376,653]`, zero horizontal
+  overflow, and 44-pixel minimum actions. Landscape 844 by 390 measured list
+  `[12,96,820,236]`, zero overflow, and 44-pixel minimum actions. Final desktop,
+  guest, detail, portrait, landscape, Layouts, and Parties captures hash to
+  `25e65a4b1ada000950100aa3a10466c9b0ea158cdcc8faf9771d6eb25b8c9b98`,
+  `a17192b349efcd89f8b0039f49f55dc21b48e5fef3b68dd67ab9cf84dadd7430`,
+  `a0083af80655baaaf783edc0586b6336986393a3675173d137599bed6132c981`,
+  `99be148f593b40aeab5db3ee30b86608d757350be116dccb4fc3034502b0b65f`,
+  `5421e69d6040720eda720fe53957f1561833c6115c50d5e3142a5dd54dab8ab4`,
+  `be636037fd8a0a87967a1ac7855894d6e93efbb508c16bebb66c0f6dc6e95456`,
+  and `37e99e8ed504c946e9887ee3919502ad5321c9fcc8763addbe0a8529f7cd7853`.
+- Stock-image comparison chose `(0,0)` for the top-left frame, Search, and Sort
+  and `(0,-1)` for the bottom-left frame; mean absolute channel deltas were
+  `12.48`, `13.16`, `13.29`, and `10.99`. Primary/Options content differs by
+  design, but their DOM rectangles and native record memberships are exact.
+- The shared validation manifest, focused suites, native-UI workbench, and full
+  canonical-gate receipt are recorded in Settings entry 130. No presentation
+  member is browser-blocked. Commit, push, deployment, and production restart
+  were not requested or performed.

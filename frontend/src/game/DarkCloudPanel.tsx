@@ -1,5 +1,4 @@
-import accountFlourish from '../assets/game/dark-cloud/account-flourish.png'
-import cornerGold from '../assets/game/dark-cloud/corner-gold.png'
+import { NativeDarkCloudPanelArt } from './native-ui/react.ts'
 
 interface DarkCloudPanelOrnamentsProps {
   /** Pentagram-skull flourishes outside the left/right frame lines. */
@@ -14,18 +13,5 @@ interface DarkCloudPanelOrnamentsProps {
 export default function DarkCloudPanelOrnaments({
   flourishes = true,
 }: DarkCloudPanelOrnamentsProps) {
-  return (
-    <>
-      <img className="dark-cloud-panel-corner top-left" src={cornerGold} alt="" />
-      <img className="dark-cloud-panel-corner top-right" src={cornerGold} alt="" />
-      <img className="dark-cloud-panel-corner bottom-left" src={cornerGold} alt="" />
-      <img className="dark-cloud-panel-corner bottom-right" src={cornerGold} alt="" />
-      {flourishes ? (
-        <>
-          <img className="dark-cloud-panel-flourish left" src={accountFlourish} alt="" />
-          <img className="dark-cloud-panel-flourish right" src={accountFlourish} alt="" />
-        </>
-      ) : null}
-    </>
-  )
+  return <NativeDarkCloudPanelArt flourishes={flourishes} />
 }

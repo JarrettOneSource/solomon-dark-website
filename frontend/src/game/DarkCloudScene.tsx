@@ -9,15 +9,6 @@ import {
   type ReactNode,
 } from 'react'
 
-import accountFlourish from '../assets/game/dark-cloud/account-flourish.png'
-import borderBottomLeft from '../assets/game/dark-cloud/border-corner-bl.png'
-import borderBottomRight from '../assets/game/dark-cloud/border-corner-br.png'
-import borderTopLeft from '../assets/game/dark-cloud/border-corner-tr.png'
-import borderTopRight from '../assets/game/dark-cloud/border-corner-tl.png'
-import searchIcon from '../assets/game/dark-cloud/search.png'
-import sortIcon from '../assets/game/dark-cloud/sort.png'
-import wizardLeft from '../assets/game/dark-cloud/wizard-left.png'
-import wizardRight from '../assets/game/dark-cloud/wizard-right.png'
 import {
   api,
   type ActiveWebMod,
@@ -38,6 +29,15 @@ import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
 } from './DarkCloudModDetail.tsx'
 import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
+import {
+  NativeDarkCloudHeading,
+  NativeDarkCloudListFrameArt,
+  NativeDarkCloudPrimaryButton,
+  NativeDarkCloudSceneArt,
+  NativeDarkCloudTabs,
+  NativeDarkCloudText,
+  NativeDarkCloudToolButton,
+} from './native-ui/react.ts'
 import {
   directoryPartyAction,
   directoryPartyPresentation,
@@ -327,48 +327,18 @@ export default function DarkCloudScene({
   return (
     <section className="dark-cloud-scene" aria-label="The Dark Cloud">
       <div className="dark-cloud-wall" aria-hidden />
-      <img className="dark-cloud-wizard dark-cloud-wizard-left" src={wizardLeft} alt="" />
-      <img className="dark-cloud-wizard dark-cloud-wizard-right" src={wizardRight} alt="" />
+      <NativeDarkCloudSceneArt />
       {/* The menu skull is the stage-level GameMenuSkull the host mounts over this scene. */}
 
-      <header className="dark-cloud-heading">
-        <h1>THE DARK CLOUD</h1>
-        {accountUsername ? (
-          <strong>{accountUsername.toUpperCase()}</strong>
-        ) : (
-          <button type="button" onClick={() => window.location.assign('/login')}>
-            <strong>YOU ARE SIGNED IN AS A GUEST.</strong>
-            <span>SIGN IN</span>
-          </button>
-        )}
-        <img className="dark-cloud-account-flourish dark-cloud-account-flourish-left" src={accountFlourish} alt="" />
-        <img className="dark-cloud-account-flourish dark-cloud-account-flourish-right" src={accountFlourish} alt="" />
-      </header>
+      <NativeDarkCloudHeading
+        accountUsername={accountUsername}
+        onAccount={accountUsername ? onMenu : () => window.location.assign('/login')}
+      />
 
-      <nav className="dark-cloud-tabs" aria-label="Dark Cloud sections">
-        {([
-          ['mods', 'MODS'],
-          ['subscribed', 'SUBSCRIBED MODS'],
-          ['parties', 'PARTIES'],
-          ['layouts', 'LAYOUTS'],
-        ] as const).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className={tab === value ? 'selected' : ''}
-            aria-current={tab === value ? 'page' : undefined}
-            onClick={() => changeTab(value)}
-          >
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
+      <NativeDarkCloudTabs onSelect={changeTab} selectedId={tab} />
 
       <main className="dark-cloud-list-frame">
-        <img src={borderTopLeft} className="dark-cloud-corner top-left" alt="" />
-        <img src={borderTopRight} className="dark-cloud-corner top-right" alt="" />
-        <img src={borderBottomLeft} className="dark-cloud-corner bottom-left" alt="" />
-        <img src={borderBottomRight} className="dark-cloud-corner bottom-right" alt="" />
+        <NativeDarkCloudListFrameArt />
 
         {tab === 'layouts' ? (
           <Suspense fallback={<p className="dark-cloud-empty">OPENING LAYOUTS…</p>}>
@@ -377,7 +347,9 @@ export default function DarkCloudScene({
         ) : (
           <>
             <div className={`dark-cloud-columns dark-cloud-columns-${tab}`} aria-hidden>
-              {columnLabels(tab).map(label => <span key={label}>{label}</span>)}
+              {columnLabels(tab).map(label => (
+                <span key={label}><NativeDarkCloudText scale={0.62} text={label} /></span>
+              ))}
             </div>
             <div className="dark-cloud-list-status">{statusControls}</div>
 
@@ -445,24 +417,19 @@ export default function DarkCloudScene({
         <div className="dark-cloud-footer-tools">
           {tab !== 'layouts' ? (
             <>
-              <button type="button" className="dark-cloud-icon-button" onClick={() => {
+              <NativeDarkCloudToolButton icon="search" label="Search" onClick={() => {
                 setDraftQuery(query)
                 setSearchOpen(true)
-              }} aria-label="Search">
-                <img src={searchIcon} alt="" />
-              </button>
-              <button type="button" className="dark-cloud-icon-button" onClick={() => setSortOpen(true)} aria-label="Sort">
-                <img src={sortIcon} alt="" />
-              </button>
+              }} />
+              <NativeDarkCloudToolButton icon="sort" label="Sort" onClick={() => setSortOpen(true)} />
             </>
           ) : null}
         </div>
         {tab === 'layouts' ? (
           <div className="dark-cloud-layout-footer">SHARE A CODE. LOAD IT ANYWHERE.</div>
         ) : (
-          <button
+          <NativeDarkCloudPrimaryButton
             type="button"
-            className="dark-cloud-primary-button"
             disabled={tab === 'parties'
               ? selectedPartyAction === null
                 || selectedPartyAction === 'wait'
@@ -477,8 +444,20 @@ export default function DarkCloudScene({
                   ? 'IN GAME'
                   : selectedPartyAction === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
               : 'VIEW MOD'}
-          </button>
+          </NativeDarkCloudPrimaryButton>
         )}
+        {tab !== 'layouts' ? (
+          <NativeDarkCloudToolButton
+            className="dark-cloud-options-button"
+            disabled={selected?.kind !== 'mod'}
+            icon={null}
+            label="OPTIONS"
+            nativeWidth={185}
+            onClick={() => {
+              if (selected?.kind === 'mod') openMod(selected.mod)
+            }}
+          />
+        ) : null}
         <div className="dark-cloud-footer-status">{statusControls}</div>
       </footer>
 
@@ -488,7 +467,7 @@ export default function DarkCloudScene({
         </p>
       ) : null}
       {searchOpen ? (
-        <DarkCloudModal title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
+        <DarkCloudModal kind="search" title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
           <div className="dark-cloud-inset">
             <div className="dark-cloud-inset-row dark-cloud-field-row">
               <label htmlFor="dark-cloud-search-input">
@@ -526,7 +505,7 @@ export default function DarkCloudScene({
       ) : null}
 
       {sortOpen ? (
-        <DarkCloudModal title={tab === 'parties' ? 'SORT PARTIES BY…' : 'SORT MODS BY…'} onClose={() => setSortOpen(false)}>
+        <DarkCloudModal kind="sort" title={tab === 'parties' ? 'SORT PARTIES BY…' : 'SORT MODS BY…'} onClose={() => setSortOpen(false)}>
           <div className="dark-cloud-inset" role="group" aria-label="Sort order">
             {(tab === 'parties' ? [
               ['members', 'MOST WIZARDS'],
@@ -602,14 +581,18 @@ function ModRow({
       >
         <DarkCloudMedia alt={mod.name} className="dark-cloud-row-thumbnail" src={mod.thumbnailUrl} />
         <span className="dark-cloud-row-copy">
-          <strong>{mod.name}</strong>
+          <strong><NativeDarkCloudText scale={0.62} text={mod.name.toUpperCase()} /></strong>
           <small>{mod.summary}</small>
           <span className="dark-cloud-row-tags">{mod.tags.slice(0, 3).join(' · ')}</span>
         </span>
-        <span className="dark-cloud-row-author">{mod.author.username}</span>
-        <span className="dark-cloud-row-version">v{mod.latestVersion}</span>
+        <span className="dark-cloud-row-author"><NativeDarkCloudText scale={0.46} text={mod.author.username.toUpperCase()} /></span>
+        <span className="dark-cloud-row-version"><NativeDarkCloudText scale={0.46} text={`V${mod.latestVersion.toUpperCase()}`} /></span>
         <span className={`dark-cloud-row-state ${subscription?.enabled ? 'enabled' : ''}`}>
-          {subscription ? subscription.enabled ? 'ENABLED' : 'DISABLED' : 'NOT SUBSCRIBED'}
+          <NativeDarkCloudText
+            scale={0.42}
+            text={subscription ? subscription.enabled ? 'ENABLED' : 'DISABLED' : 'NOT SUBSCRIBED'}
+            tint={subscription?.enabled ? 0xa9d29d : 0xa99a70}
+          />
         </span>
       </button>
       <div className="dark-cloud-row-actions">
@@ -678,7 +661,7 @@ function PartyRow({
       >
         <span className="dark-cloud-party-mark" aria-hidden>{party.leader.slice(0, 1).toUpperCase()}</span>
         <span className="dark-cloud-row-copy">
-          <strong>{`${party.leader}'s party`.toUpperCase()}</strong>
+          <strong><NativeDarkCloudText scale={0.62} text={`${party.leader}'S PARTY`.toUpperCase()} /></strong>
           <span className="dark-cloud-party-flags">
             {party.sessionKind === 'private-college' ? <em>PRIVATE COLLEGE</em> : null}
             {party.modCount > 0 ? <em>MODDED · {party.modCount}</em> : null}
@@ -686,10 +669,10 @@ function PartyRow({
           </span>
           <small>{party.members.join(' · ')}</small>
         </span>
-        <span className="dark-cloud-party-members">{presentation.squad}</span>
-        <span className={`dark-cloud-party-status ${party.status}`}>{presentation.status}</span>
+        <span className="dark-cloud-party-members"><NativeDarkCloudText scale={0.42} text={presentation.squad.toUpperCase()} /></span>
+        <span className={`dark-cloud-party-status ${party.status}`}><NativeDarkCloudText scale={0.42} text={presentation.status.toUpperCase()} /></span>
         <span className="dark-cloud-party-location" title={presentation.location}>
-          {presentation.location}
+          <NativeDarkCloudText scale={0.4} text={presentation.location} />
         </span>
       </button>
       <div className="dark-cloud-row-actions">
@@ -800,10 +783,12 @@ function DeveloperPresenceSection({
 
 function DarkCloudModal({
   children,
+  kind,
   onClose,
   title,
 }: {
   children: ReactNode
+  kind: 'search' | 'sort'
   onClose: () => void
   title: string
 }) {
@@ -821,14 +806,13 @@ function DarkCloudModal({
     <div className="dark-cloud-modal-backdrop" role="presentation" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className="dark-cloud-modal dark-cloud-panel" role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`dark-cloud-modal dark-cloud-modal-${kind} dark-cloud-panel`} role="dialog" aria-modal="true" aria-label={title}>
         <DarkCloudPanelOrnaments />
         <div className="dark-cloud-panel-body">
-          <h2 className="dark-cloud-panel-caption">{title}</h2>
+          <h2 className="dark-cloud-panel-caption">
+            <NativeDarkCloudText scale={0.68} text={title} />
+          </h2>
           {children}
-        </div>
-        <div className="dark-cloud-panel-footer">
-          <button data-game-back="true" type="button" className="dark-cloud-modal-done dark-cloud-stone-button" onClick={onClose}>DONE</button>
         </div>
       </section>
     </div>

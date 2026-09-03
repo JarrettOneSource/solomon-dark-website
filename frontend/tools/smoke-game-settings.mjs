@@ -146,6 +146,19 @@ try {
   assert.equal(await dialog.getAttribute('data-settings-context'), 'title')
   assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
   assert.equal(await dialog.getByText('RESOLUTION', { exact: true }).count(), 0)
+  assert.deepEqual(
+    await dialog.locator('.game-settings-content > .game-settings-group').evaluateAll(groups => (
+      groups.map(group => group.getAttribute('aria-label'))
+    )),
+    ['SOUND AND MUSIC', 'VIDEO SETTINGS', 'DARK CLOUD SETTINGS', 'CONTROLS', 'PERFORMANCE'],
+  )
+  const footer = dialog.getByRole('button', { exact: true, name: 'DONE' })
+  assert.equal(await footer.locator('[data-native-ui-record="UI.105"]').count(), 1)
+  await footer.dispatchEvent('pointerdown', { button: 0, pointerType: 'mouse' })
+  assert.equal(await footer.locator('[data-native-ui-record="UI.106"]').count(), 1)
+  await footer.dispatchEvent('pointerup', { button: 0, pointerType: 'mouse' })
+  await dialog.getByRole('button', { name: 'ONLINE AND ACCOUNT' }).click()
+  assert.equal(await dialog.getAttribute('data-settings-page'), 'cloud')
   const onlineMaster = dialog.getByRole('button', { name: 'ENABLE ONLINE FEATURES' })
   const onlineChildren = [
     'ENABLE ACTIVITY MESSAGES',
@@ -169,6 +182,8 @@ try {
     assert.equal(await child.getAttribute('aria-pressed'), 'true')
     assert.equal(await child.isEnabled(), true)
   }
+  await dialog.getByRole('button', { exact: true, name: 'BACK' }).click()
+  assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
   await setRange(dialog.getByRole('slider', { name: 'SOUND VOL:' }), 65)
   await setRange(dialog.getByRole('slider', { name: 'MUSIC VOL:' }), 40)
   await setRange(dialog.getByRole('slider', { name: 'CAMERA FOV' }), 125)
@@ -647,17 +662,27 @@ async function enterCreateAfterCollegeAdmission(page, host) {
 async function assertNativeSettingsPresentation(dialog, { desktop }) {
   const receipt = await dialog.evaluate((node) => {
     const bounds = node.getBoundingClientRect()
+    const rect = selector => {
+      const value = node.querySelector(selector).getBoundingClientRect()
+      return { height: value.height, width: value.width, x: value.x, y: value.y }
+    }
     const records = [...node.querySelectorAll('.native-settings-panel-art [data-native-ui-record]')]
       .map((record) => record.getAttribute('data-native-ui-record'))
     return {
       actionArrows: node.querySelectorAll('[data-native-ui-record="ControlPanel.0"]').length,
-      bounds: { height: bounds.height, width: bounds.width },
+      bounds: { height: bounds.height, width: bounds.width, x: bounds.x, y: bounds.y },
+      footerBounds: rect('.game-settings-close'),
       frameRecords: records,
+      leftFlourishBounds: rect('.native-settings-panel-art .game-settings-frame-flourish.left'),
       nativeFonts: [...node.querySelectorAll('[data-native-ui-font]')].map((font) => (
         font.getAttribute('data-native-ui-font')
       )),
       rowPlates: node.querySelectorAll('[data-native-ui-plan] [data-native-ui-record="ControlPanel.3"]').length,
       sliderTracks: node.querySelectorAll('[data-native-ui-strip="ControlPanel.4"]').length,
+      stoneButtons: [...node.querySelectorAll(
+        '.game-settings-close [data-native-ui-record="UI.105"], .game-settings-close [data-native-ui-record="UI.106"]',
+      )].map(button => button.getAttribute('data-native-ui-record')),
+      topLeftFrameBounds: rect('.native-settings-panel-art .game-settings-frame-corner.top-left'),
       toggles: [...node.querySelectorAll(
         '[data-native-ui-record="ControlPanel.8"], [data-native-ui-record="ControlPanel.9"]',
       )].map((toggle) => toggle.getAttribute('data-native-ui-record')),
@@ -672,9 +697,12 @@ async function assertNativeSettingsPresentation(dialog, { desktop }) {
   assert.ok(receipt.sliderTracks >= 4)
   assert.ok(receipt.toggles.length > 0)
   assert.ok(receipt.actionArrows > 0)
+  assert.deepEqual(receipt.stoneButtons, ['UI.105'])
   if (desktop) {
-    assert.ok(Math.abs(receipt.bounds.width - 600) < 0.1, JSON.stringify(receipt.bounds))
-    assert.ok(Math.abs(receipt.bounds.height - 700) < 0.1, JSON.stringify(receipt.bounds))
+    assert.deepEqual(receipt.bounds, { height: 700, width: 600, x: 500, y: 100 })
+    assert.deepEqual(receipt.footerBounds, { height: 41, width: 300, x: 650, y: 739.5 })
+    assert.deepEqual(receipt.topLeftFrameBounds, { height: 83, width: 80, x: 490, y: 90 })
+    assert.deepEqual(receipt.leftFlourishBounds, { height: 262, width: 86, x: 402, y: 319 })
   } else {
     assert.ok(receipt.bounds.width <= 600)
     assert.ok(receipt.bounds.height <= 700)

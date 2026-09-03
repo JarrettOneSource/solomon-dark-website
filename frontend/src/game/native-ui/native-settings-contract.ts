@@ -19,6 +19,8 @@ export const NATIVE_SETTINGS_PRESENTATION = Object.freeze({
     rowPlate: Object.freeze({ atlas: 'ControlPanel' as const, record: 3 }),
     sliderThumb: Object.freeze({ atlas: 'ControlPanel' as const, record: 18 }),
     sliderTrack: Object.freeze({ atlas: 'ControlPanel' as const, record: 4 }),
+    stoneButtonIdle: Object.freeze({ atlas: 'UI' as const, record: 105 }),
+    stoneButtonPressed: Object.freeze({ atlas: 'UI' as const, record: 106 }),
     toggleOff: Object.freeze({ atlas: 'ControlPanel' as const, record: 8 }),
     toggleOn: Object.freeze({ atlas: 'ControlPanel' as const, record: 9 }),
   }),

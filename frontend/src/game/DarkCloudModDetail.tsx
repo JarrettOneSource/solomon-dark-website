@@ -11,6 +11,7 @@ import { api, type ModComment, type ModDetail, type ModSubscription, type ModSum
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format.ts'
 import DarkCloudMedia from './DarkCloudMedia.tsx'
 import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
+import { NativeUiStoneButton } from './native-ui/react.ts'
 
 export type DarkCloudSubscriptionAction = 'disable' | 'enable' | 'subscribe' | 'unsubscribe'
 
@@ -393,9 +394,9 @@ export default function DarkCloudModDetail({
         </div>
 
         <footer className="dark-cloud-panel-footer">
-          <button type="button" className="dark-cloud-stone-button dark-cloud-detail-done" onClick={onClose}>
+          <NativeUiStoneButton className="dark-cloud-stone-button dark-cloud-detail-done" onClick={onClose}>
             DONE
-          </button>
+          </NativeUiStoneButton>
         </footer>
       </section>
     </div>

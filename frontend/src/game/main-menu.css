@@ -405,14 +405,14 @@
   background: none;
 }
 
-.native-settings-panel-art .game-settings-frame-corner.top-left { top: -10px; left: -10px; }
-.native-settings-panel-art .game-settings-frame-corner.top-right { top: -10px; right: -10px; transform: scaleX(-1); }
-.native-settings-panel-art .game-settings-frame-corner.bottom-left { bottom: -10px; left: -10px; transform: scaleY(-1); }
-.native-settings-panel-art .game-settings-frame-corner.bottom-right { right: -10px; bottom: -10px; transform: scale(-1); }
+.native-settings-panel-art .game-settings-frame-corner.top-left { top: -13px; left: -13px; }
+.native-settings-panel-art .game-settings-frame-corner.top-right { top: -13px; right: -13px; transform: scaleX(-1); }
+.native-settings-panel-art .game-settings-frame-corner.bottom-left { bottom: -13px; left: -13px; transform: scaleY(-1); }
+.native-settings-panel-art .game-settings-frame-corner.bottom-right { right: -13px; bottom: -13px; transform: scale(-1); }
 
-.native-settings-panel-art .game-settings-frame-flourish { top: 219px; }
-.native-settings-panel-art .game-settings-frame-flourish.left { left: -98px; transform: none; }
-.native-settings-panel-art .game-settings-frame-flourish.right { right: -98px; transform: scaleX(-1); }
+.native-settings-panel-art .game-settings-frame-flourish { top: 216px; }
+.native-settings-panel-art .game-settings-frame-flourish.left { left: -101px; transform: none; }
+.native-settings-panel-art .game-settings-frame-flourish.right { right: -101px; transform: scaleX(-1); }
 
 .game-settings-header {
   position: relative;
@@ -752,28 +752,15 @@
 .game-settings-close {
   position: relative;
   z-index: 3;
-  display: grid;
   align-self: center;
   justify-self: center;
-  width: min(300px, calc(100% - 80px));
-  min-height: 42px;
-  padding: 6px 18px;
-  border: 4px ridge #4d5740;
-  color: #f2f0dc;
-  background: linear-gradient(#5f9a65, #315736);
-  box-shadow: inset 0 0 10px rgb(255 255 255 / 0.18), 0 2px 3px #000;
-  font: 700 17px var(--font-display);
-  cursor: pointer;
-  place-items: center;
-  text-shadow: 0 1px 2px #000;
+  max-width: calc(100% - 40px);
+  transform: translateY(-2px);
 }
 
-.game-settings-close:hover,
 .game-settings-close:focus-visible {
-  color: #fff;
-  filter: brightness(1.16);
-  outline: 1px solid #fff0b7;
-  outline-offset: 2px;
+  outline-width: 1px;
+  outline-offset: 3px;
 }
 
 @keyframes settings-listen-pulse { 50% { opacity: 0.45; } }

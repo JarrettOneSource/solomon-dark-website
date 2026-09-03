@@ -17,6 +17,7 @@ import {
   NativeSettingsText,
   NativeSettingsToggleArt,
 } from './NativeSettingsPresentation.tsx'
+import NativeUiStoneButton from './NativeUiStoneButton.tsx'
 import '../main-menu.css'
 
 interface NativeUiSettingsPanelProps extends Omit<
@@ -68,20 +69,13 @@ export function NativeUiSettingsPanel({
         <div className="game-settings-content" ref={contentRef}>
           {children}
         </div>
-        <button
+        <NativeUiStoneButton
           className="game-settings-close"
           data-game-back={footerBack || undefined}
           onClick={onFooter}
-          type="button"
         >
-          <span className="sr-only native-ui-sr-only">{footerLabel}</span>
-          <NativeSettingsText
-            align="center"
-            scale={1.15}
-            text={footerLabel}
-            tint={0xf2f0dc}
-          />
-        </button>
+          {footerLabel}
+        </NativeUiStoneButton>
       </section>
     </div>
   )

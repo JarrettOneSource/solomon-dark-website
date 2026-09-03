@@ -204,7 +204,7 @@ try {
   })
   await declineTutorial(viewer)
   await viewer.getByRole('button', { name: 'Explore the Dark Cloud' }).click()
-  await viewer.getByRole('button', { name: 'PARTIES', exact: true }).click()
+  await viewer.getByRole('tab', { name: 'PARTIES', exact: true }).click()
   const listedRow = viewer.locator(`[data-party-id="${directory.id}"]`)
   await listedRow.waitFor()
   for (const text of [

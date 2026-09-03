@@ -52,7 +52,7 @@ import {
 } from './native-ui/react.ts'
 
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
-type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
+type SettingsPage = 'cloud' | 'controls' | 'mobile-ui' | 'performance' | 'root' | 'save-transfer'
 
 const MobileUiEditor = lazy(() => import('./MobileUiEditor.tsx'))
 const MobileUiLayoutSettingsAction = lazy(() => import('./MobileUiLayoutSettingsAction.tsx'))
@@ -246,6 +246,15 @@ export default function GameSettingsDialog({
     >
       {page === 'root' ? (
             <RootSettings
+              onChange={onChange}
+              onOpen={(nextPage) => {
+                if (nextPage === 'mobile-ui') openMobileUi()
+                else setPage(nextPage)
+              }}
+              settings={settings}
+            />
+      ) : page === 'cloud' ? (
+            <CloudSettings
               accountUsername={accountUsername}
               context={context}
               onChange={onChange}
@@ -276,6 +285,68 @@ export default function GameSettingsDialog({
 }
 
 function RootSettings({
+  onChange,
+  onOpen,
+  settings,
+}: {
+  onChange: (settings: GameSettings) => void
+  onOpen: (page: SettingsPage) => void
+  settings: GameSettings
+}) {
+  return (
+    <>
+      <NativeUiSettingsGroup title="SOUND AND MUSIC">
+        <NativeUiSettingsRange
+          autoFocus
+          label="SOUND VOL:"
+          maximum={100}
+          minimum={0}
+          onChange={(soundVolumePercent) => onChange({ ...settings, soundVolumePercent })}
+          value={settings.soundVolumePercent}
+        />
+        <NativeUiSettingsRange
+          label="MUSIC VOL:"
+          maximum={100}
+          minimum={0}
+          onChange={(musicVolumePercent) => onChange({ ...settings, musicVolumePercent })}
+          value={settings.musicVolumePercent}
+        />
+      </NativeUiSettingsGroup>
+
+      <NativeUiSettingsGroup title="VIDEO SETTINGS">
+        <FullscreenSetting />
+        <NativeUiSettingsRange
+          label="CAMERA FOV"
+          maximum={CAMERA_FOV_MAX_PERCENT}
+          minimum={CAMERA_FOV_MIN_PERCENT}
+          onChange={(cameraFovPercent) => onChange({ ...settings, cameraFovPercent })}
+          value={settings.cameraFovPercent}
+        />
+        <NativeUiSettingsRange
+          label="UI SCALE"
+          maximum={UI_SCALE_MAX_PERCENT}
+          minimum={UI_SCALE_MIN_PERCENT}
+          onChange={(uiScalePercent) => onChange({ ...settings, uiScalePercent })}
+          value={settings.uiScalePercent}
+        />
+      </NativeUiSettingsGroup>
+
+      <NativeUiSettingsGroup title="DARK CLOUD SETTINGS">
+        <NativeUiSettingsAction label="ONLINE AND ACCOUNT" onClick={() => onOpen('cloud')} />
+      </NativeUiSettingsGroup>
+
+      <NativeUiSettingsGroup title="CONTROLS">
+        <NativeUiSettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
+      </NativeUiSettingsGroup>
+
+      <NativeUiSettingsGroup title="PERFORMANCE">
+        <NativeUiSettingsAction label="TWEAK GAME" onClick={() => onOpen('performance')} />
+      </NativeUiSettingsGroup>
+    </>
+  )
+}
+
+function CloudSettings({
   accountUsername,
   context,
   onChange,
@@ -294,6 +365,10 @@ function RootSettings({
   const globalChat = onlineFeatures && settings.enableGlobalChat
   return (
     <>
+      <NativeUiSettingsGroup title="DARK ACCOUNT">
+        <NativeUiSettingsStaticRow label={`ACCOUNT: ${(accountUsername ?? 'GUEST').toUpperCase()}`} />
+      </NativeUiSettingsGroup>
+
       <NativeUiSettingsGroup title="ONLINE FEATURES">
         <NativeUiSettingsToggle
           autoFocus
@@ -334,51 +409,11 @@ function RootSettings({
         />
       </NativeUiSettingsGroup>
 
-      <NativeUiSettingsGroup title="SOUND AND MUSIC">
-        <NativeUiSettingsRange
-          label="SOUND VOL:"
-          maximum={100}
-          minimum={0}
-          onChange={(soundVolumePercent) => onChange({ ...settings, soundVolumePercent })}
-          value={settings.soundVolumePercent}
-        />
-        <NativeUiSettingsRange
-          label="MUSIC VOL:"
-          maximum={100}
-          minimum={0}
-          onChange={(musicVolumePercent) => onChange({ ...settings, musicVolumePercent })}
-          value={settings.musicVolumePercent}
-        />
-      </NativeUiSettingsGroup>
-
-      <NativeUiSettingsGroup title="VIDEO SETTINGS">
-        <FullscreenSetting />
-        <NativeUiSettingsRange
-          label="CAMERA FOV"
-          maximum={CAMERA_FOV_MAX_PERCENT}
-          minimum={CAMERA_FOV_MIN_PERCENT}
-          onChange={(cameraFovPercent) => onChange({ ...settings, cameraFovPercent })}
-          value={settings.cameraFovPercent}
-        />
-        <NativeUiSettingsRange
-          label="UI SCALE"
-          maximum={UI_SCALE_MAX_PERCENT}
-          minimum={UI_SCALE_MIN_PERCENT}
-          onChange={(uiScalePercent) => onChange({ ...settings, uiScalePercent })}
-          value={settings.uiScalePercent}
-        />
-      </NativeUiSettingsGroup>
-
-      <NativeUiSettingsGroup title="CONTROLS">
-        <NativeUiSettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
+      <NativeUiSettingsGroup title="MOBILE INTERFACE">
         <NativeUiSettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
         <Suspense fallback={null}>
           <MobileUiLayoutSettingsAction accountUsername={accountUsername} />
         </Suspense>
-      </NativeUiSettingsGroup>
-
-      <NativeUiSettingsGroup title="PERFORMANCE">
-        <NativeUiSettingsAction label="TWEAK GAME" onClick={() => onOpen('performance')} />
       </NativeUiSettingsGroup>
 
       {context === 'title' && saveTransfer ? (
@@ -584,6 +619,7 @@ function captureMouseBinding(
 }
 
 function pageTitle(page: SettingsPage): string {
+  if (page === 'cloud') return 'DARK CLOUD SETTINGS'
   if (page === 'controls') return 'CUSTOMIZE KEYBOARD'
   if (page === 'mobile-ui') return 'MOBILE UI EDITOR'
   if (page === 'performance') return 'TWEAK PERFORMANCE'

@@ -10,6 +10,7 @@ import {
   NativeUiSettingsToggle,
 } from './NativeUiSettings.tsx'
 import NativeUiSimpleMenu from './NativeUiSimpleMenu.tsx'
+import NativeUiStoneButton from './NativeUiStoneButton.tsx'
 import NativeUiTabs from './NativeUiTabs.tsx'
 import { nativeUiRect } from './native-ui-plan.ts'
 
@@ -51,6 +52,12 @@ export default function NativeUiDomWorkbenchPreview() {
       >
         DISABLED STOCK ACTION
       </NativeUiButton>
+      <NativeUiStoneButton
+        name="stone-action"
+        style={{ left: 650, position: 'absolute', top: 730, zIndex: 2 }}
+      >
+        DONE
+      </NativeUiStoneButton>
       <NativeUiSimpleMenu
         ariaLabel="SimpleMenu example"
         centerX={270}

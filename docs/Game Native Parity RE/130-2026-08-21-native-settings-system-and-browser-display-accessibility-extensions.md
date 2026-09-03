@@ -680,3 +680,160 @@ screen quad's alpha directly.
   were recorded.
 - No push, deployment, or production restart was requested or performed. The
   focused local worktree remains the handoff owner.
+
+## 2026-09-02 — Reopened: stock CPanel composition rather than asset-count parity
+
+### Reported smell and parity question
+
+- Owner report: make Settings look like the stock game, using the stock UI
+  assets; setting membership may continue to include Website additions.
+- This is a secondary report against the 2026-08-31 presentation closure. That
+  pass stopped after proving record presence, outer bounds, and semantic
+  controls. It did not compare the complete composed root against the stock
+  frame, accepted a CSS green footer in place of the extractable stock footer
+  states, and let five Website online toggles displace the stock root hierarchy.
+  The skipped rule was complete composition membership, not missing behavior.
+- The parity question is whether every stock visual member is the actual painter
+  of its corresponding shell/control state, whether the root keeps stock's
+  sparse group hierarchy, and whether Website-only settings remain visually
+  subordinate in native child pages instead of turning the root into a modern
+  scrolling preferences list.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000` | Same retail 0.72.5 image as the settled Settings recovery. | high |
+| Clean-stock capture | `game-settings-title.png`, 1600 by 900, SHA-256 `b938fd44664ebb3c8d36d111ef57f11113b6faccbbb4f9e1b5823e98ac18d03b`; `controls.png`, SHA-256 `a16ba4f476f00033e734b30f3d777c50b50a405d5d9a878fd39c683f07c04591`; paired live layout JSON | Stock is a fixed 600 by 700 CPanel: compact grouped black strips on cracked leather, one gold header, one 70-pixel footer, and a 300 by 41 green stone Done/Back control. | high |
+| Exact asset catalog | Website `native-ui-assets.json`, `UI.17/.18`, `UI.105/.106`, `ControlPanel.0/.3/.4/.5/.8/.9/.18`, and the ControlPanel bitmap wrapper | `UI.105` and `.106` are the exact idle/pressed green footer faces. The earlier semantic Settings module did not consume either record. Every row family remains independently extractable. | high |
+| Current Mac browser baseline | Website `origin/main` `a2b19c2f5ab698fbc28e6e01d3cda94cfe025f1e`; Mac Chrome 1600 by 900 capture SHA-256 `59d8e8743bb6c434ce0ed90cfca521f21eaefd3b15feea056e6b65f0a66d6b14` | Outer shell and row assets are present, but the CSS-gradient footer is not stock art and the first viewport is dominated by five Website online rows. The prior smoke reported record counts only, so it could not reject either mismatch. | high |
+
+The native capture/layout files are retained historical clean-stock evidence.
+The Mac baseline image is disposable task evidence and must be deleted after its
+measurements and hash are recorded.
+
+### System boundary and membership inventory
+
+Native system: **Settings CPanel presentation**, from one context-owned shell
+through root/child composition, exact control painters, focus/press state, and
+responsive browser projection. Setting values and their already-proved runtime
+consumers do not move into this presentation owner.
+
+| Member / branch | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| 1600 by 900 design and 600 by 700 shell at `[500,100,1100,800]` | settled Settings layouts | `exact-ported` | desktop bounds and one shared title/gameplay/Dark Cloud shell |
+| cracked body, gold header/footer bands, four frame corners, two side flourishes | panel plus `UI.17 x4`, `UI.18 x2` | `exact-ported` | exact records and stock painter order; no decorative substitute |
+| ControlPanel title/group/row/value type | finite ControlPanel wrapper | `exact-ported` | every visible shell/control label is bitmap text; semantic copy remains screen-reader-only |
+| range row | `ControlPanel.3/.4/.18` | `exact-ported` | 44-pixel row, 380-pixel track, exact thumb, label/value baselines |
+| toggle row | `ControlPanel.3/.8/.9` | `exact-ported` | exact Off/On face selected from the authoritative Boolean |
+| action and value-action row | `ControlPanel.3/.0` | `exact-ported` | exact row plate and arrow; no CSS triangle or app-style card |
+| binding row | `ControlPanel.3/.5` | `exact-ported` | exact value plate and capture-state bitmap label |
+| Done/Back idle and pressed states | stock 300 by 41 footer; `UI.105/.106` | `exact-ported` | actual stock face, pressed substitution, one semantic HotRect |
+| stock root hierarchy | Sound and Music, Video Settings, Dark Cloud Settings, Controls, Performance | `exact-ported` presentation hierarchy | Website rows fit the nearest group or a child page; root is not front-loaded by extension toggles |
+| online/account/save/developer Website additions | Website preferences and account/save owners | `out-of-system` semantics; exact stock child-page vocabulary | settings remain reachable without false native attribution or root-card styling |
+| Controls, Performance, mobile editor, and save-transfer children | prior complete behavior inventory | `verified-already-at-parity` behavior; presentation re-proved here | Back retains one CPanel lifetime; rows use the same exact family |
+| title, gameplay, and Dark Cloud contexts | `MyCPanel` context branches | `verified-already-at-parity` lifecycle; presentation re-proved here | retained underlay, suspension, return, and focus ownership do not change |
+| compact/coarse-pointer projection | browser platform policy | `exact-ported` web projection | stock member identity is preserved; content scrolls; controls remain at least 44 CSS pixels |
+
+No presentation member is blocked by the browser platform. Automatic
+fullscreen re-entry remains the previously documented behavioral platform
+constraint and is unchanged by this visual reopening.
+
+### Native ownership thread and recovered contract
+
+- `MyCPanel` remains one context-owned lifetime. The root selects child pages;
+  child Back restores the same root; only root Done releases the owner.
+- Desktop geometry is authored, not responsive: 600 by 700 with 70-pixel
+  header/footer bands, 560-pixel row strips, 44-pixel row height, label origin
+  at the row's ten-pixel inset, and a 300 by 41 centred footer HotRect.
+- Stock groups are sparse. Website-only online, save, mobile, and developer
+  controls may use the same visual vocabulary, but their quantity cannot
+  redefine the root hierarchy.
+- Hover/focus adds only the browser-required focus indicator. Idle art remains
+  stock; pointer/keyboard press selects the recovered pressed face. Values,
+  persistence, audio, camera, renderer settings, input, authority, and teardown
+  remain with their existing owners.
+
+### Web implementation consequence
+
+- Deepen `native-settings-contract` and the semantic Settings module with the
+  exact `UI.105/.106` footer states and their pressed lifecycle.
+- Recompose the root to follow the stock group rhythm; move dense Website-only
+  online/account/save/developer controls into one native-looking Dark Cloud
+  Settings child rather than deleting or weakening them.
+- Remove the CSS-gradient footer and any OS-font shell labels. Preserve current
+  behavior, persistence, mobile scrolling, and focus/Back ownership.
+
+### Validation contract
+
+- Focused contracts pin every record, exact desktop rectangles, root group/page
+  membership, idle/pressed footer substitution, and the absence of the former
+  CSS footer skin.
+- Mac Chrome at 1600 by 900 compares the shell, header, group starts, row strips,
+  slider/toggle/action/binding families, and footer pixels against the stock
+  title and Controls captures. The same presentation must survive title,
+  gameplay, and Dark Cloud contexts.
+- DPR-2 touch at 896 by 414 exercises scrolling and every control family with
+  at least 44-pixel semantic targets. Page, console, and failed-response arrays
+  must be empty, and the exact candidate must pass
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini.
+
+### Implementation validation receipt
+
+- `planNativeUiStoneButton` and `NativeUiStoneButton` now own the exact
+  `UI.105` idle / `UI.106` pressed green CPanel action, ControlPanel bitmap
+  label, disabled state, focus outline, and one semantic HotRect. Settings and
+  Dark Cloud detail consume that same shared module; the CSS-gradient green
+  button path is removed.
+- The root now presents Sound and Music, Video Settings, Dark Cloud Settings,
+  Controls, and Performance in stock order. Its eight visible row plates keep
+  Performance in the first desktop viewport. Online/account, mobile-layout,
+  save-transfer, and developer extensions remain fully reachable inside the
+  Dark Cloud Settings child; no preference, persistence, consumer, or negative
+  disposition changed.
+- Mac Chrome desktop Settings returned `status: ok` with empty page/console/
+  failed-response arrays. The shell was exactly `[500,100,600,700]`, its first
+  `UI.17` was `[490,90,80,83]`, the left logical `UI.18` was
+  `[402,319,86,262]` (trimmed ink begins at native x 421), and the footer
+  HotRect was `[650,739.5,300,41]`. It exercised the `UI.105 -> UI.106 ->
+  UI.105` press sequence, the Dark Cloud child, keyboard binding, Performance,
+  Dark Cloud return, Hub and Boneyard consumers, and retained all prior live
+  audio/camera/UI/light/shadow/flash behavior. Capture SHA-256 is
+  `2df91632f5bb2d30f782ed465f9ba6a544f88a34eb674bd4bdb5a7b6c6bb9007`.
+- DPR-2 touch Chrome at 896 by 414 also returned `status: ok` with empty errors.
+  The clamped panel was 600 by 389.1875; real touches changed Sound, Music,
+  Camera FOV, UI Scale, and Light Quality before their final values were
+  applied. Effective game music/sound remained `0.40/0.65`, Hub/Boneyard camera
+  zoom remained `0.96/1.08`, and the capture hashes to
+  `2315655d61045e69c3a2281b5afe36c3a4a7907b5defe873f4f65d1772a0c74b`.
+- Direct stock-image comparison now chooses offset `(0,0)` for the top-left
+  frame and left flourish, with mean absolute channel deltas `13.00` and
+  `6.56`; the green footer is at its exact DOM rectangle and measures `11.01`
+  mean delta. The remaining pixel delta is browser/D3D sampling and changed
+  settings values, not a missing member or geometry shift.
+- The pre-rebase byte-identical local/Mac code candidate manifest was
+  `b0027396248ba0cf678a7c147da83ecc4935879bb0e1bcd874133a2edf615804` on
+  base `a2b19c2f5ab698fbc28e6e01d3cda94cfe025f1e`. Focused Mac validation passed
+  `79/79` native-UI tests, `9/9` Settings tests, lint with 11 existing warnings
+  and zero errors, and the native-UI browser workbench with empty error arrays.
+- The pre-receipt exact Mac canonical gate exited zero; stdout SHA-256 is
+  `f2f3818b53f5a89b331b63da149e0c46202fa5dcc6676d050cb0e95c50c32116`.
+  It passed the Release backend build, 19 backend contracts, 348 prerequisites,
+  broad Boneyard `1807/1807`, Hub UI `94/94`, desktop `4/4`, all remaining
+  focused suites, production frontend/game-host builds, media policy, and
+  bundle budget (`Game-bZj5YhGT.js`, 262,099 raw / 79,041 gzip bytes).
+- While the receipt was being written, `origin/main` advanced in two waves
+  through six disjoint shared-Hub/gameplay commits and one disjoint native
+  secondary-affine correction. The task branch was recoverably rebased from
+  `a2b19c2f5ab698fbc28e6e01d3cda94cfe025f1e` through
+  `b786fc7e9555ccff7b5aa7fc464a8a2a183fa8a1` to current base
+  `f74a441c21f83521e1786ccb355fe5de34261a0e`; both advancing-file intersections
+  with this task were empty. Local and clean detached Mac task files remained
+  byte-identical at manifest
+  `159c48a372b785144f05406d21b5e81615aaa575a629bd91c8e221409c46dfb0`.
+  Rebased lint, `79/79` native-UI tests, `9/9` Settings tests, the UI workbench,
+  desktop/touch Settings, and the full desktop/portrait/landscape Dark Cloud
+  journey all passed again with the exact geometry above and empty error
+  arrays.
+- No presentation member is browser-blocked. Commit, push, deployment, and
+  production restart were not requested or performed.

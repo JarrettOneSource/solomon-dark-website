@@ -64,6 +64,25 @@
   outline-offset: 3px;
 }
 
+.native-ui-stone-button {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.native-ui-stone-button:disabled { cursor: default; }
+
+.native-ui-stone-button:focus-visible {
+  outline: 2px solid rgb(239 209 125 / 0.9);
+  outline-offset: 3px;
+}
+
 .native-ui-simple-menu-action {
   position: absolute;
   z-index: 1;

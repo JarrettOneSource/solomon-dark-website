@@ -15,6 +15,7 @@ import {
 import {
   NATIVE_UI_BUTTON,
   NATIVE_UI_MESSAGE,
+  NATIVE_UI_STONE_BUTTON,
   NATIVE_UI_TAB,
   layoutNativeUiSingleActionMessage,
   nativeUiMessageActionBounds,
@@ -25,9 +26,16 @@ import {
   planNativeUiMessage,
   planNativeUiMessageFrame,
   planNativeUiSimpleMenu,
+  planNativeUiStoneButton,
   planNativeUiTabs,
   type NativeUiNode,
 } from './native-ui-plan.ts'
+import {
+  NATIVE_DARK_CLOUD_PRESENTATION,
+  NATIVE_DARK_CLOUD_ROOT_RECORDS,
+  NATIVE_DARK_CLOUD_TABS,
+  planNativeDarkCloudToolButton,
+} from './native-dark-cloud-contract.ts'
 
 import {
   layoutNativeUiText,
@@ -386,6 +394,114 @@ test('stock button plans share visible and semantic geometry for every state', (
       y: 333.5,
     },
   ])
+})
+
+test('stock green stone buttons use the exact idle and pressed faces', () => {
+  const bounds = nativeUiRect(650, 739.5, 300, 41)
+  for (const [state, record, disabled] of [
+    ['idle', 105, false],
+    ['focused', 105, false],
+    ['pressed', 106, false],
+    ['selected', 106, false],
+    ['disabled', 105, true],
+  ] as const) {
+    const plan = planNativeUiStoneButton({ bounds, id: state, label: 'DONE', state })
+    assert.deepEqual(plan.actions, [{ bounds, disabled, id: state, role: 'button' }])
+    const body = plan.nodes.find(({ label }) => label === `${state}:body`)
+    assert.ok(body?.kind === 'sprite')
+    assert.equal(body.record, record)
+    assert.equal(body.width, 300)
+    assert.equal(body.height, NATIVE_UI_STONE_BUTTON.sourceHeight)
+    const label = plan.nodes.find(({ label }) => label === `${state}:label`)
+    assert.ok(label?.kind === 'text')
+    assert.equal(label.text.font, 'control-panel')
+  }
+})
+
+test('Dark Cloud contract drains the complete stock root and footer membership', () => {
+  assert.deepEqual(NATIVE_DARK_CLOUD_PRESENTATION.design, { height: 900, width: 1_600 })
+  assert.deepEqual(NATIVE_DARK_CLOUD_PRESENTATION.geometry, {
+    accountBounds: { height: 50, left: 586, top: 58, width: 428 },
+    listBounds: { height: 627, left: 55, top: 173, width: 1_490 },
+    optionsBounds: { height: 52, left: 1_017.5, top: 818, width: 185 },
+    primaryBounds: { height: 69, left: 623.5, top: 809.5, width: 353 },
+    searchBounds: { height: 52, left: 390, top: 818, width: 90 },
+    searchPanelBounds: { height: 205, left: 540, top: 347.5, width: 520 },
+    sortBounds: { height: 52, left: 495, top: 818, width: 90 },
+    sortPanelBounds: { height: 255, left: 640, top: 347.5, width: 320 },
+    tabStripBounds: { height: 69, left: 460, top: 128, width: 882 },
+  })
+  assert.deepEqual(NATIVE_DARK_CLOUD_ROOT_RECORDS, [
+    'UI.29', 'UI.29', 'UI.31', 'UI.31', 'UI.32', 'UI.32',
+    'UI.20', 'UI.20', 'UI.20', 'UI.20',
+    'UI.107', 'UI.108', 'UI.109', 'UI.110',
+    'UI.17', 'UI.17', 'UI.17', 'UI.17',
+    'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13',
+    'UI.101', 'UI.54', 'UI.54',
+    'UI.103', 'UI.53', 'UI.53', 'UI.58',
+    'UI.103', 'UI.53', 'UI.53', 'UI.66',
+    'UI.103', 'UI.53', 'UI.53', 'UI.42',
+  ])
+  assert.deepEqual(NATIVE_DARK_CLOUD_TABS.map(tab => tab.bounds), [
+    { height: 69, left: 0, top: 0, width: 170 },
+    { height: 69, left: 170, top: 0, width: 340 },
+    { height: 69, left: 510, top: 0, width: 170 },
+    { height: 69, left: 680, top: 0, width: 202 },
+  ])
+})
+
+test('Dark Cloud tool controls use their distinct native body, surround, icon, and press states', () => {
+  const bounds = nativeUiRect(0, 0, 90, 52)
+  const search = planNativeDarkCloudToolButton({ bounds, iconRecord: 58, id: 'search' })
+  assert.deepEqual(search.nodes.map(node => node.label), [
+    'search:body', 'search:end-left', 'search:end-right', 'search:icon',
+  ])
+  assert.deepEqual(search.nodes.filter(node => node.kind === 'sprite').map(node => node.record), [103, 53, 53, 58])
+  const pressed = planNativeDarkCloudToolButton({ bounds, iconRecord: 66, id: 'sort', state: 'pressed' })
+  assert.equal(pressed.nodes[0]?.kind === 'sprite' && pressed.nodes[0].record, 104)
+  const options = planNativeDarkCloudToolButton({
+    bounds: nativeUiRect(0, 0, 185, 52),
+    id: 'options',
+    label: 'OPTIONS',
+  })
+  assert.equal(options.nodes.at(-1)?.kind, 'text')
+  assert.throws(
+    () => planNativeDarkCloudToolButton({ bounds, id: 'invalid' }),
+    /requires exactly one icon or label/,
+  )
+})
+
+test('Dark Cloud callers consume the semantic stock composition without retired crop skins', () => {
+  const scene = readFileSync(new URL('../DarkCloudScene.tsx', import.meta.url), 'utf8')
+  const panel = readFileSync(new URL('../DarkCloudPanel.tsx', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../dark-cloud.css', import.meta.url), 'utf8')
+  for (const semantic of [
+    'NativeDarkCloudHeading',
+    'NativeDarkCloudListFrameArt',
+    'NativeDarkCloudPrimaryButton',
+    'NativeDarkCloudSceneArt',
+    'NativeDarkCloudTabs',
+    'NativeDarkCloudToolButton',
+  ]) assert.match(scene, new RegExp(`<${semantic}`))
+  assert.match(panel, /<NativeDarkCloudPanelArt/)
+  for (const retired of [
+    'account-flourish.png',
+    'border-corner-',
+    'button-dark-',
+    'corner-gold.png',
+    'panel-edge-',
+    'search.png',
+    'sort.png',
+    'stone-button-selected.png',
+    'tab-bracket.png',
+    'wizard-left.png',
+    'wizard-right.png',
+  ]) {
+    assert.equal(scene.includes(retired) || panel.includes(retired) || css.includes(retired), false)
+  }
+  assert.doesNotMatch(css, /\.dark-cloud-tabs button\s*\{[^}]*border-radius/s)
+  assert.doesNotMatch(css, /\.dark-cloud-primary-button::(?:before|after)/)
+  assert.doesNotMatch(css, /\.dark-cloud-tool-button::(?:before|after)/)
 })
 
 test('stock tabs keep bracket X fixed and move only the selected Y contract', () => {

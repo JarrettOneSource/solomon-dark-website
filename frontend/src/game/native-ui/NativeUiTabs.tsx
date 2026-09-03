@@ -60,6 +60,7 @@ export default function NativeUiTabs({
         return (
           <button
             aria-label={tab.label}
+            aria-current={selected ? 'page' : undefined}
             aria-selected={selected}
             className="native-ui-tabs-action"
             data-native-ui-tab={tab.id}

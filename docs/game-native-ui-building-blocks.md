@@ -162,6 +162,12 @@ surround bounds.
 `NativeUiButton` is the semantic React form of that same plan. Do not create a
 second CSS button skin for a stock action.
 
+`NativeUiStoneButton` is the separate green CPanel/Dark Cloud action family.
+It scales the exact `UI.105` idle and `UI.106` pressed faces to the owning
+HotRect and keeps its ControlPanel bitmap label in the same plan. It is not a
+green variant of `NativeUiButton`; the two families use different authored
+records and press substitutions.
+
 `planNativeUiSimpleMenu` composes those buttons with the native frame, header,
 arrows, curtain, and action rectangles. The screen owner continues to supply
 opening/closing progress and to decide what an action means.
@@ -259,6 +265,36 @@ React callers use `NativeUiSettingsPanel`, `NativeUiSettingsGroup`,
 `NativeUiSettingsStaticRow` from `native-ui/react.ts`. These modules own the
 semantic controls and stock row structure as well as their art. Callers own
 values, persistence, pages, and browser behavior.
+
+The Settings root preserves the stock group rhythm: Sound and Music, Video
+Settings, Dark Cloud Settings, Controls, and Performance. Dense Website-only
+online/account/save/developer and mobile-layout controls live behind the Dark
+Cloud Settings child so they use the stock row vocabulary without replacing
+the native root composition.
+
+## Dark Cloud presentation
+
+`native-dark-cloud-contract.ts` owns the retail 1600 by 900 shell geometry and
+the complete record inventory for the background figures/flourishes, both list
+corner families, tab brackets, and Search/Sort/primary/Options footer controls.
+`NativeDarkCloudPresentation.tsx` exposes the semantic React composition:
+
+- `NativeDarkCloudSceneArt` and `NativeDarkCloudListFrameArt` paint the complete
+  stock scene/frame membership;
+- `NativeDarkCloudHeading`, `NativeDarkCloudText`, and
+  `NativeDarkCloudTabs` use the exact heading/menu bitmap wrappers and `UI.13`
+  selected/resting bracket geometry;
+- `NativeDarkCloudToolButton` owns `UI.103/.104`, paired `UI.53` surrounds,
+  and the exact Search/Sort icons or Options label;
+- `NativeDarkCloudPrimaryButton` owns the `UI.101/.102` and `UI.54` family; and
+- `NativeDarkCloudPanelArt` paints the two recovered corner sets plus the two
+  side flourishes for Search, Sort, account-style, and Website extension
+  dialogs.
+
+Desktop callers retain the exact native rectangles. Narrow and short browser
+surfaces scale those same plans inside semantic hosts, preserve at least
+44-pixel actions, and reflow content without replacing the stock art with a
+second mobile skin.
 
 `NativeUiTabs` similarly turns `planNativeUiTabs` into one semantic tablist
 whose visible art and hit rectangles come from the same plan. `NativeUiNotebox`

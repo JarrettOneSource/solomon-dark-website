@@ -7,6 +7,7 @@ const desktopScreenshotPath = process.env.SDR_DARK_CLOUD_SCREENSHOT || '/tmp/sol
 const detailScreenshotPath = process.env.SDR_DARK_CLOUD_DETAIL_SCREENSHOT || '/tmp/solomon-dark-cloud-detail.png'
 const landscapeScreenshotPath = process.env.SDR_DARK_CLOUD_LANDSCAPE_SCREENSHOT || '/tmp/solomon-dark-cloud-landscape.png'
 const mobileScreenshotPath = process.env.SDR_DARK_CLOUD_MOBILE_SCREENSHOT || '/tmp/solomon-dark-cloud-mobile.png'
+const guestScreenshotPath = process.env.SDR_DARK_CLOUD_GUEST_SCREENSHOT || '/tmp/solomon-dark-cloud-guest.png'
 const partyScreenshotPath = process.env.SDR_DARK_CLOUD_PARTY_SCREENSHOT || '/tmp/solomon-dark-cloud-party-desktop.png'
 const partyMobileScreenshotPath = process.env.SDR_DARK_CLOUD_PARTY_MOBILE_SCREENSHOT || '/tmp/solomon-dark-cloud-party-mobile.png'
 const layoutsScreenshotPath = process.env.SDR_DARK_CLOUD_LAYOUTS_SCREENSHOT || '/tmp/solomon-dark-cloud-layouts.png'
@@ -70,6 +71,10 @@ await page.route('**/api/game/parties', route => route.fulfill({
     }],
   }),
 }))
+await page.route('**/deployment.json?*', route => {
+  const revision = new URL(route.request().url()).searchParams.get('current')
+  return route.fulfill({ json: { revision } })
+})
 
 let subscribedSlug = null
 try {
@@ -101,14 +106,14 @@ try {
   await page.getByText(username.toUpperCase(), { exact: true }).waitFor()
 
   for (const label of ['MODS', 'SUBSCRIBED MODS', 'PARTIES', 'LAYOUTS']) {
-    assert.equal(await page.getByRole('button', { name: label, exact: true }).count(), 1)
+    assert.equal(await page.getByRole('tab', { name: label, exact: true }).count(), 1)
   }
   for (const removed of ['RECENT', 'BONEYARDS', 'MULTIPLAYER']) {
-    assert.equal(await page.getByRole('button', { name: removed, exact: true }).count(), 0)
+    assert.equal(await page.getByRole('tab', { name: removed, exact: true }).count(), 0)
   }
   assert.equal(await page.getByText('HOW DARK ARE YOU TODAY?', { exact: true }).count(), 0)
   assert.equal(
-    await page.getByRole('button', { name: 'MODS', exact: true }).getAttribute('aria-current'),
+    await page.getByRole('tab', { name: 'MODS', exact: true }).getAttribute('aria-current'),
     'page',
   )
 
@@ -121,11 +126,59 @@ try {
   assert.deepEqual(desktopGeometry.scene, { x: 0, y: 0, width: 1600, height: 900 })
   assert.deepEqual(desktopGeometry.stage, desktopGeometry.scene)
   assert.equal(desktopGeometry.stageTransform, 'none')
-  assert.ok(desktopGeometry.list.width >= 1480)
-  assert.ok(desktopGeometry.list.height >= 610)
+  assertRectClose(desktopGeometry.list, { x: 55, y: 173, width: 1490, height: 627 })
+  assertRectClose(desktopGeometry.tabs, { x: 460, y: 128, width: 882, height: 69 })
+  assertRectClose(desktopGeometry.selectedTabBracket, { x: 460, y: 128, width: 34, height: 65 })
+  assertRectClose(desktopGeometry.restingTabBracket, { x: 630, y: 136, width: 34, height: 51 })
+  assertRectClose(desktopGeometry.search, { x: 390, y: 818, width: 90, height: 52 })
+  assertRectClose(desktopGeometry.sort, { x: 495, y: 818, width: 90, height: 52 })
+  assertRectClose(desktopGeometry.primary, { x: 623.5, y: 809.5, width: 353, height: 69 })
+  assertRectClose(desktopGeometry.options, { x: 1017.5, y: 818, width: 185, height: 52 })
   assert.equal(desktopGeometry.horizontalOverflow, 0)
-  assertCornerLegs(desktopGeometry.cornerLegs)
+  assert.deepEqual(desktopGeometry.sceneArtRecords, [
+    'UI.29', 'UI.29', 'UI.31', 'UI.32', 'UI.32', 'UI.31',
+    'UI.20', 'UI.20', 'UI.20', 'UI.20',
+  ])
+  assert.deepEqual(desktopGeometry.listArtRecords, [
+    'UI.107', 'UI.108', 'UI.109', 'UI.110',
+    'UI.17', 'UI.17', 'UI.17', 'UI.17',
+  ])
+  assert.deepEqual(desktopGeometry.tabRecords, Array.from({ length: 8 }, () => 'UI.13'))
+  assert.deepEqual(desktopGeometry.footerRecords, [
+    'UI.103', 'UI.53', 'UI.53', 'UI.58',
+    'UI.103', 'UI.53', 'UI.53', 'UI.66',
+    'UI.101', 'UI.54', 'UI.54',
+    'UI.103', 'UI.53', 'UI.53',
+  ])
+  assert.deepEqual(desktopGeometry.footerSlices, ['UI.54'])
+  assert.deepEqual(desktopGeometry.unsupportedBitmapText, [])
+  await assertPressedFace(page.getByRole('button', { name: 'Search', exact: true }), 103, 104)
+  await assertPressedFace(page.locator('.dark-cloud-primary-button'), 101, 102)
+  await assertPressedFace(page.getByRole('button', { name: 'OPTIONS', exact: true }), 103, 104)
   await page.screenshot({ path: desktopScreenshotPath })
+
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  const searchDialog = page.getByRole('dialog', { name: 'SEARCH THE DARK CLOUD' })
+  await searchDialog.waitFor()
+  await assertNativePanel(searchDialog, { stoneFooter: false })
+  assert.equal(await searchDialog.getByRole('button', { name: 'DONE', exact: true }).count(), 0)
+  await searchDialog.getByRole('button', { name: 'SEARCH NOW', exact: true }).click()
+  await searchDialog.waitFor({ state: 'detached' })
+
+  await page.getByRole('button', { name: 'Sort', exact: true }).click()
+  const sortDialog = page.getByRole('dialog', { name: 'SORT MODS BY…' })
+  await sortDialog.waitFor()
+  await assertNativePanel(sortDialog, { stoneFooter: false })
+  assert.equal(await sortDialog.getByRole('button', { name: 'DONE', exact: true }).count(), 0)
+  await sortDialog.getByRole('button', { name: 'NEWEST', exact: true }).click()
+  await sortDialog.waitFor({ state: 'detached' })
+
+  await page.getByRole('button', { name: 'OPTIONS', exact: true }).click()
+  const optionsDetail = page.getByRole('dialog', { name: await modRow.locator('.dark-cloud-row-copy strong').innerText() })
+  await optionsDetail.waitFor()
+  await assertNativePanel(optionsDetail, { stoneFooter: true })
+  await optionsDetail.getByRole('button', { name: 'Close mod details' }).click()
+  await optionsDetail.waitFor({ state: 'detached' })
 
   const subscriptionMutations = []
   const captureSubscriptionMutation = request => {
@@ -138,6 +191,7 @@ try {
   await modRow.locator('.dark-cloud-row-main').dblclick()
   const detail = page.getByRole('dialog', { name: await modRow.locator('.dark-cloud-row-copy strong').innerText() })
   await detail.waitFor()
+  await assertNativePanel(detail, { stoneFooter: true })
   assert.deepEqual(subscriptionMutations, [])
   await detail.getByRole('heading', { name: 'SCREENSHOTS', exact: true }).waitFor()
   await detail.getByText('NO IMAGE', { exact: true }).waitFor()
@@ -167,7 +221,7 @@ try {
   await detail.getByRole('button', { name: 'Close mod details' }).click()
   page.off('request', captureSubscriptionMutation)
 
-  await page.getByRole('button', { name: 'SUBSCRIBED MODS', exact: true }).click()
+  await page.getByRole('tab', { name: 'SUBSCRIBED MODS', exact: true }).click()
   const subscribedRow = page.locator(`.dark-cloud-mod-row[data-mod-slug="${subscribedSlug}"]`)
   await subscribedRow.waitFor()
   const modName = await subscribedRow.locator('.dark-cloud-row-copy strong').innerText()
@@ -211,7 +265,7 @@ try {
   assert.equal((await activeManifest(page, account.token)).mods.length, 0)
   subscribedSlug = null
 
-  await page.getByRole('button', { name: 'PARTIES', exact: true }).click()
+  await page.getByRole('tab', { name: 'PARTIES', exact: true }).click()
   const partyRow = page.locator('[data-party-id="party-smoke-public"]')
   await partyRow.waitFor()
   await partyRow.getByText("HAGATHA'S PARTY", { exact: true }).waitFor()
@@ -244,7 +298,7 @@ try {
   await page.evaluate(({ key, layout }) => {
     localStorage.setItem(key, JSON.stringify(layout))
   }, { key: mobileUiStorageKey, layout: sharedDocument })
-  await page.getByRole('button', { name: 'LAYOUTS', exact: true }).click()
+  await page.getByRole('tab', { name: 'LAYOUTS', exact: true }).click()
   await page.getByRole('heading', { name: 'MOBILE UI LAYOUTS', exact: true }).waitFor()
   const publishLayoutResponse = page.waitForResponse(response => (
     response.request().method() === 'POST'
@@ -266,7 +320,8 @@ try {
   }
   await explore.click()
   await page.getByText('YOU ARE SIGNED IN AS A GUEST.', { exact: true }).waitFor()
-  await page.getByRole('button', { name: 'LAYOUTS', exact: true }).click()
+  await page.screenshot({ path: guestScreenshotPath })
+  await page.getByRole('tab', { name: 'LAYOUTS', exact: true }).click()
   await page.evaluate(key => localStorage.removeItem(key), mobileUiStorageKey)
   const codeInput = page.getByLabel('SHARE CODE')
   await codeInput.fill(sharedCode)
@@ -283,7 +338,7 @@ try {
     JSON.parse(await page.evaluate(key => localStorage.getItem(key), mobileUiStorageKey)),
     sharedDocument,
   )
-  await page.getByRole('button', { name: 'PARTIES', exact: true }).click()
+  await page.getByRole('tab', { name: 'PARTIES', exact: true }).click()
   await partyRow.waitFor()
 
   await page.setViewportSize({ width: 390, height: 844 })
@@ -292,7 +347,7 @@ try {
   }
   assert.ok(await partyRow.locator('.dark-cloud-party-status').boundingBox(), 'IN GAME was hidden on mobile')
   await page.screenshot({ path: partyMobileScreenshotPath })
-  await page.getByRole('button', { name: 'MODS', exact: true }).click()
+  await page.getByRole('tab', { name: 'MODS', exact: true }).click()
   await page.locator('.dark-cloud-mod-row').first().waitFor()
   const mobileGeometry = await darkCloudGeometry(page)
   assert.deepEqual(mobileGeometry.scene, { x: 0, y: 0, width: 390, height: 844 })
@@ -361,6 +416,7 @@ try {
     screenshots: {
       desktop: desktopScreenshotPath,
       detail: detailScreenshotPath,
+      guest: guestScreenshotPath,
       joinParty: joinPartyScreenshotPath,
       joinPartyMobile: joinPartyMobileScreenshotPath,
       landscape: landscapeScreenshotPath,
@@ -400,27 +456,10 @@ async function darkCloudGeometry(page) {
       const bounds = document.querySelector(selector).getBoundingClientRect()
       return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
     }
-    const cornerLeg = (selector, half) => {
-      const image = document.querySelector(selector)
-      const canvas = document.createElement('canvas')
-      canvas.width = image.naturalWidth
-      canvas.height = image.naturalHeight
-      const context = canvas.getContext('2d', { willReadFrequently: true })
-      context.drawImage(image, 0, 0)
-      const startY = half === 'top' ? 0 : Math.floor(canvas.height / 2)
-      const sampleHeight = half === 'top' ? Math.ceil(canvas.height / 2) : canvas.height - startY
-      const pixels = context.getImageData(0, startY, canvas.width, sampleHeight).data
-      let left = 0
-      let right = 0
-      for (let y = 0; y < sampleHeight; y += 1) {
-        for (let x = 0; x < canvas.width; x += 1) {
-          const alpha = pixels[(y * canvas.width + x) * 4 + 3]
-          if (x < canvas.width / 2) left += alpha
-          else right += alpha
-        }
-      }
-      return { left, right }
-    }
+    const records = selector => [...document.querySelectorAll(`${selector} [data-native-ui-record]`)]
+      .map(record => record.getAttribute('data-native-ui-record'))
+    const slices = selector => [...document.querySelectorAll(`${selector} [data-native-ui-slice]`)]
+      .map(record => record.getAttribute('data-native-ui-slice'))
     const touchTargets = [...document.querySelectorAll(
       '.dark-cloud-tabs button, .dark-cloud-footer button, .dark-cloud-row-actions button',
     )].filter(element => getComputedStyle(element).display !== 'none')
@@ -430,22 +469,51 @@ async function darkCloudGeometry(page) {
       scene: rect('.dark-cloud-scene'),
       stage: rect('.dark-cloud-stage'),
       list: rect('.dark-cloud-list-frame'),
+      tabs: rect('.dark-cloud-tabs'),
+      selectedTabBracket: rect('[data-native-ui-node="mods:bracket-left"]'),
+      restingTabBracket: rect('[data-native-ui-node="subscribed:bracket-left"]'),
+      search: rect('[data-native-dark-cloud-tool="search"]'),
+      sort: rect('[data-native-dark-cloud-tool="sort"]'),
+      primary: rect('.dark-cloud-primary-button'),
+      options: rect('[data-native-dark-cloud-tool="options"]'),
       stageTransform: getComputedStyle(document.querySelector('.dark-cloud-stage')).transform,
       horizontalOverflow: Math.max(0, scene.scrollWidth - scene.clientWidth),
       minimumTouchTarget: Math.min(...touchTargets),
-      cornerLegs: {
-        topLeft: cornerLeg('.dark-cloud-corner.top-left', 'bottom'),
-        topRight: cornerLeg('.dark-cloud-corner.top-right', 'bottom'),
-        bottomLeft: cornerLeg('.dark-cloud-corner.bottom-left', 'top'),
-        bottomRight: cornerLeg('.dark-cloud-corner.bottom-right', 'top'),
-      },
+      sceneArtRecords: records('.dark-cloud-native-scene-art'),
+      listArtRecords: records('.dark-cloud-native-list-art'),
+      tabRecords: slices('.dark-cloud-tabs'),
+      footerRecords: records('.dark-cloud-footer'),
+      footerSlices: slices('.dark-cloud-footer'),
+      unsupportedBitmapText: [...scene.querySelectorAll('[data-native-ui-unsupported]')]
+        .map(node => node.getAttribute('data-native-ui-unsupported')),
     }
   })
 }
 
-function assertCornerLegs(corners) {
-  assert.ok(corners.topLeft.left > corners.topLeft.right * 1.15)
-  assert.ok(corners.bottomLeft.left > corners.bottomLeft.right * 1.15)
-  assert.ok(corners.topRight.right > corners.topRight.left * 1.15)
-  assert.ok(corners.bottomRight.right > corners.bottomRight.left * 1.15)
+function assertRectClose(actual, expected, tolerance = 0.6) {
+  for (const key of ['x', 'y', 'width', 'height']) {
+    assert.ok(Math.abs(actual[key] - expected[key]) <= tolerance, JSON.stringify({ actual, expected }))
+  }
+}
+
+async function assertNativePanel(panel, { stoneFooter }) {
+  const records = await panel.locator('.dark-cloud-native-panel-art [data-native-ui-record]')
+    .evaluateAll(nodes => nodes.map(node => node.getAttribute('data-native-ui-record')))
+  assert.deepEqual(records, [
+    'UI.17', 'UI.17', 'UI.17', 'UI.17',
+    'UI.17', 'UI.17', 'UI.17', 'UI.17',
+    'UI.18', 'UI.18',
+  ])
+  assert.equal(
+    await panel.locator('[data-native-ui-stone-button] [data-native-ui-record="UI.105"]').count(),
+    stoneFooter ? 1 : 0,
+  )
+}
+
+async function assertPressedFace(button, idleRecord, pressedRecord) {
+  assert.equal(await button.locator(`[data-native-ui-record="UI.${idleRecord}"]`).count(), 1)
+  await button.dispatchEvent('pointerdown', { button: 0, pointerType: 'mouse' })
+  assert.equal(await button.locator(`[data-native-ui-record="UI.${pressedRecord}"]`).count(), 1)
+  await button.dispatchEvent('pointerup', { button: 0, pointerType: 'mouse' })
+  assert.equal(await button.locator(`[data-native-ui-record="UI.${idleRecord}"]`).count(), 1)
 }

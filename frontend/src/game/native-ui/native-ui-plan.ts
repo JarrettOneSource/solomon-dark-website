@@ -128,6 +128,10 @@ export interface NativeUiButtonSpec extends NativeUiButtonChromeSpec {
   readonly label: string
 }
 
+export interface NativeUiStoneButtonSpec extends NativeUiButtonChromeSpec {
+  readonly label: string
+}
+
 export interface NativeUiTabSpec {
   readonly bounds: NativeUiRect
   readonly disabled?: boolean
@@ -227,6 +231,16 @@ export const NATIVE_UI_BUTTON = Object.freeze({
   surroundEndRecord: 54,
   surroundEdgeUvOrigin: 0.95,
   textTint: 0xd9ba70,
+})
+
+export const NATIVE_UI_STONE_BUTTON = Object.freeze({
+  idleRecord: 105,
+  labelScale: 1.15,
+  labelYOffset: 4,
+  pressedRecord: 106,
+  sourceHeight: 41,
+  sourceWidth: 141,
+  textTint: 0xf2f0dc,
 })
 
 export const NATIVE_UI_TAB = Object.freeze({
@@ -536,6 +550,56 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
       alpha: 0.25,
       bounds: spec.bounds,
       color: 0x808080,
+      kind: 'solid',
+      label: `${spec.id}:disabled-overlay`,
+    })
+  }
+  return {
+    actions: [{ bounds: spec.bounds, disabled, id: spec.id, role: 'button' }],
+    nodes,
+  }
+}
+
+export function planNativeUiStoneButton(spec: NativeUiStoneButtonSpec): NativeUiFragment {
+  const state = spec.state ?? 'idle'
+  const disabled = state === 'disabled'
+  const pressed = state === 'pressed' || state === 'selected'
+  const alpha = disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1
+  const labelOffset = pressed ? 1 : 0
+  const nodes: NativeUiNode[] = [
+    {
+      alpha,
+      atlas: 'UI',
+      height: spec.bounds.height,
+      kind: 'sprite',
+      label: `${spec.id}:body`,
+      record: pressed
+        ? NATIVE_UI_STONE_BUTTON.pressedRecord
+        : NATIVE_UI_STONE_BUTTON.idleRecord,
+      width: spec.bounds.width,
+      x: spec.bounds.left,
+      y: spec.bounds.top,
+    },
+    {
+      kind: 'text',
+      label: `${spec.id}:label`,
+      text: {
+        alpha,
+        font: 'control-panel',
+        scale: NATIVE_UI_STONE_BUTTON.labelScale,
+        text: spec.label,
+        tint: NATIVE_UI_STONE_BUTTON.textTint,
+        x: spec.bounds.left + spec.bounds.width / 2 + labelOffset,
+        y: spec.bounds.top + spec.bounds.height / 2
+          + NATIVE_UI_STONE_BUTTON.labelYOffset + labelOffset,
+      },
+    },
+  ]
+  if (disabled) {
+    nodes.push({
+      alpha: 0.25,
+      bounds: spec.bounds,
+      color: 0x202020,
       kind: 'solid',
       label: `${spec.id}:disabled-overlay`,
     })
