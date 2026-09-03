@@ -384,15 +384,20 @@ to the latest 30-second or lifecycle checkpoint.
   writes / `623.598 ms` to `2` writes / `11.180 ms`, with final document 100
   retained.
 - The Mac browser save journey advanced local revision `1 -> 2`, persisted
-  tick `398`, and resumed X `1039.0505779667071` after movement from X
+  tick `398`, and resumed X `1038.0158819991916` after movement from X
   `950.64`; page, console, and unexpected-warning arrays were empty. The full
   deployment-restart journey passed for anonymous and authenticated owners,
   advanced each final revision `2 -> 4`, preserved the moved continuation,
   retained Game Over/profile-only behavior, and reported one saved and zero
   unacknowledged players on the second drain.
-- The exact candidate passed the canonical Mac gate: zero-warning/error
-  backend Release build, `19/19` Website/backend contracts, lint and generated
-  boundaries, `2601/2601` Node tests across every frontend/desktop group,
-  production frontend and game-host builds, media policy, and bundle budget.
-  `Game-B8oK0i5p.js` measured `265,780` raw / `80,974` gzip bytes against
-  `524,288` / `134,144` limits. No production push or deployment was performed.
+- Clean Mac commit `97feadf7a98867dc0575e751b10190420a77d30b`
+  passed the canonical gate: zero-warning/error backend Release build,
+  `19/19` Website/backend contracts, lint and generated boundaries,
+  `2601/2601` Node tests across every frontend/desktop group, production
+  frontend and game-host builds, media policy, and bundle budget. The shared
+  Mac was simultaneously running eight unrelated full-core native evaluators,
+  so this final run gave only the validation process a temporary `nice -10`;
+  no other process was changed. `Game-Bp2ujbUQ.js` measured `265,780` raw /
+  `80,975` gzip bytes against `524,288` / `134,144` limits. This receipt is the
+  sole post-validation documentation write. No production push or deployment
+  was performed.

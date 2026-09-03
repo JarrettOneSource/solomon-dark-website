@@ -355,9 +355,10 @@ snapshots as authoritative presentation samples rather than simulation steps.
   The host opened flow control at eight outstanding frames, the healthy page
   received `21` consecutive snapshots in the measured window, and the stalled
   page resumed on sequences `64,65,66` across an 18-sequence current-state
-  jump. Page and console errors were empty. The separate steady-state receipt
-  delivered `100` snapshots and `100` ACKs to each of two pages in `5.002 s`
-  (`19.991 Hz`), with zero sequence gaps and about `48.69 KiB/s` estimated
+  jump in the first receipt and a 17-sequence jump in the final clean-commit
+  repeat. Page and console errors were empty. The final steady-state receipt
+  delivered `101` snapshots and `101` ACKs to each of two pages in `5.002 s`
+  (`20.192 Hz`), with zero sequence gaps and about `49.21 KiB/s` estimated
   compressed snapshots per lane.
 - Back-to-back unacknowledged world changes exposed one older strictness gap:
   Hub -> Boneyard -> Hub could compare the new Hub only with the older ACKed

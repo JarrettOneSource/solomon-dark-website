@@ -227,8 +227,9 @@ DOM visibility or elapsed time.
   the already-established two-second `game-started` progress phase rather than
   manufacturing a painter-less spectator or expecting the progress surface to
   vanish immediately. With those corrections, the full three-human journey
-  passed: run `ad01325e82bbb59fc72387fe290f6294`, authority held at tick `1235`,
-  resumed at `1246`, resolved offer sequences `[4,6,8,10,12,14,16,18]`, and
+  passed on clean commit `97feadf7`: run
+  `c6f07c52837fd662d80693eef18299d4`, authority held at tick `1020`, resumed
+  at `1021`, resolved offer sequences `[4,6,8,10,12,14,16,18]`, and
   advanced local save revision `2 -> 6`. Page, console, failed-response,
   failed-request, and host-error arrays were empty.
 - The staging-ready host regression, death-registration kernel regression,
