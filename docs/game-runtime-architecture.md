@@ -583,6 +583,15 @@ ordered vector feeds the Hall
 projection and schema-17 stock bridge, so Tonic membership is neither hidden
 during web play nor reconstructed heuristically during export.
 
+Hagatha effects are never pooled across a party. Every derived, skill, combat,
+and presentation consumer resolves the participant that owns the selector.
+The shared Boneyard keeps that boundary at delayed loot seams: an enemy's
+terminal reward uses its attributed killer's complete loot context, while a
+Goodie latches the authenticated key user's ID until its tick-250 reward
+materializes. A missing owner uses neutral loot inputs instead of inheriting the
+first connected participant. Resulting ground actors remain shared and retain
+first-valid pickup contention; shared pickup does not transfer charm ownership.
+
 Each host owns its safe public-party projection. A bearer-protected supervisor
 control-plane read aggregates every nonclosing host and exposes that bounded
 projection to the Website backend;

@@ -110,6 +110,7 @@ export interface BoneyardGoodieInput {
 
 export interface BoneyardGoodieState {
   readonly active: boolean
+  readonly activatedByPlayerId: string | null
   readonly eid: string
   readonly exhausted: boolean
   readonly id: number
@@ -271,6 +272,7 @@ export function createBoneyardLootStore(
     }
     return Object.freeze({
       active: false,
+      activatedByPlayerId: null,
       eid: source.eid,
       exhausted: false,
       id: nextGoodieId++,
@@ -359,12 +361,18 @@ export function retireBoneyardGoodiesOutsideBounds(
 export function activateBoneyardGoodie(
   source: BoneyardLootStore,
   eid: string,
+  playerId: string,
 ): BoneyardLootStore {
   let changed = false
   const goodies = source.goodies.map((goodie) => {
     if (goodie.eid !== eid || goodie.active || goodie.exhausted) return goodie
     changed = true
-    return Object.freeze({ ...goodie, active: true, timer: 0 })
+    return Object.freeze({
+      ...goodie,
+      active: true,
+      activatedByPlayerId: playerId,
+      timer: 0,
+    })
   })
   return changed ? { ...source, goodies: Object.freeze(goodies) } : source
 }
@@ -529,10 +537,7 @@ export function stepBoneyardLootStore(
     stepLootEffects(work, context.placement, tick)
     stepGoodies(
       work,
-      context.participants[0]?.level ?? 1,
-      context.participants[0]?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
-      context.participants[0]?.modifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
-      context.participants[0]?.ownedRecipeIndexes ?? [],
+      context.participants,
       context.placement,
       tick,
     )
@@ -1110,10 +1115,7 @@ function radialVector(angleDeg: number, speed: number): BoneyardPoint {
 
 function stepGoodies(
   work: WorkingLootStep,
-  playerLevel: number,
-  advancedUnlocks: readonly boolean[],
-  modifiers: NativeLootModifiers,
-  ownedRecipeIndexes: readonly number[],
+  participants: readonly BoneyardLootParticipant[],
   placement: NativeLootPlacement,
   tick: number,
 ): void {
@@ -1135,14 +1137,23 @@ function stepGoodies(
       })
     }
     if (timer !== 250) return Object.freeze(goodie)
-    goodie = { ...goodie, active: false, exhausted: true, phase: 2 }
+    const participant = participants.find(({ playerId }) => (
+      playerId === source.activatedByPlayerId
+    ))
+    goodie = {
+      ...goodie,
+      active: false,
+      activatedByPlayerId: null,
+      exhausted: true,
+      phase: 2,
+    }
     materializeGoodie(
       work,
       goodie,
-      playerLevel,
-      advancedUnlocks,
-      modifiers,
-      ownedRecipeIndexes,
+      participant?.level ?? 1,
+      participant?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
+      participant?.modifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
+      participant?.ownedRecipeIndexes ?? [],
       placement,
       tick,
     )

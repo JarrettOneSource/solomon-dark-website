@@ -21,6 +21,7 @@ import {
 } from '../src/game/core-kernels/native-loot.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import {
   activateBoneyardGoodie,
   createBoneyardLootStore,
@@ -33,9 +34,15 @@ import {
   getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
 import {
+  createBoneyardEnemyStore,
+  damageBoneyardEnemy,
+  stepBoneyardEnemyStore,
+} from '../src/game/core-server/boneyard-enemy-store.ts'
+import {
   damagePlayerEntity,
   playerSkillDerivedStatsAt,
   replacePlayerCharacter,
+  replacePlayerEconomy,
   setPlayerEntityMana,
 } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
@@ -47,6 +54,7 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
 const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
+const charmOwnerOnly = process.argv.includes('--charm-owner-only')
 const ALL_DISABLED = Object.freeze({
   gold: 4,
   item: 4,
@@ -106,6 +114,12 @@ await Promise.all([hostPage, guestPage].map(async (page) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
   page.on('pageerror', (error) => pageErrors.push(error.message))
+  page.on('requestfailed', (request) => {
+    const failure = request.failure()?.errorText ?? 'failed'
+    if (new URL(request.url()).pathname === '/deployment.json') return
+    if (failure === 'net::ERR_ABORTED' && /\.(?:mp3|ogg)(?:\?|$)/.test(request.url())) return
+    failedResponses.push({ error: failure, status: null, url: request.url() })
+  })
   page.on('response', (response) => {
     if (response.status() >= 400) {
       failedResponses.push({ status: response.status(), url: response.url() })
@@ -133,6 +147,7 @@ await Promise.all([hostPage, guestPage].map(async (page) => {
 }))
 
 try {
+  smoke: {
   const page = hostPage
   await enterHub(hostPage, baseUrl, 'Fire')
   await enterHub(guestPage, baseUrl, 'Air')
@@ -170,6 +185,31 @@ try {
     .map(({ playerId: connectedPlayerId }) => connectedPlayerId)
     .find((connectedPlayerId) => connectedPlayerId !== playerId)
   assert.ok(guestPlayerId, 'the second browser must own a distinct authoritative slot')
+
+  if (charmOwnerOnly) {
+    const charmOwnership = await proveCharmOwnerIsolation({
+      guestPage,
+      guestPlayerId,
+      host,
+      hostPage,
+      hostPlayerId: playerId,
+      position: arenaCenter(host.state().world.bounds),
+    })
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
+      consoleErrors: [],
+      failedResponses: [],
+      pageErrors: [],
+    })
+    process.stdout.write(`${JSON.stringify({
+      browser: charmOwnership.browser,
+      charmOwnership,
+      consoleErrors,
+      failedResponses,
+      pageErrors,
+      useBuiltFrontend,
+    }, null, 2)}\n`)
+    break smoke
+  }
 
   const center = arenaCenter(host.state().world.bounds)
   movePlayer(host, playerId, center)
@@ -463,6 +503,7 @@ try {
     terminalFade,
     useBuiltFrontend,
   }, null, 2)}\n`)
+  }
 } finally {
   await Promise.all([
     hostContext.close(),
@@ -472,6 +513,242 @@ try {
   await host.close()
   await new Promise((resolve) => setImmediate(resolve))
   await vite.close()
+}
+
+async function proveCharmOwnerIsolation({
+  guestPage,
+  guestPlayerId,
+  host,
+  hostPage,
+  hostPlayerId,
+  position,
+}) {
+  movePlayer(host, hostPlayerId, point(position, -300, 0))
+  movePlayer(host, guestPlayerId, point(position, 300, 0))
+
+  setOwnedPerkSelectors(host, hostPlayerId, [0])
+  setOwnedPerkSelectors(host, guestPlayerId, [])
+  const maximumHealth = {
+    guest: playerSkillDerivedStatsAt(host.state().playerEntities, guestPlayerId)?.maximumHealth,
+    host: playerSkillDerivedStatsAt(host.state().playerEntities, hostPlayerId)?.maximumHealth,
+  }
+  assert.deepEqual(maximumHealth, { guest: 50, host: 62.5 })
+
+  setOwnedPerkSelectors(host, hostPlayerId, [4])
+  const neutralEnemyGold = await materializeAttributedEnemyGold({
+    creditedPlayerId: guestPlayerId,
+    guestPage,
+    host,
+    hostPage,
+    position,
+  })
+  assert.equal(neutralEnemyGold.amount, 6)
+
+  setOwnedPerkSelectors(host, hostPlayerId, [])
+  setOwnedPerkSelectors(host, guestPlayerId, [4])
+  const charmedEnemyGold = await materializeAttributedEnemyGold({
+    creditedPlayerId: guestPlayerId,
+    guestPage,
+    host,
+    hostPage,
+    position,
+  })
+  assert.equal(charmedEnemyGold.amount, 7)
+
+  setOwnedPerkSelectors(host, hostPlayerId, [4])
+  setOwnedPerkSelectors(host, guestPlayerId, [])
+  const neutralGoodieGold = await materializeOwnedGoodieGold({
+    guestPage,
+    host,
+    hostPage,
+    openerPlayerId: guestPlayerId,
+    position,
+  })
+  assert.equal(neutralGoodieGold.amount, 800)
+
+  setOwnedPerkSelectors(host, hostPlayerId, [])
+  setOwnedPerkSelectors(host, guestPlayerId, [4])
+  const charmedGoodieGold = await materializeOwnedGoodieGold({
+    guestPage,
+    host,
+    hostPage,
+    openerPlayerId: guestPlayerId,
+    position,
+  })
+  assert.equal(charmedGoodieGold.amount, 1_000)
+
+  const browser = await Promise.all([hostPage, guestPage].map((page) => (
+    page.locator('.boneyard-world-canvas').evaluate((node) => ({
+      context: (node.getContext('webgl2') || node.getContext('webgl'))?.constructor.name,
+      lootCount: Number(node.dataset.lootCount),
+      playerCount: node.__sdrBoneyardFrame.playerCount,
+      rendererName: node.dataset.rendererName,
+      runtimeErrorCount: document.querySelectorAll('.game-runtime-error').length,
+    }))
+  )))
+  assert.ok(browser.every(({ context, playerCount, rendererName, runtimeErrorCount }) => (
+    context === 'WebGL2RenderingContext'
+    && playerCount === 2
+    && rendererName === 'webgl'
+    && runtimeErrorCount === 0
+  )), JSON.stringify(browser))
+
+  return {
+    browser,
+    charmedEnemyGold,
+    charmedGoodieGold,
+    maximumHealth,
+    neutralEnemyGold,
+    neutralGoodieGold,
+    selectors: {
+      guest: [...getPlayerEconomy(host.state(), guestPlayerId).ownedPerkSelectors],
+      host: [...getPlayerEconomy(host.state(), hostPlayerId).ownedPerkSelectors],
+    },
+  }
+}
+
+async function materializeAttributedEnemyGold({
+  creditedPlayerId,
+  guestPage,
+  host,
+  hostPage,
+  position,
+}) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const worldManagerOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const players = Object.fromEntries(state.playerEntities.identities.map(({ playerId }) => {
+    const player = getPlayerCharacter(state, playerId)
+    return [playerId, {
+      alive: true,
+      collisionRadius: 25,
+      connected: true,
+      eligible: true,
+      position: player.position,
+      velocityPerTick: { x: 0, y: 0 },
+    }]
+  }))
+  const spawned = stepBoneyardEnemyStore(
+    createBoneyardEnemyStore(`browser-charm-owner-${state.tick}`),
+    {
+      firstProjectileWorldContact: () => null,
+      players,
+      registerWorldPainter: worldManagerOrder.register,
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [{
+        enemyToken: 'SKELETON',
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+        position,
+        spawnTick: state.tick,
+        waveOrdinal: 1,
+      }],
+      rollLootSeed: () => 9_974_658,
+      tick: state.tick,
+    },
+  )
+  const enemy = spawned.store.actors[0]
+  assert.ok(enemy)
+  const killed = damageBoneyardEnemy(spawned.store, {
+    actorId: enemy.id,
+    amount: enemy.currentHealth,
+    registerWorldPainter: worldManagerOrder.register,
+    sourcePlayerId: creditedPlayerId,
+    tick: state.tick,
+  })
+  assert.equal(killed.killed, true)
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      arenaTransition: null,
+      encounter: null,
+      enemies: killed.store,
+      enemyEvents: [],
+      loot: {
+        ...createBoneyardLootStore(`browser-charm-owner-loot-${state.tick}`),
+        sharedRng: createNativeRng(100),
+      },
+      lootEvents: [],
+      waves: null,
+    },
+    worldManagerOrder: worldManagerOrder.state(),
+  })
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard'
+      && world.enemies.actors.length === 0
+      && world.loot.actors.some(({ source }) => source === 'enemy')
+  }, 'attributed charm-owner enemy reward did not materialize')
+  const world = host.state().world
+  assert.equal(world.kind, 'boneyard')
+  const actors = world.loot.actors.filter(({ source }) => source === 'enemy')
+  await Promise.all([
+    waitForLootCount(hostPage, actors.length),
+    waitForLootCount(guestPage, actors.length),
+  ])
+  return {
+    actorCount: actors.length,
+    amount: actors.reduce((total, actor) => total + actor.amount, 0),
+    creditedPlayerId,
+  }
+}
+
+async function materializeOwnedGoodieGold({
+  guestPage,
+  host,
+  hostPage,
+  openerPlayerId,
+  position,
+}) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  let loot = createBoneyardLootStore('goodie-charm-owner', [{
+    eid: 'browser-goodie-owner',
+    position,
+    rewardSeed: 13,
+    subtype: 0,
+  }])
+  loot = activateBoneyardGoodie(loot, 'browser-goodie-owner', openerPlayerId)
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemyEvents: [],
+      loot,
+      lootEvents: [],
+    },
+  })
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard'
+      && world.loot.goodies[0]?.exhausted === true
+      && world.loot.actors.length > 0
+  }, 'owned Goodie Gold did not materialize', 10_000)
+  const world = host.state().world
+  assert.equal(world.kind, 'boneyard')
+  await Promise.all([
+    waitForLootCount(hostPage, world.loot.actors.length),
+    waitForLootCount(guestPage, world.loot.actors.length),
+  ])
+  assert.equal(world.loot.goodies[0]?.activatedByPlayerId, null)
+  return {
+    actorCount: world.loot.actors.length,
+    amount: world.loot.actors.reduce((total, actor) => total + actor.amount, 0),
+    openerPlayerId,
+  }
+}
+
+function setOwnedPerkSelectors(host, playerId, ownedPerkSelectors) {
+  const state = host.state()
+  const economy = getPlayerEconomy(state, playerId)
+  Object.assign(state, {
+    playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+      ...economy,
+      ownedPerkSelectors,
+      revision: economy.revision + 1,
+    }),
+  })
 }
 
 async function proveGoodieSackOpening({ host, page, playerId, position }) {
@@ -489,7 +766,7 @@ async function proveGoodieSackOpening({ host, page, playerId, position }) {
     ...goodie,
     nextItemId: state.world.loot.nextItemId,
   }
-  goodie = activateBoneyardGoodie(goodie, 'browser-goodie-sack')
+  goodie = activateBoneyardGoodie(goodie, 'browser-goodie-sack', playerId)
   goodie = stepBoneyardLootStore(goodie, {
     participants: [],
     placement: NATIVE_LOOT_OPEN_PLACEMENT,
@@ -600,7 +877,7 @@ async function enterHub(page, baseUrl, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
-  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  const tutorialPrompt = page.locator('[data-prompt-kind="tutorial"] .stock-prompt-dialog')
   if (await tutorialPrompt.isVisible()) {
     await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
     await tutorialPrompt.waitFor({ state: 'detached' })

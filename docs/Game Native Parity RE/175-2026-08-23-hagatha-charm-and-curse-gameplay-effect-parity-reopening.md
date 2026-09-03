@@ -1257,3 +1257,205 @@ No member is blocked by the browser platform.
   worktree remain focused and retained because publication was not requested.
   One local focused commit records the validated tree; no push, deployment, or
   production restart is claimed by this receipt.
+
+## 2026-09-02 — participant-scoped Hagatha effect ownership correction
+
+### Reported smell and parity question
+
+- Reported web behavior: one player's charms affect the whole party instead of
+  only the player who owns them.
+- Stock behavior to preserve: Hagatha flags and retained one-shot fields belong
+  to one participant's `ActorProgression`; no party union or first-member proxy
+  may stand in for that owner.
+- Reproduction inputs/scenes: two participants with disjoint charm sets; Hub
+  purchase/removal; derived stats; skill and equipment refresh; incoming and
+  outgoing combat; an enemy killed by the second participant; a Goodie opened
+  by the second participant; pickup contention; death, save/rejoin, and exit.
+- Falsifiers: changing the first party member's selectors changes a second
+  member's derived state, cast, damage, reward roll, or opened Goodie; changing
+  party insertion order changes an attributed reward; or a missing/disconnected
+  owner silently inherits another participant's modifiers.
+
+This is a secondary report in the Hagatha system. The 2026-08-23 pass proved
+participant-owned flags and tested purchase-state isolation, but its membership
+sweep stopped before the two world-level loot consumers. Those consumers
+continued to select `Object.keys(nextPlayers)[0]` or `participants[0]`, so the
+first party member's Item, Gold, Scatter, and Arcane Attractor modifiers could
+govern another participant's enemy reward, and the first member's Gold Charm
+could govern a Goodie opened by a peer. This reopening removes that proxy owner
+and re-audits every selector.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Owner report | 2026-09-02 request | Charm consequences must remain with the player who owns the charm, not the party. | high for required Website behavior |
+| Existing retail instructions | sealed retail 0.72.5 image SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; apply `0x0066EF70`; refresh `0x0067C360`; complete consumer census above | Selector flags, capacity, and retained one-shot lanes live on one participant's `ActorProgression`; the prior ledger already rejects owner state leaking to a peer. | high |
+| Current web enemy-reward trace | Website `a2b19c2f`; `boneyard-enemy-store.ts` terminal reward plus `boneyard-world.ts` reward materialization | Terminal rewards retain `lastDamagedByPlayerId`, but materialization discards it and feeds every reward the first enumerated participant's level, unlocks, inventory context, recipes, and `NativeLootModifiers`. | high |
+| Current web Goodie trace | Website `a2b19c2f`; `interactWithBoneyardGoodie`, `activateBoneyardGoodie`, `stepBoneyardLootStore`, `stepGoodies` | Key consumption knows the opener, but activation stores no player identity; delayed materialization always consumes `context.participants[0]`. | high |
+| Complete web consumer sweep | `nativeHagathaDerivedModifiers`, `player-entity-store.ts`, `game-simulation.ts`, `player-staff-combat-system.ts`, `native-hagatha-seeker-view.ts`, `native-loot.ts` | All non-loot effect paths already resolve an explicit player index/ID or local-player snapshot. Only enemy reward selection and delayed Goodie Gold materialization use a first-party-member proxy. | high |
+
+No new injected-runtime evidence is used. The retail image and instruction
+addresses are inherited from the byte-identified system evidence above; this
+reopening corrects the web multiplayer owner that consumes those facts.
+
+### System boundary and membership inventory
+
+Native system: participant-scoped Hagatha ownership from purchase and retained
+runtime through every derived, combat, progression, loot, presentation,
+persistence, replication, and teardown consumer. Shared world consequences may
+still be visible or contestable, but the modifier that creates them must come
+from the actor who owns the charm.
+
+| Selector/member | Ownership disposition | Decisive proof |
+| ---: | --- | --- |
+| 0 Life | `verified-already-at-parity` | maximum health derives from the addressed participant economy only |
+| 1 Mana | `verified-already-at-parity` | maximum mana derives from the addressed participant economy only |
+| 2 Speed | `verified-already-at-parity` | movement/cast factors are projected by player ID |
+| 3 Item | `exact-ported` by this reopening | enemy Item chance consumes the attributed killer's modifier, never party slot zero |
+| 4 Gold | `exact-ported` by this reopening | enemy Gold chance/amount use the attributed killer; delayed Goodie Gold uses the opener latched at activation |
+| 5 Seeker's | `verified-already-at-parity` | renderer requires the local player snapshot and that player's selector 5 |
+| 6 Revelation | `verified-already-at-parity` | purchase/rank/equipment writers mutate only the addressed player entity |
+| 7 Cheat Death | `verified-already-at-parity` | charge and lethal recovery live in the damaged participant progression |
+| 8 Perky | `out-of-system` — retail and web offer builders exclude the dormant row | no player or party can acquire it |
+| 9 Scatter | `exact-ported` by this reopening | enemy Orb chance/value consume the attributed killer's modifier |
+| 10 War | `verified-already-at-parity` | offensive mana derives from the caster's economy/runtime |
+| 11 Curing | `verified-already-at-parity` | poison factor derives from the damaged participant |
+| 12 Last Word | `verified-already-at-parity` | death milestones and Mindblast/archive source are keyed by dead owner ID |
+| 13 Spellwelder's | `verified-already-at-parity` | Weld cache refresh uses the owning skill book and economy index |
+| 14 Weird Caster | `verified-already-at-parity` | grant RNG, skill book, and offer bias mutate only the purchaser |
+| 15 Drinker's | `verified-already-at-parity` | HP/MP predicates and potion removal use the addressed participant inventory |
+| 16 Glass Cannon | `verified-already-at-parity` | outgoing source and incoming target resolve their own derived factors |
+| 17 Sorceror's | `verified-already-at-parity` | reroll/defer availability is checked at the offer owner's index |
+| 18 Focus | `verified-already-at-parity` | secondary recharge derives from the casting participant |
+| 19 Disfiguring | `verified-already-at-parity` | third-ring admission uses the addressed participant economy |
+| 20 Bare Hands | `verified-already-at-parity` | weapon state and spell factors come from the casting participant |
+| 21 Split Mind | `verified-already-at-parity` | concentration B is admitted and saved per participant |
+| 22 Curse Bosses | `verified-already-at-parity` | primary, secondary, Staff, and Last Word damage look up the source owner ID |
+| 23 Arcane Attractor | `exact-ported` by this reopening | enemy Powerup chance consumes the attributed killer's modifier |
+| 24 Serendipity | `verified-already-at-parity` | armed/cleared state and outgoing factor live in one progression |
+| 25 Reverie | `verified-already-at-parity` | armed/cleared state and mana debit live in one progression |
+| 26 Brute's | `verified-already-at-parity` | melee and push factors resolve the acting player's owner ID |
+| 27 Tonic | `verified-already-at-parity` | capacity changes only the purchaser's ordered outcome vector |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread and recovered behavioral contract
+
+- `ActorProgression` remains the sole charm owner. Purchases, runtime flags,
+  skill books, equipment, vitals, input cadence, combat, snapshots, and saves
+  are already indexed by authenticated `playerId`.
+- A hostile's lethal path retains `lastDamagedByPlayerId` in its terminal
+  reward. Enemy loot selection must resolve the complete participant context
+  from that ID. The first party entry is ordering, not ownership.
+- Goodie key consumption already has an authenticated opener. Activation must
+  latch that ID across the 100/200/250-tick presentation and resolve the same
+  participant at materialization. If that participant no longer exists, the
+  Goodie uses neutral defaults; it never borrows a peer's charm state.
+- `NativeLootModifiers` stays one indivisible participant value. Item, Gold,
+  Scatter, Arcane Attractor, equipment attraction, level/unlocks, inventory
+  health-potion context, and owned recipes must all come from the same reward
+  owner so no hybrid party context is constructed.
+- Ground actors remain shared authoritative world objects and retain native
+  first-valid pickup contention. A peer collecting an existing drop is not a
+  charm grant; the drop's selection and amount were already fixed by the
+  attributed killer or Goodie opener.
+- Disconnect, owner removal, run exit, and Goodie exhaustion clear or neutralize
+  delayed ownership. No client-visible protocol field or replicated charm union
+  is added.
+
+### Nearby-system findings
+
+- The first-participant proxy also selected non-Hagatha loot inputs (level,
+  advanced unlocks, inventory health-potion presence, owned recipes). Routing
+  the complete context through one attributed owner prevents those fields from
+  disagreeing with the corrected charm owner.
+- Loot attraction during ground-actor updates already evaluates each candidate
+  participant's own modifiers. It is not part of the leak and remains unchanged.
+- Last Word and Curse Bosses can affect shared enemies or ground actors, just as
+  an ordinary player attack can; their initiating state remains owner-local and
+  is not copied to peers.
+
+### Confidence and open questions
+
+- Confirmed: prior retail participant ownership; complete selector membership;
+  terminal killer attribution; Goodie opener authority; both first-participant
+  proxy call sites; all other web consumers and lifecycle boundaries.
+- Inferred: none required for the Website correction. Attributed killer and
+  authenticated opener are the only existing actor identities at the two
+  delayed world seams.
+- Unknown: none material.
+
+### Web implementation consequence
+
+- Replace enemy reward `authorityCombat` with the participant context selected
+  by `reward.playerId`; null or absent attribution receives neutral loot input.
+- Add an activation-owner field to server-side Goodie state, set it from the
+  authenticated interaction, consume it at tick 250, and clear it on
+  exhaustion. Keep it out of the client snapshot because it owns no pixels or
+  input after activation.
+- Preserve the shared RNG stream, candidate tables, drop actors, pickup order,
+  protocol DTO, and every non-loot charm consumer.
+
+### Validation contract
+
+- Focused enemy-reward regression: with a charmed first participant and an
+  uncharmed second-participant killer, output equals the uncharmed baseline;
+  moving the same charm to the killer changes only that attributed reward.
+- Focused Goodie regression: changing a non-opener's Gold Charm cannot alter
+  delayed Gold; changing the opener's charm does, regardless of participant
+  insertion order. Missing opener lookup uses neutral modifiers.
+- Existing per-selector Hagatha kernel/entity/combat/save/renderer suites stay
+  green, including two-participant purchase/runtime isolation and all four loot
+  modifier fields.
+- Complete Mac mini `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact
+  candidate tree.
+- Real two-client Mac Chrome journey: give only one client Gold Charm, prove
+  the other client's attributed enemy reward and opened Goodie stay neutral,
+  then prove the owner's equivalent paths receive the modifier. Both clients'
+  snapshots must retain disjoint selector lists and derived stats, with empty
+  page/console/failed-response/WebGL/wire/host-error arrays.
+
+### Implementation validation receipt
+
+- Enemy terminal reward materialization now selects the complete loot context
+  through `reward.playerId`. Null, unknown, or disconnected attribution uses
+  neutral defaults instead of the first party entry. The same selected context
+  supplies all four Hagatha loot fields plus level, unlocks, inventory Potion
+  state, and recipes, so a hybrid party reward cannot be constructed.
+- `BoneyardGoodieState` now latches `activatedByPlayerId` when the authenticated
+  key interaction succeeds. The 100/200/250-tick sequence retains that owner,
+  tick 250 resolves only the matching participant, and exhaustion clears the
+  field. A missing owner is neutral. Client Goodie snapshots, shared RNG,
+  painter order, and first-valid ground pickup remain unchanged.
+- The Mac red run proved both defects before implementation: a Gold Charm on
+  party slot zero changed a second player's attributed enemy reward from six to
+  seven Gold, and changed peer-opened Goodie Gold from 800 to 1,000. After the
+  correction, the expanded 91-test focused loot/simulation run passes. Its
+  enemy matrix covers Item selector 3, Gold 4, Scatter 9, and Arcane Attractor
+  23 with neutral/charmed owner, charmed peer, and missing-owner branches. The
+  Goodie matrix covers opener, non-opener, insertion order, missing owner,
+  owner retention, and exhaustion cleanup. Test TypeScript and focused lint
+  both pass with zero errors.
+- The candidate was rebased onto Website `de814b462d5609e90fbf571f2ade7b373e9241b1`
+  and materialized byte-for-byte in a clean Mac worktree. The complete
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` gate passed: backend build with
+  zero warnings/errors, 19 backend/integration contracts, backend formatting,
+  frontend lint/architecture/generated-content checks, every configured
+  frontend suite, desktop tests, production frontend/game-host builds, bundle
+  budget, and media policy. Lint retained the repository's 11 pre-existing
+  warnings and introduced no error. `Game-CGrgqk2q.js` measured 265,203 raw /
+  80,820 gzip bytes under the 524,288 / 134,144 limits.
+- Real Mac Chrome ran the production bundle with two independent browser
+  contexts and the authoritative host. With Life Charm only on player one,
+  maximum health was `62.5` for its owner and `50` for player two. With Gold
+  Charm only on player one, player two's attributed kill remained six Gold and
+  player-two-opened Goodie remained 800; moving the charm to player two changed
+  only those owner paths to seven and 1,000. Both canvases reported
+  `WebGL2RenderingContext`, two players, and the same 65 final ground actors.
+  Page errors, console errors, failed requests/responses, and surfaced runtime
+  errors were empty.
+- All 28 selector rows have a final disposition above. No browser-specific
+  approximation, protocol field, save-schema change, or material unknown
+  remains. Commit is local and focused; push, deployment, and production
+  restart were not requested or performed.

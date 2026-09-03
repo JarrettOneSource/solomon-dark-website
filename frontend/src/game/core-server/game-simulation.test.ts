@@ -3798,6 +3798,144 @@ test('enemy retirement carries its death-time private seed into one authoritativ
   }
 })
 
+test('enemy loot charm modifiers belong only to the participant credited with the kill', () => {
+  const materializedReward = (
+    firstSelectors: readonly number[],
+    killerSelectors: readonly number[],
+    actorSeed: number,
+    creditedPlayerId = 'killer',
+  ) => {
+    let state = enterBoneyardWorld(
+      createGameSimulation({
+        first: {
+          discipline: 'arcane',
+          displayName: 'First',
+          element: 'ether',
+        },
+        killer: {
+          discipline: 'body',
+          displayName: 'Killer',
+          element: 'fire',
+        },
+      }),
+      emptyBoneyard(),
+    )
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    for (const [playerId, ownedPerkSelectors] of [
+      ['first', firstSelectors],
+      ['killer', killerSelectors],
+    ] as const) {
+      const economy = getPlayerEconomy(state, playerId)
+      state = {
+        ...state,
+        playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+          ...economy,
+          ownedPerkSelectors,
+        }),
+      }
+    }
+    state = {
+      ...state,
+      playerEntities: {
+        ...state.playerEntities,
+        progressions: state.playerEntities.progressions.map((progression) => ({
+          ...progression,
+          level: 12,
+        })),
+      },
+    }
+    const first = getPlayerCharacter(state, 'first')
+    const killer = getPlayerCharacter(state, 'killer')
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    const boneyardWorld = state.world
+    const spawned = stepBoneyardEnemyStore(boneyardWorld.enemies, {
+      firstProjectileWorldContact: () => null,
+      players: {
+        first: {
+          alive: true,
+          collisionRadius: 25,
+          connected: true,
+          eligible: true,
+          position: first.position,
+          velocityPerTick: { x: 0, y: 0 },
+        },
+        killer: {
+          alive: true,
+          collisionRadius: 25,
+          connected: true,
+          eligible: true,
+          position: killer.position,
+          velocityPerTick: { x: 0, y: 0 },
+        },
+      },
+      rollLootSeed: () => actorSeed,
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [{
+        enemyToken: 'SKELETON',
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+        position: { x: first.position.x + 200, y: first.position.y },
+        spawnTick: 0,
+        waveOrdinal: 1,
+      }],
+      tick: 0,
+    })
+    const enemy = spawned.store.actors[0]!
+    const killed = damageBoneyardEnemy(spawned.store, {
+      actorId: enemy.id,
+      amount: enemy.currentHealth,
+      sourcePlayerId: creditedPlayerId,
+      tick: 0,
+    })
+    state = {
+      ...state,
+      world: {
+        ...boneyardWorld,
+        enemies: killed.store,
+        loot: { ...boneyardWorld.loot, sharedRng: createNativeRng(100) },
+      },
+    }
+
+    state = stepGameSimulationTick(state, {})
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    return state.world.loot.actors.map((actor) => ({
+      amount: actor.amount,
+      bonusKind: actor.bonusKind,
+      itemKind: actor.item?.kind ?? null,
+      kind: actor.kind,
+      orbValue: actor.orbValue,
+    }))
+  }
+
+  const goldSeed = 9_974_658
+  const neutralGold = materializedReward([], [], goldSeed)
+  assert.deepEqual(materializedReward([4], [], goldSeed), neutralGold)
+  assert.equal(neutralGold.reduce((total, actor) => total + actor.amount, 0), 6)
+  assert.equal(
+    materializedReward([], [4], goldSeed).reduce((total, actor) => total + actor.amount, 0),
+    7,
+  )
+  assert.deepEqual(materializedReward([4], [], goldSeed, 'disconnected'), neutralGold)
+
+  const orbSeed = 6_778_989
+  const neutralOrb = materializedReward([], [], orbSeed)
+  assert.deepEqual(materializedReward([9], [], orbSeed), neutralOrb)
+  assert.ok(materializedReward([], [9], orbSeed)[0]!.orbValue > neutralOrb[0]!.orbValue)
+
+  const itemSeed = 247_445
+  assert.deepEqual(materializedReward([3], [], itemSeed), materializedReward([], [], itemSeed))
+  assert.equal(materializedReward([], [3], itemSeed)[0]?.itemKind, 'equipment')
+
+  const powerupSeed = 143
+  assert.deepEqual(
+    materializedReward([23], [], powerupSeed),
+    materializedReward([], [], powerupSeed),
+  )
+  assert.equal(materializedReward([], [23], powerupSeed)[0]?.kind, 'bonus')
+})
+
 test('all three Bonus pickups apply once through authoritative progression and feedback', () => {
   for (const bonusKind of [0, 1, 2] as const) {
     let state = enterBoneyardWorld(

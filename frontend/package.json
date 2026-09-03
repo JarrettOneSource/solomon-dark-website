@@ -99,6 +99,7 @@
     "smoke:game:hub-npcs": "node --experimental-strip-types tools/smoke-hub-npcs.mjs",
     "smoke:game:sacks-dyes": "node --experimental-strip-types tools/smoke-sacks-dyes.mjs",
     "smoke:game:loot-drops": "node --experimental-strip-types tools/smoke-loot-drops.mjs",
+    "smoke:game:charm-owners": "node --experimental-strip-types tools/smoke-loot-drops.mjs --charm-owner-only",
     "smoke:game:reported-parity": "node tools/smoke-reported-parity.mjs",
     "smoke:editor:layering": "node tools/smoke-boneyard-editor-layering.mjs",
     "smoke:game:invincibility-mod": "node --experimental-strip-types tools/smoke-invincibility-mod.mjs",

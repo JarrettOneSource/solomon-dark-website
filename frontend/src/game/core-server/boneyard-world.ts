@@ -881,13 +881,14 @@ export function stepBoneyardWorldTick(
     },
     tick,
   })
-  const authorityId = Object.keys(nextPlayers)[0]
-  const authorityCombat = authorityId === undefined ? undefined : playerCombat[authorityId]
   const badguyCountBeforeDeaths = collisionResolvedEnemies.actors.length
   for (const [rewardIndex, reward] of enemyStep.rewards.entries()) {
+    const rewardCombat = reward.playerId === null
+      ? undefined
+      : playerCombat[reward.playerId]
     const materialized = materializeBoneyardEnemyLoot(loot, {
       actorSeed: reward.lootSource.actorSeed,
-      advancedUnlocks: authorityCombat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
+      advancedUnlocks: rewardCombat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
       arena: {
         disableMask: 0,
         itemLevelMaximum: 100,
@@ -896,16 +897,16 @@ export function stepBoneyardWorldTick(
         mode: 0,
         specialSuppression: false,
       },
-      inventoryHasHealthPotion: authorityCombat?.inventoryHasHealthPotion ?? false,
-      modifiers: authorityCombat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
+      inventoryHasHealthPotion: rewardCombat?.inventoryHasHealthPotion ?? false,
+      modifiers: rewardCombat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
       nearbyMaskTwoCount: nearbyNativeMaskTwoCount(
         collisionResolvedEnemies,
         reward.actorId,
         reward.lootSource.position,
       ),
       onDeathProgram: reward.lootSource.onDeathProgram,
-      ownedRecipeIndexes: authorityCombat?.ownedRecipeIndexes ?? [],
-      participantLevel: authorityCombat?.level ?? 1,
+      ownedRecipeIndexes: rewardCombat?.ownedRecipeIndexes ?? [],
+      participantLevel: rewardCombat?.level ?? 1,
       participantSlot: reward.lootSource.participantSlot,
       placement: createNativeLootPlacement(
         activeBounds,

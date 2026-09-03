@@ -513,7 +513,9 @@ test('Goodie activation owns exact phases 100/200 and materializes at 250', () =
     rewardSeed: 0,
     subtype: 0,
   }])
-  store = activateBoneyardGoodie(store, 'goodie-1')
+  store = activateBoneyardGoodie(store, 'goodie-1', 'far')
+  assert.equal(store.goodies[0]?.activatedByPlayerId, 'far')
+  assert.strictEqual(activateBoneyardGoodie(store, 'goodie-1', 'peer'), store)
   let stepped = stepBoneyardLootStore(store, { participants: FAR, tick: 0 })
   stepped = stepBoneyardLootStore(stepped.store, { participants: FAR, tick: 98 })
   assert.equal(stepped.store.goodies[0]?.phase, 0)
@@ -528,6 +530,7 @@ test('Goodie activation owns exact phases 100/200 and materializes at 250', () =
   assert.equal(stepped.store.goodies[0]?.phase, 2)
   stepped = stepBoneyardLootStore(stepped.store, { participants: FAR, tick: 249 })
   assert.equal(stepped.store.goodies[0]?.active, false)
+  assert.equal(stepped.store.goodies[0]?.activatedByPlayerId, null)
   assert.equal(stepped.store.actors.length, 1)
   assert.equal(stepped.store.actors[0]?.kind, 'sack')
   assert.equal(stepped.store.actors[0]?.item?.nativeTypeId, 7008)
@@ -538,6 +541,74 @@ test('Goodie activation owns exact phases 100/200 and materializes at 250', () =
     [[1, 0, 5]],
   )
   assert.equal(stepped.store.nextItemId, 7)
+})
+
+test('delayed Goodie Gold uses only the activating player charm modifiers', () => {
+  const materializedGold = (
+    firstSelectors: readonly number[],
+    openerSelectors: readonly number[],
+  ): number => {
+    let store = createBoneyardLootStore('goodie-charm-owner', [{
+      eid: 'owned-goodie',
+      position: { x: 100, y: 200 },
+      rewardSeed: 13,
+      subtype: 0,
+    }])
+    store = activateBoneyardGoodie(store, 'owned-goodie', 'opener')
+    const participants = [
+      {
+        ...FAR[0]!,
+        modifiers: nativeLootModifiers(firstSelectors),
+        playerId: 'first',
+      },
+      {
+        ...FAR[0]!,
+        modifiers: nativeLootModifiers(openerSelectors),
+        playerId: 'opener',
+      },
+    ]
+    const started = stepBoneyardLootStore(store, {
+      participants,
+      tick: 0,
+    })
+    const stepped = stepBoneyardLootStore(started.store, {
+      participants,
+      tick: 249,
+    })
+    return stepped.store.actors.reduce((total, actor) => total + actor.amount, 0)
+  }
+
+  const neutral = materializedGold([], [])
+  assert.equal(materializedGold([4], []), neutral)
+  assert.ok(materializedGold([], [4]) > neutral)
+
+  let missingOwner = createBoneyardLootStore('goodie-charm-owner', [{
+    eid: 'owned-goodie',
+    position: { x: 100, y: 200 },
+    rewardSeed: 13,
+    subtype: 0,
+  }])
+  missingOwner = activateBoneyardGoodie(missingOwner, 'owned-goodie', 'disconnected')
+  const missingStarted = stepBoneyardLootStore(missingOwner, {
+    participants: [{
+      ...FAR[0]!,
+      modifiers: nativeLootModifiers([4]),
+      playerId: 'first',
+    }],
+    tick: 0,
+  })
+  const missingFinished = stepBoneyardLootStore(missingStarted.store, {
+    participants: [{
+      ...FAR[0]!,
+      modifiers: nativeLootModifiers([4]),
+      playerId: 'first',
+    }],
+    tick: 249,
+  })
+  assert.equal(
+    missingFinished.store.actors.reduce((total, actor) => total + actor.amount, 0),
+    neutral,
+  )
 })
 
 test('proximity alone never activates a locked Goodie without an explicit interaction action', () => {

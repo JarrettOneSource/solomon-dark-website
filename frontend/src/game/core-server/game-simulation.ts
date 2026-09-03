@@ -4416,7 +4416,7 @@ function interactWithBoneyardGoodie(
       playerEntities: consumed.store,
       world: {
         ...state.world,
-        loot: activateBoneyardGoodie(state.world.loot, goodie.eid),
+        loot: activateBoneyardGoodie(state.world.loot, goodie.eid, playerId),
       },
     },
   }
