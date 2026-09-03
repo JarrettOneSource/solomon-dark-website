@@ -490,8 +490,10 @@ simulation while it has resident actors, plus zero or more party-scoped
 Boneyard simulations. After the last Hub resident leaves, the coordinator
 reconstructs only that empty world at tick zero and holds it until admission;
 the process, parties, active Boneyards, social broker, and persisted Memorial
-keep their independent lifetimes. Each socket receives snapshots only for its
-current world instance, while party-control messages remain session-wide.
+keep their independent lifetimes. Snapshot and autosave cadence uses a separate
+process-lifetime host-step counter, so freezing the Hub cannot starve a run or
+observer. Each socket receives snapshots only for its current world instance,
+while party-control messages remain session-wide.
 Before a newly created or restored Boneyard is exposed to its participants,
 the host's loading owner prepares the immutable ordinary, Demon, and Solomon
 NavMeshes in a server-only worker thread. The worker receives only collision

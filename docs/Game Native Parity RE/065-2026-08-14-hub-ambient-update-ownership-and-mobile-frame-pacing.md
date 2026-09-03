@@ -222,6 +222,9 @@ No member is blocked by the browser platform.
   resident leaves reconstructs a fresh empty Hub, preserves the ten-slot
   Memorial, leaves parties and active Boneyards untouched, and then holds the
   empty Hub at tick zero until the next admission.
+- Snapshot and periodic-save cadence belongs to a separate process-lifetime
+  host-step counter. Resetting or freezing the empty Hub therefore cannot stop
+  `20 Hz` delivery, observers, recovery, or checkpoints for active Boneyards.
 - No arbitrary age threshold may reset an occupied Hub. The scene-epoch rule
   removes late-join age cost without interrupting players; the empty boundary
   resets Students, ambient actors, runtime grids, painter counters, and Hub RNG
@@ -242,6 +245,9 @@ No member is blocked by the browser platform.
   an active Boneyard, then prove that the Hub resets once and remains at tick
   zero while the run advances. Memorial and party identity must survive, and a
   new Hub resident must begin advancing from zero.
+- Host and supervisor coverage must retain player and observer snapshots,
+  leaderboard/Memorial completion, periodic saves, and deployment recovery
+  while every connected actor is outside the reset Hub.
 - The exact candidate requires the complete Mac Website gate and a built Mac
   Chrome production journey against an artificially aged shared Hub. The
   browser receipt must show bounded discipline-to-ready time, no absolute-tick

@@ -709,6 +709,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let nextChatSequence = 1
   const socialChatSequences = new Map<number, number>()
   let nextSnapshotSequence = 1
+  let sharedHostTick = 0
   const saveDocuments = new Map<string, string>()
   const saveSequences = new Map<string, number>()
   let nextLuaRunSeed: number | null = null
@@ -3778,17 +3779,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
           steps += 1
+          sharedHostTick += 1
           if (
             lifecycleBoundary
-            || (
-              state.tick !== previous.hub.tick
-              && state.tick % ticksPerSnapshot === 0
-            )
+            || sharedHostTick % ticksPerSnapshot === 0
           ) broadcastSnapshot()
-          if (
-            state.tick !== previous.hub.tick
-            && state.tick % GAME_SAVE_AUTOSAVE_INTERVAL_TICKS === 0
-          ) {
+          if (sharedHostTick % GAME_SAVE_AUTOSAVE_INTERVAL_TICKS === 0) {
             publishSaveCheckpoint('periodic')
           }
           continue
