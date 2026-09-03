@@ -256,3 +256,35 @@ No member is blocked by the browser platform.
 
 Implementation in this source change is complete; validation, publication, and
 deployment are separate receipts below.
+
+### Implementation and validation receipt
+
+- Functional code candidate `8794d69f90c281c6526c9444555bbbf1c6566a67`
+  makes the scene epoch mandatory for every stochastic Hub clock, resets and
+  freezes an empty shared Hub, prunes departed player references, and gives
+  shared snapshots/autosaves an independent monotonic host-step clock.
+- The local and Mac worktrees matched at the commit/tree level and across the
+  changed-file byte manifest. On the Mac, test TypeScript checking plus the
+  focused Hub/shared-world suites passed `51/51`. The first complete gate
+  correctly exposed one omitted polisher epoch and then five active-run
+  snapshot/autosave failures caused by freezing the former cadence clock. Those
+  findings were fixed at their owners; all six focused regressions passed.
+- The final functional Mac `./scripts/validate.sh` run passed backend contracts,
+  every frontend/runtime group including `1,803/1,803` Boneyard tests, desktop
+  checks, production frontend and game-host builds, bundle budget (`265,203`
+  raw / `80,656` gzip), and CSP media policy. Its combined log SHA-256 is
+  `24797f98f6a5e7b82ea7fd4bd18ab21ce7a32a483bd4867659149ae972b27ccd`.
+  The available Mac toolchain was Node `22.23.2` / npm `10.9.8`, newer than the
+  package's pinned Node `22.17.0` / npm `10.9.2`; npm emitted that engine warning
+  but no validation failure.
+- Built Mac Chrome 152 joined an occupied local shared Hub whose welcome tick
+  was `1,500,903`. Discipline-to-ready was `2,818 ms`, welcome-to-ready was
+  `863.4 ms`, and hello-to-welcome was `23.2 ms`. The join produced one `220 ms`
+  long task and no page, console, request, host, or runtime error. The old
+  multi-second `native-world-speech` checkpoint expansion was absent from the
+  CPU hot list. Both players rendered at tick `1,500,986.25`; after they closed,
+  the same host reported zero players and Hub tick zero. Browser receipt log
+  SHA-256 is
+  `a38d7c55836dbd9cf9117f1537fd5ccd9f71164af7de0ff95c51a8bc666cb906`.
+- No browser-platform exception remains. Publication and production deployment
+  are separate from these validation receipts.
