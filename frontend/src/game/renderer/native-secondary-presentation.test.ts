@@ -21,6 +21,7 @@ import {
   nativeSecondaryMiscLightSource,
   nativeSecondaryProviderLightSource,
 } from './boneyard-lighting.ts'
+import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
 import {
   NativeSecondaryPresentationScratch,
   nativeGolemFacing,
@@ -124,6 +125,41 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     worldKey: 'boneyard:test',
   }
 }
+
+function close(actual: number, expected: number, message: string): void {
+  assert.ok(
+    Math.abs(actual - expected) < 1e-12,
+    `${message}: expected ${expected}, received ${actual}`,
+  )
+}
+
+test('native sprite affine order rotates before fixed-axis scale', () => {
+  const matrix = { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }
+  writeNativeRotationThenScaleMatrix(matrix, Math.PI / 6, 2, 3, 7, 11)
+  close(matrix.a, Math.sqrt(3), 'positive a')
+  close(matrix.b, 1.5, 'positive b uses Y scale')
+  close(matrix.c, -1, 'positive c uses X scale')
+  close(matrix.d, 3 * Math.sqrt(3) / 2, 'positive d')
+  assert.equal(matrix.tx, 7)
+  assert.equal(matrix.ty, 11)
+  assert.notEqual(matrix.b, Math.sin(Math.PI / 6) * 2)
+  assert.notEqual(matrix.c, -Math.sin(Math.PI / 6) * 3)
+
+  writeNativeRotationThenScaleMatrix(matrix, Math.PI / 2, -0.8, 0.64, 0, 0)
+  close(matrix.a, 0, 'reflected a')
+  close(matrix.b, 0.64, 'reflected b')
+  close(matrix.c, 0.8, 'reflected c')
+  close(matrix.d, 0, 'reflected d')
+
+  writeNativeRotationThenScaleMatrix(matrix, 0.75, 4, 4, -2, 5)
+  close(matrix.a, Math.cos(0.75) * 4, 'uniform a')
+  close(matrix.b, Math.sin(0.75) * 4, 'uniform b')
+  close(matrix.c, -Math.sin(0.75) * 4, 'uniform c')
+  close(matrix.d, Math.cos(0.75) * 4, 'uniform d')
+
+  writeNativeRotationThenScaleMatrix(matrix, 0, 1.5, 3, 0, -200)
+  assert.deepEqual(matrix, { a: 1.5, b: 0, c: -0, d: 3, tx: 0, ty: -200 })
+})
 
 function screenEvent(
   eventId: number,
@@ -1570,6 +1606,23 @@ test('Acid Rain uses fixed-tick actor age for its cloud and splits out ground re
   const residueOnly = nativeSecondaryPresentationPlan({ ...source, phase: 0 }, 987)
   assert.equal(residueOnly.draws.length, 0)
   assert.equal(residueOnly.underlayDraws.length, 1)
+
+  const center = plan.draws[2]!
+  const centerMatrix = { a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0 }
+  writeNativeRotationThenScaleMatrix(
+    centerMatrix,
+    center.rotationRadians,
+    center.scaleX,
+    center.scaleY,
+    center.offset.x,
+    center.offset.y,
+  )
+  close(centerMatrix.a, 1.149066664678467, 'Acid center a')
+  close(centerMatrix.b, -1.9283628290596178, 'Acid center b uses Y scale')
+  close(centerMatrix.c, 0.9641814145298089, 'Acid center c uses X scale')
+  close(centerMatrix.d, 2.298133329356934, 'Acid center d')
+  assert.equal(centerMatrix.tx, 0)
+  assert.equal(centerMatrix.ty, -200)
 })
 
 test('Enhanced moving Storm replays fifteen controls into thirty spline arcs and its cloud core', () => {

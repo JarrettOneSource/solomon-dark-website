@@ -6,6 +6,11 @@
 > supersedes and completes its parent-root topology: Region manager chronology,
 > `PuppetPointer` insertion, `ZAnimSplit` clip slices, Goodie scenery ownership,
 > and direct pre/post-world composition are exact-ported by that entry.
+>
+> **2026-09-02 secondary affine correction:** [entry 231](<231-2026-08-26-acid-rain-cloud-drop-visual-correction-after-comparison-falsifier.md>)
+> reopens the claim that recovered rotation/scale operands imply an exact final
+> sprite transform. Native `Graphics_Rotate` then `Graphics_Scale` yields
+> `S*R`; the secondary Pixi adapter previously yielded `R*S`.
 
 ## 2026-09-01 — Sixth report: ExactText glyph logical-trim quad
 

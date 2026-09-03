@@ -46,6 +46,16 @@ const deathHatAnchors = JSON.parse(readFileSync(
   'utf8',
 ))
 
+test('secondary sprites use the native rotate-then-fixed-axis-scale adapter', () => {
+  const source = readFileSync(
+    new URL('./native-secondary-world-view.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(source, /writeNativeRotationThenScaleMatrix/)
+  assert.doesNotMatch(source, /sprite\.rotation = draw\.rotationRadians/)
+  assert.doesNotMatch(source, /sprite\.scale\.set\(draw\.scaleX, draw\.scaleY\)/)
+})
+
 test('environment player-light plan applies the requested web brightness scale', () => {
   assert.equal(WEB_DIRECT_ENVIRONMENT_LIGHT_SCALE, 0.14)
   for (let frame = 0; frame < 360; frame += 1) {

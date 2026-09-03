@@ -1,6 +1,7 @@
 import {
   ColorMatrixFilter,
   Container,
+  Matrix,
   MeshSimple,
   RenderTexture,
   Sprite,
@@ -45,6 +46,7 @@ import {
   nativeArenaPackedColor,
   setNativeArenaVertexColors,
 } from './native-arena-render-pipeline.ts'
+import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
 
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
@@ -120,6 +122,7 @@ interface NativeSecondarySpriteBinding {
   blend: NativeSecondarySpriteDraw['blend'] | null
   colorMode: NativeSecondarySpriteDraw['colorMode'] | null
   entry: number
+  matrix?: Matrix
   offsetX: number
   offsetY: number
   role: string
@@ -1249,19 +1252,28 @@ function applyDraw(
     binding.blend = draw.blend
     sprite.blendMode = draw.blend
   }
-  if (binding.offsetX !== draw.offset.x || binding.offsetY !== draw.offset.y) {
+  if (
+    binding.offsetX !== draw.offset.x
+    || binding.offsetY !== draw.offset.y
+    || binding.rotationRadians !== draw.rotationRadians
+    || binding.scaleX !== draw.scaleX
+    || binding.scaleY !== draw.scaleY
+  ) {
     binding.offsetX = draw.offset.x
     binding.offsetY = draw.offset.y
-    sprite.position.set(draw.offset.x, draw.offset.y)
-  }
-  if (binding.rotationRadians !== draw.rotationRadians) {
     binding.rotationRadians = draw.rotationRadians
-    sprite.rotation = draw.rotationRadians
-  }
-  if (binding.scaleX !== draw.scaleX || binding.scaleY !== draw.scaleY) {
     binding.scaleX = draw.scaleX
     binding.scaleY = draw.scaleY
-    sprite.scale.set(draw.scaleX, draw.scaleY)
+    const matrix = binding.matrix ??= new Matrix()
+    writeNativeRotationThenScaleMatrix(
+      matrix,
+      draw.rotationRadians,
+      draw.scaleX,
+      draw.scaleY,
+      draw.offset.x,
+      draw.offset.y,
+    )
+    sprite.setFromMatrix(matrix)
   }
   if (binding.tint !== draw.tint) {
     binding.tint = draw.tint
