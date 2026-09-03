@@ -3779,7 +3779,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
           steps += 1
-          sharedHostTick += 1
+          sharedHostTick = Math.max(sharedHostTick + 1, state.tick)
           if (
             lifecycleBoundary
             || sharedHostTick % ticksPerSnapshot === 0
