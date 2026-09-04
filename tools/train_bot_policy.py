@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, replace
 import json
+import math
 from pathlib import Path
 import sys
 from typing import Any, Sequence
@@ -350,6 +351,10 @@ def run_promote(args: argparse.Namespace) -> Any:
     incumbent_holdout, candidate_holdout = paired_wave_vectors(
         reports["incumbentHoldout"], reports["candidateHoldout"]
     )
+    train_seeds = {int(episode["seed"]) for episode in reports["incumbentTrain"]["episodes"]}
+    holdout_seeds = {int(episode["seed"]) for episode in reports["incumbentHoldout"]["episodes"]}
+    if train_seeds & holdout_seeds:
+        raise ValueError("promotion train and holdout seeds must be disjoint")
     result = promotion_decision(
         incumbent_train,
         candidate_train,
@@ -424,19 +429,52 @@ def run_summary(args: argparse.Namespace) -> Any:
 
 
 def paired_wave_vectors(first: Any, second: Any) -> tuple[list[float], list[float]]:
-    def rows(report: Any) -> dict[int, float]:
-        return {
-            int(episode["seed"]): float(episode["waves_reached"])
-            for episode in report["episodes"]
-            if episode.get("aborted") is False
-        }
+    def rows(report: Any) -> dict[int, dict[str, Any]]:
+        episodes = report.get("episodes")
+        if not isinstance(episodes, list):
+            raise ValueError("evaluation report episodes must be a list")
+        result: dict[int, dict[str, Any]] = {}
+        for episode in episodes:
+            if not isinstance(episode, dict) or episode.get("aborted") is not False:
+                raise ValueError("promotion requires completed evaluation episodes")
+            seed = episode.get("seed")
+            if (
+                not isinstance(seed, int)
+                or isinstance(seed, bool)
+                or not 0 <= seed <= 0xFFFF_FFFF
+            ):
+                raise ValueError("evaluation episode seed must be a uint32")
+            if seed in result:
+                raise ValueError(f"evaluation report repeats episode seed {seed}")
+            wave = episode.get("waves_reached")
+            if (
+                not isinstance(wave, (int, float))
+                or isinstance(wave, bool)
+                or not math.isfinite(wave)
+            ):
+                raise ValueError("evaluation wave depth must be finite")
+            result[seed] = episode
+        if len(result) < 30:
+            raise ValueError("promotion requires at least 30 unique completed evaluation seeds")
+        return result
 
     first_rows = rows(first)
     second_rows = rows(second)
     if set(first_rows) != set(second_rows):
         raise ValueError("evaluation reports do not contain the same seeds")
     seeds = sorted(first_rows)
-    return [first_rows[seed] for seed in seeds], [second_rows[seed] for seed in seeds]
+    for seed in seeds:
+        geometry = first_rows[seed].get("boneyard_layout")
+        if (
+            not isinstance(geometry, str)
+            or not geometry
+            or geometry != second_rows[seed].get("boneyard_layout")
+        ):
+            raise ValueError(f"paired evaluation seed {seed} has different or missing geometry")
+    return (
+        [float(first_rows[seed]["waves_reached"]) for seed in seeds],
+        [float(second_rows[seed]["waves_reached"]) for seed in seeds],
+    )
 
 
 def bootstrap_configuration(args: argparse.Namespace) -> BootstrapConfiguration:

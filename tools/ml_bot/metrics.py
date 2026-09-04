@@ -11,7 +11,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-from .checkpoint import load_checkpoint
+from .checkpoint import MAGIC, load_checkpoint
 from .spec import POLICY_SPEC
 
 
@@ -101,6 +101,18 @@ def promotion_decision(
     }
 
 
+def checkpoint_promotion_eligible(metadata: Mapping[str, Any]) -> bool:
+    eligibility = metadata.get("promotionEligible")
+    if eligibility is not None and not isinstance(eligibility, bool):
+        raise ValueError("checkpoint promotion eligibility must be boolean")
+    training_kind = metadata.get("trainingKind")
+    search_derived = any(str(key).startswith("lineSearch") for key in metadata) or (
+        isinstance(training_kind, str) and "line-search" in training_kind
+    )
+    return eligibility is not False and not search_derived
+
+
+
 def evaluation_checkpoint_identity(
     train_report: Mapping[str, Any],
     holdout_report: Mapping[str, Any],
@@ -128,8 +140,17 @@ def evaluation_checkpoint_identity(
     ):
         raise ValueError(f"{label} train and holdout checkpoint hashes differ")
     checkpoint = Path(path)
-    if not checkpoint.is_file() or hashlib.sha256(checkpoint.read_bytes()).hexdigest() != digest:
+    if not checkpoint.is_file():
         raise ValueError(f"{label} checkpoint no longer matches its evaluation reports")
+    payload = checkpoint.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise ValueError(f"{label} checkpoint no longer matches its evaluation reports")
+    if payload.startswith(MAGIC) or any(
+        report.get("evaluationVersion") == 7 for report in (train_report, holdout_report)
+    ):
+        metadata, _ = load_checkpoint(checkpoint)
+        if not checkpoint_promotion_eligible(metadata):
+            raise ValueError(f"{label} checkpoint metadata excludes it from promotion")
     return {"checkpoint": str(checkpoint.resolve()), "checkpointSha256": digest}
 
 

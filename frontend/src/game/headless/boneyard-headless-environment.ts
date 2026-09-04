@@ -99,6 +99,7 @@ export interface BoneyardHeadlessChoicePlan {
 export interface BoneyardHeadlessLearnedChoice {
   readonly oldLogProbability: number
   readonly oldValue: number
+  readonly samplingTemperature: number
   readonly selectedOption: number
 }
 
@@ -109,6 +110,7 @@ export interface MlBotPolicyLearnedChoiceEvent {
   readonly observation: Float32Array
   readonly oldLogProbability: number
   readonly oldValue: number
+  readonly samplingTemperature: number
   readonly optionDescriptors: Float32Array
   readonly optionIds: readonly number[]
   readonly optionMask: Uint8Array
@@ -370,7 +372,10 @@ export class BoneyardHeadlessEnvironment {
       })
       executedTicks += 1
       this.frame = this.observeState(inputs)
-      if (mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)) break
+      if (
+        mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)
+        || this.simulation.levelUpBarrier !== null
+      ) break
     }
     const done = mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)
     const baseReward = rewardAccumulator.finish(this.simulation, done)
@@ -434,7 +439,12 @@ export class BoneyardHeadlessEnvironment {
     if (this.choiceMode !== 'learned') {
       throw new Error('scripted Boneyard environments do not accept learned skill choices')
     }
-    if (!Number.isFinite(choice.oldLogProbability) || !Number.isFinite(choice.oldValue)) {
+    if (
+      !Number.isFinite(choice.oldLogProbability)
+      || !Number.isFinite(choice.oldValue)
+      || !Number.isFinite(choice.samplingTemperature)
+      || choice.samplingTemperature <= 0
+    ) {
       throw new RangeError('learned Boneyard skill choice policy values must be finite')
     }
     const plan = this.choicePlan()
@@ -462,6 +472,7 @@ export class BoneyardHeadlessEnvironment {
       observation: plan.observation,
       oldLogProbability: choice.oldLogProbability,
       oldValue: choice.oldValue,
+      samplingTemperature: choice.samplingTemperature,
       optionDescriptors: plan.optionDescriptors,
       optionIds: plan.optionIds,
       optionMask: plan.optionMask,
@@ -631,6 +642,7 @@ export class BoneyardHeadlessEnvironment {
       ...event,
       oldLogProbability: 0,
       oldValue: 0,
+      samplingTemperature: 1,
     })
   }
 

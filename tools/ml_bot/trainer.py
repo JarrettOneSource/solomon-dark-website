@@ -25,6 +25,7 @@ from .diagnostics import write_observation_audit, write_spatial_replay, write_va
 from .metrics import (
     append_jsonl,
     bootstrap_mean_interval,
+    checkpoint_promotion_eligible,
     episode_gameplay_summary,
     primary_curriculum_coverage,
 )
@@ -62,6 +63,8 @@ from .spec import POLICY_SPEC
 
 
 CHOICE_OPTIMIZER_SCOPE = "choice-head-and-value-v1"
+OPTIMIZATION_SEMANTICS = "elapsed-ticks-recorded-choice-temperature-v1"
+REWARD_SEMANTICS = "completed-wave-progress-v1"
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,7 @@ def bootstrap_policy(
     dataset_path: Path | None = None,
 ) -> Mapping[str, Any]:
     validate_bootstrap_configuration(configuration)
+    validate_new_campaign_directory(output_directory)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
     cache = dataset_path or output_directory / "expert-v7.npz"
@@ -250,6 +254,9 @@ def bootstrap_choice_policy(
     dataset_path: Path | None = None,
 ) -> Mapping[str, Any]:
     validate_choice_bootstrap_configuration(configuration)
+    validate_new_campaign_directory(output_directory)
+    metadata, tensors = load_checkpoint(checkpoint_path)
+    validate_training_checkpoint_metadata(metadata)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
     cache = dataset_path or output_directory / "choice-expert-v7.npz"
@@ -285,7 +292,6 @@ def bootstrap_choice_policy(
         validation_fraction=configuration.validation_fraction,
         rng=np.random.default_rng(configuration.seed + 1),
     )
-    metadata, tensors = load_checkpoint(checkpoint_path)
     policy = PolicyV7().to(torch.device("cpu"))
     policy.load_tensors(tensors)
     protected = {
@@ -369,9 +375,16 @@ def train_policy(
     resume: bool = False,
 ) -> Mapping[str, Any]:
     validate_training_configuration(configuration)
+    trainer_state_path = output_directory / "trainer-state-v7.pt"
+    if resume:
+        if not trainer_state_path.is_file():
+            raise ValueError("resume requires an existing trainer-state-v7.pt")
+    else:
+        validate_new_campaign_directory(output_directory)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
     metadata, tensors = load_checkpoint(checkpoint_path)
+    validate_training_checkpoint_metadata(metadata)
     policy = PolicyV7().to(torch.device("cpu"))
     policy.load_tensors(tensors)
     main_parameters = policy.main_parameters()
@@ -391,8 +404,7 @@ def train_policy(
     completed_episode_count = 0
     seed_stream = SeedStream(configuration.seed)
     torch_generator = torch.Generator().manual_seed(configuration.seed + 1)
-    trainer_state_path = output_directory / "trainer-state-v7.pt"
-    if resume and trainer_state_path.exists():
+    if resume:
         state = load_trainer_state(trainer_state_path)
         validate_resume_state(state, checkpoint_path, configuration, metadata)
         policy.load_state_dict(state["model"])
@@ -487,7 +499,7 @@ def train_policy(
                     choice_batch["oldLogProbabilities"],
                     torch.from_numpy(choice_advantages).float(),
                     torch.from_numpy(choice_returns).float(),
-                    temperature=coverage.temperature,
+                    temperature=choice_batch["samplingTemperatures"],
                     epochs=configuration.epochs,
                     batch_size=configuration.choice_batch_size,
                     generator=torch_generator,
@@ -537,6 +549,8 @@ def train_policy(
                 **metadata,
                 "choiceCoverage": dict(sorted(coverage.counts.items())),
                 "choiceOptimizerScope": CHOICE_OPTIMIZER_SCOPE,
+                "optimizationSemantics": OPTIMIZATION_SEMANTICS,
+                "rewardSemantics": REWARD_SEMANTICS,
                 "choiceTemperature": coverage.temperature,
                 "choiceReturnNormalizer": choice_normalizer.state_dict(),
                 "mainReturnNormalizer": main_normalizer.state_dict(),
@@ -556,6 +570,8 @@ def train_policy(
                     "mainOptimizer": main_optimizer.state_dict(),
                     "choiceOptimizer": choice_optimizer.state_dict(),
                     "choiceOptimizerScope": CHOICE_OPTIMIZER_SCOPE,
+                    "optimizationSemantics": OPTIMIZATION_SEMANTICS,
+                    "rewardSemantics": REWARD_SEMANTICS,
                     "mainNormalizer": main_normalizer.state_dict(),
                     "choiceNormalizer": choice_normalizer.state_dict(),
                     "choiceCoverage": coverage.counts,
@@ -681,8 +697,11 @@ def evaluation_report(
     choice_policy_mode: str,
     maximum_steps: int,
 ) -> Mapping[str, Any]:
+    checkpoint_metadata, _ = load_checkpoint(checkpoint_path)
+    checkpoint_eligible = checkpoint_promotion_eligible(checkpoint_metadata)
     completed = [record for record in records if record.get("aborted") is False]
     incomplete = [record for record in records if record.get("aborted") is True]
+    completed_seeds = [int(record["seed"]) for record in completed]
     primary_coverage = primary_curriculum_coverage(completed)
     returns = [float(record["return"]) for record in completed]
     waves = [float(record["waves_reached"]) for record in completed]
@@ -690,6 +709,7 @@ def evaluation_report(
         "evaluationVersion": 7,
         "checkpoint": str(checkpoint_path),
         "checkpointSha256": file_sha256(checkpoint_path),
+        "checkpointPromotionEligible": checkpoint_eligible,
         "episodes": records,
         "requestedEpisodes": len(seeds),
         "actionRepeatTicks": action_repeat,
@@ -698,7 +718,11 @@ def evaluation_report(
         "completeEpisodes": len(completed),
         "incompleteEpisodes": len(incomplete),
         "validForPromotion": (
-            len(completed) == len(seeds)
+            checkpoint_eligible
+            and len(completed) == len(seeds)
+            and len(set(seeds)) == len(seeds)
+            and len(set(completed_seeds)) == len(completed_seeds)
+            and set(completed_seeds) == set(seeds)
             and len(completed) >= 30
             and primary_coverage["passed"] is True
         ),
@@ -818,6 +842,9 @@ def prepare_choice_batch(intervals: Sequence[Mapping[str, Any]]) -> Mapping[str,
         descriptors[index, :count] = rows
         masks[index, :count] = np.asarray(interval["optionMask"], dtype=bool)
     return {
+        "samplingTemperatures": torch.tensor(
+            [float(interval["samplingTemperature"]) for interval in intervals], dtype=torch.float32
+        ),
         "observations": torch.from_numpy(observations),
         "descriptors": torch.from_numpy(descriptors),
         "masks": torch.from_numpy(masks),
@@ -1022,6 +1049,11 @@ def validate_resume_state(
             "trainer state uses an incompatible choice optimizer scope; "
             "start a clean output directory from the runtime checkpoint"
         )
+    if (
+        state.get("optimizationSemantics") != OPTIMIZATION_SEMANTICS
+        or state.get("rewardSemantics") != REWARD_SEMANTICS
+    ):
+        raise ValueError("trainer state uses incompatible reward or credit semantics; start a new campaign")
     expected_hash = state.get("runtimeCheckpointSha256")
     if not isinstance(expected_hash, str) or expected_hash != file_sha256(checkpoint_path):
         raise ValueError("trainer state does not belong to the supplied runtime checkpoint")
@@ -1039,6 +1071,30 @@ def validate_resume_state(
         or int(metadata.get("trainedUpdates", -1)) != int(state.get("completedUpdates", -2))
     ):
         raise ValueError("runtime checkpoint and trainer progress counters disagree")
+
+
+def validate_new_campaign_directory(output_directory: Path) -> None:
+    if (
+        (output_directory / "trainer-state-v7.pt").exists()
+        or (output_directory / "metrics.jsonl").exists()
+        or (output_directory / "episodes.jsonl").exists()
+        or any(output_directory.glob("policy-v7-update-*.sdml"))
+    ):
+        raise ValueError("training output already contains a campaign; resume it or use a new directory")
+
+
+
+def validate_training_checkpoint_metadata(metadata: Mapping[str, Any]) -> None:
+    eligibility = metadata.get("trainingEligible")
+    if eligibility is not None and not isinstance(eligibility, bool):
+        raise ValueError("checkpoint training eligibility must be boolean")
+    training_kind = metadata.get("trainingKind")
+    search_derived = any(str(key).startswith("lineSearch") for key in metadata) or (
+        isinstance(training_kind, str) and "line-search" in training_kind
+    )
+    if eligibility is False or search_derived:
+        raise ValueError("search-derived checkpoint cannot seed or resume PPO")
+
 
 
 def file_sha256(path: Path) -> str:

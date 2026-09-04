@@ -470,6 +470,7 @@ def resolve_policy_choices(
             choices.append({
                 "oldLogProbability": float(evaluation.log_probability[0].cpu()),
                 "oldValue": float(evaluation.value[0].cpu()),
+                "samplingTemperature": temperature,
                 "selectedOption": int(selected[0].cpu()),
             })
         bridge.select_choices(choices)

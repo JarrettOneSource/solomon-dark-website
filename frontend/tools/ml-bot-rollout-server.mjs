@@ -7,7 +7,7 @@ import {
   mlBotPrimaryCurriculumEntryForSeed,
 } from '../src/game/core-server/ml-bot-policy/primary-curriculum.ts'
 
-const PROTOCOL = 'solomon-dark-ml-rollout-v7-choice1'
+const PROTOCOL = 'solomon-dark-ml-rollout-v7-choice2'
 let pool = null
 
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })
@@ -227,12 +227,15 @@ function requireChoices(value, worldCount) {
     if (
       !Number.isFinite(choice.oldLogProbability)
       || !Number.isFinite(choice.oldValue)
+      || !Number.isFinite(choice.samplingTemperature)
+      || choice.samplingTemperature <= 0
       || !Number.isSafeInteger(choice.selectedOption)
       || choice.selectedOption < 0
     ) throw new Error('learned choice evaluation is invalid')
     return {
       oldLogProbability: choice.oldLogProbability,
       oldValue: choice.oldValue,
+      samplingTemperature: choice.samplingTemperature,
       selectedOption: choice.selectedOption,
     }
   })

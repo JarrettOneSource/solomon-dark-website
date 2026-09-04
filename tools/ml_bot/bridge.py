@@ -14,7 +14,7 @@ import numpy as np
 
 from .spec import POLICY_SPEC, REPOSITORY_ROOT, require_uint32
 
-PROTOCOL = "solomon-dark-ml-rollout-v7-choice1"
+PROTOCOL = "solomon-dark-ml-rollout-v7-choice2"
 SERVER_PATH = REPOSITORY_ROOT / "frontend/tools/ml-bot-rollout-server.mjs"
 
 
@@ -164,12 +164,18 @@ class BoneyardRolloutBridge:
                 choice.get("oldLogProbability"), "choice old log probability"
             )
             old_value = required_finite(choice.get("oldValue"), "choice old value")
+            sampling_temperature = required_finite(
+                choice.get("samplingTemperature"), "choice sampling temperature"
+            )
+            if sampling_temperature <= 0:
+                raise ValueError("choice sampling temperature must be positive")
             selected_option = required_integer(
                 choice.get("selectedOption"), "selected choice option", minimum=0
             )
             normalized.append({
                 "oldLogProbability": old_log_probability,
                 "oldValue": old_value,
+                "samplingTemperature": sampling_temperature,
                 "selectedOption": selected_option,
             })
         response = self._request({"choices": normalized, "type": "select-choices"})
@@ -418,6 +424,10 @@ def decode_indexed_choice(value: Any, *, interval: bool) -> Mapping[str, Any]:
     if interval:
         if event.get("choiceTrajectoryVersion") != 7:
             raise RolloutProtocolError("choice interval is not trajectory v7")
+    if interval or event.get("choiceMode") == "learned":
+        temperature = required_finite(event.get("samplingTemperature"), "choice sampling temperature")
+        if temperature <= 0:
+            raise RolloutProtocolError("choice sampling temperature must be positive")
     event["worldIndex"] = world_index
     return event
 

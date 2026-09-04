@@ -107,7 +107,9 @@ python tools/train_bot_policy.py train \
 
 Main rewards remain raw and frozen. A running standard deviation of discounted
 returns scales rewards before tick-aware GAE. Each decision uses
-`gamma ** executed_ticks`; an action repeat stops on the first terminal tick.
+`gamma ** executed_ticks`; an action repeat stops on the first terminal tick
+or newly opened level-up barrier. Frozen simulation calls do not count as
+elapsed time. Wave reward requires completing a wave; opening wave 1 earns zero.
 The approved gamma values are 0.99, 0.995, 0.997, and 0.999.
 
 Run the same registered short campaign at every approved horizon with:
@@ -138,8 +140,11 @@ python tools/train_bot_policy.py bootstrap-choices \
 The resulting checkpoint is marked `choicePolicyMode=learned`. A level-up then
 pauses the headless action lane, exposes the exact observation, variable option
 rows, option IDs, generation, and legality mask through the strict
-`solomon-dark-ml-rollout-v7-choice1` bridge, and accepts the sampled option with
-its old log probability and choice value without advancing simulation time.
+`solomon-dark-ml-rollout-v7-choice2` bridge, and accepts the sampled option with
+its old log probability, choice value, and sampling temperature without
+advancing simulation time. Each completed interval retains that temperature;
+PPO uses it for the corresponding row even when coverage changes the
+temperature for later choices.
 The interval closes at the next learned choice or terminal state. Only those
 `choiceMode=learned`, `trainable=true` intervals enter SMDP PPO; scripted
 incumbents remain scripted during frozen evaluation. The live GameHost follows
@@ -159,7 +164,16 @@ directory from the desired runtime checkpoint instead.
 
 Runtime and trainer checkpoints are atomically replaced. Resume is allowed
 only when the supplied `.sdml` hash, progress counters, and immutable training
-configuration match the saved trainer state.
+configuration match the saved trainer state. `--resume` requires an existing
+`trainer-state-v7.pt`; it never silently starts fresh. Training and bootstrap
+commands reject output directories that already contain campaign checkpoints,
+metrics, episodes, or trainer state before replacing those files.
+
+The corrected training semantics are
+`elapsed-ticks-recorded-choice-temperature-v1` and
+`completed-wave-progress-v1`. Earlier trainer states cannot resume under these
+semantics; begin a new campaign directory from the desired runtime checkpoint.
+The packaged runtime checkpoint remains strict schema v7.
 
 ```sh
 python tools/train_bot_policy.py train \
@@ -251,6 +265,13 @@ incumbent slot so deployed and all-primary v6 checkpoints can be compared
 during the strict v7 cutover. Candidate reports must be version 7. This is
 evaluation-only lineage support; the v7 runtime and checkpoint codec still
 reject every legacy artifact.
+
+Promotion requires at least 30 unique completed seeds per set, identical
+paired seeds and geometry, and disjoint train/holdout seeds. It rejects
+checkpoints marked `promotionEligible: false` or carrying line-search
+provenance even if older reports claim eligibility. PPO and learned-choice
+bootstrap also reject checkpoints marked `trainingEligible: false` or derived
+from line search.
 
 ```sh
 python tools/train_bot_policy.py promote \

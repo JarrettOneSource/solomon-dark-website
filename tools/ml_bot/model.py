@@ -166,7 +166,7 @@ class PolicyV7(nn.Module):
         mask: Tensor,
         selected_options: Tensor,
         *,
-        temperature: float,
+        temperature: float | Tensor,
     ) -> ChoiceEvaluation:
         latent = self.encode(observations)
         require_shape(
@@ -177,11 +177,10 @@ class PolicyV7(nn.Module):
         require_finite(descriptors, "choice descriptors")
         option_count = descriptors.shape[1]
         normalized_mask = require_mask(mask, latent.shape[0], option_count, "choice mask")
-        if not np.isfinite(temperature) or temperature <= 0:
-            raise ValueError("choice temperature must be positive and finite")
+        temperatures = choice_temperature_column(temperature, latent)
         state = latent[:, None, :].expand(-1, option_count, -1)
         hidden = torch.tanh(self.choice_hidden(torch.cat((state, descriptors), dim=-1)))
-        logits = masked_logits(self.choice_score(hidden).squeeze(-1) / temperature, normalized_mask)
+        logits = masked_logits(self.choice_score(hidden).squeeze(-1) / temperatures, normalized_mask)
         log_probabilities = torch.log_softmax(logits, dim=-1)
         probabilities = torch.softmax(logits, dim=-1)
         actions = selected_options.long()
@@ -198,7 +197,7 @@ class PolicyV7(nn.Module):
         descriptors: Tensor,
         mask: Tensor,
         *,
-        temperature: float,
+        temperature: float | Tensor,
         deterministic: bool,
         generator: torch.Generator | None = None,
     ) -> tuple[Tensor, ChoiceEvaluation]:
@@ -209,14 +208,13 @@ class PolicyV7(nn.Module):
             "choice descriptors",
         )
         require_finite(descriptors, "choice descriptors")
-        if not np.isfinite(temperature) or temperature <= 0:
-            raise ValueError("choice temperature must be positive and finite")
+        temperatures = choice_temperature_column(temperature, latent)
         option_count = descriptors.shape[1]
         normalized_mask = require_mask(mask, latent.shape[0], option_count, "choice mask")
         state = latent[:, None, :].expand(-1, option_count, -1)
         hidden = torch.tanh(self.choice_hidden(torch.cat((state, descriptors), dim=-1)))
         action, _, _ = select_action(
-            self.choice_score(hidden).squeeze(-1) / temperature,
+            self.choice_score(hidden).squeeze(-1) / temperatures,
             normalized_mask,
             deterministic,
             generator,
@@ -312,6 +310,18 @@ class PolicyV7(nn.Module):
                 if source.shape != TENSOR_SHAPES[name] or not np.all(np.isfinite(source)):
                     raise ValueError(f"model tensor {name} is invalid")
                 target.copy_(torch.from_numpy(source).to(device=target.device))
+
+
+def choice_temperature_column(temperature: float | Tensor, reference: Tensor) -> Tensor:
+    values = torch.as_tensor(temperature, dtype=reference.dtype, device=reference.device)
+    if values.ndim == 0:
+        values = values.expand(reference.shape[0])
+    require_shape(values, (reference.shape[0],), "choice sampling temperatures")
+    require_finite(values, "choice sampling temperatures")
+    if not torch.all(values > 0):
+        raise ValueError("choice temperature must be positive and finite")
+    return values[:, None]
+
 
 
 def parameters_of(*modules: nn.Module) -> list[nn.Parameter]:

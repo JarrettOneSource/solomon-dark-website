@@ -102,13 +102,14 @@ export class MlBotPolicyRewardAccumulator {
     const baseline = this.baseline
     if (baseline === null) throw new Error('ML bot policy reward interval is not open')
     const progression = getPlayerProgression(state, this.playerId)
+    const wavesCompleted = Math.max(0, waveOrdinal(state) - Math.max(1, baseline.wave))
     const terms = Object.freeze({
       death: done && progression.lifeState !== 'alive' ? -2 : 0,
       ownDamage: 0.65 * this.ownDamageRatio,
       selfHp: 1.25 * (
         ratio(progression.currentHealth, progression.maximumHealth) - baseline.hpRatio
       ),
-      wave: 1.5 * Math.min(Math.max(waveOrdinal(state) - baseline.wave, 0), 1),
+      wave: 1.5 * Math.min(wavesCompleted, 1),
       xp: this.ownKillExperience / 25,
     })
     const raw = terms.selfHp + terms.ownDamage + terms.xp + terms.wave + terms.death
@@ -124,7 +125,7 @@ export class MlBotPolicyRewardAccumulator {
       potionsUsed: 0,
       powerupsCollected: this.powerupsCollected,
       skillPicks: 0,
-      wavesCompleted: Math.max(0, waveOrdinal(state) - Math.max(1, baseline.wave)),
+      wavesCompleted,
     })
     this.baseline = null
     this.ownDamageRatio = 0

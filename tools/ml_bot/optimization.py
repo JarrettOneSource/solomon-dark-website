@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from .model import PolicyV7
+from .model import PolicyV7, choice_temperature_column
 from .spec import POLICY_SPEC
 
 ENTROPY_COEFFICIENTS = {
@@ -367,7 +367,7 @@ def choice_ppo_epochs(
     advantages: Tensor,
     returns: Tensor,
     *,
-    temperature: float,
+    temperature: float | Tensor,
     epochs: int,
     batch_size: int,
     generator: torch.Generator,
@@ -377,6 +377,7 @@ def choice_ppo_epochs(
 ) -> list[ChoicePpoMetrics]:
     count = observations.shape[0]
     require_training_sizes(count, epochs, batch_size)
+    sampling_temperatures = choice_temperature_column(temperature, observations).squeeze(-1)
     normalized_advantages = normalize_advantages(advantages)
     metrics: list[ChoicePpoMetrics] = []
     for _ in range(epochs):
@@ -388,7 +389,7 @@ def choice_ppo_epochs(
                 descriptors[indices],
                 masks[indices],
                 selected_options[indices],
-                temperature=temperature,
+                temperature=sampling_temperatures[indices],
             )
             old_log = old_log_probabilities[indices]
             advantage = normalized_advantages[indices]
@@ -423,7 +424,7 @@ def choice_ppo_epochs(
                     clip_fraction=float(clip_fraction),
                     gradient_norm=float(gradient_norm),
                     normalized_entropy=float(normalized_entropy.mean().detach()),
-                    temperature=temperature,
+                    temperature=float(sampling_temperatures[indices].mean()),
                 )
             )
     return metrics

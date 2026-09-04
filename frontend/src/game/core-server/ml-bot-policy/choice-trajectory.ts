@@ -9,6 +9,7 @@ export interface MlBotPolicyChoiceEventSeed {
   readonly observation: Float32Array
   readonly oldLogProbability: number
   readonly oldValue: number
+  readonly samplingTemperature: number
   readonly optionDescriptors: Float32Array
   readonly optionIds: readonly number[]
   readonly optionMask: Uint8Array
@@ -138,6 +139,9 @@ function validateEvent(event: MlBotPolicyChoiceEventSeed): void {
   }
   if (!Number.isFinite(event.oldLogProbability) || !Number.isFinite(event.oldValue)) {
     throw new RangeError('ML bot policy choice inference values must be finite')
+  }
+  if (!Number.isFinite(event.samplingTemperature) || event.samplingTemperature <= 0) {
+    throw new RangeError('ML bot policy choice sampling temperature must be positive and finite')
   }
   if (event.choiceMode === 'scripted' && event.trainable) {
     throw new Error('ML bot policy scripted choices cannot be trainable')
