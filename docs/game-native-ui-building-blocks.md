@@ -337,16 +337,24 @@ the native root composition.
 
 ## Dark Cloud presentation
 
-`native-dark-cloud-contract.ts` owns the retail 1600 by 900 shell geometry and
-the complete record inventory for the background figures/flourishes, both list
-corner families, tab brackets, and Search/Sort/primary/Options footer controls.
-`NativeDarkCloudPresentation.tsx` exposes the semantic React composition:
+`native-dark-cloud-contract.ts` owns the retail 1600 by 900 screen: the shell
+geometry, the record inventory, `NATIVE_DARK_CLOUD_TEXT` (heading, beta,
+account, column and row baselines and scales), `NATIVE_DARK_CLOUD_COLUMNS`
+(the per-tab column anchors) and `NATIVE_DARK_CLOUD_SCENE` (wall, scroll,
+figure, chain, stone, frame, leather and shade constants). Two planners,
+`planNativeDarkCloudBackdrop()` and `planNativeDarkCloudFrame()`, turn those
+constants into plain plan fragments in the retail painter order (see RE report
+300). `NativeDarkCloudPresentation.tsx` exposes the semantic React composition:
 
-- `NativeDarkCloudSceneArt` and `NativeDarkCloudListFrameArt` paint the complete
-  stock scene/frame membership;
-- `NativeDarkCloudHeading`, `NativeDarkCloudText`, and
-  `NativeDarkCloudTabs` use the exact heading/menu bitmap wrappers and `UI.13`
-  selected/resting bracket geometry;
+- `NativeDarkCloudSceneArt` renders the backdrop plan, the CSS shade band and
+  panel glow, and the frame plan;
+- `NativeDarkCloudHeading`, `NativeDarkCloudText` and `NativeDarkCloudTabs`
+  use the exact heading/menu bitmap wrappers; the tabs pass `labelScale`,
+  `labelTint` and `selectedLabel` through `planNativeUiTabs` so resting labels
+  read lowercase in the small caps face and the selected label reads uppercase;
+- `NativeDarkCloudColumns`, `NativeDarkCloudRowCells` and
+  `NativeDarkCloudStatusRow` place bitmap text on the stock column anchors
+  (rows from y 260, 25 px pitch, baseline 28 px below the row top);
 - `NativeDarkCloudToolButton` owns `UI.103/.104`, paired `UI.53` surrounds,
   and the exact Search/Sort icons or Options label;
 - `NativeDarkCloudPrimaryButton` owns the `UI.101/.102` and `UI.54` family; and
@@ -354,10 +362,9 @@ corner families, tab brackets, and Search/Sort/primary/Options footer controls.
   side flourishes for Search, Sort, account-style, and Website extension
   dialogs.
 
-Desktop callers retain the exact native rectangles. Narrow and short browser
-surfaces scale those same plans inside semantic hosts, preserve at least
-44-pixel actions, and reflow content without replacing the stock art with a
-second mobile skin.
+The Dark Cloud stage is a fixed 1600 by 900 native stage scaled by
+`nativeStageStyle` like the Hub and Boneyard; there is no fluid layout and no
+phone-specific skin. The workbench DARK CLOUD tab shows the full composition.
 
 `NativeUiTabs` similarly turns `planNativeUiTabs` into one semantic tablist
 whose visible art and hit rectangles come from the same plan. `NativeUiNotebox`

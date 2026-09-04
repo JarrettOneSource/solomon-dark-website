@@ -15,6 +15,18 @@ import {
 import NativeUiSimpleMenu from './NativeUiSimpleMenu.tsx'
 import NativeUiStoneButton from './NativeUiStoneButton.tsx'
 import NativeUiTabs from './NativeUiTabs.tsx'
+import {
+  NativeDarkCloudColumns,
+  NativeDarkCloudHeading,
+  NativeDarkCloudPrimaryButton,
+  NativeDarkCloudRowCells,
+  NativeDarkCloudSceneArt,
+  NativeDarkCloudStatusRow,
+  NativeDarkCloudTabs,
+  NativeDarkCloudToolButton,
+} from './NativeDarkCloudPresentation.tsx'
+import { NATIVE_DARK_CLOUD_COLUMNS, NATIVE_DARK_CLOUD_TEXT } from './native-dark-cloud-contract.ts'
+import '../dark-cloud.css'
 import { nativeUiRect } from './native-ui-plan.ts'
 import type {
   NativeUiPartyMenuMember,
@@ -37,6 +49,13 @@ const WORKBENCH_PARTY_REQUESTS: readonly NativeUiPartyMenuRequest[] = [
   { id: 'r1', name: 'Zed Halloway' },
 ]
 
+const WORKBENCH_DARK_CLOUD_ROWS: readonly (readonly [string, string, string, string])[] = [
+  ['Monument Crypt', 'Ash Whitlock', 'v1.4.0', 'enabled'],
+  ['Cathedral of Rust', 'Mira', 'v0.9.2', 'not subscribed'],
+  ['The Long Stair', 'Ted Bramble', 'v2.0.1', 'disabled'],
+  ['Bell Tower Sortie', 'Wren', 'v1.0.0', 'not subscribed'],
+]
+
 const WORKBENCH_PARTY_VISIBILITY: readonly NativeUiPartyMenuVisibilityOption[] = [
   { id: 'public', label: 'PUBLIC' },
   { id: 'invite-only', label: 'INVITE ONLY' },
@@ -57,16 +76,17 @@ export default function NativeUiDomWorkbenchPreview() {
         onSelect={setSelectedTab}
         selectedId={selectedTab}
         tabs={[
-          { bounds: nativeUiRect(60, 28, 220, 69), id: 'messages', label: 'MESSAGES' },
-          { bounds: nativeUiRect(280, 28, 260, 69), id: 'menus', label: 'SIMPLE MENUS' },
-          { bounds: nativeUiRect(540, 28, 250, 69), id: 'settings', label: 'SETTINGS' },
-          { bounds: nativeUiRect(790, 28, 260, 69), id: 'boasts', label: 'BOAST MENU' },
-          { bounds: nativeUiRect(1050, 28, 260, 69), id: 'party', label: 'PARTY' },
-          { bounds: nativeUiRect(1310, 28, 240, 69), id: 'chip', label: 'PARTY CHIP' },
+          { bounds: nativeUiRect(30, 28, 200, 69), id: 'messages', label: 'MESSAGES' },
+          { bounds: nativeUiRect(230, 28, 240, 69), id: 'menus', label: 'SIMPLE MENUS' },
+          { bounds: nativeUiRect(470, 28, 200, 69), id: 'settings', label: 'SETTINGS' },
+          { bounds: nativeUiRect(670, 28, 230, 69), id: 'boasts', label: 'BOAST MENU' },
+          { bounds: nativeUiRect(900, 28, 180, 69), id: 'party', label: 'PARTY' },
+          { bounds: nativeUiRect(1080, 28, 230, 69), id: 'chip', label: 'PARTY CHIP' },
+          { bounds: nativeUiRect(1310, 28, 260, 69), id: 'darkcloud', label: 'DARK CLOUD' },
         ]}
         width={1_600}
       />
-      <div style={{ visibility: selectedTab === 'boasts' || selectedTab === 'party' || selectedTab === 'chip' ? 'hidden' : undefined }}>
+      <div style={{ visibility: selectedTab === 'messages' || selectedTab === 'menus' || selectedTab === 'settings' ? undefined : 'hidden' }}>
         <NativeUiMessageBox
         body="Every panel, glyph, button, and tab in this preview is composed from the stock atlas record and bitmap-font ABI."
         bounds={nativeUiRect(500, 125, 600, 400)}
@@ -183,6 +203,46 @@ export default function NativeUiDomWorkbenchPreview() {
             onDeny={() => setSelectedTab('messages')}
           />
         </>
+      ) : null}
+      {selectedTab === 'darkcloud' ? (
+        <div
+          className="dark-cloud-scene"
+          style={{ left: 80, position: 'absolute', top: 110, transform: 'scale(0.9)', transformOrigin: 'top left' }}
+        >
+          <NativeDarkCloudSceneArt />
+          <NativeDarkCloudHeading accountUsername={null} onAccount={() => undefined} />
+          <NativeDarkCloudTabs onSelect={() => undefined} selectedId="mods" />
+          <main className="dark-cloud-list-frame">
+            <NativeDarkCloudColumns columns={NATIVE_DARK_CLOUD_COLUMNS.mods} />
+            <div className="dark-cloud-rows">
+              {WORKBENCH_DARK_CLOUD_ROWS.map(([name, author, version, status], index) => (
+                <div className="dark-cloud-row" key={name}>
+                  <button aria-pressed={index === 1} className="dark-cloud-row-main" type="button">
+                    <NativeDarkCloudRowCells
+                      cells={[
+                        { text: name },
+                        { text: author },
+                        { text: version },
+                        { text: status, tint: status === 'enabled' ? NATIVE_DARK_CLOUD_TEXT.colors.green : undefined },
+                      ]}
+                      columns={NATIVE_DARK_CLOUD_COLUMNS.mods}
+                      tint={index === 1 ? NATIVE_DARK_CLOUD_TEXT.colors.green : undefined}
+                    />
+                  </button>
+                </div>
+              ))}
+              <NativeDarkCloudStatusRow text="CONSULTING THE DARK CLOUD..." />
+            </div>
+          </main>
+          <footer className="dark-cloud-footer">
+            <div className="dark-cloud-footer-tools">
+              <NativeDarkCloudToolButton icon="search" label="Search" />
+              <NativeDarkCloudToolButton icon="sort" label="Sort" />
+            </div>
+            <NativeDarkCloudPrimaryButton type="button">VIEW MOD</NativeDarkCloudPrimaryButton>
+            <NativeDarkCloudToolButton className="dark-cloud-options-button" icon={null} label="OPTIONS" nativeWidth={185} />
+          </footer>
+        </div>
       ) : null}
     </>
   )

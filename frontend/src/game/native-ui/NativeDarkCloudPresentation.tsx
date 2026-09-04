@@ -1,11 +1,9 @@
 import {
-  useLayoutEffect,
-  useRef,
   useState,
   type ButtonHTMLAttributes,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
-  type RefObject,
+  type ReactNode,
 } from 'react'
 
 import NativeBitmapText from './NativeBitmapText.tsx'
@@ -15,12 +13,29 @@ import NativeUiSprite from './NativeUiSprite.tsx'
 import NativeUiTabs, { type NativeUiTab } from './NativeUiTabs.tsx'
 import {
   NATIVE_DARK_CLOUD_PRESENTATION,
+  NATIVE_DARK_CLOUD_SCENE,
   NATIVE_DARK_CLOUD_TABS,
+  NATIVE_DARK_CLOUD_TEXT,
+  planNativeDarkCloudBackdrop,
+  planNativeDarkCloudFrame,
   planNativeDarkCloudToolButton,
+  type NativeDarkCloudColumn,
 } from './native-dark-cloud-contract.ts'
+import { nativeUiFont } from './native-ui-catalog.ts'
 import { nativeUiPlan, nativeUiRect, type NativeUiButtonState } from './native-ui-plan.ts'
 
 type DarkCloudTabId = 'layouts' | 'mods' | 'parties' | 'subscribed'
+
+const HEADING_FONT = NATIVE_DARK_CLOUD_PRESENTATION.fonts.heading
+const MENU_FONT = NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu
+const FRAME_LEFT = NATIVE_DARK_CLOUD_SCENE.shade.panel.left
+const FRAME_TOP = NATIVE_DARK_CLOUD_SCENE.shade.panel.top
+const FRAME_RIGHT = FRAME_LEFT + NATIVE_DARK_CLOUD_SCENE.shade.panel.width
+
+/** NativeBitmapText puts the baseline metrics[0] * scale / 2 below its top edge. */
+function textTop(font: 'heading' | 'menu', baselineY: number, scale: number): number {
+  return baselineY - nativeUiFont(font).metrics[0] * scale / 2
+}
 
 export function NativeDarkCloudText({
   align = 'left',
@@ -59,33 +74,30 @@ export function NativeDarkCloudText({
 }
 
 export function NativeDarkCloudSceneArt() {
+  const { shade } = NATIVE_DARK_CLOUD_SCENE
+  const reach = shade.glowReach
+  const { panel } = shade
+  const right = panel.left + panel.width
+  const bottom = panel.top + panel.height
   return (
     <div aria-hidden className="dark-cloud-native-scene-art">
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-flourish left" record={29} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-flourish right" record={29} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard tall top-right" record={31} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard short top-left" record={32} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard short bottom-right" record={32} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard tall bottom-left" record={31} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side top-left" record={20} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side bottom-left" record={20} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side top-right" record={20} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side bottom-right" record={20} />
-    </div>
-  )
-}
-
-export function NativeDarkCloudListFrameArt() {
-  return (
-    <div aria-hidden className="dark-cloud-native-list-art">
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone top-left" record={107} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone top-right" record={108} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone bottom-left" record={109} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone bottom-right" record={110} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold top-left" record={17} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold top-right" record={17} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold bottom-left" record={17} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold bottom-right" record={17} />
+      <NativeUiPlanView className="dark-cloud-backdrop-plan" plan={planNativeDarkCloudBackdrop()} />
+      <div className="dark-cloud-shade">
+        <i className="dark-cloud-shade-band" style={{ height: shade.bandBottom }} />
+        <i
+          className="dark-cloud-shade-gradient"
+          style={{ height: shade.gradientBottom - shade.bandBottom, top: shade.bandBottom }}
+        />
+        <i className="dark-cloud-glow top" style={{ height: reach, left: panel.left, top: panel.top - reach, width: panel.width }} />
+        <i className="dark-cloud-glow bottom" style={{ height: reach, left: panel.left, top: bottom, width: panel.width }} />
+        <i className="dark-cloud-glow left" style={{ height: panel.height, left: panel.left - reach, top: panel.top, width: reach }} />
+        <i className="dark-cloud-glow right" style={{ height: panel.height, left: right, top: panel.top, width: reach }} />
+        <i className="dark-cloud-glow corner top-left" style={{ height: reach, left: panel.left - reach, top: panel.top - reach, width: reach }} />
+        <i className="dark-cloud-glow corner top-right" style={{ height: reach, left: right, top: panel.top - reach, width: reach }} />
+        <i className="dark-cloud-glow corner bottom-left" style={{ height: reach, left: panel.left - reach, top: bottom, width: reach }} />
+        <i className="dark-cloud-glow corner bottom-right" style={{ height: reach, left: right, top: bottom, width: reach }} />
+      </div>
+      <NativeUiPlanView className="dark-cloud-frame-plan" plan={planNativeDarkCloudFrame()} />
     </div>
   )
 }
@@ -131,49 +143,78 @@ export function NativeDarkCloudHeading({
   readonly accountUsername: string | null
   readonly onAccount: () => void
 }) {
+  const text = NATIVE_DARK_CLOUD_TEXT
+  const { account } = text
   const accountLine = accountUsername
-    ? `YOU ARE SIGNED IN AS ${accountUsername.toUpperCase()}.`
-    : 'YOU ARE SIGNED IN AS A GUEST.'
+    ? `You are signed in as ${accountUsername}.`
+    : 'You are signed in as a GUEST.'
   return (
     <header className="dark-cloud-heading">
       <h1>
         <span className="native-ui-sr-only">THE DARK CLOUD</span>
         <NativeBitmapText
           align="center"
-          font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.heading}
+          font={HEADING_FONT}
+          scale={text.heading.scale}
+          style={{ left: 0, position: 'absolute', top: textTop('heading', text.heading.baselineY, text.heading.scale) }}
           text="THE DARK CLOUD"
-          tint={0xd9ba70}
-          width={420}
+          tint={text.colors.gold}
+          width={text.heading.centerX * 2}
         />
         <NativeBitmapText
           className="dark-cloud-beta"
-          font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
-          scale={0.68}
-          text="BETA"
-          tint={0xd9ba70}
+          font={MENU_FONT}
+          scale={text.beta.scale}
+          style={{ left: text.beta.x, position: 'absolute', top: textTop('menu', text.beta.baselineY, text.beta.scale) }}
+          text="beta"
+          tint={text.colors.gold}
         />
       </h1>
-      <button onClick={onAccount} type="button">
+      <button
+        onClick={onAccount}
+        style={{ height: account.bounds.height, left: account.bounds.left, top: account.bounds.top, width: account.bounds.width }}
+        type="button"
+      >
         <span className="native-ui-sr-only">{accountLine}</span>
-        {accountUsername ? <span className="native-ui-sr-only">{accountUsername.toUpperCase()}</span> : null}
         <NativeBitmapText
           align="center"
-          font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
-          scale={0.72}
+          font={MENU_FONT}
+          scale={account.line1.scale}
+          style={{
+            left: 0,
+            position: 'absolute',
+            top: textTop('menu', account.line1.baselineY, account.line1.scale) - account.bounds.top,
+          }}
           text={accountLine}
-          tint={0xd9ba70}
-          width={560}
+          tint={text.colors.gold}
+          width={account.bounds.width}
         />
         {!accountUsername ? (
-          <NativeBitmapText
-            align="center"
-            className="dark-cloud-account-action"
-            font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
-            scale={0.68}
-            text="TO CHANGE THIS, CLICK HERE."
-            tint={0xd9ba70}
-            width={560}
-          />
+          <>
+            <NativeBitmapText
+              align="center"
+              className="dark-cloud-account-action"
+              font={MENU_FONT}
+              scale={account.line2.scale}
+              style={{
+                left: 0,
+                position: 'absolute',
+                top: textTop('menu', account.line2.baselineY, account.line2.scale) - account.bounds.top,
+              }}
+              text="To change this, click here."
+              tint={text.colors.gold}
+              width={account.bounds.width}
+            />
+            <i
+              className="dark-cloud-account-underline"
+              style={{
+                height: account.underline.height,
+                left: account.underline.left - account.bounds.left,
+                top: account.underline.top - account.bounds.top,
+                width: account.underline.width,
+              }}
+            />
+          </>
         ) : null}
       </button>
     </header>
@@ -187,23 +228,129 @@ export function NativeDarkCloudTabs({
   readonly onSelect: (id: DarkCloudTabId) => void
   readonly selectedId: DarkCloudTabId
 }) {
-  const hostRef = useRef<HTMLElement>(null)
-  const size = useElementSize(hostRef, { height: 69, width: 882 })
-  const scaleX = size.width / 882
-  const scaleY = size.height / 69
+  const strip = NATIVE_DARK_CLOUD_PRESENTATION.geometry.tabStripBounds
   return (
-    <nav className="dark-cloud-tabs" ref={hostRef}>
+    <nav className="dark-cloud-tabs" style={{ height: strip.height, left: strip.left, top: strip.top, width: strip.width }}>
       <NativeUiTabs
         ariaLabel="Dark Cloud sections"
         className="dark-cloud-tabs-plan"
-        height={69}
+        height={strip.height}
         onSelect={(id) => onSelect(id as DarkCloudTabId)}
         selectedId={selectedId}
-        style={{ transform: `scale(${scaleX}, ${scaleY})`, transformOrigin: 'top left' }}
         tabs={NATIVE_DARK_CLOUD_TABS as readonly NativeUiTab[]}
-        width={882}
+        width={strip.width}
       />
     </nav>
+  )
+}
+
+/** Column x anchors expressed inside the list frame (design x minus the frame left). */
+function columnStyle(column: NativeDarkCloudColumn): CSSProperties {
+  if (column.left !== undefined) return { left: column.left - FRAME_LEFT }
+  return { right: FRAME_RIGHT - (column.right ?? FRAME_RIGHT) }
+}
+
+function columnAlign(column: NativeDarkCloudColumn): 'left' | 'right' {
+  return column.left !== undefined ? 'left' : 'right'
+}
+
+/** The lowercase small-caps column header row inside the frame's dark band. */
+export function NativeDarkCloudColumns({
+  columns,
+}: {
+  readonly columns: readonly NativeDarkCloudColumn[]
+}) {
+  const { columns: metrics, colors } = NATIVE_DARK_CLOUD_TEXT
+  const top = textTop('menu', metrics.baselineY, metrics.scale) - FRAME_TOP
+  return (
+    <div aria-hidden className="dark-cloud-columns">
+      {columns.map(column => (
+        <span
+          className={`dark-cloud-column dark-cloud-column-${column.id}`}
+          key={column.id}
+          style={{ ...columnStyle(column), top }}
+        >
+          <NativeBitmapText
+            align={columnAlign(column)}
+            font={MENU_FONT}
+            scale={metrics.scale}
+            text={column.label}
+            tint={colors.gold}
+          />
+        </span>
+      ))}
+    </div>
+  )
+}
+
+export interface NativeDarkCloudCell {
+  readonly text: string
+  readonly tint?: number
+  readonly title?: string
+}
+
+/** One stock list row: single-line menu-face cells on the column anchors. */
+export function NativeDarkCloudRowCells({
+  cells,
+  columns,
+  tint = NATIVE_DARK_CLOUD_TEXT.colors.gold,
+}: {
+  readonly cells: readonly NativeDarkCloudCell[]
+  readonly columns: readonly NativeDarkCloudColumn[]
+  readonly tint?: number
+}) {
+  const { rows } = NATIVE_DARK_CLOUD_TEXT
+  const top = rows.baselineOffset - nativeUiFont('menu').metrics[0] * rows.scale / 2
+  return (
+    <>
+      {cells.map((cell, index) => {
+        const column = columns[index]
+        if (!column) return null
+        return (
+          <span
+            className={`dark-cloud-cell dark-cloud-cell-${column.id}`}
+            key={column.id}
+            style={{ ...columnStyle(column), top }}
+            title={cell.title}
+          >
+            <span className="native-ui-sr-only">{cell.text}</span>
+            <NativeBitmapText
+              align={columnAlign(column)}
+              font={MENU_FONT}
+              scale={rows.scale}
+                text={cell.text}
+              tint={cell.tint ?? tint}
+            />
+          </span>
+        )
+      })}
+    </>
+  )
+}
+
+/** A green status row (loading, empty, error) in the stock list voice. */
+export function NativeDarkCloudStatusRow({
+  children,
+  text,
+}: {
+  readonly children?: ReactNode
+  readonly text: string
+}) {
+  const { colors, rows } = NATIVE_DARK_CLOUD_TEXT
+  const top = rows.baselineOffset - nativeUiFont('menu').metrics[0] * rows.scale / 2
+  return (
+    <div className="dark-cloud-empty">
+      <span className="dark-cloud-cell dark-cloud-cell-name" style={{ left: 105 - FRAME_LEFT, top }}>
+        <span className="native-ui-sr-only">{text}</span>
+        <NativeBitmapText
+          font={MENU_FONT}
+          scale={rows.scale}
+          text={text}
+          tint={colors.green}
+        />
+      </span>
+      {children}
+    </div>
   )
 }
 
@@ -229,9 +376,7 @@ export function NativeDarkCloudToolButton({
   onPointerUp,
   ...buttonProps
 }: NativeDarkCloudToolButtonProps) {
-  const hostRef = useRef<HTMLButtonElement>(null)
   const [pressed, setPressed] = useState(false)
-  const size = useElementSize(hostRef, { height: 52, width: nativeWidth })
   const state: NativeUiButtonState = disabled ? 'disabled' : pressed ? 'pressed' : 'idle'
   const iconRecord = icon === 'search'
     ? NATIVE_DARK_CLOUD_PRESENTATION.records.searchIcon.record
@@ -272,16 +417,10 @@ export function NativeDarkCloudToolButton({
         setPressed(false)
         onPointerUp?.(event)
       }}
-      ref={hostRef}
+      style={{ height: 52, width: nativeWidth, ...buttonProps.style }}
       type={buttonProps.type ?? 'button'}
     >
-      <NativeUiPlanView
-        plan={plan}
-        style={{
-          transform: `scale(${size.width / nativeWidth}, ${size.height / 52})`,
-          transformOrigin: 'top left',
-        }}
-      />
+      <NativeUiPlanView plan={plan} />
       <span className="native-ui-sr-only">{label}</span>
     </button>
   )
@@ -299,46 +438,17 @@ export function NativeDarkCloudPrimaryButton({
   className,
   ...buttonProps
 }: NativeDarkCloudPrimaryButtonProps) {
-  const hostRef = useRef<HTMLDivElement>(null)
-  const size = useElementSize(hostRef, { height: 69, width: 353 })
   return (
-    <div className="dark-cloud-primary-control" ref={hostRef}>
+    <div className="dark-cloud-primary-control">
       <NativeUiButton
         {...buttonProps}
         className={['dark-cloud-primary-button', className].filter(Boolean).join(' ')}
         height={69}
-        style={{
-          left: 0,
-          top: 0,
-          transform: `scale(${size.width / 353}, ${size.height / 69})`,
-          transformOrigin: 'top left',
-        }}
+        style={{ left: 0, top: 0 }}
         width={353}
       >
         {children}
       </NativeUiButton>
     </div>
   )
-}
-
-function useElementSize<T extends Element>(
-  ref: RefObject<T | null>,
-  fallback: { readonly height: number; readonly width: number },
-) {
-  const [size, setSize] = useState(fallback)
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return undefined
-    const update = () => {
-      const bounds = element.getBoundingClientRect()
-      if (bounds.width > 0 && bounds.height > 0) {
-        setSize({ height: bounds.height, width: bounds.width })
-      }
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref])
-  return size
 }

@@ -2003,7 +2003,7 @@ export default function MainMenuScene({
           </div>
         ) : screen === 'dark-cloud' ? (
           <>
-            <div className="main-menu-native-stage dark-cloud-stage" inert={darkCloudMenuOpen || undefined}>
+            <div className="main-menu-native-stage dark-cloud-stage" inert={darkCloudMenuOpen || undefined} style={nativeStageStyle}>
               <DarkCloudScene
                 accountUsername={accountUsername}
                 developerAccess={developerAccess}

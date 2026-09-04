@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 
+import type { NativeDarkCloudColumn } from './native-ui/native-dark-cloud-contract.ts'
 import {
   api,
   type ActiveWebMod,
@@ -24,16 +25,19 @@ import {
   connectedPlayerPresentation,
   useDeveloperPresence,
 } from './connected-players.ts'
-import DarkCloudMedia from './DarkCloudMedia.tsx'
 import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
 } from './DarkCloudModDetail.tsx'
 import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
 import {
+  NATIVE_DARK_CLOUD_COLUMNS,
+  NATIVE_DARK_CLOUD_TEXT,
+  NativeDarkCloudColumns,
   NativeDarkCloudHeading,
-  NativeDarkCloudListFrameArt,
   NativeDarkCloudPrimaryButton,
+  NativeDarkCloudRowCells,
   NativeDarkCloudSceneArt,
+  NativeDarkCloudStatusRow,
   NativeDarkCloudTabs,
   NativeDarkCloudText,
   NativeDarkCloudToolButton,
@@ -277,16 +281,6 @@ export default function DarkCloudScene({
     }
   }
 
-  const runRowAction = (mod: ModSummary, action: DarkCloudSubscriptionAction) => {
-    if (!accountUsername) {
-      window.location.assign('/login')
-      return
-    }
-    void mutateSubscription(mod, action).catch((error: unknown) => {
-      setActionError(message(error, 'The subscription could not be changed.'))
-    })
-  }
-
   const primaryAction = () => {
     if (tab === 'layouts') return
     if (tab === 'parties') {
@@ -326,7 +320,6 @@ export default function DarkCloudScene({
 
   return (
     <section className="dark-cloud-scene" aria-label="The Dark Cloud">
-      <div className="dark-cloud-wall" aria-hidden />
       <NativeDarkCloudSceneArt />
       {/* The menu skull is the stage-level GameMenuSkull the host mounts over this scene. */}
 
@@ -338,43 +331,37 @@ export default function DarkCloudScene({
       <NativeDarkCloudTabs onSelect={changeTab} selectedId={tab} />
 
       <main className="dark-cloud-list-frame">
-        <NativeDarkCloudListFrameArt />
-
         {tab === 'layouts' ? (
           <Suspense fallback={<p className="dark-cloud-empty">OPENING LAYOUTS…</p>}>
             <DarkCloudLayouts accountUsername={accountUsername} />
           </Suspense>
         ) : (
           <>
-            <div className={`dark-cloud-columns dark-cloud-columns-${tab}`} aria-hidden>
-              {columnLabels(tab).map(label => (
-                <span key={label}><NativeDarkCloudText scale={0.62} text={label} /></span>
-              ))}
-            </div>
-            <div className="dark-cloud-list-status">{statusControls}</div>
+            <NativeDarkCloudColumns columns={NATIVE_DARK_CLOUD_COLUMNS[tab]} />
 
             <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={tab === 'parties' ? partyDirectory.loading : loading}>
-              {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
+              {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length === 0
+                ? <NativeDarkCloudStatusRow text="CONSULTING THE DARK CLOUD..." />
+                : null}
               {!(tab === 'parties' ? partyDirectory.loading : loading) && activeError && rows.length === 0 ? (
-                <div className="dark-cloud-empty dark-cloud-empty-error" role="alert">
-                  <p>{activeError}</p>
-                  <button type="button" onClick={() => { void load() }}>RETRY</button>
+                <div role="alert">
+                  <NativeDarkCloudStatusRow text={activeError.toUpperCase()}>
+                    <button type="button" className="dark-cloud-retry" onClick={() => { void load() }}>RETRY</button>
+                  </NativeDarkCloudStatusRow>
                 </div>
               ) : null}
               {!(tab === 'parties' ? partyDirectory.loading : loading) && !activeError && rows.length === 0 ? (
-                <p className="dark-cloud-empty">{emptyMessage(tab, accountUsername !== null, query)}</p>
+                <NativeDarkCloudStatusRow text={emptyMessage(tab, accountUsername !== null, query)} />
               ) : null}
               {rows.map(row => row.kind === 'mod' ? (
                 <ModRow
-                  busy={busySlug !== null}
+                  columns={NATIVE_DARK_CLOUD_COLUMNS[tab]}
                   key={row.key}
                   mod={row.mod}
                   onOpen={() => openMod(row.mod)}
                   onSelect={() => setSelectedKey(row.key)}
-                  onSubscriptionAction={action => runRowAction(row.mod, action)}
                   selected={selectedKey === row.key}
                   subscription={row.subscription}
-                  tab={tab}
                 />
               ) : (
                 <PartyRow
@@ -449,7 +436,7 @@ export default function DarkCloudScene({
         {tab !== 'layouts' ? (
           <NativeDarkCloudToolButton
             className="dark-cloud-options-button"
-            disabled={selected?.kind !== 'mod'}
+            disabled={selected?.kind !== 'mod' || busySlug !== null}
             icon={null}
             label="OPTIONS"
             nativeWidth={185}
@@ -547,24 +534,21 @@ export default function DarkCloudScene({
 }
 
 function ModRow({
-  busy,
+  columns,
   mod,
   onOpen,
   onSelect,
-  onSubscriptionAction,
   selected,
   subscription,
-  tab,
 }: {
-  busy: boolean
+  columns: readonly NativeDarkCloudColumn[]
   mod: ModSummary
   onOpen: () => void
   onSelect: () => void
-  onSubscriptionAction: (action: DarkCloudSubscriptionAction) => void
   selected: boolean
   subscription: ModSubscription | null
-  tab: DarkCloudTab
 }) {
+  const { colors } = NATIVE_DARK_CLOUD_TEXT
   return (
     <article
       className={`dark-cloud-row dark-cloud-mod-row${selected ? ' selected' : ''}`}
@@ -579,49 +563,21 @@ function ModRow({
         onClick={onSelect}
         onDoubleClick={onOpen}
       >
-        <DarkCloudMedia alt={mod.name} className="dark-cloud-row-thumbnail" src={mod.thumbnailUrl} />
-        <span className="dark-cloud-row-copy">
-          <strong><NativeDarkCloudText scale={0.62} text={mod.name.toUpperCase()} /></strong>
-          <small>{mod.summary}</small>
-          <span className="dark-cloud-row-tags">{mod.tags.slice(0, 3).join(' · ')}</span>
-        </span>
-        <span className="dark-cloud-row-author"><NativeDarkCloudText scale={0.46} text={mod.author.username.toUpperCase()} /></span>
-        <span className="dark-cloud-row-version"><NativeDarkCloudText scale={0.46} text={`V${mod.latestVersion.toUpperCase()}`} /></span>
-        <span className={`dark-cloud-row-state ${subscription?.enabled ? 'enabled' : ''}`}>
-          <NativeDarkCloudText
-            scale={0.42}
-            text={subscription ? subscription.enabled ? 'ENABLED' : 'DISABLED' : 'NOT SUBSCRIBED'}
-            tint={subscription?.enabled ? 0xa9d29d : 0xa99a70}
-          />
-        </span>
+        <span className="dark-cloud-row-copy native-ui-sr-only"><strong>{mod.name}</strong></span>
+        <NativeDarkCloudRowCells
+          cells={[
+            { text: mod.name },
+            { text: mod.author.username },
+            { text: `v${mod.latestVersion}` },
+            {
+              text: subscription ? subscription.enabled ? 'enabled' : 'disabled' : 'not subscribed',
+              tint: subscription?.enabled ? colors.green : undefined,
+            },
+          ]}
+          columns={columns}
+          tint={selected ? colors.green : colors.gold}
+        />
       </button>
-      <div className="dark-cloud-row-actions">
-        <button type="button" aria-label={`View ${mod.name}`} onClick={onOpen}>VIEW</button>
-        {tab === 'subscribed' && subscription ? (
-          <>
-            <button
-              type="button"
-              disabled={busy}
-              aria-label={`${subscription.enabled ? 'Disable' : 'Enable'} ${mod.name}`}
-              onClick={() => onSubscriptionAction(subscription.enabled ? 'disable' : 'enable')}
-            >
-              {subscription.enabled ? 'DISABLE' : 'ENABLE'}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              aria-label={`Unsubscribe from ${mod.name}`}
-              onClick={() => onSubscriptionAction('unsubscribe')}
-            >
-              REMOVE
-            </button>
-          </>
-        ) : !subscription ? (
-          <button type="button" disabled={busy} onClick={() => onSubscriptionAction('subscribe')}>
-            {busy ? 'WORKING…' : 'SUBSCRIBE'}
-          </button>
-        ) : null}
-      </div>
     </article>
   )
 }
@@ -643,6 +599,15 @@ function PartyRow({
 }) {
   const action = directoryPartyAction(party)
   const presentation = directoryPartyPresentation(party)
+  const { colors } = NATIVE_DARK_CLOUD_TEXT
+  const flags = [
+    party.sessionKind === 'private-college' ? 'private college' : null,
+    party.modCount > 0 ? `modded ${party.modCount}` : null,
+    party.cheatsEnabled ? 'cheats' : null,
+  ].filter((flag): flag is string => flag !== null)
+  const status = pending
+    ? 'requested'
+    : action === 'wait' ? 'in game' : presentation.status
   return (
     <article
       className={`dark-cloud-row dark-cloud-party-row${selected ? ' selected' : ''}`}
@@ -656,32 +621,21 @@ function PartyRow({
           ? `, modded with ${party.modCount} ${party.modCount === 1 ? 'mod' : 'mods'}`
           : ''}${party.cheatsEnabled ? ', cheats enabled' : ''}`}
         aria-pressed={selected}
+        disabled={busy && !selected}
         onClick={onSelect}
         onDoubleClick={onEnter}
       >
-        <span className="dark-cloud-party-mark" aria-hidden>{party.leader.slice(0, 1).toUpperCase()}</span>
-        <span className="dark-cloud-row-copy">
-          <strong><NativeDarkCloudText scale={0.62} text={`${party.leader}'S PARTY`.toUpperCase()} /></strong>
-          <span className="dark-cloud-party-flags">
-            {party.sessionKind === 'private-college' ? <em>PRIVATE COLLEGE</em> : null}
-            {party.modCount > 0 ? <em>MODDED · {party.modCount}</em> : null}
-            {party.cheatsEnabled ? <em className="cheats">CHEATS</em> : null}
-          </span>
-          <small>{party.members.join(' · ')}</small>
-        </span>
-        <span className="dark-cloud-party-members"><NativeDarkCloudText scale={0.42} text={presentation.squad.toUpperCase()} /></span>
-        <span className={`dark-cloud-party-status ${party.status}`}><NativeDarkCloudText scale={0.42} text={presentation.status.toUpperCase()} /></span>
-        <span className="dark-cloud-party-location" title={presentation.location}>
-          <NativeDarkCloudText scale={0.4} text={presentation.location} />
-        </span>
+        <NativeDarkCloudRowCells
+          cells={[
+            { text: `${party.leader}'s party${flags.length ? ` (${flags.join(', ')})` : ''}` },
+            { text: presentation.squad, title: party.members.join(', ') },
+            { text: status },
+            { text: presentation.location, title: presentation.location },
+          ]}
+          columns={NATIVE_DARK_CLOUD_COLUMNS.parties}
+          tint={selected ? colors.green : colors.gold}
+        />
       </button>
-      <div className="dark-cloud-row-actions">
-        <button type="button" disabled={busy || action === 'wait'} onClick={onEnter}>
-          {pending
-            ? 'REQUESTED'
-            : action === 'request' ? 'REQUEST' : action === 'wait' ? 'IN GAME' : 'JOIN'}
-        </button>
-      </div>
     </article>
   )
 }
@@ -849,13 +803,6 @@ async function listAllMods(): Promise<ModSummary[]> {
     api.mods.list({ sort: 'newest', pageSize: 50, page: index + 2 })
   )))
   return [first, ...rest].flatMap((page: ModList) => page.items)
-}
-
-function columnLabels(tab: DarkCloudTab): readonly string[] {
-  if (tab === 'layouts') return []
-  if (tab === 'parties') return ['PARTY', 'WIZARDS', 'STATUS', 'LOCATION', 'ACTION']
-  if (tab === 'subscribed') return ['SUBSCRIBED MOD', 'AUTHOR', 'VERSION', 'STATUS', 'MANAGE']
-  return ['MOD', 'AUTHOR', 'VERSION', 'STATUS', 'ACTION']
 }
 
 function statusLabel(tab: DarkCloudTab, count: number, query: string, loading: boolean): string {

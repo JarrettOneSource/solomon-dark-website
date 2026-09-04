@@ -13,6 +13,10 @@ export interface NativeUiTab {
   readonly id: string
   readonly label: string
   readonly labelBaselineY?: number
+  readonly labelScale?: number
+  readonly labelTint?: number
+  readonly selectedLabel?: string
+  readonly selectedLabelTint?: number
 }
 
 interface NativeUiTabsProps {

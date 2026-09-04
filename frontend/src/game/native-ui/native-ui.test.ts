@@ -33,7 +33,11 @@ import {
 import {
   NATIVE_DARK_CLOUD_PRESENTATION,
   NATIVE_DARK_CLOUD_ROOT_RECORDS,
+  NATIVE_DARK_CLOUD_SCENE,
   NATIVE_DARK_CLOUD_TABS,
+  NATIVE_DARK_CLOUD_TEXT,
+  planNativeDarkCloudBackdrop,
+  planNativeDarkCloudFrame,
   planNativeDarkCloudToolButton,
 } from './native-dark-cloud-contract.ts'
 
@@ -491,10 +495,12 @@ test('Dark Cloud callers consume the semantic stock composition without retired 
   const panel = readFileSync(new URL('../DarkCloudPanel.tsx', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../dark-cloud.css', import.meta.url), 'utf8')
   for (const semantic of [
+    'NativeDarkCloudColumns',
     'NativeDarkCloudHeading',
-    'NativeDarkCloudListFrameArt',
     'NativeDarkCloudPrimaryButton',
+    'NativeDarkCloudRowCells',
     'NativeDarkCloudSceneArt',
+    'NativeDarkCloudStatusRow',
     'NativeDarkCloudTabs',
     'NativeDarkCloudToolButton',
   ]) assert.match(scene, new RegExp(`<${semantic}`))
@@ -508,6 +514,7 @@ test('Dark Cloud callers consume the semantic stock composition without retired 
     'search.png',
     'sort.png',
     'stone-button-selected.png',
+    'stone-wall.png',
     'tab-bracket.png',
     'wizard-left.png',
     'wizard-right.png',
@@ -517,6 +524,80 @@ test('Dark Cloud callers consume the semantic stock composition without retired 
   assert.doesNotMatch(css, /\.dark-cloud-tabs button\s*\{[^}]*border-radius/s)
   assert.doesNotMatch(css, /\.dark-cloud-primary-button::(?:before|after)/)
   assert.doesNotMatch(css, /\.dark-cloud-tool-button::(?:before|after)/)
+})
+
+test('Dark Cloud backdrop plan follows the retail painter order', () => {
+  const plan = planNativeDarkCloudBackdrop()
+  assert.deepEqual(plan.nodes.map(node => node.label), [
+    'wall-0', 'wall-1', 'scroll-left', 'scroll-right',
+    'flourish-left', 'flourish-right',
+    'wizard-tall-top-right', 'wizard-short-top-left',
+    'wizard-short-bottom-right', 'wizard-tall-bottom-left',
+    'plates-left', 'plates-right',
+  ])
+  const wall = plan.nodes[0]
+  assert.ok(wall?.kind === 'tile')
+  assert.deepEqual(wall.bounds, { height: 108, left: 0, top: 65, width: 1_600 })
+  assert.equal(wall.record, 30)
+  const bottomLeft = plan.nodes.find(node => node.label === 'wizard-tall-bottom-left')
+  assert.ok(bottomLeft?.kind === 'sprite')
+  assert.deepEqual([bottomLeft.record, bottomLeft.x, bottomLeft.y, bottomLeft.mirrorX], [31, -57, 765, undefined])
+  const bottomRight = plan.nodes.find(node => node.label === 'wizard-short-bottom-right')
+  assert.ok(bottomRight?.kind === 'sprite' && bottomRight.mirrorX === true)
+  const plates = plan.nodes.filter(node => node.kind === 'clip')
+  assert.deepEqual(plates.map(node => node.kind === 'clip' && node.nodes.length), [2, 2])
+  assert.deepEqual(plates.map(node => node.kind === 'clip' && node.bounds.left), [0, 1_545])
+})
+
+test('Dark Cloud frame plan paints chains, stones, the ruled black frame, leather and gold corners', () => {
+  const plan = planNativeDarkCloudFrame()
+  const labels = plan.nodes.map(node => node.label)
+  assert.equal(labels[0], 'chains')
+  assert.deepEqual(labels.slice(1, 5), ['stone-top-left', 'stone-top-right', 'stone-bottom-left', 'stone-bottom-right'])
+  assert.equal(labels[5], 'frame-fill')
+  const fill = plan.nodes[5]
+  assert.ok(fill?.kind === 'solid')
+  assert.deepEqual(fill.bounds, { height: 624, left: 57, top: 175, width: 1_487 })
+  assert.equal(fill.color, 0)
+  const lines = plan.nodes.filter(node => node.kind === 'solid' && /^frame-(?:top|bottom|left|right)-/.test(node.label ?? ''))
+  assert.equal(lines.length, 32)
+  const topRule = lines.find(node => node.label === 'frame-top-0')
+  assert.ok(topRule?.kind === 'solid')
+  assert.deepEqual([topRule.bounds.top, topRule.color], [175, 0xe5d2a4])
+  const bottomRule = lines.find(node => node.label === 'frame-bottom-0')
+  assert.ok(bottomRule?.kind === 'solid' && bottomRule.bounds.top === 798)
+  const rightRule = lines.find(node => node.label === 'frame-right-13')
+  assert.ok(rightRule?.kind === 'solid' && rightRule.bounds.left === 1_530)
+  const leather = plan.nodes.find(node => node.label === 'leather')
+  assert.ok(leather?.kind === 'clip')
+  assert.deepEqual(leather.bounds, { height: 587, left: 75, top: 193, width: 1_450 })
+  const leatherTile = leather.nodes[0]
+  assert.ok(leatherTile?.kind === 'tile')
+  assert.deepEqual([leatherTile.record, leatherTile.bounds.left, leatherTile.bounds.top], [49, 55, 173])
+  const band = plan.nodes.find(node => node.label === 'header-band')
+  assert.ok(band?.kind === 'solid' && band.alpha === 0.5)
+  assert.deepEqual(labels.slice(-4), ['gold-top-left', 'gold-top-right', 'gold-bottom-left', 'gold-bottom-right'])
+  const goldBottomRight = plan.nodes.at(-1)
+  assert.ok(goldBottomRight?.kind === 'sprite')
+  assert.deepEqual([goldBottomRight.x, goldBottomRight.y, goldBottomRight.mirrorX, goldBottomRight.mirrorY], [1_545, 800, true, true])
+  assert.deepEqual(NATIVE_DARK_CLOUD_SCENE.shade.panel, NATIVE_DARK_CLOUD_PRESENTATION.geometry.listBounds)
+})
+
+test('Dark Cloud tabs carry lowercase resting labels, capital selected labels and the retail gold', () => {
+  assert.deepEqual(NATIVE_DARK_CLOUD_TABS.map(tab => [tab.label, tab.selectedLabel]), [
+    ['mods', 'MODS'], ['subscribed mods', 'SUBSCRIBED MODS'], ['parties', 'PARTIES'], ['layouts', 'LAYOUTS'],
+  ])
+  const plan = planNativeUiTabs({
+    height: 69,
+    selectedId: 'subscribed',
+    tabs: NATIVE_DARK_CLOUD_TABS,
+    width: 882,
+  })
+  const labels = plan.nodes.filter(node => node.kind === 'text')
+  assert.deepEqual(labels.map(node => node.kind === 'text' && node.text.text), ['mods', 'SUBSCRIBED MODS', 'parties', 'layouts'])
+  assert.deepEqual(labels.map(node => node.kind === 'text' && node.text.tint), Array(4).fill(NATIVE_DARK_CLOUD_TEXT.colors.gold))
+  assert.deepEqual(labels.map(node => node.kind === 'text' && node.text.y), [53, 45, 53, 53])
+  assert.deepEqual(labels.map(node => node.kind === 'text' && node.text.scale), Array(4).fill(0.88))
 })
 
 test('stock tabs keep bracket X fixed and move only the selected Y contract', () => {
