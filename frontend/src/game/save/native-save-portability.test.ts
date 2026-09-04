@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { nativeBeltSkillProjection } from '../core-kernels/native-belt.ts'
+import { bindNativeBeltItem, nativeBeltSkillProjection } from '../core-kernels/native-belt.ts'
+import {
+  createEquipmentInventoryItem,
+  createFomentiusInventoryItem,
+  createNativeSkillBookInventoryItem,
+  DOWSING_EQUIPMENT_RECIPES,
+  EQUIPMENT_TYPES,
+  FOMENTIUS_STOCK_DEFINITIONS,
+  HUB_ITEM_KINDS,
+  NATIVE_SKILL_BOOK_DEFINITIONS,
+  type HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
 import { deflateRawSync } from 'node:zlib'
 
 import { createPlayerSkillBook } from '../core-kernels/player-progression.ts'
@@ -39,7 +50,7 @@ import {
   readZip,
   WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH,
 } from './native-save-archive.ts'
-import { readNativeSaveFileSelection } from './native-save-files.ts'
+import { readGameSaveFileSelection } from './game-save-files.ts'
 import {
   createPortableGameProfileFromNative,
   encodePortableGameProfile,
@@ -776,29 +787,31 @@ test('standalone gamestate selections use explicit stock profile defaults and re
     })
   }
   try {
-    const direct = await readNativeSaveFileSelection([
+    const direct = await readGameSaveFileSelection([
       selectedFile('gamestate.sav', activeGamestate),
     ])
-    const zipped = await readNativeSaveFileSelection([
+    const zipped = await readGameSaveFileSelection([
       selectedFile('SolomonDarkStockSaveWaterMage.zip', singleSaveZip),
     ])
     const expectedGamestateSha256 = await portableSha256(activeGamestate)
-    for (const portable of [direct, zipped]) {
-      assert.equal(portable.profile.gold, 500)
-      assert.equal(portable.wizard.name, fixture.expected.wizardName)
-      assert.equal(portable.nativeSource.runName, '_survival')
-      assert.equal(portable.nativeSource.darkdataSha256, fixture.files.darkdata.sha256)
-      assert.equal(portable.nativeSource.gamestateSha256, expectedGamestateSha256)
-      assert.equal(portable.wizard.permanentRanks[54], 0)
-      assert.equal(portable.wizard.learnedOrder.includes(54), false)
+    for (const preview of [direct, zipped]) {
+      const restored = restoreGameSaveDocument(preview.document)
+      assert.equal(preview.source, 'stock')
+      assert.equal(preview.gold, 500)
+      assert.equal(preview.displayName, fixture.expected.wizardName)
+      assert.equal(restored.nativeSource?.runName, '_survival')
+      assert.equal(restored.nativeSource?.darkdataSha256, fixture.files.darkdata.sha256)
+      assert.equal(restored.nativeSource?.gamestateSha256, expectedGamestateSha256)
+      assert.equal(restored.state.playerEntities.skillBooks[0]!.permanentRanks[54], 0)
+      assert.equal(restored.state.playerEntities.skillBooks[0]!.learnedSkillOrder.includes(54), false)
       assert.match(
-        portable.warnings.join('\n'),
+        preview.warnings.join('\n'),
         /Only gamestate\.sav was supplied.*missing darkdata\.cfg profile fields start from stock defaults/s,
       )
-      assert.match(portable.warnings.join('\n'), /row\(s\) 54 depend only on effective equipment ranks/)
+      assert.match(preview.warnings.join('\n'), /row\(s\) 54 depend only on effective equipment ranks/)
     }
 
-    const imported = createWebGameSaveFromPortableProfile(zipped)
+    const imported = zipped
     const restored = restoreGameSaveDocument(imported.document)
     assert.equal(restored.state.playerEntities.skillBooks[0]?.learnedSkillOrder.includes(54), false)
     assert.equal(restored.state.playerEntities.belts[0]?.[3]?.kind, 'health-potion')
@@ -820,7 +833,7 @@ test('standalone gamestate selections use explicit stock profile defaults and re
       { bytes: Uint8Array.of(1), path: 'notes.txt' },
     ])
     await assert.rejects(
-      () => readNativeSaveFileSelection([selectedFile('ambiguous.zip', ambiguous)]),
+      () => readGameSaveFileSelection([selectedFile('ambiguous.zip', ambiguous)]),
       /must contain only one gamestate\.sav/,
     )
   } finally {
@@ -932,9 +945,23 @@ test('stock ZIP export carries one sanitized exact browser Boneyard continuation
   assert.deepEqual(restored.state, canonical.state)
   assert.deepEqual(restored.mods, mods)
   assert.deepEqual(restored.modState, modState)
+  for (const file of [
+    selectedFile('exported.zip', exported.archive),
+    selectedFile('browser-game-save.json', new TextEncoder().encode(document)),
+  ]) {
+    const preview = await readGameSaveFileSelection([file])
+    const reimported = restoreGameSaveDocument(preview.document)
+    assert.equal(preview.source, 'browser')
+    assert.equal(reimported.integrity, 'local-only')
+    assert.equal(JSON.parse(preview.document).continuation.summary.partyRejoinToken, null)
+    assert.deepEqual(reimported.loadedBoneyard, canonical.loadedBoneyard)
+    assert.deepEqual(reimported.state, canonical.state)
+    assert.deepEqual(reimported.mods, mods)
+    assert.deepEqual(reimported.modState, modState)
+  }
 })
 
-test('stock import ignores a support sidecar and re-export replaces it without nesting', async () => {
+test('browser archive import retains native siblings and re-export replaces its browser document without nesting', async () => {
   const portrait = Uint8Array.of(9, 8, 7)
   const staleSupport = new TextEncoder().encode('{"stale":true}')
   const portable = await createPortableGameProfileFromNative(
@@ -957,18 +984,17 @@ test('stock import ignores a support sidecar and re-export replaces it without n
   assert.notEqual(new TextDecoder().decode(firstSupportFiles[0]!.bytes), '{"stale":true}')
   assert.equal(JSON.parse(new TextDecoder().decode(firstSupportFiles[0]!.bytes)).nativeSource, null)
 
-  const reimported = await readNativeSaveFileSelection([
+  const reimported = await readGameSaveFileSelection([
     selectedFile('browser-support.zip', first.archive),
   ])
   assert.deepEqual(
-    reimported.nativeSource.retainedFiles.map(({ path }) => path),
+    restoreGameSaveDocument(reimported.document).nativeSource!.retainedFiles.map(({ path }) => path),
     ['solomondark/Portraits/portrait100.raw'],
   )
-  assert.match(reimported.warnings.join('\n'), /1 opaque native slot file/)
-  assert.doesNotMatch(reimported.warnings.join('\n'), /2 opaque native slot files/)
+  assert.equal(reimported.source, 'browser')
 
   const second = await exportWebGameSaveToNativeArchive(
-    createWebGameSaveFromPortableProfile(reimported).document,
+    reimported.document,
   )
   const secondArchive = await readNativeSaveArchive(second.archive)
   const secondSupportFiles = secondArchive.retainedFiles?.filter(({ path }) => (
@@ -980,6 +1006,129 @@ test('stock import ignores a support sidecar and re-export replaces it without n
   assert.equal(secondSupport.nativeSource, null)
   assert.equal(secondSupport.continuation.summary.partyRejoinToken, null)
   assert.equal('stale' in secondSupport, false)
+})
+
+test('downloaded browser archives retain found inventory, equipment, sacks, storage, and belt', async () => {
+  const portable = await createPortableGameProfileFromNative(darkdata, gamestate, fixture.expected.runName)
+  const initial = restoreGameSaveDocument(createWebGameSaveFromPortableProfile(portable).document)
+  const economy = initial.state.playerEntities.economies[0]!
+  let nextId = 100_000
+  const equipment = EQUIPMENT_TYPES.map(type => ({
+    ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES.find(recipe => recipe.type === type)!, nextId++),
+    ...(type === 'hat' || type === 'robe' ? { iconTints: [0x6688cc, 0xffdd88] as const } : {}),
+    modAffixes: [{ contentId: '5000000000000000092', modId: 'example.inventory',
+      modifiers: [{ key: 'incoming_damage', operation: 'multiply' as const, value: 0.8 }], name: 'Gravebound' }],
+  }))
+  const ring = equipment.find(item => item.equipmentType === 'ring')!
+  const goods = FOMENTIUS_STOCK_DEFINITIONS.filter(row => row.kind !== 'sack')
+    .map(row => createFomentiusInventoryItem(row, nextId++, 7))
+  const books = NATIVE_SKILL_BOOK_DEFINITIONS.map(row => createNativeSkillBookInventoryItem(row, nextId++))
+  const modContent = {
+    contentId: '5000000000000000090', description: 'Saved mod item', key: 'saved_item',
+    icon: {
+      atlasId: 'example.inventory:icon', frameIndex: 0, imagePath: 'art/icon.png',
+      frame: { centerOffsetX: 0, centerOffsetY: 0, contentHeight: 16, contentWidth: 16,
+        height: 16, logicalHeight: 16, logicalWidth: 16, width: 16, x: 0, y: 0 },
+    },
+    modId: 'example.inventory',
+  }
+  const modItems: HubInventoryItem[] = [
+    { ...goods[0]!, iconRecords: [], id: nextId++, kind: 'mod-item', nativeTypeId: 7013, nativeSubtype: null,
+      modItemContent: { ...modContent, stackMaximum: 10 } },
+    { ...goods[0]!, iconRecords: [], id: nextId++, kind: 'mod-potion', nativeSubtype: 6,
+      modContent: { ...modContent, contentId: '5000000000000000091', key: 'saved_potion',
+        durationMs: 1_000, consumeVfx: null } },
+  ]
+  const sack: HubInventoryItem = {
+    ...createFomentiusInventoryItem(FOMENTIUS_STOCK_DEFINITIONS.find(row => row.kind === 'sack')!, nextId++),
+    contents: [{ ...equipment[0]!, id: nextId++ }, ...books, {
+      equipmentType: 'ring', iconRecords: [52], id: nextId++, kind: 'equipment',
+      generatedLevel: 9, name: 'Thoughtful Ring', nativeSelector: 0,
+      nativeSubtype: null, nativeTypeId: 7002, quantity: 1, rarity: null, recipeIndex: null,
+      nativeEffects: [{ kind: 24, magnitude: 50, operator: 0, target: 0 }],
+    }],
+    name: 'Found treasures',
+  }
+  const nestedSack = { ...sack, id: nextId++, contents: [sack] }
+  const carried = [...goods, ...modItems, ...equipment.filter(item => item !== ring), nestedSack].map((item, index) => ({
+    ...item, inventorySlot: item === nestedSack ? 100 : index * 2,
+  }))
+  const equipped = (type: typeof EQUIPMENT_TYPES[number]) => ({
+    ...equipment.find(item => item.equipmentType === type)!, id: nextId++,
+  })
+  const inventory = {
+    ...economy,
+    backpack: carried,
+    equipment: {
+      amulet: equipped('amulet'), hat: equipped('hat'), robe: equipped('robe'), weapon: equipped('wand'),
+      rings: [ring, equipped('ring'), equipped('ring')] as const,
+    },
+    nextItemId: nextId + 10,
+    storage: [{ ...sack, id: nextId++, contents: [{ ...goods[0]!, id: nextId++ }] }],
+  }
+  const state = {
+    ...initial.state,
+    playerEntities: {
+      ...initial.state.playerEntities,
+      economies: [inventory],
+      belts: [bindNativeBeltItem(
+        bindNativeBeltItem(initial.state.playerEntities.belts[0]!, inventory, sack.id, 6),
+        inventory, ring.id, 7,
+      )],
+    },
+  }
+  assert.deepEqual(new Set([...carried, ...books].map(item => item.kind)), new Set(HUB_ITEM_KINDS))
+  const loaded = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 41))
+  assert.ok(loaded)
+  for (const loadedBoneyard of [null, loaded]) {
+    const document = createGameSaveDocument({
+      integrity: 'local-only', loadedBoneyard,
+      mods: [{ id: 'example.inventory', version: '1.0.0', contentSha256: 'a'.repeat(64) }],
+      modState: { 'example.inventory': { found: 2 } },
+      nativeSource: initial.nativeSource, playerId: initial.playerId,
+      state: loadedBoneyard ? enterBoneyardWorld(state, loadedBoneyard) : state,
+    })
+    const exported = await exportWebGameSaveToNativeArchive(document)
+    const selection = await readGameSaveFileSelection([selectedFile('saved-wizard.zip', exported.archive)])
+    assert.equal(selection.source, 'browser')
+    const restored = restoreGameSaveDocument(selection.document)
+    const expected = restoreGameSaveDocument(document)
+    assert.deepEqual(restored.state, expected.state)
+    assert.deepEqual(restored.mods, expected.mods)
+    assert.deepEqual(restored.modState, expected.modState)
+  }
+})
+
+test('invalid browser documents reject the whole import instead of losing inventory in a stock fallback', async () => {
+  const portable = await createPortableGameProfileFromNative(darkdata, gamestate, fixture.expected.runName)
+  const document = createWebGameSaveFromPortableProfile(portable).document
+  const invalidInventory = JSON.parse(document)
+  invalidInventory.continuation.simulation.playerEntities.economies[0].backpack[0].quantity = -1
+  const invalidBelt = JSON.parse(document)
+  invalidBelt.continuation.simulation.playerEntities.belts[0][7] = {
+    itemId: 999_999, kind: 'item', nativeTypeId: 7002,
+  }
+  const futureVersion = JSON.parse(document)
+  futureVersion.schemaVersion += 1_000
+  for (const invalid of ['{', JSON.stringify(invalidInventory), JSON.stringify(invalidBelt), JSON.stringify(futureVersion)]) {
+    const contents = new TextEncoder().encode(invalid)
+    const archive = await createNativeSaveArchive({
+      darkdata, gamestate, runName: fixture.expected.runName,
+      retainedFiles: [{ path: 'SolomonDark/Browser-Game-Save.json', bytes: contents }],
+    })
+    await assert.rejects(() => readGameSaveFileSelection([selectedFile('bad.zip', archive)]))
+    await assert.rejects(() => readGameSaveFileSelection([selectedFile('bad.json', contents)]))
+  }
+  for (const selection of [
+    [selectedFile('darkdata.cfg', darkdata), selectedFile('gamestate.sav', gamestate)],
+    [selectedFile('old-export.zip', await createNativeSaveArchive({
+      darkdata, gamestate, runName: fixture.expected.runName,
+    }))],
+  ]) {
+    const preview = await readGameSaveFileSelection(selection)
+    assert.equal(preview.source, 'stock')
+    assert.equal(preview.displayName, fixture.expected.wizardName)
+  }
 })
 
 test('a fresh web wizard exports through the controlled native Hub template', async () => {

@@ -565,3 +565,83 @@ carry exactly the document selected by the player, not claim a later tick.
   registration lane. Those corrections changed maintained acceptance code,
   not product behavior. No member remains browser-blocked or unknown. The
   implementation is uncommitted and unpushed; deployment was not requested.
+
+## 2026-09-04 — Inventory retention through browser save export/import
+
+### Report and causal trace
+
+The user reports that save exports retain charms, gold, skills, and discipline
+but lose found inventory. At Website `5a4a81cc`, ordinary authoritative saves
+already serialize the complete economy and belt. ZIP exports also carry that
+document at `solomondark/browser-game-save.json`. Both Settings and Account
+instead call `readNativeSaveFileSelection`, which discards this file and builds
+a fresh Hub from the stock progression projection. That importer is the loss
+point. The September 1 support-only boundary deliberately excluded player
+re-import; this request now brings that lifecycle into scope.
+
+No new retail serialization claim is required. The unchanged native evidence
+and binary identity above continue to own stock-only transfer. This change
+restores Website-owned data through its existing strict save codec.
+
+### Boundary and complete membership
+
+System: personal Website save transfer from authoritative checkpoint, through
+ZIP download and file selection, to preview, slot replacement, and Last Game.
+
+| Member | Disposition | Proof contract |
+| --- | --- | --- |
+| Backpack addressed slots, including gaps and overflow | `exact-ported` | exported/re-imported items and slot indices equal the checkpoint |
+| All six equipment families and all seven equipped slots | `exact-ported` | exact item IDs, recipes, generated properties, effects, dyes, and equipped locations survive |
+| Potion stacks, dyes, keys, both skill books, nested Sacks | `exact-ported` | all stock item kinds, quantities, and recursive contents survive |
+| Mod items, potions, affixes, and content identities/state | `verified-already-at-parity` in the full document | no projection drops mod fields; existing resume content checks still apply |
+| Luthacus storage and completed-run Sacks | `exact-ported` | complete stored trees survive alongside carried items |
+| Eight belt slots, including nested/equipped item references | `exact-ported` | item and skill bindings survive; invalid references reject import |
+| Hub and active Boneyard continuations | `exact-ported` | same wizard and inventory; Boneyard run, world, and tick survive |
+| Settings/anonymous slot and Account/cloud slot | `exact-ported` | both use the same import preview and require existing replacement confirmation |
+| ZIP with browser document; standalone browser JSON | `exact-ported` | full document is validated and restored, including existing September 1 exports |
+| ZIP/loose stock files without browser document | `verified-already-at-parity` | existing settled-Hub projection remains; preview states its inventory limitation |
+| Native profile/wizard and opaque archive siblings | `verified-already-at-parity` | stock files unchanged; retain non-browser siblings without nesting the browser document |
+| Invalid browser document or invalid manifest | `exact-ported` rejection | reject before replacing the slot; never silently fall back to progression-only import |
+| Party rejoin capability and global integrity | `out-of-system` for personal imports | re-encode as local-only with no rejoin token |
+| Death, Game Over, New Game retirement | `out-of-system` | inventory ownership/reset rules are unchanged |
+| Native-only inventory materialization | `out-of-system` | this request concerns Website exports; retail polymorphic item trees are not newly decoded |
+
+### Implementation and validation contract
+
+One file-selection owner returns a validated preview for both UI surfaces.
+An archive containing the browser document restores that document; an archive
+without it follows the existing native projection. A preview identifies which
+source will be restored before the existing replacement action. Browser
+imports strip account integrity and party capabilities, and retain archive
+native files separately so repeated exports cannot nest prior browser saves.
+
+Regression coverage must perform an actual ZIP download-format round trip for
+mixed inventory in both Hub and Boneyard, compare economy/belt/full continuation,
+check direct JSON and malformed input, and preserve existing native-only tests.
+Mac Chrome acceptance must import the downloaded ZIP through Settings and
+Account, reload, use Last Game, and verify the restored inventory on the host
+and inventory UI. Run the complete Mac Website gate on the candidate tree.
+
+### Implementation status
+
+`game-save-files.ts` now owns both file formats and the shared preview. It
+validates archive membership before reading the browser document, restores it
+through the canonical save codec, and re-encodes it as local-only without a
+party rejoin token. Native archive siblings remain attached separately.
+Settings and Account now expose save import/export with explicit browser or
+stock-only previews. The portability regressions cover all thirteen item kinds,
+all equipment families/slots, named/generated gear, dyes and mod affixes,
+addressed gaps/overflow, recursive Sacks, storage, belt references, Hub/Boneyard,
+JSON, invalid documents, older stock-only files, and repeated export. The
+maintained browser journey now imports the actual downloaded ZIP through each UI.
+
+Validation is pending, not passed. The isolated Mac worktree was created at
+`5a4a81cc` and Node 22.17.0/npm 10.9.2 installed its dependencies. The Mac then
+went offline: Linux and Windows Tailscale both report `Online: false`, last seen
+2026-09-04 20:50:00 UTC; repeated bounded SSH attempts time out. The focused red
+test transfer did not complete. No automated tests, builds, or browser checks
+have run for this change. Resume with the focused regression, full Mac gate,
+and both browser journeys when the Mac is available. The user subsequently
+requested a push to main after being informed of the pending validation.
+Publication is authorized with that limitation recorded; deployment was not
+requested. The Mac acceptance worktree requires cleanup when it is reachable.

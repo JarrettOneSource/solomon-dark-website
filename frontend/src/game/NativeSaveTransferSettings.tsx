@@ -1,21 +1,10 @@
 import { useRef, useState } from 'react'
+import type { GameSaveImportPreview } from './save/game-save-files.ts'
 
 import {
   NativeUiSettingsAction,
   NativeUiSettingsGroup,
 } from './native-ui/react.ts'
-
-export interface NativeSaveImportPreview {
-  readonly discipline: string
-  readonly displayName: string
-  readonly document: string
-  readonly element: string
-  readonly gold: number
-  readonly hagathaPerks: number
-  readonly learnedRows: number
-  readonly level: number
-  readonly warnings: readonly string[]
-}
 
 export interface NativeSaveExportArchive {
   readonly archive: Uint8Array
@@ -25,7 +14,7 @@ export interface NativeSaveExportArchive {
 export interface NativeSaveTransferController {
   readonly canExport: boolean
   exportCurrent: () => Promise<NativeSaveExportArchive>
-  inspectImport: (files: FileList) => Promise<NativeSaveImportPreview>
+  inspectImport: (files: FileList) => Promise<GameSaveImportPreview>
   replaceWithImport: (document: string) => Promise<void>
 }
 
@@ -37,7 +26,7 @@ export default function NativeSaveTransferSettings({
   const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pendingImport, setPendingImport] = useState<NativeSaveImportPreview | null>(null)
+  const [pendingImport, setPendingImport] = useState<GameSaveImportPreview | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
   const inspect = async (files: FileList | null) => {
@@ -49,7 +38,7 @@ export default function NativeSaveTransferSettings({
     try {
       setPendingImport(await controller.inspectImport(files))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The stock save could not be inspected.')
+      setError(cause instanceof Error ? cause.message : 'The save could not be inspected.')
     } finally {
       if (fileInput.current) fileInput.current.value = ''
       setBusy(false)
@@ -63,9 +52,9 @@ export default function NativeSaveTransferSettings({
     try {
       await controller.replaceWithImport(pendingImport.document)
       setPendingImport(null)
-      setStatus('Stock progression imported. Close Settings and choose Last Game.')
+      setStatus('Save imported. Close Settings and choose Last Game.')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The stock save could not replace this slot.')
+      setError(cause instanceof Error ? cause.message : 'The save could not replace this slot.')
     } finally {
       setBusy(false)
     }
@@ -79,7 +68,7 @@ export default function NativeSaveTransferSettings({
       const exported = await controller.exportCurrent()
       if (
         exported.warnings.length > 0
-        && !window.confirm(`${exported.warnings.join('\n\n')}\n\nExport anyway?`)
+        && !window.confirm(`These limitations apply when loading in stock Solomon Dark. The browser save retains your inventory and run.\n\n${exported.warnings.join('\n\n')}\n\nExport anyway?`)
       ) return
       const url = URL.createObjectURL(new Blob(
         [new Uint8Array(exported.archive)],
@@ -87,10 +76,10 @@ export default function NativeSaveTransferSettings({
       ))
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `solomon-dark-stock-save-${Date.now()}.zip`
+      anchor.download = `solomon-dark-save-${Date.now()}.zip`
       anchor.click()
       URL.revokeObjectURL(url)
-      setStatus('Stock-compatible archive with browser support state downloaded.')
+      setStatus('Save archive downloaded, including inventory and your saved run.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The stock save could not be exported.')
     } finally {
@@ -101,30 +90,29 @@ export default function NativeSaveTransferSettings({
   return (
     <div className="native-save-transfer-settings">
       <p className="native-save-transfer-intro">
-        Move permanent wizard progression between stock Solomon Dark and this browser slot.
-        Stock imports resume in the Hub. Exports also include browser-game-save.json so a
-        Website run can be supplied for support; retail Solomon Dark ignores that file.
+        Browser exports retain your inventory, equipment, and saved run.
+        Import the ZIP to restore them. Stock-only saves import progression into the Hub.
       </p>
-      <NativeUiSettingsGroup title="IMPORT FROM STOCK">
+      <NativeUiSettingsGroup title="IMPORT SAVE">
           <input
             ref={fileInput}
             className="sr-only"
             type="file"
-            accept=".zip,.cfg,.sav"
+            accept=".zip,.json,.cfg,.sav"
             multiple
             onChange={event => { void inspect(event.currentTarget.files) }}
           />
           <NativeUiSettingsAction
             autoFocus
             disabled={busy}
-            label="CHOOSE STOCK SAVE FILES"
+            label="CHOOSE SAVE FILES"
             onClick={() => fileInput.current?.click()}
           />
       </NativeUiSettingsGroup>
-      <NativeUiSettingsGroup title="EXPORT FOR STOCK">
+      <NativeUiSettingsGroup title="EXPORT SAVE">
           <NativeUiSettingsAction
             disabled={busy || !controller.canExport}
-            label="DOWNLOAD STOCK SAVE ARCHIVE"
+            label="DOWNLOAD SAVE ARCHIVE"
             onClick={() => { void exportCurrent() }}
           />
         {!controller.canExport ? (
@@ -132,7 +120,7 @@ export default function NativeSaveTransferSettings({
         ) : null}
       </NativeUiSettingsGroup>
       {pendingImport ? (
-        <section className="native-save-transfer-preview" aria-label="Stock import preview">
+        <section className="native-save-transfer-preview" aria-label="Save import preview">
           <h3>{pendingImport.displayName}</h3>
           <p>
             Level {pendingImport.level} · {pendingImport.element} / {pendingImport.discipline}
@@ -141,6 +129,9 @@ export default function NativeSaveTransferSettings({
           <p>
             {pendingImport.learnedRows} learned rows · {pendingImport.hagathaPerks} Hagatha perks
           </p>
+          <p>{pendingImport.source === 'browser'
+            ? 'Browser save: inventory, equipment, and the saved run will be restored.'
+            : 'Stock progression only: inventory is not imported; play starts in the Hub.'}</p>
           {pendingImport.warnings.map(warning => <p key={warning}>{warning}</p>)}
           <div>
             <button disabled={busy} onClick={() => { void applyImport() }} type="button">

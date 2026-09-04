@@ -14,8 +14,7 @@ import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
 import { SCHOOLS } from '../fx/SchoolBursts'
 import { formatCount, formatDate, timeAgo } from '../lib/format'
-import type { PortableImportResult } from '../game/save/game-save-portability.ts'
-import type { PortableGameProfile } from '../game/save/portable-game-profile.ts'
+import type { GameSaveImportPreview } from '../game/save/game-save-files.ts'
 
 const SCHOOL_LORE: Record<School, string> = {
   fire: 'Every click, a small act of arson.',
@@ -96,10 +95,7 @@ function BrowserGameSaveSlot({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pendingImport, setPendingImport] = useState<Readonly<{
-    imported: PortableImportResult
-    portable: PortableGameProfile
-  }> | null>(null)
+  const [pendingImport, setPendingImport] = useState<GameSaveImportPreview | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const remove = async () => {
     if (!save || !window.confirm('Erase browser save I from the cloud?')) return
@@ -114,48 +110,41 @@ function BrowserGameSaveSlot({
     }
   }
 
-  const inspectNativeFiles = async (files: FileList | null) => {
+  const inspectSaveFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setBusy(true)
     setError(null)
     setPendingImport(null)
     try {
-      const [{ readNativeSaveFileSelection }, { createWebGameSaveFromPortableProfile }] = await Promise.all([
-        import('../game/save/native-save-files.ts'),
-        import('../game/save/game-save-portability.ts'),
-      ])
-      const portable = await readNativeSaveFileSelection(files)
-      setPendingImport(Object.freeze({
-        imported: createWebGameSaveFromPortableProfile(portable),
-        portable,
-      }))
+      const { readGameSaveFileSelection } = await import('../game/save/game-save-files.ts')
+      setPendingImport(await readGameSaveFileSelection(files))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The native save could not be inspected.')
+      setError(cause instanceof Error ? cause.message : 'The save could not be inspected.')
     } finally {
       if (fileInput.current) fileInput.current.value = ''
       setBusy(false)
     }
   }
 
-  const applyNativeImport = async () => {
+  const applySaveImport = async () => {
     if (!pendingImport) return
     setBusy(true)
     setError(null)
     try {
       await api.gameSaves.put(0, {
-        document: pendingImport.imported.document,
+        document: pendingImport.document,
         expectedRevision: save?.revision ?? 0,
       })
       setPendingImport(null)
       onChanged()
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'The native save could not replace slot I.')
+      setError(cause instanceof ApiError ? cause.message : 'The save could not replace slot I.')
     } finally {
       setBusy(false)
     }
   }
 
-  const exportForStock = async () => {
+  const exportSave = async () => {
     if (!save) return
     setBusy(true)
     setError(null)
@@ -166,7 +155,7 @@ function BrowserGameSaveSlot({
       const exported = await exportWebGameSaveToNativeArchive(save.document)
       if (
         exported.warnings.length > 0
-        && !window.confirm(`${exported.warnings.join('\n\n')}\n\nExport anyway?`)
+        && !window.confirm(`These limitations apply when loading in stock Solomon Dark. The browser save retains your inventory and run.\n\n${exported.warnings.join('\n\n')}\n\nExport anyway?`)
       ) return
       const url = URL.createObjectURL(new Blob(
         [new Uint8Array(exported.archive)],
@@ -174,7 +163,7 @@ function BrowserGameSaveSlot({
       ))
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `solomon-dark-stock-save-${Date.now()}.zip`
+      anchor.download = `solomon-dark-save-${Date.now()}.zip`
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (cause) {
@@ -210,9 +199,9 @@ function BrowserGameSaveSlot({
           ref={fileInput}
           className="sr-only"
           type="file"
-          accept=".zip,.cfg,.sav"
+          accept=".zip,.json,.cfg,.sav"
           multiple
-          onChange={event => { void inspectNativeFiles(event.currentTarget.files) }}
+          onChange={event => { void inspectSaveFiles(event.currentTarget.files) }}
         />
         <button
           type="button"
@@ -220,36 +209,38 @@ function BrowserGameSaveSlot({
           disabled={busy}
           onClick={() => fileInput.current?.click()}
         >
-          import stock save
+          import save
         </button>
         <button
           type="button"
           className="text-[11px] uppercase tracking-wider text-gold/80 hover:text-gold"
           disabled={busy || !save}
-          onClick={() => { void exportForStock() }}
+          onClick={() => { void exportSave() }}
         >
-          export for stock
+          export save
         </button>
       </div>
       {save ? (
         <p className="mt-2 text-[10px] leading-relaxed text-bone-dim">
-          Stock exports include browser-game-save.json for Website support replay.
+          Exports retain inventory, equipment, and your saved run. Import the ZIP to restore them.
         </p>
       ) : null}
       {pendingImport ? (
         <div className="mt-3 rounded border border-arcane/30 bg-arcane/5 p-3 text-xs text-bone-dim">
           <div className="font-display text-sm text-bone">
-            {pendingImport.imported.character.displayName}
+            {pendingImport.displayName}
           </div>
           <div className="mt-1">
-            Level {pendingImport.portable.wizard.level} · {pendingImport.imported.character.element}
-            {' / '}{pendingImport.imported.character.discipline} · {pendingImport.portable.profile.gold} gold
+            Level {pendingImport.level} · {pendingImport.element}
+            {' / '}{pendingImport.discipline} · {pendingImport.gold} gold
           </div>
           <div className="mt-1">
-            {pendingImport.portable.wizard.permanentRanks.filter(rank => rank > 0).length} learned rows
-            {' · '}{pendingImport.portable.wizard.perkSelectors.length} Hagatha perks
+            {pendingImport.learnedRows} learned rows · {pendingImport.hagathaPerks} Hagatha perks
           </div>
-          {pendingImport.imported.warnings.map(warning => (
+          <p className="mt-2">{pendingImport.source === 'browser'
+            ? 'Browser save: inventory, equipment, and the saved run will be restored.'
+            : 'Stock progression only: inventory is not imported; play starts in the Hub.'}</p>
+          {pendingImport.warnings.map(warning => (
             <p key={warning} className="mt-2 text-amber-200/75">{warning}</p>
           ))}
           <div className="mt-3 flex gap-3">
@@ -257,7 +248,7 @@ function BrowserGameSaveSlot({
               type="button"
               className="text-[11px] uppercase tracking-wider text-arcane"
               disabled={busy}
-              onClick={() => { void applyNativeImport() }}
+              onClick={() => { void applySaveImport() }}
             >
               {save ? 'replace slot I' : 'write slot I'}
             </button>

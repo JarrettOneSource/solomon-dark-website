@@ -384,23 +384,8 @@ export default function Game() {
   }, [])
 
   const inspectNativeSaveImport = useCallback(async (files: FileList) => {
-    const [{ readNativeSaveFileSelection }, { createWebGameSaveFromPortableProfile }] = await Promise.all([
-      import('../game/save/native-save-files.ts'),
-      import('../game/save/game-save-portability.ts'),
-    ])
-    const portable = await readNativeSaveFileSelection(files)
-    const imported = createWebGameSaveFromPortableProfile(portable)
-    return Object.freeze({
-      discipline: imported.character.discipline,
-      displayName: imported.character.displayName,
-      document: imported.document,
-      element: imported.character.element,
-      gold: portable.profile.gold,
-      hagathaPerks: portable.wizard.perkSelectors.length,
-      learnedRows: portable.wizard.permanentRanks.filter(rank => rank > 0).length,
-      level: portable.wizard.level,
-      warnings: imported.warnings,
-    })
+    const { readGameSaveFileSelection } = await import('../game/save/game-save-files.ts')
+    return readGameSaveFileSelection(files)
   }, [])
 
   const replaceWithNativeSaveImport = useCallback(async (document: string) => {

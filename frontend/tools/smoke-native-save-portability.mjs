@@ -29,6 +29,14 @@ import {
   stepGameSimulationTick,
 } from '../src/game/core-server/game-simulation.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-director.ts'
+import {
+  createEquipmentInventoryItem,
+  createFomentiusInventoryItem,
+  DOWSING_EQUIPMENT_RECIPES,
+  FOMENTIUS_STOCK_DEFINITIONS,
+} from '../src/game/core-kernels/hub-economy.ts'
+import { bindNativeBeltItem } from '../src/game/core-kernels/native-belt.ts'
+import { exportWebGameSaveToNativeArchive } from '../src/game/save/game-save-portability.ts'
 
 const baseUrl = process.env.SDR_NATIVE_SAVE_SMOKE_URL || 'http://127.0.0.1:4187'
 const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
@@ -155,9 +163,16 @@ async function runAnonymousJourney(browser) {
     const support = await assertStockExport(exported, persisted.document)
     const archivePath = `${screenshotRoot}/solomon-dark-native-save-anonymous.zip`
     await writeFile(archivePath, exported)
+    await page.locator('.native-save-transfer-settings input[type="file"]').setInputFiles({
+      buffer: Buffer.from(exported), mimeType: 'application/zip', name: 'saved-inventory.zip',
+    })
+    await page.getByRole('region', { name: 'Save import preview' })
+      .getByText('Browser save: inventory, equipment, and the saved run will be restored.').waitFor()
+    await page.getByRole('button', { name: 'REPLACE BROWSER SLOT', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: 'Save imported' }).waitFor()
+    assertInventoryRetained((await readLocalSave(page)).document, persisted.document)
     await page.getByRole('button', { name: 'BACK', exact: true }).click()
     await page.getByRole('button', { name: 'DONE', exact: true }).click()
-    await replaceLocalSave(page, support.document, persisted.revision)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForTitle(page)
@@ -165,6 +180,7 @@ async function runAnonymousJourney(browser) {
     assert.equal(resumedBoneyard.runId, enteredBoneyard.runId)
     assert.ok(resumedBoneyard.tick >= support.tick)
     await page.waitForTimeout(2_500)
+    await assertInventoryResumed(page, persisted.document)
     await page.screenshot({
       path: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
     })
@@ -204,7 +220,7 @@ async function runCloudJourney(browser, token) {
     await page.goto(`${baseUrl}/account`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('heading', { name: accountUsername }).waitFor({ timeout: 30_000 })
     await page.getByRole('heading', { name: 'Cloud Saves' }).waitFor()
-    await page.getByRole('button', { name: /import stock save/i }).waitFor()
+    await page.getByRole('button', { name: /import save/i }).waitFor()
     await page.locator('input[type="file"][accept*=".zip"]').setInputFiles(stockUpload)
     const accountPreview = page.getByText(expectedWizard.name, { exact: true }).locator('..')
     await assertImportPreview(accountPreview)
@@ -218,29 +234,47 @@ async function runCloudJourney(browser, token) {
     assert.ok((await importResponse).ok())
     const imported = await waitForCloudSave(page, token, save => save?.revision === 1)
     assertImportedWebSave(imported)
+    const inventorySave = prepareInventoryDocument(imported.document)
+    const inventoryExport = await exportWebGameSaveToNativeArchive(inventorySave)
+    await page.locator('input[type="file"][accept*=".zip"]').setInputFiles({
+      buffer: Buffer.from(inventoryExport.archive), mimeType: 'application/zip', name: 'inventory.zip',
+    })
+    await page.getByText('Browser save: inventory, equipment, and the saved run will be restored.').waitFor()
+    await page.getByRole('button', { name: /replace slot I/i }).click()
+    const inventoryImport = await waitForCloudSave(page, token, save => save?.revision === 2)
+    assertInventoryRetained(inventoryImport.document, inventorySave)
 
     await openGameTitle(page)
     await resumeLastGame(page)
     await returnToTitle(page)
     const persisted = await readCloudSave(page, token)
-    assertImportedWebSave(persisted)
+    assertInventoryRetained(persisted.document, inventorySave)
     assert.ok(persisted.revision >= imported.revision)
 
     await page.goto(`${baseUrl}/account`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('heading', { name: 'Cloud Saves' }).waitFor({ timeout: 30_000 })
     const exported = await captureDownload(
       page,
-      page.getByRole('button', { name: /export for stock/i }),
+      page.getByRole('button', { name: /export save/i }),
     )
     await assertStockExport(exported, persisted.document)
     const archivePath = `${screenshotRoot}/solomon-dark-native-save-cloud.zip`
     await writeFile(archivePath, exported)
 
+    await page.locator('input[type="file"][accept*=".zip"]').setInputFiles({
+      buffer: Buffer.from(exported), mimeType: 'application/zip', name: 'saved-inventory.zip',
+    })
+    await page.getByText('Browser save: inventory, equipment, and the saved run will be restored.').waitFor()
+    await page.getByRole('button', { name: /replace slot I/i }).click()
+    const reimported = await waitForCloudSave(page, token, save => save?.revision === persisted.revision + 1)
+    assertInventoryRetained(reimported.document, persisted.document)
+
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await waitForCloudSave(page, token, save => save?.revision === persisted.revision)
+    await waitForCloudSave(page, token, save => save?.revision === reimported.revision)
     await openGameTitle(page)
     await resumeLastGame(page)
     await page.waitForTimeout(2_500)
+    await assertInventoryResumed(page, persisted.document)
     await page.screenshot({
       path: `${screenshotRoot}/solomon-dark-native-save-cloud.png`,
     })
@@ -284,14 +318,14 @@ async function openTitleSaveTransfer(page) {
 
 async function importFromTitleSettings(page) {
   await openTitleSaveTransfer(page)
-  await page.getByRole('button', { name: 'CHOOSE STOCK SAVE FILES', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'CHOOSE SAVE FILES', exact: true }).waitFor()
   await page.locator('.native-save-transfer-settings input[type="file"]').setInputFiles(stockUpload)
-  await assertImportPreview(page.getByRole('region', { name: 'Stock import preview' }))
+  await assertImportPreview(page.getByRole('region', { name: 'Save import preview' }))
   await page.screenshot({
     path: `${screenshotRoot}/solomon-dark-native-save-anonymous-preview.png`,
   })
   await page.getByRole('button', { name: 'REPLACE BROWSER SLOT', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: 'Stock progression imported' }).waitFor()
+  await page.getByRole('status').filter({ hasText: 'Save imported' }).waitFor()
   await page.getByRole('button', { name: 'BACK', exact: true }).click()
   await page.getByRole('button', { name: 'DONE', exact: true }).click()
 }
@@ -376,7 +410,7 @@ async function exportFromTitleSettings(page) {
   await openTitleSaveTransfer(page)
   return captureDownload(
     page,
-    page.getByRole('button', { name: 'DOWNLOAD STOCK SAVE ARCHIVE', exact: true }),
+    page.getByRole('button', { name: 'DOWNLOAD SAVE ARCHIVE', exact: true }),
   )
 }
 
@@ -464,7 +498,7 @@ function assertImportedWebSave(record) {
 }
 
 function prepareBoneyardDocument(document) {
-  const restored = restoreGameSaveDocument(document)
+  const restored = restoreGameSaveDocument(prepareInventoryDocument(document))
   const loaded = materializeBoneyard(
     createBoneyardCatalog(),
     'default-random',
@@ -497,6 +531,66 @@ function prepareBoneyardDocument(document) {
     }),
     runId: loaded.runId,
   }
+}
+
+function prepareInventoryDocument(document) {
+  const restored = restoreGameSaveDocument(document)
+  const state = restored.state
+  const economy = state.playerEntities.economies[0]
+  const ring = createEquipmentInventoryItem(
+    DOWSING_EQUIPMENT_RECIPES.find(recipe => recipe.type === 'ring'), 500_001,
+  )
+  const potion = createFomentiusInventoryItem(
+    FOMENTIUS_STOCK_DEFINITIONS.find(row => row.kind === 'health-potion'), 500_002, 7,
+  )
+  const sack = {
+    ...createFomentiusInventoryItem(FOMENTIUS_STOCK_DEFINITIONS.find(row => row.kind === 'sack'), 500_003),
+    contents: [potion], name: 'Saved treasures',
+  }
+  const inventory = {
+    ...economy,
+    backpack: [...economy.backpack, { ...sack, inventorySlot: 6 }],
+    equipment: { ...economy.equipment, rings: [ring, null, null] },
+    nextItemId: 500_010,
+    storage: [{ ...potion, id: 500_004, inventorySlot: 3 }],
+  }
+  return createGameSaveDocument({
+    integrity: restored.integrity, loadedBoneyard: restored.loadedBoneyard,
+    mods: restored.mods, modState: restored.modState,
+    nativeSource: restored.nativeSource, playerId: restored.playerId,
+    state: {
+      ...state,
+      playerEntities: {
+        ...state.playerEntities, economies: [inventory],
+        belts: [bindNativeBeltItem(state.playerEntities.belts[0], inventory, ring.id, 7)],
+      },
+    },
+  })
+}
+
+function assertInventoryRetained(actualDocument, expectedDocument) {
+  const actual = restoreGameSaveDocument(actualDocument).state.playerEntities
+  const expected = restoreGameSaveDocument(expectedDocument).state.playerEntities
+  for (const field of ['backpack', 'equipment', 'storage', 'nextItemId']) {
+    assert.deepEqual(actual.economies[0][field], expected.economies[0][field], field)
+  }
+  assert.deepEqual(actual.belts[0], expected.belts[0])
+}
+
+async function assertInventoryResumed(page, expectedDocument) {
+  if (localHost) {
+    const expected = restoreGameSaveDocument(expectedDocument).state.playerEntities
+    const actual = localHost.state().playerEntities
+    for (const field of ['backpack', 'equipment', 'storage', 'nextItemId']) {
+      assert.deepEqual(actual.economies[0][field], expected.economies[0][field], field)
+    }
+    assert.deepEqual(actual.belts[0], expected.belts[0])
+  }
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  await inventory.getByRole('button', { name: /Saved treasures/ }).waitFor()
+  await inventory.getByRole('button', { name: /Pentaclostic Ring/ }).first().waitFor()
 }
 
 function assertBoneyardWebSave(record, runId) {
