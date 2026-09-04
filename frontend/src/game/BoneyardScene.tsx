@@ -115,7 +115,7 @@ import {
 import {
   boundedGameViewportLayout,
   gameViewportLayout,
-  type GameViewportLayout,
+  type BoundedGameViewportLayout,
 } from './renderer/game-viewport.ts'
 import './hub.css'
 import './boneyard.css'
@@ -359,9 +359,10 @@ export default function BoneyardScene({
     tutorialAccess?.inventory,
   ])
   const previousAudioRunRef = useRef(boneyardInitialSnapshot.run)
-  const [viewport, setViewport] = useState<GameViewportLayout>(() => (
-    gameViewportLayout(1600, 900)
-  ))
+  const [viewport, setViewport] = useState<BoundedGameViewportLayout>(() => ({
+    ...gameViewportLayout(1600, 900),
+    worldZoom: 1,
+  }))
   const [gameOverAnchor, setGameOverAnchor] = useState({
     x: 800,
     y: 450,
@@ -1022,7 +1023,7 @@ export default function BoneyardScene({
   const configuredCameraZoom = cameraZoomForFov(
     BONEYARD_CAMERA_ZOOM,
     settings.cameraFovPercent,
-  )
+  ) * viewport.worldZoom
   const uiScale = gameUiScale(settings)
   return (
     <div
@@ -1294,7 +1295,7 @@ function positionDigIndicator(
   playerId: string,
   digPosition: { x: number; y: number } | undefined,
   camera: Camera,
-  viewport: GameViewportLayout,
+  viewport: BoundedGameViewportLayout,
 ): void {
   const player = snapshot.players[playerId]
   if (!indicator || !player || !digPosition) return
@@ -1321,10 +1322,14 @@ function positionDigIndicator(
   indicator.dataset.ready = 'true'
 }
 
-function sameViewport(left: GameViewportLayout, right: GameViewportLayout): boolean {
+function sameViewport(
+  left: BoundedGameViewportLayout,
+  right: BoundedGameViewportLayout,
+): boolean {
   return left.displayScale === right.displayScale
     && left.height === right.height
     && left.width === right.width
+    && left.worldZoom === right.worldZoom
 }
 
 function publishSceneDiagnostics(

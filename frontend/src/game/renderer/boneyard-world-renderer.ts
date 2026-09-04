@@ -100,7 +100,7 @@ import {
   nativeSolomonDirtStateAt,
   type NativeSolomonDirtState,
 } from './boneyard-solomon-dirt-presentation.ts'
-import type { GameViewportLayout } from './game-viewport.ts'
+import { gameViewportWorldZoom, type GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
   BONEYARD_CAMERA_ZOOM,
@@ -750,7 +750,9 @@ export async function createBoneyardWorldRenderer(
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
   let viewport = options.viewport
   let settings = options.settings ?? DEFAULT_GAME_SETTINGS
+  let worldZoom = gameViewportWorldZoom(viewport)
   let cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
+    * worldZoom
   let lightQuality = gameLightQuality(settings)
   const initialResolution = initialHubResolution({
     devicePixelRatio,
@@ -1760,13 +1762,21 @@ export async function createBoneyardWorldRenderer(
         devicePixelRatio: nextDevicePixelRatio,
         displayScale: nextViewport.displayScale,
       })
+      const nextWorldZoom = gameViewportWorldZoom(nextViewport)
       if (
         nextResolution === resolution
+        && nextWorldZoom === worldZoom
         && nextViewport.height === viewport.height
         && nextViewport.width === viewport.width
       ) return
       viewport = nextViewport
       resolution = nextResolution
+      if (nextWorldZoom !== worldZoom) {
+        worldZoom = nextWorldZoom
+        cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
+          * worldZoom
+        canvas.dataset.cameraZoom = `${cameraZoom}`
+      }
       application.renderer.resize(viewport.width, viewport.height, resolution)
       regionLightField.resize(viewport, resolution)
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
@@ -1805,6 +1815,7 @@ export async function createBoneyardWorldRenderer(
       if (destroyed) return
       settings = nextSettings
       cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
+        * worldZoom
       lightQuality = gameLightQuality(settings)
       regionLightField.setQuality(lightQuality, viewport, resolution)
       if (!settings.zoomEffects) {

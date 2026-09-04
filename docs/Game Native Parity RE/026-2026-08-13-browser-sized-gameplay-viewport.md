@@ -357,3 +357,123 @@ No member is blocked by the browser platform.
   SHAs belong in the external handoff. The focused local and detached Mac
   worktrees remained retained; all one-off probes, captures, and temporary
   logs were removed.
+
+## 2026-09-03 reopened: the bounded frame upscale blurred every 1080p room
+
+### Reported smell and parity question
+
+- On 2026-09-03, after `a7d470cd` replaced the 2026-08-28 production build
+  `77e31bf4`, the owner reported that most visuals had gone blurry and that
+  text was cut off in many places. The owner's display is one 1920 x 1080
+  monitor at 100 percent scaling (device pixel ratio `1`) in Brave, so the CSS
+  viewport is at most `1920 x 1080` and nothing in the 2026-08-13 contract
+  should ever resample on it.
+- Parity question: does the browser-sized gameplay viewport still render the
+  world and the DOM UI at physical resolution on that display, as the
+  2026-08-13 contract requires, once the 2026-08-29 map-edge bound is applied?
+
+### Evidence and provenance
+
+- The 2026-08-29 bound (`0c5f1577`) made `boundedGameViewportLayout` return
+  `displayScale = max(layout.displayScale, width / maximumWidth,
+  height / maximumHeight)` and both scenes applied that number as the CSS
+  `scale()` of `.hub-native-frame` and `.boneyard-native-frame`. Below `1`
+  that is the 2026-08-13 shrink; above `1` it upscales the whole frame, DOM UI
+  included, which the 2026-08-13 contract forbids.
+- At `1920 x 1080` the private rooms (office, library, mortuary, store room)
+  have `world extent * zoom` below the `1600 x 900` minimum, so their bound
+  resolved to `1920 / 1600 = 1.2`; the courtyard and the Boneyards resolved to
+  `1.0`. At `2560 x 1440` the rooms resolved to `1.6` and the courtyard to
+  `1.171875`; at `3840 x 2160` to `2.4` and `1.7578125`.
+- With the frame at `1.2`, `initialHubResolution` quantised
+  `dpr * displayScale = 1.2` up to `1.25`, so the office canvas rendered a
+  `2000 x 1125` backing store that the compositor resampled to `1920 x 1080`
+  (`0.96`), while every bitmap glyph in the HUD, dialogue and menus was drawn
+  at `1.2` with nearest-neighbour sampling. That is the reported blur, and it
+  affected every private room on the owner's display from the moment the
+  build deployed.
+- The cut-off text was a separate and older defect: `.dark-cloud-row-copy
+  strong { overflow: hidden }` (from `971146e3`) clips the top of bitmap glyph
+  ink, which rises above the line box. A clip audit on production at
+  `1920 x 1080` counted 19 clipped glyph masks on the Dark Cloud MODS tab, 14
+  on PARTIES and 19 behind the mod detail; the title screens, create menu,
+  Settings (TWEAK GAME, KEYBOARD, ONLINE), Hall of Fame, SUBSCRIBED and
+  LAYOUTS counted 0. The 52 media assets that changed in the deploy range are
+  all additions, so no asset was downscaled.
+
+### Recovered behavioral contract
+
+- Keep the 2026-08-13 contract: the frame is `gameViewportLayout(width,
+  height)`, `displayScale <= 1`, the logical size equals the browser size at
+  `1`, and the DOM UI renders at `1`.
+- Keep the 2026-08-29 contract: the visible world region never exceeds
+  `max(1600 x 900 / zoom, world extent)`, so authored map edges stay hidden.
+- Reconcile the two by zooming the camera instead of scaling the frame. The
+  bound becomes `worldZoom = boundedScale / layout.displayScale` (always
+  `>= 1`), and every camera zoom consumer multiplies the field of view zoom by
+  it. The visible world region is unchanged from the 2026-08-29 receipt
+  (`1820.444444 x 1024` for the courtyard in a `6400 x 3600` window), but the
+  world now renders at physical resolution and the UI stays at `1`.
+
+### Web implementation consequence
+
+- `frontend/src/game/renderer/game-viewport.ts`: `GameViewportLayout` gains an
+  optional `worldZoom`; `boundedGameViewportLayout` returns
+  `BoundedGameViewportLayout` (the `gameViewportLayout` frame plus
+  `worldZoom`); `gameViewportWorldZoom(viewport)` reads it defensively and
+  answers `1` when it is absent, not finite or below `1`.
+- `HubScene.tsx` and `BoneyardScene.tsx`: the viewport state carries
+  `worldZoom`; input projection, pointer targets and `data-camera-zoom` use
+  `cameraZoomForFov(base, fov) * viewport.worldZoom`; `sameViewport` compares
+  `worldZoom` so a bound change re-renders.
+- `hub-world-renderer.ts` and `boneyard-world-renderer.ts`: the camera scale
+  is `cameraZoomForFov(base, fov) * worldZoom`; `resize` recomputes it and
+  `canvas.dataset.cameraZoom` when the bound changes, before the renderer
+  resizes; `setSettings` keeps the multiplier when the field of view changes.
+- `frontend/src/game/dark-cloud.css`: `.dark-cloud-row-copy strong {
+  overflow: clip visible }` so row titles clip sideways only.
+
+### Implementation validation receipt
+
+- `frontend/src/game/renderer/game-viewport.test.ts` passes `12/12`. The
+  `1600 x 900` and `1920 x 1080` courtyard layouts equal the stock layout with
+  `worldZoom 1`; the `6400 x 3600` courtyard keeps `displayScale 1`, logical
+  `6400 x 3600`, `worldZoom = 3600 / (1024 * 1.2) = 2.9296875` and a visible
+  height of `1024`; the office at `1920 x 1080` resolves to `displayScale 1`,
+  logical `1920 x 1080`, `worldZoom 1.2` and a visible width of `1600 / 1.2`;
+  the office at `1280 x 800` keeps `displayScale 0.8`, logical `1600 x 1000`
+  and `worldZoom 1`. The shared bound assertion now proves `displayScale <= 1`
+  and `worldZoom >= 1` for every sampled Boneyard as well.
+- A Playwright probe over the Vite dev server with the local Node game host
+  (headless Chrome, device pixel ratio `1`) entered the Hub, walked `w` from
+  spawn into the office and `s` back to the courtyard, and read the scene and
+  canvas data on each step. Every step reported an identity frame transform,
+  a canvas backing store equal to the window, `data-resolution 1` and an
+  empty page-error array:
+
+  | Step | `data-viewport-scale` | logical | `data-camera-zoom` | canvas backing |
+  | --- | --- | --- | --- | --- |
+  | courtyard `1920 x 1080` | `1` | `1920 x 1080` | `1.2` | `1920 x 1080` |
+  | office `1920 x 1080` | `1` | `1920 x 1080` | `1.44` | `1920 x 1080` |
+  | office `2560 x 1440` | `1` | `2560 x 1440` | `1.92` | `2560 x 1440` |
+  | courtyard `2560 x 1440` | `1` | `2560 x 1440` | `1.40625` | `2560 x 1440` |
+  | courtyard `3840 x 2160` | `1` | `3840 x 2160` | `2.109375` | `3840 x 2160` |
+  | courtyard `1280 x 800` | `0.8` | `1600 x 1000` | `1.2` | `1200 x 750` |
+
+  Before the fix the office step at `1920 x 1080` reported a frame transform
+  of `1.2`, a `2000 x 1125` backing store and `data-camera-zoom 1.2`. The
+  `1280 x 800` row is the unchanged 2026-08-13 shrink path with its quantised
+  `0.75` resolution.
+- The inspected office capture at `1920 x 1080` rendered the room at camera
+  zoom `1.44` with a crisp HUD, portraits, action bar and minimap. The capture
+  and the probe script were temporary evidence and were deleted after this
+  receipt was recorded.
+- `tsc -b` exited `0` and `oxlint` reported nothing. The complete
+  `./scripts/validate.sh` gate passed on the worktree on 2026-09-03 (backend
+  build, 19 contract and integration tests, backend formatting, frontend lint
+  and import boundaries, every frontend test group and the desktop shell tests
+  with zero failures, the production build, the game bundle budget at
+  `79196` gzip bytes of `134144`, and the production media policy).
+- At the time this receipt was recorded, no commit, push, deployment or live
+  production change had been performed; the Windows checkout's uncommitted
+  work by the other contributor was left untouched.

@@ -87,7 +87,7 @@ import {
 import {
   boundedGameViewportLayout,
   gameViewportLayout,
-  type GameViewportLayout,
+  type BoundedGameViewportLayout,
 } from './renderer/game-viewport.ts'
 import { hubPolisherWipeGain } from './renderer/hub-private-room-presentation.ts'
 import { nearestHubPlayer, selectHubPlayerAtPoint } from './hub-player-selection.ts'
@@ -241,9 +241,10 @@ export default function HubScene({
   controllerActionsRef.current = { boneyards, onOpenSkills, onPauseRequest, onStartMatch }
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
-  const [viewport, setViewport] = useState<GameViewportLayout>(() => (
-    gameViewportLayout(1600, 900)
-  ))
+  const [viewport, setViewport] = useState<BoundedGameViewportLayout>(() => ({
+    ...gameViewportLayout(1600, 900),
+    worldZoom: 1,
+  }))
   const viewportRef = useRef(viewport)
   const [hostPlayerId, setHostPlayerId] = useState(initialSnapshot.hostPlayerId)
   const [currentRegion, setCurrentRegion] = useState<HubRegionId>(
@@ -666,10 +667,7 @@ export default function HubScene({
           direction,
           player.position,
           viewportRef.current,
-          cameraZoomForFov(
-            HUB_CAMERA_SCALE,
-            settingsRef.current.cameraFovPercent,
-          ),
+          hubCameraScale(settingsRef.current.cameraFovPercent, viewportRef.current),
         )
       },
       projectPointer: (pointer) => {
@@ -677,9 +675,9 @@ export default function HubScene({
         const player = snapshot.players[playerId]
         const participant = snapshot.world.participants[playerId]
         if (!player || !participant) return null
-        const cameraScale = cameraZoomForFov(
-          HUB_CAMERA_SCALE,
+        const cameraScale = hubCameraScale(
           settingsRef.current.cameraFovPercent,
+          viewportRef.current,
         )
         return projectNativeWorldPointer(
           pointer,
@@ -702,10 +700,7 @@ export default function HubScene({
           actorHeadingVector(player.headingIndex),
           player.position,
           viewportRef.current,
-          cameraZoomForFov(
-            HUB_CAMERA_SCALE,
-            settingsRef.current.cameraFovPercent,
-          ),
+          hubCameraScale(settingsRef.current.cameraFovPercent, viewportRef.current),
         )
       },
       secondaryAtPointer: () => settingsRef.current.castSecondariesAtMouse,
@@ -808,10 +803,7 @@ export default function HubScene({
   }
   const localPlayer = hubInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
-  const configuredCameraScale = cameraZoomForFov(
-    HUB_CAMERA_SCALE,
-    settings.cameraFovPercent,
-  )
+  const configuredCameraScale = hubCameraScale(settings.cameraFovPercent, viewport)
   const uiScale = gameUiScale(settings)
   const activatePointerTarget = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!event.isPrimary || event.button !== 0 || inputBlocked || modalOpen || transitionActive) {
@@ -1204,8 +1196,16 @@ export default function HubScene({
   )
 }
 
-function sameViewport(left: GameViewportLayout, right: GameViewportLayout): boolean {
+function sameViewport(
+  left: BoundedGameViewportLayout,
+  right: BoundedGameViewportLayout,
+): boolean {
   return left.displayScale === right.displayScale
     && left.height === right.height
     && left.width === right.width
+    && left.worldZoom === right.worldZoom
+}
+
+function hubCameraScale(fovPercent: number, viewport: BoundedGameViewportLayout): number {
+  return cameraZoomForFov(HUB_CAMERA_SCALE, fovPercent) * viewport.worldZoom
 }

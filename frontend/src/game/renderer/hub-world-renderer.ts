@@ -18,7 +18,7 @@ import type {
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { deriveHubPlayerActivityItems } from '../hub-player-activity.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
-import type { GameViewportLayout } from './game-viewport.ts'
+import { gameViewportWorldZoom, type GameViewportLayout } from './game-viewport.ts'
 import {
   HUB_DIAGNOSTIC_WINDOW_FRAMES,
   hubStudentVisibilityDiagnosticsDue,
@@ -200,10 +200,10 @@ export async function createHubWorldRenderer(
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
   let viewport = options.viewport
-  let baseCameraScale = cameraZoomForFov(
-    HUB_CAMERA_SCALE,
-    options.settings?.cameraFovPercent ?? DEFAULT_GAME_SETTINGS.cameraFovPercent,
-  )
+  let cameraFovPercent = options.settings?.cameraFovPercent
+    ?? DEFAULT_GAME_SETTINGS.cameraFovPercent
+  let worldZoom = gameViewportWorldZoom(viewport)
+  let baseCameraScale = cameraZoomForFov(HUB_CAMERA_SCALE, cameraFovPercent) * worldZoom
   let reducedScreenFlashes = options.settings?.reducedScreenFlashes
     ?? DEFAULT_GAME_SETTINGS.reducedScreenFlashes
   let zoomEffects = options.settings?.zoomEffects ?? DEFAULT_GAME_SETTINGS.zoomEffects
@@ -907,13 +907,20 @@ export async function createHubWorldRenderer(
         devicePixelRatio: nextDevicePixelRatio,
         displayScale: nextViewport.displayScale,
       })
+      const nextWorldZoom = gameViewportWorldZoom(nextViewport)
       if (
         nextResolution === resolution
+        && nextWorldZoom === worldZoom
         && nextViewport.height === viewport.height
         && nextViewport.width === viewport.width
       ) return
       viewport = nextViewport
       resolution = nextResolution
+      if (nextWorldZoom !== worldZoom) {
+        worldZoom = nextWorldZoom
+        baseCameraScale = cameraZoomForFov(HUB_CAMERA_SCALE, cameraFovPercent) * worldZoom
+        canvas.dataset.cameraZoom = `${baseCameraScale}`
+      }
       application.renderer.resize(viewport.width, viewport.height, resolution)
       fadeCover.width = viewport.width
       fadeCover.height = viewport.height
@@ -945,7 +952,8 @@ export async function createHubWorldRenderer(
     },
     setSettings(settings) {
       if (destroyed) return
-      baseCameraScale = cameraZoomForFov(HUB_CAMERA_SCALE, settings.cameraFovPercent)
+      cameraFovPercent = settings.cameraFovPercent
+      baseCameraScale = cameraZoomForFov(HUB_CAMERA_SCALE, cameraFovPercent) * worldZoom
       reducedScreenFlashes = settings.reducedScreenFlashes
       zoomEffects = settings.zoomEffects
       canvas.dataset.cameraZoom = `${baseCameraScale}`

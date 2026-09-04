@@ -5,6 +5,12 @@ export interface GameViewportLayout {
   displayScale: number
   height: number
   width: number
+  /** Camera zoom multiplier a bounded layout adds on top of the field of view zoom. */
+  worldZoom?: number
+}
+
+export interface BoundedGameViewportLayout extends GameViewportLayout {
+  worldZoom: number
 }
 
 export interface GameViewportWorldExtent {
@@ -131,21 +137,22 @@ export function boundedGameViewportLayout(
   height: number,
   world: GameViewportWorldExtent,
   cameraZoom: number,
-): GameViewportLayout {
+): BoundedGameViewportLayout {
   const layout = gameViewportLayout(width, height)
-  if (!validSize(width, height)) return layout
+  if (!validSize(width, height)) return { ...layout, worldZoom: 1 }
   const maximumWidth = Math.max(GAME_VIEWPORT_MIN_WIDTH, world.width * cameraZoom)
   const maximumHeight = Math.max(GAME_VIEWPORT_MIN_HEIGHT, world.height * cameraZoom)
-  const displayScale = Math.max(
+  const boundedScale = Math.max(
     layout.displayScale,
     width / maximumWidth,
     height / maximumHeight,
   )
-  return {
-    displayScale,
-    height: height / displayScale,
-    width: width / displayScale,
-  }
+  return { ...layout, worldZoom: boundedScale / layout.displayScale }
+}
+
+export function gameViewportWorldZoom(viewport: GameViewportLayout): number {
+  const zoom = viewport.worldZoom ?? 1
+  return Number.isFinite(zoom) && zoom >= 1 ? zoom : 1
 }
 
 function validSize(width: number, height: number): boolean {

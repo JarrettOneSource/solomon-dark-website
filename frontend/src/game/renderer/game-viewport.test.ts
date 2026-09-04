@@ -11,6 +11,7 @@ import {
   fixedGameViewportLayout,
   fixedGameViewportScale,
   gameViewportLayout,
+  gameViewportWorldZoom,
 } from './game-viewport.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import { HUB_REGION_DEFINITIONS } from '../core-kernels/hub-regions.ts'
@@ -178,17 +179,44 @@ test('bounded gameplay preserves stock and ordinary larger-browser layouts until
     displayScale: 1,
     height: 900,
     width: 1600,
+    worldZoom: 1,
   })
   assert.deepEqual(boundedGameViewportLayout(1920, 1080, courtyard, HUB_CAMERA_SCALE), {
     displayScale: 1,
     height: 1080,
     width: 1920,
+    worldZoom: 1,
   })
 
   const oversized = boundedGameViewportLayout(6400, 3600, courtyard, HUB_CAMERA_SCALE)
-  closeTo(oversized.displayScale, 3600 / (courtyard.height * HUB_CAMERA_SCALE))
-  closeTo(oversized.height, courtyard.height * HUB_CAMERA_SCALE)
-  closeTo(oversized.width, 6400 / oversized.displayScale)
+  assert.equal(oversized.displayScale, 1)
+  assert.equal(oversized.height, 3600)
+  assert.equal(oversized.width, 6400)
+  closeTo(oversized.worldZoom, 3600 / (courtyard.height * HUB_CAMERA_SCALE))
+  closeTo(oversized.height / (HUB_CAMERA_SCALE * oversized.worldZoom), courtyard.height)
+})
+
+test('bounded gameplay zooms the camera instead of upscaling the frame in 1080p rooms', () => {
+  const office = HUB_REGION_DEFINITIONS.office
+  const room = boundedGameViewportLayout(1920, 1080, office, HUB_CAMERA_SCALE)
+  assert.equal(room.displayScale, 1)
+  assert.equal(room.height, 1080)
+  assert.equal(room.width, 1920)
+  closeTo(room.worldZoom, 1.2)
+  closeTo(
+    room.width / (HUB_CAMERA_SCALE * room.worldZoom),
+    GAME_VIEWPORT_MIN_WIDTH / HUB_CAMERA_SCALE,
+  )
+
+  assert.deepEqual(boundedGameViewportLayout(1280, 800, office, HUB_CAMERA_SCALE), {
+    displayScale: 0.8,
+    height: 1000,
+    width: 1600,
+    worldZoom: 1,
+  })
+  assert.equal(gameViewportWorldZoom(room), room.worldZoom)
+  assert.equal(gameViewportWorldZoom(gameViewportLayout(1920, 1080)), 1)
+  assert.equal(gameViewportWorldZoom({ displayScale: 1, height: 900, width: 1600, worldZoom: 0 }), 1)
 })
 
 test('smaller and non-native aspects retain a minimum logical viewport without stretching', () => {
@@ -229,7 +257,7 @@ test('an unmeasured scene falls back to the exact stock viewport', () => {
 })
 
 function assertBoundedWorldLayout(
-  layout: Readonly<{ displayScale: number, height: number, width: number }>,
+  layout: Readonly<{ displayScale: number, height: number, width: number, worldZoom: number }>,
   measured: Readonly<{ height: number, width: number }>,
   world: Readonly<{ height: number, width: number }>,
   zoom: number,
@@ -237,14 +265,17 @@ function assertBoundedWorldLayout(
 ): void {
   closeTo(layout.width * layout.displayScale, measured.width)
   closeTo(layout.height * layout.displayScale, measured.height)
+  assert.ok(layout.displayScale <= 1, `${label} upscaled the frame`)
+  assert.ok(layout.worldZoom >= 1, `${label} zoomed the camera out`)
   assert.ok(layout.width >= GAME_VIEWPORT_MIN_WIDTH, `${label} width dropped below stock`)
   assert.ok(layout.height >= GAME_VIEWPORT_MIN_HEIGHT, `${label} height dropped below stock`)
+  const visibleZoom = zoom * layout.worldZoom
   assert.ok(
-    layout.width / zoom <= Math.max(world.width, GAME_VIEWPORT_MIN_WIDTH / zoom) + 0.000_001,
+    layout.width / visibleZoom <= Math.max(world.width, GAME_VIEWPORT_MIN_WIDTH / zoom) + 0.000_001,
     `${label} exposed the horizontal map edge`,
   )
   assert.ok(
-    layout.height / zoom <= Math.max(world.height, GAME_VIEWPORT_MIN_HEIGHT / zoom) + 0.000_001,
+    layout.height / visibleZoom <= Math.max(world.height, GAME_VIEWPORT_MIN_HEIGHT / zoom) + 0.000_001,
     `${label} exposed the vertical map edge`,
   )
 }
