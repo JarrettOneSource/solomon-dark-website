@@ -237,6 +237,7 @@ import {
   skillPickerWorldPresentationFrame,
 } from './level-up-presentation.ts'
 import { installNativeFixedFunctionRenderPipeline } from './native-fixed-function-render-pipeline.ts'
+import { PLAYER_CHARACTER_ATLAS_SOURCES } from './player-character-atlas.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import {
   NativeWorldNameplateLayer,
@@ -780,6 +781,9 @@ export async function createBoneyardWorldRenderer(
     installNativeFixedFunctionRenderPipeline(application.renderer, {
       installTextureAlphaShaders: false,
     })
+    for (const source of PLAYER_CHARACTER_ATLAS_SOURCES) {
+      application.renderer.texture.initSource(textures.base[source].source)
+    }
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)

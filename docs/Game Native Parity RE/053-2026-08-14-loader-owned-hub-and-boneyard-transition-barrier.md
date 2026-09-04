@@ -196,3 +196,175 @@
   WebSocket session, host state, and Hub/Boneyard renderers. No Mod Loader file
   changed because its existing source and durable report already contained the
   complete recovered contract.
+
+## 2026-09-04 — Player-animation GPU readiness and Ring of Fire hitch
+
+### Report, boundary, and evidence
+
+The player reports occasional stutter near the end of Ring of Fire, appearing
+less often after enabling the new reduced-light/flash setting. The referenced
+`SDB - Noticeable performance improvement with reduced light.mp4` was not
+present in the configured Windows Downloads folder during initial inspection;
+its path was requested. The findings below are an independent controlled
+reproduction, not a claim to have inspected that unavailable recording.
+
+Native/web system: **GPU readiness of the complete player-character atlas in
+each gameplay renderer context**, from the existing decoded texture map through
+initial GPU upload, the first visible frame, later animation/skin selection,
+and context teardown. The same atlas is consumed by Hub and Boneyard.
+
+The earlier readiness pass proved the initial visible frame but skipped
+GPU preparation for animation pages absent from that frame. Image decoding
+and Texture/Source construction do not establish GPU residency. A later Cast2
+pose consequently performed a synchronous first upload inside gameplay.
+
+| Evidence | Result |
+| --- | --- |
+| Existing native loading contract | This entry and 041 retain work-bound loading, no artificial delay, initial-frame readiness, and input ownership. Retail identity remains 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`. No gameplay constant or native asset is changed by this browser resource correction. |
+| Source trace at `69f402be0bc523c4c9f340ccfcf325f7df79d5a8` | `loadGameTextureEntries` waits for image load/decode and constructs ImageSource/Texture. `createPlayerWorldTextures` constructs atlas views. Boneyard does not call `renderer.texture.initSource` for unused player pages; Hub prepares selected ambient NPC textures but also omits the player atlas. |
+| Controlled built Mac Chrome baseline | 1920x1080, Apple M2 / ANGLE Metal / WebGL2, same scene seed, player/target positions, skill/equipment, and native secondary RNG. Off/on/on/off casts have the same 30 MovingFire lights and Shockwave/contact output. After warm-up, both settings maintain approximately 16.7-ms frame intervals. |
+| Direct WebGL upload instrumentation | The cold cast uploads `player-character-atlas-1-I-8wVOTz.png`, 2048x2048, from the Boneyard WebGL context after controls are live. At diagnostic CPU throttle 4, this single `texImage2D` takes 119.9 ms; the associated task is 143 ms and the frame gap is 133.3 ms. The following cast has no late image upload and a 16.8-ms maximum frame interval. Throttled figures are diagnostic, not a physical slow-device benchmark. |
+| CPU-profile falsifier | Starting with reduced flashes On still puts approximately 122.7 ms of sampled time in `texImage2D`; subsequent On and Off casts do not repeat it. Profiling startup itself introduces debugger pauses, so profiled RAF maxima are excluded from performance conclusions. The unprofiled upload census supplies the timing above. |
+| Actual setting consumers | `presentNativeSecondaryScreenOverlay` changes only final alpha by `0.2`. Both replays retain up to 34 light providers and the same actor/primitive populations. A setting-dependent lighting optimization is not justified by this trace. |
+
+The independent first-cast hitch is confirmed. The reported toggle correlation
+is consistent with reuse of an already-uploaded page on later casts; it is
+not evidence that reduced flashes disable world lighting. The unavailable
+video's exact end-of-effect timing remains uncorrelated with this reproduction.
+
+### Complete membership and dispositions
+
+The existing generated catalog is the complete data inventory:
+`player-character-atlas.generated.ts` contains 100 named sheets, 7,931 packed
+rectangles, and 12,403 authored cells (8,410 nonempty). Its full sheet and
+rectangle tables remain byte-identical. Preparation enumerates the generated
+page-source registry, not one Ring of Fire frame or a guessed page index.
+
+| Member | Disposition | Required behavior |
+| --- | --- | --- |
+| Player atlas page 0, 2048x2048 | `exact-ported` resource timing | Upload once into each destination context before its initial-frame readiness can release. |
+| Player atlas page 1, 2048x2048 | `exact-ported` resource timing | Includes the cold Cast2 witness; no first-use upload during combat. |
+| Player atlas page 2, 2048x1750 | `exact-ported` resource timing | Same complete-page preparation despite different packed height. |
+| Air/Earth/Ether/Fire/Water head, fixed robe, dynamic robe, and death sheets | `verified-already-at-parity` | All five authored families and every frame retain their generated coordinates and alpha policy. |
+| Four primary/secondary hats, special hats, three primary/secondary robes, fixed robe layers, and their death variants | `verified-already-at-parity` | GPU timing changes no equipment selector, frame, transform, or draw order. |
+| Six staff styles/bodies and death styles; base staff; wand and wand death | `verified-already-at-parity` | All retained sheets share the prepared pages. |
+| Primary/secondary staff hands, bare attachments, unselected attachments and robe attachment | `verified-already-at-parity` | Cast2 and sibling action poses cannot discover an unprepared player page. |
+| Hub renderer: Courtyard and every private region, first entry and new context | `exact-ported` resource timing | Prepare all player pages alongside the existing deferred ambient texture preparation. |
+| Boneyard renderer: survival/tutorial, fresh entry, resume/rejoin, observer, and new run | `exact-ported` resource timing | Same preparation in the renderer construction try/catch, before initial render and readiness. |
+| Viewport resize, existing-context scene sampling, and repeated casts | `verified-already-at-parity` | Do not repeat uploads on each draw, resize, or action. |
+| Constructor failure and context destruction | `verified-already-at-parity` | Existing failure cleanup and texture/application teardown own any prepared GPU resources. |
+| Reduced Screen Flashes On/Off, complex lighting/shadows, FOV, camera feedback | `verified-already-at-parity` | No change to any visual setting, native effect, or state producer. |
+| Combat/loot/scenery atlases, procedural textures, screen overlays, and ambient NPC preparation | `out-of-system` | Different source owners; no broad warming of every loaded game texture is introduced. |
+| Inventory/service/dialogue renderer's paperdoll atlas consumer | `out-of-system` | `createHubInventoryRenderer` directly consumes the same packed atlas for a modal model preview; it does not run gameplay action animation or release world-renderer readiness. Warming all pages for every dialogue would allocate unused GPU images. Its existing model-specific first render remains the owner. |
+| Title/Create/editor renderers and non-gameplay UI | `out-of-system` | They do not call the shared gameplay player-texture factory; this correction does not change their readiness. |
+
+The three pages already belong to both decoded gameplay texture maps. Their
+base RGBA8 storage totals 47,890,432 bytes per context before driver overhead;
+there are no new downloads, images, atlas frames, or duplicate source objects.
+The confirmed Boneyard witness moves an existing 16-MiB page upload from the
+first cast into renderer preparation.
+
+### Implementation and verification contract
+
+Both gameplay renderer constructors enumerate `PLAYER_CHARACTER_ATLAS_SOURCES`
+and initialize the corresponding existing source with the active renderer's
+texture system. Keep this within constructor error cleanup and before returning
+renderer readiness. Do not warm a synthetic cast, alter gameplay, introduce a
+timer, weaken animation quality, or change the accessibility multiplier.
+
+Add browser regression coverage at the real GPU-upload seam: record image
+uploads by WebGL context, mark the current world context before a cast, and
+reject new player-atlas uploads during any tested secondary action. The old
+Boneyard Ring of Fire must fail this assertion before the behavior change.
+Prove the same contract in Hub, then run the complete Mac gate and repeat the
+controlled first-cast/warm-cast measurements with normal and reduced flashes.
+The before/after comparison must retain the same particle/light counts and
+show zero late player-atlas uploads; report first-cast timing separately from
+steady state and exclude profiler startup pauses.
+
+### Implementation and Mac validation receipt
+
+- Candidate and comparison base:
+  `fe0543982bdc077c827cd438393e934d5d118784`. The production change is eight
+  lines across the Hub/Boneyard renderer constructors: enumerate the existing
+  generated atlas registry and initialize its existing texture sources inside
+  construction error handling. No asset, sheet, frame, clock, gameplay rule,
+  setting value, or protocol changed.
+- The browser regression failed before the change with
+  `Ring of Fire uploaded a player atlas during gameplay`, identifying page 1
+  in the current Boneyard context. Afterward the real cast passes. Coverage
+  also verifies that pages `[0,1,2]` are already present in each world context
+  before gameplay, rather than relying only on a page used by one spell.
+- The Hub proof correctly preserves rejection of Ring of Fire. Its ready
+  context contains pages `[0,1,2]`. The positive Boneyard proof observes a
+  separate context with the same complete page set, a real Ring of Fire cast,
+  zero late player-atlas uploads, intact native player/combat texture alpha
+  and addressing policies, and empty page/console/response error arrays.
+  The initially attempted positive Hub cast was a probe setup error; no
+  admission rule was changed to make that probe pass.
+
+Exact-base, fresh-browser before/fix/restoration measurements used the same
+1920x1080 scene, player, target, equipment, and RNG, with Off/On/On/Off order.
+The lightweight sampler and upload observer were unchanged across versions.
+All casts retained a peak of 32 secondary actors, 33 primitives, and 34 light
+providers.
+
+| Candidate/run | CPU throttle | First-cast maximum frame interval | Late player-page upload | Later casts, maximum frame interval |
+| --- | --- | --- | --- | --- |
+| Unchanged baseline | diagnostic 4x | 133.3 ms | page 1, 122.7 ms | 16.8 ms |
+| Corrected | diagnostic 4x | 33.3 ms | none | 16.8 ms |
+| Restored unchanged baseline | diagnostic 4x | 133.4 ms | page 1, 117.4 ms | 16.8 ms |
+| Corrected, normal hardware speed | 1x | 16.8 ms | none | 16.8 ms |
+
+The corrected 4x sample retains one 33.3-ms interval near tick 88 with an
+approximately 18.36-MB heap decrease. It is a residual garbage-collection
+observation, not a late image upload. At normal hardware speed all four
+corrected casts have zero intervals over 25 ms, zero long tasks, and zero late
+uploads. These results close the reproduced upload stall; they do not
+establish the cause of the unavailable recording's precise end-of-effect
+stutter.
+
+- The complete Mac `/opt/homebrew/bin/bash ./scripts/validate.sh` passed:
+  19 backend integration tests, 2,663 Node tests, TypeScript, formatting,
+  lint/boundaries, frontend/host builds, bundle budget, and media/CSP. Lint
+  reports 11 existing warnings outside this change and no errors. Entry
+  `Game-Bx3o7q4F.js` is 262,311 raw / 79,062 gzip bytes. Full-gate log SHA-256:
+  `32f1ad42624503f18b25557e5cbb8366c7ef54ec9bebbe16f6da0370a192a14a`.
+- The final strengthened browser census was followed by passing Hub/Boneyard
+  journeys and the supported Mac `./scripts/validate.sh lint` gate. No
+  production code changed after the complete gate. The inspected Boneyard
+  VFX capture SHA-256 is
+  `dcc980a3744a89a7d01238525ae073dc19086f6efe1fff70f55c80c709e6e8d1`.
+- Before/fix/restoration summary SHA-256 values, respectively:
+  `b1b4f35bb4d3ddcd5c35d30863abf7f18dfba5c9721ea62a67ed05b95ff17198`,
+  `0c3484fa066ed99f533aa95940b104cc647ec8089806348f70d7ce05cad9866d`,
+  `8fc6ba10c977a4f3026c0f0cf3713c5e376ab84bca99f2e4bd0490f34ac63570`.
+  Normal-speed summary:
+  `465f9d8029f90e6a67cd3312e7b990090cefafcc8ae301e8cf130fee0cf809ca`.
+  Final Hub/Boneyard browser log SHA-256 values:
+  `9193f59e798ee0b4159bb7739d5d9732da87af54c5b18cc14adf0fb012a18746`,
+  `4cd24def77c5b93d7841db2546fada0568e1edfd8015f88294a46ba919da7e77`.
+- The initial handoff retained the source and Mac acceptance worktrees for
+  review. The user's follow-up authorizes a normal push to `main`. All five
+  candidate files initially matched the validated Mac tree byte for byte.
+  Before the push, upstream rendering optimization
+  `4335d52d5b21c44573e3e201a948b8d73154bcf2` landed; the focused fix rebased
+  cleanly onto it. Publication requires repeating the full Mac gate and
+  Hub/Boneyard browser checks on that integrated tree. Deployment is separate.
+  Publication scaffolding consists of
+  `/home/user/.codex-worktrees/solomon-website-ring-fire-lighting-lag-20260904-root`
+  and `/Users/jarrett/codex-acceptance/ring-fire-lighting-lag-20260904-root/Website`;
+  remove both and the task branch after verifying the remote commit. The
+  temporary baseline worktree, profiling probes, captures, and raw logs were
+  already removed at handoff. The referenced recording remains unavailable,
+  so publication does not establish its exact end-of-effect timing.
+- Publication revalidation of candidate
+  `493a4448264ec1fd3552902fdc5db362a6f10fa6` on parent `4335d52d` passed the
+  complete Mac gate: 2,667 Node tests, 19 backend integration tests, and all
+  formatting, lint, type, build, budget, and media checks. The gate log SHA-256
+  is `664974dbb6b02edcbe2a26b8e35fa29c44c6e20fbc0a02fbcac7f935fde1fea1`.
+  Built entry `Game-46blNuBz.js` is 262,311 raw / 79,057 gzip bytes. Fresh
+  built Hub and Boneyard journeys each confirmed pages `[0,1,2]` before
+  gameplay. Hub rejection remained intact; the Boneyard cast had zero late
+  player-atlas uploads. Both journeys had empty page/console/response error
+  arrays. Only this publication receipt changed after those checks.

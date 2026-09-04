@@ -58,6 +58,7 @@ import { hub } from '../../lib/assets.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
 import { loadModPresentationTextures } from './mod-presentation-assets.ts'
 import { installNativeFixedFunctionRenderPipeline } from './native-fixed-function-render-pipeline.ts'
+import { PLAYER_CHARACTER_ATLAS_SOURCES } from './player-character-atlas.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -231,6 +232,9 @@ export async function createHubWorldRenderer(
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
     }
     installNativeFixedFunctionRenderPipeline(application.renderer)
+    for (const source of PLAYER_CHARACTER_ATLAS_SOURCES) {
+      application.renderer.texture.initSource(textures.base[source].source)
+    }
     for (const texture of hubDeferredAnimationTextures(textures)) {
       application.renderer.texture.initSource(texture.source)
     }

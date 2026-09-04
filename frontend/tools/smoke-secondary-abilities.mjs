@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite'
 
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { installGameTextureUploadSmokeProbe } from './game-texture-upload-smoke-probe.mjs'
 import {
   NATIVE_SECONDARY_ABILITY_IDS,
 } from '../src/game/core-kernels/native-secondary-ability-contract.ts'
@@ -197,6 +198,7 @@ try {
     }
   })
   await page.addInitScript(installGameAudioSmokeProbe)
+  await page.addInitScript(installGameTextureUploadSmokeProbe)
   await page.addInitScript(() => {
     const samples = []
     Object.defineProperty(window, '__secondaryRenderSamples', { value: samples })
@@ -252,6 +254,7 @@ try {
 
   await enterHub(page, baseUrl)
   let canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
+  const playerAtlasContexts = [await assertPlayerAtlasReady(canvas)]
   const playerId = host.hostPlayerId()
   assert.ok(playerId, 'the browser player must own the local authoritative host slot')
   const baseSkillBook = getPlayerSkillBook(host.state(), playerId)
@@ -279,6 +282,7 @@ try {
     })
     canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
     await canvas.waitFor({ timeout: 90_000 })
+    playerAtlasContexts.push(await assertPlayerAtlasReady(canvas))
     await openBoneyardCombat(page, host, playerId)
     if (cooldownOnly || phasingFrameCapture) stabilizeBoneyardCooldownEnemies(host)
     const state = host.state()
@@ -411,6 +415,10 @@ try {
       window.__secondaryRenderSamples.at(-1)?.materialTint ?? null
     ))
     const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+    const textureUploadMark = await canvas.evaluate((node) => (
+      window.__sdrTextureUploadProbe.mark(node)
+    ))
+    assert.ok(Number.isInteger(textureUploadMark.contextId), 'world GPU uploads were not observed')
     const castRequestedAtMs = performance.now()
     const castRequestedAtTick = host.state().tick
     const manaBeforeCast = playerProgression(host, playerId).currentMana
@@ -901,6 +909,12 @@ try {
     }
     const player = host.state().secondaryAbilities.players[playerId]
     assertPlayerState(contract.skillId, player)
+    const latePlayerAtlasUploads = await page.evaluate(({ contextId, start }) => (
+      window.__sdrTextureUploadProbe.uploads.slice(start).filter((upload) => (
+        upload.contextId === contextId && upload.source.includes('player-character-atlas-')
+      ))
+    ), textureUploadMark)
+    assert.deepEqual(latePlayerAtlasUploads, [], `${contract.name} uploaded a player atlas during gameplay`)
     const reportedPresentation = assertReportedPresentation(
       host.state(),
       playerId,
@@ -927,6 +941,7 @@ try {
       maximumActorCount: Math.max(...samples.map(({ actorCount }) => actorCount)),
       maximumPrimitiveCount: Math.max(...samples.map(({ primitiveCount }) => primitiveCount)),
       maximumSet,
+      latePlayerAtlasUploads,
       name: contract.name,
       phasing,
       phasingFrames,
@@ -1004,6 +1019,7 @@ try {
     consoleErrors,
     insufficientMana: insufficientManaReceipt,
     pageErrors,
+    playerAtlasContexts,
     receipts,
     responseErrors,
     scene: requestedScene,
@@ -1015,6 +1031,22 @@ try {
   await host.close()
   await vite?.close()
   await staticServer?.close()
+}
+
+async function assertPlayerAtlasReady(canvas) {
+  const result = await canvas.evaluate((node) => {
+    const probe = window.__sdrTextureUploadProbe
+    const { contextId } = probe.mark(node)
+    const pages = new Set(probe.uploads.filter((upload) => upload.contextId === contextId)
+      .flatMap(({ source }) => {
+        const match = source.match(/player-character-atlas-(\d+)/)
+        return match ? [Number(match[1])] : []
+      }))
+    return { contextId, pages: [...pages].sort((a, b) => a - b) }
+  })
+  assert.ok(Number.isInteger(result.contextId), 'world GPU uploads were not observed')
+  assert.deepEqual(result.pages, [0, 1, 2], 'player animation pages must be GPU-ready before gameplay')
+  return result
 }
 
 async function capturePhasingFrames(page, host, playerId, screenshotRoot, committedState) {
