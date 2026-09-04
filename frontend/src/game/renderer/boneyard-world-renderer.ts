@@ -223,6 +223,7 @@ import {
   type NativeSecondaryDiagnosticSample,
 } from './native-secondary-world-view.ts'
 import {
+  NATIVE_PLAYER_MAGIC_SHIELD,
   NativeSecondaryScreenFeedbackPresentation,
   nativeRegionPointGain,
   nativeSecondaryWorldShake,
@@ -411,6 +412,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerHeadingIndex: number
   playerLightRadius: number
   playerLightRasterRadius: number
+  playerMagicShieldAlpha: number
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
@@ -1037,7 +1039,8 @@ export async function createBoneyardWorldRenderer(
     playerHeadingIndex: 0,
     playerLightRadius: 0,
     playerLightRasterRadius: 0,
-    playerMagicShieldScale: 1.5,
+    playerMagicShieldAlpha: 0,
+    playerMagicShieldScale: NATIVE_PLAYER_MAGIC_SHIELD.scale,
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
     playerOrdinaryWeaponVisible: false,
@@ -1642,7 +1645,8 @@ export async function createBoneyardWorldRenderer(
           },
         ]
       }
-      frameDiagnostics.playerMagicShieldScale = playerView?.magicShieldScale ?? 1.5
+      frameDiagnostics.playerMagicShieldAlpha = playerView?.magicShieldAlpha ?? 0
+      frameDiagnostics.playerMagicShieldScale = playerView?.magicShieldScale ?? NATIVE_PLAYER_MAGIC_SHIELD.scale
       frameDiagnostics.playerMagicShieldVisible = playerView?.magicShieldVisible ?? false
       frameDiagnostics.playerMaterialTint = playerView?.materialTint ?? 0xffffff
       frameDiagnostics.playerOrdinaryWeaponVisible =

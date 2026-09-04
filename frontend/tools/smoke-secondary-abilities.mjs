@@ -19,6 +19,7 @@ import { NATIVE_SKILL_CATALOG } from '../src/game/core-kernels/player-progressio
 import { isHubRegionTraversable } from '../src/game/core-kernels/hub-regions.ts'
 import {
   nativeSecondaryCooldownCapacityTicks,
+  applyNativeSecondaryPlayerDamage,
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { freezeNativeBelt } from '../src/game/core-kernels/native-belt.ts'
@@ -139,7 +140,9 @@ if (!baseUrl && productionBuild) {
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  ...(phasingFrameCapture ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
+  ...(phasingFrameCapture || (requestedSkillIds.length === 1 && requestedSkillIds[0] === 54)
+    ? { createBoneyardSeedBytes: () => Buffer.alloc(16) }
+    : {}),
   snapshotRate: 20,
 })
 const browser = await chromium.launch({
@@ -215,6 +218,7 @@ try {
           frameCount: frame.frameCount,
           kinds: [...frame.secondaryAbilityKinds],
           magicShieldScale: frame.playerMagicShieldScale,
+          magicShieldAlpha: frame.playerMagicShieldAlpha,
           magicShieldVisible: frame.playerMagicShieldVisible,
           materialTint: frame.playerMaterialTint,
           observedAtMs: performance.now(),
@@ -311,13 +315,37 @@ try {
     if (expectBlocked) {
       armQuickbar(host, playerId, baseSkillBook, [contract.skillId])
       await waitForBeltSkill(page, contract.name)
-      receipts.push(await blockedSecondaryReceipt(
+      const blocked = await blockedSecondaryReceipt(
         page,
         canvas,
         host,
         playerId,
         contract,
-      ))
+      )
+      let shieldFixture = null
+      if (contract.skillId === 54) {
+        const state = host.state()
+        Object.assign(state, { secondaryAbilities: {
+          ...state.secondaryAbilities,
+          players: {
+            ...state.secondaryAbilities.players,
+            [playerId]: {
+              ...state.secondaryAbilities.players[playerId],
+              magicShieldAbsorb: 25,
+              magicShieldMaximum: 25,
+            },
+          },
+        } })
+        const presentation = await waitForPlayerPresentation(page, 54, null)
+        await page.screenshot({ path: `${screenshotRoot}/54-hub-shield-fixture.png` })
+        shieldFixture = {
+          presentation,
+          lifecycle: await captureMagicShieldLifecycle(
+            page, host, playerId, `hub:${state.world.participants[playerId].region}`,
+          ),
+        }
+      }
+      receipts.push({ ...blocked, shieldFixture })
       break
     }
     if (boneyardEnemyBaseline) restoreBoneyardEnemies(host, boneyardEnemyBaseline)
@@ -555,13 +583,8 @@ try {
     let flashObservedAtCast = false
     if (proof.flash) {
       try {
-        await page.waitForFunction(() => (
-          ((document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
-            ?.__sdrHubFrame
-            ?? document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
-              ?.__sdrBoneyardFrame)
-            ?.secondaryScreenFlashAlpha ?? 0) > 0
-        ), undefined, { timeout: 2_000 })
+        await page.waitForFunction((start) => window.__secondaryRenderSamples.slice(start)
+          .some(({ flashAlpha }) => flashAlpha > 0), sampleStart, { timeout: 2_000 })
       } catch (error) {
         process.stderr.write(`${JSON.stringify({
           contract: { id: contract.skillId, name: contract.name },
@@ -884,6 +907,9 @@ try {
       contract.skillId,
       samples,
     )
+    const shieldLifecycle = contract.skillId === 54
+      ? await captureMagicShieldLifecycle(page, host, playerId, events[0].worldKey)
+      : null
     receipts.push({
       audio: proof.audio,
       golemAssemblyAudio,
@@ -911,6 +937,7 @@ try {
       },
       primaryOverlap: primaryOverlapReceipt,
       reportedPresentation,
+      shieldLifecycle,
       screenshotPath,
       teleport,
       ticksObserved: new Set(samples.map(({ tick }) => tick).filter(Number.isFinite)).size,
@@ -2881,7 +2908,9 @@ async function waitForPlayerPresentation(page, skillId, materialTintBeforeCast) 
     const frame = canvas?.__sdrHubFrame ?? canvas?.__sdrBoneyardFrame
     if (!frame) return false
     if (id === 46) return frame.playerMaterialTint === tint
-    return frame.playerMagicShieldVisible && frame.playerMagicShieldScale >= 1.5
+    return frame.playerMagicShieldVisible
+      && frame.playerMagicShieldScale === Math.fround(2.15)
+      && frame.playerMagicShieldAlpha === 0.25
   }, { id: skillId, tint: expectedMaterialTint }, { timeout: 10_000 })
   return page.evaluate(({ before, expected }) => {
     const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
@@ -2891,9 +2920,83 @@ async function waitForPlayerPresentation(page, skillId, materialTintBeforeCast) 
       materialTintBeforeCast: before,
       materialTintExpected: expected,
       magicShieldScale: frame?.playerMagicShieldScale ?? null,
+      magicShieldAlpha: frame?.playerMagicShieldAlpha ?? null,
       magicShieldVisible: frame?.playerMagicShieldVisible ?? null,
     }
   }, { before: materialTintBeforeCast, expected: expectedMaterialTint })
+}
+
+async function captureMagicShieldLifecycle(page, host, playerId, worldKey) {
+  const sampleStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
+  const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  const absorbBefore = host.state().secondaryAbilities.players[playerId].magicShieldAbsorb
+  assert.ok(absorbBefore > 1)
+  const damage = (amount) => {
+    const state = host.state()
+    const result = applyNativeSecondaryPlayerDamage(
+      state.secondaryAbilities, playerId, amount, state.tick,
+      getPlayerCharacter(state, playerId).position, worldKey,
+    )
+    Object.assign(state, { secondaryAbilities: result.state })
+    return result
+  }
+  const hitTick = host.state().tick
+  const hit = damage(1)
+  assert.equal(hit.state.players[playerId].magicShieldAbsorb, absorbBefore - 1)
+  assert.equal(hit.healthDamage, 0)
+  await page.waitForFunction((start) => window.__secondaryRenderSamples.slice(start)
+    .some(({ magicShieldAlpha }) => magicShieldAlpha > 0.25), sampleStart)
+  await page.screenshot({ path: `${screenshotRoot}/54-magic-shield-hit.png` })
+  await page.waitForFunction((tick) => {
+    const frame = window.__secondaryRenderSamples.at(-1)
+    return frame?.tick > tick + 40 && frame.magicShieldAlpha === 0.25
+      && frame.magicShieldScale === Math.fround(2.15) && frame.magicShieldVisible
+  }, hitTick)
+  await page.screenshot({ path: `${screenshotRoot}/54-magic-shield-resting.png` })
+  const pulse = await page.evaluate((start) => window.__secondaryRenderSamples.slice(start)
+    .map(({ magicShieldAlpha: alpha, magicShieldScale: scale, tick }) => ({ alpha, scale, tick })), sampleStart)
+  assert.ok(pulse.every(({ alpha, scale }) => alpha >= 0.25 && alpha <= 0.75
+    && scale >= 2.05 && scale <= 2.251))
+  const broken = damage(host.state().secondaryAbilities.players[playerId].magicShieldAbsorb)
+  assert.equal(broken.state.actors.filter(({ kind }) => kind === 'shield-break').length, 20)
+  await page.waitForFunction(() => {
+    const frame = window.__secondaryRenderSamples.at(-1)
+    return frame?.magicShieldVisible === false && frame.magicShieldAlpha === 0
+  })
+  await waitForAudio(page, audioStart, 'hit-shield')
+  await waitForAudio(page, audioStart, 'pop-shield')
+  await page.screenshot({ path: `${screenshotRoot}/54-magic-shield-broken.png` })
+
+  const state = host.state()
+  Object.assign(state, { secondaryAbilities: {
+    ...state.secondaryAbilities,
+    players: {
+      ...state.secondaryAbilities.players,
+      [playerId]: {
+        ...state.secondaryAbilities.players[playerId],
+        magicShieldAbsorb: 25,
+        magicShieldMaximum: 25,
+        magicShieldExplosionDamage: 12,
+      },
+    },
+  } })
+  const explosionStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
+  const exploded = damage(25)
+  assert.ok(exploded.state.actors.some(({ kind }) => kind === 'shield-explosion'))
+  await page.waitForFunction((start) => window.__secondaryRenderSamples.slice(start)
+    .some(({ kinds, primitiveCount }) => kinds.includes('shield-explosion')
+      && primitiveCount >= 200), explosionStart, { timeout: 5_000 })
+  await waitForAudio(page, audioStart, 'magic-shield-explode')
+  return {
+    absorbBefore,
+    absorbAfterHit: absorbBefore - 1,
+    breakChildren: 20,
+    explosionPresented: true,
+    maximumAlpha: Math.max(...pulse.map(({ alpha }) => alpha)),
+    minimumAlpha: Math.min(...pulse.map(({ alpha }) => alpha)),
+    scaleRange: [Math.min(...pulse.map(({ scale }) => scale)), Math.max(...pulse.map(({ scale }) => scale))],
+    samples: pulse.length,
+  }
 }
 
 function halfMaterialTint(tint) {

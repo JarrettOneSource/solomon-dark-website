@@ -37,6 +37,7 @@ import {
   skillPickerWorldPresentationFrame,
 } from './level-up-presentation.ts'
 import {
+  NATIVE_PLAYER_MAGIC_SHIELD,
   NativeSecondaryScreenFeedbackPresentation,
   nativeRegionPointGain,
   presentNativeSecondaryScreenOverlay,
@@ -101,6 +102,7 @@ interface HubFrameDiagnostics {
   playerEnchantStaffTint: number | null
   playerEnchantStaffTints: Record<string, number | null>
   playerHeadingIndex: number
+  playerMagicShieldAlpha: number
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
@@ -360,7 +362,8 @@ export async function createHubWorldRenderer(
     playerEnchantStaffTint: null,
     playerEnchantStaffTints: {},
     playerHeadingIndex: 0,
-    playerMagicShieldScale: 1.5,
+    playerMagicShieldAlpha: 0,
+    playerMagicShieldScale: NATIVE_PLAYER_MAGIC_SHIELD.scale,
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
     playerMoving: false,
@@ -560,6 +563,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.playerEnchantStaffAlpha = playerView.enchantStaffAlpha
     frameDiagnostics.playerEnchantStaffAuraRecord = playerView.enchantStaffAuraRecord
     frameDiagnostics.playerEnchantStaffTint = playerView.enchantStaffTint
+    frameDiagnostics.playerMagicShieldAlpha = playerView.magicShieldAlpha
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
     frameDiagnostics.playerMaterialTint = playerView.materialTint

@@ -422,7 +422,15 @@ const MAGIC_TRAP_SELECTOR_COLORS = Object.freeze([
 const EMPTY_GOLEM_FRONT_GLOW_RECORDS = new Set([81, 83, 84, 94, 96])
 const FIRE_DRAW_SCALE = 1.100000023841858
 
+export const NATIVE_PLAYER_MAGIC_SHIELD = Object.freeze({
+  atlas: 'Clothes',
+  entry: 2,
+  offsetY: -35,
+  scale: Math.fround(2.15),
+} as const)
+
 export interface NativePlayerMagicShieldPlan {
+  readonly alpha: number
   readonly scale: number
   readonly tint: number
   readonly visible: boolean
@@ -442,12 +450,15 @@ export function nativePlayerMagicShieldPlan(
   tick: number,
 ): NativePlayerMagicShieldPlan {
   const visible = (state?.magicShieldAbsorb ?? 0) > 0
-  if (!visible || !state) return { scale: 1.5, tint: WHITE, visible: false }
+  if (!visible || !state) {
+    return { alpha: 0, scale: NATIVE_PLAYER_MAGIC_SHIELD.scale, tint: WHITE, visible: false }
+  }
   const pulse = state.magicShieldPulseTicks * 0.05
-  const brightness = 0.5 * (Math.max(pulse, 1) - 1) + 0.25
   return {
-    scale: 1.5 + 0.1 * Math.sin(tick * 20 * Math.PI / 180) * Math.min(pulse, 1),
-    tint: (Math.round(Math.min(1, brightness) * 255) << 16) | 0x00ffff,
+    alpha: 0.5 * (Math.max(pulse, 1) - 1) + 0.25,
+    scale: Math.fround(NATIVE_PLAYER_MAGIC_SHIELD.scale
+      + Math.fround(0.1) * Math.sin(tick * 20 * Math.PI / 180) * Math.min(pulse, 1)),
+    tint: WHITE,
     visible: true,
   }
 }
@@ -2843,7 +2854,7 @@ function shieldExplosionDraws(
   const ringAlpha = repeatedFloatDecay(1.5, 0.05, age)
   if (ringAlpha > 0) {
     const ringScale = repeatedFloatMultiply(2.5, 1.01, age)
-    draws.push(draw('DeadHawg', 2, {
+    draws.push(draw('Clothes', 2, {
       alpha: Math.min(ringAlpha, 1),
       blend: 'add',
       offset: { x: 0, y: -35 },

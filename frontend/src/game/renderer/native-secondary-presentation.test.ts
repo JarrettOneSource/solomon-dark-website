@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   NATIVE_SECONDARY_ACTOR_KINDS,
+  createNativeSecondaryPlayerState,
   nativeSecondaryLightDisposition,
   type NativeSecondaryActorKind,
   type NativeSecondaryActorState,
@@ -24,6 +25,7 @@ import {
 import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
 import {
   NativeSecondaryPresentationScratch,
+  NATIVE_PLAYER_MAGIC_SHIELD,
   nativeGolemFacing,
   nativeGolemPresentationPlan,
   nativeLeviathanCompositePlan,
@@ -1024,7 +1026,7 @@ test('Explosive Shield replays the exact four-layer burst and one hundred FuzzyS
       role: 'explosive-shield-center-flash', scaleX: 12, scaleY: 12,
     },
     {
-      atlas: 'DeadHawg', blend: 'add', entry: 2, offset: { x: 0, y: -35 },
+      atlas: 'Clothes', blend: 'add', entry: 2, offset: { x: 0, y: -35 },
       role: 'explosive-shield-expanding-ring', scaleX: 2.5, scaleY: 2.5,
     },
     {
@@ -2142,34 +2144,43 @@ test('Teleport source and destination draw stock record 90 with clamped additive
   ])
 })
 
-test('the player shield shell uses the native pulse brightness and sine scale', () => {
+test('the player shield uses its own Clothes shell and alpha, independent of body materials', () => {
+  assert.deepEqual(NATIVE_PLAYER_MAGIC_SHIELD, {
+    atlas: 'Clothes', entry: 2, offsetY: -35, scale: Math.fround(2.15),
+  })
   const state = {
-    castSequence: 0,
-    castSpinTicksRemaining: 0,
-    cooldownMaximumTicksBySkill: [],
-    cooldownTicksBySkill: [],
-    firewalker: false,
-    fizzleSequence: 0,
-    globalCooldownTicks: 0,
-    heldSlot: null,
-    lastSkillId: null,
+    ...createNativeSecondaryPlayerState(),
     magicShieldAbsorb: 25,
-    magicShieldExplosionDamage: 0,
     magicShieldMaximum: 25,
-    magicShieldPulseTicks: 40,
-    mindstar: false,
-    planeOrbHeld: false,
-    planewalkerTicksRemaining: 0,
-    regenerate: false,
-    reservedMana: 0,
-    staffCastTicksRemaining: 0,
-    stoneskinTicksRemaining: 0,
-  } as const
+  }
   assert.deepEqual(nativePlayerMagicShieldPlan(state, 0), {
-    scale: 1.5,
-    tint: 0xbfffff,
+    alpha: 0.25,
+    scale: Math.fround(2.15),
+    tint: 0xffffff,
     visible: true,
   })
+  for (const [pulseTicks, alpha] of [[40, 0.75], [30, 0.5], [20, 0.25], [10, 0.25], [0, 0.25]] as const) {
+    const pulsed = { ...state, magicShieldPulseTicks: pulseTicks }
+    const peak = nativePlayerMagicShieldPlan(pulsed, 4)
+    const trough = nativePlayerMagicShieldPlan(pulsed, 13)
+    assert.equal(peak.alpha, alpha)
+    assert.equal(peak.tint, 0xffffff)
+    if (pulseTicks >= 20) {
+      assert.ok(peak.scale > 2.24 && peak.scale < 2.25)
+      assert.ok(trough.scale > 2.05 && trough.scale < 2.06)
+    } else if (pulseTicks === 10) {
+      assert.ok(peak.scale > 2.19 && peak.scale < 2.2)
+      assert.ok(trough.scale > 2.1 && trough.scale < 2.11)
+    } else {
+      assert.equal(peak.scale, Math.fround(2.15))
+      assert.equal(trough.scale, Math.fround(2.15))
+    }
+  }
+  for (const material of [{ stoneskinTicksRemaining: 10 }, { planewalkerTicksRemaining: 10 }]) {
+    assert.deepEqual(nativePlayerMagicShieldPlan({ ...state, ...material }, 4),
+      nativePlayerMagicShieldPlan(state, 4))
+  }
+  assert.equal(nativePlayerMagicShieldPlan(undefined, 0).visible, false)
   assert.equal(nativePlayerMagicShieldPlan({ ...state, magicShieldAbsorb: 0 }, 0).visible, false)
   assert.equal(nativePlayerMaterialTint(0xffffff, { ...state, stoneskinTicksRemaining: 1 }), 0x808080)
   assert.equal(nativePlayerMaterialTint(0x804020, { ...state, stoneskinTicksRemaining: 1 }), 0x402010)

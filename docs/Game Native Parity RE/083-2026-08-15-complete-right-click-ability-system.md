@@ -81,7 +81,7 @@ layout—owns the hint tails below the screen.
 | `49` Magic Circle | Aimed circle lives 1500 native updates, pulses immediately and every 10 ticks, slows targets, and executes the live MP-recovery branch inside exact half extents `210x168`. | One/two centered spinning BadGuys `48` fades per global-tick parity, a player-attached `7` only on successful recovery pulses, a flickering shadow-casting Region light, and `magiccircle`. | exact-ported |
 | `50` Magic Trap | Choose the bound component before damage: selector `0..4` reads effective-rank primary `8,16,24,32,40`; Ether alone consumes inclusive `FloatRange(mDamage1,mDamage2)`, then the trap stores `f32(base*trap mDamage)`. Aimed trap adds a float32 charge increment through the update-800 clamp. Every age divisible by 25, a 130-wide arming query can trigger one separate 300-wide terminal payload query. Air payloads become one mergeable, target-following 100-update ElectricBurn at `payload/100` per update. | Armed body/shadow BadGuys `111,112,15,85`; 32 independently fading selector-tinted `16` shimmers; trigger `15,158..167,17,74`; set/trigger plus bound-primary start audio and 1.25 camera pulse. ElectricBurn adds only a non-shadow Region light with radius `.5+S(.25)` and intensity one plus `electric__loop`, never a lightning sprite at trap chain count zero. | exact-ported |
 | `51` Dampen | Caster rectangle dispels shields on `RandomInt(100) < 0x33` (51/100 outcomes despite the 50% UI text) and owns mode-21 CastSpin for 73 strict-boundary ticks. | 360 independently moving/fading BadGuys `10/11` rays plus 30 centered perspective `48` fades; `flash`, `dampen` stream. | exact-ported |
-| `54` Magic Shield | Player-owned absorb state owns a 40-tick shell pulse. Break emits 20 particles and, when upgraded, applies one full `absorb*mDamage/100` contact over radius 110 plus a zero-damage Dazzle/push Shockwave, then clears both factors. | BadGuys `49,68,15,158..167,17,74`, DeadHawg `2,18`; exact up/hit/pop/explode sequence, 502-word explosion program, Region flash, and 1.25 camera pulse. | exact-ported |
+| `54` Magic Shield | Player-owned absorb state owns a 40-tick shell pulse. Break emits 20 particles and, when upgraded, applies one full `absorb*mDamage/100` contact over radius 110 plus a zero-damage Dazzle/push Shockwave, then clears both factors. | Clothes `2`, BadGuys `68,15,158..167,17,74`, DeadHawg `18`; exact up/hit/pop/explode sequence, 502-word explosion program, Region flash, and 1.25 camera pulse. | exact-ported |
 | `72` Acid Rain | Aimed rain lives 1500 active ticks plus residue; emits 2 drops/tick or 5 enhanced, owns a one-in-four splash gate, and every 25 ticks hits exactly `min(n,floor(n/3)+1)` shuffled targets for float32 `mDamage/6` direct damage each. | BadGuys `0,10` field, raindrop, and splash program; storm/sizzle/rain audio. | exact-ported |
 | `73` Fire Wall | Builds one 300-unit aim-perpendicular line from exactly eleven independent Fire_Goodguy patches, spaced 30 units apart; life scalar `7` reaches zero after 700 ticks at `-0.01/tick`, with contact every 3 ticks. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-ported |
 | `74` Ether Drain | Aimed field scales in for 40 ticks, owns 1,000 active ticks, scales out for 20 ticks, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-ported |
@@ -631,15 +631,17 @@ RNG words and its children live independently for up to 100 ticks; the
 73-update CastSpin is a separate player action, not an expanding-ring clock.
 
 Magic Shield has no standalone cast actor. The player-owned absorb state is
-the presentation owner: additive BadGuys `49` stays attached at `y-30`, scale
-`1.5`, and an absorbed hit drives the recovered 40-tick brightness/sine-scale
-pulse. Break callback `0x00546650` consumes three words for each of 20
+the presentation owner: additive Clothes `2` stays attached at `y-35`, scale
+`2.1500000953674316`, with white tint and resting alpha `.25`. An absorbed hit
+drives the recovered 40-tick alpha/sine-scale pulse. The September 4 reopening
+below supersedes the earlier enemy-shell asset/geometry and RGB interpretation.
+Break callback `0x00546650` consumes three words for each of 20
 additive BadGuys `68` children: `Float(360)` rotation, `.5+Float(.75)` alpha,
 and `2+Float(.25)` scale. They spawn at `y-35`, lose `.05` alpha per tick,
 and account for an exact 60-word prefix.
 
 When Explosive Shield is installed, helper `0x00648790` then registers one
-normal scale-12 BadGuys `15` fade at `y-25`, one additive DeadHawg `2`
+normal scale-12 BadGuys `15` fade at `y-25`, one additive Clothes `2`
 FadeScale at `y-35` (scale `2.5`, factor `1.01`, alpha `1.5`, loss `.05`),
 and two additive ten-frame BadGuys `158..167` arrays at `y-35`, scale `6`,
 with frame rates `.15` and `.225`. Their two rotations consume two RNG words.
@@ -1836,3 +1838,180 @@ No member is blocked by the browser platform.
   unknown remains. The initial focused commit was local and unpushed at the end
   of the implementation pass; deployment and production restart remain
   separate operations.
+
+
+## 2026-09-04 — Magic Shield player-shell and shared ring-asset reopening
+
+### Report and earlier closure failure
+
+Soggy's supplied `SD shield original - image.png` and
+`SD shield web - image.png` show a broad, faint stock shell versus a compact,
+bright cyan web shell. The earlier closure copied the enemy-shell geometry and
+asset into the player painter and mistook the fourth color argument (alpha)
+for the red channel. Its test repeated those assumptions and its browser gate
+only required a visible shell with scale at least 1.5. It did not verify the
+sprite-register argument or actual opacity. This reopening replaces those
+claims for the entire player-shell family and the shared Clothes-2 consumers.
+
+### Evidence and provenance
+
+- Fresh retail binary: 0.72.5, 4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred base `0x00400000`. No injected process or stale runtime address is
+  used. The user supplied the visual comparisons; their capture settings and
+  exact frame phase are not known, so instructions and asset bytes determine
+  numerical values.
+- Ghidra 12.0.3, canonical `SolomonDark/SolomonDark.exe`, read-only replicas
+  acquired through the existing Mod Loader wrapper. Wrapper SHA-256
+  `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+  `decompile_targets.py` SHA-256
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+  Task scratch logs: `/tmp/sd-magic-shield-re-20260904/`.
+- Full draw decompiles `0x005468C0` and `0x0054BA80`, raw instructions
+  `0x00547FC6..0x0054812D`, color setter `0x0041FE50`, uniform Sprite draw
+  `0x00414EA0`, install `0x00529EE0`, common update `0x00533520`, contact
+  `0x00534510`, break `0x00546650`, explosion `0x00648790`, and Clothes builder
+  `0x004E4CA0` were reopened. The field census covered `+0x1C4/+0x1D0`.
+- Instruction-level census of every direct reference to Clothes singleton
+  `0x00819980` found six Clothes-2 consumer sites in four functions: player
+  special painter `0x005480CB`, ordinary painter `0x0054C9E8`, explosion
+  `0x00648902`, and Mindblast rings `0x00645D58/0x00645E57/0x00645F5F`.
+  Every site selects singleton `+0x1C0`, which is Clothes record 2. The older
+  decompiler-only asset-object map missed the implicit ECX player arguments.
+- The complete consumed record is rectangle `(1093,85,81,81)`, logical cell
+  `81x81`, origin `(0,0)`. Direct retail `Clothes.bundle`/`Clothes.png`
+  extraction matches every RGBA byte of the existing
+  `frontend/src/assets/game/player-mindblast-ring.png`. RGBA-byte SHA-256:
+  `255ff1d068ba0cccb5200098df4462c097c017071bf01bd9cc23756f372ea855`.
+  Reuse this asset; do not synthesize another shell or recolor enemy art.
+
+### Boundary and complete membership
+
+Native system: the player-owned Magic Shield shell, its absorption/break
+lifecycle, and all consumers of its shared Clothes-2 art. The dispositions below describe this candidate; the validation receipt follows.
+Pre-fix main did not meet this contract.
+
+| Member | Source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| ordinary player shell, all five elements, every rank/equipment appearance | `0x0054BA80`, Clothes 2 | exact-ported | one shared asset, offset, scale, white color and alpha formula; no element/rank size override |
+| special/material player shell | `0x005468C0`; suppress duplicate body shell through `0x00819E5D` | exact-ported | same one shell after the body; Stoneskin/Planewalker do not tint or duplicate it |
+| local player, remote participant and bot in Courtyard, private College and Boneyard | both PlayerWizard painters; shared web `PlayerWorldView` | exact-ported | both world consumers bind the same plan and texture; Mac scene journeys |
+| no shield, applied/refreshed shield, hit pulse, depleted shield and world reset | `+0x1C4/+0x1C8/+0x1CC/+0x1D0`; install/update/contact/break functions above | verified-already-at-parity | authoritative absorb/reset and up/hit/pop audio regressions; shell absent when absorb is zero |
+| pulse brightness and size | both player draw tails | exact-ported | brightness is alpha, not RGB; idle and high/low pulse branches covered |
+| Explosive Shield ring | `0x00648902`, Clothes 2 | exact-ported | correct shared art; existing 2.5 scale, 1.01 recurrence, 1.5 alpha and .05 loss retained |
+| Mindblast ring 0 | `0x00645D58`, Clothes 2 | verified-already-at-parity | existing ring program and exact asset hash |
+| Mindblast ring 1 | `0x00645E57`, Clothes 2 | verified-already-at-parity | existing independent 1.05 recurrence |
+| Mindblast ring 2 | `0x00645F5F`, Clothes 2 | verified-already-at-parity | existing independent 1.025 recurrence |
+| 20 break children, explosion flash, both ten-frame arrays, 100 FuzzySpears, Shockwave, Region flash/camera and four audio edges | `0x00546650/0x00648790`; existing full programs above | verified-already-at-parity | retained construction-word, lifecycle, damage and presentation regressions |
+| enemy shields | separate enemy owner and BadGuys 49 | out-of-system | different art, 1.5 scale and y-30 remain enemy-owned; no global replacement |
+| HP/shield HUD, unrelated secondary abilities, unrelated Clothes records | separate consumers | out-of-system | no shell asset or geometry ownership |
+
+No member requires a browser-platform approximation. Settings do not select a
+second player shell; the same asset and state serve both enhanced-effects
+settings and every camera zoom. Retained world reflections consume the same
+player container and therefore the same corrected shell.
+
+### Recovered contract
+
+The render guard is positive absorb at player `+0x1C4`. Installation writes
+remaining/capacity and the explosion factor, plays the up cue, and clears the
+hit pulse. Absorbed contact writes pulse 2, common update subtracts .05 with a
+zero floor, and depletion clears the absorb state and invokes the independent
+break program. These authoritative lanes already exist in the web kernel.
+The web's 40-tick pulse representation supplies the presentation pulse scalar.
+
+Both native player draw tails select Clothes 2 with additive blend, position
+`(player.x, player.y-35)`, and **white RGB**. Alpha is
+`0.25 + 0.5 * (max(pulse,1)-1)`: idle .25, fresh hit .75, returning to .25 while
+late-pulse scale wobble still decays. Scale is
+`2.1500000953674316 + 0.10000000149011612 * sin(tick*20*pi/180) * min(pulse,1)`.
+The base double at `0x00794118` and amplitude double at `0x007849E8` encode
+float32 values 2.15 and .1. Offset 35 comes from `0x00785BB8`; alpha constants
+are `0x007DE820` (1), `0x007DE808` (.5), `0x007DE8F0` (.25). The submitted
+scale is stored as float32. Resting logical diameter is approximately 174.15
+world units, versus the incorrect 121.5; camera scaling applies afterward.
+
+`0x0054BA80` gates its shell on `0x00819E5D == 0`; material passes suppress that
+inner draw and `0x005468C0` emits the shell once afterward. A body tint must not
+become the shell tint. Explosive Shield's one expanding ring uses this same
+Clothes-2 image, while its other independently owned children retain their
+existing exact assets and lifetimes.
+
+### Implementation and validation contract
+
+Keep asset/offset/base-scale data together with the native shield plan and use
+that descriptor in `PlayerWorldView`. Bind alpha to the Sprite alpha field,
+retain white tint, and replace the Explosive Shield ring's incorrect DeadHawg
+selection. Reuse the existing exact Clothes crop and registration helper.
+Extend actual renderer diagnostics with shield alpha so the Mac browser gate
+cannot repeat the former visibility-only false positive. Cover absent/idle,
+bright and late pulse, material-independent tint, break/reset, and all three
+Mindblast sibling rings. Run focused tests, `./scripts/validate.sh`, and built
+Mac Chrome acceptance for College and Boneyard, including a shield hit/break
+journey and page/console/failed-response capture.
+
+
+### Mac implementation receipt
+
+- Isolated Website branch `codex/magic-shield-parity-20260904-root`, based on
+  fetched `origin/main` `3fa437374ffaae2849189c6a11404183dd5c5080`.
+  Local worktree:
+  `/home/user/.codex-worktrees/solomon-website-magic-shield-parity-20260904-root`.
+  Mac candidate:
+  `/Users/jarrett/codex-acceptance/magic-shield-parity-20260904-root/Website`.
+  The shared primary checkout and all Mod Loader files were left untouched.
+- The new regression first failed on Mac against the old implementation:
+  actual scale `1.5`, tint `0x40FFFF`, and no alpha versus expected float32
+  `2.15`, white tint, and `.25` alpha. After correction all **135** focused
+  secondary presentation, asset, and authoritative ability tests passed.
+- `/opt/homebrew/bin/bash ./scripts/validate.sh` passed **19 backend checks**
+  and **2,646 frontend/desktop tests**, backend formatting, frontend
+  lint/boundary/generated checks, both production builds, bundle budget and
+  media policy. Gate log SHA-256:
+  `de95b87c9d8d4ea8d9d5813475b9beba720e62b59882841ad6d36ba46a9dfbdc`.
+  The subsequent smoke-driver corrections changed no production/runtime code;
+  the final driver was checked again with canonical `validate.sh lint` and
+  executed against that same production build.
+- Built Mac Chrome, WebGL2, 1600x900: Boneyard cast through the actual belt and
+  right mouse input, with `SDR_SECONDARY_ABILITY_ID=54`,
+  `SDR_SECONDARY_ABILITY_SCENE=boneyard`, `SDR_SECONDARY_ABILITY_PRODUCTION=1`
+  and `SDR_SECONDARY_ABILITY_NATIVE_VIEWPORT=1`. The single-shield run now uses
+  a fixed 16-byte zero map seed. Resting Sprite scale was
+  `2.1500000953674316` and Sprite alpha `.25`. The hit changed absorb `25 ->
+  24` without health damage; 29 sampled frames observed alpha `.625 -> .25`
+  and scale `2.052485227584839..2.2489776611328125`. Depletion removed the
+  shell, emitted 20 break children, and played hit/pop audio. The upgraded
+  break presented the explosion's 200-plus primitives and explosion audio.
+  Boneyard receipt SHA-256:
+  `5ade9ba5ce7ef9d48269ce787ad6e7e242de9db23f32693e39b575228fe4f59d`.
+- College correctly rejected the cast with unchanged mana/cast sequence. A
+  separately labeled authoritative shield fixture then exercised the College
+  renderer without bypassing its input policy: scale `2.1500000953674316`,
+  alpha `.25`, 46 sampled hit frames, alpha `.625 -> .25`, scale
+  `2.052408456802368..2.2492547035217285`, 20 break children and an upgraded
+  explosion. This is renderer/lifecycle fixture evidence, not a claim that
+  ordinary College casting is enabled. Hub receipt SHA-256:
+  `92a6116c21979c7e3db5073b08862908e9dba2c8805d57e211b653531f234cfb`.
+- Both successful browser receipts have empty page-error, console-error and
+  failed-response arrays. The resting screenshots were visually inspected
+  against the supplied reference: broad translucent blue shell, visible
+  ground through the shell, and unchanged body/weapon presentation. Different
+  source-capture settings prevent a claim of matched-scene pixel identity.
+- The driver now observes the brief cast flash from frames recorded during
+  the cast instead of waiting for another flash after its screenshot. The
+  burst check uses actual rendered kind and primitive count: explosion actors
+  intentionally are not in the renderer's detailed diagnostic-kind set.
+  Exact Clothes-2 ring selection is independently covered by the native
+  instruction evidence and presentation/asset tests.
+- One randomized Boneyard attempt aborted in the pre-existing enemy-placement
+  path (`resolveNativeBoneyardSpawnPosition`, no dark collision-safe placement,
+  radius `17.443894807249308`). This is a nearby generated-map/spawn finding,
+  outside the shield painter change. The final fixed-seed run exercised the
+  complete shield journey successfully; this pass makes no random-map spawn
+  closure claim and changes no spawning code.
+- No material shield-rendering unknown or browser-platform exception remains.
+  The initial implementation phase ended without a commit, push, deployment,
+  or production restart. Its focused worktrees were retained until the user
+  authorized publication to main in the follow-up. Task-owned
+  scratch Ghidra output, copied screenshots, and browser logs are disposable
+  once their conclusions and hashes above have been recorded.

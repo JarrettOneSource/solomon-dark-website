@@ -35,6 +35,7 @@ import {
 import { nativeSecondarySpriteKey, nativeSecondarySpriteRecord } from './native-secondary-assets.ts'
 import {
   nativePlayerMagicShieldPlan,
+  NATIVE_PLAYER_MAGIC_SHIELD,
   nativePlayerMaterialTint,
 } from './native-secondary-presentation.ts'
 import type { ModPresentationTextures, ModWearableTextureFrames } from './mod-presentation-assets.ts'
@@ -179,13 +180,14 @@ export class PlayerWorldView {
       this.hitHead,
       this.hitHeadSecondary,
     )
-    const shieldRecord = nativeSecondarySpriteRecord('BadGuys', 49)
-    this.magicShield = new Sprite(textures.secondary[nativeSecondarySpriteKey('BadGuys', 49)])
+    const shield = NATIVE_PLAYER_MAGIC_SHIELD
+    const shieldRecord = nativeSecondarySpriteRecord(shield.atlas, shield.entry)
+    this.magicShield = new Sprite(textures.secondary[nativeSecondarySpriteKey(shield.atlas, shield.entry)])
     this.magicShield.anchor.set(
       shieldRecord.anchorX / shieldRecord.width,
       shieldRecord.anchorY / shieldRecord.height,
     )
-    this.magicShield.position.set(0, -30)
+    this.magicShield.position.set(0, shield.offsetY)
     this.magicShield.zIndex = 8
     this.magicShield.blendMode = 'add'
     this.magicShield.eventMode = 'none'
@@ -628,6 +630,10 @@ export class PlayerWorldView {
     return this.unselectedRobeAttachment.visible
   }
 
+  get magicShieldAlpha(): number {
+    return this.magicShield.alpha
+  }
+
   get magicShieldScale(): number {
     return this.magicShield.scale.x
   }
@@ -672,6 +678,7 @@ export class PlayerWorldView {
     this.secondaryState = state
     const plan = nativePlayerMagicShieldPlan(state, tick)
     this.magicShield.visible = plan.visible
+    this.magicShield.alpha = plan.alpha
     this.magicShield.tint = plan.tint
     this.magicShield.scale.set(plan.scale)
     this.applyMaterialTint()
