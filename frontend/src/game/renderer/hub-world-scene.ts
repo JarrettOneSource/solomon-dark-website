@@ -34,7 +34,7 @@ import {
   type HubHagathaParticle,
 } from '../hub-presentation.ts'
 import {
-  applyNativeHubPainterOrder,
+  NativeHubPainterPlanner,
   nativeHubFixedActorPainterRegistration,
   type NativeHubPainterLayer,
 } from '../hub-painter-order.ts'
@@ -46,7 +46,7 @@ import {
   hubTeacherFrameAt,
   type HubTeacherBurstPresentation,
 } from '../hub-teacher.ts'
-import { HubPlayerView, HubStudentView, actorSprite } from './hub-actors.ts'
+import { PlayerWorldView, HubStudentView, actorSprite } from './hub-actors.ts'
 import {
   HUB_COURTYARD_OBSTACLES,
   HUB_WORLD_DEPTH,
@@ -112,7 +112,7 @@ export class HubWorldScene {
   private readonly potion: HubPotionTraderView
   private readonly skorcha: HubSkorchaView
   private readonly teacher: HubTeacherView
-  private readonly players = new Map<string, HubPlayerView>()
+  private readonly players = new Map<string, PlayerWorldView>()
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly primarySpells: PrimarySpellWorldView
   private readonly levelUp: NativeLevelUpWorldView
@@ -131,6 +131,7 @@ export class HubWorldScene {
   private markerEpochSeed = 0
   private markerEpochStartedAtTick = 0
   private lastLocalRegion: string | null = null
+  private readonly painterPlanner = new NativeHubPainterPlanner()
   private lastPainterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[] = []
 
   constructor(
@@ -314,7 +315,7 @@ export class HubWorldScene {
     )
   }
 
-  player(playerId: string): HubPlayerView | undefined {
+  player(playerId: string): PlayerWorldView | undefined {
     return this.players.get(playerId)
   }
 
@@ -445,6 +446,7 @@ export class HubWorldScene {
   }
 
   destroy(): void {
+    this.painterPlanner.clear()
     this.world.removeChild(this.walkToTalk.container)
     this.walkToTalk.destroy()
     this.world.removeChild(this.levelUp.container)
@@ -681,7 +683,7 @@ export class HubWorldScene {
         worldY: layer.worldY,
       })
     }
-    this.lastPainterOrder = applyNativeHubPainterOrder(layers, referenceY)
+    this.lastPainterOrder = this.painterPlanner.apply(layers, referenceY)
     this.statueAura.zIndex = this.statueBody.zIndex - 0.25
     for (const [interactionId, target] of [
       ['hagatha', this.hagatha.container],
@@ -819,7 +821,7 @@ export class HubWorldScene {
         view = undefined
       }
       if (!view) {
-        view = new HubPlayerView(player.config.element, this.textures, this.modTextures)
+        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures)
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
         this.world.addChild(view.container)

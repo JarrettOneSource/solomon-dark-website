@@ -1,5 +1,95 @@
 # 2026-08-29 — Complete Region world-painter layering audit
 
+## 2026-09-04 — retain the Hub Region planner
+
+At Website `3c5e76d6`, the Courtyard and all private College rooms called
+`buildNativeRegionPainterOrder` every display frame. That immutable convenience
+entry constructed a planner, gathered arrays and maps, and froze every output
+row. The Boneyard already owned a reusable `NativeRegionPainterPlanner` with
+the same native queue contract. A Mac M2 Chrome profile at 1600x900, 128
+Students, and fourfold CPU throttling attributed 436 ms of a ten-second sample
+to the old planner and 410 ms to the Hub adapter. These are browser adapter
+costs; the native queue evidence below remains authoritative.
+
+The implementation boundary is Region queue planning and its Hub adapter.
+`region-painter-order.ts` owns the single queue algorithm and the immutable
+one-shot entry used by editor/contract consumers. `hub-painter-order.ts` owns
+one reusable planner and target map per scene. The Courtyard and private-room
+scene classes only create, call, and clear that owner. Their actor construction,
+updates, painter membership, and rendering stay in the existing scene owners.
+
+| Member | Disposition | Contract |
+| --- | --- | --- |
+| Courtyard fixed actors, Students, players, teacher releases | `exact-ported` | Same registrations, row rounding, visibility, and target depth assignment. |
+| Every private College room and its dynamic actors | `exact-ported` | Independent scene planner; region changes replace its input population. |
+| Primary/secondary spells, nested insertion roots, invisible emitters | `exact-ported` | Preserve actor/scenery/transient lane order, same-row FIFO, future-row insertions, and duplicate/missing-target errors. |
+| Boneyard retained planning and static bands | `verified-already-at-parity` | Continue through the existing canonical retained queue. |
+| Editor and immutable Region/Boneyard helper results | `exact-ported` | Freeze a one-shot canonical planner result; later builds cannot mutate it. |
+| Scene clear, reuse, and destruction | `exact-ported` | Clear the planner and target map; no cross-scene state or growing cache. |
+| Actor simulation, assets, sound, and native membership | `out-of-system` | No behavior or presentation-content change. |
+
+Remove the superseded `NativeRegionPainterOrderPlanner` and update its tests
+to the canonical planner. Gather initial row keys and sort once before flush;
+insert future rows in order only when render-time insertions require it.
+Validate each entry once when it enters the queue. Validation must cover
+ordering, hidden/nested entries, invalid identities/coordinates, clear/reuse,
+scene independence, and immutable results, followed by Mac full validation
+and production-bundle Chrome before/after measurements.
+
+Teardown drops the private slot pool after clearing the live arrays; resetting
+fields on the discarded slots is redundant. A row is inserted into the sorted
+pending list only after the row map establishes that it is new, so the binary
+insertion needs no second duplicate check.
+
+A tested removal of provisional actor-depth writes was rejected. Although
+Pixi's `sortMixin.depthOfChildModified` invalidates the render group's
+structure on those writes, dense moving-crowd Chrome measurements got slower
+when they were removed (about 191–202 FPS versus a restored 226 FPS sample
+under CPU throttling). That experiment does not justify changing Pixi's
+invalidation behavior. The final candidate retains the writes and overlay
+order. The redundant `HubPlayerView` alias is removed; its existing
+`PlayerWorldView` name serves all three scene consumers.
+
+### Validation receipt
+
+The focused patch on `132774b6992fc766c255e319cdbbdcddeef8135b` passed the full
+Mac `./scripts/validate.sh` gate. The final browser journey passed Storeroom,
+Mortuary, Office, and Library entry/return, all eight Courtyard obstacle/Student
+crossings, player sort biases, Useful Thyngs child layering, and Teacher
+release ordering. Page/console errors, failed responses, and request failures
+were empty. Screenshots of the Storeroom and Courtyard crossing were inspected.
+
+The isolated Node benchmark used 60 moving-row inputs, 6,000 measured frames,
+and before/candidate/restored calls to the actual implementations. Every
+frame's placement result matched before timing. At 128 roots, the adapter
+fell from `48.44/48.14 us` before/restored to `39.80 us` per frame (17.3% below
+restored). At 512 roots it fell from `203.55/196.57 us` to `169.23 us` (13.9%).
+This measures planner CPU cost, not whole-frame rendering throughput.
+
+Final production-bundle Chrome on hardware Apple M2/Metal, 1600x900, 128
+Students, no CPU throttling, and browser vsync disabled measured 386.74 FPS,
+3.3 ms p99 frame intervals, and 20.00 Hz snapshots. All 128 Students remained
+present; no page/console errors or failed responses occurred. Broader FPS
+comparisons varied enough that a general client FPS gain is not established.
+
+Desloppification removed the duplicate planner, its root-slot wrappers and
+unused row bookkeeping, redundant validation/reset work, duplicate collision
+selection type, and `HubPlayerView` alias. No dependency was added. The three
+substantively changed production modules are 93, 262, and 350 lines; their
+cyclomatic complexity passes an Oxlint maximum of 21. The existing Courtyard
+scene remains 1,294 lines; this patch changes only planner ownership and the
+player-view type references there, not its separate actor responsibilities.
+
+Scoped Node coverage is 100% lines, branches, and functions for the Hub
+adapter, Region planner, and collision adapter. Admission regressions cover
+invalid coordinates/registrations, duplicate ids, fixed-actor reservation
+order, failed-build recovery, and reads after clear. Statement coverage,
+cognitive complexity,
+Halstead difficulty, CRAP, mutation survival, and dedicated dead-code/duplicate
+analysis have no configured analyzer here and remain unmeasured. Source and
+consumer review found no obsolete production references or explicit
+`any`/`unknown` types in the changed planner/collision scope.
+
 > **2026-08-31 advanced-effect birth-edge reopening.** The actor-manager census
 > below did not follow pure-primary Fire/Ether contacts that create their Burn
 > modifier parent after the common secondary-step enrollment barrier. That

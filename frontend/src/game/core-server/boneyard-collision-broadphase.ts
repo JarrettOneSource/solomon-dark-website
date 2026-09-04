@@ -19,12 +19,6 @@ export interface CollisionBroadphaseSelection {
   segmentIndices: readonly number[]
 }
 
-interface MutableCollisionBroadphaseSelection {
-  circleIndices: readonly number[]
-  polygonIndices: readonly number[]
-  segmentIndices: readonly number[]
-}
-
 interface PrimitiveCell {
   readonly indices: number[]
 }
@@ -42,11 +36,17 @@ export class BoneyardCollisionBroadphase {
   private readonly circles: PrimitiveCellGrid
   private readonly polygons: PrimitiveCellGrid
   private readonly segments: PrimitiveCellGrid
-  private readonly selection: MutableCollisionBroadphaseSelection = {
+  private readonly selection: CollisionBroadphaseSelection = {
     circleIndices: EMPTY_INDICES,
     polygonIndices: EMPTY_INDICES,
     segmentIndices: EMPTY_INDICES,
   }
+
+  private hasSelection = false
+  private minimumCellX = 0
+  private minimumCellY = 0
+  private maximumCellX = 0
+  private maximumCellY = 0
 
   constructor(world: BoneyardCollisionWorld) {
     this.circles = new PrimitiveCellGrid(world.circles.map(circleBounds))
@@ -55,10 +55,12 @@ export class BoneyardCollisionBroadphase {
   }
 
   select(center: Readonly<BoneyardPoint>, radius: number): CollisionBroadphaseSelection {
-    this.selection.circleIndices = this.circles.select(center, radius)
-    this.selection.polygonIndices = this.polygons.select(center, radius)
-    this.selection.segmentIndices = this.segments.select(center, radius)
-    return this.selection
+    return this.selectBounds(
+      center.x - radius,
+      center.y - radius,
+      center.x + radius,
+      center.y + radius,
+    )
   }
 
   selectBounds(
@@ -67,24 +69,31 @@ export class BoneyardCollisionBroadphase {
     maximumX: number,
     maximumY: number,
   ): CollisionBroadphaseSelection {
-    this.selection.circleIndices = this.circles.selectBounds(
-      minimumX,
-      minimumY,
-      maximumX,
-      maximumY,
+    const minimumCellX = cellCoordinate(minimumX)
+    const minimumCellY = cellCoordinate(minimumY)
+    const maximumCellX = cellCoordinate(maximumX)
+    const maximumCellY = cellCoordinate(maximumY)
+    if (
+      this.hasSelection
+      && minimumCellX === this.minimumCellX
+      && minimumCellY === this.minimumCellY
+      && maximumCellX === this.maximumCellX
+      && maximumCellY === this.maximumCellY
+    ) return this.selection
+    this.selection.circleIndices = this.circles.selectCells(
+      minimumCellX, minimumCellY, maximumCellX, maximumCellY,
     )
-    this.selection.polygonIndices = this.polygons.selectBounds(
-      minimumX,
-      minimumY,
-      maximumX,
-      maximumY,
+    this.selection.polygonIndices = this.polygons.selectCells(
+      minimumCellX, minimumCellY, maximumCellX, maximumCellY,
     )
-    this.selection.segmentIndices = this.segments.selectBounds(
-      minimumX,
-      minimumY,
-      maximumX,
-      maximumY,
+    this.selection.segmentIndices = this.segments.selectCells(
+      minimumCellX, minimumCellY, maximumCellX, maximumCellY,
     )
+    this.minimumCellX = minimumCellX
+    this.minimumCellY = minimumCellY
+    this.maximumCellX = maximumCellX
+    this.maximumCellY = maximumCellY
+    this.hasSelection = true
     return this.selection
   }
 }
@@ -101,30 +110,7 @@ class PrimitiveCellGrid {
     for (const [index, primitive] of bounds.entries()) this.insert(index, primitive)
   }
 
-  select(center: Readonly<BoneyardPoint>, radius: number): readonly number[] {
-    return this.selectCells(
-      cellCoordinate(center.x - radius),
-      cellCoordinate(center.y - radius),
-      cellCoordinate(center.x + radius),
-      cellCoordinate(center.y + radius),
-    )
-  }
-
-  selectBounds(
-    minimumX: number,
-    minimumY: number,
-    maximumX: number,
-    maximumY: number,
-  ): readonly number[] {
-    return this.selectCells(
-      cellCoordinate(minimumX),
-      cellCoordinate(minimumY),
-      cellCoordinate(maximumX),
-      cellCoordinate(maximumY),
-    )
-  }
-
-  private selectCells(
+  selectCells(
     minimumCellX: number,
     minimumCellY: number,
     maximumCellX: number,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
+import { BoneyardCollisionBroadphase } from './boneyard-collision-broadphase.ts'
 import {
   boneyardActiveBounds,
   createBoneyardArenaTransition,
@@ -700,6 +701,83 @@ test('static broadphase preserves negative-cell and overlapping first-contact or
       resolveBoneyardMovement(start, requested, bounds, allPairs, radius),
     )
   }
+})
+
+test('static candidate reuse follows every cell bound across radius and bounds queries', () => {
+  const points = [
+    { x: -64, y: -64 }, { x: 64, y: -64 },
+    { x: -64, y: 64 }, { x: 64, y: 64 }, { x: 192, y: 192 },
+  ]
+  const world = {
+    circles: points.map((center) => ({ center, radius: 0 })),
+    polygons: points.map((point) => ({ points: [
+      point, { x: point.x + 1, y: point.y }, { x: point.x, y: point.y + 1 },
+    ] })),
+    segments: points.map((point) => ({ start: point, end: point, radius: 0 })),
+  }
+  const index = new BoneyardCollisionBroadphase(world)
+  for (const [bounds, expected] of [
+    [[-127, -127, 127, 127], [0, 1, 2, 3]],
+    [[-126, -126, 126, 126], [0, 1, 2, 3]],
+    [[0, -126, 126, 126], [1, 3]],
+    [[0, 0, 126, 126], [3]],
+    [[0, 0, 255, 126], [3]],
+    [[0, 0, 126, 126], [3]],
+    [[0, 0, 126, 255], [3]],
+    [[0, 0, 255, 255], [3, 4]],
+    [[256, 256, 383, 383], []],
+    [[-127, -127, 127, 127], [0, 1, 2, 3]],
+  ] as const) {
+    for (let repeat = 0; repeat < 2; repeat += 1) {
+      assert.deepEqual(index.selectBounds(...bounds), {
+        circleIndices: [...expected], polygonIndices: [...expected], segmentIndices: [...expected],
+      })
+    }
+  }
+  assert.deepEqual(index.select({ x: 0, y: 0 }, 100), {
+    circleIndices: [0, 1, 2, 3], polygonIndices: [0, 1, 2, 3], segmentIndices: [0, 1, 2, 3],
+  })
+  const replacement = new BoneyardCollisionBroadphase({ circles: [], polygons: [], segments: [] })
+  assert.deepEqual(replacement.select({ x: 0, y: 0 }, 100), {
+    circleIndices: [], polygonIndices: [], segmentIndices: [],
+  })
+})
+
+test('static candidate reuse retains oversized primitives and source order', () => {
+  const index = new BoneyardCollisionBroadphase({
+    circles: [
+      { center: { x: 64, y: 64 }, radius: 0 },
+      { center: { x: 0, y: 0 }, radius: 1_000_000 },
+      { center: { x: 128, y: 128 }, radius: 8 },
+    ],
+    polygons: [],
+    segments: [],
+  })
+  for (const [bounds, expected] of [
+    [[0, 0, 255, 255], [0, 1, 2]],
+    [[0, 0, 255, 255], [0, 1, 2]],
+    [[-500, -500, -400, -400], [1]],
+    [[-500, -500, -400, -400], [1]],
+    [[0, 0, 127, 127], [0, 1, 2]],
+    [[0, 0, 255, 255], [0, 1, 2]],
+  ] as const) {
+    assert.deepEqual(index.selectBounds(...bounds).circleIndices, [...expected])
+  }
+})
+
+test('long-lived static grids retain candidates after deduplication counter rollover', () => {
+  const index = new BoneyardCollisionBroadphase({
+    circles: [{ center: { x: 0, y: 0 }, radius: 20 }],
+    polygons: [],
+    segments: [],
+  })
+  assert.deepEqual(index.selectBounds(-127, -127, 127, 127).circleIndices, [0])
+  // Reach the long-running server boundary without performing 2^32 queries.
+  Object.assign(Reflect.get(index, 'circles'), { epoch: 0xffff_ffff })
+  assert.deepEqual(index.selectBounds(-255, -127, 127, 127).circleIndices, [0])
+  assert.deepEqual(index.selectBounds(-255, -127, 127, 127).circleIndices, [0])
+  assert.deepEqual(index.selectBounds(128, 128, 255, 255).circleIndices, [])
+  assert.deepEqual(index.selectBounds(-127, -127, 127, 127).circleIndices, [0])
 })
 
 function makeScene(): BoneyardScene {

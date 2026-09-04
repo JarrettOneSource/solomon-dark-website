@@ -7,7 +7,6 @@ import {
 } from './boneyard-painter-order.ts'
 import {
   buildNativeRegionPainterOrder,
-  NativeRegionPainterOrderPlanner,
   NativeRegionPainterPlanner,
   nativeRegionPainterRow,
 } from './region-painter-order.ts'
@@ -15,6 +14,108 @@ import {
   buildNativeZAnimSplitBands,
   nativeZAnimSplitInsertions,
 } from './native-zanim-split.ts'
+import {
+  NativeHubPainterPlanner,
+  nativeHubFixedActorPainterRegistration,
+  reserveNativeHubFixedActorPainters,
+} from './hub-painter-order.ts'
+import { createNativeWorldManagerOrder } from './core-kernels/native-world-manager-order.ts'
+
+test('Hub scene planners preserve hidden roots, nested insertion order, and scene isolation', () => {
+  const courtyard = new NativeHubPainterPlanner()
+  const privateRoom = new NativeHubPainterPlanner()
+  const actor = { zIndex: 0 }
+  const hidden = { zIndex: -1 }
+  const future = { zIndex: 0 }
+  const nested = { zIndex: 0 }
+  const persistent = { zIndex: 0 }
+  const privateActor = { zIndex: 0 }
+  const result = courtyard.apply([
+    { ...regionEntry('persistent', 'scenery', 0, 140), target: persistent },
+    {
+      ...regionEntry('hidden', 'actor', 0, 100),
+      target: hidden,
+      visible: false,
+      insertionTargets: { future, nested },
+      insertions: [{
+        id: 'future', sortBias: 0, visible: true, worldY: 120,
+        insertions: [{ id: 'nested', sortBias: 0, visible: true, worldY: 140 }],
+      }],
+    },
+    { ...regionEntry('actor', 'actor', 1, 140), target: actor },
+  ], 100)
+  assert.deepEqual(result, [
+    { id: 'future', row: 10, zIndex: 1 },
+    { id: 'actor', row: 20, zIndex: 2 },
+    { id: 'persistent', row: 20, zIndex: 3 },
+    { id: 'nested', row: 20, zIndex: 4 },
+  ])
+  assert.deepEqual([hidden.zIndex, future.zIndex, actor.zIndex, persistent.zIndex, nested.zIndex],
+    [-1, 1001, 1002, 1003, 1004])
+  const privateResult = privateRoom.apply([
+    { ...regionEntry('private', 'actor', 0, -20), target: privateActor },
+  ], 0, 50)
+  assert.equal(privateActor.zIndex, 51)
+  assert.equal(result.length, 4)
+  courtyard.clear()
+  assert.deepEqual(result, [])
+  assert.deepEqual(privateResult, [{ id: 'private', row: -10, zIndex: 1 }])
+  courtyard.apply([{ ...regionEntry('actor', 'actor', 0, 0), target: actor }], 0)
+  assert.equal(actor.zIndex, 1001)
+  assert.equal(nested.zIndex, 1004)
+  privateRoom.clear()
+})
+
+test('Hub planner rejects duplicate and missing insertion targets and can recover', () => {
+  const planner = new NativeHubPainterPlanner()
+  const root = { ...regionEntry('root', 'actor', 0, 0), target: { zIndex: 0 } }
+  assert.throws(() => planner.apply([{
+    ...root, insertionTargets: { root: root.target },
+  }], 0), /duplicate native Hub painter target root/)
+  assert.throws(() => planner.apply([{
+    ...root, insertions: [{ id: 'missing', sortBias: 0, visible: true, worldY: 2 }],
+  }], 0), /native Hub painter missing lost its target/)
+  assert.deepEqual(planner.apply([root], 0), [{ id: 'root', row: 0, zIndex: 1 }])
+  assert.deepEqual(planner.apply([], 0), [])
+})
+
+test('painter admission rejects invalid records and releases failed-build state', () => {
+  const planner = new NativeRegionPainterPlanner()
+  const valid = regionEntry('valid', 'actor', 0, 0)
+  const invalid = [
+    { ...valid, id: '' },
+    { ...valid, worldY: Number.NaN },
+    { ...valid, sortBias: Number.POSITIVE_INFINITY },
+    { ...valid, registration: { managerLane: 'actor' as const, registrationOrdinal: -1 } },
+    { ...valid, registration: { managerLane: 'actor' as const, registrationOrdinal: 0.5 } },
+    { ...valid, registration: { managerLane: 'invalid' as 'actor', registrationOrdinal: 0 } },
+  ]
+  for (const entry of invalid) {
+    assert.throws(() => planner.build([entry], 0))
+    assert.deepEqual(planner.build([valid], 0).orderedLayers, [
+      { id: 'valid', row: 0, zIndex: 1 },
+    ])
+  }
+  assert.throws(() => planner.build([valid], Number.NaN), /reference Y must be finite/)
+  assert.throws(() => planner.build([valid, {
+    ...valid, registration: { managerLane: 'scenery', registrationOrdinal: 0 },
+  }], 0), /duplicate native Region painter id valid/)
+  planner.clear()
+  assert.throws(() => planner.rootEntryAt(0), /root placement 0 is unavailable/)
+  assert.throws(() => planner.isInsertionAt(0), /placement 0 is unavailable/)
+  assert.deepEqual(planner.build([{
+    id: 'minimal', worldY: 2, sortBias: 0,
+    registration: { managerLane: 'actor', registrationOrdinal: 0 },
+  }], 0).orderedLayers, [{ id: 'minimal', row: 1, zIndex: 1 }])
+})
+
+test('fixed Hub painters require a known id and the first actor registrations', () => {
+  assert.throws(() => nativeHubFixedActorPainterRegistration('invalid' as 'teacher'),
+    /unknown native Hub painter invalid/)
+  const order = createNativeWorldManagerOrder()
+  order.register('actor')
+  assert.throws(() => reserveNativeHubFixedActorPainters(order), /reservation is not first/)
+})
 
 test('shared Region rows retain native truncation on both sides of the reference player', () => {
   assert.equal(nativeRegionPainterRow(100.9, 0, 150.9), -25)
@@ -136,14 +237,11 @@ test('Region planner rejects duplicate manager slots and backwards proxy inserti
 })
 
 test('frame-local Region planner reuses scratch without retaining failed state', () => {
-  const planner = new NativeRegionPainterOrderPlanner()
-  assert.throws(() => planner.build({
-    referenceY: 0,
-    entries: [
-      regionEntry('first', 'actor', 0, 0),
-      regionEntry('duplicate', 'actor', 0, 1),
-    ],
-  }), /duplicate native actor registration ordinal 0/)
+  const planner = new NativeRegionPainterPlanner()
+  assert.throws(() => planner.build([
+    regionEntry('first', 'actor', 0, 0),
+    regionEntry('duplicate', 'actor', 0, 1),
+  ], 0), /duplicate native actor registration ordinal 0/)
 
   const entries = [
     {
@@ -152,17 +250,14 @@ test('frame-local Region planner reuses scratch without retaining failed state',
     },
     regionEntry('scenery', 'scenery', 0, 120),
   ]
-  const first = planner.build({ referenceY: 100, entries })
+  const first = planner.build(entries, 100)
   assert.deepEqual(structuredClone(first), buildNativeRegionPainterOrder({
     referenceY: 100,
     entries,
   }))
   const orderedSlots = first.orderedLayers
 
-  const second = planner.build({
-    referenceY: 110,
-    entries: [regionEntry('replacement', 'transient', 0, 90)],
-  })
+  const second = planner.build([regionEntry('replacement', 'transient', 0, 90)], 110)
   assert.equal(second, first)
   assert.equal(second.orderedLayers, orderedSlots)
   assert.deepEqual(second.orderedLayers, [

@@ -792,8 +792,6 @@ export class PlayerWorldView {
   }
 }
 
-export { PlayerWorldView as HubPlayerView }
-
 export class HubStudentView {
   readonly container = new Container({ label: 'student' })
   private readonly shadow: Sprite

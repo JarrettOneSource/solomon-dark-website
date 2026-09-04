@@ -3,7 +3,7 @@ import type {
   NativeWorldManagerRegistration,
 } from './core-kernels/native-world-manager-order.ts'
 import {
-  buildNativeRegionPainterOrder,
+  NativeRegionPainterPlanner,
   type NativeRegionPainterInsertion,
   type NativeRegionPainterRegistration,
 } from './region-painter-order.ts'
@@ -58,33 +58,36 @@ export interface NativeHubPainterLayer {
   readonly worldY: number
 }
 
-export function applyNativeHubPainterOrder(
-  layers: readonly NativeHubPainterLayer[],
-  referenceY: number,
-  depthBase = 1_000,
-): readonly Readonly<{ id: string; row: number; zIndex: number }>[] {
-  const targets = new Map(layers.map((layer) => [layer.id, layer.target]))
-  for (const layer of layers) {
-    for (const [id, target] of Object.entries(layer.insertionTargets ?? {})) {
-      if (targets.has(id)) throw new Error(`duplicate native Hub painter target ${id}`)
-      targets.set(id, target)
+/** Returned rows belong to this scene and remain valid until its next apply/clear. */
+export class NativeHubPainterPlanner {
+  private readonly region = new NativeRegionPainterPlanner()
+  private readonly targets = new Map<string, { zIndex: number }>()
+
+  apply(
+    layers: readonly NativeHubPainterLayer[],
+    referenceY: number,
+    depthBase = 1_000,
+  ): readonly Readonly<{ id: string; row: number; zIndex: number }>[] {
+    this.targets.clear()
+    for (const layer of layers) this.targets.set(layer.id, layer.target)
+    for (const layer of layers) {
+      if (!layer.insertionTargets) continue
+      for (const [id, target] of Object.entries(layer.insertionTargets)) {
+        if (this.targets.has(id)) throw new Error(`duplicate native Hub painter target ${id}`)
+        this.targets.set(id, target)
+      }
     }
+    const order = this.region.build(layers, referenceY)
+    for (const positioned of order.orderedLayers) {
+      const target = this.targets.get(positioned.id)
+      if (!target) throw new Error(`native Hub painter ${positioned.id} lost its target`)
+      target.zIndex = depthBase + positioned.zIndex
+    }
+    return order.orderedLayers
   }
-  const order = buildNativeRegionPainterOrder({
-    entries: layers.map((layer) => ({
-      id: layer.id,
-      insertions: layer.insertions,
-      registration: layer.registration,
-      sortBias: layer.sortBias,
-      visible: layer.visible ?? true,
-      worldY: layer.worldY,
-    })),
-    referenceY,
-  })
-  for (const positioned of order.orderedLayers) {
-    const target = targets.get(positioned.id)
-    if (!target) throw new Error(`native Hub painter ${positioned.id} lost its target`)
-    target.zIndex = depthBase + positioned.zIndex
+
+  clear(): void {
+    this.region.clear()
+    this.targets.clear()
   }
-  return order.orderedLayers
 }

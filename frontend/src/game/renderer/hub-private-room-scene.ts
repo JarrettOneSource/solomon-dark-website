@@ -19,7 +19,7 @@ import {
   NATIVE_HUB_NPC_CATALOG,
   type NativeHubInteractionId,
 } from '../core-kernels/native-hub-npc.ts'
-import { HubPlayerView } from './hub-actors.ts'
+import { PlayerWorldView } from './hub-actors.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
   HUB_PRIVATE_ROOM_EFFECT_DEPTH,
@@ -31,7 +31,7 @@ import {
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import {
-  applyNativeHubPainterOrder,
+  NativeHubPainterPlanner,
   nativeHubFixedActorPainterRegistration,
   type NativeHubFixedActorPainterId,
   type NativeHubPainterLayer,
@@ -77,7 +77,7 @@ function depthTarget(setDepth: (depth: number) => void): { zIndex: number } {
 export class HubPrivateRoomScene {
   readonly world = new Container({ isRenderGroup: true, label: 'college-private-rooms' })
   private readonly rooms: Record<PrivateHubRegionId, Container>
-  private readonly players = new Map<string, HubPlayerView>()
+  private readonly players = new Map<string, PlayerWorldView>()
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly nonPlayerActors: Record<PrivateHubRegionId, Container[]> = {
     mortuary: [],
@@ -113,6 +113,7 @@ export class HubPrivateRoomScene {
   private markerEpochSeed = 0
   private markerEpochStartedAtTick = 0
   private activeRegion: PrivateHubRegionId = 'mortuary'
+  private readonly painterPlanner = new NativeHubPainterPlanner()
   private lastPainterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[] = []
 
   constructor(
@@ -225,7 +226,7 @@ export class HubPrivateRoomScene {
     )
   }
 
-  player(playerId: string): HubPlayerView | undefined {
+  player(playerId: string): PlayerWorldView | undefined {
     return this.players.get(playerId)
   }
 
@@ -278,6 +279,7 @@ export class HubPrivateRoomScene {
   }
 
   destroy(): void {
+    this.painterPlanner.clear()
     this.levelUp.container.parent?.removeChild(this.levelUp.container)
     this.levelUp.destroy()
     for (const view of Object.values(this.primarySpells)) view.destroy()
@@ -651,7 +653,7 @@ export class HubPrivateRoomScene {
         worldY: layer.worldY,
       })
     }
-    this.lastPainterOrder = applyNativeHubPainterOrder(
+    this.lastPainterOrder = this.painterPlanner.apply(
       layers,
       localPlayer?.position.y ?? 0,
     )
@@ -812,7 +814,7 @@ export class HubPrivateRoomScene {
         view = undefined
       }
       if (!view) {
-        view = new HubPlayerView(player.config.element, this.textures, this.modTextures)
+        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures)
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
         room.addChild(view.container)

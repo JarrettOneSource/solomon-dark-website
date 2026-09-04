@@ -1,5 +1,71 @@
 # 2026-08-27 — enemy target tracking, Archer volley, and NavMesh reopening
 
+## 2026-09-04 — repeated static collision candidate selection
+
+The optimization starts at Website `3c5e76d6`. A Mac M2 CPU profile of the
+existing 62,500-tick deterministic runtime replay attributed 593 ms to
+`PrimitiveCellGrid.selectCells`. The replay reached 100 live enemies and 573
+dynamic actors. Repeated placement and movement checks often select the same
+128-unit cell rectangle while their exact coordinates differ.
+
+This is a representation change to the existing static collision adapter.
+The native collision and route contracts recovered below remain the oracle;
+no new native behavior, geometry, tick cadence, or tolerance is inferred.
+
+| Member | Disposition | Preserved contract |
+| --- | --- | --- |
+| Circle, segment, polygon candidate grids | `exact-ported` | Reuse only the immediately preceding cell rectangle's ordered candidate indices; exact contact still runs for each query. |
+| Radius queries and line/bounds queries | `exact-ported` | All four cell bounds participate in reuse, including negative coordinates and cell crossings. |
+| Single-cell, empty, multi-cell, and oversized global primitives | `exact-ported` | Same candidates, duplicate removal, and source-array order. |
+| All generated Arenas, enemy clearance sizes, players, projectile collision, client prediction | `verified-already-at-parity` | Shared adapter consumers keep their precise geometry and first-contact formulas. |
+| Gate changes, scene replacement, and teardown | `verified-already-at-parity` | Each immutable collision view owns its grids; replacing geometry creates a fresh view. No query cache is shared between worlds. |
+| Dynamic actor collision and native NavMesh A* | `out-of-system` | No dynamic-body candidates or route results are cached. |
+
+The collision view quantizes the query bounds once for all three primitive
+grids and retains one result with four cell coordinates. Its indices already
+use immutable cell arrays or each grid's existing scratch array, so memory
+does not grow with the number of visited cells. A different
+rectangle replaces the cached selection. Remove the duplicate mutable
+selection interface, whose fields already match `CollisionBroadphaseSelection`.
+
+Validation: sequential query and geometry-replacement regressions, the existing
+all-pairs comparison across every generated Arena, identical full-runtime
+state hashes and population counts, Mac canonical validation, and browser
+movement acceptance. Performance conclusions require before/after measurements.
+
+### Validation receipt
+
+- Initial validation base: `132774b6992fc766c255e319cdbbdcddeef8135b`.
+  All ten changed files matched byte-for-byte on the Mac before validation.
+- Mac M2, Node `22.17.0`: `./scripts/validate.sh` passed, including 19 Python
+  tests, the configured Node suites, lint, type checks, builds, and media
+  policy. The collision all-pairs oracle still covers every generated Arena.
+- The final 62,500-tick, seed `1372610135`, Arena-0 replay preserved all 125
+  periodic hashes, wave events, population totals, and the final hashes
+  `5d41b07ca048bb71` / `79eec76cfadc6f7e:808304`. It reached 100 live enemies
+  and 573 dynamic actors. Instrumenting the actual selection entry counted
+  6,346,049 cache hits in 7,682,462 queries (82.60%, including navigation
+  preparation). No instrumentation remains in production source.
+- Isolated before/candidate/restored comparisons across the first three
+  generated Arenas, radius 25, 256 query locations, 500,000 calls, and eight
+  consecutive queries per location measured candidate costs of
+  `0.038..0.114 us/query`, versus restored baseline `0.237..0.678 us/query`:
+  approximately 5.3–6.2 times faster. Candidate and baseline checksums match.
+  Miss-only measurements and full replay wall times varied; these results
+  do not establish a uniform reduction in total server tick time.
+- Production-bundle Mac Chrome, hardware Apple M2/Metal, 1600x900: stormy
+  Boneyard idle/movement samples reached 340.54/347.30 FPS with the 400-FPS
+  presentation cap and browser vsync disabled. Movement traversed 2,573
+  presented positions; native light samples, 569 rain drops, 300 splashes,
+  static paint count, and resident visibility checks passed. Page/console
+  errors and failed responses were empty. This is desktop evidence, not a
+  physical-phone measurement or a demonstrated before/after FPS gain.
+- Scoped Node coverage for the collision adapter: 100% lines, branches,
+  and functions. A regression seeds the existing deduplication counter at
+  rollover and verifies exact candidate membership through subsequent queries.
+  Cyclomatic complexity passes the configured maximum of 21. Additional
+  unavailable quality gates are recorded with the Region planner receipt.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Skeleton Archers shoot in the wrong direction and do
