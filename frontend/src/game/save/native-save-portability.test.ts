@@ -1001,8 +1001,12 @@ test('browser archive import retains native siblings and re-export replaces its 
     path.toLowerCase() === WEB_GAME_SAVE_SUPPORT_ARCHIVE_PATH
   )) ?? []
   assert.equal(secondSupportFiles.length, 1)
-  assert.equal(secondSupportFiles[0]!.bytes.byteLength, firstSupportFiles[0]!.bytes.byteLength)
   const secondSupport = JSON.parse(new TextDecoder().decode(secondSupportFiles[0]!.bytes))
+  const firstSupport = JSON.parse(new TextDecoder().decode(firstSupportFiles[0]!.bytes))
+  assert.deepEqual(
+    secondSupport.continuation.simulation.playerEntities,
+    firstSupport.continuation.simulation.playerEntities,
+  )
   assert.equal(secondSupport.nativeSource, null)
   assert.equal(secondSupport.continuation.summary.partyRejoinToken, null)
   assert.equal('stale' in secondSupport, false)
@@ -1093,7 +1097,8 @@ test('downloaded browser archives retain found inventory, equipment, sacks, stor
     assert.equal(selection.source, 'browser')
     const restored = restoreGameSaveDocument(selection.document)
     const expected = restoreGameSaveDocument(document)
-    assert.deepEqual(restored.state, expected.state)
+    assert.deepEqual(restored.state.playerEntities, expected.state.playerEntities)
+    if (loadedBoneyard) assert.deepEqual(restored.state, expected.state)
     assert.deepEqual(restored.mods, expected.mods)
     assert.deepEqual(restored.modState, expected.modState)
   }

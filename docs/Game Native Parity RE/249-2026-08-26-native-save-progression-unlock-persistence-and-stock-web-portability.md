@@ -635,13 +635,55 @@ addressed gaps/overflow, recursive Sacks, storage, belt references, Hub/Boneyard
 JSON, invalid documents, older stock-only files, and repeated export. The
 maintained browser journey now imports the actual downloaded ZIP through each UI.
 
-Validation is pending, not passed. The isolated Mac worktree was created at
+Before initial publication, validation was pending. The isolated Mac worktree was created at
 `5a4a81cc` and Node 22.17.0/npm 10.9.2 installed its dependencies. The Mac then
 went offline: Linux and Windows Tailscale both report `Online: false`, last seen
 2026-09-04 20:50:00 UTC; repeated bounded SSH attempts time out. The focused red
 test transfer did not complete. No automated tests, builds, or browser checks
-have run for this change. Resume with the focused regression, full Mac gate,
-and both browser journeys when the Mac is available. The user subsequently
+had run for this change at that point. The user subsequently
 requested a push to main after being informed of the pending validation.
 Publication is authorized with that limitation recorded; deployment was not
-requested. The Mac acceptance worktree requires cleanup when it is reachable.
+requested. The follow-up below closes validation after the Mac returned.
+
+### Mac validation follow-up
+
+The Mac returned after publication. The first focused run at `3c5e76d6` passed
+19/21 tests. Both failures were test assumptions about Hub regeneration:
+`restoreGameSaveDocument` draws a fresh Hub seed and reconstructs world scenery,
+so repeated saves need not have identical RNG, Skorcha state, or encoded length.
+Inventory/player state must remain exact in the Hub; Boneyard continuations
+must retain their complete authoritative state. The regression assertions are
+corrected to that existing contract, without changing runtime/save behavior.
+
+The browser harness also now follows Settings -> Online and Account -> Stock /
+Browser Save, counts the eight class-root ranks that import normalizes, and
+waits for the Inventory renderer's settled reveal before capturing it. Its
+found-item fixture has completed Tutorial/College onboarding: otherwise
+`armGameSimulationCollegeIntro` correctly changes starter clothes to the
+College palette during Hub entry, which is not an inventory-transfer loss.
+
+### Completed validation receipt
+
+- Focused Mac portability tests: **21/21 passed**. The full
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` passed 19 backend/integration
+  tests, every frontend suite (including 1,835 broad runtime tests), desktop
+  tests, lint/type checks, production builds, bundle budget, and media policy.
+- Built Mac Chrome passed both actual ZIP re-import journeys: anonymous
+  Settings/IndexedDB in an active Boneyard, and Account/cloud in the Hub.
+  The checks compare backpack entries/slots, equipped gear including tints,
+  Luthacus storage, next item ID, and every belt binding before/after file
+  import and after host resume. They also verify the visible Sack and equipped
+  ring in the settled Inventory screen.
+- The exercised items included equipped Pentaclostic Ring `500001`, nested
+  seven-potion stack `500002` in Sack `500003`, stored potion stack `500004`,
+  and the ring bound to belt slot 7. The Boneyard run retained its one Wraith,
+  run identity, and checkpoint tick. The observed anonymous ZIP was 788,754
+  bytes (759,835-byte browser document); cloud ZIP was 85,490 bytes.
+- Both journeys ended with empty page-error, console-error, failed-response,
+  and request-failure arrays. Native file decoding and archive integrity also
+  passed. No runtime correction was needed after `3c5e76d6`; the follow-up
+  changes only regression/acceptance assertions and this evidence record.
+- The receipt-bearing candidate is checked again on Mac before the authorized
+  follow-up push. No production deployment is part of this work. Task-owned
+  checkouts, backend, screenshots, archives, database, and logs are removed
+  after the remote commit is verified.

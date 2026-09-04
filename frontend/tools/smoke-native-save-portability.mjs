@@ -81,7 +81,7 @@ if (sourceZipPath) {
   stockArchive = createStoredZip([{ bytes: gamestate, path: 'gamestate.sav' }])
 }
 const expectedWizard = decodeNativeGamestateWizard(gamestate)
-const expectedLearnedRows = expectedWizard.rows
+const expectedLearnedRows = 8 + expectedWizard.rows.slice(8)
   .filter(row => row.permanentRank > 0).length
 const expectedEffectiveOnlyRows = expectedWizard.learnedOrder.filter(skillId => (
   expectedWizard.rows[skillId]?.permanentRank === 0
@@ -312,6 +312,7 @@ async function waitForTitle(page) {
 async function openTitleSaveTransfer(page) {
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await page.getByRole('dialog').waitFor()
+  await page.getByRole('button', { name: 'ONLINE AND ACCOUNT', exact: true }).click()
   await page.getByRole('button', { name: 'STOCK / BROWSER SAVE', exact: true }).click()
   await page.locator('.game-settings-dialog[data-settings-page="save-transfer"]').waitFor()
 }
@@ -550,9 +551,11 @@ function prepareInventoryDocument(document) {
   const inventory = {
     ...economy,
     backpack: [...economy.backpack, { ...sack, inventorySlot: 6 }],
+    collegeIntroPending: false,
     equipment: { ...economy.equipment, rings: [ring, null, null] },
     nextItemId: 500_010,
     storage: [{ ...potion, id: 500_004, inventorySlot: 3 }],
+    tutorialPending: false,
   }
   return createGameSaveDocument({
     integrity: restored.integrity, loadedBoneyard: restored.loadedBoneyard,
@@ -589,6 +592,8 @@ async function assertInventoryResumed(page, expectedDocument) {
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]')
+    .waitFor({ timeout: 10_000 })
   await inventory.getByRole('button', { name: /Saved treasures/ }).waitFor()
   await inventory.getByRole('button', { name: /Pentaclostic Ring/ }).first().waitFor()
 }
