@@ -8,7 +8,7 @@ import type {
   PrimarySpellTransientState,
   PrimarySpellWaterTransientState,
 } from '../core-kernels/primary-spells.ts'
-import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
+import { waterFrostJetKind, waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
 import {
   NATIVE_AIR_WATER_ACTOR_KINDS,
   isNativeAirWaterActorState,
@@ -21,9 +21,48 @@ import {
   nativeWaterAuraVisualPlan,
 } from './primary-spell-air-water-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 const WORLD_KEY = 'boneyard:air-water-view'
+
+test('Frost painter queries keep the geometry and lane of the drawn update', () => {
+  for (const id of [normalWaterId(1), overWaterId(1)]) {
+    for (const underpowered of [false, true]) {
+      const view = new WaterPrimarySpellView(
+        { ...water(id), underpowered },
+        { core: Texture.EMPTY, glint: Texture.EMPTY },
+      )
+      for (const ageTicks of [0, 1, 7, 15, 30]) {
+        const state = { ...water(id), ageTicks, underpowered }
+        const plan = waterFrostJetPlan(state)
+        view.update(state)
+        const first = view.painterRoots()[0]!
+        assert.equal(first.worldY, plan.worldY)
+        assert.equal(view.worldY, plan.worldY)
+        assert.equal(first.lane, plan.kind === 'normal' ? 'world-sorted' : 'post-world-queue')
+        assert.equal(first.queueFamily, plan.kind === 'normal' ? 'zanim' : null)
+        assert.deepEqual(
+          { x: view.container.x, y: view.container.y },
+          plan.position,
+        )
+        for (const [index, pass] of ['core', 'additive-core', 'glint'].entries()) {
+          const sprite = view.container.children[index]!
+          assert.ok(sprite instanceof Sprite)
+          const draw = plan.draws.find(candidate => candidate.pass === pass)
+          assert.equal(sprite.visible, draw !== undefined)
+          if (draw) {
+            assert.equal(sprite.rotation, draw.rotation)
+            assert.equal(sprite.scale.x, draw.scale)
+          }
+        }
+        assert.deepEqual(view.painterRoots()[0], first)
+      }
+      view.destroy()
+      assert.equal(view.container.destroyed, true)
+    }
+  }
+})
 
 test('Air/Water world view routes all three primary-owned actors through stock textures', () => {
   const root = new Container()

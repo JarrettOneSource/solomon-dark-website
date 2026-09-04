@@ -1850,9 +1850,8 @@ export function stepBoneyardEnemyStore(
     throw new RangeError('enemy store ticks must advance monotonically')
   }
   if (context.paused) return stepPausedBoneyardEnemyStore(source, context)
-  const standaloneWorldManagerOrder = createNativeWorldManagerOrder(
-    standaloneEnemyWorldManagerOrderState(source),
-  )
+  const registerWorldPainter = context.registerWorldPainter
+    ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
   const work: WorkingStep = {
     actors: [],
     deathEffects: [],
@@ -1880,11 +1879,8 @@ export function stepBoneyardEnemyStore(
     pendingSpawnIntents: [],
     projectiles: [...source.projectiles],
     projectileEffects: [],
-    registerWorldPainter: context.registerWorldPainter
-      ?? standaloneWorldManagerOrder.register,
-    registerProjectileWorldPainter: context.registerProjectileWorldPainter
-      ?? context.registerWorldPainter
-      ?? standaloneWorldManagerOrder.register,
+    registerWorldPainter,
+    registerProjectileWorldPainter: context.registerProjectileWorldPainter ?? registerWorldPainter,
     retired: [],
     rewards: [],
     rngState: source.rngState,
@@ -1952,9 +1948,8 @@ function stepPausedBoneyardEnemyStore(
   source: BoneyardEnemyStore,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyStoreStepResult {
-  const standaloneWorldManagerOrder = createNativeWorldManagerOrder(
-    standaloneEnemyWorldManagerOrderState(source),
-  )
+  const registerWorldPainter = context.registerWorldPainter
+    ?? createNativeWorldManagerOrder(standaloneEnemyWorldManagerOrderState(source)).register
   const work: WorkingStep = {
     actors: [...source.actors],
     deathEffects: [...source.deathEffects],
@@ -1980,11 +1975,8 @@ function stepPausedBoneyardEnemyStore(
     playerKnockbacks: [],
     projectiles: [...source.projectiles],
     projectileEffects: [...source.projectileEffects],
-    registerWorldPainter: context.registerWorldPainter
-      ?? standaloneWorldManagerOrder.register,
-    registerProjectileWorldPainter: context.registerProjectileWorldPainter
-      ?? context.registerWorldPainter
-      ?? standaloneWorldManagerOrder.register,
+    registerWorldPainter,
+    registerProjectileWorldPainter: context.registerProjectileWorldPainter ?? registerWorldPainter,
     retired: [],
     rewards: [],
     rngState: source.rngState,

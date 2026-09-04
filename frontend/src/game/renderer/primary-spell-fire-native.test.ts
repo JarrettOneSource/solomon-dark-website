@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { Texture } from 'pixi.js'
 
 import { createNativeFirePatch } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
@@ -15,6 +16,11 @@ import type {
   PrimarySpellFireGoodImpState,
   PrimarySpellFireParticleState,
 } from '../core-kernels/primary-spells.ts'
+import {
+  FireImpactSpellView,
+  FireParticleSpellView,
+  FirePrimarySpellView,
+} from './primary-spell-fire-view.ts'
 import {
   NATIVE_FIREBALL_CORE_RECORD,
   NATIVE_FIREBALL_FRAME_FIRST,
@@ -80,6 +86,57 @@ function impact(id: number, ageTicks: number): PrimarySpellFireImpactState {
     worldKey: 'boneyard:run',
   }
 }
+
+test('Fire painter metadata follows the same plan as each rendered update', () => {
+  const shot = (age: number) => ({
+    ...fireball(age), position: { x: 400 + age, y: 300 - age },
+  })
+  const smoke = (age: number) => ({
+    ...particle(17, age), origin: { x: 100 + age, y: 200 - age },
+  })
+  const burst = (age: number) => ({
+    ...impact(17, age), origin: { x: 400 + age, y: 300 - age },
+  })
+  const textures = {
+    core: Texture.EMPTY,
+    frames: Array.from({ length: 32 }, () => Texture.EMPTY),
+    impacts: Array.from({ length: 32 }, () => Texture.EMPTY),
+    particles: Array.from({ length: 32 }, () => Texture.EMPTY),
+  }
+  for (const { view, stateAt, planAt, queueFamily } of [
+    {
+      view: new FirePrimarySpellView(fireball(0), textures),
+      stateAt: shot,
+      planAt: (age: number) => nativeFireballPlan(shot(age), 91),
+      queueFamily: 'ordinary-dynamic',
+    },
+    {
+      view: new FireParticleSpellView(particle(17, 0), textures),
+      stateAt: smoke,
+      planAt: (age: number) => nativeFireParticlePlan(smoke(age)),
+      queueFamily: 'ordinary-dynamic',
+    },
+    {
+      view: new FireImpactSpellView(impact(17, 0), textures),
+      stateAt: burst,
+      planAt: (age: number) => nativeFireImpactPlan(burst(age)),
+      queueFamily: 'zanim',
+    },
+  ]) {
+    for (const age of [0, 3, 7, 11]) {
+      view.update(stateAt(age), 91)
+      const plan = planAt(age)
+      const painter = view.painterRoots()[0]!
+      assert.equal(painter.worldY, plan.worldY)
+      assert.equal(painter.queueFamily, queueFamily)
+      assert.deepEqual(painter.regionLightPoint, plan.regionLightPoint)
+      assert.deepEqual({ x: view.container.x, y: view.container.y }, plan.position)
+      assert.deepEqual(view.painterRoots()[0], painter)
+    }
+    view.destroy()
+    assert.equal(view.container.destroyed, true)
+  }
+})
 
 test('pins Fireball frame clock, heading, transforms, and three-pass blend order', () => {
   assert.equal(nativeFireballPlan(fireball(2)).frameIndex, 0)

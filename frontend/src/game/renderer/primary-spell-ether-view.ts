@@ -180,11 +180,10 @@ export class EtherPrimaryImpactView {
   readonly containers: readonly Container[]
   readonly kind = 'ether-impact'
   private readonly sprites: Sprite[] = []
-  private state: PrimarySpellEtherImpactState
+  private plan!: ReturnType<typeof etherPrimaryImpactPlan>
   private readonly textures: EtherPrimaryTextures
 
   constructor(state: PrimarySpellEtherImpactState, textures: EtherPrimaryTextures) {
-    this.state = state
     this.textures = textures
     this.containers = [this.container]
     this.container.eventMode = 'none'
@@ -193,8 +192,8 @@ export class EtherPrimaryImpactView {
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (!('origin' in state) || state.kind !== 'ether-impact') return
-    this.state = state
     const plan = etherPrimaryImpactPlan(state)
+    this.plan = plan
     this.container.position.set(plan.position.x, plan.position.y)
     while (this.sprites.length < plan.draws.length) {
       const sprite = new Sprite()
@@ -212,7 +211,7 @@ export class EtherPrimaryImpactView {
   }
 
   painterRoots(): readonly EtherImpactPainterRoot[] {
-    const plan = etherPrimaryImpactPlan(this.state)
+    const plan = this.plan
     return [{
       container: this.container,
       lane: 'world-sorted',
@@ -239,10 +238,9 @@ export class EtherPrimaryPierceStreakView {
   readonly containers = [this.container]
   readonly kind = 'ether-pierce-streak'
   private readonly sprite: Sprite
-  private state: PrimarySpellEtherPierceStreakState
+  private plan!: ReturnType<typeof etherPrimaryPierceStreakPlan>
 
   constructor(state: PrimarySpellEtherPierceStreakState, texture: Texture) {
-    this.state = state
     this.sprite = new Sprite(texture)
     this.sprite.anchor.set(0.5)
     this.sprite.blendMode = 'add'
@@ -254,8 +252,8 @@ export class EtherPrimaryPierceStreakView {
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (state.kind !== 'ether-pierce-streak') return
-    this.state = state
     const plan = etherPrimaryPierceStreakPlan(state)
+    this.plan = plan
     this.container.position.set(plan.position.x, plan.position.y)
     this.sprite.rotation = plan.rotationDegrees * Math.PI / 180
     this.sprite.scale.set(plan.scale)
@@ -270,7 +268,7 @@ export class EtherPrimaryPierceStreakView {
       regionLightPoint: null,
       sortBias: 0,
       suffix: '',
-      worldY: etherPrimaryPierceStreakPlan(this.state).worldY,
+      worldY: this.plan.worldY,
     }]
   }
 

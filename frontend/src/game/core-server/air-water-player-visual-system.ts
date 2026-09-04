@@ -111,10 +111,9 @@ export function synchronizeAirWaterPlayerVisualActors(
 
   let nextId = source.nextId
   let rng = sourceRng
-  const standaloneOrder = createNativeWorldManagerOrder({
+  const register = registerWorldPainter ?? createNativeWorldManagerOrder({
     nextRegistrationOrdinal: { actor: nextId, transient: nextId },
-  })
-  const register = registerWorldPainter ?? standaloneOrder.register
+  }).register
   for (const owner of owners) {
     if (owner.hurricaneCharge <= 0) continue
     const existing = hurricaneByOwner.get(owner.ownerId)

@@ -5388,10 +5388,8 @@ function enrollNativeSecondaryLightOwners(
   source: NativeSecondarySimulationState,
   context: NativeSecondaryTickContext,
 ): NativeSecondarySimulationState {
-  const standaloneOrder = createNativeWorldManagerOrder(
-    nativeSecondaryWorldManagerOrderState(source),
-  )
-  const register = context.registerWorldPainter ?? standaloneOrder.register
+  const register = context.registerWorldPainter
+    ?? createNativeWorldManagerOrder(nativeSecondaryWorldManagerOrderState(source)).register
   const painterState = enrollNativeSecondaryPainterOwners(source, register)
   const nextModifierOrdinalByTarget = new Map<string, number>()
   const actors = painterState.actors.map((actor) => {

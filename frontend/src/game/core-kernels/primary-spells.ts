@@ -974,11 +974,8 @@ export function playerStaffAttachmentOffset(
 }
 
 export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpellTickResult {
-  const standaloneWorldManagerOrder = createNativeWorldManagerOrder(
-    standalonePrimaryWorldManagerOrderState(context.spells),
-  )
   const registerWorldPainter = context.registerWorldPainter
-    ?? standaloneWorldManagerOrder.register
+    ?? createNativeWorldManagerOrder(standalonePrimaryWorldManagerOrderState(context.spells)).register
   let nextId = context.spells.nextId
   let rng = context.rng
   let transients: PrimarySpellTransientState[] = []

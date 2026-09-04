@@ -23,12 +23,11 @@ export class WaterPrimarySpellView {
   readonly containers: readonly Container[]
   private readonly additiveCore: Sprite
   private readonly core: Sprite
-  private state: PrimarySpellWaterTransientState
+  private plan!: ReturnType<typeof waterFrostJetPlan>
   private readonly glint: Sprite
   readonly kind = 'water'
 
   constructor(state: PrimarySpellWaterTransientState, textures: WaterPrimarySpellTextures) {
-    this.state = state
     this.container = new Container({ label: 'water' })
     this.containers = [this.container]
     this.container.eventMode = 'none'
@@ -41,8 +40,8 @@ export class WaterPrimarySpellView {
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (!('origin' in state) || state.kind !== 'water') return
-    this.state = state
     const plan = waterFrostJetPlan(state)
+    this.plan = plan
     this.container.position.set(plan.position.x, plan.position.y)
     this.apply(this.core, plan.draws.find((draw) => draw.pass === 'core'), plan.position)
     this.apply(
@@ -54,11 +53,11 @@ export class WaterPrimarySpellView {
   }
 
   get worldY(): number {
-    return waterFrostJetPlan(this.state).worldY
+    return this.plan.worldY
   }
 
   painterRoots(): readonly WaterPainterRoot[] {
-    const plan = waterFrostJetPlan(this.state)
+    const plan = this.plan
     const policy = waterFrostJetPainterLane(plan.kind)
     return [{
       container: this.container,

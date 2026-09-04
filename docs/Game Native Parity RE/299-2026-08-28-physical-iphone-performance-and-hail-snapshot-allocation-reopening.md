@@ -1912,3 +1912,122 @@ lifecycle bookkeeping and changes no native-visible mechanic or pixel.
   budget. `Game-iCeVVE1l.js` measured 262,676 raw / 79,196 gzip bytes against
   524,288 / 134,144 limits. This receipt is the sole post-gate write; no
   runtime, test, build, or browser source changed after that gate.
+
+## 2026-09-04 — retained spell plans and authoritative painter-registry selection
+
+Final base: `fe0543982bdc077c827cd438393e934d5d118784`. The patch preserves the
+intervening coffin-debris, media-control, Magic Shield, and painter/collision
+fixes. The concurrent collision optimization and its tests duplicate work from
+this investigation; the final diff keeps the upstream implementation and
+removes those duplicate edits. Eight production files and four tests remain.
+
+### Causal model and boundary
+
+A Mac CPU profile of the existing Arena-0 replay showed full population scans
+reconstructing standalone painter registries even when an authoritative
+registry was already supplied. Those reconstructed registries were discarded.
+The client profile separately showed Frost replaying its float32 motion and
+animation plan repeatedly during painter/diagnostic queries after computing
+the same plan for drawing. Sibling Fire and Ether views repeated that pattern.
+
+The boundary is derived work within the existing native presentation and
+registration owners. The pure native plan functions and their authored data
+remain the oracle. No actor membership, ticks, RNG, geometry, asset, audio,
+resolution, lighting, painter order, protocol, or save shape changes.
+
+| Member | Disposition | Result |
+| --- | --- | --- |
+| Active Boneyard enemies | verified-already-at-parity | Reconstruct standalone registration only when authority is absent. |
+| Paused Boneyard enemies | verified-already-at-parity | Same rule; projectile registration shares the selected order unless explicitly supplied. |
+| Primary spells | verified-already-at-parity | Skip discarded projectile/transient registration scans. |
+| Secondary abilities | verified-already-at-parity | Skip discarded registration scans before enrollment. |
+| Air/Water player effects | verified-already-at-parity | Construct standalone order only for standalone callers. |
+| Standalone consumers | verified-already-at-parity | Preserve reconstruction, allocation order, and lifecycle. |
+| Normal/over/underpowered Frost sprite views | verified-already-at-parity | Painter queries read the exact plan retained by the mandatory update. |
+| Fireball, Fire particle, Fire impact | verified-already-at-parity | Retain each drawn plan for painter metadata. |
+| Ether impact and piercing streak | verified-already-at-parity | Retain each drawn plan for painter metadata. |
+| Boneyard normal Frost mesh, Aura, Air, Earth, welded views, other Fire/Ether views | verified-already-at-parity | Already retain plans or derive painter metadata directly from current containers/state. |
+| Retained Boneyard Hail | verified-already-at-parity | Reindex only when the immutable newer frame table changes; keep interpolation, birth, expiry, and same-tick replacement behavior. |
+
+Caches belong to the existing view/timeline lifetime. Hail retains at most one
+indexed newer table; no global actor-ID cache or compatibility API is added.
+
+### Measurements
+
+The final incremental server comparison uses Node 22.17.0, the existing replay
+inputs, and baseline/candidate simulation graphs in one process. Alternating
+500-tick blocks reduce scheduling differences. After 2,000 warm-up ticks, the
+remaining 28,000 ticks cost **0.194197 / 0.188135 ms per tick**, or **3.12% less
+time beyond the already optimized main**. State and ordered-JSON hashes match
+at every 5,000-tick checkpoint. Final hashes are `88197cea5375414b` and
+`bfbf09c9974bccdb:880210`.
+
+The earlier client comparison used production bundles on base `132774b6`,
+before the concurrent painter changes. Both browsers used the same baseline
+host. Chrome 152.0.7977.76 used Apple M2 Metal at 1600x900. Two baseline runs,
+three candidate runs, then restoration of the original bundle supplied three
+samples per build. Eight-second Water samples followed gate crossing and
+Solomon combat admission, max ranks for skills 32..39/57/59, a 1,000-actor
+warm-up, and mana restoration every 500 ms through the existing Lua API.
+
+| Median | Baseline | Candidate |
+| --- | ---: | ---: |
+| Hub FPS | 394.45 | 394.83 |
+| Empty Boneyard FPS | 388.83 | 391.76 |
+| Sustained Water FPS | 152.79 | 178.90 |
+| Water frame p95 | 10.2 ms | 9.0 ms |
+| Water frame p99 | 15.4 ms | 16.4 ms |
+| Water mean actor count | 1,410.30 | 1,408.88 |
+
+The restored baseline returned to 151.18 FPS. Individual Water runs ranged
+151.18..166.72 FPS for baseline and 133.88..183.80 for candidate. This is a
+17.1% median improvement in that earlier experiment, not a uniform client,
+frame-tail, or incremental FPS claim against `fe054398`. No physical iPhone
+measurement or production-server load claim is made.
+
+### Final validation and quality limits
+
+The exact final Mac tree passes `/opt/homebrew/bin/bash ./scripts/validate.sh`:
+19 Website/backend contracts, 2,667 frontend/desktop test executions,
+formatting, lint/import/generated checks, TypeScript, production builds,
+bundle budget, and media policy. The entry is 262,311 raw / 79,058 gzip bytes.
+
+Final hardware-browser journeys on the candidate client and host observe
+Water/Aura/Hail (peak 1,481 actors), Fireball/particles/impacts (68), and
+Ether/impacts (four). Each advances over 798 server ticks and renders 477..478
+frames in eight seconds with normal vsync. Page-error, console-error, and
+failed-response arrays are empty. Direct sprite tests cover all six changed
+views, including the Ether piercing streak; Hail tests cover repeated samples,
+reordered tables, removal, and replacement at the same tick.
+
+Earlier `smoke-primary-spells.mjs` short-tap/audio attempts were inconclusive:
+the Hub cast was not observed and the Boneyard Fire audio receipt timed out.
+They are not passing short-tap/audio evidence. The settled held-cast journeys
+establish the changed rendering behavior; input/audio code is not altered to
+accommodate those harness failures.
+
+The stricter requested quality gates are **not all satisfied**:
+
+- Oxlint maximum complexity 21 reports the same 17 existing server/kernel
+  violations on final baseline and candidate. `stepPrimarySpells` remains 226
+  and `synchronizeAirWaterPlayerVisualActors` remains 39. No new violation or
+  suppression is introduced; changed client modules pass this check.
+- Three pre-existing kernel/enemy-store files remain above 1,000 source lines;
+  this patch changes only registry selection there.
+- Focused Node whole-file line/branch/function coverage is 97.52/85.11/100 for
+  retained Hail, 100/93.33/91.67 for Water view, 52.62/80/78.26 for Fire view,
+  and 76/86.67/82.61 for Ether view. The latter files contain unchanged classes.
+  These figures do not establish 100% coverage of the scope.
+- Cognitive complexity, Halstead, CRAP, mutation, and whole-project dead-code/
+  duplication analyzers are not configured. Separate statement coverage is
+  not reported by Node. These gates remain unmeasured; no dependencies,
+  exclusions, or artificial tests were added to manufacture a pass.
+- Normal lint/type checks pass. Manual diff review finds no new `any`/`unknown`,
+  compatibility path, unused helper, or duplicate implementation. No UI copy
+  changes.
+
+Cleanup verified all task Mac worktrees and temporary directories absent and
+ports 5537/5538 closed. The twelve changed code/test files matched between
+local and Mac at manifest SHA-256
+`04c9453e7f800025e415a9a660b66a4ebb6fd95809bc505b6ebdce28ce3ceda8`.
+Only this documentation was written after the final validation.

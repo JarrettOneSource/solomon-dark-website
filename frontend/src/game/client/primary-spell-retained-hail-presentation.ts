@@ -65,6 +65,7 @@ class RetainedHailPresentation {
   private readonly hailOutput: PrimarySpellWaterHailState[] = []
   private readonly liveIds = new Set<number>()
   private readonly newerRowIndexesById = new Map<number, number>()
+  private indexedNewerTable: PrimarySpellWaterHailFrameTable | null = null
   private readonly transientOutput: PrimarySpellTransientState[] = []
 
   copyFrame(
@@ -86,9 +87,12 @@ class RetainedHailPresentation {
     time: PrimarySpellPresentationTime,
   ): PrimarySpellWaterHailState[] {
     this.begin()
-    this.newerRowIndexesById.clear()
-    for (let index = 0; index < newer.rows.length; index += 1) {
-      this.newerRowIndexesById.set(newer.rows.ids[index]!, index)
+    if (newer !== this.indexedNewerTable) {
+      this.newerRowIndexesById.clear()
+      for (let index = 0; index < newer.rows.length; index += 1) {
+        this.newerRowIndexesById.set(newer.rows.ids[index]!, index)
+      }
+      this.indexedNewerTable = newer
     }
     for (let index = 0; index < older.rows.length; index += 1) {
       const nextIndex = this.newerRowIndexesById.get(older.rows.ids[index]!)

@@ -272,11 +272,10 @@ export class FirePrimarySpellView {
   private readonly body: Sprite
   private readonly core: Sprite
   readonly kind = 'fire'
-  private state: PrimarySpellFireProjectileState
+  private plan!: ReturnType<typeof nativeFireballPlan>
   private readonly textures: PrimarySpellFireTextures
 
   constructor(state: PrimarySpellFireProjectileState, textures: PrimarySpellFireTextures) {
-    this.state = state
     this.textures = textures
     this.container = new Container({ label: 'fire' })
     this.containers = [this.container]
@@ -293,8 +292,8 @@ export class FirePrimarySpellView {
     presentationFrame?: number,
   ): void {
     if (!('position' in state) || state.kind !== 'fire') return
-    this.state = state
     const plan = nativeFireballPlan(state, presentationFrame)
+    this.plan = plan
     this.container.position.set(plan.position.x, plan.position.y)
     this.apply(this.core, plan.draws[0])
     this.apply(this.additiveBody, plan.draws[1])
@@ -302,7 +301,7 @@ export class FirePrimarySpellView {
   }
 
   painterRoots(): readonly FirePainterRoot[] {
-    const plan = nativeFireballPlan(this.state)
+    const plan = this.plan
     return [{
       container: this.container,
       lane: 'world-sorted',
@@ -339,11 +338,10 @@ export class FireParticleSpellView {
   readonly containers: readonly Container[]
   readonly kind = 'fire-particle'
   private readonly particle: Sprite
-  private state: PrimarySpellFireParticleState
+  private plan!: ReturnType<typeof nativeFireParticlePlan>
   private readonly textures: PrimarySpellFireTextures
 
   constructor(state: PrimarySpellFireParticleState, textures: PrimarySpellFireTextures) {
-    this.state = state
     this.textures = textures
     this.container = new Container({ label: 'fire-particle' })
     this.containers = [this.container]
@@ -355,8 +353,8 @@ export class FireParticleSpellView {
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (!('origin' in state) || state.kind !== 'fire') return
-    this.state = state
     const plan = nativeFireParticlePlan(state)
+    this.plan = plan
     this.container.position.set(plan.position.x, plan.position.y)
     this.particle.texture = this.textures.particles[
       plan.frame - NATIVE_FIRE_PARTICLE_FRAME_FIRST
@@ -368,7 +366,7 @@ export class FireParticleSpellView {
   }
 
   painterRoots(): readonly FirePainterRoot[] {
-    const plan = nativeFireParticlePlan(this.state)
+    const plan = this.plan
     return [{
       container: this.container,
       lane: 'world-sorted',
@@ -395,11 +393,10 @@ export class FireImpactSpellView {
   private readonly burst: Sprite
   private readonly core: Sprite
   readonly kind = 'fire-impact'
-  private state: PrimarySpellFireImpactState
+  private plan!: ReturnType<typeof nativeFireImpactPlan>
   private readonly textures: PrimarySpellFireTextures
 
   constructor(state: PrimarySpellFireImpactState, textures: PrimarySpellFireTextures) {
-    this.state = state
     this.textures = textures
     this.container = new Container({ label: 'fire-impact' })
     this.containers = [this.container]
@@ -412,8 +409,8 @@ export class FireImpactSpellView {
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (!('origin' in state) || state.kind !== 'fire-impact') return
-    this.state = state
     const plan = nativeFireImpactPlan(state)
+    this.plan = plan
     this.container.position.set(plan.position.x, plan.position.y)
     this.apply(this.core, plan.draws[0])
     this.apply(this.burst, plan.draws[1])
@@ -423,7 +420,7 @@ export class FireImpactSpellView {
   }
 
   painterRoots(): readonly FirePainterRoot[] {
-    const plan = nativeFireImpactPlan(this.state)
+    const plan = this.plan
     return [{
       container: this.container,
       lane: 'world-sorted',

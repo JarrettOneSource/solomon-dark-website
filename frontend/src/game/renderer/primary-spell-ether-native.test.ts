@@ -19,7 +19,11 @@ import {
   etherPrimaryPierceStreakPlan,
   etherPrimaryPhase,
 } from './primary-spell-ether-native.ts'
-import { EtherBlastPulseView } from './primary-spell-ether-view.ts'
+import {
+  EtherBlastPulseView,
+  EtherPrimaryImpactView,
+  EtherPrimaryPierceStreakView,
+} from './primary-spell-ether-view.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 
 const closeTo = (actual: number, expected: number): void => {
@@ -27,6 +31,47 @@ const closeTo = (actual: number, expected: number): void => {
 }
 
 const sinDegrees = (degrees: number): number => Math.sin(degrees * Math.PI / 180)
+
+test('Ether contact and pierce painter rows follow updated sprite origins', () => {
+  const impactAt = (ageTicks: number) => ({
+    ageTicks, birthTick: 300, id: 41, kind: 'ether-impact' as const,
+    origin: { x: 120 + ageTicks, y: 240 - ageTicks },
+    ownerId: 'caster', visualScale: 1, worldKey: 'boneyard:run',
+  })
+  const streakAt = (ageTicks: number) => ({
+    ageTicks, headingDegrees: 70, id: 91, kind: 'ether-pierce-streak' as const,
+    origin: { x: 12 + ageTicks, y: 34 - ageTicks },
+    ownerId: 'caster', visualScale: 0.5, worldKey: 'boneyard:run',
+  })
+  for (const { view, stateAt, planAt } of [
+    {
+      view: new EtherPrimaryImpactView(impactAt(0), {
+        core: Texture.EMPTY, ray: Texture.EMPTY, spark: Texture.EMPTY,
+      }),
+      stateAt: impactAt,
+      planAt: (age: number) => etherPrimaryImpactPlan(impactAt(age)),
+    },
+    {
+      view: new EtherPrimaryPierceStreakView(streakAt(0), Texture.EMPTY),
+      stateAt: streakAt,
+      planAt: (age: number) => etherPrimaryPierceStreakPlan(streakAt(age)),
+    },
+  ]) {
+    for (const age of [0, 1, 8]) {
+      view.update(stateAt(age))
+      const plan = planAt(age)
+      const painter = view.painterRoots()[0]!
+      assert.equal(painter.worldY, plan.worldY)
+      assert.equal(painter.lane, 'world-sorted')
+      assert.equal(painter.queueFamily, 'zanim')
+      assert.equal(painter.regionLightPoint, null)
+      assert.deepEqual({ x: view.container.x, y: view.container.y }, plan.position)
+      assert.deepEqual(view.painterRoots()[0], painter)
+    }
+    view.destroy()
+    assert.equal(view.container.destroyed, true)
+  }
+})
 
 test('pins the native Magic Missile records, sizes, root, and nine-degree phase tick', () => {
   assert.deepEqual(ETHER_PRIMARY_FLIGHT_RECORDS, { core: 110, ray: 112, spark: 111 })

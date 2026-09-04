@@ -110,6 +110,39 @@ test('retained Boneyard Hail presentation retires storage before an id can be re
   assert.deepEqual(replacement.position, { x: -50, y: 90 })
 })
 
+test('retained Hail reindexes replacement tables at the same tick, including reordered and removed rows', () => {
+  const retained = createRetainedBoneyardPrimarySpellPresentation()
+  const second = hail({
+    id: 9,
+    painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 56 }],
+    position: { x: -100, y: -200 },
+  })
+  const older = createPrimarySpellSimulationFrame({
+    nextId: 10, projectiles: [], transients: [olderHail, second],
+  })
+  for (const transients of [
+    [newerHail, second],
+    [second, newerHail],
+    [newerHail],
+    [],
+    [second, newerHail],
+  ]) {
+    const newer = createPrimarySpellSimulationFrame({ nextId: 10, projectiles: [], transients })
+    for (const blend of [0.25, 0.75, 1]) {
+      const time = { olderTick: 120, newerTick: 125, targetTick: 120 + 5 * blend }
+      assert.deepEqual(
+        retained.interpolateFrame(older, newer, blend, time),
+        interpolatePrimarySpellState(
+          materializePrimarySpellSimulationFrame(older, 120),
+          materializePrimarySpellSimulationFrame(newer, 125),
+          blend,
+          time,
+        ),
+      )
+    }
+  }
+})
+
 function hail(
   overrides: Partial<PrimarySpellWaterHailState> = {},
 ): PrimarySpellWaterHailState {
