@@ -141,13 +141,6 @@ export interface NativeUiTabSpec {
   readonly id: string
   readonly label: string
   readonly labelBaselineY?: number
-  /** Menu-face scale for the label; retail Dark Cloud tabs run at 0.88. */
-  readonly labelScale?: number
-  /** Resting label tint; the selected tint falls back to white. */
-  readonly labelTint?: number
-  /** Label drawn while selected; retail Dark Cloud tabs switch to capitals. */
-  readonly selectedLabel?: string
-  readonly selectedLabelTint?: number
 }
 
 export interface NativeUiTabsSpec {
@@ -704,11 +697,8 @@ export function planNativeUiTabs(spec: NativeUiTabsSpec): NativeUiPlan {
           text: {
             alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
             font: 'menu',
-            scale: tab.labelScale,
-            text: selected ? tab.selectedLabel ?? tab.label : tab.label,
-            tint: selected
-              ? tab.selectedLabelTint ?? tab.labelTint ?? 0xffffff
-              : tab.labelTint ?? 0xaaa2a6,
+            text: tab.label,
+            tint: selected ? 0xffffff : 0xaaa2a6,
             x: tab.bounds.left + tab.bounds.width / 2,
             y: labelBaselineY,
           },
