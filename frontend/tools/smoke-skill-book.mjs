@@ -113,7 +113,7 @@ try {
   })
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
-  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  const tutorialPrompt = page.locator('[data-prompt-kind="tutorial"] .stock-prompt-dialog')
   if (await tutorialPrompt.isVisible()) {
     await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
     await tutorialPrompt.waitFor({ state: 'detached' })

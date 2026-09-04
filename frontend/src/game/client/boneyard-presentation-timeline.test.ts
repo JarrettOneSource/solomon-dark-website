@@ -1194,3 +1194,53 @@ test('does not replay the previous Boneyard interval when a frozen tick is repla
   assert.equal(timeline.sample(150).players.local.position.x, 21)
   assert.equal(timeline.sample(150).world.enemies[0].position.x, 421)
 })
+
+test('does not rewind a displayed Air lifetime for a sub-interval Boneyard snapshot', () => {
+  const initial = snapshotAt(100, 10, 100)
+  initial.primarySpells = {
+    nextId: 2,
+    projectiles: [],
+    transients: [{
+      ageTicks: 4,
+      birthTick: 96,
+      direction: { x: 1, y: 0 },
+      endpoint: { x: 490, y: 240 },
+      hurricaneCharge: 0,
+      id: 1,
+      kind: 'air',
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+      midpoint: { x: 300, y: 150 },
+      origin: { x: 100, y: 100 },
+      ownerId: 'local',
+      painterRegistrations: [0, 1, 2].map((registrationOrdinal) => ({
+        managerLane: 'actor' as const,
+        registrationOrdinal,
+      })),
+      targetId: null,
+      underpowered: false,
+      variant: 0,
+      worldKey: 'boneyard:run-1',
+    }],
+  }
+  const eventSnapshot = snapshotAt(101, 11, 101)
+  eventSnapshot.primarySpells = {
+    nextId: 2,
+    projectiles: [],
+    transients: [],
+  }
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: initial,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+
+  const displayed = timeline.sample(50)
+  assert.equal(displayed.primarySpells.transients[0]?.ageTicks, 4)
+
+  timeline.push(eventSnapshot, 51)
+  const atEventReceipt = timeline.sample(51)
+  assert.equal(atEventReceipt.tick, 100)
+  assert.equal(atEventReceipt.primarySpells.transients[0]?.ageTicks, 4)
+  assert.deepEqual(timeline.sample(61).primarySpells.transients, [])
+})

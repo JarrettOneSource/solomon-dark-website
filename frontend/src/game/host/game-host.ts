@@ -2279,10 +2279,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           message.skillId,
           message.slot,
         )
-        if (!bound) {
-          disconnect(socket, 'invalid-message', 'The quickbar skill is unavailable.')
-          return
-        }
+        if (!bound) return
         replaceStateForPlayer(client.playerId, bound)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
@@ -2308,10 +2305,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.playerId,
           message.skillId,
         )
-        if (!selected) {
-          disconnect(socket, 'invalid-message', 'The primary skill is unavailable.')
-          return
-        }
+        if (!selected) return
         replaceStateForPlayer(client.playerId, selected)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
@@ -2334,10 +2328,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.playerId,
           message.skillId,
         )
-        if (!selected) {
-          disconnect(socket, 'invalid-message', 'The concentration is unavailable.')
-          return
-        }
+        if (!selected) return
         replaceStateForPlayer(client.playerId, selected)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
@@ -2361,10 +2352,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           message.skillId,
           message.slot,
         )
-        if (!selected) {
-          disconnect(socket, 'invalid-message', 'The concentration is unavailable.')
-          return
-        }
+        if (!selected) return
         replaceStateForPlayer(client.playerId, selected)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()

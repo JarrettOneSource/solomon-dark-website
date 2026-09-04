@@ -1227,6 +1227,23 @@ test('does not replay the previous Hub interval when a frozen tick is replaced',
   assert.equal(presentation.sample(150).players.remote.position.x, 31)
 })
 
+test('does not rewind displayed Hub state for a sub-interval event snapshot', () => {
+  const presentation = timeline(snapshotAt(100, 10, 20))
+  presentation.push(snapshotAt(105, 20, 30), 50)
+  const displayed = presentation.sample(100)
+  assert.equal(displayed.tick, 105)
+  assert.equal(displayed.players.remote.position.x, 30)
+
+  presentation.push(snapshotAt(106, 21, 31), 101)
+  const atEventReceipt = presentation.sample(101)
+  assert.equal(atEventReceipt.tick, 105)
+  assert.equal(atEventReceipt.players.remote.position.x, 30)
+
+  const caughtUp = presentation.sample(111)
+  assert.equal(caughtUp.tick, 106)
+  assert.equal(caughtUp.players.remote.position.x, 31)
+})
+
 test('rejects invalid timeline clocks and non-Hub snapshots', () => {
   const initial = snapshotAt(0, 0, 0)
   assert.throws(() => createHubPresentationTimeline({

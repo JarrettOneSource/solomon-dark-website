@@ -380,3 +380,144 @@ No member is blocked by the browser platform.
 - No platform block or material unknown remains. The browser can represent
   the native state exactly, and no Mod Loader file or duplicated native report
   changed.
+
+## 2026-09-04 — Production stale selected-skill request reopening
+
+### Reported smell and parity question
+
+- NFO browser diagnostics contain two new protocol-117 fatal returns from
+  `/game`: `The primary skill is unavailable.` at
+  `2026-09-03T00:48:47Z` and `The concentration is unavailable.` at
+  `2026-09-04T04:14:29Z`. The host converted both into `invalid-message`,
+  closed the only player, and retired that player's active run. Neither
+  supervised process crashed or restarted.
+- This is a secondary report against this selected-skill system. The earlier
+  pass tested an unlearned selection as a fatal protocol violation, but did not
+  inventory the asynchronous gap between a browser's last accepted snapshot
+  and the authority's current pause, barrier, life, Mind Chug, College, or run
+  state. It conflated a structurally invalid message with a well-formed player
+  intent that became stale in transit.
+- Stock behavior to preserve: selecting a currently available primary or
+  concentration mutates the actor-owned book/runtime atomically. Clicking an
+  unavailable row cannot end the game process or destroy the wizard/run.
+- Falsifiable question: does a learned, structurally valid selection sent after
+  its Skill Book pause releases or a level-up barrier begins reproduce the
+  exact server disconnect? If so, treating rejected selected-skill edits as
+  no-ops while retaining strict wire decoding must preserve authority without
+  ejecting the player.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Production browser/host | `DiagnosticLogs` captures above plus `solomon-dark-game.service` journal at deployed `a7d470cd`, protocol 117 | Both clients sent a decodable selected-skill request; the host replied 1008/`invalid-message`. The shared-Hub client was repeatedly recovering old baselines and sent the primary request after its Skill Book pause had released. The private Air client had repeated flow-control pressure and several successful concentration checkpoints before the fatal rejection. | high-live |
+| Current authority | `game-host.ts`, `game-simulation.ts`, `player-entity-store.ts` | Wire decode rejects malformed IDs/slots. The host then maps every null edit result—temporary lifecycle gate, stale learned state, Mind Chug, or illegal row—to the same fatal disconnect. | high |
+| Existing native ownership | selected primary `0x005D8120`, concentration `0x005D5600`, SkillScreen/BeltButton report and complete authored catalogs already recorded above | Selection is actor-local and unavailable input is non-mutating. The native single-process UI has no network race or session to terminate. | high |
+| Sibling web behavior | `client-hub-action` authority and host test `rejects stale inventory commands without disconnecting` | Another player-owned editor already returns authoritative rejected feedback/no mutation and keeps the same authenticated socket alive. | high |
+
+### System boundary and membership inventory
+
+Native system plus required network adaptation: authenticated selected-skill
+configuration intents from browser producers through strict wire shape,
+current authority gates, mutation, replication/checkpoint, and nonfatal stale
+completion.
+
+| Member / branch | Owner | Disposition | Proof |
+| --- | --- | --- | --- |
+| pure primary rows `8/16/24/32/40` and Weld row `52`/builds `1000..1009` | selected-primary owner | `verified-already-at-parity`; stale completion `exact-ported` here | accepted rows still reset cast state; a delayed learned row is a no-op, not a disconnect |
+| all concentrations `57..63,65..71`, general selection and addressed A/B slots | concentration owner | `verified-already-at-parity`; stale completion `exact-ported` | accepted fill/replace stays unchanged; delayed request under a current gate keeps the socket alive |
+| eight quickbar bindings and null removal | player skill book | `exact-ported` shared correction | stale/unlearned binding cannot mutate or disconnect; accepted binding still checkpoints |
+| SkillScreen, selected-HUD primary/A/B selector, and quickbar producers | browser semantic input | `exact-ported` across asynchronous delivery | every producer may race a newer authority snapshot safely |
+| Skill Book pause owner/release and resume grace | game host lifecycle | `exact-ported` race boundary | selection arriving after release/grace is ignored without reopening the modal or changing state |
+| level-up barrier and pending offer | progression lifecycle | `exact-ported` race boundary | a newly raised barrier wins; old selector input cannot bypass it or eject the actor |
+| death/spectator, Game Over/loadout replacement, Tutorial/College admission, and private-room transition | player/run lifecycle | `exact-ported` race boundary | current authority wins with no mutation and no disconnect |
+| Mind Chug and Split Mind occupancy/exclusion | concentration runtime | `verified-already-at-parity`; stale rejection `exact-ported` | no bypass, fill, duplicate, or replacement occurs while unavailable |
+| malformed JSON/message type, out-of-range slot, non-integer ID, and invalid protocol shape | protocol decoder | `verified-already-at-parity` | remains fatal `invalid-message`; this correction does not relax the wire |
+| level-up offer choice/reroll/save sequences | separate sequenced offer lifecycle | `out-of-system`: not one of the selected-skill configuration messages or reported failures | existing offer-sequence authority remains unchanged |
+| inventory, social, chat, Tutorial actions, and Boneyard selection | separate semantic action owners | `out-of-system` | no behavior changes |
+
+No member is blocked by the browser platform.
+
+### Recovered behavioral contract
+
+- A decoded message proves only structural validity. Availability is evaluated
+  against the current authoritative actor/run state at handling time and may
+  legitimately differ from the browser snapshot used to render the control.
+- An accepted edit remains atomic, clears active input, broadcasts the new
+  snapshot, and checkpoints. A rejected edit changes nothing. The next normal
+  snapshot reconciles the browser; it must not terminate the authenticated
+  session or retire a run.
+- Current pause/barrier/life/College/Mind Chug gates stay authoritative. This is
+  not optimistic mutation, retry, clamping, or decoder leniency.
+
+### Nearby-system findings
+
+- The shared-Hub incident retained one active Boneyard behind the Hub session;
+  fatal socket closure then retired that otherwise valid run. A nonfatal no-op
+  preserves both the player and run without changing party ownership.
+- Both incidents occurred under substantial replication backpressure. That
+  pressure explains a wider browser/authority observation gap, but no amount of
+  lag should turn an authenticated state race into malformed protocol data.
+- The current Skill Book browser smoke still searched for
+  `data-prompt-kind="tutorial"` on the dialog after native UI moved that owner to
+  the enclosing stage. The real prompt correctly intercepted Play. Update only
+  that locator so the maintained journey reaches the selected-skill system.
+
+### Confidence and open questions
+
+- Confirmed: exact live failures, service/run consequences, accepted protocol
+  shape, current rejection collapse, all selected-skill producers and gates.
+- Inferred: the precise gate that won each live race. The bounded report omits
+  the request payload/current host progression, but reproducing multiple
+  legitimate gates reaches the identical fatal branch and the correction is
+  gate-independent.
+- Unknown material to implementation: none.
+
+### Web implementation consequence and validation contract
+
+- Keep the strict protocol decoder unchanged. At the host's selected-primary,
+  selected-concentration, addressed concentration, and quickbar-binding
+  handlers, return without mutation when the current authority rejects a
+  decoded request.
+- Add host regressions that delay a learned primary past Skill Book pause
+  release, delay a learned concentration into a level-up barrier and Mind Chug,
+  and submit an unlearned binding. Assert state equality, an open socket, and a
+  subsequent ping/pong for every branch. Retain accepted mutation/checkpoint
+  coverage and strict malformed-wire tests.
+- On the Mac mini, run the focused host/client/protocol/progression matrices,
+  the complete Website gate, and a real built-site journey that repeatedly
+  races selector actions with pause/picker edges under snapshot pressure.
+  Require no fatal surface, protocol close, page/console error, or host error.
+
+### Implementation validation receipt
+
+- Red Mac receipt on exact `a7d470cd`: all three connection-survival cases
+  reached WebSocket state 3 instead of the required open state 1. They
+  reproduced unlearned quickbar/general concentration, a learned primary after
+  a level-up barrier won, and addressed concentration during Mind Chug. The
+  full focused run had only those three selection failures plus the two
+  independent timeline failures.
+- Implementation: the four host handlers keep strict message decoding but now
+  return without mutation when current authority rejects a quickbar binding,
+  primary selection, general concentration, or addressed A/B concentration.
+  Accepted edits retain input clearing, snapshot broadcast, and checkpointing;
+  no protocol or save-schema change is required.
+- Green host receipt: all 88 host tests passed. Rejected edits preserved the
+  exact belt/book/runtime values, every socket remained open, and each client
+  completed a subsequent authenticated ping/pong. The 132-test Air/Storm/Mage,
+  client, and protocol matrix separately retained all malformed-wire and
+  accepted-selection checks.
+- Real Mac Chrome 152 completed the full Skill Book/HUD journey through Hub and
+  Boneyard: category-1 primary selection, all three tested concentration
+  bindings, addressed A/B replacement, hotbar key swaps, pause/reopen/cancel,
+  checkpoints, and replicated orb selection. Page, console, and network error
+  arrays were empty; no fatal surface or protocol close occurred.
+- The first complete Mac gate on the core eight-file candidate passed 19
+  Website/backend contracts, 2,643 Node tests, Release build/format/lint,
+  TypeScript, desktop tests, production frontend/game-host builds, media
+  policy, and bundle budget. The final exact-tree gate after this ledger and
+  smoke-locator correction is recorded in the external completion receipt so
+  recording it cannot change the validated tree.
+- No platform block or material unknown remains. The exact gate that won each
+  historical live race is not needed: every current-authority rejection in the
+  complete selected-skill configuration family now has the same safe outcome.

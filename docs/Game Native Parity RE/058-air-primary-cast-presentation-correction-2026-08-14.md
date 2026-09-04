@@ -642,3 +642,157 @@ the owner Geometry exactly once after those views detach.
   commit and remote identity are recorded in the external completion receipt
   because a tracked document cannot self-identify its own commit. Deployment
   remains a separate, unauthorized operation.
+
+## 2026-09-04 — Production Air lifetime rewind reopening
+
+### Reported smell and parity question
+
+- Production browser diagnostics captured two uncaught renderer errors at
+  `2026-09-04T04:08:10Z` on deployed Website
+  `a7d470cdd163463ca5ac7eb91976e9ac21d0de8a`, protocol 117:
+  `Air lightning body resources cannot re-enter an earlier lifetime` and
+  `Air lightning source resources cannot re-enter age zero`.
+- This is a secondary report against the September 2 resource-lifetime entry.
+  That pass correctly bounded resources by the first presented age, but stopped
+  at the monotonic native actor lifetime and did not inventory the browser
+  presentation clock that supplies later ages. Its statement that a late-seen
+  actor can never return to an earlier age is false for the current web
+  timeline when an event-driven snapshot arrives inside the ordinary five-tick
+  network interval.
+- Stock behavior to preserve: within one loaded scene, the native fixed-tick
+  clock and every actor age advance or hold; presentation never replays an
+  already displayed bolt lifetime because a state publication occurred early.
+- Falsifiable question: after displaying snapshot tick 100, does pushing an
+  authoritative event snapshot at tick 101 reset the web target to tick 96 and
+  synthesize an age-zero Air actor from the prior age-four row? If so, keeping
+  the presentation target monotonic must remove both exceptions without
+  restoring unreachable Air allocations.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Production browser | NFO `DiagnosticLogs`, captured `2026-09-04T04:08:10.248Z/.265Z`; built assets `game-audio-spatial-QevSY3Dl.js`, `native-world-speech-C6sAKbpU.js`, `BoneyardScene-C-Jfw8Sd.js` | One resumed private Air/Body run raised the body rewind and source age-zero assertions in consecutive render callbacks. | high-live |
+| Production authority | `solomon-dark-game.service` journal for the same session | The errors coincide with a `skill-picker-closed` checkpoint and resume edge. The host stayed alive; event-driven snapshots and repeated flow-control recovery continued. | high-live |
+| Current web causal trace | `boneyard-presentation-timeline.ts`, `hub-presentation-timeline.ts`, `primary-spell-transient-presentation.ts`, `primary-spell-air-view.ts` at `a7d470cd` | Every new positive-tick snapshot resets elapsed presentation time and starts at `newest.tick - 5`. A tick-101 publication after tick 100 therefore requests tick 96. Fixed Air timing derives age from `targetTick - birthTick`, so an age-four view can receive age zero. | high |
+| Existing retail instructions | retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Air factory/lifetime functions already recorded above | Body/source/contact ownership remains 2/1/5 ticks on a monotonic native clock. No stock geometry, asset, or lifetime fact changed. | high |
+
+### System boundary and membership inventory
+
+Native/web system: monotonic scene presentation time from authoritative
+snapshot publication through every interpolated actor family, including the
+retained Air resource owner that exposed the violation.
+
+| Member (class/variant/scene/branch) | Native/web source | Disposition | Proof |
+| --- | --- | --- | --- |
+| ordinary five-tick Hub and Boneyard snapshots | fixed 100 Hz authority / 20 Hz presentation | `verified-already-at-parity` | existing midpoint and catch-up matrices remain unchanged |
+| same-tick replacement snapshot | current timeline replacement branch | `verified-already-at-parity` | preserves the original receipt time and cannot rewind |
+| event-driven positive-tick snapshot inside one network interval | pause, picker, selection, world-action, and checkpoint publication edges | `exact-ported` by this reopening | new tick-100 to tick-101 regression holds at the last displayed tick, then advances at native tick rate |
+| skipped/delayed snapshots beyond one interval | flow-control and baseline recovery | `verified-already-at-parity` | remains bounded to at most one interval behind and may advance, never retreat |
+| out-of-order snapshots | timeline `push` guard | `verified-already-at-parity` | older ticks remain ignored |
+| new Hub/Boneyard run identity | `GameClientSession` timeline reconstruction | `verified-already-at-parity` | a fresh timeline owns its independent clock and resources |
+| player Air, normal/underpowered, body/source/contact, and chain hops | existing Air factory and fixed-transient presentation | `exact-ported` with the shared monotonic clock | age-four followed by an early publication cannot request body/source re-entry; late-first-observation allocation remains bounded |
+| Magic Storm direct bolt | shared `AirPrimarySpellView`, secondary interpolation | `exact-ported` through the same scene clock | direct unsplit factory stays monotonic and retains current teardown |
+| Skeleton Mage lightning | Mage pulse presentation tick | `exact-ported` through the same Boneyard clock | pulse membership and direct factory lifetime never replay |
+| other fixed and state-driven primary transients, enemies, projectiles, deaths, loot, weather, participants, and NPCs | Hub/Boneyard interpolation consumers | `exact-ported` shared correction | no consumer can visibly reverse because of publication cadence |
+| local Hub prediction | newest authoritative local-player override | `out-of-system`: it does not consume the delayed world target clock | existing prediction/reconciliation tests remain unchanged |
+
+No member is blocked by the browser platform.
+
+### Recovered behavioral contract
+
+- Snapshot receipt cadence may be periodic, early, delayed, or bursty, but it
+  must not be observable as negative scene time. At a new receipt, presentation
+  starts at the later of one interval behind that snapshot or the target the
+  prior receipt had already reached at the same wall-clock instant.
+- From that start it advances at the native 100 Hz rate and caps at the newest
+  authoritative tick. A short-interval event snapshot therefore catches up in
+  its actual tick delta rather than replaying a full five-tick interval.
+- A newly constructed timeline may choose its initial delayed bracket before
+  any frame has been displayed. Once a frame is displayed, neither Hub nor
+  Boneyard state may retreat. Run changes reconstruct the timeline rather than
+  carrying the prior run's clock.
+- Air geometry, bands, coronas, randomness, painter order, 2/1/5 lifetimes,
+  direct Storm/Mage ownership, and explicit geometry destruction remain
+  unchanged. The runtime assertions remain valid downstream guards; the clock
+  owner must stop supplying impossible ages.
+
+### Nearby-system findings
+
+- The same cadence rewind affects every remote/world interpolation consumer,
+  even when most renderers tolerate reversed values. Air's retained-resource
+  assertion made the shared clock defect visible instead of creating it.
+- The production session's repeated flow-control warnings are pressure
+  evidence, not this exception's cause: skipped snapshots move the delayed
+  target forward. The decisive trigger is the sub-interval picker publication.
+- The built Air acceptance wrapper reached a generated Boneyard twice but its
+  unrelated entry-gate alignment helper timed out before casting. The Water
+  wrapper already owns a host-opened deterministic combat option. Add the same
+  opt-in isolation for Air while retaining gate traversal as the default smoke;
+  the crash acceptance must exercise the renderer, not certify navigation.
+
+### Confidence and open questions
+
+- Confirmed: deployed revision/protocol, both exception stacks, the adjacent
+  authority event, the exact target-tick equation, and the complete two-scene
+  consumer membership.
+- Inferred pending the red receipt: tick 100 displayed before the tick-101
+  picker snapshot in the live browser. The deterministic timeline regression
+  reproduces the same age-four to age-zero transition.
+- Unknown material to implementation: none.
+
+### Web implementation consequence and validation contract
+
+- Make Hub and Boneyard timeline receipts carry a continuity-preserving start
+  tick and cap display time at the newest authority tick.
+- Add deterministic Hub and Boneyard tests for periodic, same-tick,
+  sub-interval, skipped, out-of-order, and new-timeline branches. The Boneyard
+  regression must drive the exact age-four Air row through a tick-101 event
+  publication and prove the view never receives an earlier lifetime.
+- Re-run the complete Air/Storm/Mage and presentation-timeline matrices on the
+  Mac mini, then exercise a real Air Boneyard with repeated level-up picker and
+  selected-skill publications. Page/console errors must be empty and host
+  snapshots must remain valid.
+
+### Implementation validation receipt
+
+- Live scan: from the prior production-crash fix boundary
+  `2026-09-01T13:43:20Z` through `2026-09-04T14:28:52Z`, NFO recorded no
+  `solomon-dark-game` error event, Website error-priority entry, or supervised
+  restart. The only submitted reports were the two selected-skill disconnects;
+  the later report contained the two Air browser exceptions above.
+- Red Mac receipt on exact `a7d470cd`: the focused three-file run had exactly
+  five failures. The Boneyard regression replayed Air `ageTicks 4 -> 0`, and
+  the Hub regression replayed presentation tick `105 -> 101`; their sibling
+  tests stayed green.
+- Implementation: each Hub/Boneyard receipt now stores a continuity-preserving
+  presentation start tick. A new receipt starts at the later of its ordinary
+  one-interval delay or the prior clock's value at that wall-clock instant,
+  advances at 100 Hz, and caps at the newest authority tick. Same-tick replace,
+  stale-drop, skipped-snapshot, new-run, and local Hub prediction ownership are
+  unchanged. Air's downstream rewind assertions and bounded resource
+  allocation remain strict.
+- Focused Mac green: test-project TypeScript passed; both complete timeline
+  files passed; all 88 host tests passed; and the 132-test Air/Storm/Mage,
+  client-session, and strict-protocol matrix passed.
+- Real built-site Chrome 152 on arm64 macOS 26.6.2 used the opt-in host-opened
+  isolation to enter a generated Boneyard and hold Air against authored
+  scenery. It rendered five simultaneous Air actors, six retained split bands
+  for the sampled live body, native source/contact/light/audio ownership, and
+  eight live Skeletons. Its page/console/network error array was empty. The
+  idle/target screenshots had SHA-256
+  `824f74e667d10fe355aab06c671d3e198f8d450ffe2f67cbd073ce6175525063`
+  and
+  `cf96b12fc1cc589be452db93e2a58c3ddfd8eaaca20479ea35d6459f6b889973`
+  before task cleanup.
+- The first complete Mac gate on the core eight-file candidate passed 19
+  Website/backend contracts, 2,643 Node tests, Release build/format/lint,
+  TypeScript, desktop tests, both production builds, media policy, and bundle
+  budget. `Game-DsWPPHUh.js` was 262,663 raw / 79,202 gzip bytes. The final
+  exact-tree gate after the maintained smoke corrections is recorded in the
+  external completion receipt so recording it cannot change the validated
+  tree.
+- No browser-platform block or material unknown remains. The two earlier gate
+  walker timeouts occurred before Air casting and are not product failures;
+  the new opt-in deterministic path leaves the default traversal acceptance
+  intact.

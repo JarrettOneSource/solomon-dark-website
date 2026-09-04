@@ -855,10 +855,17 @@ async function enterBoneyard(page) {
 async function castAirInBoneyard(page) {
   const canvas = await enterBoneyard(page)
   const scene = page.locator('.boneyard-scene')
-  const gate = await crossEntryGate(page, scene)
-  const combatAdmission = combatAdmissionAcceptance
-    ? await enableSolomonCombat(page, scene)
-    : null
+  const gate = hostOpenedBoneyard
+    ? { fixture: 'host-opened-boneyard' }
+    : await crossEntryGate(page, scene)
+  const combatAdmission = hostOpenedBoneyard
+    ? await page.waitForFunction(() => (
+        document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-combat-enabled') === 'true'
+      ), undefined, { timeout: 90_000 }).then(() => ({ fixture: 'host-opened-boneyard' }))
+    : combatAdmissionAcceptance
+      ? await enableSolomonCombat(page, scene)
+      : null
   await settleMovement(page)
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')

@@ -2862,7 +2862,7 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   assert.equal(intermediateCheckpointCount, 0)
 })
 
-test('game host authoritatively projects each player belt and rejects unlearned selections', async (context) => {
+test('game host keeps unavailable skill edits nonfatal and authoritative', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -2899,16 +2899,62 @@ test('game host authoritatively projects each player belt and rejects unlearned 
     ],
   )
 
-  const rejected = nextMessage(second.socket, (message) => message.type === 'server-disconnect')
+  const firstBelt = host.state().playerEntities.belts[0]
+  const secondRuntime = host.state().playerEntities.skillRuntimes[1]
+  first.socket.send(encodeGameMessage({
+    type: 'client-skill-quickbar-bind',
+    skillId: 57,
+    slot: 6,
+  }))
   second.socket.send(encodeGameMessage({
     type: 'client-select-concentration',
     skillId: 57,
   }))
-  assert.deepEqual(await rejected, {
-    type: 'server-disconnect',
-    code: 'invalid-message',
-    reason: 'The concentration is unavailable.',
+  await new Promise(resolve => setTimeout(resolve, 50))
+  assert.equal(first.socket.readyState, WebSocket.OPEN)
+  assert.equal(second.socket.readyState, WebSocket.OPEN)
+  assert.equal(host.state().playerEntities.belts[0], firstBelt)
+  assert.deepEqual(host.state().playerEntities.skillRuntimes[1], secondRuntime)
+
+  const firstPong = nextMessage(first.socket, message => (
+    message.type === 'server-pong' && message.nonce === 81
+  ))
+  const secondPong = nextMessage(second.socket, message => (
+    message.type === 'server-pong' && message.nonce === 82
+  ))
+  first.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 81 }))
+  second.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 82 }))
+  assert.deepEqual(await firstPong, { type: 'server-pong', nonce: 81 })
+  assert.deepEqual(await secondPong, { type: 'server-pong', nonce: 82 })
+})
+
+test('game host keeps a stale primary selection nonfatal after a barrier wins', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    initialPlayerExperience: 100,
+    snapshotRate: 100,
   })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+  const skillBook = host.state().playerEntities.skillBooks[0]
+  assert.ok(host.state().levelUpBarrier)
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-select-primary-skill',
+    skillId: 8,
+  }))
+  await new Promise(resolve => setTimeout(resolve, 50))
+  assert.equal(client.socket.readyState, WebSocket.OPEN)
+  assert.equal(host.state().playerEntities.skillBooks[0], skillBook)
+
+  const pong = nextMessage(client.socket, message => (
+    message.type === 'server-pong' && message.nonce === 83
+  ))
+  client.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 83 }))
+  assert.deepEqual(await pong, { type: 'server-pong', nonce: 83 })
+  assert.equal(getPlayerProgression(host.state(), playerId).pendingOffer !== null, true)
 })
 
 test('Boneyard host authorizes HUD concentration replacement only for the addressed selector', async (context) => {
@@ -3018,17 +3064,23 @@ test('Boneyard host authorizes HUD concentration replacement only for the addres
   Object.assign(host.state().playerEntities.progressions[index]!, {
     mindChugTicksRemaining: 10,
   })
-  const rejected = nextMessage(client.socket, (message) => message.type === 'server-disconnect')
+  const runtimeBeforeRejectedSelection = host.state().playerEntities.skillRuntimes[index]
   client.socket.send(encodeGameMessage({
     type: 'client-select-concentration-slot',
     skillId: 57,
     slot: 0,
   }))
-  assert.deepEqual(await rejected, {
-    type: 'server-disconnect',
-    code: 'invalid-message',
-    reason: 'The concentration is unavailable.',
-  })
+  await new Promise(resolve => setTimeout(resolve, 50))
+  assert.equal(client.socket.readyState, WebSocket.OPEN)
+  assert.equal(
+    host.state().playerEntities.skillRuntimes[index],
+    runtimeBeforeRejectedSelection,
+  )
+  const pong = nextMessage(client.socket, message => (
+    message.type === 'server-pong' && message.nonce === 84
+  ))
+  client.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 84 }))
+  assert.deepEqual(await pong, { type: 'server-pong', nonce: 84 })
 })
 
 test('game host accepts an empty deterministic Hub fixture factory', async (context) => {

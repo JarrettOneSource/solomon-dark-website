@@ -68,6 +68,7 @@ export interface BoneyardPresentationTimelineOptions {
 }
 
 interface TimedSnapshot {
+  presentationStartTick: number
   receivedAtMs: number
   snapshot: BoneyardClientGameSnapshot
 }
@@ -88,6 +89,7 @@ export function createBoneyardPresentationTimeline(
   requireFinite(options.initialReceivedAtMs, 'initialReceivedAtMs')
   const intervalTicks = Math.max(1, options.serverTickRate / options.snapshotRate)
   const history: TimedSnapshot[] = [{
+    presentationStartTick: options.initialSnapshot.tick,
     receivedAtMs: options.initialReceivedAtMs,
     snapshot: clientBoneyardSnapshot(options.initialSnapshot),
   }]
@@ -102,12 +104,20 @@ export function createBoneyardPresentationTimeline(
       if (clientSnapshot.tick < latest.snapshot.tick) return
       if (clientSnapshot.tick === latest.snapshot.tick) {
         history[history.length - 1] = {
+          presentationStartTick: latest.presentationStartTick,
           receivedAtMs: latest.receivedAtMs,
           snapshot: clientSnapshot,
         }
         return
       }
-      history.push({ receivedAtMs, snapshot: clientSnapshot })
+      history.push({
+        presentationStartTick: Math.max(
+          clientSnapshot.tick - intervalTicks,
+          presentationTargetTick(latest, receivedAtMs, options.serverTickRate),
+        ),
+        receivedAtMs,
+        snapshot: clientSnapshot,
+      })
       if (history.length > MAX_BUFFERED_SNAPSHOTS) history.shift()
     },
     sample(nowMs) {
@@ -116,12 +126,7 @@ export function createBoneyardPresentationTimeline(
       if (history.length === 1) {
         return presentationCopy(newest.snapshot, primarySpellPresentation)
       }
-      const elapsedTicks = clamp(
-        (nowMs - newest.receivedAtMs) * options.serverTickRate / 1000,
-        0,
-        intervalTicks,
-      )
-      const targetTick = newest.snapshot.tick - intervalTicks + elapsedTicks
+      const targetTick = presentationTargetTick(newest, nowMs, options.serverTickRate)
       const [older, newer] = bracketSnapshots(history, targetTick)
       const span = newer.snapshot.tick - older.snapshot.tick
       const blend = span <= 0 ? 1 : clamp(
@@ -138,6 +143,15 @@ export function createBoneyardPresentationTimeline(
       )
     },
   }
+}
+
+function presentationTargetTick(
+  newest: TimedSnapshot,
+  nowMs: number,
+  serverTickRate: number,
+): number {
+  const elapsedTicks = Math.max(0, nowMs - newest.receivedAtMs) * serverTickRate / 1_000
+  return Math.min(newest.snapshot.tick, newest.presentationStartTick + elapsedTicks)
 }
 
 export function isBoneyardGameSnapshot(

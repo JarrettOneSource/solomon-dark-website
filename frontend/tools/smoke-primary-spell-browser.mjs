@@ -14,9 +14,13 @@ const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const luaWasmPath = fileURLToPath(new URL('../node_modules/wasmoon/dist/glue.wasm', import.meta.url))
 const kind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
 const heldFacingAcceptance = process.env.SDR_PRIMARY_HELD_FACING === '1'
+const hostOpenedAirAcceptance = process.env.SDR_PRIMARY_AIR_HOST_OPENED === '1'
 const supportedKinds = new Set(['ether', 'fire', 'air', 'water', 'earth'])
 if (!kind || !supportedKinds.has(kind)) {
   throw new Error('SDR_PRIMARY_SPELL_KIND must name one elemental primary')
+}
+if (hostOpenedAirAcceptance && kind !== 'air') {
+  throw new Error('SDR_PRIMARY_AIR_HOST_OPENED requires SDR_PRIMARY_SPELL_KIND=air')
 }
 
 const screenshotRoot = process.env.SDR_PRIMARY_SPELL_SCREENSHOT_ROOT
@@ -60,14 +64,14 @@ try {
       SDR_PRIMARY_SPELL_BONEYARD_ONLY: '1',
       SDR_PRIMARY_SPELL_COMBAT_ADMISSION: kind === 'ether' || kind === 'air' ? '1' : '',
       SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD:
-        kind === 'water' || heldFacingAcceptance ? '1' : '',
+        kind === 'water' || heldFacingAcceptance || hostOpenedAirAcceptance ? '1' : '',
       SDR_PRIMARY_SPELL_KIND: kind,
       SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
     }),
     heldFacingAcceptance
       ? stabilizeHeldFacingCombat(host)
-      : kind === 'water'
-        ? openWaterCombat(host)
+      : kind === 'water' || hostOpenedAirAcceptance
+        ? openPrimaryCombat(host, kind)
         : process.env.SDR_PRIMARY_PERFORMANCE === '1'
           ? stabilizePerformanceCombat(host)
           : Promise.resolve(null),
@@ -82,7 +86,7 @@ try {
   }
   process.stdout.write(`${JSON.stringify({
     heldFacingFixture: heldFacingAcceptance ? supportFixture : null,
-    hostFixture: kind === 'water' ? supportFixture : null,
+    hostFixture: kind === 'water' || hostOpenedAirAcceptance ? supportFixture : null,
     kind,
     performanceFixture: !heldFacingAcceptance && process.env.SDR_PRIMARY_PERFORMANCE === '1'
       ? supportFixture
@@ -95,10 +99,10 @@ try {
   await Promise.all([host.close(), frontend.close()])
 }
 
-async function openWaterCombat(host) {
+async function openPrimaryCombat(host, kind) {
   await waitUntil(() => (
     host.state().world.kind === 'boneyard' && host.hostPlayerId() !== null
-  ), 'Water browser did not enter the Boneyard', 120_000)
+  ), `${kind} browser did not enter the Boneyard`, 120_000)
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
   const playerId = host.hostPlayerId()
@@ -108,7 +112,7 @@ async function openWaterCombat(host) {
   ))
   assert.notEqual(playerIndex, -1)
   const solomon = state.world.encounter?.position
-  assert.ok(solomon, 'Water acceptance requires the authentic Solomon encounter')
+  assert.ok(solomon, `${kind} acceptance requires the authentic Solomon encounter`)
   await waitUntil(() => {
     const world = host.state().world
     if (world.kind === 'boneyard' && world.encounter?.phase === 'speaking') return true
