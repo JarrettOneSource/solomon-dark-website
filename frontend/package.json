@@ -115,6 +115,7 @@
     "smoke:game:lua-console": "node --experimental-strip-types tools/smoke-game-lua-console.mjs",
     "smoke:game:developer-grants": "node --experimental-strip-types tools/smoke-game-developer-grants.mjs",
     "smoke:game-audio": "node tools/smoke-game-audio.mjs",
+    "smoke:game:music-media": "node --experimental-strip-types tools/smoke-music-media-controls.mjs",
     "smoke:game:devices": "node tools/smoke-game-devices.mjs",
     "smoke:game:built-joystick": "node tools/smoke-game-built-joystick.mjs",
     "smoke:game:mobile-hud": "node --experimental-strip-types tools/smoke-mobile-hud-compact.mjs",

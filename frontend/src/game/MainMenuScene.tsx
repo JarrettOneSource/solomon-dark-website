@@ -28,6 +28,7 @@ import type {
 } from './core-kernels/player-character.ts'
 import { initialCreateWizardNameForSession } from './create-wizard-name.ts'
 import { createBrowserGameAudioDirector } from './game-audio-browser.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import {
   NATIVE_LEVEL_UP_SOUND_REQUEST,
@@ -371,9 +372,20 @@ interface MainMenuSceneProps {
   tutorialOfferEligible: boolean
 }
 
-export default function MainMenuScene({
+export default function MainMenuScene(props: MainMenuSceneProps) {
+  const [audio, setAudio] = useState<GameAudioDirector | null>(null)
+  useLayoutEffect(() => {
+    const director = createBrowserGameAudioDirector()
+    setAudio(director)
+    return () => director.destroy()
+  }, [])
+  return audio ? <MainMenuContent {...props} audio={audio} /> : null
+}
+
+function MainMenuContent({
   activeMods,
   accountUsername,
+  audio,
   connectSession,
   connectObserver,
   developerAccess,
@@ -393,8 +405,7 @@ export default function MainMenuScene({
   saveTransfer,
   submitGlobalHallOfFame,
   tutorialOfferEligible,
-}: MainMenuSceneProps) {
-  const audio = useMemo(createBrowserGameAudioDirector, [])
+}: MainMenuSceneProps & { readonly audio: GameAudioDirector }) {
   const skillPickerRendererOwnerRef = useRef<
     RetainedRendererOwner<SkillPickerRenderer> | null
   >(null)
@@ -659,7 +670,6 @@ export default function MainMenuScene({
     return () => {
       window.removeEventListener('pointerdown', unlock, { capture: true })
       window.removeEventListener('keydown', unlock, { capture: true })
-      audio.destroy()
     }
   }, [audio])
 

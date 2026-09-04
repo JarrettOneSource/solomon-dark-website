@@ -202,8 +202,9 @@ class FakeAudio {
   pauseCalls = 0
   paused = true
   playCalls = 0
-  preload = ''
+  preload: GameMusicChannel['preload'] = ''
   rejectNextPlay = false
+  pendingPlay: Promise<void> | null = null
   src: string
   volume = 1
 
@@ -228,7 +229,7 @@ class FakeAudio {
       return Promise.reject(new Error('autoplay blocked'))
     }
     this.paused = false
-    return Promise.resolve()
+    return this.pendingPlay ?? Promise.resolve()
   }
 }
 
@@ -312,19 +313,28 @@ function fixture(options: {
   const created: FakeAudio[] = []
   const frames = new FakeFrames()
   const playback = new FakePlayback()
+  const handlers = new Map<MediaSessionAction, MediaSessionActionHandler>()
+  const mediaSession = {
+    playbackState: 'none' as MediaSessionPlaybackState,
+    setActionHandler(action: MediaSessionAction, handler: MediaSessionActionHandler | null) {
+      if (handler) handlers.set(action, handler)
+      else handlers.delete(action)
+    },
+  }
   const director = new GameAudioDirector(SOURCES, {
     cancelFrame: frames.cancel,
     createMusicChannel: (source) => {
       const audio = new FakeAudio(source)
       audio.rejectNextPlay = options.rejectSources?.has(source) ?? false
       created.push(audio)
-      return audio as unknown as GameMusicChannel
+      return audio
     },
     now: frames.now,
+    mediaSession,
     playback,
     requestFrame: frames.request,
   })
-  return { created, director, frames, playback }
+  return { created, director, frames, handlers, mediaSession, playback }
 }
 
 const flushPromises = async () => {
@@ -499,6 +509,225 @@ test('primes every loaded song during input unlock for automatic College music',
   assert.equal(academy.volume, 0.5)
   frames.runAt(20)
   assert.equal(academy.volume, 1)
+})
+
+test('retired music stays silent when a media controller resumes cached channels', async () => {
+  const { created, director, frames } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  director.setScene('create')
+  await flushPromises()
+  frames.runAt(1_350)
+  director.setScene('hub')
+  await flushPromises()
+  frames.runAt(1_370)
+  const retired = created[0]!
+  assert.equal(retired.volume, 0)
+  assert.equal(retired.muted, true)
+  for (const channel of created) await channel.play()
+  assert.deepEqual(created.filter(channel => !channel.muted && channel.volume > 0)
+    .map(channel => channel.src), ['academy.mp3'])
+})
+
+test('ordinary keyboard unlock preserves deliberate music pause and playback position', async () => {
+  const { created, director, frames } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  const current = created[0]!
+  current.currentTime = 37
+  current.pause()
+  for (let press = 0; press < 5; press += 1) director.unlock()
+  await flushPromises()
+  assert.equal(current.paused, true)
+  assert.equal(current.currentTime, 37)
+  assert.equal(current.playCalls, 1)
+})
+
+test('media play and pause preserve position and resume only current music and live mod owners', async () => {
+  const { created, director, frames, handlers, mediaSession, playback } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  director.setScene('hub')
+  await flushPromises()
+  frames.runAt(1_020)
+  director.startAssetMusic('mod-owner', 'mod.mp3', 0.4)
+  await flushPromises()
+  const current = created[1]!
+  const mod = created[2]!
+  current.currentTime = 37
+  mod.currentTime = 12
+  for (let press = 0; press < 5; press += 1) {
+    handlers.get('pause')!({ action: 'pause' })
+    director.unlock()
+    await flushPromises()
+    assert.equal(current.paused, true)
+    assert.equal(mod.paused, true)
+    assert.equal(mediaSession.playbackState, 'paused')
+    handlers.get('play')!({ action: 'play' })
+    await flushPromises()
+    assert.equal(current.currentTime, 37)
+    assert.equal(mod.currentTime, 12)
+    assert.equal(current.paused, false)
+    assert.equal(mod.paused, false)
+    assert.equal(created[0]!.paused, true)
+    assert.equal(mediaSession.playbackState, 'playing')
+  }
+  const starts = created.map(channel => channel.playCalls)
+  handlers.get('play')!({ action: 'play' })
+  await flushPromises()
+  assert.deepEqual(created.map(channel => channel.playCalls), starts)
+  assert.deepEqual(playback.masterVolumeUpdates, [])
+  director.destroy()
+  assert.equal(handlers.size, 0)
+  assert.equal(mediaSession.playbackState, 'none')
+  assert.ok(created.every(channel => channel.paused && channel.muted && channel.volume === 0))
+})
+
+test('every scene can change while media-paused without starting a track', async () => {
+  const { created, director, frames, handlers } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  handlers.get('pause')!({ action: 'pause' })
+  for (const scene of ['create', 'hub', 'boneyard', 'boneyard-combat', 'game-over', 'title'] as const) {
+    director.setScene(scene)
+    director.unlock()
+    await flushPromises()
+    assert.ok(created.every(channel => channel.paused), scene)
+  }
+  director.startAssetMusic('replaced', 'old-mod.mp3')
+  director.startAssetMusic('replaced', 'new-mod.mp3')
+  assert.ok(created.every(channel => channel.paused))
+  handlers.get('play')!({ action: 'play' })
+  await flushPromises()
+  frames.runAt(2_000)
+  assert.deepEqual(created.filter(channel => !channel.paused && !channel.muted && channel.volume > 0)
+    .map(channel => channel.src), ['theme.mp3', 'new-mod.mp3'])
+})
+
+test('media pause during a crossfade retires its tail without resetting the current position', async () => {
+  const { created, director, frames, handlers } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  director.setScene('create')
+  await flushPromises()
+  frames.runAt(1_350)
+  created[1]!.currentTime = 0.35
+  handlers.get('pause')!({ action: 'pause' })
+  frames.runAt(2_000)
+  handlers.get('play')!({ action: 'play' })
+  await flushPromises()
+  assert.equal(created[0]!.paused, true)
+  assert.equal(created[0]!.volume, 0)
+  assert.equal(created[1]!.currentTime, 0.35)
+  assert.equal(created[1]!.paused, false)
+})
+
+test('pending music starts are deduplicated and cannot revive retired scene or mod channels', async () => {
+  const { created, director, frames } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  director.unlock()
+  await flushPromises()
+  const selection = created.find(channel => channel.src === 'selection.mp3')!
+  let resolvePlay!: () => void
+  selection.pendingPlay = new Promise(resolve => { resolvePlay = resolve })
+  director.setScene('create')
+  for (let press = 0; press < 5; press += 1) director.unlock()
+  assert.equal(selection.playCalls, 2, 'one prime and one scene start')
+  director.setScene('hub')
+  await flushPromises()
+  frames.runAt(1_020)
+  resolvePlay()
+  await flushPromises()
+  assert.equal(selection.paused, true)
+  assert.equal(selection.muted, true)
+  assert.equal(selection.volume, 0)
+
+  director.startAssetMusic('mod', 'mod.mp3')
+  const mod = created.at(-1)!
+  director.stopAssetMusic('mod')
+  await flushPromises()
+  assert.equal(mod.paused, true)
+  assert.equal(mod.muted, true)
+  assert.equal(mod.volume, 0)
+})
+
+test('late play results cannot pause a scene that became current again', async () => {
+  const { created, director, frames, handlers } = fixture()
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  director.unlock()
+  await flushPromises()
+  const selection = created.find(channel => channel.src === 'selection.mp3')!
+  let resolvePlay!: () => void
+  selection.pendingPlay = new Promise(resolve => { resolvePlay = resolve })
+  director.setScene('create')
+  director.setScene('hub')
+  director.setScene('create')
+  handlers.get('pause')!({ action: 'pause' })
+  handlers.get('play')!({ action: 'play' })
+  resolvePlay()
+  await flushPromises()
+  frames.runAt(2_000)
+  assert.equal(selection.paused, false)
+  assert.equal(selection.volume, 1)
+  assert.ok(created.filter(channel => channel !== selection).every(channel => channel.paused))
+})
+
+test('a media play command retries blocked autoplay without an earlier media pause', async () => {
+  const { created, director, frames, handlers } = fixture({ rejectSources: new Set(['theme.mp3']) })
+  director.setScene('title')
+  await flushPromises()
+  handlers.get('play')!({ action: 'play' })
+  await flushPromises()
+  frames.runAt(1_000)
+  assert.equal(created[0]!.paused, false)
+  assert.equal(created[0]!.playCalls, 2)
+  assert.equal(created[0]!.volume, 1)
+})
+
+test('destroyed directors cannot stop a cached channel acquired by a new director', async () => {
+  const frames = new FakeFrames()
+  const channel = new FakeAudio('theme.mp3')
+  let resolvePlay!: () => void
+  channel.pendingPlay = new Promise(resolve => { resolvePlay = resolve })
+  const handlers = new Map<MediaSessionAction, MediaSessionActionHandler>()
+  const mediaSession = {
+    playbackState: 'none' as MediaSessionPlaybackState,
+    setActionHandler(action: MediaSessionAction, handler: MediaSessionActionHandler | null) {
+      if (handler) handlers.set(action, handler)
+      else handlers.delete(action)
+    },
+  }
+  const createDirector = () => new GameAudioDirector(SOURCES, {
+    cancelFrame: frames.cancel,
+    createMusicChannel: () => channel,
+    mediaSession,
+    now: frames.now,
+    playback: new FakePlayback(),
+    requestFrame: frames.request,
+  })
+  const retired = createDirector()
+  retired.setScene('title')
+  retired.destroy()
+  const current = createDirector()
+  current.setScene('title')
+  retired.destroy()
+  assert.equal(handlers.size, 2)
+  resolvePlay()
+  await flushPromises()
+  frames.runAt(1_000)
+  assert.equal(channel.paused, false)
+  assert.equal(channel.muted, false)
+  assert.equal(channel.volume, 1)
+  current.destroy()
 })
 
 test('overlaps Sound instances and reuses restartable SoundStream channels', async () => {

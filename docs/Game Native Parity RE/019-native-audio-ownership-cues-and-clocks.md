@@ -471,3 +471,105 @@ unrelated to audio.
   auditory device receipt. The platform cause is instruction-backed by Apple
   and the fixed-volume browser model proves the corrected output graph; a later
   physical listen is optional confirmation, not an undispositioned member.
+
+## 2026-09-04 — Keyboard media pause/resume and retired music channels
+
+### Report, evidence, and boundary
+
+The user reports that repeated keyboard play/pause presses make several music
+tracks play together. At Website `3fa43737`, a Mac Chrome probe using the real
+browser audio factory reproduced the audible overlap: Title -> Create for
+350 ms -> Hub left the retired Title channel paused at output gain
+`0.6668000221252441`. Externally resuming retained media made both Title and
+Academy play at nonzero gain. The probe's DOM `MediaPlayPause` events alone did
+not invoke Chrome's OS media service; external media playback was exercised
+directly, and that distinction is retained as evidence provenance.
+
+The causal trace is `MainMenuScene`'s capture-phase keyboard/pointer unlock ->
+`GameAudioDirector.unlock`, cached scene channels, asynchronous `play`, and
+crossfade retirement. `stopAndReset` paused and rewound a channel but did not
+clear its gain or mute it. `unlock` also restarted any paused current track at
+zero, conflating a user media pause with initial autoplay denial. No Media
+Session handlers identified the currently owned music.
+
+Native ownership remains the two music channels and the scene/tick transitions
+documented above (`0x00409CD0`, `0x00409610`). Browser media controls are a
+Website extension, not a newly claimed retail input lane. The
+[Media Session specification](https://w3c.github.io/mediasession/#actions-model)
+defines application play/pause handlers for hardware and platform controls;
+the game must bind those actions to its music owner and remove them on teardown.
+
+System: scene/mod music admission, autoplay unlock, media pause/resume,
+crossfades, retirement, and director teardown.
+
+| Member | Disposition | Required proof |
+| --- | --- | --- |
+| Title/theme, Create/selection, Hub/academy | `exact-ported` | same source and 100/100/2-tick transitions; retired channels are silent on external replay |
+| Boneyard/prelude, combat/combat, Game Over/death | `exact-ported` | same source and 100/100/0-tick transitions; every destination covered |
+| Interrupted or rapidly replaced crossfade | `exact-ported` | discarded outgoing channel has zero gain and is muted; at most current/outgoing native music remain audible |
+| Initial autoplay refusal and per-song priming | `exact-ported` | first input still retries a blocked start and primes once; normal input never rewinds an already-started song |
+| Pending play callbacks, repeated unlock, rapid scene reuse | `exact-ported` | stale callbacks cannot restart a retired track or pause a track that is active again; only one start/fade for an unchanged request |
+| Media Session play/pause and repeated commands | `exact-ported` for the browser extension | active positions survive; pause is idempotent; resume touches only current/outgoing and live mod owners |
+| Scene changes while music is media-paused | `exact-ported` for the browser extension | newest scene remains selected without starting audio; existing scene fade clock remains presentation-owned |
+| Mod music start, replacement, stop, and teardown | `exact-ported` for existing mod ownership | media controls preserve active owner membership; stopped/pending former owners stay silent |
+| Director destroy and subsequent route entry | `exact-ported` | zero audible retired channels; media handlers are removed and cached streams remain reusable |
+| Game pause, one-shots, SoundStreams, SoundLoops | `verified-already-at-parity` | media pause governs music; simulation pause and effect ownership remain independent |
+| Public-site jukebox | `out-of-system` | it is stopped/disconnected on `/game` entry; the reproduced overlap involved only game music channels |
+
+### Validation contract
+
+Add failing director tests for the reproduced retained-gain overlap and paused
+playback rewind before changing runtime code. Extend the same seam for every
+scene, paused transitions, mod owners, pending promises, repeated requests,
+autoplay rejection, and destroy. Use Mac Chrome with genuine media elements
+and Web Audio gains to exercise registered Media Session actions, rapid
+transitions, deliberate pause plus ordinary keyboard input, and teardown.
+The browser receipt must distinguish protocol/handler injection from physical
+OS key events. Run the full Mac Website validation gate on the final candidate.
+
+The lifecycle sweep also found director construction in `useMemo` while its
+destruction lived in an effect cleanup. React Strict Mode can replay that
+cleanup while retaining the memoized instance. Audio creation/destruction and
+Media Session registration therefore belong to one route layout effect;
+the menu body receives that live director. This also avoids registering global
+media handlers from a render that React may discard. This follows React's
+[documented effect replay](https://react.dev/reference/react/StrictMode#fixing-bugs-found-by-re-running-effects-in-development).
+
+### Implementation and focused/browser validation
+
+- Retiring any music channel now mutes it, sets its Web Audio gain to zero,
+  pauses/rewinds it, and disconnects its output. The resident cache still
+  reuses the same six native streams when they become active again.
+- Music pause is an explicit director state. Media Session play/pause targets
+  current/outgoing scene music plus live mod music owners, preserves playback
+  positions, and leaves the Sound/SoundStream/SoundLoop bus independent.
+  Ordinary input unlock retries only a scene that has not started, rather
+  than rewinding a deliberately paused song.
+- Pending scene starts are deduplicated by generation. Their completion
+  checks current ownership; stale work cannot stop a newly reused channel,
+  revive retired mod music, or add another fade to an unchanged request.
+  Destroy removes both platform action handlers and releases every owned
+  channel. A route layout effect now creates and destroys the director.
+- Before the fix, the two added regressions failed with retired gain `0.65`
+  and an ordinary keyboard unlock resuming deliberately paused playback.
+  After the fix, the focused director/Web Audio/media-gain set passed
+  **65/65** tests on the Mac. All six native scenes, media actions,
+  interrupted fades, mod owners, blocked autoplay, deferred play, cache reuse,
+  and destruction have assertions.
+- The original real-media Chrome probe now reports retired Title gain zero
+  and muted, while only Academy remains audible after external replay of all
+  cached elements. Chrome **152.0.7977.76** also passed the maintained
+  `smoke:game:music-media` journey against the production build and Vite/React
+  Strict Mode: 36 repeated pause/resume cycles per run across Title, Hub, and
+  Boneyard, paused scene changes, ordinary Shift input while paused, SPA route
+  teardown/re-entry, six resident channels, and empty page/console/response/
+  request-error arrays. Browser and host shutdown are awaited together before
+  reporting success, avoiding a test shutdown race.
+- These browser checks invoke the actual registered Media Session handlers;
+  they do not claim to synthesize the Mac's physical system media key. Real
+  keyboard events cover the game's general input-unlock path. The platform
+  action dispatch itself is the standard browser-owned boundary described
+  above; no predicted audio difference remains in the owned implementation.
+- The complete canonical Mac gate remains the final check for this candidate.
+  No music assets, native scene choices, crossfade durations, simulation pause
+  rules, or user volume settings were changed.

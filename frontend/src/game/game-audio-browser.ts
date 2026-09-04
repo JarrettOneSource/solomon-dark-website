@@ -58,6 +58,7 @@ export function createBrowserGameAudioDirector(): GameAudioDirector {
       const channel = musicChannels.get(source)
       return channel ?? createBrowserMusicChannel(context, new Audio(source))
     },
+    mediaSession: navigator.mediaSession,
     playback: createWebAudioPlayback(
       context,
       buffers,

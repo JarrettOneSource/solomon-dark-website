@@ -45,6 +45,7 @@ export interface GameAudioPlayback {
 export interface GameAudioDirectorOptions {
   cancelFrame?: (handle: number) => void
   createMusicChannel: (source: string) => GameMusicChannel
+  mediaSession?: Pick<MediaSession, 'playbackState' | 'setActionHandler'>
   now?: () => number
   playback: GameAudioPlayback
   requestFrame?: (callback: FrameRequestCallback) => number
@@ -67,9 +68,14 @@ export class GameAudioDirector {
   private cancelFrame: (handle: number) => void
   private createMusicChannel: (source: string) => GameMusicChannel
   private currentMusic: GameMusicChannel | null = null
+  private currentMusicStarted = false
+  private destroyed = false
   private fadeFrame = 0
   private generation = 0
   private musicScene: GameAudioScene | null = null
+  private readonly mediaSession: GameAudioDirectorOptions['mediaSession']
+  private musicPaused = false
+  private pendingMusicStartGeneration: number | null = null
   private readonly musicChannels = new Map<string, GameMusicChannel>()
   private readonly assetMusic = new Map<string, Readonly<{ channel: GameMusicChannel; volume: number }>>()
   private loops = new Map<GameLoopCue, Map<string, ActiveLoopOptions>>()
@@ -91,10 +97,13 @@ export class GameAudioDirector {
   ) {
     this.sources = sources
     this.createMusicChannel = options.createMusicChannel
+    this.mediaSession = options.mediaSession
     this.playback = options.playback
     this.now = options.now ?? (() => performance.now())
     this.requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback))
     this.cancelFrame = options.cancelFrame ?? ((handle) => cancelAnimationFrame(handle))
+    this.mediaSession?.setActionHandler('pause', () => this.setMusicPaused(true))
+    this.mediaSession?.setActionHandler('play', () => this.setMusicPaused(false))
   }
 
   setVolumes(soundVolume: number, musicVolume: number): void {
@@ -114,6 +123,7 @@ export class GameAudioDirector {
   }
 
   setScene(scene: GameAudioScene): void {
+    if (this.destroyed) return
     if (scene === this.musicScene && this.currentMusic) return
 
     this.cancelMusicFade()
@@ -126,18 +136,44 @@ export class GameAudioDirector {
     this.currentMusic.loop = true
     this.setMusicEnvelope(this.currentMusic, 0)
     this.musicScene = scene
+    this.currentMusicStarted = false
     this.generation += 1
+    this.updateMediaPlaybackState()
 
     void this.startCurrentMusic(this.generation)
   }
 
   unlock(): void {
+    if (this.destroyed) return
     this.playback.unlock()
-    if (this.currentMusic?.paused) {
-      this.currentMusic.currentTime = 0
+    if (!this.musicPaused && !this.currentMusicStarted && this.currentMusic?.paused) {
       void this.startCurrentMusic(this.generation)
     }
-    this.primeMusicChannels()
+    if (!this.musicPaused) this.primeMusicChannels()
+  }
+
+  setMusicPaused(paused: boolean): void {
+    if (this.destroyed) return
+    const channels = new Set([
+      this.currentMusic,
+      this.outgoingMusic,
+      ...[...this.assetMusic.values()].map(({ channel }) => channel),
+    ])
+    if (paused === this.musicPaused && (paused || ![...channels].some(channel => channel?.paused))) return
+    this.musicPaused = paused
+    this.generation += 1
+    this.updateMediaPlaybackState()
+    if (paused) {
+      for (const channel of new Set([...this.musicChannels.values(), ...channels])) channel?.pause()
+      return
+    }
+    this.playback.unlock()
+    for (const channel of channels) {
+      if (!channel) continue
+      if (channel === this.currentMusic && !this.currentMusicStarted) {
+        void this.startCurrentMusic(this.generation)
+      } else void this.playOwnedMusic(channel)
+    }
   }
 
   startLoop(
@@ -209,6 +245,7 @@ export class GameAudioDirector {
   }
 
   startAssetMusic(owner: string, source: string, volume = 1): void {
+    if (this.destroyed) return
     this.stopAssetMusic(owner)
     const channel = this.makeMusicChannel(source)
     const boundedVolume = clampUnit(volume)
@@ -216,7 +253,8 @@ export class GameAudioDirector {
     channel.loop = true
     channel.volume = boundedVolume * this.musicVolume
     this.assetMusic.set(owner, Object.freeze({ channel, volume: boundedVolume }))
-    void channel.play().catch(() => undefined)
+    this.updateMediaPlaybackState()
+    void this.playOwnedMusic(channel)
   }
 
   stopAssetMusic(owner: string): void {
@@ -224,7 +262,7 @@ export class GameAudioDirector {
     if (!entry) return
     this.assetMusic.delete(owner)
     this.stopAndReset(entry.channel)
-    entry.channel.disconnect()
+    this.updateMediaPlaybackState()
   }
 
   playStream(cue: GameStreamCue, options: PlaySoundOptions = {}): void {
@@ -250,11 +288,12 @@ export class GameAudioDirector {
   }
 
   destroy(): void {
+    if (this.destroyed) return
+    this.destroyed = true
     this.generation += 1
     this.cancelMusicFade()
     for (const channel of this.musicChannels.values()) {
       this.stopAndReset(channel)
-      channel.disconnect()
     }
     this.currentMusic = null
     this.outgoingMusic = null
@@ -265,6 +304,9 @@ export class GameAudioDirector {
     this.musicEnvelopes.clear()
     this.primedMusic.clear()
     this.primingMusic.clear()
+    this.mediaSession?.setActionHandler('play', null)
+    this.mediaSession?.setActionHandler('pause', null)
+    this.updateMediaPlaybackState()
     this.playback.destroy()
   }
 
@@ -308,31 +350,62 @@ export class GameAudioDirector {
   }
 
   private finishMusicPrime(channel: GameMusicChannel, usable: boolean): void {
+    if (this.destroyed) return
     if (!this.primingMusic.delete(channel)) return
     if (usable) this.primedMusic.add(channel)
-    if (channel === this.currentMusic || channel === this.outgoingMusic) return
+    if (channel === this.currentMusic || channel === this.outgoingMusic) {
+      if (this.musicPaused) channel.pause()
+      return
+    }
     this.stopAndReset(channel)
   }
 
   private async startCurrentMusic(generation: number): Promise<void> {
     const incoming = this.currentMusic
     const scene = this.musicScene
-    if (!incoming || !scene || generation !== this.generation) return
-    incoming.muted = false
-    try {
-      await incoming.play()
-    } catch {
-      if (generation !== this.generation || incoming !== this.currentMusic) return
-      incoming.pause()
-      incoming.currentTime = 0
-      return
+    if (
+      !incoming || !scene || this.destroyed || this.musicPaused
+      || generation !== this.generation || this.pendingMusicStartGeneration === generation
+    ) return
+    this.pendingMusicStartGeneration = generation
+    const playing = await this.playOwnedMusic(incoming)
+    if (this.pendingMusicStartGeneration === generation) {
+      this.pendingMusicStartGeneration = null
     }
-    if (generation !== this.generation || incoming !== this.currentMusic) {
-      incoming.pause()
-      return
-    }
+    if (!playing || generation !== this.generation || incoming !== this.currentMusic) return
+    this.currentMusicStarted = true
     this.primedMusic.add(incoming)
+    this.cancelMusicFade()
     this.beginMusicFade(incoming, this.outgoingMusic, GAME_SCENE_MUSIC[scene].transitionTicks)
+  }
+
+  private async playOwnedMusic(channel: GameMusicChannel): Promise<boolean> {
+    if (this.destroyed || this.musicPaused) return false
+    channel.muted = false
+    try {
+      await channel.play()
+    } catch {
+      return false
+    }
+    if (this.destroyed) return false
+    const owned = channel === this.currentMusic || channel === this.outgoingMusic
+      || [...this.assetMusic.values()].some(entry => entry.channel === channel)
+    if (!owned) {
+      this.stopAndReset(channel)
+      return false
+    }
+    if (this.musicPaused) {
+      channel.pause()
+      return false
+    }
+    return true
+  }
+
+  private updateMediaPlaybackState(): void {
+    if (!this.mediaSession) return
+    this.mediaSession.playbackState = this.destroyed || (!this.currentMusic && this.assetMusic.size === 0)
+      ? 'none'
+      : this.musicPaused ? 'paused' : 'playing'
   }
 
   private beginMusicFade(
@@ -368,9 +441,12 @@ export class GameAudioDirector {
 
   private stopAndReset(channel: GameMusicChannel | null): void {
     if (!channel) return
+    channel.muted = true
+    channel.volume = 0
     channel.pause()
     channel.currentTime = 0
     this.musicEnvelopes.delete(channel)
+    channel.disconnect()
   }
 
   private setMusicEnvelope(channel: GameMusicChannel, envelope: number): void {
