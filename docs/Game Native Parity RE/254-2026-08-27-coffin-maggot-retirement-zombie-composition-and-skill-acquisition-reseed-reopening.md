@@ -78,7 +78,7 @@ independent terminal effects.
 | Coffin death body | `0x0049B310` plus common removal | verified-already-at-parity; browser regression added | body disappears on the terminal edge; debris is independent |
 | parent-loss children | stored parent handle resolution | exact-ported | all active/inactive/emerging children retire after invalidation |
 | Maggot wave-count policy | Maggot constructor cancels the shared Badguy count increment | exact-ported in this reopening | wave thresholds and spawn capacity count Coffin, never its Maggots |
-| Coffin break debris/audio/reward | independent Bouncer/Unbind/audio actors | verified-already-at-parity | long-lived debris cannot retain a living Coffin view |
+| Coffin break debris/audio/reward | independent Bouncer/Unbind/audio actors | lifetime verified; splinter selection corrected in entry 081's 2026-09-04 reopening | long-lived debris cannot retain a living Coffin view; only BadGuys `2067..2069` supplies extra airborne wood fragments |
 | Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon terminal bodies | shared Badguy terminal/removal family | verified-already-at-parity | per-family body removal and actor retirement sweep |
 
 Native system C: **Zombie composite body and auxiliary presentation**, including

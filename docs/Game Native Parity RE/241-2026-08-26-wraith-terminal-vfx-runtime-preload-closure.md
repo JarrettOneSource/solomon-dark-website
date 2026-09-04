@@ -47,7 +47,7 @@ actors remain outside this boundary.
 | Zombie | fragments `2088,2089,2091,2093,2293,2297`, Unbind `86`, clipped `DeadHawg[30]` | selected and covered |
 | Wraith | shared bones/skull/Unbind, additive rays `10/11`, additive dissolve core `20`, bouncers `27` | record 20 host/painter exact; runtime preload missing |
 | Demon | additive banish `15`, sprite array `401..419`, `Demon[55..61]`, five `DeadHawg[46..77]` fire arrays, and terminal burst `BadGuys[110,251..254]` | selected and covered |
-| Coffin | shared bones/skull/Unbind, main fragments `2013..2062`, and extra fragments `DeadHawg[114..144]` / `BadGuys[2067..2069]` | selected and covered |
+| Coffin | shared bones/skull/Unbind, main fragments `2013..2062`, and extra fragments `BadGuys[2067..2069]` only | selected and covered; the former mixed DeadHawg claim is superseded by entry 081's 2026-09-04 binding trace |
 
 The inventory has one missing runtime member and no browser-platform variant:
 `BadGuys[20]`. It already exists as a nonempty shipped atlas record and asset,

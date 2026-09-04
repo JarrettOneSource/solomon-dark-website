@@ -174,8 +174,7 @@ test('every reachable projectile and welded painter record is selected for prelo
       ...recordPairs('BadGuys', 2_013, 2_069),
       ...[2_088, 2_089, 2_091, 2_093, 2_293, 2_297]
         .map((entry) => ['BadGuys', entry] as const),
-      ...[28, 30].map((entry) => ['DeadHawg', entry] as const),
-      ...recordPairs('DeadHawg', 114, 144),
+      ...[28, 30, 120, 144].map((entry) => ['DeadHawg', entry] as const),
     ]
     const selectedDeathEffects = new Set<string>()
     for (const [atlas, entry] of deathEffectRecords) {
@@ -183,7 +182,7 @@ test('every reachable projectile and welded painter record is selected for prelo
       assert.ok(record.source.length > 0)
       selectedDeathEffects.add(`${atlas}:${entry}`)
     }
-    assert.equal(selectedDeathEffects.size, 159)
+    assert.equal(selectedDeathEffects.size, 130)
   } finally {
     await server.close()
   }

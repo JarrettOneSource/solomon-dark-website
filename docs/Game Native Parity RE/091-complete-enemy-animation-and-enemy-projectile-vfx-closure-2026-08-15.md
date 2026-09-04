@@ -445,7 +445,8 @@ Website's per-object inbound Region tint.
   rewards, and removal. The current sequential 55..61 strip and tick-zero
   terminal handoff are false.
 - Coffin order is shared bones, `40..50` main fragments, `12..15` extra
-  fragments, skull, then post-world Unbind. Main/extra bouncers have distinct
+  fragments (BadGuys `2067..2069` only; corrected by entry 081's 2026-09-04
+  reopening), skull, then post-world Unbind. Main/extra bouncers have distinct
   launch magnitudes and doubled bounce velocity; the current root-only generic
   launches and `12..16` count are wrong.
 - Maggot constructor scale `1+Float(.25)` survives its child construction and

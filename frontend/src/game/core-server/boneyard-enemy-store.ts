@@ -6745,17 +6745,12 @@ function spawnCoffinTerminalEffects(
 
   const extraCount = 12 + drawInteger(work, 4)
   for (let index = 0; index < extraCount; index += 1) {
-    let fragment: typeof COFFIN_EXTRA_FRAGMENT_RECORDS[number]
     spawnBouncer(
       work,
       actor,
       tick,
-      () => {
-        fragment = COFFIN_EXTRA_FRAGMENT_RECORDS[
-          drawInteger(work, COFFIN_EXTRA_FRAGMENT_RECORDS.length)
-        ]!
-        return fragment.entry
-      },
+      // Coffin::Die selects BadGuys +0x4ABC, not the separate ground-decoration array.
+      () => 2067 + drawInteger(work, 3),
       `coffin-extra-fragment:${index}`,
       () => {
         const speed = 1 + drawUnit(work)
@@ -6763,7 +6758,6 @@ function spawnCoffinTerminalEffects(
         const velocity = { x: direction.x * 1.5, y: direction.y }
         const distance = 15 + drawUnit(work) * 10
         return {
-          atlas: fragment.atlas,
           bounceVelocityScale: 2,
           position: {
             x: actor.position.x + velocity.x * (distance + 2),
@@ -6867,17 +6861,6 @@ const SKELETON_BASE_FRAGMENT_ENTRIES = Object.freeze([
   113, 113, 113, 115, 118, 121, 120, 119, 116,
   121, 120, 119, 116, 117, 117, 117, 117, 117,
 ] as const)
-
-const COFFIN_EXTRA_FRAGMENT_RECORDS = Object.freeze([
-  ...Array.from({ length: 31 }, (_, index) => ({
-    atlas: 'DeadHawg' as const,
-    entry: 114 + index,
-  })),
-  ...Array.from({ length: 3 }, (_, index) => ({
-    atlas: 'BadGuys' as const,
-    entry: 2067 + index,
-  })),
-])
 
 function emitEnemyDeathSounds(
   work: WorkingStep,

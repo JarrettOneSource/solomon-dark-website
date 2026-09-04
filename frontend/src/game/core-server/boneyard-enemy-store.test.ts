@@ -4046,6 +4046,45 @@ test('every survival family assembles its native terminal animation classes', ()
   ).length, 1)
 })
 
+test('Coffin deaths select the complete native airborne fragment arrays without ground decorations', () => {
+  const mainEntries = new Set<number>()
+  const extraEntries = new Set<number>()
+  const skullEntries = new Set<number>()
+  const extraCounts = new Set<number>()
+  for (let index = 0; index < 128; index += 1) {
+    const seed = `coffin-black-circle-${index}`
+    const result = killOneAndStep(seed, 'COFFIN')
+    assert.equal(result.store.actors.length, 0, seed)
+    const effects = result.store.deathEffects
+    const bones = effects.filter(({ role }) => role === 'coffin-bone')
+    assert.deepEqual(bones.map(({ entry }) => entry).sort((a, b) => a - b), [
+      113, 113, 113, 115, 116, 116, 117, 117, 117, 117, 117,
+      118, 119, 119, 120, 120, 121, 121,
+    ], seed)
+    const main = effects.filter(({ role }) => role.startsWith('coffin-main-fragment:'))
+    assert.ok(main.length >= 40 && main.length <= 50, seed)
+    const extras = effects.filter(({ role }) => role.startsWith('coffin-extra-fragment:'))
+    assert.ok(extras.length >= 12 && extras.length <= 15, seed)
+    extraCounts.add(extras.length)
+    const skulls = effects.filter(({ role }) => role === 'coffin-skull')
+    assert.equal(skulls.length, 1, seed)
+    for (const effect of [...bones, ...main, ...extras, ...skulls]) {
+      assert.equal(effect.atlas, 'BadGuys', `${seed}: ${effect.role}:${effect.entry}`)
+      assert.equal(effect.kind, 'bouncer', seed)
+      assert.equal(effect.shadow, true, seed)
+      assert.equal(effect.presentationOwner, 'world-sorted', seed)
+    }
+    for (const { entry } of main) mainEntries.add(entry)
+    for (const { entry } of extras) extraEntries.add(entry)
+    for (const { entry } of skulls) skullEntries.add(entry)
+  }
+  assert.deepEqual([...mainEntries].sort((a, b) => a - b),
+    Array.from({ length: 50 }, (_, index) => 2013 + index))
+  assert.deepEqual([...extraEntries].sort((a, b) => a - b), [2067, 2068, 2069])
+  assert.deepEqual([...skullEntries].sort((a, b) => a - b), [1819, 1820, 1821, 1822])
+  assert.deepEqual([...extraCounts].sort((a, b) => a - b), [12, 13, 14, 15])
+})
+
 test('Demon death retains its body flames and delayed Anim_FireBurst choreography', () => {
   let result = killOneAndStep('demon-death-choreography', 'DEMON')
   let effects = result.store.deathEffects
@@ -4204,10 +4243,8 @@ test('family death branches emit the recovered ordered sound calls and pitch ban
   )
   assert.ok(extraFragments.length >= 12 && extraFragments.length <= 15)
   assert.ok(extraFragments.every(({ atlas, entry }) => (
-    (atlas === 'DeadHawg' && entry >= 114 && entry <= 144)
-    || (atlas === 'BadGuys' && entry >= 2067 && entry <= 2069)
+    atlas === 'BadGuys' && entry >= 2067 && entry <= 2069
   )))
-  assert.ok(extraFragments.some(({ atlas }) => atlas === 'DeadHawg'))
 })
 
 test('wave spawn resolution observes post-retirement and terminal-child live counts', () => {
