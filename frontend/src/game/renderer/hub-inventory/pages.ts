@@ -1,69 +1,81 @@
-import { Container, Graphics } from 'pixi.js'
 import {
+  type HubInventoryItem,
   NATIVE_EQUIPMENT_LEVEL_REDUCTION_SKILL_ID,
   findInventoryItem,
   inventoryItemsAtSackPath,
   projectInventoryRootSlots,
-  type HubInventoryItem,
-} from '../core-kernels/hub-economy.ts'
-import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
-import type { PlayerBeltComponent } from '../core-kernels/native-belt.ts'
-import { NATIVE_INVENTORY_GOLD_LEDGER } from '../native-inventory-gold-layout.ts'
-import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
+} from '../../core-kernels/hub-economy.ts'
+import { type PlayerBeltComponent } from '../../core-kernels/native-belt.ts'
 import {
+  type PlayerCharacterConfig,
+  type WizardElement,
+} from '../../core-kernels/player-character.ts'
+import {
+  type ProtocolPlayerEconomy,
+  type ProtocolPlayerProgression,
+} from '../../protocol/game-state.ts'
+import {
+  HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_GRID,
-  HUB_INVENTORY_ROOT_CHROME,
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_UNFORGE_TARGET,
+  hubInventoryFlybyFrame,
+  hubInventoryFlybyPoint,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
-} from './hub-inventory-render-contract.ts'
-import type {
-  RenderContext,
-  InventoryBuildState,
-  InventorySackPages,
-} from './hub-inventory-render-model.ts'
-import type {
-  HubInventorySelectionModel,
-  HubInventoryDragModel,
-  HubInventoryFlybyModel,
-  HubInventorySackTransitionModel,
-  HubServiceInspectionModel,
-} from './hub-inventory-renderer.ts'
+} from '../hub-inventory-render-contract.ts'
 import {
+  addBackpackFrame,
+  addGold,
+  addHorizontalChain,
   addInventorySidePanelBackdrop,
   addInventorySidePanelChrome,
-  addInventorySectionHeader,
-  addStats,
-  addPlayerPreview,
-  addEquipment,
-  addBelt,
-  addHagathaInventoryPane,
-} from './hub-inventory-panels.ts'
-import { addOwnedPerkInspection, addInventoryItemInfo } from './hub-inventory-inspection.ts'
+} from './chrome.ts'
 import {
-  addInventoryFlyby,
-  economyRecipeIndexes,
-  permanentSkillRank,
-  addInventorySelection,
-  inventoryItemForSelection,
-  inventoryItemForDrag,
-  inventorySelectionCenter,
-  addInventoryDragger,
-  addClippedItemIcon,
-} from './hub-inventory-items.ts'
-import {
-  addHorizontalChain,
   addAtlasSprite,
+  addBitmapText,
   addCenteredAtlasSprite,
   addTiledAtlas,
-  addBitmapText,
-} from './hub-inventory-drawing.ts'
+} from './drawing.ts'
+import {
+  addBelt,
+  addEquipment,
+  addPlayerPreview,
+} from './equipment.ts'
+import {
+  addClippedItemIcon,
+  addInventoryDragger,
+  addInventoryItemInfo,
+  addInventorySelection,
+  addItemIcon,
+  inventoryItemForDrag,
+  inventoryItemForSelection,
+  inventorySelectionCenter,
+} from './items.ts'
+import {
+  type HubInventoryDragModel,
+  type HubInventoryFlybyModel,
+  type HubInventorySackTransitionModel,
+  type HubInventorySelectionModel,
+  type HubServiceInspectionModel,
+  type InventoryBuildState,
+  type InventoryFlybyView,
+  type InventorySackPages,
+  type RenderContext,
+} from './model.ts'
+import {
+  addHagathaInventoryPane,
+  addOwnedPerkInspection,
+  economyRecipeIndexes,
+  permanentSkillRank,
+} from './services.ts'
+import { addStats } from './stats.ts'
+import {
+  Container,
+  Graphics,
+} from 'pixi.js'
 
-export function buildInventory(
-  context: RenderContext,
-  layer: Container,
-  model: {
+interface InventoryPageModel {
     readonly belt: PlayerBeltComponent
     readonly config: PlayerCharacterConfig
     readonly economy: ProtocolPlayerEconomy
@@ -77,7 +89,12 @@ export function buildInventory(
     readonly sackTransition: HubInventorySackTransitionModel | null
     readonly selection?: HubInventorySelectionModel | null
     readonly statsPage: number
-  },
+}
+
+export function buildInventory(
+  context: RenderContext,
+  layer: Container,
+  model: InventoryPageModel,
 ): InventoryBuildState {
   const { economy, progression } = model
   const companion = model.companion ?? false
@@ -89,8 +106,6 @@ export function buildInventory(
     )),
   )
   const selection = model.selection ?? null
-  const visibleBackpack = inventoryItemsAtSackPath(economy.backpack, model.sackPath)
-    ?? economy.backpack
   const background = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
   layer.addChild(background)
 
@@ -117,49 +132,7 @@ export function buildInventory(
   addHorizontalChain(context, layer, 0, 800, 1600)
   addBackpackFrame(context, layer)
 
-  let sackPages: InventorySackPages | null = null
-  if (model.sackTransition) {
-    const outgoing = new Container()
-    const incoming = new Container()
-    outgoing.label = 'native-sack-page-outgoing'
-    incoming.label = 'native-sack-page-incoming'
-    addInventoryGridPage(
-      context,
-      outgoing,
-      inventoryItemsAtSackPath(economy.backpack, model.sackTransition.fromPath) ?? [],
-      null,
-      null,
-      model.config.element,
-      inventorySackAtPath(economy.backpack, model.sackTransition.fromPath),
-      hiddenItemIds,
-    )
-    addInventoryGridPage(
-      context,
-      incoming,
-      inventoryItemsAtSackPath(economy.backpack, model.sackTransition.toPath) ?? [],
-      selection,
-      null,
-      model.config.element,
-      inventorySackAtPath(economy.backpack, model.sackTransition.toPath),
-      hiddenItemIds,
-    )
-    layer.addChild(outgoing, incoming)
-    sackPages = { incoming, outgoing, transition: model.sackTransition }
-  } else {
-    const page = new Container()
-    page.label = 'native-sack-page-current'
-    addInventoryGridPage(
-      context,
-      page,
-      visibleBackpack,
-      selection,
-      dragging,
-      model.config.element,
-      inventorySackAtPath(economy.backpack, model.sackPath),
-      hiddenItemIds,
-    )
-    layer.addChild(page)
-  }
+  const sackPages = buildSackPages(context, layer, model, selection, dragging, hiddenItemIds)
 
   addGold(context, layer, economy.gold)
   const modalHud = addBelt(
@@ -213,6 +186,61 @@ export function buildInventory(
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
     : null
   return { dragger, flybys: flybyViews, itemInfo, modalHud, playerPreview, sackPages }
+}
+
+function buildSackPages(
+  context: RenderContext,
+  layer: Container,
+  model: InventoryPageModel,
+  selection: HubInventorySelectionModel | null,
+  dragging: HubInventoryDragModel | null,
+  hiddenItemIds: ReadonlySet<number>,
+): InventorySackPages | null {
+  let sackPages: InventorySackPages | null = null
+  if (model.sackTransition) {
+    const outgoing = new Container()
+    const incoming = new Container()
+    outgoing.label = 'native-sack-page-outgoing'
+    incoming.label = 'native-sack-page-incoming'
+    addInventoryGridPage(
+      context,
+      outgoing,
+      inventoryItemsAtSackPath(model.economy.backpack, model.sackTransition.fromPath) ?? [],
+      null,
+      null,
+      model.config.element,
+      inventorySackAtPath(model.economy.backpack, model.sackTransition.fromPath),
+      hiddenItemIds,
+    )
+    addInventoryGridPage(
+      context,
+      incoming,
+      inventoryItemsAtSackPath(model.economy.backpack, model.sackTransition.toPath) ?? [],
+      selection,
+      null,
+      model.config.element,
+      inventorySackAtPath(model.economy.backpack, model.sackTransition.toPath),
+      hiddenItemIds,
+    )
+    layer.addChild(outgoing, incoming)
+    sackPages = { incoming, outgoing, transition: model.sackTransition }
+  } else {
+    const page = new Container()
+    page.label = 'native-sack-page-current'
+    addInventoryGridPage(
+      context,
+      page,
+      inventoryItemsAtSackPath(model.economy.backpack, model.sackPath) ?? model.economy.backpack,
+      selection,
+      dragging,
+      model.config.element,
+      inventorySackAtPath(model.economy.backpack, model.sackPath),
+      hiddenItemIds,
+    )
+    layer.addChild(page)
+  }
+
+  return sackPages
 }
 
 function addInventoryGridPage(
@@ -289,41 +317,52 @@ function inventorySackAtPath(
   return item?.kind === 'sack' && item.nativeTypeId === 7008 ? item : null
 }
 
-function addBackpackFrame(context: RenderContext, layer: Container): void {
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 513.5)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1663.5, 513.5, -1, 1)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 775.5, 1, -1)
-  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1663.5, 775.5, -1, -1)
-  addCenteredAtlasSprite(context, layer, 'UI', 71, 21, 481)
-  addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 481)
-  addCenteredAtlasSprite(context, layer, 'UI', 71, 21, 809)
-  addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 809)
-  const header = HUB_INVENTORY_ROOT_CHROME.backpackHeader
-  addInventorySectionHeader(
-    context,
-    layer,
-    header.text,
-    header.centerX,
-    header.frameTop,
-    header.baselineY,
-  )
+function addInventoryFlyby(
+  context: RenderContext,
+  layer: Container,
+  model: HubInventoryFlybyModel,
+  element: WizardElement,
+): InventoryFlybyView {
+  const container = new Container()
+  container.label = 'native-inventory-flyby'
+  const lanes = model.lanes.map((lane) => {
+    const afterimages = new Map<number, Container>()
+    for (const spawnTick of HUB_INVENTORY_FLYBY.afterimageBirthTicks) {
+      const afterimage = new Container()
+      afterimage.label = `native-inventory-flyby-afterimage-${spawnTick}`
+      afterimage.visible = false
+      addItemIcon(context, afterimage, lane.item, 0, 0, element)
+      afterimages.set(spawnTick, afterimage)
+      container.addChild(afterimage)
+    }
+    const main = new Container()
+    main.label = 'native-inventory-flyby-main'
+    addItemIcon(context, main, lane.item, 0, 0, element)
+    container.addChild(main)
+    return { afterimages, main, model: lane }
+  })
+  layer.addChild(container)
+  const view = { container, lanes, model }
+  updateInventoryFlybyView(view, model.startedAtMs)
+  return view
 }
 
-function addGold(context: RenderContext, layer: Container, gold: number): void {
-  addCenteredAtlasSprite(
-    context,
-    layer,
-    'UI',
-    NATIVE_INVENTORY_GOLD_LEDGER.iconRecord,
-    ...NATIVE_INVENTORY_GOLD_LEDGER.iconCenter,
-  )
-  addBitmapText(
-    context,
-    layer,
-    gold.toLocaleString(),
-    'body',
-    NATIVE_INVENTORY_GOLD_LEDGER.textLeft,
-    NATIVE_INVENTORY_GOLD_LEDGER.textBaselineY,
-    { align: 'left', tint: 0xffffff },
-  )
+export function updateInventoryFlybyView(view: InventoryFlybyView, nowMs: number): void {
+  const frame = hubInventoryFlybyFrame(view.model.startedAtMs, nowMs)
+  const afterimages = new Map(frame.afterimages.map((afterimage) => (
+    [afterimage.spawnTick, afterimage] as const
+  )))
+  for (const lane of view.lanes) {
+    const mainPoint = hubInventoryFlybyPoint(lane.model.from, lane.model.to, frame.mainProgress)
+    lane.main.position.set(mainPoint.x, mainPoint.y)
+    lane.main.visible = view.model.phase === 'flying' && frame.mainVisible
+    for (const [spawnTick, container] of lane.afterimages) {
+      const afterimage = afterimages.get(spawnTick)
+      container.visible = afterimage !== undefined
+      if (!afterimage) continue
+      const point = hubInventoryFlybyPoint(lane.model.from, lane.model.to, afterimage.progress)
+      container.position.set(point.x, point.y)
+      container.alpha = afterimage.alpha
+    }
+  }
 }

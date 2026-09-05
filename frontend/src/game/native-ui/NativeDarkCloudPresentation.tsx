@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react'
 
-import NativeBitmapText from './NativeBitmapText.tsx'
+import NativeUiText from './NativeUiText.tsx'
 import NativeUiButton from './NativeUiButton.tsx'
 import NativeUiPlanView from './NativeUiPlanView.tsx'
 import NativeUiSprite from './NativeUiSprite.tsx'
@@ -44,7 +44,7 @@ export function NativeDarkCloudText({
   return (
     <>
       <span className="native-ui-sr-only">{text}</span>
-      <NativeBitmapText
+      <NativeUiText
         align={align}
         className={className}
         font={font}
@@ -138,14 +138,14 @@ export function NativeDarkCloudHeading({
     <header className="dark-cloud-heading">
       <h1>
         <span className="native-ui-sr-only">THE DARK CLOUD</span>
-        <NativeBitmapText
+        <NativeUiText
           align="center"
           font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.heading}
           text="THE DARK CLOUD"
           tint={0xd9ba70}
           width={420}
         />
-        <NativeBitmapText
+        <NativeUiText
           className="dark-cloud-beta"
           font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
           scale={0.68}
@@ -156,7 +156,7 @@ export function NativeDarkCloudHeading({
       <button onClick={onAccount} type="button">
         <span className="native-ui-sr-only">{accountLine}</span>
         {accountUsername ? <span className="native-ui-sr-only">{accountUsername.toUpperCase()}</span> : null}
-        <NativeBitmapText
+        <NativeUiText
           align="center"
           font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
           scale={0.72}
@@ -165,7 +165,7 @@ export function NativeDarkCloudHeading({
           width={560}
         />
         {!accountUsername ? (
-          <NativeBitmapText
+          <NativeUiText
             align="center"
             className="dark-cloud-account-action"
             font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}

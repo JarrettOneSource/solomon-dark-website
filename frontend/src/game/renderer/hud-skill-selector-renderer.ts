@@ -1,3 +1,4 @@
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import { Container, Graphics } from 'pixi.js'
 
 import { skillPicker } from '../../lib/assets.ts'
@@ -9,6 +10,7 @@ import {
   type NativeHudSkillSelectorOption,
 } from '../hud-skill-selector.ts'
 import { destroyNativeUiPixiFor } from '../native-ui/pixi.ts'
+import { measureNativeUiText } from '../native-ui/core.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
@@ -17,7 +19,6 @@ import {
 } from './game-webgl.ts'
 import {
   addBitmapText,
-  measureNativeBitmapText,
   spriteFor,
 } from './skill-picker-renderer.ts'
 
@@ -26,9 +27,7 @@ export interface HudSkillSelectorRendererPresentation {
   readonly title: string
 }
 
-export interface HudSkillSelectorRenderer {
-  readonly canvas: HTMLCanvasElement
-  destroy(): void
+export interface HudSkillSelectorRenderer extends NativeUiCanvas {
   setPresentation(presentation: HudSkillSelectorRendererPresentation): void
 }
 
@@ -41,7 +40,6 @@ export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelector
         backgroundAlpha: 0,
         className: 'hud-skill-selector-canvas',
         height: 900,
-        resolution: 1,
         width: 1_600,
       }),
       loadGameTextureMap({
@@ -52,7 +50,7 @@ export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelector
       }),
     ])
   } catch (error) {
-    gpu?.application.destroy({ removeView: true })
+    gpu?.destroy()
     textures?.destroy()
     throw error
   }
@@ -65,10 +63,11 @@ export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelector
 
   return {
     canvas: gpu.canvas,
+    mount: gpu.mount,
     destroy() {
       if (destroyed) return
       destroyed = true
-      application.destroy({ removeView: true })
+      gpu.destroy()
       destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
@@ -77,7 +76,7 @@ export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelector
       root.removeChildren().forEach((child) => child.destroy({ children: true }))
       const layout = nativeHudSkillSelectorLayout(
         options.length,
-        measureNativeBitmapText(title, 'medium'),
+        measureNativeUiText(title, 'medium'),
       )
       root.addChild(new Graphics()
         .rect(layout.panelLeft, layout.panelTop, layout.panelWidth, layout.panelHeight)

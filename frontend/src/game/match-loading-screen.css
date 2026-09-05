@@ -40,7 +40,7 @@
   left: 0;
   overflow: hidden;
   color: #f2e5c7;
-  font-family: 'Segoe UI', Arial, sans-serif;
+  font-family: var(--font-body);
   font-size: clamp(16.8px, 2.222222vh, 36px);
   font-weight: 600;
   line-height: clamp(22.4px, 2.962963vh, 48px);

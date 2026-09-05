@@ -54,10 +54,6 @@
   inset: 0;
 }
 
-.tutorial-instruction-text {
-  position: absolute !important;
-  transform: translateX(-50%);
-}
 
 .tutorial-pointer {
   position: absolute;
@@ -79,9 +75,8 @@
   position: absolute;
 }
 
-.tutorial-callout-text,
 .tutorial-selected-hud-lesson {
-  position: absolute !important;
+  position: absolute;
 }
 
 .tutorial-selected-hud-lesson {

@@ -16,18 +16,18 @@
   padding: 24px 24px 20px;
   background: radial-gradient(circle at 50% 20%, rgb(43 34 18 / 0.97), rgb(4 5 8 / 0.99) 68%);
   color: #ead9aa;
-  font-family: 'IM FELL English', Georgia, serif;
+  font-family: var(--font-narrative);
   pointer-events: auto;
 }
 
 .join-party-scene header { grid-area: heading; text-align: center; }
-.join-party-scene h1 { margin: 0; color: #f4d887; font: 700 30px Cinzel, Georgia, serif; letter-spacing: 0.14em; }
+.join-party-scene h1 { margin: 0; color: #f4d887; font: 700 30px var(--font-display); letter-spacing: 0.14em; }
 .join-party-scene header p { margin: 5px 0 0; color: #aaa088; }
 .join-party-code { grid-area: code; width: min(560px, 100%); margin: 0 auto; }
-.join-party-code label { display: block; margin-bottom: 5px; font: 700 11px Cinzel, Georgia, serif; letter-spacing: 0.12em; }
+.join-party-code label { display: block; margin-bottom: 5px; font: 700 11px var(--font-display); letter-spacing: 0.12em; }
 .join-party-code > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.join-party-code input { min-width: 0; min-height: 44px; padding: 8px 14px; border: 1px solid #947b42; background: #080704; color: #fff0bd; font: 700 20px 'JetBrains Mono', monospace; letter-spacing: 0.16em; text-transform: uppercase; }
-.join-party-scene button { min-height: 44px; padding: 8px 18px; border: 1px solid #947b42; background: linear-gradient(#3c301a, #171108); color: #f0d690; cursor: pointer; font: 700 11px Cinzel, Georgia, serif; }
+.join-party-code input { min-width: 0; min-height: 44px; padding: 8px 14px; border: 1px solid #947b42; background: #080704; color: #fff0bd; font: 700 20px var(--font-mono); letter-spacing: 0.16em; text-transform: uppercase; }
+.join-party-scene button { min-height: 44px; padding: 8px 18px; border: 1px solid #947b42; background: linear-gradient(#3c301a, #171108); color: #f0d690; cursor: pointer; font: 700 11px var(--font-display); }
 .join-party-scene button:disabled { cursor: default; opacity: 0.5; }
 .join-party-error { grid-area: error; width: min(760px, 100%); margin: 0 auto; color: #e8a99e; text-align: center; }
 .join-party-list { grid-area: list; overflow: auto; width: min(900px, 100%); margin: 0 auto; border: 1px solid rgb(191 157 78 / 0.45); background: rgb(0 0 0 / 0.35); }
@@ -35,7 +35,7 @@
 .join-party-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 10px 12px; border-bottom: 1px solid rgb(191 157 78 / 0.2); }
 .join-party-copy { display: grid; min-width: 0; }
 .join-party-flags { display: flex; flex-wrap: wrap; gap: 3px; margin: 2px 0; }
-.join-party-flags em { padding: 1px 4px; border: 1px solid rgb(190 156 76 / 0.38); color: #c8ad69; font: 700 8px Cinzel, Georgia, serif; font-style: normal; letter-spacing: 0.06em; }
+.join-party-flags em { padding: 1px 4px; border: 1px solid rgb(190 156 76 / 0.38); color: #c8ad69; font: 700 8px var(--font-display); font-style: normal; letter-spacing: 0.06em; }
 .join-party-flags em.cheats { border-color: rgb(211 115 70 / 0.48); color: #e6a078; }
 .join-party-list small { overflow: hidden; color: #9e9580; text-overflow: ellipsis; white-space: nowrap; }
 .join-party-status { color: #88af81; }

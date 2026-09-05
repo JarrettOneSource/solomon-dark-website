@@ -84,7 +84,7 @@
   left: 50%;
   margin: 0;
   color: #d8d4c8;
-  font: 18px serif;
+  font: 18px var(--font-body);
   transform: translateX(-50%);
 }
 
@@ -106,7 +106,7 @@
   place-items: center;
   color: #efe3bd;
   background: rgb(0 0 0 / 82%);
-  font: 700 28px/1.2 "IM FELL English", serif;
+  font: 700 28px/1.2 var(--font-narrative);
   letter-spacing: 0.04em;
   text-align: center;
   text-shadow: 0 2px 3px #000;

@@ -34,6 +34,6 @@
 .mod-minimap__marker--enemy { background: #e44; }
 .mod-minimap__marker--powerup { background: #79f06b; }
 
-.mod-minimap output { position: absolute; left: .45rem; bottom: .35rem; color: #eee3c4; font: 10px sans-serif; }
+.mod-minimap output { position: absolute; left: .45rem; bottom: .35rem; color: #eee3c4; font: 10px var(--font-body); }
 .mod-minimap output + output { display: none; }
-.mod-minimap button { position: absolute; right: 50%; bottom: .75rem; padding: .2rem .35rem; border: 1px solid #d2be8b; background: #181521; color: #eee3c4; font: 10px sans-serif; transform: translateX(50%); }
+.mod-minimap button { position: absolute; right: 50%; bottom: .75rem; padding: .2rem .35rem; border: 1px solid #d2be8b; background: #181521; color: #eee3c4; font: 10px var(--font-body); transform: translateX(50%); }

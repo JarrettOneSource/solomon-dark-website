@@ -1,4 +1,3 @@
-import nativeFontData from '../assets/game/hub-hud-font-group-6.json' with { type: 'json' }
 import type {
   NativeSecondaryActorState,
   NativeSecondaryGolemState,
@@ -18,49 +17,6 @@ export interface AllyHudRow {
   id: string
   identity: AllyHudIdentity
 }
-
-interface NativeAllyFontGlyph {
-  advance: number
-  atlasHeight: number
-  atlasWidth: number
-  atlasX: number
-  atlasY: number
-  centerX: number
-  centerY: number
-  glyphId: number
-  offsetX: number
-  offsetY: number
-  record: number
-}
-
-interface NativeAllyFontData {
-  atlasHeight: number
-  atlasWidth: number
-  glyphCount: number
-  glyphs: Readonly<Record<string, NativeAllyFontGlyph>>
-  group: number
-  header: readonly number[]
-  kerning: Readonly<Record<string, number>>
-  kerningCount: number
-  scale: number
-}
-
-export interface NativeAllyNameGlyph {
-  atlasX: number
-  atlasY: number
-  char: string
-  height: number
-  left: number
-  top: number
-  width: number
-}
-
-export interface NativeAllyNameLayout {
-  advance: number
-  glyphs: readonly NativeAllyNameGlyph[]
-}
-
-export const NATIVE_ALLY_FONT: NativeAllyFontData = nativeFontData
 
 export function derivePlayerAllyHudRows(
   players: Readonly<Record<string, ProtocolPlayerState>>,
@@ -182,49 +138,4 @@ export function allyHudRowsEqual(
         && leftRow.identity.element === rightRow.identity.element
       )
   })
-}
-
-export function layoutNativeAllyName(
-  text: string,
-  scale = NATIVE_ALLY_FONT.scale,
-): NativeAllyNameLayout {
-  const glyphs: NativeAllyNameGlyph[] = []
-  let cursor = 0
-  let previousGlyphId: number | null = null
-
-  for (const char of text) {
-    const glyph = NATIVE_ALLY_FONT.glyphs[char]
-    if (glyph) {
-      if (previousGlyphId !== null) {
-        cursor += NATIVE_ALLY_FONT.kerning[`${previousGlyphId}:${glyph.glyphId}`] ?? 0
-      }
-      glyphs.push({
-        atlasX: glyph.atlasX,
-        atlasY: glyph.atlasY,
-        char,
-        height: glyph.atlasHeight * scale,
-        left: (
-          cursor
-          + glyph.offsetX
-          - glyph.atlasWidth / 2
-          + glyph.centerX
-        ) * scale,
-        top: (
-          glyph.offsetY
-          - glyph.atlasHeight / 2
-          + glyph.centerY
-        ) * scale,
-        width: glyph.atlasWidth * scale,
-      })
-      cursor += glyph.advance
-    } else if (char === ' ') {
-      cursor += NATIVE_ALLY_FONT.header[1]
-    }
-    previousGlyphId = char.codePointAt(0) ?? null
-  }
-
-  return {
-    advance: cursor * scale,
-    glyphs,
-  }
 }

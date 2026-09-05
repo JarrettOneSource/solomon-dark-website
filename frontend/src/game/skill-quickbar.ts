@@ -1,47 +1,11 @@
-import nativeFontData from '../assets/game/hub-hud-font-group-8.json' with { type: 'json' }
+import { layoutNativeUiText, measureNativeUiText, type NativeUiTextLayout } from './native-ui/core.ts'
 import { NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS } from './core-kernels/native-secondary-abilities.ts'
-
-interface NativeBeltFontGlyph {
-  advance: number
-  atlasHeight: number
-  atlasWidth: number
-  atlasX: number
-  atlasY: number
-  centerX: number
-  centerY: number
-  glyphId: number
-  offsetX: number
-  offsetY: number
-  record: number
-}
-
-interface NativeBeltFontData {
-  atlasHeight: number
-  atlasWidth: number
-  glyphCount: number
-  glyphs: Readonly<Record<string, NativeBeltFontGlyph>>
-  group: number
-  header: readonly number[]
-  kerning: Readonly<Record<string, number>>
-  kerningCount: number
-  scale: number
-}
-
-export interface NativeBeltBindingGlyph {
-  atlasX: number
-  atlasY: number
-  char: string
-  height: number
-  left: number
-  top: number
-  width: number
-}
 
 export interface NativeBeltBindingLayout {
   advance: number
   backingLeft: number
   backingWidth: number
-  glyphs: readonly NativeBeltBindingGlyph[]
+  text: NativeUiTextLayout
 }
 
 export interface NativeSkillQuickbarCooldownPresentation {
@@ -66,7 +30,6 @@ export function nativeSkillQuickbarIconAlpha({
     : NATIVE_SKILL_QUICKBAR_READY_ALPHA
 }
 
-export const NATIVE_SKILL_QUICKBAR_FONT: NativeBeltFontData = nativeFontData
 export const NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS = Object.freeze([
   -332, -272, -212, -152, 98, 158, 218, 278,
 ])
@@ -90,45 +53,13 @@ export function nativeSkillQuickbarCooldownPresentation(
 }
 
 export function layoutNativeQuickbarBinding(text: string): NativeBeltBindingLayout {
-  const glyphs: Array<NativeBeltBindingGlyph & { cursor: number }> = []
-  let cursor = 0
-  let previousGlyphId: number | null = null
-
-  for (const char of text) {
-    const glyph = NATIVE_SKILL_QUICKBAR_FONT.glyphs[char]
-    if (glyph) {
-      if (previousGlyphId !== null) {
-        cursor += NATIVE_SKILL_QUICKBAR_FONT.kerning[
-          `${previousGlyphId}:${glyph.glyphId}`
-        ] ?? 0
-      }
-      glyphs.push({
-        atlasX: glyph.atlasX,
-        atlasY: glyph.atlasY,
-        char,
-        cursor,
-        height: glyph.atlasHeight,
-        left: glyph.offsetX - glyph.atlasWidth / 2 + glyph.centerX,
-        top: glyph.offsetY - glyph.atlasHeight / 2 + glyph.centerY,
-        width: glyph.atlasWidth,
-      })
-      cursor += glyph.advance
-    } else if (char === ' ') {
-      cursor += NATIVE_SKILL_QUICKBAR_FONT.header[1] ?? 0
-    }
-    previousGlyphId = char.codePointAt(0) ?? null
-  }
-
-  const advance = cursor
+  const advance = measureNativeUiText(text, 'belt')
   const backingWidth = advance + 6
   return {
     advance,
     backingLeft: (SLOT_SIZE - backingWidth) / 2,
     backingWidth,
-    glyphs: glyphs.map(({ cursor: glyphCursor, ...glyph }) => ({
-      ...glyph,
-      left: SECTOR_CENTER - advance / 2 + glyphCursor + glyph.left,
-    })),
+    text: layoutNativeUiText({ align: 'center', font: 'belt', text, tint: 0x000000, x: SECTOR_CENTER, y: 64 }),
   }
 }
 

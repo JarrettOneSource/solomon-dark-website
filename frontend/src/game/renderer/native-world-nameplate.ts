@@ -1,11 +1,8 @@
-import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Graphics, Sprite, Texture } from 'pixi.js'
 
-import {
-  layoutNativeAllyName,
-  type NativeAllyNameGlyph,
-} from '../ally-hud.ts'
+import { layoutNativeUiText, nativeUiGlyphInkBounds, type NativeUiGlyphLayout } from '../native-ui/core.ts'
+import { nativeUiGlyphRecordTexture } from '../native-ui/native-ui-glyph-texture.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
-import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 export type WorldNameplateElement = ProtocolPlayerState['config']['element']
 
@@ -140,18 +137,19 @@ export interface WorldNameplateVisualLayout {
   readonly glyphBounds: Readonly<{ left: number; right: number }>
   readonly glyphOffsetX: number
   readonly glyphOffsetY: number
-  readonly glyphs: readonly NativeAllyNameGlyph[]
+  readonly glyphs: readonly NativeUiGlyphLayout[]
   readonly width: number
 }
 
 export function worldNameplateVisualLayout(displayName: string): WorldNameplateVisualLayout {
   const style = WORLD_NAMEPLATE_STYLE
-  const nativeLayout = layoutNativeAllyName(displayName, style.glyphScale)
+  const nativeLayout = layoutNativeUiText({ align: 'left', font: 'world-and-roster', scale: style.glyphScale, text: displayName, x: 0, y: 0 })
   let left = 0
-  let right = nativeLayout.advance
+  let right = nativeLayout.width
   for (const glyph of nativeLayout.glyphs) {
-    left = Math.min(left, glyph.left)
-    right = Math.max(right, glyph.left + glyph.width)
+    const ink = nativeUiGlyphInkBounds(glyph)
+    left = Math.min(left, ink.left)
+    right = Math.max(right, ink.left + ink.width)
   }
   const glyphOffsetX = -(left + right) / 2
   const capTop = style.fontCapTop * style.glyphScale
@@ -449,20 +447,18 @@ class NativeWorldNameplateView {
   }
 
   private addGlyph(
-    glyph: NativeAllyNameGlyph,
+    glyph: NativeUiGlyphLayout,
     glyphOffsetX: number,
     glyphOffsetY: number,
     shadow: boolean,
   ): void {
     const style = WORLD_NAMEPLATE_STYLE
-    const atlasWidth = glyph.width / style.glyphScale
-    const atlasHeight = glyph.height / style.glyphScale
-    const texture = this.glyphTexture(glyph, atlasWidth, atlasHeight)
+    const texture = this.glyphTexture(glyph)
     const sprite = new Sprite(texture)
     sprite.anchor.set(0.5)
     sprite.position.set(
-      glyph.left + glyph.width / 2 + glyphOffsetX,
-      glyph.top + glyph.height / 2 + glyphOffsetY + (shadow ? style.textShadowOffsetY : 0),
+      glyph.centerX + glyphOffsetX,
+      glyph.centerY + glyphOffsetY + (shadow ? style.textShadowOffsetY : 0),
     )
     sprite.scale.set(style.glyphScale)
     sprite.tint = shadow ? style.textShadowColor : style.textTint
@@ -472,17 +468,12 @@ class NativeWorldNameplateView {
   }
 
   private glyphTexture(
-    glyph: NativeAllyNameGlyph,
-    atlasWidth: number,
-    atlasHeight: number,
+    glyph: NativeUiGlyphLayout,
   ): Texture {
-    const existing = this.glyphTextures.get(glyph.char)
+    const existing = this.glyphTextures.get(glyph.character)
     if (existing) return existing
-    const texture = nativeSpriteRecordTexture({
-      source: this.fontAtlas.source,
-      frame: new Rectangle(glyph.atlasX, glyph.atlasY, atlasWidth, atlasHeight),
-    })
-    this.glyphTextures.set(glyph.char, texture)
+    const texture = nativeUiGlyphRecordTexture(this.fontAtlas.source, glyph)
+    this.glyphTextures.set(glyph.character, texture)
     return texture
   }
 }

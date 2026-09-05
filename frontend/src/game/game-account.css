@@ -3,7 +3,7 @@
   display: block;
   overflow: hidden;
   color: rgb(217 186 112);
-  font: 12px 'JetBrains Mono', monospace;
+  font: 12px var(--font-mono);
   line-height: 12px;
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px #000, 0 0 4px #000;

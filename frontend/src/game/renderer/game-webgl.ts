@@ -1,6 +1,7 @@
 // Installs Pixi's static CSP-safe shader paths; no runtime eval is required.
 import 'pixi.js/unsafe-eval'
 import { Application, Texture } from 'pixi.js'
+import { createNativeUiCanvas, type NativeUiCanvas } from './native-ui-canvas.ts'
 
 import {
   loadGameImage,
@@ -21,9 +22,8 @@ import {
   type GameTextureSourcePolicy,
 } from './game-texture-source-policy.ts'
 
-export interface GameWebGlApplication {
+export interface GameWebGlApplication extends NativeUiCanvas {
   application: Application
-  canvas: HTMLCanvasElement
 }
 
 export interface GameTextureMap {
@@ -37,7 +37,6 @@ interface GameWebGlApplicationOptions {
   backgroundAlpha?: number
   className: string
   height: number
-  resolution: number
   width: number
 }
 
@@ -45,7 +44,6 @@ export async function createGameWebGlApplication({
   backgroundAlpha = 1,
   className,
   height,
-  resolution,
   width,
 }: GameWebGlApplicationOptions): Promise<GameWebGlApplication> {
   const application = new Application()
@@ -60,7 +58,7 @@ export async function createGameWebGlApplication({
       powerPreference: 'high-performance',
       preference: 'webgl',
       preferWebGLVersion: 2,
-      resolution,
+      resolution: 1,
       roundPixels: false,
       width,
     })
@@ -80,10 +78,10 @@ export async function createGameWebGlApplication({
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.rendererName = application.renderer.name
-  canvas.dataset.resolution = `${resolution}`
+  canvas.dataset.resolution = '1'
   canvas.style.width = `${width}px`
   canvas.style.height = `${height}px`
-  return { application, canvas }
+  return { application, ...createNativeUiCanvas(application, canvas) }
 }
 
 export async function loadGameTextureMap(

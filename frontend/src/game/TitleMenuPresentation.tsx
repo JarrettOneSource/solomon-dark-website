@@ -73,7 +73,7 @@ export default function TitleMenuPresentation({
         return
       }
       rendererRef.current = renderer
-      host.replaceChildren(renderer.canvas)
+      renderer.mount(host)
       renderer.resize(viewportRef.current)
       stopPresentationLoop = startGamePresentationLoop((now) => {
         renderer.render({
@@ -94,7 +94,6 @@ export default function TitleMenuPresentation({
       stopPresentationLoop?.()
       rendererRef.current?.destroy()
       rendererRef.current = null
-      host.replaceChildren()
     }
   }, [])
 

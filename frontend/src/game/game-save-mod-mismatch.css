@@ -4,7 +4,7 @@
   place-items: center;
   background: rgba(0, 0, 0, .82);
   color: #d7bd78;
-  font-family: Cinzel, serif;
+  font-family: var(--font-display);
 }
 
 .game-save-mod-mismatch {
@@ -18,12 +18,12 @@
 }
 
 .game-save-mod-mismatch h2 { margin: 0; text-align: center; font-size: 27px; }
-.game-save-mod-mismatch > p { color: #c6b990; text-align: center; font: 17px 'IM FELL English', serif; }
+.game-save-mod-mismatch > p { color: #c6b990; text-align: center; font: 17px var(--font-narrative); }
 .game-save-mod-mismatch-groups { display: grid; gap: 12px; margin: 24px 0; }
 .game-save-mod-mismatch-groups section { border: 1px solid #4f452e; padding: 12px 16px; background: rgba(0, 0, 0, .45); }
 .game-save-mod-mismatch-groups h3 { margin: 0 0 7px; font-size: 13px; letter-spacing: .16em; }
-.game-save-mod-mismatch-groups ul { margin: 0; padding-left: 18px; color: #eee0bc; font: 14px ui-monospace, monospace; }
+.game-save-mod-mismatch-groups ul { margin: 0; padding-left: 18px; color: #eee0bc; font: 14px var(--font-mono); }
 .game-save-mod-mismatch .game-save-mod-mismatch-warning { color: #d5997e; font-size: 15px; }
 .game-save-mod-mismatch-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 25px; }
-.game-save-mod-mismatch-actions button { height: 54px; border: 2px solid #8e773e; color: #d7bd78; background: #090908; font: 700 16px Cinzel, serif; cursor: pointer; }
+.game-save-mod-mismatch-actions button { height: 54px; border: 2px solid #8e773e; color: #d7bd78; background: #090908; font: 700 16px var(--font-display); cursor: pointer; }
 .game-save-mod-mismatch-actions button:last-child { border-color: #74926e; color: #d8efcf; background: #1c2c1c; }

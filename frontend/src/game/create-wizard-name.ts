@@ -1,42 +1,8 @@
-import nativeFontData from '../assets/game/create-name-font-group-4.json' with { type: 'json' }
+import { layoutNativeUiText, measureNativeUiText, nativeUiFont, nativeUiGlyphInkBounds, type NativeUiGlyphLayout } from './native-ui/core.ts'
 import stockWizardNames from '../assets/magenames.json' with { type: 'json' }
 
-interface NativeCreateWizardNameGlyph {
-  advance: number
-  atlasHeight: number
-  atlasWidth: number
-  atlasX: number
-  atlasY: number
-  centerX: number
-  centerY: number
-  glyphId: number
-  spriteCenterX: number
-  spriteCenterY: number
-}
-
-interface NativeCreateWizardNameFont {
-  atlasHeight: number
-  atlasWidth: number
-  glyphCount: number
-  glyphs: Readonly<Record<string, NativeCreateWizardNameGlyph>>
-  group: number
-  kerning: Readonly<Record<string, number>>
-  kerningCount: number
-  spaceAdvance: number
-}
-
-export interface CreateWizardNameGlyph {
-  atlasHeight: number
-  atlasWidth: number
-  atlasX: number
-  atlasY: number
-  char: string
-  left: number
-  top: number
-}
-
 export interface CreateWizardNameLayout {
-  glyphs: readonly CreateWizardNameGlyph[]
+  glyphs: readonly NativeUiGlyphLayout[]
   height: number
   left: number
   right: number
@@ -49,7 +15,7 @@ export type CreateWizardNameValidation =
   | { ok: true; value: string }
   | { ok: false; reason: string }
 
-export const CREATE_WIZARD_NAME_FONT: NativeCreateWizardNameFont = nativeFontData
+const NAME_FONT = nativeUiFont('heading')
 export const CREATE_WIZARD_NAME_MAX_LENGTH = 64
 export const CREATE_WIZARD_NAME_MAX_WIDTH = 372
 export const STOCK_WIZARD_NAMES: readonly string[] = Object.freeze([...stockWizardNames])
@@ -65,24 +31,17 @@ const CREATE_WIZARD_NAME_TEXT_TOP = 19
 
 export function initialCreateWizardName(value: string): string {
   let supported = ''
-  let width = 0
-  let previousGlyphId: number | null = null
 
   for (const char of value) {
-    const glyph = CREATE_WIZARD_NAME_FONT.glyphs[char.toUpperCase()]
-    if (!glyph) continue
-    const nextWidth = width
-      + (previousGlyphId === null
-        ? 0
-        : CREATE_WIZARD_NAME_FONT.kerning[`${previousGlyphId}:${glyph.glyphId}`] ?? 0)
-      + glyph.advance
+    const upper = char.toUpperCase()
+    if (upper.length !== 1) continue
+    if (!NAME_FONT.glyphs[`${upper.codePointAt(0)!}`]) continue
+    const next = supported + char
     if (
-      supported.length >= CREATE_WIZARD_NAME_MAX_LENGTH
-      || nextWidth > CREATE_WIZARD_NAME_MAX_WIDTH
+      next.length > CREATE_WIZARD_NAME_MAX_LENGTH
+      || measureNativeUiText(next.toUpperCase(), 'heading') > CREATE_WIZARD_NAME_MAX_WIDTH
     ) break
-    supported += char
-    width = nextWidth
-    previousGlyphId = glyph.glyphId
+    supported = next
   }
   return supported || CREATE_WIZARD_NAME_DEFAULT
 }
@@ -114,10 +73,8 @@ export function validateCreateWizardName(value: string): CreateWizardNameValidat
       reason: `Wizard names may contain at most ${CREATE_WIZARD_NAME_MAX_LENGTH} characters.`,
     }
   }
-  if ([...value].some((char) => !Object.hasOwn(
-    CREATE_WIZARD_NAME_FONT.glyphs,
-    char.toUpperCase(),
-  ))) {
+  if ([...value].some(char => char.toUpperCase().length !== 1
+    || !NAME_FONT.glyphs[`${char.toUpperCase().codePointAt(0)!}`])) {
     return {
       ok: false,
       reason: 'Use letters, numbers, or ! , . / : ? only.',
@@ -133,68 +90,32 @@ export function validateCreateWizardName(value: string): CreateWizardNameValidat
 }
 
 export function measureCreateWizardName(value: string): number {
-  let width = 0
-  let previousGlyphId: number | null = null
-
-  for (const char of value.toUpperCase()) {
-    const glyph = CREATE_WIZARD_NAME_FONT.glyphs[char]
-    if (!glyph) throw new Error('Cannot measure an unsupported wizard-name character.')
-    if (previousGlyphId !== null) {
-      width += CREATE_WIZARD_NAME_FONT.kerning[
-        `${previousGlyphId}:${glyph.glyphId}`
-      ] ?? 0
-    }
-    width += glyph.advance
-    previousGlyphId = glyph.glyphId
+  const text = value.toUpperCase()
+  if ([...text].some(char => !NAME_FONT.glyphs[`${char.codePointAt(0)!}`])) {
+    throw new Error('Cannot measure an unsupported wizard-name character.')
   }
-  return width
+  return measureNativeUiText(text, 'heading')
 }
 
 export function layoutCreateWizardName(value: string): CreateWizardNameLayout {
   const validation = validateCreateWizardName(value)
   if (!validation.ok) throw new Error(validation.reason)
   const renderedValue = validation.value.toUpperCase()
-
-  let cursor = 0
-  let previousGlyphId: number | null = null
-  const glyphs: Array<CreateWizardNameGlyph & { rawLeft: number; rawTop: number }> = []
-
-  for (const char of renderedValue) {
-    const glyph = CREATE_WIZARD_NAME_FONT.glyphs[char]!
-    if (previousGlyphId !== null) {
-      cursor += CREATE_WIZARD_NAME_FONT.kerning[
-        `${previousGlyphId}:${glyph.glyphId}`
-      ] ?? 0
-    }
-    glyphs.push({
-      atlasHeight: glyph.atlasHeight,
-      atlasWidth: glyph.atlasWidth,
-      atlasX: glyph.atlasX,
-      atlasY: glyph.atlasY,
-      char,
-      left: 0,
-      rawLeft: cursor + glyph.centerX - glyph.atlasWidth / 2 + glyph.spriteCenterX,
-      rawTop: glyph.centerY - glyph.atlasHeight / 2 + glyph.spriteCenterY,
-      top: 0,
-    })
-    cursor += glyph.advance
-    previousGlyphId = glyph.glyphId
-  }
-
-  const minimumLeft = Math.floor(Math.min(...glyphs.map((glyph) => glyph.rawLeft)))
-  const minimumTop = Math.floor(Math.min(...glyphs.map((glyph) => glyph.rawTop)))
-  const maximumRight = Math.ceil(Math.max(...glyphs.map((glyph) => glyph.rawLeft + glyph.atlasWidth)))
-  const maximumBottom = Math.ceil(Math.max(...glyphs.map((glyph) => glyph.rawTop + glyph.atlasHeight)))
+  const layout = layoutNativeUiText({ align: 'left', font: 'heading', text: renderedValue, x: 0, y: 0 })
+  const ink = layout.glyphs.map(nativeUiGlyphInkBounds)
+  const minimumLeft = Math.floor(Math.min(...ink.map(glyph => glyph.left)))
+  const minimumTop = Math.floor(Math.min(...ink.map(glyph => glyph.top)))
+  const maximumRight = Math.ceil(Math.max(...ink.map(glyph => glyph.left + glyph.width)))
+  const maximumBottom = Math.ceil(Math.max(...ink.map(glyph => glyph.top + glyph.height)))
   const width = maximumRight - minimumLeft
   const height = maximumBottom - minimumTop
   const left = CREATE_WIZARD_NAME_VALUE_BOUNDS.left
     + (CREATE_WIZARD_NAME_VALUE_BOUNDS.width - width) / 2
-
   return {
-    glyphs: glyphs.map(({ rawLeft, rawTop, ...glyph }) => ({
+    glyphs: layout.glyphs.map(glyph => ({
       ...glyph,
-      left: left + rawLeft - minimumLeft,
-      top: CREATE_WIZARD_NAME_TEXT_TOP + rawTop - minimumTop,
+      centerX: left + glyph.centerX - minimumLeft,
+      centerY: CREATE_WIZARD_NAME_TEXT_TOP + glyph.centerY - minimumTop,
     })),
     height,
     left,

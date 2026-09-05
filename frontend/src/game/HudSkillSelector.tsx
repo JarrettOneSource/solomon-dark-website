@@ -23,7 +23,7 @@ import {
   type HudSkillSelectorRenderer,
   type HudSkillSelectorRendererPresentation,
 } from './renderer/hud-skill-selector-renderer.ts'
-import { measureNativeBitmapText } from './renderer/skill-picker-renderer.ts'
+import { measureNativeUiText } from './native-ui/core.ts'
 import './hud-skill-selector.css'
 
 interface HudSkillSelectorProps {
@@ -59,7 +59,7 @@ export default function HudSkillSelector({
   const title = nativeHudSkillSelectorTitle(target)
   const layout = nativeHudSkillSelectorLayout(
     options.length,
-    measureNativeBitmapText(title, 'medium'),
+    measureNativeUiText(title, 'medium'),
   )
   const presentationRef = useRef<HudSkillSelectorRendererPresentation>({ options, title })
   presentationRef.current = { options, title }
@@ -93,10 +93,7 @@ export default function HudSkillSelector({
     const host = hostRef.current
     const renderer = rendererRef.current
     if (!host || !renderer) return
-    host.replaceChildren(renderer.canvas)
-    return () => {
-      if (renderer.canvas.parentElement === host) host.replaceChildren()
-    }
+    return renderer.mount(host)
   }, [rendererState])
 
   useEffect(() => {

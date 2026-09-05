@@ -71,7 +71,7 @@ export default function NativeLoader({
         return
       }
       rendererRef.current = renderer
-      host.replaceChildren(renderer.canvas)
+      renderer.mount(host)
       renderer.resize(viewportRef.current)
       renderer.render(progressRef.current)
     }).catch((error: unknown) => {
@@ -85,7 +85,6 @@ export default function NativeLoader({
       cancelled = true
       rendererRef.current?.destroy()
       rendererRef.current = null
-      host.replaceChildren()
     }
   }, [])
 

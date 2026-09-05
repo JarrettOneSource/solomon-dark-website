@@ -113,20 +113,19 @@ import {
   type NativeNoteboxNotice,
 } from './native-ui/core.ts'
 import { NativeUiNotebox } from './native-ui/react.ts'
+import { createHubInventoryRenderer, type HubInventoryRenderer } from './renderer/hub-inventory-renderer.ts'
 import {
-  createHubInventoryRenderer,
   type HubInventoryDragModel,
   type HubInventoryDyeModalModel,
   type HubInventoryFlybyLaneModel,
   type HubInventoryFlybyModel,
   type HubInventoryPressedControl,
-  type HubInventoryRenderer,
   type HubInventoryRendererModel,
   type HubInventoryRendererNotice,
   type HubInventorySackTransitionModel,
   type HubInventorySelectionModel,
   type HubServiceInspectionModel,
-} from './renderer/hub-inventory-renderer.ts'
+} from './renderer/hub-inventory/model.ts'
 import {
   createRetainedRendererOwner,
   type RetainedRendererOwner,
@@ -1209,12 +1208,13 @@ function NativeHubSurface({
     if (!host) return
     let disposed = false
     let renderer: HubInventoryRenderer | undefined
+    let detachCanvas: (() => void) | undefined
     void rendererOwner.get().then((created) => {
       if (disposed) return
       renderer = created
       rendererRef.current = created
       created.setModel(modelRef.current!)
-      host.replaceChildren(created.canvas)
+      detachCanvas = created.mount(host)
       revealStartedAtRef.current = null
       setRendererState('ready')
     }).catch(() => {
@@ -1269,7 +1269,7 @@ function NativeHubSurface({
       disposed = true
       unsubscribe()
       rendererRef.current = null
-      host.replaceChildren()
+      detachCanvas?.()
     }
   }, [rendererOwner])
 

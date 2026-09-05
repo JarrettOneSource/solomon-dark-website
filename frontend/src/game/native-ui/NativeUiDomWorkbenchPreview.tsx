@@ -15,6 +15,7 @@ import {
 import NativeUiSimpleMenu from './NativeUiSimpleMenu.tsx'
 import NativeUiStoneButton from './NativeUiStoneButton.tsx'
 import NativeUiTabs from './NativeUiTabs.tsx'
+import NativeUiTypographyPreview from './NativeUiTypographyPreview.tsx'
 import { nativeUiRect } from './native-ui-plan.ts'
 import type {
   NativeUiPartyMenuMember,
@@ -57,16 +58,18 @@ export default function NativeUiDomWorkbenchPreview() {
         onSelect={setSelectedTab}
         selectedId={selectedTab}
         tabs={[
-          { bounds: nativeUiRect(60, 28, 220, 69), id: 'messages', label: 'MESSAGES' },
-          { bounds: nativeUiRect(280, 28, 260, 69), id: 'menus', label: 'SIMPLE MENUS' },
-          { bounds: nativeUiRect(540, 28, 250, 69), id: 'settings', label: 'SETTINGS' },
-          { bounds: nativeUiRect(790, 28, 260, 69), id: 'boasts', label: 'BOAST MENU' },
-          { bounds: nativeUiRect(1050, 28, 260, 69), id: 'party', label: 'PARTY' },
-          { bounds: nativeUiRect(1310, 28, 240, 69), id: 'chip', label: 'PARTY CHIP' },
+          { bounds: nativeUiRect(60, 28, 180, 69), id: 'messages', label: 'MESSAGES' },
+          { bounds: nativeUiRect(240, 28, 220, 69), id: 'menus', label: 'SIMPLE MENUS' },
+          { bounds: nativeUiRect(460, 28, 190, 69), id: 'settings', label: 'SETTINGS' },
+          { bounds: nativeUiRect(650, 28, 220, 69), id: 'boasts', label: 'BOAST MENU' },
+          { bounds: nativeUiRect(870, 28, 160, 69), id: 'party', label: 'PARTY' },
+          { bounds: nativeUiRect(1030, 28, 210, 69), id: 'chip', label: 'PARTY CHIP' },
+          { bounds: nativeUiRect(1240, 28, 300, 69), id: 'typography', label: 'TYPOGRAPHY' },
         ]}
         width={1_600}
       />
-      <div style={{ visibility: selectedTab === 'boasts' || selectedTab === 'party' || selectedTab === 'chip' ? 'hidden' : undefined }}>
+      {selectedTab === 'typography' ? <NativeUiTypographyPreview /> : null}
+      <div style={{ visibility: ['boasts', 'party', 'chip', 'typography'].includes(selectedTab) ? 'hidden' : undefined }}>
         <NativeUiMessageBox
         body="Every panel, glyph, button, and tab in this preview is composed from the stock atlas record and bitmap-font ABI."
         bounds={nativeUiRect(500, 125, 600, 400)}

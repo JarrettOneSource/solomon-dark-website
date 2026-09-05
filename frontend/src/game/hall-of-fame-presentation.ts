@@ -1,5 +1,4 @@
-import headingFontJson from '../assets/game/create-name-font-group-4.json' with { type: 'json' }
-import nativeUiAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
+import { layoutNativeUiText, measureNativeUiText, nativeUiRecord, type NativeUiTextLayout } from './native-ui/core.ts'
 
 /**
  * Pure presentation kernel for the native Hall of Fame rows
@@ -36,15 +35,6 @@ export interface HallTextAnchor extends HallPoint {
   readonly font: HallFont
 }
 
-export interface HallGlyphPlacement {
-  readonly atlasX: number
-  readonly atlasY: number
-  readonly height: number
-  readonly left: number
-  readonly top: number
-  readonly width: number
-}
-
 /** On-screen center of the chevron sprite after `Sprite_Draw` pixel snapping, plus its rotation. */
 export interface HallChevronPlacement {
   readonly rotation: 90 | 180
@@ -59,11 +49,6 @@ export interface HallChevronPlacement {
  */
 export function hallRoundHalfUp(value: number): number {
   return Math.floor(value + 0.5)
-}
-
-export interface HallTextLayout {
-  readonly glyphs: readonly HallGlyphPlacement[]
-  readonly width: number
 }
 
 export interface HallAtlasRecord {
@@ -162,54 +147,11 @@ export const HALL_ATLAS_SIZES: Readonly<Record<HallAtlas, readonly [number, numb
   Skills: [1024, 512],
   UI: [1024, 1024],
 }
-export const HALL_FONT_ATLAS_SIZE = [512, 256] as const
 
 const HALL_HALF_WIDTH = HALL_BOX.width / 2
 
-interface PickerGlyph {
-  readonly frame: readonly [number, number, number, number]
-  readonly metrics?: readonly [number, number, number]
-}
-
-interface PickerFont {
-  readonly glyphs: Readonly<Record<string, PickerGlyph>>
-  readonly kerning: readonly (readonly [number, number, number])[]
-  readonly spaceAdvance: number
-}
-
-interface HeadingGlyph {
-  readonly advance: number
-  readonly atlasHeight: number
-  readonly atlasWidth: number
-  readonly atlasX: number
-  readonly atlasY: number
-  readonly centerX: number
-  readonly centerY: number
-  readonly glyphId: number
-  readonly spriteCenterX: number
-  readonly spriteCenterY: number
-}
-
-interface HeadingFont {
-  readonly glyphs: Readonly<Record<string, HeadingGlyph>>
-  readonly kerning: Readonly<Record<string, number>>
-  readonly spaceAdvance: number
-}
-
-const PICKER_FONTS = (nativeUiAssetsJson as unknown as {
-  readonly fonts: Readonly<Record<'body' | 'medium' | 'menu', PickerFont>>
-}).fonts
-const HEADING_FONT = headingFontJson as unknown as HeadingFont
-const ATLASES = (nativeUiAssetsJson as unknown as {
-  readonly atlases: Readonly<Record<HallAtlas, {
-    readonly records: Readonly<Record<string, HallAtlasRecord>>
-  }>>
-}).atlases
-
 export function hallAtlasRecord(atlas: HallAtlas, record: number): HallAtlasRecord {
-  const definition = ATLASES[atlas].records[`${record}`]
-  if (!definition) throw new RangeError(`Missing native ${atlas} record ${record}`)
-  return definition
+  return nativeUiRecord(atlas, record)
 }
 
 export function hallSkillIconRecord(skillId: number): number {
@@ -442,95 +384,18 @@ export function hallNineSliceLayout(
 }
 
 export function measureHallText(font: HallFont, text: string): number {
-  return layoutHallText(font, text, 'left').width
+  return measureNativeUiText(font === 'heading' ? text.toUpperCase() : text, font)
 }
 
-/**
- * Glyph placements relative to the anchor. The native text draws truncate the
- * pen to a whole pixel (`pen = trunc(x - width / 2)` for centered text, so an
- * odd width shifts the run half a pixel left of its float center) and each
- * glyph quad, center-anchored at (cursor + offsetX, offsetY), snaps with
- * `hallRoundHalfUp`. Anchors are whole pixels, as every native anchor is.
- * Characters the font lacks are skipped with zero advance.
- */
-export function layoutHallText(font: HallFont, text: string, align: HallTextAlign): HallTextLayout {
-  const placed = font === 'heading' ? layoutHeadingText(text) : layoutPickerText(PICKER_FONTS[font], text)
-  const shift = align === 'center' ? -Math.ceil(placed.width / 2) : align === 'right' ? -placed.width : 0
-  return {
-    glyphs: placed.glyphs.map((glyph) => ({ ...glyph, left: glyph.left + shift })),
-    width: placed.width,
-  }
-}
-
-/** Characters of `text` that `font` cannot draw (spaces always can). */
-export function hallMissingGlyphs(font: HallFont, text: string): readonly string[] {
-  const missing: string[] = []
-  for (const character of text) {
-    if (character === ' ') continue
-    const present = font === 'heading'
-      ? HEADING_FONT.glyphs[character.toUpperCase()] !== undefined
-      : PICKER_FONTS[font].glyphs[`${character.codePointAt(0)!}`]?.metrics !== undefined
-    if (!present) missing.push(character)
-  }
-  return missing
-}
-
-function layoutPickerText(font: PickerFont, text: string): HallTextLayout {
-  const glyphs: HallGlyphPlacement[] = []
-  let cursor = 0
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') {
-      cursor += font.spaceAdvance
-      previous = code
-      continue
-    }
-    const glyph = font.glyphs[`${code}`]
-    if (!glyph?.metrics) continue
-    if (previous >= 0) {
-      cursor += font.kerning.find(([left, right]) => left === previous && right === code)?.[2] ?? 0
-    }
-    const [atlasX, atlasY, width, height] = glyph.frame
-    glyphs.push({
-      atlasX,
-      atlasY,
-      height,
-      left: hallRoundHalfUp(cursor + glyph.metrics[1] - width / 2),
-      top: hallRoundHalfUp(glyph.metrics[2] - height / 2),
-      width,
-    })
-    cursor += glyph.metrics[0]
-    previous = code
-  }
-  return { glyphs, width: cursor }
-}
-
-function layoutHeadingText(text: string): HallTextLayout {
-  const glyphs: HallGlyphPlacement[] = []
-  let cursor = 0
-  let previousGlyphId: number | null = null
-  for (const character of text.toUpperCase()) {
-    if (character === ' ') {
-      cursor += HEADING_FONT.spaceAdvance
-      previousGlyphId = null
-      continue
-    }
-    const glyph = HEADING_FONT.glyphs[character]
-    if (!glyph) continue
-    if (previousGlyphId !== null) {
-      cursor += HEADING_FONT.kerning[`${previousGlyphId}:${glyph.glyphId}`] ?? 0
-    }
-    glyphs.push({
-      atlasX: glyph.atlasX,
-      atlasY: glyph.atlasY,
-      height: glyph.atlasHeight,
-      left: hallRoundHalfUp(cursor + glyph.centerX - glyph.atlasWidth / 2 + glyph.spriteCenterX),
-      top: hallRoundHalfUp(glyph.centerY - glyph.atlasHeight / 2 + glyph.spriteCenterY),
-      width: glyph.atlasWidth,
-    })
-    cursor += glyph.advance
-    previousGlyphId = glyph.glyphId
-  }
-  return { glyphs, width: cursor }
+/** Hall rows submit whole-pixel pens; the shared renderer retains authored glyph trims. */
+export function layoutHallText(font: HallFont, text: string, align: HallTextAlign): NativeUiTextLayout {
+  const value = font === 'heading' ? text.toUpperCase() : text
+  const width = measureNativeUiText(value, font)
+  return layoutNativeUiText({
+    align: 'left',
+    font,
+    text: value,
+    x: align === 'center' ? -Math.ceil(width / 2) : align === 'right' ? -width : 0,
+    y: 0,
+  })
 }

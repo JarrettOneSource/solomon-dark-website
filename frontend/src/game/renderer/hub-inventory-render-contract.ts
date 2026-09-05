@@ -1,3 +1,4 @@
+import { NATIVE_UI_TEXT_ITALIC } from '../native-ui/core.ts'
 import {
   NATIVE_SKILL_CATALOG,
   nativeSkillColorRoot,
@@ -706,8 +707,7 @@ export const HUB_CHAT_INLINE_EMPHASIS = {
   exactTextCommand: 'i',
   exactTextMarker: '_',
   fontLineHeight: 24,
-  glyphBottomDelta: -3,
-  glyphTopDelta: 3,
+  ...NATIVE_UI_TEXT_ITALIC,
   italicFactor: 0.125,
   sourceDelimiter: '*',
 } as const

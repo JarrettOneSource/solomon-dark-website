@@ -100,7 +100,7 @@
   top: calc(100% - 50px);
   display: block;
   pointer-events: none;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
 }
 
 .game-over-prompt-text {

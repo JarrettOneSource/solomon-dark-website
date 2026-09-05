@@ -1,3 +1,4 @@
+import { NativeUiTextGlyphs } from './native-ui/react-raw.ts'
 import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
 
 import { elementVfx, hub, skillPicker } from '../lib/assets.ts'
@@ -12,7 +13,6 @@ import {
 } from './element-vfx-native.ts'
 import {
   HALL_ATLAS_SIZES,
-  HALL_FONT_ATLAS_SIZE,
   HALL_GOLD,
   HALL_NINE_SLICE_EDGE_UV,
   HALL_TICK_MS,
@@ -40,9 +40,6 @@ const ATLAS_SOURCES: Readonly<Record<HallAtlas, string>> = {
   Skills: skillPicker.skillsAtlas,
   UI: skillPicker.uiAtlas,
 }
-
-const FONT_MASK = `url("${skillPicker.fontsAtlas}")`
-const FONT_MASK_SIZE = `${HALL_FONT_ATLAS_SIZE[0]}px ${HALL_FONT_ATLAS_SIZE[1]}px`
 
 function cssColor(tint: number): string {
   return `#${(tint & 0xffffff).toString(16).padStart(6, '0')}`
@@ -75,26 +72,14 @@ interface HallTextProps {
 /** Native bitmap text: the pen sits on the baseline at (x, y); glyphs are center-anchored sprites. */
 export function HallText({ align = 'left', alpha, className, font, text, tint = HALL_GOLD, x, y }: HallTextProps) {
   const layout = useMemo(() => layoutHallText(font, text, align), [align, font, text])
-  const color = cssColor(tint)
+  const tintedLayout = { ...layout, glyphs: layout.glyphs.map(glyph => ({ ...glyph, tint })) }
   return (
     <span
       className={className ? `hall-text ${className}` : 'hall-text'}
       style={{ left: x, opacity: alpha, top: y }}
       aria-hidden
     >
-      {layout.glyphs.map((glyph, index) => (
-        <i
-          key={index}
-          style={{
-            backgroundColor: color,
-            height: glyph.height,
-            left: glyph.left,
-            top: glyph.top,
-            width: glyph.width,
-            ...maskStyle(FONT_MASK, `${-glyph.atlasX}px ${-glyph.atlasY}px`, FONT_MASK_SIZE),
-          }}
-        />
-      ))}
+      <NativeUiTextGlyphs layout={tintedLayout} />
     </span>
   )
 }

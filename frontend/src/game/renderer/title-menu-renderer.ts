@@ -1,8 +1,9 @@
+import { nativeUiGlyphRecordTexture } from '../native-ui/native-ui-glyph-texture.ts'
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   Container,
   FillGradient,
   Graphics,
-  Rectangle,
   Sprite,
   Texture,
   type Application,
@@ -14,7 +15,6 @@ import {
   layoutTitleBuildRevisionLabel,
 } from '../title-build-revision.ts'
 import {
-  fixedGamePresentationResolution,
   fixedGameStageBounds,
   type FixedGameViewportLayout,
 } from './game-viewport.ts'
@@ -38,7 +38,6 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
-import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 import {
   TITLE_COMPOSITED_ASSET_SOURCES,
   TITLE_STOCK_ASSET_SOURCES,
@@ -74,15 +73,12 @@ export interface TitleMenuRenderFrame {
   screen: TitleMenuScreen
 }
 
-export interface TitleMenuRenderer {
-  readonly canvas: HTMLCanvasElement
-  destroy(): void
+export interface TitleMenuRenderer extends NativeUiCanvas {
   render(frame: TitleMenuRenderFrame): void
-  resize(viewport: FixedGameViewportLayout, devicePixelRatio?: number): void
+  resize(viewport: FixedGameViewportLayout): void
 }
 
 interface TitleMenuRendererOptions {
-  devicePixelRatio?: number
   viewport: FixedGameViewportLayout
 }
 
@@ -111,16 +107,11 @@ export async function createTitleMenuRenderer(
     stock: TITLE_STOCK_ASSET_SOURCES,
     stockPoint: TITLE_STOCK_POINT_ASSET_SOURCES,
   })
-  const resolution = fixedGamePresentationResolution(
-    options.devicePixelRatio ?? window.devicePixelRatio,
-    options.viewport.displayScale,
-  )
   let gpu
   try {
     gpu = await createGameWebGlApplication({
       className: 'title-menu-canvas',
       height: options.viewport.height,
-      resolution,
       width: options.viewport.width,
     })
   } catch (error) {
@@ -265,7 +256,6 @@ export async function createTitleMenuRenderer(
 
   let destroyed = false
   let simulatedTicks = 0
-  let currentResolution = resolution
   let currentViewport = options.viewport
   let solomonTick = 0
   let solomonPhase = 0
@@ -292,6 +282,7 @@ export async function createTitleMenuRenderer(
 
   const renderer: TitleMenuRenderer = {
     canvas,
+    mount: gpu.mount,
     render(frame) {
       if (destroyed) return
       const elapsedSeconds = frame.reducedMotion ? 0 : Math.max(0, frame.elapsedMs) / 1000
@@ -361,18 +352,12 @@ export async function createTitleMenuRenderer(
       canvas.dataset.canResume = `${frame.canResume}`
       canvas.dataset.prompt = frame.prompt ?? 'none'
     },
-    resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(viewport) {
       if (destroyed) return
-      const nextResolution = fixedGamePresentationResolution(
-        nextDevicePixelRatio,
-        viewport.displayScale,
-      )
-      if (nextResolution === currentResolution
-        && viewport.width === currentViewport.width
+      if (viewport.width === currentViewport.width
         && viewport.height === currentViewport.height
         && viewport.nativeStage.x === currentViewport.nativeStage.x
         && viewport.nativeStage.y === currentViewport.nativeStage.y) return
-      currentResolution = nextResolution
       currentViewport = viewport
       applyTitleViewport(
         application,
@@ -381,9 +366,7 @@ export async function createTitleMenuRenderer(
         centerStage,
         versionStage,
         viewport,
-        currentResolution,
       )
-      canvas.dataset.resolution = `${currentResolution}`
       diagnostics.viewportHeight = viewport.height
       diagnostics.viewportWidth = viewport.width
     },
@@ -396,8 +379,7 @@ export async function createTitleMenuRenderer(
       for (const glyphTexture of buildRevision.glyphTextures) glyphTexture.destroy(false)
       nativeUi.destroy()
       textures.destroy()
-      application.destroy({ removeView: true })
-      canvas.remove()
+      gpu.destroy()
     },
   }
   applyTitleViewport(
@@ -407,7 +389,6 @@ export async function createTitleMenuRenderer(
     centerStage,
     versionStage,
     options.viewport,
-    resolution,
   )
   renderer.render({
     canResume: false,
@@ -429,9 +410,8 @@ function applyTitleViewport(
   centerStage: Container,
   versionStage: Container,
   viewport: FixedGameViewportLayout,
-  resolution: number,
 ): void {
-  application.renderer.resize(viewport.width, viewport.height, resolution)
+  application.renderer.resize(viewport.width, viewport.height)
   const backdropScale = Math.max(
     viewport.width / TITLE_RENDER_WIDTH,
     viewport.height / TITLE_RENDER_HEIGHT,
@@ -474,18 +454,11 @@ function createTitleBuildRevisionView(atlas: Texture): {
   container.position.set(TITLE_RENDER_WIDTH - 1 - layout.right, 12)
 
   for (const glyph of layout.glyphs) {
-    const glyphTexture = nativeSpriteRecordTexture({
-      frame: new Rectangle(
-        glyph.atlasX,
-        glyph.atlasY,
-        glyph.width,
-        glyph.height,
-      ),
-      source: atlas.source,
-    })
+    const glyphTexture = nativeUiGlyphRecordTexture(atlas.source, glyph)
     const sprite = new Sprite(glyphTexture)
     sprite.eventMode = 'none'
-    sprite.position.set(glyph.left, glyph.top)
+    sprite.anchor.set(0.5)
+    sprite.position.set(glyph.centerX, glyph.centerY)
     sprite.tint = 0xd8ba70
     glyphTextures.push(glyphTexture)
     container.addChild(sprite)

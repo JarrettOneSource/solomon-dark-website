@@ -1,3 +1,4 @@
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   Container,
   Graphics,
@@ -83,9 +84,7 @@ export interface SkillBookRendererPresentation {
   readonly targetQuickbarSlot: number | null
 }
 
-export interface SkillBookRenderer {
-  readonly canvas: HTMLCanvasElement
-  destroy(): void
+export interface SkillBookRenderer extends NativeUiCanvas {
   render(nowMs: number): void
   setPresentation(presentation: SkillBookRendererPresentation): void
 }
@@ -100,7 +99,6 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
         backgroundAlpha: 0,
         className: 'skill-book-canvas',
         height: NATIVE_SKILL_SCREEN_SIZE.height,
-        resolution: 1,
         width: NATIVE_SKILL_SCREEN_SIZE.width,
       }),
       loadGameTextureMap({
@@ -117,7 +115,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       }),
     ])
   } catch (error) {
-    gpu?.application.destroy({ removeView: true })
+    gpu?.destroy()
     textures?.destroy()
     throw error
   }
@@ -148,10 +146,11 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   let lastSealTick = -1
   const renderer: SkillBookRenderer = {
     canvas: gpu.canvas,
+    mount: gpu.mount,
     destroy() {
       if (destroyed) return
       destroyed = true
-      application.destroy({ removeView: true })
+      gpu.destroy()
       destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
@@ -558,7 +557,7 @@ function drawSkillEntry(
     layer,
     textures,
     NATIVE_SKILL_CATALOG[row.id]?.family.toUpperCase() ?? '',
-    'skill',
+    'skill-uppercase',
     centerX,
     nameY + nativeSkillPageTextHeight(nameLines),
     0xffffff,
@@ -769,7 +768,7 @@ function addShadowedText(
   layer: Container,
   textures: GameTextureMap,
   text: string,
-  font: 'body' | 'medium' | 'menu' | 'skill',
+  font: 'body' | 'medium' | 'menu' | 'skill-uppercase',
   x: number,
   y: number,
   tint: number,
@@ -778,7 +777,7 @@ function addShadowedText(
 ): void {
   const textLayer = new Container()
   textLayer.alpha = alpha
-  const lineHeight = nativeUiFont(font === 'skill' ? 'skill-uppercase' : font).metrics[0]
+  const lineHeight = nativeUiFont(font).metrics[0]
   const shadowOffset = NATIVE_SKILL_ROW_PRESENTATION.textShadowOffset
   addBitmapText(textLayer, textures, text, font, x + shadowOffset, y + shadowOffset, {
     lineHeight,

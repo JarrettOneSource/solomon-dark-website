@@ -19,11 +19,11 @@ import {
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import { nativeTutorialSelectedHudLayoutFromCenters } from './native-hud-presentation.ts'
 import {
-  NativeBitmapText,
+  NativeUiText,
   NativeUiNineSlice,
   NativeUiSprite,
 } from './native-ui/react-raw.ts'
-import { nativeUiFont, type NativeUiFontName } from './native-ui/core.ts'
+import type { NativeUiFontName } from './native-ui/core.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   emptyTutorialHudAnchors,
@@ -284,7 +284,6 @@ function TutorialCallout({
   readonly id: TutorialModalCalloutId
 }) {
   const { frame, lines } = geometry
-  const glyphHalfHeight = nativeUiFont(TUTORIAL_CALLOUT_FONT).metrics[0] / 2
   return (
     <div
       className="tutorial-callout"
@@ -301,11 +300,12 @@ function TutorialCallout({
         width={frame.width}
       />
       {lines.map((line, index) => (
-        <NativeBitmapText
+        <NativeUiText
           className="tutorial-callout-text"
           font={TUTORIAL_CALLOUT_FONT}
           key={`${index}:${line.text}`}
-          style={{ left: line.x - frame.x, top: line.y - frame.y - glyphHalfHeight }}
+          placement="baseline"
+          style={{ left: line.x - frame.x, top: line.y - frame.y }}
           text={line.text}
           tint={TUTORIAL_GOLD}
         />
@@ -327,28 +327,29 @@ function TutorialShadowedText({
   readonly font: NativeUiFontName
   readonly text: string
 }) {
-  const top = baseline - nativeUiFont(font).metrics[0] / 2
   const sharedClassName = className
     ? `tutorial-instruction-text ${className}`
     : 'tutorial-instruction-text'
   return (
     <>
-      <NativeBitmapText
+      <NativeUiText
         align="center"
         className={`${sharedClassName} tutorial-instruction-shadow`}
         font={font}
+        placement="baseline"
         style={{
           left: typeof centerX === 'number' ? centerX + 2.25 : `calc(${centerX} + 2.25px)`,
-          top: top + 2.25,
+          top: baseline + 2.25,
         }}
         text={text}
         tint={0x000000}
       />
-      <NativeBitmapText
+      <NativeUiText
         align="center"
         className={sharedClassName}
         font={font}
-        style={{ left: centerX, top }}
+        placement="baseline"
+        style={{ left: centerX, top: baseline }}
         text={text}
         tint={TUTORIAL_GOLD}
       />

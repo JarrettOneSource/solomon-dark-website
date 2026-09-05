@@ -3,11 +3,11 @@ import { Fragment, type CSSProperties, type ReactNode } from 'react'
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
 import {
   nativeUiAtlas,
-  nativeUiFont,
   nativeUiRecord,
 } from './native-ui-catalog.ts'
 import NativeUiNineSlice from './NativeUiNineSlice.tsx'
 import NativeUiSprite from './NativeUiSprite.tsx'
+import NativeUiTextGlyphs from './NativeUiTextGlyphs.tsx'
 import type {
   NativeUiClipNode,
   NativeUiNode,
@@ -17,7 +17,7 @@ import type {
   NativeUiTextNode,
   NativeUiTileNode,
 } from './native-ui-plan.ts'
-import { layoutNativeUiText, nativeUiGlyphInkBounds } from './native-ui-text.ts'
+import { layoutNativeUiText } from './native-ui-text.ts'
 
 interface NativeUiPlanViewProps {
   readonly className?: string
@@ -256,9 +256,6 @@ function renderTile(node: NativeUiTileNode): ReactNode {
 
 function renderText(node: NativeUiTextNode): ReactNode {
   const layout = layoutNativeUiText(node.text)
-  const font = nativeUiFont(node.text.font)
-  const atlas = nativeUiAtlas(font.atlas)
-  const source = `url("${nativeUiAtlasSource(font.atlas)}")`
   return (
     <span
       data-native-ui-font={node.text.font}
@@ -267,34 +264,7 @@ function renderText(node: NativeUiTextNode): ReactNode {
       data-native-ui-unsupported={layout.unsupportedCodePoints.join(',') || undefined}
       style={{ inset: 0, pointerEvents: 'none', position: 'absolute' }}
     >
-      {layout.glyphs.map((glyph, index) => {
-        const [x, y] = glyph.frame
-        const bounds = nativeUiGlyphInkBounds(glyph)
-        return (
-          <i
-            data-native-ui-glyph={glyph.codePoint}
-            key={`${index}:${glyph.codePoint}`}
-            style={{
-              backgroundColor: color(glyph.tint),
-              height: bounds.height,
-              imageRendering: 'pixelated',
-              left: bounds.left,
-              maskImage: source,
-              maskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,
-              maskRepeat: 'no-repeat',
-              maskSize: `${atlas.dimensions[0] * glyph.scale}px ${atlas.dimensions[1] * glyph.scale}px`,
-              opacity: glyph.alpha,
-              position: 'absolute',
-              top: bounds.top,
-              WebkitMaskImage: source,
-              WebkitMaskPosition: `${-x * glyph.scale}px ${-y * glyph.scale}px`,
-              WebkitMaskRepeat: 'no-repeat',
-              WebkitMaskSize: `${atlas.dimensions[0] * glyph.scale}px ${atlas.dimensions[1] * glyph.scale}px`,
-              width: bounds.width,
-            }}
-          />
-        )
-      })}
+      <NativeUiTextGlyphs layout={layout} />
     </span>
   )
 }

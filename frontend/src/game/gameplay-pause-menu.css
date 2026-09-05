@@ -29,7 +29,7 @@
   padding: 42px 52px;
   border: 4px double #d8bc72;
   color: #dfc782;
-  font-family: 'Cinzel', Georgia, serif;
+  font-family: var(--font-display);
   text-align: center;
   text-shadow: 0 2px 2px #000;
   background: rgb(8 8 8 / 0.78);

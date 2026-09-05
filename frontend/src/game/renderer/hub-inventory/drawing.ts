@@ -1,95 +1,20 @@
-import { Container, Graphics, NineSliceSprite, Sprite, Texture } from 'pixi.js'
 import {
-  nativeUiFont,
-  nativeUiKerning,
+  type NativeUiTextRun,
   nativeUiRecord,
-  NATIVE_UI_BUTTON,
-  nativeUiRect,
-  planNativeUiButtonChrome,
-  type NativeUiFontName,
-  type NativeUiAtlasRecord,
-} from '../native-ui/core.ts'
-import { nativeUiPixiFor } from '../native-ui/pixi.ts'
-import { HUB_CHAT_INLINE_EMPHASIS, HUB_INVENTORY_INFO_FRAME, HUB_MSGBOX_ART } from './hub-inventory-render-contract.ts'
-import type { RenderContext } from './hub-inventory-render-model.ts'
-
-type AtlasName = 'Inventory' | 'Library' | 'Skills' | 'UI'
-
-export type FontName = 'body' | 'medium' | 'menu' | 'skill' | 'special-uppercase'
-
-export function addNativeButton(
-  context: RenderContext,
-  layer: Container,
-  id: string,
-  label: string,
-  [left, top, width, height]: readonly [number, number, number, number],
-  pressed: boolean,
-  labelCenterX: number,
-  labelBaselineY: number,
-): number {
-  const chrome = planNativeUiButtonChrome({
-    bounds: nativeUiRect(left, top, width, height),
-    id,
-    state: pressed ? 'pressed' : 'idle',
-  })
-  layer.addChild(nativeUiPixiFor(context.textures).render(chrome, `${id}:chrome`))
-  const copyOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset : 0
-  addBitmapText(
-    context,
-    layer,
-    label,
-    'menu',
-    labelCenterX + copyOffset,
-    labelBaselineY + copyOffset,
-    { tint: HUB_MSGBOX_ART.primaryButtonTextTint },
-  )
-  return copyOffset
-}
-
-export function addHorizontalChain(context: RenderContext, layer: Container, x: number, y: number, width: number): void {
-  addTiledAtlas(context, layer, 'UI', 10, x, y, width, 24, 1.25)
-}
-
-export function addInventoryInfoFrame(
-  context: RenderContext,
-  layer: Container,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-): void {
-  layer.addChild(new Graphics()
-    .rect(x, y, width, height)
-    .fill({ color: HUB_INVENTORY_INFO_FRAME.fillTint }))
-  const frame = new NineSliceSprite({
-    bottomHeight: HUB_INVENTORY_INFO_FRAME.sourceThird,
-    height,
-    leftWidth: HUB_INVENTORY_INFO_FRAME.sourceThird,
-    rightWidth: HUB_INVENTORY_INFO_FRAME.sourceThird,
-    texture: atlasTexture(context, 'Inventory', HUB_INVENTORY_INFO_FRAME.frameRecord),
-    topHeight: HUB_INVENTORY_INFO_FRAME.sourceThird,
-    width,
-  })
-  frame.label = 'native-inventory-info-frame'
-  frame.position.set(x, y)
-  layer.addChild(frame)
-}
-
-export function addPrimitiveFrame(layer: Container, x: number, y: number, width: number, height: number): void {
-  layer.addChild(new Graphics().rect(x, y, width, height).stroke({ color: 0x000000, width: 2 }))
-  layer.addChild(new Graphics().rect(x + 1, y + 1, width - 2, height - 2).stroke({
-    color: 0xeadab3,
-    width: 1,
-  }))
-  layer.addChild(new Graphics().rect(x + 2, y + 2, width - 4, height - 4).stroke({
-    color: 0xd8ba70,
-    width: 1,
-  }))
-  layer.addChild(new Graphics().rect(x + 3, y + 3, width - 6, height - 6).stroke({
-    color: 0x15130b,
-    width: 1,
-  }))
-}
+  wrapNativeUiTextRuns,
+} from '../../native-ui/core.ts'
+import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
+import { hubChatTextRuns } from '../hub-inventory-render-contract.ts'
+import {
+  type AtlasName,
+  type FontName,
+  type RenderContext,
+} from './model.ts'
+import {
+  Container,
+  Sprite,
+  Texture,
+} from 'pixi.js'
 
 export function addAtlasSprite(
   context: RenderContext,
@@ -267,7 +192,7 @@ export function addRepeatedAtlas(
   return sprites
 }
 
-function atlasTexture(context: RenderContext, atlas: AtlasName, record: number): Texture {
+export function atlasTexture(context: RenderContext, atlas: AtlasName, record: number): Texture {
   return nativeUiPixiFor(context.textures).texture(atlas, record)
 }
 
@@ -300,7 +225,7 @@ export function addBitmapText(
 ): void {
   layer.addChild(nativeUiPixiFor(context.textures).text({
     align: options.align,
-    font: nativeUiFontName(fontName),
+    font: fontName,
     lineHeight: options.lineHeight,
     maxWidth: options.maxWidth,
     scale: options.scale,
@@ -311,67 +236,39 @@ export function addBitmapText(
   }))
 }
 
-interface BitmapTextRun {
-  readonly advanceScale?: number
-  readonly italic?: boolean
-  readonly offsetX?: number
-  readonly offsetY?: number
-  readonly scale?: number
-  readonly text: string
-}
-
 export function addBitmapTextRuns(
   context: RenderContext,
   layer: Container,
-  runs: readonly BitmapTextRun[],
-  fontName: FontName,
+  runs: readonly NativeUiTextRun[],
+  font: FontName,
   x: number,
   y: number,
   tint: number,
 ): void {
-  const nativeFontName = nativeUiFontName(fontName)
-  const font = nativeUiFont(nativeFontName)
-  let cursor = x
-  let previous = -1
-  for (const run of runs) {
-    const scale = run.scale ?? 1
-    const advanceScale = run.advanceScale ?? scale
-    for (const character of run.text) {
-      const code = character.codePointAt(0)!
-      if (character === ' ') {
-        cursor += font.spaceAdvance * advanceScale
-        previous = code
-        continue
-      }
-      const glyph = font.glyphs[`${code}`]
-      if (!glyph?.metrics) continue
-      cursor += nativeUiKerning(nativeFontName, previous, code) * advanceScale
-      const sprite = nativeUiPixiFor(context.textures).glyph(nativeFontName, code)
-      sprite.anchor.set(0.5)
-      sprite.scale.set(scale)
-      if (run.italic) applyExactTextItalic(sprite, glyph)
-      sprite.tint = tint
-      sprite.position.set(
-        cursor + glyph.metrics[1] * scale + (run.offsetX ?? 0),
-        y + glyph.metrics[2] * scale + (run.offsetY ?? 0),
-      )
-      layer.addChild(sprite)
-      cursor += glyph.metrics[0] * advanceScale
-      previous = code
-    }
-  }
+  layer.addChild(nativeUiPixiFor(context.textures).textRuns({ font, runs, tint, x, y }))
 }
 
-function nativeUiFontName(fontName: FontName): NativeUiFontName {
-  return fontName === 'skill' ? 'skill-uppercase' : fontName
-}
-
-export function applyExactTextItalic(sprite: Sprite, glyph: NativeUiAtlasRecord): void {
-  const glyphHeight = glyph.frame[3]
-  if (glyphHeight <= 0) return
-  const totalDelta = HUB_CHAT_INLINE_EMPHASIS.glyphTopDelta
-    - HUB_CHAT_INLINE_EMPHASIS.glyphBottomDelta
-  const italicAngle = Math.atan(totalDelta / glyphHeight)
-  sprite.skew.x = -italicAngle
-  sprite.scale.y /= Math.cos(italicAngle)
+export function addChatBitmapText(
+  context: RenderContext,
+  layer: Container,
+  source: string,
+  x: number,
+  y: number,
+  options: {
+    readonly lineHeight: number
+    readonly maxWidth: number
+    readonly tint: number
+  },
+): number {
+  const lines = wrapNativeUiTextRuns(hubChatTextRuns(source), 'menu', options.maxWidth)
+  lines.forEach((line, lineIndex) => {
+    layer.addChild(nativeUiPixiFor(context.textures).textRuns({
+      font: 'menu',
+      runs: line,
+      tint: options.tint,
+      x,
+      y: y + lineIndex * options.lineHeight,
+    }))
+  })
+  return lines.length
 }

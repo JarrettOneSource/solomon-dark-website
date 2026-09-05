@@ -15,7 +15,7 @@ import {
   nativeNoteboxOpacity,
   type NativeNoteboxNotice,
 } from './native-ui-notebox.ts'
-import NativeBitmapText from './NativeBitmapText.tsx'
+import NativeUiText from './NativeUiText.tsx'
 import NativeUiNineSlice from './NativeUiNineSlice.tsx'
 import './native-ui-notebox.css'
 
@@ -114,11 +114,12 @@ export default function NativeUiNotebox({
             record={NATIVE_NOTEBOX.frameRecord}
             width={layout.panelWidth}
           />
-          <NativeBitmapText
+          <NativeUiText
             align="center"
             className="native-notebox-text"
             font="menu"
-            style={{ left: layout.textLeft, top: layout.textTop }}
+            placement="baseline"
+            style={{ left: layout.textLeft, top: layout.textBaseline }}
             text={notice.text}
             tint={textTint}
             width={layout.textWidth}

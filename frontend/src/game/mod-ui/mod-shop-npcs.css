@@ -3,4 +3,4 @@
 .mod-shop-npcs img,
 .mod-shop-npcs i { display: block; width: 54px; height: 54px; object-fit: contain; border-radius: 50%; image-rendering: pixelated; }
 .mod-shop-npcs i { border: 2px solid #d5c08e; background: radial-gradient(circle, #8568a1, #251c30); }
-.mod-shop-npcs span { color: #f0e4c4; font: 600 11px sans-serif; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+.mod-shop-npcs span { color: #f0e4c4; font: 600 11px var(--font-body); text-shadow: 0 1px 3px #000; white-space: nowrap; }

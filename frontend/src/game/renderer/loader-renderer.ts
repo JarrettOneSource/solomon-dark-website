@@ -1,3 +1,4 @@
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import { Container, Graphics, Sprite, type Application, type Texture } from 'pixi.js'
 
 import { loader } from '../../lib/assets.ts'
@@ -8,7 +9,6 @@ import {
   textureFrom,
 } from './game-webgl.ts'
 import {
-  fixedGamePresentationResolution,
   gameViewportAnchoredBounds,
   type FixedGameViewportLayout,
 } from './game-viewport.ts'
@@ -24,15 +24,12 @@ import {
   loaderFillWidth,
 } from './loader-render-contract.ts'
 
-export interface LoaderRenderer {
-  readonly canvas: HTMLCanvasElement
-  destroy(): void
+export interface LoaderRenderer extends NativeUiCanvas {
   render(progress: number): void
-  resize(viewport: FixedGameViewportLayout, devicePixelRatio?: number): void
+  resize(viewport: FixedGameViewportLayout): void
 }
 
 interface LoaderRendererOptions {
-  devicePixelRatio?: number
   viewport: FixedGameViewportLayout
 }
 
@@ -42,16 +39,11 @@ export async function createLoaderRenderer(
   const textures = await loadGameTextureMap({
     composited: LOADER_COMPOSITED_ASSET_SOURCES,
   })
-  const resolution = fixedGamePresentationResolution(
-    options.devicePixelRatio ?? window.devicePixelRatio,
-    options.viewport.displayScale,
-  )
   let gpu
   try {
     gpu = await createGameWebGlApplication({
       className: 'native-loader-canvas',
       height: options.viewport.height,
-      resolution,
       width: options.viewport.width,
     })
   } catch (error) {
@@ -83,7 +75,6 @@ export async function createLoaderRenderer(
   fill.mask = fillMask
   content.addChild(fill, fillMask)
 
-  let currentResolution = resolution
   let currentViewport = options.viewport
   let destroyed = false
   const diagnostics = {
@@ -103,6 +94,7 @@ export async function createLoaderRenderer(
 
   const renderer: LoaderRenderer = {
     canvas,
+    mount: gpu.mount,
     render(progress) {
       if (destroyed) return
       const width = loaderFillWidth(progress)
@@ -117,26 +109,18 @@ export async function createLoaderRenderer(
       diagnostics.progress = width / LOADER_FILL_CLIP.width
       canvas.dataset.progress = `${diagnostics.progress}`
     },
-    resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(viewport) {
       if (destroyed) return
-      const nextResolution = fixedGamePresentationResolution(
-        nextDevicePixelRatio,
-        viewport.displayScale,
-      )
-      if (nextResolution === currentResolution
-        && viewport.width === currentViewport.width
+      if (viewport.width === currentViewport.width
         && viewport.height === currentViewport.height) return
-      currentResolution = nextResolution
       currentViewport = viewport
       applyLoaderViewport(
         application,
         background,
         content,
         viewport,
-        currentResolution,
         diagnostics,
       )
-      canvas.dataset.resolution = `${currentResolution}`
       application.render()
     },
     destroy() {
@@ -145,8 +129,7 @@ export async function createLoaderRenderer(
       application.stage.removeChild(root)
       root.destroy({ children: true })
       textures.destroy()
-      application.destroy({ removeView: true })
-      canvas.remove()
+      gpu.destroy()
     },
   }
   applyLoaderViewport(
@@ -154,7 +137,6 @@ export async function createLoaderRenderer(
     background,
     content,
     options.viewport,
-    resolution,
     diagnostics,
   )
   renderer.render(0)
@@ -166,7 +148,6 @@ function applyLoaderViewport(
   background: Graphics,
   content: Container,
   viewport: FixedGameViewportLayout,
-  resolution: number,
   diagnostics: {
     contentX: number
     contentY: number
@@ -174,7 +155,7 @@ function applyLoaderViewport(
     viewportWidth: number
   },
 ): void {
-  application.renderer.resize(viewport.width, viewport.height, resolution)
+  application.renderer.resize(viewport.width, viewport.height)
   background.clear().rect(0, 0, viewport.width, viewport.height).fill(LOADER_BACKGROUND)
   const bounds = gameViewportAnchoredBounds(
     viewport,

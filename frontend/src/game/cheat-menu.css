@@ -28,7 +28,7 @@
 
 .cheat-menu-identity strong {
   color: #f2d98d;
-  font: 700 clamp(17px, 2.4vmin, 23px) var(--font-heading);
+  font: 700 clamp(17px, 2.4vmin, 23px) var(--font-display);
   letter-spacing: 0.06em;
   text-shadow: 0 2px 2px #000;
 }

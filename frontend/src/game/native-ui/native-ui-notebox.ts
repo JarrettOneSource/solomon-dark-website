@@ -1,4 +1,3 @@
-import { nativeUiFont } from './native-ui-catalog.ts'
 import { layoutNativeUiText } from './native-ui-text.ts'
 
 export type NativeNoteboxKind = 'failure' | 'instruction'
@@ -16,7 +15,7 @@ export interface NativeNoteboxLayout {
   readonly panelWidth: number
   readonly textHeight: number
   readonly textLeft: number
-  readonly textTop: number
+  readonly textBaseline: number
   readonly textWidth: number
 }
 
@@ -77,9 +76,7 @@ export function nativeNoteboxLayout(text: string): NativeNoteboxLayout {
     panelWidth,
     textHeight,
     textLeft: NATIVE_NOTEBOX.padding,
-    textTop: NATIVE_NOTEBOX.padding
-      + NATIVE_NOTEBOX.textBaselineOffset
-      - nativeUiFont('menu').metrics[0] / 2,
+    textBaseline: NATIVE_NOTEBOX.padding + NATIVE_NOTEBOX.textBaselineOffset,
     textWidth,
   }
 }

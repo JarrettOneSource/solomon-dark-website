@@ -16,6 +16,6 @@
   border: 1px solid rgb(210 190 139 / 75%);
   background: rgb(10 12 17 / 88%);
   color: #e6d9b2;
-  font: 600 .75rem/1.2 Cinzel, serif;
+  font: 600 .75rem/1.2 var(--font-display);
   text-align: left;
 }

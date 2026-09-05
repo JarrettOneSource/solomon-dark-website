@@ -19,7 +19,7 @@
   padding: 26px 42px 30px;
   border: 4px double #d8bc72;
   color: #dfc782;
-  font-family: "IM FELL English", Georgia, serif;
+  font-family: var(--font-narrative);
   text-align: center;
   text-shadow: 0 3px 4px #000;
   background: rgb(8 8 8 / 0.82);

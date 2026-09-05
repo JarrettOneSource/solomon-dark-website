@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-import NativeBitmapText from './NativeBitmapText.tsx'
+import NativeUiText from './NativeUiText.tsx'
 import NativeUiPlanView from './NativeUiPlanView.tsx'
 import NativeUiSprite from './NativeUiSprite.tsx'
 import NativeUiStrip from './NativeUiStrip.tsx'
@@ -27,7 +27,7 @@ export function NativeSettingsText({
   width,
 }: NativeSettingsTextProps) {
   return (
-    <NativeBitmapText
+    <NativeUiText
       align={align}
       className={className}
       font={NATIVE_SETTINGS_PRESENTATION.font}
@@ -93,14 +93,13 @@ export function NativeSettingsToggleArt({
   )
 }
 
-export function NativeSettingsRangeTrack({ width = 380 }: { readonly width?: number }) {
+export function NativeSettingsRangeTrack() {
   const source = NATIVE_SETTINGS_PRESENTATION.records.sliderTrack
   return (
     <NativeUiStrip
       atlas={source.atlas}
       className="game-settings-native-range-track"
       record={source.record}
-      width={width}
     />
   )
 }

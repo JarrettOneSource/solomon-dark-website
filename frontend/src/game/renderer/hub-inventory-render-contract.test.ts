@@ -116,15 +116,8 @@ import {
 
 const hubInventoryRendererSource = [
   './hub-inventory-renderer.ts',
-  './hub-inventory-page.ts',
-  './hub-inventory-panels.ts',
-  './hub-inventory-dialogue.ts',
-  './hub-inventory-service.ts',
-  './hub-inventory-notices.ts',
-  './hub-inventory-inspection.ts',
-  './hub-inventory-items.ts',
-  './hub-inventory-drawing.ts',
-].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n')
+  ...['chrome', 'dialogue', 'drawing', 'equipment', 'items', 'notices', 'pages', 'services', 'stats'].map(name => `./hub-inventory/${name}.ts`),
+].map(path => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n')
 
 const AUTHORED_EQUIPMENT_DESCRIPTIONS: Readonly<Record<number, string>> = {
   29: 'An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read "Interferenal."',

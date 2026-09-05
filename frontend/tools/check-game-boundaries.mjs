@@ -3,6 +3,11 @@ import { extname, join, relative, resolve } from 'node:path'
 
 const frontendRoot = resolve(import.meta.dirname, '..')
 const gameRoot = join(frontendRoot, 'src/game')
+const nativeUiRoot = join(gameRoot, 'native-ui')
+const nativeUiEntrypoints = new Set([
+  'assets.ts', 'core.ts', 'pixi.ts', 'react.ts', 'react-raw.ts',
+  'native-ui-glyph-texture.ts',
+])
 const layers = [
   {
     directory: join(gameRoot, 'core-kernels'),
@@ -68,6 +73,13 @@ for (const layer of layers) {
 
 for (const path of await sourceFiles(gameRoot)) {
   const source = await readFile(path, 'utf8')
+  if (!path.startsWith(`${nativeUiRoot}/`)) {
+    for (const [, entrypoint] of source.matchAll(/from\s+['"][^'"]*\/native-ui\/([^'"]+)['"]/g)) {
+      if (!nativeUiEntrypoints.has(entrypoint)) {
+        failures.push(`${relative(gameRoot, path)} must use a supported native UI entrypoint: ${entrypoint}`)
+      }
+    }
+  }
   if (/from\s+['"][^'"]*\/fx\/(?:audio|jukebox)(?:\.ts)?['"]/.test(source)) {
     failures.push(`${relative(gameRoot, path)} must not import public-site audio state`)
   }

@@ -80,7 +80,7 @@ try {
   assert.equal(await stoneAction.locator('[data-native-ui-record="UI.106"]').count(), 1)
   await stoneAction.dispatchEvent('pointerup', { button: 0, pointerType: 'mouse' })
   assert.equal(await dom.locator('[data-native-ui-tabs]').count(), 1)
-  assert.equal(await dom.locator('[data-native-ui-tab]').count(), 4)
+  assert.equal(await dom.locator('[data-native-ui-tab]').count(), 7)
   assert.equal(await dom.locator('[data-native-ui-simple-menu]').count(), 1)
   assert.equal(await dom.locator('[data-native-ui-simple-menu-action]').count(), 2)
   assert.equal(await dom.locator('[data-native-ui-settings-controls]').count(), 1)

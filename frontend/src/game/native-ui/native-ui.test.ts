@@ -266,9 +266,9 @@ test('native point glyph textures and both DOM adapters keep record trim geometr
 
   const pixiSource = readFileSync(new URL('./native-ui-pixi.ts', import.meta.url), 'utf8')
   assert.match(pixiSource, /nativeUiGlyphRecordTexture\(source\.source, glyph\)/)
-  for (const component of ['NativeUiPlanView.tsx', 'NativeBitmapText.tsx']) {
+  for (const component of ['NativeUiPlanView.tsx', 'NativeUiText.tsx']) {
     const domSource = readFileSync(new URL(`./${component}`, import.meta.url), 'utf8')
-    assert.match(domSource, /nativeUiGlyphInkBounds\(glyph\)/)
+    assert.match(domSource, /<NativeUiTextGlyphs layout=\{layout\}/)
     assert.doesNotMatch(domSource, /glyph\.center[XY] - rendered(?:Width|Height) \/ 2/)
   }
 })

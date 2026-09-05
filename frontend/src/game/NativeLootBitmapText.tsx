@@ -1,4 +1,4 @@
-import { NativeBitmapText } from './native-ui/react-raw.ts'
+import { NativeUiText } from './native-ui/react-raw.ts'
 
 interface NativeLootBitmapTextProps {
   readonly text: string
@@ -7,7 +7,7 @@ interface NativeLootBitmapTextProps {
 
 export default function NativeLootBitmapText({ text, tint }: NativeLootBitmapTextProps) {
   return (
-    <NativeBitmapText
+    <NativeUiText
       className="boneyard-loot-bitmap-text"
       font="body"
       text={text}

@@ -5,7 +5,6 @@ import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
   boundedGameViewportLayout,
-  fixedGamePresentationResolution,
   fixedGameStageBounds,
   fixedGameStageCssBounds,
   fixedGameViewportLayout,
@@ -115,14 +114,6 @@ test('fixed native stage lanes independently preserve all screen-edge relationsh
     x: 0,
     y: 100,
   })
-})
-
-test('fixed-screen backing density maps directly to physical pixels below its cap', () => {
-  assert.equal(fixedGamePresentationResolution(1, 1), 1)
-  assert.equal(fixedGamePresentationResolution(1, 0.8), 0.8)
-  assert.equal(fixedGamePresentationResolution(1, 390 / 900), 390 / 900)
-  assert.equal(fixedGamePresentationResolution(2, 0.8), 1.5)
-  assert.equal(fixedGamePresentationResolution(Number.NaN, Number.NaN), 1)
 })
 
 test('larger browsers expand camera field of view at native scale', () => {

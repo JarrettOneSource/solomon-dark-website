@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-import { NativeBitmapText } from './native-ui/react-raw.ts'
+import { NativeUiText } from './native-ui/react-raw.ts'
 import {
   nativeUiAtlas,
   nativeUiRecord,
@@ -47,9 +47,10 @@ export default function NativeSpectatorStatus({
       }}
     >
       <NativePanelChrome layout={layout} />
-      <NativeBitmapText
+      <NativeUiText
         className="boneyard-spectator-status-text"
         font={NATIVE_SPECTATOR_HUD_CONTRACT.font}
+        placement="baseline"
         style={{ left: layout.text.x, position: 'absolute', top: layout.text.y }}
         text={status.displayText}
         tint={NATIVE_SPECTATOR_HUD_CONTRACT.tint}
@@ -70,9 +71,10 @@ export default function NativeSpectatorStatus({
         }}
       >
         <NativePanelChrome layout={layout} />
-        <NativeBitmapText
+        <NativeUiText
           className="boneyard-spectator-status-text"
           font={NATIVE_SPECTATOR_HUD_CONTRACT.font}
+        placement="baseline"
           style={{ left: layout.text.x, position: 'absolute', top: layout.text.y }}
           text={status.respawnText}
           tint={NATIVE_SPECTATOR_HUD_CONTRACT.tint}

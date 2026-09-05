@@ -150,6 +150,7 @@ export default function SkillPicker({
     if (!host) return
     let disposed = false
     let renderer: SkillPickerRenderer | undefined
+    let detachCanvas: (() => void) | undefined
     setRendererState('loading')
     void rendererOwner.get().then((created) => {
       if (disposed) return
@@ -161,7 +162,7 @@ export default function SkillPicker({
       )
       created.setDetailOption(detailIndexRef.current)
       created.setContentVisible(phaseRef.current !== 'queued-wait')
-      host.replaceChildren(created.canvas)
+      detachCanvas = created.mount(host)
       setRendererState('ready')
     }).catch(() => {
       if (!disposed) setRendererState('error')
@@ -296,7 +297,7 @@ export default function SkillPicker({
       disposed = true
       unsubscribe()
       rendererRef.current = null
-      host.replaceChildren()
+      detachCanvas?.()
     }
   }, [audio, rendererOwner])
 

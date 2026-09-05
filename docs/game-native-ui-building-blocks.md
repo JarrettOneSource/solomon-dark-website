@@ -1,26 +1,29 @@
 # Stock UI building blocks
 
 The native UI kit is the one reusable interface for Solomon Dark's stock UI
-art and bitmap text. It contains all 12 presentation/UI atlases, all 1,259
+art and bitmap text. It contains all 13 presentation/UI atlases, all 1,292
 records, all ten bitmap-font wrappers, and composable plans for sprites, text,
 tiled/clipped fills, mirrored frames, buttons, tabs, messages, SimpleMenu, and
 the stock BoastBox.
 
 ## Supported entrypoints
 
-Game code imports the kit through one of five supported seams. Do not deep-
+Game code imports the kit through the supported seams below. Do not deep-
 import implementation files from outside `native-ui/`.
 
 - `native-ui/core.ts`: Node-safe catalog, text, plan, Settings contract, and
   Notebox contract. It never evaluates PNG imports.
 - `native-ui/assets.ts`: browser atlas URLs.
 - `native-ui/pixi.ts`: the Pixi adapter.
+- `native-ui/native-ui-glyph-texture.ts`: the asset-free glyph texture
+  constructor used by world renderers that already own their font atlas. This
+  keeps their layout tests Node-safe without evaluating browser asset imports.
 - `native-ui/react-raw.ts`: exact low-level React sprite, strip, nine-slice,
   bitmap-text, and plan adapters.
 - `native-ui/react.ts`: semantic Button, MsgBox, Tabs, SimpleMenu, BoastMenu,
   PartyMenu, Settings, and Notebox modules.
 
-An architecture test rejects every external import that bypasses these seams.
+The canonical architecture check rejects external imports that bypass these seams.
 Use the semantic interface whenever the stock composition already exists; the
 raw React interface is the explicit escape hatch for a recovered composition
 that has not yet earned a semantic module.
@@ -298,19 +301,76 @@ is the back action. The workbench PARTY CHIP tab shows the desktop chip with a r
 a chip with an error line and no gear, the touch chip collapsed and expanded at 0.55,
 and the invitation box.
 
-## Bitmap text
+## Typography
 
-`native-ui-text.ts` is the shared measurement and glyph-layout seam for both
-Pixi and `NativeBitmapText.tsx`. It preserves each wrapper's metrics, glyph
-set, advance, and kerning table. Unsupported glyphs are reported in
-`unsupportedCodePoints` and draw nothing. There is intentionally no OS-font
-fallback.
+All game bitmap text uses the ten font wrappers in `native-ui-catalog.ts` and
+one pen implementation in `native-ui-text.ts`. Measurement, kerning, glyph
+advance, wrapping and styled runs use the same extracted data. There are no
+separate runtime font tables for the title revision, wizard name, quickbar,
+world labels, NPC marker, or Hall of Fame.
 
-Available font names are:
+`NativeUiText` is the DOM text interface:
 
-- `body`, `medium`, `special-uppercase`, `menu`, `heading`;
-- `skill-uppercase`, `world-and-roster`, `timeline`, `belt`;
-- `control-panel`.
+```tsx
+<NativeUiText font="medium" text="READY" />
+<NativeUiText
+  align="center"
+  font="menu"
+  placement="baseline"
+  style={{ left: 800, top: 450 }}
+  text="CHOOSE A SPELL"
+/>
+```
+
+The default `box` placement contains the visible glyph ink in an ordinary flow
+box and centers it vertically. Explicit newlines retain their line slots,
+including leading and trailing blank lines. `baseline` placement is absolute:
+`style.top` is the native pen baseline, and the default zero-width anchor makes
+`style.left` the left/center/right anchor selected by `align`. An explicit
+`width` instead aligns within that lane. Callers must not subtract half a font
+height or add a compensating translate transform.
+
+`NativeUiTextGlyphs` from `react-raw.ts` paints DOM glyphs for flow text, native plans, Hall rows and
+quickbar labels. The Pixi adapter consumes the same glyph layouts and uses
+`nativeUiGlyphRecordTexture` to preserve each record's logical canvas and trim.
+Both retain native point sampling. Italic text shares its authored shear;
+`textRuns` supports independent visual scale, pen advance scale and offsets.
+Native dialogue wrapping retains hard spaces and emphasis. Screen-specific
+paragraph breaking and authored integer pen placement remain with their native
+screen layout owners.
+
+Font names are `belt`, `body`, `control-panel`, `heading`, `medium`, `menu`,
+`skill-uppercase`, `special-uppercase`, `timeline`, and `world-and-roster`.
+Unsupported glyphs are reported in `unsupportedCodePoints` and draw nothing.
+Browser input, Unicode prose and diagnostic/code text use the shared CSS font
+roles `--font-display`, `--font-body`, `--font-narrative`, and `--font-mono` from
+`index.css`.
+
+The DOM workbench's **TYPOGRAPHY** tab displays every native family in both flow
+and baseline placement. `npm run smoke:game:typography` checks all of them,
+Settings alignment and range-value separation, physical canvas density,
+ancestor transforms, retained attachment leases, and DPR changes.
+
+## UI canvas ownership
+
+`createGameWebGlApplication` supplies `canvas`, `mount(host)` and `destroy()`.
+`mount` appends only its owned canvas and returns a detach function. Detaching
+preserves renderer resources; final destruction releases the attachment and
+application. A stale detach function cannot close a later attachment.
+
+`native-ui-canvas.ts` owns backing density for Title, Create, Loader, Inventory,
+Skills, SkillPicker, the HUD selector, and the workbench. It observes mounted
+layout and ancestor presentation changes, calculates physical pixels from the
+actual displayed rectangle and DPR, and repaints retained content after a
+backing resize. It performs no per-frame DOM measurement. Logical scene
+coordinates, hit boxes, simulation timing and world render-quality limits do
+not change. SkillPicker's intermediate text cache uses the same density.
+
+Renderers retain their screen-specific scene layout and resource cleanup. The
+Inventory renderer's lifetime is in `renderer/hub-inventory-renderer.ts`; its
+models, pages, stats, equipment, dialogue, services, notices, items and drawing
+live under `renderer/hub-inventory/`. UI callers import the model types directly
+from that owner instead of relying on a forwarding export.
 
 ## Settings presentation
 

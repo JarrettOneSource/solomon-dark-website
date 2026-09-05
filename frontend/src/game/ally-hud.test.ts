@@ -1,3 +1,4 @@
+import { layoutNativeUiText, nativeUiGlyphInkBounds, nativeUiFont, nativeUiKerning } from './native-ui/core.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -13,8 +14,6 @@ import {
   combineAllyHudRows,
   deriveGolemAllyHudRows,
   derivePlayerAllyHudRows,
-  layoutNativeAllyName,
-  NATIVE_ALLY_FONT,
   type AllyHudRow,
 } from './ally-hud.ts'
 
@@ -281,19 +280,19 @@ test('ally HUD clamps ratios without smoothing and compares semantic rows', () =
 })
 
 test('ally HUD lays out native quarter-scale bitmap glyphs with bundle kerning', () => {
-  assert.equal(NATIVE_ALLY_FONT.glyphCount, 67)
-  assert.equal(NATIVE_ALLY_FONT.kerningCount, 1_043)
-  assert.equal(NATIVE_ALLY_FONT.glyphs.A.record, 391)
-  assert.equal(NATIVE_ALLY_FONT.kerning['65:66'], 3)
+  assert.equal(Object.keys(nativeUiFont('world-and-roster').glyphs).length, 67)
+  assert.equal(nativeUiFont('world-and-roster').kerning.length, 1_043)
+  assert.equal(nativeUiFont('world-and-roster').glyphs['65']!.record, 391)
+  assert.equal(nativeUiKerning('world-and-roster', 65, 66), 3)
 
-  const layout = layoutNativeAllyName('AB')
-  assert.equal(layout.advance, 9)
+  const layout = layoutNativeUiText({ align: 'left', font: 'world-and-roster', scale: 0.25, text: 'AB', x: 0, y: 0 })
+  assert.equal(layout.width, 9)
   assert.deepEqual(layout.glyphs.map((glyph) => ({
-    char: glyph.char,
-    height: glyph.height,
-    left: glyph.left,
-    top: glyph.top,
-    width: glyph.width,
+    char: glyph.character,
+    height: nativeUiGlyphInkBounds(glyph).height,
+    left: nativeUiGlyphInkBounds(glyph).left,
+    top: nativeUiGlyphInkBounds(glyph).top,
+    width: nativeUiGlyphInkBounds(glyph).width,
   })), [
     { char: 'A', height: 6.5, left: -0.25, top: -4.75, width: 6 },
     { char: 'B', height: 6.75, left: 5, top: -5, width: 4 },
@@ -301,13 +300,13 @@ test('ally HUD lays out native quarter-scale bitmap glyphs with bundle kerning',
 })
 
 test('ally HUD font layout can reuse native group-6 metrics at world half scale', () => {
-  const layout = layoutNativeAllyName('AB', 0.5)
-  assert.equal(layout.advance, 18)
+  const layout = layoutNativeUiText({ align: 'left', font: 'world-and-roster', scale: 0.5, text: 'AB', x: 0, y: 0 })
+  assert.equal(layout.width, 18)
   assert.deepEqual(layout.glyphs.map((glyph) => ({
-    height: glyph.height,
-    left: glyph.left,
-    top: glyph.top,
-    width: glyph.width,
+    height: nativeUiGlyphInkBounds(glyph).height,
+    left: nativeUiGlyphInkBounds(glyph).left,
+    top: nativeUiGlyphInkBounds(glyph).top,
+    width: nativeUiGlyphInkBounds(glyph).width,
   })), [
     { height: 13, left: -0.5, top: -9.5, width: 12 },
     { height: 13.5, left: 10, top: -10, width: 8 },

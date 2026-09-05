@@ -1,25 +1,6 @@
-import nativeFontData from '../assets/game/hub-hud-font-group-8.json' with { type: 'json' }
+import { layoutNativeUiText, nativeUiGlyphInkBounds, type NativeUiGlyphLayout } from './native-ui/core.ts'
 
 declare const __SDR_BUILD_REVISION__: string
-
-interface NativeTitleFontGlyph {
-  advance: number
-  atlasHeight: number
-  atlasWidth: number
-  atlasX: number
-  atlasY: number
-  centerX: number
-  centerY: number
-  glyphId: number
-  offsetX: number
-  offsetY: number
-}
-
-interface NativeTitleFontData {
-  glyphs: Readonly<Record<string, NativeTitleFontGlyph>>
-  header: readonly number[]
-  kerning: Readonly<Record<string, number>>
-}
 
 export interface TitleBuildRevision {
   full: string | null
@@ -27,27 +8,16 @@ export interface TitleBuildRevision {
   short: string | null
 }
 
-export interface TitleBuildRevisionGlyph {
-  atlasX: number
-  atlasY: number
-  char: string
-  height: number
-  left: number
-  top: number
-  width: number
-}
-
 export interface TitleBuildRevisionLayout {
   advance: number
   bottom: number
-  glyphs: readonly TitleBuildRevisionGlyph[]
+  glyphs: readonly NativeUiGlyphLayout[]
   left: number
   right: number
   top: number
 }
 
 const FULL_GIT_REVISION = /^[0-9a-f]{40}$/i
-const TITLE_BUILD_REVISION_FONT: NativeTitleFontData = nativeFontData
 const injectedRevision = typeof __SDR_BUILD_REVISION__ === 'string'
   ? __SDR_BUILD_REVISION__
   : undefined
@@ -69,43 +39,17 @@ export function titleBuildRevision(revision: string | undefined): TitleBuildRevi
 }
 
 export function layoutTitleBuildRevisionLabel(text: string): TitleBuildRevisionLayout {
-  const glyphs: TitleBuildRevisionGlyph[] = []
-  let cursor = 0
-  let previousGlyphId: number | null = null
-
-  for (const char of text) {
-    if (char === ' ') {
-      cursor += TITLE_BUILD_REVISION_FONT.header[1] ?? 0
-      previousGlyphId = null
-      continue
-    }
-
-    const glyph = TITLE_BUILD_REVISION_FONT.glyphs[char]
-    if (!glyph) throw new Error(`The title build font has no ${JSON.stringify(char)} glyph`)
-    if (previousGlyphId !== null) {
-      cursor += TITLE_BUILD_REVISION_FONT.kerning[
-        `${previousGlyphId}:${glyph.glyphId}`
-      ] ?? 0
-    }
-    glyphs.push({
-      atlasX: glyph.atlasX,
-      atlasY: glyph.atlasY,
-      char,
-      height: glyph.atlasHeight,
-      left: cursor + glyph.offsetX - glyph.atlasWidth / 2 + glyph.centerX,
-      top: glyph.offsetY - glyph.atlasHeight / 2 + glyph.centerY,
-      width: glyph.atlasWidth,
-    })
-    cursor += glyph.advance
-    previousGlyphId = glyph.glyphId
+  const layout = layoutNativeUiText({ align: 'left', font: 'belt', text, x: 0, y: 0 })
+  if (layout.unsupportedCodePoints.length > 0) {
+    throw new Error(`The title build font has no ${JSON.stringify(String.fromCodePoint(layout.unsupportedCodePoints[0]!))} glyph`)
   }
-
+  const ink = layout.glyphs.map(nativeUiGlyphInkBounds)
   return {
-    advance: cursor,
-    bottom: Math.max(...glyphs.map((glyph) => glyph.top + glyph.height)),
-    glyphs,
-    left: Math.min(...glyphs.map((glyph) => glyph.left)),
-    right: Math.max(...glyphs.map((glyph) => glyph.left + glyph.width)),
-    top: Math.min(...glyphs.map((glyph) => glyph.top)),
+    advance: layout.width,
+    bottom: Math.max(...ink.map(glyph => glyph.top + glyph.height)),
+    glyphs: layout.glyphs,
+    left: Math.min(...ink.map(glyph => glyph.left)),
+    right: Math.max(...ink.map(glyph => glyph.left + glyph.width)),
+    top: Math.min(...ink.map(glyph => glyph.top)),
   }
 }

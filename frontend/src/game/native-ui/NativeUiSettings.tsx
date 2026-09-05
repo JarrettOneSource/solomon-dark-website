@@ -1,3 +1,5 @@
+import './native-ui-settings.css'
+
 import {
   useId,
   type ButtonHTMLAttributes,
@@ -63,7 +65,7 @@ export function NativeUiSettingsPanel({
         <header className="game-settings-header">
           <h2 id={titleId}>
             <span className="sr-only native-ui-sr-only">{title}</span>
-            <NativeSettingsText align="center" scale={1.75} text={title} tint={0xd9bd72} />
+            <NativeSettingsText align="center" scale={2} text={title} tint={0xd9bd72} />
           </h2>
         </header>
         <div className="game-settings-content" ref={contentRef}>
@@ -92,7 +94,7 @@ export function NativeUiSettingsGroup({
     <section className="game-settings-group" aria-label={title}>
       <h3>
         <span className="sr-only native-ui-sr-only">{title}</span>
-        <NativeSettingsText scale={1.05} text={title} tint={0xa99258} />
+        <NativeSettingsText text={title} tint={0xa99258} />
       </h3>
       <div>{children}</div>
     </section>
@@ -125,7 +127,7 @@ export function NativeUiSettingsAction({
       <NativeSettingsRowPlate className="game-settings-row-plate" />
       <span className="game-settings-native-label">
         <span className="sr-only native-ui-sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
+        <NativeSettingsText text={label} />
       </span>
       <NativeSettingsActionArrow />
     </button>
@@ -169,7 +171,7 @@ export function NativeUiSettingsToggle({
       <NativeSettingsRowPlate className="game-settings-row-plate" />
       <span className="game-settings-native-label">
         <span className="sr-only native-ui-sr-only">{label}</span>
-        <NativeSettingsText scale={nested ? 1 : 1.15} text={label} />
+        <NativeSettingsText text={label} />
       </span>
       <NativeSettingsToggleArt enabled={checked} />
     </button>
@@ -205,7 +207,7 @@ export function NativeUiSettingsRange({
       <NativeSettingsRowPlate className="game-settings-row-plate" />
       <span className="game-settings-native-label">
         <span className="sr-only native-ui-sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
+        <NativeSettingsText text={label} />
       </span>
       <div className="game-settings-range-control">
         <NativeSettingsRangeTrack />
@@ -221,17 +223,11 @@ export function NativeUiSettingsRange({
           type="range"
           value={value}
         />
-        <output>
-          <span className="sr-only native-ui-sr-only">{value}%</span>
-          <NativeSettingsText
-            align="right"
-            scale={0.9}
-            text={`${value}%`}
-            tint={0xf0d996}
-            width={48}
-          />
-        </output>
       </div>
+      <output>
+        <span className="sr-only native-ui-sr-only">{value}%</span>
+        <NativeSettingsText align="right" text={`${value}%`} tint={0xf0d996} width={48} />
+      </output>
     </label>
   )
 }
@@ -261,14 +257,13 @@ export function NativeUiSettingsBinding({
       <NativeSettingsRowPlate className="game-settings-row-plate" />
       <span className="game-settings-native-label">
         <span className="sr-only native-ui-sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
+        <NativeSettingsText text={label} />
       </span>
       <strong>
         <NativeSettingsBindingPlate />
         <span className="sr-only native-ui-sr-only">{value}</span>
         <NativeSettingsText
           align="center"
-          scale={1.05}
           text={value}
           tint={0xd9bd72}
           width={200}
@@ -303,11 +298,11 @@ export function NativeUiSettingsValueAction({
       <NativeSettingsRowPlate className="game-settings-row-plate" />
       <span className="game-settings-native-label">
         <span className="sr-only native-ui-sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
+        <NativeSettingsText text={label} />
       </span>
       <strong>
         <span className="sr-only native-ui-sr-only">{value}</span>
-        <NativeSettingsText align="right" scale={1.05} text={value} tint={0xd9bd72} width={82} />
+        <NativeSettingsText align="right" text={value} tint={0xd9bd72} width={82} />
       </strong>
     </button>
   )
@@ -325,7 +320,7 @@ export function NativeUiSettingsStaticRow({
       <NativeSettingsRowPlate className="game-settings-row-plate" />
       <span className="game-settings-native-label">
         <span className="sr-only native-ui-sr-only">{label}</span>
-        <NativeSettingsText scale={1.15} text={label} />
+        <NativeSettingsText text={label} />
       </span>
       {detail === undefined ? null : <small>{detail}</small>}
     </p>

@@ -1,3 +1,4 @@
+import { layoutNativeUiText, nativeUiGlyphInkBounds } from './native-ui/core.ts'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
@@ -14,7 +15,6 @@ import {
   hallCurrentFrameAlpha,
   hallCurrentRowScrollTarget,
   hallHighlightFillAlpha,
-  hallMissingGlyphs,
   hallNineSliceLayout,
   hallPerkIconRecord,
   hallPulse,
@@ -218,11 +218,11 @@ describe('hall of fame bitmap text', () => {
     assert.equal(left.glyphs.length, center.glyphs.length)
     // Centered pen = trunc(x - width / 2): an even width splits evenly, an odd width
     // lands one pixel further left (ceil), exactly like String_Assign does.
-    assert.equal(center.glyphs[0]!.left, left.glyphs[0]!.left - Math.ceil(width / 2))
-    assert.equal(right.glyphs[0]!.left, left.glyphs[0]!.left - width)
+    assert.equal(nativeUiGlyphInkBounds(center.glyphs[0]!).left, nativeUiGlyphInkBounds(left.glyphs[0]!).left - Math.ceil(width / 2))
+    assert.equal(nativeUiGlyphInkBounds(right.glyphs[0]!).left, nativeUiGlyphInkBounds(left.glyphs[0]!).left - width)
     for (const placed of [left, center, right]) {
       for (const glyph of placed.glyphs) {
-        assert.ok(Number.isInteger(glyph.left) && Number.isInteger(glyph.top), `quad ${glyph.left},${glyph.top}`)
+        assert.ok(Number.isInteger(nativeUiGlyphInkBounds(glyph).left) && Number.isInteger(nativeUiGlyphInkBounds(glyph).top), `quad ${nativeUiGlyphInkBounds(glyph).left},${nativeUiGlyphInkBounds(glyph).top}`)
       }
     }
     assert.ok(measureHallText('medium', 'Time:') > 0)
@@ -233,23 +233,23 @@ describe('hall of fame bitmap text', () => {
     // Row 1 of 03-hall.png: 'Awesomeness: 91' starts at box x 521, 'Level 3 SEER' at 540.
     const awesomeness = layoutHallText('medium', 'Awesomeness: 91', 'center')
     assert.equal(awesomeness.width, 155)
-    assert.equal(600 + awesomeness.glyphs[0]!.left, 521)
+    assert.equal(600 + nativeUiGlyphInkBounds(awesomeness.glyphs[0]!).left, 521)
     const level = layoutHallText('medium', 'Level 1 SEER', 'center')
     assert.equal(level.width, 118)
-    assert.equal(600 + level.glyphs[0]!.left, 540)
+    assert.equal(600 + nativeUiGlyphInkBounds(level.glyphs[0]!).left, 540)
   })
 
   it('knows which characters the picker fonts cannot draw', () => {
-    assert.deepEqual(hallMissingGlyphs('medium', '…'), ['…'])
-    assert.deepEqual(hallMissingGlyphs('menu', 'abcdefghijklmnopqrstuvwxyz'), [])
+    assert.deepEqual(missingGlyphs('medium', '…'), ['…'])
+    assert.deepEqual(missingGlyphs('menu', 'abcdefghijklmnopqrstuvwxyz'), [])
     for (const text of [
       'Loading global records...', 'No records yet.', 'The global board could not be read.',
       'SURVIVAL', 'PERKS USED', 'HIGHEST SKILLS', 'Time:', 'Wave:', '1:23:45',
       'Monsters Killed: 0', 'Awesomest Kill:', 'Level 1 SEER', 'Awesomeness: 0',
     ]) {
-      assert.deepEqual(hallMissingGlyphs('medium', text), [], text)
+      assert.deepEqual(missingGlyphs('medium', text), [], text)
     }
-    assert.deepEqual(hallMissingGlyphs('heading', '0123456789'), [])
+    assert.deepEqual(missingGlyphs('heading', '0123456789'), [])
   })
 
   it('snaps the chevron like the native sprite pass (90° and 180° states)', () => {
@@ -270,3 +270,7 @@ describe('hall of fame bitmap text', () => {
     assert.ok(measureHallText('heading', '12') > measureHallText('heading', '1'))
   })
 })
+
+function missingGlyphs(font: 'body' | 'heading' | 'medium' | 'menu', text: string): string[] {
+  return layoutNativeUiText({ font, text, x: 0, y: 0 }).unsupportedCodePoints.map(code => String.fromCodePoint(code))
+}

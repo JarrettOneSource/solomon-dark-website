@@ -84,7 +84,6 @@ import hubHudBackpack from '../assets/game/hub-hud-backpack.png'
 import hubHudBarBlue from '../assets/game/hub-hud-bar-blue.png'
 import hubHudBarRed from '../assets/game/hub-hud-bar-red.png'
 import hubHudManaReserve from '../assets/game/hub-hud-mana-reserve.png'
-import hubHudFontAtlas from '../assets/game/hub-hud-font-atlas.png'
 import hubHudGolem from '../assets/game/hub-hud-golem.png'
 import hubHudHelp from '../assets/game/hub-hud-help.png'
 import hubHudInventoryDigits from '../assets/game/hub-hud-inventory-digits.png'
@@ -661,7 +660,7 @@ export const hub = {
     barBlue: hubHudBarBlue,
     barRed: hubHudBarRed,
     manaReserve: hubHudManaReserve,
-    fontAtlas: hubHudFontAtlas,
+    fontAtlas: skillPickerFontsAtlas,
     golem: hubHudGolem,
     help: hubHudHelp,
     inventoryDigits: hubHudInventoryDigits,

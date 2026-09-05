@@ -12,7 +12,7 @@
 
 .mod-skill-picker h2 {
   margin: 0 0 .45rem;
-  font: 700 .8rem Cinzel, serif;
+  font: 700 .8rem var(--font-display);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -33,7 +33,7 @@
   border: 1px solid rgb(178 147 218 / 70%);
   background: rgb(27 20 38 / 94%);
   color: inherit;
-  font: 600 .72rem Cinzel, serif;
+  font: 600 .72rem var(--font-display);
   text-align: left;
 }
 
@@ -50,7 +50,7 @@
 
 .mod-skill-picker small {
   color: #bfb3d0;
-  font: 500 .62rem/1.2 sans-serif;
+  font: 500 .62rem/1.2 var(--font-body);
 }
 
 @media (max-width: 700px) {

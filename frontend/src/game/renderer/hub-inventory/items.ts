@@ -1,110 +1,48 @@
-import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  type EquipmentSlot,
+  type HubInventoryItem,
   findInventoryItem,
   inventoryItemsAtSackPath,
   projectInventoryRootSlots,
-  type EquipmentSlot,
-  type HubInventoryItem,
-} from '../core-kernels/hub-economy.ts'
-import type { WizardElement } from '../core-kernels/player-character.ts'
-import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
-import { nativeUiAtlas } from '../native-ui/core.ts'
+} from '../../core-kernels/hub-economy.ts'
+import { type WizardElement } from '../../core-kernels/player-character.ts'
 import {
+  measureNativeUiText,
+  nativeUiAtlas,
+  nativeUiFont,
+  wrapNativeUiText,
+} from '../../native-ui/core.ts'
+import { type ProtocolPlayerEconomy } from '../../protocol/game-state.ts'
+import {
+  HUB_HOVER_BOX,
   HUB_INVENTORY_GRID,
-  HUB_INVENTORY_FLYBY,
   HUB_INVENTORY_INTERACTION,
   HUB_ITEM_ICON_TRANSFORMS,
+  HUB_NATIVE_UI_SIZE,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
+  type HubTooltipLine,
+  type HubTooltipOptions,
   hubInventoryEquipmentSlotRects,
-  hubInventoryFlybyFrame,
-  hubInventoryFlybyPoint,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
-} from './hub-inventory-render-contract.ts'
-import type { RenderContext, InventoryFlybyView } from './hub-inventory-render-model.ts'
-import type {
-  HubInventorySelectionModel,
-  HubInventoryDragModel,
-  HubInventoryFlybyModel,
-} from './hub-inventory-renderer.ts'
-import { addAtlasSprite } from './hub-inventory-drawing.ts'
-
-export function addInventoryFlyby(
-  context: RenderContext,
-  layer: Container,
-  model: HubInventoryFlybyModel,
-  element: WizardElement,
-): InventoryFlybyView {
-  const container = new Container()
-  container.label = 'native-inventory-flyby'
-  const lanes = model.lanes.map((lane) => {
-    const afterimages = new Map<number, Container>()
-    for (const spawnTick of HUB_INVENTORY_FLYBY.afterimageBirthTicks) {
-      const afterimage = new Container()
-      afterimage.label = `native-inventory-flyby-afterimage-${spawnTick}`
-      afterimage.visible = false
-      addItemIcon(context, afterimage, lane.item, 0, 0, element)
-      afterimages.set(spawnTick, afterimage)
-      container.addChild(afterimage)
-    }
-    const main = new Container()
-    main.label = 'native-inventory-flyby-main'
-    addItemIcon(context, main, lane.item, 0, 0, element)
-    container.addChild(main)
-    return { afterimages, main, model: lane }
-  })
-  layer.addChild(container)
-  const view = { container, lanes, model }
-  updateInventoryFlybyView(view, model.startedAtMs)
-  return view
-}
-
-export function updateInventoryFlybyView(view: InventoryFlybyView, nowMs: number): void {
-  const frame = hubInventoryFlybyFrame(view.model.startedAtMs, nowMs)
-  const afterimages = new Map(frame.afterimages.map((afterimage) => (
-    [afterimage.spawnTick, afterimage] as const
-  )))
-  for (const lane of view.lanes) {
-    const mainPoint = hubInventoryFlybyPoint(lane.model.from, lane.model.to, frame.mainProgress)
-    lane.main.position.set(mainPoint.x, mainPoint.y)
-    lane.main.visible = view.model.phase === 'flying' && frame.mainVisible
-    for (const [spawnTick, container] of lane.afterimages) {
-      const afterimage = afterimages.get(spawnTick)
-      container.visible = afterimage !== undefined
-      if (!afterimage) continue
-      const point = hubInventoryFlybyPoint(lane.model.from, lane.model.to, afterimage.progress)
-      container.position.set(point.x, point.y)
-      container.alpha = afterimage.alpha
-    }
-  }
-}
-
-export function economyRecipeIndexes(economy: ProtocolPlayerEconomy): readonly number[] {
-  const equipment = [
-    economy.equipment.hat,
-    economy.equipment.robe,
-    economy.equipment.amulet,
-    economy.equipment.weapon,
-    ...economy.equipment.rings,
-  ]
-  const visit = (item: HubInventoryItem): readonly number[] => [
-    ...(item.recipeIndex === null ? [] : [item.recipeIndex]),
-    ...(item.contents ?? []).flatMap(visit),
-  ]
-  return Object.freeze([
-    ...economy.backpack,
-    ...economy.storage,
-    ...equipment.filter((item): item is HubInventoryItem => item !== null),
-  ].flatMap(visit))
-}
-
-export function permanentSkillRank(
-  progression: ProtocolPlayerProgression,
-  skillId: number,
-): number {
-  return progression.learnedSkills.find(([candidate]) => candidate === skillId)?.[1] ?? 0
-}
+  hubItemTooltipLines,
+} from '../hub-inventory-render-contract.ts'
+import {
+  addAtlasSprite,
+  addBitmapText,
+} from './drawing.ts'
+import {
+  type HubInventoryDragModel,
+  type HubInventorySelectionModel,
+  type RenderContext,
+} from './model.ts'
+import {
+  Container,
+  Graphics,
+  Sprite,
+  Texture,
+} from 'pixi.js'
 
 export function addInventorySelection(
   layer: Container,
@@ -182,6 +120,88 @@ export function itemAtEquipmentSlot(
   }
 }
 
+export function addInventoryItemInfo(
+  context: RenderContext,
+  layer: Container,
+  item: HubInventoryItem,
+  sourceCenterX: number,
+  sourceCenterY: number,
+  options: HubTooltipOptions,
+): Container {
+  const info = addNativeContextualHoverBox(
+    context,
+    layer,
+    hubItemTooltipLines(item, options),
+    sourceCenterX,
+    sourceCenterY,
+    HUB_HOVER_BOX.shopSourceGap,
+  )
+  info.label = 'native-inventory-item-info'
+  info.visible = false
+  return info
+}
+
+export function addNativeContextualHoverBox(
+  context: RenderContext,
+  layer: Container,
+  lines: readonly HubTooltipLine[],
+  sourceCenterX: number,
+  sourceCenterY: number,
+  sourceGap: number,
+): Container {
+  const rendered = lines.map((line) => {
+    const font = nativeUiFont(line.font)
+    const wrapped = wrapNativeUiText(line.text, line.font, HUB_HOVER_BOX.contentMaxWidth)
+    return { font, line, wrapped }
+  })
+  const contentWidth = Math.max(0, ...rendered.flatMap(({ line, wrapped }) => (
+    wrapped.map((text) => measureNativeUiText(text, line.font))
+  )))
+  const contentHeight = rendered.reduce((height, { font, wrapped }, index) => (
+    height
+    + wrapped.length * font.metrics[0]
+    + (index === rendered.length - 1 ? 0 : HUB_HOVER_BOX.lineGap)
+  ), 0)
+  const width = contentWidth + HUB_HOVER_BOX.contentMargin * 2
+  const height = contentHeight + HUB_HOVER_BOX.contentMargin * 2
+  const margin = HUB_HOVER_BOX.viewportMargin
+  let x = sourceCenterX + sourceGap
+  if (x + width > HUB_NATIVE_UI_SIZE.width - margin) x = sourceCenterX - sourceGap - width
+  x = Math.max(margin, Math.min(HUB_NATIVE_UI_SIZE.width - margin - width, x))
+  const y = Math.max(
+    margin,
+    Math.min(HUB_NATIVE_UI_SIZE.height - margin - height, sourceCenterY - height / 2),
+  )
+
+  const info = new Container()
+  info.label = 'native-contextual-hover-box'
+  info.position.set(x, y)
+  info.addChild(new Graphics()
+    .rect(0, 0, width, height)
+    .fill({ color: 0x000000 })
+    .stroke({ color: 0xffffff, width: 1 }))
+  let cursorY = HUB_HOVER_BOX.contentMargin
+  for (const { font, line, wrapped } of rendered) {
+    addBitmapText(
+      context,
+      info,
+      line.text,
+      line.font,
+      HUB_HOVER_BOX.contentMargin,
+      cursorY,
+      {
+        align: 'left',
+        lineHeight: font.metrics[0],
+        maxWidth: HUB_HOVER_BOX.contentMaxWidth,
+        tint: line.tint,
+      },
+    )
+    cursorY += wrapped.length * font.metrics[0] + HUB_HOVER_BOX.lineGap
+  }
+  layer.addChild(info)
+  return info
+}
+
 export function addInventoryDragger(
   context: RenderContext,
   layer: Container,
@@ -207,46 +227,59 @@ export function addInventoryDragger(
   return dragger
 }
 
+type InventoryIconItem = Pick<HubInventoryItem,
+  'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'modItemContent' | 'recipeIndex'>
+
+interface InventoryIconOptions {
+  readonly alpha?: number
+  readonly tintOverride?: number
+}
+
+function addModItemIcon(
+  context: RenderContext,
+  layer: Container,
+  item: InventoryIconItem,
+  modContent: NonNullable<InventoryIconItem['modContent'] | InventoryIconItem['modItemContent']>,
+  centerX: number,
+  centerY: number,
+  options: InventoryIconOptions,
+): readonly Sprite[] {
+  const textures = [
+    context.modTextures.texture(modContent),
+    ...(item.modItemContent
+      ? [context.modTextures.iconTrim(item.modItemContent)].filter((value): value is Texture => value !== null)
+      : []),
+  ]
+  const tints = item.modItemContent?.wearable?.slot === 'hat'
+    || item.modItemContent?.wearable?.slot === 'robe'
+    ? item.iconTints ?? [0xffffff, 0xffffff]
+    : [0xffffff, 0xffffff]
+  return textures.map((texture, index) => {
+    const sprite = new Sprite(texture)
+    sprite.anchor.set(0.5)
+    sprite.position.set(centerX, centerY)
+    sprite.alpha = options.alpha ?? 1
+    sprite.tint = options.tintOverride ?? tints[index] ?? 0xffffff
+    layer.addChild(sprite)
+    return sprite
+  })
+}
+
 export function addItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<
-    HubInventoryItem,
-    'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'modItemContent' | 'recipeIndex'
-  >,
+  item: InventoryIconItem,
   centerX: number,
   centerY: number,
   element: WizardElement,
-  options: {
-    readonly alpha?: number
-    readonly tintOverride?: number
-  } = {},
+  options: InventoryIconOptions = {},
 ): readonly Sprite[] {
   const modContent = item.modContent ?? item.modItemContent
-  if (modContent) {
-    const textures = [
-      context.modTextures.texture(modContent),
-      ...(item.modItemContent
-        ? [context.modTextures.iconTrim(item.modItemContent)].filter((value): value is Texture => value !== null)
-        : []),
-    ]
-    const tints = item.modItemContent?.wearable?.slot === 'hat'
-      || item.modItemContent?.wearable?.slot === 'robe'
-      ? item.iconTints ?? [0xffffff, 0xffffff]
-      : [0xffffff, 0xffffff]
-    return textures.map((texture, index) => {
-      const sprite = new Sprite(texture)
-      sprite.anchor.set(0.5)
-      sprite.position.set(centerX, centerY)
-      sprite.alpha = options.alpha ?? 1
-      sprite.tint = options.tintOverride ?? tints[index] ?? 0xffffff
-      layer.addChild(sprite)
-      return sprite
-    })
-  }
+  if (modContent) return addModItemIcon(context, layer, item, modContent, centerX, centerY, options)
   const transform = item.equipmentType === null
     ? null
     : HUB_ITEM_ICON_TRANSFORMS[item.equipmentType]
+  const [translationX, translationY] = transform?.translation ?? [0, 0]
   const recipe = item.recipeIndex === null
     ? null
     : DOWSING_EQUIPMENT_RECIPES[item.recipeIndex]
@@ -263,8 +296,8 @@ export function addItemIcon(
       layer,
       'Inventory',
       record,
-      centerX + (transform?.translation[0] ?? 0),
-      centerY + (transform?.translation[1] ?? 0),
+      centerX + translationX,
+      centerY + translationY,
       { anchor: 0.5 },
     )
     sprite.alpha = options.alpha ?? 1
@@ -278,10 +311,7 @@ export function addItemIcon(
 export function addClippedItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<
-    HubInventoryItem,
-    'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'modItemContent' | 'recipeIndex'
-  >,
+  item: InventoryIconItem,
   centerX: number,
   centerY: number,
   element: WizardElement,

@@ -1,3 +1,4 @@
+import { nativeUiGlyphInkBounds } from './native-ui/core.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -6,7 +7,6 @@ import {
   nativeCooldownSectorPath,
   nativeSkillQuickbarIconAlpha,
   nativeSkillQuickbarCooldownPresentation,
-  NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
 
@@ -53,34 +53,16 @@ test('BeltButton uses distinct ready, cooldown, and unavailable icon alpha', () 
 })
 
 test('item belt lays out native group-8 key labels over 13 px plaques', () => {
-  assert.equal(NATIVE_SKILL_QUICKBAR_FONT.group, 8)
-  assert.deepEqual(NATIVE_SKILL_QUICKBAR_FONT.header, [10, 3, 28])
-  assert.equal(NATIVE_SKILL_QUICKBAR_FONT.glyphCount, 92)
-  assert.equal(NATIVE_SKILL_QUICKBAR_FONT.kerningCount, 1)
-  assert.equal(NATIVE_SKILL_QUICKBAR_FONT.scale, 1)
-
-  assert.deepEqual(layoutNativeQuickbarBinding('3'), {
-    advance: 7,
-    backingLeft: 20,
-    backingWidth: 13,
-    glyphs: [{
-      atlasX: 77,
-      atlasY: 134,
-      char: '3',
-      height: 9,
-      left: 23,
-      top: -8,
-      width: 8,
-    }],
+  const binding = layoutNativeQuickbarBinding('3')
+  assert.equal(binding.advance, 7)
+  assert.equal(binding.backingLeft, 20)
+  assert.equal(binding.backingWidth, 13)
+  assert.equal(binding.text.glyphs[0]!.character, '3')
+  assert.deepEqual(nativeUiGlyphInkBounds(binding.text.glyphs[0]!), {
+    height: 9, left: 23, top: 56, width: 8,
   })
-  assert.deepEqual(layoutNativeQuickbarBinding('4').glyphs[0], {
-    atlasX: 435,
-    atlasY: 9,
-    char: '4',
-    height: 9,
-    left: 22,
-    top: -8,
-    width: 10,
+  assert.deepEqual(nativeUiGlyphInkBounds(layoutNativeQuickbarBinding('4').text.glyphs[0]!), {
+    height: 9, left: 22, top: 56, width: 10,
   })
 })
 

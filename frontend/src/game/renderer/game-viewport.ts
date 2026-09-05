@@ -32,8 +32,6 @@ export interface FixedGameViewportLayout extends GameViewportLayout {
 export type GameViewportHorizontalAnchor = 'center' | 'left' | 'right'
 export type GameViewportVerticalAnchor = 'bottom' | 'center' | 'top'
 
-export const FIXED_GAME_MAX_PRESENTATION_RESOLUTION = 1.5
-
 export function fixedGameViewportScale(width: number, height: number): number {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return 1
@@ -106,16 +104,6 @@ export function fixedGameStageCssBounds(
   }
 }
 
-export function fixedGamePresentationResolution(
-  devicePixelRatio: number,
-  displayScale: number,
-): number {
-  return Math.min(
-    FIXED_GAME_MAX_PRESENTATION_RESOLUTION,
-    positiveFiniteOr(devicePixelRatio, 1) * positiveFiniteOr(displayScale, 1),
-  )
-}
-
 export function gameViewportLayout(width: number, height: number): GameViewportLayout {
   if (!validSize(width, height)) {
     return {
@@ -167,8 +155,4 @@ function anchoredOffset(
   if (anchor === 'left' || anchor === 'top') return 0
   if (anchor === 'right' || anchor === 'bottom') return available - extent
   return (available - extent) / 2
-}
-
-function positiveFiniteOr(value: number, fallback: number): number {
-  return Number.isFinite(value) && value > 0 ? value : fallback
 }

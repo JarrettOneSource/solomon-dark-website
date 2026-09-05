@@ -10,7 +10,6 @@ import {
   nativeUiFont,
   nativeUiRecord,
   type NativeUiAtlasName,
-  type NativeUiFontName,
   type NativeUiGlyphRecord,
 } from './native-ui-catalog.ts'
 import { nativeUiGlyphRecordTexture } from './native-ui-glyph-texture.ts'
@@ -22,11 +21,16 @@ import type {
   NativeUiSpriteNode,
   NativeUiTileNode,
 } from './native-ui-plan.ts'
-import { layoutNativeUiText, type NativeUiTextSpec } from './native-ui-text.ts'
+import {
+  layoutNativeUiText,
+  layoutNativeUiTextRuns,
+  NATIVE_UI_TEXT_ITALIC,
+  type NativeUiTextLayout,
+  type NativeUiTextSpec,
+} from './native-ui-text.ts'
 
 export interface NativeUiPixiAdapter {
   destroy(): void
-  glyph(font: NativeUiFontName, codePoint: number): Sprite
   render(fragment: NativeUiFragment, label?: string): Container
   slice(
     atlas: NativeUiAtlasName,
@@ -35,6 +39,7 @@ export interface NativeUiPixiAdapter {
   ): Texture
   sprite(spec: NativeUiSpriteNode): Sprite
   text(spec: NativeUiTextSpec, label?: string): Container
+  textRuns(spec: Parameters<typeof layoutNativeUiTextRuns>[0]): Container
   texture(atlas: NativeUiAtlasName, record: number): Texture
 }
 
@@ -159,10 +164,9 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
     return result
   }
 
-  const text = (spec: NativeUiTextSpec, label = spec.text): Container => {
+  const textLayout = (layout: NativeUiTextLayout, label: string): Container => {
     assertLive()
-    const layout = layoutNativeUiText(spec)
-    const font = nativeUiFont(spec.font)
+    const font = nativeUiFont(layout.font)
     const result = new Container({ label })
     result.eventMode = 'none'
     for (const glyph of layout.glyphs) {
@@ -170,6 +174,12 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
       glyphSprite.anchor.set(0.5)
       glyphSprite.position.set(glyph.centerX, glyph.centerY)
       glyphSprite.scale.set(glyph.scale)
+      if (glyph.italic) {
+        const angle = Math.atan((NATIVE_UI_TEXT_ITALIC.glyphTopDelta
+          - NATIVE_UI_TEXT_ITALIC.glyphBottomDelta) / glyph.frame[3])
+        glyphSprite.skew.x = -angle
+        glyphSprite.scale.y /= Math.cos(angle)
+      }
       glyphSprite.tint = glyph.tint
       glyphSprite.alpha = glyph.alpha
       glyphSprite.eventMode = 'none'
@@ -178,15 +188,7 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
     return result
   }
 
-  const glyph = (fontName: NativeUiFontName, codePoint: number): Sprite => {
-    assertLive()
-    const font = nativeUiFont(fontName)
-    const definition = font.glyphs[`${codePoint}`]
-    if (!definition) throw new RangeError(`native ${fontName} font has no glyph ${codePoint}`)
-    const result = new Sprite(glyphTexture(font.atlas, definition))
-    result.eventMode = 'none'
-    return result
-  }
+  const text = (spec: NativeUiTextSpec, label = spec.text): Container => textLayout(layoutNativeUiText(spec), label)
 
   const renderNode = (layer: Container, node: NativeUiNode): void => {
     switch (node.kind) {
@@ -366,7 +368,6 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
       for (const item of pointFilteredAtlases.values()) item.destroy(true)
       pointFilteredAtlases.clear()
     },
-    glyph,
     render(fragment, label = 'native-ui-plan') {
       assertLive()
       const result = new Container({ label })
@@ -380,6 +381,10 @@ export function createNativeUiPixiAdapter(textures: GameTextureMap): NativeUiPix
     slice: sliceTexture,
     sprite,
     text,
+    textRuns(spec) {
+      const layout = layoutNativeUiTextRuns(spec)
+      return textLayout(layout, layout.lines[0]!.text)
+    },
     texture,
   }
 }

@@ -148,7 +148,7 @@
 .hub-hud-ally-name {
   overflow: hidden;
   color: #f0e2b6;
-  font: 12px/1.1 'IM FELL English', Georgia, serif;
+  font: 12px/1.1 var(--font-narrative);
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px #000, 0 0 5px rgb(0 0 0 / 0.9);
@@ -215,7 +215,7 @@
   place-items: center;
   padding-left: 27px;
   color: #ffd1cb;
-  font: 700 12px/1 'IM FELL English', Georgia, serif;
+  font: 700 12px/1 var(--font-narrative);
   letter-spacing: 0.1em;
   text-shadow: 0 1px 2px #000, 0 0 5px #000;
   pointer-events: none;
@@ -248,7 +248,7 @@
 .hub-hud-fps,
 .hub-hud-ping {
   color: #d8d4c8;
-  font: 12px 'JetBrains Mono', monospace;
+  font: 12px var(--font-mono);
   line-height: 1;
   text-shadow: 0 1px 2px #000, 0 0 4px #000;
 }
@@ -441,12 +441,14 @@
   opacity: 0.6;
 }
 
+.hub-hud-quickbar-binding,
 .hub-hud-quickbar-key-backing,
-.hub-hud-quickbar-key-backing > span,
-.hub-hud-quickbar-key-glyph {
+.hub-hud-quickbar-key-backing > span {
   position: absolute;
   display: block;
 }
+
+.hub-hud-quickbar-binding { inset: 0; pointer-events: none; }
 
 .hub-hud-quickbar-key-backing {
   top: 53px;
@@ -462,11 +464,7 @@
   background-size: 15px 15px;
 }
 
-.hub-hud-quickbar-key-glyph {
-  background: #000;
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-}
+
 
 .hub-hud-loadout {
   position: absolute;
@@ -609,7 +607,7 @@
 .hub-boneyard-cancel {
   border: 1px solid #87734d;
   color: #dfd0a0;
-  font-family: 'IM FELL English', Georgia, serif;
+  font-family: var(--font-narrative);
   text-shadow: 0 2px 2px #000;
   cursor: pointer;
 }
@@ -634,7 +632,7 @@
   box-shadow: inset 0 1px 0 rgb(255 232 160 / 0.14);
   color: #ead293;
   cursor: pointer;
-  font: 700 11px Cinzel, Georgia, serif;
+  font: 700 11px var(--font-display);
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -686,7 +684,7 @@
     0 18px 50px rgb(0 0 0 / 0.7),
     inset 0 0 30px rgb(0 0 0 / 0.55);
   color: #dfd0a0;
-  font: 14px Alegreya, Georgia, serif;
+  font: 14px var(--font-body);
   gap: 14px;
   text-shadow: 0 1px 2px #000;
 }
@@ -771,7 +769,7 @@
   margin: 0;
   overflow-wrap: anywhere;
   color: #f0dda0;
-  font: 28px/1.05 'IM FELL English', Georgia, serif;
+  font: 28px/1.05 var(--font-narrative);
   font-weight: normal;
   text-shadow: 0 3px 3px #000;
 }
@@ -779,7 +777,7 @@
 .hub-player-profile-class {
   margin: 0;
   color: var(--element-accent, #a9d9ef);
-  font: 700 11px Cinzel, Georgia, serif;
+  font: 700 11px var(--font-display);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -794,7 +792,7 @@
   border: 1px solid rgb(202 168 84 / 0.5);
   border-radius: 9px;
   color: #f3d994;
-  font: 700 9.5px Cinzel, Georgia, serif;
+  font: 700 9.5px var(--font-display);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -825,7 +823,7 @@
   justify-self: start;
   margin: 1px 0 0;
   color: #f3d994;
-  font: 700 10px Cinzel, Georgia, serif;
+  font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -883,7 +881,7 @@
 .hub-player-profile-stat dt {
   margin: 0;
   color: #a49c89;
-  font: 700 10.5px Cinzel, Georgia, serif;
+  font: 700 10.5px var(--font-display);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -891,7 +889,7 @@
 .hub-player-profile-stat dd {
   margin: 0;
   color: #fff0c0;
-  font: 18px 'IM FELL English', Georgia, serif;
+  font: 18px var(--font-narrative);
   text-align: right;
 }
 
@@ -961,7 +959,7 @@
 .hub-boneyard-picker h2 {
   margin: 0 0 20px;
   color: #e0cf98;
-  font: 34px 'IM FELL English', Georgia, serif;
+  font: 34px var(--font-narrative);
   font-weight: normal;
   text-align: center;
   text-shadow: 0 3px 3px #000;
@@ -990,7 +988,7 @@
 .hub-boneyard-option span {
   margin-top: 3px;
   color: #948970;
-  font: 12px Cinzel, serif;
+  font: 12px var(--font-display);
   letter-spacing: 0.04em;
 }
 
@@ -1012,7 +1010,7 @@
   border: 1px solid #b7a56e;
   background: rgb(6 8 13 / 0.9);
   color: #e1d4a6;
-  font: 26px 'IM FELL English', Georgia, serif;
+  font: 26px var(--font-narrative);
   text-align: center;
   transform: translate(-50%, -50%);
 }
@@ -1102,8 +1100,7 @@
   }
 
   .hub-hud-quickbar-input-mouse,
-  .hub-hud-quickbar-key-backing,
-  .hub-hud-quickbar-key-glyph {
+  .hub-hud-quickbar-binding {
     display: none;
   }
 

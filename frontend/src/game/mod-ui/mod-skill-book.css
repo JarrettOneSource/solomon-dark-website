@@ -12,7 +12,7 @@
   border: 1px solid rgb(202 181 126 / 78%);
   background: rgb(9 10 14 / 94%);
   color: #e8dcb9;
-  font: 600 .7rem/1.25 Cinzel, serif;
+  font: 600 .7rem/1.25 var(--font-display);
 }
 
 .mod-skill-book h2,
@@ -41,7 +41,7 @@
 
 .mod-skill-book article[data-subskill='true'] { margin-left: 1rem; }
 .mod-skill-book img { grid-row: 1 / 4; width: 2rem; height: 2rem; object-fit: contain; }
-.mod-skill-book small { color: #b8aec3; font: 500 .62rem/1.2 sans-serif; }
+.mod-skill-book small { color: #b8aec3; font: 500 .62rem/1.2 var(--font-body); }
 .mod-skill-book button:hover:not(:disabled) { border-color: #e5ccff; }
 
 @media (max-width: 700px) {

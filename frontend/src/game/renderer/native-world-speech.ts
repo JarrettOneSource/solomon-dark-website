@@ -1,13 +1,10 @@
-import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Graphics, Sprite, Texture } from 'pixi.js'
 
-import {
-  layoutNativeAllyName,
-  type NativeAllyNameGlyph,
-} from '../ally-hud.ts'
+import { layoutNativeUiText, measureNativeUiText, type NativeUiGlyphLayout } from '../native-ui/core.ts'
+import { nativeUiGlyphRecordTexture } from '../native-ui/native-ui-glyph-texture.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import type { GameChatChannel } from '../protocol/game-chat.ts'
 import type { NativeWorldScreenPoint } from './native-world-nameplate.ts'
-import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 export const WORLD_SPEECH_STYLE = Object.freeze({
   anchorWorldOffsetY: -78,
@@ -34,7 +31,7 @@ export const WORLD_SPEECH_STYLE = Object.freeze({
 
 export interface NativeWorldSpeechLine {
   readonly advance: number
-  readonly glyphs: readonly NativeAllyNameGlyph[]
+  readonly glyphs: readonly NativeUiGlyphLayout[]
   readonly text: string
 }
 
@@ -70,9 +67,9 @@ type WorldSpeechPlayer = Readonly<{
 export function layoutNativeWorldSpeech(text: string): NativeWorldSpeechLayout {
   const style = WORLD_SPEECH_STYLE
   const lines = wrapNativeWorldSpeech(text).map((lineText) => {
-    const layout = layoutNativeAllyName(lineText, style.fontScale)
+    const layout = layoutNativeUiText({ align: 'left', font: 'world-and-roster', scale: style.fontScale, text: lineText, x: 0, y: 0 })
     return Object.freeze({
-      advance: layout.advance,
+      advance: layout.width,
       glyphs: layout.glyphs,
       text: lineText,
     })
@@ -254,7 +251,7 @@ function breakWorldSpeechWord(word: string): string[] {
 }
 
 function measureWorldSpeechText(text: string): number {
-  return layoutNativeAllyName(text, WORLD_SPEECH_STYLE.fontScale).advance
+  return measureNativeUiText(text, 'world-and-roster', WORLD_SPEECH_STYLE.fontScale)
 }
 
 class NativeWorldSpeechView {
@@ -328,7 +325,7 @@ class NativeWorldSpeechView {
   }
 
   private addGlyph(
-    glyph: NativeAllyNameGlyph,
+    glyph: NativeUiGlyphLayout,
     offsetX: number,
     baseline: number,
     shadow: boolean,
@@ -338,8 +335,8 @@ class NativeWorldSpeechView {
     const sprite = new Sprite(texture)
     sprite.anchor.set(0.5)
     sprite.position.set(
-      glyph.left + glyph.width / 2 + offsetX,
-      glyph.top + glyph.height / 2 + baseline + (shadow ? style.shadowOffsetY : 0),
+      glyph.centerX + offsetX,
+      glyph.centerY + baseline + (shadow ? style.shadowOffsetY : 0),
     )
     sprite.scale.set(style.fontScale)
     sprite.tint = shadow ? style.shadowColor : style.textColor
@@ -348,20 +345,11 @@ class NativeWorldSpeechView {
     this.text.addChild(sprite)
   }
 
-  private glyphTexture(glyph: NativeAllyNameGlyph): Texture {
-    const existing = this.glyphTextures.get(glyph.char)
+  private glyphTexture(glyph: NativeUiGlyphLayout): Texture {
+    const existing = this.glyphTextures.get(glyph.character)
     if (existing) return existing
-    const style = WORLD_SPEECH_STYLE
-    const texture = nativeSpriteRecordTexture({
-      source: this.fontAtlas.source,
-      frame: new Rectangle(
-        glyph.atlasX,
-        glyph.atlasY,
-        glyph.width / style.fontScale,
-        glyph.height / style.fontScale,
-      ),
-    })
-    this.glyphTextures.set(glyph.char, texture)
+    const texture = nativeUiGlyphRecordTexture(this.fontAtlas.source, glyph)
+    this.glyphTextures.set(glyph.character, texture)
     return texture
   }
 }

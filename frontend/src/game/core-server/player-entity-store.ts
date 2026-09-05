@@ -2212,10 +2212,13 @@ function replacePlayerSkillState(
       && currentProgression.disciplineOfferBias === disciplineOfferBias
     ? currentProgression
     : { ...currentProgression, disciplineOfferBias, weldingOfferBias }
-  progressions[index] = refreshPlayerCombatFromSkillStats(
+  const refreshedProgression = refreshPlayerCombatFromSkillStats(
     biasedProgression,
     derived,
   )
+  progressions[index] = refreshed.skillBook === previousSkillBook
+    ? refreshedProgression
+    : { ...refreshedProgression, revision: Math.max(refreshedProgression.revision, currentProgression.revision + 1) }
   skillBooks[index] = refreshed.skillBook
   skillRuntimes[index] = refreshed.runtime
   const replaced = { ...source, belts, economies, progressions, skillBooks, skillRuntimes }

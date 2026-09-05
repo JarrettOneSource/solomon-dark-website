@@ -37,7 +37,7 @@ test('fits the build label into the stock top-right version slot', () => {
   assert.equal(layout.right, 96)
   assert.equal(layout.top, -8)
   assert.equal(layout.bottom, 2)
-  assert.equal(layout.glyphs.map((glyph) => glyph.char).join(''), 'BUILDD278FF88')
+  assert.equal(layout.glyphs.map((glyph) => glyph.character).join(''), 'BUILDD278FF88')
   assert.equal(widestLayout.right - widestLayout.left, 103)
   assert.ok(widestLayout.right - widestLayout.left <= 104)
 })

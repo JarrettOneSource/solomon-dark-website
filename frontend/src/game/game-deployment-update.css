@@ -32,11 +32,11 @@
 .game-deployment-update h1 {
   margin: 0 0 14px;
   color: #f0d98e;
-  font: 32px/1.1 'IM FELL English', Georgia, serif;
+  font: 32px/1.1 var(--font-narrative);
 }
 
 .game-deployment-update p:last-child {
   margin: 0;
   color: #c9bea2;
-  font: 16px/1.55 Georgia, serif;
+  font: 16px/1.55 var(--font-body);
 }

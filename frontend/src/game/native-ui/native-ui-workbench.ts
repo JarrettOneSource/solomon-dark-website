@@ -59,7 +59,6 @@ async function start(): Promise<void> {
       backgroundAlpha: 0,
       className: 'native-ui-workbench-canvas',
       height: HEIGHT,
-      resolution: 1,
       width: WIDTH,
     }),
     loadGameTextureMap({ stock: Object.values(NATIVE_UI_ATLAS_SOURCES) }),
@@ -67,7 +66,7 @@ async function start(): Promise<void> {
   const nativeUi = createNativeUiPixiAdapter(textures)
   const root = new Container({ label: 'native-ui-workbench' })
   gpu.application.stage.addChild(root)
-  host.replaceChildren(gpu.canvas)
+  gpu.mount(host)
   const dom = mountNativeUiDomWorkbench(host)
   dom.setVisible(false)
   const atlasCount = Object.keys(NATIVE_UI_MANIFEST.atlases).length
@@ -139,7 +138,7 @@ async function start(): Promise<void> {
   })
   window.addEventListener('pagehide', () => {
     dom.destroy()
-    gpu.application.destroy({ removeView: true })
+    gpu.destroy()
     nativeUi.destroy()
     textures.destroy()
   }, { once: true })

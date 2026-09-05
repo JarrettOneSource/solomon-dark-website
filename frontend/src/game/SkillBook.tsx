@@ -228,10 +228,7 @@ export default function SkillBook({
     const host = hostRef.current
     const renderer = rendererRef.current
     if (!host || !renderer) return
-    host.replaceChildren(renderer.canvas)
-    return () => {
-      if (renderer.canvas.parentElement === host) host.replaceChildren()
-    }
+    return renderer.mount(host)
   }, [rendererState])
 
   useEffect(() => {

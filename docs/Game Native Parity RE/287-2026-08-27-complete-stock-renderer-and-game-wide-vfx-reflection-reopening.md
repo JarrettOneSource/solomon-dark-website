@@ -256,6 +256,201 @@ measurements are recorded here.
 > sprite transform. Native `Graphics_Rotate` then `Graphics_Scale` yields
 > `S*R`; the secondary Pixi adapter previously yielded `R*S`.
 
+## 2026-09-04 — Shared typography placement and display-density reopening
+
+### Reported behavior and ownership
+
+The user reports awkward, low-resolution text and authorizes a complete shared
+system correction and migration, followed by publication to main. This reopens
+the browser adapters of ExactText; the existing native glyph, kerning, trim,
+and point-sampler recovery remains the native contract.
+
+Live production `a2197bf4a6b8bf8a5328030c63b555b269c65e65` was reviewed on the
+Mac mini in Chrome 152.0.7977.76 at 1600x900/DPR1, 1366x768/DPR1, and
+1920x1080/DPR2. Settings row ink was 5.7421875 CSS pixels above the row center;
+the heading was 9.75 pixels above its header center. The 100% volume output
+occupied the right-hand skull thumb. Title's 1920x1080 Retina view used a
+2400x1350 backing buffer; Inventory and Skills used 1600x900. These are current
+browser measurements, not new clean-native executable captures.
+
+The skipped rule in the previous glyph-quad closure was output-adapter and
+intermediate-surface completeness: native pen positions were recovered, but
+DOM flow boxes were treated as native pen coordinates, and the final display
+and cached text surfaces were not verified at physical pixel density.
+
+### Evidence and recovered contract
+
+- Retail ExactText `0x0043AFC0 -> Glyph_Draw 0x004143D0` owns alignment,
+  kerning, advance, metric bearings, and authored logical/trim geometry. The
+  existing instruction census also proves point filtering around glyph draws.
+  Stock is retail 0.72.5, preferred base 0x00400000, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+- The complete tracked font catalog contains 718 glyphs in ten wrappers. Its
+  data is retained byte-for-byte. For example ControlPanel A has line height
+  14, bearing Y -5, logical height 28, trim Y 8, and ink height 12. A native
+  baseline at Y=7 therefore puts its ink at -4..8, outside a 0..14 DOM box.
+  A centered 14-pixel flow box instead needs ink at 1..13. This is a browser
+  flow-box contract; it does not change a native baseline or glyph bearing.
+- Both DOM adapters currently repeat the CSS glyph-mask painter. The shared
+  typography interface must distinguish native baseline placement from flow
+  placement and use one final glyph painter. Flow placement contains and
+  centers the visible ink while preserving native horizontal advances and
+  line pitches. Baseline placement preserves the native pen exactly.
+- Settings fractional per-label scales 1.05/1.15/0.9 and 1.75 amplify uneven
+  point-sampled strokes. Settings typography will use shared native-size roles;
+  values get their own lane outside the range thumb's travel.
+- All fixed UI applications share `createGameWebGlApplication`. Physical
+  density belongs to the mounted UI canvas, using the actual displayed size
+  and current DPR. Native logical coordinates, semantic hit boxes, simulation,
+  and camera/world rendering quality do not change. CSS scaling is observed
+  only when layout or ancestor presentation changes, never every frame.
+- SkillPicker's `staticOfferLayer.cacheAsTexture({ resolution: 1 })` is a second
+  font rasterization boundary. Its cache must follow the same density and
+  invalidate before redraw. Fixing the main canvas alone is incomplete.
+
+### System boundary and membership
+
+The scope is every game typography output adapter, its placement/scale owner,
+and every fixed UI surface or cache that rasterizes those glyphs. The table
+states the required final disposition; the validation receipt below records
+completion evidence after implementation.
+
+| Member | Required disposition | Proof contract |
+| --- | --- | --- |
+| belt, 92 glyphs | verified-already-at-parity | complete metrics/trim census; flow and baseline coverage |
+| body, 92 glyphs | verified-already-at-parity | native 13-pixel line metrics and all glyph records |
+| control-panel, 92 glyphs | verified-already-at-parity | centered flow controls and unchanged baseline draws |
+| heading, 42 glyphs | verified-already-at-parity | exact native geometry and full wrapper coverage |
+| medium, 92 glyphs | verified-already-at-parity | wrapped paragraphs and native row baselines |
+| menu, 92 glyphs | verified-already-at-parity | native menu/prompt/notification metrics |
+| skill-uppercase, 26 glyphs | verified-already-at-parity | canonical name and complete glyph coverage |
+| special-uppercase, 31 glyphs | verified-already-at-parity | canonical name and complete glyph coverage |
+| timeline, 92 glyphs | verified-already-at-parity | complete wrapper coverage |
+| world-and-roster, 67 glyphs | verified-already-at-parity | world/roster metrics and authored geometry |
+| shared text layout and both DOM adapters | exact-ported through this reopening | distinct flow/baseline contracts and one glyph painter |
+| Settings headers, sections, actions, bindings, static rows, toggles, ranges and values | exact-ported as browser layout extension | shared size roles, centered ink, values outside thumb travel; desktop/mobile extrema |
+| Dark Cloud flow labels and heading/account text | exact-ported through shared flow adapter | box geometry and long/wrapped text |
+| Tutorial headings, shadow pairs and modal callouts | exact-ported | native baseline placements and 2.25-pixel shadow preserved |
+| Notebox, spectator/resurrection panels, loot and game-over prompt | exact-ported | explicit placement contract at every existing caller |
+| Pixi plan text, direct glyphs, styled runs, italic chat, Inventory/Skills wrappers and world labels | exact-ported or verified-already-at-parity through canonical typography | no divergent glyph layout, alias maps or sampler choices |
+| Title and Create applications | exact-ported as browser density extension | DPR1/2/3, resize and unchanged native stage anchors |
+| Loader application | exact-ported as browser density extension | loading resize and teardown use the same owner |
+| Inventory/services/dialogue application | exact-ported as browser density extension | exact physical backing, retained detach/reopen, unchanged models |
+| SkillBook application | exact-ported as browser density extension | resize/DPR and retained logical layouts |
+| SkillPicker application and static offer cache | exact-ported as browser density extension | both raster boundaries follow density; queued/reopened picker lifetime |
+| HUD skill selector | exact-ported as browser density extension | static content repaints after density changes |
+| native UI Pixi and DOM workbenches | exact-ported | the same production interfaces, all font families and placements |
+| Browser text input, Unicode user prose, runtime errors, diagnostic/code text and mod UI text | exact-ported as Website text roles | one font-family vocabulary; preserve input, Unicode and code readability |
+| World camera/FOV, world render-quality bounds, lighting and VFX caches | out-of-system: separate world renderer policy | no accidental increase in world render density or layout changes |
+| Protocol, saves, simulation, multiplayer authority and audio | out-of-system: typography has no ownership | unchanged contracts and full gate |
+
+### Additional migration findings
+
+The membership sweep found older glyph-table readers in Hall, Create names,
+the title revision, quickbar bindings, world names/speech and the walk-to-talk
+marker. These now consume the complete canonical font catalog and shared pen.
+Hall's authored integer pen is retained before common glyph layout; native
+logical/trim geometry replaces the former independent tight-frame painter.
+All of those glyph outputs now share the DOM painter or native Pixi glyph
+texture constructor. The five obsolete partial font artifacts were removed.
+
+Inventory's independent styled and chat pens were consolidated into the same
+pen used for ordinary text and measurement. Its original `+3/-3` italic shear,
+run advance/visual scales, offsets, hard spaces and line pitch are preserved.
+The broad Inventory painter was separated by its existing responsibilities;
+frame updates now keep each item's state and diagnostics together.
+
+Review caught two migration edge cases and they were corrected: the touch HUD
+now hides each keyboard label together with its backing, and flow boxes retain
+leading/trailing blank-line allocation. A new public-geometry regression was
+red at A ink Y=15 instead of Y=3, then green with the corrected line slots.
+Baseline DOM text also owns absolute placement directly, removing Tutorial's
+half-height/translate and important-position compensation.
+
+The built Tutorial journey additionally reproduced a stale progression envelope:
+its Skills book displayed `[8,72,16]` while the Tutorial modal still used the
+old two-page progression. `MainMenuScene::sameRuntimeProgression` trusts the
+protocol progression revision, but `replacePlayerSkillState` did not advance
+that revision when learning a new spell left combat stats unchanged. The
+common skill-state replacement must advance the revision whenever its skill
+book changes, preserving existing combat-only revision changes. This updates
+all retained text/lesson consumers through their existing contract; it does not
+change native skill acquisition, save data, or the network schema.
+
+### Validation contract
+
+Focused Mac regressions cover native pen invariance, centered flow ink,
+unsupported glyph handling, wrapping, all ten families, slider minimum/maximum
+values, density changes, and retained canvas lifetime. Browser acceptance uses
+the built candidate for Title, Settings, Create, Inventory, Skills and the
+native-UI workbench at desktop, Retina and mobile dimensions. It records page,
+console and failed-response errors plus physical buffers and visible text
+bounds. Final acceptance includes the canonical Mac `./scripts/validate.sh`,
+configured scope analyzers, current-main rebase and exact remote publication.
+
+No source font is replaced or upscaled by image generation. Small original
+bitmap glyphs still have finite authored detail; correct display density removes
+an additional raster bottleneck but cannot invent higher-resolution outlines.
+
+### Implementation validation receipt — 2026-09-05
+
+- The membership above is implemented through the shared catalog, pen, DOM
+  painter, Pixi glyph constructor and mounted-canvas owner. All ten wrappers
+  and all 718 glyph records retain their native geometry. The five partial
+  font artifacts, old bitmap component, duplicate measurement/kerning loops,
+  font aliases, and separate styled Inventory pens were removed. Native
+  world/camera density limits and font point sampling are unchanged.
+- `NativeUiText` distinguishes flow boxes from absolute native baselines.
+  Settings uses native-size roles and a separate numeric-value lane. The
+  Typography workbench shows all ten families in both placement modes.
+  The canonical architecture check now enforces the kit's supported imports,
+  and `./scripts/validate.sh` includes `test:native-ui`.
+- Mac Chrome measurements at DPR 1/2/3 put Settings row ink at its row center
+  (maximum measured residual below 0.00004 CSS pixels) and keep 100% outside
+  the thumb travel. Every displayed font's flow/baseline anchor was within
+  0.00012 logical pixels. Canvas scale changes, detach/reopen, stale detach,
+  destruction, retained sibling nodes and live DPR changes passed. Chromium's
+  metrics-only DevTools override does not dispatch the media-query event;
+  acceptance sends the media override as well, then observes the real owner.
+- Built Mac Chrome at 1920x1080/DPR2 rendered Title, Create, Inventory, Skills,
+  HUD selector and level picker into 3840x2160. At 896x414/DPR3, full-screen
+  Title/Create use 2688x1242 and the centered 736x414 modal stage uses
+  2208x1242. Inventory survives close/reopen at the same density. The actual
+  level-picker cache changed from 2.4 to 1.6 on the Retina resize, and from
+  1.38 to 2.4 on the mobile resize. Page, console and failed-response arrays
+  were empty. Reviewed screenshots retain the native faces, center Settings
+  copy and show sharper inventory text.
+- Tutorial callouts passed stock, wide, tall and touch geometry, including
+  the three-page concentration lesson, native baselines, shadow offsets and
+  pointer timing. One wide scenario's initial forced-stage fixture timed out;
+  its isolated rerun passed without a code change. The revision regression
+  first failed at `0 !== 1`; after the common revision fix, all 26 focused
+  entity/revision tests passed and the missing concentration lesson appeared.
+- The upstream Inventory tooltip-order correction is preserved. Its built
+  College/Boneyard smoke passed all nine cells, 27/8 perk variants, black
+  overlap margins (`nonBlack=0`, `maximumChannel=0`) and teardown with empty
+  error arrays. The existing UI workbench also passed its Pixi/DOM, Settings,
+  buttons, tabs, BoastMenu and atlas journeys.
+- The canonical Mac gate passed backend build/integration, frontend/desktop
+  tests, type/lint/import boundaries, generated-artifact checks, production
+  build, bundle budget and media policy. It ran 2,806 Node test cases across
+  the configured suites, including 113 native-UI tests, with zero failures.
+  The ten ordinary lint warnings are pre-existing in authentication, save
+  path validation, native numeric fixtures and public-site modules.
+- Node/V8 measured `native-ui-text.ts` at **100% lines, branches and functions**.
+  Statements are not separately reported by this analyzer. Oxlint's strict
+  cyclomatic limit 21 passed the typography/native-UI, canvas owner and
+  reorganized Inventory renderer scope with zero diagnostics. The new owners
+  range from 42 to 675 source lines and contain no explicit `any`/`unknown`.
+  Full migrated-scope coverage, cognitive complexity, Halstead, CRAP,
+  mutation survival and exhaustive duplication/dead-code metrics remain
+  unmeasured; corresponding complete analyzers are not configured. Wider
+  file scans still identify pre-existing complexity in untouched gameplay
+  callback bodies; no claim of a codebase-wide metric pass is made.
+- Main integration preserves the concurrent native-material, Hail/Weld and
+  tooltip changes. Push verification and task cleanup are performed after
+  the exact final candidate passes the final gate and browser checks.
+
 ## 2026-09-01 — Sixth report: ExactText glyph logical-trim quad
 
 ### Reported smell and parity question

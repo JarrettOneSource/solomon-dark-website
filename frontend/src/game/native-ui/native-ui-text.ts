@@ -1,12 +1,22 @@
 import {
   NATIVE_UI_FONT_NAMES,
   nativeUiFont,
-  type NativeUiBitmapFont,
   type NativeUiFontName,
   type NativeUiGlyphRecord,
 } from './native-ui-catalog.ts'
 
 export type NativeUiTextAlign = 'center' | 'left' | 'right'
+
+export const NATIVE_UI_TEXT_ITALIC = Object.freeze({ glyphBottomDelta: -3, glyphTopDelta: 3 })
+
+export interface NativeUiTextRun {
+  readonly advanceScale?: number
+  readonly italic?: boolean
+  readonly offsetX?: number
+  readonly offsetY?: number
+  readonly scale?: number
+  readonly text: string
+}
 
 export interface NativeUiTextSpec {
   readonly align?: NativeUiTextAlign
@@ -14,12 +24,14 @@ export interface NativeUiTextSpec {
   readonly font: NativeUiFontName
   readonly lineHeight?: number
   readonly maxWidth?: number
+  /** A native pen baseline, or a flow box containing and centering its visible ink. */
+  readonly placement?: 'baseline' | 'box'
   readonly scale?: number
   readonly text: string
   readonly tint?: number
   /** Horizontal anchor: left edge, center, or right edge according to `align`. */
   readonly x: number
-  /** Native text baseline for the first line. */
+  /** First native baseline, or the top of the flow box when placement is box. */
   readonly y: number
 }
 
@@ -30,6 +42,7 @@ export interface NativeUiGlyphLayout extends NativeUiGlyphRecord {
   readonly character: string
   readonly codePoint: number
   readonly font: NativeUiFontName
+  readonly italic?: boolean
   readonly scale: number
   readonly tint: number
 }
@@ -96,19 +109,7 @@ export function measureNativeUiText(
   scale = 1,
 ): number {
   if (!Number.isFinite(scale) || scale <= 0) throw new RangeError('native UI text scale must be positive')
-  const font = nativeUiFont(fontName)
-  let width = 0
-  let previous = -1
-  for (const character of text) {
-    const codePoint = character.codePointAt(0)!
-    if (character === ' ') width += font.spaceAdvance
-    else {
-      const glyph = font.glyphs[`${codePoint}`]
-      if (glyph) width += nativeUiKerning(fontName, previous, codePoint) + glyph.metrics[0]
-    }
-    previous = codePoint
-  }
-  return width * scale
+  return layoutLine({ font: fontName, scale, x: 0, y: 0 }, [{ text }])
 }
 
 export function wrapNativeUiText(
@@ -232,57 +233,148 @@ export function layoutNativeUiText(spec: NativeUiTextSpec): NativeUiTextLayout {
         : spec.x - width / 2
     const baselineY = spec.y + lineIndex * lineHeight
     lineLayouts.push({ baselineY, text, width, x: lineX })
-    layoutLine(font, spec, text, lineX, baselineY, scale, alpha, glyphs, unsupported)
+    layoutLine({ ...spec, x: lineX, y: baselineY }, [{ text }], glyphs, unsupported)
   }
-  return {
+  const layout: NativeUiTextLayout = {
     font: spec.font,
     glyphs,
-    height: lines.length === 0 ? 0 : font.metrics[0] * scale + (lines.length - 1) * lineHeight,
+    height: font.metrics[0] * scale + (lines.length - 1) * lineHeight,
     lines: lineLayouts,
     unsupportedCodePoints: [...unsupported].sort((left, right) => left - right),
     width: widest,
   }
+  return spec.placement === 'box' ? placeTextInBox(layout) : layout
 }
 
-function layoutLine(
-  font: NativeUiBitmapFont,
-  spec: NativeUiTextSpec,
-  text: string,
-  lineX: number,
-  baselineY: number,
-  scale: number,
-  alpha: number,
-  output: NativeUiGlyphLayout[],
-  unsupported: Set<number>,
-): void {
-  let cursor = lineX
-  let previous = -1
-  for (const character of text) {
-    const codePoint = character.codePointAt(0)!
-    if (character === ' ') {
-      cursor += font.spaceAdvance * scale
-      previous = codePoint
-      continue
-    }
-    const glyph = font.glyphs[`${codePoint}`]
-    if (!glyph) {
-      unsupported.add(codePoint)
-      previous = codePoint
-      continue
-    }
-    cursor += nativeUiKerning(spec.font, previous, codePoint) * scale
-    output.push({
-      ...glyph,
-      alpha,
-      centerX: cursor + glyph.metrics[1] * scale,
-      centerY: baselineY + glyph.metrics[2] * scale,
-      character,
-      codePoint,
-      font: spec.font,
-      scale,
-      tint: spec.tint ?? 0xffffff,
-    })
-    cursor += glyph.metrics[0] * scale
-    previous = codePoint
+function placeTextInBox(layout: NativeUiTextLayout): NativeUiTextLayout {
+  if (layout.glyphs.length === 0) return layout
+  let inkTop = Number.POSITIVE_INFINITY
+  let inkBottom = Number.NEGATIVE_INFINITY
+  for (const glyph of layout.glyphs) {
+    const bounds = nativeUiGlyphInkBounds(glyph)
+    const baseline = glyph.centerY - glyph.metrics[2] * glyph.scale
+    inkTop = Math.min(inkTop, bounds.top - baseline)
+    inkBottom = Math.max(inkBottom, bounds.top + bounds.height - baseline)
   }
+  const inkHeight = inkBottom - inkTop
+  const lineSpan = layout.lines.at(-1)!.baselineY - layout.lines[0]!.baselineY
+  const lineHeight = Math.max(layout.height - lineSpan, inkHeight)
+  const height = lineSpan + lineHeight
+  const offsetY = (lineHeight - inkHeight) / 2 - inkTop
+  return {
+    ...layout,
+    glyphs: layout.glyphs.map(glyph => ({ ...glyph, centerY: glyph.centerY + offsetY })),
+    height,
+    lines: layout.lines.map(line => ({ ...line, baselineY: line.baselineY + offsetY })),
+  }
+}
+
+/** Styled runs share the same native pen, including kerning across run boundaries. */
+export function layoutNativeUiTextRuns(
+  spec: Pick<NativeUiTextSpec, 'font' | 'tint' | 'x' | 'y'> & { readonly runs: readonly NativeUiTextRun[] },
+): NativeUiTextLayout {
+  const font = nativeUiFont(spec.font)
+  const glyphs: NativeUiGlyphLayout[] = []
+  const unsupported = new Set<number>()
+  const width = layoutLine(spec, spec.runs, glyphs, unsupported)
+  return {
+    font: spec.font,
+    glyphs,
+    height: font.metrics[0],
+    lines: [{ baselineY: spec.y, text: spec.runs.map(run => run.text).join(''), width, x: spec.x }],
+    unsupportedCodePoints: [...unsupported].sort((left, right) => left - right),
+    width,
+  }
+}
+
+type NativeUiTextPen = Pick<NativeUiTextSpec, 'alpha' | 'font' | 'scale' | 'tint' | 'x' | 'y'>
+
+function layoutLine(
+  spec: NativeUiTextPen,
+  runs: readonly NativeUiTextRun[],
+  output?: NativeUiGlyphLayout[],
+  unsupported?: Set<number>,
+): number {
+  const font = nativeUiFont(spec.font)
+  const scale = spec.scale ?? 1
+  let cursor = spec.x
+  let previous = -1
+  for (const run of runs) {
+    const glyphScale = scale * (run.scale ?? 1)
+    const advanceScale = scale * (run.advanceScale ?? run.scale ?? 1)
+    for (const character of run.text) {
+      const codePoint = character.codePointAt(0)!
+      if (character === ' ') {
+        cursor += font.spaceAdvance * advanceScale
+        previous = codePoint
+        continue
+      }
+      const glyph = font.glyphs[`${codePoint}`]
+      if (!glyph) {
+        unsupported?.add(codePoint)
+        previous = codePoint
+        continue
+      }
+      cursor += nativeUiKerning(spec.font, previous, codePoint) * advanceScale
+      output?.push({
+        ...glyph,
+        alpha: spec.alpha ?? 1,
+        centerX: cursor + glyph.metrics[1] * glyphScale + (run.offsetX ?? 0),
+        centerY: spec.y + glyph.metrics[2] * glyphScale + (run.offsetY ?? 0),
+        character,
+        codePoint,
+        font: spec.font,
+        italic: run.italic ?? false,
+        scale: glyphScale,
+        tint: spec.tint ?? 0xffffff,
+      })
+      cursor += glyph.metrics[0] * advanceScale
+      previous = codePoint
+    }
+  }
+  return cursor - spec.x
+}
+
+/** Preserve authored spaces and emphasis when wrapping a native dialogue paragraph. */
+export function wrapNativeUiTextRuns(
+  runs: readonly NativeUiTextRun[],
+  font: NativeUiFontName,
+  maxWidth: number,
+): readonly (readonly NativeUiTextRun[])[] {
+  const lines: NativeUiTextRun[][] = []
+  let paragraph: NativeUiTextRun[] = []
+  for (const run of runs) {
+    for (const character of run.text) {
+      if (character === '\n') {
+        lines.push(...wrapRunParagraph(paragraph, font, maxWidth))
+        paragraph = []
+      } else paragraph.push({ ...run, text: character })
+    }
+  }
+  lines.push(...wrapRunParagraph(paragraph, font, maxWidth))
+  return lines
+}
+
+function wrapRunParagraph(
+  paragraph: readonly NativeUiTextRun[],
+  font: NativeUiFontName,
+  maxWidth: number,
+): NativeUiTextRun[][] {
+  const lines: NativeUiTextRun[][] = []
+  let line: NativeUiTextRun[] = []
+  let index = 0
+  while (index < paragraph.length) {
+    const spaces: NativeUiTextRun[] = []
+    while (paragraph[index]?.text === ' ') spaces.push(paragraph[index++]!)
+    const word: NativeUiTextRun[] = []
+    while (index < paragraph.length && paragraph[index]!.text !== ' ') word.push(paragraph[index++]!)
+    const candidate = [...line, ...spaces, ...word]
+    if (line.length > 0 && word.length > 0
+      && layoutLine({ font, x: 0, y: 0 }, candidate) > maxWidth) {
+      lines.push(line)
+      line = word
+    } else line = candidate
+  }
+  lines.push(line)
+  return lines
 }

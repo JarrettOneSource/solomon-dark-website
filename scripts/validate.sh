@@ -84,6 +84,7 @@ run_all() {
     npm --prefix frontend run test:world-weather
     npm --prefix frontend run test:parties
     npm --prefix frontend run test:level-up
+    npm --prefix frontend run test:native-ui
     npm --prefix frontend run test:tutorial
     npm --prefix frontend run test:diagnostics
     npm --prefix frontend run test:hall

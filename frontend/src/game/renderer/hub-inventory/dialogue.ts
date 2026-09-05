@@ -1,21 +1,20 @@
-import { Container, Graphics, Sprite } from 'pixi.js'
-import { nativeSkillColorRoot, nativeSkillIconRecord } from '../core-kernels/player-progression.ts'
-import { boastSelectionKey } from '../core-kernels/boast.ts'
-import { hubInteractionDialogue } from '../hub-inventory-presentation.ts'
+import { boastSelectionKey } from '../../core-kernels/boast.ts'
 import {
+  nativeSkillColorRoot,
+  nativeSkillIconRecord,
+} from '../../core-kernels/player-progression.ts'
+import { hubInteractionDialogue } from '../../hub-inventory-presentation.ts'
+import {
+  type HubNpcSelectorRow,
   hubNpcChatChoices,
   hubNpcSelectorTitle,
-  type HubNpcSelectorRow,
-} from '../hub-npc-dialogue.ts'
+} from '../../hub-npc-dialogue.ts'
 import {
-  measureNativeUiText,
-  nativeUiFont,
-  nativeUiKerning,
-  nativeUiRecord,
   NATIVE_UI_BOAST_SELECTED_TINT,
+  nativeUiRecord,
   planNativeUiBoastMenu,
-} from '../native-ui/core.ts'
-import { nativeUiPixiFor } from '../native-ui/pixi.ts'
+} from '../../native-ui/core.ts'
+import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
 import {
   HUB_CHAT_PANEL,
   HUB_NATIVE_UI_SIZE,
@@ -26,17 +25,25 @@ import {
   hubNpcSelectorContentHeight,
   hubNpcSelectorPriceTint,
   hubNpcSelectorRowRect,
-  hubChatTextRuns,
-} from './hub-inventory-render-contract.ts'
-import { skillPickerRootTint } from './skill-picker-render-contract.ts'
-import type { RenderContext, ChatRenderState } from './hub-inventory-render-model.ts'
-import type { HubInventoryRendererModel } from './hub-inventory-renderer.ts'
+} from '../hub-inventory-render-contract.ts'
+import { skillPickerRootTint } from '../skill-picker-render-contract.ts'
+import { addChatPanel } from './chrome.ts'
 import {
-  addCenteredAtlasSprite,
-  addNativeNineSlice,
   addBitmapText,
-  applyExactTextItalic,
-} from './hub-inventory-drawing.ts'
+  addCenteredAtlasSprite,
+  addChatBitmapText,
+  addNativeNineSlice,
+} from './drawing.ts'
+import {
+  type ChatRenderState,
+  type HubInventoryRendererModel,
+  type RenderContext,
+} from './model.ts'
+import {
+  Container,
+  Graphics,
+  Sprite,
+} from 'pixi.js'
 
 export function buildDialogue(
   context: RenderContext,
@@ -402,113 +409,4 @@ function addBookSelectorRow(
       tint,
     },
   )
-}
-
-function addChatPanel(context: RenderContext, layer: Container): void {
-  addNativeNineSlice(
-    context,
-    layer,
-    'UI',
-    HUB_CHAT_PANEL.uiRecord,
-    HUB_CHAT_PANEL.left,
-    HUB_CHAT_PANEL.top,
-    HUB_CHAT_PANEL.width,
-    HUB_CHAT_PANEL.height,
-    HUB_CHAT_PANEL.edgeUvOrigin,
-  )
-}
-
-interface StyledGlyphCharacter {
-  readonly character: string
-  readonly italic: boolean
-}
-
-function addChatBitmapText(
-  context: RenderContext,
-  layer: Container,
-  source: string,
-  x: number,
-  y: number,
-  options: {
-    readonly lineHeight: number
-    readonly maxWidth: number
-    readonly tint: number
-  },
-): number {
-  const font = nativeUiFont('menu')
-  const lines = wrapChatBitmapText(source, options.maxWidth)
-  lines.forEach((line, lineIndex) => {
-    let cursor = x
-    let previous = -1
-    for (const { character, italic } of line) {
-      const code = character.codePointAt(0)!
-      if (character === ' ') {
-        cursor += font.spaceAdvance
-        previous = code
-        continue
-      }
-      const glyph = font.glyphs[`${code}`]
-      if (!glyph?.metrics) continue
-      cursor += nativeUiKerning('menu', previous, code)
-      const sprite = nativeUiPixiFor(context.textures).glyph('menu', code)
-      sprite.anchor.set(0.5)
-      if (italic) applyExactTextItalic(sprite, glyph)
-      sprite.tint = options.tint
-      sprite.position.set(
-        cursor + glyph.metrics[1],
-        y + lineIndex * options.lineHeight + glyph.metrics[2],
-      )
-      layer.addChild(sprite)
-      cursor += glyph.metrics[0]
-      previous = code
-    }
-  })
-  return lines.length
-}
-
-function wrapChatBitmapText(source: string, maxWidth: number): StyledGlyphCharacter[][] {
-  const characters = hubChatTextRuns(source).flatMap(({ italic, text }) => (
-    [...text].map((character) => ({ character, italic }))
-  ))
-  const lines: StyledGlyphCharacter[][] = []
-  let paragraph: StyledGlyphCharacter[] = []
-  const flushParagraph = (): void => {
-    lines.push(...wrapChatParagraph(paragraph, maxWidth))
-    paragraph = []
-  }
-  for (const character of characters) {
-    if (character.character === '\n') flushParagraph()
-    else paragraph.push(character)
-  }
-  flushParagraph()
-  return lines
-}
-
-function wrapChatParagraph(
-  paragraph: readonly StyledGlyphCharacter[],
-  maxWidth: number,
-): StyledGlyphCharacter[][] {
-  if (paragraph.length === 0) return [[]]
-  const lines: StyledGlyphCharacter[][] = []
-  let line: StyledGlyphCharacter[] = []
-  let index = 0
-  while (index < paragraph.length) {
-    const spaces: StyledGlyphCharacter[] = []
-    while (paragraph[index]?.character === ' ') spaces.push(paragraph[index++]!)
-    const word: StyledGlyphCharacter[] = []
-    while (index < paragraph.length && paragraph[index]!.character !== ' ') word.push(paragraph[index++]!)
-    const candidate = [...line, ...spaces, ...word]
-    if (line.length > 0 && word.length > 0 && measureStyledBitmapText(candidate) > maxWidth) {
-      lines.push(line)
-      line = word
-    } else {
-      line = candidate
-    }
-  }
-  lines.push(line)
-  return lines
-}
-
-function measureStyledBitmapText(text: readonly StyledGlyphCharacter[]): number {
-  return measureNativeUiText(text.map(({ character }) => character).join(''), 'menu')
 }

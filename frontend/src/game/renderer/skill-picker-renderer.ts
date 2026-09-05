@@ -1,3 +1,4 @@
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   Container,
   MeshSimple,
@@ -43,7 +44,6 @@ import {
   destroyNativeUiPixiFor,
   nativeUiPixiFor,
 } from '../native-ui/pixi.ts'
-import { measureNativeUiText } from '../native-ui/core.ts'
 
 interface AnimatedCorner {
   readonly baseX: number
@@ -58,9 +58,7 @@ interface InsightCardTreatment {
   readonly pulsing: readonly Container[]
 }
 
-export interface SkillPickerRenderer {
-  readonly canvas: HTMLCanvasElement
-  destroy(): void
+export interface SkillPickerRenderer extends NativeUiCanvas {
   render(
     nowMs: number,
     selectedIndex: number,
@@ -71,7 +69,7 @@ export interface SkillPickerRenderer {
   setOffer(offer: ProtocolPlayerSkillOffer, specialActionsAvailable: boolean): void
 }
 
-export type SkillPickerFontName = 'body' | 'medium' | 'menu' | 'skill'
+export type SkillPickerFontName = 'body' | 'medium' | 'menu' | 'skill-uppercase'
 
 export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> {
   let gpu: GameWebGlApplication | undefined
@@ -82,7 +80,6 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         backgroundAlpha: 0,
         className: 'skill-picker-canvas',
         height: SKILL_PICKER_SIZE.height,
-        resolution: 1,
         width: SKILL_PICKER_SIZE.width,
       }),
       loadGameTextureMap({
@@ -94,7 +91,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       }),
     ])
   } catch (error) {
-    gpu?.application.destroy({ removeView: true })
+    gpu?.destroy()
     textures?.destroy()
     throw error
   }
@@ -160,13 +157,25 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   const nativeScreenStartedAtMs = performance.now()
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let destroyed = false
+  const refreshTextCache = () => {
+    if (!staticOfferLayer.isCachedAsTexture) return
+    staticOfferLayer.cacheAsTexture({
+      antialias: false,
+      resolution: application.renderer.resolution,
+      scaleMode: 'nearest',
+    })
+    staticOfferLayer.updateCacheTexture()
+  }
+  application.renderer.on('resize', refreshTextCache)
 
   return {
     canvas: gpu.canvas,
+    mount: gpu.mount,
     destroy() {
       if (destroyed) return
       destroyed = true
-      application.destroy({ removeView: true })
+      application.renderer.off('resize', refreshTextCache)
+      gpu.destroy()
       destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
@@ -206,6 +215,10 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         insightPanels[treatment.cardIndex]!.alpha = insightAlpha
       }
       application.renderer.render(application.stage)
+      const cacheResolution = `${staticOfferLayer.renderGroup?.texture?.source.resolution ?? 0}`
+      if (gpu.canvas.dataset.nativeTextCacheResolution !== cacheResolution) {
+        gpu.canvas.dataset.nativeTextCacheResolution = cacheResolution
+      }
     },
     setContentVisible(visible) {
       offerLayer.visible = visible
@@ -296,7 +309,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       if (!staticOfferLayer.isCachedAsTexture) {
         staticOfferLayer.cacheAsTexture({
           antialias: false,
-          resolution: 1,
+          resolution: application.renderer.resolution,
           scaleMode: 'nearest',
         })
       }
@@ -415,7 +428,7 @@ function addSkillCard(
       layer,
       textures,
       presentation.familyLabel,
-      'skill',
+      'skill-uppercase',
       centerX,
       presentation.familyBaselineY,
       presentation.rootTint,
@@ -471,7 +484,7 @@ function addInsightCardTextPass(
     layer,
     textures,
     presentation.familyLabel,
-    'skill',
+    'skill-uppercase',
     centerX,
     presentation.familyBaselineY,
     { align: 'center', blendMode: treatment.blendMode, tint: treatment.tint },
@@ -668,7 +681,7 @@ export function addBitmapText(
 ): void {
   const rendered = nativeUiPixiFor(textures).text({
     align: options.align,
-    font: nativeUiFontName(fontName),
+    font: fontName,
     lineHeight: options.lineHeight,
     maxWidth: options.maxWidth,
     text,
@@ -705,15 +718,4 @@ function addShadowedBitmapText(
     { ...options, tint: 0x000000 },
   )
   addBitmapText(layer, textures, text, fontName, x, y, { ...options, tint })
-}
-
-export function measureNativeBitmapText(
-  text: string,
-  fontName: SkillPickerFontName,
-): number {
-  return measureNativeUiText(text, nativeUiFontName(fontName))
-}
-
-function nativeUiFontName(fontName: SkillPickerFontName) {
-  return fontName === 'skill' ? 'skill-uppercase' as const : fontName
 }

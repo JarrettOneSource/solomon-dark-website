@@ -27,12 +27,12 @@
   overflow: hidden;
   color: #dcc071;
   background: #020202;
-  font-family: Cinzel, serif;
+  font-family: var(--font-display);
   isolation: isolate;
 }
 
 .dark-cloud-scene button {
-  font-family: Cinzel, serif;
+  font-family: var(--font-display);
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -328,7 +328,7 @@
   background:
     linear-gradient(135deg, transparent 47%, rgb(183 151 76 / 0.1) 48%, rgb(183 151 76 / 0.1) 52%, transparent 53%),
     radial-gradient(circle, #12110e, #070706);
-  font: 700 10px Cinzel, serif;
+  font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
   text-align: center;
 }
@@ -369,7 +369,7 @@
 .dark-cloud-row-copy small {
   margin-top: 2px;
   color: #938b78;
-  font: clamp(11px, 0.82vw, 13px) 'IM FELL English', serif;
+  font: clamp(11px, 0.82vw, 13px) var(--font-narrative);
 }
 
 .dark-cloud-row-copy > .dark-cloud-party-flags {
@@ -438,7 +438,7 @@
   color: #c2ad71;
   background: radial-gradient(circle, #242016, #080706 72%);
   box-shadow: inset 0 0 16px #000, 0 2px 10px #000;
-  font: 700 24px Cinzel, serif;
+  font: 700 24px var(--font-display);
   place-items: center;
 }
 
@@ -488,7 +488,7 @@
   max-width: 760px;
   margin: 5px auto 0;
   color: #9e9274;
-  font: clamp(13px, 1vw, 15px)/1.35 'IM FELL English', serif;
+  font: clamp(13px, 1vw, 15px)/1.35 var(--font-narrative);
 }
 
 .dark-cloud-layout-cards {
@@ -532,7 +532,7 @@
   color: #f0dfa7;
   background: #090807;
   outline: none;
-  font: 700 clamp(18px, 2vw, 24px) 'JetBrains Mono', monospace;
+  font: 700 clamp(18px, 2vw, 24px) var(--font-mono);
   letter-spacing: 0.12em;
   text-align: center;
   text-transform: uppercase;
@@ -547,7 +547,7 @@
   border: 1px solid #8e743b;
   color: #dbc174;
   background: linear-gradient(#17140e, #080706);
-  font: 700 11px Cinzel, serif;
+  font: 700 11px var(--font-display);
   letter-spacing: 0.07em;
 }
 
@@ -561,7 +561,7 @@
 .dark-cloud-layout-card small {
   margin: 0;
   color: #95896d;
-  font: 13px/1.35 'IM FELL English', serif;
+  font: 13px/1.35 var(--font-narrative);
 }
 
 .dark-cloud-layout-card small { color: #746c58; }
@@ -584,7 +584,7 @@
 
 .dark-cloud-layout-receipt output {
   color: #f2dda1;
-  font: 700 20px 'JetBrains Mono', monospace;
+  font: 700 20px var(--font-mono);
   letter-spacing: 0.1em;
   user-select: all;
 }
@@ -596,7 +596,7 @@
   max-width: 680px;
   margin: 10px auto 0;
   color: #e4a39a;
-  font: 13px 'IM FELL English', serif;
+  font: 13px var(--font-narrative);
   text-align: center;
 }
 
@@ -671,7 +671,7 @@
   border: 1px solid #756238;
   color: #d3b86f;
   background: #080706;
-  font: 700 9px Cinzel, serif;
+  font: 700 9px var(--font-display);
 }
 .dark-cloud-dev-match-row button:disabled { color: #6b6450; }
 
@@ -754,7 +754,7 @@
   color: #d3b86f;
   background: linear-gradient(#12110e, #080706);
   box-shadow: inset 0 0 13px #000;
-  font: 700 11px Cinzel, serif;
+  font: 700 11px var(--font-display);
   letter-spacing: 0.06em;
 }
 
@@ -1057,7 +1057,7 @@
 .dark-cloud-inset-label,
 .dark-cloud-detail-summary dt {
   color: #d8be78;
-  font: 700 11px Cinzel, serif;
+  font: 700 11px var(--font-display);
   letter-spacing: 0.12em;
   white-space: nowrap;
 }
@@ -1084,7 +1084,7 @@
   color: #ece0c0;
   background: transparent;
   outline: none;
-  font: 16px Cinzel, serif;
+  font: 16px var(--font-display);
 }
 
 .dark-cloud-field-clear {
@@ -1096,7 +1096,7 @@
   border: 0;
   color: #cdb06b;
   background: transparent;
-  font: 700 18px/1 Cinzel, serif;
+  font: 700 18px/1 var(--font-display);
 }
 
 .dark-cloud-field-clear:hover,
@@ -1114,7 +1114,7 @@
   border: 0;
   color: #ddc27c;
   background: transparent;
-  font: 700 12px Cinzel, serif;
+  font: 700 12px var(--font-display);
   letter-spacing: 0.12em;
   text-align: left;
 }
@@ -1197,7 +1197,7 @@
   border: 1px solid rgb(208 170 85 / 0.45);
   color: #e6cc80;
   background: rgb(0 0 0 / 0.35);
-  font: 300 28px/1 Cinzel, serif;
+  font: 300 28px/1 var(--font-display);
   transform: translateY(-50%);
   place-items: center;
 }
@@ -1231,7 +1231,7 @@
   background: rgb(22 5 4 / 0.72);
 }
 
-.dark-cloud-detail-load-error p { margin: 0; font: 14px 'IM FELL English', serif; }
+.dark-cloud-detail-load-error p { margin: 0; font: 14px var(--font-narrative); }
 .dark-cloud-detail-load-error button { flex: none; padding: 0 18px; }
 
 .dark-cloud-detail-layout {
@@ -1298,7 +1298,7 @@
   border-color: rgb(208 170 85 / 0.42);
   color: #e1c97e;
   background: rgb(3 3 3 / 0.72);
-  font: 34px/1 serif;
+  font: 34px/1 var(--font-body);
   transform: translateY(-50%);
   place-items: center;
 }
@@ -1334,7 +1334,7 @@
   margin: 0;
   padding: 12px 14px;
   color: #d3c5a0;
-  font: 15px/1.45 'IM FELL English', serif;
+  font: 15px/1.45 var(--font-narrative);
 }
 
 .dark-cloud-detail-summary dl { display: grid; margin: 0; }
@@ -1374,14 +1374,14 @@
 .dark-cloud-detail-subscription .dark-cloud-inline-error,
 .dark-cloud-comments > .dark-cloud-inline-error {
   margin: 8px 2px 0;
-  font: 13px/1.35 'IM FELL English', serif;
+  font: 13px/1.35 var(--font-narrative);
 }
 
 .dark-cloud-detail-copy .dark-cloud-inset > p {
   margin: 0;
   padding: 12px 14px;
   color: #cfc2a1;
-  font: 15px/1.6 'IM FELL English', serif;
+  font: 15px/1.6 var(--font-narrative);
   white-space: pre-wrap;
 }
 
@@ -1396,13 +1396,13 @@
 
 .dark-cloud-versions strong { color: #e0c780; font-size: 13px; letter-spacing: 0.06em; }
 .dark-cloud-versions article span { color: #85795a; font-size: 9px; letter-spacing: 0.08em; }
-.dark-cloud-versions article p { margin: 5px 0 0; color: #ad9f82; font: 13px/1.45 'IM FELL English', serif; }
+.dark-cloud-versions article p { margin: 5px 0 0; color: #ad9f82; font: 13px/1.45 var(--font-narrative); }
 
 .dark-cloud-detail-empty {
   margin: 0;
   padding: 12px 14px;
   color: #8a7f63;
-  font: 13px 'IM FELL English', serif;
+  font: 13px var(--font-narrative);
 }
 
 .dark-cloud-comments form label { padding: 10px 14px 8px; }
@@ -1416,7 +1416,7 @@
   color: #e2d5b4;
   background: rgb(0 0 0 / 0.35);
   outline: none;
-  font: 15px/1.4 'IM FELL English', serif;
+  font: 15px/1.4 var(--font-narrative);
   resize: vertical;
 }
 
@@ -1455,7 +1455,7 @@
 .dark-cloud-comment-list article > p {
   margin: 6px 0 0;
   color: #c6b99a;
-  font: 14px/1.45 'IM FELL English', serif;
+  font: 14px/1.45 var(--font-narrative);
   white-space: pre-wrap;
 }
 

@@ -39,7 +39,6 @@ import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { createGameSnapshot } from '../src/game/host/game-snapshot.ts'
 import { NATIVE_HUD_BACKBUFFER } from '../src/game/native-hud-layout.ts'
-import { nativeUiFont } from '../src/game/native-ui/native-ui-catalog.ts'
 import { layoutNativeUiText } from '../src/game/native-ui/native-ui-text.ts'
 import {
   WEB_GAME_SAVE_SLOT,
@@ -75,14 +74,13 @@ const INVENTORY_KEY = DEFAULT_GAME_SETTINGS.controls.openInventory
 const SKILLS_KEY = DEFAULT_GAME_SETTINGS.controls.openSkills
 const allowSettledOpening = process.env.SDR_TUTORIAL_MODAL_ALLOW_SETTLED_OPENING === '1'
 const allowSparsePresentation = process.env.SDR_TUTORIAL_MODAL_ALLOW_SPARSE_PRESENTATION === '1'
-const GLYPH_HALF_HEIGHT = nativeUiFont(TUTORIAL_CALLOUT_FONT).metrics[0] / 2
-// NativeBitmapText renders mask glyphs (no text nodes), so callout lines are compared as the glyph
+// NativeUiText renders mask glyphs (no text nodes), so callout lines are compared as the glyph
 // code points produced by the same left-aligned layout the component runs.
 const calloutGlyphs = (text) => layoutNativeUiText({
   font: TUTORIAL_CALLOUT_FONT,
   text,
   x: 0,
-  y: GLYPH_HALF_HEIGHT,
+  y: 0,
 }).glyphs.map(({ codePoint }) => codePoint)
 const INTRO_CLEARED = {
   introActive: false,
@@ -619,7 +617,7 @@ function measureSelectedHudLesson(page) {
     const logicalText = (element) => {
       const rect = element.getBoundingClientRect()
       return {
-        baseline: (rect.top - overlayRect.top) * logicalHeight / overlayRect.height + 12,
+        baseline: (rect.top - overlayRect.top) * logicalHeight / overlayRect.height,
         x: (rect.left + rect.width / 2 - overlayRect.left) * logicalWidth / overlayRect.width,
       }
     }
@@ -755,7 +753,7 @@ function compareModal(measured, plans, label) {
         `${label} callout ${plan.id} lines`,
       )
       plan.geometry.lines.forEach((line, index) => {
-        const origin = toClient(line.x, line.y - GLYPH_HALF_HEIGHT)
+        const origin = toClient(line.x, line.y)
         check(callout.lines[index].left, origin.x, `${plan.id} line ${index} left`)
         check(callout.lines[index].top, origin.y, `${plan.id} line ${index} top`)
       })

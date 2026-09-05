@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 
 import { nativeUiAtlasSource } from './native-ui-assets.ts'
 import {
@@ -14,7 +14,8 @@ interface NativeUiStripProps {
   readonly className?: string
   readonly record: number
   readonly style?: CSSProperties
-  readonly width: number
+  /** Omit to fill the containing block while keeping native end caps unstretched. */
+  readonly width?: number
 }
 
 /** DOM projection of the stock horizontal repeated-strip helper `0x00415230`. */
@@ -26,11 +27,21 @@ export default function NativeUiStrip({
   style,
   width,
 }: NativeUiStripProps) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [measuredWidth, setMeasuredWidth] = useState(0)
+  useLayoutEffect(() => {
+    if (width !== undefined) return
+    const element = ref.current!
+    setMeasuredWidth(element.clientWidth)
+    const observer = new ResizeObserver(([entry]) => setMeasuredWidth(entry!.contentRect.width))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [width])
   const definition = nativeUiRecord(atlas, record)
   const atlasDefinition = nativeUiAtlas(atlas)
   const [frameX, frameY, sourceWidth, sourceHeight] = definition.frame
   const source = `url("${nativeUiAtlasSource(atlas)}")`
-  const pieces = nativeUiStripPieces(sourceWidth, width)
+  const pieces = nativeUiStripPieces(sourceWidth, width ?? measuredWidth)
 
   return (
     <span
@@ -38,6 +49,7 @@ export default function NativeUiStrip({
       aria-label={ariaLabel}
       className={className}
       data-native-ui-strip={`${atlas}.${record}`}
+      ref={ref}
       role={ariaLabel === undefined ? undefined : 'img'}
       style={{
         display: 'block',
@@ -45,7 +57,7 @@ export default function NativeUiStrip({
         overflow: 'hidden',
         pointerEvents: 'none',
         position: 'absolute',
-        width,
+        width: width ?? '100%',
         ...style,
       }}
     >

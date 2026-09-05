@@ -1,8 +1,8 @@
+import { nativeUiFont } from './native-ui/core.ts'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  CREATE_WIZARD_NAME_FONT,
   CREATE_WIZARD_NAME_MAX_WIDTH,
   CREATE_WIZARD_NAME_VALUE_BOUNDS,
   STOCK_WIZARD_NAMES,
@@ -15,10 +15,9 @@ import {
 } from './create-wizard-name.ts'
 
 test('wizard-name layout drains the native group-4 glyph and kerning membership', () => {
-  assert.equal(CREATE_WIZARD_NAME_FONT.group, 4)
-  assert.equal(CREATE_WIZARD_NAME_FONT.glyphCount, 42)
-  assert.equal(CREATE_WIZARD_NAME_FONT.kerningCount, 132)
-  assert.deepEqual(Object.keys(CREATE_WIZARD_NAME_FONT.glyphs).join(''), '0123456789!,./:?ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+  assert.equal(Object.keys(nativeUiFont('heading').glyphs).length, 42)
+  assert.equal(nativeUiFont('heading').kerning.length, 132)
+  assert.deepEqual(Object.keys(nativeUiFont('heading').glyphs).map(Number), [...'!,./0123456789:?ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map(character => character.codePointAt(0)))
 
   const layout = layoutCreateWizardName('helvidius')
   assert.equal(layout.value, 'HELVIDIUS')
@@ -27,7 +26,7 @@ test('wizard-name layout drains the native group-4 glyph and kerning membership'
   assert.equal(layout.left, 122)
   assert.equal(layout.top, 19)
   assert.equal(layout.right, 362)
-  assert.equal(layout.glyphs.map((glyph) => glyph.char).join(''), 'HELVIDIUS')
+  assert.equal(layout.glyphs.map((glyph) => glyph.character).join(''), 'HELVIDIUS')
   assert.deepEqual(CREATE_WIZARD_NAME_VALUE_BOUNDS, {
     height: 49,
     left: 50,

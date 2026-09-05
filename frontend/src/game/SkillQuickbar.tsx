@@ -1,3 +1,4 @@
+import { NativeUiTextGlyphs } from './native-ui/react-raw.ts'
 import {
   useRef,
   useState,
@@ -31,7 +32,6 @@ import {
   nativeCooldownSectorPath,
   nativeSkillQuickbarIconAlpha,
   nativeSkillQuickbarCooldownPresentation,
-  NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
 import { mobileQuickbarBankLayout, mobileQuickbarSlotPlacement } from './mobile-quickbar-layout.ts'
@@ -428,11 +428,9 @@ function CooldownSector({ capacity, remaining }: { capacity: number; remaining: 
 
 function NativeQuickbarBinding({ text }: { text: string }) {
   const layout = layoutNativeQuickbarBinding(text)
-  const maskImage = `url("${hub.hud.fontAtlas}")`
   const backingImage = `url("${hub.hud.keyBacking}")`
-  const maskSize = `${NATIVE_SKILL_QUICKBAR_FONT.atlasWidth}px ${NATIVE_SKILL_QUICKBAR_FONT.atlasHeight}px`
   return (
-    <>
+    <span className="hub-hud-quickbar-binding" aria-hidden>
       <span
         className="hub-hud-quickbar-key-backing"
         style={{
@@ -458,27 +456,8 @@ function NativeQuickbarBinding({ text }: { text: string }) {
           }}
         />
       </span>
-      {layout.glyphs.map((glyph, index) => (
-        <span
-          key={`${index}:${glyph.char}`}
-          className="hub-hud-quickbar-key-glyph"
-          style={{
-            height: glyph.height,
-            imageRendering: 'pixelated',
-            left: glyph.left,
-            maskImage,
-            maskPosition: `${-glyph.atlasX}px ${-glyph.atlasY}px`,
-            maskSize,
-            top: 64 + glyph.top,
-            WebkitMaskImage: maskImage,
-            WebkitMaskPosition: `${-glyph.atlasX}px ${-glyph.atlasY}px`,
-            WebkitMaskSize: maskSize,
-            width: glyph.width,
-          }}
-          aria-hidden
-        />
-      ))}
-    </>
+      <NativeUiTextGlyphs layout={layout.text} />
+    </span>
   )
 }
 

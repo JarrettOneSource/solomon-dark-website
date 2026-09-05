@@ -129,7 +129,7 @@ export default function CreateMenuScene({
         return
       }
       rendererRef.current = renderer
-      host.replaceChildren(renderer.canvas)
+      renderer.mount(host)
       renderer.resize(viewportRef.current)
       const sceneStartedAt = performance.now()
       phaseStartedAtRef.current = sceneStartedAt
@@ -204,7 +204,6 @@ export default function CreateMenuScene({
       stopPresentationLoop?.()
       rendererRef.current?.destroy()
       rendererRef.current = null
-      host.replaceChildren()
     }
   }, [audio])
 

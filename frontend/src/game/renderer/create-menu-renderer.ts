@@ -1,8 +1,9 @@
+import { nativeUiGlyphRecordTexture } from '../native-ui/native-ui-glyph-texture.ts'
+import type { NativeUiCanvas } from './native-ui-canvas.ts'
 import {
   Container,
   FillGradient,
   Graphics,
-  Rectangle,
   Sprite,
   Texture,
   type Application,
@@ -56,12 +57,10 @@ import {
 } from '../game-assets.ts'
 import { createNativeUiPixiAdapter } from '../native-ui/pixi.ts'
 import {
-  fixedGamePresentationResolution,
   fixedGameStageBounds,
   type FixedGameViewportLayout,
 } from './game-viewport.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
-import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 import { createNativeElementVfxTextures } from './world-player-textures.ts'
 import {
   BONEYARD_COMBAT_ATLAS_SOURCES,
@@ -83,15 +82,12 @@ export interface CreateMenuRenderFrame {
   selectedElement: WizardElement | null
 }
 
-export interface CreateMenuRenderer {
-  readonly canvas: HTMLCanvasElement
-  destroy(): void
+export interface CreateMenuRenderer extends NativeUiCanvas {
   render(frame: CreateMenuRenderFrame): void
-  resize(viewport: FixedGameViewportLayout, devicePixelRatio?: number): void
+  resize(viewport: FixedGameViewportLayout): void
 }
 
 interface CreateMenuRendererOptions {
-  devicePixelRatio?: number
   viewport: FixedGameViewportLayout
 }
 
@@ -132,16 +128,11 @@ export async function createCreateMenuRenderer(
     ],
     stockPoint: CREATE_STOCK_POINT_ASSET_SOURCES,
   })
-  const resolution = fixedGamePresentationResolution(
-    options.devicePixelRatio ?? window.devicePixelRatio,
-    options.viewport.displayScale,
-  )
   let gpu
   try {
     gpu = await createGameWebGlApplication({
       className: 'create-menu-canvas',
       height: options.viewport.height,
-      resolution,
       width: options.viewport.width,
     })
   } catch (error) {
@@ -314,7 +305,6 @@ export async function createCreateMenuRenderer(
   flash.alpha = 0
   root.addChild(flash)
 
-  let currentResolution = resolution
   let currentViewport = options.viewport
   let destroyed = false
   let cachedMotion: ReturnType<typeof createEntryMotionAt> | null = null
@@ -338,6 +328,7 @@ export async function createCreateMenuRenderer(
 
   const renderer: CreateMenuRenderer = {
     canvas,
+    mount: gpu.mount,
     render(frame) {
       if (destroyed) return
       const phaseElapsedMs = Math.max(0, frame.phaseElapsedMs)
@@ -403,18 +394,12 @@ export async function createCreateMenuRenderer(
       canvas.dataset.selectedElement = frame.selectedElement ?? ''
       canvas.dataset.wizardName = frame.displayName
     },
-    resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(viewport) {
       if (destroyed) return
-      const nextResolution = fixedGamePresentationResolution(
-        nextDevicePixelRatio,
-        viewport.displayScale,
-      )
-      if (nextResolution === currentResolution
-        && viewport.width === currentViewport.width
+      if (viewport.width === currentViewport.width
         && viewport.height === currentViewport.height
         && viewport.nativeStage.x === currentViewport.nativeStage.x
         && viewport.nativeStage.y === currentViewport.nativeStage.y) return
-      currentResolution = nextResolution
       currentViewport = viewport
       applyCreateViewport(
         application,
@@ -426,9 +411,7 @@ export async function createCreateMenuRenderer(
         nativeNameStage,
         nativeDiceStage,
         viewport,
-        currentResolution,
       )
-      canvas.dataset.resolution = `${currentResolution}`
       diagnostics.viewportHeight = viewport.height
       diagnostics.viewportWidth = viewport.width
     },
@@ -445,8 +428,7 @@ export async function createCreateMenuRenderer(
       combatAtlas.destroy()
       nativeUi.destroy()
       textures.destroy()
-      application.destroy({ removeView: true })
-      canvas.remove()
+      gpu.destroy()
     },
   }
   applyCreateViewport(
@@ -459,7 +441,6 @@ export async function createCreateMenuRenderer(
     nativeNameStage,
     nativeDiceStage,
     options.viewport,
-    resolution,
   )
   renderer.render({
     applicationTick: 0,
@@ -484,9 +465,8 @@ function applyCreateViewport(
   nativeNameStage: Container,
   nativeDiceStage: Container,
   viewport: FixedGameViewportLayout,
-  resolution: number,
 ): void {
-  application.renderer.resize(viewport.width, viewport.height, resolution)
+  application.renderer.resize(viewport.width, viewport.height)
   background.clear().rect(0, 0, viewport.width, viewport.height).fill(backgroundGradient)
   flash.clear().rect(0, 0, viewport.width, viewport.height).fill(0xffffff)
   const actionBounds = fixedGameStageBounds(viewport, 'center', 'bottom')
@@ -698,17 +678,15 @@ function updateCreateNameView(view: CreateNameView, displayName: string): void {
   const layout = layoutCreateWizardName(validation.value)
 
   for (const glyph of layout.glyphs) {
-    let glyphTexture = view.glyphTextures.get(glyph.char)
+    let glyphTexture = view.glyphTextures.get(glyph.character)
     if (!glyphTexture) {
-      glyphTexture = nativeSpriteRecordTexture({
-        frame: new Rectangle(glyph.atlasX, glyph.atlasY, glyph.atlasWidth, glyph.atlasHeight),
-        source: view.atlas.source,
-      })
-      view.glyphTextures.set(glyph.char, glyphTexture)
+      glyphTexture = nativeUiGlyphRecordTexture(view.atlas.source, glyph)
+      view.glyphTextures.set(glyph.character, glyphTexture)
     }
     const sprite = new Sprite(glyphTexture)
     sprite.eventMode = 'none'
-    sprite.position.set(glyph.left, glyph.top)
+    sprite.anchor.set(0.5)
+    sprite.position.set(glyph.centerX, glyph.centerY)
     sprite.tint = 0xd8ba70
     view.value.addChild(sprite)
   }
