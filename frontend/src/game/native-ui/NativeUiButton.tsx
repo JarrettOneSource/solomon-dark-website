@@ -1,124 +1,61 @@
-import {
-  forwardRef,
-  useState,
-  type ButtonHTMLAttributes,
-  type KeyboardEvent,
-  type PointerEvent,
-} from 'react'
+import { forwardRef, useImperativeHandle, useRef, type ButtonHTMLAttributes } from 'react'
 
 import NativeUiPlanView from './NativeUiPlanView.tsx'
-import {
-  nativeUiPlan,
-  nativeUiRect,
-  planNativeUiButton,
-  type NativeUiRect,
-} from './native-ui-plan.ts'
+import { useNativeUiButtonState } from './native-ui-button-state.ts'
+import { useNativeUiElementSize } from './native-ui-element-size.ts'
+import { nativeUiPlan, nativeUiRect, planNativeUiButton, type NativeUiRect } from './native-ui-plan.ts'
 import './native-ui.css'
 
 export interface NativeUiButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   readonly children: string
   readonly height?: number
   readonly nativeBounds?: NativeUiRect
+  readonly scale?: number
   readonly selected?: boolean
-  readonly width?: number
+  /** Fill a flow/grid cell, or use an authored native width. */
+  readonly width?: number | 'fill'
 }
 
 /** Semantic React button backed by the exact shared stock Button plan. */
 const NativeUiButton = forwardRef<HTMLButtonElement, NativeUiButtonProps>(function NativeUiButton({
   children,
   className,
-  disabled = false,
   height: requestedHeight = 69,
   nativeBounds,
-  onBlur,
-  onFocus,
-  onKeyDown,
-  onKeyUp,
-  onPointerCancel,
-  onPointerDown,
-  onPointerEnter,
-  onPointerLeave,
-  onPointerUp,
+  scale = 1,
   selected = false,
   style,
   width: requestedWidth = 353,
   ...buttonProps
-}, ref) {
-  const [focused, setFocused] = useState(false)
-  const [hovered, setHovered] = useState(false)
-  const [pressed, setPressed] = useState(false)
-  const width = nativeBounds?.width ?? requestedWidth
+}, forwardedRef) {
+  const ref = useRef<HTMLButtonElement>(null)
+  useImperativeHandle(forwardedRef, () => ref.current!, [])
+  const { events, state } = useNativeUiButtonState(buttonProps, selected)
   const height = nativeBounds?.height ?? requestedHeight
-  const state = disabled
-    ? 'disabled'
-    : pressed
-      ? 'pressed'
-      : selected
-        ? 'selected'
-        : focused || hovered
-          ? 'focused'
-          : 'idle'
+  const size = useNativeUiElementSize(ref, { height, width: typeof requestedWidth === 'number' ? requestedWidth : 353 })
+  const width = nativeBounds?.width ?? (requestedWidth === 'fill' ? size.width : requestedWidth)
   const plan = nativeUiPlan(width, height, planNativeUiButton({
     bounds: nativeUiRect(0, 0, width, height),
     id: buttonProps.name ?? 'native-button',
     label: children,
+    scale,
     state,
   }))
-
   return (
     <button
       {...buttonProps}
+      {...events}
       aria-label={buttonProps['aria-label'] ?? children}
       className={['native-ui-button', className].filter(Boolean).join(' ')}
       data-native-ui-button
       data-native-ui-button-state={state}
-      disabled={disabled}
-      onBlur={(event) => {
-        setFocused(false)
-        setPressed(false)
-        onBlur?.(event)
-      }}
-      onFocus={(event) => {
-        setFocused(true)
-        onFocus?.(event)
-      }}
-      onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
-        if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
-          setPressed(true)
-        }
-        onKeyDown?.(event)
-      }}
-      onKeyUp={(event: KeyboardEvent<HTMLButtonElement>) => {
-        if (event.key === 'Enter' || event.key === ' ') setPressed(false)
-        onKeyUp?.(event)
-      }}
-      onPointerCancel={(event: PointerEvent<HTMLButtonElement>) => {
-        setPressed(false)
-        onPointerCancel?.(event)
-      }}
-      onPointerDown={(event: PointerEvent<HTMLButtonElement>) => {
-        if (!disabled && event.button === 0) setPressed(true)
-        onPointerDown?.(event)
-      }}
-      onPointerEnter={(event: PointerEvent<HTMLButtonElement>) => {
-        setHovered(true)
-        onPointerEnter?.(event)
-      }}
-      onPointerLeave={(event: PointerEvent<HTMLButtonElement>) => {
-        setHovered(false)
-        setPressed(false)
-        onPointerLeave?.(event)
-      }}
-      onPointerUp={(event: PointerEvent<HTMLButtonElement>) => {
-        setPressed(false)
-        onPointerUp?.(event)
-      }}
       ref={ref}
       style={{
         height,
         left: nativeBounds?.left,
+        position: requestedWidth === 'fill' ? 'relative' : undefined,
         top: nativeBounds?.top,
-        width,
+        width: requestedWidth === 'fill' ? '100%' : width,
         ...style,
       }}
       type={buttonProps.type ?? 'button'}

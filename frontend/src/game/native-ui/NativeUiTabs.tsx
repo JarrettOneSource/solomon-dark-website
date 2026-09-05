@@ -1,19 +1,8 @@
+import { planNativeUiTabs, type NativeUiTab } from './native-ui-tabs.ts'
 import type { CSSProperties } from 'react'
 
 import NativeUiPlanView from './NativeUiPlanView.tsx'
-import {
-  planNativeUiTabs,
-  type NativeUiRect,
-} from './native-ui-plan.ts'
 import './native-ui.css'
-
-export interface NativeUiTab {
-  readonly bounds: NativeUiRect
-  readonly disabled?: boolean
-  readonly id: string
-  readonly label: string
-  readonly labelBaselineY?: number
-}
 
 interface NativeUiTabsProps {
   readonly ariaLabel: string
@@ -21,8 +10,10 @@ interface NativeUiTabsProps {
   readonly height: number
   readonly onSelect: (id: string) => void
   readonly selectedId: string
+  readonly scale?: number
   readonly style?: CSSProperties
   readonly tabs: readonly NativeUiTab[]
+  readonly tint?: number
   readonly width: number
 }
 
@@ -33,11 +24,13 @@ export default function NativeUiTabs({
   height,
   onSelect,
   selectedId,
+  scale,
   style,
   tabs,
+  tint,
   width,
 }: NativeUiTabsProps) {
-  const plan = planNativeUiTabs({ height, selectedId, tabs, width })
+  const plan = planNativeUiTabs({ height, scale, selectedId, tabs, tint, width })
   return (
     <div
       aria-label={ariaLabel}

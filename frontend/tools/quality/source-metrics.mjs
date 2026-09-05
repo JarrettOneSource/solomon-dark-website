@@ -8,7 +8,8 @@ const linter = new Linter()
 const callableTypes = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])
 
 export function measureSource(source, file) {
-  const parsed = parser.parseForESLint(source, { loc: true, range: true, tokens: true, comment: true })
+  const jsx = file.endsWith('.tsx')
+  const parsed = parser.parseForESLint(source, { loc: true, range: true, tokens: true, comment: true, filePath: file, ecmaFeatures: { jsx } })
   const units = []
   const prohibitedTypes = []
   function visit(node, parent) {
@@ -40,8 +41,8 @@ export function measureSource(source, file) {
   }
   visit(parsed.ast, null)
   const messages = linter.verify(source, {
-    files: ['**/*.ts'],
-    languageOptions: { parser, ecmaVersion: 'latest', sourceType: 'module' },
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: { parser, parserOptions: { ecmaFeatures: { jsx } }, ecmaVersion: 'latest', sourceType: 'module' },
     plugins: { sonarjs },
     // Zero is a reporting threshold here: collect exact analyzer counts,
     // then enforce the repository's strict limits against the result below.

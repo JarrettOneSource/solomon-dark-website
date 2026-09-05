@@ -6,6 +6,13 @@ export {
   type NativeUiBoastMenuProps,
 } from './NativeUiBoastMenu.tsx'
 export { default as NativeUiMessageBox } from './NativeUiMessageBox.tsx'
+export { default as NativeUiDialog } from './NativeUiDialog.tsx'
+export {
+  NativeUiControlPanel,
+  NativeUiControlPanelAction,
+  NativeUiControlPanelArt,
+  NativeUiControlPanelField,
+} from './NativeUiControlPanel.tsx'
 export { default as NativeUiNotebox } from './NativeUiNotebox.tsx'
 export {
   NativeDarkCloudHeading,
@@ -47,4 +54,5 @@ export {
   default as NativeUiSimpleMenu,
   type NativeUiSimpleMenuRow,
 } from './NativeUiSimpleMenu.tsx'
-export { default as NativeUiTabs, type NativeUiTab } from './NativeUiTabs.tsx'
+export { default as NativeUiTabs } from './NativeUiTabs.tsx'
+export type { NativeUiTab } from './native-ui-tabs.ts'

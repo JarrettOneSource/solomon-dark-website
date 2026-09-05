@@ -90,10 +90,7 @@ export function createGamepadMenuNavigation(
       frame = requestFrame(update)
       return
     }
-    if (current.confirm && !previous.confirm) confirm(scope, ownerDocument)
-    if (current.back && !previous.back) activateBack(scope)
-    if (current.previous && !previous.previous) moveLinearFocus(scope, ownerDocument, -1)
-    if (current.next && !previous.next) moveLinearFocus(scope, ownerDocument, 1)
+    applyMenuButtons(scope, ownerDocument, previous, current)
     if (current.direction) {
       const changed = current.direction !== previous.direction
       if (changed || currentTime >= nextRepeatAt) {
@@ -114,6 +111,13 @@ export function createGamepadMenuNavigation(
       previous = emptyGamepadState()
     },
   }
+}
+
+function applyMenuButtons(root: ParentNode, ownerDocument: Document, previous: MenuGamepadState, current: MenuGamepadState): void {
+  if (current.confirm && !previous.confirm) confirm(root, ownerDocument)
+  if (current.back && !previous.back) requestMenuBack(root)
+  if (current.previous && !previous.previous) moveLinearFocus(root, ownerDocument, -1)
+  if (current.next && !previous.next) moveLinearFocus(root, ownerDocument, 1)
 }
 
 export function readMenuGamepad(
@@ -185,21 +189,9 @@ export function chooseInitialMenuTarget<T>(
 }
 
 function moveFocus(root: ParentNode, ownerDocument: Document, direction: MenuDirection): void {
-  const elements = focusableElements(root)
-  if (elements.length === 0) return
-  const active = ownerDocument.activeElement instanceof HTMLElement
-    && elements.includes(ownerDocument.activeElement)
-    ? ownerDocument.activeElement
-    : null
-  if (!active) {
-    const preferred = matchingElements(root, DEFAULT_FOCUS_SELECTOR)
-    chooseInitialMenuTarget(
-      elements,
-      preferred,
-      direction === 'up' || direction === 'left',
-    )?.focus()
-    return
-  }
+  const focus = activeMenuFocus(root, ownerDocument, direction === 'up' || direction === 'left')
+  if (!focus) return
+  const { active, elements } = focus
   if (adjustRange(active, direction)) return
   const current = { bounds: active.getBoundingClientRect(), value: active }
   const candidates = elements.map((element) => ({
@@ -217,19 +209,21 @@ function moveFocus(root: ParentNode, ownerDocument: Document, direction: MenuDir
 }
 
 function moveLinearFocus(root: ParentNode, ownerDocument: Document, delta: -1 | 1): void {
-  const elements = focusableElements(root)
-  if (elements.length === 0) return
-  const active = ownerDocument.activeElement instanceof HTMLElement
-    && elements.includes(ownerDocument.activeElement)
-    ? ownerDocument.activeElement
-    : null
-  if (!active) {
-    const preferred = matchingElements(root, DEFAULT_FOCUS_SELECTOR)
-    chooseInitialMenuTarget(elements, preferred, delta < 0)?.focus()
-    return
-  }
+  const focus = activeMenuFocus(root, ownerDocument, delta < 0)
+  if (!focus) return
+  const { active, elements } = focus
   const index = elements.indexOf(active)
   elements[(index + delta + elements.length) % elements.length].focus()
+}
+
+/** Resolve the current target or establish initial focus for either navigation mode. */
+function activeMenuFocus(root: ParentNode, ownerDocument: Document, fromEnd: boolean): { active: HTMLElement; elements: HTMLElement[] } | null {
+  const elements = focusableElements(root)
+  if (elements.length === 0) return null
+  const active = ownerDocument.activeElement
+  if (active instanceof HTMLElement && elements.includes(active)) return { active, elements }
+  chooseInitialMenuTarget(elements, matchingElements(root, DEFAULT_FOCUS_SELECTOR), fromEnd)?.focus()
+  return null
 }
 
 function adjustRange(element: HTMLElement, direction: MenuDirection): boolean {
@@ -245,7 +239,7 @@ function adjustRange(element: HTMLElement, direction: MenuDirection): boolean {
 function confirm(root: ParentNode, ownerDocument: Document): void {
   const elements = focusableElements(root)
   const active = ownerDocument.activeElement
-  if (active instanceof HTMLElement && contains(root, active) && elements.includes(active)) {
+  if (active instanceof HTMLElement && root.contains(active) && elements.includes(active)) {
     active.click()
     return
   }
@@ -259,20 +253,26 @@ export type MenuBackResult = 'activated' | 'modal-without-back' | 'no-modal'
 
 /**
  * The menu skull's back rule, shared with gamepad B: with a modal open in `root`, press
- * that modal's declared back owner and report it; with a modal that declares none, do
- * nothing; with no modal open, report `no-modal` so the caller may open its scene menu.
+ * that modal's declared back owner, or request native dialog cancellation. With no
+ * modal open, report `no-modal` so the caller may open its scene menu.
  */
 export function activateMenuBack(root: ParentNode): MenuBackResult {
   const scope = activeNavigationRoot(root, true)
   if (!scope) return 'no-modal'
-  const back = backOwner(scope)
-  if (!back) return 'modal-without-back'
-  back.click()
-  return 'activated'
+  return requestMenuBack(scope) ? 'activated' : 'modal-without-back'
 }
 
-function activateBack(root: ParentNode): void {
-  backOwner(root)?.click()
+function requestMenuBack(root: ParentNode): boolean {
+  const back = backOwner(root)
+  if (back) {
+    back.click()
+    return true
+  }
+  if (root instanceof HTMLDialogElement) {
+    root.requestClose()
+    return true
+  }
+  return false
 }
 
 function backOwner(root: ParentNode): HTMLElement | null {
@@ -300,7 +300,7 @@ function isVisible(element: HTMLElement): boolean {
     && getComputedStyle(element).visibility !== 'hidden'
 }
 
-function center(bounds: SpatialCandidate<unknown>['bounds']): { x: number; y: number } {
+function center(bounds: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>): { x: number; y: number } {
   return {
     x: bounds.left + bounds.width / 2,
     y: bounds.top + bounds.height / 2,
@@ -315,10 +315,6 @@ function emptyGamepadState(): MenuGamepadState {
     next: false,
     previous: false,
   }
-}
-
-function contains(root: ParentNode, element: Element): boolean {
-  return root === element || Array.from(root.querySelectorAll('*')).includes(element)
 }
 
 function activeNavigationRoot(root: ParentNode, requireModal: boolean): ParentNode | null {

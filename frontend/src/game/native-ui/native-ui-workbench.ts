@@ -1,3 +1,4 @@
+import { planNativeUiTabs } from './native-ui-tabs.ts'
 import { Container } from 'pixi.js'
 
 import {
@@ -17,7 +18,6 @@ import {
   nativeUiRect,
   planNativeUiButton,
   planNativeUiMessage,
-  planNativeUiTabs,
   type NativeUiPlan,
 } from './native-ui-plan.ts'
 import { createNativeUiPixiAdapter } from './native-ui-pixi.ts'

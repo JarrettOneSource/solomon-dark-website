@@ -6,14 +6,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from 'react'
 
 import {
   api,
   type ActiveWebMod,
-  type ConnectedGamePlayer,
-  type DeveloperGameMatch,
   type ModList,
   type ModSubscription,
   type ModSummary,
@@ -21,26 +18,21 @@ import {
   type PublicGameParty,
 } from '../lib/api.ts'
 import {
-  connectedPlayerPresentation,
   useDeveloperPresence,
 } from './connected-players.ts'
-import DarkCloudMedia from './DarkCloudMedia.tsx'
 import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
 } from './DarkCloudModDetail.tsx'
-import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
 import {
+  NativeUiButton,
   NativeDarkCloudHeading,
   NativeDarkCloudListFrameArt,
-  NativeDarkCloudPrimaryButton,
   NativeDarkCloudSceneArt,
   NativeDarkCloudTabs,
   NativeDarkCloudText,
-  NativeDarkCloudToolButton,
 } from './native-ui/react.ts'
 import {
   directoryPartyAction,
-  directoryPartyPresentation,
   usePartyDirectory,
 } from './party-directory.ts'
 import { usePartyJoinActions } from './party-join.ts'
@@ -49,16 +41,12 @@ import {
   prefetchGameContent,
   type GameContentDownloadProgress,
 } from './game-content-cache.ts'
+import { DarkCloudSearchDialog, DarkCloudSortDialog, type DarkCloudSort } from './DarkCloudDialogs.tsx'
+import { DarkCloudList, DeveloperPresenceSection, type DarkCloudRow, type DarkCloudTab } from './DarkCloudRows.tsx'
+import { DarkCloudFooter, DarkCloudStatus } from './DarkCloudFooter.tsx'
 import './dark-cloud.css'
 
 const DarkCloudLayouts = lazy(() => import('./DarkCloudLayouts.tsx'))
-
-type DarkCloudTab = 'layouts' | 'mods' | 'subscribed' | 'parties'
-type SortMode = 'downloads' | 'members' | 'name' | 'newest' | 'updated'
-
-type DarkCloudRow =
-  | { key: string; kind: 'mod'; mod: ModSummary; subscription: ModSubscription | null }
-  | { key: string; kind: 'party'; party: PublicGameParty }
 
 interface DarkCloudSceneProps {
   accountUsername: string | null
@@ -105,10 +93,9 @@ export default function DarkCloudScene({
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [detailMod, setDetailMod] = useState<ModSummary | null>(null)
   const [query, setQuery] = useState('')
-  const [draftQuery, setDraftQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
-  const [sort, setSort] = useState<SortMode>('newest')
+  const [sort, setSort] = useState<DarkCloudSort>('newest')
   const partyDirectory = usePartyDirectory(tab === 'parties')
   const parties = partyDirectory.parties
   const partyActions = usePartyJoinActions(requesterDisplayName, onPartyResolved)
@@ -130,13 +117,13 @@ export default function DarkCloudScene({
       setMods(modsResult.value)
       setModsError(null)
     } else {
-      setModsError(message(modsResult.reason, 'The mod catalog could not be loaded.'))
+      setModsError((modsResult.reason instanceof Error ? modsResult.reason.message : 'The mod catalog could not be loaded.'))
     }
     if (subscriptionsResult.status === 'fulfilled') {
       setSubscriptions(subscriptionsResult.value.items)
       setSubscriptionsError(null)
     } else {
-      setSubscriptionsError(message(subscriptionsResult.reason, 'Your subscribed mods could not be loaded.'))
+      setSubscriptionsError((subscriptionsResult.reason instanceof Error ? subscriptionsResult.reason.message : 'Your subscribed mods could not be loaded.'))
     }
     setLoading(false)
   }, [accountUsername])
@@ -198,11 +185,7 @@ export default function DarkCloudScene({
   }, [rows, selectedKey])
 
   const selected = rows.find(row => row.key === selectedKey) ?? null
-  const activeError = tab === 'mods'
-    ? modsError
-    : tab === 'subscribed'
-      ? subscriptionsError
-      : tab === 'parties' ? partyDirectory.error : null
+  const activeError = { mods: modsError, subscribed: subscriptionsError, parties: partyDirectory.error, layouts: null }[tab]
   const detailSubscription = detailMod
     ? subscriptionsBySlug.get(detailMod.slug) ?? null
     : null
@@ -215,7 +198,6 @@ export default function DarkCloudScene({
     setTab(next)
     setSelectedKey(firstKey)
     setQuery('')
-    setDraftQuery('')
     setSearchOpen(false)
     setSortOpen(false)
     setSort(next === 'parties' ? 'members' : 'newest')
@@ -242,34 +224,26 @@ export default function DarkCloudScene({
       if (action === 'unsubscribe') await api.mods.subscriptions.unsubscribe(mod.slug)
       const activeMods = await onSubscriptionsChanged()
       await load()
-      if (action === 'subscribe' || action === 'enable') {
-        try {
-          await prefetchGameContent(
-            activeMods.flatMap(active => active.assets),
-            setDownloadProgress,
-          )
-        } catch (error) {
-          const loadFailure = error instanceof GameModContentLoadError ? error : null
-          const failedMod = loadFailure
-            ? activeMods.find(active => active.id === loadFailure.modId)
-            : null
-          if (!loadFailure || !failedMod) {
-            setDownloadError(message(error, 'The mod is enabled, but its game content was not cached.'))
-          } else {
-            try {
-              await api.mods.subscriptions.setEnabled(failedMod.slug, false)
-              await onSubscriptionsChanged()
-              await load()
-              setDownloadError(
-                `${failedMod.name} was disabled because its content could not be loaded or verified.`,
-              )
-            } catch {
-              setDownloadError(`${loadFailure.message} The mod could not be disabled automatically.`)
-            }
-          }
-        } finally {
-          setDownloadProgress(null)
+      if (action !== 'subscribe' && action !== 'enable') return
+      try {
+        await prefetchGameContent(activeMods.flatMap(active => active.assets), setDownloadProgress)
+      } catch (error) {
+        const loadFailure = error instanceof GameModContentLoadError ? error : null
+        const failedMod = loadFailure ? activeMods.find(active => active.id === loadFailure.modId) : null
+        if (!loadFailure || !failedMod) {
+          setDownloadError(error instanceof Error ? error.message : 'The mod is enabled, but its game content was not cached.')
+          return
         }
+        try {
+          await api.mods.subscriptions.setEnabled(failedMod.slug, false)
+          await onSubscriptionsChanged()
+          await load()
+          setDownloadError(`${failedMod.name} was disabled because its content could not be loaded or verified.`)
+        } catch {
+          setDownloadError(`${loadFailure.message} The mod could not be disabled automatically.`)
+        }
+      } finally {
+        setDownloadProgress(null)
       }
     } finally {
       subscriptionBusyRef.current = false
@@ -282,8 +256,8 @@ export default function DarkCloudScene({
       window.location.assign('/login')
       return
     }
-    void mutateSubscription(mod, action).catch((error: unknown) => {
-      setActionError(message(error, 'The subscription could not be changed.'))
+    void mutateSubscription(mod, action).catch((error) => {
+      setActionError(error instanceof Error ? error.message : 'The subscription could not be changed.')
     })
   }
 
@@ -302,31 +276,19 @@ export default function DarkCloudScene({
     if (action === 'join') void partyActions.joinPublic(party.id)
     if (action === 'request') void partyActions.requestInvite(party.id)
   }
-  const selectedPartyAction = selected?.kind === 'party'
-    ? directoryPartyAction(selected.party)
-    : null
+  const listLoading = tab === 'parties' ? partyDirectory.loading : loading
+  const refresh = () => {
+    if (tab === 'parties') {
+      void partyDirectory.refresh()
+      if (developerAccess) void developerPresence.refresh()
+    } else void load()
+  }
 
-  // Same controls in two homes: the footer status slot on desktop and the
-  // in-frame band that replaces the column header on phones. CSS shows one.
-  const statusControls = (
-    <>
-      <span className="dark-cloud-status-label">{statusLabel(tab, rows.length, query, loading)}</span>
-      {tab !== 'layouts' && (tab === 'parties' ? partyDirectory.loading : loading) && rows.length > 0
-        ? <span className="dark-cloud-status-note">REFRESHING…</span>
-        : null}
-      {query ? <button type="button" onClick={() => setQuery('')}>CLEAR SEARCH</button> : null}
-      {tab === 'parties' ? (
-        <button type="button" onClick={() => {
-          void partyDirectory.refresh()
-          if (developerAccess) void developerPresence.refresh()
-        }}>REFRESH</button>
-      ) : null}
-    </>
-  )
+  const statusControls = <DarkCloudStatus count={rows.length} loading={listLoading} onClear={() => setQuery('')} onRefresh={refresh} query={query} tab={tab} />
+  const notice = actionError || downloadError || partyActions.error
 
   return (
     <section className="dark-cloud-scene" aria-label="The Dark Cloud">
-      <div className="dark-cloud-wall" aria-hidden />
       <NativeDarkCloudSceneArt />
       {/* The menu skull is the stage-level GameMenuSkull the host mounts over this scene. */}
 
@@ -341,52 +303,39 @@ export default function DarkCloudScene({
         <NativeDarkCloudListFrameArt />
 
         {tab === 'layouts' ? (
-          <Suspense fallback={<p className="dark-cloud-empty">OPENING LAYOUTS…</p>}>
+          <Suspense fallback={<p className="dark-cloud-empty"><NativeDarkCloudText text="OPENING LAYOUTS..." /></p>}>
             <DarkCloudLayouts accountUsername={accountUsername} />
           </Suspense>
         ) : (
           <>
-            <div className={`dark-cloud-columns dark-cloud-columns-${tab}`} aria-hidden>
-              {columnLabels(tab).map(label => (
-                <span key={label}><NativeDarkCloudText scale={0.62} text={label} /></span>
+            <div className={`dark-cloud-columns dark-cloud-columns-${tab}`}>
+              {columnLabels(tab).map((label, index) => (
+                <span key={label}>
+                  {tab === 'parties' && index === 4
+                    ? <NativeUiButton height={44} onClick={refresh} scale={0.55} width={100}>REFRESH</NativeUiButton>
+                    : <NativeDarkCloudText scale={1} text={label.toLowerCase()} />}
+                </span>
               ))}
             </div>
             <div className="dark-cloud-list-status">{statusControls}</div>
 
-            <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={tab === 'parties' ? partyDirectory.loading : loading}>
-              {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
-              {!(tab === 'parties' ? partyDirectory.loading : loading) && activeError && rows.length === 0 ? (
-                <div className="dark-cloud-empty dark-cloud-empty-error" role="alert">
-                  <p>{activeError}</p>
-                  <button type="button" onClick={() => { void load() }}>RETRY</button>
-                </div>
-              ) : null}
-              {!(tab === 'parties' ? partyDirectory.loading : loading) && !activeError && rows.length === 0 ? (
-                <p className="dark-cloud-empty">{emptyMessage(tab, accountUsername !== null, query)}</p>
-              ) : null}
-              {rows.map(row => row.kind === 'mod' ? (
-                <ModRow
-                  busy={busySlug !== null}
-                  key={row.key}
-                  mod={row.mod}
-                  onOpen={() => openMod(row.mod)}
-                  onSelect={() => setSelectedKey(row.key)}
-                  onSubscriptionAction={action => runRowAction(row.mod, action)}
-                  selected={selectedKey === row.key}
-                  subscription={row.subscription}
-                  tab={tab}
-                />
-              ) : (
-                <PartyRow
-                  busy={partyActions.busy}
-                  key={row.key}
-                  onEnter={() => joinParty(row.party)}
-                  onSelect={() => setSelectedKey(row.key)}
-                  party={row.party}
-                  pending={partyActions.pendingListingId === row.party.id}
-                  selected={selectedKey === row.key}
-                />
-              ))}
+            <DarkCloudList
+              busy={busySlug !== null}
+              emptyText={emptyMessage(tab, accountUsername !== null, query)}
+              error={activeError}
+              label={`${tab} entries`}
+              loading={listLoading}
+              onJoinParty={joinParty}
+              onModAction={runRowAction}
+              onOpenMod={openMod}
+              onRetry={refresh}
+              onSelect={setSelectedKey}
+              partyBusy={partyActions.busy}
+              pendingParty={partyActions.pendingListingId}
+              rows={rows}
+              selectedKey={selectedKey}
+              subscribed={tab === 'subscribed'}
+            >
               {tab === 'parties' && developerAccess ? (
                 <DeveloperPresenceSection
                   error={developerPresence.error}
@@ -400,137 +349,49 @@ export default function DarkCloudScene({
                     try {
                       await onObserveMatch(matchId)
                     } catch (error) {
-                      setActionError(message(error, 'The match could not be observed.'))
+                      setActionError(error instanceof Error ? error.message : 'The match could not be observed.')
                       setObservingMatchId(null)
                     }
                   }}
                   players={developerPresence.players}
                 />
               ) : null}
-            </div>
+            </DarkCloudList>
           </>
         )}
       </main>
 
-      <footer className="dark-cloud-footer">
-        <DarkCloudDownloadProgress progress={downloadProgress} />
-        <div className="dark-cloud-footer-tools">
-          {tab !== 'layouts' ? (
-            <>
-              <NativeDarkCloudToolButton icon="search" label="Search" onClick={() => {
-                setDraftQuery(query)
-                setSearchOpen(true)
-              }} />
-              <NativeDarkCloudToolButton icon="sort" label="Sort" onClick={() => setSortOpen(true)} />
-            </>
-          ) : null}
-        </div>
-        {tab === 'layouts' ? (
-          <div className="dark-cloud-layout-footer">SHARE A CODE. LOAD IT ANYWHERE.</div>
-        ) : (
-          <NativeDarkCloudPrimaryButton
-            type="button"
-            disabled={tab === 'parties'
-              ? selectedPartyAction === null
-                || selectedPartyAction === 'wait'
-                || partyActions.busy
-              : selected?.kind !== 'mod'}
-            onClick={primaryAction}
-          >
-            {tab === 'parties'
-              ? selectedPartyAction === null
-                ? 'SELECT PARTY'
-                : selectedPartyAction === 'wait'
-                  ? 'IN GAME'
-                  : selectedPartyAction === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
-              : 'VIEW MOD'}
-          </NativeDarkCloudPrimaryButton>
-        )}
-        {tab !== 'layouts' ? (
-          <NativeDarkCloudToolButton
-            className="dark-cloud-options-button"
-            disabled={selected?.kind !== 'mod'}
-            icon={null}
-            label="OPTIONS"
-            nativeWidth={185}
-            onClick={() => {
-              if (selected?.kind === 'mod') openMod(selected.mod)
-            }}
-          />
-        ) : null}
-        <div className="dark-cloud-footer-status">{statusControls}</div>
-      </footer>
+      <DarkCloudFooter
+        onPrimary={primaryAction}
+        onSearch={() => setSearchOpen(true)}
+        onSort={() => setSortOpen(true)}
+        partyBusy={partyActions.busy}
+        progress={downloadProgress}
+        selected={selected}
+        status={statusControls}
+        tab={tab}
+      />
 
-      {actionError || downloadError || partyActions.error ? (
+      {notice ? (
         <p className="dark-cloud-error" role="alert">
-          {actionError ?? downloadError ?? partyActions.error}
+          {notice}
         </p>
       ) : null}
       {searchOpen ? (
-        <DarkCloudModal kind="search" title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
-          <div className="dark-cloud-inset">
-            <div className="dark-cloud-inset-row dark-cloud-field-row">
-              <label htmlFor="dark-cloud-search-input">
-                {tab === 'parties' ? 'LEADER, MEMBER, OR BONEYARD:' : 'MOD, AUTHOR, OR TAG:'}
-              </label>
-              <span className="dark-cloud-field">
-                <input
-                  id="dark-cloud-search-input"
-                  value={draftQuery}
-                  onChange={event => setDraftQuery(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key !== 'Enter') return
-                    setQuery(draftQuery)
-                    setSearchOpen(false)
-                  }}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  className="dark-cloud-field-clear"
-                  aria-label="Clear search text"
-                  disabled={draftQuery.length === 0}
-                  onClick={() => setDraftQuery('')}
-                >
-                  <span aria-hidden>×</span>
-                </button>
-              </span>
-            </div>
-            <button type="button" className="dark-cloud-inset-button" onClick={() => {
-              setQuery(draftQuery)
-              setSearchOpen(false)
-            }}>SEARCH NOW</button>
-          </div>
-        </DarkCloudModal>
+        <DarkCloudSearchDialog
+          initialQuery={query}
+          onClose={() => setSearchOpen(false)}
+          onSearch={value => { setQuery(value); setSearchOpen(false) }}
+          parties={tab === 'parties'}
+        />
       ) : null}
-
       {sortOpen ? (
-        <DarkCloudModal kind="sort" title={tab === 'parties' ? 'SORT PARTIES BY…' : 'SORT MODS BY…'} onClose={() => setSortOpen(false)}>
-          <div className="dark-cloud-inset" role="group" aria-label="Sort order">
-            {(tab === 'parties' ? [
-              ['members', 'MOST WIZARDS'],
-              ['name', 'LEADER NAME'],
-            ] as const : [
-              ['newest', 'NEWEST'],
-              ['updated', 'UPDATED RECENTLY'],
-              ['downloads', 'MOST DOWNLOADED'],
-              ['name', 'NAME'],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={`dark-cloud-inset-button${sort === value ? ' selected' : ''}`}
-                aria-pressed={sort === value}
-                onClick={() => {
-                  setSort(value)
-                  setSortOpen(false)
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </DarkCloudModal>
+        <DarkCloudSortDialog
+          onClose={() => setSortOpen(false)}
+          onSort={value => { setSort(value); setSortOpen(false) }}
+          parties={tab === 'parties'}
+          sort={sort}
+        />
       ) : null}
 
       {detailMod ? (
@@ -543,301 +404,6 @@ export default function DarkCloudScene({
         />
       ) : null}
     </section>
-  )
-}
-
-function ModRow({
-  busy,
-  mod,
-  onOpen,
-  onSelect,
-  onSubscriptionAction,
-  selected,
-  subscription,
-  tab,
-}: {
-  busy: boolean
-  mod: ModSummary
-  onOpen: () => void
-  onSelect: () => void
-  onSubscriptionAction: (action: DarkCloudSubscriptionAction) => void
-  selected: boolean
-  subscription: ModSubscription | null
-  tab: DarkCloudTab
-}) {
-  return (
-    <article
-      className={`dark-cloud-row dark-cloud-mod-row${selected ? ' selected' : ''}`}
-      data-mod-slug={mod.slug}
-      role="listitem"
-    >
-      <button
-        type="button"
-        className="dark-cloud-row-main"
-        aria-label={`Select ${mod.name}`}
-        aria-pressed={selected}
-        onClick={onSelect}
-        onDoubleClick={onOpen}
-      >
-        <DarkCloudMedia alt={mod.name} className="dark-cloud-row-thumbnail" src={mod.thumbnailUrl} />
-        <span className="dark-cloud-row-copy">
-          <strong><NativeDarkCloudText scale={0.62} text={mod.name.toUpperCase()} /></strong>
-          <small>{mod.summary}</small>
-          <span className="dark-cloud-row-tags">{mod.tags.slice(0, 3).join(' · ')}</span>
-        </span>
-        <span className="dark-cloud-row-author"><NativeDarkCloudText scale={0.46} text={mod.author.username.toUpperCase()} /></span>
-        <span className="dark-cloud-row-version"><NativeDarkCloudText scale={0.46} text={`V${mod.latestVersion.toUpperCase()}`} /></span>
-        <span className={`dark-cloud-row-state ${subscription?.enabled ? 'enabled' : ''}`}>
-          <NativeDarkCloudText
-            scale={0.42}
-            text={subscription ? subscription.enabled ? 'ENABLED' : 'DISABLED' : 'NOT SUBSCRIBED'}
-            tint={subscription?.enabled ? 0xa9d29d : 0xa99a70}
-          />
-        </span>
-      </button>
-      <div className="dark-cloud-row-actions">
-        <button type="button" aria-label={`View ${mod.name}`} onClick={onOpen}>VIEW</button>
-        {tab === 'subscribed' && subscription ? (
-          <>
-            <button
-              type="button"
-              disabled={busy}
-              aria-label={`${subscription.enabled ? 'Disable' : 'Enable'} ${mod.name}`}
-              onClick={() => onSubscriptionAction(subscription.enabled ? 'disable' : 'enable')}
-            >
-              {subscription.enabled ? 'DISABLE' : 'ENABLE'}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              aria-label={`Unsubscribe from ${mod.name}`}
-              onClick={() => onSubscriptionAction('unsubscribe')}
-            >
-              REMOVE
-            </button>
-          </>
-        ) : !subscription ? (
-          <button type="button" disabled={busy} onClick={() => onSubscriptionAction('subscribe')}>
-            {busy ? 'WORKING…' : 'SUBSCRIBE'}
-          </button>
-        ) : null}
-      </div>
-    </article>
-  )
-}
-
-function PartyRow({
-  busy,
-  onEnter,
-  onSelect,
-  party,
-  pending,
-  selected,
-}: {
-  busy: boolean
-  onEnter: () => void
-  onSelect: () => void
-  party: PublicGameParty
-  pending: boolean
-  selected: boolean
-}) {
-  const action = directoryPartyAction(party)
-  const presentation = directoryPartyPresentation(party)
-  return (
-    <article
-      className={`dark-cloud-row dark-cloud-party-row${selected ? ' selected' : ''}`}
-      data-party-id={party.id}
-      role="listitem"
-    >
-      <button
-        type="button"
-        className="dark-cloud-row-main"
-        aria-label={`Select ${party.leader}'s party${party.modCount > 0
-          ? `, modded with ${party.modCount} ${party.modCount === 1 ? 'mod' : 'mods'}`
-          : ''}${party.cheatsEnabled ? ', cheats enabled' : ''}`}
-        aria-pressed={selected}
-        onClick={onSelect}
-        onDoubleClick={onEnter}
-      >
-        <span className="dark-cloud-party-mark" aria-hidden>{party.leader.slice(0, 1).toUpperCase()}</span>
-        <span className="dark-cloud-row-copy">
-          <strong><NativeDarkCloudText scale={0.62} text={`${party.leader}'S PARTY`.toUpperCase()} /></strong>
-          <span className="dark-cloud-party-flags">
-            {party.sessionKind === 'private-college' ? <em>PRIVATE COLLEGE</em> : null}
-            {party.modCount > 0 ? <em>MODDED · {party.modCount}</em> : null}
-            {party.cheatsEnabled ? <em className="cheats">CHEATS</em> : null}
-          </span>
-          <small>{party.members.join(' · ')}</small>
-        </span>
-        <span className="dark-cloud-party-members"><NativeDarkCloudText scale={0.42} text={presentation.squad.toUpperCase()} /></span>
-        <span className={`dark-cloud-party-status ${party.status}`}><NativeDarkCloudText scale={0.42} text={presentation.status.toUpperCase()} /></span>
-        <span className="dark-cloud-party-location" title={presentation.location}>
-          <NativeDarkCloudText scale={0.4} text={presentation.location} />
-        </span>
-      </button>
-      <div className="dark-cloud-row-actions">
-        <button type="button" disabled={busy || action === 'wait'} onClick={onEnter}>
-          {pending
-            ? 'REQUESTED'
-            : action === 'request' ? 'REQUEST' : action === 'wait' ? 'IN GAME' : 'JOIN'}
-        </button>
-      </div>
-    </article>
-  )
-}
-
-/**
- * Developer-only roster of every connected player and what they are doing.
- * The backend answers `/api/game/players` with 404 unless the signed-in user
- * is a developer, so this section can only ever render for developers.
- */
-function DeveloperPresenceSection({
-  error,
-  loading,
-  matches,
-  observingMatchId,
-  onObserve,
-  players,
-}: {
-  error: string | null
-  loading: boolean
-  matches: readonly DeveloperGameMatch[]
-  observingMatchId: string | null
-  onObserve: (matchId: string) => Promise<void>
-  players: readonly ConnectedGamePlayer[]
-}) {
-  return (
-    <section className="dark-cloud-dev-presence" aria-label="All connected players (developer)">
-      <header className="dark-cloud-dev-presence-heading" aria-hidden>
-        <span>DEVELOPER SIGHT</span>
-        <span className="dark-cloud-dev-presence-count">
-          {loading && players.length === 0
-            ? 'SCRYING…'
-            : `${players.length} CONNECTED ${players.length === 1 ? 'WIZARD' : 'WIZARDS'}`}
-        </span>
-      </header>
-      {error !== null ? (
-        <p className="dark-cloud-dev-presence-note" role="alert">{error}</p>
-      ) : null}
-      {!loading && error === null && players.length === 0 ? (
-        <p className="dark-cloud-dev-presence-note">NO WIZARDS ARE CONNECTED RIGHT NOW.</p>
-      ) : null}
-      <div className="dark-cloud-dev-matches">
-        <div className="dark-cloud-dev-subheading">
-          <span>ACTIVE MATCHES · ALL VISIBILITIES</span>
-          <span>{matches.length}</span>
-        </div>
-        {!loading && error === null && matches.length === 0 ? (
-          <p className="dark-cloud-dev-presence-note">NO BONEYARD MATCHES ARE ACTIVE.</p>
-        ) : null}
-        {matches.map(match => (
-          <div className="dark-cloud-dev-match-row" key={match.id}>
-            <span>
-              <strong>{match.boneyardName.toUpperCase()}</strong>
-              <small>{match.players.join(' · ').toUpperCase()}</small>
-            </span>
-            <span>{match.waveNumber > 0 ? `WAVE ${match.waveNumber}` : 'STAGING'}</span>
-            <span>{match.visibility.toUpperCase()}</span>
-            <span>{match.session === 'global-hub' ? 'GLOBAL HUB' : 'PRIVATE COLLEGE'}</span>
-            <button
-              type="button"
-              disabled={observingMatchId !== null}
-              onClick={() => { void onObserve(match.id) }}
-            >
-              {observingMatchId === match.id ? 'OPENING…' : 'OBSERVE'}
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="dark-cloud-dev-subheading">
-        <span>CONNECTED WIZARDS</span>
-        <span>{players.length}</span>
-      </div>
-      {players.map((player, index) => {
-        const presentation = connectedPlayerPresentation(player)
-        return (
-          <div className="dark-cloud-dev-presence-row" key={`${player.session}:${player.displayName}:${index}`}>
-            <span className="dark-cloud-dev-presence-wizard">
-              <strong>{player.displayName.toUpperCase()}</strong>
-              <small>
-                {presentation.detail.toUpperCase()}
-                {player.developer ? ' · DEV' : ''}
-              </small>
-            </span>
-            <span className="dark-cloud-dev-presence-session">{presentation.session}</span>
-            <span className={`dark-cloud-dev-presence-status ${player.activity}`}>
-              {presentation.status}
-            </span>
-            <span className="dark-cloud-dev-presence-location" title={presentation.location}>
-              {presentation.location.toUpperCase()}
-            </span>
-            <span className="dark-cloud-dev-presence-party" title={presentation.party ?? undefined}>
-              {presentation.party?.toUpperCase() ?? 'NO PARTY'}
-            </span>
-          </div>
-        )
-      })}
-    </section>
-  )
-}
-
-function DarkCloudModal({
-  children,
-  kind,
-  onClose,
-  title,
-}: {
-  children: ReactNode
-  kind: 'search' | 'sort'
-  onClose: () => void
-  title: string
-}) {
-  useEffect(() => {
-    const keyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      onClose()
-    }
-    window.addEventListener('keydown', keyDown)
-    return () => window.removeEventListener('keydown', keyDown)
-  }, [onClose])
-
-  return (
-    <div className="dark-cloud-modal-backdrop" role="presentation" onMouseDown={event => {
-      if (event.target === event.currentTarget) onClose()
-    }}>
-      <section className={`dark-cloud-modal dark-cloud-modal-${kind} dark-cloud-panel`} role="dialog" aria-modal="true" aria-label={title}>
-        <DarkCloudPanelOrnaments />
-        <div className="dark-cloud-panel-body">
-          <h2 className="dark-cloud-panel-caption">
-            <NativeDarkCloudText scale={0.68} text={title} />
-          </h2>
-          {children}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function DarkCloudDownloadProgress({
-  progress,
-}: {
-  progress: GameContentDownloadProgress | null
-}) {
-  if (!progress || progress.totalBytes === 0) return null
-  const percent = Math.min(100, Math.round(progress.completedBytes / progress.totalBytes * 100))
-  return (
-    <div
-      className="dark-cloud-download"
-      role="progressbar"
-      aria-label="Caching subscribed mod content"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-    >
-      <span style={{ width: `${percent}%` }} />
-      <small>{progress.active ? `DOWNLOADING ${progress.active.modId}` : 'CONTENT READY'} · {percent}%</small>
-    </div>
   )
 }
 
@@ -858,26 +424,17 @@ function columnLabels(tab: DarkCloudTab): readonly string[] {
   return ['MOD', 'AUTHOR', 'VERSION', 'STATUS', 'ACTION']
 }
 
-function statusLabel(tab: DarkCloudTab, count: number, query: string, loading: boolean): string {
-  if (tab === 'layouts') return 'MOBILE UI LAYOUTS'
-  if (loading && count === 0) return 'CONSULTING THE DARK CLOUD…'
-  if (query) return `"${query.toUpperCase()}" · ${count} ${count === 1 ? 'MATCH' : 'MATCHES'}`
-  if (tab === 'parties') return `${count} ${count === 1 ? 'PARTY' : 'PARTIES'}`
-  if (tab === 'subscribed') return `${count} SUBSCRIBED`
-  return `${count} ${count === 1 ? 'MOD' : 'MODS'}`
-}
-
 function emptyMessage(tab: DarkCloudTab, authenticated: boolean, query: string): string {
   if (tab === 'layouts') return ''
   if (query) return 'NOTHING MATCHES YOUR SEARCH.'
-  if (tab === 'parties') return 'NO PUBLIC PARTIES ARE FORMING RIGHT NOW.'
+  if (tab === 'parties') return 'NO PUBLIC PARTIES.'
   if (tab === 'subscribed') {
-    return authenticated ? 'YOU HAVE NOT SUBSCRIBED TO ANY MODS.' : 'SIGN IN TO SEE SUBSCRIBED MODS.'
+    return authenticated ? 'NO SUBSCRIBED MODS.' : 'SIGN IN TO SEE YOUR MODS.'
   }
   return 'NO MODS HAVE REACHED THE DARK CLOUD.'
 }
 
-function compareRows(first: DarkCloudRow, second: DarkCloudRow, sort: SortMode): number {
+function compareRows(first: DarkCloudRow, second: DarkCloudRow, sort: DarkCloudSort): number {
   if (first.kind === 'party' && second.kind === 'party') {
     if (sort === 'members') return second.party.memberCount - first.party.memberCount
     return first.party.leader.localeCompare(second.party.leader)
@@ -887,8 +444,4 @@ function compareRows(first: DarkCloudRow, second: DarkCloudRow, sort: SortMode):
   if (sort === 'downloads') return second.mod.downloads - first.mod.downloads
   if (sort === 'updated') return second.mod.updatedAtUtc.localeCompare(first.mod.updatedAtUtc)
   return second.mod.createdAtUtc.localeCompare(first.mod.createdAtUtc)
-}
-
-function message(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
 }

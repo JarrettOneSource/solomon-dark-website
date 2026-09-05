@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import AuthenticatedImage from '../components/AuthenticatedImage'
+import { NativeDarkCloudText, NativeUiControlPanelArt } from './native-ui/react.ts'
 
 interface DarkCloudMediaProps {
   alt: string
   className?: string
   eager?: boolean
+  fit?: 'contain' | 'cover'
   src: string | null
 }
 
@@ -12,6 +14,7 @@ export default function DarkCloudMedia({
   alt,
   className = '',
   eager = false,
+  fit = 'cover',
   src,
 }: DarkCloudMediaProps) {
   const [failed, setFailed] = useState(false)
@@ -20,6 +23,7 @@ export default function DarkCloudMedia({
 
   return (
     <span className={`dark-cloud-media ${className}`.trim()}>
+      <NativeUiControlPanelArt />
       {src && !failed ? (
         <AuthenticatedImage
           alt={alt}
@@ -27,6 +31,7 @@ export default function DarkCloudMedia({
           loading={eager ? 'eager' : 'lazy'}
           onLoadError={() => setFailed(true)}
           src={src}
+          style={{ objectFit: fit }}
         />
       ) : (
         <span
@@ -34,7 +39,7 @@ export default function DarkCloudMedia({
           role="img"
           aria-label={`No image available for ${alt}`}
         >
-          <span aria-hidden>NO IMAGE</span>
+          <NativeDarkCloudText align="center" font="medium" scale={0.85} text={'NO\nIMAGE'} tint={0xa99a70} />
         </span>
       )}
     </span>

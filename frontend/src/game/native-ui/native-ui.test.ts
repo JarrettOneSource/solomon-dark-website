@@ -1,3 +1,4 @@
+import { planNativeUiTabs } from './native-ui-tabs.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -16,7 +17,6 @@ import {
   NATIVE_UI_BUTTON,
   NATIVE_UI_MESSAGE,
   NATIVE_UI_STONE_BUTTON,
-  NATIVE_UI_TAB,
   layoutNativeUiSingleActionMessage,
   nativeUiMessageActionBounds,
   nativeUiRect,
@@ -27,15 +27,8 @@ import {
   planNativeUiMessageFrame,
   planNativeUiSimpleMenu,
   planNativeUiStoneButton,
-  planNativeUiTabs,
   type NativeUiNode,
 } from './native-ui-plan.ts'
-import {
-  NATIVE_DARK_CLOUD_PRESENTATION,
-  NATIVE_DARK_CLOUD_ROOT_RECORDS,
-  NATIVE_DARK_CLOUD_TABS,
-  planNativeDarkCloudToolButton,
-} from './native-dark-cloud-contract.ts'
 
 import {
   layoutNativeUiText,
@@ -433,92 +426,6 @@ test('stock green stone buttons use the exact idle and pressed faces', () => {
   }
 })
 
-test('Dark Cloud contract drains the complete stock root and footer membership', () => {
-  assert.deepEqual(NATIVE_DARK_CLOUD_PRESENTATION.design, { height: 900, width: 1_600 })
-  assert.deepEqual(NATIVE_DARK_CLOUD_PRESENTATION.geometry, {
-    accountBounds: { height: 50, left: 586, top: 58, width: 428 },
-    listBounds: { height: 627, left: 55, top: 173, width: 1_490 },
-    optionsBounds: { height: 52, left: 1_017.5, top: 818, width: 185 },
-    primaryBounds: { height: 69, left: 623.5, top: 809.5, width: 353 },
-    searchBounds: { height: 52, left: 390, top: 818, width: 90 },
-    searchPanelBounds: { height: 205, left: 540, top: 347.5, width: 520 },
-    sortBounds: { height: 52, left: 495, top: 818, width: 90 },
-    sortPanelBounds: { height: 255, left: 640, top: 347.5, width: 320 },
-    tabStripBounds: { height: 69, left: 460, top: 128, width: 882 },
-  })
-  assert.deepEqual(NATIVE_DARK_CLOUD_ROOT_RECORDS, [
-    'UI.29', 'UI.29', 'UI.31', 'UI.31', 'UI.32', 'UI.32',
-    'UI.20', 'UI.20', 'UI.20', 'UI.20',
-    'UI.107', 'UI.108', 'UI.109', 'UI.110',
-    'UI.17', 'UI.17', 'UI.17', 'UI.17',
-    'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13',
-    'UI.101', 'UI.54', 'UI.54',
-    'UI.103', 'UI.53', 'UI.53', 'UI.58',
-    'UI.103', 'UI.53', 'UI.53', 'UI.66',
-    'UI.103', 'UI.53', 'UI.53', 'UI.42',
-  ])
-  assert.deepEqual(NATIVE_DARK_CLOUD_TABS.map(tab => tab.bounds), [
-    { height: 69, left: 0, top: 0, width: 170 },
-    { height: 69, left: 170, top: 0, width: 340 },
-    { height: 69, left: 510, top: 0, width: 170 },
-    { height: 69, left: 680, top: 0, width: 202 },
-  ])
-})
-
-test('Dark Cloud tool controls use their distinct native body, surround, icon, and press states', () => {
-  const bounds = nativeUiRect(0, 0, 90, 52)
-  const search = planNativeDarkCloudToolButton({ bounds, iconRecord: 58, id: 'search' })
-  assert.deepEqual(search.nodes.map(node => node.label), [
-    'search:body', 'search:end-left', 'search:end-right', 'search:icon',
-  ])
-  assert.deepEqual(search.nodes.filter(node => node.kind === 'sprite').map(node => node.record), [103, 53, 53, 58])
-  const pressed = planNativeDarkCloudToolButton({ bounds, iconRecord: 66, id: 'sort', state: 'pressed' })
-  assert.equal(pressed.nodes[0]?.kind === 'sprite' && pressed.nodes[0].record, 104)
-  const options = planNativeDarkCloudToolButton({
-    bounds: nativeUiRect(0, 0, 185, 52),
-    id: 'options',
-    label: 'OPTIONS',
-  })
-  assert.equal(options.nodes.at(-1)?.kind, 'text')
-  assert.throws(
-    () => planNativeDarkCloudToolButton({ bounds, id: 'invalid' }),
-    /requires exactly one icon or label/,
-  )
-})
-
-test('Dark Cloud callers consume the semantic stock composition without retired crop skins', () => {
-  const scene = readFileSync(new URL('../DarkCloudScene.tsx', import.meta.url), 'utf8')
-  const panel = readFileSync(new URL('../DarkCloudPanel.tsx', import.meta.url), 'utf8')
-  const css = readFileSync(new URL('../dark-cloud.css', import.meta.url), 'utf8')
-  for (const semantic of [
-    'NativeDarkCloudHeading',
-    'NativeDarkCloudListFrameArt',
-    'NativeDarkCloudPrimaryButton',
-    'NativeDarkCloudSceneArt',
-    'NativeDarkCloudTabs',
-    'NativeDarkCloudToolButton',
-  ]) assert.match(scene, new RegExp(`<${semantic}`))
-  assert.match(panel, /<NativeDarkCloudPanelArt/)
-  for (const retired of [
-    'account-flourish.png',
-    'border-corner-',
-    'button-dark-',
-    'corner-gold.png',
-    'panel-edge-',
-    'search.png',
-    'sort.png',
-    'stone-button-selected.png',
-    'tab-bracket.png',
-    'wizard-left.png',
-    'wizard-right.png',
-  ]) {
-    assert.equal(scene.includes(retired) || panel.includes(retired) || css.includes(retired), false)
-  }
-  assert.doesNotMatch(css, /\.dark-cloud-tabs button\s*\{[^}]*border-radius/s)
-  assert.doesNotMatch(css, /\.dark-cloud-primary-button::(?:before|after)/)
-  assert.doesNotMatch(css, /\.dark-cloud-tool-button::(?:before|after)/)
-})
-
 test('stock tabs keep bracket X fixed and move only the selected Y contract', () => {
   const recent = nativeUiRect(460, 128, 170, 69)
   const online = nativeUiRect(630, 128, 340, 69)
@@ -536,14 +443,14 @@ test('stock tabs keep bracket X fixed and move only the selected Y contract', ()
   assert.ok(recentLeft?.kind === 'slice' && onlineLeft?.kind === 'slice')
   assert.equal(recentLeft.bounds.left, recent.left)
   assert.equal(onlineLeft.bounds.left, online.left)
-  assert.equal(recentLeft.bounds.top, recent.top + NATIVE_UI_TAB.restingTopTrim)
-  assert.equal(recentLeft.bounds.height, NATIVE_UI_TAB.restingHeight)
+  assert.equal(recentLeft.bounds.top, recent.top + 8)
+  assert.equal(recentLeft.bounds.height, 51)
   assert.equal(onlineLeft.bounds.top, online.top)
-  assert.equal(onlineLeft.bounds.height, NATIVE_UI_TAB.selectedHeight)
+  assert.equal(onlineLeft.bounds.height, 65)
   const recentLabel = plan.nodes.find(({ label }) => label === 'recent:label')
   const onlineLabel = plan.nodes.find(({ label }) => label === 'online:label')
   assert.ok(recentLabel?.kind === 'text' && onlineLabel?.kind === 'text')
-  assert.equal(recentLabel.text.y - onlineLabel.text.y, NATIVE_UI_TAB.selectedRise)
+  assert.equal(recentLabel.text.y - onlineLabel.text.y, 8)
 })
 
 test('stock messages compose exact chrome and one or two action rows in order', () => {
@@ -953,7 +860,7 @@ function nearRect(
   near(actual.height, expected[3], `${label} height`)
 }
 
-test('tabs stretch the plate column of UI.13 between the brackets', () => {
+test('tabs retain the rounded source top while clipping the resting plate at the bottom', () => {
   const plan = planNativeUiTabs({
     height: 900,
     selectedId: 'a',
@@ -968,11 +875,13 @@ test('tabs stretch the plate column of UI.13 between the brackets', () => {
   assert.ok(labels.indexOf('a:plate') < labels.indexOf('a:bracket-left'))
   const selected = partySlice(plan.nodes, 'a:plate')
   assert.deepEqual(selected.bounds, nativeUiRect(134, 50, 178, 65))
-  assert.deepEqual(selected.sourceUv, [NATIVE_UI_TAB.plateUvOrigin, 0, 1, 1])
-  assert.equal(selected.record, NATIVE_UI_TAB.bracketRecord)
+  assert.deepEqual(selected.sourceUv, [0.95, 0, 1, 1])
+  assert.equal(selected.record, 13)
   const resting = partySlice(plan.nodes, 'b:plate')
   assert.deepEqual(resting.bounds, nativeUiRect(380, 58, 178, 51))
-  assert.deepEqual(resting.sourceUv, [NATIVE_UI_TAB.plateUvOrigin, 8 / 65, 1, 1 - 6 / 65])
+  assert.deepEqual(resting.sourceUv, [0.95, 0, 1, 51 / 65])
+  assert.deepEqual(partySlice(plan.nodes, 'b:bracket-left').sourceUv, [0, 0, 1, 51 / 65])
+  assert.deepEqual(partySlice(plan.nodes, 'b:bracket-right').sourceUv, [0, 0, 1, 51 / 65])
   assert.ok(!labels.includes('c:plate'))
 })
 
@@ -1063,8 +972,8 @@ test('the party menu sits in message-box chrome with its own title and tab band'
     plan.actions.filter(action => action.role === 'tab').map(action => [action.id, action.bounds.left, action.bounds.width]),
     [['tab:members', 431, 246], ['tab:mods', 677, 246], ['tab:settings', 923, 246]],
   )
-  assert.equal(partyText(plan.nodes, 'tab:members:label').y, 226)
-  assert.equal(partyText(plan.nodes, 'tab:mods:label').y, 234)
+  assert.equal(partyText(plan.nodes, 'tab:members:label').y, 235)
+  assert.equal(partyText(plan.nodes, 'tab:mods:label').y, 243)
   assert.deepEqual(partySlice(plan.nodes, 'tab:members:plate').bounds, nativeUiRect(465, 190, 178, 65))
 })
 

@@ -21,7 +21,7 @@ import implementation files from outside `native-ui/`.
 - `native-ui/react-raw.ts`: exact low-level React sprite, strip, nine-slice,
   bitmap-text, and plan adapters.
 - `native-ui/react.ts`: semantic Button, MsgBox, Tabs, SimpleMenu, BoastMenu,
-  PartyMenu, Settings, and Notebox modules.
+  PartyMenu, Settings, Notebox, ControlPanel, Dialog, and Dark Cloud modules.
 
 The canonical architecture check rejects external imports that bypass these seams.
 Use the semantic interface whenever the stock composition already exists; the
@@ -403,10 +403,11 @@ the native root composition.
 
 ## Dark Cloud presentation
 
-`native-dark-cloud-contract.ts` owns the retail 1600 by 900 shell geometry and
-the complete record inventory for the background figures/flourishes, both list
-corner families, tab brackets, and Search/Sort/primary/Options footer controls.
-`NativeDarkCloudPresentation.tsx` exposes the semantic React composition:
+`native-dark-cloud-frame.ts` owns the repeated background bands, scene ornaments,
+chain rails, leather, and complete gold frames. `native-dark-cloud-contract.ts`
+owns the browser's tab bands and tool-control plans. The drawing plans are the
+inventory; do not maintain a separate array that can claim a missing draw exists.
+`NativeDarkCloudPresentation.tsx` exposes their semantic React composition:
 
 - `NativeDarkCloudSceneArt` and `NativeDarkCloudListFrameArt` paint the complete
   stock scene/frame membership;
@@ -416,17 +417,51 @@ corner families, tab brackets, and Search/Sort/primary/Options footer controls.
 - `NativeDarkCloudToolButton` owns `UI.103/.104`, paired `UI.53` surrounds,
   and the exact Search/Sort icons or Options label;
 - `NativeDarkCloudPrimaryButton` owns the `UI.101/.102` and `UI.54` family; and
-- `NativeDarkCloudPanelArt` paints the two recovered corner sets plus the two
-  side flourishes for Search, Sort, account-style, and Website extension
-  dialogs.
+- `NativeDarkCloudPanelArt` paints a black offset shadow, one foreground gold
+  frame, and the two side flourishes. The second native corner pass is the
+  shadow; painting it gold is incorrect.
 
 Desktop callers retain the exact native rectangles. Narrow and short browser
-surfaces scale those same plans inside semantic hosts, preserve at least
-44-pixel actions, and reflow content without replacing the stock art with a
-second mobile skin.
+surfaces size their semantic hosts to the available layout space and uniformly
+scale the artwork. Hit targets remain at least 44 pixels. Do not shrink a
+control with a CSS transform: that also shrinks its hit target and can leave
+its original layout box overflowing. Decorative frames use layout-aware zoom;
+viewport shadows remain in the clipped scene painter.
+
+`NativeUiButton` accepts `scale` for compact stock controls and `width="fill"`
+for flow/grid cells. `NativeUiStoneButton` also accepts `width="fill"`. Both
+button families and the Dark Cloud tools share pointer, keyboard, blur, and
+cancellation state. The tool family crops its full native face and moves pressed
+content by four native pixels; it preserves an undimmed gold surround.
+
+`NativeUiControlPanel` provides the stock black bevel (`ControlPanel.3`) or
+editable recess (`variant="field"`, `ControlPanel.5`). Its six- and three-pixel
+edges remain unchanged as the content grows. `NativeUiControlPanelAction`
+provides medium-font action/choice rows. `NativeUiControlPanelField` pairs a
+bitmap label with a browser-owned input and optional clear action. Reuse these
+surfaces for grouped metadata, comments, and layout-sharing controls.
+
+`NativeUiDialog` delegates modality, focus restoration, Escape, and cancellation
+to HTML `dialog`. The shared controller Back path requests native dialog
+cancellation when there is no declared back button. Focus cannot enter the
+inert page behind it; keyboard access to the browser's own controls remains
+available. CPanel actions and fields translate `autoFocus` into the existing
+`data-game-default-focus` marker. The dialog focuses that target after
+`showModal()` because React's mount-time autofocus runs while it is still hidden.
+Search/Sort have no invented Done footer.
+
+Use supported stock characters for fixed chrome: three ASCII periods, not a
+Unicode ellipsis, and ordinary punctuation instead of a middle dot. For external
+names or metadata, `NativeDarkCloudText content` preserves characters absent
+from the retail font in readable browser text. Descriptions and comments remain
+user prose; never drop their characters to make a bitmap-only check pass.
 
 `NativeUiTabs` similarly turns `planNativeUiTabs` into one semantic tablist
-whose visible art and hit rectangles come from the same plan. `NativeUiNotebox`
+whose visible art and hit rectangles come from the same plan. Its optional
+`scale` affects the artwork while the supplied bounds retain the full hit area;
+`tint` carries the native caller's text color without CSS glyph overrides.
+Resting tabs retain the rounded source top and clip only their bottom.
+`NativeUiNotebox`
 owns the recovered Notebox geometry, fixed-tick reveal/fade, pointer dismissal,
 and self-contained styles; its caller supplies only the notice and expiry
 effect.

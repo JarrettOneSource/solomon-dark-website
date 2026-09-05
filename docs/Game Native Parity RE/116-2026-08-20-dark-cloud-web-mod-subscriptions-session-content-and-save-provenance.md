@@ -332,3 +332,293 @@ the exact assets, typography, state substitutions, and painter grouping.
   canonical-gate receipt are recorded in Settings entry 130. No presentation
   member is browser-blocked. Commit, push, deployment, and production restart
   were not requested or performed.
+
+## 2026-09-05 — Reopened: missing tiled painters and mixed control vocabulary
+
+The earlier closure counted individual Sprite draws and matched isolated corners.
+It omitted the repeated draws, stretched edges, primitive shadows, and populated
+Website content. That was an incomplete painter census. In particular, the
+recorded second set of dialog corners is a **black shadow pass**, not another
+gold frame. The previous double-gold-frame assertion is withdrawn.
+
+### Evidence and causal trace
+
+- Candidate base: Website `01f07fde`. A fresh Mac Chrome guest journey through
+  `/game` reproduced the missing wall and rails, clipped resting tab tops,
+  double gold dialog corners, and generic HTML controls in Search, Sort,
+  mod details, and Layouts. No page or console errors were emitted.
+- `stone-wall.png` was deleted by `6100d25f` while `dark-cloud.css` retained its
+  URL. The generated UI atlas already contains the exact wall as `UI.30`.
+  Restoring a second crop would preserve the duplicate asset ownership.
+- Stock image identity was reverified: retail 0.72.5, 4,723,200 bytes,
+  SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred image base `0x00400000`. Read-only Ghidra queries used the canonical
+  `SolomonDark` project through the existing replica wrapper. No runtime PID or
+  ASLR address is used here. Tool provenance: Mod Loader revision
+  `08bfba9ef367f7b863848030d0a289dc31e33192`, wrapper SHA-256
+  `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`,
+  and `decompile_targets.py` SHA-256
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+- Reference images are the existing `dark-cloud-{browser,search,sort,options}.png`
+  fixtures. Their paired JSON identifies native UI/font/Sprite hooks; it also
+  contains stale draws from previous panels. Treat that JSON as supporting
+  instrumentation, not a complete clean-frame display list. Reconcile each
+  entry with the image and instructions.
+- `DarkCloudBrowser_Render 0x00594FC0` calls horizontal tiling `0x00415DE0`
+  with `UI` singleton field `+0x1730` (`UI.30`), and vertical tiling
+  `0x00415F00` with `+0x197C` (`UI.33`). These helpers repeat the source
+  logical width/height; they are absent from the earlier Sprite-hook census.
+  At 1600 by 900 the wall strips start at y=65 and y=800; filigree starts
+  at x=-74 and x=1540, y=0. The top curtain is opaque through y=50 and
+  fades out over the following 100 pixels (`0x00595753..0x00595812`).
+- `UiPanel_Render 0x005C3F40` receives `(40,161,1520,651,0)` from the
+  browser. Its `UI.10` horizontal rails are clipped to x=50..1550, with
+  tops y=159 and y=797. `UI.79` vertical rails start at x=40 and x=1543,
+  clipped to y=171..802. The four stone-corner centers are (77,198),
+  (1523,198), (77,775), and (1523,775). The browser then tiles `UI.49`
+  from (55,173), clips the leather to the inset (75,193,1450,587), shades
+  its 85-pixel heading band at alpha 0.5, and invokes the shared `UI.17`
+  nine-slice over (55,173,1490,627).
+- `0x00417E30` draws whole tab brackets and stretches their last 5% column.
+  The browser's resting pass translates down eight pixels and clips at y=187;
+  it does not crop eight pixels from the source top. Correct source UVs are
+  `(0,0,1,51/65)`. All consumers of the shared tab planner must use that rule.
+  The native Dark Cloud text pens are y=173 selected / y=181 resting,
+  heading y=50, account y=83 / y=101, and beta x=center+235, y=50.
+- `MyQuickCPanel` vtable `0x0079C014`, background painter `0x005DB7A0`,
+  paints an opaque black offset shadow using `+0x1F8`, including a black
+  `UI.17` pass. The shadow is visible down/right of the foreground frame.
+  `ControlPanel.3` supplies the beveled black rows, and `ControlPanel.5`
+  the text-entry recess. These records and the stock bitmap faces already
+  exist in the maintained UI kit.
+- Foreground `0x005DBC30` expands the panel frame and places the side
+  flourishes at the expanded edge centers plus/minus 45. `UI.18` has an
+  86-pixel logical width with a 19-pixel trim; using its 67-pixel packed width
+  as its logical size incorrectly moves the flourishes onto the frame.
+- `UiUnlabeledControl_Render 0x005C6A50` and labeled sibling `0x005C65A0`
+  clip the full `UI.103/.104` face at the control bounds, move pressed
+  content by four pixels (`0x007DE8C8`), and keep the `UI.53` surround
+  undimmed. Disabled content uses alpha 0.5 followed by a gray body overlay
+  at alpha 0.25. The surround includes its stretched last-column connector.
+- The reusable CPanel surface uses the existing `ControlPanel.3` six-pixel
+  right/bottom bevel and `ControlPanel.5` three-pixel recess. Atlas inspection
+  establishes these edge widths; the Website's variable-height content groups
+  preserve those edges rather than stretching them with the group.
+
+Measured reference/current mean RGB values establish a red-capable visual
+oracle: top wall `[13.37,13.00,12.17]` / `[2.28,2.22,2.11]`; top chain
+`[52.54,54.75,53.51]` / `[16.83,16.36,15.00]`; left chain
+`[55.89,56.03,52.77]` / `[14.80,14.40,13.27]`; left filigree
+`[34.53,31.81,25.03]` / `[2,2,2]`. Regions are respectively
+`[260,95,140,50]`, `[270,160,160,13]`, `[40,285,15,135]`, and
+`[5,275,30,145]`. A screenshot that only looks correct at the corners cannot
+satisfy these checks.
+
+### System boundary and membership
+
+The work owns Dark Cloud presentation from title ingress through retained
+catalog/selection, child dialogs, responsive projection, and teardown. Existing
+API, subscription, party, comments, gallery, and layout-sharing behavior stays
+with its current Website owners. The following are the implementation
+dispositions; the validation receipt below records their actual proof.
+
+| Member | Source | Disposition | Required proof |
+| --- | --- | --- | --- |
+| top/bottom wall and both filigree bands | `UI.30/.33`; `0x00595190..0x005952C3` | `exact-ported` | continuous native tiles and full-frame pixels |
+| top curtain and outside-frame shading | `0x00595753..0x005958E3` | `exact-ported` | stock gradient extents and painter order |
+| flourishes, four wizards, four side badges | `UI.29/.31/.32/.20` | `exact-ported` | native orientation and viewport-relative placement |
+| both horizontal and vertical chains, four stone corners | `UI.10/.79/.107..110`; `0x005C3F40` | `exact-ported` | all four rails, native clip/centers |
+| leather, header shade, complete gold frame | `UI.49/.17`; `0x005959CF..0x00595AEC` | `exact-ported` | continuous edges and textured center |
+| selected/resting/disabled tabs and bitmap labels | `UI.13`; `0x00417E30` | `exact-ported` | whole rounded top, source UVs, selection rise |
+| heading, beta, guest/named account | native heading/menu pens | `exact-ported` | authored baselines and guest link underline |
+| Search/Sort/Options and primary footer states | `UI.101..104/.53/.54/.58/.66` | `exact-ported` | connected surround, pointer and keyboard press |
+| Search/Sort/detail foreground, shadow, and flourishes | `MyQuickCPanel`, `UI.17/.18/.49` | `exact-ported` | one gold frame, black shadow, no overlapping corner duplicate |
+| search input, clear/commit, sort choices | `ControlPanel.3/.5`, stock bitmap wrappers | `exact-ported` | keyboard and pointer actions through native control surfaces |
+| mod/party rows and all inline actions | stock list text-selection plus Button family | `exact-ported` for presentation vocabulary | green selected text, native action art, preserved Website behavior |
+| detail metadata, gallery, versions, subscription, comments | Website content in native panels/controls | `exact-ported` for presentation vocabulary | every fixed heading/action uses the kit; arbitrary content remains readable |
+| loading, empty, download, refresh, retry/error states | bitmap status and native action vocabulary | `exact-ported` for presentation vocabulary | exercised state branches and no generic card skin |
+| Layouts load/publish/code receipt | Website feature in native field/action vocabulary | `exact-ported` for presentation vocabulary | load, submit, copy, error, guest/auth states |
+| developer party/match roster | Website data in the same list vocabulary | `exact-ported` for presentation vocabulary | native fixed labels and Observe action |
+| account service, catalog data, subscriptions, parties, comments, shared layouts | existing Website domain | `out-of-system` for native data parity | preserve current endpoints and behavior |
+| portrait/landscape/touch projection | browser viewport and input constraints | `exact-ported` for presentation vocabulary | zero overflow, scrolling, 44-pixel visible actions |
+| skull and Esc/Settings lifecycle | stage-owned skull and existing SimpleMenu | `verified-already-at-parity` | retained scene on return and shared control ownership |
+
+Website mods, arbitrary Unicode prose, and shared mobile layouts have no retail
+data counterpart. Their arrangement is a Website extension; their chrome must
+use the recovered vocabulary. No unsupported-glyph substitution or invented
+native content is an acceptable way to make the screenshot match.
+
+### Implementation and validation plan
+
+Keep native painter plans and semantic control surfaces inside `native-ui`.
+The Dark Cloud files retain data/state. Separate the tab planner from
+`native-ui-plan.ts` and update every caller; remove the superseded definitions.
+Replace the 1,942-line stylesheet with cohesive scene, content, and dialog
+styles, each including the responsive rules it owns. Remove the one-use panel
+forwarder, dead asset URL, CSS frame substitutes, duplicate gold corner pass,
+gradient action skins, and repetitive explanatory copy.
+
+Use the established pure native-plan and browser seams. First demonstrate the
+missing surfaces with the screenshot oracle, then validate all tabs, children,
+action states, and desktop/portrait/landscape layouts on the exact Mac tree.
+Run the canonical Website gate and available quality analyzers there. Record
+unavailable measurements explicitly; do not manufacture proxy scores.
+
+### Implementation validation receipt
+
+Implemented in the focused Website worktree on base
+`f9d736bf03e3d917ce1cf31dd3778a4423b40f94`. All execution below used the
+Mac mini acceptance worktree and pinned Node/.NET toolchain; the primary
+Website and Mod Loader checkouts were preserved.
+
+- The scene owns catalog, selection, and API actions. Rows, child dialogs,
+  gallery, comments, footer, and layout sharing have cohesive UI owners.
+  Native painters, control state, layout measurement, and modality belong to
+  the reusable kit. The 1,942-line CSS monolith is split into scene, content,
+  and dialog styles. The obsolete panel forwarder and fake record inventory
+  are removed, and all tab-planner callers use the canonical module.
+- The four pure drawing modules have 100% Istanbul statements, branches,
+  functions, and lines through the established Node tests. Their maximum
+  method CRAP scores are 1 (frame), 9 (tools), 4 (CPanel), and 13 (tabs).
+  This measurement does not cover React event handlers or browser lifecycle.
+- Source metrics measured 22 materially changed production files / 212
+  implementation units: maximum cyclomatic complexity 18, cognitive complexity
+  20, Halstead difficulty 62.47, and no explicit `any` or `unknown` types.
+  Every changed production file is below 1,000 handwritten lines, including
+  the retained 903-line plan module after extraction. Scoped jscpd analysis
+  over 27 changed production TS/TSX files found zero duplicated blocks.
+- The native UI workbench passed all atlas pages and the DOM button, tab,
+  Settings, and BoastMenu journeys with empty page/console/failed-response
+  arrays. This checks the shared tab and button consumers as well as Dark Cloud.
+- Production `build` passed TypeScript, Vite/game-host output, and the game
+  bundle budget. `smoke:game:dark-cloud-presentation` passed 1600 by 900,
+  DPR-2 390 by 844, 844 by 390, and 320 by 640 scenarios. Its controlled
+  fixtures cover Unicode search/clear, selected Sort focus on open/reopen,
+  controller bumper/d-pad/Back, Space press art, modal focus containment and
+  restoration, gallery navigation, comments, subscription toggles, developer
+  roster presentation, and guest/authenticated layout load/publish/copy UI.
+  Each scenario has zero layout problems and unexpected browser errors;
+  each intentionally returns one 503 before the Parties Retry regression.
+- `smoke:game:dark-cloud` passed against the built frontend and task-owned
+  Development API/database. Registration, comments, subscription mutations,
+  layout publication and guest load use real endpoints. Party directory data
+  remains an explicit browser fixture; this is not a live multiplayer receipt.
+  Page errors, console errors, failed responses, and unsupported bitmap labels
+  were empty. Seed content has no downloadable game assets (`cachedGameContent`
+  is zero), so cold mod-content download UI is not live-proven by this journey.
+- Built desktop geometry is list `[55,173,1490,627]`, tabs `[460,128,882,69]`,
+  selected/rest brackets `[460,128,34,65]` / `[630,136,34,51]`, Search
+  `[390,818,90,52]`, Sort `[495,818,90,52]`, primary
+  `[623.5,809.5,353,69]`, and Options `[1017.5,818,185,52]`. All recovered
+  record families and their connected slices are present. Stock-region
+  brightness means are now 13.62 / 54.24 / 54.89 / 30.75 versus reference
+  12.85 / 53.60 / 54.89 / 30.46; the original web values were
+  2.20 / 16.06 / 14.16 / 2.00.
+- Built portrait and landscape lists are `[12,140,366,629]` and
+  `[12,94,820,234]`, with zero settled horizontal overflow and a minimum
+  44-pixel visible action height. Phone gallery controls remain below the
+  image. Native bitmap fixed text and arbitrary Unicode content both remain
+  readable. The phone beta badge is hidden through its owning element so
+  inline bitmap layout styles cannot override the responsive rule.
+
+The canonical `/opt/homebrew/bin/bash ./scripts/validate.sh` run passed backend
+build/format, 20 Python contracts/integration tests, 2,902 Node tests, frontend
+lint, the production build/media checks, and renderer complexity, coverage,
+CRAP, dead-code, and duplication checks. It exited **1** solely on renderer
+mutation: 279 killed, 29 survived, one timeout, and 121 compile errors out of
+430 generated mutants. The 29 surviving diagnostic-label mutations are the
+existing baseline documented in entry 287 and `docs/renderer-quality.md`;
+this task does not claim a green canonical gate. After the final UI changes,
+frontend lint, all 118 native-UI/related tests, TypeScript/build, and both built
+Dark Cloud journeys passed again.
+
+The initial Stryker run over the four pure UI modules generated 418 mutants:
+157 killed, 63 survived, and 198 compile errors (no timeout). Meaningful
+regressions were added for the tab routes/visible labels, missing selection
+in a nonempty tab set, scaled label/edge positions, right-bracket mirroring,
+and solid dialog-shadow bounds. The redundant `state ?? 'idle'` expression
+was removed because absent state already yields the idle drawing conditions.
+All 62 surviving locations still present in the source were rechecked with
+Stryker ranges (64 generated mutants, including two nested locations). The
+recheck killed 31 and left **33 diagnostic-label string mutations**: eight in
+tools, 24 in frames, one in CPanel, and zero in tabs. No geometry or visible
+label survivor remains in that recheck. This is a targeted recheck, not a
+fresh whole-scope mutation score, and the zero-survivor gate remains unmet.
+
+Knip's full production graph reports six files in the changed scope: the
+development workbench entry, existing controller test-seam exports/types,
+public React kit exports/types, and existing plan/party-menu test-seam types.
+Unused row exports and the unused tab constant export were removed. The
+remaining public and test entrypoints have actual workbench/test consumers,
+which the production-only graph does not include; raw Knip findings were not
+suppressed or presented as a zero-finding UI gate. Full React event/lifecycle
+statement/branch coverage, UI-wide CRAP, and mutation coverage remain
+unmeasured by the configured renderer-only collection. No quality exclusions,
+ignore comments, artificial label assertions, or analyzer dependencies were
+added to change those results.
+This is an implementation and local acceptance receipt; no commit, push,
+deployment, or production restart was requested or performed.
+
+
+### Responsive and interaction closure
+
+- The 60-pixel outer shadow belonged to the viewport-clipped scene pass. Putting
+  it inside the list created a five-pixel scrollable overflow at 1600 by 900.
+  Moving the same shadow to its owning scene clip restored the native bounds.
+- Transformed fixed-width controls retained oversized layout boxes on phones.
+  The kit now uses actual layout dimensions for buttons and tabs, uniform art
+  scales, and full 44-pixel targets. The account action retains its 50-pixel
+  target while its bitmap text scales. Scaled frame extents determine the
+  12-pixel phone margin.
+- Tablet columns now remove the version track with its label and value. Party
+  columns preserve all membership/status/location fields, and their Refresh
+  action occupies the action column. Modded/private/Cheats notices stay visible
+  on phones.
+- The gallery's automatic aspect-ratio width transferred its minimum height
+  into an unwanted minimum width on 320-pixel screens. An explicit available
+  width preserves the image area. Gallery navigation is below the image so its
+  buttons cannot cover content. Stone Done buttons fit the available width.
+- On small phones the two-column layout receipt allowed its bitmap share code
+  to extend under Copy. One column keeps the code, author, and action separate;
+  a production browser assertion checks their painted bounds for overlap.
+- A pre-existing Retry wiring defect reloaded mods when the Parties directory
+  failed. A controlled 503 reproduced the failure within two seconds; the
+  shared refresh action now retries the active directory and updates its real
+  loading state.
+- Search and Sort use native dialog cancellation for controller Back as well
+  as Escape. The old controller path required a declared back button, so B did
+  nothing on these action-complete sheets. The real controller journey now
+  closes them and preserves selection/focus.
+- React attempted autofocus before the native dialog was visible. Chrome
+  initially focused a transient scroll container, then lost focus when that
+  container resized. Applying the existing default-focus target after
+  `showModal()` restores the selected sort choice and the first controller
+  navigation step. The production journey verifies open and reopen behavior.
+- Mobile acceptance enters through the existing landscape title gate and then
+  rotates inside Dark Cloud, where portrait is supported. No startup gate was
+  removed to make the test pass.
+
+### Copy cleanup
+
+| Location | Before | After |
+| --- | --- | --- |
+| Layouts introduction | Load a shared mobile layout on any device. A Website account is required only to submit one. | Omitted; the two labeled actions carry the flow. |
+| Layout load note | Loading replaces the mobile layout saved in this browser. No account is needed. | Replaces the layout saved on this device. |
+| Layout publish introduction | Publish the mobile layout currently saved in Settings and receive an immutable share code. | Omitted. |
+| Guest publish note | Sign in to submit. You can still load any shared code. | Sign in to submit. |
+| Uncustomized layout note | Customize and save a mobile layout in Game Settings first. | Save a layout in Game Settings first. |
+| Published-code note | Submitting creates a new code and does not change older shared layouts. | Each submission creates a new share code. |
+| Layout footer | SHARE A CODE. LOAD IT ANYWHERE. | Omitted. |
+| Comment placeholder | Share a useful note about this mod… | Write a comment... |
+| Empty subscriptions | YOU HAVE NOT SUBSCRIBED TO ANY MODS. | NO SUBSCRIBED MODS. |
+| Guest subscriptions | SIGN IN TO SEE SUBSCRIBED MODS. | SIGN IN TO SEE YOUR MODS. |
+| Empty parties | NO PUBLIC PARTIES ARE FORMING RIGHT NOW. | NO PUBLIC PARTIES. |
+| Download status | DOWNLOADING plus the internal mod ID | DOWNLOADING MOD CONTENT |
+| Developer matches heading | ACTIVE MATCHES · ALL VISIBILITIES | ACTIVE MATCHES |
+| Empty developer rosters | NO WIZARDS ARE CONNECTED RIGHT NOW. / NO BONEYARD MATCHES ARE ACTIVE. | NO CONNECTED WIZARDS. / NO ACTIVE MATCHES. |
+| Fixed waiting/sort labels | Unicode ellipsis | Three supported ASCII periods. |
+| Party mod notice | MODDED · count | MODDED (count) |
+| Name/tag/progress separators | Middle dot | Supported comma punctuation. |
+| Absent changelog | No changelog supplied. | No invented replacement text. |
+
+Arbitrary descriptions, changelogs, comments, and names are preserved.

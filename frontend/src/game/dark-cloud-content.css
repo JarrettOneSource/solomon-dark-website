@@ -1,0 +1,537 @@
+.dark-cloud-columns {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  grid-template-columns: minmax(260px, 1fr) 120px 90px 165px 300px;
+  gap: 12px;
+}
+
+.dark-cloud-columns > span:not(:first-child) {
+  text-align: center;
+}
+
+.dark-cloud-columns > span:has(button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dark-cloud-columns > span > button {
+  position: relative;
+}
+
+.dark-cloud-list-status {
+  display: none;
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+.dark-cloud-rows {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 4px 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #876d37 #080808;
+  scrollbar-width: thin;
+}
+
+.dark-cloud-row {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  border-bottom: 1px solid rgb(210 178 99 / 0.12);
+}
+
+.dark-cloud-row.dark-cloud-party-row {
+  grid-template-columns: minmax(0, 1fr) 160px;
+}
+
+.dark-cloud-columns.dark-cloud-columns-parties {
+  grid-template-columns: minmax(0, 1fr) 120px 90px 165px 160px;
+}
+
+.dark-cloud-row-main {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-items: center;
+  gap: 12px;
+  grid-template-columns: 58px minmax(0, 1fr) 120px 90px 165px;
+  padding: 6px 0;
+  border: 0;
+  color: #d9ba70;
+  background: transparent;
+  text-align: left;
+}
+
+.dark-cloud-row-main:focus-visible {
+  outline: 1px solid #d9ba70;
+  outline-offset: -3px;
+}
+
+.dark-cloud-row-copy {
+  display: block;
+  min-width: 0;
+}
+
+.dark-cloud-row-copy > strong, .dark-cloud-row-copy > small, .dark-cloud-row-copy > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark-cloud-row-copy > small {
+  margin-top: 3px;
+  color: #b2a78d;
+  font: 14px/1.25 var(--font-narrative);
+}
+
+.dark-cloud-row-tags {
+  margin-top: 3px;
+}
+
+.dark-cloud-row-author, .dark-cloud-row-version, .dark-cloud-row-state, .dark-cloud-party-members, .dark-cloud-party-status, .dark-cloud-party-location {
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+}
+
+.dark-cloud-row-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 8px 10px 14px;
+}
+
+.dark-cloud-row-actions .native-ui-button {
+  flex: 1 1 0;
+  min-width: 77px;
+  max-width: 130px;
+}
+
+.dark-cloud-media {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.dark-cloud-media > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dark-cloud-media-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  place-items: center;
+  text-align: center;
+}
+
+.dark-cloud-row-thumbnail {
+  width: 56px;
+  height: 56px;
+}
+
+.dark-cloud-party-mark {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+}
+
+.dark-cloud-row-copy > .dark-cloud-party-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 3px;
+}
+
+.dark-cloud-party-flags em {
+  font-style: normal;
+}
+
+.dark-cloud-empty {
+  margin: 48px auto;
+  padding: 0 12px;
+  color: #bfffbf;
+  text-align: center;
+}
+
+.dark-cloud-empty-error p {
+  margin: 0 0 16px;
+  font: 16px/1.4 var(--font-narrative);
+}
+
+.dark-cloud-empty-error .native-ui-button {
+  max-width: 170px;
+  margin: auto;
+}
+
+.dark-cloud-layouts {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+  grid-row: 1 / -1;
+  overscroll-behavior: contain;
+}
+
+.dark-cloud-layouts > header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.dark-cloud-layouts h2, .dark-cloud-layouts h3 {
+  margin: 0;
+}
+
+.dark-cloud-layout-sections {
+  display: grid;
+  max-width: 980px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  margin: auto;
+}
+
+.dark-cloud-layout-section h3 {
+  margin: 0 0 12px 10px;
+}
+
+.dark-cloud-layout-section p {
+  margin: 12px 10px 0;
+  color: #b2a78d;
+  font: 15px/1.4 var(--font-narrative);
+}
+
+.dark-cloud-layout-section input {
+  font-family: var(--font-mono);
+  text-align: center;
+  letter-spacing: 0.08em;
+}
+
+.dark-cloud-layout-receipt {
+  display: grid;
+  max-width: 800px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto auto 130px;
+  gap: 12px 18px;
+  margin: 30px auto 0;
+}
+
+.dark-cloud-layout-receipt output {
+  user-select: all;
+}
+
+.dark-cloud-layout-error {
+  margin: 24px auto;
+  color: #e4a39a;
+  font: 16px/1.4 var(--font-narrative);
+}
+
+.dark-cloud-dev-presence {
+  margin-top: 24px;
+}
+
+.dark-cloud-dev-presence-heading, .dark-cloud-dev-subheading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.dark-cloud-dev-presence-row {
+  display: grid;
+  min-height: 54px;
+  align-items: center;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 1.5fr) 140px 100px minmax(130px, 1fr) minmax(140px, 1fr);
+}
+
+.dark-cloud-dev-match-row {
+  display: grid;
+  min-height: 62px;
+  align-items: center;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 1fr) 100px 100px 140px 110px;
+}
+
+.dark-cloud-dev-presence-wizard > strong, .dark-cloud-dev-presence-wizard > small, .dark-cloud-dev-match-row > span > strong, .dark-cloud-dev-match-row > span > small {
+  display: block;
+}
+
+.dark-cloud-dev-presence-note {
+  color: #b2a78d;
+  font: 15px/1.4 var(--font-narrative);
+}
+
+.native-ui-content-text {
+  color: #d9ba70;
+  font-family: var(--font-display);
+}
+
+@media (max-width: 1300px) {
+  .dark-cloud-columns {
+    grid-template-columns: minmax(180px, 1fr) 95px 75px 135px 270px;
+    gap: 8px;
+  }
+
+  .dark-cloud-row {
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+
+  .dark-cloud-row-main {
+    grid-template-columns: 52px minmax(0, 1fr) 95px 75px 135px;
+    gap: 8px;
+  }
+
+  .dark-cloud-columns.dark-cloud-columns-parties {
+    grid-template-columns: minmax(0, 1fr) 95px 75px 135px 160px;
+  }
+
+  .dark-cloud-row-actions {
+    gap: 8px;
+    padding-inline: 6px;
+  }
+
+}
+
+@media (max-width: 1050px) {
+  .dark-cloud-columns {
+    grid-template-columns: minmax(0, 1fr) 95px 135px 270px;
+  }
+
+  .dark-cloud-columns.dark-cloud-columns-parties {
+    grid-template-columns: minmax(0, 1fr) 75px 85px 125px 160px;
+  }
+
+  .dark-cloud-columns:not(.dark-cloud-columns-parties) > span:nth-child(3), .dark-cloud-row-version {
+    display: none;
+  }
+
+  .dark-cloud-row-main {
+    grid-template-columns: 52px minmax(0, 1fr) 95px 135px;
+  }
+
+  .dark-cloud-party-row .dark-cloud-row-main {
+    grid-template-columns: 52px minmax(0, 1fr) 75px 85px 125px;
+  }
+
+  .dark-cloud-dev-presence-row {
+    grid-template-columns: minmax(120px, 1.3fr) 110px 90px minmax(100px, 1fr) minmax(100px, 1fr);
+    gap: 8px;
+  }
+
+  .dark-cloud-dev-match-row {
+    grid-template-columns: minmax(150px, 1fr) 80px 90px 120px 100px;
+    gap: 8px;
+  }
+
+}
+
+@media (max-width: 880px) {
+  .dark-cloud-columns {
+    grid-template-columns: minmax(0, 1fr) 80px 135px 200px;
+  }
+
+  .dark-cloud-row {
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+
+  .dark-cloud-row-main {
+    grid-template-columns: 52px minmax(0, 1fr) 80px 135px;
+  }
+
+  .dark-cloud-row-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 9px;
+  }
+
+  .dark-cloud-row-actions .native-ui-button {
+    max-width: none;
+  }
+
+  .dark-cloud-layout-sections {
+    gap: 24px;
+  }
+
+}
+
+@media (max-width: 700px) {
+  .dark-cloud-columns {
+    display: none;
+  }
+
+  .dark-cloud-list-status {
+    display: flex;
+    min-height: 34px;
+    padding: 2px 3px;
+  }
+
+  .dark-cloud-list-status .native-ui-button {
+    flex: 0 0 120px;
+  }
+
+  .dark-cloud-rows {
+    padding: 4px 0 8px;
+  }
+
+  .dark-cloud-row {
+    display: block;
+    min-height: 0;
+    padding-bottom: 4px;
+  }
+
+  .dark-cloud-row-main {
+    width: 100%;
+    min-height: 78px;
+    padding: 8px 3px;
+    grid-template-areas: 'media copy' 'media author' 'media state';
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 2px 9px;
+  }
+
+  .dark-cloud-row-thumbnail, .dark-cloud-party-mark {
+    width: 44px;
+    height: 48px;
+    grid-area: media;
+  }
+
+  .dark-cloud-row-thumbnail [data-native-ui-font] {
+    transform: scale(0.75);
+  }
+
+  .dark-cloud-row-copy {
+    grid-area: copy;
+  }
+
+  .dark-cloud-row-copy > small {
+    font-size: 13px;
+  }
+
+  .dark-cloud-row-tags {
+    display: none;
+  }
+
+  .dark-cloud-row-author {
+    grid-area: author;
+    text-align: left;
+  }
+
+  .dark-cloud-row-version + .dark-cloud-row-state {
+    grid-area: state;
+    text-align: left;
+  }
+
+  .dark-cloud-row-actions {
+    padding: 4px 4px 8px;
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  .dark-cloud-row:not(.selected) .dark-cloud-row-actions {
+    display: none;
+  }
+
+  .dark-cloud-party-row .dark-cloud-row-main {
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas: 'media copy' 'media members' 'media status' 'media location';
+  }
+
+  .dark-cloud-party-members {
+    grid-area: members;
+    text-align: left;
+  }
+
+  .dark-cloud-party-status {
+    grid-area: status;
+    text-align: left;
+  }
+
+  .dark-cloud-party-location {
+    grid-area: location;
+    text-align: left;
+  }
+
+  .dark-cloud-empty {
+    margin: 32px auto;
+    padding: 0 3px;
+  }
+
+  .dark-cloud-layouts {
+    padding: 8px 4px;
+  }
+
+  .dark-cloud-layouts > header {
+    margin-bottom: 24px;
+  }
+
+  .dark-cloud-layout-sections {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .dark-cloud-layout-receipt {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .dark-cloud-dev-presence-row, .dark-cloud-dev-match-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 10px 0;
+  }
+
+  .dark-cloud-dev-presence-wizard, .dark-cloud-dev-match-row > span:first-child {
+    flex: 1 0 100%;
+  }
+
+  .dark-cloud-dev-match-row .native-ui-button {
+    flex: 0 0 100px;
+    margin-left: auto;
+  }
+
+}
+
+@media (max-height: 620px) and (min-width: 701px) {
+  .dark-cloud-row, .dark-cloud-row-main {
+    min-height: 64px;
+  }
+
+  .dark-cloud-row-copy > small, .dark-cloud-row-tags {
+    display: none;
+  }
+
+  .dark-cloud-layouts > header {
+    margin-bottom: 18px;
+  }
+
+  .dark-cloud-layout-section p {
+    font-size: 13px;
+  }
+
+}

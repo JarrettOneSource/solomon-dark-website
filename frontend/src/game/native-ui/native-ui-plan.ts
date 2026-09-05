@@ -135,21 +135,6 @@ export interface NativeUiStoneButtonSpec extends NativeUiButtonChromeSpec {
   readonly label: string
 }
 
-export interface NativeUiTabSpec {
-  readonly bounds: NativeUiRect
-  readonly disabled?: boolean
-  readonly id: string
-  readonly label: string
-  readonly labelBaselineY?: number
-}
-
-export interface NativeUiTabsSpec {
-  readonly height: number
-  readonly selectedId: string
-  readonly tabs: readonly NativeUiTabSpec[]
-  readonly width: number
-}
-
 export interface NativeUiMessageAction {
   readonly bounds?: NativeUiRect
   readonly id: string
@@ -244,17 +229,6 @@ export const NATIVE_UI_STONE_BUTTON = Object.freeze({
   sourceHeight: 41,
   sourceWidth: 141,
   textTint: 0xf2f0dc,
-})
-
-export const NATIVE_UI_TAB = Object.freeze({
-  bracketRecord: 13,
-  bracketWidth: 34,
-  plateUvOrigin: 0.95,
-  restingBottomTrim: 6,
-  restingHeight: 51,
-  restingTopTrim: 8,
-  selectedHeight: 65,
-  selectedRise: 8,
 })
 
 export const NATIVE_UI_MESSAGE = Object.freeze({
@@ -627,86 +601,6 @@ export function planNativeUiStoneButton(spec: NativeUiStoneButtonSpec): NativeUi
     actions: [{ bounds: spec.bounds, disabled, id: spec.id, role: 'button' }],
     nodes,
   }
-}
-
-export function planNativeUiTabs(spec: NativeUiTabsSpec): NativeUiPlan {
-  if (!spec.tabs.some(({ id }) => id === spec.selectedId)) {
-    throw new RangeError(`native UI selected tab ${spec.selectedId} is absent`)
-  }
-  const fragments = spec.tabs.map((tab): NativeUiFragment => {
-    const selected = tab.id === spec.selectedId
-    const top = tab.bounds.top + (selected ? 0 : NATIVE_UI_TAB.restingTopTrim)
-    const bracketHeight = selected ? NATIVE_UI_TAB.selectedHeight : NATIVE_UI_TAB.restingHeight
-    const rightX = tab.bounds.left + tab.bounds.width - NATIVE_UI_TAB.bracketWidth
-    const sourceUv = selected
-      ? [0, 0, 1, 1] as const
-      : [
-          0,
-          NATIVE_UI_TAB.restingTopTrim / NATIVE_UI_TAB.selectedHeight,
-          1,
-          1 - NATIVE_UI_TAB.restingBottomTrim / NATIVE_UI_TAB.selectedHeight,
-        ] as const
-    const labelBaselineY = (tab.labelBaselineY ?? tab.bounds.top + 44)
-      - (selected ? NATIVE_UI_TAB.selectedRise : 0)
-    const plateWidth = tab.bounds.width - NATIVE_UI_TAB.bracketWidth * 2
-    // UI.13 carries the tab's dark plate and gold top edge along with the bracket.
-    // Retail stretches its last column across the middle, the way the button
-    // stretches UI.54, so the plate reaches from bracket to bracket.
-    const plate: NativeUiNode[] = plateWidth > 0
-      ? [{
-          alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
-          atlas: 'UI',
-          bounds: nativeUiRect(
-            tab.bounds.left + NATIVE_UI_TAB.bracketWidth,
-            top,
-            plateWidth,
-            bracketHeight,
-          ),
-          kind: 'slice',
-          label: `${tab.id}:plate`,
-          record: NATIVE_UI_TAB.bracketRecord,
-          sourceUv: [NATIVE_UI_TAB.plateUvOrigin, sourceUv[1], 1, sourceUv[3]],
-        }]
-      : []
-    return {
-      actions: [{ bounds: tab.bounds, disabled: tab.disabled ?? false, id: tab.id, role: 'tab' }],
-      nodes: [
-        ...plate,
-        {
-          alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
-          atlas: 'UI',
-          bounds: nativeUiRect(tab.bounds.left, top, NATIVE_UI_TAB.bracketWidth, bracketHeight),
-          kind: 'slice',
-          label: `${tab.id}:bracket-left`,
-          record: NATIVE_UI_TAB.bracketRecord,
-          sourceUv,
-        },
-        {
-          alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
-          atlas: 'UI',
-          bounds: nativeUiRect(rightX, top, NATIVE_UI_TAB.bracketWidth, bracketHeight),
-          kind: 'slice',
-          label: `${tab.id}:bracket-right`,
-          mirrorX: true,
-          record: NATIVE_UI_TAB.bracketRecord,
-          sourceUv,
-        },
-        {
-          kind: 'text',
-          label: `${tab.id}:label`,
-          text: {
-            alpha: tab.disabled ? NATIVE_UI_BUTTON.disabledAlpha : 1,
-            font: 'menu',
-            text: tab.label,
-            tint: selected ? 0xffffff : 0xaaa2a6,
-            x: tab.bounds.left + tab.bounds.width / 2,
-            y: labelBaselineY,
-          },
-        },
-      ],
-    }
-  })
-  return nativeUiPlan(spec.width, spec.height, ...fragments)
 }
 
 export function planNativeUiMessageFrame(spec: NativeUiMessageFrameSpec): NativeUiPlan {

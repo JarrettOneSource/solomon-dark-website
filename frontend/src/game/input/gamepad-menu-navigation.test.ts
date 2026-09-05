@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  activateMenuBack,
   chooseInitialMenuTarget,
   chooseSpatialTarget,
   readMenuGamepad,
@@ -114,33 +113,4 @@ test('initial navigation waits for a declared default instead of falling into an
   assert.equal(chooseInitialMenuTarget([back], [preferred]), null)
   assert.equal(chooseInitialMenuTarget([back, preferred], [preferred]), preferred)
   assert.equal(chooseInitialMenuTarget([back], []), back)
-})
-
-test('the menu skull backs out of the topmost modal through its back owner, else reports no modal', () => {
-  // Minimal DOM: matchingElements() consults `instanceof HTMLElement` and isVisible()
-  // consults getComputedStyle(); neither exists under node:test.
-  const globals = globalThis as Record<string, unknown>
-  const previous = { HTMLElement: globals.HTMLElement, getComputedStyle: globals.getComputedStyle }
-  globals.HTMLElement = class {}
-  globals.getComputedStyle = () => ({ visibility: 'visible' })
-  const clicks: string[] = []
-  const node = (name: string, { backs = [], modals = [] }: { backs?: unknown[]; modals?: unknown[] } = {}) => ({
-    click: () => clicks.push(name),
-    getClientRects: () => [{}],
-    querySelectorAll: (selector: string) => (selector.includes('data-game-back') ? backs : modals),
-  })
-  const stage = (modals: unknown[]) => (
-    node('stage', { backs: [node('title-back')], modals }) as unknown as ParentNode
-  )
-  try {
-    const picker = node('picker')
-    const settings = node('settings', { backs: [node('settings-done')] })
-    assert.equal(activateMenuBack(stage([])), 'no-modal')
-    assert.equal(activateMenuBack(stage([picker])), 'modal-without-back')
-    assert.equal(activateMenuBack(stage([picker, settings])), 'activated')
-    assert.deepEqual(clicks, ['settings-done'], 'only the topmost modal\'s back owner is pressed')
-  } finally {
-    globals.HTMLElement = previous.HTMLElement
-    globals.getComputedStyle = previous.getComputedStyle
-  }
 })

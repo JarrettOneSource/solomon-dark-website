@@ -9,6 +9,22 @@
   border: 0;
 }
 
+.native-ui-dialog {
+  position: fixed;
+  inset: 0;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.native-ui-dialog::backdrop { background: transparent; }
+.native-ui-dialog:not([open]) { display: none; }
+
 .native-ui-boast-menu {
   display: block;
   isolation: isolate;

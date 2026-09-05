@@ -1,154 +1,92 @@
+import type { NativeUiTab } from './native-ui-tabs.ts'
 import {
   nativeUiRect,
   type NativeUiButtonState,
   type NativeUiFragment,
   type NativeUiNode,
   type NativeUiRect,
-  type NativeUiTabSpec,
 } from './native-ui-plan.ts'
-
-export const NATIVE_DARK_CLOUD_PRESENTATION = Object.freeze({
-  design: Object.freeze({ height: 900, width: 1_600 }),
-  fonts: Object.freeze({ heading: 'heading' as const, menu: 'menu' as const }),
-  geometry: Object.freeze({
-    accountBounds: nativeUiRect(586, 58, 428, 50),
-    listBounds: nativeUiRect(55, 173, 1_490, 627),
-    optionsBounds: nativeUiRect(1_017.5, 818, 185, 52),
-    primaryBounds: nativeUiRect(623.5, 809.5, 353, 69),
-    searchBounds: nativeUiRect(390, 818, 90, 52),
-    searchPanelBounds: nativeUiRect(540, 347.5, 520, 205),
-    sortBounds: nativeUiRect(495, 818, 90, 52),
-    sortPanelBounds: nativeUiRect(640, 347.5, 320, 255),
-    tabStripBounds: nativeUiRect(460, 128, 882, 69),
-  }),
-  records: Object.freeze({
-    frameGold: Object.freeze({ atlas: 'UI' as const, record: 17 }),
-    frameStoneBottomLeft: Object.freeze({ atlas: 'UI' as const, record: 109 }),
-    frameStoneBottomRight: Object.freeze({ atlas: 'UI' as const, record: 110 }),
-    frameStoneTopLeft: Object.freeze({ atlas: 'UI' as const, record: 107 }),
-    frameStoneTopRight: Object.freeze({ atlas: 'UI' as const, record: 108 }),
-    menuSkull: Object.freeze({ atlas: 'UI' as const, record: 42 }),
-    panelFlourish: Object.freeze({ atlas: 'UI' as const, record: 18 }),
-    primaryIdle: Object.freeze({ atlas: 'UI' as const, record: 101 }),
-    primaryPressed: Object.freeze({ atlas: 'UI' as const, record: 102 }),
-    primarySurround: Object.freeze({ atlas: 'UI' as const, record: 54 }),
-    sceneFlourish: Object.freeze({ atlas: 'UI' as const, record: 29 }),
-    sceneSideOrnament: Object.freeze({ atlas: 'UI' as const, record: 20 }),
-    sceneWizardShort: Object.freeze({ atlas: 'UI' as const, record: 32 }),
-    sceneWizardTall: Object.freeze({ atlas: 'UI' as const, record: 31 }),
-    searchIcon: Object.freeze({ atlas: 'UI' as const, record: 58 }),
-    sortIcon: Object.freeze({ atlas: 'UI' as const, record: 66 }),
-    tabBracket: Object.freeze({ atlas: 'UI' as const, record: 13 }),
-    toolIdle: Object.freeze({ atlas: 'UI' as const, record: 103 }),
-    toolPressed: Object.freeze({ atlas: 'UI' as const, record: 104 }),
-    toolSurround: Object.freeze({ atlas: 'UI' as const, record: 53 }),
-  }),
-})
 
 export const NATIVE_DARK_CLOUD_TABS = Object.freeze([
   Object.freeze({ bounds: nativeUiRect(0, 0, 170, 69), id: 'mods', label: 'MODS' }),
   Object.freeze({ bounds: nativeUiRect(170, 0, 340, 69), id: 'subscribed', label: 'SUBSCRIBED MODS' }),
   Object.freeze({ bounds: nativeUiRect(510, 0, 170, 69), id: 'parties', label: 'PARTIES' }),
   Object.freeze({ bounds: nativeUiRect(680, 0, 202, 69), id: 'layouts', label: 'LAYOUTS' }),
-] satisfies readonly NativeUiTabSpec[])
+] satisfies readonly NativeUiTab[])
 
-export const NATIVE_DARK_CLOUD_ROOT_RECORDS = Object.freeze([
-  'UI.29', 'UI.29',
-  'UI.31', 'UI.31',
-  'UI.32', 'UI.32',
-  'UI.20', 'UI.20', 'UI.20', 'UI.20',
-  'UI.107', 'UI.108', 'UI.109', 'UI.110',
-  'UI.17', 'UI.17', 'UI.17', 'UI.17',
-  'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13', 'UI.13',
-  'UI.101', 'UI.54', 'UI.54',
-  'UI.103', 'UI.53', 'UI.53', 'UI.58',
-  'UI.103', 'UI.53', 'UI.53', 'UI.66',
-  'UI.103', 'UI.53', 'UI.53',
-  'UI.42',
-] as const)
-
-interface NativeDarkCloudToolButtonSpec {
+type NativeDarkCloudToolButtonSpec = {
   readonly bounds: NativeUiRect
-  readonly iconRecord?: number
   readonly id: string
-  readonly label?: string
   readonly state?: NativeUiButtonState
-}
+  readonly scale?: number
+} & (
+  | { readonly iconRecord: number; readonly label?: never }
+  | { readonly iconRecord?: never; readonly label: string }
+)
 
-export function planNativeDarkCloudToolButton(
-  spec: NativeDarkCloudToolButtonSpec,
-): NativeUiFragment {
-  if ((spec.iconRecord === undefined) === (spec.label === undefined)) {
-    throw new TypeError('native Dark Cloud tool button requires exactly one icon or label')
-  }
-  const state = spec.state ?? 'idle'
+export function planNativeDarkCloudToolButton(spec: NativeDarkCloudToolButtonSpec): NativeUiFragment {
+  const state = spec.state
   const disabled = state === 'disabled'
   const pressed = state === 'pressed' || state === 'selected'
-  const alpha = disabled ? 0.45 : 1
+  const scale = spec.scale ?? 1
   const { bounds } = spec
-  const offset = pressed ? 1 : 0
-  const nodes: NativeUiNode[] = [
-    {
-      alpha,
-      atlas: 'UI',
-      height: bounds.height,
-      kind: 'sprite',
-      label: `${spec.id}:body`,
-      record: pressed
-        ? NATIVE_DARK_CLOUD_PRESENTATION.records.toolPressed.record
-        : NATIVE_DARK_CLOUD_PRESENTATION.records.toolIdle.record,
-      width: bounds.width,
-      x: bounds.left,
-      y: bounds.top,
-    },
-    {
-      alpha,
-      atlas: 'UI',
-      kind: 'sprite',
-      label: `${spec.id}:end-left`,
-      record: NATIVE_DARK_CLOUD_PRESENTATION.records.toolSurround.record,
-      x: bounds.left - 6,
-      y: bounds.top - 6,
-    },
-    {
-      alpha,
-      atlas: 'UI',
-      kind: 'sprite',
-      label: `${spec.id}:end-right`,
-      mirrorX: true,
-      record: NATIVE_DARK_CLOUD_PRESENTATION.records.toolSurround.record,
-      x: bounds.left + bounds.width + 6,
-      y: bounds.top - 6,
-    },
-  ]
+  const offset = pressed ? 4 * scale : 0
+  const centerX = bounds.left + bounds.width / 2
+  const centerY = bounds.top + bounds.height / 2
+  const content: NativeUiNode[] = [{
+    anchor: [0.5, 0.5],
+    atlas: 'UI',
+    kind: 'sprite',
+    label: `${spec.id}:body`,
+    record: pressed ? 104 : 103,
+    scale,
+    x: centerX,
+    y: centerY,
+  }]
   if (spec.iconRecord !== undefined) {
-    nodes.push({
-      alpha,
+    content.push({
+      alpha: disabled ? 0.5 : 1,
       anchor: [0.5, 0.5],
       atlas: 'UI',
       kind: 'sprite',
       label: `${spec.id}:icon`,
       record: spec.iconRecord,
-      x: bounds.left + bounds.width / 2 + offset,
-      y: bounds.top + bounds.height / 2 + offset,
+      scale,
+      x: centerX + offset,
+      y: centerY + offset,
     })
   } else {
-    nodes.push({
+    content.push({
       kind: 'text',
       label: `${spec.id}:label`,
       text: {
-        alpha,
+        alpha: disabled ? 0.5 : 1,
         font: 'menu',
-        scale: 0.68,
-        text: spec.label!,
+        scale,
+        text: spec.label,
         tint: 0xd9ba70,
-        x: bounds.left + bounds.width / 2 + offset,
-        y: bounds.top + bounds.height / 2 + 5 + offset,
+        x: centerX + offset,
+        y: centerY + 8 * scale + offset,
       },
     })
   }
+  if (disabled) {
+    content.push({ alpha: 0.25, bounds, color: 0x808080, kind: 'solid', label: `${spec.id}:disabled-overlay` })
+  }
   return {
     actions: [{ bounds, disabled, id: spec.id, role: 'button' }],
-    nodes,
+    nodes: [
+      { bounds, kind: 'clip', label: `${spec.id}:face`, nodes: content },
+      { atlas: 'UI', kind: 'sprite', label: `${spec.id}:end-left`, record: 53, scale, x: bounds.left - 6 * scale, y: bounds.top - 6 * scale },
+      {
+        atlas: 'UI',
+        bounds: nativeUiRect(bounds.left + 21 * scale, bounds.top - 6 * scale, bounds.width - 42 * scale, 62 * scale),
+        kind: 'slice',
+        label: `${spec.id}:edge`,
+        record: 53,
+        sourceUv: [0.95, 0, 1, 1],
+      },
+      { atlas: 'UI', kind: 'sprite', label: `${spec.id}:end-right`, mirrorX: true, record: 53, scale, x: bounds.left + bounds.width + 6 * scale, y: bounds.top - 6 * scale },
+    ],
   }
 }

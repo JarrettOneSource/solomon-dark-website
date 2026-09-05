@@ -1,3 +1,4 @@
+import { planNativeUiTabs } from './native-ui-tabs.ts'
 import { nativeUiFont, type NativeUiFontName } from './native-ui-catalog.ts'
 import {
   NATIVE_UI_BUTTON,
@@ -7,7 +8,6 @@ import {
   nativeUiRect,
   planNativeUiButton,
   planNativeUiMessageFrame,
-  planNativeUiTabs,
   type NativeUiActionRegion,
   type NativeUiButtonState,
   type NativeUiNode,

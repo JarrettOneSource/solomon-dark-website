@@ -1329,3 +1329,38 @@ disintegration on your conscience.
   changed. At this validation-receipt point, commit, push, deployment, and
   production restart had not yet been performed; publication state is reported
   separately at handoff.
+
+
+## 2026-09-05 — Dark Cloud painters and responsive control ownership
+
+Reopened the Dark Cloud family after the Sprite-only census omitted tiled
+painters and mistook a black shadow for a second gold frame. The complete native
+trace, membership dispositions, and candidate receipts are in [entry 116](<116-2026-08-20-dark-cloud-web-mod-subscriptions-session-content-and-save-provenance.md#2026-09-05--reopened-missing-tiled-painters-and-mixed-control-vocabulary>).
+
+The shared-kit corrections apply across every consumer:
+
+- `native-ui-tabs.ts` owns the `UI.13` top-preserving resting crop, selected/resting
+  pens, uniform artwork scale, and full semantic bounds. Dark Cloud supplies its
+  gold text tint through the plan; the DOM mask-color override is removed.
+- `native-ui-button-state.ts` owns pointer/keyboard/blur/cancel handling for the
+  standard, stone, and tool families. Responsive buttons measure layout pixels
+  and place the same native art inside their actual button bounds.
+- `NativeUiControlPanel` and its action/field/art members reuse `ControlPanel.3`
+  and `.5`, preserving authored bevel widths instead of stretching those edges.
+- `NativeUiDialog` uses browser modality and cancellation. Both controller Back
+  and the skull retain an explicit back button's precedence and otherwise request
+  cancellation from native dialogs. The controller's scope and repeat clocks
+  remain unchanged. Initial focus uses the existing default-focus marker after
+  opening, so React's focus attempt against a hidden dialog cannot strand focus
+  on its transient scroll container.
+- Dark Cloud scene/frame plans enumerate real draw commands, including `UI.30`,
+  `.33`, `.10`, `.79`, `.49`, and complete `.17` strips. The separate unused
+  record-inventory constant and one-use panel forwarder were removed.
+- Fixed chrome uses characters actually present in the retail bitmap faces.
+  External Unicode names retain their text and selection tint through an explicit
+  content presentation path.
+
+The browser controller regression replaced the old fake-DOM Back test. Native
+plan tests cover every frame family, tool state, clipped tab, responsive hit
+band, and preserved bevel. The complete Website and built-browser results are
+recorded in entry 116; no Mod Loader file is maintained by this change.

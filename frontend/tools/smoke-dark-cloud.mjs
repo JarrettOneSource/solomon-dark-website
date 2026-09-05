@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
+import { assertNativePanel, assertPressedFace, assertRectClose, assertStockCloudSurfaces, darkCloudGeometry } from './dark-cloud-presentation-assertions.mjs'
 
 const baseUrl = process.env.SDR_DARK_CLOUD_SMOKE_URL || 'http://127.0.0.1:5173'
 const desktopScreenshotPath = process.env.SDR_DARK_CLOUD_SCREENSHOT || '/tmp/solomon-dark-cloud-desktop.png'
@@ -103,7 +104,7 @@ try {
   }
   await explore.click()
   await page.getByRole('heading', { name: 'THE DARK CLOUD', exact: true }).waitFor({ timeout: 15_000 })
-  await page.getByText(username.toUpperCase(), { exact: true }).waitFor()
+  await page.getByRole('button', { name: `You are signed in as ${username}.`, exact: true }).waitFor()
 
   for (const label of ['MODS', 'SUBSCRIBED MODS', 'PARTIES', 'LAYOUTS']) {
     assert.equal(await page.getByRole('tab', { name: label, exact: true }).count(), 1)
@@ -141,20 +142,21 @@ try {
   ])
   assert.deepEqual(desktopGeometry.listArtRecords, [
     'UI.107', 'UI.108', 'UI.109', 'UI.110',
-    'UI.17', 'UI.17', 'UI.17', 'UI.17',
   ])
-  assert.deepEqual(desktopGeometry.tabRecords, Array.from({ length: 8 }, () => 'UI.13'))
+  assert.deepEqual(desktopGeometry.listFrames, ['UI.17'])
+  assert.deepEqual(desktopGeometry.tabRecords, Array.from({ length: 12 }, () => 'UI.13'))
   assert.deepEqual(desktopGeometry.footerRecords, [
-    'UI.103', 'UI.53', 'UI.53', 'UI.58',
-    'UI.103', 'UI.53', 'UI.53', 'UI.66',
+    'UI.103', 'UI.58', 'UI.53', 'UI.53',
+    'UI.103', 'UI.66', 'UI.53', 'UI.53',
     'UI.101', 'UI.54', 'UI.54',
     'UI.103', 'UI.53', 'UI.53',
   ])
-  assert.deepEqual(desktopGeometry.footerSlices, ['UI.54'])
+  assert.deepEqual(desktopGeometry.footerSlices, ['UI.53', 'UI.53', 'UI.54', 'UI.53'])
   assert.deepEqual(desktopGeometry.unsupportedBitmapText, [])
   await assertPressedFace(page.getByRole('button', { name: 'Search', exact: true }), 103, 104)
   await assertPressedFace(page.locator('.dark-cloud-primary-button'), 101, 102)
   await assertPressedFace(page.getByRole('button', { name: 'OPTIONS', exact: true }), 103, 104)
+  const surfaceBrightness = await assertStockCloudSurfaces(page)
   await page.screenshot({ path: desktopScreenshotPath })
 
   await page.getByRole('button', { name: 'Search', exact: true }).click()
@@ -166,7 +168,7 @@ try {
   await searchDialog.waitFor({ state: 'detached' })
 
   await page.getByRole('button', { name: 'Sort', exact: true }).click()
-  const sortDialog = page.getByRole('dialog', { name: 'SORT MODS BY…' })
+  const sortDialog = page.getByRole('dialog', { name: 'SORT MODS BY...' })
   await sortDialog.waitFor()
   await assertNativePanel(sortDialog, { stoneFooter: false })
   assert.equal(await sortDialog.getByRole('button', { name: 'DONE', exact: true }).count(), 0)
@@ -268,9 +270,9 @@ try {
   await page.getByRole('tab', { name: 'PARTIES', exact: true }).click()
   const partyRow = page.locator('[data-party-id="party-smoke-public"]')
   await partyRow.waitFor()
-  await partyRow.getByText("HAGATHA'S PARTY", { exact: true }).waitFor()
+  await partyRow.getByText("Hagatha's party", { exact: true }).waitFor()
   await partyRow.getByText('2 / 16', { exact: true }).waitFor()
-  for (const disclosure of ['PRIVATE COLLEGE', 'MODDED · 2', 'CHEATS']) {
+  for (const disclosure of ['PRIVATE COLLEGE', 'MODDED (2)', 'CHEATS']) {
     await partyRow.getByText(disclosure, { exact: true }).waitFor()
   }
   assert.equal(await partyRow.locator('.dark-cloud-party-status').innerText(), 'IN GAME')
@@ -319,7 +321,7 @@ try {
     await tutorialOffer.waitFor({ state: 'detached' })
   }
   await explore.click()
-  await page.getByText('YOU ARE SIGNED IN AS A GUEST.', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'You are signed in as a GUEST.', exact: true }).waitFor()
   await page.screenshot({ path: guestScreenshotPath })
   await page.getByRole('tab', { name: 'LAYOUTS', exact: true }).click()
   await page.evaluate(key => localStorage.removeItem(key), mobileUiStorageKey)
@@ -342,7 +344,7 @@ try {
   await partyRow.waitFor()
 
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const text of ['2 / 16', 'The Survival Grounds', 'MODDED · 2', 'CHEATS']) {
+  for (const text of ['2 / 16', 'The Survival Grounds', 'MODDED (2)', 'CHEATS']) {
     assert.ok(await partyRow.getByText(text, { exact: true }).boundingBox(), `${text} was hidden on mobile`)
   }
   assert.ok(await partyRow.locator('.dark-cloud-party-status').boundingBox(), 'IN GAME was hidden on mobile')
@@ -408,6 +410,7 @@ try {
     status: 'ok',
     username,
     desktopGeometry,
+    surfaceBrightness,
     mobileGeometry,
     landscapeGeometry,
     partySource: 'bounded browser fixture; host/supervisor contracts prove the live projection',
@@ -448,72 +451,4 @@ async function activeManifest(page, token) {
     if (!response.ok) throw new Error(payload.error ?? `active manifest failed (${response.status})`)
     return payload
   }, { token })
-}
-
-async function darkCloudGeometry(page) {
-  return page.evaluate(() => {
-    const rect = selector => {
-      const bounds = document.querySelector(selector).getBoundingClientRect()
-      return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
-    }
-    const records = selector => [...document.querySelectorAll(`${selector} [data-native-ui-record]`)]
-      .map(record => record.getAttribute('data-native-ui-record'))
-    const slices = selector => [...document.querySelectorAll(`${selector} [data-native-ui-slice]`)]
-      .map(record => record.getAttribute('data-native-ui-slice'))
-    const touchTargets = [...document.querySelectorAll(
-      '.dark-cloud-tabs button, .dark-cloud-footer button, .dark-cloud-row-actions button',
-    )].filter(element => getComputedStyle(element).display !== 'none')
-      .map(element => element.getBoundingClientRect().height)
-    const scene = document.querySelector('.dark-cloud-scene')
-    return {
-      scene: rect('.dark-cloud-scene'),
-      stage: rect('.dark-cloud-stage'),
-      list: rect('.dark-cloud-list-frame'),
-      tabs: rect('.dark-cloud-tabs'),
-      selectedTabBracket: rect('[data-native-ui-node="mods:bracket-left"]'),
-      restingTabBracket: rect('[data-native-ui-node="subscribed:bracket-left"]'),
-      search: rect('[data-native-dark-cloud-tool="search"]'),
-      sort: rect('[data-native-dark-cloud-tool="sort"]'),
-      primary: rect('.dark-cloud-primary-button'),
-      options: rect('[data-native-dark-cloud-tool="options"]'),
-      stageTransform: getComputedStyle(document.querySelector('.dark-cloud-stage')).transform,
-      horizontalOverflow: Math.max(0, scene.scrollWidth - scene.clientWidth),
-      minimumTouchTarget: Math.min(...touchTargets),
-      sceneArtRecords: records('.dark-cloud-native-scene-art'),
-      listArtRecords: records('.dark-cloud-native-list-art'),
-      tabRecords: slices('.dark-cloud-tabs'),
-      footerRecords: records('.dark-cloud-footer'),
-      footerSlices: slices('.dark-cloud-footer'),
-      unsupportedBitmapText: [...scene.querySelectorAll('[data-native-ui-unsupported]')]
-        .map(node => node.getAttribute('data-native-ui-unsupported')),
-    }
-  })
-}
-
-function assertRectClose(actual, expected, tolerance = 0.6) {
-  for (const key of ['x', 'y', 'width', 'height']) {
-    assert.ok(Math.abs(actual[key] - expected[key]) <= tolerance, JSON.stringify({ actual, expected }))
-  }
-}
-
-async function assertNativePanel(panel, { stoneFooter }) {
-  const records = await panel.locator('.dark-cloud-native-panel-art [data-native-ui-record]')
-    .evaluateAll(nodes => nodes.map(node => node.getAttribute('data-native-ui-record')))
-  assert.deepEqual(records, [
-    'UI.17', 'UI.17', 'UI.17', 'UI.17',
-    'UI.17', 'UI.17', 'UI.17', 'UI.17',
-    'UI.18', 'UI.18',
-  ])
-  assert.equal(
-    await panel.locator('[data-native-ui-stone-button] [data-native-ui-record="UI.105"]').count(),
-    stoneFooter ? 1 : 0,
-  )
-}
-
-async function assertPressedFace(button, idleRecord, pressedRecord) {
-  assert.equal(await button.locator(`[data-native-ui-record="UI.${idleRecord}"]`).count(), 1)
-  await button.dispatchEvent('pointerdown', { button: 0, pointerType: 'mouse' })
-  assert.equal(await button.locator(`[data-native-ui-record="UI.${pressedRecord}"]`).count(), 1)
-  await button.dispatchEvent('pointerup', { button: 0, pointerType: 'mouse' })
-  assert.equal(await button.locator(`[data-native-ui-record="UI.${idleRecord}"]`).count(), 1)
 }

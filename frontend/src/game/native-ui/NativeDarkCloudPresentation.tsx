@@ -1,30 +1,31 @@
 import {
-  useLayoutEffect,
   useRef,
-  useState,
   type ButtonHTMLAttributes,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-  type RefObject,
 } from 'react'
 
 import NativeUiText from './NativeUiText.tsx'
 import NativeUiButton from './NativeUiButton.tsx'
 import NativeUiPlanView from './NativeUiPlanView.tsx'
-import NativeUiSprite from './NativeUiSprite.tsx'
-import NativeUiTabs, { type NativeUiTab } from './NativeUiTabs.tsx'
+import { useNativeUiButtonState } from './native-ui-button-state.ts'
+import { useNativeUiElementSize } from './native-ui-element-size.ts'
+import { planNativeDarkCloudListFrame, planNativeDarkCloudPanel, planNativeDarkCloudSceneArt } from './native-dark-cloud-frame.ts'
+import './native-dark-cloud.css'
+import NativeUiTabs from './NativeUiTabs.tsx'
+import { nativeUiFont } from './native-ui-catalog.ts'
+import { layoutNativeUiText } from './native-ui-text.ts'
 import {
-  NATIVE_DARK_CLOUD_PRESENTATION,
   NATIVE_DARK_CLOUD_TABS,
   planNativeDarkCloudToolButton,
 } from './native-dark-cloud-contract.ts'
-import { nativeUiPlan, nativeUiRect, type NativeUiButtonState } from './native-ui-plan.ts'
+import { nativeUiPlan, nativeUiRect } from './native-ui-plan.ts'
 
 type DarkCloudTabId = 'layouts' | 'mods' | 'parties' | 'subscribed'
 
 export function NativeDarkCloudText({
   align = 'left',
   className,
+  content = false,
   font = 'menu',
   scale = 0.68,
   style,
@@ -34,6 +35,8 @@ export function NativeDarkCloudText({
 }: {
   readonly align?: 'center' | 'left' | 'right'
   readonly className?: string
+  /** External names and metadata may contain characters absent from retail atlases. */
+  readonly content?: boolean
   readonly font?: 'heading' | 'medium' | 'menu'
   readonly scale?: number
   readonly style?: CSSProperties
@@ -41,6 +44,9 @@ export function NativeDarkCloudText({
   readonly tint?: number
   readonly width?: number
 }) {
+  if (content && layoutNativeUiText({ font, scale, text, x: 0, y: 0 }).unsupportedCodePoints.length > 0) {
+    return <span className={['native-ui-content-text', className].filter(Boolean).join(' ')} data-native-ui-content-text style={{ color: `#${tint.toString(16).padStart(6, '0')}`, fontSize: nativeUiFont(font).metrics[0] * scale, ...style }}>{text}</span>
+  }
   return (
     <>
       <span className="native-ui-sr-only">{text}</span>
@@ -59,67 +65,38 @@ export function NativeDarkCloudText({
 }
 
 export function NativeDarkCloudSceneArt() {
+  const ref = useRef<HTMLDivElement>(null)
+  const { width, height } = useNativeUiElementSize(ref, { height: 900, width: 1_600 })
   return (
-    <div aria-hidden className="dark-cloud-native-scene-art">
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-flourish left" record={29} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-flourish right" record={29} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard tall top-right" record={31} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard short top-left" record={32} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard short bottom-right" record={32} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-wizard tall bottom-left" record={31} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side top-left" record={20} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side bottom-left" record={20} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side top-right" record={20} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-scene-side bottom-right" record={20} />
+    <div aria-hidden className="dark-cloud-native-scene-art" ref={ref}>
+      <NativeUiPlanView plan={planNativeDarkCloudSceneArt(width, height)} />
+      <i className="native-dark-cloud-curtain" />
+      <div className="native-dark-cloud-frame-shade-box">
+        <i className="native-dark-cloud-frame-shade top" />
+        <i className="native-dark-cloud-frame-shade bottom" />
+        <i className="native-dark-cloud-frame-shade left" />
+        <i className="native-dark-cloud-frame-shade right" />
+      </div>
     </div>
   )
 }
 
 export function NativeDarkCloudListFrameArt() {
+  const ref = useRef<HTMLDivElement>(null)
+  const { width, height } = useNativeUiElementSize(ref, { height: 627, width: 1_490 })
   return (
-    <div aria-hidden className="dark-cloud-native-list-art">
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone top-left" record={107} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone top-right" record={108} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone bottom-left" record={109} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-stone bottom-right" record={110} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold top-left" record={17} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold top-right" record={17} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold bottom-left" record={17} />
-      <NativeUiSprite atlas="UI" className="dark-cloud-frame-gold bottom-right" record={17} />
+    <div aria-hidden className="dark-cloud-native-list-art" ref={ref}>
+      <NativeUiPlanView plan={planNativeDarkCloudListFrame(width, height)} />
     </div>
   )
 }
 
-export function NativeDarkCloudPanelArt({
-  flourishes = true,
-}: {
-  readonly flourishes?: boolean
-}) {
-  const corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const
+export function NativeDarkCloudPanelArt() {
+  const ref = useRef<HTMLDivElement>(null)
+  const { width, height } = useNativeUiElementSize(ref, { height: 205, width: 520 })
   return (
-    <div aria-hidden className="dark-cloud-native-panel-art">
-      {corners.map(corner => (
-        <NativeUiSprite
-          atlas="UI"
-          className={`dark-cloud-panel-corner outer ${corner}`}
-          key={`outer:${corner}`}
-          record={17}
-        />
-      ))}
-      {corners.map(corner => (
-        <NativeUiSprite
-          atlas="UI"
-          className={`dark-cloud-panel-corner inner ${corner}`}
-          key={`inner:${corner}`}
-          record={17}
-        />
-      ))}
-      {flourishes ? (
-        <>
-          <NativeUiSprite atlas="UI" className="dark-cloud-panel-flourish left" record={18} />
-          <NativeUiSprite atlas="UI" className="dark-cloud-panel-flourish right" record={18} />
-        </>
-      ) : null}
+    <div aria-hidden className="dark-cloud-native-panel-art" ref={ref}>
+      <NativeUiPlanView plan={planNativeDarkCloudPanel(width, height)} />
     </div>
   )
 }
@@ -131,50 +108,63 @@ export function NativeDarkCloudHeading({
   readonly accountUsername: string | null
   readonly onAccount: () => void
 }) {
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const accountRef = useRef<HTMLButtonElement>(null)
+  const titleSize = useNativeUiElementSize(titleRef, { height: 58, width: 760 })
+  const accountSize = useNativeUiElementSize(accountRef, { height: 50, width: 560 })
+  const titleScale = Math.min(1, titleSize.width / 560, titleSize.height / 58)
+  const accountScale = Math.min(1, accountSize.width / 560)
   const accountLine = accountUsername
-    ? `YOU ARE SIGNED IN AS ${accountUsername.toUpperCase()}.`
-    : 'YOU ARE SIGNED IN AS A GUEST.'
+    ? `You are signed in as ${accountUsername}.`
+    : 'You are signed in as a GUEST.'
   return (
     <header className="dark-cloud-heading">
-      <h1>
+      <h1 ref={titleRef}>
         <span className="native-ui-sr-only">THE DARK CLOUD</span>
         <NativeUiText
           align="center"
-          font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.heading}
+          font="heading"
+          placement="baseline"
+          scale={titleScale}
+          style={{ left: '50%', top: 50 * titleScale }}
           text="THE DARK CLOUD"
           tint={0xd9ba70}
-          width={420}
         />
-        <NativeUiText
-          className="dark-cloud-beta"
-          font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
-          scale={0.68}
-          text="BETA"
-          tint={0xd9ba70}
-        />
+        <span className="dark-cloud-beta">
+          <NativeUiText
+            font="menu"
+            align="center"
+            placement="baseline"
+            scale={titleScale}
+            style={{ left: titleSize.width / 2 + 235 * titleScale, top: 50 * titleScale }}
+            text="beta"
+            tint={0xd9ba70}
+          />
+        </span>
       </h1>
-      <button onClick={onAccount} type="button">
-        <span className="native-ui-sr-only">{accountLine}</span>
-        {accountUsername ? <span className="native-ui-sr-only">{accountUsername.toUpperCase()}</span> : null}
+      <button aria-label={accountLine} onClick={onAccount} ref={accountRef} type="button">
         <NativeUiText
           align="center"
-          font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
-          scale={0.72}
+          font="menu"
+          placement="baseline"
+          scale={accountScale}
+          style={{ left: '50%', top: 25 }}
           text={accountLine}
           tint={0xd9ba70}
-          width={560}
         />
         {!accountUsername ? (
           <NativeUiText
             align="center"
             className="dark-cloud-account-action"
-            font={NATIVE_DARK_CLOUD_PRESENTATION.fonts.menu}
-            scale={0.68}
-            text="TO CHANGE THIS, CLICK HERE."
+            font="menu"
+            placement="baseline"
+            scale={accountScale}
+            style={{ left: '50%', top: 25 + 18 * accountScale }}
+            text="To change this, click here."
             tint={0xd9ba70}
-            width={560}
           />
         ) : null}
+        {!accountUsername ? <i aria-hidden className="native-dark-cloud-account-underline" style={{ left: `calc(50% + ${34 * accountScale}px)`, top: 25 + 20 * accountScale, width: 145 * accountScale }} /> : null}
       </button>
     </header>
   )
@@ -188,20 +178,20 @@ export function NativeDarkCloudTabs({
   readonly selectedId: DarkCloudTabId
 }) {
   const hostRef = useRef<HTMLElement>(null)
-  const size = useElementSize(hostRef, { height: 69, width: 882 })
-  const scaleX = size.width / 882
-  const scaleY = size.height / 69
+  const size = useNativeUiElementSize(hostRef, { height: 69, width: 882 })
+  const scale = Math.min(1, size.width / 882, size.height / 69)
   return (
     <nav className="dark-cloud-tabs" ref={hostRef}>
       <NativeUiTabs
         ariaLabel="Dark Cloud sections"
         className="dark-cloud-tabs-plan"
-        height={69}
+        height={size.height}
         onSelect={(id) => onSelect(id as DarkCloudTabId)}
         selectedId={selectedId}
-        style={{ transform: `scale(${scaleX}, ${scaleY})`, transformOrigin: 'top left' }}
-        tabs={NATIVE_DARK_CLOUD_TABS as readonly NativeUiTab[]}
-        width={882}
+        scale={scale}
+        tabs={NATIVE_DARK_CLOUD_TABS.map(tab => ({ ...tab, bounds: nativeUiRect(tab.bounds.left * size.width / 882, 0, tab.bounds.width * size.width / 882, size.height) }))}
+        tint={0xd9ba70}
+        width={size.width}
       />
     </nav>
   )
@@ -218,32 +208,23 @@ interface NativeDarkCloudToolButtonProps extends Omit<
 
 export function NativeDarkCloudToolButton({
   className,
-  disabled = false,
   icon,
   label,
   nativeWidth = 90,
-  onBlur,
-  onPointerCancel,
-  onPointerDown,
-  onPointerLeave,
-  onPointerUp,
   ...buttonProps
 }: NativeDarkCloudToolButtonProps) {
   const hostRef = useRef<HTMLButtonElement>(null)
-  const [pressed, setPressed] = useState(false)
-  const size = useElementSize(hostRef, { height: 52, width: nativeWidth })
-  const state: NativeUiButtonState = disabled ? 'disabled' : pressed ? 'pressed' : 'idle'
-  const iconRecord = icon === 'search'
-    ? NATIVE_DARK_CLOUD_PRESENTATION.records.searchIcon.record
-    : icon === 'sort'
-      ? NATIVE_DARK_CLOUD_PRESENTATION.records.sortIcon.record
-      : undefined
-  const plan = nativeUiPlan(nativeWidth, 52, planNativeDarkCloudToolButton({
-    bounds: nativeUiRect(0, 0, nativeWidth, 52),
-    iconRecord,
-    id: label.toLocaleLowerCase().replaceAll(' ', '-'),
-    label: icon === null ? label : undefined,
+  const size = useNativeUiElementSize(hostRef, { height: 52, width: nativeWidth })
+  const { events, state } = useNativeUiButtonState(buttonProps)
+  const content = icon === null
+    ? { label: label.toLowerCase() }
+    : { iconRecord: icon === 'search' ? 58 : 66 }
+  const plan = nativeUiPlan(size.width, size.height, planNativeDarkCloudToolButton({
+    ...content,
+    bounds: nativeUiRect(0, 0, size.width, size.height),
+    id: label.toLowerCase().replaceAll(' ', '-'),
     state,
+    scale: size.height / 52,
   }))
   return (
     <button
@@ -251,37 +232,11 @@ export function NativeDarkCloudToolButton({
       aria-label={buttonProps['aria-label'] ?? label}
       className={['dark-cloud-tool-button', className].filter(Boolean).join(' ')}
       data-native-dark-cloud-tool={icon ?? 'options'}
-      disabled={disabled}
-      onBlur={(event) => {
-        setPressed(false)
-        onBlur?.(event)
-      }}
-      onPointerCancel={(event) => {
-        setPressed(false)
-        onPointerCancel?.(event)
-      }}
-      onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!disabled && event.button === 0) setPressed(true)
-        onPointerDown?.(event)
-      }}
-      onPointerLeave={(event) => {
-        setPressed(false)
-        onPointerLeave?.(event)
-      }}
-      onPointerUp={(event) => {
-        setPressed(false)
-        onPointerUp?.(event)
-      }}
+      {...events}
       ref={hostRef}
       type={buttonProps.type ?? 'button'}
     >
-      <NativeUiPlanView
-        plan={plan}
-        style={{
-          transform: `scale(${size.width / nativeWidth}, ${size.height / 52})`,
-          transformOrigin: 'top left',
-        }}
-      />
+      <NativeUiPlanView plan={plan} />
       <span className="native-ui-sr-only">{label}</span>
     </button>
   )
@@ -300,45 +255,22 @@ export function NativeDarkCloudPrimaryButton({
   ...buttonProps
 }: NativeDarkCloudPrimaryButtonProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const size = useElementSize(hostRef, { height: 69, width: 353 })
+  const size = useNativeUiElementSize(hostRef, { height: 69, width: 353 })
   return (
     <div className="dark-cloud-primary-control" ref={hostRef}>
       <NativeUiButton
         {...buttonProps}
         className={['dark-cloud-primary-button', className].filter(Boolean).join(' ')}
-        height={69}
+        height={size.height}
+        scale={size.height / 69}
         style={{
           left: 0,
           top: 0,
-          transform: `scale(${size.width / 353}, ${size.height / 69})`,
-          transformOrigin: 'top left',
         }}
-        width={353}
+        width={size.width}
       >
         {children}
       </NativeUiButton>
     </div>
   )
-}
-
-function useElementSize<T extends Element>(
-  ref: RefObject<T | null>,
-  fallback: { readonly height: number; readonly width: number },
-) {
-  const [size, setSize] = useState(fallback)
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return undefined
-    const update = () => {
-      const bounds = element.getBoundingClientRect()
-      if (bounds.width > 0 && bounds.height > 0) {
-        setSize({ height: bounds.height, width: bounds.width })
-      }
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref])
-  return size
 }

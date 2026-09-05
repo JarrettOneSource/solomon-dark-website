@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { measureSource } from './source-metrics.mjs'
 
+test('measures authored JSX controls with their TypeScript props', () => {
+  const result = measureSource('function Panel({ enabled }: { enabled: boolean }) { return <button disabled={!enabled}>{enabled ? "Ready" : "Waiting"}</button> }', 'panel.tsx')
+  assert.equal(result.units.length, 1)
+  assert.equal(result.units[0].cyclomatic, 2)
+  assert.equal(result.units[0].cognitive, 1)
+  assert.ok(Number.isFinite(result.units[0].halstead.difficulty))
+  assert.deepEqual(result.prohibitedTypes, [])
+})
+
 test('measures each method, nested arrow and same-line callable once', () => {
   const source = `
 class Example {
