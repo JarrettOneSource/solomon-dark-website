@@ -21,6 +21,11 @@ export function installGameAudioSmokeProbe({
   const nativeCreateMediaElementSource = AudioContext.prototype.createMediaElementSource
   const nativeMediaPause = HTMLMediaElement.prototype.pause
   const nativeMediaPlay = HTMLMediaElement.prototype.play
+  const nativeGetChannelData = AudioBuffer.prototype.getChannelData
+  const nativeFloatSlice = Float32Array.prototype.slice
+  const nativePostMessage = MessagePort.prototype.postMessage
+  const pcmSources = new WeakMap()
+  const nativeVoiceSources = new WeakMap()
   let nextChannelId = 1
 
   const sourceMatches = (actual, expected) => {
@@ -79,6 +84,44 @@ export function installGameAudioSmokeProbe({
       return nativeConnect(destination, ...args)
     }
     return gain
+  }
+  AudioBuffer.prototype.getChannelData = function (...args) {
+    const channel = nativeGetChannelData.apply(this, args)
+    const source = decodedSources.get(this)
+    if (source) pcmSources.set(channel, source)
+    return channel
+  }
+  Float32Array.prototype.slice = function (...args) {
+    const copy = nativeFloatSlice.apply(this, args)
+    const source = pcmSources.get(this)
+    if (source) pcmSources.set(copy, source)
+    return copy
+  }
+  MessagePort.prototype.postMessage = function (message, ...args) {
+    if (message?.type === 'register-buffer' && message.channels?.[0]) {
+      const source = pcmSources.get(message.channels[0])
+      if (source) {
+        let sourcesById = nativeVoiceSources.get(this)
+        if (!sourcesById) {
+          sourcesById = new Map()
+          nativeVoiceSources.set(this, sourcesById)
+        }
+        sourcesById.set(message.bufferId, source)
+      }
+    }
+    if (message?.type === 'play') {
+      const source = nativeVoiceSources.get(this)?.get(message.bufferId)
+      if (source) events.push({
+        at: performance.now(),
+        channelId: `native:${message.bufferId}:${message.slot}`,
+        loop: false,
+        playbackRate: message.playbackRate,
+        src: source,
+        type: 'buffer-start',
+        volume: message.volume,
+      })
+    }
+    return nativePostMessage.call(this, message, ...args)
   }
   BaseAudioContext.prototype.createBufferSource = function () {
     const node = nativeCreateBufferSource.call(this)

@@ -162,6 +162,8 @@ function fixedTransientTiming(
 
 function isStateDrivenTransient(effect: PrimarySpellTransientState): boolean {
   return effect.kind === 'air-hurricane'
+    || effect.kind === 'harden-burst'
+    || effect.kind === 'harden-shard'
     || effect.kind === 'earth-boulder-bit'
     || effect.kind === 'earth-called-rock'
     || effect.kind === 'fire-ember'

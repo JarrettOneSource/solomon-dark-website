@@ -143,6 +143,52 @@ test('Hail save cutover retires old cosmetic particles while preserving current 
   assert.deepEqual(migrated.gameRng, current.gameRng)
 })
 
+test('Harden saves retain current coating and migrate the former armor-only cache', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const active = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      skillRuntimes: [{ ...state.playerEntities.skillRuntimes[0]!, harden: { armor: 12, coating: 0.5 } }],
+    },
+    secondaryAbilities: {
+      ...state.secondaryAbilities,
+      nextEventId: 2,
+      events: [{
+        actorId: null, cameraDisplacement: null, cameraMagnitude: 0, cue: 'teleport' as const,
+        eventId: 1, gain: 1, kind: 'pulse' as const, ownerId: 'owner', pitch: 1,
+        position: { x: 20, y: 30 }, screenFlash: null, skillId: 48 as const,
+        tick: 0, worldKey: 'hub:courtyard',
+      }],
+    },
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner', state: active,
+  })
+  const restored = restoreGameSaveDocument(document).state
+  assert.deepEqual(restored.playerEntities.skillRuntimes[0]!.harden, { armor: 12, coating: 0.5 })
+  for (const schemaVersion of [28, 29]) {
+    const previous = JSON.parse(document)
+    previous.schemaVersion = schemaVersion
+    const runtime = previous.continuation.simulation.playerEntities.skillRuntimes[0]
+    delete runtime.harden
+    runtime.hardenArmor = 12
+    delete previous.continuation.simulation.secondaryAbilities.events[0].gain
+    const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
+    assert.deepEqual(migrated.playerEntities.skillRuntimes[0]!.harden, { armor: 0, coating: 0 })
+    assert.equal('hardenArmor' in migrated.playerEntities.skillRuntimes[0]!, false)
+    assert.equal(migrated.secondaryAbilities.events[0]!.gain, 1)
+    assert.deepEqual(migrated.run, restored.run)
+    assert.deepEqual(migrated.playerEntities.economies, restored.playerEntities.economies)
+  }
+  for (const harden of [null, { armor: -1, coating: 0.5 }, { armor: 1, coating: -0.5 },
+    { armor: 1, coating: 1.5 }, { armor: 1, coating: 0 }, { armor: '12', coating: 0.5 }]) {
+    const malformed = JSON.parse(document)
+    malformed.continuation.simulation.playerEntities.skillRuntimes[0].harden = harden
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /Harden/)
+  }
+})
+
 test('current Hub restore allocates its reconstructed students after persisted owners', () => {
   const state = createGameSimulation({ owner: OWNER })
   const persistedNextActor = state.worldManagerOrder.nextRegistrationOrdinal.actor

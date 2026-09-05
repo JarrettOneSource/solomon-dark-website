@@ -50,6 +50,8 @@ export type GameSoundCue =
   | 'demon-die'
   | 'disable-enemy'
   | 'drink'
+  | 'harden'
+  | 'ice-shatter'
   | 'distort-reality'
   | 'drop-bag-1'
   | 'drop-bag-2'
@@ -197,6 +199,8 @@ export interface GameAudioSources {
 export const NATIVE_SOUND_MAXIMUM_VOICES: Readonly<Partial<
   Record<GameSoundCue, number>
 >> = Object.freeze({
+  harden: 10,
+  'ice-shatter': 10,
   'hail-bounce-0': 10,
   'hail-bounce-1': 10,
   'hail-bounce-2': 10,

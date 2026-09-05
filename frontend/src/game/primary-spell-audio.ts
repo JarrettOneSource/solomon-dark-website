@@ -436,7 +436,7 @@ export class PrimarySpellAudioSynchronizer {
           || event.cue === null
           || SECONDARY_LOOP_CUES.has(event.cue)
         ) continue
-        const volume = hubAudioAttenuation(Math.hypot(
+        const volume = event.gain * hubAudioAttenuation(Math.hypot(
           event.position.x - listener.position.x,
           event.position.y - listener.position.y,
         ))

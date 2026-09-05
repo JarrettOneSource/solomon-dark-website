@@ -17,7 +17,6 @@ import {
   BODY_SKILL_IDS,
   CONCENTRATABLE_SKILL_IDS,
   MIND_SKILL_IDS,
-  applyPlayerHardenArmor,
   autofillPlayerSkillSelections,
   createPlayerSkillRuntime,
   isPlayerSkillConcentrated,
@@ -25,12 +24,13 @@ import {
   playerStaffDamage,
   playerSkillDerivedStats,
   refreshPlayerSkillRuntime,
-  resolvePlayerHarmfulContact,
   setPlayerConcentration,
   setPlayerConcentrationSlot,
   setPlayerMindstarActive,
   stepPlayerSkillRuntime,
 } from './player-skill-runtime.ts'
+
+import { resolvePlayerHarmfulContact } from './player-harmful-contact.ts'
 
 const CONFIG = {
   discipline: 'mind',
@@ -668,10 +668,12 @@ test('Hurricane and Harden use player-owned channel clocks and weak Water clears
   }
   assert.equal(state.runtime.hurricaneCharge, Math.fround(0.0015))
   assert.equal(state.runtime.hurricaneRefreshed, false)
-  assert.equal(state.runtime.hardenArmor, Math.fround(0.08))
-  const reduced = applyPlayerHardenArmor(state.runtime, 1)
+  assert.equal(state.runtime.harden.armor, Math.fround(0.08))
+  const reduced = resolvePlayerHarmfulContact(
+    state.runtime, derived, progression(), 1, 'physical', false, false, createNativeRng(1), { x: 0, y: 0 },
+  )
   assert.equal(reduced.damage, 1 - Math.fround(0.08))
-  assert.equal(reduced.runtime, state.runtime, 'Harden is persistent flat armor, not a consumed pool')
+  assert.equal(state.runtime.harden.armor, Math.fround(0.08), 'contact does not consume armor')
 
   state = {
     ...state,
@@ -693,7 +695,33 @@ test('Hurricane and Harden use player-owned channel clocks and weak Water clears
       primaryUnderpowered: true,
     }).runtime,
   }
-  assert.equal(state.runtime.hardenArmor, 0)
+  assert.equal(state.runtime.harden.armor, 0)
+})
+
+test('Harden removes its armor when the held Frost Jet action is released', () => {
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  const state = createPlayerSkillRuntime(rankedBook({ 36: 2 }), statBook, economy)
+  const derived = playerSkillDerivedStats(
+    state.runtime, state.skillBook, statBook, progression(), economy,
+  )
+  let runtime = state.runtime
+  for (let tick = 0; tick < 100; tick += 1) {
+    runtime = stepPlayerSkillRuntime(runtime, derived, {
+      acting: true,
+      moving: false,
+      primaryChannel: 'water',
+      primaryUnderpowered: false,
+    }).runtime
+  }
+  assert.ok(runtime.harden.armor > 11.9)
+  runtime = stepPlayerSkillRuntime(runtime, derived, {
+    acting: false,
+    moving: false,
+    primaryChannel: null,
+    primaryUnderpowered: false,
+  }).runtime
+  assert.equal(runtime.harden.armor, 0, 'native release clears Harden armor with the ice coating')
 })
 
 test('Flash consumes its complete response RNG before Deflect and rejects percentile zero', () => {
@@ -733,6 +761,7 @@ test('Flash consumes its complete response RNG before Deflect and rejects percen
     true,
     true,
     createNativeRng(15),
+    { x: 0, y: 0 },
   )
   assert.equal(result.deflected, true)
   assert.equal(result.reflectedDamage, 0)
@@ -755,6 +784,7 @@ test('Flash consumes its complete response RNG before Deflect and rejects percen
     false,
     false,
     createNativeRng(121),
+    { x: 0, y: 0 },
   )
   assert.equal(zero.flash, null)
   assert.equal(zero.rng.indexA, 1)

@@ -47,6 +47,7 @@ import {
   PlayerStaffVfxView,
 } from './player-staff-vfx-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
+import { PlayerHardenEffectView } from './player-harden-effect-view.ts'
 import { WeldPrimarySpellView } from './primary-spell-weld-view.ts'
 import { isNativeWeldPresentationState } from './primary-spell-weld-native.ts'
 
@@ -163,7 +164,9 @@ export class PrimarySpellWorldView {
       }
       let view = this.views.get(state.id)
       if (!view) {
-        if (isNativeWeldPresentationState(state)) {
+        if (state.kind === 'harden-shard' || state.kind === 'harden-burst') {
+          view = new PlayerHardenEffectView(state, this.textures.secondary)
+        } else if (isNativeWeldPresentationState(state)) {
           view = new WeldPrimarySpellView(state, this.textures.primarySpells.weldActors)
         } else if (isNativeAirWaterActorState(state)) {
           view = new AirWaterActorSpellView(state, this.textures.primarySpells)

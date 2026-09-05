@@ -41,6 +41,11 @@ interface TransientContract {
 }
 
 const TRANSIENT_CONTRACTS: Record<TransientKind, TransientContract> = {
+  'harden-burst': { numbers: ['ageTicks', 'alpha'], owned: ['position'], vectors: ['position'] },
+  'harden-shard': {
+    numbers: ['ageTicks', 'height', 'life', 'rotationDegrees', 'verticalVelocity'],
+    owned: ['position', 'velocity'], vectors: ['position', 'velocity'],
+  },
   air: { numbers: ['ageTicks'], owned: ['direction', 'endpoint', 'lightRegistration', 'midpoint', 'origin'] },
   'air-hurricane': { numbers: ['ageTicks', 'charge', 'contactCharge', 'phaseDegrees'], owned: ['lanes', 'position'], vectors: ['position'] },
   'earth-boulder-bit': { numbers: ['ageTicks'], owned: ['debris', 'debris.position', 'debris.velocity', 'origin', 'position'], vectors: ['origin', 'position'] },

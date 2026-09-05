@@ -1,3 +1,4 @@
+import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
 import type {
   GameClientSnapshot,
   GameSnapshot,
@@ -459,6 +460,10 @@ function interpolatePlayer(
     progression: {
       ...discrete.progression,
       damageX4TicksRemaining,
+      hardenCoating: interpolateNativeHardenCoating(
+        older.progression.hardenCoating, newer.progression.hardenCoating,
+        older.primaryCast.castSequence === newer.primaryCast.castSequence, blend,
+      ),
     },
     velocity: {
       x: lerp(older.velocity.x, newer.velocity.x, blend),

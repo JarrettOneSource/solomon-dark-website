@@ -423,7 +423,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 118
+export const GAME_PROTOCOL_VERSION = 119
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4193,6 +4193,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'deathTick',
     'experience',
     'hagathaRuntime',
+    'hardenCoating',
     'inventoryStats',
     'learnedSkills',
     'learnedSkillOrder',
@@ -4444,6 +4445,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
     hagathaRuntime,
+    hardenCoating: unitInterval(source.hardenCoating, `${field}.hardenCoating`),
     inventoryStats,
     learnedSkills,
     learnedSkillOrder,
@@ -6136,7 +6138,7 @@ function nativeSecondaryEvent(
 ): NativeSecondaryEventState {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'actorId', 'cameraDisplacement', 'cameraMagnitude', 'cue', 'eventId', 'kind',
+    'actorId', 'cameraDisplacement', 'cameraMagnitude', 'cue', 'eventId', 'gain', 'kind',
     'ownerId', 'pitch', 'position', 'screenFlash', 'skillId', 'tick', 'worldKey',
   ])
   const cue = source.cue === null
@@ -6156,8 +6158,8 @@ function nativeSecondaryEvent(
     : nativeSecondaryScreenFlash(source.screenFlash, `${field}.screenFlash`)
   const skillId = source.skillId === null
     ? null
-    : source.skillId === 22
-      ? 22
+    : source.skillId === 22 || source.skillId === 36
+      ? source.skillId
       : source.skillId === 53
         ? 53
       : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
@@ -6166,6 +6168,9 @@ function nativeSecondaryEvent(
   )) {
     throw new GameProtocolError(`${field} skill 53 is reserved for Flash response feedback`)
   }
+  if (skillId === 36 && (
+    (cue !== 'harden' && cue !== 'ice-shatter') || kind !== 'impact' || screenFlash !== null
+  )) throw new GameProtocolError(`${field} skill 36 requires Harden audio feedback`)
   if (skillId === null && (cue !== null || kind !== 'impact' || screenFlash === null)) {
     throw new GameProtocolError(`${field} null skillId is reserved for player-effect feedback`)
   }
@@ -6177,6 +6182,7 @@ function nativeSecondaryEvent(
       ? null
       : vector(source.cameraDisplacement, `${field}.cameraDisplacement`),
     cameraMagnitude: nonnegativeFinite(source.cameraMagnitude, `${field}.cameraMagnitude`),
+    gain: nonnegativeFinite(source.gain, `${field}.gain`),
     cue,
     eventId: positiveInteger(source.eventId, `${field}.eventId`),
     kind,
@@ -8344,6 +8350,47 @@ function primarySpellTransientPayload(
   field: string,
 ): WithoutPainterRegistrations<PrimarySpellTransientState> {
   const source = record(value, field)
+  if (source.kind === 'harden-burst') {
+    onlyKeys(source, field, ['ageTicks', 'alpha', 'birthTick', 'id', 'kind', 'ownerId', 'position', 'worldKey'])
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      alpha: unitInterval(source.alpha, `${field}.alpha`),
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'harden-burst',
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      position: vector(source.position, `${field}.position`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'harden-shard') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'bounceVelocity', 'height', 'id', 'kind', 'life',
+      'ownerId', 'position', 'record', 'rotationDegrees', 'rotationStepDegrees',
+      'velocity', 'verticalVelocity', 'worldKey',
+    ])
+    const shardRecord = integer(source.record, `${field}.record`)
+    if (shardRecord < 446 || shardRecord > 450) throw new GameProtocolError(`${field}.record is not Harden art`)
+    const life = positiveFinite(source.life, `${field}.life`)
+    if (life > 10) throw new GameProtocolError(`${field}.life exceeds the native Harden fragment timer`)
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      bounceVelocity: finite(source.bounceVelocity, `${field}.bounceVelocity`),
+      height: finite(source.height, `${field}.height`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'harden-shard',
+      life,
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      position: vector(source.position, `${field}.position`),
+      record: shardRecord,
+      rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
+      rotationStepDegrees: nonnegativeFinite(source.rotationStepDegrees, `${field}.rotationStepDegrees`),
+      velocity: vector(source.velocity, `${field}.velocity`),
+      verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
   if (source.kind === 'earth-boulder-bit') {
     onlyKeys(source, field, [
       'ageTicks', 'birthTick', 'debris', 'id', 'kind', 'lightRegistration',

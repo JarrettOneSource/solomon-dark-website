@@ -15,9 +15,11 @@ import {
   type InstructionSet,
   type Mesh,
   type MeshPipe,
+  type GlBatchAdaptor,
   type Renderer,
   type WebGLRenderer,
 } from 'pixi.js'
+import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 export const NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS = Object.freeze({
   addressMode: 'repeat' as const,
@@ -112,6 +114,7 @@ export const NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE = `
   vec3 textureColor = texturePremultiplied > 0.5 && textureAlpha > 0.0
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
+  if (uIgnoreTextureColor > 0.5) textureColor = vec3(1.0);
   vec3 nativeColor = textureColor * vColor.rgb;
   float finalAlpha = textureAlpha * vertexAlpha;
   finalColor = vec4(
@@ -137,6 +140,7 @@ const NATIVE_TEXTURE_ALPHA_MODE_BIT_GL = {
 const NATIVE_FIXED_FUNCTION_COLOR_BIT_GL = {
   name: 'native-fixed-function-color',
   fragment: {
+    header: NATIVE_TEXTURE_COLOR_HEADER,
     end: NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE,
   },
 }
@@ -274,6 +278,7 @@ class NativeFixedFunctionBatchShader extends Shader {
         ],
       }),
       resources: {
+        nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
         batchSamplers: getBatchSamplersUniformGroup(maxTextures),
       },
     })
@@ -396,9 +401,13 @@ function installNativeTextureAlphaShaders(renderer: Renderer): void {
   const nativeRenderer = renderer as WebGLRenderer
   const batchPipe = nativeRenderer.renderPipes?.batch
   const maxTextures = nativeRenderer.limits?.maxBatchableTextures
-  if (!batchPipe?.['_batchersByInstructionSet'] || !maxTextures) {
+  if (!batchPipe?.['_batchersByInstructionSet'] || !batchPipe['_adaptor']?.start || !maxTextures) {
     throw new Error('Native fixed-function rendering requires a Pixi WebGL batch owner.')
   }
+
+  // Pixi uploads custom batch uniforms only on a shader's first bind. Native
+  // capture mode changes between render targets, so it must sync at each start.
+  installNativeTextureColorSync(batchPipe['_adaptor'] as GlBatchAdaptor, nativeRenderer.shader)
 
   const originalBuildStart = batchPipe.buildStart
   batchPipe.buildStart = function buildNativeFixedFunctionBatch(
@@ -451,6 +460,7 @@ function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
   const nativeColorBit = {
     name: `native-fixed-function-${premultiplied ? 'pma' : 'npm'}`,
     fragment: {
+      header: NATIVE_TEXTURE_COLOR_HEADER,
       end: NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE.replace(
         /texturePremultiplied/g,
         premultiplied ? '1.0' : '0.0',
@@ -469,6 +479,7 @@ function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
       ],
     }),
     resources: {
+      nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       uTexture: Texture.EMPTY.source,
       textureUniforms: {
         uTextureMatrix: { type: 'mat3x3<f32>', value: new Matrix() },

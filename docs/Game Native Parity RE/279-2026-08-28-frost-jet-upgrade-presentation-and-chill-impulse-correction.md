@@ -474,7 +474,7 @@ and debit through VFX/contact/modifier/RNG ownership to release and teardown.
 | Normal Frost | `0x00453550/0x00453670/0x00457720` | core/glint recurrence, wall splay, and world-sorted lane already match | preserve |
 | Over Frost | `0x00453840/0x00453670/0x00457A00` | draw/update lane matches; web wrongly admits its children to Hail allocation | exclude Over from Hail without changing its Frost painter |
 | underpowered Water | weak branch `0x005438EC` and cleanup `0x00529840` | one Normal quarter-opacity child, half damage, `.75` Cold, mask 2, loop gain `.5`, learned suppression, and Harden reset match | preserve |
-| Harden rows 0..10 | `0x00544A57..0x00544C3C`, cleanup `0x00529840` | accrual/cap, persistent release state, flat damage consumer, and weak cleanup match | all-row regression |
+| Harden rows 0..10 | `0x00544A57..0x00544C3C`, cleanup `0x00529840` | authored rows match; release, magic exclusion, and presentation claims were incomplete | corrected by entry 121, 2026-09-04 reopening |
 | Cold Aura rows 0..10 | `0x0054478A..0x00544A25`, `0x0045AF20/0x0045AFB0` | raw radius, unscaled factor, pre-contact query, Boneyard-only birth, fixed origin, and short lifetime violate stock | world radius, post-contact query, Permafrost factor, shared Hub/Boneyard birth, owner follow/teardown |
 | Hail rows 0..10 visual branch | `0x00543F02..0x005440A0`, Bouncer tick `0x00458D80` | every child is gated from a moved Frost position and only Boneyard owns the actor; settled-zero and protocol height bounds break the native lifecycle | Normal-only gate, Staff-emitter origin, shared scene owner, exact RNG/order/bounce/settlement/protocol lifecycle |
 | Hail rows 0..10 gameplay branch | `0x005443B6..0x00544468` | chance/range/draw order match; target-specific boss multiplier is bypassed | all rows and common target multiplier |
@@ -585,7 +585,7 @@ Final implementation dispositions:
 | Chill Wind and Arrow tumble | `exact-ported` | Staff-emitter origin, native blocker, post-damage/Hail order, all 11 rows, strict Arrow threshold, and Brute negative pass |
 | Cone of Ice | `verified-already-at-parity` | all 12 rows retain authored width/count/speed/heading and LOS |
 | Normal/Over/weak Frost presentation | `exact-ported` | Normal-only Hail gate; Over exclusion; weak suppression retained |
-| Harden | `verified-already-at-parity` | all 11 rows, cap, release persistence, flat mitigation, and weak cleanup pass |
+| Harden | `exact-ported` by the later entry 121 reopening | all 11 authored rows retained; release cleanup, physical-only armor, coating/audio/chips are corrected on 2026-09-04 |
 | Cold Aura and Permafrost | `exact-ported` | `720..1440` world radius, float32 factor division, 200-tick minimum, post-contact query, owner follow, and shared lifecycle pass |
 | Hail visual/gameplay lifecycle | `exact-ported` | Staff emitter, RNG order, common target multiplier, full Bouncer arc/settlement, audio fields, protocol, render, and retirement pass |
 | ice start/loop audio and existing Frost painters | `verified-already-at-parity` | preserved registries, loop edge/gain, render records, and captured production frames |

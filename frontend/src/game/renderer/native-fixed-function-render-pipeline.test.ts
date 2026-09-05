@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 import {
   NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
@@ -160,7 +161,9 @@ test('installs exact opaque-surface blend maps once and restores them after cont
 
 test('Sprite-only renderers install native batching without requiring a mesh pipe', () => {
   const original = [9, 9, 9, 9]
+  const capturedModes: number[] = []
   const batch = {
+    _adaptor: { start() {} },
     _batchersByInstructionSet: {},
     buildStart() {},
   }
@@ -169,6 +172,11 @@ test('Sprite-only renderers install native batching without requiring a mesh pip
     gl,
     limits: { maxBatchableTextures: 16 },
     renderPipes: { batch },
+    shader: {
+      updateUniformGroup(group: typeof NATIVE_TEXTURE_COLOR_UNIFORMS) {
+        capturedModes.push(group.uniforms.uIgnoreTextureColor)
+      },
+    },
     runners: { contextChange: { add() {} } },
     state: {
       resetState() {},
@@ -184,6 +192,11 @@ test('Sprite-only renderers install native batching without requiring a mesh pip
 
   assert.doesNotThrow(() => installNativeFixedFunctionRenderPipeline(renderer as never))
   assert.notEqual(batch.buildStart, originalBuildStart)
+  NATIVE_TEXTURE_COLOR_UNIFORMS.uniforms.uIgnoreTextureColor = 1
+  batch._adaptor.start()
+  NATIVE_TEXTURE_COLOR_UNIFORMS.uniforms.uIgnoreTextureColor = 0
+  batch._adaptor.start()
+  assert.deepEqual(capturedModes, [1, 0], 'every batch syncs capture state, including reused shaders')
 })
 
 test('transparent browser overlay surfaces preserve Porter-Duff alpha maps', () => {

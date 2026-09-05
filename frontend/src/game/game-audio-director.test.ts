@@ -46,6 +46,8 @@ const SOURCES = {
     solomondarktheme: 'theme.mp3',
   },
   sounds: {
+    harden: 'harden.wav',
+    'ice-shatter': 'ice-shatter.wav',
     'backpack-close': 'backpack-close.wav',
     'backpack-open': 'backpack-open.wav',
     'bad-action': 'bad-action.wav',

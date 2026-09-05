@@ -790,7 +790,7 @@ function normalizeSimulation(
     playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion),
     primarySpells: normalizePrimarySpells(source.primarySpells, sourceSchemaVersion),
     run: normalizeRun(source.run),
-    secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities),
+    secondaryAbilities: normalizeDiskSecondary(source.secondaryAbilities, sourceSchemaVersion),
     tick: source.tick,
     world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
   }
@@ -1414,17 +1414,34 @@ function normalizePlayerStore(
     let skillBook = normalizeSkillBook(legacyBook, index)
     const statBook = statBooks[index]!
     const economy = economies[index]!
+    const created = createPlayerSkillRuntime(skillBook, statBook, economy)
+    skillBook = created.skillBook
     let runtime: PlayerSkillRuntimeComponent
     if (persistedRuntimes) {
+      const persisted = record(persistedRuntimes[index], `game save skill runtime ${index}`)
+      const harden = sourceSchemaVersion < 30
+        ? { armor: 0, coating: 0 }
+        : record(persisted.harden, 'game save Harden state')
+      const armor = finiteNumber(harden.armor, 'game save Harden armor')
+      const coating = finiteNumber(harden.coating, 'game save Harden coating')
+      if (armor < 0 || coating < 0 || coating > 1 || (coating === 0 && armor !== 0)) {
+        throw new Error('game save Harden state is out of range')
+      }
+      const replacementSlot = persisted.nextConcentrationReplacementSlot
+      if (replacementSlot !== 'a' && replacementSlot !== 'b') {
+        throw new Error('game save concentration replacement slot is invalid')
+      }
       runtime = {
-        ...(persistedRuntimes[index] as PlayerSkillRuntimeComponent),
-        meditationActivityRampTicks: 0,
-        meditationIdleElapsedTicks: 0,
-        mindstarActive: false,
+        ...created.runtime,
+        concentrationSkillIdA: numericOrNull(persisted.concentrationSkillIdA),
+        concentrationSkillIdB: numericOrNull(persisted.concentrationSkillIdB),
+        harden: { armor, coating },
+        hurricaneCharge: finiteNumber(persisted.hurricaneCharge, 'game save Hurricane charge'),
+        hurricaneRefreshed: persisted.hurricaneRefreshed === true,
+        nextConcentrationReplacementSlot: replacementSlot,
+        staffMeleeAlternate: persisted.staffMeleeAlternate === true,
       }
     } else {
-      const created = createPlayerSkillRuntime(skillBook, statBook, economy)
-      skillBook = created.skillBook
       const concentrations = Array.isArray(legacyBook.concentrationSkillIds)
         ? legacyBook.concentrationSkillIds
         : []
@@ -1519,11 +1536,16 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   }
 }
 
-function normalizeDiskSecondary(value: unknown): GameSimulationState['secondaryAbilities'] {
+function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): GameSimulationState['secondaryAbilities'] {
   const source = record(value, 'game save secondary abilities')
   const players = record(source.players, 'game save secondary players')
   return {
     ...source,
+    events: sourceSchemaVersion < 30
+      ? array(source.events, 'game save secondary events').map(event => ({
+          ...record(event, 'game save secondary event'), gain: 1,
+        }))
+      : source.events,
     players: Object.fromEntries(Object.entries(players).map(([playerId, value]) => {
       const player = record(value, `game save secondary player ${playerId}`)
       return [playerId, {

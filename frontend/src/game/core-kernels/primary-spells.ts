@@ -22,6 +22,7 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import type { NativeHurricaneLane } from './native-hurricane.ts'
+import { stepNativeHardenEffect, type NativeHardenEffect } from './native-harden-effects.ts'
 import {
   advanceNativeEarthBoulderCharge,
   nativeEarthBoulderReleasedDamage,
@@ -495,6 +496,7 @@ export type PrimarySpellTransientState = (
   | PrimarySpellFirePatchState
   | PrimarySpellFireParticleState
   | NativePlayerStaffTransient
+  | NativeHardenEffect
   | PrimarySpellWaterAuraState
   | PrimarySpellWaterHailState
   | NativeWeldWorldActor
@@ -812,6 +814,7 @@ export function nativePrimaryPainterRegistrationContract(
     case 'ether-pierce-streak':
     case 'fire-explosion':
     case 'fire-impact':
+    case 'harden-shard':
     case 'water':
       return { count: 1, managerLane: 'transient' }
     case 'player-staff-contact':
@@ -1013,7 +1016,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     .map((effect) => effect.id))
   const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
-    if (effect.kind === 'earth-boulder-bit') {
+    if (effect.kind === 'harden-shard' || effect.kind === 'harden-burst') {
+      const stepped = stepNativeHardenEffect(effect, context.tick, rng, (position) => (
+        context.canPlaceProjectile(effect, position, 0)
+      ))
+      rng = stepped.rng
+      if (stepped.effect) transients.push(stepped.effect)
+    } else if (effect.kind === 'earth-boulder-bit') {
       const stepped = stepNativeWeldBoulderDebrisParticle(
         effect.debris,
         effect.birthTick + effect.ageTicks + 1,

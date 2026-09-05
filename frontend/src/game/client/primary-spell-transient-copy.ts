@@ -68,6 +68,10 @@ function copyStaffTransient(effect: NativePlayerStaffTransient): NativePlayerSta
 
 function copyElementTransient(effect: ElementTransient): ElementTransient {
   switch (effect.kind) {
+    case 'harden-burst': return { ...effect, position: { ...effect.position } }
+    case 'harden-shard': return {
+      ...effect, position: { ...effect.position }, velocity: { ...effect.velocity },
+    }
     case 'ether-pierce-streak': return { ...effect, origin: { ...effect.origin } }
     case 'fire-explosion': return {
       ...effect,

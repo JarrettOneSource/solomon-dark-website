@@ -107,6 +107,7 @@ interface HubFrameDiagnostics {
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
+  playerHardenLayerCount: number
   playerMoving: boolean
   playerOrdinaryWeaponVisible: boolean
   painterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[]
@@ -370,6 +371,7 @@ export async function createHubWorldRenderer(
     playerMagicShieldScale: NATIVE_PLAYER_MAGIC_SHIELD.scale,
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
+    playerHardenLayerCount: 0,
     playerMoving: false,
     playerOrdinaryWeaponVisible: false,
     painterOrder: [],
@@ -570,6 +572,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.playerMagicShieldAlpha = playerView.magicShieldAlpha
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
+    frameDiagnostics.playerHardenLayerCount = playerView.hardenLayerCount
     frameDiagnostics.playerMaterialTint = playerView.materialTint
     frameDiagnostics.playerOrdinaryWeaponVisible = playerView.ordinaryWeaponVisible
     frameDiagnostics.playerRobeFixedPose = playerView.robeFixedPose

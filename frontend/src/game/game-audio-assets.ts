@@ -56,6 +56,8 @@ import hitShield from '../assets/game/audio/sfx/hit-shield.wav'
 import golemDie from '../assets/game/audio/sfx/golem-die.wav'
 import golemProvoke from '../assets/game/audio/sfx/golem-provoke.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
+import harden from '../assets/game/audio/sfx/harden.wav'
+import iceShatter from '../assets/game/audio/sfx/ice-shatter.wav'
 import impSplit from '../assets/game/audio/sfx/imp-split.wav'
 import impVocal1 from '../assets/game/audio/sfx/imp-1.wav'
 import impVocal2 from '../assets/game/audio/sfx/imp-2.wav'
@@ -256,6 +258,8 @@ export const GAME_AUDIO_SOURCES = {
     'hail-bounce-3': hailBounce3,
     'hail-shot': hailShot,
     'ice-start': iceStart,
+    harden,
+    'ice-shatter': iceShatter,
     'imp-split': impSplit,
     'imp-vocal-1': impVocal1,
     'imp-vocal-2': impVocal2,

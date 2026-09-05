@@ -35,8 +35,8 @@ import {
 } from './native-offensive-resolution.ts'
 import {
   nativeSkillClass,
-  type PlayerFlashResponse,
 } from './player-skill-runtime.ts'
+import type { PlayerFlashResponse } from './player-harmful-contact.ts'
 import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
 import {
   NATIVE_GOLEM_DEATH_DURATION_TICKS,
@@ -116,7 +116,7 @@ export const NATIVE_SECONDARY_AUDIO_CUES = Object.freeze([
   'golem-provoke', 'knockback-golem', 'stone-step', 'golem-die', 'stone-break',
   'flame-lash-start', 'flash-spell', 'rock-hit',
   'stoneskin-on', 'stoneskin', 'teleport', 'magic-circle', 'set-trap', 'trap',
-  'magic-missile', 'throw-fire', 'ice-start', 'start-boulder',
+  'magic-missile', 'throw-fire', 'ice-start', 'start-boulder', 'harden', 'ice-shatter',
   'flash', 'dampen', 'magic-shield-up', 'hit-shield', 'pop-shield',
   'magic-shield-explode', 'acid-sizzle', 'fireball-hit', 'distort-reality',
   'comet-whistle', 'explode-steam', 'level-up', 'mindstar', 'fizzle',
@@ -200,12 +200,13 @@ export interface NativeSecondaryEventState {
   readonly cameraMagnitude: number
   readonly cue: NativeSecondaryAudioCue | null
   readonly eventId: number
+  readonly gain: number
   readonly kind: NativeSecondaryEventKind
   readonly ownerId: string
   readonly pitch: number
   readonly position: Vector2
   readonly screenFlash: NativeSecondaryScreenFlashState | null
-  readonly skillId: NativeSecondaryAbilityId | 22 | 53 | null
+  readonly skillId: NativeSecondaryAbilityId | 22 | 36 | 53 | null
   readonly tick: number
   readonly worldKey: string
 }
@@ -221,10 +222,11 @@ export interface NativeSecondaryScreenFlashState {
 
 type NativeSecondaryEventSeed = Omit<
   NativeSecondaryEventState,
-  'cameraDisplacement' | 'cameraMagnitude' | 'eventId' | 'screenFlash'
+  'cameraDisplacement' | 'cameraMagnitude' | 'eventId' | 'gain' | 'screenFlash'
 > & {
   readonly cameraDisplacement?: Vector2 | null
   readonly cameraMagnitude?: number
+  readonly gain?: number
   readonly screenFlash?: NativeSecondaryScreenFlashState | null
 }
 
@@ -1159,7 +1161,7 @@ export function applyNativeSecondaryPlayerDamage(
       },
     },
   }
-  next = emit(next, {
+  next = emitNativeSecondaryEvent(next, {
     actorId: null,
     cue: 'hit-shield',
     kind: 'shield-hit',
@@ -1171,7 +1173,7 @@ export function applyNativeSecondaryPlayerDamage(
     worldKey,
   })
   if (broke) {
-    next = emit(next, {
+    next = emitNativeSecondaryEvent(next, {
       actorId: null,
       cue: 'pop-shield',
       kind: 'shield-break',
@@ -1233,7 +1235,7 @@ export function applyNativeSecondaryPlayerDamage(
         variant: 1,
         worldKey,
       }))
-      next = emit(next, {
+      next = emitNativeSecondaryEvent(next, {
         actorId: null,
         cameraMagnitude: 1.25,
         cue: 'magic-shield-explode',
@@ -1328,7 +1330,7 @@ export function applyNativeSecondaryGolemDamage(
     'golem-die',
     'rock-hit',
   ] as const) {
-    state = emit(state, eventSeed(death, tick, cue, 'impact'))
+    state = emitNativeSecondaryEvent(state, eventSeed(death, tick, cue, 'impact'))
   }
   return {
     ignored: false,
@@ -1608,7 +1610,7 @@ export function stepNativeSecondaryAbilities(
           scale: Math.fround(actor.slowFactor * currentScale),
         }
         if (actor.ageTicks === 1) {
-          state = emit(state, {
+          state = emitNativeSecondaryEvent(state, {
             ...eventSeed(actor, context.tick, null, 'pulse'),
             screenFlash: REGION_FLASH_PLANES,
           })
@@ -2343,7 +2345,7 @@ export function stepNativeSecondaryAbilities(
                 worldKey: actor.worldKey,
               }))
               for (const cue of ['lightning-start', 'thunder'] as const) {
-                state = emit(state, {
+                state = emitNativeSecondaryEvent(state, {
                   actorId: strikeId,
                   cue,
                   kind: 'impact',
@@ -2371,7 +2373,7 @@ export function stepNativeSecondaryAbilities(
           const volumeJitter = drawNativeFloat(rng, STORM_AMBIENT_THUNDER_VOLUME_JITTER)
           rng = volumeJitter.state
           actor = { ...actor, frame: 1 }
-          state = emit(state, eventSeed(actor, context.tick, 'thunder', 'pulse'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'thunder', 'pulse'))
         }
         break
       }
@@ -2409,8 +2411,8 @@ export function stepNativeSecondaryAbilities(
             Math.min(preDecrementRemaining, 200) / 200,
           )
           if (sourceActor.ageTicks === 0) {
-            state = emit(state, eventSeed(actor, context.tick, 'rock-hit', 'pulse'))
-            state = emit(state, eventSeed(actor, context.tick, 'quake-cracks', 'pulse'))
+            state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'rock-hit', 'pulse'))
+            state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'quake-cracks', 'pulse'))
           }
           const horizontal = drawNativeFloat(rng, 3, true)
           rng = horizontal.state
@@ -2423,7 +2425,7 @@ export function stepNativeSecondaryAbilities(
           if ((previousPhase < 0.6 && phase > 0.6)
             || (previousPhase < 3 && phase > 3)) greenOverlay = 1
           if (previousPhase < 3 && phase > 3) {
-            state = emit(state, eventSeed(
+            state = emitNativeSecondaryEvent(state, eventSeed(
               actor,
               context.tick,
               'quake-crack-small',
@@ -2704,8 +2706,8 @@ export function stepNativeSecondaryAbilities(
           targetId: stepped.actor.targetId,
         }
         if (stepped.assemblyMilestone !== null) {
-          state = emit(state, eventSeed(actor, context.tick, 'quake-crack-small', 'pulse'))
-          state = emit(state, {
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'quake-crack-small', 'pulse'))
+          state = emitNativeSecondaryEvent(state, {
             ...eventSeed(
               actor,
               context.tick,
@@ -2716,13 +2718,13 @@ export function stepNativeSecondaryAbilities(
           })
         }
         if (stepped.provokeStarted) {
-          state = emit(state, eventSeed(actor, context.tick, 'golem-provoke', 'pulse'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'golem-provoke', 'pulse'))
         }
         if (stepped.footstep) {
-          state = emit(state, eventSeed(actor, context.tick, 'stone-step', 'pulse'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'stone-step', 'pulse'))
         }
         if (stepped.contact !== null) {
-          state = emit(state, eventSeed(actor, context.tick, 'knockback-golem', 'impact'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'knockback-golem', 'impact'))
           for (const targetId of stepped.contact.targetIds) {
             const target = context.target(actor.worldKey, targetId)
             if (target === null) continue
@@ -2793,7 +2795,7 @@ export function stepNativeSecondaryAbilities(
           }
         }
         if (actor.ageTicks === 2) {
-          state = emit(state, {
+          state = emitNativeSecondaryEvent(state, {
             ...eventSeed(actor, context.tick, 'magic-circle', 'pulse'),
             screenFlash: REGION_FLASH_MAGIC_CIRCLE,
           })
@@ -2852,7 +2854,7 @@ export function stepNativeSecondaryAbilities(
                 variant: actor.variant,
                 worldKey: actor.worldKey,
               }))
-              state = emit(state, {
+              state = emitNativeSecondaryEvent(state, {
                 ...eventSeed(actor, context.tick, 'trap', 'impact'),
                 cameraMagnitude: 1.25,
                 screenFlash: magicTrapScreenFlash(actor.variant, 0.05, true),
@@ -3057,7 +3059,7 @@ export function stepNativeSecondaryAbilities(
                 Math.fround(0.45),
               )
               rng = soundPitch.state
-              state = emit(state, {
+              state = emitNativeSecondaryEvent(state, {
                 ...eventSeed(actor, context.tick, 'acid-sizzle', 'pulse'),
                 pitch: Math.fround(0.8 + soundPitch.value),
               })
@@ -3178,7 +3180,7 @@ export function stepNativeSecondaryAbilities(
           )),
         }
         if (actor.ageTicks === 1) {
-          state = emit(state, {
+          state = emitNativeSecondaryEvent(state, {
             ...eventSeed(actor, context.tick, null, 'pulse'),
             screenFlash: REGION_FLASH_PLANES,
           })
@@ -3358,7 +3360,7 @@ export function stepNativeSecondaryAbilities(
         if (sourceActor.variant === 0
           && remainingTicks < COMET_WARNING_TICKS_REMAINING) {
           actor = { ...actor, variant: 1 }
-          state = emit(
+          state = emitNativeSecondaryEvent(
             state,
             eventSeed(actor, context.tick, 'comet-whistle', 'whistle'),
           )
@@ -3439,13 +3441,13 @@ export function stepNativeSecondaryAbilities(
               accumulatedAngle + 8 + angleStep.value,
             )
           } while (accumulatedAngle < 360)
-          state = emit(state, {
+          state = emitNativeSecondaryEvent(state, {
             ...eventSeed(actor, context.tick, 'explode-steam', 'impact'),
             screenFlash: REGION_FLASH_COMET,
           })
-          state = emit(state, eventSeed(actor, context.tick, 'magic-shield-explode', 'impact'))
-          state = emit(state, eventSeed(actor, context.tick, 'big-fire', 'impact'))
-          state = emit(state, eventSeed(actor, context.tick, 'ring-of-ice', 'impact'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'magic-shield-explode', 'impact'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'big-fire', 'impact'))
+          state = emitNativeSecondaryEvent(state, eventSeed(actor, context.tick, 'ring-of-ice', 'impact'))
           retain = false
         }
         break
@@ -3649,7 +3651,7 @@ export function stepNativeSecondaryAbilities(
     player = stepPlayerState(player, authority)
     player = recalculateReserve(player, authority)
     if (planewalkerWasActive && player.planewalkerTicksRemaining === 0) {
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         actorId: null,
         cue: 'planewalker-off',
         kind: 'toggle-off',
@@ -3662,7 +3664,7 @@ export function stepNativeSecondaryAbilities(
       })
     }
     if (stoneskinWasActive && player.stoneskinTicksRemaining === 0) {
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         actorId: null,
         cue: 'stoneskin',
         kind: 'pulse',
@@ -3679,7 +3681,7 @@ export function stepNativeSecondaryAbilities(
       player = clearPlayerToggles(player)
       if (overloaded && authority.eligible) {
         overloadedPlayerIds.add(playerId)
-        state = emit(state, {
+        state = emitNativeSecondaryEvent(state, {
           actorId: null,
           cue: 'fizzle',
           kind: 'overload',
@@ -3728,10 +3730,10 @@ export function stepNativeSecondaryAbilities(
           authority.character.position,
           authority.worldKey,
         )
-        state = emit(state, castEvent(
+        state = emitNativeSecondaryEvent(state, castEvent(
           playerId, 12, authority, context.tick, 'cast', 'distort-reality',
         ))
-        state = emit(state, {
+        state = emitNativeSecondaryEvent(state, {
           ...castEvent(
             playerId, 12, authority, context.tick, 'pulse', 'lightning-start',
           ),
@@ -3786,7 +3788,7 @@ export function stepNativeSecondaryAbilities(
       player = clearPlayerToggles(player)
       if (overloaded) {
         overloadedPlayerIds.add(playerId)
-        state = emit(state, {
+        state = emitNativeSecondaryEvent(state, {
           actorId: null,
           cue: 'fizzle',
           kind: 'overload',
@@ -4016,7 +4018,7 @@ function castAbility(
       if (player.planewalkerTicksRemaining > 0) {
         manaSpent = 0
         nextPlayer = { ...nextPlayer, planewalkerTicksRemaining: 0, planeOrbHeld: false }
-        state = emit(state, castEvent(
+        state = emitNativeSecondaryEvent(state, castEvent(
           playerId,
           skillId,
           authority,
@@ -4041,7 +4043,7 @@ function castAbility(
           Math.round(v.mDuration * 100),
         ),
       }
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
         screenFlash: REGION_FLASH_PLANEWALKER,
       })
@@ -4084,7 +4086,7 @@ function castAbility(
         scale: 2,
         skillId,
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
         position: phaseMarker,
       })
@@ -4143,12 +4145,12 @@ function castAbility(
         slowFactor: SHOCKWAVE_FADE_THRESHOLD,
         variant: authority.maximumRingOfFire ? 1 : 0,
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'cast', 'big-fire'),
         cameraMagnitude: 0.25,
         screenFlash: REGION_FLASH_RING_FIRE,
       })
-      state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'nuke'))
+      state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'nuke'))
       break
     case 23: {
       manaSpent = 0
@@ -4166,7 +4168,7 @@ function castAbility(
           authority,
         ))
       }
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(
           playerId,
           skillId,
@@ -4242,11 +4244,11 @@ function castAbility(
         skillId,
         slowFactor: angularSign.value,
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'cast', 'prismatic-shock'),
         screenFlash: screenFlash(red, green, blue, 0.05, true),
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', 'lightning-start'),
         pitch: 0.8,
       })
@@ -4263,7 +4265,7 @@ function castAbility(
         skillId,
         worldKey: authority.worldKey,
       }).state
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
         screenFlash: REGION_FLASH_RING_ICE,
       })
@@ -4324,7 +4326,7 @@ function castAbility(
             ? Object.freeze({ ...actor, hitTargetIds: Object.freeze(sceneryActorIds) })
             : actor),
         }
-        state = emit(state, {
+        state = emitNativeSecondaryEvent(state, {
           ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
           screenFlash: REGION_FLASH_EARTHQUAKE,
         })
@@ -4404,11 +4406,11 @@ function castAbility(
     }
     case 46:
       nextPlayer = { ...nextPlayer, stoneskinTicksRemaining: Math.max(nextPlayer.stoneskinTicksRemaining, Math.round(v.mDuration * 100)) }
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'cast', 'stoneskin-on'),
         screenFlash: REGION_FLASH_STONESKIN,
       })
-      state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'stoneskin'))
+      state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'stoneskin'))
       break
     case 48: {
       const sourceRotation = drawNativeFloat(state.rng, 360)
@@ -4422,7 +4424,7 @@ function castAbility(
         scale: 1,
         skillId,
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', 'teleport'),
         position: origin,
         screenFlash: REGION_FLASH_TELEPORT_SOURCE,
@@ -4442,7 +4444,7 @@ function castAbility(
         skillId,
         variant: 1,
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', 'teleport'),
         position: relocated,
         screenFlash: REGION_FLASH_TELEPORT_DESTINATION,
@@ -4525,7 +4527,7 @@ function castAbility(
         variant: trapSelector.selector,
       })
       postCastCue = magicTrapPrimaryCue(trapSelector.selector)
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
         position: aim,
         screenFlash: magicTrapScreenFlash(trapSelector.selector, 0.1, false),
@@ -4579,8 +4581,8 @@ function castAbility(
         presentationRng,
         skillId,
       })
-      state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'cast', 'flash'))
-      state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'dampen'))
+      state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'cast', 'flash'))
+      state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'dampen'))
       break
     }
     case 54:
@@ -4591,7 +4593,7 @@ function castAbility(
         magicShieldMaximum: v.mAbsorb,
         magicShieldPulseTicks: 0,
       }
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', null),
         screenFlash: REGION_FLASH_MAGIC_SHIELD_APPLY,
       })
@@ -4646,12 +4648,12 @@ function castAbility(
           variant: index,
         })
       }
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'cast', 'ignite'),
         position: aim,
         screenFlash: REGION_FLASH_FIRE,
       })
-      state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'fireball-hit'))
+      state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'fireball-hit'))
       break
     }
     case 74:
@@ -4671,8 +4673,8 @@ function castAbility(
           skillId,
           slowFactor: 0,
         })
-        state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'cast', 'distort-reality'))
-        state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'lightning-start'))
+        state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'cast', 'distort-reality'))
+        state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'lightning-start'))
       }
       break
     case 76: {
@@ -4723,11 +4725,11 @@ function castAbility(
           }
         }
       }
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', 'level-up'),
         pitch: 2,
       })
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'pulse', 'level-up'),
         pitch: 3,
       })
@@ -4739,7 +4741,7 @@ function castAbility(
       const active = !player[field]
       nextPlayer = { ...nextPlayer, [field]: active }
       nextPlayer = recalculateReserve(nextPlayer, authority)
-      state = emit(state, {
+      state = emitNativeSecondaryEvent(state, {
         ...castEvent(playerId, skillId, authority, context.tick, active ? 'toggle-on' : 'toggle-off', 'mindstar'),
         screenFlash: skillId === 78 ? REGION_FLASH_MINDSTAR : REGION_FLASH_FIRE,
       })
@@ -4756,9 +4758,9 @@ function castAbility(
   if (skillId !== 51) {
     nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
   }
-  state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'cast', castCue(skillId)))
+  state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'cast', castCue(skillId)))
   if (postCastCue !== null) {
-    state = emit(state, castEvent(
+    state = emitNativeSecondaryEvent(state, castEvent(
       playerId,
       skillId,
       authority,
@@ -5184,11 +5186,11 @@ function spawnMaximumRingFireExplosion(
     worldKey: wave.worldKey,
   }))
   const actor = state.actors.at(-1)!
-  state = emit(state, {
+  state = emitNativeSecondaryEvent(state, {
     ...eventSeed(actor, tick, 'fireball-hit', 'pulse'),
     pitch: detonation.soundPitch,
   })
-  state = emit(state, {
+  state = emitNativeSecondaryEvent(state, {
     ...eventSeed(actor, tick, 'throw-fire', 'pulse'),
     pitch: Math.fround(0.8),
   })
@@ -5822,7 +5824,7 @@ function spawn(
   }
 }
 
-function emit(
+export function emitNativeSecondaryEvent(
   source: NativeSecondarySimulationState,
   event: NativeSecondaryEventSeed,
 ): NativeSecondarySimulationState {
@@ -5837,6 +5839,7 @@ function emit(
           : Object.freeze({ ...event.cameraDisplacement }),
       cameraMagnitude: event.cameraMagnitude ?? 0,
       eventId: source.nextEventId,
+      gain: event.gain ?? 1,
       screenFlash: event.screenFlash ?? null,
     })],
     nextEventId: source.nextEventId + 1,
@@ -5886,7 +5889,7 @@ function fizzle(
   authority: NativeSecondaryPlayerAuthority,
   tick: number,
 ): NativeSecondarySimulationState {
-  return emit(source, castEvent(ownerId, skillId, authority, tick, 'fizzle', 'fizzle'))
+  return emitNativeSecondaryEvent(source, castEvent(ownerId, skillId, authority, tick, 'fizzle', 'fizzle'))
 }
 
 function advanceActor(actor: NativeSecondaryActorState): NativeSecondaryActorState {
@@ -6223,7 +6226,7 @@ export function materializeNativePlayerFlashResponse(
       worldKey: input.worldKey,
     }))
   }
-  return emit(state, {
+  return emitNativeSecondaryEvent(state, {
     actorId: null,
     cameraDisplacement: { ...input.response.cameraDisplacement },
     cue: 'flash-spell',
@@ -6248,7 +6251,7 @@ export function emitNativePlayerScreenFlash(
     worldKey: string
   }>,
 ): NativeSecondarySimulationState {
-  return emit(source, {
+  return emitNativeSecondaryEvent(source, {
     actorId: null,
     cue: null,
     kind: 'impact',

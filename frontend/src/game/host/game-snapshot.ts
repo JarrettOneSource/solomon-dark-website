@@ -389,6 +389,7 @@ function protocolPlayerState(
       deathTick: progression.deathTick,
       experience: progression.experience,
       hagathaRuntime: { ...progression.hagathaRuntime },
+      hardenCoating: skillRuntime.harden.coating,
       inventoryStats: {
         castSpeedPercent: Math.fround(derived.castProgressFactor * 100),
         magicResistancePercent: Math.fround(derived.magicResistance * 100),

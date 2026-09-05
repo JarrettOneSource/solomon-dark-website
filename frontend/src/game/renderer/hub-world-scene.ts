@@ -134,6 +134,8 @@ export class HubWorldScene {
   private readonly painterPlanner = new NativeHubPainterPlanner()
   private lastPainterOrder: readonly Readonly<{ id: string; row: number; zIndex: number }>[] = []
 
+  private readonly renderer: Renderer
+
   constructor(
     textures: HubWorldTextures,
     createdAtTick: number,
@@ -142,6 +144,7 @@ export class HubWorldScene {
     modTextures: ModPresentationTextures,
   ) {
     this.textures = textures
+    this.renderer = renderer
     this.modTextures = modTextures
     this.stage.eventMode = 'none'
     this.world.sortableChildren = true
@@ -821,7 +824,7 @@ export class HubWorldScene {
         view = undefined
       }
       if (!view) {
-        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures)
+        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures, this.renderer, false)
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
         this.world.addChild(view.container)

@@ -333,6 +333,22 @@ function interpolateWaterTransient(
   blend: number,
 ): PrimarySpellTransientState | null {
   const [kind, older, newer] = pair
+  if (kind === 'harden-burst') return {
+    ...(blend < 1 ? older : newer),
+    ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+    alpha: lerp(older.alpha, newer.alpha, blend),
+    position: lerpVector(older.position, newer.position, blend),
+  }
+  if (kind === 'harden-shard') return {
+    ...(blend < 1 ? older : newer),
+    ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+    height: lerp(older.height, newer.height, blend),
+    life: lerp(older.life, newer.life, blend),
+    position: lerpVector(older.position, newer.position, blend),
+    rotationDegrees: lerp(older.rotationDegrees, newer.rotationDegrees, blend),
+    velocity: lerpVector(older.velocity, newer.velocity, blend),
+    verticalVelocity: lerp(older.verticalVelocity, newer.verticalVelocity, blend),
+  }
   if (kind === 'water') {
     const water = blend < 1 ? older : newer
     return {

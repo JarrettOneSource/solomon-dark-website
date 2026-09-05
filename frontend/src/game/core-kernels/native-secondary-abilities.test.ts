@@ -471,6 +471,7 @@ test('Flash materializes twelve independent children, area Dazzle, feedback, and
     cameraMagnitude: 0,
     cue: 'flash-spell',
     eventId: 1,
+    gain: 1,
     kind: 'impact',
     ownerId: 'player',
     pitch: 1.125,

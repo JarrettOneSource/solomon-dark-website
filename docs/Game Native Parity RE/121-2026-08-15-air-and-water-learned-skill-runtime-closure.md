@@ -48,7 +48,7 @@ merge, simulation tick, replication, presentation, audio, and teardown.
 | 33 Chill Wind | `0x00543860`, target impulse vslot `+0x64` | exact-ported | distance-aware actor push plus hostile Arrow `Anim_SpinAway`; exact inner/outer squared-radius taper |
 | 34 Cone of Ice | `0x00543860`, `0x00641B10` | exact-ported | reach `205 + 4*widen`, half aperture `15+widen`, visual density/speed inputs |
 | 35 Ring of Ice | `0x00644460`, `FreezeWave 0x7E8` | exact-ported | paid expanding one-contact-per-target wave, freeze/cold application, three bursts, ring, and 100/200 WhirlSnow children |
-| 36 Harden | Water handler, progression `+0x8B8/+0x8BC` | exact-ported | held accrual, actor-private cap, persistent armor pool and damage consumer |
+| 36 Harden | Water handler, progression `+0x8B8/+0x8BC` | exact-ported | held physical armor/cap; coating and teardown corrected in the 2026-09-04 reopening below |
 | 37 Cold Aura | Water handler, record 14, progression `+0x8AC/+0x8B0` | exact-ported | held radius query, six-tick presentation cadence, slow merge |
 | 38 Hail | Water handler, `Anim_Hail 0x00454030`, record 32 | exact-ported | native 3,000-cell hit roll, event-time damage draw, presentation actor |
 | 39 Permafrost | progression `+0x8B4`, cold/freeze modifier construction | exact-ported | slowdown scaling and 200-tick minimum-duration rule across both Water spells |
@@ -148,11 +148,11 @@ than becoming an Air/Water-only boolean.
   retirement are presentation consequences of that single authoritative
   impact.
 - Harden adds its cached per-tick increment while held, clamps to the cached
-  maximum, and stops accruing on release without deleting the pool. Player
+  maximum. The 2026-09-04 reopening corrects the earlier release claim: the
+  active-primary dispatcher deletes coating and armor on release. Player
   contact `0x0052FCA5` resolves Deflect cancellation first, applies Resist
-  Magic to surviving magic damage, then consumes the actor-private flat armor
-  pool at `+0x1E8`; only the remainder reaches HP. Deflected contacts do not
-  consume Harden.
+  Magic to surviving magic damage, then subtracts the actor-private armor at `+0x1E8` from physical damage;
+  magic damage is separate. Hits do not consume the accumulator.
 - StormCloud starts with 1,000 active ticks. Tornado adds
   `trunc(mDuration*100)` and resets strike delay to
   `trunc(IntegerInclusive(30,120)/(1+mSpeed/100))`.
@@ -246,8 +246,8 @@ than becoming an Air/Water-only boolean.
 - Player rank/runtime/armor stays in dense player ECS columns. Enemy modifiers
   are target-owned authoritative rows. Persistent spells are simulation-owned
   entities with stable IDs, owner/world identity, clocks, and contact ledgers.
-  Deflect, Resist Magic, and persistent flat Harden are applied in that native
-  order by the central player harmful-contact seam; Harden is not depleted by
+  Deflect, resistance, and held physical Harden are applied by the central
+  player harmful-contact seam; Harden is not depleted by
   damage.
 - Existing rank-one Air and Water render plans remain their proven owners.
   Learned Hail/Aura and secondary art get separate presentation actors; combat
@@ -496,3 +496,170 @@ initial handoff the fix was not committed, pushed, or deployed. The shared
 dirty checkout and Mod Loader files were preserved. Focused local/Mac source
 worktrees were retained for review; task browser/host processes and disposable
 captures, profiles, coverage output, scripts, and logs were removed.
+## 2026-09-04 — Harden state, special painter, and breakup reopening
+
+The report `SDB - Harden no effect.mp4` in Windows Downloads shows rank-2
+Harden with Frost Jet firing and no ice coating. The earlier entries stopped
+at the armor accumulator and ordinary PlayerWizard painter. They skipped the
+flag-selected special painter and the upstream release branch. Consequently,
+their claims that Harden has no independent presentation/audio and survives
+release are false. The 2026-08-28 all-Water receipt inherited those assumptions.
+
+### Evidence established before implementation
+
+Retail image: `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`. Static work uses the canonical Ghidra 12.0.3
+project through the read-only Mod Loader wrapper at revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`. No injected observations justify
+the following instruction/data facts.
+
+| Owner | Recovered contract |
+| --- | --- |
+| Water handler `0x00543860`, `0x00544A57..0x00544C3E` | Normal paid Water adds cached `progression+0x8BC` to physical armor `player+0x1E8`, clamps at `progression+0x8B8`, sets `player+0x138` bit `8`, and independently increases coating `player+0x2E0` by double `0.004999999888241291`, with a float32 store and cap one. |
+| Water start and threshold | Zero coating requests `sounds\\harden` at pitch `0.800000011920929`; crossing `0.25` requests the same cue twice at pitch one. Point attenuation belongs to Region vtable `+0x100`. |
+| Main player update `0x00548B00`, cleanup call `0x0054AD24` | No active primary calls the breakup helper when bit 8 is set, then clears coating and armor. Merely stopping accrual is incorrect. Weak Water reaches the same cleanup from `0x00544C20`. |
+| Player damage `0x00548150 -> 0x0052F540` | Deflected contact does not chip Harden. Surviving positive physical contact can create a cosmetic chip once coating is strictly above `0.2`. The flat armor subtraction at `0x0052FCA5` applies to physical lane `0x0081C6E8`; the separate magic lane `0x0081C6EC` is not reduced by Harden. Hits do not consume the armor accumulator. |
+| Special painter `0x005468C0`, PlayerWizard vtable `0x00793F74 + 0x20` | Region dispatch `0x00624B40` selects the special painter for flag mask `0x39`; bit 8 selects Harden below bit 1 and above bits `0x10/0x20`. Harden captures the animated ordinary player, multiplies the mask with Clothes record 1, draws the ordinary player, then submits the cyan result three times additively. |
+| Coating draw `0x00546FBC..0x0054731E` | Clothes singleton `0x00819980 + 0xFC`; orientation `24 * ((trunc(heading)+7)/15 mod 24)` degrees; gait-dependent registration; composite offset `(0,-25)`, scale `1.1200000047683716`, RGB `(0.25,0.75,1)`, alpha `coating * 0.699999988079071`. No new light source is created. |
+| Coating asset | Complete retail Clothes record 1 is rectangle `(494,0,130,130)`, logical size `130x130`, origin `(0,0)`. The existing bundle parser recovers these bytes directly. |
+| Breakup `0x00529840 -> 0x00654A60` | Clear bit 8; request `sounds\\ice_shatter` at pitch `1 + Float(0.1,signed)` and gain `coating * pointGain`; emit radial additive fragments only above coating `0.1`; reset armor and coating to zero. Angular steps are 90 below `.2`, 60 below `.3`, 45 below `.4`, 35 below `.5`, and 20 thereafter. |
+| Audio registry `0x004EE010` | `sounds\\harden` is registry field `+0x724`, loaded at `0x004EEE1C`; `sounds\\ice_shatter` is `+0x7D4`, loaded at `0x004EEF74`. Both are exact retail WAV assets. |
+
+Mac baseline at `a2197bf4`: the production 200-tick Boneyard Water probe
+reaches armor `24.000041961669922`, blocks a ten-point physical contact, also
+incorrectly blocks a ten-point magic contact, and publishes no Harden state.
+The focused release regression fails with armor `11.999990463256836` instead
+of zero after 100 ticks followed by release. Thus the report is a missing
+presentation/lifecycle implementation, rather than an absent numerical cache.
+
+### System boundary and membership
+
+This reopening owns Harden row 36, all eleven authored ranks, normal/weak
+Water, active-primary/release transitions, physical and magic contact,
+Deflect suppression, coating and chip/breakup presentation, audio,
+replication, and player/world teardown. The inert equipment `FX_MAXHARDEN`
+bit retains the already-recovered absence of native consumers; the tooltip
+does not authorize inventing damaging retaliation. Other Water skills and
+the unrelated bit-1/bit-`0x10`/bit-`0x20` effects retain their own owners.
+
+The all-rank armor-per-second rows remain
+`[0,8,12,18,25,30,35,40,45,50,60]`, caps
+`[0,25,50,75,100,125,150,175,200,250,300]`, and added mana-per-second rows
+`[0,5,8,10,15,25,32,45,50,55,58]`. Coating growth is independent of rank.
+
+### Implementation and acceptance contract
+
+Keep Harden state and native effect programs cohesive; remove the obsolete
+test-only armor helper. Publish authoritative coating state to the shared
+player view; both normal and late snapshots must display it. Use the exact
+Clothes/WAV assets and existing Pixi render-target/native blend facilities.
+Preserve host-owned random draws, world coordinates, painter ownership,
+release/weak cleanup, death, and world changes. Validate every rank and state
+branch through the real runtime/contact and snapshot interfaces, then prove
+the animated coating and breakup through Mac Chrome. The canonical Mac gate
+and final browser receipt are recorded below.
+
+
+### Final recovered membership and implementation
+
+| Member | Disposition | Evidence / production owner |
+| --- | --- | --- |
+| Row 36 ranks 0..10, armor rates/caps/mana | verified-already-at-parity for authored rows; exact-ported for held lifecycle | profile all-rank matrix plus `native-harden.ts` independent coating clock |
+| Normal Water, weak Water, release, other held primary | exact-ported | `0x00544A57..0x00544C3E` and no-action `0x0054AD19..`; shared skill tick |
+| Physical contact, magic exclusion, Deflect cancellation, chip chance | exact-ported | `0x00548150 -> 0x0052F540`; `player-harmful-contact.ts` |
+| Start, formed threshold, release and chip audio | exact-ported | Sound fields `+0x724/+0x7D4`; builder supplies ten voices to both; shared event gain carries partial coating breakup volume |
+| Animated head/body/equipment mask and Clothes-1 multiply | exact-ported | `0x005468C0`, all sprite and mesh native pipelines; 256-square NPM target; `D3DTOP_SELECTARG1` preserves diffuse RGB and texture alpha |
+| Three cyan composites and final front Staff/orb submission | exact-ported | `0x00547222..0x00547355`; common player view, shader state restored between target submissions |
+| Stoneskin precedence and dying/spectator suppression | exact-ported | bit-1 branch above bit 8; native death gate; shared player view |
+| Breakup radial fragments and one Fade flash | exact-ported | `0x00654A60`; BadGuys builder `0x004E0DD0` maps `+0x48BC` to all five records 446..450; flash is ordinary `Anim_Fade` record 15 at scale 3.5, alpha decay .05 and sort bias 10 |
+| Fragment construction / updates / landing / settlement | exact-ported | `Anim_Bouncer 0x00453060/0x00456720`, additive draw `0x00528D10`; four constructor float draws, record Integer(5), signed heading jitter, speed and lead; life 10 with .015 decay, skip airborne ticks divisible by three, gravity .4, restitution .65, strict -.75 settlement |
+| Fragment painter and static-collision retirement | exact-ported | `Region+0x2C4` post-world owner; `0x004567C6..0x004567E2` queries the embedded Arena collision controller at `+0x378`; retire inside a shape and still consume the two landing random draws |
+| Coating snapshots and both fragment families | exact-ported | protocol 119, strict record/field validation, independent players, late-state reconstruction and interpolation; release stays discrete |
+| College and Boneyard transitions, death and owner removal | exact-ported | existing shared player view and reset owner; runtime and renderer regressions |
+| FX_MAXHARDEN equipment feature | out-of-system: shipped inert | previous exhaustive `+0x878` read census; no native consumer for bit `0x100` |
+| Other Water progression effects and other special material flags | out-of-system: distinct effect owners | preserved existing Water/secondary contracts and the incoming Hail/renderer fixes |
+
+The first browser candidate exposed a real Pixi integration defect: batched
+shader uniforms were uploaded only on the first bind, leaving the texture-color
+selector in mask mode. `installNativeTextureColorSync` now updates this uniform
+at each native batch start in both College and Arena, and restores its predecessor
+when the Arena pipeline is destroyed. The smoke journey observes the actual GL
+uniform returning to zero, normal detailed wizard art after release, three
+coating layers while active, and native audio play requests.
+
+Asset SHA-256: Clothes-1 PNG
+`e02f6b79705e40702e6a8219dd959bfbd0ec6b2cbc87e497c0ffdaf24fea16ef`;
+Harden WAV `47f01edbaa864239705de0be04e1fde25877d9e2e99f6edfc07e8c3656e48df9`;
+Ice Shatter WAV `6c59e5456086dfd3c43ebc891ba6225d967c36f0a36d14a2a8fe48b3484321bd`.
+The standalone extracted Clothes record uses the existing fixed-function
+framed texture policy. No generated replacement art or audio is used.
+
+
+### Save cutover and cloud admission
+
+Schema 30 stores the canonical `{armor, coating}` pair. Schema 1..29 restores
+retire the old erroneous persistent `hardenArmor` cache, remove that field, and
+initialize the held-only pair to zero; the next accepted Water handler rebuilds
+it. Current saves preserve both fields, and the input boundary rejects negative
+armor, coating outside `[0,1]`, or nonzero armor with zero coating. Historical
+secondary feedback events acquire their former implicit gain one in the same
+versioned migration. This is the existing save-version migration path, not a
+second runtime implementation. The cloud inspector's maximum schema was still
+28 while the preceding Hail change wrote 29; it now admits current schema 30.
+The authenticated cloud-slot integration test uses 30 and rejects 31.
+
+
+### 2026-09-05 implementation validation receipt
+
+- Candidate source `3c88b5c63a5fbefa143220d8749953e9479273d1`, based on
+  `e75bfb4a28c408b55e013f6749841e53bd52013d`. A 64-file SHA-256 manifest
+  matched the isolated Mac tree byte-for-byte before the final run. The receipt
+  itself is a subsequent documentation-only edit; implementation bytes are
+  unchanged.
+- Mac complete gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` exited zero.
+  Backend Release build/format, 19 backend integration tests, frontend lint and
+  boundary checks, 2,826 frontend/desktop tests, production build, bundle budget,
+  and production media policy passed. Ten pre-existing lint warnings concern
+  control-character regexes and React fast-refresh exports; there are no lint
+  errors. The cloud-slot integration now accepts schema 30 and rejects 31.
+- Mac targeted save suite: 57/57 passed, including both old Harden layouts,
+  exact current state restoration, invalid-state rejection, and preservation
+  of the run/economy.
+- Mac built Chrome journey: `npm run smoke:game:harden`, 1920x1080. The real
+  Title/Create/College/Boneyard/Solomon path reaches held Frost Jet, three
+  textured cyan player layers, armor `24.12004280090332` and coating one.
+  Movement retains the animated coating. Release publishes armor/coating zero
+  and native shards/Fade; weak Water independently clears the coating and plays
+  the attenuated breakup sound. The GL texture-color selector returns to zero.
+  Page errors, console errors, and failed-request/HTTP-error arrays are empty.
+- Actual native sound plays observed: Harden at `.800000011920929`, two
+  pitch-one formation plays, release shatter pitch `1.0210349559783936` at gain
+  one, and weak shatter pitch `.9137049913406372` at gain
+  `.5049996972084045`. Screenshots were visually inspected for the textured
+  coating and the restored detailed wizard after release; temporary captures
+  are removed after publication.
+- The independent-owner/death/removal/College-reset and late-client snapshot
+  regressions pass through the production simulation and replication paths.
+- Mac Hurricane regression: the extracted shared navigation completes the
+  existing Air journey, reaches charge `.5010014772415161`, retains eight
+  lanes and damage range 10..20, and starts/stops the wind audio. Page, console,
+  and network errors are empty. The old smoke fixture wrote artificial resource
+  maxima that the normal economy refresh immediately replaced with derived
+  stats. It now grants Hurricane, Mana Up, and Health Up through the existing
+  skill API and fills the resulting resources; the `.5` charge assertion is
+  preserved.
+- Focused Node coverage gate: 49/49 tests; 100% lines, branches, and functions
+  for all seven new Harden/contact/presentation modules. Oxc's actual per-unit
+  cyclomatic maximum is 18, with the `<22` gate passing. New module lengths are
+  35..187 lines; the reorganized skill runtime is 863 lines and the shared
+  player view is 980 lines. No explicit `any`/`unknown` types were added to those
+  modules. The existing save JSON boundary retains its untrusted input type.
+- Unmeasured: statement coverage (the built-in Node reporter does not expose
+  it), full-file coverage of the existing integration modules, cognitive
+  complexity, Halstead Difficulty, CRAP, mutation survival, and dedicated
+  whole-scope dead-code/duplication analysis. The repository supplies no
+  configured analyzers for those latter measures; no dependencies, exclusions,
+  or suppressions were added to manufacture a result. Available TypeScript,
+  Oxc unused-symbol checks, boundary checks, and a manual reference/diff sweep
+  found no remaining defect in the Harden cutover.

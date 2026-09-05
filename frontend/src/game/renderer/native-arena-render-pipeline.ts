@@ -19,9 +19,11 @@ import {
   type InstructionSet,
   type Mesh,
   type MeshPipe,
+  type GlBatchAdaptor,
   type Renderer,
   type WebGLRenderer,
 } from 'pixi.js'
+import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 import {
   NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
@@ -44,7 +46,7 @@ export const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
   vec3 vertexColor = vColor.rgb;
-  vec3 textureColor = sampledTextureColor;
+  vec3 textureColor = uIgnoreTextureColor > 0.5 ? vec3(1.0) : sampledTextureColor;
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;
   float vertexGrey = (vertexColor.r + vertexColor.g + vertexColor.b) / 3.0;
   float grey = textureGrey * vertexGrey;
@@ -74,6 +76,7 @@ const NATIVE_ARENA_ALPHA_MODE_BIT_GL = {
 export const NATIVE_ARENA_SATURATION_BIT_GL = {
   name: 'native-arena-saturation',
   fragment: {
+    header: NATIVE_TEXTURE_COLOR_HEADER,
     end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE,
   },
 }
@@ -81,6 +84,7 @@ export const NATIVE_ARENA_SATURATION_BIT_GL = {
 export const NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL = {
   name: 'native-arena-unpremultiplied-saturation',
   fragment: {
+    header: NATIVE_TEXTURE_COLOR_HEADER,
     end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(
       /texturePremultiplied/g,
       '0.0',
@@ -91,6 +95,7 @@ export const NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL = {
 const NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL = {
   name: 'native-arena-premultiplied-saturation',
   fragment: {
+    header: NATIVE_TEXTURE_COLOR_HEADER,
     end: NATIVE_ARENA_FRAGMENT_SHADER_SOURCE.replace(
       /texturePremultiplied/g,
       '1.0',
@@ -137,6 +142,7 @@ class NativeArenaBatchShader extends Shader {
         ],
       }),
       resources: {
+        nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
         batchSamplers: getBatchSamplersUniformGroup(maxTextures),
       },
     })
@@ -242,6 +248,7 @@ export function installNativeArenaRenderPipeline(
   const particleAdaptor = nativeRenderer.renderPipes.particle.adaptor
   if (
     !batchPipe?.['_batchersByInstructionSet']
+    || !batchPipe['_adaptor']?.start
     || !graphicsAdaptor?.shader
     || !meshAdaptor?.['_shader']
   ) {
@@ -250,6 +257,9 @@ export function installNativeArenaRenderPipeline(
 
   const graphicsShader = createNativeArenaGraphicsShader(
     nativeRenderer.limits.maxBatchableTextures,
+  )
+  const restoreTextureColorSync = installNativeTextureColorSync(
+    batchPipe['_adaptor'] as GlBatchAdaptor, nativeRenderer.shader,
   )
   const premultipliedMeshShader = createNativeArenaMeshShader(true)
   const unpremultipliedMeshShader = createNativeArenaMeshShader(false)
@@ -307,6 +317,7 @@ export function installNativeArenaRenderPipeline(
     destroy() {
       if (destroyed) return
       destroyed = true
+      restoreTextureColorSync()
       batchPipe.buildStart = originalBuildStart
       meshAdaptor.execute = originalMeshExecute
       particleAdaptor.execute = originalParticleExecute
@@ -327,6 +338,7 @@ export function createNativeArenaUnpremultipliedParticleShader(): Shader {
       fragment: NATIVE_ARENA_PARTICLE_FRAGMENT_SHADER_SOURCE,
     }),
     resources: {
+      nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       uTexture: Texture.WHITE.source,
       uSampler: new TextureStyle({}),
       uniforms: {
@@ -393,6 +405,7 @@ function createNativeArenaGraphicsShader(maxTextures: number): Shader {
       ],
     }),
     resources: {
+      nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       localUniforms: new UniformGroup({
         uColor: { value: new Float32Array([1, 1, 1, 1]), type: 'vec4<f32>' },
         uTransformMatrix: { value: new Matrix(), type: 'mat3x3<f32>' },
@@ -418,6 +431,7 @@ function createNativeArenaMeshShader(premultiplied: boolean): Shader {
       ],
     }),
     resources: {
+      nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       uTexture: Texture.EMPTY.source,
       textureUniforms: {
         uTextureMatrix: { type: 'mat3x3<f32>', value: new Matrix() },
@@ -464,9 +478,11 @@ const NATIVE_ARENA_PARTICLE_FRAGMENT_SHADER_SOURCE = `
 varying vec2 vUV;
 varying vec4 vColor;
 uniform sampler2D uTexture;
+uniform float uIgnoreTextureColor;
 
 void main(void) {
   vec4 textureColor = texture2D(uTexture, vUV);
+  if (uIgnoreTextureColor > 0.5) textureColor.rgb = vec3(1.0);
   float vertexAlpha = vColor.a;
   vec3 vertexColor = vColor.rgb;
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;

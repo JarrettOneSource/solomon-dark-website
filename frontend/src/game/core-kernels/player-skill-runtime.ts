@@ -1,5 +1,6 @@
 import type { HubEconomyState } from './hub-economy.ts'
 import { nativeHurricaneChargeTick } from './native-hurricane.ts'
+import { createNativeHarden, stepNativeHarden, type NativeHardenState } from './native-harden.ts'
 import {
   drawNativeFloat,
   drawNativeInteger,
@@ -50,9 +51,6 @@ export const CONCENTRATABLE_SKILL_IDS = Object.freeze([
 
 export const NATIVE_MEDITATION_ACTIVITY_BONUS_SCALE = 0.25
 export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
-export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
-export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
-export const NATIVE_FLASH_RESPONSE_RADIUS = 100
 
 export type PlayerConcentrationSlot = 'a' | 'b'
 export type PlayerStaffDamageLane = 'primary' | 'secondary'
@@ -67,7 +65,7 @@ export interface PlayerSkillRuntimeComponent {
   readonly concentrationSkillIdA: number | null
   readonly concentrationSkillIdB: number | null
   readonly equipmentModifiers: NativeEquipmentModifiers
-  readonly hardenArmor: number
+  readonly harden: NativeHardenState
   readonly hardenArmorMaximum: number
   readonly hardenArmorPerTick: number
   readonly hurricaneCharge: number
@@ -133,31 +131,9 @@ export interface PlayerSkillRuntimeTickResult {
   readonly runtime: PlayerSkillRuntimeComponent
 }
 
-export interface PlayerHarmfulContactResult {
-  readonly damage: number
-  readonly deflectPitch: number | null
-  readonly deflected: boolean
-  readonly flash: PlayerFlashResponse | null
-  readonly reflectedDamage: number
-  readonly rng: NativeRngState
-}
-
-export interface PlayerFlashResponse {
-  readonly cameraDisplacement: Readonly<{ x: number; y: number }>
-  readonly durationTicks: number
-  readonly growScales: readonly number[]
-  readonly pitch: number
-}
-
 export interface PlayerCreativityInsightResult {
   readonly offer: PlayerSkillOffer
   readonly rng: NativeRngState
-}
-
-export interface PlayerHardenArmorResult {
-  readonly absorbedDamage: number
-  readonly damage: number
-  readonly runtime: PlayerSkillRuntimeComponent
 }
 
 export interface PlayerStaffAttackResult {
@@ -179,7 +155,7 @@ export function createPlayerSkillRuntime(
       economy.equipment,
       economy.ownedPerkSelectors,
     ).modifiers,
-    hardenArmor: 0,
+    harden: createNativeHarden(),
     hardenArmorMaximum: 0,
     hardenArmorPerTick: 0,
     hurricaneCharge: 0,
@@ -253,7 +229,6 @@ export function refreshPlayerSkillRuntime(
     concentrationSkillIdA,
     concentrationSkillIdB,
     equipmentModifiers: equipment.modifiers,
-    hardenArmor: Math.min(source.hardenArmor, hardenArmorMaximum),
     hardenArmorMaximum,
     hardenArmorPerTick: effectiveSkillNumericValue(
       nextSkillBook,
@@ -508,105 +483,6 @@ export function refreshPlayerCombatFromSkillStats<T extends PlayerCombatComponen
   }
 }
 
-export function resolvePlayerHarmfulContact(
-  runtime: PlayerSkillRuntimeComponent,
-  derived: PlayerSkillDerivedStats,
-  progression: Pick<PlayerProgressionComponent, 'mindChugTicksRemaining'>,
-  damage: number,
-  kind: 'magic' | 'physical',
-  deflectable: boolean,
-  reflectionSourceInRange: boolean,
-  sourceRng: NativeRngState,
-): PlayerHarmfulContactResult {
-  if (!Number.isFinite(damage) || damage < 0) {
-    throw new RangeError('incoming player damage must be finite and non-negative')
-  }
-  let rng = sourceRng
-  let flash: PlayerFlashResponse | null = null
-  if (damage > 0 && derived.flashChancePercent > 0) {
-    const chance = drawNativeInteger(rng, 100)
-    rng = chance.state
-    if (
-      chance.value > 0
-      && chance.value <= Math.round(derived.flashChancePercent)
-    ) {
-      const pitch = drawNativeFloat(rng, Math.fround(0.2))
-      const heading = drawNativeInteger(pitch.state, 100_001)
-      rng = heading.state
-      const headingDegrees = Math.fround(
-        Math.fround(heading.value / 100_000) * 360,
-      )
-      const headingRadians = headingDegrees * Math.PI / 180
-      const growScales: number[] = []
-      for (let index = 0; index < 8; index += 1) {
-        const scale = drawNativeFloat(rng, 1)
-        rng = scale.state
-        growScales.push(Math.fround(2 - scale.value))
-      }
-      flash = Object.freeze({
-        cameraDisplacement: Object.freeze({
-          x: Math.fround(Math.sin(headingRadians) * 3),
-          y: Math.fround(-Math.cos(headingRadians) * 3),
-        }),
-        durationTicks: derived.flashDurationTicks,
-        growScales: Object.freeze(growScales),
-        pitch: Math.fround(1 + pitch.value),
-      })
-    }
-  }
-  if (deflectable) {
-    const draw = drawNativeInteger(rng, 100)
-    rng = draw.state
-    if (draw.value < derived.deflectChancePercent) {
-      const pitch = drawNativeFloat(rng, 1, true)
-      return Object.freeze({
-        damage: 0,
-        deflectPitch: Math.fround(1 + pitch.value),
-        deflected: true,
-        flash,
-        reflectedDamage: kind === 'physical'
-          && reflectionSourceInRange
-          && isPlayerSkillConcentrated(runtime, progression, 68)
-          ? damage * NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR
-          : 0,
-        rng: pitch.state,
-      })
-    }
-  }
-  const resistedDamage = damage * (1 - (kind === 'magic'
-      ? derived.magicResistance
-      : derived.damageResistance))
-  return Object.freeze({
-    damage: Math.max(0, resistedDamage - runtime.hardenArmor),
-    deflectPitch: null,
-    deflected: false,
-    flash,
-    reflectedDamage: 0,
-    rng,
-  })
-}
-
-export function playerDeflectReflectionSourceInRange(
-  playerPosition: Readonly<{ x: number; y: number }>,
-  playerRadius: number,
-  sourcePosition: Readonly<{ x: number; y: number }>,
-  sourceRadius: number,
-): boolean {
-  if (
-    !Number.isFinite(playerRadius)
-    || playerRadius < 0
-    || !Number.isFinite(sourceRadius)
-    || sourceRadius < 0
-  ) throw new RangeError('reflection radii must be finite and non-negative')
-  const deltaX = sourcePosition.x - playerPosition.x
-  const deltaY = sourcePosition.y - playerPosition.y
-  if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) {
-    throw new RangeError('reflection positions must be finite')
-  }
-  const reach = playerRadius + sourceRadius + NATIVE_DEFLECT_REFLECTION_PADDING
-  return deltaX * deltaX + deltaY * deltaY < reach * reach
-}
-
 export function resolvePlayerStaffAttack(
   derived: PlayerSkillDerivedStats,
   sourceRng: NativeRngState,
@@ -677,6 +553,7 @@ export function stepPlayerSkillRuntime(
     acting: boolean
     moving: boolean
     primaryChannel?: 'air' | 'earth' | 'ether' | 'fire' | 'water' | null
+    primaryActive?: boolean
     primaryUnderpowered?: boolean
   }>,
 ): PlayerSkillRuntimeTickResult {
@@ -712,41 +589,25 @@ export function stepPlayerSkillRuntime(
     source.hurricaneEnabled,
     activity.primaryChannel === 'air' && !activity.primaryUnderpowered,
   )
-  const hardenArmor = activity.primaryChannel === 'water'
-    ? activity.primaryUnderpowered
-      ? 0
-      : Math.min(
-          source.hardenArmorMaximum,
-          Math.fround(source.hardenArmor + source.hardenArmorPerTick),
-        )
-    : source.hardenArmor
+  const harden = stepNativeHarden(
+    source.harden,
+    activity.primaryChannel === 'water'
+      ? activity.primaryUnderpowered ? 'weak-water' : 'water'
+      : activity.primaryChannel || activity.primaryActive ? 'other' : 'idle',
+    source.hardenArmorPerTick,
+    source.hardenArmorMaximum,
+  )
   return Object.freeze({
     baseManaRecoveryPerTick: derived.manaRecoveryPerTick,
     meditationManaRecoveryPerTick,
     runtime: Object.freeze({
       ...source,
-      hardenArmor,
+      harden,
       hurricaneCharge: hurricane.nextCharge,
       hurricaneRefreshed: hurricane.refreshed,
       meditationActivityRampTicks,
       meditationIdleElapsedTicks,
     }),
-  })
-}
-
-/** Native Harden is a persistent flat armor lane; incoming contact never consumes it. */
-export function applyPlayerHardenArmor(
-  source: PlayerSkillRuntimeComponent,
-  damage: number,
-): PlayerHardenArmorResult {
-  if (!Number.isFinite(damage) || damage < 0) {
-    throw new RangeError('incoming Harden damage must be finite and non-negative')
-  }
-  const absorbedDamage = Math.min(source.hardenArmor, damage)
-  return Object.freeze({
-    absorbedDamage,
-    damage: damage - absorbedDamage,
-    runtime: source,
   })
 }
 

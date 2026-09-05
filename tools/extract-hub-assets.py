@@ -1810,6 +1810,7 @@ def main() -> int:
             f"Clothes.bundle has {len(clothes_records)} records; expected 3724"
         )
     verify_player_staff_split(clothes, clothes_records)
+    save(crop(clothes, clothes_records[1]), output_dir, "player-harden-ice")
     save(crop(clothes, clothes_records[2]), output_dir, "player-mindblast-ring")
     for selector in range(6):
         save(

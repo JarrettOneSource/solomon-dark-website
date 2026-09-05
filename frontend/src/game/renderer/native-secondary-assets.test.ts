@@ -40,7 +40,8 @@ test('the stock right-click atlas membership is complete and every row is regist
       Array.from({ length: 33 }, (_, index) => 401 + index),
     )
     assert.equal(membership.BadGuys.includes(2008), true)
-    assert.deepEqual(membership.Clothes, [2])
+    assert.deepEqual(membership.Clothes, [1, 2])
+    assert.deepEqual(membership.BadGuys.filter((entry) => entry >= 446 && entry <= 450), [446, 447, 448, 449, 450])
     for (const entry of [15, 40, 45, 55, 88]) {
       assert.equal(membership.BadGuys.includes(entry), true, `missing Staff VFX record ${entry}`)
       const record = module.nativeSecondarySpriteRecord('BadGuys', entry) as unknown as {
@@ -88,6 +89,7 @@ test('the stock right-click atlas membership is complete and every row is regist
     )
     assert.ok(module.NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane.includes('etherplane.png'))
     assert.deepEqual(module.NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES, [
+      module.nativeSecondarySpriteRecord('Clothes', 1).source,
       module.nativeSecondarySpriteRecord('Clothes', 2).source,
     ])
     const hubSources = new Set(hubTextures.hubWorldAssetSources())

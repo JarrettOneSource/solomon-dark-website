@@ -1,4 +1,4 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import type { PlayerStaffAttachmentPose } from '../core-kernels/primary-spells.ts'
@@ -26,6 +26,7 @@ import {
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { PlayerDamageX4VfxView } from './player-damage-x4-vfx-view.ts'
 import { PlayerEnchantStaffView } from './player-enchant-staff-view.ts'
+import { PlayerHardenView } from './player-harden-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import {
@@ -52,11 +53,16 @@ const PLAYER_DEATH_LAYER_COUNT = 9
 export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
+  private readonly harden: PlayerHardenView
+  private readonly arena: boolean
+  private hardenPlayer: ProtocolPlayerState | null = null
   private readonly staffBack: Sprite
   private readonly damageX4FrontBase: PlayerDamageX4VfxView
   private readonly damageX4FrontOverlay: PlayerDamageX4VfxView
   private readonly orbFrontBase: NativeElementVfxView
   private readonly orbFrontOverlay: NativeElementVfxView
+  private readonly orbHardenOverlay: NativeElementVfxView
+  private readonly damageX4HardenOverlay: PlayerDamageX4VfxView
   private readonly robe: Sprite
   private readonly robeSecondary: Sprite
   private readonly unselectedRobeAttachment: Sprite
@@ -105,9 +111,13 @@ export class PlayerWorldView {
     element: WizardElement,
     textures: PlayerWorldTextures,
     modTextures: ModPresentationTextures,
+    renderer: Renderer,
+    arena: boolean,
   ) {
     this.textures = textures
     this.modTextures = modTextures
+    this.arena = arena
+    this.harden = new PlayerHardenView(textures.secondary[nativeSecondarySpriteKey('Clothes', 1)]!, renderer)
     const playerTextures = textures.players[element]
     this.container.sortableChildren = true
     this.container.eventMode = 'none'
@@ -138,6 +148,12 @@ export class PlayerWorldView {
     this.orbFrontOverlay = new NativeElementVfxView(null, textures.elementVfx)
     this.orbFrontOverlay.container.label = 'native-element-vfx-front-overlay'
     this.orbFrontOverlay.container.zIndex = 6
+    this.damageX4HardenOverlay = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4HardenOverlay.container.label = 'player-damage-x4-vfx-harden-overlay'
+    this.damageX4HardenOverlay.container.zIndex = 9
+    this.orbHardenOverlay = new NativeElementVfxView(null, textures.elementVfx)
+    this.orbHardenOverlay.container.label = 'native-element-vfx-harden-overlay'
+    this.orbHardenOverlay.container.zIndex = 9
     this.head = actorSprite(playerTextures.head[0], 7)
     this.headSecondary = actorSprite(playerTextures.head[0], 7)
     this.deathShadowLayers = createDeathLayers(playerTextures.death[0][0], 1, 'shadow')
@@ -212,6 +228,9 @@ export class PlayerWorldView {
       ...this.deathLayers,
       this.hitOverlay,
       this.magicShield,
+      this.harden.container,
+      this.damageX4HardenOverlay.container,
+      this.orbHardenOverlay.container,
     )
   }
 
@@ -345,6 +364,11 @@ export class PlayerWorldView {
       && elementEffectVisible
       && ordinaryStaffVisible
       && plan.orbPasses.frontOverlay
+    this.orbHardenOverlay.container.visible = !death.visible && elementEffectVisible
+      && ordinaryStaffVisible && player.progression.hardenCoating > 0
+      && (this.secondaryState?.stoneskinTicksRemaining ?? 0) <= 0
+    this.damageX4HardenOverlay.container.visible = this.orbHardenOverlay.container.visible
+      && selectedPrimaryAvailable && player.progression.damageX4TicksRemaining > 0
     this.damageX4FrontBase.container.visible = this.orbFrontBase.container.visible
       && selectedPrimaryAvailable
       && player.progression.damageX4TicksRemaining > 0
@@ -516,6 +540,8 @@ export class PlayerWorldView {
       this.orbFrontBase,
       this.damageX4FrontOverlay,
       this.orbFrontOverlay,
+      this.damageX4HardenOverlay,
+      this.orbHardenOverlay,
     ]) {
       view.container.position.set(
         orbOffset.x + attachmentOffset.x,
@@ -528,27 +554,17 @@ export class PlayerWorldView {
     const selectedPrimaryId = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       ? 80
       : player.primaryCast.selectedPrimaryId
-    this.damageX4FrontBase.update(
-      player.progression.damageX4TicksRemaining,
-      tick,
-      this.currentElementEffectScale,
-    )
-    this.damageX4FrontOverlay.update(
-      player.progression.damageX4TicksRemaining,
-      tick,
-      this.currentElementEffectScale,
-    )
-    this.orbFrontBase.updateSelectedPrimary(
-      selectedPrimaryId,
-      tick,
-      this.currentElementEffectScale,
-    )
-    this.orbFrontOverlay.updateSelectedPrimary(
-      selectedPrimaryId,
-      tick,
-      this.currentElementEffectScale,
-    )
+    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
+      view.update(player.progression.damageX4TicksRemaining, tick, this.currentElementEffectScale)
+    }
+    for (const view of [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
+      view.updateSelectedPrimary(selectedPrimaryId, tick, this.currentElementEffectScale)
+    }
     this.applyMaterialTint()
+    this.hardenPlayer = player
+    if (!this.arena) this.harden.update(
+      player, this.container, [this.shadow, this.orbHardenOverlay.container, this.damageX4HardenOverlay.container], (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0,
+    )
   }
 
   get walkPose(): number {
@@ -581,6 +597,10 @@ export class PlayerWorldView {
 
   get materialTint(): number {
     return this.robe.tint
+  }
+
+  get hardenLayerCount(): number {
+    return this.harden.container.visible ? this.harden.container.children.length : 0
   }
 
   /**
@@ -643,12 +663,13 @@ export class PlayerWorldView {
   }
 
   get damageX4Alpha(): number {
-    return Math.max(this.damageX4FrontBase.alpha, this.damageX4FrontOverlay.alpha)
+    return Math.max(this.damageX4FrontBase.alpha, this.damageX4FrontOverlay.alpha, this.damageX4HardenOverlay.alpha)
   }
 
   get damageX4SpriteCount(): number {
     return this.damageX4FrontBase.visibleSpriteCount
       + this.damageX4FrontOverlay.visibleSpriteCount
+      + this.damageX4HardenOverlay.visibleSpriteCount
   }
 
   get enchantStaffActive(): boolean {
@@ -687,6 +708,10 @@ export class PlayerWorldView {
   setWorldTint(tint: number): void {
     this.worldTint = tint
     this.applyMaterialTint()
+    if (this.hardenPlayer) this.harden.update(
+      this.hardenPlayer, this.container, [this.shadow, this.orbHardenOverlay.container, this.damageX4HardenOverlay.container],
+      (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0,
+    )
   }
 
   private applyMaterialTint(): void {
@@ -705,7 +730,7 @@ export class PlayerWorldView {
   }
 
   get orbSpriteCount(): number {
-    return [this.orbFrontBase, this.orbFrontOverlay]
+    return [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]
       .filter(({ container }) => container.visible)
       .reduce((count, orb) => (
         count + orb.sprites.filter((sprite) => sprite.visible).length
@@ -713,13 +738,14 @@ export class PlayerWorldView {
   }
 
   destroy(): void {
+    this.harden.destroy()
     this.container.removeChild(this.enchantStaff.container)
     this.enchantStaff.destroy()
-    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay]) {
+    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
       this.container.removeChild(view.container)
       view.destroy()
     }
-    for (const orb of [this.orbFrontBase, this.orbFrontOverlay]) {
+    for (const orb of [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
       this.container.removeChild(orb.container)
       orb.destroy()
     }

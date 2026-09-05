@@ -9,6 +9,8 @@ type TransientOf<Kind extends TransientKind> = Extract<
 >
 
 export const TRANSIENT_KINDS = [
+  'harden-burst',
+  'harden-shard',
   'air',
   'air-hurricane',
   'earth-boulder-bit',

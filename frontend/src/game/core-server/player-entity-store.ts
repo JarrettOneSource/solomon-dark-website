@@ -1307,6 +1307,7 @@ export function stepPlayerEntityCombatTick(
         primaryChannel: source.primaryCasts[index]!.channelActive
           ? selectedPurePrimaryChannel(source.skillBooks[index]!.primarySkillId)
           : null,
+        primaryActive: source.primaryCasts[index]!.held,
         primaryUnderpowered: source.primaryCasts[index]!.underpowered,
       },
     )

@@ -154,6 +154,7 @@ export interface ProtocolPlayerProgression {
   dazzleTicksRemaining: number
   experience: number
   hagathaRuntime: NativeHagathaRuntimeState
+  hardenCoating: number
   inventoryStats: ProtocolPlayerInventoryStats
   learnedSkills: readonly (readonly [number, number, number])[]
   learnedSkillOrder: readonly number[]

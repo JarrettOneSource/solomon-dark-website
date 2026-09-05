@@ -1,3 +1,4 @@
+import { interpolateNativeHardenCoating } from '../core-kernels/native-harden.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
@@ -394,6 +395,10 @@ function interpolatePlayerProgression(
   return {
     ...discrete,
     damageX4TicksRemaining,
+    hardenCoating: interpolateNativeHardenCoating(
+      first.hardenCoating, second.hardenCoating,
+      older.primaryCast.castSequence === newer.primaryCast.castSequence, blend,
+    ),
     ...(sameDeathEpoch
       ? { deathTick: Math.floor(lerp(first.deathTick, second.deathTick, blend)) }
       : {}),

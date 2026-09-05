@@ -6,7 +6,7 @@ namespace SolomonDarkRevived.Services;
 
 public static class WebGameSaveInspector
 {
-    public const int CurrentSchemaVersion = 28;
+    public const int CurrentSchemaVersion = 30;
     public const int MaxDocumentBytes = 16 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 

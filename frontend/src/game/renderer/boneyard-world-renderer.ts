@@ -417,6 +417,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
   playerMaterialTint: number
+  playerHardenLayerCount: number
   playerOrdinaryWeaponVisible: boolean
   playerRobeFixedPose: number
   playerSamples: readonly Readonly<{
@@ -1047,6 +1048,7 @@ export async function createBoneyardWorldRenderer(
     playerMagicShieldScale: NATIVE_PLAYER_MAGIC_SHIELD.scale,
     playerMagicShieldVisible: false,
     playerMaterialTint: 0xffffff,
+    playerHardenLayerCount: 0,
     playerOrdinaryWeaponVisible: false,
     playerRobeFixedPose: 0,
     playerSamples: [],
@@ -1652,6 +1654,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerMagicShieldAlpha = playerView?.magicShieldAlpha ?? 0
       frameDiagnostics.playerMagicShieldScale = playerView?.magicShieldScale ?? NATIVE_PLAYER_MAGIC_SHIELD.scale
       frameDiagnostics.playerMagicShieldVisible = playerView?.magicShieldVisible ?? false
+      frameDiagnostics.playerHardenLayerCount = playerView?.hardenLayerCount ?? 0
       frameDiagnostics.playerMaterialTint = playerView?.materialTint ?? 0xffffff
       frameDiagnostics.playerOrdinaryWeaponVisible =
         playerView?.ordinaryWeaponVisible ?? false
@@ -2014,6 +2017,8 @@ class BoneyardDynamicScene {
   private readonly weatherView: NativeBoneyardWeatherView
   private visibleEnemyFamilies = ''
 
+  private readonly renderer: Application['renderer']
+
   constructor(
     boneyard: LoadedBoneyard,
     root: Container,
@@ -2031,6 +2036,7 @@ class BoneyardDynamicScene {
     modCatalog: readonly ModConsumableCatalogEntry[],
   ) {
     this.boneyard = boneyard
+    this.renderer = renderer
     this.collisionWorld = createBoneyardCollisionWorld(boneyard.scene)
     this.lightIndex = new NativeBoneyardLightIndex({
       height: boneyard.scene.bounds.h,
@@ -2130,7 +2136,7 @@ class BoneyardDynamicScene {
       livePlayerIds.add(playerId)
       let view = this.players.get(playerId)
       if (!view) {
-        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures)
+        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures, this.renderer, true)
         this.players.set(playerId, view)
         this.root.addChild(view.container)
       }

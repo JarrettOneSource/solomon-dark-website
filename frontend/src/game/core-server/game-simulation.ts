@@ -130,12 +130,13 @@ import {
   resolveNativeSkillDamageValue,
 } from '../core-kernels/native-offensive-resolution.ts'
 import { nativeHurricaneChargeTick } from '../core-kernels/native-hurricane.ts'
+import { synchronizePlayerHardenEffects, type PendingPlayerHardenChip } from './player-harden-effects.ts'
 import {
   NATIVE_FLASH_RESPONSE_RADIUS,
   playerDeflectReflectionSourceInRange,
-  playerPoisonDurationSeconds,
   resolvePlayerHarmfulContact,
-} from '../core-kernels/player-skill-runtime.ts'
+} from '../core-kernels/player-harmful-contact.ts'
+import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
 import {
   applyNativeUnforgeFullRejuvenation,
   boneyardEnemyExperienceAward,
@@ -2565,6 +2566,7 @@ function finishGameSimulationTick(
     },
   }
   const playerDamage = result.playerDamage ?? []
+  const hardenChips: PendingPlayerHardenChip[] = []
   const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
   const appliedPlayerDamage: (typeof playerDamage)[number][] = []
   const reflectedEnemyDamage: Array<Readonly<{
@@ -2615,7 +2617,7 @@ function finishGameSimulationTick(
     const runtime = playerSkillRuntimeAt(playerEntities, damage.playerId)
     const derived = playerSkillDerivedStatsAt(playerEntities, damage.playerId)
     const progression = playerProgressionAt(playerEntities, damage.playerId)
-    const contact = runtime === null || derived === null || progression === null
+    const contact = runtime === null || derived === null || progression === null || character === undefined
       ? null
       : resolvePlayerHarmfulContact(
           runtime,
@@ -2635,8 +2637,15 @@ function finishGameSimulationTick(
                 : damageSource.collisionRadius,
             ),
           secondaryAbilities.rng,
+          character.position,
         )
     if (contact !== null) secondaryAbilities = { ...secondaryAbilities, rng: contact.rng }
+    if (contact?.hardenChip && character) hardenChips.push({
+      chip: contact.hardenChip,
+      ownerId: damage.playerId,
+      position: character.position,
+      worldKey: gameWorldKey(world, damage.playerId),
+    })
     if (contact !== null && contact.flash !== null && character !== undefined) {
       const worldKey = gameWorldKey(world, damage.playerId)
       const targetIds = world.kind === 'boneyard'
@@ -3969,6 +3978,20 @@ function finishGameSimulationTick(
     playerCombatMutations(extensions, tick, secondaryAbilities),
   )
   playerEntities = combat.store
+  const harden = synchronizePlayerHardenEffects({
+    after: playerEntities,
+    before: previous.playerEntities,
+    chips: hardenChips,
+    register: worldManagerOrder.register,
+    rng: combatRng,
+    secondary: secondaryAbilities,
+    spells: primarySpells,
+    tick,
+    worldKey: (playerId) => gameWorldKey(world, playerId),
+  })
+  primarySpells = harden.spells
+  secondaryAbilities = harden.secondary
+  combatRng = harden.rng
   for (const { playerId } of playerEntities.identities) {
     const progression = playerProgressionAt(playerEntities, playerId)
     const lighting = playerLightingAt(playerEntities, playerId)

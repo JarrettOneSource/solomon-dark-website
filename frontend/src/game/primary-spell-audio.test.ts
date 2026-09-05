@@ -1234,6 +1234,7 @@ test('secondary one-shots and streams consume new authoritative events once with
     cameraMagnitude: 0,
     cue,
     eventId,
+    gain: 1,
     kind: 'pulse',
     ownerId: PLAYER_ID,
     pitch,
