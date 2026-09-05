@@ -670,10 +670,15 @@ test('Hurricane and Harden use player-owned channel clocks and weak Water clears
   assert.equal(state.runtime.hurricaneRefreshed, false)
   assert.equal(state.runtime.harden.armor, Math.fround(0.08))
   const reduced = resolvePlayerHarmfulContact(
-    state.runtime, derived, progression(), 1, 'physical', false, false, createNativeRng(1), { x: 0, y: 0 },
+    state.runtime,
+    derived,
+    progression(),
+    { physicalDamage: 1, magicDamage: 0 },
+    false,
+    createNativeRng(1),
+    { x: 0, y: 0 },
   )
-  assert.equal(reduced.damage, 1 - Math.fround(0.08))
-  assert.equal(state.runtime.harden.armor, Math.fround(0.08), 'contact does not consume armor')
+  assert.equal(reduced.physicalDamage, Math.fround(1 - Math.fround(0.08)))
 
   state = {
     ...state,
@@ -724,71 +729,6 @@ test('Harden removes its armor when the held Frost Jet action is released', () =
   assert.equal(runtime.harden.armor, 0, 'native release clears Harden armor with the ice coating')
 })
 
-test('Flash consumes its complete response RNG before Deflect and rejects percentile zero', () => {
-  const book = rankedBook({ 53: 1, 68: 1 })
-  const statBook = playerStatBook()
-  const economy = createHubEconomy(1)
-  const created = createPlayerSkillRuntime(book, statBook, economy)
-  const derived = playerSkillDerivedStats(
-    created.runtime,
-    created.skillBook,
-    statBook,
-    progression(),
-    economy,
-  )
-  assert.equal(derived.flashChancePercent, 10)
-  assert.equal(derived.flashDurationTicks, 400)
-
-  let rng = createNativeRng(15)
-  const chance = drawNativeInteger(rng, 100); rng = chance.state
-  assert.equal(chance.value, 9)
-  const responsePitch = drawNativeFloat(rng, Math.fround(0.2)); rng = responsePitch.state
-  const heading = drawNativeInteger(rng, 100_001); rng = heading.state
-  const growScales: number[] = []
-  for (let index = 0; index < 8; index += 1) {
-    const scale = drawNativeFloat(rng, 1); rng = scale.state
-    growScales.push(Math.fround(2 - scale.value))
-  }
-  const deflect = drawNativeInteger(rng, 100); rng = deflect.state
-  assert.equal(deflect.value, 0)
-  const swipe = drawNativeFloat(rng, 1, true); rng = swipe.state
-  const result = resolvePlayerHarmfulContact(
-    created.runtime,
-    derived,
-    progression(),
-    2,
-    'physical',
-    true,
-    true,
-    createNativeRng(15),
-    { x: 0, y: 0 },
-  )
-  assert.equal(result.deflected, true)
-  assert.equal(result.reflectedDamage, 0)
-  assert.deepEqual(result.rng, rng)
-  assert.deepEqual(result.flash?.growScales, growScales)
-  assert.equal(result.flash?.durationTicks, 400)
-  assert.equal(result.flash?.pitch, Math.fround(1 + responsePitch.value))
-  const degrees = Math.fround(Math.fround(heading.value / 100_000) * 360)
-  assert.deepEqual(result.flash?.cameraDisplacement, {
-    x: Math.fround(Math.sin(degrees * Math.PI / 180) * 3),
-    y: Math.fround(-Math.cos(degrees * Math.PI / 180) * 3),
-  })
-
-  const zero = resolvePlayerHarmfulContact(
-    created.runtime,
-    derived,
-    progression(),
-    2,
-    'physical',
-    false,
-    false,
-    createNativeRng(121),
-    { x: 0, y: 0 },
-  )
-  assert.equal(zero.flash, null)
-  assert.equal(zero.rng.indexA, 1)
-})
 
 test('staff admission comes only from the exact native Staff type', () => {
   const book = rankedBook({ 65: 1, 68: 1 })

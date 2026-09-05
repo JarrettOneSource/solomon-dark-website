@@ -2941,6 +2941,7 @@ function enemyArrow(options: {
     coldSlowTicks: 0,
     contactRadius: 8,
     damage: 1,
+    secondaryDamage: 0,
     headingDeg: 90,
     hitPlayerIds: [],
     homing: false,

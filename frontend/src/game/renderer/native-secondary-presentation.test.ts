@@ -30,7 +30,6 @@ import {
   nativeGolemPresentationPlan,
   nativeLeviathanCompositePlan,
   nativePlayerMagicShieldPlan,
-  nativePlayerMaterialTint,
   nativeEtherFadeScalar,
   nativeSecondaryPresentationPlan,
   nativeSecondaryCompositeOwnerEntries,
@@ -2182,9 +2181,6 @@ test('the player shield uses its own Clothes shell and alpha, independent of bod
   }
   assert.equal(nativePlayerMagicShieldPlan(undefined, 0).visible, false)
   assert.equal(nativePlayerMagicShieldPlan({ ...state, magicShieldAbsorb: 0 }, 0).visible, false)
-  assert.equal(nativePlayerMaterialTint(0xffffff, { ...state, stoneskinTicksRemaining: 1 }), 0x808080)
-  assert.equal(nativePlayerMaterialTint(0x804020, { ...state, stoneskinTicksRemaining: 1 }), 0x402010)
-  assert.equal(nativePlayerMaterialTint(0x804020, state), 0x804020)
 })
 
 test('Golem facing follows x87 tie-to-even rounding and sixteen-frame wrap', () => {

@@ -167,6 +167,7 @@ export interface ProtocolPlayerProgression {
   nextThreshold: number
   pendingOffer: ProtocolPlayerSkillOffer | null
   poisonDamagePerTick: number
+  poisonBeforeCold: boolean
   poisonTicksRemaining: number
   previousThreshold: number
   revision: number
@@ -340,6 +341,7 @@ export interface BoneyardLootEventSnapshot {
 }
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
+  'move-fade-perspective',
   'banish',
   'bouncer',
   'smoky-bouncer',
@@ -425,11 +427,14 @@ export type BoneyardMageLightningPulseFrame = readonly [
 ]
 
 export const BONEYARD_ENEMY_EVENT_TYPES = [
+  'player-status-sound',
   'attack-marker',
   'coffin-maggot-release',
   'enemy-action-sound',
   'enemy-damage-sound',
   'player-damage-sound',
+  'player-deflected',
+  'mage-lightning-contact',
   'enemy-death',
   'enemy-death-sound',
   'enemy-retired',
@@ -491,6 +496,8 @@ export const BONEYARD_PLAYER_DAMAGE_SOUNDS = [
   'wizard-ouch-3',
 ] as const
 
+export const BONEYARD_PLAYER_STATUS_SOUNDS = ['frosted', 'poisoned'] as const
+
 export const BONEYARD_ENEMY_SOUNDS = [
   ...BONEYARD_ENEMY_ACTION_SOUNDS,
   ...BONEYARD_ENEMY_DAMAGE_SOUNDS,
@@ -498,6 +505,7 @@ export const BONEYARD_ENEMY_SOUNDS = [
 ] as const
 
 export const BONEYARD_COMBAT_SOUNDS = [
+  ...BONEYARD_PLAYER_STATUS_SOUNDS,
   ...BONEYARD_ENEMY_SOUNDS,
   ...BONEYARD_PLAYER_DAMAGE_SOUNDS,
 ] as const

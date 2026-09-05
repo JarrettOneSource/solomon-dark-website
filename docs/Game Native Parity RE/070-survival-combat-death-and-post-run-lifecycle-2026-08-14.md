@@ -1,5 +1,226 @@
 # Survival combat, death, and post-run lifecycle — 2026-08-14
 
+## 2026-09-04 — Reopened hostile mage contacts
+
+The report `SDB - Poison Mage no Effect.mp4` exposed an incomplete damage
+contract. Earlier receipts verified projectile payloads and presentation without
+checking the resulting player health, status, and movement under defenses. The
+Mac regression reproduces poison disappearing when Harden is present.
+
+The system boundary is the four SkeletonMage attack variants, their Firebolt,
+GuidedMissile and lightning contact producers, and the shared player defense,
+status, replication and presentation consumers. Archer, Zombie and Maggot
+contacts are regression members wherever they consume those shared rules.
+Unrelated enemy scheduling and mage ally-shield production retain their existing
+owners; the player's response to a shielded mage hit is in scope.
+
+### Recovered contract and provenance
+
+Retail `SolomonDark.exe` was re-hashed on September 4: 4,723,200 bytes,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. Evidence uses the existing read-only Ghidra
+replica wrapper and the `decompile_targets.py` and
+`dump_function_instructions.py` scripts. Raw logs are disposable task artifacts.
+
+- `PlayerWizard` defense `0x00548150` scales the physical and magic channels
+  independently. The downstream player handler `0x0052F540` subtracts armor
+  lanes `+0x1E0/+0x1E4/+0x1E8` only from physical damage `0x0081C6E8`.
+  Magic damage `0x0081C6EC` must not lose Harden armor.
+- Mage dispatch `0x0047FDE0` writes frost duration `2.5` seconds and movement
+  factor `0.5` to GuidedMissile `+0x188/+0x184`. Poison instead writes ten
+  seconds, the actor's primary damage as its total poison amount, and magic
+  contact damage one. These values are instruction and binary-data facts,
+  replacing the three-second placeholder shared by the web producers.
+- GuidedMissile contact `0x005F3EE0` converts duration to native ticks. Poison
+  divides the total by that unresisted duration, queues `Mod_Poisoned 0x1B72`,
+  and adds one point on the unmitigated poison channel `0x0081C6F0`. Frost
+  queues `Mod_ColdSlow 0x1B69` with its own factor and duration. Both contacts
+  carry flags `0xA`; the shared hurt response suppresses ordinary hit redraw.
+- Mage lightning tick `0x00490860` supplies magic damage on each successful
+  channel contact: `primaryDamage / (100 * 0.5) * attackSpeed`. Dispatch sets
+  `trunc(100 * 0.5 / attackSpeed)` channel ticks. A single full-damage hit at
+  dispatch is not the native behavior; clipped or missing targets do not take
+  the successful-contact damage.
+- `Mod_ColdSlow` consumer `0x00623080` multiplies the movement scalar and mixes
+  the cold material. `Mod_Poisoned` consumer `0x00623850` sets the poison
+  material; its tick `0x00627160` submits the independent poison damage lane.
+  Health damage, status admission, and hit presentation are distinct outcomes.
+- The shield branch `0x0052F8F0..0x0052FA04` retains pending modifier IDs
+  `0x1B72/0x1B69/0x1B6E`, removes other pending modifiers, and dispatches the
+  retained list even after clearing physical/magic health damage. Poison's
+  independent channel bypasses the shield. Stoneskin instead returns before
+  status admission when that independent channel is zero. Poison immunity
+  `0x0052F64F..0x0052F76C` clears the poison channel and removes `0x1B72`.
+  Poison attach/merge `0x00626C50` subtracts the truncated resisted tick count,
+  then takes the maximum remaining duration and maximum damage per tick.
+  Earlier notes describing that merge as an approximation are superseded.
+- Material blend `0x0040FA00` interpolates each current actor RGB channel toward
+  the supplied color by `0.5`. Poison supplies `(0.1,0.5,0.1)` and cold supplies
+  `(0.5,1,1)`. The common modifier manager walks insertion order, so simultaneous
+  poison/cold needs one authoritative ordering bit; refresh preserves order,
+  expiry and a fresh application establish a new order. Stoneskin's separate
+  renderer material multiplies the result by `(0.5,0.5,0.5)`. Protocol 121 carries
+  `poisonBeforeCold`; the renderer composes the result with world and dye tint.
+- The common player receiver caps tertiary poison damage at
+  `min(amount, max(0, healthBeforeContact))` before summing damage channels
+  (`0x0052FDF6..0x0052FEC9`). Periodic poison therefore cannot deliver a lethal
+  hit. Deflect runs first even for periodic poison; poison flags do not bypass
+  the PlayerWizard override.
+- The receiver admits Flash after defenses, modifier admission, health
+  processing and ouch, when final tertiary damage is zero and flag `0x40` is
+  clear (`0x00530750..0x0053080C`). Lightning supplies `0x42` and cannot proc
+  Flash. The comparison is `0 < Integer(100) <= trunc(chance)`. This supersedes
+  entry 122's earlier Flash-before-Deflect claim.
+- Native ouch requires zero final tertiary damage, positive physical/magic
+  damage, nonterminal health loss and a strict global deadline. Its inclusive
+  delay draw precedes the cue draw; the health factor scales the absolute
+  deadline, with float32 storage and truncation. Entry 096's earlier cue/delay
+  order is superseded by `0x00530614..0x0053073A`.
+- Common modifier tick `0x006247A0` invokes the periodic callback, then
+  decrements the modifier clock and removes it below one. Admission itself
+  does not decrement the clock. The Website applies its ordered admitted
+  status batch after the current player combat pass, so fresh cold/poison
+  exposes 250/1000 ticks and begins countdown on the next pass. It must not
+  apply all poison early and all cold late, which reverses simultaneous
+  frost-then-poison material order.
+- First status admission owns twelve `Anim_FadeMoveAdditive_Perspective`
+  children in `Region+0x278`; refresh returns before creating children or sound.
+  Each uses BadGuys 10, alpha `.5`, loss float32 `.00625`, scale `.75+Float(.75)`,
+  rotation `Float(360)`, radial position `10+Float(20)` at independently jittered
+  `heading+SignedFloat(10)`, speed `Float(3)` at a second independently jittered
+  heading, Y velocity times float32 `.8`, and perspective Y scale `.8`.
+  Headings run `0..330` by 30. Poison uses RGB `(.5,1,.5)`, damping float32 `.95`
+  and registry offset `0xC78` (`Poisoned.wav`); cold uses `(.5,.75,1)`, damping
+  float32 `.93` and offset `0x674` (`Frosted.wav`). Both play at pitch `1.5`;
+  poison gain is one and cold is point-attenuated. The exact untouched WAV
+  SHA-256 values are `711860be40acb45d9c2cea6ab0f4c9358d115dff9e85757a08f2947ab356629d`
+  and `ef8471c066d812f2e23ae251a0c2ef3f98f161f8937bc1a2324664cec2f58b1b`.
+  Repeated float32 alpha subtraction leaves `0.000000336207449` after tick 80;
+  the child retires on tick 81. It is not an exact 80-tick integer timer.
+- Resist Poison removes `trunc(float32(durationTicks * resistance))` ticks;
+  it does not alter per-tick poison strength. A modifier reduced to duration
+  zero is still admitted and its periodic callback runs before removal on the
+  next modifier pass. The web remaining-callback count represents that case
+  as one tick. Antidote immunity is separate and prevents admission entirely.
+- Firebolt contact `0x005E7C20` writes half its strength to each physical and
+  magic channel. Arrow `0x005FEA00` likewise carries independent physical and
+  magic fields; its poison field is a total divided across exactly three
+  seconds (`0x005FEBC3..0x005FEBF5`, double `0x007DE910=3`). A single
+  `damageKind` cannot represent these packets. This pass carries the two
+  channels together through one Deflect decision, separate resistances, the
+  shared shield, physical-only Harden, and the health response.
+- PoisonPool `0x005F8030` supplies flags `0xC1`, so status admission without a
+  direct health hit must not proc Flash. Its own pulse/target cadence remains
+  a separate Zombie-owned producer; the shared receiver and status consumer
+  use the same corrected rules as Mage and Arrow contacts.
+
+### Implementation and acceptance inventory
+
+Save schema 31 records the poison/cold instance order and the independent
+Arrow magic channel. Current saves require both fields. Earlier Website saves
+did not record either value: their migration retains the serialized damage in
+the physical channel, initializes the absent magic channel to zero, and uses
+cold-before-poison material order. This preserves those historical packets
+without inventing a split from the surviving caster. Newly emitted packets use
+the recovered native channels; old saves cannot recover the missing historical
+channel split or status creation order.
+Structurally compatible later versions remain accepted by the save parser;
+the version number alone is not a rejection condition.
+
+The integration with Harden preserves its separate coating/armor state and
+chip output. PlayerWizard `0x00548150` rolls Deflect first, then the positive
+physical/coating chip branch, before invoking the base damage receiver with
+its shield and Stoneskin checks. A shield may therefore absorb the health
+damage after a chip was already admitted. Periodic poison has no physical
+channel and cannot chip. The final Flash decision remains after the base
+receiver's damage and status processing.
+
+The following dispositions describe the implemented system. The validation
+receipt below records the evidence and its limits.
+
+| Member | Disposition | Required evidence |
+| --- | --- | --- |
+| Fire Mage / Firebolt | exact-ported | ordinary and Harden-protected magic impacts |
+| Frost Mage / GuidedMissile | exact-ported | 250-tick slow, half movement, cold material, refresh and expiry |
+| Poison Mage / GuidedMissile | exact-ported | ten-second total-damage payload, direct poison lane, poison material and expiry |
+| Lightning Mage | exact-ported | per-tick channel damage, clipping, target loss and complete channel lifetime |
+| Shared Harden / resistance / Deflect response | exact-ported | physical versus magic, reflected contact and status admission |
+| Shield / Stoneskin / Resist Poison / poison immunity | exact-ported | independent health/status decisions and native suppression rules |
+| Archer / Zombie / Maggot shared status consumers | exact-ported | preserve source-specific durations and damage units |
+| Host-to-client status and player presentation | exact-ported | replicated health/status, visible material and movement, reset and teardown |
+
+Validation uses the real `stepGameSimulationTick` impact path, the shared
+harmful-contact interface, existing projectile and modifier contracts, the full
+Website gate, and Mac Chrome browser acceptance. No Website validation runs on
+Windows or WSL.
+
+### Validation receipt — 2026-09-05
+
+The focused candidate is based on Website
+`ffe24fe6bab73d17cbfe0d805d26ce7ba7494eed`, including the Harden, save-compatibility,
+and one-handed Wand changes. Local and Mac manifests matched all 52 changed
+files before the final gate. The final runtime uses protocol 121 and emits save
+schema 31; compatible later save versions remain accepted.
+
+`/opt/homebrew/bin/bash ./scripts/validate.sh` passed on the Mac mini, including
+backend build and integration contracts, frontend lint and type checks, all
+configured test suites, desktop tests, production build, bundle budget and
+production media policy. The final game entry was 252,770 raw bytes and 76,595
+gzip bytes. The focused contact/combat/Harden/material run passed 150 tests.
+
+`npm run smoke:game:mage-effects` passed in Mac Chrome `152.0.7977.76` against
+the production build at 1600 by 900. It entered `/game` through the ordinary
+menus and drove the real host, protocol, renderer and audio paths. The isolated
+arena seeds the Mage cast marker and defense state; the resulting projectile
+movement, contacts, channel ticks, statuses and player movement use production
+simulation code.
+
+| Browser case | Observed result |
+| --- | --- |
+| Fire with Harden | The magic half reached health; observed health was 38.039 from 50, including recovery after contact. |
+| Frost with Harden | Health fell to 44.036, the cold material and 12 onset children appeared, actual travel per tick was exactly half the recovered normal travel, and expiry restored the material. |
+| Poison with Harden | Health fell to 47.219, the poison material and 12 onset children appeared, and the poison modifier remained active after impact. |
+| Lightning with Harden | The active channel was visible, dealt repeated damage, completed its lifetime and retired; observed health was 38.086 after the channel and recovery. |
+| Frost with Magic Shield | Health stayed at 50 while cold still applied; the measured travel ratio was 0.524834 during the sampled acceleration interval, and expiry restored the material. |
+| Poison with Magic Shield | Health fell to 48.150 through the shield; poison and its material expired normally. |
+
+Each first cold/poison admission played its exact stock cue once at pitch 1.5.
+The page-error, console-error, failed-response, failed-request and wire-error
+arrays were all empty. Final captures were inspected for the player material,
+status burst, shield and active lightning channel. The movement check uses the
+existing native movement threshold: retained velocity decays after position
+has stopped and need not become exactly zero.
+
+`npm run smoke:game:harden` also passed against the same production build at
+1920 by 1080 with protocol 121. Real Water casting reached coating one and
+armor 24.120043; release cleared armor, weak Water cleared coating, and the
+formation/breakup audio and renderer checks passed. Its page, console and
+network error arrays were empty. The contact regression additionally proves
+Harden chips remain admitted before shield and Stoneskin health interception.
+
+Measured quality: V8 reports 100% lines, branches and functions for
+`player-harmful-contact.ts`, `player-contact-system.ts`,
+`boneyard-player-status.ts` and `player-material.ts`. Their source lengths are
+153, 354, 100 and 29 lines respectively. Oxlint at maximum cyclomatic complexity
+21 passed those four files plus `player-combat.ts` and `player-entity-store.ts`,
+with zero warnings/errors. The maximum in that scope is the unchanged
+`isSupersededWebStarterWearable` at 21; the largest changed function is
+`stepLivingPlayerCombat` at 16. No explicit `any` or `unknown`, unused helper,
+temporary diagnostic, or placeholder was introduced in the four focused
+modules.
+
+Existing large simulation, entity-store, protocol and save integration files
+remain above 1,000 lines; this receipt does not certify every touched file
+against the file-size gate. Broader-file and statement coverage are unmeasured.
+Cognitive complexity, Halstead Difficulty, CRAP, mutation, general dead-code
+and duplication analysis are unmeasured because their analyzers are not
+configured/available. No analyzer dependencies or exclusions were added.
+
+The validation above covers the recovered system and its integration. Git
+publication does not claim a production deployment or restart. Native facts
+and measurements remain in this tracked ledger; task worktrees, probes,
+captures and validation logs are disposable after publication is verified.
+
 ## Reported smell and parity question
 
 The Solomon Dig and retail wave work materialized accurate encounter state and
@@ -262,11 +483,11 @@ the confirmed Create choice now owns a fresh skill/progression generation.
   transients can never become phantom rays.
 - Player combat now owns 50/100 fresh HP/MP, native recovery, poison, the
   `HP <= -10` lethal edge, corpse frames, once-only death events, input/cast
-  suppression, spectator state, and all-dead arbitration. Overlapping poison
-  pools currently merge by strongest DPS and longest remaining duration as a
-  deterministic bounded web policy; exact native poison stacking is still
-  open. Poison-created lethal pending state survives until the following tick
-  begins the explicit death epoch, so Game Over cannot precede death. Wave
+  suppression, spectator state, and all-dead arbitration. September 4 native
+  evidence confirms same-class poison merges by strongest per-tick damage and
+  longest remaining duration. Poison is capped at current positive health and
+  cannot deliver the lethal hit. Direct damage begins the explicit death
+  epoch on the following combat tick, so Game Over cannot precede death. Wave
   scheduling pauses while there is no living eligible target.
 - Game Over remains host/run-nonce authoritative and once-only. Automatic
   completion returns to retained-choice Create without closing the

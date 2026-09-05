@@ -2077,7 +2077,7 @@ class BoneyardDynamicScene {
     this.gates = new BoneyardGateViews(root, textures)
     this.goodies = new NativeGoodieViews(root, textures)
     this.enemies = new NativeEnemyViews(root, textures, preWorld)
-    this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures)
+    this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures, preWorld)
     this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)

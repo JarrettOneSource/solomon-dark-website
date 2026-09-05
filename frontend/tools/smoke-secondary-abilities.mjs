@@ -2135,6 +2135,7 @@ function prepareDampenProjectileProof(host, playerId) {
       coldSlowTicks: 0,
       contactRadius: 8,
       damage: 1,
+      secondaryDamage: 0,
       headingDeg,
       hitPlayerIds: [],
       homing: false,

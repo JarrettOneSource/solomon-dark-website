@@ -1,3 +1,4 @@
+import { nativePlayerMaterialTint, type PlayerStatusMaterialState } from './player-material.ts'
 import { Container, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
@@ -37,7 +38,6 @@ import { nativeSecondarySpriteKey, nativeSecondarySpriteRecord } from './native-
 import {
   nativePlayerMagicShieldPlan,
   NATIVE_PLAYER_MAGIC_SHIELD,
-  nativePlayerMaterialTint,
 } from './native-secondary-presentation.ts'
 import { modWearableFrame, type ModPresentationTextures } from './mod-presentation-assets.ts'
 import {
@@ -91,6 +91,11 @@ export class PlayerWorldView {
     { length: PLAYER_DEATH_LAYER_COUNT },
     () => 0xffffff,
   )
+  private statusMaterial: PlayerStatusMaterialState = {
+    coldSlowTicksRemaining: 0,
+    poisonBeforeCold: false,
+    poisonTicksRemaining: 0,
+  }
   private worldTint = 0xffffff
   private currentWalkPose = 0
   private currentAttachmentPose = 0
@@ -241,6 +246,7 @@ export class PlayerWorldView {
     elementEffectVisible = true,
     movementFacing = false,
   ): void {
+    this.statusMaterial = player.progression
     const playerTextures = this.textures.players[player.config.element]
     const elementEffectPhase = player.lighting.overlayEffectPhase
     const plan = createPlayerCharacterDrawPlan(
@@ -713,7 +719,7 @@ export class PlayerWorldView {
   }
 
   private applyMaterialTint(): void {
-    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState)
+    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState, this.statusMaterial)
     this.staffBack.tint = tint
     this.robe.tint = multiplyTints(this.robePrimaryTint, tint)
     this.robeSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
@@ -805,7 +811,7 @@ export class PlayerWorldView {
   }
 
   private applyDeathTints(): void {
-    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState)
+    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState, this.statusMaterial)
     for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
       this.deathLayers[index]!.tint = multiplyTints(
         this.deathBaseTints[index]!,

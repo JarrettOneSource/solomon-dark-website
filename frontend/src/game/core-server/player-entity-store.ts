@@ -14,12 +14,18 @@ import type { NativeWorldManagerRegistration } from '../core-kernels/native-worl
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
 import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
+  resolvePlayerFlashResponse,
+  resolvePlayerHarmfulContact,
+  type PlayerFlashResponse,
+} from '../core-kernels/player-harmful-contact.ts'
+import {
   coldSlowPlayer,
   dazzlePlayer,
   damagePlayer,
   playerCanAcceptInput,
   playerCanCast,
   playerDisplayHealth,
+  playerPoisonHealthDamage,
   poisonPlayer,
   playerMovementScale,
   respawnPlayerCombat,
@@ -140,6 +146,11 @@ export interface PlayerEntityStore {
   readonly statBooks: readonly PlayerStatBookComponent[]
 }
 
+export type PlayerPoisonResponse = Readonly<{ playerId: string }> & (
+  | Readonly<{ kind: 'deflect'; pitch: number }>
+  | Readonly<{ kind: 'flash'; response: PlayerFlashResponse }>
+)
+
 export interface PlayerEntityCombatTickResult {
   readonly autoHealthPotionPlayerIds: readonly string[]
   readonly beganDeathEpochPlayerIds: readonly string[]
@@ -148,6 +159,8 @@ export interface PlayerEntityCombatTickResult {
   readonly deathBurstPlayerIds: readonly string[]
   readonly lastWordArchivePlayerIds: readonly string[]
   readonly lastWordBurstPlayerIds: readonly string[]
+  readonly poisonResponses: readonly PlayerPoisonResponse[]
+  readonly rng: NativeRngState
   readonly store: PlayerEntityStore
 }
 
@@ -1049,6 +1062,7 @@ export function damagePlayerEntityWithResult(
   damage: number,
   tick: number,
   damageAlreadyScaled = false,
+  recordHit = true,
 ): PlayerEntityDamageResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) {
@@ -1063,7 +1077,7 @@ export function damagePlayerEntityWithResult(
         source.progressions[index]!,
         source.economies[index]!,
       ).incomingDamageFactor)
-  const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick)
+  const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick, recordHit)
   if (damaged === source.progressions[index]) {
     return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
   }
@@ -1268,6 +1282,7 @@ export function setPlayerEntityMindstar(
 
 export function stepPlayerEntityCombatTick(
   source: PlayerEntityStore,
+  sourceRng: NativeRngState,
   actingPlayerIds: ReadonlySet<string> = new Set(),
   mutations: Readonly<{
     filterMana?: (playerId: string, delta: number, current: number, maximum: number) => number
@@ -1282,6 +1297,8 @@ export function stepPlayerEntityCombatTick(
   const deathBurstPlayerIds: string[] = []
   const lastWordArchivePlayerIds: string[] = []
   const lastWordBurstPlayerIds: string[] = []
+  const poisonResponses: PlayerPoisonResponse[] = []
+  let rng = sourceRng
   let changed = false
   const economies = [...source.economies]
   const skillRuntimes = [...source.skillRuntimes]
@@ -1322,47 +1339,20 @@ export function stepPlayerEntityCombatTick(
           potionStepped.maximumMana,
         )
       : skillTick.baseManaRecoveryPerTick
-    const nativePoisonDamagePerTick = Math.fround(
-      potionStepped.poisonDamagePerTick
-        * derived.poisonDamageFactor
-        * derived.incomingDamageFactor,
-    )
-    const poisonDamagePerTick = mutations.filterPoisonDamage
-      ? mutations.filterPoisonDamage(
-          source.identities[index]!.playerId,
-          nativePoisonDamagePerTick,
-        )
-      : nativePoisonDamagePerTick
+    const { poisonActive, contact, poisonDamagePerTick, poisonHealthDamage, nativePoisonDamagePerTick } =
+      resolvePoisonContact()
     let result = stepPlayerCombatTick(potionStepped, {
       healthRecoveryPerTick: derived.healthRecoveryPerTick,
       manaCeiling: mutations.manaCeiling?.(playerId, potionStepped.maximumMana),
       manaRecoveryPerTick: baseManaRecoveryPerTick,
       poisonDamagePerTick,
     })
-    const meditationManaRecoveryPerTick = skillTick.meditationManaRecoveryPerTick === 0
-      ? 0
-      : mutations.filterMana
-        ? mutations.filterMana(
-            playerId,
-            skillTick.meditationManaRecoveryPerTick,
-            result.combat.currentMana,
-            result.combat.maximumMana,
-          )
-        : skillTick.meditationManaRecoveryPerTick
-    if (meditationManaRecoveryPerTick !== 0 && result.combat.lifeState === 'alive') {
-      result = {
-        ...result,
-        combat: setPlayerMana(result.combat, Math.max(0, Math.min(
-          result.combat.maximumMana,
-          result.combat.currentMana + meditationManaRecoveryPerTick,
-        ))),
-      }
-    }
-    const resolved = poisonDamagePerTick > 0 && potionStepped.poisonTicksRemaining > 0
+    applyMeditationRecovery()
+    const resolved = poisonHealthDamage > 0
       ? resolveNativeHagathaDamage(
           result.combat,
           source.economies[index]!,
-          poisonDamagePerTick,
+          poisonHealthDamage,
         )
       : {
           autoHealthPotionUsed: false,
@@ -1370,37 +1360,102 @@ export function stepPlayerEntityCombatTick(
           economy: source.economies[index]!,
           progression: result.combat,
         }
+    applyPoisonFlashResponse()
     progressions[index] = resolved.progression
     economies[index] = resolved.economy
-    if (resolved.autoHealthPotionUsed) autoHealthPotionPlayerIds.push(playerId)
-    if (resolved.cheatDeathTriggered) cheatDeathPlayerIds.push(playerId)
-    if (result.beganDeathEpoch && resolved.progression.lifeState === 'dying') {
-      beganDeathEpochPlayerIds.push(playerId)
-    }
-    if (
-      result.completedDeathPresentation
-      && resolved.progression.lifeState === 'dying'
-    ) completedDeathPresentationPlayerIds.push(playerId)
-    if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
-    if (
-      ownsNativeHagathaSelector(
-        source.economies[index]!.ownedPerkSelectors,
-        NATIVE_HAGATHA_SELECTORS.lastWord,
-      )
-    ) {
-      if (
-        progression.deathTick < NATIVE_HAGATHA_LAST_WORD_DEATH_TICK
-        && resolved.progression.deathTick >= NATIVE_HAGATHA_LAST_WORD_DEATH_TICK
-      ) {
-        lastWordBurstPlayerIds.push(playerId)
-      }
-      if (result.completedDeathPresentation) {
-        lastWordArchivePlayerIds.push(playerId)
-      }
-    }
+    recordCombatOutcomes()
     changed ||= resolved.progression !== progression
       || resolved.economy !== source.economies[index]
       || skillTick.runtime !== source.skillRuntimes[index]
+
+    function resolvePoisonContact() {
+      const nativePoisonDamagePerTick = Math.fround(
+        potionStepped.poisonDamagePerTick
+          * derived.poisonDamageFactor
+          * derived.incomingDamageFactor,
+      )
+      const poisonActive = potionStepped.lifeState === 'alive' && potionStepped.poisonTicksRemaining > 0
+      const contact = poisonActive ? resolvePlayerHarmfulContact(
+        skillTick.runtime, derived, potionStepped, { physicalDamage: 0, magicDamage: 0 },
+        false, rng, source.locomotions[index]!.position,
+      ) : null
+      if (contact !== null) rng = contact.rng
+      if (contact?.deflected) poisonResponses.push({ kind: 'deflect', playerId, pitch: contact.deflectPitch })
+      const poisonDamagePerTick = contact?.deflected ? 0 : mutations.filterPoisonDamage
+        ? mutations.filterPoisonDamage(
+            source.identities[index]!.playerId,
+            nativePoisonDamagePerTick,
+          )
+        : nativePoisonDamagePerTick
+      const poisonHealthDamage = poisonActive
+        ? playerPoisonHealthDamage(potionStepped.currentHealth, poisonDamagePerTick)
+        : 0
+      return { poisonActive, contact, poisonDamagePerTick, poisonHealthDamage, nativePoisonDamagePerTick }
+    }
+
+    function applyMeditationRecovery() {
+      const meditationManaRecoveryPerTick = skillTick.meditationManaRecoveryPerTick === 0
+        ? 0
+        : mutations.filterMana
+          ? mutations.filterMana(
+              playerId,
+              skillTick.meditationManaRecoveryPerTick,
+              result.combat.currentMana,
+              result.combat.maximumMana,
+            )
+          : skillTick.meditationManaRecoveryPerTick
+      if (meditationManaRecoveryPerTick !== 0 && result.combat.lifeState === 'alive') {
+        result = {
+          ...result,
+          combat: setPlayerMana(result.combat, Math.max(0, Math.min(
+            result.combat.maximumMana,
+            result.combat.currentMana + meditationManaRecoveryPerTick,
+          ))),
+        }
+      }
+    }
+
+    function applyPoisonFlashResponse() {
+      if (
+        poisonActive && !contact?.deflected
+        && poisonHealthDamage === 0
+        && !(nativePoisonDamagePerTick > 0 && poisonDamagePerTick <= 0)
+        && resolved.progression.lifeState === 'alive'
+      ) {
+        const flash = resolvePlayerFlashResponse(derived, rng)
+        rng = flash.rng
+        if (flash.flash !== null) poisonResponses.push({ kind: 'flash', playerId, response: flash.flash })
+      }
+    }
+
+    function recordCombatOutcomes() {
+      if (resolved.autoHealthPotionUsed) autoHealthPotionPlayerIds.push(playerId)
+      if (resolved.cheatDeathTriggered) cheatDeathPlayerIds.push(playerId)
+      if (result.beganDeathEpoch && resolved.progression.lifeState === 'dying') {
+        beganDeathEpochPlayerIds.push(playerId)
+      }
+      if (
+        result.completedDeathPresentation
+        && resolved.progression.lifeState === 'dying'
+      ) completedDeathPresentationPlayerIds.push(playerId)
+      if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
+      if (
+        ownsNativeHagathaSelector(
+          source.economies[index]!.ownedPerkSelectors,
+          NATIVE_HAGATHA_SELECTORS.lastWord,
+        )
+      ) {
+        if (
+          progression.deathTick < NATIVE_HAGATHA_LAST_WORD_DEATH_TICK
+          && resolved.progression.deathTick >= NATIVE_HAGATHA_LAST_WORD_DEATH_TICK
+        ) {
+          lastWordBurstPlayerIds.push(playerId)
+        }
+        if (result.completedDeathPresentation) {
+          lastWordArchivePlayerIds.push(playerId)
+        }
+      }
+    }
   }
   return {
     autoHealthPotionPlayerIds: Object.freeze(autoHealthPotionPlayerIds),
@@ -1412,6 +1467,8 @@ export function stepPlayerEntityCombatTick(
     deathBurstPlayerIds: Object.freeze(deathBurstPlayerIds),
     lastWordArchivePlayerIds: Object.freeze(lastWordArchivePlayerIds),
     lastWordBurstPlayerIds: Object.freeze(lastWordBurstPlayerIds),
+    poisonResponses,
+    rng,
     store: changed ? { ...source, economies, progressions, skillRuntimes } : source,
   }
 }

@@ -1471,6 +1471,9 @@ function normalizePlayerStore(
   const progressions = array(source.progressions, 'game save player progressions').map(
     (value, index) => {
       const progression = record(value, `game save player progression ${index}`)
+      if (sourceSchemaVersion >= 31 && typeof progression.poisonBeforeCold !== 'boolean') {
+        throw new Error(`game save player progression ${index} poison/cold order is invalid`)
+      }
       const economy = economies[index]!
       const parsedRuntime = progression.hagathaRuntime === undefined
         ? applyNativeHagathaPurchaseRuntime(
@@ -1486,6 +1489,7 @@ function normalizePlayerStore(
       )
       const normalized = {
         ...progression,
+        poisonBeforeCold: sourceSchemaVersion < 31 ? false : progression.poisonBeforeCold,
         disciplineOfferBias: economy.ownedPerkSelectors.includes(14),
         hagathaRuntime,
       } as unknown as GameSimulationState['playerEntities']['progressions'][number]
@@ -1861,7 +1865,13 @@ function normalizeWorld(
     if (chillTumbleAccumulator < 0 || chillTumbleAccumulator > 1) {
       throw new Error(`game save Boneyard enemy projectile ${index} Chill accumulator is invalid`)
     }
-    return { ...projectile, chillTumbleAccumulator }
+    const secondaryDamage = sourceSchemaVersion < 31
+      ? 0
+      : finiteNumber(projectile.secondaryDamage, `game save Boneyard enemy projectile ${index} magic damage`)
+    if (secondaryDamage < 0) {
+      throw new Error(`game save Boneyard enemy projectile ${index} magic damage is invalid`)
+    }
+    return { ...projectile, chillTumbleAccumulator, secondaryDamage }
   })
   const encounter = source.encounter === null
     ? null

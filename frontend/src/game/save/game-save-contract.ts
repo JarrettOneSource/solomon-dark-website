@@ -10,7 +10,7 @@ import type {
 } from '../protocol/game-protocol.ts'
 import type { NativeGameSaveSource } from './portable-game-profile.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 30
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 31
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 16 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */

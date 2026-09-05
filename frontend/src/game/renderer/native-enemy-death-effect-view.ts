@@ -15,12 +15,14 @@ import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 export class NativeEnemyDeathEffectViews {
   private readonly liveIds = new Set<number>()
   private readonly root: Container
+  private readonly preWorldRoot: Container
   private readonly textures: BoneyardWorldTextures
   private readonly views = new Map<number, NativeEnemyDeathEffectView>()
   private visibleCount = 0
 
-  constructor(root: Container, textures: BoneyardWorldTextures) {
+  constructor(root: Container, textures: BoneyardWorldTextures, preWorldRoot: Container) {
     this.root = root
+    this.preWorldRoot = preWorldRoot
     this.textures = textures
   }
 
@@ -34,7 +36,11 @@ export class NativeEnemyDeathEffectViews {
       this.liveIds.add(effect.id)
       let view = this.views.get(effect.id)
       if (!view) {
-        view = new NativeEnemyDeathEffectView(this.root, this.textures, effect)
+        view = new NativeEnemyDeathEffectView(
+          effect.presentationOwner === 'pre-world-queue' ? this.preWorldRoot : this.root,
+          this.textures,
+          effect,
+        )
         this.views.set(effect.id, view)
       }
       if (view.update(effect, visibleBounds)) this.visibleCount += 1

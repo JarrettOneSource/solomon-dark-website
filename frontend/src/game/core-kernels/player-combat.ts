@@ -1,5 +1,5 @@
 import {
-  BOUNDED_ENEMY_COLD_MOVEMENT_SCALE,
+  NATIVE_COLD_MOVEMENT_SCALE,
   NATIVE_WRAITH_DAZZLE_TICKS,
   nativeDazzleMovementScale,
 } from './boneyard-enemy-modifiers.ts'
@@ -40,6 +40,7 @@ export interface PlayerCombatComponent {
   readonly maximumHealth: number
   readonly maximumMana: number
   readonly poisonDamagePerTick: number
+  readonly poisonBeforeCold: boolean
   readonly poisonTicksRemaining: number
 }
 
@@ -76,6 +77,7 @@ export function createPlayerCombat(): PlayerCombatComponent {
     maximumHealth: PLAYER_INITIAL_HEALTH,
     maximumMana: PLAYER_INITIAL_MANA,
     poisonDamagePerTick: 0,
+    poisonBeforeCold: false,
     poisonTicksRemaining: 0,
   }
 }
@@ -89,6 +91,9 @@ export function coldSlowPlayer<T extends PlayerCombatComponent>(
   return {
     ...source,
     coldSlowTicksRemaining: Math.max(source.coldSlowTicksRemaining, durationTicks),
+    poisonBeforeCold: source.coldSlowTicksRemaining > 0
+      ? source.poisonBeforeCold
+      : source.poisonTicksRemaining > 0,
   }
 }
 
@@ -111,7 +116,7 @@ export function playerMovementScale(
   source: Pick<PlayerCombatComponent, 'coldSlowTicksRemaining' | 'dazzleTicksRemaining'>,
 ): number {
   const coldScale = source.coldSlowTicksRemaining > 0
-    ? BOUNDED_ENEMY_COLD_MOVEMENT_SCALE
+    ? NATIVE_COLD_MOVEMENT_SCALE
     : 1
   return coldScale * nativeDazzleMovementScale(source.dazzleTicksRemaining)
 }
@@ -126,21 +131,30 @@ export function poisonPlayer<T extends PlayerCombatComponent>(
   if (
     source.lifeState !== 'alive'
     || damagePerSecond === 0
-    || durationSeconds === 0
   ) return source
-  const poisonDamagePerTick = damagePerSecond / PLAYER_COMBAT_TICKS_PER_SECOND
-  const poisonTicksRemaining = Math.ceil(durationSeconds * PLAYER_COMBAT_TICKS_PER_SECOND)
+  const poisonDamagePerTick = Math.fround(damagePerSecond / PLAYER_COMBAT_TICKS_PER_SECOND)
+  const poisonTicksRemaining = Math.max(1, Math.trunc(Math.fround(
+    durationSeconds * PLAYER_COMBAT_TICKS_PER_SECOND,
+  )))
   return {
     ...source,
     poisonDamagePerTick: Math.max(source.poisonDamagePerTick, poisonDamagePerTick),
+    poisonBeforeCold: source.poisonTicksRemaining > 0
+      ? source.poisonBeforeCold
+      : source.coldSlowTicksRemaining === 0,
     poisonTicksRemaining: Math.max(source.poisonTicksRemaining, poisonTicksRemaining),
   }
+}
+
+export function playerPoisonHealthDamage(currentHealth: number, amount: number): number {
+  return Math.min(Math.max(0, currentHealth), amount)
 }
 
 export function damagePlayer<T extends PlayerCombatComponent>(
   source: T,
   damage: number,
   tick: number,
+  recordHit = true,
 ): T {
   requireNonnegativeFinite(damage, 'player damage')
   requireNonnegativeTicks(tick, 'player damage tick')
@@ -151,7 +165,7 @@ export function damagePlayer<T extends PlayerCombatComponent>(
   return {
     ...source,
     currentHealth,
-    lastDamageTick: tick,
+    lastDamageTick: recordHit ? tick : source.lastDamageTick,
     lifeState: source.lifeState === 'lethal-pending' || currentHealth <= PLAYER_LETHAL_HEALTH
       ? 'lethal-pending'
       : 'alive',
@@ -226,23 +240,8 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
   source: T,
   options: PlayerCombatTickOptions = {},
 ): PlayerCombatTickResult<T> {
-  const healthRecoveryPerTick = options.healthRecoveryPerTick
-    ?? PLAYER_HEALTH_RECOVERY_PER_TICK
-  const manaRecoveryPerTick = options.manaRecoveryPerTick
-    ?? PLAYER_MANA_RECOVERY_PER_TICK
-  const manaCeiling = options.manaCeiling ?? source.maximumMana
-  const appliedPoisonDamagePerTick = options.poisonDamagePerTick ?? source.poisonDamagePerTick
-  if (
-    !Number.isFinite(healthRecoveryPerTick)
-    || healthRecoveryPerTick < 0
-    || !Number.isFinite(manaRecoveryPerTick)
-    || Math.abs(manaRecoveryPerTick) > 1_000_000
-    || !Number.isFinite(manaCeiling)
-    || manaCeiling < 0
-    || manaCeiling > source.maximumMana
-    || !Number.isFinite(appliedPoisonDamagePerTick)
-    || appliedPoisonDamagePerTick < 0
-  ) throw new RangeError('player combat recovery options are invalid')
+  const { healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick } =
+    playerCombatRecovery(source, options)
   if (source.lifeState === 'lethal-pending') {
     return {
       beganDeathEpoch: true,
@@ -255,6 +254,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
         dazzleTicksRemaining: 0,
         lastDamageTick: null,
         lifeState: 'dying',
+        poisonBeforeCold: false,
         poisonDamagePerTick: 0,
         poisonTicksRemaining: 0,
       },
@@ -295,14 +295,26 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
     }
   }
 
+  return stepLivingPlayerCombat(source, {
+    healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick,
+  })
+}
+
+function stepLivingPlayerCombat<T extends PlayerCombatComponent>(
+  source: T,
+  recovery: Required<PlayerCombatTickOptions>,
+): PlayerCombatTickResult<T> {
+  const { healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick } = recovery
   const poisoned = source.poisonTicksRemaining > 0 && source.poisonDamagePerTick > 0
   const coldSlowTicksRemaining = Math.max(0, source.coldSlowTicksRemaining - 1)
   const dazzleTicksRemaining = Math.max(0, source.dazzleTicksRemaining - 1)
   const poisonTicksRemaining = poisoned ? source.poisonTicksRemaining - 1 : 0
+  const poisonBeforeCold = poisonTicksRemaining > 0
+    && (coldSlowTicksRemaining === 0 || source.poisonBeforeCold)
   const currentHealth = Math.min(
     source.maximumHealth,
     source.currentHealth
-      - (poisoned ? appliedPoisonDamagePerTick : 0)
+      - (poisoned ? playerPoisonHealthDamage(source.currentHealth, appliedPoisonDamagePerTick) : 0)
       + healthRecoveryPerTick,
   )
   const currentMana = Math.max(0, Math.min(
@@ -318,6 +330,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
       && lifeState === source.lifeState
       && poisonDamagePerTick === source.poisonDamagePerTick
       && poisonTicksRemaining === source.poisonTicksRemaining
+      && poisonBeforeCold === source.poisonBeforeCold
       && coldSlowTicksRemaining === source.coldSlowTicksRemaining
       && dazzleTicksRemaining === source.dazzleTicksRemaining
     ? source
@@ -329,6 +342,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
         dazzleTicksRemaining,
         lifeState,
         poisonDamagePerTick,
+        poisonBeforeCold,
         poisonTicksRemaining,
       }
   return {
@@ -337,6 +351,30 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
     completedDeathPresentation: false,
     emittedDeathBurst: false,
   }
+}
+
+function playerCombatRecovery(
+  source: PlayerCombatComponent,
+  options: PlayerCombatTickOptions,
+): Required<PlayerCombatTickOptions> {
+  const healthRecoveryPerTick = options.healthRecoveryPerTick
+    ?? PLAYER_HEALTH_RECOVERY_PER_TICK
+  const manaRecoveryPerTick = options.manaRecoveryPerTick
+    ?? PLAYER_MANA_RECOVERY_PER_TICK
+  const manaCeiling = options.manaCeiling ?? source.maximumMana
+  const appliedPoisonDamagePerTick = options.poisonDamagePerTick ?? source.poisonDamagePerTick
+  if (
+    !Number.isFinite(healthRecoveryPerTick)
+    || healthRecoveryPerTick < 0
+    || !Number.isFinite(manaRecoveryPerTick)
+    || Math.abs(manaRecoveryPerTick) > 1_000_000
+    || !Number.isFinite(manaCeiling)
+    || manaCeiling < 0
+    || manaCeiling > source.maximumMana
+    || !Number.isFinite(appliedPoisonDamagePerTick)
+    || appliedPoisonDamagePerTick < 0
+  ) throw new RangeError('player combat recovery options are invalid')
+  return { healthRecoveryPerTick, manaRecoveryPerTick, manaCeiling, poisonDamagePerTick: appliedPoisonDamagePerTick }
 }
 
 export function setPlayerSpectating<T extends PlayerCombatComponent>(source: T): T {
@@ -427,6 +465,7 @@ export function resetPlayerCombatForNewRun<T extends PlayerCombatComponent>(sour
     lastDamageTick: null,
     lifeState: 'alive',
     poisonDamagePerTick: 0,
+    poisonBeforeCold: false,
     poisonTicksRemaining: 0,
   }
 }

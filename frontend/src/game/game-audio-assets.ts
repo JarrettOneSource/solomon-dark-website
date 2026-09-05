@@ -140,6 +140,8 @@ import throwDirt2 from '../assets/game/audio/sfx/throw-dirt-2.wav'
 import unlockSkill from '../assets/game/audio/sfx/unlockskill.wav'
 import unforge from '../assets/game/audio/sfx/unforge.wav'
 import wizardOuch1 from '../assets/game/audio/sfx/wizard-ouch-1.wav'
+import frosted from '../assets/game/audio/sfx/frosted.wav'
+import poisoned from '../assets/game/audio/sfx/poisoned.wav'
 import wizardOuch2 from '../assets/game/audio/sfx/wizard-ouch-2.wav'
 import wizardOuch3 from '../assets/game/audio/sfx/wizard-ouch-3.wav'
 import zombieDie from '../assets/game/audio/sfx/zombie-die.wav'
@@ -325,6 +327,8 @@ export const GAME_AUDIO_SOURCES = {
     'unlock-skill': unlockSkill,
     unforge,
     'wizard-ouch-1': wizardOuch1,
+    frosted,
+    poisoned,
     'wizard-ouch-2': wizardOuch2,
     'wizard-ouch-3': wizardOuch3,
     'zombie-die': zombieDie,

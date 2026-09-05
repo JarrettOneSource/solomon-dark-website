@@ -543,7 +543,9 @@ export function playerPoisonDurationSeconds(
   if (!Number.isFinite(durationSeconds) || durationSeconds < 0) {
     throw new RangeError('poison duration must be finite and non-negative')
   }
-  return durationSeconds * (1 - derived.poisonResistance)
+  const durationTicks = Math.trunc(Math.fround(durationSeconds * PLAYER_COMBAT_TICKS_PER_SECOND))
+  const resistedTicks = Math.trunc(Math.fround(durationTicks * derived.poisonResistance))
+  return Math.max(0, durationTicks - resistedTicks) / PLAYER_COMBAT_TICKS_PER_SECOND
 }
 
 export function stepPlayerSkillRuntime(

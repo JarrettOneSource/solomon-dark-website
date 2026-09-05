@@ -39,8 +39,8 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { buildNativeEnemySteering } from '../core-kernels/native-enemy-pathfinding.ts'
 import {
-  BOUNDED_ENEMY_COLD_SLOW_TICKS,
-  BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+  NATIVE_MAGE_COLD_SLOW_TICKS,
+  NATIVE_ARROW_POISON_DURATION_SECONDS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import {
@@ -347,54 +347,30 @@ test('Turn Undead weakening remains one fixed factor across repeated target tick
     result = stepWithEffects(result.store, tick, near, {
       1: targetEffect(1, { weakenFactor: 0.5 }),
     })
-    damage.push(...result.playerDamage.map(({ amount }) => amount))
+    damage.push(...result.playerDamage.map(({ physicalDamage, magicDamage }) => physicalDamage + magicDamage))
   }
   assert.deepEqual(damage, [1.5, 1.5, 1.5])
   assert.deepEqual(result.store.actors[0]!.config, authoredConfig)
 })
 
-test('Wizard ouch consumes cue then inclusive cooldown draws on the active enemy RNG stream', () => {
+test('Wizard ouch consumes delay before cue and scales the absolute deadline', () => {
   const source = createBoneyardEnemyStore('wizard-ouch')
-  const cueDraw = randomBoneyardWaveInteger(source.rngState, 3)
-  const cooldownDraw = randomBoneyardWaveInteger(cueDraw.state, 41)
-  const sounds = ['wizard-ouch-1', 'wizard-ouch-2', 'wizard-ouch-3'] as const
-  const emitted = emitBoneyardPlayerDamageSound(source, {
-    actorId: 7,
-    currentHealth: 35,
-    playerId: 'wizard',
-    position: { x: 120, y: 240 },
-    tick: 101,
-  })
-
-  assert.deepEqual(emitted.event, {
-    actorId: 7,
-    eventId: 1,
-    gainScale: 0.625,
-    pitch: 1,
-    sound: sounds[cueDraw.value],
-    sourcePosition: { x: 120, y: 240 },
-    targetPlayerId: 'wizard',
-    tick: 101,
-    type: 'player-damage-sound',
-  })
-  assert.equal(emitted.delayTicks, 20 + cooldownDraw.value)
+  const rng = createNativeRng(15)
+  const delay = drawNativeInteger(rng, 41)
+  const cue = drawNativeInteger(delay.state, 3)
+  const request = { actorId: 7, currentHealth: 35, playerId: 'wizard', position: { x: 120, y: 240 }, tick: 101 }
+  const emitted = emitBoneyardPlayerDamageSound(source, request, rng)
+  assert.equal(emitted.event.sound, `wizard-ouch-${cue.value + 1}`)
+  assert.equal(emitted.event.gainScale, 0.625)
+  assert.equal(emitted.event.targetPlayerId, 'wizard')
+  assert.equal(emitted.deadlineTick, Math.trunc(Math.fround((101 + 20 + delay.value) * 0.5)))
+  assert.deepEqual(emitted.rng, cue.state)
   assert.equal(emitted.store.nextEventId, 2)
-  assert.equal(emitted.store.rngState, cooldownDraw.state)
-  assert.equal(source.nextEventId, 1)
-  assert.equal(emitBoneyardPlayerDamageSound(source, {
-    actorId: 7,
-    currentHealth: 45,
-    playerId: 'wizard',
-    position: { x: 0, y: 0 },
-    tick: 102,
-  }).event.gainScale, 0.25)
-  assert.equal(emitBoneyardPlayerDamageSound(source, {
-    actorId: 7,
-    currentHealth: 25,
-    playerId: 'wizard',
-    position: { x: 0, y: 0 },
-    tick: 102,
-  }).event.gainScale, 1)
+  assert.equal(emitted.store.rngState, source.rngState)
+  assert.equal(emitBoneyardPlayerDamageSound(source, { ...request, currentHealth: 45 }, rng).event.gainScale, 0.25)
+  const lowHealth = emitBoneyardPlayerDamageSound(source, { ...request, currentHealth: 25 }, rng)
+  assert.equal(lowHealth.event.gainScale, 1)
+  assert.equal(lowHealth.deadlineTick, 0)
   assert.equal(nativeWizardOuchCooldownReady(140, 140), false)
   assert.equal(nativeWizardOuchCooldownReady(141, 140), true)
 })
@@ -1615,7 +1591,7 @@ test('each native claw crossing independently re-checks its staged target and re
     }
     if (result.playerDamage.length > 0) {
       damageTicks.push(tick - 1)
-      assert.deepEqual(result.playerDamage.map(({ amount }) => amount), [3])
+      assert.deepEqual(result.playerDamage.map(({ physicalDamage, magicDamage }) => physicalDamage + magicDamage), [3])
     }
   }
 
@@ -1918,7 +1894,7 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
     2,
   )
   const fireArrows = fire.store.projectiles.map((projectile) => ({
-    damage: projectile.damage,
+    damage: projectile.damage + projectile.secondaryDamage,
     headingDeg: projectile.headingDeg,
     lightRegistration: projectile.lightRegistration,
     payload: projectile.payload,
@@ -1962,8 +1938,8 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
     damage: 4,
     lightRegistration: null,
     payload: 'poison',
-    poisonDamage: 12,
-    poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+    poisonDamage: 4,
+    poisonDuration: NATIVE_ARROW_POISON_DURATION_SECONDS,
   })
 })
 
@@ -2355,7 +2331,7 @@ test('all Mage elements emit their authoritative damage, status, payload, and li
   })
   const frost = forcedMageAttack('mage-frost', ['FLAG_CASTFROST'])
   assert.deepEqual(mageProjectileSummary(frost), {
-    coldSlowTicks: BOUNDED_ENEMY_COLD_SLOW_TICKS,
+    coldSlowTicks: NATIVE_MAGE_COLD_SLOW_TICKS,
     damage: 6,
     kind: 'guided-missile',
     payload: 'cold',
@@ -2365,19 +2341,19 @@ test('all Mage elements emit their authoritative damage, status, payload, and li
   const poison = forcedMageAttack('mage-poison', ['FLAG_CASTPOISON'])
   assert.deepEqual(mageProjectileSummary(poison), {
     coldSlowTicks: 0,
-    damage: 24,
+    damage: 1,
     kind: 'guided-missile',
     payload: 'poison',
-    poisonDamage: 24,
-    poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+    poisonDamage: 2.4,
+    poisonDuration: 10,
   })
 
   let lightning = forcedMageAttack('mage-lightning', ['FLAG_CASTLIGHTNING'])
   assert.equal(lightning.store.projectiles.length, 0)
   assert.deepEqual(lightning.playerDamage.map((damage) => ({
-    amount: damage.amount,
+    amount: damage.physicalDamage + damage.magicDamage,
     playerId: damage.playerId,
-  })), [{ amount: 12, playerId: 'player' }])
+  })), [{ amount: Math.fround(0.24), playerId: 'player' }])
   assert.ok(lightning.events.every((event) => event.type !== ('mage-lightning' as string)))
   const first = lightning.store.mageLightningPulses[0]!
   assert.equal(first.tick, 1)
@@ -2398,16 +2374,21 @@ test('all Mage elements emit their authoritative damage, status, payload, and li
     .lightningTicksRemaining, 49)
 
   const birthTicks = [first.tick]
+  let channelDamage = (lightning.playerDamage[0]!.physicalDamage + lightning.playerDamage[0]!.magicDamage)
   for (let tick = 2; tick <= 50; tick += 1) {
     lightning = step(lightning.store, tick, { player: livingTarget(150, 0) })
     const born = lightning.store.mageLightningPulses.find((pulse) => pulse.tick === tick)
     assert.ok(born, `missing Mage lightning pulse at tick ${tick}`)
     birthTicks.push(born.tick)
+    assert.equal(lightning.playerDamage.length, 1)
+    channelDamage += (lightning.playerDamage[0]!.physicalDamage + lightning.playerDamage[0]!.magicDamage)
   }
+  assert.ok(Math.abs(channelDamage - 12) < 0.000_001)
   assert.equal(birthTicks.length, 50)
   assert.deepEqual(birthTicks, Array.from({ length: 50 }, (_, index) => index + 1))
   assert.deepEqual(lightning.store.mageLightningPulses.map(({ tick }) => tick), [46, 47, 48, 49, 50])
   lightning = step(lightning.store, 51, { player: livingTarget(150, 0) })
+  assert.deepEqual(lightning.playerDamage, [])
   assert.ok(!lightning.store.mageLightningPulses.some(({ tick }) => tick === 51))
 })
 
@@ -2419,6 +2400,7 @@ test('Mage lightning uses a clipped world contact without reusing endpoint displ
     () => blockedPoint,
   )
   const pulse = result.store.mageLightningPulses[0]!
+  assert.deepEqual(result.playerDamage, [], 'clipped lightning must not damage the target')
   assert.deepEqual(pulse.midpoint, { x: 75, y: 0 })
   assert.equal(pulse.contact.kind, 'world')
   if (pulse.contact.kind !== 'world') throw new Error('expected world contact')
@@ -2439,6 +2421,7 @@ test('Mage lightning preserves its dispatch target identity after attachment bec
   let result = forcedMageAttack('mage-lightning-detached', ['FLAG_CASTLIGHTNING'])
   const detachedTarget = { ...livingTarget(150, 0), alive: false }
   result = step(result.store, 2, { player: detachedTarget })
+  assert.deepEqual(result.playerDamage, [], 'lightning must stop damaging a lost target')
 
   const pulse = result.store.mageLightningPulses.find(({ tick }) => tick === 2)!
   assert.equal(pulse.contact.kind, 'world')
@@ -2455,7 +2438,7 @@ test('Wraith contact immediately applies damage and the exact 50-tick Dazzle dur
   result = step(result.store, 1, players)
 
   assert.equal(result.playerDamage.length, 1)
-  assert.equal(result.playerDamage[0]!.amount, 4)
+  assert.equal((result.playerDamage[0]!.physicalDamage + result.playerDamage[0]!.magicDamage), 4)
   assert.equal(result.playerDamage[0]!.dazzleTicks, NATIVE_WRAITH_DAZZLE_TICKS)
 })
 
@@ -2913,7 +2896,7 @@ test('GuidedMissile deterministically reacquires, homes, contacts, and retires',
     const damage = result.playerDamage.find((entry) => entry.playerId === 'beta')
     if (!damage) continue
     impacted = true
-    assert.equal(damage.amount, 6)
+    assert.equal(damage.physicalDamage + damage.magicDamage, 6)
     assert.ok(result.events.some((event) => event.type === 'projectile-impact'))
   }
   assert.equal(impacted, true)
@@ -2984,8 +2967,8 @@ test('enemy projectile actor entry wins when it precedes a later world contact',
     tick: 51,
   })
 
-  assert.deepEqual(result.playerDamage.map(({ amount, playerId }) => ({
-    amount,
+  assert.deepEqual(result.playerDamage.map(({ physicalDamage, magicDamage, playerId }) => ({
+    amount: physicalDamage + magicDamage,
     playerId,
   })), [{ amount: 6, playerId: 'player' }])
   assert.equal(result.store.projectiles.length, 0)
@@ -4492,7 +4475,7 @@ function verifySkeletonProgram(
     bodyPoses.add(result.store.actors[0]!.bodyPose)
     if (result.playerDamage.length > 0) {
       markerTicks.push(tick - 1)
-      damageAmounts.push(...result.playerDamage.map(({ amount }) => amount))
+      damageAmounts.push(...result.playerDamage.map(({ physicalDamage, magicDamage }) => physicalDamage + magicDamage))
     }
     if (completionTick < 0 && result.store.actors[0]!.brain.phase === 'approach') {
       completionTick = tick

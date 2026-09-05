@@ -691,6 +691,7 @@ export function applyPlayerPotionEffect(
     case 3:
       return {
         ...source,
+        poisonBeforeCold: false,
         poisonDamagePerTick: 0,
         poisonImmunityTicksRemaining: NATIVE_ANTIDOTE_IMMUNITY_TICKS,
         poisonTicksRemaining: 0,

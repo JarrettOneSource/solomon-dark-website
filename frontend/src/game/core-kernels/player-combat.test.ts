@@ -77,6 +77,52 @@ test('cold and dazzle are authoritative bounded counters with only native-suppor
   assert.equal(two.coldSlowTicksRemaining, 1)
 })
 
+test('poison stops at zero health and never becomes a lethal hit', () => {
+  let player = poisonPlayer({ ...createPlayerCombat(), currentHealth: 0.05 }, 100, 3)
+  for (let tick = 0; tick < 300; tick += 1) {
+    player = stepPlayerCombatTick(player, { healthRecoveryPerTick: 0 }).combat
+    assert.equal(player.currentHealth, 0)
+    assert.equal(player.lifeState, 'alive')
+  }
+  assert.equal(player.poisonTicksRemaining, 0)
+  const negative = stepPlayerCombatTick(poisonPlayer({
+    ...createPlayerCombat(), currentHealth: -5,
+  }, 100, 1), { healthRecoveryPerTick: 0 }).combat
+  assert.equal(negative.currentHealth, -5)
+  assert.equal(negative.lifeState, 'alive')
+})
+
+test('poison refresh keeps the strongest per-tick damage and longest remaining clock', () => {
+  const first = poisonPlayer(createPlayerCombat(), 5, 10)
+  const shorter = poisonPlayer(first, 10, 2)
+  assert.equal(shorter.poisonTicksRemaining, 1_000)
+  assert.equal(shorter.poisonDamagePerTick, Math.fround(0.1))
+  const longer = poisonPlayer(shorter, 1, 15)
+  assert.equal(longer.poisonTicksRemaining, 1_500)
+  assert.equal(longer.poisonDamagePerTick, Math.fround(0.1))
+})
+
+test('fully resisted poison receives its native first callback before retirement', () => {
+  const poisoned = poisonPlayer(createPlayerCombat(), 5, 0)
+  assert.equal(poisoned.poisonTicksRemaining, 1)
+  const stepped = stepPlayerCombatTick(poisoned, { healthRecoveryPerTick: 0 }).combat
+  assert.equal(stepped.currentHealth, 50 - Math.fround(0.05))
+  assert.equal(stepped.poisonTicksRemaining, 0)
+  assert.equal(stepped.poisonDamagePerTick, 0)
+})
+
+test('cold and poison refresh, expiry, antidote order and new-run reset keep the material order', () => {
+  const poisonFirst = coldSlowPlayer(poisonPlayer(createPlayerCombat(), 5, 2), 250)
+  assert.equal(poisonFirst.poisonBeforeCold, true)
+  assert.equal(poisonPlayer(poisonFirst, 5, 3).poisonBeforeCold, true)
+  const coldFirst = poisonPlayer(coldSlowPlayer(createPlayerCombat(), 250), 5, 2)
+  assert.equal(coldFirst.poisonBeforeCold, false)
+  assert.equal(coldSlowPlayer(coldFirst, 350).poisonBeforeCold, false)
+  const expired = stepPlayerCombatTick({ ...poisonFirst, poisonTicksRemaining: 1 }).combat
+  assert.equal(poisonPlayer(expired, 5, 1).poisonBeforeCold, false)
+  assert.equal(resetPlayerCombatForNewRun(poisonFirst).poisonBeforeCold, false)
+})
+
 test('cold/dazzle clear on death and on a new run', () => {
   const affected = dazzlePlayer(coldSlowPlayer(createPlayerCombat(), 30), 40)
   const lethal = damagePlayer(affected, 60, 0)

@@ -1699,7 +1699,7 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   assert.equal(restored.state.world.encounter!.escapeTarget, null)
 })
 
-test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 19', () => {
+test('saves preserve projectile channels, Chill accumulation and status order with historical defaults', () => {
   const loadedBoneyard = materializeBoneyard(
     createBoneyardCatalog(),
     'default-random',
@@ -1718,6 +1718,9 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
     state,
   }))
   const simulation = document.continuation.simulation
+  simulation.playerEntities.progressions[0].poisonBeforeCold = true
+  simulation.playerEntities.progressions[0].poisonTicksRemaining = 100
+  simulation.playerEntities.progressions[0].coldSlowTicksRemaining = 100
   const worldKey = `boneyard:${loadedBoneyard.runId}`
   const painterRegistration = {
     managerLane: 'transient',
@@ -1752,6 +1755,7 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
     coldSlowTicks: 0,
     contactRadius: 8,
     damage: 1,
+    secondaryDamage: 5,
     headingDeg: 90,
     hitPlayerIds: [],
     homing: false,
@@ -1765,7 +1769,7 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
     nativeRegistrationOrder: enemies.nextNativeRegistrationOrder,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
-    payload: 'normal',
+    payload: 'fire',
     poisonDamage: 0,
     poisonDuration: 0,
     position: { x: 330, y: 250 },
@@ -1783,6 +1787,12 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
   enemies.nextNativeRegistrationOrder += 1
 
   const current = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(current.state.playerEntities.progressions[0]?.poisonBeforeCold, true)
+  assert.equal(current.state.playerEntities.progressions[0]?.poisonTicksRemaining, 100)
+  assert.equal(current.state.playerEntities.progressions[0]?.coldSlowTicksRemaining, 100)
+  if (current.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(current.state.world.enemies.projectiles[0]?.damage, 1)
+  assert.equal(current.state.world.enemies.projectiles[0]?.secondaryDamage, 5)
   assert.equal(current.state.primarySpells.transients[0]?.kind, 'water')
   assert.equal(
     current.state.primarySpells.transients[0]?.kind === 'water'
@@ -1803,6 +1813,10 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
   delete legacy.continuation.simulation.primarySpells.transients[0].speed
   delete legacy.continuation.simulation.world.enemies.projectiles[0].chillTumbleAccumulator
   const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(migrated.state.playerEntities.progressions[0]?.poisonBeforeCold, false)
+  if (migrated.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(migrated.state.world.enemies.projectiles[0]?.damage, 1)
+  assert.equal(migrated.state.world.enemies.projectiles[0]?.secondaryDamage, 0)
   assert.equal(
     migrated.state.primarySpells.transients[0]?.kind === 'water'
       ? migrated.state.primarySpells.transients[0].speed
@@ -1829,6 +1843,22 @@ test('schema 18 resumes Frost speed and Arrow Chill accumulation through schema 
     () => restoreGameSaveDocument(JSON.stringify(missingAccumulator)),
     /enemy projectile 0 Chill accumulator/,
   )
+
+  const missingContactFields = structuredClone(document)
+  delete missingContactFields.continuation.simulation.playerEntities.progressions[0].poisonBeforeCold
+  delete missingContactFields.continuation.simulation.world.enemies.projectiles[0].secondaryDamage
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(missingContactFields)), /poison\/cold order/)
+  missingContactFields.schemaVersion = 30
+  const precedingSchema = restoreGameSaveDocument(JSON.stringify(missingContactFields))
+  assert.equal(precedingSchema.state.playerEntities.progressions[0]?.poisonBeforeCold, false)
+  if (precedingSchema.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(precedingSchema.state.world.enemies.projectiles[0]?.secondaryDamage, 0)
+
+  for (const magicDamage of [undefined, -1, null]) {
+    const invalidDamage = structuredClone(document)
+    invalidDamage.continuation.simulation.world.enemies.projectiles[0].secondaryDamage = magicDamage
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalidDamage)), /enemy projectile 0 magic damage/)
+  }
 })
 
 test('current schema resumes the complete stock Tutorial controller and exact level identity', () => {

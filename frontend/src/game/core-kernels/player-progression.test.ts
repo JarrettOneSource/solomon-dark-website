@@ -431,26 +431,18 @@ test('the fixed combat tick recovers exact native HP and MP amounts and caps bot
   assert.ok(Math.abs(second.combat.currentMana - 80.1) < 1e-12)
 })
 
-test('authoritative poison applies DPS for its bounded duration and can arm lethal state', () => {
+test('authoritative poison applies native DPS for its duration and retires', () => {
   let progression = poisonPlayer(createPlayerProgression(0), 10, 2)
-  assert.equal(progression.poisonDamagePerTick, 0.1)
+  assert.equal(progression.poisonDamagePerTick, Math.fround(0.1))
   assert.equal(progression.poisonTicksRemaining, 200)
   for (let tick = 0; tick < 200; tick += 1) {
     progression = stepPlayerCombatTick(progression).combat
   }
-  assert.ok(Math.abs(progression.currentHealth - 30.2) < 1e-9)
+  assert.ok(Math.abs(progression.currentHealth - 30.2) < 1e-6)
   assert.equal(progression.poisonDamagePerTick, 0)
   assert.equal(progression.poisonTicksRemaining, 0)
 
-  progression = poisonPlayer(progression, 1_000, 1)
-  while (progression.lifeState === 'alive') {
-    progression = stepPlayerCombatTick(progression).combat
-  }
-  assert.equal(progression.lifeState, 'lethal-pending')
-  const dying = stepPlayerCombatTick(progression).combat
-  assert.equal(dying.lifeState, 'dying')
-  assert.equal(dying.poisonDamagePerTick, 0)
-  assert.equal(dying.poisonTicksRemaining, 0)
+
 })
 
 test('mana debit is atomic, affordability checked, and unavailable outside alive play', () => {

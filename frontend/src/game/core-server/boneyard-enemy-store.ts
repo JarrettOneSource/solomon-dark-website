@@ -61,8 +61,9 @@ import {
   type EvaluatedBoneyardEnemyConfig,
 } from '../core-kernels/boneyard-enemy-config.ts'
 import {
-  BOUNDED_ENEMY_COLD_SLOW_TICKS,
-  BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+  NATIVE_MAGE_COLD_SLOW_TICKS,
+  NATIVE_MAGE_POISON_DURATION_SECONDS,
+  NATIVE_ARROW_POISON_DURATION_SECONDS,
   BOUNDED_MAGE_ALLY_SHIELD_RANGE,
   NATIVE_WRAITH_DAZZLE_TICKS,
   boundedMageShieldIntervalTicks,
@@ -76,6 +77,7 @@ import {
   restoreNativeRangeEasyAfterVolley,
 } from '../core-kernels/native-enemy-targeting.ts'
 import {
+  NATIVE_MAGE_LIGHTNING_BASE_TICKS,
   NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES,
   NATIVE_MAGE_CAST_BODY_POSES,
   nativeMageBodyPose,
@@ -462,6 +464,7 @@ export interface BoneyardEnemyProjectile {
   readonly coldSlowTicks: number
   readonly contactRadius: number
   readonly damage: number
+  readonly secondaryDamage: number
   readonly headingDeg: number
   readonly hitPlayerIds: readonly string[]
   readonly homing: boolean
@@ -587,6 +590,7 @@ export type BoneyardEnemyDeathEffectKind =
   | 'fire-array'
   | 'late-splat'
   | 'move-fade'
+  | 'move-fade-perspective'
   | 'sprite-array'
   | 'unbind'
 
@@ -718,12 +722,15 @@ const NATIVE_IMP_BITE_SOUNDS = Object.freeze([
 ] as const)
 
 export type BoneyardCombatSound =
+  | 'frosted'
+  | 'poisoned'
   | BoneyardEnemyActionSound
   | BoneyardEnemyDamageSound
   | BoneyardEnemyDeathSound
   | BoneyardPlayerDamageSound
 
 export type BoneyardEnemySemanticEventType =
+  | 'player-status-sound'
   | 'attack-marker'
   | 'coffin-maggot-release'
   | 'enemy-action-sound'
@@ -736,6 +743,8 @@ export type BoneyardEnemySemanticEventType =
   | 'enemy-terminal-output'
   | 'projectile-impact'
   | 'projectile-retired'
+  | 'player-deflected'
+  | 'mage-lightning-contact'
   | 'projectile-spawned'
   | 'reward'
 
@@ -758,14 +767,16 @@ export interface BoneyardEnemySemanticEvent {
 
 export interface BoneyardEnemyPlayerDamage {
   readonly actorId: BoneyardEnemyActorId
-  readonly amount: number
+  readonly physicalDamage: number
+  readonly magicDamage: number
   readonly coldSlowTicks: number
   readonly dazzleTicks: number
-  readonly deflectable: boolean
-  readonly damageKind: 'magic' | 'physical'
   readonly eventId: BoneyardEnemyEventId
   readonly poisonDamage: number
   readonly poisonDuration: number
+  readonly poisonContactDamage?: number
+  readonly suppressHitResponse?: boolean
+  readonly suppressFlash?: boolean
   readonly playerId: string
 }
 
@@ -832,8 +843,9 @@ export interface BoneyardPlayerDamageSoundRequest {
 }
 
 export interface BoneyardPlayerDamageSoundResult {
-  readonly delayTicks: number
+  readonly deadlineTick: number
   readonly event: BoneyardEnemySemanticEvent
+  readonly rng: NativeRngState
   readonly store: BoneyardEnemyStore
 }
 
@@ -1119,9 +1131,10 @@ export function createBoneyardEnemyStore(
 export function emitBoneyardPlayerDamageSound(
   source: BoneyardEnemyStore,
   request: BoneyardPlayerDamageSoundRequest,
+  sourceRng: NativeRngState,
 ): BoneyardPlayerDamageSoundResult {
-  const cue = randomBoneyardWaveInteger(source.rngState, 3)
-  const delay = randomBoneyardWaveInteger(cue.state, 41)
+  const delay = drawNativeInteger(sourceRng, 41)
+  const cue = drawNativeInteger(delay.state, 3)
   const sound = `wizard-ouch-${cue.value + 1}` as BoneyardPlayerDamageSound
   const event = Object.freeze({
     actorId: request.actorId,
@@ -1135,12 +1148,13 @@ export function emitBoneyardPlayerDamageSound(
     type: 'player-damage-sound' as const,
   })
   return {
-    delayTicks: 20 + delay.value,
+    deadlineTick: Math.trunc(Math.fround((request.tick + 20 + delay.value)
+      * Math.min(1, Math.max(0, Math.fround((request.currentHealth - 25) / 20))))),
     event,
+    rng: cue.state,
     store: {
       ...source,
       nextEventId: source.nextEventId + 1,
-      rngState: delay.state,
     },
   }
 }
@@ -3158,7 +3172,7 @@ function stepMage(
       NATIVE_MAGE_CAST_BODY_POSES[brain.castProgram],
       context.tick,
       actor.targetPlayerId,
-      (eventId) => {
+      () => {
         spellDispatched = true
         const restored = restoreNativeRangeEasyAfterVolley(
           attackRange,
@@ -3166,7 +3180,7 @@ function stepMage(
         )
         attackRange = restored.range
         rangeEasyPending = restored.pending
-        const dispatch = emitMageAttack(work, tracked, context, eventId)
+        const dispatch = emitMageAttack(work, tracked, context)
         if (dispatch !== null) lightningDispatches.push(dispatch)
       },
     )
@@ -4245,11 +4259,10 @@ function stepMaggots(
         })
         work.playerDamage.push(Object.freeze({
           actorId: source.id,
-          amount: source.damage * (effect?.weakenFactor ?? 1),
+          physicalDamage: source.damage * (effect?.weakenFactor ?? 1),
+          magicDamage: 0,
           coldSlowTicks: 0,
           dazzleTicks: 0,
-          deflectable: true,
-          damageKind: 'physical',
           eventId,
           playerId: targetPlayerId,
           poisonDamage: source.poisonDamage,
@@ -5116,16 +5129,12 @@ function directPlayerDamage(
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
   work.playerDamage.push(Object.freeze({
     actorId: actor.id,
-    amount: actor.config.primaryDamage,
+    physicalDamage: actor.config.enemyToken === 'WRAITH' ? 0 : actor.config.primaryDamage,
+    magicDamage: actor.config.enemyToken === 'WRAITH' ? actor.config.primaryDamage : 0,
     coldSlowTicks: 0,
     dazzleTicks: actor.config.enemyToken === 'WRAITH'
       ? NATIVE_WRAITH_DAZZLE_TICKS
       : 0,
-    deflectable: true,
-    damageKind: actor.config.enemyToken === 'SKELETONMAGE'
-      || actor.config.enemyToken === 'WRAITH'
-      ? 'magic'
-      : 'physical',
     eventId,
     playerId: targetPlayerId,
     poisonDamage: zombie?.poisonPunchDamage ?? 0,
@@ -5175,8 +5184,8 @@ function emitArcherVolley(
         lifetimeTicks: arrow.lifetimeTicks,
         minimumSpeed: arrow.speed,
         payload: projectilePayloadForArrow(arrow.arrowType),
-        poisonDamage: poison ? actor.config.secondaryDamage : 0,
-        poisonDuration: poison ? BOUNDED_ENEMY_POISON_DURATION_SECONDS : 0,
+        poisonDamage: poison ? actor.config.secondaryDamage / NATIVE_ARROW_POISON_DURATION_SECONDS : 0,
+        poisonDuration: poison ? NATIVE_ARROW_POISON_DURATION_SECONDS : 0,
         position: arrow.position,
         secondaryDamage: arrow.arrowType === 'fire'
           ? actor.config.secondaryDamage
@@ -5228,7 +5237,6 @@ function emitMageAttack(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
-  eventId: number,
 ): MageLightningDispatch | null {
   if (actor.config.enemyToken !== 'SKELETONMAGE') return null
   switch (actor.config.family.element) {
@@ -5249,7 +5257,7 @@ function emitMageAttack(
         context.tick,
         'guided-missile',
         actor.config.primaryDamage ?? 0,
-        { coldSlowTicks: BOUNDED_ENEMY_COLD_SLOW_TICKS, payload: 'cold' },
+        { coldSlowTicks: NATIVE_MAGE_COLD_SLOW_TICKS, payload: 'cold' },
       )
       return null
     case 'poison':
@@ -5258,11 +5266,11 @@ function emitMageAttack(
         actor,
         context.tick,
         'guided-missile',
-        actor.config.primaryDamage ?? 0,
+        1,
         {
           payload: 'poison',
-          poisonDamage: actor.config.primaryDamage ?? 0,
-          poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+          poisonDamage: (actor.config.primaryDamage ?? 0) / NATIVE_MAGE_POISON_DURATION_SECONDS,
+          poisonDuration: NATIVE_MAGE_POISON_DURATION_SECONDS,
         },
       )
       return null
@@ -5271,7 +5279,6 @@ function emitMageAttack(
       if (targetPlayerId === null) return null
       const target = context.players[targetPlayerId]
       if (!target || !targetEligible(target)) return null
-      directPlayerDamage(work, actor, targetPlayerId, eventId)
       return Object.freeze({
         targetPlayerId,
         targetPosition: Object.freeze({ ...target.position }),
@@ -5309,6 +5316,23 @@ function stepMageLightningPulse(
   const clearTarget = attachedTarget !== null
     && clipped.x === targetPosition.x
     && clipped.y === targetPosition.y
+  if (clearTarget) {
+    work.playerDamage.push(Object.freeze({
+      actorId: actor.id,
+      physicalDamage: 0,
+      magicDamage: Math.fround(
+        (actor.config.primaryDamage ?? 0) / NATIVE_MAGE_LIGHTNING_BASE_TICKS
+          * staffAttackSpeed(actor),
+      ),
+      coldSlowTicks: 0,
+      dazzleTicks: 0,
+      suppressFlash: true,
+      eventId: emitEvent(work, context.tick, 'mage-lightning-contact', actor.id, { targetPlayerId }),
+      playerId: targetPlayerId!,
+      poisonDamage: 0,
+      poisonDuration: 0,
+    }))
+  }
   const endpointBase = clearTarget ? targetPosition : clipped
   const endpointOffset = randomRadialDisplacement(work, 10)
   const contactOffset = randomRadialDisplacement(work, 15)
@@ -5432,7 +5456,8 @@ function spawnProjectile(
     chillTumbleAccumulator: 0,
     coldSlowTicks: options.coldSlowTicks ?? 0,
     contactRadius: program.contactRadius,
-    damage: kind === 'poison-pool' ? 0 : damage + (options.secondaryDamage ?? 0),
+    damage: kind === 'poison-pool' ? 0 : damage,
+    secondaryDamage: options.secondaryDamage ?? 0,
     headingDeg,
     hitPlayerIds: Object.freeze([]),
     homing: program.homing,
@@ -5822,11 +5847,10 @@ function stepDemonBomb(
       ) > projectile.contactRadius + player.collisionRadius) continue
       work.playerDamage.push(Object.freeze({
         actorId: projectile.ownerActorId,
-        amount: projectile.damage,
+        physicalDamage: 0,
+        magicDamage: projectile.damage,
         coldSlowTicks: 0,
         dazzleTicks: 0,
-        deflectable: true,
-        damageKind: 'magic',
         eventId,
         playerId,
         poisonDamage: 0,
@@ -5926,11 +5950,10 @@ function stepArrow(
       })
       work.playerDamage.push(Object.freeze({
         actorId: projectile.ownerActorId,
-        amount: projectile.damage,
+        physicalDamage: projectile.damage,
+        magicDamage: projectile.secondaryDamage,
         coldSlowTicks: projectile.coldSlowTicks,
         dazzleTicks: 0,
-        deflectable: true,
-        damageKind: 'physical',
         eventId,
         playerId: contact.playerId,
         poisonDamage: projectile.poisonDamage,
@@ -6116,15 +6139,19 @@ function stepProjectiles(
       })
       work.playerDamage.push(Object.freeze({
         actorId: source.ownerActorId,
-        amount: source.damage,
+        physicalDamage: source.kind === 'firebolt' ? Math.fround(source.damage * 0.5) : 0,
+        magicDamage: source.kind === 'firebolt' ? Math.fround(source.damage * 0.5) : source.damage,
         coldSlowTicks: source.coldSlowTicks,
         dazzleTicks: 0,
-        deflectable: source.kind !== 'poison-pool',
-        damageKind: 'magic',
         eventId,
         playerId: contact.playerId,
         poisonDamage: source.poisonDamage,
         poisonDuration: source.poisonDuration,
+        suppressFlash: source.kind === 'poison-pool',
+        ...(source.kind === 'guided-missile' ? {
+          poisonContactDamage: source.payload === 'poison' ? 1 : 0,
+          suppressHitResponse: true,
+        } : {}),
       }))
       if (source.kind !== 'poison-pool') {
         emitEvent(work, context.tick, 'projectile-retired', source.ownerActorId, {

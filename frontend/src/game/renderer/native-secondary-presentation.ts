@@ -436,15 +436,6 @@ export interface NativePlayerMagicShieldPlan {
   readonly visible: boolean
 }
 
-export function nativePlayerMaterialTint(
-  worldTint: number,
-  state: NativeSecondaryPlayerState | undefined,
-): number {
-  if ((state?.stoneskinTicksRemaining ?? 0) <= 0) return worldTint
-  const half = (shift: number): number => Math.round(((worldTint >> shift) & 0xff) * 0.5)
-  return (half(16) << 16) | (half(8) << 8) | half(0)
-}
-
 export function nativePlayerMagicShieldPlan(
   state: NativeSecondaryPlayerState | undefined,
   tick: number,

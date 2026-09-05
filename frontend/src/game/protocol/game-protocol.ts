@@ -263,7 +263,7 @@ import {
   SPELL_WELDING_SKILL_ID,
 } from '../core-kernels/player-progression.ts'
 import {
-  BOUNDED_ENEMY_COLD_SLOW_TICKS,
+  NATIVE_MAGE_COLD_SLOW_TICKS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
@@ -341,6 +341,7 @@ import {
   BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS,
   BONEYARD_ENEMY_TERMINAL_OUTPUTS,
   BONEYARD_PLAYER_DAMAGE_SOUNDS,
+  BONEYARD_PLAYER_STATUS_SOUNDS,
   BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES,
   BONEYARD_MAGGOT_STATES,
   BONEYARD_LOOT_EVENT_TYPES,
@@ -423,7 +424,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 120
+export const GAME_PROTOCOL_VERSION = 121
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4206,6 +4207,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'nextThreshold',
     'pendingOffer',
     'poisonDamagePerTick',
+    'poisonBeforeCold',
     'poisonTicksRemaining',
     'previousThreshold',
     'revision',
@@ -4243,7 +4245,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     source.coldSlowTicksRemaining,
     `${field}.coldSlowTicksRemaining`,
   )
-  if (coldSlowTicksRemaining > BOUNDED_ENEMY_COLD_SLOW_TICKS) {
+  if (coldSlowTicksRemaining > NATIVE_MAGE_COLD_SLOW_TICKS) {
     throw new GameProtocolError(`${field}.coldSlowTicksRemaining is out of range`)
   }
   const dazzleTicksRemaining = nonnegativeInteger(
@@ -4465,6 +4467,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       ? null
       : playerSkillOffer(source.pendingOffer, `${field}.pendingOffer`, level),
     poisonDamagePerTick,
+    poisonBeforeCold: boolean(source.poisonBeforeCold, `${field}.poisonBeforeCold`),
     poisonTicksRemaining: nonnegativeInteger(
       source.poisonTicksRemaining,
       `${field}.poisonTicksRemaining`,
@@ -11005,6 +11008,8 @@ function boneyardEnemyEvents(
           'painterRegistration',
           'targetPlayerId',
         ]
+        case 'player-deflected': return ['deflectPitch', 'targetPlayerId']
+        case 'mage-lightning-contact': return ['deflectPitch', 'targetPlayerId']
         case 'enemy-spawned':
         case 'reward': return ['targetPlayerId']
         case 'coffin-maggot-release': return ['count']
@@ -11018,6 +11023,7 @@ function boneyardEnemyEvents(
           'sound',
           'sourcePosition',
         ]
+        case 'player-status-sound':
         case 'player-damage-sound': return [
           'gainScale',
           'pitch',
@@ -11061,7 +11067,9 @@ function boneyardEnemyEvents(
     previousEventId = eventId
     previousTick = tick
     const base = {
-      actorId: positiveInteger(source.actorId, `${eventField}.actorId`),
+      actorId: type === 'player-deflected'
+        ? nonnegativeInteger(source.actorId, `${eventField}.actorId`)
+        : positiveInteger(source.actorId, `${eventField}.actorId`),
       eventId,
       runId,
       tick,
@@ -11106,6 +11114,7 @@ function boneyardEnemyEvents(
       case 'enemy-action-sound':
       case 'enemy-damage-sound':
       case 'enemy-death-sound':
+      case 'player-status-sound':
       case 'player-damage-sound': {
         const sound = limitedString(source.sound, `${eventField}.sound`, 64)
         const supportedSounds = type === 'enemy-action-sound'
@@ -11114,7 +11123,7 @@ function boneyardEnemyEvents(
             ? BONEYARD_ENEMY_DAMAGE_SOUNDS
             : type === 'enemy-death-sound'
               ? BONEYARD_ENEMY_DEATH_SOUNDS
-              : BONEYARD_PLAYER_DAMAGE_SOUNDS
+              : type === 'player-status-sound' ? BONEYARD_PLAYER_STATUS_SOUNDS : BONEYARD_PLAYER_DAMAGE_SOUNDS
         if (!(supportedSounds as readonly string[]).includes(sound)) {
           throw new GameProtocolError(`${eventField}.sound is not supported`)
         }
@@ -11135,7 +11144,7 @@ function boneyardEnemyEvents(
           pitch,
           sound: sound as BoneyardEnemyEventSnapshot['sound'],
           sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
-          ...(type === 'player-damage-sound'
+          ...(type === 'player-damage-sound' || type === 'player-status-sound'
             ? {
                 targetPlayerId: nullablePlayerId(
                   source.targetPlayerId,
@@ -11157,6 +11166,16 @@ function boneyardEnemyEvents(
             ? {}
             : { count: nonnegativeInteger(source.count, `${eventField}.count`) }),
         }
+      }
+      case 'player-deflected': return {
+        ...base,
+        deflectPitch: positiveFinite(source.deflectPitch, `${eventField}.deflectPitch`),
+        targetPlayerId: validatedPlayerId(source.targetPlayerId, `${eventField}.targetPlayerId`),
+      }
+      case 'mage-lightning-contact': return {
+        ...base,
+        ...deflectPitchPayload(source.deflectPitch, eventField),
+        targetPlayerId: validatedPlayerId(source.targetPlayerId, `${eventField}.targetPlayerId`),
       }
       case 'projectile-impact': {
         const targetPlayerId = nullablePlayerId(

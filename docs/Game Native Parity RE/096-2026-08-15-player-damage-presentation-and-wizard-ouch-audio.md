@@ -82,18 +82,28 @@ right-click ability exists.
 
 - Timing: red alpha is `max(1 - (tick-lastDirectDamageTick)/20, 0)`;
   eligible ouch requests require `tick > deadline`, then store
-  `tick + Integer(20,60)` inclusive.
+  `trunc(float32((tick + Integer(20,60)) * healthFactor))`, with inclusive
+  delay bounds and `healthFactor=clamp((HP_after-25)/20,0,1)`. Fresh instruction
+  evidence on September 4 corrects the earlier unscaled deadline claim.
 - Rendering: append a normal-blend `#ff0000` duplicate of every visible living
   body/equipment sprite with identical texture, position, and order. Do not
   tint the shadow, element orb/VFX, shield shell, or death art.
 - Audio/randomness: choose uniformly from exact WAVs `SAY_OUCH1..3` on the
-  authoritative gameplay stream, fixed playback rate. Non-spatial gain is
+  authoritative gameplay stream after drawing the delay, with fixed playback rate. Non-spatial gain is
   `0.25 + 0.75 * (1 - clamp((HP_after-25)/20,0,1))`.
 - Authority/replication: replicate accepted hit timing and a monotonic
   run-scoped sound event. Health interpolation is not a hit oracle.
 - Boundary behavior: poison/healing/zero/suppressed damage do not present;
   terminal direct damage makes no ouch request; death/reset removes the living
   pass immediately.
+
+September 4 correction: ordinary red redraw and ouch have distinct gates.
+GuidedMissile sets flag `0x8` to suppress red redraw. Ouch additionally requires
+final tertiary poison damage zero, positive physical/magic damage, and a free
+native dialogue manager (`0x00462090`, global `0x008199F8`). The manager's active
+slot/count is shared with the `SAY_*` dialogue producers. Poison-immunity or the
+nonlethal poison cap can leave a magic-only contact eligible for ouch. Flash is
+then evaluated separately as recorded in entry 122.
 
 ## Nearby-system findings
 

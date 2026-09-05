@@ -3647,7 +3647,7 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
 test('Deflect cancels the contact, faces and sounds once, and reflects concentrated physical damage', () => {
   const deflectSeed = seedForIntegerDraw(100, (value) => value < 10)
   const chance = drawNativeInteger(createNativeRng(deflectSeed), 100)
-  const swipe = drawNativeFloat(chance.state, 1, true)
+  const swipe = drawNativeFloat(chance.state, Math.fround(0.1), true)
   let state = enterBoneyardWorld(
     createGameSimulation(),
     combatBoneyard('deflect-combat-run'),
@@ -3712,7 +3712,7 @@ test('Deflect cancels the contact, faces and sounds once, and reflects concentra
   )))
 })
 
-test('Flash responds before damage with area Dazzle, twelve children, feedback, and stock audio', () => {
+test('Flash responds after damage with area Dazzle, twelve children, feedback, and stock audio', () => {
   let state = enterBoneyardWorld(
     createGameSimulation(),
     combatBoneyard('flash-response-run'),
@@ -4090,9 +4090,9 @@ test('Rotten Zombie contact applies direct damage and authoritative poison over 
 
   const progression = getPlayerProgression(state)
   assert.ok(progression.poisonTicksRemaining > 0)
-  assert.ok(progression.currentHealth > 14 && progression.currentHealth < 15)
-  assert.equal(progression.poisonDamagePerTick, 35 / 6 / 100)
-  assert.equal(progression.poisonTicksRemaining, 999)
+  assert.ok(Math.abs(progression.currentHealth - 15.001) < 1e-6)
+  assert.equal(progression.poisonDamagePerTick, Math.fround(35 / 6 / 100))
+  assert.equal(progression.poisonTicksRemaining, 1_000)
   assert.notEqual(progression.lastDamageTick, null)
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const ouchEvents = state.world.enemyEvents.filter((event) => (
@@ -4103,13 +4103,12 @@ test('Rotten Zombie contact applies direct damage and authoritative poison over 
   assert.equal(ouchEvents[0]!.pitch, 1)
   assert.equal(ouchEvents[0]!.targetPlayerId, 'local-player')
   assert.match(ouchEvents[0]!.sound!, /^wizard-ouch-[123]$/)
-  assert.ok(state.world.playerOuchDeadlineTick >= state.tick + 20)
-  assert.ok(state.world.playerOuchDeadlineTick <= state.tick + 60)
+  assert.equal(state.world.playerOuchDeadlineTick, 0)
   const lastDamageTick = progression.lastDamageTick
   const healthAfterContact = progression.currentHealth
   state = stepGameSimulationTick(state, {})
   assert.ok(getPlayerProgression(state).currentHealth < healthAfterContact)
-  assert.equal(getPlayerProgression(state).poisonTicksRemaining, 998)
+  assert.equal(getPlayerProgression(state).poisonTicksRemaining, 999)
   assert.equal(getPlayerProgression(state).lastDamageTick, lastDamageTick)
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   assert.equal(
@@ -4271,7 +4270,7 @@ test('Last Word explodes at death tick 200, triples Demon damage, and archives o
   assert.deepEqual(state.world.loot.actors.map(({ kind }) => kind), ['bonus'])
 })
 
-test('poison begins the native death epoch before all-dead Game Over', () => {
+test('poison cannot finish the player; a subsequent direct hit begins Game Over', () => {
   let state = enterBoneyardWorld(
     createGameSimulation(),
     combatBoneyard('poison-lethal-run'),
@@ -4287,10 +4286,11 @@ test('poison begins the native death epoch before all-dead Game Over', () => {
   }
 
   state = stepGameSimulationTick(state, {})
-  assert.equal(getPlayerProgression(state).lifeState, 'lethal-pending')
+  assert.equal(getPlayerProgression(state).lifeState, 'alive')
   assert.equal(getPlayerProgression(state).deathEpoch, 0)
   assert.equal(state.run.phase, 'active')
 
+  state = { ...state, playerEntities: damagePlayerEntity(state.playerEntities, 'local-player', 1, state.tick) }
   state = stepGameSimulationTick(state, {})
   assert.equal(getPlayerProgression(state).lifeState, 'dying')
   assert.equal(getPlayerProgression(state).deathEpoch, 1)

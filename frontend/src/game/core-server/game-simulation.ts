@@ -1,3 +1,8 @@
+import { applyPlayerContacts, gameWorldKey, finiteModMutation } from './player-contact-system.ts'
+import type { BoneyardEnemyPlayerDamage } from './boneyard-enemy-store.ts'
+import {
+  NATIVE_FLASH_RESPONSE_RADIUS,
+} from '../core-kernels/player-harmful-contact.ts'
 import {
   PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
@@ -11,7 +16,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+
 import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
 import { isBoneyardPlayerCombatEnabled } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
@@ -130,13 +135,7 @@ import {
   resolveNativeSkillDamageValue,
 } from '../core-kernels/native-offensive-resolution.ts'
 import { nativeHurricaneChargeTick } from '../core-kernels/native-hurricane.ts'
-import { synchronizePlayerHardenEffects, type PendingPlayerHardenChip } from './player-harden-effects.ts'
-import {
-  NATIVE_FLASH_RESPONSE_RADIUS,
-  playerDeflectReflectionSourceInRange,
-  resolvePlayerHarmfulContact,
-} from '../core-kernels/player-harmful-contact.ts'
-import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
+import { synchronizePlayerHardenEffects } from './player-harden-effects.ts'
 import {
   applyNativeUnforgeFullRejuvenation,
   boneyardEnemyExperienceAward,
@@ -154,11 +153,9 @@ import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import { NATIVE_PLAYER_STAFF_CAST_TWO_OVERLAY } from '../core-kernels/player-lighting.ts'
 import {
-  applyNativeSecondaryGolemDamage,
   applyNativeSecondaryDazzle,
   applyNativeSecondaryEtherBurn,
   applyNativeSecondaryFireBurn,
-  applyNativeSecondaryPlayerDamage,
   applyNativeSecondaryTargetEffect,
   applyNativeUnforgeCooldownRejuvenation,
   createNativeSecondarySimulation,
@@ -180,7 +177,6 @@ import {
 import {
   NATIVE_GOLEM_PLACEMENT_RADIUS,
   NATIVE_GOLEM_RADIUS,
-  NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED,
 } from '../core-kernels/native-secondary-golem.ts'
 import {
   createDeferredNativeWorldManagerRegistrations,
@@ -234,8 +230,6 @@ import {
   boneyardEnemyCollisionRadius,
   damageBoneyardEnemy,
   applyBoneyardStaffHeadingPerturbation,
-  emitBoneyardPlayerDamageSound,
-  nativeWizardOuchCooldownReady,
   type BoneyardEnemyAttributionObserver,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemyReward,
@@ -276,7 +270,6 @@ import {
   consumePlayerEntityWizardKey,
   createPlayerEntityStore,
   creditPlayerEntityLootGold,
-  damagePlayerEntityWithResult,
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
   grantPlayerEntityBonusSkillChoice,
@@ -2109,11 +2102,12 @@ export function stepGameSimulationTick(
     let playerEntities = stepPlayerEntityOverlayLightingTick(state.playerEntities)
     const combat = stepPlayerEntityCombatTick(
       playerEntities,
+      state.secondaryAbilities.rng,
       new Set(),
       playerCombatMutations(options.extensions, state.tick, state.secondaryAbilities),
     )
     playerEntities = combat.store
-    let secondaryAbilities = stepNativeMindblastPresentation(state.secondaryAbilities)
+    let secondaryAbilities = stepNativeMindblastPresentation({ ...state.secondaryAbilities, rng: combat.rng })
     for (const playerId of combat.deathBurstPlayerIds) {
       playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
       secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
@@ -2428,18 +2422,7 @@ function finishGameSimulationTick(
       Record<string, readonly BoneyardPlayerMovementContact[]>
     >
     movementEpochActiveByPlayerId?: Readonly<Record<string, boolean>>
-    playerDamage?: readonly Readonly<{
-      actorId: number
-      amount: number
-      coldSlowTicks: number
-      damageKind: 'magic' | 'physical'
-      dazzleTicks: number
-      deflectable: boolean
-      eventId: number
-      playerId: string
-      poisonDamage: number
-      poisonDuration: number
-    }>[]
+    playerDamage?: readonly BoneyardEnemyPlayerDamage[]
     players: Readonly<Record<PlayerId, PlayerCharacterState>>
     rewards?: readonly BoneyardEnemyReward[]
     world: GameWorldState
@@ -2565,200 +2548,13 @@ function finishGameSimulationTick(
       }
     },
   }
-  const playerDamage = result.playerDamage ?? []
-  const hardenChips: PendingPlayerHardenChip[] = []
-  const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
-  const appliedPlayerDamage: (typeof playerDamage)[number][] = []
-  const reflectedEnemyDamage: Array<Readonly<{
-    actorId: number
-    amount: number
-    playerId: string
-  }>> = []
-  const deflectPitchesByEventId = new Map<number, number>()
-  for (const damage of playerDamage) {
-    if (world.kind === 'boneyard' && world.tutorial?.damageProtection) continue
-    const golemId = parseNativeSecondaryGolemTargetId(damage.playerId)
-    if (golemId !== null && world.kind === 'boneyard') {
-      const golem = secondaryAbilities.actors.find(({ id, kind }) => (
-        id === golemId && kind === 'golem'
-      ))
-      if (!golem) continue
-      const damageSource = world.enemies.actors.find(({ id }) => id === damage.actorId)
-        ?? world.enemies.maggots.find(({ id }) => id === damage.actorId)
-      const sourceInReflectRange = damageSource !== undefined
-        && squaredVectorDistance(damageSource.position, golem.position)
-          < NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED
-      const received = applyNativeSecondaryGolemDamage(
-        secondaryAbilities,
-        golemId,
-        {
-          primaryDamage: damage.damageKind === 'physical' ? damage.amount : 0,
-          reflectablePhysicalSourceInRange: damage.damageKind === 'physical'
-            && sourceInReflectRange,
-          secondaryDamage: damage.damageKind === 'magic' ? damage.amount : 0,
-        },
-        tick,
-      )
-      secondaryAbilities = received.state
-      if (received.reflectedDamage > 0 && received.ownerId !== null) {
-        reflectedEnemyDamage.push(Object.freeze({
-          actorId: damage.actorId,
-          amount: received.reflectedDamage,
-          playerId: received.ownerId,
-        }))
-      }
-      continue
-    }
-    const character = resolvedPlayers[damage.playerId]
-    const damageSource = world.kind === 'boneyard'
-      ? world.enemies.actors.find(({ id }) => id === damage.actorId)
-        ?? world.enemies.maggots.find(({ id }) => id === damage.actorId)
-      : undefined
-    const runtime = playerSkillRuntimeAt(playerEntities, damage.playerId)
-    const derived = playerSkillDerivedStatsAt(playerEntities, damage.playerId)
-    const progression = playerProgressionAt(playerEntities, damage.playerId)
-    const contact = runtime === null || derived === null || progression === null || character === undefined
-      ? null
-      : resolvePlayerHarmfulContact(
-          runtime,
-          derived,
-          progression,
-          damage.amount * derived.incomingDamageFactor,
-          damage.damageKind,
-          damage.deflectable,
-          character !== undefined
-            && damageSource !== undefined
-            && playerDeflectReflectionSourceInRange(
-              character.position,
-              PLAYER_CHARACTER_RADIUS,
-              damageSource.position,
-              'config' in damageSource
-                ? boneyardEnemyCollisionRadius(damageSource)
-                : damageSource.collisionRadius,
-            ),
-          secondaryAbilities.rng,
-          character.position,
-        )
-    if (contact !== null) secondaryAbilities = { ...secondaryAbilities, rng: contact.rng }
-    if (contact?.hardenChip && character) hardenChips.push({
-      chip: contact.hardenChip,
-      ownerId: damage.playerId,
-      position: character.position,
-      worldKey: gameWorldKey(world, damage.playerId),
-    })
-    if (contact !== null && contact.flash !== null && character !== undefined) {
-      const worldKey = gameWorldKey(world, damage.playerId)
-      const targetIds = world.kind === 'boneyard'
-        ? boneyardNativeSecondaryTargets(
-            world.enemies,
-            character.position,
-            NATIVE_FLASH_RESPONSE_RADIUS,
-          ).map(({ id }) => id)
-        : []
-      secondaryAbilities = materializeNativePlayerFlashResponse(
-        secondaryAbilities,
-        {
-          ownerId: damage.playerId,
-          position: character.position,
-          response: contact.flash,
-          targetIds,
-          tick,
-          worldKey,
-        },
-      )
-    }
-    if (contact?.deflected) {
-      if (contact.deflectPitch === null) {
-        throw new Error('successful Deflect did not produce its native swipe pitch')
-      }
-      deflectPitchesByEventId.set(damage.eventId, contact.deflectPitch)
-      if (character !== undefined && damageSource !== undefined) {
-        resolvedPlayers = {
-          ...resolvedPlayers,
-          [damage.playerId]: {
-            ...character,
-            headingIndex: actorHeadingIndex(actorHeadingFromVector(
-              damageSource.position.x - character.position.x,
-              damageSource.position.y - character.position.y,
-            )),
-          },
-        }
-      }
-      if (contact.reflectedDamage > 0) {
-        reflectedEnemyDamage.push(Object.freeze({
-          actorId: damage.actorId,
-          amount: contact.reflectedDamage,
-          playerId: damage.playerId,
-        }))
-      }
-      continue
-    }
-    const resistedDamage = contact?.damage ?? damage.amount
-    const intercepted = character === undefined
-      ? { healthDamage: resistedDamage, state: secondaryAbilities }
-      : applyNativeSecondaryPlayerDamage(
-          secondaryAbilities,
-          damage.playerId,
-          resistedDamage,
-          tick,
-          character.position,
-          gameWorldKey(world, damage.playerId),
-        )
-    secondaryAbilities = intercepted.state
-    const filteredHealthDamage = extensions
-      ? extensions.filterDamage({
-          amount: intercepted.healthDamage,
-          damageKind: damage.damageKind,
-          sourceActorId: damage.actorId,
-          targetPlayerId: damage.playerId,
-          tick,
-        })
-      : intercepted.healthDamage
-    if (!Number.isFinite(filteredHealthDamage) || filteredHealthDamage <= 0) continue
-    const before = playerProgressionAt(playerEntities, damage.playerId)
-    playerEntities = damagePlayerEntityWithResult(
-      playerEntities,
-      damage.playerId,
-      filteredHealthDamage,
-      tick,
-      true,
-    ).store
-    const after = playerProgressionAt(playerEntities, damage.playerId)
-    if (
-      world.kind === 'boneyard'
-      && before !== null
-      && after !== null
-      && after.currentHealth < before.currentHealth
-      && after.lifeState === 'alive'
-      && nativeWizardOuchCooldownReady(tick, world.playerOuchDeadlineTick)
-    ) {
-      const player = playerCharacterAt(playerEntities, damage.playerId)
-      if (player !== null) {
-        const emitted = emitBoneyardPlayerDamageSound(world.enemies, {
-          actorId: damage.actorId,
-          currentHealth: after.currentHealth,
-          playerId: damage.playerId,
-          position: player.position,
-          tick,
-        })
-        playerDamageSoundEvents.push(emitted.event)
-        world = {
-          ...world,
-          enemies: emitted.store,
-          playerOuchDeadlineTick: tick + emitted.delayTicks,
-        }
-      }
-    }
-    playerEntities = poisonPlayerEntity(
-      playerEntities,
-      damage.playerId,
-      damage.poisonDamage,
-      derived === null
-        ? damage.poisonDuration
-        : playerPoisonDurationSeconds(derived, damage.poisonDuration),
-    )
-    appliedPlayerDamage.push({ ...damage, amount: intercepted.healthDamage })
-  }
+  const contacts = applyPlayerContacts({ world, playerEntities, secondaryAbilities },
+    resolvedPlayers, result.playerDamage ?? [], tick, extensions)
+  world = contacts.world
+  playerEntities = contacts.playerEntities
+  secondaryAbilities = contacts.secondaryAbilities
+  resolvedPlayers = contacts.resolvedPlayers
+  const { appliedPlayerDamage, reflectedEnemyDamage, deflectPitchesByEventId, playerDamageSoundEvents } = contacts
   for (const reward of result.rewards ?? []) {
     if (reward.playerId === null || playerEntityIndex(playerEntities, reward.playerId) < 0) continue
     const previousLevel = playerProgressionAt(playerEntities, reward.playerId)?.level
@@ -3978,14 +3774,16 @@ function finishGameSimulationTick(
   playerEntities = replacePlayerCharacterRecords(playerEntities, players)
   const combat = stepPlayerEntityCombatTick(
     playerEntities,
+    secondaryAbilities.rng,
     staffActingPlayerIds,
     playerCombatMutations(extensions, tick, secondaryAbilities),
   )
   playerEntities = combat.store
+  secondaryAbilities = { ...secondaryAbilities, rng: combat.rng }
   const harden = synchronizePlayerHardenEffects({
     after: playerEntities,
     before: previous.playerEntities,
-    chips: hardenChips,
+    chips: contacts.hardenChips,
     register: worldManagerOrder.register,
     rng: combatRng,
     secondary: secondaryAbilities,
@@ -3996,6 +3794,37 @@ function finishGameSimulationTick(
   primarySpells = harden.spells
   secondaryAbilities = harden.secondary
   combatRng = harden.rng
+  for (const response of combat.poisonResponses) {
+    const character = playerCharacterAt(playerEntities, response.playerId)
+    if (character === null) continue
+    if (response.kind === 'flash') {
+      secondaryAbilities = materializeNativePlayerFlashResponse(secondaryAbilities, {
+        ownerId: response.playerId,
+        position: character.position,
+        response: response.response,
+        targetIds: world.kind === 'boneyard'
+          ? boneyardNativeSecondaryTargets(world.enemies, character.position,
+              NATIVE_FLASH_RESPONSE_RADIUS).map(target => target.id)
+          : [],
+        tick,
+        worldKey: gameWorldKey(world, response.playerId),
+      })
+    } else if (world.kind === 'boneyard') {
+      const event: BoneyardEnemySemanticEvent = {
+        actorId: 0,
+        deflectPitch: response.pitch,
+        eventId: world.enemies.nextEventId,
+        targetPlayerId: response.playerId,
+        tick,
+        type: 'player-deflected',
+      }
+      world = {
+        ...world,
+        enemies: { ...world.enemies, nextEventId: world.enemies.nextEventId + 1 },
+        enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents, [event], tick),
+      }
+    }
+  }
   for (const { playerId } of playerEntities.identities) {
     const progression = playerProgressionAt(playerEntities, playerId)
     const lighting = playerLightingAt(playerEntities, playerId)
@@ -4064,6 +3893,12 @@ function finishGameSimulationTick(
       damage.playerId,
       damage.dazzleTicks,
     )
+    playerEntities = poisonPlayerEntity(
+      playerEntities,
+      damage.playerId,
+      damage.poisonDamage,
+      damage.poisonDuration,
+    )
   }
   if (
     previous.world.kind === 'boneyard'
@@ -4127,11 +3962,6 @@ function gameSimulationHubCollegePrimaryUnset(
     )
 }
 
-function gameWorldKey(world: GameWorldState, playerId: string): string {
-  return world.kind === 'hub'
-    ? `hub:${world.participants[playerId]?.region ?? 'courtyard'}`
-    : `boneyard:${world.runId}`
-}
 
 function completedBoneyardWaveBoundary(
   previous: BoneyardWorldState,
@@ -4261,24 +4091,8 @@ function applyFilteredManaDelta(
   return delta > 0 ? restorePlayerEntityMana(source, playerId, delta) : source
 }
 
-function finiteModMutation(value: number, field: string): number {
-  if (!Number.isFinite(value) || Math.abs(value) > 1_000_000) {
-    throw new RangeError(`${field} must be finite and within +/-1000000`)
-  }
-  return value
-}
 
-function parseNativeSecondaryGolemTargetId(targetId: string): number | null {
-  if (!targetId.startsWith('golem:')) return null
-  const id = Number(targetId.slice('golem:'.length))
-  return Number.isSafeInteger(id) && id > 0 ? id : null
-}
 
-function squaredVectorDistance(left: Readonly<Vector2>, right: Readonly<Vector2>): number {
-  const dx = left.x - right.x
-  const dy = left.y - right.y
-  return dx * dx + dy * dy
-}
 
 function effectiveSkillNumericValue(
   skillBook: PlayerSkillBookComponent,

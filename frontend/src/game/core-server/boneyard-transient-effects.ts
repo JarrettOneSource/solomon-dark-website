@@ -191,7 +191,9 @@ function stepDeathEffect(
     return bounced
   }
 
-  const opacityTimer = source.opacityTimer - source.alphaLossPerTick
+  const opacityTimer = source.kind === 'move-fade-perspective'
+    ? Math.fround(source.opacityTimer - source.alphaLossPerTick)
+    : source.opacityTimer - source.alphaLossPerTick
   if (opacityTimer <= 0) return null
   let entry = source.entry
   let framePhase = source.framePhase
@@ -200,6 +202,16 @@ function stepDeathEffect(
   let scale = source.scale
   let velocity = source.velocity
   switch (source.kind) {
+    case 'move-fade-perspective':
+      position = {
+        x: Math.fround(source.position.x + source.velocity.x),
+        y: Math.fround(source.position.y + source.velocity.y),
+      }
+      velocity = {
+        x: Math.fround(source.velocity.x * source.velocityDamping),
+        y: Math.fround(source.velocity.y * source.velocityDamping),
+      }
+      break
     case 'move-fade':
       position = {
         x: source.position.x + source.velocity.x,

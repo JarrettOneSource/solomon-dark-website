@@ -1127,10 +1127,10 @@ export function applyNativeSecondaryPlayerDamage(
   }
   const current = source.players[playerId]
   if (!current || amount === 0) return { absorbedDamage: 0, healthDamage: amount, state: source }
-  if (current.stoneskinTicksRemaining > 0) {
-    return { absorbedDamage: amount, healthDamage: 0, state: source }
-  }
   if (current.magicShieldAbsorb <= 0) {
+    if (current.stoneskinTicksRemaining > 0) {
+      return { absorbedDamage: amount, healthDamage: 0, state: source }
+    }
     return { absorbedDamage: 0, healthDamage: amount, state: source }
   }
 

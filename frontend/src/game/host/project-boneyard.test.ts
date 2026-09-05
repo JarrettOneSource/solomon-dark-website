@@ -651,7 +651,7 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
     resolveSpawnIntents: () => [],
     tick: startedTick,
   })
-  assert.equal(attacked.playerDamage[0]?.amount, 12)
+  assert.equal(attacked.playerDamage[0]?.magicDamage, Math.fround(0.36))
   const store = {
     ...attacked.store,
     actors: [{

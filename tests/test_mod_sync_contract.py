@@ -957,7 +957,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 30,
+                "schemaVersion": 31,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},

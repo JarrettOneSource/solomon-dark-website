@@ -1289,6 +1289,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     nextThreshold: 90,
     pendingOffer: null,
     poisonDamagePerTick: 0,
+    poisonBeforeCold: false,
     poisonTicksRemaining: 0,
     previousThreshold: 0,
     revision: 0,
@@ -1368,14 +1369,14 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   const affected = {
     ...active,
     playerEntities: dazzlePlayerEntity(
-      coldSlowPlayerEntity(active.playerEntities, 'player-1', 300),
+      coldSlowPlayerEntity(active.playerEntities, 'player-1', 250),
       'player-1',
       50,
     ),
   }
   const snapshot = createGameSnapshot(affected, 'player-1')
   if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
-  assert.equal(snapshot.players['player-1']?.progression.coldSlowTicksRemaining, 300)
+  assert.equal(snapshot.players['player-1']?.progression.coldSlowTicksRemaining, 250)
   assert.equal(snapshot.players['player-1']?.progression.dazzleTicksRemaining, 50)
   snapshot.world.enemies = [{
     animation: {

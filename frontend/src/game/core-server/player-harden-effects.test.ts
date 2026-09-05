@@ -73,16 +73,37 @@ test('real Water casting publishes coating, physical protection, and both format
   const runtime = state.playerEntities.skillRuntimes[0]!
   const derived = playerSkillDerivedStatsAt(state.playerEntities, 'water')
   assert.ok(derived)
-  const physical = resolvePlayerHarmfulContact(runtime, derived, state.playerEntities.progressions[0]!,
-    10, 'physical', false, false, createNativeRng(1), { x: 250, y: 250 })
-  const magic = resolvePlayerHarmfulContact(runtime, derived, state.playerEntities.progressions[0]!,
-    10, 'magic', false, false, createNativeRng(1), { x: 250, y: 250 })
-  assert.equal(physical.damage, 0)
-  assert.equal(magic.damage, 10)
+  const physical = resolvePlayerHarmfulContact(
+    runtime,
+    derived,
+    state.playerEntities.progressions[0]!,
+    { physicalDamage: 10, magicDamage: 0 },
+    false,
+    createNativeRng(1),
+    { x: 250, y: 250 },
+  )
+  const magic = resolvePlayerHarmfulContact(
+    runtime,
+    derived,
+    state.playerEntities.progressions[0]!,
+    { physicalDamage: 0, magicDamage: 10 },
+    false,
+    createNativeRng(1),
+    { x: 250, y: 250 },
+  )
+  assert.equal(physical.physicalDamage, 0)
+  assert.equal(magic.magicDamage, 10)
   assert.equal(magic.hardenChip, null)
   assert.ok(runtime.harden.armor > 24)
-  const deflected = resolvePlayerHarmfulContact(runtime, { ...derived, deflectChancePercent: 100 },
-    state.playerEntities.progressions[0]!, 10, 'physical', true, false, createNativeRng(1), { x: 250, y: 250 })
+  const deflected = resolvePlayerHarmfulContact(
+    runtime,
+    { ...derived, deflectChancePercent: 100 },
+    state.playerEntities.progressions[0]!,
+    { physicalDamage: 10, magicDamage: 0 },
+    false,
+    createNativeRng(1),
+    { x: 250, y: 250 },
+  )
   assert.equal(deflected.deflected, true)
   assert.equal(deflected.hardenChip, null)
 })
@@ -160,13 +181,27 @@ test('a physical contact emits one cosmetic chip while invalid and magic contact
   const progression = state.playerEntities.progressions[0]!
   const position = { x: 250, y: 250 }
   for (const amount of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
-    assert.throws(() => resolvePlayerHarmfulContact(runtime, derived, progression,
-      amount, 'physical', false, false, createNativeRng(1), position), /finite and non-negative/)
+    assert.throws(() => resolvePlayerHarmfulContact(
+      runtime,
+      derived,
+      progression,
+      { physicalDamage: amount, magicDamage: 0 },
+      false,
+      createNativeRng(1),
+      position,
+    ), /finite and non-negative/)
   }
-  const contact = resolvePlayerHarmfulContact(runtime, derived, progression,
-    5, 'physical', false, false, createNativeRng(3), position)
+  const contact = resolvePlayerHarmfulContact(
+    runtime,
+    derived,
+    progression,
+    { physicalDamage: 5, magicDamage: 0 },
+    false,
+    createNativeRng(4),
+    position,
+  )
   assert.ok(contact.hardenChip)
-  assert.equal(contact.damage, 0)
+  assert.equal(contact.physicalDamage, 0)
   const result = synchronizePlayerHardenEffects({
     after: state.playerEntities, before: state.playerEntities,
     chips: [{ chip: contact.hardenChip, ownerId: 'water', position, worldKey: 'boneyard:harden' }],
@@ -209,9 +244,16 @@ test('Deflect reflection uses the native strict radius and only concentrated phy
   for (const kind of ['magic', 'physical'] as const) {
     for (const inRange of [false, true]) {
       for (const concentrationSkillIdA of [null, 68]) {
-        const contact = resolvePlayerHarmfulContact({ ...source, concentrationSkillIdA }, derived,
-          state.playerEntities.progressions[0]!, 10, kind, true, inRange, createNativeRng(1), { x: 0, y: 0 })
-        assert.equal(contact.damage, 0)
+        const contact = resolvePlayerHarmfulContact(
+          { ...source, concentrationSkillIdA },
+          derived,
+          state.playerEntities.progressions[0]!,
+          { physicalDamage: kind === 'physical' ? 10 : 0, magicDamage: kind === 'magic' ? 10 : 0 },
+          inRange,
+          createNativeRng(1),
+          { x: 0, y: 0 },
+        )
+        assert.equal(contact.physicalDamage, 0)
         assert.equal(contact.reflectedDamage, kind === 'physical' && inRange && concentrationSkillIdA === 68 ? 50 : 0)
       }
     }

@@ -410,6 +410,7 @@ function protocolPlayerState(
       nextThreshold: progression.nextThreshold,
       pendingOffer: progression.pendingOffer,
       poisonDamagePerTick: progression.poisonDamagePerTick,
+      poisonBeforeCold: progression.poisonBeforeCold,
       poisonTicksRemaining: progression.poisonTicksRemaining,
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,

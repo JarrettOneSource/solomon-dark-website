@@ -134,6 +134,8 @@ export type GameSoundCue =
   | 'unforge'
   | 'unlock-skill'
   | 'wizard-ouch-1'
+  | 'frosted'
+  | 'poisoned'
   | 'wizard-ouch-2'
   | 'wizard-ouch-3'
   | 'zombie-die'
@@ -251,13 +253,14 @@ export function nativeEnemyEventSoundRequest(
     && event.type !== 'enemy-damage-sound'
     && event.type !== 'enemy-death-sound'
     && event.type !== 'player-damage-sound'
+    && event.type !== 'player-status-sound'
   ) {
     return null
   }
   return {
     cue: event.sound as GameSoundCue,
     playbackRate: event.pitch!,
-    sourcePosition: event.sourcePosition!,
+    sourcePosition: event.sound === 'poisoned' ? null : event.sourcePosition!,
     volume: event.gainScale!,
   }
 }

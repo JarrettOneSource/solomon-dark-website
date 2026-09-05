@@ -393,21 +393,21 @@ test('learned primary effects follow the selected pure row, not creation element
       hurricaneRefreshed: false,
     }],
   }
-  const lightning = stepPlayerEntityCombatTick(store).store
+  const lightning = stepPlayerEntityCombatTick(store, createNativeRng(1)).store
   assert.equal(lightning.skillRuntimes[0]!.hurricaneCharge, Math.fround(0.0015))
 
   const ether = stepPlayerEntityCombatTick({
     ...store,
     configs: [{ ...store.configs[0]!, element: 'air' }],
     skillBooks: [{ ...store.skillBooks[0]!, primarySkillId: 8 }],
-  }).store
+  }, createNativeRng(1)).store
   assert.equal(ether.skillRuntimes[0]!.hurricaneCharge, 0)
 
   const weld = stepPlayerEntityCombatTick({
     ...store,
     configs: [{ ...store.configs[0]!, element: 'air' }],
     skillBooks: [{ ...store.skillBooks[0]!, primarySkillId: 52 }],
-  }).store
+  }, createNativeRng(1)).store
   assert.equal(weld.skillRuntimes[0]!.hurricaneCharge, 0)
 })
 
@@ -586,7 +586,7 @@ test('equipped native effects refresh effective ranks, maxima, and dense runtime
   store = damagePlayerEntity(store, 'first', 10, 0)
   const healthBeforeRecovery = playerProgressionAt(store, 'first')!.currentHealth
   store = restorePlayerEntityHealth(store, 'first', 1.5 / 100)
-  store = stepPlayerEntityCombatTick(store).store
+  store = stepPlayerEntityCombatTick(store, createNativeRng(1)).store
   assert.ok(Math.abs(
     playerProgressionAt(store, 'first')!.currentHealth
       - healthBeforeRecovery
@@ -651,7 +651,7 @@ test('entity combat APIs update only the indexed progression and publish one-sho
   assert.equal(playerEntityCanCast(store, 'first'), false)
   assert.equal(playerEntityCanAcceptInput(store, 'second'), true)
 
-  const tick = stepPlayerEntityCombatTick(store)
+  const tick = stepPlayerEntityCombatTick(store, createNativeRng(1))
   store = tick.store
   assert.deepEqual(tick.beganDeathEpochPlayerIds, ['first'])
   assert.deepEqual(tick.completedDeathPresentationPlayerIds, [])
@@ -660,7 +660,7 @@ test('entity combat APIs update only the indexed progression and publish one-sho
   assert.equal(playerProgressionAt(store, 'second')?.currentHealth, 50)
 
   store = poisonPlayerEntity(store, 'second', 5, 10)
-  assert.equal(playerProgressionAt(store, 'second')?.poisonDamagePerTick, 0.05)
+  assert.equal(playerProgressionAt(store, 'second')?.poisonDamagePerTick, Math.fround(0.05))
   assert.equal(playerProgressionAt(store, 'second')?.poisonTicksRemaining, 1_000)
 })
 
@@ -682,7 +682,7 @@ test('entity combat applies the per-player hoard ceiling before Meditation recov
   }
   store = { ...store, progressions, skillRuntimes }
 
-  store = stepPlayerEntityCombatTick(store, new Set(), {
+  store = stepPlayerEntityCombatTick(store, createNativeRng(1), new Set(), {
     manaCeiling: () => 75,
   }).store
   assert.ok(Math.abs(playerProgressionAt(store, 'first')!.currentMana - 75.4) < 1e-12)
@@ -705,7 +705,7 @@ test('wave respawn restores only a non-positive player on the same durable entit
     velocity: { x: 4, y: -3 },
   })
   store = damagePlayerEntity(store, 'first', 60, 100)
-  store = stepPlayerEntityCombatTick(store).store
+  store = stepPlayerEntityCombatTick(store, createNativeRng(1)).store
 
   const entityIds = store.entityIds
   const identities = store.identities
@@ -759,7 +759,7 @@ test('new-run placement resets transient combat while retaining dense identity a
   store = coldSlowPlayerEntity(store, 'first', 200)
   store = dazzlePlayerEntity(store, 'first', 50)
   store = damagePlayerEntity(store, 'first', 75, 0)
-  store = stepPlayerEntityCombatTick(store).store
+  store = stepPlayerEntityCombatTick(store, createNativeRng(1)).store
   store = setPlayerEntitySpectating(store, 'first')
 
   const entityIds = store.entityIds
@@ -1151,7 +1151,7 @@ test('Last Word emits its native death and archive milestones only for its owner
       lifeState: 'dying',
     }],
   }
-  const burst = stepPlayerEntityCombatTick(store)
+  const burst = stepPlayerEntityCombatTick(store, createNativeRng(1))
   assert.deepEqual(burst.lastWordBurstPlayerIds, ['first'])
   store = {
     ...burst.store,
@@ -1161,7 +1161,7 @@ test('Last Word emits its native death and archive milestones only for its owner
       deathTick: PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
     }],
   }
-  const archive = stepPlayerEntityCombatTick(store)
+  const archive = stepPlayerEntityCombatTick(store, createNativeRng(1))
   assert.deepEqual(archive.lastWordArchivePlayerIds, ['first'])
   assert.deepEqual(archive.completedDeathPresentationPlayerIds, ['first'])
 })

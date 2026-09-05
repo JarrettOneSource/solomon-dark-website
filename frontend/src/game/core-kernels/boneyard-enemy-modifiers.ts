@@ -3,12 +3,13 @@ import type { BoneyardArrowType } from './boneyard-enemy-config.ts'
 /** Retail does not populate extraArrows; custom configs remain explicitly bounded. */
 export const BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS = 8
 
-/** Exact status clocks remain open; the native payload/effect ownership is recovered. */
-export const BOUNDED_ENEMY_COLD_SLOW_TICKS = 300
-export const BOUNDED_ENEMY_COLD_MOVEMENT_SCALE = 0.5
+/** Mage dispatch 0x0047FDE0 writes 2.5 seconds at the native 100 Hz clock. */
+export const NATIVE_MAGE_COLD_SLOW_TICKS = 250
+export const NATIVE_COLD_MOVEMENT_SCALE = 0.5
 /** Wraith writes Mod_Dazzle duration +0x14 = 0x32 at 0x00486C30. */
 export const NATIVE_WRAITH_DAZZLE_TICKS = 50
-export const BOUNDED_ENEMY_POISON_DURATION_SECONDS = 3
+export const NATIVE_ARROW_POISON_DURATION_SECONDS = 3
+export const NATIVE_MAGE_POISON_DURATION_SECONDS = 10
 
 /** Native shield interval units remain open; config values are converted here. */
 export const BOUNDED_MAGE_SHIELD_INTERVAL_TICKS_PER_CONFIG_UNIT = 100
