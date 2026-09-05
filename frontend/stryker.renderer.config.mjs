@@ -3,6 +3,9 @@ import { rendererFiles } from './tools/quality/scope.mjs'
 export default {
   mutate: rendererFiles,
   testRunner: 'command',
+  checkers: ['typescript'],
+  tsconfigFile: 'tsconfig.app.json',
+  typescriptChecker: { prioritizePerformanceOverAccuracy: false },
   commandRunner: { command: 'node tools/quality/mutation-tests.mjs' },
   coverageAnalysis: 'off',
   concurrency: 2,

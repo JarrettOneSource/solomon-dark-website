@@ -67,6 +67,22 @@ Implementation requirements for the Istanbul adapter: map executable statements 
 - `typhonjs-escomplex` 0.1.0 was published in 2018. Its public API accepts external ASTs, but parser acceptance alone does not establish modern-node metric support; the inspected Babylon syntax plugin has `ClassMethod` support without a `ClassPrivateMethod` handler. The selected package has direct modern TypeScript and private-member visitors. ([Package registry](https://registry.npmjs.org/typhonjs-escomplex), [API](https://docs.typhonjs.io/typhonjs-node-escomplex/typhonjs-escomplex/class/src/ESComplex.js~ESComplex.html), [syntax plugin](https://github.com/typhonjs-node-escomplex/escomplex-plugin-syntax-babylon/blob/d0ce535ccebb2f8afc4bc991db6611fcd7e01ce5/src/PluginSyntaxBabylon.js))
 - Mozilla `rust-code-analysis` recognizes TypeScript method and arrow spaces. Current source at `37e5d83c056c8cbf827223d5814a93c5218df1a9` uses Rust edition 2024 and Tree-sitter TypeScript 0.23.2, while the latest published 0.0.25 release is from 2023 and provides Linux/Windows x86_64 binaries only. Its TypeScript Halstead classifier omits private-property identifiers; cyclomatic excludes nullish/optional decisions counted by ESLint; cognitive has different lambda nesting semantics. Its JSON complexity sums and Halstead maps merge child spaces. It adds a Rust installation and semantic caveats that the selected npm tools avoid. ([Current manifest](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/Cargo.toml), [release assets](https://github.com/mozilla/rust-code-analysis/releases/tag/v0.0.25), [TS classifiers](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/getter.rs#L230), [cyclomatic](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/metrics/cyclomatic.rs#L159), [cognitive](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/metrics/cognitive.rs#L395), [space aggregation](https://github.com/mozilla/rust-code-analysis/blob/37e5d83c056c8cbf827223d5814a93c5218df1a9/src/spaces.rs))
 
-## Integration evidence still required
+## Integration evidence
 
-On the Mac mini, exercise the selected adapter on the scoped files and a small syntax/ownership fixture containing a constructor, TS-private method, `#private` member, getters/setters, object method, nested arrow, same-line arrows, and optional/nullish expressions. Confirm each callable appears exactly once, that parent/child metrics have the declared boundaries, and that coverage ownership does not credit uncalled bodies. This research inspection does not claim those executable checks passed.
+Mutation checking uses the matching `@stryker-mutator/core@9.6.1` and
+`@stryker-mutator/typescript-checker@9.6.1` packages. Both support Node `>=20`;
+the instrumenter uses Babel `~7.29.0`. Stryker 10 was exercised during the
+initial measurement but brings Babel 8, whose Node requirement excludes this
+project's pinned 22.17.0. The selected release avoids that engine mismatch.
+([Core release metadata](https://registry.npmjs.org/@stryker-mutator/core/9.6.1),
+[instrumenter release metadata](https://registry.npmjs.org/@stryker-mutator/instrumenter/9.6.1),
+[checker release metadata](https://registry.npmjs.org/@stryker-mutator/typescript-checker/9.6.1))
+
+The checker runs against `tsconfig.app.json` with
+`prioritizePerformanceOverAccuracy: false`. It classifies type-invalid mutants
+as compile errors and preserves them in the report. Its documented overrides
+allow unreachable code and disable unused-local/parameter diagnostics while
+checking mutations; the repository's normal TypeScript gate still runs with
+its original options. ([TypeScript checker documentation](https://stryker-mutator.io/docs/stryker-js/typescript-checker/))
+
+The Mac mini passed all four analyzer contract tests in `tools/quality/source-metrics.test.mjs` and `tools/quality/crap.test.mjs`. The fixtures cover constructor, private fields, `#private` member, getters/setters, object method, nested arrow, same-line arrows, and optional/nullish expressions. They confirm distinct callable ownership, independent complexity counts, invalid-source rejection, and that declaration coverage cannot credit an uncalled arrow body. These checks validate the adapters; production measurements and commands are documented in [renderer-quality.md](renderer-quality.md) and the native renderer ledger.

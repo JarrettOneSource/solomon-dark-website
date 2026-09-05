@@ -53,6 +53,23 @@ Geometry. The Staff view must explicitly destroy its aura geometry and buffers,
 while keeping atlas textures borrowed. Pixi `Shader.destroy()` is idempotent,
 so shader teardown does not need separate active-shader identity guards.
 
+The measured cleanup also removes redundant source defaults and initialization:
+Pixi supplies the composited image policy and scalar vertex attribute format;
+its particle adaptor replaces the complete local uniform group on each draw.
+The Staff owner's fixed child insertion order needs no child sorting, and the
+dynamic texture-color uniform group needs no static-update notifications.
+Behavior probes retain the source-policy, byte-layout, painter-order, and
+successive-frame contracts while checking bounded native uniform uploads.
+
+The blend-only initialization path reproduces one additional restoration bug:
+after removing Arena, a colored sprite remains `[128,86,170,255]` instead of
+the previous material's `[128,64,192,255]`. Restoring `BatcherPipe.buildStart`
+alone leaves its per-instruction-set Arena batches cached. Material changes
+must invalidate the owning render groups, and removal must release the owned
+instruction-set caches so the previous builder recreates its material.
+The shared batcher now uses Pixi's `Batcher` base directly; the fully overridden
+`DefaultBatcher` had allocated a default geometry solely to discard it.
+
 Analyzer definitions, pinned primary sources, callable boundaries, and the
 line-coverage CRAP variant are documented in
 [`renderer-quality-analyzers-research.md`](../renderer-quality-analyzers-research.md).

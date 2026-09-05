@@ -7,13 +7,14 @@ test('diffuse mask rendering restores the enclosing color mode after nested rend
   const container = new Container()
   const modes: number[] = []
   const readMode = () => NATIVE_TEXTURE_COLOR_UNIFORMS.uniforms.uIgnoreTextureColor
+  const options = { container }
   assert.equal(readMode(), 0)
-  renderNativeDiffuseMask({ render(options) {
-    assert.equal(options.container, container)
+  renderNativeDiffuseMask({ render(received) {
+    assert.equal(received, options)
     modes.push(readMode())
     renderNativeDiffuseMask({ render() { modes.push(readMode()) } }, options)
     modes.push(readMode())
-  } }, { container })
+  } }, options)
   assert.deepEqual(modes, [1, 1, 1])
   assert.equal(readMode(), 0)
   container.destroy()

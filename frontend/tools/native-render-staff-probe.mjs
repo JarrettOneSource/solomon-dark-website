@@ -27,6 +27,9 @@ export async function compareNativeStaffFrames() {
       app.stage.addChild(view.container)
       const children = [...view.container.children]
       const geometry = children.find(child => child instanceof MeshSimple).geometry
+      const buffers = [...geometry.buffers]
+      let positionBufferUpdates = 0
+      geometry.getBuffer('aPosition').on('update', () => { positionBufferUpdates += 1 })
       try {
         const variations = [{ tick: 18, widthSample: 0 }, { tick: 36, widthSample: 1.5 }, { tick: 54, widthSample: 0.75, pose: 2 }]
         for (const [frame, variation] of variations.entries()) {
@@ -65,7 +68,9 @@ export async function compareNativeStaffFrames() {
         }
       } finally {
         view.destroy()
-        lifetimes.push({ mode, container: view.container.destroyed, children: children.every(child => child.destroyed), geometry: geometry.buffers === null, textureAlive: !texture.destroyed })
+        lifetimes.push({ mode, container: view.container.destroyed, children: children.every(child => child.destroyed),
+          geometry: geometry.buffers === null && buffers.every(buffer => buffer.destroyed), textureAlive: !texture.destroyed,
+          positionBufferUpdates })
         target.destroy(true)
         arena?.destroy()
         app.destroy(true, { children: true })

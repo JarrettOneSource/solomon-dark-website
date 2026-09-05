@@ -8,6 +8,7 @@ const commands = [
   ['tools/quality/duplication.mjs'],
 ]
 if (!staticOnly) commands.push(
+  ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.test.json', '--noEmit'],
   ['tools/quality/coverage.mjs'],
   ['tools/quality/crap.mjs'],
   ['node_modules/@stryker-mutator/core/bin/stryker.js', 'run', 'stryker.renderer.config.mjs'],

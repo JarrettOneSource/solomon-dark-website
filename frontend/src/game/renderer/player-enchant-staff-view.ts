@@ -25,7 +25,6 @@ export class PlayerEnchantStaffView {
 
   constructor(textures: PlayerWorldTextures['enchantStaff']) {
     this.textures = textures
-    this.container.sortableChildren = true
     this.container.eventMode = 'none'
     this.body = centeredSprite(0)
     this.bodyAdditive = centeredSprite(1)

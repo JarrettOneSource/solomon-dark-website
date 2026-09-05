@@ -105,6 +105,7 @@ try {
     )))
     assert.deepEqual(variants.variants, [
       { name: 'sprite-only', pixel: [128, 128, 128, 64] },
+      { name: 'blend-only', pixel: [64, 64, 64, 64] },
       { name: 'browser-overlay', pixel: [128, 128, 128, 128] },
       { name: 'default-particle', pixel: [255, 255, 255, 255] },
     ])
@@ -127,20 +128,41 @@ try {
     console.log(JSON.stringify({ staff }))
     assert.equal(staff.frames.length, 6)
     assert.ok(staff.frames.every(row => row.changedChannels === 0 && row.visiblePixels > 50))
-    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive))
-    const lifetimes = await page.evaluate(async () => {
-      const { inspectNativeMaterialLifetimes } = await import('/tools/native-render-lifecycle-probe.mjs')
-      return inspectNativeMaterialLifetimes()
-    })
-    console.log(JSON.stringify({ lifetimes }))
-    for (const row of lifetimes.pixels) {
-      const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
-      assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
+    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive && row.positionBufferUpdates === 0))
+    for (const options of [
+      { finishPremultiplied: false, installTextureAlphaShaders: false },
+      { finishPremultiplied: true, installTextureAlphaShaders: false },
+      { finishPremultiplied: false, installTextureAlphaShaders: true },
+      { finishPremultiplied: true, installTextureAlphaShaders: true },
+    ]) {
+      const lifetimes = await page.evaluate(async ({ finishPremultiplied, installTextureAlphaShaders }) => {
+        const { inspectNativeMaterialLifetimes } = await import('/tools/native-render-lifecycle-probe.mjs')
+        return inspectNativeMaterialLifetimes(finishPremultiplied, installTextureAlphaShaders)
+      }, options)
+      console.log(JSON.stringify({ options, lifetimes }))
+      for (const row of lifetimes.pixels) {
+        const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
+        assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
+        const expectedUpdates = row.kind === 'mesh' ? 0 : Number(options.installTextureAlphaShaders) + Number(row.phase.includes('arena'))
+        assert.equal(row.nativeUniformUpdates, expectedUpdates, `${row.phase}/${row.kind} uniform uploads`)
+      }
+      for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
+        assert.equal(lifetimes[key], true, key)
+      }
+      assert.ok(lifetimes.batchLifetimes.every(Boolean))
     }
-    for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
-      assert.equal(lifetimes[key], true, key)
+    for (const installTextureAlphaShaders of [false, true]) {
+      const retainedMaterials = await page.evaluate(async installTextureAlphaShaders => {
+        const { inspectRetainedMaterialChanges } = await import('/tools/native-render-lifecycle-probe.mjs')
+        return inspectRetainedMaterialChanges(installTextureAlphaShaders)
+      }, installTextureAlphaShaders)
+      console.log(JSON.stringify({ installTextureAlphaShaders, retainedMaterials }))
+      assert.equal(retainedMaterials.pixels.length, 8)
+      assert.equal(retainedMaterials.preservedUnusedMaterial, true)
+      for (const row of retainedMaterials.pixels) {
+        assert.deepEqual(row.pixel, row.phase === 'arena' ? [128, 86, 170, 255] : [128, 64, 192, 255])
+      }
     }
-    assert.ok(lifetimes.batchLifetimes.every(Boolean))
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
   }
   if (collectCoverage) {
@@ -190,7 +212,8 @@ function expectedPixel(sample) {
   }
   const amount = 8.5 / 16
   const vertex = sample.top.map((value, index) => (value * (1 - amount) + sample.bottom[index] * amount) / 255)
-  vertex[3] *= sample.groupAlpha ?? 1
+  const groupAlpha = sample.groupAlpha ?? 1
+  vertex[3] = (Math.trunc(sample.top[3] * groupAlpha) * (1 - amount) + Math.trunc(sample.bottom[3] * groupAlpha) * amount) / 255
   const color = saturate(vertex.slice(0, 3), sample.mode)
   return [...color.map(channel => channel * vertex[3] * 255), vertex[3] * vertex[3] * 255]
 }

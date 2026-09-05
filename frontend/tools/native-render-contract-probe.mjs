@@ -147,19 +147,25 @@ export async function inspectNativeRendererVariants() {
     try { install(renderer) } catch (error) { errors.push({ name, message: error.message }) }
   }
   const variants = []
-  for (const name of ['sprite-only', 'browser-overlay', 'default-particle']) {
+  for (const name of ['sprite-only', 'blend-only', 'browser-overlay', 'default-particle']) {
     const app = new Application()
     await app.init({ autoStart: false, width: 64, height: 64, preference: 'webgl', backgroundAlpha: 0 })
     const target = RenderTexture.create({ width: 64, height: 64, alphaMode: 'no-premultiply-alpha' })
     let arena
     const meshPipe = app.renderer.renderPipes.mesh
     if (name === 'sprite-only') delete app.renderer.renderPipes.mesh
-    installNativeFixedFunctionRenderPipeline(app.renderer, { preserveBrowserCompositingAlpha: name === 'browser-overlay' })
+    installNativeFixedFunctionRenderPipeline(app.renderer, {
+      preserveBrowserCompositingAlpha: name === 'browser-overlay',
+      installTextureAlphaShaders: name !== 'blend-only',
+    })
     if (name === 'sprite-only') app.renderer.renderPipes.mesh = meshPipe
+    const texture = name === 'blend-only' ? new Texture({ source: new BufferImageSource({
+      resource: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1, alphaMode: 'no-premultiply-alpha',
+    }) }) : Texture.WHITE
     try {
       const display = name === 'default-particle'
         ? new ParticleContainer({ texture: Texture.WHITE })
-        : new Sprite({ texture: Texture.WHITE, width: 64, height: 64 })
+        : new Sprite({ texture, width: 64, height: 64 })
       if (name === 'default-particle') {
         arena = installNativeArenaRenderPipeline(app.renderer)
         display.addParticle(new Particle({ texture: Texture.WHITE, scaleX: 64, scaleY: 64 }))
@@ -171,6 +177,7 @@ export async function inspectNativeRendererVariants() {
       target.destroy(true)
       arena?.destroy()
       app.destroy(true, { children: true })
+      if (name === 'blend-only') texture.destroy(true)
     }
   }
   return { errors, variants }

@@ -69,7 +69,7 @@ export async function renderNativeMaterialSamples() {
       firstSprite.destroy()
       const gradients = [
         { role: 'gradient', top: [255, 0, 0, 0], bottom: [0, 255, 0, 255] },
-        { role: 'faded-gradient', top: [255, 0, 0, 0], bottom: [0, 255, 0, 255], groupAlpha: 128 / 255 },
+        { role: 'faded-gradient', top: [255, 0, 0, 64], bottom: [0, 255, 0, 127], groupAlpha: 128 / 255 },
         { role: 'acid-gradient', top: [102, 242, 128, 0], bottom: [179, 242, 191, 127] },
         { role: 'storm-gradient', top: [102, 242, 255, 0], bottom: [204, 242, 255, 127] },
         { role: 'shadow-gradient', top: [0, 0, 0, 255], bottom: [0, 0, 0, 0] },

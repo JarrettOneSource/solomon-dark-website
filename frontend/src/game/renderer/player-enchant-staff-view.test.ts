@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Texture, type Sprite } from 'pixi.js'
+import { Texture, TextureSource, type Sprite } from 'pixi.js'
 
 import type { NativeEnchantStaffDrawInput } from '../player-enchant-staff-presentation.ts'
 import { PlayerEnchantStaffView } from './player-enchant-staff-view.ts'
@@ -103,6 +103,31 @@ test('an unenchanted Staff remains visible for selected primary zero', () => {
   assert.equal(view.container.visible, true)
   assert.equal(view.active, false)
   view.destroy()
+})
+
+test('inactive Staff owners do not require attachment atlas frames', () => {
+  const complete = textures()
+  const view = new PlayerEnchantStaffView({ ...complete, bodies: [] })
+  view.update(input({ nativeStaff: false }), true)
+  assert.equal(view.container.visible, false)
+  assert.equal(view.active, false)
+  view.destroy()
+})
+
+test('ordinary Staff and hand frames center their bounds at the attachment origin', () => {
+  const texture = new Texture({ source: new TextureSource({ width: 8, height: 12 }) })
+  const frames = grid().map(row => row.map(() => texture))
+  const side = { back: frames, front: frames }
+  const view = new PlayerEnchantStaffView({
+    auras: [Texture.EMPTY, Texture.EMPTY], bodies: [side], hands: { primary: side, secondary: side },
+  })
+  view.update(input({ learnedSkills: [] }), true)
+  for (const child of view.container.children.filter(child => child.visible)) {
+    const bounds = child.getLocalBounds()
+    assert.deepEqual([bounds.minX, bounds.minY, bounds.maxX, bounds.maxY], [-4, -6, 4, 6])
+  }
+  view.destroy()
+  texture.destroy(true)
 })
 
 test('material tint reaches Staff body and hands without replacing selected-primary aura tint', () => {

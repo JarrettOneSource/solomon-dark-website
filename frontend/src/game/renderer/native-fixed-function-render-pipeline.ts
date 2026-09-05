@@ -32,11 +32,6 @@ const NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS = Object.freeze({
   ...NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS,
   addressMode: 'clamp-to-edge' as const,
 })
-const NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS = Object.freeze({
-  addressMode: 'clamp-to-edge' as const,
-  alphaMode: 'premultiply-alpha-on-upload' as const,
-  scaleMode: 'linear' as const,
-})
 
 interface NativeFixedFunctionRenderPipelineOptions {
   readonly installTextureAlphaShaders?: boolean
@@ -146,13 +141,13 @@ function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
 export function nativeStockTextureFromImage(
   image: HTMLImageElement,
 ): Texture {
-  return nativeStockTextureFromImageWithOptions(image, NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS)
+  return nativeTextureFromImage(image, NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS)
 }
 
 export function nativeStockPointTextureFromImage(
   image: HTMLImageElement,
 ): Texture {
-  return nativeStockTextureFromImageWithOptions(
+  return nativeTextureFromImage(
     image,
     NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS,
   )
@@ -161,7 +156,7 @@ export function nativeStockPointTextureFromImage(
 export function nativeStockFramedTextureFromImage(
   image: HTMLImageElement,
 ): Texture {
-  return nativeStockTextureFromImageWithOptions(
+  return nativeTextureFromImage(
     image,
     NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS,
   )
@@ -170,19 +165,15 @@ export function nativeStockFramedTextureFromImage(
 export function nativeCompositedTextureFromImage(
   image: HTMLImageElement,
 ): Texture {
-  return nativeStockTextureFromImageWithOptions(
-    image,
-    NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
-  )
+  return nativeTextureFromImage(image)
 }
 
-function nativeStockTextureFromImageWithOptions(
+function nativeTextureFromImage(
   image: HTMLImageElement,
-  options:
+  options?:
     | typeof NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS
     | typeof NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS
-    | typeof NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS
-    | typeof NATIVE_COMPOSITED_TEXTURE_SOURCE_OPTIONS,
+    | typeof NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS,
 ): Texture {
   return new Texture({
     source: new ImageSource({

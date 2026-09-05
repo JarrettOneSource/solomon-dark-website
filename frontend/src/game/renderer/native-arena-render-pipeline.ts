@@ -163,12 +163,8 @@ export function createNativeArenaUnpremultipliedParticleShader(): Shader {
       nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       uTexture: Texture.WHITE.source,
       uSampler: new TextureStyle({}),
-      uniforms: {
-        uTranslationMatrix: { value: new Matrix(), type: 'mat3x3<f32>' },
-        uColor: { value: new Float32Array([1, 1, 1, 1]), type: 'vec4<f32>' },
-        uRound: { value: 1, type: 'f32' },
-        uResolution: { value: [0, 0], type: 'vec2<f32>' },
-      },
+      // The particle adaptor binds its current local uniform group here.
+      uniforms: {},
     },
   })
 }

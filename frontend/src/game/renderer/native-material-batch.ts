@@ -1,7 +1,8 @@
 import {
-  BatchGeometry, BatcherPipe, DefaultBatcher, Shader,
+  BatchGeometry, Batcher, BatcherPipe, DefaultBatcher, Shader,
   compileHighShaderGlProgram, generateTextureBatchBitGl, getBatchSamplersUniformGroup,
-  roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type GlBatchAdaptor, type Renderer, type Texture, type WebGLRenderer,
+  roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type BatchableSprite,
+  type GlBatchAdaptor, type Mesh, type Renderer, type Texture, type WebGLRenderer,
 } from 'pixi.js'
 import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
@@ -58,7 +59,6 @@ class NativeTextureAlphaBatchGeometry extends BatchGeometry {
     for (const attribute of Object.values(this.attributes)) attribute.stride = stride
     this.addAttribute('aTexturePremultiplied', {
       buffer: this.buffers[0]!,
-      format: 'float32',
       offset: 6 * 4,
       stride,
     })
@@ -86,15 +86,16 @@ class NativeMaterialBatchShader extends Shader {
   }
 }
 
-class NativeMaterialBatcher extends DefaultBatcher {
+class NativeMaterialBatcher extends Batcher {
+  override readonly name = DefaultBatcher.extension.name
+  protected override vertexSize = 7
+  override geometry = new NativeTextureAlphaBatchGeometry()
+  override shader: NativeMaterialBatchShader
   readonly material: NativeBatchMaterial
 
   constructor(options: NativeBatchOptions, material: NativeBatchMaterial) {
     super(options)
     this.material = material
-    this.geometry.destroy(true)
-    this.geometry = new NativeTextureAlphaBatchGeometry()
-    this.vertexSize = 7
     this.shader = new NativeMaterialBatchShader(
       options.maxTextures, material,
     )
@@ -123,7 +124,8 @@ class NativeMaterialBatcher extends DefaultBatcher {
       float32View[index++] = transform.d * y + transform.b * x + transform.ty
       float32View[index++] = uvs[coordinate]!
       float32View[index++] = uvs[coordinate + 1]!
-      const vertexColor = vertexColors?.[vertex - element.attributeOffset]
+      // Registered colors belong to Mesh; Pixi's BatchableMesh starts at vertex zero.
+      const vertexColor = vertexColors?.[vertex]
       uint32View[index++] = vertexColor === undefined
         ? element.color
         : multiplyNativePackedColors(vertexColor, element.color)
@@ -161,9 +163,8 @@ class NativeMaterialBatcher extends DefaultBatcher {
   }
 
   override destroy(): void {
-    const shader = this.shader as NativeMaterialBatchShader
-    shader.destroy(true)
-    super.destroy()
+    this.shader?.destroy(true)
+    super.destroy({ shader: true })
   }
 }
 
@@ -173,7 +174,7 @@ export function nativePackedColor(color: number, alpha: number): number {
 }
 
 export function setNativeVertexColors(
-  renderable: object,
+  renderable: Mesh,
   colors: Uint32Array,
 ): void {
   nativeVertexColors.set(renderable, colors)
@@ -193,10 +194,14 @@ export function nativeTextureIsPremultiplied(texture: Texture): 0 | 1 {
 
 export function installNativeBatchMaterial(renderer: WebGLRenderer, material: NativeBatchMaterial): () => void {
   const pipe = renderer.renderPipes.batch
+  const batchersByInstructionSet = pipe['_batchersByInstructionSet'] as Record<number, Record<string, Batcher>>
   const previous = pipe.buildStart
+  for (const batchers of Object.values(batchersByInstructionSet)) {
+    invalidateBatchRenderGroups(batchers.default)
+  }
   const restoreTextureColor = installNativeTextureColorSync(pipe['_adaptor'] as GlBatchAdaptor, renderer.shader)
   pipe.buildStart = function buildNativeMaterialBatch(instructionSet): void {
-    const batchers = this['_batchersByInstructionSet'][instructionSet.uid] ??= {}
+    const batchers = batchersByInstructionSet[instructionSet.uid] ??= {}
     const current = batchers.default
     if (!(current instanceof NativeMaterialBatcher) || current.material !== material) {
       current?.destroy()
@@ -204,9 +209,36 @@ export function installNativeBatchMaterial(renderer: WebGLRenderer, material: Na
     }
     BatcherPipe.prototype.buildStart.call(this, instructionSet)
   }
+  const lifetime = {
+    destroy(): void {
+      for (const [uid, batchers] of Object.entries(batchersByInstructionSet)) {
+        const current = batchers.default
+        if (!(current instanceof NativeMaterialBatcher) || current.material !== material) continue
+        invalidateBatchRenderGroups(current)
+        for (const name of Object.keys(batchers)) {
+          batchers[name]!.destroy()
+          delete batchers[name]
+        }
+        delete batchersByInstructionSet[Number(uid)]
+      }
+    },
+  }
+  renderer.runners.destroy.add(lifetime)
   return () => {
+    renderer.runners.destroy.remove(lifetime)
+    lifetime.destroy()
     restoreTextureColor()
     pipe.buildStart = previous
+  }
+}
+
+function invalidateBatchRenderGroups(batcher: Batcher): void {
+  for (let index = 0; index < batcher.batchIndex; index += 1) {
+    const elements = batcher.batches[index]!.elements as (BatchableMesh | BatchableGraphics | BatchableSprite)[]
+    for (const { renderable } of elements) {
+      const group = renderable?.renderGroup ?? renderable?.parentRenderGroup
+      if (group) group.structureDidChange = true
+    }
   }
 }
 
