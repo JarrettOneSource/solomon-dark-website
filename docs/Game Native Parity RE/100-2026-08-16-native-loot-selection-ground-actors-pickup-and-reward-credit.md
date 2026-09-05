@@ -276,8 +276,8 @@ callers directly. Whole-store complexity, coverage and CRAP were not claimed
 for those legacy callers. The census field has its real-world regression and
 two-mutant proof rather than a fabricated whole-world metric.
 
-The corrections are uncommitted, unpushed and undeployed. Source candidates
-remain for review at:
+At the initial handoff the corrections were uncommitted, unpushed and
+undeployed. Source candidates were retained for review at:
 
 - `/home/user/.codex-worktrees/solomon-website-loot-rates-20260905-root`
 - `/Users/jarrett/codex-acceptance/loot-rates-20260905-root`
@@ -290,6 +290,40 @@ task prefix contains only the two retained source candidates, with no ignored
 build/test artifacts. No process referencing either task path remained.
 No Mod Loader files, shared primary checkout changes, other task worktrees or
 production sessions were modified.
+
+### Main publication verification — 2026-09-05
+
+The user authorized `push to main` after the audit and renderer-gate limitation
+were reported. Implementation commit `54fa8ccd3984739fe9de56b8081a05b6120a73ac`
+rebases the focused changes onto `e223eb9bccd51099143195ea70cd08331555383a`.
+The intervening Dark Cloud/Boast work and the analyzer's TSX support were
+preserved. All twenty candidate files matched between the local worktree and
+both clean detached Mac worktrees.
+
+The new Mac canonical run passed 22 Python/backend tests, all ordinary
+frontend/desktop suites (including 73 loot tests and 1,922 Boneyard tests),
+lint, TypeScript checks, both builds, bundle/media policy, and the renderer's
+static, coverage and GPU checks. The built key/chest and complete loot-family
+journeys both passed again with empty page-error, console-error and
+failed-response arrays. Key seed 311 at wave 7 produced one Key from two
+deaths, advanced the threshold to 17, and the host consumed the collected Key
+to exhaust the chest. Both clients ended with zero Keys; the captured chest
+reward contained 76 remaining source-`goodie` Gold actors.
+
+The duplicate renderer mutation campaign was stopped before completion. All
+18 renderer source, test, probe and mutation-configuration files are
+byte-identical to the completed audit above; its 29 reviewed diagnostic-label
+survivors remain the documented exception. The updated verification guidance
+and explicit publication request permit carrying that result forward. The
+new invocation therefore is **not** reported as a passing full gate or as a
+fresh complete mutation receipt. No configured gate or assertion was weakened.
+The drop-specific production sources also remained byte-identical to their
+completed zero-survivor campaigns.
+
+Publication uses a normal fast-forward push with remote SHA verification.
+After that verification, all three task worktrees, the local task branch,
+and task-owned temporary artifacts are removed. Deployment and live production
+verification are separate from this publication request.
 
 ## 2026-09-04 — Reopened Gold batch placement
 
