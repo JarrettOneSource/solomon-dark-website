@@ -961,3 +961,134 @@ No member is blocked by the browser platform.
 - No member is blocked by the browser platform and no behavior remains inferred.
   This receipt is a documentation-only follow-up to the validated code cutoff.
   Publication is pending; no push, deployment, or production restart occurred.
+
+## 2026-09-05 — Retained Weld drawing resources during long Boneyard runs
+
+The performance pass starts from Website `530b7d2a4e4859af9d8603a52ee0a30ef9ab6e3d`.
+The user requires unchanged visuals. The supplied schema-28 browser continuation
+at tick 53666 restores 29 enemies, 361 death fragments and 166 Storm actors.
+A Mac M2 production-build journey holds 60 FPS at normal speed; diagnostic 6x
+CPU pressure exposes rendering and allocation cost. A 62,500-tick simulation
+replay reaches wave 12 and 100 simultaneous enemies with mean tick cost 0.301 ms.
+These observations separate browser resource work from simulation cadence.
+
+The causal source trace finds that `WeldPrimarySpellView` recreates every split
+band's sprites, Graphics and MeshSimple geometry on every presentation update.
+Unsplit Weld meshes are also rebuilt every update. Pixi 8.19.0 `Mesh.destroy()`
+only detaches its geometry listener; it does not destroy the geometry's buffers.
+A Mac constructor/destructor probe leaves all three mesh buffers undestroyed.
+This is an ownership defect; retained GPU growth must be measured separately
+rather than inferred from that probe alone.
+
+The owning system is the Weld plan consumer, including every variant accepted
+by `isNativeWeldPresentationState`, its split wrappers, and its resource teardown.
+The existing native extraction above and entry 297 remain the visual authority:
+`ZAnimSplit` (`0x005E0230`) draws one semantic child through ordered 25/50-unit
+clips. It does not require cloned vertex storage or new display objects each
+frame. This pass changes allocation and resource ownership only.
+
+| Membership | Disposition / preservation requirement |
+| --- | --- |
+| 1000/1001/1002/1009 moving projectile and fade families | `exact-ported`: retain the existing unsplit sprite/line/mesh order and every plan value |
+| 1003 Flame Lash and its fade | `exact-ported`: retain dynamic ribbon geometry, texture, alpha, clip rectangles and ordered painter insertions |
+| 1004 Blizzard and source/contact/chain children | `exact-ported`: retain both beam passes and independently registered child effects |
+| 1005 Steam | `verified-already-at-parity`: unchanged native plan and sprite presentation, using the same consumer |
+| 1006 Boulder/debris, 1007 Meteor/markers/impacts, 1008 Hail/terrain/contact children | `exact-ported`: unchanged plan membership, transforms, topology and lifetime |
+| Hub, tutorial, Boneyard and multiplayer observers | `exact-ported`: one shared consumer, no scene or quality branch |
+| Ordinary Air and Water shared-geometry owners | `out-of-system`: already explicitly destroy their independently owned geometry |
+| Secondary spell, scenery shadow and UI mesh consumers | `out-of-system` for Weld rendering; separate lifetime audit, no inferred visible change |
+
+Implementation structure: `primary-spell-weld-view.ts` continues to own semantic
+actor state, painter bands and transforms. A cohesive Weld drawing-resource
+module owns the shared line context and per-plan mesh geometry, plus the
+retained per-band Sprite/Mesh views. Each plan's buffers are updated once;
+clipped views share them. All views detach before their owner frees geometry.
+The old rebuilding paths are removed together. Texture ownership stays with
+the scene atlas. No simulation, save, RNG, effect density, light, alpha,
+resolution, frame cadence or clipping constants change.
+
+Validation uses the public Weld view and existing primary-world renderer seams:
+first failing repeated-update/shared-buffer/teardown tests, exact drawing-plan
+comparisons, real WebGL captures of moving and retiring spells, a controlled
+before/after/reverted-baseline comparison, and the complete Mac Website gate.
+
+### Drawing and lifetime measurements
+
+A real Mac Chrome WebGL comparison loads both implementations into the same
+runtime with the actual packed stock atlas and native material pipeline. It
+renders Flame Lash and Blizzard, normal and underpowered, at three angles with
+moving endpoints, band tint and interleaved scenery. All 12 corresponding pixel
+buffers are SHA-256 identical. Empty page/console error arrays accompany the
+comparison. Shared geometry changes neither clipped view count nor painter
+insertion order.
+
+One 26-band Flame Lash instance previously owns 26 geometries / 78 buffers;
+the candidate owns one geometry / three buffers. After its view is destroyed,
+zero candidate buffers remain undestroyed, versus all 78 baseline buffers.
+This is explicit resource-lifetime evidence, not a claim about a measured GPU
+heap leak in every other renderer.
+
+A repeated-update comparison uses 20 actors, each with 30 updates, in
+baseline/candidate/candidate/baseline order. Median time for 30 Flame Lash
+updates is 9.9 / 0.6 / 0.6 / 9.1 ms; Blizzard is 4.4 / 0.3 / 0.3 / 3.7 ms.
+The drawing loop is over 90% cheaper. Real saved-scene Blizzard firing under
+6x CPU pressure improves from 50.58 to 59.44 FPS; p95 frame interval improves
+from 25.5 to 21.2 ms. These are diagnostic Mac measurements, not Windows FPS
+predictions. Normal-speed production journeys through the supplied save hold
+approximately 60 FPS during idle, firing and recovery for Air, Blizzard and
+Flame Lash, with zero long tasks and empty page/console/HTTP/host-error arrays.
+
+The Blizzard combat journey also passes direct and chained damage, ColdSlow,
+Stun, accumulated push, source glows, fade children, 26 ordered clipping bands,
+cast pose and replicated actor checks. No simulation or protocol production
+code changes in this pass.
+
+The wider audit finds fresh and dense simulation ticks comfortably below the
+10-ms fixed-tick budget on the M2, and the original Air save remains at 60 FPS
+without artificial CPU pressure. Repeated source-plan construction and
+short-lived secondary sprites still consume time, but this pass does not
+change their effects or assert an unmeasured GPU leak. The selected changes
+are supported by reproducible costs, equivalent output and complete teardown.
+
+### Final integration and quality checks
+
+The candidate was rebased onto `d617f28d6fe1bf97f4c271b9be9cdf213bcdbf40`,
+including the concurrent native material correction. All 11 changed files on
+the isolated local and Mac checkouts were byte-identical before acceptance.
+The Mac canonical `/opt/homebrew/bin/bash ./scripts/validate.sh` passed all
+2,694 Node tests and 19 backend integration tests, with no failed or skipped
+Node tests. Formatting, lint, import boundaries, generated-content checks,
+TypeScript, backend/frontend/game-host builds, bundle budgets and media policy
+passed. Gate log SHA-256:
+`b57037663528e45f3a1498b4939ce14ad4b7d32323abe08127dc63b2ba433f95`.
+The production game entry is 262,313 raw / 79,055 gzip bytes.
+
+Node's V8 coverage reports 100% lines, branches and functions for all three
+changed production modules. The installed Oxlint cyclomatic-complexity rule
+passes at maximum 21 with zero warnings/errors. Files contain 229, 146 and 313
+lines, below the 1,000-line limit, and no explicit `any` or `unknown` types.
+The old Weld rebuilding implementations were removed; shared geometry ownership
+and texture lifetime have regression coverage. The existing Weld test fixture
+was corrected to match its current skill-profile/vector types and included in
+the TypeScript test gate.
+
+Statement coverage is not separately reported by the installed Node analyzer.
+Cognitive complexity, Halstead Difficulty, CRAP, mutation, automated duplication
+and automated dead-code gates remain unmeasured because the repository has no
+configured/installed analyzers for them. No analyzer dependency, metric
+suppression or exclusion was added. Source/caller review found no unused new
+production path or duplicate superseded implementation.
+
+The 12 pixel comparisons were repeated successfully against the rebased native
+material pipeline. The temporary isolated proof needed to register Pixi's
+particle pipe, which the game already registers; this was a probe setup issue,
+not a production change. All comparison error arrays are empty.
+
+Production acceptance on that final integration holds 60.02 FPS idle and
+59.90 FPS moving in a fresh stormy Boneyard. The imported original Air run,
+Blizzard run and Flame Lash run each hold approximately 60 FPS through all
+three eight-second idle/firing/recovery windows, with zero long tasks and
+empty page, console, failed-response and host-error arrays. Final screenshots
+were inspected. These measurements validate the Mac production build; the
+Windows recording is reproduction context, not a Windows benchmark receipt.
+No required behavioral member is blocked by the platform.

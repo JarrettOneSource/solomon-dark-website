@@ -485,8 +485,8 @@ function profile(buildId: 1000 | 1001 | 1002 | 1009): NativeWeldPrimarySkillProf
       : [8, 8, 2, 1, 1, 0, 0]
   return {
     buildId, castKind: 'one-shot', damageFactor: 1, damageMaximum: 8,
-    damageMinimum: 8, kind: 'weld', manaCost: 2, skillId: buildId,
-    vector: { values, weldEffectFactor: 1 },
+    damageMinimum: 8, damageRollCount: 1, rank: 1, kind: 'weld', manaCost: 2, skillId: buildId,
+    vector: { buildId, castKind: 'one-shot', values },
   }
 }
 

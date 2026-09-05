@@ -267,19 +267,24 @@ export class NativeBoneyardWeather {
   }
 
   private stepExistingEffects(): void {
-    for (let index = this.drops.length - 1; index >= 0; index -= 1) {
+    let survivingDrops = 0
+    for (let index = 0; index < this.drops.length; index += 1) {
       const drop = this.drops[index]!
       drop.height = Math.fround(drop.height + drop.length)
-      if (drop.height > 0) this.drops.splice(index, 1)
+      if (drop.height <= 0) this.drops[survivingDrops++] = drop
     }
-    for (let index = this.splashes.length - 1; index >= 0; index -= 1) {
+    this.drops.length = survivingDrops
+    let survivingSplashes = 0
+    for (let index = 0; index < this.splashes.length; index += 1) {
       const splash = this.splashes[index]!
       splash.ageTicks += 1
       splash.life = Math.fround(splash.life - splash.loss)
       splash.scale = Math.fround(splash.scale * splash.growth)
-      if (splash.life <= 0) this.splashes.splice(index, 1)
+      if (splash.life > 0) this.splashes[survivingSplashes++] = splash
     }
+    this.splashes.length = survivingSplashes
   }
+
 }
 
 export function nativeBoneyardWeatherSpawnCount(

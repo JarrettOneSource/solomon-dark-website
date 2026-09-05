@@ -259,9 +259,15 @@ try {
 async function enterBoneyard(page) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorial = page.locator('[data-prompt-kind="tutorial"] .stock-prompt-dialog')
+  if (await tutorial.isVisible()) {
+    await tutorial.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorial.waitFor({ state: 'detached' })
+  }
   const presentation = await configureGamePresentation(page, presentationUncapped)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  await page.getByRole('button', { name: 'Continue Local' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
     .waitFor({ timeout: 30_000 })
   await page.getByRole('button', { name: /fire/i }).click()

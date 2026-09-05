@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 import {
@@ -143,4 +144,40 @@ test('production weather visitors expose every persistent actor without rebuildi
     splash.scale,
     splash.alpha,
   ]))
+})
+
+// Captured from the pre-optimization particle stream, including full ordered draw plans.
+test('long-running weather retains exact ordered particles across retirement and viewport changes', () => {
+  const cases = [
+    { mode: 0, enhancedEffects: true, hash: '9797ebf3a309bb09b95e602a18555798755c43799a44baf581e2ba6ee9f32b20' },
+    { mode: 1, enhancedEffects: false, hash: '425d4534dc1331114405399c3cae532c8d65de8d9fe67eebbff66245fdcb680a' },
+    { mode: 2, enhancedEffects: false, hash: '33c2fd9948a559d647b4c4e9946d94953013aff842c4c38f6e74cf822e2c768d' },
+    { mode: 2, enhancedEffects: true, hash: 'e94e33f72431363da9c61c703a8bdba6c684924f206c9098d174f9c430206510' },
+  ]
+  for (const { mode, enhancedEffects, hash: expected } of cases) {
+    const source = weather(mode, enhancedEffects)
+    const hash = createHash('sha256')
+    for (let tick = 1; tick <= 20_000; tick += 1) {
+      const height = tick < 5_000 ? 900 : tick < 10_000 ? 1800 : 450
+      source.advanceTo(tick, { x: -100, y: -50, w: 1000, h: 700 }, height,
+        point => point.x < 0 && point.y < 0)
+      if (tick % 1000 === 0) {
+        hash.update(JSON.stringify(source.plan(point => point.x < 500 ? 0.3 : 0.8)))
+      }
+    }
+    assert.equal(hash.digest('hex'), expected, `mode ${mode}, enhanced ${enhancedEffects}`)
+  }
+})
+
+test('weather rejects invalid clocks and camera heights and bounds invalid birth lighting', () => {
+  assert.throws(() => new NativeBoneyardWeather({ mode: 2, enhancedEffects: true, initialTick: -1 }), /initial tick/)
+  assert.throws(() => nativeBoneyardWeatherTickSeed(1.5), /safe integer/)
+  const source = weather(1)
+  assert.throws(() => source.advanceTo(Number.NaN, BOUNDS, 100, () => false), /tick/)
+  assert.throws(() => source.advanceTo(2, BOUNDS, 0, () => false), /viewport height/)
+  source.advanceTo(2, BOUNDS, 100, () => false)
+  const colors: number[] = []
+  source.visitDrops(() => Number.NaN, (_index, _id, _x, _y, _length, color) => colors.push(color))
+  assert.deepEqual(colors, [0, 0, 0])
+  assert.ok(source.plan().drops.every(drop => drop.startColor === 0))
 })

@@ -419,3 +419,59 @@ the recovered model.
   `/tmp/solomon-dark-world-weather-rebased.png`.
 - Presentation samples can repeat, regress, or be fractional; the local
   owner floors and ignores non-forward samples without mutating authority.
+
+## 2026-09-05 — Stable weather retirement without repeated array shifts
+
+The supplied long-run save uses storm mode. Its current Mac CPU profile spends
+106 ms of an eight-second diagnostic 6x sample in `stepExistingEffects`.
+The owning particle arrays erase expired entries with one `splice` per death,
+repeatedly moving surviving references. On the same Mac, 20,000 fixed weather
+ticks with 900/1800/450-unit viewport heights cost 73.1 ms in rain, 385.7 ms in
+standard storm and 1253.8 ms in enhanced storm (timing excludes plan hashing).
+
+The native lifecycle, appearance and RNG extraction in this entry remain the
+contract. Every drop and splash update in `stepExistingEffects` depends only on
+that particle's own fields; neither loop draws RNG, emits a child or reads a
+neighbor. Stable forward compaction therefore preserves survivor identity/order,
+all float32 operations and exactly the same expiration thresholds. Spawning
+still follows retirement, in the same order with the same native random stream.
+
+| Member | Disposition |
+| --- | --- |
+| Clear mode | `verified-already-at-parity`: empty arrays, unchanged clock |
+| Rain, standard storm, enhanced storm | `exact-ported`: same 3/10/20 births and survivor order |
+| Drop height/retirement and cached light | `exact-ported`: same addition, strict height cutoff and birth light sample |
+| Splash age/life/scale/retirement | `exact-ported`: same float32 operations and zero-life cutoff |
+| Visibility, camera height, collision rejection, reset and catch-up | `verified-already-at-parity`: caller, spawn sampler and ownership unchanged |
+| Weather rendering and rainfall audio | `verified-already-at-parity`: unchanged visitors, art, tint, blend and sound consumer |
+
+The before/after oracle hashes full ordered plans every 1,000 ticks across
+20,000 ticks for every mode, including camera-height changes, collision
+rejection, light caching and many retirement cycles. The existing weather
+contracts, production Mac save journey and full Website gate remain required.
+
+### Measured retirement result
+
+The paired Mac run used the original and candidate classes in the same Node
+22.17.0 process, in baseline/candidate/candidate/baseline order. Every row runs
+20,000 ticks with identical inputs; plan hashing is outside the timed loop.
+
+| Mode | Baseline first/last (ms) | Candidate first/second (ms) |
+| --- | --- | --- |
+| Rain | 73.3 / 57.2 | 50.2 / 45.0 |
+| Standard storm | 387.4 / 366.9 | 158.4 / 151.6 |
+| Enhanced storm | 1274.6 / 1265.4 | 310.1 / 307.3 |
+
+Full ordered-plan SHA-256 values match across both implementations for every
+mode. The enhanced-storm value is
+`e94e33f72431363da9c61c703a8bdba6c684924f206c9098d174f9c430206510`;
+the regression also preserves the clear, rain and standard-storm values.
+Enhanced-storm simulation is approximately 4.1 times faster in this benchmark.
+This measures the weather owner, not total game FPS or the user's Windows GPU.
+
+Fresh production Boneyard acceptance after the change measured 60.05 FPS idle
+and 60.00 FPS moving with zero long tasks. The observed storm retained 566
+drops and 305 splashes; the environment-light center retained alpha 9 / RGB
+sum 765, the far corner alpha 0, resolution 1 and `plus-lighter` compositing.
+The benchmark journey now handles the existing tutorial and Continue Local
+prompts, so a fresh browser profile exercises its intended scenario.
