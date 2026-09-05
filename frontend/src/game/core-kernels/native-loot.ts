@@ -1,6 +1,6 @@
+import { selectNativeLootCandidate } from './native-loot-selection.ts'
 import { DOWSING_EQUIPMENT_RECIPES } from './hub-economy.ts'
 import {
-  createNativeRng,
   drawNativeFloat,
   drawNativeFloatRange,
   drawNativeInteger,
@@ -16,10 +16,7 @@ import {
   type NativeLootItemIds,
 } from './native-loot-items.ts'
 
-export const NATIVE_LOOT_CANDIDATE_ORDER = Object.freeze([
-  'key', 'orb', 'gold', 'item', 'potion', 'powerup',
-] as const)
-export type NativeLootCategory = typeof NATIVE_LOOT_CANDIDATE_ORDER[number]
+export type NativeLootCategory = 'key' | 'orb' | 'gold' | 'item' | 'potion' | 'powerup'
 export type NativeLootPolicy = 0 | 1 | 2 | 3 | 4 | 5
 export type NativeOrbKind = 'health' | 'mana'
 export type NativeBonusKind = 0 | 1 | 2
@@ -180,19 +177,6 @@ export interface NativeLootArenaDropLimits {
   readonly mode: number
 }
 
-export function nativeLootCandidateWeights(count: number): readonly number[] {
-  if (!Number.isInteger(count) || count < 1 || count > 6) {
-    throw new RangeError('native loot candidate count must be within [1,6]')
-  }
-  let width = 2
-  while (width < count) width *= 2
-  const weights = Array.from({ length: count }, (_, result) => (
-    Math.floor((width - 1 - result) / count) + 1
-  ))
-  const divisor = weights.reduce(greatestCommonDivisor)
-  return Object.freeze(weights.map((weight) => weight / divisor))
-}
-
 export function nativeLootModifiers(
   ownedPerkSelectors: readonly number[],
   attraction: NativeLootAttractionModifiers = NATIVE_LOOT_DEFAULT_MODIFIERS,
@@ -224,20 +208,6 @@ export function nativeLootModifiers(
   })
 }
 
-export function nativePowerupLevelBase(level: number): number | null {
-  if (!Number.isInteger(level) || level < 0) {
-    throw new RangeError('native loot participant level must be non-negative')
-  }
-  if (level <= 1 || level % 5 === 0) return null
-  if (level <= 10) return 75
-  if (level <= 15) return 77
-  if (level <= 20) return 82
-  if (level <= 25) return 92
-  if (level <= 30) return 102
-  if (level <= 35) return 117
-  return 137
-}
-
 export function nativeGoldTier(amount: number): 0 | 1 | 2 | 3 {
   if (!Number.isSafeInteger(amount) || amount < 1) {
     throw new RangeError('native Gold amount must be a positive safe integer')
@@ -252,96 +222,31 @@ export function rollNativeEnemyLoot(
   input: NativeLootSelectionInput,
 ): NativeLootSelectionResult {
   validateSelectionInput(input)
-  let sharedRng = input.sharedRng
-  if (usesEmergencyPotionLane(input.policies)) {
-    const first = drawNativeInteger(sharedRng, 2)
-    sharedRng = first.state
-    if (first.value === 0) {
-      const second = drawNativeInteger(sharedRng, 10)
-      sharedRng = second.state
-      if (second.value === 1) {
-        const canCreate = input.worldBadguyCount > 79
-          && !input.inventoryHasHealthPotion
-          && !input.worldHasHealthPotionSack
-          && input.nearbyMaskTwoCount > 49
-        const potion = canCreate
-          ? materializePotion(input, sharedRng, 0, 'enemy')
-          : null
-        if (potion !== null) sharedRng = potion.sharedRng
-        return {
-          drops: potion?.drops ?? [],
-          emergencyPotionAttempted: true,
-          itemIds: input.itemIds,
-          lastSuccessfulItemLevel: input.arena.lastSuccessfulItemLevel,
-          nextKeyDropLevel: input.key.current,
-          selectedCategory: canCreate ? 'potion' : null,
-          sharedRng,
-        }
-      }
+  const emergency = rollEmergencyPotionGate(input.sharedRng, input.policies)
+  let sharedRng = emergency.sharedRng
+  if (emergency.attempted) {
+    const canCreate = input.worldBadguyCount > 79
+      && !input.inventoryHasHealthPotion
+      && !input.worldHasHealthPotionSack
+      && input.nearbyMaskTwoCount > 49
+    const potion = canCreate
+      ? materializePotion(input, sharedRng, 0, 'enemy')
+      : null
+    if (potion !== null) sharedRng = potion.sharedRng
+    return {
+      drops: potion?.drops ?? [],
+      emergencyPotionAttempted: true,
+      itemIds: input.itemIds,
+      lastSuccessfulItemLevel: input.arena.lastSuccessfulItemLevel,
+      nextKeyDropLevel: input.key.current,
+      selectedCategory: canCreate ? 'potion' : null,
+      sharedRng,
     }
   }
 
-  let privateRng = createNativeRng(input.actorSeed)
-  const candidates: NativeLootCategory[] = []
-  if ((input.arena.disableMask & (1 << 4)) === 0) {
-    const keyBound = Math.trunc((Math.trunc((input.arena.level - 20) / 5) + 10) * 100)
-    if (input.key.current <= input.key.level && input.key.remaining > 0) {
-      const draw = keyBound <= 0 ? null : drawNativeInteger(privateRng, keyBound)
-      if (draw) privateRng = draw.state
-      if (keyBound <= 0 || draw?.value === 2) candidates.push('key')
-    }
-  }
+  const { category: selectedCategory, privateRng } = selectNativeLootCandidate(input)
 
-  privateRng = appendPolicyCandidate(
-    candidates,
-    'orb',
-    input.policies.orb,
-    input.arena.disableMask & (1 << 3),
-    policyBound(input.policies.orb, 8, 16, 4, input.participant.modifiers.orbChance),
-    privateRng,
-  )
-  privateRng = appendPolicyCandidate(
-    candidates,
-    'gold',
-    input.policies.gold,
-    input.arena.disableMask & 1,
-    policyBound(input.policies.gold, 22, 44, 11, input.participant.modifiers.goldChance),
-    privateRng,
-    input.arena.specialSuppression || input.policies.gold === 5,
-  )
-  privateRng = appendPolicyCandidate(
-    candidates,
-    'item',
-    input.policies.item,
-    input.arena.disableMask & (1 << 5),
-    itemCandidateBound(input),
-    privateRng,
-    input.arena.specialSuppression,
-  )
-  privateRng = appendPolicyCandidate(
-    candidates,
-    'potion',
-    input.policies.potion,
-    input.arena.disableMask & (1 << 1),
-    policyBound(input.policies.potion, 400, 800, 200, 1),
-    privateRng,
-    input.policies.potion === 3 && !input.sceneForcesHealthPotion,
-  )
-  const powerupBase = nativePowerupLevelBase(input.participant.level)
-  privateRng = appendPolicyCandidate(
-    candidates,
-    'powerup',
-    input.policies.powerup,
-    input.arena.disableMask & (1 << 2),
-    input.policies.powerup === 3
-      ? 0
-      : powerupBase === null
-        ? null
-        : powerupCandidateBound(powerupBase, input.policies.powerup, input.participant.modifiers),
-    privateRng,
-  )
-
-  if (candidates.length === 0) {
+  if (selectedCategory === null) {
     return {
       drops: [],
       emergencyPotionAttempted: false,
@@ -352,36 +257,19 @@ export function rollNativeEnemyLoot(
       sharedRng,
     }
   }
-  const choice = drawNativeInteger(privateRng, candidates.length)
-  privateRng = choice.state
-  const selectedCategory = candidates[choice.value]!
-  if (
-    input.participant.slot !== 0
-    && selectedCategory !== 'key'
-    && selectedCategory !== 'orb'
-  ) {
-    return {
-      drops: [],
-      emergencyPotionAttempted: false,
-      itemIds: input.itemIds,
-      lastSuccessfulItemLevel: input.arena.lastSuccessfulItemLevel,
-      nextKeyDropLevel: input.key.current,
-      selectedCategory,
-      sharedRng,
-    }
-  }
-
-  const materialized = materializeSelected(
-    selectedCategory,
-    input,
-    privateRng,
-    sharedRng,
-  )
+  const materialized: NativeLootMaterializationResult = input.participant.slot === 0
+    || selectedCategory === 'key' || selectedCategory === 'orb'
+    ? materializeSelected(selectedCategory, input, privateRng, sharedRng)
+    : {
+        drops: [],
+        lastSuccessfulItemLevel: input.arena.lastSuccessfulItemLevel,
+        nextKeyDropLevel: input.key.current,
+        sharedRng,
+      }
   sharedRng = materialized.sharedRng
   let drops = [...materialized.drops]
   if (
     input.policies.gold === 5
-    && selectedCategory !== 'gold'
     && !input.arena.specialSuppression
   ) {
     const scatter = drawNativeFloatRange(sharedRng, Math.fround(0.9), Math.fround(1.1))
@@ -413,19 +301,7 @@ export function materializeNativeLootScriptAction(
     return materializeGold(input, input.sharedRng, action.amount, 'script')
   }
   if (action.kind === 'drop-random-gold') {
-    if (
-      !Number.isSafeInteger(action.minimum)
-      || !Number.isSafeInteger(action.maximum)
-      || action.maximum < action.minimum
-    ) throw new RangeError('native random-Gold bounds are invalid')
-    let rng = input.sharedRng
-    let amount = action.minimum
-    if (action.minimum !== action.maximum) {
-      const selected = drawNativeInteger(rng, action.maximum - action.minimum + 1)
-      rng = selected.state
-      amount += selected.value
-    }
-    return materializeGold(input, rng, amount, 'script')
+    return materializeRandomGold(input, action.minimum, action.maximum)
   }
   if (action.kind === 'drop-potion') {
     if (!Number.isInteger(action.subtype) || action.subtype < 0 || action.subtype > 5) {
@@ -818,10 +694,10 @@ function materializePotion(
 }
 
 function sackDrop(
-  input: Pick<NativeLootSelectionInput, 'itemIds' | 'sourcePosition'>,
+  input: Pick<NativeLootSelectionInput, 'itemIds'>,
   item: NativeLootItem,
   source: NativeLootDropSource,
-  position: Readonly<BoneyardPoint> = input.sourcePosition,
+  position: Readonly<BoneyardPoint>,
   activationDelayTicks = 0,
 ): NativeLootDropSpec {
   return {
@@ -903,66 +779,18 @@ export function resolveNativeLootPlacement(
   }
 }
 
-function appendPolicyCandidate(
-  candidates: NativeLootCategory[],
-  category: NativeLootCategory,
-  policy: NativeLootPolicy,
-  masked: number,
-  bound: number | null,
-  sourceRng: NativeRngState,
-  suppressed = false,
-): NativeRngState {
-  if (masked !== 0 || policy === 4 || suppressed || bound === null) return sourceRng
-  if (policy === 3) {
-    candidates.push(category)
-    return sourceRng
+function rollEmergencyPotionGate(
+  sharedRng: NativeRngState,
+  policies: NativeLootPolicies,
+): { readonly attempted: boolean; readonly sharedRng: NativeRngState } {
+  if (policies.orb === 3 || policies.gold === 3 || policies.item === 3
+    || policies.potion === 3 || policies.gold === 5) {
+    return { attempted: false, sharedRng }
   }
-  const draw = drawNativeInteger(sourceRng, Math.trunc(bound))
-  if (draw.value === 1) candidates.push(category)
-  return draw.state
-}
-
-function policyBound(
-  policy: NativeLootPolicy,
-  ordinary: number,
-  reduced: number,
-  increased: number,
-  modifier: number,
-): number | null {
-  if (policy === 3) return 0
-  if (policy === 4) return null
-  const base = policy === 1 ? reduced : policy === 2 ? increased : ordinary
-  return Math.fround(Math.fround(base) * Math.fround(modifier))
-}
-
-function itemCandidateBound(input: NativeLootSelectionInput): number | null {
-  const base = policyBound(input.policies.item, 360, 720, 180, 1)
-  if (base === null) return null
-  if (input.policies.item === 3) return 0
-  let result = base
-  if (input.arena.level < 5) result = Math.fround(result * 200)
-  result = Math.fround(result * 2)
-  if (input.arena.level !== input.arena.lastSuccessfulItemLevel) {
-    result = Math.fround(result * 2)
-  }
-  return Math.fround(result * input.participant.modifiers.itemChance)
-}
-
-function powerupCandidateBound(
-  base: number,
-  policy: NativeLootPolicy,
-  modifiers: NativeLootModifiers,
-): number {
-  const policyScale = policy === 1 ? 2 : policy === 2 ? 0.5 : 1
-  return Math.fround(Math.fround(Math.fround(base * policyScale) * 9) * modifiers.powerupChance)
-}
-
-function usesEmergencyPotionLane(policies: NativeLootPolicies): boolean {
-  return policies.orb !== 3
-    && policies.gold !== 3
-    && policies.item !== 3
-    && policies.potion !== 3
-    && policies.gold !== 5
+  const first = drawNativeInteger(sharedRng, 2)
+  if (first.value !== 0) return { attempted: false, sharedRng: first.state }
+  const second = drawNativeInteger(first.state, 10)
+  return { attempted: second.value === 1, sharedRng: second.state }
 }
 
 function validateSelectionInput(input: NativeLootSelectionInput): void {
@@ -981,9 +809,22 @@ function validateSelectionInput(input: NativeLootSelectionInput): void {
   }
 }
 
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = left
-  let b = right
-  while (b !== 0) [a, b] = [b, a % b]
-  return a
+function materializeRandomGold(
+  input: NativeLootSelectionInput,
+  minimum: number,
+  maximum: number,
+): NativeLootMaterializationResult {
+  if (
+    !Number.isSafeInteger(minimum)
+    || !Number.isSafeInteger(maximum)
+    || maximum < minimum
+  ) throw new RangeError('native random-Gold bounds are invalid')
+  let rng = input.sharedRng
+  let amount = minimum
+  if (minimum !== maximum) {
+    const selected = drawNativeInteger(rng, maximum - minimum + 1)
+    rng = selected.state
+    amount += selected.value
+  }
+  return materializeGold(input, rng, amount, 'script')
 }

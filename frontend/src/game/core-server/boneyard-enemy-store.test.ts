@@ -435,14 +435,16 @@ test('materialization gives all eight families stable actor and event identities
 })
 
 test('Skeleton, Archer, and Mage schedulers replace retained seeds in native order', () => {
-  for (const [token, distance, phase, expectedWrites, expectedSeed] of [
-    ['SKELETON', 10, 'attack', [100, 101], 101],
-    ['SKELETONARCHER', 200, 'attack', [100], null],
-    ['SKELETONMAGE', 150, 'cast', [100, 101, 102], 102],
+  for (const [token, distance, phase, expectedWrites, expectedBounds, expectedSeed] of [
+    ['SKELETON', 10, 'attack', [100, 101], [10_000_000, 1_000_000], 101],
+    ['SKELETONARCHER', 200, 'attack', [100, 101], [10_000_000, 1_000_000], 101],
+    ['SKELETONMAGE', 150, 'cast', [100, 101, 102], [10_000_000, 1_000_000, 1_000_000], 102],
   ] as const) {
     const writes: number[] = []
-    const rollLootSeed = () => {
+    const bounds: number[] = []
+    const rollLootSeed = (bound: number) => {
       const seed = 100 + writes.length
+      bounds.push(bound)
       writes.push(seed)
       return seed
     }
@@ -468,14 +470,12 @@ test('Skeleton, Archer, and Mage schedulers replace retained seeds in native ord
     })
     assert.equal(result.store.actors[0]?.brain.phase, phase)
     const actor = result.store.actors[0]!
-    if (expectedSeed === null) {
-      if (actor.brain.family !== 'archer') throw new Error('expected Archer brain')
+    if (actor.brain.family === 'archer') {
       assert.equal(actor.lootSeed, actor.brain.aimSeed)
-      assert.ok(actor.lootSeed >= 0 && actor.lootSeed < 1_000_000)
-    } else {
-      assert.equal(actor.lootSeed, expectedSeed)
     }
+    assert.equal(actor.lootSeed, expectedSeed)
     assert.deepEqual(writes, expectedWrites)
+    assert.deepEqual(bounds, expectedBounds)
   }
 })
 

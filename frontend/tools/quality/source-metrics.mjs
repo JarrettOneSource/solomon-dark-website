@@ -18,7 +18,7 @@ export function measureSource(source, file) {
     }
     if (callableTypes.has(node.type)) {
       const unit = parent?.type === 'MethodDefinition'
-        || (parent?.type === 'Property' && (parent.method || parent.kind !== 'init'))
+        || parent?.type === 'Property'
         ? parent : node
       const name = node.id?.name ?? parent?.key?.name ?? parent?.id?.name ?? '(anonymous)'
       units.push({

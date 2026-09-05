@@ -15,6 +15,7 @@ import {
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
 import { NATIVE_MINIBOSS_DIE_PROGRAM } from '../core-kernels/native-survival-miniboss.ts'
+import { nextEnemyLootSeed, rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
 import type { BoneyardLootSnapshot } from '../protocol/game-state.ts'
 import {
   boneyardLootDescriptor,
@@ -27,7 +28,6 @@ import {
   materializeBoneyardEnemyLoot,
   nativeHagathaLastWordLoot,
   removeBoneyardLootActors,
-  rollBoneyardLootSeed,
   spawnBoneyardLootSpecs,
   stepBoneyardLootStore as stepBoneyardLootStoreExact,
   type BoneyardLootActor,
@@ -56,12 +56,32 @@ const FAR: readonly BoneyardLootParticipant[] = [{
 
 test('the authoritative loot stream owns stable actor seed writes', () => {
   const initial = createBoneyardLootStore('seed-writers')
-  const first = rollBoneyardLootSeed(initial)
-  const second = rollBoneyardLootSeed(first.store)
+  const first = rollBoneyardLootSeed(initial, 10_000_000)
+  const second = rollBoneyardLootSeed(first.store, 1_000_000)
   assert.ok(first.seed >= 0 && first.seed < 10_000_000)
-  assert.ok(second.seed >= 0 && second.seed < 10_000_000)
+  assert.ok(second.seed >= 0 && second.seed < 1_000_000)
   assert.notEqual(first.seed, second.seed)
   assert.notDeepEqual(second.store.sharedRng, initial.sharedRng)
+})
+
+test('enemy seed ownership enforces each producer bound and advances standalone entropy', () => {
+  for (const bound of [1_000_000, 10_000_000] as const) {
+    for (const invalid of [-1, 1.5, Number.NaN, bound]) {
+      assert.throws(() => nextEnemyLootSeed({ rngState: 1 }, () => invalid, bound),
+        /native loot seed writer returned an invalid seed/)
+    }
+    const state = { rngState: 123 }
+    const first = nextEnemyLootSeed(state, undefined, bound)
+    const afterFirst = state.rngState
+    const second = nextEnemyLootSeed(state, undefined, bound)
+    assert.ok(first >= 0 && first < bound)
+    assert.ok(second >= 0 && second < bound)
+    assert.notEqual(first, second)
+    assert.notEqual(state.rngState, afterFirst)
+    assert.equal(nextEnemyLootSeed(state, () => bound - 1, bound), bound - 1)
+    assert.equal(nextEnemyLootSeed(state, () => 0, bound), 0)
+  }
+  assert.equal(nextEnemyLootSeed({ rngState: 1 }, () => 1_000_000), 1_000_000)
 })
 
 test('Last Word selects only ground Gold and Sacks and removes their actor-owned effects', () => {
@@ -133,7 +153,8 @@ test('the linked Miniboss Die script chooses exact trigger-focus Gold or ANY ite
     actorSeed: 110,
     advancedUnlocks: new Array<boolean>(8).fill(false),
     arena: {
-      disableMask: 0,
+      // Isolate the linked script from the recipe's forced ordinary Potion.
+      disableMask: 1 << 1,
       itemLevelMaximum: 100,
       itemLevelMinimum: 0,
       level: 10,

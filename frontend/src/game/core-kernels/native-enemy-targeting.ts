@@ -20,7 +20,7 @@ export const NATIVE_MAGE_RANGE_RANDOM_MAXIMUM = 150
 export const NATIVE_RANGED_RANGE_DOWN_DIVISOR = 1.8
 export const NATIVE_RANGED_RANGE_UP_FACTOR = Math.fround(1.5)
 
-export const NATIVE_ARCHER_PRIVATE_SEED_BOUND = 1_000_000
+export const NATIVE_ENEMY_ACTION_SEED_BOUND = 1_000_000
 export const NATIVE_ARCHER_LEAD_SPEED_DIVISOR = 6
 export const NATIVE_ARCHER_SCATTER_RADIUS = 75
 export const NATIVE_ARCHER_FAN_STEP_DEG = 10
@@ -286,7 +286,7 @@ function validateVolleyRequest(request: NativeArcherVolleyRequest): void {
   if (
     !Number.isSafeInteger(request.privateSeed)
     || request.privateSeed < 0
-    || request.privateSeed >= NATIVE_ARCHER_PRIVATE_SEED_BOUND
+    || request.privateSeed >= NATIVE_ENEMY_ACTION_SEED_BOUND
   ) throw new RangeError('Archer private seed must be within the native bound')
   for (const [label, point] of [
     ['origin', request.origin],

@@ -12,6 +12,7 @@ import {
 } from '../core-kernels/boneyard-arena-transition.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   type BoneyardEnemySpawnIntent,
   startBoneyardWaveDirector,
@@ -87,6 +88,50 @@ function stepWorld(
     externalSpawnIntents,
   )
 }
+
+test('emergency Potion admission counts the population after the source death', () => {
+  // Native seed 2 hits the first precheck; seed 3 misses first and hits second.
+  for (const [population, deaths, sharedSeed, expectedPotions] of [
+    [80, 1, 2, 0], [81, 1, 2, 1], [81, 2, 3, 0],
+  ] as const) {
+    let world = createBoneyardWorld(gatedBoneyard())
+    world = { ...world, arenaTransition: null, encounter: null, waves: null }
+    const intents: BoneyardEnemySpawnIntent[] = Array.from({ length: population }, (_, index) => ({
+      enemyToken: 'SKELETON', flags: [], id: index + 1, locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: index < deaths ? { x: 250, y: 250 } : {
+        x: 250 + ((index - 1) % 10 - 4.5) * 40,
+        y: 250 + (Math.floor((index - 1) / 10) - 3.5) * 40,
+      },
+      spawnTick: 0, waveOrdinal: 1,
+    }))
+    world = stepWorld(world, {}, {}, 0, intents).world
+    assert.equal(world.enemies.actors.length, population)
+    let enemies: typeof world.enemies = {
+      ...world.enemies,
+      actors: world.enemies.actors.map((actor) => ({ ...actor, lootSeed: 2_432_785 })),
+    }
+    for (const source of enemies.actors.slice(0, deaths)) {
+      const death = damageBoneyardEnemy(enemies, {
+        actorId: source.id, amount: source.currentHealth, sourcePlayerId: null, tick: 0,
+      })
+      assert.equal(death.killed, true)
+      enemies = death.store
+    }
+    world = { ...world, enemies, loot: { ...world.loot, sharedRng: createNativeRng(sharedSeed) } }
+    let rewards = 0
+    for (let tick = 1; tick <= 600 && rewards === 0; tick += 1) {
+      const result = stepWorld(world, {}, {}, tick)
+      rewards += result.rewards.length
+      world = result.world
+    }
+    assert.equal(rewards, deaths)
+    assert.equal(world.enemies.actors.length, population - deaths)
+    const potions = world.loot.actors.filter(({ item }) => item?.nativeTypeId === 7001)
+    assert.equal(potions.length, expectedPotions)
+    if (expectedPotions > 0) assert.equal(potions[0]?.item?.nativeSubtype, 0)
+  }
+})
 
 test('a wizard pushes both native gate leaves aside and crosses the opening', () => {
   let world = createBoneyardWorld(gatedBoneyard())

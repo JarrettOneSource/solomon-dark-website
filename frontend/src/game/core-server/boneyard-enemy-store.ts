@@ -1,3 +1,4 @@
+import { nextEnemyLootSeed, type NativeEnemyLootSeedBound } from './boneyard-enemy-loot-seed.ts'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import {
@@ -71,7 +72,7 @@ import {
   type BoneyardEnemyProjectilePayload,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import {
-  NATIVE_ARCHER_PRIVATE_SEED_BOUND,
+  NATIVE_ENEMY_ACTION_SEED_BOUND,
   buildNativeArcherVolley,
   constructNativeRangedAttackRange,
   restoreNativeRangeEasyAfterVolley,
@@ -959,7 +960,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly registerWorldPainter?: RegisterNativeWorldPainter
   readonly registerProjectileWorldPainter?: RegisterNativeWorldPainter
   readonly retirementObserver?: BoneyardEnemyRetirementObserver
-  readonly rollLootSeed?: () => number
+  readonly rollLootSeed?: (bound: NativeEnemyLootSeedBound) => number
   readonly resolveMovement: ResolveBoneyardEnemyMovement
   readonly resolveSpawnPlacement?: ResolveBoneyardEnemySpawnPlacement
   readonly resolveSpawnIntents: (
@@ -2191,7 +2192,7 @@ function materializeSpawnIntents(
       lifeState: 'alive',
       lightRegistration: work.registerWorldPainter('actor'),
       lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
-      lootSeed: nextLootSeed(work, context),
+      lootSeed: nextEnemyLootSeed(work, context.rollLootSeed),
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
       nextTargetRefreshTick: context.tick
         + nativeEnemyTargetRefreshTicks(config.pathfindingMode),
@@ -2948,7 +2949,7 @@ function stepSkeleton(
         markerEmitted: false,
         phase: 'attack',
       },
-      lootSeed: nextLootSeed(work, context),
+      lootSeed: nextEnemyLootSeed(work, context.rollLootSeed, NATIVE_ENEMY_ACTION_SEED_BOUND),
     }
   }
   return moveTowardTarget(work, actor, brain, context, 1)
@@ -3126,22 +3127,18 @@ function stepArcher(
     distance < brain.attackRange
     && enemyTargetLineOfSightIsClear(actor, context)
   ) {
-    const aimSeed = drawNativeInteger(
-      work.steeringRngState,
-      NATIVE_ARCHER_PRIVATE_SEED_BOUND,
-    )
-    work.steeringRngState = aimSeed.state
+    const aimSeed = nextEnemyLootSeed(work, context.rollLootSeed, NATIVE_ENEMY_ACTION_SEED_BOUND)
     return {
       ...actor,
       bodyPose: NATIVE_ARCHER_SHOT_BODY_POSES[0]!,
       brain: {
         ...brain,
         actionProgress: 0,
-        aimSeed: aimSeed.value,
+        aimSeed,
         markerEmitted: false,
         phase: 'attack',
       },
-      lootSeed: aimSeed.value,
+      lootSeed: aimSeed,
     }
   }
   return moveTowardTarget(work, actor, brain, context, 1)
@@ -3207,8 +3204,8 @@ function stepMage(
       work.rngState = roll.state
       // Mage action scheduling and cast scheduling are separate native writers;
       // the second value is the death-time seed retained by the actor.
-      nextLootSeed(work, context)
-      const lootSeed = nextLootSeed(work, context)
+      nextEnemyLootSeed(work, context.rollLootSeed, NATIVE_ENEMY_ACTION_SEED_BOUND)
+      const lootSeed = nextEnemyLootSeed(work, context.rollLootSeed, NATIVE_ENEMY_ACTION_SEED_BOUND)
       stepped = {
         ...actor,
         bodyPose: NATIVE_MAGE_CAST_BODY_POSES[
@@ -7458,22 +7455,6 @@ function drawLocomotionInteger(work: WorkingStep, count: number): number {
 
 function drawInteger(work: WorkingStep, count: number): number {
   const draw = randomBoneyardWaveInteger(work.rngState, count)
-  work.rngState = draw.state
-  return draw.value
-}
-
-function nextLootSeed(
-  work: WorkingStep,
-  context: BoneyardEnemyStoreStepContext,
-): number {
-  const seed = context.rollLootSeed?.()
-  if (seed !== undefined) {
-    if (!Number.isSafeInteger(seed) || seed < 0 || seed >= 10_000_000) {
-      throw new RangeError('native loot seed writer returned an invalid seed')
-    }
-    return seed
-  }
-  const draw = randomBoneyardWaveInteger(work.rngState, 10_000_000)
   work.rngState = draw.state
   return draw.value
 }

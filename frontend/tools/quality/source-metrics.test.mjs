@@ -46,3 +46,18 @@ test('counts default, optional, and nullish decisions and rejects invalid source
   const types = measureSource('function input(a: any, b: unknown) { return a || b }', 'types.ts')
   assert.deepEqual(types.prohibitedTypes.map(type => type.kind), ['TSAnyKeyword', 'TSUnknownKeyword'])
 })
+
+test('measures arrow and function properties at their reported property locations', () => {
+  const result = measureSource(`
+const placement = {
+  canPlace: (x: number) => x > 0 ? true : false,
+  resolve: function (x: number) { if (x > 0) return x; return 0 },
+}
+`, 'properties.ts')
+  assert.deepEqual(result.units.map(({ name, cyclomatic, cognitive }) => (
+    { name, cyclomatic, cognitive }
+  )), [
+    { name: 'canPlace', cyclomatic: 2, cognitive: 1 },
+    { name: 'resolve', cyclomatic: 2, cognitive: 1 },
+  ])
+})

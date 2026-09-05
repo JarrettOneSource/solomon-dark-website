@@ -12,6 +12,7 @@ import {
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { observeGoldPlacementWire, proveGoldPlacement } from './smoke-loot-gold-placement.mjs'
+import { proveKeyDrops } from './smoke-loot-key-drops.mjs'
 import {
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   NATIVE_LOOT_OPEN_PLACEMENT,
@@ -59,6 +60,7 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
 const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
 const charmOwnerOnly = process.argv.includes('--charm-owner-only')
 const goldPlacementOnly = process.argv.includes('--gold-placement-only')
+const keyDropsOnly = process.argv.includes('--key-drops-only')
 const ALL_DISABLED = Object.freeze({
   gold: 4,
   item: 4,
@@ -94,7 +96,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  ...(goldPlacementOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
+  ...(goldPlacementOnly || keyDropsOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -113,7 +115,7 @@ const [hostPage, guestPage] = await Promise.all([
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
-const goldWires = goldPlacementOnly
+const goldWires = goldPlacementOnly || keyDropsOnly
   ? [hostPage, guestPage].map((page) => observeGoldPlacementWire(page, host.address.url))
   : []
 
@@ -204,6 +206,21 @@ try {
     })
     process.stdout.write(`${JSON.stringify({
       goldPlacement, consoleErrors, failedResponses, pageErrors, useBuiltFrontend,
+    }, null, 2)}\n`)
+    break smoke
+  }
+
+  if (keyDropsOnly) {
+    const keyDrops = await proveKeyDrops({
+      host, hostPage, guestPage, hostPlayerId: playerId, guestPlayerId,
+      position: arenaCenter(host.state().world.bounds),
+      movePlayer, waitUntil, waitForLootCount, screenshotRoot, wires: goldWires,
+    })
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
+      consoleErrors: [], failedResponses: [], pageErrors: [],
+    })
+    process.stdout.write(`${JSON.stringify({
+      keyDrops, consoleErrors, failedResponses, pageErrors, useBuiltFrontend,
     }, null, 2)}\n`)
     break smoke
   }

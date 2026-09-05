@@ -2,7 +2,6 @@ import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
-  NATIVE_LOOT_ACTOR_SEED_BOUND,
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   initialNativeKeyDropLevel,
   materializeNativeLootScriptAction,
@@ -302,16 +301,6 @@ export function createBoneyardLootStore(
     nextItemId: 1,
     nextKeyDropLevel: keyLevel.level,
     sharedRng,
-  }
-}
-
-export function rollBoneyardLootSeed(
-  source: BoneyardLootStore,
-): { readonly seed: number; readonly store: BoneyardLootStore } {
-  const draw = drawNativeInteger(source.sharedRng, NATIVE_LOOT_ACTOR_SEED_BOUND)
-  return {
-    seed: draw.value,
-    store: { ...source, sharedRng: draw.state },
   }
 }
 

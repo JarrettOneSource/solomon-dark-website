@@ -1,5 +1,296 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-09-05 — Drop-rate audit and early-wave Wizard Key correction
+
+### Report and evidence
+
+A player reported one Wizard Key in each of four consecutive runs. The audit
+compares the complete death-drop candidate program, its RNG, modifiers and
+key schedule. It does not infer a per-run probability without the runs' wave
+history, eligible kills, unopened chests and mod configuration.
+
+The earlier audit omitted the key formula's signed clamp and asserted one
+key-winning seed copied from that formula. It skipped instruction verification
+of the decompiler's signed-mask expression, the forced-Potion clear/append
+branch, and supplemental Gold after nonzero-slot dispatch. The September 4 Gold correction
+also incorrectly removed the nonpositive-bound success branch from the shared
+candidate helper. Both claims are superseded by the instructions below.
+
+- Candidate base: Website `f9d736bf`; the public `deployment.json` returned
+  `9005eb9933b01a4f5cd12dee59077752153425e1` during this audit. The loot kernel,
+  loot store, RNG and world reward caller are identical between those trees.
+  The key formula dates to `2caee0e9` (initial loot implementation); its body
+  has not changed since. The nonpositive-bound regression began in `a2197bf4`.
+- Retail 0.72.5 was hashed again: 4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+  base `0x00400000`. Evidence is static instructions and PE data, not an
+  injected runtime or clean-stock play recording.
+- Read-only Mod Loader tooling revision `08bfba9ef367f7b863848030d0a289dc31e33192`,
+  wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+  `decompile_targets.py`, `dump_function_instructions.py` and
+  `refs_to_addr_decompile.py`, canonical `SolomonDark/SolomonDark.exe` replica
+  pool. Targets: `0x0047C070`, `0x00401120`, `0x00401170`, `0x00463500`,
+  `0x00468440`, `0x00463380`, `0x0046DC60`. Constants were independently read
+  from the matching PE's sections at the operand addresses.
+- Baseline Mac `npm --prefix frontend run test:loot`: 58 passed. Those tests
+  therefore did not detect either discrepancy. New tests use independent
+  instruction-derived outcomes at the established public loot interfaces.
+
+### Boundary and membership
+
+Boundary: hostile death-drop admission, ordered category selection, key
+eligibility/scheduling, and their private/shared RNG contracts. Existing
+materializers and world lifetime remain the downstream owners documented in
+this entry. Dispositions below specify the corrected implementation contract;
+the validation receipt records when that contract is proved.
+
+| Member | Native source | Disposition / proof |
+| --- | --- | --- |
+| Shared death selector and source admission | sole caller `0x004819D0`, call `0x00481A43`; Maggot/Cocoon early returns in `0x0047C070` | `verified-already-at-parity`; source retirement and non-drop-child tests |
+| Base hostile construction seed | `0x00473390`, write `actor+0x1C0`; `0x00401120` seed and `0x00401170` draw | `verified-already-at-parity`; shared `Integer(10000000)` |
+| Skeleton action, Archer action/aim seed, Mage action and cast seed replacements | `0x00473980`, `0x00473B40`, `0x00478290`, `0x00490860` | `exact-ported`; all four draws use shared `Integer(1000000)`, and the second Mage draw survives for death |
+| Wizard Key: disabled, below threshold, no unopened chest, eligible, early clamp and later five-wave bands | `0x00463500`; `0x0047C312..0x0047C367` | `exact-ported`; independent winning/losing seeds, each eligibility branch and band boundary |
+| Key initial band and all three advances, terminal band, run reset | load `0x0046DC60` called only by `Arena_Create`; key dispatch `0x00468440` called only by selector | `verified-already-at-parity`; shared `Integer(8)+5`, `Integer(11)+15`, `Integer(11)+30`, `Integer(21)+50`, no advance above 40 |
+| Orb policies 0/1/2/3/4/5 and disable bit 3 | selector; bounds 8/16/4; Arena no-op virtual `0x0042E260` | `exact-ported`; retain all policy outcomes and restore nonpositive-bound success |
+| Gold policies 0/1/2/3/4/5, bit 0, special suppression, policy-5 supplemental Gold | selector; bases 11/22/5.5 times 2 | `exact-ported`; shared-helper correction; existing bonus and materialization tests |
+| Item policies 0/1/2/3/4/5, bit 5, suppression, first/next item and early wave | selector; bases 30/60/15 times 12; `0x00463380` (vtable references `0x00785A70`, `0x0078C2C0`) | `exact-ported`; shared-helper correction; existing recipe/equipment and last-success tests |
+| Potion policies 0/1/2/3/4/5, bit 1, scene-forced health and shared subtype | selector; bases 50/100/25 times 8 | `exact-ported`; policy 3 always appends; special scene clears preceding candidates before append; powerups remain later candidates |
+| Powerup policies 0/1/2/3/4/5, bit 2, level exclusions, all seven level bands | selector, `0x0047C740..0x0047C880` | `exact-ported`; shared-helper correction and complete level-table tests |
+| Emergency Potion shared precheck, all admission failures and success | `0x0047C1B7..0x0047C2F0`; preceding population decrement in `0x004819D0` | `exact-ported`; post-death global population, return on successful gate even when admission fails, density/inventory tests |
+| Ordered competing candidates, counts 1..6, slot-0-only non-Key/non-Orb dispatch | `0x0047C89E..0x0047CA74` | `exact-ported`; preserve chosen category and policy-5 supplemental Gold even when its primary dispatch is suppressed |
+| Item Charm 3, Gold Charm 4, Scatter Curse 9, Arcane Attractor Charm 23 | final progression fields `+0x804/+0x808/+0x80C/+0x810/+0x814` | `verified-already-at-parity`; modifiers and owner tests; none directly multiplies the key bound |
+| Key Sack, pickup, inventory insertion, chest key consumption and unopened count | existing materializer/Goodie inventory below | `verified-already-at-parity`; browser journey must reach this path from enemy selection |
+| Gold/Item/Potion/Orb/Bonus materializers, all 18 Goodie reward rows, explicit script actions | existing inventory and September 4 materializer audit | `verified-already-at-parity`; retained loot suite and complete browser family journey |
+| Mod-authored rewards and independent boss scripted rewards | explicit content/script owners | `out-of-system`; not stock random death-drop rates; no stock per-run guaranteed-key producer found |
+
+There is no browser limitation in this boundary and no unextracted probability
+table. The shared selector serves every hostile class admitted by the existing
+death path; no enemy-specific rate patch is introduced.
+
+The final seed-writer sweep falsified the old report's assertion that scheduler
+draws also use ten million. Fresh decompilation and call operands recover
+`1000000` (`0xF4240`) in all four scheduler writers above; only Badguy
+construction uses `10000000` (`0x989680`). The existing web Skeleton and Mage
+callbacks reused the construction bound. Archer already used one million but
+drew from the separate steering state. All scheduled seed requests now use the
+world's shared seed callback with the action bound, including Archer's retained
+aim seed. The earlier statistical sweep explicitly models constructor seeds;
+scheduled actors have a different weighted seed population. No claim of an
+exact per-run probability is based on that constructor-only model.
+
+### Exact rates and RNG interpretation
+
+`Arena+0x8FF0` is the arena wave level; `+0x905C` is the next eligible key
+threshold and `+0x9060` the unopened-Goodie count. The native key bound is:
+
+```text
+(max(0, trunc((arenaLevel - 20) / 5)) + 10) * 100
+```
+
+`0x0047C32D..0x0047C338` computes the signed quotient, then `SETS`, `DEC`,
+`AND` clamps it at zero. The double constant at `0x007DE908` is 100.
+The key roll is exactly private `Integer(bound) == 2`; it has no automatic
+success branch. Eligible waves through 24 therefore use bound 1000, waves
+25..29 use 1100, 30..34 use 1200, and subsequent bands continue identically.
+The old web bound was 700/800/900 during eligible waves 5..15.
+
+`Integer` masks to the next power of two (minimum 2), then takes a remainder.
+It does not perform uniform rejection sampling. For bound 1000, residues 2
+and 1002 both win: the isolated key-candidate probability is approximately
+1/512, not 1/1000. For bounds 1100..2000 it is approximately 1/1024. These
+are candidate probabilities before emergency preemption and category competition.
+Charms can affect competition with a key candidate without directly changing
+its bound. The initial 5..12 key threshold is uniform; subsequent 11- and
+21-wide threshold bands inherit the same modulo bias. A drop advances the
+threshold immediately, regardless of whether its Key is picked up.
+
+For the five other candidates the compiled branch is `trunc(bound) <= 0 ||
+Integer(trunc(bound)) == 1`. Nonpositive bounds append without consuming a
+private word (`JLE` at `0x0047C434`, `0x0047C528`, `0x0047C61B`,
+`0x0047C6BF`, `0x0047C872`). A positive fractional bound truncating to zero
+has the same behavior. Stock charm values do not reach that boundary; the
+regression therefore is not an explanation for ordinary key streaks.
+
+Forced Potion policy 3 always appends a Potion candidate. When scene field
+`+0x1CD0` is nonzero, `0x0047C674` first calls the candidate-list clear helper
+`0x004014E0`. The jump at `0x0047C66E` bypasses only that clear, not the
+append at `0x0047C679`. The later Powerup remains able to compete. Disabled
+Potions do not clear earlier candidates. The old web code suppressed forced
+Potions in an ordinary scene and did not clear candidates in the special scene.
+
+The nonzero-source-slot check suppresses Gold/Item/Potion/Powerup primary
+materialization, but the policy-5 supplemental Gold block at
+`0x0047CA79..0x0047CAD6` lies after that check. It still executes when an
+eligible category was selected, including one whose primary dispatch was
+suppressed. Current web hostile rewards use source slot zero, so this latter
+correction closes the native kernel contract without explaining player streaks.
+
+`0x004819D0` decrements `DAT_0081984C` and marks `actor+0x1AC` before calling
+the selector at `0x00481A43`. The world adapter passed its pre-death count for
+the first reward, counting the dying actor once too many. Each reward must
+subtract itself and earlier rewards from the pre-death population. A stock
+80-actor crowd becomes 79 before the emergency check and cannot satisfy
+`>79`; an 81-actor crowd becomes 80 and can. The local mask-2 census already
+excludes the source actor; Maggots participate in that spatial query but cancel
+their constructor's global Badguy count (entry 254).
+
+Ordinary Orb/Gold/Item/Potion bounds are 8/22/360/400 before Arena item
+adjustment. Reduced policies double them; increased policies halve them.
+Item additionally multiplies by 200 below wave 5, always by 2, and by another
+2 when the current wave differs from the last successful Item wave.
+Powerup bases are 75,77,82,92,102,117,137 for participant level bands
+2..10,11..15,16..20,21..25,26..30,31..35,36+; level 1 and multiples of
+five are excluded unless forced. Policy scaling is followed by times 9.
+Final charm bound multipliers are Item .75, Gold .75, Orb .5, Powerup
+float32 .8. Gold Charm separately multiplies quantity by 1.25; Scatter
+separately multiplies Orb value by 1.25.
+
+Independent C++ instruction replay on Mac (clang, `-ffp-contract=off`) gives
+seed 236 first results `Integer(800)=2`, `Integer(1000)=802`; seed 311 gives
+202 and 2. These are deterministic regression witnesses. A sweep of all
+10,000,000 possible base hostile seeds, weighted by their preimages under
+shared `Integer(10000000)`, covers 16,777,216 source values. With an eligible
+key, wave 10, participant level 12, ordinary policies, no charms, and last
+Item wave -1, stock selects 29,443 Keys versus the old formula's 30,078.
+That is a 2.16% relative difference in this conditional selection model,
+not a measured per-run change or a new September increase. The emergency
+precheck has a 1/16 gate; an independence approximation gives about one key
+per 608 eligible kills in this setup. Actual run odds depend on the changing
+wave, gate, remaining chests, private seed writers and shared RNG history.
+
+### Implementation and validation contract
+
+Correct the shared selector, preserve the materializers and all callers, and
+replace the previously wrong seed/zero-bound expectations. Test through
+`rollNativeEnemyLoot`, key scheduling helpers, `materializeBoneyardEnemyLoot`,
+and the existing real-host browser loot journey. First capture failing Mac
+regressions, then run the complete Mac gate and built Chrome journey with
+empty page/console/failed-response arrays. Record quality measurements for
+the changed production scope and distinguish unavailable measurements.
+
+Target structure: `native-loot-selection.ts` owns the private candidate list,
+category bounds/order and candidate RNG result. `native-loot.ts` retains the
+shared emergency gate, materialization, key schedule and script entry points.
+The existing `rollNativeEnemyLoot` callers stay at that public boundary; direct
+selection-table tests move to observable selection behavior. No compatibility
+export or parallel candidate implementation remains.
+
+The seed owner is extracted to `boneyard-enemy-loot-seed.ts`; the existing enemy
+store only routes construction/action requests to it. The loot store retains
+the authoritative shared RNG, with the requested bound supplied by the world
+callback. The action-bound constant is shared with Archer volley validation.
+The large pre-existing enemy store is not otherwise reorganized during this
+rate correction; its existing file-size debt must be reported separately.
+
+The broadened tests separate selection from materialization and share one
+fixture in `tools/native-loot-test-fixture.ts`; both suites and the loot-store
+suite are included in the existing TypeScript test project. The source-metrics
+tool also needed its object-property callable range corrected: an arrow-valued
+property was reported at its key, outside the old arrow-only range. Its focused
+regression fails before that one-line correction and passes afterward.
+
+Two complete Mac attempts reached the broad Boneyard suite but timed out in
+the host/supervisor network cases under default file concurrency (three, then
+five timeouts). The same 1,926-test batch passed with file concurrency 2 in
+131.8 seconds, including those network cases and the new population boundary.
+The repository's Boneyard test command now uses that supported Node option;
+test predicates and deadlines are unchanged. The final complete gate is still
+required after this test-runner correction.
+
+### Final Mac audit receipt — 2026-09-05
+
+The candidate was rebased onto Website
+`36aba60e297fd5eb7ad9d3dd53fae5dc332cc58e`, preserving the intervening
+InventoryScreen and hat-atlas fixes. Twenty changed source/test/document files
+were compared by SHA-256 between the isolated local worktree and both detached
+Mac candidates. The final chest-only Gold count refinement and this receipt
+were transferred and compared again after their respective checks.
+
+The six corrected contracts are the early key clamp, action-seed range/shared
+owner, nonpositive candidate bounds, forced-Potion clear/append behavior,
+nonzero-slot supplemental Gold, and the post-death global population input.
+Other category bases, charm multipliers, key bands, candidate ordering and
+modulo bias remain the recovered stock rules. Ordinary new runs receive fresh
+16-byte random seeds through `materializeDefaultBoneyard`; their loot stores
+and key thresholds are recreated. There is no stock one-key-per-run guarantee.
+
+- `npm --prefix frontend run test:loot`: **73 passed**. The real-world
+  population regression additionally covers 80 versus 81 initial actors and
+  two simultaneous deaths, with native precheck streams `0,1` and `1,0,1`.
+  The source-writer test observes all three scheduler families, all requested
+  bounds, and the retained Archer aim/death seed.
+- The production TypeScript build, expanded TypeScript test project, frontend
+  lint/import boundaries, and final diff whitespace check passed on Mac.
+- Full command: `/opt/homebrew/bin/bash ./scripts/validate.sh`. The final
+  run passed 22 Python/backend contracts, every ordinary frontend/desktop
+  group (including all **1,926 Boneyard tests**), both production builds,
+  bundle/media checks, and the renderer's static/coverage/GPU checks. It
+  **exited 1 at the pre-existing strict renderer mutation gate**: 544 generated
+  mutants, 385 killed, 129 compile errors, one timeout, and 29 survivors.
+  All survivors alter renderer diagnostic names/labels, matching the baseline
+  already recorded in [`renderer-quality.md`](../renderer-quality.md).
+  No renderer label assertions, exclusions, or threshold changes were added.
+- The drop-specific Stryker campaign generated **368 mutants** across the
+  complete candidate/seed owners and the changed orchestration/script/carrier
+  functions: **241 killed, 127 compile errors, zero survivors, timeouts or
+  uncovered mutants**. A separate census-expression campaign killed both
+  arithmetic mutants. These use the configured accurate TypeScript checker;
+  compile errors are reported separately from killed mutants. The three
+  measured owner sources remained byte-identical after the rebase.
+- Built Mac Chrome journey:
+  `SDR_LOOT_BUILT=1 node --experimental-strip-types tools/smoke-loot-drops.mjs
+  --key-drops-only`. A real Skeleton death with seed 311 at wave 7 produced
+  Key actor 1 and advanced the threshold to 17. Both clients received its
+  type-7012/subtype-1 identity. Two deaths below the next threshold produced
+  one Key; the host collected it, used the real **Unlock locked chest** button,
+  and consumed it. The Goodie exhausted and produced visible Gold (75
+  source-`goodie` Gold actors remained at capture). Host and guest ended with
+  zero Keys. Page errors, console errors and failed responses were all empty.
+- The complete built loot journey also passed on the rebased candidate:
+  Gold, Potion/Item/Goodie Sacks, both Orbs, generated Ring/Robe inventory
+  insertion, Bonus pickup/fade, audio, bitmap messages and first-retirement
+  contention. Both clients stayed ready after terminal Bonus fade. All three
+  error arrays were empty. Screenshots were inspected; the Key's ground view
+  is partly occluded by native scenery, while its pickup notification and
+  opened-chest reward are visible. This is browser proof against instruction
+  and data evidence, not a claim of a clean-stock playthrough capture.
+
+Istanbul measured every statement, branch, function and line in these complete
+logic modules at **100%**. ESLint/SonarJS/estree-halstead and the repository's
+CRAP calculator reported:
+
+| Module | Lines | Max cyclomatic | Max cognitive | Max Halstead Difficulty | Max CRAP |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `native-loot.ts` | 830 | 20 | 19 | 54.678 | 20 |
+| `native-loot-selection.ts` | 138 | 11 | 11 | 41.283 | 11 |
+| `boneyard-enemy-loot-seed.ts` | 37 | 7 | 3 | 21.667 | 7 |
+
+Those modules contain no explicit `any`/`unknown`; jscpd found zero duplicate
+blocks. Knip found no issues in the new selection/seed modules, but its
+production-only graph still reports **15 pre-existing unused exports and four
+types** in the legacy loot kernel, including exported test/RE interfaces.
+That is a remaining finding, not a claimed dead-code-gate pass. The existing
+enemy store (7,677 lines) and remaining loot store (1,413 lines) retain their
+file-size debt; this change moves seed ownership out and routes existing
+callers directly. Whole-store complexity, coverage and CRAP were not claimed
+for those legacy callers. The census field has its real-world regression and
+two-mutant proof rather than a fabricated whole-world metric.
+
+The corrections are uncommitted, unpushed and undeployed. Source candidates
+remain for review at:
+
+- `/home/user/.codex-worktrees/solomon-website-loot-rates-20260905-root`
+- `/Users/jarrett/codex-acceptance/loot-rates-20260905-root`
+- `/Users/jarrett/codex-acceptance/loot-rates-20260905-root-gate`
+
+Task-owned RE replays, logs, captures, reports, dependencies, build output and
+temporary mutation sandboxes were removed on both machines. Exact-path checks
+confirmed the local/Windows scratch directories are absent and that the Mac
+task prefix contains only the two retained source candidates, with no ignored
+build/test artifacts. No process referencing either task path remained.
+No Mod Loader files, shared primary checkout changes, other task worktrees or
+production sessions were modified.
+
 ## 2026-09-04 — Reopened Gold batch placement
 
 The earlier closure skipped the temporary-list owner and validated a shared-RNG
@@ -106,9 +397,9 @@ body substitution from the world placement adapter and update its callers.
 `native-loot-items.ts` now owns item factories and Goodie contents;
 `boneyard-world-placement.ts` owns world placement/movement geometry, with
 callers updated directly and no re-export shims. The Goodie recipe selector
-no longer carries unused generic selection modes. Candidate selection no
-longer treats an unrolled zero Integer bound as a forced success: it retains
-the native `Integer(bound) == 1` decision.
+no longer carries unused generic selection modes. The candidate-selection
+change made alongside this cutover is superseded by the September 5
+instruction audit above: native nonpositive bounds append without a roll.
 
 Use meaningful public materialization/store tests, the complete Mac gate, and
 Mac Chrome with two real clients: open a chest, observe spread around obstacles,

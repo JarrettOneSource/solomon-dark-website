@@ -1,3 +1,4 @@
+import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
 import {
   resolveActorMotion,
   resolveUnpushedMoverMotion,
@@ -123,7 +124,6 @@ import {
   materializeBoneyardEnemyLoot,
   retireBoneyardGoodiesOutsideBounds,
   spawnBoneyardCustomLootItems,
-  rollBoneyardLootSeed,
   stepBoneyardLootStore,
   type BoneyardLootEvent,
   type BoneyardLootPickup,
@@ -808,8 +808,8 @@ export function stepBoneyardWorldTick(
         }
       },
     },
-    rollLootSeed: () => {
-      const rolled = rollBoneyardLootSeed(loot)
+    rollLootSeed: (bound) => {
+      const rolled = rollBoneyardLootSeed(loot, bound)
       loot = rolled.store
       return rolled.seed
     },
@@ -851,7 +851,7 @@ export function stepBoneyardWorldTick(
       position: reward.lootSource.position,
       sceneForcesHealthPotion: false,
       tick,
-      worldBadguyCount: Math.max(0, badguyCountBeforeDeaths - rewardIndex),
+      worldBadguyCount: badguyCountBeforeDeaths - rewardIndex - 1,
       worldHasHealthPotionSack: loot.actors.some(({ item, kind }) => (
         kind === 'sack'
         && item?.nativeTypeId === 7001
