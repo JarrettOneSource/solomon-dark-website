@@ -113,6 +113,36 @@ const MOD_STATE = {
 } as const
 const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
+test('Hail save cutover retires old cosmetic particles while preserving current particles and the run', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const painterOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const aura = createNativeWaterAuraActor(
+    1, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, 720, createNativeRng(37),
+  ).actor
+  const hail = createNativeWaterHailActor(
+    2, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, { x: 1, y: 0 }, createNativeRng(37),
+  ).actor
+  const transients = [
+    { ...aura, painterRegistrations: [painterOrder.register('actor')] },
+    { ...hail, painterRegistrations: [painterOrder.register('actor')] },
+  ]
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner',
+    state: { ...state, primarySpells: { nextId: 3, projectiles: [], transients }, worldManagerOrder: painterOrder.state() },
+  })
+  const current = restoreGameSaveDocument(document).state
+  assert.deepEqual(current.primarySpells.transients, transients)
+  const previous = JSON.parse(document)
+  previous.schemaVersion = 28
+  previous.continuation.simulation.primarySpells.transients[1].scale = 1.5
+  const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
+  assert.deepEqual(migrated.primarySpells, { nextId: 3, projectiles: [], transients: [transients[0]] })
+  assert.deepEqual(migrated.run, current.run)
+  assert.deepEqual(migrated.playerEntities, current.playerEntities)
+  assert.deepEqual(migrated.combatRng, current.combatRng)
+  assert.deepEqual(migrated.gameRng, current.gameRng)
+})
+
 test('current Hub restore allocates its reconstructed students after persisted owners', () => {
   const state = createGameSimulation({ owner: OWNER })
   const persistedNextActor = state.worldManagerOrder.nextRegistrationOrdinal.actor
@@ -187,19 +217,22 @@ test('checkpoints retain pending offers and schema 27 repairs the erased offer o
   assert.equal(currentMessage.type, 'server-snapshot')
 
   const legacy = structuredClone(current)
-  legacy.schemaVersion = WEB_GAME_SAVE_SCHEMA_VERSION - 1
+  legacy.schemaVersion = 27
   legacy.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
   const legacyMessage = decodeCheckpoint(JSON.stringify(legacy))
   assert.equal(legacyMessage.type, 'server-snapshot')
   assert.ok(legacyMessage.frame.players.owner?.progression.pendingOffer)
   assert.deepEqual(legacyMessage.frame.levelUpBarrier?.pendingPlayerIds, ['owner'])
 
-  const malformedCurrent = structuredClone(current)
-  malformedCurrent.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
-  assert.throws(
-    () => restoreGameSaveDocument(JSON.stringify(malformedCurrent)),
-    /level-up barrier pending player has no skill offer/,
-  )
+  for (const schemaVersion of [28, WEB_GAME_SAVE_SCHEMA_VERSION]) {
+    const malformed = structuredClone(current)
+    malformed.schemaVersion = schemaVersion
+    malformed.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
+    assert.throws(
+      () => restoreGameSaveDocument(JSON.stringify(malformed)),
+      /level-up barrier pending player has no skill offer/,
+    )
+  }
 })
 
 test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix', () => {
@@ -651,7 +684,7 @@ test('schema 22 restores late Water painters and every native death-effect owner
     restored.state.primarySpells.transients.map(({ painterRegistrations }) => (
       painterRegistrations?.map(({ managerLane }) => managerLane)
     )),
-    [['actor'], ['actor']],
+    [['actor']],
   )
   assert.deepEqual(
     restored.state.world.enemies.deathEffects.map((effect) => ({

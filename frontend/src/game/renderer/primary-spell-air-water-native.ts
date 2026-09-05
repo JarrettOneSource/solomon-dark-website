@@ -116,7 +116,7 @@ export const NATIVE_WATER_AURA_SAFE_ALPHA_TRIM = Object.freeze({
   y: 2,
 })
 
-/** Anim_Hail draw transform recovered at 0x00458D80. */
+/** Anim_Hail draw transform recovered at 0x004540B0. */
 export function nativeHailVisualPlan(
   state: Pick<
     PrimarySpellWaterHailState,

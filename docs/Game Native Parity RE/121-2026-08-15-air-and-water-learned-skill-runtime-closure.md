@@ -102,10 +102,10 @@ than becoming an Air/Water-only boolean.
   success. Before the target query, each shipped-default Frost visual child
   independently tests `Integer(250)` against the same threshold. A successful
   visual allocation consumes the `Anim_Bouncer` constructor draws
-  `Float(3), Float(20), Float(360), Float(10)`, then `Anim_Hail` `Float(1)`,
+  `Float(3), Float(20), Float(360), Float(10)`, then `Anim_Hail` signed `Float(0.1)`,
   handler `Float(15)`, random-unit-vector `Integer(100001)`, and handler
   `Float(2)`, in that order. It uses
-  BadGuys record 32, scale `1+Float(1)`, speed `4+Float(2)`, initial height
+  BadGuys record 32, scale `0.5+Float(0.1,signed=true)`, speed `4+Float(2)`, initial height
   `-Float(20)`, rotation `Float(360)`, rotation step `1+Float(10)`, life `2`
   with `0.015` decay, and `0.65` bounce restitution. Cold Aura presentation
   emits every sixth tick and queries `mRadius*120` world units. Its parent-
@@ -276,3 +276,223 @@ than becoming an Air/Water-only boolean.
   Node suite passed 155/155, `tsc -p tsconfig.test.json --noEmit` passed, and
   the production `tsc -b` project build passed. These are diagnostic WSL
   receipts, not the final Mac mini browser acceptance.
+
+
+## 2026-09-04 — Hail constructor scale and signed RNG reopening
+
+The report `SDB - Hail MASSIVE particles.mp4` (Windows Downloads, 1920x1080,
+15.957556 seconds) shows oversized round Hail behind the Frost Jet. The earlier
+closure incorrectly transcribed the constructor as unsigned `Float(1)+1` and
+validated that assumption in tests. It skipped the raw constant/sign-argument
+check; the later mesh work carried that wrong producer range into both decoders.
+
+### Native evidence and ownership
+
+Fresh read-only Ghidra replica queries used the canonical `SolomonDark` project,
+`SolomonDark.exe` at preferred base `0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The existing Mod Loader wrapper was used without edits (SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`).
+Queries: `decompile_targets.py` for `0x00454030`, `0x00458D80`, `0x00543860`;
+`dump_function_instructions.py 260` for the constructor, parent `0x00453060`,
+painter `0x004540B0`, and RNG `0x00401310`; `refs_to_addr_decompile.py` for
+constructor, vtable `0x0078501C`, and painter. Raw PE section reads independently
+confirmed the following constants. These are instruction/data facts, not a
+clean-stock screenshot claim.
+
+- `0x00454062` pushes signed flag `1`; `0x00454068` loads float32
+  `0x007845E8 = 0.10000000149011612`; `0x00454085` calls the float RNG;
+  `0x0045408A` adds double `0x007DE808 = 0.5`; `0x00454092` stores float32
+  scale at `+0x54`. The exact stored range is
+  `[0.4000000059604645, 0.6000000238418579]`.
+- Parent `0x00453060` consumes four unsigned draws: `Float(3)`, `Float(20)`,
+  `Float(360)`, `Float(10)`. The Hail scale consumes two words, magnitude then
+  sign. Handler `0x00543860` follows with `Float(15)`, `Integer(100001)`,
+  `Float(2)`: nine words total. The previous eight-word sequence also shifted
+  radial spawn, speed, and subsequent shared random outcomes.
+- Signed RNG `0x00401385..0x00401396` loads the positive magnitude, negates
+  only when bit 6 of the second advanced word is `1`, and returns it otherwise.
+  The shared Website helper already implements this correctly; Hail must use
+  its signed branch so the extra word is consumed.
+- The sole constructor xref is Water handler `0x00543F4C`. Its Normal-only
+  branch tests `Integer(250)` against the learned Hail threshold; it writes
+  BadGuys record 32 at `+0x24`, position, Region, and velocity, then registers
+  the actor. It never overwrites scale.
+- The sole vtable writer is the constructor; draw slot `0x00785028` points to
+  `0x004540B0`, while update slot `0x00785024` points to `0x00458D80`.
+  The painter passes stored scale unchanged, rotation `+0x3C`, `(x,y+height)`,
+  white tint and `min(life,1)`. Record 32 is 19x20 with origin `(9.5,11)`:
+  Hail covers 7.6–11.4 by 8–12 world units before rotation, throughout its life.
+- The update never writes `+0x54`. Airborne, bounce, settled, and fade keep
+  constructor size. Existing 134-tick retirement, bounce motion, native audio
+  sequence, and post-release lifetime remain owned by the authoritative actor.
+
+### Boundary and complete membership
+
+The reopened system is the learned Hail actor's construction-to-presentation
+contract and the signed-float primitive it consumes. It is distinct from the
+welded Hailstones spell (build 1008).
+
+| Member | Disposition | Proof / consequence |
+| --- | --- | --- |
+| Hail (skill 38), every rank, Normal Frost emission in Hub and Boneyard | exact-ported | one corrected shared constructor; same nine-word sequence |
+| Frost Over / underpowered branch | verified-already-at-parity | handler does not allocate Hail; existing shared emission tests |
+| Anim_Bouncer inherited birth, airborne, bounce, settled, fade, retirement | exact-ported | explicit float32 stores, retained settled bounce clock, unchanged scale through all live ticks |
+| BadGuys record 32 / Sprite view in Hub | verified-already-at-parity | direct stored scale, authored 19x20 canvas and `(9.5,11)` origin |
+| Record 32 / combined Water mesh in Boneyard | verified-already-at-parity | direct stored scale and exact per-vertex geometry |
+| Compact Hail table and welcome snapshot decoder | exact-ported | both reject old oversized range and admit both exact float32 endpoints |
+| Retained interpolation, actor order, snapshot hydration | verified-already-at-parity | carries authoritative scale unchanged; lifecycle/transport tests |
+| Schema-29 save round-trip and older Hail retirement | exact-ported | preserves current Hail and the run; older cosmetic Hail alone retires on restore |
+| Hail damage roll and release/world teardown | verified-already-at-parity | distinct event/lifetime ownership; scale does not control damage |
+| Hail bounce pitch and sound-gated RNG consumption | exact-ported | signed Float(.2)+1; both endpoints, all four samples, six-word sounding bounce / three-word silent bounce |
+| Signed `Float` magnitude/sign primitive and existing callers | verified-already-at-parity | bit-6 instruction comparison and fixed-word positive/negative checks; Hail now calls the existing signed branch |
+| Unsigned `Float`, integer RNG, random-sign helper | verified-already-at-parity | separate branches; no change to draw counts or outputs |
+| Welded Hailstones, Frost Jet core, Cold Aura, Hurricane | out-of-system | separate constructors/registrations; no size retuning |
+
+No browser limitation requires a visual approximation. The cause is proven by
+a pre-fix Mac constructor/lifecycle reproduction: seed 37 produces scale
+`1.3328900337219238`, stays that size for 134 ticks, and fails the native
+`0.4..0.6` envelope. Atlas magnification and lifetime growth are ruled out.
+
+### Validation contract
+
+Use public constructor tests with native fixed-word expectations, both wire
+representations with exact endpoint acceptance and neighboring rejection,
+and Sprite/mesh geometry from real constructed actors. Run the canonical Mac
+Website gate and a 1920x1080 Mac Chrome Water journey with no Hail, Hail rank 10,
+and restored no-Hail phases. Record frame times and actual actor sizes; distinguish
+pixel-area reduction from measured whole-game performance.
+
+
+### Existing save continuation
+
+Save schema 28 can persist live Hail actors with the incorrect 1–2 scale.
+Those actors would fail the corrected welcome decoder before a restored player
+can resume. Schema 29 retires only Hail presentation actors from schema 28 and
+older during the existing primary-spell normalization step. Their missing
+native sign draw cannot be reconstructed from the saved state without guessing;
+retirement preserves the run, player progress, all other spell actors, and RNG.
+New schema 29 saves retain native Hail exactly. This is a one-time saved-data
+migration, not a second runtime representation or a renderer scale fallback.
+
+
+### Residual signed bounce-pitch correction
+
+The complete lifecycle review also found the same omitted sign argument in
+bounce audio. Matching-image instructions `0x00458E88` load float32
+`0x00784CE8 = 0.20000000298023224`; `0x00458E8E` pushes `1`;
+`0x00458E9A` calls `Float`; `0x00458EB8` adds double `1` and the result is
+stored as float32. Thus pitch is `1+Float(.2,signed=true)`, with exact endpoints
+`0.800000011920929` and `1.2000000476837158`. The sound-enabled bounce consumes
+six words (rotation, sound gate, pitch magnitude, pitch sign, sample, horizontal
+damping); a silent bounce consumes three. The earlier unsigned-pitch account
+in ledger 299 is superseded. Both wire paths and audio-cursor tests must admit
+the lower endpoint. The shared signed-float implementation itself remains exact.
+
+The schema-29 change also pins the prior missing-offer repair cutoff at schema
+28. Later schema bumps must not broaden that unrelated migration or reroll a
+malformed schema-28 offer; only schema 27 and older retain that repair.
+
+
+### Float32 placement and update boundaries
+
+The same full-instruction review replaces two algebraically similar but
+bit-different Hail recurrences. `0x00458DBE..CF` computes
+`f32(f32(height + verticalVelocity) + verticalVelocity)`. At
+`0x00458DD2..E8`, keep `a = bounceProgress * f32(.4)` in double precision,
+then store `f32(a + f32(verticalVelocity + a))`. Do not double a rounded
+product or fold the two height additions. Settlement `0x00458F25..3B`
+clears velocities and rotation step, but retains the already-incremented
+bounce clock at `+0x50`; the outer zero-height branch preserves it thereafter.
+
+Random vector helper `0x00410C50` stores its angle, radians, and each sine/cosine
+component before the caller multiplies by radial distance. It uses GMath's
+authored float32 pi `3.141592502593994` (`0x007DE8A8`, constructor
+`0x004100D0`), already recovered in ledger 100. Hail now preserves those
+intermediate stores. A 90-degree vector at distance 7.5 gives
+`(7.5, -0.0000005662342346113292)` before emitter addition. The original
+`Math.PI` / unrounded-trig path erased that native component.
+
+Following the corrected recurrence gives the closed height minimum
+`-79.45001220703125` (native height draw 1/100000, initial saved bounce velocity
+-5, tick 21). Both Hail decoders use this exact producer envelope. The old
+`f32(-79.45)` bound was two float32 steps too high. A Mac instruction-recurrence
+sweep covers all 100001 constructor height samples at the maximum bounce speed;
+later bounces have both weaker upward velocity and no smaller acceleration.
+
+
+### Initial implementation and Mac acceptance receipt
+
+The initial candidate was base `a2197bf4a6b8bf8a5328030c63b555b269c65e65` plus the
+focused uncommitted patch. All 13 changed frontend code/test files matched
+between the local worktree and the Mac; their sorted compact JSON SHA-256
+manifest is `8e5f4187652f5085822f7f33151aa4e15dc5b18489e88f88aeabbe93a098c81d`.
+Protocol 118 admits the native scale/pitch bounds. Save schema 29 retires prior
+Hail visuals and preserves the schema-28 missing-offer rejection boundary.
+The existing finite-range validator replaces duplicated Hail scalar checks.
+
+- Focused Mac suite: **119 passed, zero failed**. Regression tests first failed
+  on oversized constructor/Sprite output, missing pitch sign consumption,
+  float32 motion/placement, and the unrelated offer-migration cutoff.
+- Final `/opt/homebrew/bin/bash ./scripts/validate.sh`: **passed**, including
+  19 Website/backend tests and 2,679 frontend/desktop test executions, backend
+  formatting, lint/import/generated checks, TypeScript, both production
+  builds, bundle limits, and media/CSP policy. Backend: zero warnings/errors.
+  Entry: 262,312 raw / 79,063 gzip bytes.
+- Built Mac Chrome at 1920x1080 used Apple M2 Metal, seeded Boneyard
+  `0123456789abcdef`, normal health/mana maxima, stationary combat enemies,
+  a 15-second warmup, and five-second measurements. Real UI input selected
+  Water and held/released Frost Jet; the authority fixture changed only Hail
+  rank between the three measurement phases.
+
+| Phase | FPS | p95 / p99 / maximum frame gap | Hail actors at capture |
+| --- | ---: | --- | ---: |
+| Water without Hail | 60.07 | 16.7 / 16.8 / 16.8 ms | 0 |
+| Water with Hail rank 10 | 60.20 | 16.7 / 16.8 / 16.8 ms | 205 |
+| Hail removed, Water still held | 60.13 | 16.7 / 16.8 / 16.8 ms | 0 |
+
+All active Hail scales were within the recovered envelope; the captured range
+was `0.40097498893737793..0.5972740054130554`. The observed native-size chips
+replace the reported large circles. Page, console, failed-request, and HTTP-error arrays were empty. Removal let all prior Hail retire; final input
+release stopped the Frost loop. This proves no Hail frame-rate drop in this
+controlled Mac scenario; it does not claim a measured speedup on the user's
+Windows hardware.
+
+Earlier samples with the reused short-cast harness's million-point health/mana
+fixture are discarded as performance evidence. Native HUD width grows with
+those maxima, and CPU sampling showed React/strip/layout/GC overhead. Normal
+stat maxima plus the existing stationary-combat/refill fixture removed that
+measurement confound. Their images remain useful only as oversized-particle
+reproduction, not as before/after FPS evidence.
+
+Receipt hashes (disposable artifacts; results retained here): full gate
+`0c1d7feff9122b0aa246d8c9f38cf11c310a1821e87f13a84156d3c4541a3559`,
+focused tests `5c63a43e7e1eb436ba08f3dd6b54ea14102d9657f18341c4f1288952457a7c73`,
+browser `e8410845646cdb9dae08fcef44abacd0bc10b8624ff8839a7174d04ba4e36bd1`,
+Hail screenshot `2b7e16b25c0f1fe47c16c0167dafb34f46a0708764a55da9dd32ff5841494b4e`.
+
+### Quality limits and initial handoff
+
+The stricter quality gates are **not all satisfied**. Oxlint maximum
+complexity 21 passes Hail construction/update, the compact Hail validator, and
+primary-save normalization. The broader files retain 25 pre-existing
+complexity violations; the unrelated transient dispatcher remains 153.
+The pre-existing protocol and save-document files remain over the file-size
+limit (12,250 and 2,458 authored lines with blank/comment lines omitted).
+This focused patch does not restructure those full modules.
+
+V8 reports every range hit in Hail construction (1/1), Hail update (12/12),
+and primary-save normalization (3/3). That is not a claim of 100% statement,
+branch, function, and line coverage for the entire changed-file scope.
+Separate statement, cognitive-complexity, Halstead, CRAP, mutation, and dedicated
+dead-code/duplication analyzers are not configured. Those gates remain
+unmeasured; no analyzer dependency, exclusion, or suppression was added.
+Normal lint/type checks pass; the changed production expressions introduce no
+explicit `any`/`unknown`, scale fallback, compatibility renderer, or new wrapper.
+
+Two-axis review closed all concrete Hail/native and save-cutover findings;
+standards review retains the pre-existing file-size constraints above. At the
+initial handoff the fix was not committed, pushed, or deployed. The shared
+dirty checkout and Mod Loader files were preserved. Focused local/Mac source
+worktrees were retained for review; task browser/host processes and disposable
+captures, profiles, coverage output, scripts, and logs were removed.

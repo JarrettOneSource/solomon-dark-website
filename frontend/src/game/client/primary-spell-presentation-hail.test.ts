@@ -164,7 +164,7 @@ function hail(
     rotationDegrees: 40,
     rotationStepDegrees: 4,
     savedBounceVelocity: -2,
-    scale: 1.5,
+    scale: 0.5,
     verticalVelocity: 3,
     worldKey: 'boneyard:run-1',
     ...overrides,

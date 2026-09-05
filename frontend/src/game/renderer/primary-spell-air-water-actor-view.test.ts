@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Container, Shader, Sprite, Texture } from 'pixi.js'
+import { BufferImageSource, Container, Mesh, Shader, Sprite, Texture } from 'pixi.js'
 
 import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
   PrimarySpellWaterTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import { waterFrostJetKind, waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
 import {
   NATIVE_AIR_WATER_ACTOR_KINDS,
@@ -91,6 +92,49 @@ test('Air/Water world view routes all three primary-owned actors through stock t
   view.destroy()
 })
 
+test('native Hail birth draws a small ice chip in both Hub sprites and Boneyard meshes', () => {
+  const texture = new Texture({ source: new BufferImageSource({
+    resource: new Uint8Array(19 * 20 * 4), width: 19, height: 20,
+  }) })
+  const textures = worldTextures()
+  textures.primarySpells.airWaterActors.hail = texture
+  textures.primarySpells.airWaterActors.coldAura = texture
+  textures.primarySpells.frost.core = texture
+  textures.primarySpells.frost.over = texture
+  const actor = createNativeWaterHailActor(
+    1, 'wizard', WORLD_KEY, 0, { x: 10, y: 20 }, { x: 1, y: 0 },
+    { indexA: 0, indexB: 31, words: new Array<number>(55).fill(0) },
+  ).actor
+  const spells: PrimarySpellSimulationState = {
+    nextId: 2, projectiles: [], transients: [{
+      ...actor,
+      painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 1 }],
+    }],
+  }
+  for (const mesh of [false, true]) {
+    const root = new Container()
+    const view = mesh
+      ? PrimarySpellWorldView.forBoneyard(root, textures, testShader())
+      : new PrimarySpellWorldView(root, textures)
+    view.update(spells, WORLD_KEY)
+    if (mesh) {
+      view.applyBoneyardPainterDepths([{ id: 'primary-spell:1', row: 1, zIndex: 1 }], 2)
+      const draw = root.children[0]
+      assert.ok(draw instanceof Mesh)
+      const vertices = draw.geometry.getBuffer('aPosition').data
+      assert.deepEqual([vertices[0], vertices[1], vertices[18], vertices[19]], [5.25, 14.5, 14.75, 24.5])
+    } else {
+      const draw = visibleSprites(root.children[0]!)[0]!
+      assert.equal(draw.width, 9.5)
+      assert.equal(draw.height, 10)
+      assert.equal(draw.blendMode, 'normal')
+    }
+    view.destroy()
+    assert.equal(root.children.length, 0)
+  }
+  texture.destroy(true)
+})
+
 test('Boneyard Air/Water mesh retains every actor row and exact painter partition', () => {
   const root = new Container()
   const view = PrimarySpellWorldView.forBoneyard(root, worldTextures(), testShader())
@@ -172,12 +216,12 @@ test('Hail and Cold Aura plans retain their authoritative motion fields', () => 
     height: -5,
     life: 1.5,
     rotationDegrees: 90,
-    scale: 2,
+    scale: 0.5,
   }), {
     alpha: 1,
     offsetY: -5,
     rotationRadians: Math.PI / 2,
-    scale: 2,
+    scale: 0.5,
   })
   assert.deepEqual(nativeWaterAuraVisualPlan({
     ageTicks: 25,
@@ -283,7 +327,7 @@ function actorFixture(): PrimarySpellSimulationState {
     rotationDegrees: 45,
     rotationStepDegrees: 2,
     savedBounceVelocity: -2,
-    scale: 1.5,
+    scale: 0.5,
     verticalVelocity: 0,
   }]
   return { nextId: 4, projectiles: [], transients }

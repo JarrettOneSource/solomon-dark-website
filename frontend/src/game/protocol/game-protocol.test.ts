@@ -785,6 +785,43 @@ test('server welcome round-trips content, kernel, character, and world ownership
     snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const hail = createNativeWaterHailActor(
+    1, 'player-1', 'hub:courtyard', 0, { x: 10, y: 20 }, { x: 1, y: 0 }, createNativeRng(37),
+  ).actor
+  const decodeHailWelcome = (scale: number, bounceSoundPitch: number | null = null) => decodeServerGameMessage(encodeGameMessage({
+    ...welcome,
+    snapshot: {
+      ...welcome.snapshot,
+      primarySpells: {
+        nextId: 2,
+        projectiles: [],
+        transients: [{
+          ...hail,
+          bounceSoundIndex: bounceSoundPitch === null ? null : 1,
+          bounceSoundPitch,
+          bounceSoundSequence: bounceSoundPitch === null ? 0 : 1,
+          painterRegistrations: [{ managerLane: 'actor', registrationOrdinal: 100 }],
+          scale,
+        }],
+      },
+    },
+  }))
+  for (const scale of [Math.fround(0.4), 0.5, Math.fround(0.6)]) {
+    const decoded = decodeHailWelcome(scale)
+    assert.equal(decoded.type, 'server-welcome')
+    const retained = decoded.snapshot.primarySpells.transients[0]
+    assert.ok(retained?.kind === 'water-hail')
+    assert.equal(retained.scale, scale)
+  }
+  for (const scale of [Math.fround(0.4) - 2 ** -25, Math.fround(0.6) + 2 ** -24, 1, 2]) {
+    assert.throws(() => decodeHailWelcome(scale), /scale must be within/)
+  }
+  for (const pitch of [Math.fround(0.8), 1, Math.fround(1.2)]) {
+    assert.doesNotThrow(() => decodeHailWelcome(0.5, pitch))
+  }
+  for (const pitch of [Math.fround(0.8) - 2 ** -24, Math.fround(1.2) + 2 ** -23]) {
+    assert.throws(() => decodeHailWelcome(0.5, pitch), /bounceSoundPitch/)
+  }
   const excessiveDamageX4 = JSON.parse(encodeGameMessage(welcome))
   excessiveDamageX4.snapshot.players['player-1'].progression.damageX4TicksRemaining = 6_001
   assert.throws(
@@ -4329,7 +4366,7 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
       rotationDegrees: 200,
       rotationStepDegrees: 4,
       savedBounceVelocity: -2,
-      scale: 1.5,
+      scale: 0.5,
       verticalVelocity: 1,
       worldKey: 'hub:courtyard',
     },
@@ -4408,6 +4445,12 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
   assert.throws(() => decodePrimarySpells(shortRow), /Hail frame payload length/)
   const hail = effects[2]
   if (hail?.kind !== 'water-hail') throw new Error('expected Hail protocol fixture')
+  for (const scale of [Math.fround(0.4), 0.5, Math.fround(0.6)]) {
+    assert.doesNotThrow(() => decodeEffects([{ ...hail, scale }]))
+  }
+  for (const scale of [0, Math.fround(0.4) - 2 ** -25, Math.fround(0.6) + 2 ** -24, 1, 2]) {
+    assert.throws(() => decodeEffects([{ ...hail, scale }]), /scale must be within/)
+  }
   const twoHail = createPrimarySpellSimulationFrame({
     nextId: 5,
     projectiles: [],
@@ -4462,7 +4505,7 @@ test('protocol carries a native Hail bounce above its constructor height domain'
     actor = stepped.actor
     rng = stepped.rng
   }
-  assert.equal(actor.height, -73.80191040039062)
+  assert.equal(actor.height, -73.8018798828125)
 
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -4497,8 +4540,15 @@ test('protocol carries a native Hail bounce above its constructor height domain'
     ).transients,
     [registeredActor],
   )
+  const minimumHeight = withMutatedHailRows(compact, (rows) => {
+    rows.heights[0] = -79.45001220703125
+  })
+  assert.doesNotThrow(() => decodeServerGameMessage(JSON.stringify({
+    ...message,
+    frame: { ...message.frame, primarySpells: minimumHeight },
+  })))
   const invalidHeight = withMutatedHailRows(compact, (rows) => {
-    rows.heights[0] = Math.fround(NATIVE_HAIL_MINIMUM_HEIGHT - 0.01)
+    rows.heights[0] = NATIVE_HAIL_MINIMUM_HEIGHT - 2 ** -17
   })
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     ...message,
@@ -4509,7 +4559,7 @@ test('protocol carries a native Hail bounce above its constructor height domain'
   })), /native Bouncer range/)
 })
 
-test('protocol carries the inclusive native Hail bounce-pitch endpoint', () => {
+test('protocol carries both signed native Hail bounce-pitch endpoints', () => {
   const born = createNativeWaterHailActor(
     3,
     'player-1',
@@ -4525,7 +4575,7 @@ test('protocol carries the inclusive native Hail bounce-pitch endpoint', () => {
     savedBounceVelocity: -2,
   }, createNativeRng(439_089))
   assert.ok(stepped.actor)
-  assert.equal(stepped.actor.bounceSoundPitch, Math.fround(1.2))
+  assert.equal(stepped.actor.bounceSoundPitch, Math.fround(0.8))
 
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -4573,7 +4623,10 @@ test('protocol carries the inclusive native Hail bounce-pitch endpoint', () => {
       },
     }))
   }
-  assert.throws(() => decodePitch(Math.fround(1 - 0.001)), /bounceSoundPitch/)
+  for (const pitch of [Math.fround(0.8), 1, Math.fround(1.2)]) {
+    assert.doesNotThrow(() => decodePitch(pitch))
+  }
+  assert.throws(() => decodePitch(Math.fround(0.8) - 2 ** -24), /bounceSoundPitch/)
   assert.throws(() => decodePitch(Math.fround(1.2) + 0.001), /bounceSoundPitch/)
 })
 

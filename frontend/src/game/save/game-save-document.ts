@@ -517,7 +517,7 @@ function restorePendingLevelUpOffers(
     }
     if (progression.pendingOffer !== null) continue
     if (
-      sourceSchemaVersion >= WEB_GAME_SAVE_SCHEMA_VERSION
+      sourceSchemaVersion >= 28
       || progression.pendingLevels.length === 0
     ) {
       throw new Error('game save level-up barrier pending player has no skill offer')
@@ -1510,7 +1510,13 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
       return { ...transient, speed }
     },
   )
-  return { ...source, transients }
+  return {
+    ...source,
+    // Older checkpoints lack Hail's native sign draw; retire those cosmetic actors.
+    transients: sourceSchemaVersion < 29
+      ? transients.filter(transient => transient.kind !== 'water-hail')
+      : transients,
+  }
 }
 
 function normalizeDiskSecondary(value: unknown): GameSimulationState['secondaryAbilities'] {

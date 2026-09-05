@@ -84,8 +84,12 @@ import {
 } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_HAIL_INITIAL_LIFE,
+  NATIVE_HAIL_MINIMUM_BOUNCE_PITCH,
+  NATIVE_HAIL_MAXIMUM_BOUNCE_PITCH,
   NATIVE_HAIL_LIFETIME_TICKS,
   NATIVE_HAIL_MINIMUM_HEIGHT,
+  NATIVE_HAIL_MINIMUM_SCALE,
+  NATIVE_HAIL_MAXIMUM_SCALE,
 } from '../core-kernels/air-water-spell-actors.ts'
 import {
   NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
@@ -419,7 +423,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 117
+export const GAME_PROTOCOL_VERSION = 118
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -6658,15 +6662,12 @@ function validatePrimarySpellHailFrameRow(
   const encodedBounceSoundPitch = rows.bounceSoundPitches[index]!
   const bounceSoundPitch = Number.isNaN(encodedBounceSoundPitch)
     ? null
-    : finite(encodedBounceSoundPitch, `${field}.bounceSoundPitch`)
-  if (
-    bounceSoundPitch !== null
-    && (bounceSoundPitch < 1 || bounceSoundPitch > Math.fround(1.2))
-  ) {
-    throw new GameProtocolError(
-      `${field}.bounceSoundPitch must be within [1,${Math.fround(1.2)}]`,
+    : finiteWithin(
+      encodedBounceSoundPitch,
+      `${field}.bounceSoundPitch`,
+      NATIVE_HAIL_MINIMUM_BOUNCE_PITCH,
+      NATIVE_HAIL_MAXIMUM_BOUNCE_PITCH,
     )
-  }
   const bounceSoundSequence = nonnegativeInteger(
     rows.bounceSoundSequences[index],
     `${field}.bounceSoundSequence`,
@@ -6707,10 +6708,9 @@ function validatePrimarySpellHailFrameRow(
   if (savedBounceVelocity < -5 || savedBounceVelocity > 0) {
     throw new GameProtocolError(`${field}.savedBounceVelocity is outside [-5,0]`)
   }
-  const scale = finite(rows.scales[index], `${field}.scale`)
-  if (scale < 1 || scale > 2) {
-    throw new GameProtocolError(`${field}.scale is outside [1,2]`)
-  }
+  finiteWithin(
+    rows.scales[index], `${field}.scale`, NATIVE_HAIL_MINIMUM_SCALE, NATIVE_HAIL_MAXIMUM_SCALE,
+  )
   const verticalVelocity = finite(rows.verticalVelocities[index], `${field}.verticalVelocity`)
   if (verticalVelocity < -5 || verticalVelocity > 20) {
     throw new GameProtocolError(`${field}.verticalVelocity is outside the Bouncer range`)
@@ -8506,15 +8506,12 @@ function primarySpellTransientPayload(
     }
     const bounceSoundPitch = source.bounceSoundPitch === null
       ? null
-      : finite(source.bounceSoundPitch, `${field}.bounceSoundPitch`)
-    if (
-      bounceSoundPitch !== null
-      && (bounceSoundPitch < 1 || bounceSoundPitch > Math.fround(1.2))
-    ) {
-      throw new GameProtocolError(
-        `${field}.bounceSoundPitch must be within [1,${Math.fround(1.2)}]`,
+      : finiteWithin(
+        source.bounceSoundPitch,
+        `${field}.bounceSoundPitch`,
+        NATIVE_HAIL_MINIMUM_BOUNCE_PITCH,
+        NATIVE_HAIL_MAXIMUM_BOUNCE_PITCH,
       )
-    }
     if ((bounceSoundSequence === 0) !== (bounceSoundIndex === null)) {
       throw new GameProtocolError(`${field}.bounce sound payload is inconsistent`)
     }
@@ -8544,10 +8541,9 @@ function primarySpellTransientPayload(
     if (savedBounceVelocity < -5 || savedBounceVelocity > 0) {
       throw new GameProtocolError(`${field}.savedBounceVelocity is outside [-5,0]`)
     }
-    const scale = finite(source.scale, `${field}.scale`)
-    if (scale < 1 || scale > 2) {
-      throw new GameProtocolError(`${field}.scale is outside [1,2]`)
-    }
+    const scale = finiteWithin(
+      source.scale, `${field}.scale`, NATIVE_HAIL_MINIMUM_SCALE, NATIVE_HAIL_MAXIMUM_SCALE,
+    )
     const verticalVelocity = finite(source.verticalVelocity, `${field}.verticalVelocity`)
     if (verticalVelocity < -5 || verticalVelocity > 20) {
       throw new GameProtocolError(`${field}.verticalVelocity is outside the Bouncer range`)

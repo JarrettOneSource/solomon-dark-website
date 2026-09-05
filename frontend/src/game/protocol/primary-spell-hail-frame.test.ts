@@ -33,7 +33,7 @@ test('packed Hail frame columns round-trip every owned scalar without row arrays
   rows.rotationDegrees.set([Math.fround(359.75), Math.fround(-720.5)])
   rows.rotationStepDegrees.set([Math.fround(10.5), 0])
   rows.savedBounceVelocities.set([Math.fround(-4.75), 0])
-  rows.scales.set([Math.fround(1.25), 2])
+  rows.scales.set([Math.fround(0.4), Math.fround(0.6)])
   rows.verticalVelocities.set([Math.fround(19.5), -5])
   rows.transientPositions.set([1, 16_383])
   rows.bounceSoundIndexes.set([3, 0xff])

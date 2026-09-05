@@ -37,7 +37,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
     life: 0.5,
     position: { x: 10, y: 20 },
     rotationDegrees: 0,
-    scale: 2,
+    scale: 0.5,
   }))
   runs.update(aura(2))
   runs.update(water(firstFrost))
@@ -84,7 +84,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   assert.deepEqual([0, 1, 2, 3].flatMap((corner) => {
     const offset = vertex(0, corner)
     return [vertices[offset], vertices[offset + 1]]
-  }), [-9, -7, 29, -7, 29, 33, -9, 33])
+  }), [5.25, 9.5, 14.75, 9.5, 14.75, 19.5, 5.25, 19.5])
   assert.deepEqual([0, 1, 2, 3].flatMap((corner) => {
     const offset = vertex(1, corner)
     return [vertices[offset], vertices[offset + 1]]
@@ -122,7 +122,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
     life: 0.5,
     position: { x: 10, y: 20 },
     rotationDegrees: 0,
-    scale: 2,
+    scale: 0.5,
   }))
   runs.update(water(firstFrost))
   runs.endFrame()
@@ -353,7 +353,7 @@ function hail(
     rotationDegrees: 45,
     rotationStepDegrees: 2,
     savedBounceVelocity: -2,
-    scale: 1.5,
+    scale: 0.5,
     verticalVelocity: 0,
     worldKey: 'boneyard:combined-water-mesh',
     ...overrides,

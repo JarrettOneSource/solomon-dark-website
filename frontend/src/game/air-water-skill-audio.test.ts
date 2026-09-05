@@ -30,7 +30,7 @@ test('Hail bounce counters emit once per unseen replicated edge and never on hyd
   const previous = hail({ bounceSoundSequence: 1 })
   const current = hail({
     bounceSoundIndex: 2,
-    bounceSoundPitch: Math.fround(1.1),
+    bounceSoundPitch: Math.fround(0.8),
     bounceSoundSequence: 3,
   })
   assert.deepEqual(newNativeAirWaterActorSoundRequests(
@@ -41,13 +41,13 @@ test('Hail bounce counters emit once per unseen replicated edge and never on hyd
   ), [
     {
       cue: 'hail-bounce-2',
-      playbackRate: Math.fround(1.1),
+      playbackRate: Math.fround(0.8),
       sourcePosition: current.position,
       volume: 1,
     },
     {
       cue: 'hail-bounce-2',
-      playbackRate: Math.fround(1.1),
+      playbackRate: Math.fround(0.8),
       sourcePosition: current.position,
       volume: 1,
     },
@@ -77,13 +77,13 @@ test('Hail bounce counters emit once per unseen replicated edge and never on hyd
   ), [
     {
       cue: 'hail-bounce-2',
-      playbackRate: Math.fround(1.1),
+      playbackRate: Math.fround(0.8),
       sourcePosition: current.position,
       volume: 1,
     },
     {
       cue: 'hail-bounce-2',
-      playbackRate: Math.fround(1.1),
+      playbackRate: Math.fround(0.8),
       sourcePosition: current.position,
       volume: 1,
     },
@@ -102,7 +102,7 @@ test('retained Hail audio follows arbitrary legal row order and immediate snapsh
 
   const currentOne = hail({
     bounceSoundIndex: 1,
-    bounceSoundPitch: Math.fround(1.1),
+    bounceSoundPitch: Math.fround(0.8),
     bounceSoundSequence: 4,
     id: 1,
     position: { x: 10, y: 20 },
@@ -122,13 +122,13 @@ test('retained Hail audio follows arbitrary legal row order and immediate snapsh
   }), { x: 20, y: 20 }, WORLD_KEY), [
     {
       cue: 'hail-bounce-1',
-      playbackRate: Math.fround(1.1),
+      playbackRate: Math.fround(0.8),
       sourcePosition: currentOne.position,
       volume: 1,
     },
     {
       cue: 'hail-bounce-1',
-      playbackRate: Math.fround(1.1),
+      playbackRate: Math.fround(0.8),
       sourcePosition: currentOne.position,
       volume: 1,
     },
@@ -182,7 +182,7 @@ function hail(overrides: Partial<PrimarySpellWaterHailState>): PrimarySpellWater
     rotationDegrees: 90,
     rotationStepDegrees: 4,
     savedBounceVelocity: -2,
-    scale: 1.5,
+    scale: 0.5,
     verticalVelocity: 1,
     worldKey: WORLD_KEY,
     ...overrides,

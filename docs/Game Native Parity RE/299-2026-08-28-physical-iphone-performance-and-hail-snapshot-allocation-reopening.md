@@ -144,6 +144,8 @@ The particle-run implementation and its public seam are removed completely.
 
 ## `Anim_Hail` dynamic-state and bounce-pitch protocol correction
 
+The 2026-09-04 reopening in [ledger 121](121-2026-08-15-air-and-water-learned-skill-runtime-closure.md#residual-signed-bounce-pitch-correction) supersedes the unsigned-pitch interpretation below: the native call is signed, so seed 439,089 reaches the lower `Math.fround(0.8)` endpoint. Its complete float32 update audit also corrects the height minimum to `-79.45001220703125`.
+
 The native Hail height envelope is not its constructor-only `[-20,0]` range.
 Following `Anim_Bouncer` through its doubled displacement and first bounce gives
 the closed minimum `Math.fround(-79.45)`. The strict protocol decoder now accepts

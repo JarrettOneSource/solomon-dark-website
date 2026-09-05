@@ -20,6 +20,7 @@ import {
   type NativeAirPrismaticSkillProfile,
   type NativeAirStormSkillProfile,
   type NativeWaterRingSkillProfile,
+  type NativeWaterHailTickResult,
 } from './air-water-spell-actors.ts'
 import { createNativeRng } from './native-rng.ts'
 
@@ -100,7 +101,7 @@ test('Disintegrate uses the event-local native high-tail percentile', () => {
   assert.deepEqual(zero.rng, certain.rng)
 })
 
-test('Hail birth consumes the exact eight-draw Bouncer and handler sequence', () => {
+test('Hail birth keeps native size and consumes the nine-word Bouncer and handler sequence', () => {
   const initial = createNativeRng(37)
   const born = createNativeWaterHailActor(
     9,
@@ -116,16 +117,44 @@ test('Hail birth consumes the exact eight-draw Bouncer and handler sequence', ()
   assert.ok(born.actor.height <= 0)
   assert.ok(born.actor.savedBounceVelocity <= -2)
   assert.ok(born.actor.savedBounceVelocity >= -5)
-  assert.ok(born.actor.scale >= 1 && born.actor.scale <= 2)
+  assert.ok(born.actor.scale >= Math.fround(0.4) && born.actor.scale <= Math.fround(0.6))
   assert.ok(born.actor.rotationStepDegrees >= 1 && born.actor.rotationStepDegrees <= 11)
   assert.equal(born.actor.horizontalVelocity.x, 0)
   assert.ok(born.actor.horizontalVelocity.y <= -4)
   assert.ok(born.actor.horizontalVelocity.y >= -6)
 
-  // Eight one-word draws: Float3, Float20, Float360, Float10, Float1,
+  // Four Bouncer words, two signed Float0.1 words, then
   // Float15, Integer100001, Float2.
-  assert.equal(born.rng.indexA, (initial.indexA + 8) % 55)
-  assert.equal(born.rng.indexB, (initial.indexB + 8) % 55)
+  assert.equal(born.rng.indexA, (initial.indexA + 9) % 55)
+  assert.equal(born.rng.indexB, (initial.indexB + 9) % 55)
+})
+
+test('Hail keeps signed native scale endpoints through its complete lifetime', () => {
+  for (const [signWord, expectedScale] of [[0, 0.6000000238418579], [64, 0.4000000059604645]] as const) {
+    const words = new Array<number>(55).fill(0)
+    // The four inherited Bouncer words precede Hail magnitude and sign.
+    words[1] = 50_000 * 64
+    words[4] = 100_000 * 64
+    words[5] = signWord
+    words[6] = 50_000 * 64
+    words[7] = 25_000 * 64
+    words[8] = 75_000 * 64
+    const born = createNativeWaterHailActor(
+      1, 'water', 'boneyard:run', 0, { x: 100, y: 0 }, { x: 1, y: 0 },
+      { indexA: 0, indexB: 31, words },
+    )
+    assert.equal(born.actor.scale, expectedScale)
+    assert.deepEqual(born.actor.position, { x: 107.5, y: -5.662342346113292e-7 })
+    assert.deepEqual(born.actor.horizontalVelocity, { x: 5.5, y: 0 })
+    let stepped: NativeWaterHailTickResult = born
+    let ticks = 0
+    while (stepped.actor !== null) {
+      assert.equal(stepped.actor.scale, expectedScale)
+      stepped = stepNativeWaterHailActor(stepped.actor, stepped.rng)
+      ticks += 1
+    }
+    assert.equal(ticks, 134)
+  }
 })
 
 test('Hail lifetime height envelope includes the complete first bounce arc', () => {
@@ -151,6 +180,7 @@ test('Hail lifetime height envelope includes the complete first bounce arc', () 
     actor = stepped.actor!
     rng = stepped.rng
   }
+  assert.equal(minimum, -79.45001220703125)
   assert.equal(minimum, NATIVE_HAIL_MINIMUM_HEIGHT)
 })
 
@@ -195,13 +225,25 @@ test('Hail owns Bouncer motion, bounce RNG, audio sequence, and 134-tick life', 
   assert.equal(bounced.actor.height, Math.fround(-1.3))
   assert.equal(bounced.actor.verticalVelocity, Math.fround(-1.3))
   assert.equal(bounced.rng.indexA, (born.rng.indexA + (
-    bounced.actor.bounceSoundSequence === 1 ? 5 : 3
+    bounced.actor.bounceSoundSequence === 1 ? 6 : 3
   )) % 55)
 
-  const endpointBounce = stepNativeWaterHailActor(forcedBounce, createNativeRng(439_089))
-  assert.ok(endpointBounce.actor)
-  assert.equal(endpointBounce.actor.bounceSoundSequence, 1)
-  assert.equal(endpointBounce.actor.bounceSoundPitch, Math.fround(1.2))
+  for (const [signWord, pitch] of [[0, 1.2000000476837158], [64, 0.800000011920929]] as const) {
+    for (const sample of [0, 1, 2, 3]) {
+      const words = new Array<number>(55).fill(0)
+      words[1] = 64 // Integer(3) == 1 admits the sound.
+      words[2] = 100_000 * 64
+      words[3] = signWord
+      words[4] = sample * 64
+      const bounced = stepNativeWaterHailActor(forcedBounce, { indexA: 0, indexB: 31, words })
+      assert.ok(bounced.actor)
+      assert.equal(bounced.actor.bounceSoundSequence, 1)
+      assert.equal(bounced.actor.bounceSoundPitch, pitch)
+      assert.equal(bounced.actor.bounceSoundIndex, sample)
+      assert.equal(bounced.rng.indexA, 6)
+      assert.equal(bounced.rng.indexB, 37)
+    }
+  }
 
   let actor = born.actor
   let rng = born.rng
@@ -213,6 +255,37 @@ test('Hail owns Bouncer motion, bounce RNG, audio sequence, and 134-tick life', 
     ticks += 1
   }
   assert.equal(ticks, 134)
+})
+
+test('Hail respects intermediate native motion stores and preserves its clock at settlement', () => {
+  const born = createNativeWaterHailActor(
+    1, 'water', 'boneyard:run', 0, { x: 0, y: 0 }, { x: 1, y: 0 }, createNativeRng(37),
+  )
+  const cases = [
+    { height: -0.03700000047683716, verticalVelocity: -0.00017299999308306724,
+      bounceProgress: 0.0010000000474974513, nextHeight: -0.037345997989177704,
+      nextVelocity: 0.000627000059466809 },
+    { height: -0.40700000524520874, verticalVelocity: -0.0019030000548809767,
+      bounceProgress: 0.010999999940395355, nextHeight: -0.41080600023269653,
+      nextVelocity: 0.006897000130265951 },
+  ]
+  for (const { nextHeight, nextVelocity, ...motion } of cases) {
+    const result = stepNativeWaterHailActor({ ...born.actor, ...motion }, born.rng)
+    assert.ok(result.actor)
+    assert.equal(result.actor.height, nextHeight)
+    assert.equal(result.actor.verticalVelocity, nextVelocity)
+  }
+  const stopped = stepNativeWaterHailActor({
+    ...born.actor, height: Math.fround(-0.1), verticalVelocity: Math.fround(0.1),
+    bounceProgress: 0.5, savedBounceVelocity: -1,
+  }, born.rng)
+  assert.ok(stopped.actor)
+  assert.equal(stopped.actor.height, 0)
+  assert.equal(stopped.actor.verticalVelocity, 0)
+  assert.deepEqual(stopped.actor.horizontalVelocity, { x: 0, y: 0 })
+  assert.equal(stopped.actor.rotationStepDegrees, 0)
+  assert.equal(stopped.actor.savedBounceVelocity, 0)
+  assert.equal(stopped.actor.bounceProgress, 0.5199999809265137)
 })
 
 test('Hail preserves native settled-zero and full airborne height lifecycle', () => {
@@ -237,6 +310,11 @@ test('Hail preserves native settled-zero and full airborne height lifecycle', ()
   assert.deepEqual(stationary.actor.position, settled.position)
   assert.equal(stationary.actor.bounceProgress, settled.bounceProgress)
   assert.equal(stationary.actor.height, 0)
+  const expiredInAir = stepNativeWaterHailActor({
+    ...born.actor, height: -10, life: Math.fround(0.015),
+  }, born.rng)
+  assert.equal(expiredInAir.actor, null)
+  assert.deepEqual(expiredInAir.rng, born.rng)
 
   let airborne = {
     ...born.actor,

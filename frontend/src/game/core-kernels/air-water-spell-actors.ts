@@ -36,12 +36,17 @@ export const NATIVE_HAIL_BOUNCE_RESTITUTION = Math.fround(0.65)
 export const NATIVE_HAIL_STOP_VELOCITY = Math.fround(-0.75)
 export const NATIVE_HAIL_BASE_SPEED = Math.fround(4)
 export const NATIVE_HAIL_ANGLE_DIVISIONS = 100_000
+export const NATIVE_HAIL_MINIMUM_SCALE = Math.fround(0.4)
+export const NATIVE_HAIL_MAXIMUM_SCALE = Math.fround(0.6)
+export const NATIVE_HAIL_MINIMUM_BOUNCE_PITCH = Math.fround(0.8)
+export const NATIVE_HAIL_MAXIMUM_BOUNCE_PITCH = Math.fround(1.2)
+const NATIVE_HAIL_PLACEMENT_PI = 3.141592502593994 // GMath +4, authored float at 0x007DE8A8.
 /**
  * Closed lifetime envelope from the inclusive Anim_Hail constructor endpoints
  * followed through tick 0x00458D80. The constructor-only height domain is
  * [-20, 0], but its first doubled-displacement bounce reaches this minimum.
  */
-export const NATIVE_HAIL_MINIMUM_HEIGHT = Math.fround(-79.45)
+export const NATIVE_HAIL_MINIMUM_HEIGHT = -79.45001220703125
 export const NATIVE_HAIL_LIFETIME_TICKS = 134
 const NATIVE_HAIL_LIFE_BY_AGE = Object.freeze(Array.from(
   { length: NATIVE_HAIL_LIFETIME_TICKS },
@@ -283,8 +288,8 @@ export function nativeWaterHailLifeAtAge(ageTicks: number): number {
 
 /**
  * Mirrors Anim_Bouncer followed by Anim_Hail and the Frost-Jet handler's
- * placement/speed draws. The order is gameplay-significant because all eight
- * draws consume the one authoritative combat RNG stream.
+ * placement/speed draws. The order is gameplay-significant because all nine
+ * words consume the one authoritative combat RNG stream.
  */
 export function createNativeWaterHailActor(
   id: number,
@@ -299,7 +304,7 @@ export function createNativeWaterHailActor(
   const height = drawNativeFloat(bounceVelocity.state, 20)
   const rotation = drawNativeFloat(height.state, 360)
   const rotationStep = drawNativeFloat(rotation.state, 10)
-  const scale = drawNativeFloat(rotationStep.state, 1)
+  const scale = drawNativeFloat(rotationStep.state, 0.1, true)
   const radialDistance = drawNativeFloat(scale.state, 15)
   const radialHeading = drawNativeInteger(
     radialDistance.state,
@@ -309,10 +314,10 @@ export function createNativeWaterHailActor(
   const headingDegrees = Math.fround(
     Math.fround(radialHeading.value / NATIVE_HAIL_ANGLE_DIVISIONS) * 360,
   )
-  const radians = headingDegrees * Math.PI / 180
+  const radians = Math.fround(headingDegrees * NATIVE_HAIL_PLACEMENT_PI / 180)
   const radial = {
-    x: Math.fround(Math.sin(radians) * radialDistance.value),
-    y: Math.fround(-Math.cos(radians) * radialDistance.value),
+    x: Math.fround(Math.fround(Math.sin(radians)) * radialDistance.value),
+    y: Math.fround(-Math.fround(Math.cos(radians)) * radialDistance.value),
   }
   const horizontalSpeed = Math.fround(NATIVE_HAIL_BASE_SPEED + speed.value)
   return {
@@ -339,7 +344,7 @@ export function createNativeWaterHailActor(
       rotationDegrees: rotation.value,
       rotationStepDegrees: Math.fround(1 + rotationStep.value),
       savedBounceVelocity: Math.fround(-(2 + bounceVelocity.value)),
-      scale: Math.fround(1 + scale.value),
+      scale: Math.fround(0.5 + scale.value),
       verticalVelocity: 0,
       worldKey,
     },
@@ -361,17 +366,17 @@ export function stepNativeWaterHailActor(
     }
   }
   let rng = sourceRng
-  let bounceProgress = Math.min(
+  const bounceProgress = Math.min(
     1,
     Math.fround(source.bounceProgress + NATIVE_HAIL_BOUNCE_PROGRESS_PER_TICK),
   )
+  const acceleration = source.bounceProgress * NATIVE_HAIL_BOUNCE_ACCELERATION
   let verticalVelocity = Math.fround(
-    source.verticalVelocity
-      + Math.fround(
-        Math.fround(source.bounceProgress * NATIVE_HAIL_BOUNCE_ACCELERATION) * 2,
-      ),
+    Math.fround(source.verticalVelocity + acceleration) + acceleration,
   )
-  let height = Math.fround(source.height + Math.fround(source.verticalVelocity * 2))
+  let height = Math.fround(
+    Math.fround(source.height + source.verticalVelocity) + source.verticalVelocity,
+  )
   let horizontalVelocity = { ...source.horizontalVelocity }
   let rotationStepDegrees = source.rotationStepDegrees
   let savedBounceVelocity = source.savedBounceVelocity
@@ -391,7 +396,7 @@ export function stepNativeWaterHailActor(
     const soundGate = drawNativeInteger(rng, 3)
     rng = soundGate.state
     if (soundGate.value === 1) {
-      const pitch = drawNativeFloat(rng, Math.fround(0.2))
+      const pitch = drawNativeFloat(rng, Math.fround(0.2), true)
       rng = pitch.state
       const sample = drawNativeInteger(rng, 4)
       rng = sample.state
@@ -409,7 +414,6 @@ export function stepNativeWaterHailActor(
       }
     }
     if (verticalVelocity > NATIVE_HAIL_STOP_VELOCITY) {
-      bounceProgress = 0
       horizontalVelocity = { x: 0, y: 0 }
       rotationStepDegrees = 0
       savedBounceVelocity = 0
