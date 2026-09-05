@@ -116,6 +116,7 @@ import {
 } from './game-content-cache.ts'
 import type { BrowserGameAdmission } from './game-bootstrap.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import { sameRuntimeProgression } from './runtime-progression.ts'
 import {
   readGameResumeToken,
   rememberGameResumeToken,
@@ -2745,31 +2746,5 @@ function sameLevelUpBarrier(
     && first.pendingPlayerIds.length === second.pendingPlayerIds.length
     && first.pendingPlayerIds.every((playerId, index) => (
       playerId === second.pendingPlayerIds[index]
-    ))
-}
-
-function sameRuntimeProgression(
-  current: ProtocolPlayerProgression | null,
-  next: ProtocolPlayerProgression | null,
-): boolean {
-  if (!current || !next) return current === next
-  return current.revision === next.revision
-    && current.currentHealth === next.currentHealth
-    && current.currentMana === next.currentMana
-    && current.deathEpoch === next.deathEpoch
-    && current.deathTick === next.deathTick
-    && current.lifeState === next.lifeState
-    && current.maximumHealth === next.maximumHealth
-    && current.maximumMana === next.maximumMana
-    && current.pendingOffer?.automaticChoiceIndex === next.pendingOffer?.automaticChoiceIndex
-    && current.poisonDamagePerTick === next.poisonDamagePerTick
-    && current.poisonTicksRemaining === next.poisonTicksRemaining
-    && current.selectedPrimarySkillId === next.selectedPrimarySkillId
-    && current.weldBuildId === next.weldBuildId
-    && current.advancedUnlocks.every((unlocked, index) => (
-      unlocked === next.advancedUnlocks[index]
-    ))
-    && current.concentrationSkillIds.every((skillId, index) => (
-      skillId === next.concentrationSkillIds[index]
     ))
 }

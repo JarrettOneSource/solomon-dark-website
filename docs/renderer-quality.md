@@ -10,11 +10,13 @@ The test cleanup removes unused CPU shader-math copies and their tests. GPU
 pixel checks and the Water mesh's geometry, ordering, and lifecycle tests remain;
 diagnostic labels are not asserted merely to increase the mutation score.
 
-The lighting/material follow-up measures the complete runtime owners listed in
+The presentation checks measure the complete runtime owners listed in
 [`scope.mjs`](../frontend/tools/quality/scope.mjs). The scope includes the four
 original files and their shared batch, surface, and texture-color responsibilities.
-Callers whose only change imports the canonical color helper remain outside this
-measurement scope. Test probes and analyzer adapters are development tooling.
+It also includes the runtime progression comparison that refreshes InventoryScreen
+after equipment changes, with its regression tests. Callers whose only change
+imports the canonical implementation remain outside this measurement scope.
+Test probes and analyzer adapters are development tooling.
 
 Run from the Website root with the pinned Node/npm versions:
 

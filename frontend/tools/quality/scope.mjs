@@ -1,6 +1,6 @@
-// Full authored runtime files from the lighting/material correction, including
-// any responsibilities moved during its measured cleanup.
+// Authored presentation modules with complete static, coverage, and mutation gates.
 export const rendererFiles = [
+  'src/game/runtime-progression.ts',
   'src/game/renderer/native-texture-color.ts',
   'src/game/renderer/native-material-batch.ts',
   'src/game/renderer/player-enchant-staff-view.ts',
@@ -11,6 +11,7 @@ export const rendererFiles = [
 ]
 
 export const rendererTests = [
+  'src/game/runtime-progression.test.ts',
   'src/game/renderer/native-texture-color.test.ts',
   'src/game/renderer/native-fixed-function-render-pipeline.test.ts',
   'src/game/renderer/player-enchant-staff-view.test.ts',

@@ -13,6 +13,133 @@
 > all ten native bitmap fonts. Inventory must inherit that shared correction;
 > no further Inventory-only offset is authorized.
 
+## 2026-09-05 — Inventory stat refresh after equipment changes
+
+The earlier closure covered the formatter's values but missed its refresh
+lifetime through the browser's retained progression state. Equip/unequip
+acceptance did not hold HP, MP, and progression revision constant. This skipped
+the lifecycle and per-branch validation required by the parity workflow.
+
+Reported witness: Windows Downloads `SDO - 4Menu not updating stats.mp4`,
+1920x1080, 16.081 seconds, SHA-256
+`205a9058c989c765953b02cce4ff075ff04d88ebec1515bdd4e794ca95358380`.
+At 0–3 seconds mana recovery remains `20.0 / sec` after Ring of Managrind
+returns to the backpack; reopening at 7 seconds shows `19.0 / sec`. At
+11–15 seconds re-equipping restores 20.0 and removal again leaves it stale.
+This is a user-supplied Website capture, not a clean-stock witness.
+
+Current-main `f9d736bf03e3d917ce1cf31dd3778a4423b40f94` reproduces the
+stale menu on Mac Chrome using a valid generated Ring of Managrind with
+native effect `(kind=9, operator=0, magnitude=1, target=0)`. Removing it
+changes authoritative recovery `11 -> 10` while the renderer still submits
+`mana heal: 11.0`. Console, page-error, and failed-response arrays are empty.
+At full mana, reopening alone also retains the stale value: a subsequent
+change to another compared progression field is what previously refreshed it.
+
+The red command is `node --experimental-strip-types
+tools/smoke-inventory-stats.mjs` from the Mac candidate's `frontend/`.
+Its failure is `removing the ring must refresh mana recovery without reopening
+inventory`, actual `mana heal: 11.0`, expected `mana heal: 10.0`.
+
+Native instruction and ownership evidence was refreshed against the retail
+image digest documented in the September 2 entry below, preferred base
+`0x00400000`, using the
+canonical Ghidra replica pool and the unchanged read-only Mod Loader tooling
+at `08bfba9ef367f7b863848030d0a289dc31e33192`. The wrapper and
+`refs_to_addr_decompile.py` hashes still match the earlier provenance.
+
+- `Equip` vtable `0x00794694`, slot `+4 -> 0x00555990`, first calls the
+  wizard refresh `0x0065F9A0` when Game exists, then calls the inventory string
+  refresh `0x00553EC0` whenever the live InventoryScreen pointer
+  `DAT_00819E58` is non-null. The callback does not distinguish adding from
+  removing a stat modifier. Vtable xrefs are construction `0x00552FB0`
+  and teardown `0x00555BC0`; construction owns the seven sink members
+  `+0x18..+0x30` and teardown releases them. Raw instructions at
+  `0x00555999..0x005559A5` select the owner from `Game+0x1654` using
+  `Equip+4` before refreshing that wizard; `0x005559B4` tail-calls the
+  InventoryScreen refresh.
+- The complete direct xref census of `0x00553EC0` has six call sites in
+  five functions: `0x00555810`, `0x00555990`, Hagatha purchase
+  `0x0056C340`, unforge `0x0056EC30`, and primary/concentration selection
+  `0x005D5600` (two calls). The existing formatter, geometry, and authored
+  tables in the September 2 entry remain the authority; no new numeric
+  approximation is needed.
+- The Website host already runs `replacePlayerEconomy ->
+  replacePlayerSkillState` for every equipment mutation and projects fresh
+  `inventoryStats`. `MainMenuScene`'s `sameRuntimeProgression` omits that
+  entire record. A diagnostic using the actual comparison independently
+  changes each of its nine numeric leaves: all nine are incorrectly treated
+  as unchanged, while a current-mana change is correctly admitted. Thus the
+  UI can discard a correct authoritative summary before the renderer sees it.
+
+The reopened system is **retention of the player progression presented by
+InventoryScreen across equipment/stat changes**. The implementation boundary
+is the shared runtime-progression comparison, with a directly testable module
+and only import/call-site wiring in the existing scene. It must compare values
+and retain equal snapshots, without adding per-frame redraws, synthetic
+progression revisions, or refresh timers.
+
+| Member | Native / Website source | Disposition and validation contract |
+| --- | --- | --- |
+| Recovery | `Skills_Wizard+0x98`, `MANARECOVERY`; `inventoryStats.manaRecoveryPerSecond` | `exact-ported`; red/green removal and repeated equip cycles while open |
+| Primary minimum, maximum, mana cost | `0x00663B30`; `inventoryStats.primarySpell` | `exact-ported`; independent increase/decrease tests for all three leaves; existing five-root/ten-weld formatter matrix retained |
+| Cast and walk speed | Inventory attribute page; `castSpeedPercent`, `walkSpeedPercent` | `exact-ported`; each leaf changes independently in both directions |
+| Pain, magic, poison resistance | Inventory attribute page; three resistance leaves | `exact-ported`; each leaf changes independently in both directions |
+| Seven sinks, both weapon classes, swap and removal, required Hat/Robe, third-ring perk | `Equip`, the established seven-sink inventory contract | `verified-already-at-parity` for admission/host effects; shared presentation invalidation tested from actual equipment mutations |
+| Standalone Hub and Boneyard, Fomentius/Luthacus/Shlorio companions | shared runtime progression and InventoryScreen model | `exact-ported`; browser inventory-removal journeys and shared comparison coverage |
+| Equal-valued snapshots, null/owner changes, ordinary progression updates | browser retained-state owner | `exact-ported`; preserve existing update conditions and reject every changed inventory-stat leaf |
+| Open/close, Equip notification, Hagatha purchase, unforge, primary/concentration selection | complete six-site native refresh census above | `verified-already-at-parity` for producer effects; all resulting inventory-stat changes enter the shared comparison |
+| Hagatha replacement pane, item catalogs, RNG, audio, save/protocol formats, native sink admission | separately owned contracts; no changed implementation or numeric data | `out-of-system` for this retention correction |
+
+No browser platform limitation is involved.
+
+### Focused implementation and browser receipt
+
+- `runtime-progression.ts` now compares every inventory-stat value. The
+  original comparison is removed from `MainMenuScene`; the scene imports
+  the canonical comparison without changing its subscription or component
+  body. Equal-valued snapshots still retain their existing UI state.
+- The actual ring-removal regression failed before the fix with HP, MP, and
+  revision held equal; all four focused tests now pass. The matrix independently
+  changes all nine stat leaves in both directions and preserves the existing
+  ordinary progression, selection, null, and equal-snapshot contracts.
+- Local and Mac candidate manifests matched byte-for-byte. Production builds
+  and focused lint passed. Chrome `152.0.7977.76` on macOS `26.6.2` exercised
+  ten journeys: Hub, Boneyard, and Fomentius/Luthacus/Shlorio companions, each
+  with double activation and drag removal followed by drag re-equip. Every
+  open pane shows `11.0 -> 10.0 -> 11.0 / sec`, with empty console-error,
+  page-error, and failed-response arrays. The browser test also decodes the
+  captured stats region and requires its rendered pixels to change on removal.
+- The post-removal Hub and Boneyard primary panes have identical decoded
+  RGBA at native rectangle `(86,230,228,80)`, SHA-256
+  `675d3d1bb761b03ceb09cd9dc302fb74b1e90c8e51cb7daf0cb7cb531c2c4213`.
+  Source values and visible pixels therefore agree on the restored 10.0.
+- The complete 43-line comparison module is included in the existing quality
+  scope. Istanbul reports 6/6 statements, 29/29 branches, 4/4 functions, and
+  5/5 executable lines; no exclusions. Its maxima are cyclomatic 20,
+  cognitive 2, Halstead Difficulty 25.43, and CRAP 20. Scoped Knip findings,
+  duplicate blocks, and explicit `any`/`unknown` types are all zero.
+- A focused Stryker run generated 114 mutations: 105 killed, 9 rejected by
+  TypeScript, and zero surviving, uncovered, timed-out, ignored, or runtime-error
+  mutants. The measured source SHA-256 is
+  `ba19834aaddb40ccf6fcfa845292453f20e060d88baafa611ece05a257429954`.
+- The complete Mac `/opt/homebrew/bin/bash ./scripts/validate.sh` finished
+  with exit 1 solely on the previously documented renderer mutation gate.
+  Backend/frontend/desktop tests, builds, lint and architecture boundaries,
+  TypeScript, bundle budget, media policy, coverage, and static checks passed.
+  The eight measured modules have 344/344 statements, 112/112 branches,
+  65/65 functions, and 324/324 executable lines covered. All 544 mutations
+  were evaluated: 385 killed, 129 TypeScript rejections, one timeout, and
+  29 survivors. The surviving files and counts exactly match entry 287's
+  unchanged diagnostic-name/label failures: building 2, Arena 8, ground/roads
+  6, fixed-function pipeline 7, shared material 3, and Staff attachment 3.
+  The comparison again has 105 killed, nine TypeScript rejections, and zero
+  survivors in this complete run. No mutation threshold or exclusion changed.
+
+Publication to main was authorized with the validation result above. This
+correction does not change the renderer mutation thresholds or include a
+production deployment.
+
 ## 2026-09-02 — Inventory primary-spell summary formatter reopening
 
 ### Reported smell and parity question
