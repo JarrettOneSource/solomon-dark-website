@@ -133,11 +133,16 @@ try {
       birthTick: 1_121,
       direction: { x: 1, y: 0 },
       endpoint: { x: 725, y: 330 },
+      hurricaneCharge: 0,
       id: 4_501,
       kind: 'air',
       midpoint: { x: 500, y: 330 },
       origin: { x: 275, y: 330 },
       ownerId: 'local',
+      painterRegistrations: [1, 2, 3].map(registrationOrdinal => ({
+        managerLane: 'actor',
+        registrationOrdinal,
+      })),
       targetId: null,
       lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
       underpowered: false,
@@ -220,6 +225,7 @@ try {
           goodies: [],
           kind: 'boneyard',
           lanternLightRegistration: null,
+          solomonPainterRegistration: null,
           loot: [],
           lootEvents: [],
           mageLightningPulses: [],
@@ -496,6 +502,9 @@ try {
         goodies: [],
         kind: 'boneyard',
         lanternLightRegistration: encounter
+          ? { managerLane: 'actor', registrationOrdinal: 2 }
+          : null,
+        solomonPainterRegistration: encounter
           ? { managerLane: 'actor', registrationOrdinal: 1 }
           : null,
         mageLightningPulses: [],

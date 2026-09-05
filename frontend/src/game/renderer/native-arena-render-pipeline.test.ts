@@ -71,10 +71,7 @@ test('keeps identity saturation, grayscale invariants, and zero alpha finite', (
 })
 
 test('the WebGL fragment path retains native inputs until saturation and blend', () => {
-  assert.match(
-    NATIVE_ARENA_FRAGMENT_SHADER_SOURCE,
-    /outColor\.a <= 0\.0 \|\| vColor\.a <= 0\.0\) discard/,
-  )
+  assert.doesNotMatch(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /discard/)
   assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /textureColor/)
   assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /vertexColor/)
   assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /textureGrey \* vertexGrey/)

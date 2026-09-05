@@ -4,13 +4,14 @@ import {
   Mesh,
   MeshGeometry,
   Shader,
-  colorBitGl,
   compileHighShaderGlProgram,
   localUniformBitGl,
   roundPixelsBitGl,
   textureBitGl,
   type Texture,
 } from 'pixi.js'
+
+import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-fixed-function-render-pipeline.ts'
 
 import {
   nativeBuildingMeshGrid,
@@ -29,7 +30,7 @@ export interface NativeStaticSurfaceMesh {
 
 const NATIVE_STATIC_SURFACE_PROGRAM = compileHighShaderGlProgram({
   bits: [
-    colorBitGl,
+    NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
     localUniformBitGl,
     textureBitGl,
     roundPixelsBitGl,

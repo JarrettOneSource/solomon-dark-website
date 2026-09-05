@@ -1,0 +1,1023 @@
+{
+  "binary": {
+    "version": "0.72.5",
+    "bytes": 4723200,
+    "sha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
+    "preferredImageBase": "0x00400000"
+  },
+  "tooling": {
+    "wrapperSha256": "b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49",
+    "project": "SolomonDark",
+    "program": "SolomonDark.exe",
+    "mode": "readOnly-noanalysis-replica"
+  },
+  "shaders": [
+    {
+      "name": "arena-saturation",
+      "address": "0x007DDB38",
+      "profile": "ps_2_0",
+      "active": true,
+      "sourceBytes": 395,
+      "sha256": "470c6ba03229674f3d001023ab08389c61eeea325c3bb6be1ad86dc11aa79c3e",
+      "sourceFile": "arena-saturation.hlsl"
+    },
+    {
+      "name": "dormant-blur",
+      "address": "0x007DDCD8",
+      "profile": "ps_2_0",
+      "active": false,
+      "sourceBytes": 587,
+      "sha256": "66652aeb28a0237407507f89cc015520b3c63b49d20302c37f4caec40d7311d9",
+      "sourceFile": "dormant-blur.hlsl"
+    }
+  ],
+  "xrefGroups": [
+    {
+      "target": "0x00B401E8",
+      "referenceCount": 129,
+      "functionCount": 44,
+      "references": [
+        {
+          "site": "0x004207E0",
+          "function": "FUN_00420760"
+        },
+        {
+          "site": "0x0041D92F",
+          "function": "FUN_0041d8f0"
+        },
+        {
+          "site": "0x0041D979",
+          "function": "FUN_0041d8f0"
+        },
+        {
+          "site": "0x0040D091",
+          "function": "FUN_0040c690"
+        },
+        {
+          "site": "0x0040D0AD",
+          "function": "FUN_0040c690"
+        },
+        {
+          "site": "0x0040D0CF",
+          "function": "FUN_0040c690"
+        },
+        {
+          "site": "0x0044020D",
+          "function": "FUN_0043ff70"
+        },
+        {
+          "site": "0x0043FB64",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FB79",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FB8D",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FBA4",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FBB8",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FBCE",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FBE4",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FBFA",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FC1F",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FC36",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FC4A",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FC61",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FC78",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FC8F",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FCA6",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FCBC",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FCD2",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FCE8",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FD04",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FD18",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FD2C",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FD42",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FD58",
+          "function": "FUN_0043fb60"
+        },
+        {
+          "site": "0x0043FAE0",
+          "function": "FUN_0043fad0"
+        },
+        {
+          "site": "0x0043FB01",
+          "function": "FUN_0043fad0"
+        },
+        {
+          "site": "0x0043FB1E",
+          "function": "FUN_0043fad0"
+        },
+        {
+          "site": "0x0043FE0D",
+          "function": "FUN_0043fd80"
+        },
+        {
+          "site": "0x0043FE20",
+          "function": "FUN_0043fd80"
+        },
+        {
+          "site": "0x0043FEEA",
+          "function": "FUN_0043fd80"
+        },
+        {
+          "site": "0x0043FF06",
+          "function": "FUN_0043fd80"
+        },
+        {
+          "site": "0x0044062B",
+          "function": "FUN_004405d0"
+        },
+        {
+          "site": "0x0044065E",
+          "function": "FUN_004405d0"
+        },
+        {
+          "site": "0x00440846",
+          "function": "FUN_004405d0"
+        },
+        {
+          "site": "0x0044058F",
+          "function": "FUN_00440520"
+        },
+        {
+          "site": "0x004405AC",
+          "function": "FUN_00440520"
+        },
+        {
+          "site": "0x004408B0",
+          "function": "FUN_00440890"
+        },
+        {
+          "site": "0x00441347",
+          "function": "FUN_00441330"
+        },
+        {
+          "site": "0x004413DE",
+          "function": "FUN_00441330"
+        },
+        {
+          "site": "0x00442C19",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442C4D",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442C8F",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442CE5",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442D10",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442D30",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442D3F",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442D51",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00442D6B",
+          "function": "FUN_00442bf0"
+        },
+        {
+          "site": "0x00440B5B",
+          "function": "FUN_00440b40"
+        },
+        {
+          "site": "0x00440B79",
+          "function": "FUN_00440b40"
+        },
+        {
+          "site": "0x0041D00D",
+          "function": "FUN_0041d000"
+        },
+        {
+          "site": "0x0041D033",
+          "function": "FUN_0041d000"
+        },
+        {
+          "site": "0x0041D07E",
+          "function": "FUN_0041d000"
+        },
+        {
+          "site": "0x0041D13F",
+          "function": "FUN_0041d000"
+        },
+        {
+          "site": "0x0041D154",
+          "function": "FUN_0041d000"
+        },
+        {
+          "site": "0x0041D29B",
+          "function": "FUN_0041d000"
+        },
+        {
+          "site": "0x0042091E",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x00420936",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x0042094E",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x00420964",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x004209A7",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x004209D6",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x00420A2E",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x00420A48",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x00420D7D",
+          "function": "FUN_00420d00"
+        },
+        {
+          "site": "0x00420E1D",
+          "function": "FUN_00420da0"
+        },
+        {
+          "site": "0x00420E97",
+          "function": "FUN_00420e40"
+        },
+        {
+          "site": "0x00442B66",
+          "function": "FUN_00442af0"
+        },
+        {
+          "site": "0x00442B85",
+          "function": "FUN_00442af0"
+        },
+        {
+          "site": "0x00442B9D",
+          "function": "FUN_00442af0"
+        },
+        {
+          "site": "0x00442BB5",
+          "function": "FUN_00442af0"
+        },
+        {
+          "site": "0x00442BD2",
+          "function": "FUN_00442af0"
+        },
+        {
+          "site": "0x00442E70",
+          "function": "FUN_00442e70"
+        },
+        {
+          "site": "0x00442E86",
+          "function": "FUN_00442e70"
+        },
+        {
+          "site": "0x00442E9C",
+          "function": "FUN_00442e70"
+        },
+        {
+          "site": "0x00442EB2",
+          "function": "FUN_00442e70"
+        },
+        {
+          "site": "0x00442ED0",
+          "function": "FUN_00442ed0"
+        },
+        {
+          "site": "0x00442EE6",
+          "function": "FUN_00442ed0"
+        },
+        {
+          "site": "0x00442EFC",
+          "function": "FUN_00442ed0"
+        },
+        {
+          "site": "0x00442F12",
+          "function": "FUN_00442ed0"
+        },
+        {
+          "site": "0x00442F66",
+          "function": "FUN_00442f30"
+        },
+        {
+          "site": "0x0041D2DF",
+          "function": "FUN_0041d2c0"
+        },
+        {
+          "site": "0x0041D307",
+          "function": "FUN_0041d2c0"
+        },
+        {
+          "site": "0x0044121B",
+          "function": "FUN_00441180"
+        },
+        {
+          "site": "0x004200FE",
+          "function": "FUN_00420030"
+        },
+        {
+          "site": "0x00441835",
+          "function": "FUN_004417f0"
+        },
+        {
+          "site": "0x0041DE11",
+          "function": "FUN_0041dd70"
+        },
+        {
+          "site": "0x00416210",
+          "function": "FUN_00416020"
+        },
+        {
+          "site": "0x00416276",
+          "function": "FUN_00416020"
+        },
+        {
+          "site": "0x00441487",
+          "function": "FUN_00441420"
+        },
+        {
+          "site": "0x004414CE",
+          "function": "FUN_00441420"
+        },
+        {
+          "site": "0x00441558",
+          "function": "FUN_00441420"
+        },
+        {
+          "site": "0x00441758",
+          "function": "FUN_00441420"
+        },
+        {
+          "site": "0x00440D45",
+          "function": "FUN_00440d40"
+        },
+        {
+          "site": "0x0041DFB1",
+          "function": "FUN_0041df10"
+        },
+        {
+          "site": "0x0041E2F1",
+          "function": "FUN_0041e250"
+        },
+        {
+          "site": "0x0041E631",
+          "function": "FUN_0041e590"
+        },
+        {
+          "site": "0x0041F025",
+          "function": "FUN_0041ef80"
+        },
+        {
+          "site": "0x0041F3B5",
+          "function": "FUN_0041f310"
+        },
+        {
+          "site": "0x0041FC35",
+          "function": "FUN_0041fb90"
+        },
+        {
+          "site": "0x004428CA",
+          "function": "FUN_00442810"
+        },
+        {
+          "site": "0x004428E7",
+          "function": "FUN_00442810"
+        },
+        {
+          "site": "0x00421457",
+          "function": "FUN_00421430"
+        },
+        {
+          "site": "0x0042151E",
+          "function": "FUN_004214c0"
+        },
+        {
+          "site": "0x00440A40",
+          "function": "FUN_00440a30"
+        },
+        {
+          "site": "0x0042159E",
+          "function": "FUN_00421560"
+        },
+        {
+          "site": "0x004215CB",
+          "function": "FUN_00421560"
+        },
+        {
+          "site": "0x0043C763",
+          "function": "ExactText_Render"
+        },
+        {
+          "site": "0x0043C78A",
+          "function": "ExactText_Render"
+        },
+        {
+          "site": "0x00442960",
+          "function": "FUN_00442950"
+        },
+        {
+          "site": "0x00442995",
+          "function": "FUN_00442950"
+        },
+        {
+          "site": "0x004429BC",
+          "function": "FUN_00442950"
+        },
+        {
+          "site": "0x00442DEB",
+          "function": "FUN_00442d90"
+        },
+        {
+          "site": "0x004401D8",
+          "function": "FUN_0043ff70"
+        },
+        {
+          "site": "0x00440BAB",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440BC4",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440BDA",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440BFD",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440C1A",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440C6D",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440C9A",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440CB7",
+          "function": "[no containing function]"
+        },
+        {
+          "site": "0x00440D06",
+          "function": "[no containing function]"
+        }
+      ]
+    },
+    {
+      "target": "0x00B401F4",
+      "referenceCount": 2,
+      "functionCount": 2,
+      "references": [
+        {
+          "site": "0x00420A4D",
+          "function": "FUN_004208a0"
+        },
+        {
+          "site": "0x0043FE15",
+          "function": "FUN_0043fd80"
+        }
+      ]
+    },
+    {
+      "target": "0x00B401F8",
+      "referenceCount": 2,
+      "functionCount": 2,
+      "references": [
+        {
+          "site": "0x00442BBA",
+          "function": "FUN_00442af0"
+        },
+        {
+          "site": "0x0043FEF7",
+          "function": "FUN_0043fd80"
+        }
+      ]
+    },
+    {
+      "target": "0x0041DF10",
+      "referenceCount": 57,
+      "functionCount": 21,
+      "references": [
+        {
+          "site": "0x0045CA33",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045CB73",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045CCC5",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045CDB0",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045CE80",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045CF4B",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045D086",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045D1C0",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045D308",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045D3E8",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045D4B8",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045D580",
+          "function": "FUN_0045c7e0"
+        },
+        {
+          "site": "0x0045E802",
+          "function": "FUN_0045e600"
+        },
+        {
+          "site": "0x0045E932",
+          "function": "FUN_0045e600"
+        },
+        {
+          "site": "0x0045EA64",
+          "function": "FUN_0045e600"
+        },
+        {
+          "site": "0x0045EB51",
+          "function": "FUN_0045e600"
+        },
+        {
+          "site": "0x0045EC41",
+          "function": "FUN_0045e600"
+        },
+        {
+          "site": "0x0045ED25",
+          "function": "FUN_0045e600"
+        },
+        {
+          "site": "0x0045F1D2",
+          "function": "FUN_0045efd0"
+        },
+        {
+          "site": "0x0045F302",
+          "function": "FUN_0045efd0"
+        },
+        {
+          "site": "0x0045F434",
+          "function": "FUN_0045efd0"
+        },
+        {
+          "site": "0x0045F521",
+          "function": "FUN_0045efd0"
+        },
+        {
+          "site": "0x0045F611",
+          "function": "FUN_0045efd0"
+        },
+        {
+          "site": "0x0045F6F5",
+          "function": "FUN_0045efd0"
+        },
+        {
+          "site": "0x0045FBB8",
+          "function": "FUN_0045f9d0"
+        },
+        {
+          "site": "0x0045FCE6",
+          "function": "FUN_0045f9d0"
+        },
+        {
+          "site": "0x0045FE18",
+          "function": "FUN_0045f9d0"
+        },
+        {
+          "site": "0x0045FF04",
+          "function": "FUN_0045f9d0"
+        },
+        {
+          "site": "0x0045FFF2",
+          "function": "FUN_0045f9d0"
+        },
+        {
+          "site": "0x004600D6",
+          "function": "FUN_0045f9d0"
+        },
+        {
+          "site": "0x004C297E",
+          "function": "FUN_004c2830"
+        },
+        {
+          "site": "0x004C2A17",
+          "function": "FUN_004c2830"
+        },
+        {
+          "site": "0x0050F743",
+          "function": "FUN_0050eac0"
+        },
+        {
+          "site": "0x0051983E",
+          "function": "FUN_00519070"
+        },
+        {
+          "site": "0x0059582F",
+          "function": "DarkCloudBrowser_Render"
+        },
+        {
+          "site": "0x00598D21",
+          "function": "MainMenu_Render"
+        },
+        {
+          "site": "0x00598E17",
+          "function": "MainMenu_Render"
+        },
+        {
+          "site": "0x005990BB",
+          "function": "MainMenu_Render"
+        },
+        {
+          "site": "0x0059ADFF",
+          "function": "FUN_0059ad40"
+        },
+        {
+          "site": "0x0059E46B",
+          "function": "FUN_0059e050"
+        },
+        {
+          "site": "0x0059E561",
+          "function": "FUN_0059e050"
+        },
+        {
+          "site": "0x0059F226",
+          "function": "FUN_0059ee10"
+        },
+        {
+          "site": "0x0059F31F",
+          "function": "FUN_0059ee10"
+        },
+        {
+          "site": "0x005A0A41",
+          "function": "MainMenu_RenderHeader"
+        },
+        {
+          "site": "0x0065BB41",
+          "function": "FUN_0065b550"
+        },
+        {
+          "site": "0x0065BBF4",
+          "function": "FUN_0065b550"
+        },
+        {
+          "site": "0x00459071",
+          "function": "FUN_00458f90"
+        },
+        {
+          "site": "0x005DBD61",
+          "function": "FUN_005dbc30"
+        },
+        {
+          "site": "0x005DBE3C",
+          "function": "FUN_005dbc30"
+        },
+        {
+          "site": "0x004D50DC",
+          "function": "FUN_004d4d00"
+        },
+        {
+          "site": "0x004DC862",
+          "function": "FUN_004dc460"
+        },
+        {
+          "site": "0x004DC969",
+          "function": "FUN_004dc460"
+        },
+        {
+          "site": "0x004DAA41",
+          "function": "FUN_004da650"
+        },
+        {
+          "site": "0x004DAB48",
+          "function": "FUN_004da650"
+        },
+        {
+          "site": "0x0059FEF6",
+          "function": "FUN_0059fae0"
+        },
+        {
+          "site": "0x0059FFEF",
+          "function": "FUN_0059fae0"
+        },
+        {
+          "site": "0x00459227",
+          "function": "FUN_00459130"
+        }
+      ]
+    },
+    {
+      "target": "0x0041E990",
+      "referenceCount": 35,
+      "functionCount": 26,
+      "references": [
+        {
+          "site": "0x0041438A",
+          "function": "FUN_004142e0"
+        },
+        {
+          "site": "0x00414420",
+          "function": "Glyph_Draw"
+        },
+        {
+          "site": "0x004146F4",
+          "function": "FUN_00414540"
+        },
+        {
+          "site": "0x00414747",
+          "function": "FUN_00414710"
+        },
+        {
+          "site": "0x004148CA",
+          "function": "FUN_00414760"
+        },
+        {
+          "site": "0x004149FA",
+          "function": "FUN_00414900"
+        },
+        {
+          "site": "0x00414CC9",
+          "function": "FUN_00414b60"
+        },
+        {
+          "site": "0x00414E69",
+          "function": "FUN_00414d00"
+        },
+        {
+          "site": "0x00415E9E",
+          "function": "FUN_00415de0"
+        },
+        {
+          "site": "0x00415FBE",
+          "function": "FUN_00415f00"
+        },
+        {
+          "site": "0x004162A8",
+          "function": "FUN_00416020"
+        },
+        {
+          "site": "0x00417198",
+          "function": "FUN_00417060"
+        },
+        {
+          "site": "0x004179E7",
+          "function": "FUN_00417760"
+        },
+        {
+          "site": "0x00417A8D",
+          "function": "FUN_00417760"
+        },
+        {
+          "site": "0x00417BE1",
+          "function": "FUN_00417760"
+        },
+        {
+          "site": "0x00417C88",
+          "function": "FUN_00417760"
+        },
+        {
+          "site": "0x00417E0E",
+          "function": "FUN_00417760"
+        },
+        {
+          "site": "0x00417FE6",
+          "function": "FUN_00417e30"
+        },
+        {
+          "site": "0x0043C628",
+          "function": "ExactText_Render"
+        },
+        {
+          "site": "0x0043C68E",
+          "function": "ExactText_Render"
+        },
+        {
+          "site": "0x004C27AB",
+          "function": "FUN_004c26d0"
+        },
+        {
+          "site": "0x004DFC36",
+          "function": "FUN_004dfb80"
+        },
+        {
+          "site": "0x00518C99",
+          "function": "FUN_00518620"
+        },
+        {
+          "site": "0x00518FE2",
+          "function": "FUN_00518620"
+        },
+        {
+          "site": "0x0051E6FA",
+          "function": "FUN_0051e270"
+        },
+        {
+          "site": "0x005BF08C",
+          "function": "FUN_005bed10"
+        },
+        {
+          "site": "0x005E1F51",
+          "function": "FUN_005e1ef0"
+        },
+        {
+          "site": "0x006018C5",
+          "function": "FUN_00600ed0"
+        },
+        {
+          "site": "0x00607B12",
+          "function": "FUN_00607440"
+        },
+        {
+          "site": "0x004DD750",
+          "function": "FUN_004dd370"
+        },
+        {
+          "site": "0x005477A7",
+          "function": "FUN_005468c0"
+        },
+        {
+          "site": "0x005E3ECA",
+          "function": "FUN_005e3e70"
+        },
+        {
+          "site": "0x005E3EE9",
+          "function": "FUN_005e3e70"
+        },
+        {
+          "site": "0x005E3F17",
+          "function": "FUN_005e3e70"
+        },
+        {
+          "site": "0x005E3F2A",
+          "function": "FUN_005e3e70"
+        }
+      ]
+    },
+    {
+      "target": "0x00655970",
+      "referenceCount": 6,
+      "functionCount": 6,
+      "references": [
+        {
+          "site": "0x00608C95",
+          "function": "FUN_00608ab0"
+        },
+        {
+          "site": "0x0060E405",
+          "function": "FUN_0060e280"
+        },
+        {
+          "site": "0x0060EF45",
+          "function": "FUN_0060edc0"
+        },
+        {
+          "site": "0x0060F3E5",
+          "function": "FUN_0060f260"
+        },
+        {
+          "site": "0x00612F74",
+          "function": "FUN_00612dc0"
+        },
+        {
+          "site": "0x0061F305",
+          "function": "FUN_0061f180"
+        }
+      ]
+    }
+  ],
+  "alphaTest": {
+    "engineReset": "0x0043FB60",
+    "setter": "0x0043FAD0",
+    "gameInitialization": "0x005BF6A0",
+    "disableCallsite": "0x005BF6B6",
+    "enabledAfterGameInitialization": false,
+    "engineResetThreshold": 0.009999999776482582,
+    "engineResetReferenceByte": 2,
+    "deviceResetCallers": [
+      "0x004405D0",
+      "0x00440B40"
+    ],
+    "browserRecovery": "Restore the initialized game material state; browser resize does not perform a D3D9 device reset."
+  },
+  "vertexColor": {
+    "gradientQuad": "0x0041DF10",
+    "texturedQuad": "0x0041E990",
+    "diffuseFormat": "straight ARGB8",
+    "interpolation": "independent Gouraud RGB and alpha",
+    "arenaSaturation": 0.6499999761581421
+  }
+}

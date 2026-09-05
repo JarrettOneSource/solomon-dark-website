@@ -83,15 +83,15 @@ test('native framed crops retain stock pixels while clamping their artificial pa
 test('straight texture and draw alpha combine once for NPM and PMA fragments', () => {
   const straightTexture = [1, 0.75, 0.25, 0.5] as const
   const premultipliedTexture = [0.5, 0.375, 0.125, 0.5] as const
-  const premultipliedVertex = [0.5, 0.25, 0.125, 0.5] as const
+  const vertex = [1, 0.5, 0.25, 0.5] as const
   const npm = nativeFixedFunctionFragmentRgba(
     straightTexture,
-    premultipliedVertex,
+    vertex,
     false,
   )
   const pma = nativeFixedFunctionFragmentRgba(
     premultipliedTexture,
-    premultipliedVertex,
+    vertex,
     true,
   )
   const npmSourceContribution = npm.slice(0, 3).map(channel => channel * npm[3])
@@ -104,12 +104,7 @@ test('straight texture and draw alpha combine once for NPM and PMA fragments', (
     [0.8, 0.1875, 0.015625],
   )
 
-  const legacyNpmRgb = straightTexture.slice(0, 3).map((channel, index) => (
-    channel * premultipliedVertex[index]! * straightTexture[3] * premultipliedVertex[3]
-  ))
-  assert.deepEqual(legacyNpmRgb, [0.125, 0.046875, 0.0078125])
-  assert.notDeepEqual(legacyNpmRgb, npmSourceContribution)
-  assert.match(NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE, /vColor\.rgb \/ vertexAlpha/)
+  assert.match(NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE, /textureColor \* vColor\.rgb/)
   assert.match(NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE, /textureAlpha \* vertexAlpha/)
 })
 
@@ -126,6 +121,7 @@ test('installs exact opaque-surface blend maps once and restores them after cont
       },
     },
     state: {
+      resetState() {},
       blendModesMap: {
         add: original,
         'add-npm': original,
@@ -175,6 +171,7 @@ test('Sprite-only renderers install native batching without requiring a mesh pip
     renderPipes: { batch },
     runners: { contextChange: { add() {} } },
     state: {
+      resetState() {},
       blendModesMap: {
         add: original,
         'add-npm': original,
@@ -196,6 +193,7 @@ test('transparent browser overlay surfaces preserve Porter-Duff alpha maps', () 
     gl,
     runners: { contextChange: { add() {} } },
     state: {
+      resetState() {},
       blendModesMap: {
         add: originalAdd,
         'add-npm': originalAdd,

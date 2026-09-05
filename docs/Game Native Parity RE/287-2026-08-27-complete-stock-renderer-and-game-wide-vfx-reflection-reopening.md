@@ -1,5 +1,249 @@
 # 2026-08-27 — Complete stock renderer and game-wide VFX reflection reopening
 
+## 2026-09-04 — Lighting, shadows, and particle material audit
+
+### Boundary and native evidence
+
+The requested additional lighting/shadow/particle audit reopens the shared
+**material ownership, vertex-color interpolation, and fragment acceptance** contract. The earlier
+straight-alpha correction divided interpolated premultiplied vertex RGB by
+interpolated alpha. That recovers a constant tint, but cannot recover a
+gradient whose color and alpha both vary. Its source-string tests explicitly
+preserved this mistake. The earlier Arena shader also added a transparent
+fragment discard without following application initialization past engine reset.
+
+Retail `SolomonDark.exe` 0.72.5 was rehashed: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`. Read-only canonical Ghidra replicas used the
+existing wrapper with SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+The fresh, complete [material xref catalog](renderer-materials/retail-render-materials.json)
+retains all 129 device references in 44 functions, all 57 gradient-quad
+references in 21 functions, all 35 textured-quad references in 26 functions,
+both references to each shader global, and all six shared shadow-projector
+callers. Each reference retains its exact preferred address.
+
+The two embedded shader sources are now Website-owned, byte-for-byte extracts:
+
+| Shader | Retail source and owner | Disposition |
+| --- | --- | --- |
+| [Arena saturation](renderer-materials/arena-saturation.hlsl), 395 bytes | `0x007DDB38`; compiler `0x0043FD80`; object `0x00B401F4`; `ps_2_0` | `verified-already-at-parity` for the arithmetic: separate texture/vertex RGB averages, their product, then lerp to texture-times-vertex by float32 `.65`; alpha is the independent product |
+| [Blur](renderer-materials/dormant-blur.hlsl), 587 bytes | `0x007DDCD8`; same compiler; object `0x00B401F8`; selector `0x00442AF0` | `out-of-system`: compiled capability with no active retail request writer; 24 samples divided by 20, not an active bloom or shadow-softening pass |
+| Game vertex shader | complete device-reference census; FVF `0x142` | `out-of-system`: retail uses fixed-function transformed/textured/diffuse vertices; there is no active authored game vertex shader to port |
+
+Instruction-derived facts:
+
+- `Graphics` gradient quad `0x0041DF10` packs R, G, B, and A independently
+  after their corresponding current-color multipliers. `0x0041C6A0` receives
+  two copies of each endpoint's packed diffuse color. Textured quad
+  `0x0041E990` likewise consumes independent packed colors. Neither multiplies
+  RGB by vertex alpha before the Gouraud interpolation established by
+  `0x0043FB60` (`D3DRS_SHADEMODE=2`).
+- Engine reset `0x0043FB60 -> 0x0043FAD0(.01)` enables a small alpha test.
+  Game initialization `0x005BF6A0`, vtable reference `0x0079A0C8`, subsequently
+  executes `FLDZ` and calls `0x0043FAD0(0)` at `0x005BF6B6`, disabling it.
+  Those are the setter's only two callers. An unconditional GLSL discard
+  therefore does not represent the game's initialized material state.
+- With native multiply `ZERO/SRCCOLOR`, transparent texture RGB still affects
+  destination RGB. Removing a zero-alpha fragment changes that operation;
+  normal/additive zero-alpha fragments contribute zero without a discard.
+  The [D3D9 alpha-test documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d9/alpha-testing-state)
+  defines discard as a separate acceptance state, not an implicit part of blending.
+- Arena binds its saturation before Region-light reset and retains it through
+  nested targets and late world painters. Region lighting and black shadows
+  are grayscale/black invariants of that equation. The existing provider,
+  authored-outline, target-quality, shadow-ownership, and setting inventories
+  in [entry 090](090-2026-08-15-complete-region-lighting-shadow-ownership-and-performance-closure.md)
+  remain the geometric/lighting authority; this correction changes their
+  shared material adapter, not their recovered data or order.
+
+The device-lifecycle sweep also records a native backend quirk: display reset
+`0x004405D0` and failed-Present recovery `0x00440B40` call engine reset again,
+which can restore `ALPHATESTENABLE` and the truncated reference byte `2`.
+That differs from fresh game initialization. These Windows D3D9 reset
+transitions are `out-of-system` for the browser material adapter: browser
+canvas resize does not reset a D3D device, and WebGL restoration restores the
+initialized game material policy. Consequently, very low-alpha fragments after
+a native device reset may differ from fresh stock and from the browser. This
+is a known backend-lifecycle distinction, not an unextracted shader or a
+justification for an unconditional browser discard.
+
+A fresh clean process was launched directly from the retail folder, PID
+`32232`, runtime base `0x00A60000` (delta `0x00660000`); module inspection found
+the retail image and Windows modules, without the Mod Loader. Its initial
+1600x900 client capture is supporting visual evidence, not the shader oracle.
+
+### Web reproduction and complete material membership
+
+The exact baseline is Website `9c0bfbe03705d9f8b868ba8cd28d7ee3c0d06606`.
+On Mac Chrome/WebGL2, a 16x16 quad with transparent red at its top vertices
+and opaque green at its bottom vertices produces midpoint RGB `(0,135,0)`
+outside Arena and `(16,104,16)` inside Arena. The native independent-color
+interpolation retains both endpoint colors. The reproduction uses actual
+retained MeshSimple geometry and the installed renderer, not the pure shader
+formula helper. Page and console error arrays are empty.
+
+The same GPU seam exposes a third defect at renderer installation. Pixi's
+`GlStateSystem` caches the currently bound blend selector. Replacing its factor
+map leaves the already-bound normal factors unchanged until a selector switch.
+A first PMA normal draw at alpha `128/255` writes alpha `128` instead of the
+native `64` into a transparent target, in both fixed and Arena renderers. The
+pixel test deliberately draws normal first and reproduces this on Mac. After
+installing native maps, call the existing `resetState()` once so the bound GL
+factors and selector cache agree; repeat at context restoration. This is
+initialization work, never a per-frame reset.
+
+The per-adapter matrix also catches ParticleContainer omitting the parent
+render group's color/alpha. Pixi supplies only `container.groupColorAlpha`
+through `uColor`; unlike the mesh encoder, its particle adaptor never binds
+the renderer's global uniform group. At parent and local alpha `128/255`,
+the particle writes alpha `64` while sibling Sprite/mesh/Graphics write the
+correct `16`. Boneyard's world is a render group. Bind the existing global
+uniform group to the native particle shader, recover its uniform color before
+vertex interpolation, and combine both alpha factors. The same pixel case
+must pass before and after context restoration. No new uniform buffer or
+per-particle CPU update is needed.
+
+Finally, the pixel harness must use the production initialization order:
+`createGameWebGlApplication` installs fixed-function shaders before Boneyard
+installs Arena shaders. Chaining the previous mesh `execute` wrapper lets it
+overwrite the Arena shader choice with its retired fixed-function shader.
+The first unbatchable NPM mesh then fails while setting `uTexture` on destroyed
+resources. Arena must select its own material and invoke the pinned Pixi
+`GlMeshAdaptor` execution method directly. The previous wrapper is retained
+only for teardown bookkeeping, not in the active Arena draw chain. The expanded
+GPU matrix covers this real installation sequence, not a test-only shortcut
+that skips fixed-function installation.
+
+The same stacked-owner defect affects `batch.buildStart`: after Arena creates
+its batcher, the earlier fixed-function wrapper replaces it again. This loses
+Arena's per-vertex color registry and saturation and recreates both batchers
+on every instruction-set build. Arena must call `BatcherPipe.prototype.buildStart`
+after selecting its own batcher, just as it calls the base mesh executor after
+selecting its own shader. Both older selection wrappers are removed from the
+active Arena chain together. Performance comparison must use the production
+fixed-then-Arena initialization sequence; the initial isolated-Arena benchmark
+is not a baseline for this additional discovery.
+
+The table gives the required final dispositions; the receipt must verify them
+before this reopening is called closed. Every primitive caller in the material
+catalog joins the shared draw adapter below; actor emission, motion, collision,
+and sprite tables stay with their existing class ledgers.
+
+| Member / branch | Disposition | Verification contract |
+| --- | --- | --- |
+| Fixed-function batch: Sprite and MeshSimple, stock NPM and composited PMA pages | `exact-ported` through independent vertex RGBA | rendered gradient, constant tint, fractional opacity, all three blend selectors |
+| Arena batch: the same Sprite/mesh families under `.65` saturation | `exact-ported` through the same vertex-color rule | colored/transparent endpoint pixels plus stock HLSL oracle |
+| Standalone default mesh in both pipelines | `exact-ported` for uniform-color representation; existing geometry unchanged | forced unbatchable mesh with fractional parent/local tint and opacity |
+| Arena standalone Graphics | `exact-ported` through the shared independent-color attribute | non-batched Graphics and opacity controls |
+| Building base/roof and Wall endpoint custom meshes | `exact-ported` through the shared independent-color attribute | all four Building selectors, 21 Monument controls, unchanged scalar data, Wall endpoint gradient, matched base/roof colors |
+| Boneyard ground/road custom mesh | `exact-ported` through the shared independent-color attribute | uniform-alpha geometry and ground pixels remain unchanged |
+| Acid and Storm falling gradients | `exact-ported` through Arena batch | both extracted endpoint color/alpha rows retain the transparent endpoint's RGB contribution |
+| Plane Orb/Leviathan per-vertex target meshes | `exact-ported` through Arena batch | native packed vertex-color interpolation and nested-target selector tests |
+| Staff enchant gradient in Create/Hub/Arena | `exact-ported` through fixed/Arena batches | packed vertex colors and fractional opacity; existing authored Staff tables unchanged |
+| Weather ParticleContainer, including rain and splash NPM art | `exact-ported` for independent particle tint and removal of invented discard | normal/additive/multiply textured-particle pixel matrix, uniform opacity |
+| Retained shadow meshes: all six authored-projector callers plus Gate/FenceGrate/Rails/Wall programs | `verified-already-at-parity` through corrected shared shader | black ramp invariance, every existing caster test, painter-order and pooled-resource checks |
+| Region light stamps, target clear, multiply, `.06/.25` quality and resize | `verified-already-at-parity` through corrected shared shader | grayscale invariance, native target RGB/alpha equations, existing target and source tests |
+| Initial normal blend and restored GL context | `exact-ported` by resetting Pixi state after native factor installation | the first normal draw writes native alpha without needing an earlier additive/multiply draw |
+| Primary Water/Hail combined mesh | `verified-already-at-parity`: already carries `aWaterColor` independently and has no discard | existing water-mesh compositing contracts and built particle journey |
+| Non-Arena default Graphics and transparent browser UI output | `verified-already-at-parity` for their existing PMA composition | no replacement of the browser's final alpha-composition contract |
+| Inactive native actors, dormant blur, editor-only geometry generation, shader-library compiler internals | `out-of-system`: no new actor, effect, asset, editor, or compiler implementation is requested | shared renderer census retained; no speculative visual enhancement |
+
+There is no browser-platform blocker. Source colors, target colors, retained
+geometry, blend factors, and painter order can all be represented in WebGL2.
+No inferred emitter constant or invented glow/blur is permitted by this audit.
+
+### Implementation and validation contract
+
+Keep the shared straight-vertex-color shader bits in the existing
+`native-fixed-function-render-pipeline.ts`; the Arena and custom surface
+adapters consume them. Recover the uniform Pixi group color in the vertex
+stage, then multiply straight per-vertex RGBA and interpolate it. The fragment
+stage handles only texture representation, native modulation/saturation, and
+the chosen blend representation. Remove the Arena/particle discard. Preserve
+the existing retained buffers, atlas pages, batching, source policies and
+teardown. No per-frame texture, mesh, or shader allocation is introduced.
+
+Use actual GPU pixel regression as the public test seam, with the existing
+blend/source/pure-formula tests as supporting contracts. Run the red and green
+proofs, focused suites, full `validate.sh`, built `/game` Acid/Storm and particle
+journeys on the Mac mini. Measure warmed baseline/stress/restoration rendering
+and resource high-water marks; report p50/p95/p99/max and long tasks rather
+than infer speed from shader arithmetic. Re-run final candidate tests after
+the final source edit and record missing configured quality analyzers honestly.
+
+### Final implementation and validation receipt — 2026-09-05
+
+- Shared vertex shader bits now preserve independent native RGB/alpha, including
+  the colors at transparent gradient endpoints. Arena owns both batch and mesh
+  selection directly; the previous wrappers no longer replace its material.
+  The fragment discard is removed, native blend maps are bound immediately and
+  after context restoration, and particles inherit the world render group's
+  tint/opacity. Custom Building/Wall/ground meshes use the same vertex rule.
+  Redundant local Pixi interface copies and `unknown` bridges were replaced with
+  the pinned dependency's actual types. No atlas, emitter, simulation, or
+  authored shadow-outline value was changed.
+- `npm run smoke:game:render-materials` passes **75 actual GPU pixel cases** on
+  Mac Chrome `152.0.7977.76`, Apple M2 / ANGLE Metal / WebGL2. They cover NPM/PMA
+  gradients, both rain endpoint rows, grayscale light and black shadow
+  invariants, all three blend selectors, transparent multiply, first normal
+  draw, standalone mesh/Graphics/surface/particle adapters, nested group opacity,
+  production installation order, and context restoration. Page, console, and
+  HTTP error arrays are empty. The earlier shader, startup-alpha, particle,
+  and stacked-adapter failures were each observed before their correction.
+- The full Mac `/opt/homebrew/bin/bash ./scripts/validate.sh` passed on integrated
+  base `456820fea10f446558eb017c8f8822bf81bb2de8` with this production change:
+  **19 Python backend/contracts tests and 2,682 JavaScript tests**, TypeScript,
+  configured lint/boundaries, generated-data checks, backend/frontend/game-host
+  builds, bundle budget, and production media/CSP policy. The gate log SHA-256
+  is `97a255f2b556512aa5e73fbe1237b0550826268ff49fb7a456f4efa44d407733`.
+  The built game entry is **262,313 raw / 79,056 gzip bytes**.
+- Built `/game` journeys passed Call Leviathan, Planewalker, Magic Storm, and
+  Acid Rain with empty page/console/response arrays. Additional 1600x900 Storm
+  and Acid journeys observed **167/176 maximum live effect actors**, and their
+  captures were visually reviewed. The 1920x1080 particle-barrier journey
+  passed all three grave/wall cases, showing **50/235/243 Water particles**,
+  with empty page/console/response/request/WebSocket error arrays.
+- The Building journey passed every Building and Monument selector and Wall
+  endpoint lighting: base/roof mismatches **0**; changed roof pixels
+  **17,446 / 18,340 / 20,153 / 16,794**. The shadow journey passed left/right
+  source movement and late Air illumination (**476,183 changed pixels**, four
+  Air path lights). The generated scene retained **14 meshes, 50 quads, capacity
+  68**, with zero depth-order mismatches and no capacity growth over 180 frames.
+  Its stale Air/Solomon/Lantern fixture registrations were corrected to the
+  current manager contract; the smoke was rerun successfully after that cleanup.
+- All local/Mac changed production files were byte-identical. The installed
+  Oxlint complexity rule passed a maximum of **21** on all seven changed
+  runtime/probe files, with zero warnings/errors. The four runtime files are
+  **544 / 481 / 116 / 193 lines**, and contain no explicit `any` or `unknown`.
+  Cognitive complexity, Halstead Difficulty, complete statement/branch/function/
+  line coverage, CRAP, mutation survival, whole-scope dead-code reachability,
+  and duplication remain **unmeasured**: no corresponding configured analysis
+  pipeline exists. No analyzer dependency, exclusion, or suppression was added.
+
+The controlled production-initialization benchmark used 1600x900, 40 warmup
+frames per phase, and three-second measurement intervals. The sequence was
+baseline build A, candidate B, then baseline A again. The 4,096-quad churn
+phase reinserted one existing painter each frame, forcing instruction rebuilds
+without changing the population. All phases held approximately 60 Hz, maximum
+frame gaps were 16.8 ms, and no long task occurred.
+
+| Phase | Baseline A p95 submission | Candidate B p95 submission | Baseline A repeat p95 |
+| --- | ---: | ---: | ---: |
+| 64 quads | 0.6 ms | 0.4 ms | 0.5 ms |
+| 4,096 stable quads | 1.9 ms | 2.9 ms | 2.3 ms |
+| 4,096 quads with painter churn | 4.4 ms | 3.3 ms | 5.6 ms |
+| Restored 64 quads | 0.4 ms | 0.4 ms | 0.4 ms |
+
+During churn, A created **358 buffers / 179 programs**, and its repeat created
+**360 / 180**; B created **zero buffers, programs, or textures** after warmup.
+The restored native color path costs 0.6–1.0 ms more in the dense stable case;
+the churn case improves while eliminating resource recreation. These are CPU
+submission times plus measured rAF pacing, not GPU timer-query measurements
+or physical-phone performance claims. The independent generated-shadow
+resource test also passed. Temporary captures/logs are disposable after their
+measurements are recorded here.
+
 > **2026-08-29 world-painter closure:** the low-level Graphics/D3D,
 > texture, shader, sampler, blend, and child-local painter results in this file
 > remain authoritative. [Entry 297](<297-2026-08-29-complete-region-world-painter-layering-audit.md>)

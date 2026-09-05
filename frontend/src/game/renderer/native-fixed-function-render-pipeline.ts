@@ -5,14 +5,18 @@ import {
   Matrix,
   Shader,
   Texture,
-  colorBitGl,
   compileHighShaderGlProgram,
   generateTextureBatchBitGl,
   getBatchSamplersUniformGroup,
   localUniformBitGl,
   roundPixelsBitGl,
   textureBitGl,
+  type GlMeshAdaptor,
+  type InstructionSet,
+  type Mesh,
+  type MeshPipe,
   type Renderer,
+  type WebGLRenderer,
 } from 'pixi.js'
 
 export const NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS = Object.freeze({
@@ -63,42 +67,14 @@ interface NativeWebGlRendererInternals {
   }
   readonly state?: {
     readonly blendModesMap?: Record<string, number[]>
+    resetState(): void
   }
 }
 
 type NativeBatchMeshElement = Parameters<DefaultBatcher['packAttributes']>[0]
 type NativeBatchQuadElement = Parameters<DefaultBatcher['packQuadAttributes']>[0]
-type NativeBatchShader = DefaultBatcher['shader']
 type NativeBatchOptions = ConstructorParameters<typeof DefaultBatcher>[0]
 const nativeFixedFunctionVertexColors = new WeakMap<object, Uint32Array>()
-
-interface NativeInstructionSet {
-  readonly uid: number
-}
-
-interface NativeBatchPipe {
-  readonly _batchersByInstructionSet: Record<number, Record<string, DefaultBatcher>>
-  buildStart(instructionSet: NativeInstructionSet): void
-}
-
-interface NativeMeshRenderable {
-  readonly _shader: Shader | null
-  readonly texture: Texture
-}
-
-interface NativeMeshAdaptor {
-  _shader: Shader | null
-  destroy(): void
-  execute(meshPipe: unknown, mesh: NativeMeshRenderable): void
-}
-
-interface NativeTextureAlphaRendererInternals {
-  readonly limits?: { readonly maxBatchableTextures: number }
-  readonly renderPipes?: {
-    readonly batch?: NativeBatchPipe
-    readonly mesh?: { readonly _adaptor?: NativeMeshAdaptor }
-  }
-}
 
 export type NativeFixedFunctionRgba = readonly [
   red: number,
@@ -107,16 +83,36 @@ export type NativeFixedFunctionRgba = readonly [
   alpha: number,
 ]
 
+// Pixi uniforms carry premultiplied group color. Recover that uniform tint
+// before interpolating the native, independently packed vertex RGB and alpha.
+export const NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL = {
+  name: 'native-straight-vertex-color',
+  vertex: {
+    header: 'in vec4 aColor;',
+    end: `
+      float nativeGroupAlpha = vColor.a;
+      vec3 nativeGroupColor = nativeGroupAlpha > 0.0
+        ? vColor.rgb / nativeGroupAlpha
+        : vec3(0.0);
+      vColor = vec4(aColor.rgb * nativeGroupColor, aColor.a * nativeGroupAlpha);
+    `,
+  },
+}
+
+export const NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL = {
+  name: 'native-straight-uniform-color',
+  vertex: {
+    end: 'if (vColor.a > 0.0) vColor.rgb /= vColor.a;',
+  },
+}
+
 export const NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE = `
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
   vec3 textureColor = texturePremultiplied > 0.5 && textureAlpha > 0.0
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
-  vec3 vertexColor = vertexAlpha > 0.0
-    ? vColor.rgb / vertexAlpha
-    : vec3(0.0);
-  vec3 nativeColor = textureColor * vertexColor;
+  vec3 nativeColor = textureColor * vColor.rgb;
   float finalAlpha = textureAlpha * vertexAlpha;
   finalColor = vec4(
     texturePremultiplied > 0.5 ? nativeColor * finalAlpha : nativeColor,
@@ -202,18 +198,11 @@ export function nativeFixedFunctionFragmentRgba(
         texture[2] / textureAlpha,
       ] as const
     : texture
-  const vertexColor = vertexAlpha > 0
-    ? [
-        vertex[0] / vertexAlpha,
-        vertex[1] / vertexAlpha,
-        vertex[2] / vertexAlpha,
-      ] as const
-    : [0, 0, 0] as const
   const alpha = textureAlpha * vertexAlpha
   const color = [
-    textureColor[0] * vertexColor[0],
-    textureColor[1] * vertexColor[1],
-    textureColor[2] * vertexColor[2],
+    textureColor[0] * vertex[0],
+    textureColor[1] * vertex[1],
+    textureColor[2] * vertex[2],
   ] as const
   return premultiplied
     ? [color[0] * alpha, color[1] * alpha, color[2] * alpha, alpha]
@@ -225,19 +214,21 @@ export function installNativeFixedFunctionRenderPipeline(
   options: NativeFixedFunctionRenderPipelineOptions = {},
 ): void {
   if (installedRenderers.has(renderer)) return
-  const internals = renderer as unknown as NativeWebGlRendererInternals
-  const blendModes = internals.state?.blendModesMap
+  const internals = renderer as Renderer & NativeWebGlRendererInternals
+  const state = internals.state
+  const blendModes = state?.blendModesMap
   const gl = internals.gl
   const contextChange = internals.runners?.contextChange
-  if (!blendModes || !gl || !contextChange) {
+  if (!state || !blendModes || !gl || !contextChange) {
     throw new Error('Native fixed-function rendering requires Pixi WebGL state internals.')
   }
   installNativeBlendModes(blendModes, gl, options.preserveBrowserCompositingAlpha === true)
+  state.resetState()
   if (options.installTextureAlphaShaders !== false) {
     installNativeTextureAlphaShaders(renderer)
   }
   contextChange.add({
-    contextChange(restoredGl) {
+    contextChange(restoredGl: NativeGlBlendConstants) {
       const restoredBlendModes = internals.state?.blendModesMap
       if (!restoredBlendModes) {
         throw new Error('Pixi WebGL state was not restored before native fixed-function state.')
@@ -247,6 +238,7 @@ export function installNativeFixedFunctionRenderPipeline(
         restoredGl,
         options.preserveBrowserCompositingAlpha === true,
       )
+      state.resetState()
     },
   })
   installedRenderers.add(renderer)
@@ -274,7 +266,7 @@ class NativeFixedFunctionBatchShader extends Shader {
       glProgram: compileHighShaderGlProgram({
         name: 'native-fixed-function-batch',
         bits: [
-          colorBitGl,
+          NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
           generateTextureBatchBitGl(maxTextures),
           roundPixelsBitGl,
           NATIVE_TEXTURE_ALPHA_MODE_BIT_GL,
@@ -299,7 +291,7 @@ class NativeFixedFunctionBatcher extends DefaultBatcher {
     this.vertexSize = 7
     this.shader = new NativeFixedFunctionBatchShader(
       options.maxTextures,
-    ) as unknown as NativeBatchShader
+    )
   }
 
   override packAttributes(
@@ -363,18 +355,18 @@ class NativeFixedFunctionBatcher extends DefaultBatcher {
   }
 
   override _updateMaxTextures(maxTextures: number): void {
-    const current = this.shader as unknown as NativeFixedFunctionBatchShader
+    const current = this.shader as NativeFixedFunctionBatchShader
     if (current.maxTextures === maxTextures) return
     current.destroy(true)
     this.shader = new NativeFixedFunctionBatchShader(
       maxTextures,
-    ) as unknown as NativeBatchShader
+    )
   }
 
   override destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
-    const shader = this.shader as unknown as NativeFixedFunctionBatchShader
+    const shader = this.shader as NativeFixedFunctionBatchShader
     shader.destroy(true)
     super.destroy()
   }
@@ -401,21 +393,21 @@ function multiplyNativeFixedFunctionPackedColors(vertex: number, group: number):
 }
 
 function installNativeTextureAlphaShaders(renderer: Renderer): void {
-  const nativeRenderer = renderer as unknown as NativeTextureAlphaRendererInternals
+  const nativeRenderer = renderer as WebGLRenderer
   const batchPipe = nativeRenderer.renderPipes?.batch
   const maxTextures = nativeRenderer.limits?.maxBatchableTextures
-  if (!batchPipe?._batchersByInstructionSet || !maxTextures) {
+  if (!batchPipe?.['_batchersByInstructionSet'] || !maxTextures) {
     throw new Error('Native fixed-function rendering requires a Pixi WebGL batch owner.')
   }
 
   const originalBuildStart = batchPipe.buildStart
   batchPipe.buildStart = function buildNativeFixedFunctionBatch(
-    instructionSet: NativeInstructionSet,
+    instructionSet: InstructionSet,
   ): void {
-    let batchers = this._batchersByInstructionSet[instructionSet.uid]
+    let batchers = this['_batchersByInstructionSet'][instructionSet.uid]
     if (!batchers) {
       batchers = {}
-      this._batchersByInstructionSet[instructionSet.uid] = batchers
+      this['_batchersByInstructionSet'][instructionSet.uid] = batchers
     }
     if (!(batchers.default instanceof NativeFixedFunctionBatcher)) {
       batchers.default?.destroy()
@@ -424,31 +416,31 @@ function installNativeTextureAlphaShaders(renderer: Renderer): void {
     originalBuildStart.call(this, instructionSet)
   }
 
-  const meshAdaptor = nativeRenderer.renderPipes?.mesh?._adaptor
+  const meshAdaptor = nativeRenderer.renderPipes.mesh?.['_adaptor'] as GlMeshAdaptor | undefined
   if (!meshAdaptor) return
-  if (!meshAdaptor._shader) {
+  if (!meshAdaptor['_shader']) {
     throw new Error('Native fixed-function rendering requires the Pixi WebGL mesh shader owner.')
   }
   const premultipliedMeshShader = createNativeFixedFunctionMeshShader(true)
   const unpremultipliedMeshShader = createNativeFixedFunctionMeshShader(false)
-  const originalMeshShader = meshAdaptor._shader
+  const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
   const originalMeshDestroy = meshAdaptor.destroy
   originalMeshShader.destroy(true)
-  meshAdaptor._shader = unpremultipliedMeshShader
+  meshAdaptor['_shader'] = unpremultipliedMeshShader
   meshAdaptor.execute = function executeNativeFixedFunctionMesh(
-    meshPipe: unknown,
-    mesh: NativeMeshRenderable,
+    meshPipe: MeshPipe,
+    mesh: Mesh,
   ): void {
     if (mesh._shader === null) {
-      this._shader = nativeTextureIsPremultiplied(mesh.texture)
+      this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
         ? premultipliedMeshShader
         : unpremultipliedMeshShader
     }
     originalMeshExecute.call(this, meshPipe, mesh)
   }
   meshAdaptor.destroy = function destroyNativeFixedFunctionMeshAdaptor(): void {
-    const activeShader = this._shader
+    const activeShader = this['_shader']
     originalMeshDestroy.call(this)
     if (premultipliedMeshShader !== activeShader) premultipliedMeshShader.destroy(true)
     if (unpremultipliedMeshShader !== activeShader) unpremultipliedMeshShader.destroy(true)
@@ -468,7 +460,13 @@ function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
   return new Shader({
     glProgram: compileHighShaderGlProgram({
       name: `native-fixed-function-mesh-${premultiplied ? 'pma' : 'npm'}`,
-      bits: [localUniformBitGl, textureBitGl, roundPixelsBitGl, nativeColorBit],
+      bits: [
+        localUniformBitGl,
+        textureBitGl,
+        roundPixelsBitGl,
+        NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
+        nativeColorBit,
+      ],
     }),
     resources: {
       uTexture: Texture.EMPTY.source,

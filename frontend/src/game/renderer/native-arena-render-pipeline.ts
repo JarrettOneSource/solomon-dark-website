@@ -1,21 +1,32 @@
 import {
   BatchGeometry,
+  BatcherPipe,
   DefaultBatcher,
+  GlMeshAdaptor,
   GlProgram,
   Matrix,
   Shader,
   Texture,
   TextureStyle,
   UniformGroup,
-  colorBitGl,
   compileHighShaderGlProgram,
   generateTextureBatchBitGl,
   getBatchSamplersUniformGroup,
   localUniformBitGl,
   roundPixelsBitGl,
   textureBitGl,
+  type GlGraphicsAdaptor,
+  type InstructionSet,
+  type Mesh,
+  type MeshPipe,
   type Renderer,
+  type WebGLRenderer,
 } from 'pixi.js'
+
+import {
+  NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
+  NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
+} from './native-fixed-function-render-pipeline.ts'
 
 export const NATIVE_ARENA_SATURATION = 0.65
 
@@ -27,15 +38,12 @@ export type NativeArenaRgba = readonly [
 ]
 
 export const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
-  if (outColor.a <= 0.0 || vColor.a <= 0.0) discard;
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
   vec3 sampledTextureColor = texturePremultiplied > 0.5 && textureAlpha > 0.0
     ? outColor.rgb / textureAlpha
     : outColor.rgb;
-  vec3 vertexColor = vertexAlpha > 0.0
-    ? vColor.rgb / vertexAlpha
-    : vec3(0.0);
+  vec3 vertexColor = vColor.rgb;
   vec3 textureColor = sampledTextureColor;
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;
   float vertexGrey = (vertexColor.r + vertexColor.g + vertexColor.b) / 3.0;
@@ -96,45 +104,8 @@ export interface NativeArenaRenderPipeline {
 
 type DefaultMeshElement = Parameters<DefaultBatcher['packAttributes']>[0]
 type DefaultQuadElement = Parameters<DefaultBatcher['packQuadAttributes']>[0]
-type BatchShader = DefaultBatcher['shader']
 type BatchOptions = ConstructorParameters<typeof DefaultBatcher>[0]
 const nativeArenaVertexColors = new WeakMap<object, Uint32Array>()
-
-interface NativeInstructionSet {
-  readonly uid: number
-}
-
-interface NativeBatchPipe {
-  readonly _batchersByInstructionSet: Record<number, Record<string, DefaultBatcher>>
-  buildStart(instructionSet: NativeInstructionSet): void
-}
-
-interface NativeGraphicsPipe {
-  readonly _adaptor: { shader: Shader }
-}
-
-interface NativeMeshRenderable {
-  readonly _shader: Shader | null
-  readonly texture: Texture
-}
-
-interface NativeMeshAdaptor {
-  _shader: Shader
-  execute(meshPipe: unknown, mesh: NativeMeshRenderable): void
-}
-
-interface NativeMeshPipe {
-  readonly _adaptor: NativeMeshAdaptor
-}
-
-interface NativeArenaRendererInternals {
-  readonly limits: { readonly maxBatchableTextures: number }
-  readonly renderPipes: {
-    readonly batch: NativeBatchPipe
-    readonly graphics: NativeGraphicsPipe
-    readonly mesh: NativeMeshPipe
-  }
-}
 
 class NativeArenaBatchGeometry extends BatchGeometry {
   constructor() {
@@ -158,7 +129,7 @@ class NativeArenaBatchShader extends Shader {
       glProgram: compileHighShaderGlProgram({
         name: 'native-arena-batch',
         bits: [
-          colorBitGl,
+          NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
           generateTextureBatchBitGl(maxTextures),
           roundPixelsBitGl,
           NATIVE_ARENA_ALPHA_MODE_BIT_GL,
@@ -181,7 +152,7 @@ class NativeArenaBatcher extends DefaultBatcher {
     this.geometry.destroy(true)
     this.geometry = new NativeArenaBatchGeometry()
     this.vertexSize = 7
-    this.shader = new NativeArenaBatchShader(options.maxTextures) as unknown as BatchShader
+    this.shader = new NativeArenaBatchShader(options.maxTextures)
   }
 
   override packAttributes(
@@ -246,16 +217,16 @@ class NativeArenaBatcher extends DefaultBatcher {
   }
 
   override _updateMaxTextures(maxTextures: number): void {
-    const current = this.shader as unknown as NativeArenaBatchShader
+    const current = this.shader as NativeArenaBatchShader
     if (current.maxTextures === maxTextures) return
     current.destroy(true)
-    this.shader = new NativeArenaBatchShader(maxTextures) as unknown as BatchShader
+    this.shader = new NativeArenaBatchShader(maxTextures)
   }
 
   override destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
-    const shader = this.shader as unknown as NativeArenaBatchShader
+    const shader = this.shader as NativeArenaBatchShader
     shader.destroy(true)
     super.destroy()
   }
@@ -264,14 +235,15 @@ class NativeArenaBatcher extends DefaultBatcher {
 export function installNativeArenaRenderPipeline(
   renderer: Renderer,
 ): NativeArenaRenderPipeline {
-  const nativeRenderer = renderer as unknown as NativeArenaRendererInternals
+  const nativeRenderer = renderer as WebGLRenderer
   const batchPipe = nativeRenderer.renderPipes.batch
-  const graphicsAdaptor = nativeRenderer.renderPipes.graphics?._adaptor
-  const meshAdaptor = nativeRenderer.renderPipes.mesh?._adaptor
+  const graphicsAdaptor = nativeRenderer.renderPipes.graphics['_adaptor'] as GlGraphicsAdaptor
+  const meshAdaptor = nativeRenderer.renderPipes.mesh['_adaptor'] as GlMeshAdaptor
+  const particleAdaptor = nativeRenderer.renderPipes.particle.adaptor
   if (
-    !batchPipe?._batchersByInstructionSet
+    !batchPipe?.['_batchersByInstructionSet']
     || !graphicsAdaptor?.shader
-    || !meshAdaptor?._shader
+    || !meshAdaptor?.['_shader']
   ) {
     throw new TypeError('Pixi WebGL renderer does not expose the required Arena shader owners')
   }
@@ -284,33 +256,41 @@ export function installNativeArenaRenderPipeline(
   graphicsAdaptor.shader.destroy(true)
   graphicsAdaptor.shader = graphicsShader
 
-  const originalMeshShader = meshAdaptor._shader
+  const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
   originalMeshShader.destroy(true)
-  meshAdaptor._shader = unpremultipliedMeshShader
+  meshAdaptor['_shader'] = unpremultipliedMeshShader
   meshAdaptor.execute = function executeNativeArenaMesh(
-    meshPipe: unknown,
-    mesh: NativeMeshRenderable,
+    meshPipe: MeshPipe,
+    mesh: Mesh,
   ): void {
     if (mesh._shader === null) {
-      this._shader = nativeArenaTextureIsPremultiplied(mesh.texture)
+      this['_shader'] = nativeArenaTextureIsPremultiplied(mesh.texture)
         ? premultipliedMeshShader
         : unpremultipliedMeshShader
     }
-    originalMeshExecute.call(this, meshPipe, mesh)
+    // Arena replaces the application's fixed-function shader selection.
+    GlMeshAdaptor.prototype.execute.call(this, meshPipe, mesh)
   }
 
   const originalBuildStart = batchPipe.buildStart
+  const originalParticleExecute = particleAdaptor.execute
+  particleAdaptor.execute = function executeNativeArenaParticles(pipe, container): void {
+    if (container.shader) {
+      container.shader.groups[100] = nativeRenderer.globalUniforms.bindGroup
+    }
+    originalParticleExecute.call(this, pipe, container)
+  }
   const ownedBatchers = new Set<NativeArenaBatcher>()
   let destroyed = false
 
   batchPipe.buildStart = function buildNativeArenaBatch(
-    instructionSet: NativeInstructionSet,
+    instructionSet: InstructionSet,
   ): void {
-    let batchers = this._batchersByInstructionSet[instructionSet.uid]
+    let batchers = this['_batchersByInstructionSet'][instructionSet.uid]
     if (!batchers) {
       batchers = {}
-      this._batchersByInstructionSet[instructionSet.uid] = batchers
+      this['_batchersByInstructionSet'][instructionSet.uid] = batchers
     }
     if (!(batchers.default instanceof NativeArenaBatcher)) {
       batchers.default?.destroy()
@@ -320,7 +300,7 @@ export function installNativeArenaRenderPipeline(
       batchers.default = nativeBatcher
       ownedBatchers.add(nativeBatcher)
     }
-    originalBuildStart.call(this, instructionSet)
+    BatcherPipe.prototype.buildStart.call(this, instructionSet)
   }
 
   return {
@@ -329,6 +309,7 @@ export function installNativeArenaRenderPipeline(
       destroyed = true
       batchPipe.buildStart = originalBuildStart
       meshAdaptor.execute = originalMeshExecute
+      particleAdaptor.execute = originalParticleExecute
       for (const batcher of ownedBatchers) batcher.destroy()
       ownedBatchers.clear()
       graphicsShader.destroy(true)
@@ -404,7 +385,7 @@ function createNativeArenaGraphicsShader(maxTextures: number): Shader {
     glProgram: compileHighShaderGlProgram({
       name: 'native-arena-graphics',
       bits: [
-        colorBitGl,
+        NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
         generateTextureBatchBitGl(maxTextures),
         localUniformBitGl,
         roundPixelsBitGl,
@@ -428,6 +409,7 @@ function createNativeArenaMeshShader(premultiplied: boolean): Shader {
       name: `native-arena-mesh-${premultiplied ? 'pma' : 'npm'}`,
       bits: [
         localUniformBitGl,
+        NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
         textureBitGl,
         roundPixelsBitGl,
         premultiplied
@@ -454,6 +436,7 @@ uniform mat3 uTranslationMatrix;
 uniform float uRound;
 uniform vec2 uResolution;
 uniform vec4 uColor;
+uniform vec4 uWorldColorAlpha;
 varying vec2 vUV;
 varying vec4 vColor;
 
@@ -471,7 +454,9 @@ void main(void) {
   gl_Position = vec4((uTranslationMatrix * vec3(vertex, 1.0)).xy, 0.0, 1.0);
   if (uRound == 1.0) gl_Position.xy = roundPixels(gl_Position.xy, uResolution);
   vUV = aUV;
-  vColor = vec4(aColor.rgb * aColor.a, aColor.a) * uColor;
+  vec4 group = uColor * uWorldColorAlpha;
+  vec3 groupColor = group.a > 0.0 ? group.rgb / group.a : vec3(0.0);
+  vColor = vec4(aColor.rgb * groupColor, aColor.a * group.a);
 }
 `
 
@@ -482,9 +467,8 @@ uniform sampler2D uTexture;
 
 void main(void) {
   vec4 textureColor = texture2D(uTexture, vUV);
-  if (textureColor.a <= 0.0 || vColor.a <= 0.0) discard;
   float vertexAlpha = vColor.a;
-  vec3 vertexColor = vertexAlpha > 0.0 ? vColor.rgb / vertexAlpha : vec3(0.0);
+  vec3 vertexColor = vColor.rgb;
   float textureGrey = (textureColor.r + textureColor.g + textureColor.b) / 3.0;
   float vertexGrey = (vertexColor.r + vertexColor.g + vertexColor.b) / 3.0;
   float grey = textureGrey * vertexGrey;

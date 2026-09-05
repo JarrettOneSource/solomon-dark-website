@@ -43,6 +43,7 @@
     "game:host": "node --experimental-strip-types src/game/host/run-game-host.ts",
     "sdmod": "node --experimental-strip-types tools/sdmod/cli.mjs",
     "smoke:game": "node --experimental-strip-types tools/smoke-game-runtime.mjs",
+    "smoke:game:render-materials": "node tools/smoke-native-render-materials.mjs",
     "smoke:game:startup": "node tools/smoke-game-startup-memory.mjs",
     "smoke:game:weather": "node --experimental-strip-types tools/smoke-boneyard-weather.mjs",
     "smoke:game:saves": "node tools/smoke-game-saves.mjs",

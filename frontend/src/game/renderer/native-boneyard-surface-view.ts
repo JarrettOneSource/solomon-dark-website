@@ -5,13 +5,14 @@ import {
   Mesh,
   MeshGeometry,
   Shader,
-  colorBitGl,
   compileHighShaderGlProgram,
   localUniformBitGl,
   roundPixelsBitGl,
   textureBitGl,
   type Texture,
 } from 'pixi.js'
+
+import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-fixed-function-render-pipeline.ts'
 
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL } from './native-arena-render-pipeline.ts'
@@ -38,7 +39,7 @@ interface NativeRoadMeshView {
 
 const BONEYARD_SURFACE_PROGRAM = compileHighShaderGlProgram({
   bits: [
-    colorBitGl,
+    NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
     localUniformBitGl,
     textureBitGl,
     roundPixelsBitGl,
