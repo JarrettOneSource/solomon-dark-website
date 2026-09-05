@@ -10,8 +10,9 @@ import {
   textureBitGl,
   type Texture,
 } from 'pixi.js'
+import { NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
-import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-fixed-function-render-pipeline.ts'
+import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-material-batch.ts'
 
 import {
   nativeBuildingMeshGrid,
@@ -39,24 +40,14 @@ const NATIVE_STATIC_SURFACE_PROGRAM = compileHighShaderGlProgram({
   name: 'native-static-surface',
 })
 
-export function createNativeBuildingSurfaceMesh(
-  texture: Texture,
-  width: number,
-  height: number,
-  enhancedEffects: boolean,
-): NativeStaticSurfaceMesh {
-  return createNativeStaticSurfaceMesh(texture, width, height, enhancedEffects)
+interface NativeSurfaceGeometry {
+  readonly colors: Uint8Array
+  readonly indices: Uint32Array
+  readonly positions: Float32Array
+  readonly uvs: Float32Array
 }
 
-export function createNativeWallSurfaceMesh(
-  texture: Texture,
-  width: number,
-  height: number,
-): NativeStaticSurfaceMesh {
-  return createNativeStaticSurfaceMesh(texture, width, height, false)
-}
-
-function createNativeStaticSurfaceMesh(
+export function createNativeLitSurfaceGrid(
   texture: Texture,
   width: number,
   height: number,
@@ -65,6 +56,11 @@ function createNativeStaticSurfaceMesh(
   const grid = nativeBuildingMeshGrid(width, height, enhancedEffects)
   const colors = new Uint8Array(grid.positions.length * 2)
   colors.fill(255)
+  return createNativeSurfaceMesh(texture, { ...grid, colors })
+}
+
+export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeometry): NativeStaticSurfaceMesh {
+  const colors = plan.colors
   const colorBuffer = new Buffer({
     data: colors,
     label: 'native-static-surface-colors',
@@ -74,6 +70,7 @@ function createNativeStaticSurfaceMesh(
   const shader = new Shader({
     glProgram: NATIVE_STATIC_SURFACE_PROGRAM,
     resources: {
+      nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       textureUniforms: {
         uTextureMatrix: {
           type: 'mat3x3<f32>',
@@ -84,10 +81,10 @@ function createNativeStaticSurfaceMesh(
     },
   })
   const geometry = new MeshGeometry({
-    indices: grid.indices,
-    positions: grid.positions,
+    indices: plan.indices,
+    positions: plan.positions,
     topology: 'triangle-list',
-    uvs: grid.uvs,
+    uvs: plan.uvs,
   })
   geometry.addAttribute('aColor', {
     buffer: colorBuffer,
@@ -106,8 +103,9 @@ function createNativeStaticSurfaceMesh(
     colors,
     mesh,
     destroy() {
+      mesh.destroy()
       shader.destroy()
-      mesh.geometry.destroy(true)
+      geometry.destroy(true)
     },
     update(scalars) {
       if (writeNativeStaticSurfaceVertexColors(colors, scalars)) colorBuffer.update()

@@ -5,14 +5,7 @@ import {
   type NativeEnchantStaffDrawInput,
   type NativeEnchantStaffDrawPlan,
 } from '../player-enchant-staff-presentation.ts'
-import {
-  nativeArenaPackedColor,
-  setNativeArenaVertexColors,
-} from './native-arena-render-pipeline.ts'
-import {
-  nativeFixedFunctionPackedColor,
-  setNativeFixedFunctionVertexColors,
-} from './native-fixed-function-render-pipeline.ts'
+import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
@@ -21,8 +14,7 @@ const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 export class PlayerEnchantStaffView {
   readonly container = new Container({ label: 'native-player-staff-attachment' })
   private readonly aura: MeshSimple
-  private readonly auraArenaColors = new Uint32Array(4)
-  private readonly auraFixedFunctionColors = new Uint32Array(4)
+  private readonly auraVertexColors = new Uint32Array(4)
   private readonly auraVertices = new Float32Array(8)
   private readonly body: Sprite
   private readonly bodyAdditive: Sprite
@@ -50,8 +42,7 @@ export class PlayerEnchantStaffView {
     this.aura.eventMode = 'none'
     this.aura.label = 'native-enchant-staff-aura'
     this.aura.zIndex = 2
-    setNativeFixedFunctionVertexColors(this.aura, this.auraFixedFunctionColors)
-    setNativeArenaVertexColors(this.aura, this.auraArenaColors)
+    setNativeVertexColors(this.aura, this.auraVertexColors)
     this.primaryHand = centeredSprite(3)
     this.secondaryHand = centeredSprite(4)
     this.container.addChild(
@@ -98,24 +89,19 @@ export class PlayerEnchantStaffView {
     const plan = nativeEnchantStaffDrawPlan(input)
     this.currentPlan = plan
     this.bodyAdditive.visible = plan !== null
-    this.aura.visible = plan?.auraRecord !== null && plan?.auraRecord !== undefined
-    if (!this.aura.visible || plan === null || plan.auraRecord === null) return
+    this.aura.visible = false
+    if (plan === null || plan.auraRecord === null) return
 
     const aura = this.textures.auras[plan.auraRecord - 11]
     if (aura === undefined) throw new RangeError(`missing Clothes aura record ${plan.auraRecord}`)
+    this.aura.visible = true
     this.aura.texture = aura
     this.auraVertices.set(plan.vertices)
-    this.auraFixedFunctionColors.set([
-      nativeFixedFunctionPackedColor(plan.tint, plan.nearAlpha),
-      nativeFixedFunctionPackedColor(plan.tint, plan.nearAlpha),
-      nativeFixedFunctionPackedColor(plan.tint, plan.farAlpha),
-      nativeFixedFunctionPackedColor(plan.tint, plan.farAlpha),
-    ])
-    this.auraArenaColors.set([
-      nativeArenaPackedColor(plan.tint, plan.nearAlpha),
-      nativeArenaPackedColor(plan.tint, plan.nearAlpha),
-      nativeArenaPackedColor(plan.tint, plan.farAlpha),
-      nativeArenaPackedColor(plan.tint, plan.farAlpha),
+    this.auraVertexColors.set([
+      nativePackedColor(plan.tint, plan.nearAlpha),
+      nativePackedColor(plan.tint, plan.nearAlpha),
+      nativePackedColor(plan.tint, plan.farAlpha),
+      nativePackedColor(plan.tint, plan.farAlpha),
     ])
   }
 

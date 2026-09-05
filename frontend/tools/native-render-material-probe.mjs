@@ -3,14 +3,15 @@ import {
   RenderTexture, Sprite, Texture,
 } from 'pixi.js'
 import {
-  installNativeFixedFunctionRenderPipeline, setNativeFixedFunctionVertexColors,
+  installNativeFixedFunctionRenderPipeline,
 } from '../src/game/renderer/native-fixed-function-render-pipeline.ts'
 import {
   createNativeArenaUnpremultipliedParticleShader, installNativeArenaRenderPipeline,
-  setNativeArenaVertexColors,
 } from '../src/game/renderer/native-arena-render-pipeline.ts'
 
-import { createNativeWallSurfaceMesh } from '../src/game/renderer/boneyard-building-surface-view.ts'
+import { setNativeVertexColors } from '../src/game/renderer/native-material-batch.ts'
+
+import { createNativeLitSurfaceGrid } from '../src/game/renderer/boneyard-building-surface-view.ts'
 
 const size = 16
 const vertices = new Float32Array([0, 0, size, 0, size, size, 0, size])
@@ -52,8 +53,7 @@ export async function renderNativeMaterialSamples() {
     const target = RenderTexture.create({
       alphaMode: 'no-premultiply-alpha', height: size, width: size,
     })
-    const setColors = mode === 'arena'
-      ? setNativeArenaVertexColors : setNativeFixedFunctionVertexColors
+    const setColors = setNativeVertexColors
     const retainedTextures = []
     try {
       const firstTexture = textureFromPixel([255, 255, 255, 255], true)
@@ -91,6 +91,7 @@ export async function renderNativeMaterialSamples() {
         }
       }
       samples.push(...uniformSamples(app, target, mode, retainedTextures))
+      samples.push(...textureOpacitySamples(app, target, mode, retainedTextures))
       for (const alpha of [0, 1, 128, 255]) {
         const texture = textureFromPixel([128, 64, 192, alpha])
         retainedTextures.push(texture)
@@ -106,6 +107,7 @@ export async function renderNativeMaterialSamples() {
       }
       await restoreContext(app)
       samples.push(...uniformSamples(app, target, mode, retainedTextures, true))
+      samples.push(...textureOpacitySamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
     } finally {
       target.destroy(true)
       pipeline?.destroy()
@@ -140,7 +142,7 @@ function uniformSamples(app, target, mode, retainedTextures, restored = false) {
       display = new MeshSimple({ indices, texture, uvs, vertices })
       display.geometry.batchMode = 'no-batch'
     } else if (kind === 'surface') {
-      surface = createNativeWallSurfaceMesh(texture, size, size)
+      surface = createNativeLitSurfaceGrid(texture, size, size, false)
       surface.update([1, 1, 1, 1])
       display = surface.mesh
       display.position.set(size / 2, size / 2)
@@ -170,6 +172,44 @@ function uniformSamples(app, target, mode, retainedTextures, restored = false) {
     }
     if (surface) surface.destroy()
     parent.destroy({ children: true })
+  }
+  return samples
+}
+
+function textureOpacitySamples(app, target, mode, retainedTextures) {
+  const samples = []
+  for (const premultiplied of [false, true]) {
+    const rgba = premultiplied ? [102, 51, 26, 128] : [204, 102, 51, 128]
+    const texture = textureFromPixel(rgba, premultiplied)
+    retainedTextures.push(texture)
+    for (const kind of ['sprite', 'mesh']) {
+      for (const blend of ['normal', 'add']) {
+        const parent = new Container({ isRenderGroup: true })
+        parent.alpha = 128 / 255
+        const display = kind === 'sprite'
+          ? new Sprite({ texture, width: size, height: size })
+          : new MeshSimple({ indices, texture, uvs, vertices })
+        if (kind === 'mesh') display.geometry.batchMode = 'no-batch'
+        display.alpha = 128 / 255
+        display.tint = 0x80c0ff
+        display.blendMode = blend
+        parent.addChild(display)
+        samples.push({
+          blend, kind, mode, premultiplied, rgba, role: 'texture-opacity',
+          pixel: drawSample(app, target, parent),
+        })
+        parent.destroy({ children: true })
+      }
+    }
+  }
+  if (mode === 'fixed') {
+    const texture = textureFromPixel([255, 255, 255, 255])
+    retainedTextures.push(texture)
+    const explicit = createNativeLitSurfaceGrid(texture, size, size, false)
+    explicit.mesh.position.set(size / 2, size / 2)
+    explicit.update([0.25, 0.25, 0.25, 0.25])
+    samples.push({ mode, role: 'explicit-shader', pixel: drawSample(app, target, explicit.mesh) })
+    explicit.destroy()
   }
   return samples
 }
@@ -236,7 +276,7 @@ export async function measureNativeMaterialFrames() {
     const mesh = new MeshSimple({ indices, texture, uvs, vertices })
     mesh.blendMode = index % 2 === 0 ? 'normal' : 'add'
     mesh.position.set(index % 64 * 24, Math.floor(index / 64) * 13)
-    setNativeArenaVertexColors(mesh, new Uint32Array([
+    setNativeVertexColors(mesh, new Uint32Array([
       pack([102, 242, 128, 0]), pack([102, 242, 128, 0]),
       pack([179, 242, 191, 127]), pack([179, 242, 191, 127]),
     ]))

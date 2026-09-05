@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "entry": ["src/main.tsx!", "src/game/host/run-game-host.ts!"],
+  "project": ["src/**/*.ts!", "src/**/*.tsx!", "!src/**/*.test.ts!"],
+  "includeEntryExports": true
+}

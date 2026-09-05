@@ -1,0 +1,8 @@
+{
+  "minLines": 5,
+  "minTokens": 50,
+  "mode": "mild",
+  "threshold": 0,
+  "reporters": ["console", "json"],
+  "output": "reports/renderer-quality/duplication"
+}

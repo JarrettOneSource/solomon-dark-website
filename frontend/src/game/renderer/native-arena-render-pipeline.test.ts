@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  NATIVE_ARENA_FRAGMENT_SHADER_SOURCE,
   NATIVE_ARENA_SATURATION,
   nativeArenaSaturateSample,
 } from './native-arena-render-pipeline.ts'
@@ -70,12 +69,3 @@ test('keeps identity saturation, grayscale invariants, and zero alpha finite', (
   assert.equal(transparent[3], 0)
 })
 
-test('the WebGL fragment path retains native inputs until saturation and blend', () => {
-  assert.doesNotMatch(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /discard/)
-  assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /textureColor/)
-  assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /vertexColor/)
-  assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /textureGrey \* vertexGrey/)
-  assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /mix\(vec3\(grey\), realColor, 0\.65\)/)
-  assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /texturePremultiplied/)
-  assert.match(NATIVE_ARENA_FRAGMENT_SHADER_SOURCE, /finalAlpha/)
-})

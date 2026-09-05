@@ -250,8 +250,7 @@ import {
   type NativeArenaRenderPipeline,
 } from './native-arena-render-pipeline.ts'
 import {
-  createNativeBuildingSurfaceMesh,
-  createNativeWallSurfaceMesh,
+  createNativeLitSurfaceGrid,
   type NativeStaticSurfaceMesh,
 } from './boneyard-building-surface-view.ts'
 import {
@@ -4430,7 +4429,7 @@ function buildingSurfaceResidentTexture(
   mainLayerIndex: number | null = null,
 ): ResidentTexture {
   const texture = residentPixelTexture(source)
-  const surfaceMesh = createNativeBuildingSurfaceMesh(
+  const surfaceMesh = createNativeLitSurfaceGrid(
     texture,
     source.width,
     source.height,
@@ -4462,10 +4461,11 @@ function wallSurfaceResidentTexture(
   mainLayerIndex: number | null = null,
 ): ResidentTexture {
   const texture = residentPixelTexture(source)
-  const surfaceMesh = createNativeWallSurfaceMesh(
+  const surfaceMesh = createNativeLitSurfaceGrid(
     texture,
     source.width,
     source.height,
+    false,
   )
   surfaceMesh.mesh.position.set(x, y)
   surfaceMesh.mesh.label = 'native-wall-body'

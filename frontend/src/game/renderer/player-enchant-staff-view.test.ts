@@ -108,3 +108,40 @@ test('material tint reaches Staff body and hands without replacing selected-prim
   assert.equal(view.tint, 0x998077)
   view.destroy()
 })
+
+test('Staff rejects an incomplete atlas at each required attachment', () => {
+  for (const [missing, expected] of [
+    ['body-style', 'missing native Staff body selector'],
+    ['body-frame', 'missing native Staff body/hand attachment frame'],
+    ['primary-hand', 'missing native Staff body/hand attachment frame'],
+    ['secondary-hand', 'missing native Staff body/hand attachment frame'],
+    ['aura', 'missing Clothes aura record 11'],
+  ]) {
+    const complete = textures()
+    const emptySide = { back: [], front: [] }
+    const broken = {
+      ...complete,
+      ...(missing === 'body-style' ? { bodies: [] } : {}),
+      ...(missing === 'body-frame' ? { bodies: [emptySide] } : {}),
+      ...(missing === 'aura' ? { auras: [] } : {}),
+      hands: {
+        primary: missing === 'primary-hand' ? emptySide : complete.hands.primary,
+        secondary: missing === 'secondary-hand' ? emptySide : complete.hands.secondary,
+      },
+    }
+    const view = new PlayerEnchantStaffView(broken)
+    assert.throws(() => view.update(input(), true), { message: expected }, missing)
+    view.destroy()
+  }
+})
+
+test('Staff diagnostics expire with the last visible draw plan', () => {
+  const view = new PlayerEnchantStaffView(textures())
+  view.update(input(), true)
+  assert.ok(view.nearAlpha > 0)
+  assert.notEqual(view.tint, null)
+  view.update(input({ living: false }), false)
+  assert.equal(view.nearAlpha, 0)
+  assert.equal(view.tint, null)
+  view.destroy()
+})

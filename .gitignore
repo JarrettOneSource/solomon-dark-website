@@ -20,3 +20,7 @@ runtime/ml-training/
 __pycache__/
 *.pyc
 tools/out/
+
+# Reproducible quality reports and mutation sandboxes
+frontend/reports/
+frontend/.stryker-renderer-tmp/

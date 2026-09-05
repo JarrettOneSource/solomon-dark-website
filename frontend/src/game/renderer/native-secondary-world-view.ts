@@ -42,10 +42,7 @@ import {
   type NativeStormWeatherComposite,
 } from './native-secondary-presentation.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
-import {
-  nativeArenaPackedColor,
-  setNativeArenaVertexColors,
-} from './native-arena-render-pipeline.ts'
+import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
 import { writeNativeRotationThenScaleMatrix } from './native-affine-transform.ts'
 
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
@@ -611,7 +608,7 @@ class NativeSecondaryActorView {
       vertices,
     })
     mesh.eventMode = 'none'
-    setNativeArenaVertexColors(mesh, vertexColors)
+    setNativeVertexColors(mesh, vertexColors)
     this.meshIndices.push(indices)
     this.meshMeshes.push(mesh)
     this.meshUvs.push(uvs)
@@ -631,11 +628,11 @@ class NativeSecondaryActorView {
     })
     mesh.eventMode = 'none'
     mesh.renderable = this.renderable
-    setNativeArenaVertexColors(mesh, new Uint32Array([
-      nativeArenaPackedColor(draw.topColor, draw.topAlpha),
-      nativeArenaPackedColor(draw.topColor, draw.topAlpha),
-      nativeArenaPackedColor(draw.bottomColor, draw.bottomAlpha),
-      nativeArenaPackedColor(draw.bottomColor, draw.bottomAlpha),
+    setNativeVertexColors(mesh, new Uint32Array([
+      nativePackedColor(draw.topColor, draw.topAlpha),
+      nativePackedColor(draw.topColor, draw.topAlpha),
+      nativePackedColor(draw.bottomColor, draw.bottomAlpha),
+      nativePackedColor(draw.bottomColor, draw.bottomAlpha),
     ]))
     this.gradientMeshes.push(mesh)
     this.gradientVertices.push(vertices)

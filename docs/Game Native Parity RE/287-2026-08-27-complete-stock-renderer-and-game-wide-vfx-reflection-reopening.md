@@ -1,5 +1,45 @@
 # 2026-08-27 — Complete stock renderer and game-wide VFX reflection reopening
 
+## 2026-09-05 — Measured renderer quality gates
+
+The requested follow-up installs the previously absent analyzers and measures
+the complete four production files from `d617f28d`, including any responsibility
+moved during cleanup. This is a quality/tooling follow-up to the already
+recovered native material contract below; shader arithmetic, packed ARGB,
+atlas sampling, painter order, and simulation ownership remain unchanged.
+
+On current base `ad99a4ac`, the initial Mac measurement is 78.93% statements,
+76.76% branches, 70.58% functions, and 80.50% lines. The ground/road surface
+owner has no direct runtime coverage in the selected material tests. jscpd
+reports nine duplicate blocks, 80 duplicate lines / 733 duplicate tokens.
+Knip's complete production graph finds unused public exports in the fixed and
+Arena material files. ESLint/SonarJS/estree-halstead measure a maximum
+cyclomatic complexity of 10, cognitive complexity of 3, and Halstead Difficulty
+35.12222222222222; all are within the requested strict limits.
+
+The implementation consequence is one shared native batch owner for the
+identical geometry layout, vertex packing, packed-color multiplication,
+texture-alpha flag and shader lifetime. Fixed and Arena callers retain their
+distinct fragment programs and renderer setup; callers use one canonical color
+registry instead of storing identical Staff colors twice. Surface construction
+will likewise share its actual mesh/buffer responsibility. Removed test-only
+exports must not become alternate production implementations. The existing GPU
+pixel seam, source upload behavior, retained resource lifetime, and surface
+updates are the regression interfaces. Every moved production file remains in
+the analyzer scope, with no metric exclusions or weakened thresholds.
+
+The new public surface-lifecycle cases reproduce two concrete omissions:
+destroying a surface releases buffers/shader but leaves the Mesh undisposed,
+and rejecting a missing Road texture leaves a partially constructed ground
+container attached to the parent. The shared surface owner must destroy its
+Mesh while preserving its borrowed texture; Road plans/textures must be
+validated before allocating or attaching the scene's surfaces. These are
+browser resource ownership corrections, with no changed native pixels.
+
+Analyzer definitions, pinned primary sources, callable boundaries, and the
+line-coverage CRAP variant are documented in
+[`renderer-quality-analyzers-research.md`](../renderer-quality-analyzers-research.md).
+
 ## 2026-09-04 — Lighting, shadows, and particle material audit
 
 ### Boundary and native evidence
