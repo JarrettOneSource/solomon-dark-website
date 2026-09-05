@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createNativeRng } from './native-rng.ts'
+import { DOWSING_EQUIPMENT_RECIPES } from './hub-economy.ts'
 import {
   NATIVE_LOOT_CANDIDATE_ORDER,
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   NATIVE_LOOT_OPEN_PLACEMENT,
   advanceNativeKeyDropLevel,
-  createNativeLootItemIds,
   initialNativeKeyDropLevel,
   materializeNativeLootScriptAction,
   nativeGoldTier,
@@ -17,11 +17,16 @@ import {
   nativeLootModifiers,
   nativePowerupLevelBase,
   resolveNativeLootPlacement,
-  resolveNativeGoodieContents,
   rollNativeEnemyLoot,
   type NativeLootCategory,
   type NativeLootSelectionInput,
 } from './native-loot.ts'
+import {
+  createNativeLootItemIds,
+  resolveNativeGoodieContents,
+  potionItem,
+  miscItem,
+} from './native-loot-items.ts'
 
 const ALL_DISABLED = Object.freeze({
   gold: 4,
@@ -363,8 +368,167 @@ test('gold tiers and chunking preserve the exact total', () => {
     sharedRng: createNativeRng(991),
   }))
   assert.equal(result.selectedCategory, 'gold')
+  assert.equal(new Set(result.drops.map(({ position }) => JSON.stringify(position))).size, result.drops.length)
   assert.equal(result.drops.reduce((sum, drop) => sum + (drop.amount ?? 0), 0), 1_000)
   assert.ok(result.drops.every((drop) => (drop.amount ?? 0) >= 1 && (drop.amount ?? 0) <= 25))
+})
+
+test('Gold placement precedes chunk selection and releases its batch reservations', () => {
+  const materialize = (amount: number) => materializeNativeLootScriptAction(input({
+    sharedRng: createNativeRng(991),
+  }), { amount, kind: 'drop-gold' })
+  const single = materialize(1).drops[0]!
+  const batch = materialize(500)
+  const first = batch.drops.find(({ id }) => id === 1)!
+  assert.equal(first.scatterSeed, single.scatterSeed)
+  assert.equal(first.phase, single.phase)
+  assert.deepEqual(first.position, single.position)
+  assert.equal(batch.drops.reduce((total, drop) => total + drop.amount!, 0), 500)
+  assert.equal(new Set(batch.drops.map(({ position }) => JSON.stringify(position))).size,
+    batch.drops.length)
+  for (const left of batch.drops) {
+    for (const right of batch.drops) {
+      if (left.id >= right.id) continue
+      const dx = left.position.x - right.position.x
+      const dy = (left.position.y - right.position.y) / 0.8
+      assert.ok(Math.hypot(dx, dy) >= 16, 'each later Gold clears an earlier radius-15 Gold')
+    }
+  }
+  assert.deepEqual(materialize(500), batch)
+})
+
+test('Gold batches clear scenery while preserving the requested total and Y registration order', () => {
+  const result = materializeNativeLootScriptAction(input({
+    placement: { canPlace: (position, radius) => (
+      Math.hypot(position.x - 100, position.y - 200) >= 20 + radius
+    ) },
+    sharedRng: createNativeRng(991),
+  }), { kind: 'drop-random-gold', minimum: 500, maximum: 500 })
+  assert.equal(result.drops.reduce((sum, drop) => sum + drop.amount!, 0), 500)
+  assert.ok(result.drops.every(({ position }) => Math.hypot(position.x - 100, position.y - 200) >= 21))
+  assert.equal(new Set(result.drops.map(({ position }) => JSON.stringify(position))).size, result.drops.length)
+  const ys = result.drops.map(({ position }) => position.y)
+  assert.deepEqual(ys, [...ys].sort((left, right) => left - right))
+})
+
+test('pending Gold uses the native strict ellipse boundary and never blocks another batch', () => {
+  const rng = createNativeRng(71)
+  const earlier = [{ position: { x: 0, y: 0 } }]
+  for (const origin of [{ x: 16.5, y: 0 }, { x: 0, y: Math.fround(13.2) }]) {
+    const tangent = resolveNativeLootPlacement(rng, NATIVE_LOOT_OPEN_PLACEMENT, origin, 1.5, earlier)
+    assert.deepEqual(tangent.position, origin)
+    assert.strictEqual(tangent.sharedRng, rng)
+  }
+  const origin = { x: 16.49, y: 0 }
+  const overlapping = resolveNativeLootPlacement(rng, NATIVE_LOOT_OPEN_PLACEMENT, origin, 1.5, earlier)
+  assert.notDeepEqual(overlapping.position, { x: Math.fround(origin.x), y: 0 })
+  const independent = resolveNativeLootPlacement(rng, NATIVE_LOOT_OPEN_PLACEMENT, { x: 0, y: 0 }, 1.5)
+  assert.deepEqual(independent.position, { x: 0, y: 0 })
+  assert.strictEqual(independent.sharedRng, rng)
+  assert.throws(() => resolveNativeLootPlacement(rng, NATIVE_LOOT_OPEN_PLACEMENT, origin, 0), /radius/)
+})
+
+test('loot boundaries reject invalid amounts, modifiers, ranges and source state', () => {
+  for (const value of [Number.NaN, -1, 1.5]) {
+    assert.throws(() => createNativeLootItemIds(value), RangeError)
+    assert.throws(() => nativeLootCandidateWeights(value), RangeError)
+    assert.throws(() => nativeGoldTier(value), RangeError)
+    assert.throws(() => nativePowerupLevelBase(value), RangeError)
+  }
+  assert.throws(() => nativeLootCandidateWeights(7), RangeError)
+  assert.throws(() => potionItem(createNativeLootItemIds(1), 6), RangeError)
+  assert.throws(() => miscItem(createNativeLootItemIds(1), -1), RangeError)
+  assert.throws(() => nativeLootArenaDropLimits(Number.NaN, 0), RangeError)
+  assert.throws(() => nativeLootModifiers([], { ...NATIVE_LOOT_DEFAULT_MODIFIERS, pickupFactor: -1 }), RangeError)
+  const initial = input()
+  for (const overrides of [
+    { actorSeed: Number.NaN },
+    { participant: { ...initial.participant, slot: -1 } },
+    { arena: { ...initial.arena, disableMask: -1 } },
+    { explicitGoldAmount: 0 },
+    { dropDelayContext: 1.5 },
+  ]) assert.throws(() => rollNativeEnemyLoot(input(overrides)), RangeError)
+  assert.throws(() => materializeNativeLootScriptAction(initial, { kind: 'drop-gold', amount: 1.5 }), RangeError)
+  assert.throws(() => materializeNativeLootScriptAction(initial, { kind: 'drop-potion', subtype: 6 }), RangeError)
+  assert.throws(() => materializeNativeLootScriptAction(initial, { kind: 'drop-random-item', mode: 5 }), RangeError)
+  assert.throws(() => materializeNativeLootScriptAction(initial, {
+    kind: 'drop-random-gold', minimum: 10, maximum: 5,
+  }), RangeError)
+  assert.throws(() => nativeLootArenaDropLimits(0, 2, Number.NaN, 5), RangeError)
+  assert.throws(() => nativeLootDisableMask(0, 1, -1), RangeError)
+  assert.throws(() => advanceNativeKeyDropLevel(createNativeRng(1), -1), RangeError)
+  assert.throws(() => resolveNativeGoodieContents({
+    advancedUnlocks: [], itemIds: createNativeLootItemIds(1), ownedRecipeIndexes: [],
+    playerLevel: 1, selector: 18, sharedRng: createNativeRng(1),
+  }), RangeError)
+})
+
+test('native item modes honor recipe rarity, level bounds and the ownership filter', () => {
+  const owned = DOWSING_EQUIPMENT_RECIPES.map(({ sourceIndex }) => sourceIndex)
+  for (const mode of [0, 1, 2, 3, 4]) {
+    for (const arenaMode of [0, 1]) {
+      for (const seed of [0, 1, 4, 6, 10, 11, 77, 991]) {
+        const source = input({ sharedRng: createNativeRng(seed) })
+        const result = materializeNativeLootScriptAction({
+          ...source, arena: { ...source.arena, mode: arenaMode },
+        }, { kind: 'drop-random-item', mode })
+        for (const { item } of result.drops) {
+          assert.ok(item)
+          assert.equal(item.kind, 'equipment')
+          if (mode === 2) assert.equal(item.rarity, 'Rare')
+          if (mode === 3) assert.equal(item.rarity, 'Epic')
+          if (item.recipeIndex !== null) assert.ok(owned.includes(item.recipeIndex))
+        }
+      }
+    }
+  }
+  const source = input()
+  const exhausted = materializeNativeLootScriptAction({
+    ...source,
+    arena: { ...source.arena, mode: 1 },
+    participant: { ...source.participant, ownedRecipeIndexes: owned },
+  }, { kind: 'drop-random-item', mode: 4 })
+  assert.deepEqual(exhausted.drops, [])
+  const enemy = rollNativeEnemyLoot({
+    ...source,
+    arena: { ...source.arena, mode: 1 },
+    participant: { ...source.participant, ownedRecipeIndexes: owned },
+    policies: { ...ALL_DISABLED, item: 3, specificItem: 4 },
+  })
+  assert.deepEqual(enemy.drops, [])
+  assert.equal(enemy.lastSuccessfulItemLevel, source.arena.lastSuccessfulItemLevel)
+  const goodie = resolveNativeGoodieContents({
+    advancedUnlocks: [], itemIds: createNativeLootItemIds(1), ownedRecipeIndexes: owned,
+    playerLevel: 1, selector: 10, sharedRng: createNativeRng(1),
+  })
+  assert.deepEqual(goodie.items, [])
+})
+
+test('reduced and increased Gold and Powerup policies retain their native bounded-RNG decisions', () => {
+  // Native first private Integer bounds: Gold 44/11; level-12 Powerup 1386/346.
+  // These seeds distinguish the two bounds, including the native modulo bias.
+  for (const [category, actorSeed, winningPolicy] of [
+    ['gold', 15, 1], ['gold', 2, 2],
+    ['powerup', 4_059, 1], ['powerup', 10, 2],
+  ] as const) {
+    for (const policy of [1, 2] as const) {
+      const result = rollNativeEnemyLoot(input({
+        actorSeed, policies: { ...ALL_DISABLED, [category]: policy },
+      }))
+      assert.equal(result.selectedCategory, policy === winningPolicy ? category : null)
+    }
+  }
+  const source = input()
+  const zeroBound = rollNativeEnemyLoot({
+    ...source,
+    participant: {
+      ...source.participant,
+      modifiers: { ...source.participant.modifiers, goldChance: 0 },
+    },
+    policies: { ...ALL_DISABLED, gold: 0 },
+  })
+  assert.equal(zeroBound.selectedCategory, null)
+  assert.deepEqual(zeroBound.drops, [])
 })
 
 test('Gold Charm exceeds eight from wave four while all amounts eight and above retain tier-three art', () => {
@@ -407,30 +571,31 @@ test('explicit Gold replays constructor, dummy, stable-sort, and cumulative-dela
     itemIds,
     sharedRng: createNativeRng(991),
   }), { amount: 137, kind: 'drop-gold' })
-  assert.deepEqual(result.drops.map(({ activationDelayTicks, amount, id, scatterSeed }) => ({
-    activationDelayTicks,
-    amount,
-    id,
-    scatterSeed,
-  })), [
-    { activationDelayTicks: 1, amount: 25, id: 1, scatterSeed: 39_722 },
-    { activationDelayTicks: 21, amount: 25, id: 2, scatterSeed: 75_798 },
-    { activationDelayTicks: 23, amount: 25, id: 3, scatterSeed: 13_927 },
-    { activationDelayTicks: 12, amount: 25, id: 4, scatterSeed: 43_829 },
-    { activationDelayTicks: 2, amount: 25, id: 5, scatterSeed: 3_513 },
-    { activationDelayTicks: 15, amount: 6, id: 6, scatterSeed: 76_009 },
-    { activationDelayTicks: 1, amount: 6, id: 7, scatterSeed: 79_554 },
+  // Independent C++ replay of the reviewed 0x0046AA90/0x00645910/0x00410470
+  // instructions, including each FSTP float boundary; not web-generated output.
+  assert.deepEqual(result.drops.map((drop) => [
+    drop.id, drop.amount, drop.activationDelayTicks, drop.scatterSeed,
+    drop.position.x, drop.position.y,
+  ]), [
+    [8, 14, 3, 78_011, 104.86273956298828, 167.13191223144531],
+    [2, 25, 7, 75_798, 115.66017150878906, 193.37274169921875],
+    [3, 7, 7, 10_858, 81.600746154785156, 195.66941833496094],
+    [1, 9, 0, 59_614, 100, 200],
+    [6, 25, 8, 64_513, 127.54767608642578, 205.25868225097656],
+    [4, 7, 8, 55_881, 83.88159942626953, 210.75096130371094],
+    [5, 25, 17, 33_258, 111.849853515625, 213.07441711425781],
+    [7, 25, 1, 44_621, 97.48357391357422, 220.74942016601562],
   ])
-  assert.equal(itemIds.peek(), 8)
+  assert.equal(itemIds.peek(), 9)
   assert.deepEqual(result.sharedRng.words.slice(0, 8), [
-    825_898_900, 262_589_065, 14_746_141, 277_335_206,
-    292_081_347, 569_416_553, 861_497_900, 357_172_629,
+    57_896_898, 464_281_499, 522_178_397, 986_459_896,
+    434_896_469, 347_614_541, 782_511_010, 56_383_727,
   ])
-  assert.equal(result.sharedRng.indexA, 0)
-  assert.equal(result.sharedRng.indexB, 31)
+  assert.equal(result.sharedRng.indexA, 29)
+  assert.equal(result.sharedRng.indexB, 5)
 })
 
-test('nonpositive explicit Gold emits no actor but still spends the sorter-probe constructor', () => {
+test('nonpositive non-sentinel Gold emits no actor but still spends the sorter-probe constructor', () => {
   for (const amount of [0, -7]) {
     const itemIds = createNativeLootItemIds(1)
     const sourceRng = createNativeRng(55)
@@ -445,6 +610,23 @@ test('nonpositive explicit Gold emits no actor but still spends the sorter-probe
   }
 })
 
+test('scripted minus-one Gold uses the native random-amount sentinel', () => {
+  const ordinary = rollNativeEnemyLoot(input({
+    policies: { ...ALL_DISABLED, gold: 3 },
+    sharedRng: createNativeRng(991),
+  }))
+  const scripted = materializeNativeLootScriptAction(input({
+    sharedRng: createNativeRng(991),
+  }), { kind: 'drop-gold', amount: -1 })
+  assert.ok(ordinary.drops.length > 0)
+  assert.deepEqual(scripted.drops, ordinary.drops.map((drop) => ({ ...drop, source: 'script' })))
+  assert.deepEqual(scripted.sharedRng, ordinary.sharedRng)
+  const randomScripted = materializeNativeLootScriptAction(input({
+    sharedRng: createNativeRng(991),
+  }), { kind: 'drop-random-gold', minimum: -1, maximum: -1 })
+  assert.deepEqual(randomScripted, scripted)
+})
+
 test('native drop placement keeps an open origin and searches the exact squashed random ring', () => {
   const origin = { x: 100, y: 200 }
   const source = createNativeRng(71)
@@ -453,7 +635,6 @@ test('native drop placement keeps an open origin and searches the exact squashed
     NATIVE_LOOT_OPEN_PLACEMENT,
     origin,
     15,
-    false,
   )
   assert.deepEqual(open.position, origin)
   assert.strictEqual(open.sharedRng, source)
@@ -464,7 +645,7 @@ test('native drop placement keeps an open origin and searches the exact squashed
       probes.push(position)
       return probes.length === 2
     },
-  }, origin, 15, false)
+  }, origin, 15)
   assert.equal(probes.length, 2)
   assert.deepEqual(probes[0], origin)
   assert.deepEqual(searched.position, {

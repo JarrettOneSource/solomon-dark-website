@@ -76,8 +76,10 @@ import {
 import {
   NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
   nativeLootModifiers,
-  type NativeLootItem,
 } from '../core-kernels/native-loot.ts'
+import {
+  type NativeLootItem,
+} from '../core-kernels/native-loot-items.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DAMAGE,
   NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE,
@@ -195,14 +197,16 @@ import {
 } from '../core-kernels/primary-spells.ts'
 import {
   boneyardPrimarySpellTargets,
-  applyBoneyardSecondaryEnemyKnockbacks,
   createBoneyardWorld,
-  placePlayersInBoneyard,
-  spawnPlayerCharacterInBoneyard,
   stepBoneyardWorldTick,
   type BoneyardPlayerMovementContact,
   type BoneyardWorldState,
 } from './boneyard-world.ts'
+import {
+  applyBoneyardSecondaryEnemyKnockbacks,
+  placePlayersInBoneyard,
+  spawnPlayerCharacterInBoneyard,
+} from './boneyard-world-placement.ts'
 import {
   canPlaceBoneyardBody,
   firstBoneyardLineObstruction,

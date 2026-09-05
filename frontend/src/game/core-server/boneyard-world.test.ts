@@ -34,9 +34,11 @@ import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.t
 import {
   boneyardPrimarySpellTargets,
   createBoneyardWorld,
-  spawnPlayerCharacterInBoneyard,
   stepBoneyardWorldTick,
 } from './boneyard-world.ts'
+import {
+  spawnPlayerCharacterInBoneyard,
+} from './boneyard-world-placement.ts'
 import {
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   damageBoneyardEnemy,

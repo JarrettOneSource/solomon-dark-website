@@ -1,5 +1,176 @@
 # 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
 
+## 2026-09-04 — Reopened Gold batch placement
+
+The earlier closure skipped the temporary-list owner and validated a shared-RNG
+sequence copied from the web implementation. Its claim that Gold placement was
+exact is superseded here. The reported chest is a shared materializer defect.
+
+### Evidence and causal model
+
+- User capture: `SDB - Gold Chest Dump.mp4`, 1920x1080, 11.021533 seconds,
+  SHA-256 `3fee6b58081f6d59823db6e2399f9233c8beae7bf62abaa42d204bdbd17b8394`.
+  This is web symptom evidence, not a clean-stock recording.
+- Exact baseline `132774b6992fc766c255e319cdbbdcddeef8135b`, isolated Mac
+  reproduction through `activateBoneyardGoodie` and `stepBoneyardLootStore`:
+  seed `gold-chest-repro`, reward selector 13, origin `(100,200)`, distant opener,
+  ticks 0 through 249: **33 Gold actors, 500 total, one position `(100,225)`**.
+- Retail 0.72.5, preferred image base `0x00400000`, executable SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+  Fresh read-only Ghidra replica decompilation and instruction dumps cover
+  `0x0046AA90`, `0x00645910`, `0x00645820`, `0x00410470`, `0x005238C0`,
+  `0x005E12C0`, `0x005E13C0`, `0x005E66B0`, and Puppet ctor `0x006287D0`.
+  Tool provider is read-only Mod Loader revision
+  `08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256
+  `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+
+`Arena_CreateGold` constructs each Gold **before** deciding that chunk's amount.
+The constructor spends `Integer(100000)`, `Float(360)`, and signed `Float(20)`
+(four words). It then draws `Float(3)+1` and searches at mask `0x404`.
+Only after placement does it randomize the amount when the original request is
+greater than 25. The previous web code reversed these two RNG stages.
+
+The materializer appends each positioned Gold to both its owned batch list and
+Region's temporary list at `+0x360` (`0x0046AC89..0x0046AC9D`). Mask bit `0x400`
+asks `0x00645820` to test that list in order. Every earlier Gold uses its Puppet
+radius 15; the candidate uses its sampled radius. `0x00410470` tests strict
+ellipse overlap with summed X radii and separately float32-scaled Y radii
+(`0.800000011920929`). The batch therefore expands as each earlier Gold blocks
+the origin. This is placement before animation, not outward tick movement.
+
+The instruction audit also recovers the exact float spills: `GMath` ctor
+`0x004100D0` copies the authored float32 **3.141592502593994** from
+`0x007DE8A8` to `0x00B4027C` (one float32 step below `f32(Math.PI)`);
+`0x00410500` rounds the degree-to-radian
+conversion before sine/cosine. Ring sample count is
+`trunc(f32(2*pi32*(ring+radius))/(2*ring))`; the direction-times-radius products
+round before adding the origin. Ring growth rounds the multiply-add once.
+Ellipse deltas, summed radii, reciprocal radii, normalized deltas, and the sum
+of squared normalized deltas each follow the explicit `FSTP float` boundaries
+in `0x00410470`. The strict threshold remains one.
+
+The ordinary collision query is still mask 4 scenery/contours. Live players
+and enemies are not members of the temporary batch. The old web `avoidActors`
+branch incorrectly substituted those bodies for the missing Gold list.
+The native registration loop removes each Gold from `+0x360` before registering
+it with the world; a completed batch does not remain a placement reservation.
+Keep the list local to one materialization, including empty requests.
+
+The residual caller audit also preserves literal script amount `-1` as the
+ordinary random-amount sentinel (`0x0046AACE..0x0046AAD1`). Other nonpositive
+amounts produce no actors. The web script adapter previously treated `-1` as
+an empty request even though its ordinary enemy input already represented the
+same sentinel with `null`.
+
+An independent C++ instruction replay (Mac clang, `-ffp-contract=off`) at seed
+991, origin `(100,200)`, requested amount 137 yields eight actors in registration
+order `[8,2,3,1,6,4,5,7]`, amounts `[14,25,7,9,25,7,25,25]`, delays
+`[3,7,7,0,8,8,17,1]`, and final RNG indices `(29,5)`. Exact float32 positions
+and the first eight final RNG words are retained in the regression test. This
+is an instruction replay, not an observed clean-stock runtime capture.
+
+Ring sampling, Y scale, cumulative growth, stable Y ordering, the unused stack
+Gold constructor, zero-delay fills, delayed pickup admission, seventeen scatter
+updates, painter-local extra coins, settlement audio, and persistent ground
+lifetime retain their native owners. The host alone chooses positions; clients
+render the replicated coordinates. Distribution does not guarantee navigation
+connectivity through every grave arrangement and does not prove reduced lag.
+
+### Boundary and membership
+
+Boundary: Gold batch construction, placement reservations, RNG ordering, and
+registration, with its existing scenery-placement interface.
+Dispositions reflect the implemented cutover; the final Mac receipt is below.
+
+| Member | Native source | Disposition and proof contract |
+| --- | --- | --- |
+| Gold tiers 0, 1, 2, 3; ordinary amount, explicit <=25 and >25, nonpositive script requests | `0x0046AA90`, `0x005E12C0`, `0x005E13C0` | `exact-ported`; totals, constructor-before-chunk draws, separation, sorting, delays, empty-request RNG tests |
+| Enemy Gold, forced Gold and policy-5 supplemental Gold | shared Gold virtual slot; selector `0x0047C070` | `exact-ported`; shared batch separation and existing policy coverage |
+| Goodie selectors 13, 14, 15, 16, all three chest subtypes | `0x0061F4C0` -> shared Gold slot | `exact-ported`; each selector/subtype materializes separated Gold after phase 250 |
+| Fixed/random scripted Gold and Miniboss Die Gold reward | existing action materializers -> shared Gold slot | `exact-ported`; script and boss regression assertions |
+| Earlier batch Gold, open origin, blocked origin, later rings, strict tangency, batch teardown | `0x00645910`, `0x00645820`, `0x00410470` | `exact-ported`; geometry, obstacle and independent-batch assertions |
+| Key (both placement passes), explicit/random Item, enemy Item and Potion, scripted Potion, Goodie Sack | xrefs `0x00468440`, `0x00469FE0`, `0x0046A0F0`, `0x0046A360`, `0x0046AE20`, `0x00466B50`, `0x0061F4C0` | `verified-already-at-parity`; mask-4 scenery search preserved, existing family assertions |
+| Shared radial-search callers for spawn/teleport/movement/secondary effects | remaining xrefs `0x00465440`, `0x00466E80`, `0x0052BB60`, `0x0054CC50` | `out-of-system`; these do not construct a Gold batch; their distinct masks and placement owners are unchanged |
+| Gold scatter render/tick, pickup credit/audio, snapshot codecs and retirement | `0x005E66B0`, `0x0060FFE0`, existing protocol/renderer owners | `verified-already-at-parity`; existing lifecycle tests and two-client browser acceptance |
+
+The complete radial-search census has 15 call sites in 12 functions;
+`0x00645820` has exactly two callers, both inside `0x00645910`. Gold creation is
+virtual, with table references at `0x00785A78` and `0x0078C2C8`. There are no
+authored scatter-radius variants or platform-blocked members in this boundary.
+
+### Implementation and validation contract
+
+Keep Gold batch occupancy inside the native materializer. Separate cohesive
+item construction from the oversized loot kernel. Remove the obsolete dynamic
+body substitution from the world placement adapter and update its callers.
+`native-loot-items.ts` now owns item factories and Goodie contents;
+`boneyard-world-placement.ts` owns world placement/movement geometry, with
+callers updated directly and no re-export shims. The Goodie recipe selector
+no longer carries unused generic selection modes. Candidate selection no
+longer treats an unrolled zero Integer bound as a forced success: it retains
+the native `Integer(bound) == 1` decision.
+
+Use meaningful public materialization/store tests, the complete Mac gate, and
+Mac Chrome with two real clients: open a chest, observe spread around obstacles,
+compare host/guest positions, collect the full reward, and capture error arrays.
+
+### Initial Mac validation receipt, before publication — 2026-09-04
+
+- Candidate base: `132774b6992fc766c255e319cdbbdcddeef8135b`. All 12 changed
+  files were SHA-256 compared between the isolated local worktree and
+  `/Users/jarrett/codex-acceptance/gold-chest-placement-20260904-root/Website`
+  before validation and again after the final browser runs. Node `22.17.0`,
+  npm `10.9.2`, pinned repository dependencies, Mac Chrome/WebGL2.
+- `/opt/homebrew/bin/bash ./scripts/validate.sh`: passed on the final code,
+  including backend contracts/integration, formatting, frontend lint/import
+  boundaries, all supported test suites, desktop tests, production builds,
+  bundle budget and production media policy.
+- Focused kernel/store tests: **41 passed**. Node's coverage reporter measured
+  **100% lines, branches and functions** in both `native-loot.ts` and
+  `native-loot-items.ts`. This includes every chest selector/subtype, native
+  constructor/RNG ordering, exact instruction-replay positions, obstacle
+  clearance, strict ellipse tangency, batch teardown, boss rewards, script
+  sentinels, all item modes and the real input boundaries.
+- Production browser command: `SDR_LOOT_BUILT=1 node
+  --experimental-strip-types tools/smoke-loot-drops.mjs --gold-placement-only`.
+  The map uses the existing host seed seam with 16 zero bytes; the Goodie seed
+  is `gold-chest-repro`. Observers remain outside pickup range during capture.
+  The ordinary chest produced 27 distinct actors carrying 500 Gold over
+  `131.1043701171875 x 98.2314453125` world units. A source deliberately placed
+  on grave geometry produced 32 distinct actors carrying 500 Gold over
+  `157.5179443359375 x 119.22030639648438` units. Every actor cleared scenery,
+  both clients matched the host's quantized positions, and all 500 Gold in
+  each case was collected from valid player positions. Page errors, console
+  errors and failed responses were all empty.
+- The complete built `smoke-loot-drops.mjs` journey also passed: Gold,
+  Potion/Item/Goodie Sacks, both Orbs, Bonus presentation/expiry, pickup effects,
+  bitmap messages and audio. In the contention case, host Gold changed
+  `510 -> 511` and guest Gold remained `500`, preserving one retirement and
+  one credit. Both clients remained ready after terminal Bonus fade.
+- The final chest/grave and family screenshots were inspected. These are
+  browser evidence; the stock oracle for this correction is the reviewed
+  retail instructions/data plus the independent C++ instruction replay.
+  Lag impact and global navigation connectivity were not benchmarked or
+  inferred from these position/pickup results.
+- The reorganized production files have 989, 409, 994 and 519 total lines
+  respectively (`native-loot`, `native-loot-items`, `boneyard-world`, and
+  `boneyard-world-placement`). Other world-geometry helpers moved without
+  behavioral changes; their existing world/integration tests passed. An
+  additional LCOV run of the world tests exercised placement-adapter
+  construction 7,858 times. V8 coverage of the real chest/grave browser
+  journey recorded 2,005 adapter constructions and 1,746 collision-callback
+  executions, with every recorded range of both functions covered.
+- Unmeasured gates: separate statement coverage (not exposed by the Node
+  reporter), cyclomatic/cognitive complexity, Halstead Difficulty, CRAP,
+  mutation survival, and automated dead-code/duplication analysis. The
+  repository configures no analyzers for those metrics; no dependencies,
+  exclusions or suppressions were added to manufacture a result.
+- At the initial handoff, this was an uncommitted isolated candidate with no
+  push or deployment; the local and Mac source worktrees were retained for review. Task-owned captures,
+  native replay source/binary, patches, logs, dependencies and build outputs
+  were removed; the user's original video remains untouched.
+
+
 ## Reported smell and parity question
 
 - Reported web behavior: enemy death retires the actor and grants XP, but the

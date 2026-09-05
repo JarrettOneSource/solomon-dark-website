@@ -4,15 +4,12 @@ import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
   NATIVE_LOOT_ACTOR_SEED_BOUND,
   NATIVE_LOOT_DEFAULT_MODIFIERS,
-  createNativeLootItemIds,
   initialNativeKeyDropLevel,
   materializeNativeLootScriptAction,
-  resolveNativeGoodieContents,
   rollNativeEnemyLoot,
   type NativeBonusKind,
   type NativeLootDropSource,
   type NativeLootDropSpec,
-  type NativeLootItem,
   type NativeLootArenaInput,
   type NativeLootModifiers,
   type NativeLootPlacement,
@@ -20,6 +17,11 @@ import {
   type NativeLootSelectionInput,
   type NativeOrbKind,
 } from '../core-kernels/native-loot.ts'
+import {
+  createNativeLootItemIds,
+  resolveNativeGoodieContents,
+  type NativeLootItem,
+} from '../core-kernels/native-loot-items.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -1049,7 +1051,7 @@ function stepLootEffect(
     height = Math.fround(height + verticalVelocity)
     verticalVelocity = Math.fround(verticalVelocity + Math.fround(0.40000000596046448))
     if (height > 0) {
-      if (!placement.canPlace(position, 0.01, false)) return null
+      if (!placement.canPlace(position, 0.01)) return null
       angularVelocityDeg = Math.fround(drawLootFloat(work, 10) + 1)
       bounceVelocity = Math.fround(bounceVelocity * Math.fround(0.6499999761581421))
       verticalVelocity = bounceVelocity

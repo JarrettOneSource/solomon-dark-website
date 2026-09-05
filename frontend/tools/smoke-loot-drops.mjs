@@ -11,14 +11,17 @@ import {
 } from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { observeGoldPlacementWire, proveGoldPlacement } from './smoke-loot-gold-placement.mjs'
 import {
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   NATIVE_LOOT_OPEN_PLACEMENT,
-  createNativeLootItemIds,
   materializeNativeLootScriptAction,
   nativeLootModifiers,
   rollNativeEnemyLoot,
 } from '../src/game/core-kernels/native-loot.ts'
+import {
+  createNativeLootItemIds,
+} from '../src/game/core-kernels/native-loot-items.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { createNativeWorldManagerOrder } from '../src/game/core-kernels/native-world-manager-order.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
@@ -55,6 +58,7 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   : '/usr/bin/google-chrome')
 const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
 const charmOwnerOnly = process.argv.includes('--charm-owner-only')
+const goldPlacementOnly = process.argv.includes('--gold-placement-only')
 const ALL_DISABLED = Object.freeze({
   gold: 4,
   item: 4,
@@ -90,6 +94,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
+  ...(goldPlacementOnly ? { createBoneyardSeedBytes: () => Buffer.alloc(16) } : {}),
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -108,6 +113,9 @@ const [hostPage, guestPage] = await Promise.all([
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
+const goldWires = goldPlacementOnly
+  ? [hostPage, guestPage].map((page) => observeGoldPlacementWire(page, host.address.url))
+  : []
 
 await Promise.all([hostPage, guestPage].map(async (page) => {
   page.on('console', (message) => {
@@ -185,6 +193,20 @@ try {
     .map(({ playerId: connectedPlayerId }) => connectedPlayerId)
     .find((connectedPlayerId) => connectedPlayerId !== playerId)
   assert.ok(guestPlayerId, 'the second browser must own a distinct authoritative slot')
+
+  if (goldPlacementOnly) {
+    const goldPlacement = await proveGoldPlacement({
+      host, hostPage, guestPage, hostPlayerId: playerId, guestPlayerId,
+      screenshotRoot, wires: goldWires,
+    })
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
+      consoleErrors: [], failedResponses: [], pageErrors: [],
+    })
+    process.stdout.write(`${JSON.stringify({
+      goldPlacement, consoleErrors, failedResponses, pageErrors, useBuiltFrontend,
+    }, null, 2)}\n`)
+    break smoke
+  }
 
   if (charmOwnerOnly) {
     const charmOwnership = await proveCharmOwnerIsolation({

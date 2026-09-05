@@ -1,12 +1,4 @@
-import {
-  DOWSING_EQUIPMENT_RECIPES,
-  NATIVE_SKILL_BOOK_DEFINITIONS,
-  createEquipmentInventoryItem,
-  createNativeSkillBookInventoryItem,
-  type EquipmentRecipe,
-  type EquipmentType,
-  type HubInventoryItem,
-} from './hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES } from './hub-economy.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -15,7 +7,14 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import type { BoneyardPoint } from './boneyard.ts'
-import { generateNativeRandomEquipmentEffects } from './native-random-equipment.ts'
+import {
+  equipmentRecipeItem,
+  miscItem,
+  potionItem,
+  selectEnemyItem,
+  type NativeLootItem,
+  type NativeLootItemIds,
+} from './native-loot-items.ts'
 
 export const NATIVE_LOOT_CANDIDATE_ORDER = Object.freeze([
   'key', 'orb', 'gold', 'item', 'potion', 'powerup',
@@ -36,6 +35,7 @@ export const NATIVE_LOOT_ORB_CHANCE_MULTIPLIER = Math.fround(0.5)
 export const NATIVE_LOOT_POWERUP_CHANCE_MULTIPLIER = Math.fround(0.800000011920929)
 export const NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS = Math.fround(15)
 export const NATIVE_LOOT_PLACEMENT_VERTICAL_SCALE = Math.fround(0.800000011920929)
+const NATIVE_LOOT_PLACEMENT_PI = 3.141592502593994 // GMath +4, authored float at 0x007DE8A8.
 
 export interface NativeLootModifiers {
   readonly goldAmount: number
@@ -98,29 +98,16 @@ export interface NativeLootKeyInput {
   readonly remaining: number
 }
 
-export interface NativeLootItemIds {
-  readonly next: () => number
-  readonly peek: () => number
-}
-
 export interface NativeLootPlacement {
   readonly canPlace: (
     position: Readonly<BoneyardPoint>,
     radius: number,
-    avoidActors: boolean,
   ) => boolean
 }
 
 export const NATIVE_LOOT_OPEN_PLACEMENT: NativeLootPlacement = Object.freeze({
   canPlace: () => true,
 })
-
-export interface NativeLootItem extends HubInventoryItem {
-  readonly contents?: readonly NativeLootItem[]
-  readonly iconTints?: readonly [number | null, number | null]
-  readonly generatedLevel?: number
-  readonly nativeSelector?: number
-}
 
 export type NativeLootDropKind = 'bonus' | 'gold' | 'orb' | 'sack'
 export type NativeLootDropSource = 'enemy' | 'goodie' | 'script'
@@ -172,22 +159,6 @@ export interface NativeLootSelectionResult {
   readonly sharedRng: NativeRngState
 }
 
-export interface NativeGoodieContentsInput {
-  readonly advancedUnlocks: readonly boolean[]
-  readonly itemIds: NativeLootItemIds
-  readonly ownedRecipeIndexes: readonly number[]
-  readonly playerLevel: number
-  readonly selector: number
-  readonly sharedRng: NativeRngState
-}
-
-export interface NativeGoodieContentsResult {
-  readonly gold: number
-  readonly itemIds: NativeLootItemIds
-  readonly items: readonly NativeLootItem[]
-  readonly sharedRng: NativeRngState
-}
-
 export interface NativeLootMaterializationResult {
   readonly drops: readonly NativeLootDropSpec[]
   readonly lastSuccessfulItemLevel: number
@@ -207,22 +178,6 @@ export interface NativeLootArenaDropLimits {
   readonly itemLevelMaximum: number
   readonly itemLevelMinimum: number
   readonly mode: number
-}
-
-interface ItemSelectionResult {
-  readonly item: NativeLootItem | null
-  readonly sharedRng: NativeRngState
-}
-
-export function createNativeLootItemIds(first: number): NativeLootItemIds {
-  if (!Number.isSafeInteger(first) || first < 1) {
-    throw new RangeError('native loot item id must start at a positive safe integer')
-  }
-  let nextId = first
-  return Object.freeze({
-    next: () => nextId++,
-    peek: () => nextId,
-  })
 }
 
 export function nativeLootCandidateWeights(count: number): readonly number[] {
@@ -489,14 +444,12 @@ export function materializeNativeLootScriptAction(
       input.placement,
       input.sourcePosition,
       NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-      false,
     )
     const second = resolveNativeLootPlacement(
       first.sharedRng,
       input.placement,
       first.position,
       NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-      false,
     )
     return {
       drops: [sackDrop(input, miscItem(input.itemIds, 1), 'script', second.position)],
@@ -522,7 +475,6 @@ export function materializeNativeLootScriptAction(
       input.placement,
       input.sourcePosition,
       NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-      false,
     )
     return {
       drops: [sackDrop(
@@ -551,7 +503,6 @@ export function materializeNativeLootScriptAction(
         input.placement,
         input.sourcePosition,
         NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-        false,
       )
   return {
     drops: selected.item && placement
@@ -595,85 +546,6 @@ export function nativeLootDisableMask(
   return enableOperand === 0 ? disabled ^ mask : disabled
 }
 
-export function resolveNativeGoodieContents(
-  input: NativeGoodieContentsInput,
-): NativeGoodieContentsResult {
-  if (!Number.isInteger(input.selector) || input.selector < 0 || input.selector > 17) {
-    throw new RangeError('native Goodie selector must be within [0,17]')
-  }
-  let rng = input.sharedRng
-  const items: NativeLootItem[] = []
-  const insertItem = (item: NativeLootItem) => {
-    if (item.nativeTypeId === 7001) {
-      const stackIndex = items.findIndex((candidate) => (
-        candidate.nativeTypeId === 7001 && candidate.nativeSubtype === item.nativeSubtype
-      ))
-      if (stackIndex >= 0) {
-        items[stackIndex] = {
-          ...items[stackIndex]!,
-          quantity: items[stackIndex]!.quantity + item.quantity,
-        }
-        return
-      }
-    }
-    items.push(item)
-  }
-  let gold = 0
-  if (input.selector <= 3) {
-    for (let index = 0; index < 5; index += 1) insertItem(potionItem(input.itemIds, 0))
-  } else if (input.selector <= 7) {
-    for (let index = 0; index < 6; index += 1) insertItem(potionItem(input.itemIds, 1))
-  } else if (input.selector <= 9) {
-    const third = drawNativeInteger(rng, 2)
-    rng = third.state
-    const count = third.value + 2
-    for (let index = 0; index < count; index += 1) {
-      const levelOffset = drawNativeInteger(rng, 5)
-      rng = levelOffset.state
-      const generated = randomEquipment(
-        rng,
-        input.itemIds,
-        input.playerLevel + levelOffset.value,
-        input.advancedUnlocks,
-      )
-      rng = generated.sharedRng
-      insertItem(generated.item)
-    }
-  } else if (input.selector === 10) {
-    const selected = selectDefinitionItem(
-      rng,
-      input.itemIds,
-      4,
-      0,
-      100,
-      input.ownedRecipeIndexes,
-    )
-    rng = selected.sharedRng
-    if (selected.item) insertItem(selected.item)
-  } else if (input.selector <= 12) {
-    for (let index = 0; index < 3; index += 1) {
-      const subtype = drawNativeInteger(rng, 2)
-      rng = subtype.state
-      insertItem(miscItem(input.itemIds, subtype.value + 2))
-    }
-  } else if (input.selector <= 16) {
-    const amount = drawNativeInteger(rng, 3)
-    rng = amount.state
-    gold = amount.value * 300 + 500
-  } else {
-    for (let index = 0; index < 3; index += 1) input.itemIds.next()
-    for (const subtype of [5, 0, 1, 4, 2, 2]) {
-      insertItem(potionItem(input.itemIds, subtype))
-    }
-  }
-  return {
-    gold,
-    itemIds: input.itemIds,
-    items: Object.freeze(items),
-    sharedRng: rng,
-  }
-}
-
 function materializeSelected(
   category: NativeLootCategory,
   input: NativeLootSelectionInput,
@@ -688,14 +560,12 @@ function materializeSelected(
       input.placement,
       input.sourcePosition,
       NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-      false,
     )
     const secondPlacement = resolveNativeLootPlacement(
       firstPlacement.sharedRng,
       input.placement,
       firstPlacement.position,
       NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-      false,
     )
     return {
       drops: [sackDrop(input, miscItem(input.itemIds, 1), 'enemy', secondPlacement.position)],
@@ -778,7 +648,6 @@ function materializeSelected(
         input.placement,
         input.sourcePosition,
         NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-        false,
       )
   return {
     drops: selected.item && placement
@@ -806,7 +675,7 @@ function materializeGold(
 ): NativeLootMaterializationResult {
   let rng = sourceRng
   let total: number
-  if (explicitAmount === null) {
+  if (explicitAmount === null || explicitAmount === -1) {
     const addend = Math.max(1, Math.trunc(input.arena.level / 5))
     const amount = drawNativeInteger(rng, Math.trunc(input.arena.level / 2) + 6)
     rng = amount.state
@@ -825,6 +694,18 @@ function materializeGold(
   let constructedCount = 0
   const constructed: NativeLootDropSpec[] = []
   while (remaining > 0) {
+    const identity = drawNativeInteger(rng, 100_000)
+    const phase = drawNativeFloat(identity.state, 360)
+    const motion = drawNativeFloat(phase.state, 20, true)
+    const radius = drawNativeFloat(motion.state, Math.fround(3))
+    const placement = resolveNativeLootPlacement(
+      radius.state,
+      input.placement,
+      input.sourcePosition,
+      Math.fround(radius.value + 1),
+      constructed,
+    )
+    rng = placement.sharedRng
     let chunk = Math.min(remaining, 25)
     if (explicitAmount !== null && explicitAmount > 25) {
       const randomize = drawNativeInteger(rng, 2)
@@ -835,18 +716,6 @@ function materializeGold(
         chunk = replacement.value + 1
       }
     }
-    const identity = drawNativeInteger(rng, 100_000)
-    const phase = drawNativeFloat(identity.state, 360)
-    const motion = drawNativeFloat(phase.state, 20, true)
-    const radius = drawNativeFloat(motion.state, Math.fround(3))
-    const placement = resolveNativeLootPlacement(
-      radius.state,
-      input.placement,
-      input.sourcePosition,
-      Math.fround(radius.value + 1),
-      true,
-    )
-    rng = placement.sharedRng
     constructed.push({
       activationDelayTicks: nextActivationDelayTicks,
       amount: chunk,
@@ -928,236 +797,6 @@ export function advanceNativeKeyDropLevel(
   return { level: currentLevel, sharedRng: sourceRng }
 }
 
-function selectEnemyItem(
-  sourceRng: NativeRngState,
-  input: NativeLootSelectionInput,
-): ItemSelectionResult {
-  let rng = sourceRng
-  const candidates: Array<EquipmentRecipe | null> = []
-  const recipes = DOWSING_EQUIPMENT_RECIPES.filter((recipe) => (
-    recipe.level >= input.arena.itemLevelMinimum
-    && recipe.level <= input.arena.itemLevelMaximum
-    && !input.participant.ownedRecipeIndexes.includes(recipe.sourceIndex)
-  ))
-  const mode = input.policies.specificItem
-  if (mode === 0) {
-    const rare = drawNativeInteger(rng, 15)
-    rng = rare.state
-    if (rare.value === 1) candidates.push(...recipes.filter(({ rarity }) => rarity === 'Rare'))
-    const epic = drawNativeInteger(rng, 20)
-    rng = epic.state
-    if (epic.value === 1) candidates.push(...recipes.filter(({ rarity }) => rarity === 'Epic'))
-  } else if (mode === 2) {
-    candidates.push(...recipes.filter(({ rarity }) => rarity === 'Rare'))
-  } else if (mode === 3) {
-    candidates.push(...recipes.filter(({ rarity }) => rarity === 'Epic'))
-  } else if (mode === 4) {
-    candidates.push(...recipes.filter(({ rarity }) => rarity === 'Rare' || rarity === 'Epic'))
-  }
-  if (candidates.length === 0 && input.arena.mode === 1) {
-    if (mode !== 3) candidates.push(...recipes.filter(({ rarity }) => rarity === 'Rare'))
-    if (mode !== 2) candidates.push(...recipes.filter(({ rarity }) => rarity === 'Epic'))
-  }
-  if (input.arena.mode !== 1 && (mode === 0 || mode === 1)) {
-    for (let index = 0; index < 110; index += 1) candidates.push(null)
-  }
-  if (candidates.length === 0) return { item: null, sharedRng: rng }
-  const selected = drawNativeInteger(rng, candidates.length)
-  rng = selected.state
-  const recipe = candidates[selected.value]
-  if (recipe) {
-    return {
-      item: equipmentRecipeItem(recipe, input.itemIds),
-      sharedRng: rng,
-    }
-  }
-  const generated = randomEquipment(
-    rng,
-    input.itemIds,
-    input.arena.level,
-    input.participant.advancedUnlocks,
-  )
-  return { item: generated.item, sharedRng: generated.sharedRng }
-}
-
-function selectDefinitionItem(
-  sourceRng: NativeRngState,
-  itemIds: NativeLootItemIds,
-  mode: number,
-  minimumLevel: number,
-  maximumLevel: number,
-  ownedRecipeIndexes: readonly number[],
-): ItemSelectionResult {
-  let rng = sourceRng
-  const recipes = DOWSING_EQUIPMENT_RECIPES.filter((recipe) => (
-    recipe.level >= minimumLevel
-    && recipe.level <= maximumLevel
-    && !ownedRecipeIndexes.includes(recipe.sourceIndex)
-  ))
-  const candidates: EquipmentRecipe[] = []
-  if (mode === 0) {
-    const rare = drawNativeInteger(rng, 15)
-    rng = rare.state
-    if (rare.value === 1) candidates.push(...recipes.filter(({ rarity }) => rarity === 'Rare'))
-    const epic = drawNativeInteger(rng, 20)
-    rng = epic.state
-    if (epic.value === 1) candidates.push(...recipes.filter(({ rarity }) => rarity === 'Epic'))
-  } else if (mode === 2) {
-    candidates.push(...recipes.filter(({ rarity }) => rarity === 'Rare'))
-  } else if (mode === 3) {
-    candidates.push(...recipes.filter(({ rarity }) => rarity === 'Epic'))
-  } else if (mode === 4) {
-    candidates.push(...recipes)
-  }
-  if (candidates.length === 0) return { item: null, sharedRng: rng }
-  const selected = drawNativeInteger(rng, candidates.length)
-  return {
-    item: equipmentRecipeItem(candidates[selected.value]!, itemIds),
-    sharedRng: selected.state,
-  }
-}
-
-function randomEquipment(
-  sourceRng: NativeRngState,
-  itemIds: NativeLootItemIds,
-  level: number,
-  advancedUnlocks: readonly boolean[],
-): { readonly item: NativeLootItem; readonly sharedRng: NativeRngState } {
-  const typeDraw = drawNativeInteger(sourceRng, 6)
-  let rng = typeDraw.state
-  const types = ['hat', 'robe', 'staff', 'wand', 'ring', 'amulet'] as const
-  const equipmentType = types[typeDraw.value]!
-  const selectorCount: Readonly<Record<EquipmentType, number>> = {
-    amulet: 12,
-    hat: 4,
-    ring: 12,
-    robe: 3,
-    staff: 6,
-    wand: 6,
-  }
-  const selectorDraw = drawNativeInteger(rng, selectorCount[equipmentType])
-  rng = selectorDraw.state
-  const selector = selectorDraw.value
-  let iconTints: readonly [number, number] | undefined
-  if (equipmentType === 'hat' || equipmentType === 'robe') {
-    const colors = randomWearableColors(rng)
-    rng = colors.sharedRng
-    iconTints = colors.iconTints
-  }
-  const generated = generateNativeRandomEquipmentEffects(
-    rng,
-    equipmentType,
-    level,
-    { advancedUnlocks },
-  )
-  rng = generated.sharedRng
-  const nativeTypeId: Readonly<Record<EquipmentType, number>> = {
-    amulet: 7003,
-    hat: 7005,
-    ring: 7002,
-    robe: 7006,
-    staff: 7004,
-    wand: 7011,
-  }
-  return {
-    item: {
-      equipmentType,
-      generatedLevel: generated.itemLevel,
-      iconRecords: equipmentIconRecords(equipmentType, selector),
-      ...(iconTints === undefined ? {} : { iconTints }),
-      id: itemIds.next(),
-      kind: 'equipment',
-      name: generated.name,
-      nativeEffects: generated.effects,
-      nativeSelector: selector,
-      nativeSubtype: null,
-      nativeTypeId: nativeTypeId[equipmentType],
-      quantity: 1,
-      rarity: null,
-      recipeIndex: null,
-    },
-    sharedRng: rng,
-  }
-}
-
-function randomWearableColors(sourceRng: NativeRngState): {
-  readonly iconTints: readonly [number, number]
-  readonly sharedRng: NativeRngState
-} {
-  const palette = [
-    [1, 0, 0], [1, 0.5, 0], [1, 1, 0], [0.25, 1, 0.25], [0.25, 1, 1],
-    [0.25, 0.25, 1], [1, 0.25, 1], [0.4, 0.4, 0.4], [0.8, 0.8, 0.8],
-  ] as const
-  const selected = drawNativeInteger(sourceRng, palette.length)
-  let rng = selected.state
-  let color = [...palette[selected.value]!] as [number, number, number]
-  const jitterGate = drawNativeInteger(rng, 2)
-  rng = jitterGate.state
-  if (jitterGate.value === 1) {
-    for (let channel = 0; channel < 3; channel += 1) {
-      const jitter = drawNativeFloat(rng, Math.fround(0.1), true)
-      rng = jitter.state
-      color[channel] = clamp01(Math.fround(color[channel]! + jitter.value))
-    }
-  }
-  const brightGate = drawNativeInteger(rng, 4)
-  rng = brightGate.state
-  if (brightGate.value === 1) color = color.map((value) => clamp01(value * 1.85)) as typeof color
-  const luminance = Math.fround(
-    Math.fround(color[0] * Math.fround(0.30860000848770142))
-    + Math.fround(color[1] * Math.fround(0.6093999743461609))
-    + Math.fround(color[2] * Math.fround(0.0820000022649765)),
-  )
-  const primary = color.map((value) => clamp01(
-    Math.fround(
-      Math.fround(luminance * Math.fround(0.800000011920929))
-      + Math.fround(value * Math.fround(0.19999998807907104)),
-    ),
-  )) as typeof color
-  return {
-    iconTints: [rgbTint(primary), 0xffffff],
-    sharedRng: rng,
-  }
-}
-
-function equipmentIconRecords(
-  type: EquipmentType,
-  selector: number,
-): readonly number[] {
-  switch (type) {
-    case 'hat': return [34 + selector, 38 + selector]
-    case 'robe': return [64 + selector, 67 + selector]
-    case 'staff': return [72 + selector]
-    case 'wand': return [78 + selector]
-    case 'ring': return [52 + selector]
-    case 'amulet': return [30 + Math.floor(selector / 6), 18 + selector]
-  }
-}
-
-function equipmentRecipeItem(
-  recipe: EquipmentRecipe,
-  itemIds: NativeLootItemIds,
-): NativeLootItem {
-  return {
-    ...createEquipmentInventoryItem(recipe, itemIds.next()),
-    ...((recipe.type === 'hat' || recipe.type === 'robe')
-      ? { iconTints: recipe.iconTints }
-      : {}),
-    nativeSelector: equipmentSelector(recipe.type, recipe.iconRecords),
-  }
-}
-
-function equipmentSelector(type: EquipmentType, records: readonly number[]): number {
-  switch (type) {
-    case 'hat': return records[0]! - 34
-    case 'robe': return records[0]! - 64
-    case 'staff': return records[0]! - 72
-    case 'wand': return records[0]! - 78
-    case 'ring': return records[0]! - 52
-    case 'amulet': return records[1]! - 18
-  }
-}
-
 function materializePotion(
   input: NativeLootSelectionInput,
   sourceRng: NativeRngState,
@@ -1169,7 +808,6 @@ function materializePotion(
     input.placement,
     input.sourcePosition,
     NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
-    false,
   )
   return {
     drops: [sackDrop(input, potionItem(input.itemIds, subtype), source, placement.position)],
@@ -1204,7 +842,7 @@ export function resolveNativeLootPlacement(
   placement: NativeLootPlacement,
   sourcePosition: Readonly<BoneyardPoint>,
   radius: number,
-  avoidActors: boolean,
+  pendingGold: readonly Pick<NativeLootDropSpec, 'position'>[] = [],
 ): {
   readonly position: Readonly<BoneyardPoint>
   readonly sharedRng: NativeRngState
@@ -1217,7 +855,21 @@ export function resolveNativeLootPlacement(
     y: Math.fround(sourcePosition.y),
   })
   const nativeRadius = Math.fround(radius)
-  if (placement.canPlace(origin, nativeRadius, avoidActors)) {
+  const canPlace = (position: Readonly<BoneyardPoint>): boolean => {
+    if (!placement.canPlace(position, nativeRadius)) return false
+    const horizontal = Math.fround(nativeRadius + NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS)
+    const vertical = Math.fround(
+      Math.fround(nativeRadius * NATIVE_LOOT_PLACEMENT_VERTICAL_SCALE)
+      + Math.fround(NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS * NATIVE_LOOT_PLACEMENT_VERTICAL_SCALE),
+    )
+    for (const earlier of pendingGold) {
+      const dx = Math.fround(Math.fround(position.x - earlier.position.x) * Math.fround(1 / horizontal))
+      const dy = Math.fround(Math.fround(position.y - earlier.position.y) * Math.fround(1 / vertical))
+      if (Math.fround(dx * dx + dy * dy) < 1) return false
+    }
+    return true
+  }
+  if (canPlace(origin)) {
     return { position: origin, sharedRng: sourceRng }
   }
 
@@ -1225,86 +877,29 @@ export function resolveNativeLootPlacement(
   let searchRadius = nativeRadius
   let growth = Math.fround(1)
   for (;;) {
-    const sampleCount = Math.max(1, Math.trunc(
-      Math.PI * Math.fround(searchRadius + nativeRadius) / searchRadius,
-    ))
+    const sampleCount = Math.trunc(
+      Math.fround(2 * NATIVE_LOOT_PLACEMENT_PI * (searchRadius + nativeRadius)) / (2 * searchRadius),
+    )
     const angleStep = Math.fround(360 / sampleCount)
     const start = drawNativeFloat(rng, 360)
     rng = start.state
     const verticalRadius = Math.fround(searchRadius * NATIVE_LOOT_PLACEMENT_VERTICAL_SCALE)
     let offset = Math.fround(0)
     while (offset < 360) {
-      const radians = Math.fround(start.value + offset) * Math.PI / 180
+      const radians = Math.fround(Math.fround(start.value + offset) * NATIVE_LOOT_PLACEMENT_PI / 180)
       const candidate = Object.freeze({
-        x: Math.fround(origin.x + Math.fround(Math.sin(radians)) * searchRadius),
-        y: Math.fround(origin.y - Math.fround(Math.cos(radians)) * verticalRadius),
+        x: Math.fround(origin.x + Math.fround(Math.fround(Math.sin(radians)) * searchRadius)),
+        y: Math.fround(origin.y - Math.fround(Math.fround(Math.cos(radians)) * verticalRadius)),
       })
-      if (placement.canPlace(candidate, nativeRadius, avoidActors)) {
+      if (canPlace(candidate)) {
         return { position: candidate, sharedRng: rng }
       }
       offset = Math.fround(offset + angleStep)
     }
-    searchRadius = Math.fround(searchRadius + Math.fround(growth * nativeRadius))
+    searchRadius = Math.fround(searchRadius + growth * nativeRadius)
     const multiplier = drawNativeFloat(rng, 1)
     rng = multiplier.state
-    growth = Math.fround(Math.fround(multiplier.value + 1) * growth)
-  }
-}
-
-function potionItem(itemIds: NativeLootItemIds, subtype: number): NativeLootItem {
-  const definitions = [
-    ['health-potion', 'Health Potion', 46],
-    ['mana-potion', 'Mana Potion', 47],
-    ['wizard-chug', 'Wizard Chug', 48],
-    ['antidote', 'Antidote', 49],
-    ['mind-chug', 'Mind Chug', 50],
-    ['rejuvenation-potion', 'Rejuvenation Potion', 51],
-  ] as const
-  const definition = definitions[subtype]
-  if (!definition) throw new RangeError('native potion subtype must be within [0,5]')
-  return {
-    equipmentType: null,
-    iconRecords: [definition[2]],
-    id: itemIds.next(),
-    kind: definition[0],
-    name: definition[1],
-    nativeSelector: subtype,
-    nativeSubtype: subtype,
-    nativeTypeId: 7001,
-    quantity: 1,
-    rarity: null,
-    recipeIndex: null,
-  }
-}
-
-function miscItem(itemIds: NativeLootItemIds, subtype: number): NativeLootItem {
-  const skillBook = NATIVE_SKILL_BOOK_DEFINITIONS.find((definition) => (
-    definition.nativeSubtype === subtype
-  ))
-  if (skillBook) {
-    return {
-      ...createNativeSkillBookInventoryItem(skillBook, itemIds.next()),
-      nativeSelector: subtype,
-    }
-  }
-  const rows = [
-    ['dye', 'Fabric Dye Kit', 42],
-    ['key', 'Wizard Key', 43],
-  ] as const
-  const row = rows[subtype]
-  if (!row) throw new RangeError('native miscellaneous subtype must be within [0,3]')
-  return {
-    equipmentType: null,
-    iconRecords: [row[2]],
-    id: itemIds.next(),
-    kind: row[0],
-    name: row[1],
-    nativeSelector: subtype,
-    nativeSubtype: subtype,
-    nativeTypeId: 7012,
-    quantity: 1,
-    rarity: null,
-    recipeIndex: null,
+    growth = Math.fround((multiplier.value + 1) * growth)
   }
 }
 
@@ -1322,12 +917,7 @@ function appendPolicyCandidate(
     candidates.push(category)
     return sourceRng
   }
-  const truncated = Math.trunc(bound)
-  if (truncated <= 0) {
-    candidates.push(category)
-    return sourceRng
-  }
-  const draw = drawNativeInteger(sourceRng, truncated)
+  const draw = drawNativeInteger(sourceRng, Math.trunc(bound))
   if (draw.value === 1) candidates.push(category)
   return draw.state
 }
@@ -1389,15 +979,6 @@ function validateSelectionInput(input: NativeLootSelectionInput): void {
   if (!Number.isSafeInteger(input.dropDelayContext)) {
     throw new RangeError('loot drop-delay context must be a safe integer')
   }
-}
-
-function rgbTint(color: readonly number[]): number {
-  const channel = (value: number) => Math.round(clamp01(value) * 255)
-  return (channel(color[0]!) << 16) | (channel(color[1]!) << 8) | channel(color[2]!)
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, Math.fround(value)))
 }
 
 function greatestCommonDivisor(left: number, right: number): number {

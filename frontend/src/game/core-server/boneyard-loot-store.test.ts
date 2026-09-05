@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  createNativeLootItemIds,
   NATIVE_LOOT_OPEN_PLACEMENT,
   nativeLootModifiers,
   type NativeLootDropSpec,
 } from '../core-kernels/native-loot.ts'
+import {
+  createNativeLootItemIds,
+} from '../core-kernels/native-loot-items.ts'
 import {
   advanceNativeRngWords,
   createNativeRng,
@@ -164,10 +166,9 @@ test('the linked Miniboss Die script chooses exact trigger-focus Gold or ANY ite
   assert.ok(gold.actors.every((actor) => (
     actor.kind === 'gold'
     && actor.source === 'script'
-    && actor.position.x === 10
-    && actor.position.y === 20
   )))
 
+  assert.equal(new Set(gold.actors.map(({ position }) => JSON.stringify(position))).size, gold.actors.length)
   const item = materialize(1)
   assert.equal(item.actors.length, 1)
   assert.equal(item.actors[0]?.kind, 'sack')
@@ -609,6 +610,23 @@ test('delayed Goodie Gold uses only the activating player charm modifiers', () =
     missingFinished.store.actors.reduce((total, actor) => total + actor.amount, 0),
     neutral,
   )
+})
+
+test('every Gold chest selector and subtype distributes the reward before scatter animation', () => {
+  for (const rewardSeed of [13, 14, 15, 16]) {
+    for (const subtype of [0, 1, 2]) {
+      let store = activateBoneyardGoodie(createBoneyardLootStore('gold-chest-repro', [{
+        eid: 'chest', position: { x: 100, y: 200 }, rewardSeed, subtype,
+      }]), 'chest', 'far')
+      store = stepBoneyardLootStore(store, { participants: FAR, tick: 0 }).store
+      store = stepBoneyardLootStore(store, { participants: FAR, tick: 249 }).store
+      const gold = store.actors.filter(({ kind }) => kind === 'gold')
+      assert.ok(gold.length > 1)
+      assert.ok([500, 800, 1_100].includes(gold.reduce((total, actor) => total + actor.amount, 0)))
+      assert.equal(new Set(gold.map(({ position }) => JSON.stringify(position))).size, gold.length)
+      assert.ok(gold.every(({ scatterProgress }) => scatterProgress <= 0.5))
+    }
+  }
 })
 
 test('proximity alone never activates a locked Goodie without an explicit interaction action', () => {
