@@ -33,7 +33,6 @@ export class PlayerEnchantStaffView {
     this.aura = new MeshSimple({
       indices: QUAD_INDICES,
       texture: textures.auras[0],
-      topology: 'triangle-list',
       uvs: QUAD_UVS,
       vertices: this.auraVertices,
     })
@@ -129,7 +128,9 @@ export class PlayerEnchantStaffView {
   }
 
   destroy(): void {
+    const geometry = this.aura.geometry
     this.container.destroy({ children: true })
+    geometry.destroy(true)
   }
 }
 

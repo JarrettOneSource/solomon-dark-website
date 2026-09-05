@@ -25,11 +25,9 @@ export function renderNativeDiffuseMask(
 ): void {
   const previous = NATIVE_TEXTURE_COLOR_UNIFORMS.uniforms.uIgnoreTextureColor
   NATIVE_TEXTURE_COLOR_UNIFORMS.uniforms.uIgnoreTextureColor = 1
-  NATIVE_TEXTURE_COLOR_UNIFORMS.update()
   try {
     renderer.render(options)
   } finally {
     NATIVE_TEXTURE_COLOR_UNIFORMS.uniforms.uIgnoreTextureColor = previous
-    NATIVE_TEXTURE_COLOR_UNIFORMS.update()
   }
 }

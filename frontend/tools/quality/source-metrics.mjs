@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { Linter } from 'eslint'
 import parser from '@typescript-eslint/parser'
 import sonarjs from 'eslint-plugin-sonarjs'
@@ -63,7 +64,10 @@ export function measureSource(source, file) {
   if (units.some(unit => unit.cyclomatic === null)) {
     throw new Error(`Missing cyclomatic measurements in ${file}`)
   }
-  return { file, sourceLines: source.split('\n').length - Number(source.endsWith('\n')), prohibitedTypes, units }
+  return {
+    file, sourceHash: createHash('sha256').update(source).digest('hex'),
+    sourceLines: source.split('\n').length - Number(source.endsWith('\n')), prohibitedTypes, units,
+  }
 }
 
 function halsteadFor(node) {

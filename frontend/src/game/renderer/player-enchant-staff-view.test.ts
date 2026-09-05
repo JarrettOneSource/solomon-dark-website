@@ -86,11 +86,22 @@ test('non-Staff, unselected, and nonliving owners hide the retained attachment w
     input({ selectedPrimarySkillId: -1 }),
     input({ living: false }),
   ]) {
+    view.update(input(), true)
     view.update(state, false)
     assert.equal(view.container.visible, false)
     assert.equal(view.active, false)
     assert.equal(view.auraRecord, null)
+    assert.equal(view.container.children[1]?.visible, false)
+    assert.equal(view.container.children[2]?.visible, false)
   }
+  view.destroy()
+})
+
+test('an unenchanted Staff remains visible for selected primary zero', () => {
+  const view = new PlayerEnchantStaffView(textures())
+  view.update(input({ learnedSkills: [], selectedPrimarySkillId: 0 }), true)
+  assert.equal(view.container.visible, true)
+  assert.equal(view.active, false)
   view.destroy()
 })
 
@@ -118,12 +129,12 @@ test('Staff rejects an incomplete atlas at each required attachment', () => {
     ['aura', 'missing Clothes aura record 11'],
   ]) {
     const complete = textures()
+    if (missing === 'aura') Reflect.deleteProperty(complete.auras, 0)
     const emptySide = { back: [], front: [] }
     const broken = {
       ...complete,
       ...(missing === 'body-style' ? { bodies: [] } : {}),
       ...(missing === 'body-frame' ? { bodies: [emptySide] } : {}),
-      ...(missing === 'aura' ? { auras: [] } : {}),
       hands: {
         primary: missing === 'primary-hand' ? emptySide : complete.hands.primary,
         secondary: missing === 'secondary-hand' ? emptySide : complete.hands.secondary,

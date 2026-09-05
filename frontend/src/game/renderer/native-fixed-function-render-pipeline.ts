@@ -99,18 +99,15 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
     meshPipe: MeshPipe,
     mesh: Mesh,
   ): void {
-    if (mesh._shader === null) {
-      this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
-        ? premultipliedMeshShader
-        : unpremultipliedMeshShader
-    }
+    this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
+      ? premultipliedMeshShader
+      : unpremultipliedMeshShader
     originalMeshExecute.call(this, meshPipe, mesh)
   }
   meshAdaptor.destroy = function destroyNativeFixedFunctionMeshAdaptor(): void {
-    const activeShader = this['_shader']
     originalMeshDestroy.call(this)
-    if (premultipliedMeshShader !== activeShader) premultipliedMeshShader.destroy(true)
-    if (unpremultipliedMeshShader !== activeShader) unpremultipliedMeshShader.destroy(true)
+    premultipliedMeshShader.destroy(true)
+    unpremultipliedMeshShader.destroy(true)
   }
 }
 

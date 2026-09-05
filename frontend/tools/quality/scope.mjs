@@ -11,6 +11,7 @@ export const rendererFiles = [
 ]
 
 export const rendererTests = [
+  'src/game/renderer/native-texture-color.test.ts',
   'src/game/renderer/native-fixed-function-render-pipeline.test.ts',
   'src/game/renderer/native-arena-render-pipeline.test.ts',
   'src/game/renderer/player-enchant-staff-view.test.ts',

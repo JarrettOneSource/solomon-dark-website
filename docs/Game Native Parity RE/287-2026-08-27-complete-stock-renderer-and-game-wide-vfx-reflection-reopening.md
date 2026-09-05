@@ -36,6 +36,23 @@ Mesh while preserving its borrowed texture; Road plans/textures must be
 validated before allocating or attaching the scene's surfaces. These are
 browser resource ownership corrections, with no changed native pixels.
 
+The mutation-driven browser probe now forces the standalone Graphics path.
+It reproduces a context-restoration failure: the Arena uniform sample changes
+from native saturation to `[32,48,64,16]` after loss/restoration, instead of
+approximately `[38,48,59,16]`. Pixi 8.19.0 `GraphicsPipe.contextChange()` calls
+`GlGraphicsAdaptor.contextChange()`, which unconditionally installs a default
+shader. The Arena override must own that callback while installed and restore
+the previous callback and retained shaders when removed. Replacing temporary
+shaders must preserve the prior renderer owner's resources until restoration.
+
+The retained Staff GPU comparison matches the independent draw-plan geometry
+for three successive frames in both material modes, but its disposal probe
+finds that the aura Geometry survives `PlayerEnchantStaffView.destroy()`.
+Pixi `Mesh.destroy()` releases references without destroying that owned
+Geometry. The Staff view must explicitly destroy its aura geometry and buffers,
+while keeping atlas textures borrowed. Pixi `Shader.destroy()` is idempotent,
+so shader teardown does not need separate active-shader identity guards.
+
 Analyzer definitions, pinned primary sources, callable boundaries, and the
 line-coverage CRAP variant are documented in
 [`renderer-quality-analyzers-research.md`](../renderer-quality-analyzers-research.md).

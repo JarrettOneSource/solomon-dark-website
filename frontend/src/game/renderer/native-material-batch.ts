@@ -1,5 +1,5 @@
 import {
-  BatchGeometry, BatcherPipe, DefaultBatcher, RendererType, Shader,
+  BatchGeometry, BatcherPipe, DefaultBatcher, Shader,
   compileHighShaderGlProgram, generateTextureBatchBitGl, getBatchSamplersUniformGroup,
   roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type GlBatchAdaptor, type Renderer, type Texture, type WebGLRenderer,
 } from 'pixi.js'
@@ -212,7 +212,7 @@ export function installNativeBatchMaterial(renderer: WebGLRenderer, material: Na
 
 export function requireNativeWebGlRenderer(renderer: Renderer): WebGLRenderer {
   const webgl = renderer as WebGLRenderer
-  if (webgl.type !== RendererType.WEBGL || !webgl.gl) {
+  if (!webgl.gl) {
     throw new TypeError('Native materials require an initialized WebGL renderer')
   }
   return webgl

@@ -1,4 +1,4 @@
-import { Application, Container, RenderTexture, Sprite } from 'pixi.js'
+import { Application, BufferImageSource, Container, Rectangle, RenderTexture, Sprite, Texture } from 'pixi.js'
 import {
   installNativeFixedFunctionRenderPipeline,
   nativeCompositedTextureFromImage,
@@ -48,9 +48,10 @@ export async function inspectNativeRenderContracts() {
     }
     for (const enhanced of [false, true]) {
       const surface = createNativeLitSurfaceGrid(texture, 64, 64, enhanced)
-      surface.mesh.position.set(32, 32)
       app.stage.addChild(surface.mesh)
       const count = enhanced ? 9 : 4
+      app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
+      const initial = pixel(app, target, 32, 32)
       surface.update(new Array(count).fill(1))
       app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
       const before = pixel(app, target, 32, 32)
@@ -60,13 +61,14 @@ export async function inspectNativeRenderContracts() {
       surface.update(new Array(count).fill(0.25))
       const colors = Array.from(surface.colors)
       const geometry = surface.mesh.geometry
+      const buffers = [...geometry.buffers]
       const shader = surface.mesh.shader
       surface.destroy()
       result.grids.push({
-        enhanced, before, after, colors,
+        enhanced, initial, before, after, colors,
         vertices: count, removed: surface.mesh.parent === null,
         meshDestroyed: surface.mesh.destroyed,
-        geometryDestroyed: geometry.buffers === null,
+        geometryDestroyed: geometry.buffers === null && buffers.every(buffer => buffer.destroyed),
         shaderDestroyed: shader.resources === null,
         borrowedTextureAlive: !texture.destroyed,
       })
@@ -77,9 +79,16 @@ export async function inspectNativeRenderContracts() {
       points: [{ x: 0, y: 8 + style * 12 }, { x: 64, y: 8 + style * 12 }],
     }))
     const scene = { bounds: { x: 0, y: 0, w: 64, h: 64 }, roads }
+    const roadTexture = new Texture({ source: new BufferImageSource({
+      resource: new Uint8Array([128, 128, 128, 255]), width: 1, height: 1,
+      alphaMode: 'no-premultiply-alpha',
+    }) })
     const surface = new NativeBoneyardSurfaceView(app.stage, scene, {
-      ground: texture, roads: new Array(5).fill(texture),
+      ground: texture, roads: new Array(5).fill(roadTexture),
     })
+    const meshes = [surface.container.children[0], ...surface.container.children[1].children]
+    const roadRoot = surface.container.children[1]
+    const resources = meshes.map(mesh => ({ mesh, geometry: mesh.geometry, shader: mesh.shader, buffers: [...mesh.geometry.buffers] }))
     app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
     const countBefore = surface.activeRoadMeshCount
     surface.applyOffCameraCleanup(new Set(['road:road-0', 'road:road-2']))
@@ -93,6 +102,11 @@ export async function inspectNativeRenderContracts() {
     }
     surface.destroy()
     result.roads.childrenAfterDestroy = app.stage.children.length
+    result.roads.resourcesDestroyed = roadRoot.destroyed && resources.every(({ mesh, geometry, shader, buffers }) => (
+      mesh.destroyed && geometry.buffers === null && shader.resources === null && buffers.every(buffer => buffer.destroyed)
+    ))
+    result.roads.textureAlive = !roadTexture.destroyed
+    roadTexture.destroy(true)
     const detached = new NativeBoneyardSurfaceView(app.stage, { ...scene, roads: [] }, {
       ground: texture, roads: [],
     })
@@ -209,7 +223,10 @@ export async function compareNativeBatchTransforms() {
         views[5].position.x += 0.3
         if (frame === 2) root.addChild(root.removeChildAt(0))
         app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
-        frames.push(Array.from(app.renderer.extract.pixels({ target }).pixels))
+        frames.push({
+          pixels: Array.from(app.renderer.extract.pixels({ target }).pixels),
+          batchShaders: Object.values(app.renderer.renderPipes.batch['_batchersByInstructionSet']).map(row => row.default.shader.uid),
+        })
       }
     } finally {
       target.destroy(true)
@@ -223,18 +240,47 @@ export async function compareNativeBatchTransforms() {
     const results = []
     for (const mode of ['fixed', 'arena']) {
       const frames = await capture(mode)
-      for (const [index, pixels] of frames.entries()) {
+      for (const [index, { pixels, batchShaders }] of frames.entries()) {
         let changedChannels = 0
         let visiblePixels = 0
         for (let i = 0; i < pixels.length; i += 1) {
-          if (Math.abs(pixels[i] - reference[index][i]) > 1) changedChannels += 1
-          if (i % 4 === 3 && reference[index][i] > 0) visiblePixels += 1
+          if (Math.abs(pixels[i] - reference[index].pixels[i]) > 1) changedChannels += 1
+          if (i % 4 === 3 && reference[index].pixels[i] > 0) visiblePixels += 1
         }
-        results.push({ mode, frame: index, changedChannels, visiblePixels })
+        const reusedBatchShaders = JSON.stringify(batchShaders) === JSON.stringify(frames[0].batchShaders)
+        results.push({ mode, frame: index, changedChannels, visiblePixels, reusedBatchShaders })
       }
     }
     return results
   } finally {
     for (const texture of sources) texture.destroy(true)
+  }
+}
+
+export async function inspectNativeSurfaceSampling() {
+  const app = new Application()
+  await app.init({ autoStart: false, width: 64, height: 64, preference: 'webgl', resolution: 1 })
+  installNativeFixedFunctionRenderPipeline(app.renderer, { installTextureAlphaShaders: false })
+  const arena = installNativeArenaRenderPipeline(app.renderer)
+  const target = RenderTexture.create({ width: 64, height: 64, alphaMode: 'no-premultiply-alpha' })
+  const texture = new Texture({
+    source: new BufferImageSource({
+      resource: new Uint8Array([32, 32, 32, 255, 160, 160, 160, 255]),
+      width: 2, height: 1, alphaMode: 'no-premultiply-alpha', scaleMode: 'nearest',
+    }),
+    frame: new Rectangle(1, 0, 1, 1),
+  })
+  texture.textureMatrix.update()
+  const surface = createNativeLitSurfaceGrid(texture, 64, 64, false)
+  app.stage.addChild(surface.mesh)
+  try {
+    app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
+    return [pixel(app, target, 8, 32), pixel(app, target, 56, 32)]
+  } finally {
+    surface.destroy()
+    texture.destroy(true)
+    target.destroy(true)
+    arena.destroy()
+    app.destroy(true, { children: true })
   }
 }

@@ -99,6 +99,9 @@ run_all() {
 
     printf 'Checking production media policy\n'
     node frontend/tools/check-production-media-policy.mjs
+
+    printf 'Measuring renderer quality gates\n'
+    npm --prefix frontend run quality:renderer
 }
 
 mode="${1:-all}"

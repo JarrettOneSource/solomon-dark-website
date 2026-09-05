@@ -64,7 +64,6 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
   const colorBuffer = new Buffer({
     data: colors,
     label: 'native-static-surface-colors',
-    shrinkToFit: false,
     usage: BufferUsage.VERTEX | BufferUsage.COPY_DST,
   })
   const shader = new Shader({
@@ -83,7 +82,6 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
   const geometry = new MeshGeometry({
     indices: plan.indices,
     positions: plan.positions,
-    topology: 'triangle-list',
     uvs: plan.uvs,
   })
   geometry.addAttribute('aColor', {

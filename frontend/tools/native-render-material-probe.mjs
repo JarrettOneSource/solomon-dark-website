@@ -10,6 +10,7 @@ import {
 } from '../src/game/renderer/native-arena-render-pipeline.ts'
 
 import { setNativeVertexColors } from '../src/game/renderer/native-material-batch.ts'
+import { renderNativeDiffuseMask } from '../src/game/renderer/native-texture-color.ts'
 
 import { createNativeLitSurfaceGrid } from '../src/game/renderer/boneyard-building-surface-view.ts'
 
@@ -42,6 +43,7 @@ function samplePixels(renderer, target) {
 
 export async function renderNativeMaterialSamples() {
   const samples = []
+  const contexts = []
   for (const mode of ['fixed', 'arena']) {
     const app = new Application()
     await app.init({
@@ -67,6 +69,7 @@ export async function renderNativeMaterialSamples() {
       firstSprite.destroy()
       const gradients = [
         { role: 'gradient', top: [255, 0, 0, 0], bottom: [0, 255, 0, 255] },
+        { role: 'faded-gradient', top: [255, 0, 0, 0], bottom: [0, 255, 0, 255], groupAlpha: 128 / 255 },
         { role: 'acid-gradient', top: [102, 242, 128, 0], bottom: [179, 242, 191, 127] },
         { role: 'storm-gradient', top: [102, 242, 255, 0], bottom: [204, 242, 255, 127] },
         { role: 'shadow-gradient', top: [0, 0, 0, 255], bottom: [0, 0, 0, 0] },
@@ -79,6 +82,7 @@ export async function renderNativeMaterialSamples() {
             retainedTextures.push(texture)
             const mesh = new MeshSimple({ indices, texture, uvs, vertices })
             mesh.blendMode = blend
+            mesh.alpha = gradient.groupAlpha ?? 1
             setColors(mesh, new Uint32Array([
               pack(gradient.top), pack(gradient.top), pack(gradient.bottom), pack(gradient.bottom),
             ]))
@@ -91,6 +95,9 @@ export async function renderNativeMaterialSamples() {
         }
       }
       samples.push(...uniformSamples(app, target, mode, retainedTextures))
+      samples.push(...uniformSamples(app, target, mode, retainedTextures, false, true))
+      samples.push(...uniformSamples(app, target, mode, retainedTextures))
+      samples.push(...retainedColorModeSamples(app, target, mode, retainedTextures))
       samples.push(...textureOpacitySamples(app, target, mode, retainedTextures))
       for (const alpha of [0, 1, 128, 255]) {
         const texture = textureFromPixel([128, 64, 192, alpha])
@@ -105,7 +112,13 @@ export async function renderNativeMaterialSamples() {
       if (mode === 'arena') {
         samples.push(...particleBlendSamples(app, target, retainedTextures))
       }
+      const previousGraphics = app.renderer.renderPipes.graphics['_adaptor'].shader
+      const previousProgram = previousGraphics.glProgram
       await restoreContext(app)
+      if (mode === 'arena') contexts.push({
+        previousShaderDestroyed: previousGraphics.resources === null,
+        previousProgramDestroyed: previousProgram.vertex === null && previousProgram.fragment === null,
+      })
       samples.push(...uniformSamples(app, target, mode, retainedTextures, true))
       samples.push(...textureOpacitySamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
     } finally {
@@ -115,22 +128,24 @@ export async function renderNativeMaterialSamples() {
       for (const texture of retainedTextures) texture.destroy(true)
     }
   }
-  return samples
+  return { samples, contexts }
 }
 
-function drawSample(app, target, display, clearColor = [0, 0, 0, 0]) {
+function drawSample(app, target, display, clearColor = [0, 0, 0, 0], masked = false) {
   app.stage.addChild(display)
-  app.renderer.render({ container: app.stage, target, clear: true, clearColor })
+  const options = { container: app.stage, target, clear: true, clearColor }
+  if (masked) renderNativeDiffuseMask(app.renderer, options)
+  else app.renderer.render(options)
   const pixel = samplePixels(app.renderer, target)
   app.stage.removeChild(display)
   return pixel
 }
 
-function uniformSamples(app, target, mode, retainedTextures, restored = false) {
+function uniformSamples(app, target, mode, retainedTextures, restored = false, masked = false) {
   const samples = []
-  for (const kind of ['sprite', 'standalone-mesh', 'graphics', 'surface', 'particle']) {
+  for (const kind of ['sprite', 'batched-mesh', 'standalone-mesh', 'graphics', 'surface', 'particle']) {
     if (mode === 'fixed' && (kind === 'surface' || kind === 'particle')) continue
-    const texture = textureFromPixel([255, 255, 255, 255])
+    const texture = textureFromPixel(masked ? [120, 60, 30, 255] : [255, 255, 255, 255])
     retainedTextures.push(texture)
     const parent = new Container({ isRenderGroup: true })
     parent.alpha = 128 / 255
@@ -138,14 +153,13 @@ function uniformSamples(app, target, mode, retainedTextures, restored = false) {
     let surface
     if (kind === 'sprite') {
       display = new Sprite({ texture, width: size, height: size })
-    } else if (kind === 'standalone-mesh') {
+    } else if (kind === 'standalone-mesh' || kind === 'batched-mesh') {
       display = new MeshSimple({ indices, texture, uvs, vertices })
-      display.geometry.batchMode = 'no-batch'
+      if (kind === 'standalone-mesh') display.geometry.batchMode = 'no-batch'
     } else if (kind === 'surface') {
       surface = createNativeLitSurfaceGrid(texture, size, size, false)
       surface.update([1, 1, 1, 1])
       display = surface.mesh
-      display.position.set(size / 2, size / 2)
     } else if (kind === 'particle') {
       display = new ParticleContainer({
         shader: createNativeArenaUnpremultipliedParticleShader(), texture,
@@ -154,25 +168,37 @@ function uniformSamples(app, target, mode, retainedTextures, restored = false) {
       display.addParticle(particle)
     } else {
       display = new Graphics()
-      // Enough points force the standalone Graphics adapter, with the same
-      // solid coverage at the sample as the Sprite and unbatchable mesh.
-      const points = Array.from({ length: 150 }, (_, index) => {
-        const angle = index * Math.PI * 2 / 150
-        return [size / 2 + Math.cos(angle) * size, size / 2 + Math.sin(angle) * size]
-      }).flat()
-      display.poly(points).fill(0xffffff)
+      if (mode === 'arena') display.context.batchMode = 'no-batch'
+      display.rect(0, 0, size, size).fill({ color: 0xffffff, texture })
     }
     display.tint = 0x80c0ff
     display.alpha = 128 / 255
     parent.addChild(display)
     try {
-      samples.push({ kind, mode, restored, pixel: drawSample(app, target, parent), role: 'uniform' })
+      samples.push({ kind, mode, restored, masked, pixel: drawSample(app, target, parent, [0, 0, 0, 0], masked), role: 'uniform' })
     } catch (error) {
       throw new Error(`${mode}/${kind}/restored=${restored}: ${error.message}`, { cause: error })
     }
     if (surface) surface.destroy()
     parent.destroy({ children: true })
   }
+  return samples
+}
+
+function retainedColorModeSamples(app, target, mode, retainedTextures) {
+  const rgba = [128, 64, 192, 128]
+  const texture = textureFromPixel(rgba)
+  retainedTextures.push(texture)
+  const sprite = new Sprite({ texture, width: size, height: size })
+  app.stage.addChild(sprite)
+  const options = { container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] }
+  const samples = []
+  for (const masked of [false, true, false, true]) {
+    if (masked) renderNativeDiffuseMask(app.renderer, options)
+    else app.renderer.render(options)
+    samples.push({ mode, masked, rgba, pixel: samplePixels(app.renderer, target), role: 'retained-color-mode' })
+  }
+  sprite.destroy()
   return samples
 }
 
@@ -206,7 +232,6 @@ function textureOpacitySamples(app, target, mode, retainedTextures) {
     const texture = textureFromPixel([255, 255, 255, 255])
     retainedTextures.push(texture)
     const explicit = createNativeLitSurfaceGrid(texture, size, size, false)
-    explicit.mesh.position.set(size / 2, size / 2)
     explicit.update([0.25, 0.25, 0.25, 0.25])
     samples.push({ mode, role: 'explicit-shader', pixel: drawSample(app, target, explicit.mesh) })
     explicit.destroy()

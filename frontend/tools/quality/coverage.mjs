@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import istanbulCoverage from 'istanbul-lib-coverage'
@@ -14,8 +15,10 @@ const directory = resolve('reports/renderer-quality/coverage')
 await rm(directory, { recursive: true, force: true })
 await mkdir(`${directory}/raw`, { recursive: true })
 const coverage = createCoverageMap({})
+const sources = {}
 for (const file of rendererFiles) {
   const source = await readFile(file, 'utf8')
+  sources[file] = createHash('sha256').update(source).digest('hex')
   coverage.addFileCoverage(instrumentRenderer(source, file).coverage)
 }
 for (const args of [
@@ -29,6 +32,11 @@ for (const args of [
 for (const file of await readdir(`${directory}/raw`)) {
   coverage.merge(JSON.parse(await readFile(`${directory}/raw/${file}`, 'utf8')))
 }
+for (const file of rendererFiles) {
+  const current = createHash('sha256').update(await readFile(file)).digest('hex')
+  if (current !== sources[file]) throw new Error(`Source changed during coverage: ${file}`)
+}
+await writeFile(`${directory}/sources.json`, JSON.stringify(sources, null, 2) + '\n')
 const context = createContext({ dir: directory, coverageMap: coverage })
 for (const reporter of ['json', 'json-summary', 'text', 'html']) {
   reports.create(reporter).execute(context)

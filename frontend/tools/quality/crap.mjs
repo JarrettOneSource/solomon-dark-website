@@ -37,13 +37,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const directory = 'reports/renderer-quality'
   const complexity = JSON.parse(await readFile(`${directory}/complexity.json`, 'utf8'))
   const coverage = JSON.parse(await readFile(`${directory}/coverage/coverage-final.json`, 'utf8'))
+  const sources = JSON.parse(await readFile(`${directory}/coverage/sources.json`, 'utf8'))
+  for (const file of complexity) {
+    const current = createHash('sha256').update(await readFile(file.file)).digest('hex')
+    if (file.sourceHash !== current || sources[file.file] !== current) {
+      throw new Error(`Re-run complexity and coverage for changed source: ${file.file}`)
+    }
+  }
   const files = complexity.map(file => {
     const covered = coverage[resolve(file.file)]
     if (!covered) throw new Error(`Coverage was not collected for ${file.file}`)
-    return { file: file.file, methods: methodCrap(file, covered) }
+    return { file: file.file, sourceHash: file.sourceHash, methods: methodCrap(file, covered) }
   })
   await writeFile(`${directory}/crap.json`, JSON.stringify({ variant: 'CRAP using method line coverage and the original formula', files }, null, 2) + '\n')
   const failures = files.flatMap(file => file.methods.filter(method => method.score >= 25).map(method => ({ file: file.file, ...method })))
   console.log(JSON.stringify({ failures, maximum: Math.max(...files.flatMap(file => file.methods.map(method => method.score))) }, null, 2))
   if (failures.length > 0) process.exitCode = 1
 }
+import { createHash } from 'node:crypto'

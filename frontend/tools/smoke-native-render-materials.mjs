@@ -50,7 +50,7 @@ try {
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     console.log(JSON.stringify({ errors, measured }))
   } else {
-    const samples = await page.evaluate(async () => {
+    const { samples, contexts } = await page.evaluate(async () => {
       const { renderNativeMaterialSamples } = await import('/tools/native-render-material-probe.mjs')
       return renderNativeMaterialSamples()
     })
@@ -61,9 +61,10 @@ try {
         failures.push({ ...sample, expected })
       }
     }
-    console.log(JSON.stringify({ errors, failures, samples }))
+    console.log(JSON.stringify({ errors, failures, samples: samples.length }))
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     assert.deepEqual(failures, [], 'GPU output must match independent native RGBA interpolation and blending')
+    assert.deepEqual(contexts, [{ previousShaderDestroyed: true, previousProgramDestroyed: true }])
     const contracts = await page.evaluate(async () => {
       const { inspectNativeRenderContracts } = await import('/tools/native-render-contract-probe.mjs')
       return inspectNativeRenderContracts()
@@ -79,6 +80,7 @@ try {
     ])
     assert.ok(contracts.sources.every(({ pixel }) => pixel.every(channel => channel === 255)))
     for (const grid of contracts.grids) {
+      assert.deepEqual(grid.initial, [255, 255, 255, 255])
       assert.deepEqual(grid.before, [255, 255, 255, 255])
       assert.deepEqual(grid.after, [63, 63, 63, 255])
       assert.equal(grid.colors.length, grid.vertices * 4)
@@ -88,7 +90,8 @@ try {
     }
     assert.deepEqual(contracts.roads, {
       countBefore: 5, countAfter: 3, countAfterEmpty: 3,
-      vertices: 40, indices: 90, meshes: 5, pixel: [255, 255, 255, 255], childrenAfterDestroy: 0,
+      vertices: 40, indices: 90, meshes: 5, pixel: [128, 128, 128, 255], childrenAfterDestroy: 0,
+      resourcesDestroyed: true, textureAlive: true,
     })
     assert.deepEqual(contracts.detachedScene, { destroyed: true, count: 0 })
     assert.deepEqual(contracts.missingRoad, { message: 'Native Road style 0 texture is unavailable', childrenAfterFailure: 0 })
@@ -111,11 +114,34 @@ try {
     })
     console.log(JSON.stringify({ transforms }))
     assert.equal(transforms.length, 6)
-    assert.ok(transforms.every(row => row.changedChannels === 0 && row.visiblePixels > 1000))
-
-
+    assert.ok(transforms.every(row => row.changedChannels === 0 && row.visiblePixels > 1000 && row.reusedBatchShaders))
+    const surfaceSampling = await page.evaluate(async () => {
+      const { inspectNativeSurfaceSampling } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeSurfaceSampling()
+    })
+    assert.deepEqual(surfaceSampling, [[160, 160, 160, 255], [160, 160, 160, 255]])
+    const staff = await page.evaluate(async () => {
+      const { compareNativeStaffFrames } = await import('/tools/native-render-staff-probe.mjs')
+      return compareNativeStaffFrames()
+    })
+    console.log(JSON.stringify({ staff }))
+    assert.equal(staff.frames.length, 6)
+    assert.ok(staff.frames.every(row => row.changedChannels === 0 && row.visiblePixels > 50))
+    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive))
+    const lifetimes = await page.evaluate(async () => {
+      const { inspectNativeMaterialLifetimes } = await import('/tools/native-render-lifecycle-probe.mjs')
+      return inspectNativeMaterialLifetimes()
+    })
+    console.log(JSON.stringify({ lifetimes }))
+    for (const row of lifetimes.pixels) {
+      const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
+      assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
+    }
+    for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
+      assert.equal(lifetimes[key], true, key)
+    }
+    assert.ok(lifetimes.batchLifetimes.every(Boolean))
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
-
   }
   if (collectCoverage) {
     const coverage = await page.evaluate(() => globalThis.__coverage__)
@@ -131,6 +157,11 @@ try {
 
 function expectedPixel(sample) {
   if (sample.role === 'explicit-shader') return [63, 63, 63, 255]
+  if (sample.role === 'retained-color-mode') {
+    const color = sample.masked ? [1, 1, 1] : saturate(sample.rgba.slice(0, 3).map(channel => channel / 255), sample.mode)
+    const alpha = sample.rgba[3] / 255
+    return [...color.map(channel => channel * alpha * 255), alpha * alpha * 255]
+  }
   if (sample.role === 'texture-opacity') {
     const alpha = sample.rgba[3] / 255 * (128 / 255) ** 2
     const texture = sample.rgba.slice(0, 3).map(channel => sample.premultiplied ? channel / sample.rgba[3] : channel / 255)
@@ -159,6 +190,7 @@ function expectedPixel(sample) {
   }
   const amount = 8.5 / 16
   const vertex = sample.top.map((value, index) => (value * (1 - amount) + sample.bottom[index] * amount) / 255)
+  vertex[3] *= sample.groupAlpha ?? 1
   const color = saturate(vertex.slice(0, 3), sample.mode)
   return [...color.map(channel => channel * vertex[3] * 255), vertex[3] * vertex[3] * 255]
 }

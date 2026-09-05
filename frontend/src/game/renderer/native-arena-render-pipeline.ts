@@ -97,27 +97,30 @@ export function installNativeArenaRenderPipeline(
   const graphicsAdaptor = nativeRenderer.renderPipes.graphics['_adaptor'] as GlGraphicsAdaptor
   const meshAdaptor = nativeRenderer.renderPipes.mesh['_adaptor'] as GlMeshAdaptor
   const particleAdaptor = nativeRenderer.renderPipes.particle.adaptor
-  const graphicsShader = createNativeArenaGraphicsShader(
+  let graphicsShader = createNativeArenaGraphicsShader(
     nativeRenderer.limits.maxBatchableTextures,
   )
   const premultipliedMeshShader = createNativeArenaMeshShader(true)
   const unpremultipliedMeshShader = createNativeArenaMeshShader(false)
-  graphicsAdaptor.shader.destroy(true)
+  const originalGraphicsShader = graphicsAdaptor.shader
+  const originalGraphicsContextChange = graphicsAdaptor.contextChange
   graphicsAdaptor.shader = graphicsShader
+  graphicsAdaptor.contextChange = function restoreNativeGraphics(renderer): void {
+    graphicsShader.destroy(true)
+    graphicsShader = createNativeArenaGraphicsShader(renderer.limits.maxBatchableTextures)
+    this.shader = graphicsShader
+  }
 
   const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
-  originalMeshShader.destroy(true)
   meshAdaptor['_shader'] = unpremultipliedMeshShader
   meshAdaptor.execute = function executeNativeArenaMesh(
     meshPipe: MeshPipe,
     mesh: Mesh,
   ): void {
-    if (mesh._shader === null) {
-      this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
-        ? premultipliedMeshShader
-        : unpremultipliedMeshShader
-    }
+    this['_shader'] = nativeTextureIsPremultiplied(mesh.texture)
+      ? premultipliedMeshShader
+      : unpremultipliedMeshShader
     // Arena replaces the application's fixed-function shader selection.
     GlMeshAdaptor.prototype.execute.call(this, meshPipe, mesh)
   }
@@ -137,7 +140,10 @@ export function installNativeArenaRenderPipeline(
       if (destroyed) return
       destroyed = true
       restoreBatchMaterial()
+      graphicsAdaptor.contextChange = originalGraphicsContextChange
+      graphicsAdaptor.shader = originalGraphicsShader
       meshAdaptor.execute = originalMeshExecute
+      meshAdaptor['_shader'] = originalMeshShader
       particleAdaptor.execute = originalParticleExecute
       graphicsShader.destroy(true)
       premultipliedMeshShader.destroy(true)
