@@ -1,6 +1,7 @@
 # Renderer quality analyzers
 
-**Research date:** 2026-09-05  
+**Research date:** 2026-09-05
+
 **Scope:** TypeScript renderer complexity and CRAP measurement. This note defines the selected tools and measurement semantics. Analyzer execution, integration checks, and production measurements run on the Mac mini.
 
 ## Selected dependencies

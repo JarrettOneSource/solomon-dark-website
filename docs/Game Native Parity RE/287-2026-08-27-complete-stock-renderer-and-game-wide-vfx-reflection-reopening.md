@@ -74,10 +74,10 @@ Analyzer definitions, pinned primary sources, callable boundaries, and the
 line-coverage CRAP variant are documented in
 [`renderer-quality-analyzers-research.md`](../renderer-quality-analyzers-research.md).
 
-### Current implementation acceptance — candidate `480bfde6`
+### Current implementation acceptance — candidate `3bbfdf9e`
 
-The configured analyzers measured all seven runtime owners and 71 static
-implementation units, including 62 explicit callables. No corresponding gate
+The configured analyzers measured all seven runtime owners and 70 static
+implementation units, including 61 explicit callables. No corresponding gate
 is left unmeasured for this TypeScript scope.
 
 | Source gate | Measured result | Required result |
@@ -85,17 +85,17 @@ is left unmeasured for this TypeScript scope.
 | Cyclomatic complexity | Maximum **18** | `< 22` |
 | Cognitive complexity | Maximum **10** | `< 22` |
 | Halstead Difficulty | Maximum **34.74545454545454** | `< 80` |
-| Handwritten source size | Largest file **291 lines** | `< 1000` |
-| Statements | **343 / 343**, 100% | 100% |
-| Branches | **84 / 84**, 100% | 100% |
-| Functions | **62 / 62**, 100% | 100% |
-| Lines | **324 / 324**, 100% | 100% |
+| Handwritten source size | Largest file **267 lines** | `< 1000` |
+| Statements | **338 / 338**, 100% | 100% |
+| Branches | **83 / 83**, 100% | 100% |
+| Functions | **61 / 61**, 100% | 100% |
+| Lines | **319 / 319**, 100% | 100% |
 | CRAP, line-coverage variant | Maximum **18** | `< 25` |
 | Scoped Knip findings | **0** | 0 |
 | jscpd duplicate blocks | **0** | 0 |
 | Explicit `any` / `unknown` | **0 / 0** | 0 |
 
-Coverage combines the 16 renderer Node cases with the real browser/GPU probes.
+Coverage combines the 14 renderer Node cases with the real browser/GPU probes.
 All four analyzer contract tests passed. Mutation results remain a separate,
 strict gate; the configuration does not suppress equivalent diagnostic-name
 mutations. The [measurement guide](../renderer-quality.md) defines each tool's
@@ -108,13 +108,14 @@ exited **1 solely because the strict mutation gate failed**:
 
 | Mutation result | Count |
 | --- | ---: |
-| Killed by tests | **301** |
+| Killed by tests | **280** |
 | Timed out | **1** |
-| Rejected by TypeScript | **122** |
+| Rejected by TypeScript | **120** |
 | Survived | **29** |
 | Uncovered / ignored / runtime errors | **0 / 0 / 0** |
 
-The valid-mutant score is **302 / 331 = 91.24%**. Review of every survivor
+Stryker generated **430** mutations. The valid-mutant score is
+**281 / 310 = 90.65%**. Review of every survivor
 found **19 shader/program/bit diagnostic-name changes** and **10 buffer or
 scene-label changes**, including deletion of label-only options objects. No
 remaining survivor changes the sampled rendering arithmetic or the exercised
@@ -122,20 +123,17 @@ resource-lifecycle behavior. The scene labels occur only at their declarations
 in production, and Pixi's shader names supply diagnostic source labels rather
 than shader operations. The configuration keeps all 29 as survivors; no
 mutation exclusions, suppressed operators, or synthetic label assertions were
-added. The zero-survivor rule therefore remains unsatisfied. The user subsequently
-authorized publication to main with that recorded result. No mutation exception
-or threshold change was applied. The redundant direct assertion of the saturation
-constant was removed; numeric color-output tests continue to verify its effect.
+added. The zero-survivor rule therefore remains unsatisfied. The user authorized
+publication to main with that recorded result. No mutation exception or
+threshold change was applied.
 
-The subsequent test-value audit traced that CPU color helper's consumer one
-level further. `nativeWaterMeshComposite` was itself used only by a test, so
-both it and `nativeArenaSaturateSample` duplicated shader arithmetic without
-exercising the live renderer. Both unused helpers, their exclusive RGBA type,
-and the three tests of those helpers were removed. The Water-run label-only
-assertion now checks the actual child count; its geometry, UV, painter-order,
-reuse, and input-contract assertions remain. The independent GPU pixel tests
-and built Water-particle acceptance provide rendering evidence. Shader
-operations and the live Water implementation are unchanged by this removal.
+Two unused CPU helpers, `nativeWaterMeshComposite` and
+`nativeArenaSaturateSample`, duplicated shader arithmetic without exercising
+the live renderer. Both helpers, their exclusive RGBA type, and their three
+tests were removed. The Water-run tests check the actual child count, geometry,
+UV, painter order, reuse, and input contracts. Independent GPU pixel tests and
+built Water-particle acceptance provide rendering evidence. Shader operations
+and the live Water implementation are unchanged by this removal.
 
 | Surviving-mutant owner | Count |
 | --- | ---: |
@@ -146,30 +144,31 @@ operations and the live Water implementation are unchanged by this removal.
 | Shared batch material | 3 |
 | Staff attachment | 3 |
 
-The complete JSON/HTML mutation report remains in the generated report
-directory. SHA-256 receipts for this exact candidate are:
+The complete JSON/HTML mutation report is generated under
+`frontend/reports/renderer-quality/mutation/`. SHA-256 receipts for this exact
+source candidate are:
 
-- Canonical validation log: `ee98625aa9ba084c8ef9dfd6662da996a40888488163b7468cfa97ed79f18f3f`.
-- Aggregate quality JSON: `1d7922dea34f4eafb4aca06bdc72d743f7e7fd4cf994a53e3d5fea10c6a22a9c`.
-- Complete mutation JSON: `a4456483c66b7c5cf5d4a3fd3260184c8e7d9381a1531a6e12eb01351cf45b7c`.
+- Canonical validation log: `1c828c4668af6c479134f088701f537db3cfd0fdf3a8d1ed206fb0b21a474c28`.
+- Aggregate quality JSON: `1945dba205c3916a43397921a9beccb2f3c9047d9a3ec4464ce0acfe042d9f08`.
+- Complete mutation JSON: `911034ddb7d520214fe4af74adc748e66c5bddbb9083919fed17f8d3dfda3e1d`.
 
 The exact committed candidate was transferred to the Mac after integration on
-`84e32576`. Its production build passed, including the frontend and game host;
-the game entry is `Game-BMiTz6BV.js`, **252,765 raw / 76,595 gzip bytes**, within
+`9005eb99`. Its production build passed, including the frontend and game host;
+the game entry is `Game-C7obaGWV.js`, **252,765 raw / 76,590 gzip bytes**, within
 the configured bundle budget.
 
 Built `/game` acceptance entered the Water discipline and the Boneyard through
-the normal UI. Rank-one and rank-eleven casts rendered **49 / 237 / 245**
-particle records in the sampled frames. The wall trial observed **4,848**
-contacts and **3,651** splays; the grave trials had no contacts. The three loop
+the normal UI. Rank-one and rank-eleven casts rendered **50 / 239 / 242**
+particle records in the sampled frames. The wall trial observed **4,740**
+contacts and **3,564** splays; the grave trials had no contacts. The three loop
 audio starts each stopped, and page, console, response, request, and wire error
 arrays were empty. The inspected wall frame shows the expected floor lighting,
 water plume, and collision spray. This uses the production bundle and the real
 localhost game host with a deterministic test arena.
 The acceptance log SHA-256 is
-`5982eed683b85725c6fc239e62880a2c3b4eca3aaeb5d49859037bc7fa00796d`;
+`c7c611badd78e3b3886a6745cba623d6483671a31083dc46719b84817ccb5a64`;
 the inspected frame is
-`6f3b98d31d8b3e7897a69c9b4f4d49e3205890758ec74413b73860c11cbeee64`.
+`246103ad8b0c850516abfc59e00f876c4675c1b3abfd715552dd45aebf69c866`.
 
 The isolated, warmed material benchmark ran at **1600×900** on
 **ANGLE Metal / Apple M2**, with 40 warmup frames and three-second measurement
@@ -178,16 +177,16 @@ animation-frame pacing, not GPU timer-query durations.
 
 | Phase | Meshes | Submission p50 / p95 / p99 / max, ms | Frame-gap p95 / max, ms |
 | --- | ---: | --- | --- |
-| Baseline | 64 | 0.4 / 0.6 / 0.7 / 0.7 | 16.8 / 16.8 |
-| Stress | 4,096 | 1.9 / 2.0 / 2.3 / 3.0 | 16.8 / 16.8 |
-| Reordered each frame | 4,096 | 2.2 / 2.3 / 2.5 / 2.5 | 16.8 / 16.8 |
+| Baseline | 64 | 0.5 / 0.6 / 0.7 / 0.7 | 16.8 / 16.8 |
+| Stress | 4,096 | 1.9 / 2.1 / 2.3 / 2.5 | 16.8 / 16.8 |
+| Reordered each frame | 4,096 | 2.3 / 3.0 / 3.3 / 3.4 | 16.8 / 16.8 |
 | Restored baseline | 64 | 0.3 / 0.4 / 0.5 / 0.5 | 16.7 / 16.8 |
 
 Each phase recorded **zero** new buffer, program, or texture allocations during
 measurement and no observed long tasks. The benchmark had no concurrent
 mutation campaign. Full analyzer results and publication status are recorded
 separately from this runtime acceptance. The measurement log SHA-256 is
-`80e886c494460459427c4f5a13f8b97925f9dd31185bbfb69ae2529c3c171d9a`.
+`6093edf067d8f69990ce1306a57ebe4a3496ed40fbdda961f8849aa1727c5193`.
 
 ## 2026-09-04 — Lighting, shadows, and particle material audit
 

@@ -1,6 +1,6 @@
 # Renderer quality checks
 
-The [2026-09-05 candidate measurements](Game%20Native%20Parity%20RE/287-2026-08-27-complete-stock-renderer-and-game-wide-vfx-reflection-reopening.md#current-implementation-acceptance--candidate-480bfde6)
+The [2026-09-05 candidate measurements](Game%20Native%20Parity%20RE/287-2026-08-27-complete-stock-renderer-and-game-wide-vfx-reflection-reopening.md#current-implementation-acceptance--candidate-3bbfdf9e)
 pass every source, coverage, and runtime check. The strict mutation gate remains
 failing with 29 diagnostic-name/label survivors. These are recorded without
 exclusions. The user authorized main publication with this recorded gate result;
