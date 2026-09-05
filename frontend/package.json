@@ -63,6 +63,7 @@
     "smoke:game:enemy-animation-projectiles": "node tools/smoke-enemy-animation-projectile-vfx.mjs",
     "smoke:game:skeleton-upper-body": "node --experimental-strip-types tools/smoke-skeleton-upper-body.mjs",
     "smoke:game:player-weapon": "node --experimental-strip-types tools/smoke-player-weapon-presentation.mjs",
+    "smoke:game:player-hat": "node tools/smoke-player-hat-presentation.mjs",
     "smoke:game:player-damage": "node tools/smoke-player-damage-presentation.mjs",
     "smoke:game:primary-spells": "node tools/smoke-primary-spells.mjs",
     "smoke:game:weld-blizzard-collision": "node --experimental-strip-types tools/smoke-weld-blizzard-collision.mjs",

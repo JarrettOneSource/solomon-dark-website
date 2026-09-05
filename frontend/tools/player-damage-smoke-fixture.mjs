@@ -1,4 +1,4 @@
-import { Application, Texture } from 'pixi.js'
+import { Application, RenderTexture, Texture } from 'pixi.js'
 
 import { loadGameImage, releaseGameImages } from '../src/game/game-assets.ts'
 import {
@@ -12,7 +12,7 @@ import {
   playerWorldAssetSources,
 } from '../src/game/renderer/world-player-textures.ts'
 
-export { Application }
+export { Application, RenderTexture }
 
 export async function loadPlayerProofTextures() {
   const sources = [...new Set([

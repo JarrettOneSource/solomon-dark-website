@@ -35,8 +35,8 @@ from hub_room_art import (
 from player_attachment_art import (
     PLAYER_CELL_SIZE,
     PLAYER_DEATH_FACINGS,
-    PLAYER_DEATH_HAT_PRIMARY_BASES,
-    PLAYER_DEATH_HAT_SECONDARY_BASES,
+    PLAYER_HAT_PRIMARY_BASES,
+    PLAYER_HAT_SECONDARY_BASES,
     PLAYER_DEATH_ROBE_FIXED_BASES,
     PLAYER_DEATH_ROBE_PRIMARY_BASES,
     PLAYER_DEATH_ROBE_SECONDARY_BASES,
@@ -45,7 +45,7 @@ from player_attachment_art import (
     build_player_bare_attachment_sheet,
     build_player_colored_layers,
     build_player_death_body_sheet,
-    build_player_death_hat_strip,
+    build_player_hat_strip,
     build_player_death_layer_sheet,
     build_player_fixed_color_sheet,
     build_player_hat_style_sheet,
@@ -563,9 +563,9 @@ def main() -> int:
             output_dir,
             f"player-character-death-robe-fixed-{name}",
         )
-    for selector, base_record in enumerate(PLAYER_DEATH_HAT_PRIMARY_BASES):
+    for selector, base_record in enumerate(PLAYER_HAT_PRIMARY_BASES):
         save(
-            build_player_death_hat_strip(
+            build_player_hat_strip(
                 clothes,
                 clothes_records,
                 base_record,
@@ -574,9 +574,9 @@ def main() -> int:
             output_dir,
             f"player-character-death-hat-primary-{selector}",
         )
-    for selector, base_record in enumerate(PLAYER_DEATH_HAT_SECONDARY_BASES):
+    for selector, base_record in enumerate(PLAYER_HAT_SECONDARY_BASES):
         save(
-            build_player_death_hat_strip(
+            build_player_hat_strip(
                 clothes,
                 clothes_records,
                 base_record,
@@ -587,7 +587,7 @@ def main() -> int:
         )
     for name, base_record in {"primary": 16, "secondary": 22}.items():
         save(
-            build_player_death_hat_strip(
+            build_player_hat_strip(
                 clothes,
                 clothes_records,
                 base_record,

@@ -30,8 +30,8 @@ PLAYER_DEATH_ROBE_FIXED_BASES = {
     "primary-b": 268,
     "secondary-b": 292,
 }
-PLAYER_DEATH_HAT_PRIMARY_BASES = (316, 340, 364, 388)
-PLAYER_DEATH_HAT_SECONDARY_BASES = (412, 412, 412, 436)
+PLAYER_HAT_PRIMARY_BASES = (316, 340, 364, 388)
+PLAYER_HAT_SECONDARY_BASES = (412, 412, 412, 436)
 PLAYER_PALETTES = {
     # Skills_Wizard_GetPrimaryColor (0x00660760) is the descriptor-facing
     # source of truth. Do not run those results through the robe mix again.
@@ -548,13 +548,8 @@ def build_player_hat_style_sheet(
     selector: int,
     secondary: bool,
 ) -> Image.Image:
-    base = (412 if secondary else 316) + selector * PLAYER_HEADINGS
-    sheet = empty_player_sheet()
-    for heading in range(PLAYER_HEADINGS):
-        cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
-        paste_player_layer(cell, atlas, records[base + heading])
-        sheet.alpha_composite(cell, (0, heading * PLAYER_CELL_SIZE))
-    return sheet
+    bases = PLAYER_HAT_SECONDARY_BASES if secondary else PLAYER_HAT_PRIMARY_BASES
+    return build_player_hat_strip(atlas, records, bases[selector], PLAYER_HEADINGS)
 
 
 def build_player_robe_style_sheet(
@@ -696,13 +691,13 @@ def build_player_death_layer_sheet(
     return sheet
 
 
-def build_player_death_hat_strip(
+def build_player_hat_strip(
     atlas: Image.Image,
     records: list[SpriteRecord],
     base_record: int,
     count: int,
 ) -> Image.Image:
-    """Preserve a registered normal or special death-hat selector bank."""
+    """Preserve a registered living, death, or special Hat selector bank."""
     sheet = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE * count))
     for index in range(count):
         cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))

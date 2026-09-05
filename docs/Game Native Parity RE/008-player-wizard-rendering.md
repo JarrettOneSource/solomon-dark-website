@@ -33,7 +33,8 @@ more clearly than the generic `0x0061AF10` decompile.
 4. fixed selector secondary layers (`+0x65c`, `+0x67c`);
 5. attachment compositor, front pass (`pass = 0`);
 6. native movement bob transform;
-7. hat/head tables (`+0x6b0`, `+0x6bc`).
+7. primary/secondary Hat vectors (`+0x6ac`, `+0x6bc`; their data pointers are
+   at `+0x6b0`, `+0x6c0`).
 
 The exact Clothes builder map confirms the four fixed banks are
 `1612..2019`, `2428..2835`, `2020..2427`, and `2836..3243`: each bank is
@@ -484,5 +485,155 @@ configured/available. No analyzer dependencies or exclusions were added.
 The recovered equipment-presentation members above are implemented and have
 the stated behavioral evidence. The quantitative limitations are separate
 from that parity result. Publication does not deploy or restart production.
+
+## 2026-09-05 — Hat secondary-bank selection and hood temple spot
+
+### Report, cause, and evidence
+
+The supplied `SDO - Bug black spot on hoods.mp4` is a 960-by-640,
+474-frame recording lasting 15.813544 seconds, SHA-256
+`900ef9f2f9b7b286b39a00f8b099ba8632427515e529a3d32157f1968bae66ae`.
+The pale green hood has an
+isolated dark spot on its right temple at some facings, including right-facing
+heading 6. This reopens the equipped Hat portion of this entry: the earlier
+extraction checked the default hat but failed to enumerate the secondary-bank
+aliases for the other three styles. The correctly recovered death-hat mapping
+was maintained separately and never applied to living hats.
+
+The defect is in `tools/player_attachment_art.py`, upstream of packing and
+rendering. `412 + selector * 24` wrongly treats the secondary banks as four
+consecutive arrays. For hood selector 3, that chooses `484..507`, the generic
+hand attachment bank, instead of the hood trim at `436..459`. Heading 6 thus
+paints hand record 490 over hood record 394. Its isolated dark pixels are
+already present in the extracted secondary PNG, before any browser shading.
+
+| Evidence | Provenance and finding | Confidence |
+| --- | --- | --- |
+| Retail executable | `SolomonDarkAbandonware/SolomonDark.exe` 0.72.5, preferred base `0x00400000`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | high |
+| Native assets | `Clothes.bundle` SHA-256 `69595c233b6dd61d2273bf60d13e0e2bf7f2dde5db8036ee8fd86e9aae30624b`; `Clothes.png` SHA-256 `eaa1feb70362cf6dbc2068036f9cc9f77001d888e26cbd218c6144ebe63d6ac1` | high |
+| Fresh Ghidra decompilation and instructions | Canonical `SolomonDark` project, read-only replica, Ghidra 12.0.3; existing `Invoke-GhidraHeadless.ps1`, `decompile_targets.py`, `dump_function_instructions.py`, and `refs_to_addr_decompile.py` | high |
+| Clothes builder `0x004E4CA0` | `0x004E6187..0x004E620A` publishes primary arrays `+0x52C/+0x53C/+0x54C/+0x55C`; `0x004E6225..0x004E6297` publishes secondary arrays `+0x56C/+0x56C/+0x56C/+0x57C`. Each contains 24 facing records. | high |
+| Equipped Hat renderer `0x005758F0` | Reads item selector `+0x1C`, primary color `+0x88`, secondary color `+0x98`; draws primary then secondary from tables `0x00B2E9A4/0x00B2E9B4`. Its sole direct xref is vtable slot `0x007856E4`; both table-pointer xref sweeps lead to this renderer. | high |
+| Asset pixel reproduction on Mac | Right-facing hood primary plus current secondary has five fully opaque temple pixels more than 60 intensity units darker than the same composite using the native secondary mapping. At `(90,61)` the current RGB is `(28,26,24)` and the native-mapped RGB is `(137,137,137)`. | high |
+
+Read-only RE tooling came from Mod Loader revision
+`08bfba9ef367f7b863848030d0a289dc31e33192`; wrapper SHA-256
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`
+and decompile-script SHA-256
+`899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+These are static native instructions and asset evidence, not a new clean-stock
+runtime capture. Packing and runtime overlap were alternative hypotheses:
+neither can explain the dark mark already present in the source secondary PNG.
+The hand artwork changes with facing, explaining the intermittent appearance.
+
+### System boundary and complete membership
+
+The system is the four-style native Hat primary/secondary bank selection,
+registered extraction, and its living/death presentation consumers. Each range
+below includes every heading `h=0..23`; the selected record is `base+h`.
+
+| Style | Primary records | Secondary records | Disposition |
+| --- | --- | --- | --- |
+| 0 | `316..339` | `412..435` | `verified-already-at-parity` |
+| 1 | `340..363` | `412..435` | `exact-ported` by correcting former `436..459` selection |
+| 2 | `364..387` | `412..435` | `exact-ported` by correcting former `460..483` selection |
+| 3, hood | `388..411` | `436..459` | `exact-ported` by correcting former `484..507` selection |
+
+| Consumer or neighboring branch | Disposition and validation contract |
+| --- | --- |
+| Living local and remote players in Hub rooms, Boneyard, and Arena; ordinary, casting, hit-flash, dyed/status-tinted heads | `exact-ported`: all use `PlayerWorldView` and the shared packed Hat sheets; preserve tint, order, heading and head bob while correcting the extracted pixels |
+| Inventory equipment preview and Memoratorium painting | `exact-ported`: their shared `hatStyles`/equipment Hat textures receive the same correction |
+| Ordinary death Hat layers, all four styles and 24 headings | `verified-already-at-parity`: reuse their native mapping and verify unchanged pixels |
+| Final hood death pose, six facings at records `16..21` and `22..27` | `verified-already-at-parity`: separate authored special banks retain their current selection and registration |
+| Default element head sheets, Student head, Ally HUD, player card and Hall wizard head | `verified-already-at-parity`: these compose default records `316+h` and `412+h`; they do not index the faulty style-dependent expression |
+| Generic source-wizard painter `0x00621780` and equipped player driver `0x0054BA80` | `verified-already-at-parity` selection/ordering contract: the Hat is the final head-bob pass, with item-owned colors on the equipped route |
+| Hand attachment records `484..507` and socket records `460..483` | `out-of-system`: they belong to the existing weapon/empty-hand attachment system and must not be extracted as Hat trim |
+| Custom Web Lua wearable art | `out-of-system`: authored wearable definitions own their own primary/secondary textures, independently of native Hat selectors |
+
+No platform constraint requires a visible approximation. No runtime owner,
+animation clock, render ordering, networking, or shader change is required.
+Living and death extraction now share `PLAYER_HAT_PRIMARY_BASES`,
+`PLAYER_HAT_SECONDARY_BASES`, and `build_player_hat_strip`. The former duplicate
+extraction loop is removed. Only secondary source sheets 1, 2, and 3 change;
+the existing packer regenerates three runtime pages and their generated map.
+
+### Validation receipt
+
+The candidate starts at Website `f9d736bf03e3d917ce1cf31dd3778a4423b40f94`.
+All tests, asset generation checks, production builds, and browser acceptance
+ran in the isolated Mac worktree. The 14 changed-file manifests matched the
+local candidate byte for byte before validation; only this evidence document
+changed afterward. No authored runtime TypeScript changed.
+
+- `python3 -m unittest discover -s tests -p test_player_hat_assets.py -v`:
+  both regressions failed before the fix and passed afterward in 0.041 seconds.
+  The exporter test covers 192 native style/layer/facing selections using an
+  independent record table; the asset test checks all 192 real layers against
+  the independently extracted ordinary death artwork. Before regeneration,
+  all 72 secondary layers for styles 1, 2, and 3 differed.
+- Regeneration against the hash-verified retail Clothes atlas/bundle matched
+  all 192 ordinary death layers. `python3 tools/pack-player-character-atlas.py`
+  verified exact reconstruction of all **12,067 frames from 100 sheets**,
+  including unchanged non-Hat frames, into three 2048-pixel pages.
+- `npm --prefix frontend run smoke:game:player-hat`: actual Mac Chrome/WebGL
+  player pixels are compared against the native primary/secondary selection.
+  All four styles, 24 facings, and two presentation cases are covered: ordinary
+  rendering and a second dye color with head bob and hit flash. Before the fix,
+  **144 / 192 cases failed**, including 355 differing right-facing hood pixels
+  in the ordinary case. Afterward, **192 / 192 pass with zero differing pixels**.
+  Page, console, and failed-response arrays are empty in both runs.
+- A separate journey through the built `/game` client selected Ether/Arcane,
+  equipped a named Cloudcover Hood through Inventory, inspected its preview,
+  entered a generated Boneyard, and used mouse casting to observe every facing
+  `0..23`. The isolated host fixture starts after Solomon's introduction
+  (`phase=gone`, `runEventId=1`) and replenishes mana to keep casting available.
+  The browser used `ANGLE Metal Renderer: Apple M2`; the right-facing capture
+  has no temple spot, and all three browser error arrays are empty.
+- `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build reports zero
+  warnings/errors; **22 Python tests** and **2,901 Node test executions** pass;
+  frontend/desktop suites, lint, boundary checks, type checks, production
+  builds, bundle budget, and media policy pass. The command exits **1 solely
+  for the pre-existing strict renderer mutation failure** described below.
+
+The configured renderer analyzer scope consists of seven unchanged TypeScript
+files, verified byte-identical to the starting revision. Its current results
+are cyclomatic maximum 18, cognitive maximum 10, Halstead Difficulty maximum
+34.74545454545454, largest file 267 lines, CRAP maximum 18, 100% statement/
+branch/function/line coverage, and zero prohibited types, dead-code findings,
+or duplicate blocks. The 430-mutant run returns **280 killed, 1 timeout,
+120 compile errors, and 29 survivors**, exactly matching the starting
+revision's recorded result in `docs/renderer-quality.md`. These are the existing
+shader/program/buffer/scene diagnostic-label mutations. The strict mutation
+gate remains failed; no exclusions, threshold changes, or label-only tests
+were added.
+
+These TypeScript metrics do not measure the changed Python extraction code.
+The two touched Python source files contain **726 and 918 lines**. Configured
+Python analyzers are unavailable for cyclomatic/cognitive complexity, Halstead
+Difficulty, statement/branch/function/line coverage, CRAP, mutation survival,
+automated dead-code analysis, and duplication: those gates remain **unmeasured**.
+Final caller/diff review found no obsolete Hat helper names or parallel bank
+mapping. No analyzer dependency was added.
+
+The Hat correction is implemented and browser-verified, with the full-gate
+failure and unmeasured Python metrics retained explicitly. After receiving
+those results, the user authorized publication to `main`. The publication
+candidate incorporates inventory-stats refresh commit
+`d1742a1df48e5d2ba6dc0aeb855ec43326bd7d9b`, which reached `main` during
+publication. The rebase was conflict-free; all 13 changed source/test/asset
+files remain byte-identical to the first validated Mac candidate. No
+deployment is part of this publication.
+
+On that combined candidate, the Mac repeat passed 22 Python tests, 2,905 Node
+test executions, builds, lint, type checks, boundary checks, bundle/media
+checks, coverage, and static analysis. The 192 browser pixel cases and the
+built Inventory-to-Boneyard journey through all 24 facings passed again with
+empty browser error arrays. The repeated mutation campaign was stopped as
+redundant: all eight mutation-target source files are byte-identical to
+`d1742a1d`, whose complete recorded campaign evaluated 544 mutations with
+385 killed, 129 compile errors, one timeout, and the same 29 label survivors
+(entry 295). The interrupted repeat is not claimed as a completed gate.
+
 Task-owned captures, raw probes, test outputs, and worktrees are disposable
 after verified publication; the original supplied video is retained.
