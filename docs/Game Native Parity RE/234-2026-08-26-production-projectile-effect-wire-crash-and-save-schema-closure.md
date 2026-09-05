@@ -224,3 +224,76 @@ current version and preserve every prior accepted version.
 - No browser-platform exception, material unknown, or new native fact remains.
   The existing Mod Loader native report already owns the complete SpinAway
   evidence, so the Website ledger is the only RE document changed here.
+
+## 2026-09-05 — Reopened save-version admission
+
+The supplied `solomon-dark-save-1788587690870.zip` contains a schema-29
+browser checkpoint: Soggy, active Boneyard, tick 201000. Its screenshot reports
+the backend inspector's exact unsupported-schema error. Current source writes
+29 but `WebGameSaveInspector` caps storage at 28. The Mac HTTP regression
+reproduces HTTP 400 for both schema 29 and a shape-identical schema 999.
+The earlier closure retained a separately maintained backend version ceiling;
+that same design defect has recurred.
+
+The user explicitly requires that a version difference alone never reject a
+save. Version selects historical migrations; validated structure determines
+compatibility. Remove the backend ceiling and the browser reader ceiling.
+Keep positive integral version validation, exact envelope/state validation,
+integrity/content ownership, byte limits, hashes, and conditional revisions.
+Do not rewrite the supplied archive or discard its active continuation.
+
+Boundary: the existing browser persistence system in entry 176, from host
+checkpoint to storage, import/resume, and retirement. No new native fact or
+change to native serialization is needed.
+
+| Member | Disposition | Verification |
+| --- | --- | --- |
+| Cloud checkpoint PUT/GET | exact-ported | current and future compatible envelopes round-trip unchanged; actual supplied archive replay |
+| Browser parser and authority restore | exact-ported | future version with current structure restores; malformed state still rejects |
+| Historical schema migrations | verified-already-at-parity | existing save suite retains migration coverage |
+| Active continuation and retirement | verified-already-at-parity | supplied run restores and retires to a durable profile |
+| Anonymous storage and archive import | verified-already-at-parity | shared parser; original archive remains importable |
+| Corrupt or structurally incompatible payload | out-of-system | cannot reconstruct missing or unknown state merely from a version number; structural errors remain explicit |
+
+Validation results follow after execution. Publication and production deployment
+are separate from local validation.
+
+### Save-version validation receipt
+
+Validated on the Mac mini against Website baseline
+`e75bfb4a28c408b55e013f6749841e53bd52013d` and the focused save-version diff.
+
+- Actual archive replay: all three manifest sizes/hashes match. Before the
+  change, cloud PUT returned HTTP 400 with the screenshot's exact error.
+  Afterward, PUT returned 200 and GET returned identical document bytes.
+- Authoritative import: Soggy, level 23, active Boneyard at tick 201000;
+  retirement produces a profile with no continuation. Original archive bytes
+  were preserved.
+- Mac Chrome, local candidate backend and Vite-served candidate frontend:
+  imported the original ZIP into an isolated account, resumed the same wizard
+  and Boneyard, left through the pause menu with cloud revision 2, then
+  confirmed Kill character and reached Create with a profile-only cloud save.
+  No page errors, console errors, or HTTP errors occurred. This is local
+  browser proof, not a production/account restoration receipt.
+- The full `scripts/validate.sh` gate passed: backend build with zero warnings
+  or errors, 20 Python/backend contracts, 2807 frontend TAP tests, formatting,
+  lint, type checks, both builds, bundle budgets, and production media policy.
+  The Game entry was 252756 raw / 76597 gzip bytes.
+- Malformed text-valued versions previously triggered HTTP 500 from
+  `TryGetInt32`; the new number-kind check returns HTTP 400 and preserves the
+  stored row. Regression tests also retain invalid-version, broken envelope,
+  integrity/hash, account isolation, and revision-conflict rejection.
+- Node's coverage report for the whole `game-save-contract.ts` file is 96.18%
+  lines, 80.69% branches, and 100% functions across the save, coordinator,
+  protocol, and portability suites. This does not meet the blanket 100%
+  coverage target. Statement and backend coverage remain unmeasured.
+- Both changed production files remain below 1000 total lines. No explicit
+  `any` or `unknown` types were introduced. The removed version predicate and
+  ceiling have no remaining callers/references. Complexity (cyclomatic and
+  cognitive), Halstead Difficulty, CRAP, mutation, dead-code, and duplication
+  analyzers are not configured in this repository; their quantitative gates
+  remain unmeasured. Existing lint and manual diff/caller review passed.
+
+The original ZIP is ready for the existing Settings -> Online and Account ->
+Stock / Browser Save import flow after the fix is published. No push,
+deployment, or production cloud-slot replacement was performed in this task.

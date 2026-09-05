@@ -6,7 +6,6 @@ namespace SolomonDarkRevived.Services;
 
 public static class WebGameSaveInspector
 {
-    public const int CurrentSchemaVersion = 30;
     public const int MaxDocumentBytes = 16 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -44,11 +43,11 @@ public static class WebGameSaveInspector
         {
             var root = RequireObject(parsed.RootElement, "browser game save");
             if (!root.TryGetProperty("schemaVersion", out var schemaVersion) ||
+                schemaVersion.ValueKind != JsonValueKind.Number ||
                 !schemaVersion.TryGetInt32(out var version) ||
-                version < 1 ||
-                version > CurrentSchemaVersion)
+                version < 1)
             {
-                throw new InvalidDataException("The browser game save schema version is not supported.");
+                throw new InvalidDataException("The browser game save schema version is invalid.");
             }
             if (version >= 5)
             {
@@ -122,7 +121,7 @@ public static class WebGameSaveInspector
                         2 or 3 => ["loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"],
                         4 => ["integrity", "loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"],
                         _ => throw new InvalidDataException(
-                            "The browser game save schema version is not supported.")
+                            "The browser game save schema version is invalid.")
                     });
                 if (version == 4) RequireMember(root, "integrity", "global-clean", "local-only");
                 ValidateContinuation(

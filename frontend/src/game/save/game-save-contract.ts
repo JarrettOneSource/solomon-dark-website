@@ -94,21 +94,18 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
   }
   const root = record(parsed, 'game save')
   const schemaVersion = root.schemaVersion
-  if (!knownGameSaveSchemaVersion(schemaVersion)) {
-    throw new Error('game save schema version is not supported')
+  if (
+    typeof schemaVersion !== 'number'
+    || !Number.isSafeInteger(schemaVersion)
+    || schemaVersion < 1
+  ) {
+    throw new Error('game save schema version is invalid')
   }
   return schemaVersion >= 6
     ? parseCurrentDocument(root, schemaVersion)
     : schemaVersion === 5
       ? parseLegacyEnvelope(root)
       : parseLegacyDocument(root, schemaVersion)
-}
-
-function knownGameSaveSchemaVersion(value: unknown): value is number {
-  return typeof value === 'number'
-    && Number.isSafeInteger(value)
-    && value >= 1
-    && value <= WEB_GAME_SAVE_SCHEMA_VERSION
 }
 
 function parseCurrentDocument(

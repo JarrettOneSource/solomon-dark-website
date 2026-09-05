@@ -910,6 +910,50 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 uuid.UUID(sibling_receipt["logId"])
 
 
+    def test_browser_game_save_accepts_compatible_versions(self) -> None:
+        auth = {"Authorization": f"Bearer {self.token}"}
+        status, existing = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200, existing)
+        revision = existing["save"]["revision"] if existing["save"] else 0
+        for version in (29, 999):
+            with self.subTest(version=version):
+                document = json.dumps({
+                    "schemaVersion": version,
+                    "integrity": "global-clean",
+                    "mods": [],
+                    "modState": {},
+                    "nativeSource": None,
+                    "profile": {"economy": {}, "hagathaRuntime": {}},
+                    "continuation": None,
+                })
+                status, saved = self.request(
+                    "PUT", "/api/game/saves/0", headers=auth,
+                    json_body={"document": document, "expectedRevision": revision},
+                )
+                self.assertEqual(status, 200, saved)
+                revision = saved["revision"]
+                status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
+                self.assertEqual(status, 200, loaded)
+                self.assertEqual(loaded["save"]["document"], document)
+        for invalid in (
+            {**json.loads(document), "schemaVersion": 0},
+            {**json.loads(document), "schemaVersion": "29"},
+            {**json.loads(document), "continuation": {"simulation": {}}},
+            {**json.loads(document), "profile": None},
+        ):
+            status, rejected = self.request(
+                "PUT", "/api/game/saves/0", headers=auth,
+                json_body={"document": json.dumps(invalid), "expectedRevision": revision},
+            )
+            self.assertEqual(status, 400, rejected)
+        status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200, loaded)
+        self.assertEqual(loaded["save"]["document"], document)
+        status, deleted = self.request(
+            "DELETE", f"/api/game/saves/0?expectedRevision={revision}", headers=auth,
+        )
+        self.assertEqual(status, 204, deleted)
+
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
@@ -995,14 +1039,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 400, rejected)
 
-        future_schema = json.loads(document)
-        future_schema["schemaVersion"] = 31
+        invalid_schema = json.loads(document)
+        invalid_schema["schemaVersion"] = 0
         status, rejected = self.request(
             "PUT",
             "/api/game/saves/0",
             headers=auth,
             json_body={
-                "document": json.dumps(future_schema, separators=(",", ":")),
+                "document": json.dumps(invalid_schema, separators=(",", ":")),
                 "expectedRevision": 0,
             },
         )

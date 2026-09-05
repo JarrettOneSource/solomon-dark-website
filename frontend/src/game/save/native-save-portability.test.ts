@@ -1113,9 +1113,9 @@ test('invalid browser documents reject the whole import instead of losing invent
   invalidBelt.continuation.simulation.playerEntities.belts[0][7] = {
     itemId: 999_999, kind: 'item', nativeTypeId: 7002,
   }
-  const futureVersion = JSON.parse(document)
-  futureVersion.schemaVersion += 1_000
-  for (const invalid of ['{', JSON.stringify(invalidInventory), JSON.stringify(invalidBelt), JSON.stringify(futureVersion)]) {
+  const invalidVersion = JSON.parse(document)
+  invalidVersion.schemaVersion = 0
+  for (const invalid of ['{', JSON.stringify(invalidInventory), JSON.stringify(invalidBelt), JSON.stringify(invalidVersion)]) {
     const contents = new TextEncoder().encode(invalid)
     const archive = await createNativeSaveArchive({
       darkdata, gamestate, runName: fixture.expected.runName,

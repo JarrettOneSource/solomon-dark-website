@@ -2028,7 +2028,7 @@ test('schema 7 and 6 saves migrate absent NPC state as acknowledged without arch
   }
 })
 
-test('host save documents fail closed for unknown schema, extra fields, owner drift, and size', () => {
+test('host save documents fail closed for invalid schema, extra fields, owner drift, and size', () => {
   const document = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
@@ -2040,7 +2040,7 @@ test('host save documents fail closed for unknown schema, extra fields, owner dr
   const parsed = JSON.parse(document)
 
   assert.throws(
-    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 999 })),
+    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 0 })),
     /schema version/,
   )
   assert.throws(

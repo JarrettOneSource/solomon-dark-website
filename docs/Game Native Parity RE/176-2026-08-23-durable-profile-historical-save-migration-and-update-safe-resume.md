@@ -255,3 +255,14 @@ implementation receipt is filled.
   all seven captures are retained under the receipt's `evidence/` directory.
 - This refresh authorizes a normal fast-forward publication only. It does not
   authorize or claim a production deployment or runtime restart.
+
+## 2026-09-05 — Version admission policy superseded
+
+The user explicitly requires that a game/save version difference alone cannot
+reject a save. The historical future-version rejection policy above is
+superseded by [entry 234's save-version reopening](234-2026-08-26-production-projectile-effect-wire-crash-and-save-schema-closure.md).
+Readers now use the version to select historical migrations and validate the
+resulting structure; compatible future-version payloads are admitted. Invalid
+version values and structurally incompatible/corrupt state still reject without
+overwriting the existing row. The backend no longer maintains a separate
+current-version ceiling.
