@@ -368,3 +368,172 @@ stutter.
   gameplay. Hub rejection remained intact; the Boneyard cast had zero late
   player-atlas uploads. Both journeys had empty page/console/response error
   arrays. Only this publication receipt changed after those checks.
+
+## 2026-09-05 — Supplied recording and current-build follow-up
+
+The previously unavailable `SDB - Noticeable performance improvement with
+reduced light.mp4` is now present in Windows Downloads. Its SHA-256 is
+`e24a42680cda49f55d75d73eda3cdf71f98bf6700b2d23877677fafec5bb45ca`.
+It contains 463 frames at approximately 29.97 FPS, 1920x1080, over 15.46 seconds.
+The container has no recording/build identifier; its filesystem modification
+time does not establish the game revision used to capture it.
+
+Direct observations:
+
+- One Ring of Fire cast occurs around 6.4 seconds, followed by its flash and
+  retirement. The HUD's one-second FPS estimate briefly reads 59 around
+  8.0–8.75 seconds and otherwise reads 60 in the sampled gameplay frames.
+- The adjacent 29–41 ms values are network ping (`GameHud.tsx:PingCounter`),
+  not frame durations. The recording cannot reveal individual 60-Hz game
+  frame intervals from its approximately 30-Hz capture cadence.
+- At 12.4 seconds, the Tweak Performance panel shows Reduced Screen Flashes,
+  Complex Lighting, Complex Shadows, Multiple Shadows, and Camera Shake Off,
+  with Light Quality 100. The clip does not include an enabled-setting cast
+  for a direct A/B comparison.
+
+The current comparison tree is `a2197bf4a6b8bf8a5328030c63b555b269c65e65`,
+which already includes player-atlas preparation commit `827c1ebd`. This
+follow-up retains the complete page/consumer/lifecycle inventory above and
+the final-overlay-only setting contract in entry 130. It does not reopen
+native lighting constants or change the accessibility policy without new
+evidence.
+
+During the investigation, main advanced to
+`9c0bfbe03705d9f8b868ba8cd28d7ee3c0d06606` with primary-spell barrier changes.
+The atlas-preparation fix remains present. Measurements and the full gate
+below remain tied to the stated comparison tree, rather than claiming that
+the newer primary-spell change received the same measurements.
+
+The controlled follow-up used the production build in Mac Chrome 152 on the
+Apple M2 Metal renderer at 1920x1080. Each fresh-browser run used a fixed
+Boneyard seed, restored player/enemy/equipment state and secondary RNG, the
+recorded lighting settings, and Ring of Fire with the Burning Man set. The
+existing secondary-ability browser fixture supplied the real UI, combat, and
+input journey. A temporary sampler observed animation-frame intervals, heap,
+long tasks, and context-specific WebGL uploads without forcing GPU completion
+or starting a CPU profiler during capture. Four eight-second casts per run
+included full effect retirement; the end window spans 500 ms on either side
+of the last frame with secondary actors.
+
+For the diagnostic baseline, reverse only the two renderer changes from
+`827c1ebd` on the same `a2197bf4` tree. Keep all other source, assets, settings,
+and instrumentation identical. Apply diagnostic 4x CPU throttling only after
+renderer readiness, then repeat in fresh browsers with either setting first.
+
+| Version | CPU throttle | Reduced-flash order | Maximum frame intervals, cast 1–4 | Maximum in any effect-end window | Late player-page upload |
+| --- | --- | --- | --- | --- | --- |
+| Current | 1x | Off/On/On/Off | 16.8 / 16.8 / 16.8 / 16.8 ms | 16.8 ms | none |
+| Baseline with atlas preparation removed | diagnostic 4x | On/Off/Off/On | 133.3 / 33.2 / 16.8 / 33.4 ms | 16.8 ms | first cast: page 1, 126.1 ms |
+| Current | diagnostic 4x | On/Off/Off/On | 33.4 / 16.8 / 16.8 / 33.3 ms | 16.8 ms | none |
+| Restored baseline, opposite initial setting | diagnostic 4x | Off/On/On/Off | 133.3 / 16.8 / 16.8 / 33.3 ms | 16.8 ms | first cast: page 1, 122.8 ms |
+
+Both baseline upload stalls occur early in the first cast, approximately
+205–239 ms after capture starts. Their fresh Boneyard contexts contain player
+pages `[0,2]` before casting; current contexts already contain `[0,1,2]`.
+This independently confirms the published cold-upload fix and shows that
+Reduced Screen Flashes does not prevent that upload. It does not identify an
+end-of-effect stall in the recording.
+
+At normal hardware speed all four current casts have zero intervals over
+25 ms, zero long tasks, and zero late uploads. At diagnostic 4x, the two
+current 33-ms intervals occur 6.9–7.4 seconds into capture, after secondary
+actors have retired, near world ticks 3,000 and 6,000. The same idle timing
+appears in baseline runs. The sampler does not establish the owner of those
+isolated intervals; neither a lighting regression nor garbage collection is
+established by temporal association alone.
+
+Corresponding first casts across runs peak at 33 secondary actors, 35
+primitives, and 34 light sources; later casts peak at 32, 33, and 33. This
+first-cast fixture difference is present with either initial flash setting.
+The setting changes only final screen-overlay alpha to 20% of native alpha,
+as specified in entry 130; the world-light and secondary-effect workload is
+unchanged. Full effect retirement occurs in every captured cast.
+
+The follow-up requires no additional production change: the reproduced
+first-use defect is already fixed, and the reported setting-dependent tail
+stutter is not reproduced under these Mac conditions. The recording's build
+and the user's Windows renderer remain unidentified. A comparison on that
+build/device is needed before attributing its reported tail stutter to the
+screen-flash setting or claiming that this existing fix resolves it.
+
+Measurement JSON SHA-256 values, in table order:
+
+- `ccb17f3c9a7f103b5494c20dc0f0f52b971ef9ff9f2276dfce51d3554df9a4bb`
+- `bf6bdaf7a812d0e27ce96e9825a69d58624e6eb65fcecc7f26f1d9c474fd0e6e`
+- `e9a6e68037af2429bd0f4184f54ad34dc74ba3d41773576402eca9015e67a5e9`
+- `b13826968388cfa32816ae85d3626417a1fe088cf3b7bfe39ace00cb1ff5c0e8`
+
+Fresh validation on the Mac comparison tree:
+
+- `/opt/homebrew/bin/bash ./scripts/validate.sh` passed all 2,675 Node tests
+  and 19 backend integration tests, with no skipped Node tests. Formatting,
+  TypeScript, import boundaries, generated-content checks, backend/frontend
+  builds, bundle budgets, and production media policy passed. Built entry
+  `Game-DCCWDgs-.js` is 262,311 raw / 79,058 gzip bytes. Gate log SHA-256:
+  `920438ca98d7dd8ac5bd18a627713dc140a6fe2201e2df012700ca7ec811578f`.
+- The gate exposed one unused import in
+  `primary-spell-water-mesh-runs.test.ts`; removing that import was the initial
+  code cleanup in this follow-up. Its seven existing tests and the supported
+  Mac `./scripts/validate.sh lint` gate passed afterward. Final lint has 11
+  pre-existing warnings and zero errors. No authored production code changed,
+  so production complexity, Halstead, coverage, CRAP, mutation, duplication,
+  and explicit-type metrics have no changed implementation scope in this
+  follow-up; this is not a claim that the entire repository meets those gates.
+  Focused-test and final-lint log SHA-256 values are
+  `af29882cd9cfdd40aba324fc771ae7af99d2b5a8ee2368756be8a96f569c3673`
+  and `66f3f33f2176ee6b41f946a63d6aa39ab55bd9d8ada9f8ec760d1ad91d45dec0`.
+- Fresh production-build `smoke-secondary-abilities.mjs` journeys used
+  skill 21, the native viewport, and separate Hub/Boneyard scenes. Both
+  contexts had all player pages `[0,1,2]` ready. Hub admission remained
+  blocked. Boneyard verified the cast pose, MovingFire/Shockwave/contact
+  explosion, damage, flash, audio, cooldown, and zero late player-atlas
+  uploads. Both runs have empty page/console/response error arrays. These
+  instrumented default-settings journeys are contract checks, not the
+  recorded-settings frame-timing comparison above. Their log SHA-256 values
+  are `e33583bc5bb00bf039edff14bdf15cbfa2b6bb97135e1bfb60c95f896df86b81`
+  and `98d2d8d24435f15d05738bcac438751298c4ddaf55b1c6745afee234ef3ef44e`.
+  The inspected Boneyard capture SHA-256 is
+  `c358bc722260e669c74029863a070f7a95452e2c116a11c5c223cfcdbc5fd996`.
+
+The diagnostic baseline, temporary probes, captures, and raw measurement logs
+were removed after recording their results here. Publication of this
+follow-up contains the investigation record, unused test import cleanup,
+and the smoke-fixture stabilization described below; it introduces no
+rendering change or runtime deployment. The original Windows Downloads
+recording remains untouched.
+
+Publication revalidation encountered the previously documented randomized
+enemy-spawn failure from entries 083 and 231: `resolveNativeBoneyardSpawnPosition`
+could not find a dark collision-safe placement for radius
+`19.79234754666686` from `(929.3023071289062, 1091.10009765625)`, aborting
+the Boneyard host before the ability proof completed. This is a separate
+open generated-map/spawn finding; it is not attributed to Ring of Fire or
+the flash preference. The browser harness now consistently uses its existing
+all-zero Boneyard seed, already used by the Phasing/Shield proofs and this
+investigation's performance sampler. This makes the ability fixture
+repeatable without changing or claiming to fix production spawn behavior.
+
+Publication validation on parent
+`530b7d2a4e4859af9d8603a52ee0a30ef9ab6e3d` passed the complete Mac gate:
+2,682 Node tests, 19 backend integration tests, no skipped Node tests, and
+all formatting, type, build, boundary, generated-content, budget, and media
+checks. Built entry `Game-DbxCGrCZ.js` is 262,312 raw / 79,061 gzip bytes.
+The gate log SHA-256 is
+`f5043685513fa79807288a6e32dcdd7c7ab103a17c4260f467f5b0bfc2002daa`.
+After stabilizing the browser fixture, the supported Mac lint gate passed
+with 10 pre-existing warnings and zero errors; its log SHA-256 is
+`e759425ad5d6071e6caa0eeb63aee3b2c370c54927b15ce03ae0222bb37ba5cc`.
+No production code changed after the complete gate.
+
+Both final fixed-seed built-browser journeys completed normally with exit
+status zero, complete player pages `[0,1,2]` before gameplay, and empty
+page/console/response error arrays. Hub still rejects Ring of Fire. Boneyard
+observes MovingFire, Shockwave, the Burning Man contact explosion, the flash,
+and zero late player-atlas uploads. Hub/Boneyard log SHA-256 values are
+`285d3edd7d236b27f073ed0ebacdc504c89ae59cad16a79255f8c7c646aa633c`
+and `bf5568cf46e05e9163d719d2701ea6177078b534cd0c31ec90ae1d06f73f5459`.
+The inspected Boneyard capture SHA-256 is
+`fc2c6bfc35fce4374ec69ad04b58d86280faa4ed51dbec5430e4e41d97e28f12`.
+The rejected randomized-attempt log SHA-256 is
+`e7f35593410f4dbc48575ce3c43484f10a67feb2324a9f3887a6c8d897097292`;
+the successful fixed fixture does not establish random-map spawn closure.

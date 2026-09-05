@@ -18,7 +18,6 @@ import type {
 } from '../core-kernels/primary-spells.ts'
 import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
-import { NATIVE_AIR_WATER_SPRITES } from './primary-spell-air-water-native.ts'
 import {
   isNativeWaterMeshActorState,
   nativeWaterMeshComposite,

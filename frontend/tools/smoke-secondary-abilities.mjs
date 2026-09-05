@@ -141,9 +141,7 @@ if (!baseUrl && productionBuild) {
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  ...(phasingFrameCapture || (requestedSkillIds.length === 1 && requestedSkillIds[0] === 54)
-    ? { createBoneyardSeedBytes: () => Buffer.alloc(16) }
-    : {}),
+  createBoneyardSeedBytes: () => Buffer.alloc(16),
   snapshotRate: 20,
 })
 const browser = await chromium.launch({
