@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=%h/.local/libexec/solomon-dark-main-deploy
-TimeoutStartSec=45min
+TimeoutStartSec=90min
 TimeoutStopSec=30s
 UMask=0077
 Nice=10

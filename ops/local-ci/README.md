@@ -52,6 +52,9 @@ Install or refresh it on the deployment machine:
 ./ops/local-ci/install.sh
 ```
 
+The service allows 90 minutes for validation, packaging, and cutover. Run the
+installer while the worker is idle to apply changed service or timer settings.
+
 The first installation remains explicit because no validated worker exists yet.
 After that bootstrap, validated releases own worker refreshes as described above.
 

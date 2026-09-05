@@ -21,6 +21,7 @@ runtime/ml-training/
 .DS_Store
 __pycache__/
 *.pyc
+.venv/
 tools/out/
 
 # Reproducible quality reports and mutation sandboxes

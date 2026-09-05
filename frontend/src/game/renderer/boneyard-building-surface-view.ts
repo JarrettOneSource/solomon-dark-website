@@ -37,6 +37,7 @@ const NATIVE_STATIC_SURFACE_PROGRAM = compileHighShaderGlProgram({
     roundPixelsBitGl,
     NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
   ],
+  // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
   name: 'native-static-surface',
 })
 
@@ -63,6 +64,7 @@ export function createNativeSurfaceMesh(texture: Texture, plan: NativeSurfaceGeo
   const colors = plan.colors
   const colorBuffer = new Buffer({
     data: colors,
+    // Stryker disable next-line StringLiteral: Equivalent: buffer labels only name GPU diagnostics.
     label: 'native-static-surface-colors',
     usage: BufferUsage.VERTEX | BufferUsage.COPY_DST,
   })

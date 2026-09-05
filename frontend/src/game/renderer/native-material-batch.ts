@@ -18,6 +18,7 @@ const nativeVertexColors = new WeakMap<object, Uint32Array>()
 // Pixi uniforms carry premultiplied group color. Recover that uniform tint
 // before interpolating the native, independently packed vertex RGB and alpha.
 export const NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-straight-vertex-color',
   vertex: {
     header: 'in vec4 aColor;',
@@ -32,6 +33,7 @@ export const NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL = {
 }
 
 export const NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-straight-uniform-color',
   vertex: {
     end: 'if (vColor.a > 0.0) vColor.rgb /= vColor.a;',
@@ -39,6 +41,7 @@ export const NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL = {
 }
 
 const NATIVE_TEXTURE_ALPHA_MODE_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-texture-alpha-mode',
   vertex: {
     header: `

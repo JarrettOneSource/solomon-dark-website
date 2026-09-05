@@ -12,6 +12,7 @@ const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 
 export class PlayerEnchantStaffView {
+  // Stryker disable next-line StringLiteral,ObjectLiteral: Equivalent: this scene label has no runtime lookup consumer.
   readonly container = new Container({ label: 'native-player-staff-attachment' })
   private readonly aura: MeshSimple
   private readonly auraVertexColors = new Uint32Array(4)
@@ -38,6 +39,7 @@ export class PlayerEnchantStaffView {
     this.aura.autoUpdate = false
     this.aura.blendMode = 'add'
     this.aura.eventMode = 'none'
+    // Stryker disable next-line StringLiteral: Equivalent: this scene label has no runtime lookup consumer.
     this.aura.label = 'native-enchant-staff-aura'
     this.aura.zIndex = 2
     setNativeVertexColors(this.aura, this.auraVertexColors)

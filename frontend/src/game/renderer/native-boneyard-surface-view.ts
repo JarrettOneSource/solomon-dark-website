@@ -18,12 +18,14 @@ interface NativeRoadMeshView {
 }
 
 export class NativeBoneyardSurfaceView {
+  // Stryker disable next-line StringLiteral,ObjectLiteral: Equivalent: this scene label has no runtime lookup consumer.
   readonly container = new Container({ label: 'native-boneyard-surface' })
   readonly roadIndexCount: number
   readonly roadMeshCount: number
   readonly roadVertexCount: number
 
   private readonly ground: NativeStaticSurfaceMesh
+  // Stryker disable next-line StringLiteral,ObjectLiteral: Equivalent: this scene label has no runtime lookup consumer.
   private readonly roadRoot = new Container({ label: 'native-road-meshes' })
   private readonly roads: readonly NativeRoadMeshView[]
 
@@ -39,6 +41,7 @@ export class NativeBoneyardSurfaceView {
       return { eid: road.eid, plan, texture }
     })
     this.ground = createNativeSurfaceMesh(textures.ground, webArenaGroundMeshPlan(scene.bounds))
+    // Stryker disable next-line StringLiteral: Equivalent: this scene label has no runtime lookup consumer.
     this.ground.mesh.label = 'web-arena-ground'
     this.container.eventMode = 'none'
     this.roadRoot.eventMode = 'none'
@@ -47,6 +50,7 @@ export class NativeBoneyardSurfaceView {
 
     const roads = plans.map(({ eid, plan, texture }) => {
       const surface = createNativeSurfaceMesh(texture, plan)
+      // Stryker disable next-line StringLiteral: Equivalent: this scene label has no runtime lookup consumer.
       surface.mesh.label = `native-road:${eid}`
       return { surface, sourceKey: `road:${eid}` }
     })

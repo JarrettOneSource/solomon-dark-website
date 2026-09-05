@@ -10,10 +10,14 @@ permissions:
 jobs:
   website:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -24,5 +28,7 @@ jobs:
           node-version-file: .node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - run: google-chrome --version
 
       - run: ./scripts/validate.sh

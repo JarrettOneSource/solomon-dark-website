@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 
 const staticOnly = process.argv.includes('--static')
 const commands = [
-  ['--test', 'tools/quality/source-metrics.test.mjs', 'tools/quality/crap.test.mjs'],
+  ['--test', 'tools/quality/source-metrics.test.mjs', 'tools/quality/crap.test.mjs', 'tools/quality/mutation-summary.test.mjs'],
   ['tools/quality/complexity.mjs'],
   ['tools/quality/dead-code.mjs'],
   ['tools/quality/duplication.mjs'],
@@ -19,5 +19,5 @@ for (const args of commands) {
   console.log(`Renderer quality: node ${args.join(' ')}`)
   const result = spawnSync(process.execPath, args, { stdio: 'inherit' })
   if (result.error) throw result.error
-  if (result.status !== 0) process.exitCode = 1
+  if (result.status !== 0) process.exit(result.status ?? 1)
 }

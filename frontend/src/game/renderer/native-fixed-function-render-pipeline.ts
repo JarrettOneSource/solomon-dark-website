@@ -54,6 +54,7 @@ const NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE = `
 `
 
 const NATIVE_FIXED_FUNCTION_COLOR_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-fixed-function-color',
   fragment: {
     header: NATIVE_TEXTURE_COLOR_HEADER,
@@ -108,6 +109,7 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
 
 function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
   const nativeColorBit = {
+    // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
     name: `native-fixed-function-${premultiplied ? 'pma' : 'npm'}`,
     fragment: {
       header: NATIVE_TEXTURE_COLOR_HEADER,
@@ -119,6 +121,7 @@ function createNativeFixedFunctionMeshShader(premultiplied: boolean): Shader {
   }
   return new Shader({
     glProgram: compileHighShaderGlProgram({
+      // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
       name: `native-fixed-function-mesh-${premultiplied ? 'pma' : 'npm'}`,
       bits: [
         localUniformBitGl,

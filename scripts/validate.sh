@@ -46,6 +46,8 @@ install_dependencies() {
     printf 'Restoring pinned dependencies\n'
     "$dotnet_command" restore backend/Server.csproj --nologo
     npm --prefix frontend ci --no-audit --no-fund
+    python3 -m venv .venv
+    .venv/bin/python -m pip install --disable-pip-version-check --requirement tests/requirements.txt
 }
 
 run_lint() {
@@ -68,7 +70,7 @@ run_all() {
         --verbosity minimal
 
     printf 'Running Website contracts and backend integration tests\n'
-    python3 -m unittest discover -s tests -p 'test_*.py' -v
+    .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 
     run_lint
 

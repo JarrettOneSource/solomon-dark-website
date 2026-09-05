@@ -50,6 +50,7 @@ const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
 `
 
 const NATIVE_ARENA_SATURATION_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-arena-saturation',
   fragment: {
     header: NATIVE_TEXTURE_COLOR_HEADER,
@@ -58,6 +59,7 @@ const NATIVE_ARENA_SATURATION_BIT_GL = {
 }
 
 export const NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-arena-unpremultiplied-saturation',
   fragment: {
     header: NATIVE_TEXTURE_COLOR_HEADER,
@@ -69,6 +71,7 @@ export const NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL = {
 }
 
 const NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL = {
+  // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
   name: 'native-arena-premultiplied-saturation',
   fragment: {
     header: NATIVE_TEXTURE_COLOR_HEADER,
@@ -148,6 +151,7 @@ export function installNativeArenaRenderPipeline(
 export function createNativeArenaUnpremultipliedParticleShader(): Shader {
   return new Shader({
     glProgram: GlProgram.from({
+      // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
       name: 'native-arena-particle',
       vertex: NATIVE_ARENA_PARTICLE_VERTEX_SHADER_SOURCE,
       fragment: NATIVE_ARENA_PARTICLE_FRAGMENT_SHADER_SOURCE,
@@ -165,6 +169,7 @@ export function createNativeArenaUnpremultipliedParticleShader(): Shader {
 function createNativeArenaGraphicsShader(maxTextures: number): Shader {
   return new Shader({
     glProgram: compileHighShaderGlProgram({
+      // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
       name: 'native-arena-graphics',
       bits: [
         NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
@@ -189,6 +194,7 @@ function createNativeArenaGraphicsShader(maxTextures: number): Shader {
 function createNativeArenaMeshShader(premultiplied: boolean): Shader {
   return new Shader({
     glProgram: compileHighShaderGlProgram({
+      // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
       name: `native-arena-mesh-${premultiplied ? 'pma' : 'npm'}`,
       bits: [
         localUniformBitGl,

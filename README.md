@@ -3,7 +3,7 @@
 ## Validation
 
 Run the complete backend build, integration contracts, lint checks, frontend
-tests, and production build from the repository root:
+tests, production build, and renderer quality checks from the repository root:
 
 ```bash
 ./scripts/validate.sh
@@ -14,6 +14,14 @@ For lint alone, use the same entrypoint:
 ```bash
 ./scripts/validate.sh lint
 ```
+
+Validation requires the pinned .NET and Node/npm versions, Python 3.12 or newer
+with `venv`, and installed stable Google Chrome for the renderer's WebGL tests.
+The script restores .NET/npm dependencies and installs the pinned Python test
+dependencies into the ignored `.venv` directory. It does not depend on globally
+installed Pillow. Playwright selects Chrome for the current operating system;
+`SDR_CHROME_PATH` overrides its executable when needed. See
+[renderer quality checks](docs/renderer-quality.md) for mutation review policy.
 
 ## Boneyard viewer
 

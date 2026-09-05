@@ -20,12 +20,14 @@ await vite.listen()
 const address = vite.httpServer.address()
 assert.ok(address && typeof address !== 'string')
 const origin = `http://127.0.0.1:${address.port}`
-const browser = await chromium.launch({
-  executablePath: process.env.SDR_CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  headless: true,
-})
+let browser
 const errors = { console: [], page: [], responses: [] }
 try {
+  browser = await chromium.launch({
+    channel: 'chrome',
+    executablePath: process.env.SDR_CHROME_PATH,
+    headless: true,
+  })
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   const activeMutant = process.env.__STRYKER_ACTIVE_MUTANT__
   if (activeMutant !== undefined) {
@@ -173,7 +175,7 @@ try {
     await writeFile(`${directory}/browser.json`, JSON.stringify(coverage))
   }
 } finally {
-  await browser.close()
+  await browser?.close()
   await vite.close()
 }
 

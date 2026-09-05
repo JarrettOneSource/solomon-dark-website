@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { rendererFiles } from './scope.mjs'
+import { summarizeMutations } from './mutation-summary.mjs'
 
 const directory = 'reports/renderer-quality'
 const readReport = async name => JSON.parse(await readFile(`${directory}/${name}.json`, 'utf8'))
@@ -33,6 +34,7 @@ const result = {
   deadCode: deadCode.issues.length,
   duplicateBlocks: duplication.duplicates.length,
 }
+const failures = []
 if (!staticOnly) {
   const coverage = await readReport('coverage/coverage-summary')
   const coverageSources = await readReport('coverage/sources')
@@ -49,12 +51,11 @@ if (!staticOnly) {
     [name, coverage.total[name]]
   )))
   result.maxima.crap = Math.max(...crap.files.flatMap(file => file.methods.map(method => method.score)))
-  result.mutation = {}
-  for (const file of Object.values(mutation.files)) {
-    for (const mutant of file.mutants) result.mutation[mutant.status] = (result.mutation[mutant.status] ?? 0) + 1
-  }
+  const summary = summarizeMutations(mutation.files)
+  result.mutation = summary.counts
+  result.equivalentMutants = summary.equivalents
+  if (!summary.passed) failures.push('mutation')
 }
-const failures = []
 for (const [name, limit] of Object.entries({ cyclomatic: 22, cognitive: 22, halsteadDifficulty: 80, sourceLines: 1000, crap: 25 })) {
   if (name === 'crap' && staticOnly) continue
   if (!Number.isFinite(result.maxima[name]) || result.maxima[name] >= limit) failures.push(name)
@@ -64,9 +65,6 @@ for (const name of ['prohibitedTypes', 'deadCode', 'duplicateBlocks']) {
 }
 if (!staticOnly) {
   if (Object.values(result.coverage).some(metric => metric.pct !== 100)) failures.push('coverage')
-  const tested = (result.mutation.Killed ?? 0) + (result.mutation.Timeout ?? 0)
-  const untested = Object.keys(result.mutation).filter(status => !['Killed', 'Timeout', 'CompileError'].includes(status))
-  if (tested === 0 || untested.length > 0) failures.push('mutation')
 }
 result.failures = failures
 await writeFile(`${directory}/${staticOnly ? 'static-summary' : 'summary'}.json`, JSON.stringify(result, null, 2) + '\n')
