@@ -435,3 +435,118 @@ No member is blocked by the browser platform.
   offer order, prices, purchases, capacity, gameplay effects, protocol, save,
   and audio are unchanged. Commit, push, and deployment were not requested or
   performed.
+
+## 2026-09-04 — Owned-perk tooltip painter order reopening
+
+The reported Revelation Charm tooltip is crossed by the Stats chain and corner
+art in both College and Boneyard inventory. The previous closure recovered
+HoverBox ordering but checked content and geometry without proving the emitted
+canvas order against overlapping chrome. That omitted painter-order regression
+is the reopened failure.
+
+### Boundary, native evidence, and implementation consequence
+
+The boundary is contextual inspection composition over InventoryScreen and its
+companion Shop: the existing 28 perk rows, item descriptions, source rectangles,
+hover/focus/leave paths, and scene teardown remain the catalog above. This pass
+changes the standalone owned-perk HoverBox composition phase, with a membership
+sweep through every producer of `addNativeContextualHoverBox`.
+
+The retail file was rehashed from
+`SolomonDarkAbandonware/SolomonDark.exe`: 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The existing instruction evidence remains applicable: preferred base
+`0x00400000`, InventoryScreen pointer owner `0x0056FC90`, StoreGrid hover
+`0x0055E2C0`, and HoverBox render `0x005C3A60`. HoverBox paints opaque black,
+its edge, and ExactText after its owning panel. No live PID or injected capture
+is used as native evidence for this reopening.
+
+At Website base `9c0bfbe03`, `buildInventory` appends the standalone owned-perk
+box immediately after Stats content, before player preview, equipment, side
+chrome, backpack, and HUD. `buildService` already appends inspections after
+Shop chrome; selected inventory ItemInfo is also already appended after the
+inventory panels. The standalone call must move into the same foreground phase,
+after the complete inventory owner and before the drag cursor. Changing tooltip
+coordinates, fonts, margins, or CSS stacking does not recover this contract.
+
+| Member | Disposition after implementation | Verification contract |
+| --- | --- | --- |
+| Standalone Stats page 2, College | exact-ported | Revelation crossing and every occupied cell remain above chains/corners |
+| Standalone Stats page 2, Boneyard | exact-ported | same renderer and visible pixel regression in a live run |
+| All 27 obtainable owned perk selectors, including tonic and Cheat Death copy | exact-ported | unchanged authored catalog; each valid selector's tooltip remains above its panel |
+| Dormant Perky Charm (8) | out-of-system | native outcome validator rejects ownership; authored description remains covered by the existing 28-row catalog test |
+| Hagatha owned-perk companion pane | verified-already-at-parity | inspection remains after service chrome |
+| Ordinary Fomentius/Luthacus/Shlorio Stats page 2 companion panes | verified-already-at-parity | shared service-owned inspection path |
+| Hagatha/Fomentius/Luthacus/Shlorio offered-item HoverBoxes | verified-already-at-parity | service chrome precedes inspection; existing complete content contracts |
+| Inventory/backpack/equipment ItemInfo | verified-already-at-parity | existing late composition, 20-tick visibility and drag suppression |
+| Pointer leave, stats page change, close/reopen and scene exit | verified-already-at-parity | model rebuild destroys the prior box; no stale tooltip |
+| Drag cursor, flyby, dye and notice layers | verified-already-at-parity | preserve existing foreground/modal ownership |
+| SkillScreen detail panels and gameplay collisions | out-of-system | separate renderers and no contextual inventory producer |
+
+The 3,704-line renderer exceeds the authored file-size gate. Preserve its public
+renderer interface while moving complete responsibilities and private helpers
+into inventory page, panels, dialogue, service, notices, inspection, item-view,
+drawing, and internal render-model modules. Keep the native contracts/catalogs
+where they are. This is a complete source move with direct imports, without
+compatibility wrappers or a new rendering abstraction.
+
+### Validation contract
+
+Use the public `/game` inventory UI and Mac Chrome screenshots to inspect the
+opaque tooltip margin where the Stats chain crosses it. Text accessibility alone
+cannot detect this bug. Prove the original failure before the ordering change,
+then cover College, Boneyard, per-selector content, hover teardown and sibling
+service composition. Run the native UI contracts and canonical Website gate on
+the exact Mac candidate. Record the final measurements below after verification.
+
+
+### Implementation and Mac validation receipt
+
+- Candidate base: `9c0bfbe03705d9f8b868ba8cd28d7ee3c0d06606`. The local and
+  Mac focused checkouts contain the same changed files. The public renderer
+  interface remains in `hub-inventory-renderer.ts`; `hub-inventory-page.ts`
+  now appends owned-perk inspection after inventory content/chrome and before
+  the drag cursor. All 99 original declarations remain; comparison of their
+  bodies identifies only `buildInventory` as changed.
+- All ten renderer modules are below 1,000 lines; the largest is
+  `hub-inventory-panels.ts` at 734. The changed production scope contains no
+  explicit `any` or `unknown`. Shared glyph drawing owns the italic transform,
+  avoiding a drawing/dialogue import cycle. One unrelated unused import in the
+  water-mesh test was removed after the canonical lint run identified it.
+- Mac native UI contracts: **97 passed**. Final
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: **exit 0**, **2,678 Node test
+  executions passed**, **19 Python tests passed**, backend/frontend build,
+  formatting, type checking, game boundaries, generated catalogs, bundle budget
+  and production-media policy passed. Changed-scope Oxc: **13 files, zero
+  warnings/errors**. The full repository retains 11 pre-existing warnings in
+  control-character validation, Fast Refresh exports, and decimal test goldens;
+  Python also emits pre-existing HTTPError ResourceWarnings.
+- Production Mac Chrome command:
+  `SDR_OVERLAY_PRODUCTION=1 npm run smoke:game:inventory-tooltips`, **exit 0**.
+  It passes **47 pixel checks**: all 27 obtainable variants in College and all
+  nine occupied positions in both College and Boneyard. Focus, pointer leave,
+  page change and close/reopen pass in both scenes. All page, console and network
+  error arrays are empty. The dormant selector 8 stays in the existing 28-row
+  description contract and is correctly excluded from playable outcome fixtures.
+- The reported chain intersection is sampled at `[367,240,8,8]`: **64 nonblack
+  pixels before**, **zero after in each scene**. Baseline capture SHA-256
+  `4e76cf66c8e8e8c4ed29079da52511012513e53416ebc6b3ee761a9e648272e6`;
+  accepted College `1817b78470be977dabfee40d23be596419eba1f9711bd973c3e7efb352e63ff2`;
+  accepted Boneyard `460a60504bf98ad1a56ca1468ef11fd0f167f551af62d314eb0790e48bef743c`.
+- Supplemental production Hagatha layout/capacity journey reached `status: ok`:
+  capacities 3/6/9, the bundle HoverBox, purchases, rejection messages, and
+  hat/robe notices passed with empty browser/failed-request/failed-response
+  arrays. Receipt SHA-256
+  `727838896349d2117b84b5552ba8f97305d322740c0f7303f5dfd31cef2b17b5`.
+  That supplemental runner stalled during Chrome shutdown and was terminated
+  after its assertions/receipt completed; it is not reported as an exit-zero
+  command. The dedicated tooltip runner completed browser and host teardown.
+- No configured analyzers measure cyclomatic/cognitive complexity, Halstead
+  difficulty, full statement/branch/function/line coverage, CRAP, mutation
+  survival, whole-module dead code or duplication. Those gates remain
+  **unmeasured**; Oxc and source review do not substitute for them. No analyzer
+  dependencies or metric exclusions were added.
+- No visible browser approximation or unresolved tooltip member remained at
+  initial acceptance. Publication had not yet been requested, so the isolated
+  local/Mac worktrees were retained for review. Task-owned runtime processes
+  and disposable captures/logs were removed after recording this receipt.
