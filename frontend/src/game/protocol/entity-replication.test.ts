@@ -112,6 +112,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       },
       kind: 'boneyard',
       lanternLightRegistration: null,
+      lanternPosition: null,
       loot: [],
       lootEvents: [],
       mageLightningPulses: [{
@@ -1638,3 +1639,28 @@ function maggotSnapshot(): BoneyardMaggotSnapshot {
     visualScale: 1.125,
   }
 }
+
+test('Lantern position survives guest keyframes and deltas without aliasing authority', () => {
+  const initial = boneyardSnapshot('lantern-push')
+  assert.equal(initial.world.kind, 'boneyard')
+  if (initial.world.kind !== 'boneyard') return
+  initial.world.lanternPosition = { x: 100, y: 200 }
+  const guest = new EntityReplicationReconstructor()
+  const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
+  const first = guest.apply(keyframe, 1)
+  assert.equal(first.world.kind, 'boneyard')
+  if (first.world.kind !== 'boneyard') return
+  assert.deepEqual(first.world.lanternPosition, initial.world.lanternPosition)
+  assert.notEqual(first.world.lanternPosition, initial.world.lanternPosition)
+  const moved = cloneSnapshot(initial)
+  if (moved.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  moved.tick += 5
+  moved.world.lanternPosition = { x: 140, y: 260 }
+  const delta = createGameSnapshotFrame(moved, 1, createReplicatedEntityBaseline(initial))
+  const second = guest.apply(delta, 2)
+  assert.equal(second.world.kind, 'boneyard')
+  if (second.world.kind !== 'boneyard') return
+  assert.deepEqual(second.world.lanternPosition, moved.world.lanternPosition)
+  assert.notEqual(second.world.lanternPosition, moved.world.lanternPosition)
+  assert.deepEqual(first.world.lanternPosition, { x: 100, y: 200 })
+})

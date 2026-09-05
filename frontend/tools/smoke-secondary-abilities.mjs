@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
+import { acceptLanternAndCursor } from './lantern-cursor-smoke-acceptance.mjs'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
@@ -287,6 +288,12 @@ try {
     assert.equal(state.world.kind, 'boneyard')
     boneyardEnemyBaseline = structuredClone(state.world.enemies)
   }
+  const lanternCursor = process.env.SDR_LANTERN_CURSOR_ACCEPTANCE === '1'
+    ? await acceptLanternAndCursor({
+        page, canvas, host, playerId, baseSkillBook, armQuickbar,
+        setHostPlayerPosition, screenshotRoot,
+      })
+    : null
   const statusEffects = statusEffectAcceptance
     ? await capturePrimaryStatusEffectExpiry(
         page,
@@ -1016,6 +1023,7 @@ try {
     browser: browserReceipt,
     consoleErrors,
     insufficientMana: insufficientManaReceipt,
+    lanternCursor,
     pageErrors,
     playerAtlasContexts,
     receipts,

@@ -352,6 +352,10 @@ interface BoneyardRendererFrameDiagnostics {
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
+  lanternWorldX: number
+  lanternWorldY: number
+  lanternLightX: number
+  lanternLightY: number
   lanternPainterRow: number
   lanternZIndex: number
   levelUpParticleCount: number
@@ -988,6 +992,10 @@ export async function createBoneyardWorldRenderer(
     localPlayerPainterRow: 0,
     localPlayerZIndex: 0,
     lanternLightIntensity: 0,
+    lanternWorldX: Number.NaN,
+    lanternWorldY: Number.NaN,
+    lanternLightX: Number.NaN,
+    lanternLightY: Number.NaN,
     lanternPainterRow: Number.NaN,
     lanternZIndex: Number.NaN,
     levelUpParticleCount: 0,
@@ -1526,6 +1534,10 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.localPlayerPainterRow = painter.localPlayerPainterRow
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
       frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
+      frameDiagnostics.lanternWorldX = painter.lanternWorldX
+      frameDiagnostics.lanternWorldY = painter.lanternWorldY
+      frameDiagnostics.lanternLightX = painter.lanternLightX
+      frameDiagnostics.lanternLightY = painter.lanternLightY
       frameDiagnostics.lanternPainterRow = painter.lanternPainterRow
       frameDiagnostics.lanternZIndex = painter.lanternZIndex
       frameDiagnostics.levelUpParticleCount = scene.levelUpParticleCount
@@ -1912,6 +1924,10 @@ interface BoneyardPainterFrame {
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
+  lanternWorldX: number
+  lanternWorldY: number
+  lanternLightX: number
+  lanternLightY: number
   lanternPainterRow: number
   lanternZIndex: number
   lightMiscTailCandidateCount: number
@@ -2227,12 +2243,13 @@ class BoneyardDynamicScene {
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
-    this.solomon?.update(snapshot.world.encounter, snapshot.tick)
+    const lanternPosition = snapshot.world.lanternPosition
+    this.solomon?.update(snapshot.world.encounter, snapshot.tick, lanternPosition)
 
     const dig = this.boneyard.scene.solomonDig
-    const lanternLight = dig
+    const lanternLight = lanternPosition
       ? nativeLanternLightSource(
-          dig.lanternPosition,
+          lanternPosition,
           presentationFrame,
           settings.multipleShadows,
         )
@@ -2786,12 +2803,12 @@ class BoneyardDynamicScene {
         nativeBoneyardLightTint(worldLightScalar(position)),
       )
     }
-    if (dig) {
+    if (dig && lanternPosition) {
       const solomonPosition = snapshot.world.encounter?.position ?? dig.position
       this.solomon?.setLighting(settings.complexLighting
         ? nativeSolomonSetPieceLighting(
             solomonPosition,
-            dig.lanternPosition,
+            lanternPosition,
             this.lightIndex,
           )
         : { bodyTint: 0xffffff, dirtTint: 0xffffff, lanternTint: 0xffffff })
@@ -2917,6 +2934,7 @@ class BoneyardDynamicScene {
         snapshot.world.encounter,
         snapshot.world.lanternLightRegistration,
         snapshot.world.solomonPainterRegistration,
+        lanternPosition,
       ))
     }
     const activeStaticPainterLayers = this.activeStaticPainterLayers
@@ -3141,6 +3159,10 @@ class BoneyardDynamicScene {
       localPlayerPainterRow: localPainter?.row ?? 0,
       localPlayerZIndex,
       lanternLightIntensity: lanternLight?.intensity ?? 0,
+      lanternWorldX: this.solomon?.lanternWorldX ?? Number.NaN,
+      lanternWorldY: this.solomon?.lanternWorldY ?? Number.NaN,
+      lanternLightX: lanternLight?.position.x ?? Number.NaN,
+      lanternLightY: lanternLight?.position.y ?? Number.NaN,
       lanternPainterRow: lanternPainter?.row ?? Number.NaN,
       lanternZIndex: lanternPainter?.zIndex ?? Number.NaN,
       lightMiscTailCandidateCount,
@@ -3446,10 +3468,8 @@ class BoneyardSolomonView {
     this.textures = textures
     this.digState = state
     this.lantern = new Sprite(textures.lantern)
-    this.lantern.position.set(
-      state.lanternPosition.x - 14.5,
-      state.lanternPosition.y - 22.5,
-    )
+    this.lantern.pivot.set(14.5, 22.5)
+    this.lantern.position.set(state.lanternPosition.x, state.lanternPosition.y)
     this.body = new Sprite(textures.solomonDig[0])
     this.body.anchor.set(0.5)
     this.mouth = new Sprite(textures.solomonDialogueMouth[0][0])
@@ -3475,7 +3495,15 @@ class BoneyardSolomonView {
     root.addChild(this.actorRoot, this.lantern)
   }
 
-  update(encounter: BoneyardSolomonSnapshot | null, tick: number): void {
+  update(
+    encounter: BoneyardSolomonSnapshot | null,
+    tick: number,
+    lanternPosition: SolomonDigState['lanternPosition'] | null,
+  ): void {
+    this.lantern.visible = lanternPosition !== null
+    if (lanternPosition !== null) {
+      this.lantern.position.set(lanternPosition.x, lanternPosition.y)
+    }
     if (encounter === null) {
       this.clearDirt()
       this.lastDigEventId = null
@@ -3596,6 +3624,14 @@ class BoneyardSolomonView {
 
   setActorRenderable(renderable: boolean): void {
     this.actorRoot.renderable = renderable
+  }
+
+  get lanternWorldX(): number {
+    return this.lantern.visible ? this.lantern.position.x : Number.NaN
+  }
+
+  get lanternWorldY(): number {
+    return this.lantern.visible ? this.lantern.position.y : Number.NaN
   }
 
   setLanternDepth(depth: number): void {

@@ -9,6 +9,7 @@ import {
 import type {
   BoneyardBounds,
   BoneyardPoint,
+  LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import {
   nativeSolomonEscapePathTarget,
@@ -318,12 +319,14 @@ export function applyBoneyardPlayerKnockbacks(
   playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
   bounds: BoneyardBounds,
   collision: BoneyardCollisionWorld,
+  lanternPosition: Readonly<BoneyardPoint> | null,
 ): Readonly<{
   enemies: BoneyardEnemyStore
+  lanternPosition: Readonly<BoneyardPoint> | null
   players: Readonly<Record<string, PlayerCharacterState>>
 }> {
-  if (knockbacks.length === 0) return { enemies, players }
-  let bodies = boneyardCombatBodies(players, enemies, playerCombat)
+  if (knockbacks.length === 0) return { enemies, lanternPosition, players }
+  let bodies = boneyardCombatBodies(players, enemies, playerCombat, lanternPosition)
   for (const knockback of knockbacks) {
     const moverId = `player-${knockback.playerId}`
     if (!bodies.has(moverId)) continue
@@ -358,6 +361,7 @@ export function applyBoneyardPlayerKnockbacks(
   )
   return {
     enemies: commitBoneyardEnemyCollisionPositions(enemies, positions),
+    lanternPosition: positions.get(NATIVE_LANTERN_BODY_ID) ?? lanternPosition,
     players: Object.fromEntries(Object.entries(players).map(([playerId, player]) => {
       const position = positions.get(`player-${playerId}`)
       return [
@@ -378,7 +382,7 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
 ): BoneyardWorldState {
   if (knockbacks.length === 0) return world
   const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
-  let bodies = boneyardCombatBodies(players, world.enemies, playerCombat)
+  let bodies = boneyardCombatBodies(players, world.enemies, playerCombat, world.lanternPosition)
   for (const knockback of knockbacks) {
     const moverId = `enemy-${knockback.targetId}`
     if (!bodies.has(moverId)) continue
@@ -409,6 +413,7 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
   }
   return {
     ...world,
+    lanternPosition: bodies.get(NATIVE_LANTERN_BODY_ID)?.position ?? world.lanternPosition,
     enemies: commitBoneyardEnemyCollisionPositions(
       world.enemies,
       new Map([...bodies.values()].map((body) => [body.id, body.position])),
@@ -416,10 +421,33 @@ export function applyBoneyardSecondaryEnemyKnockbacks(
   }
 }
 
+// Stock Lantern ctor 0x005E1120: radius +0x30 = 8, resistance +0x28 = 1.
+// Actor ctor 0x006287D0 leaves strength zero and enables passive pushing.
+export const NATIVE_LANTERN_BODY_ID = 'lantern'
+const NATIVE_LANTERN_PHYSICS = Object.freeze({
+  pushEnabled: true,
+  pushResistance: 1,
+  pushStrength: 0,
+  radius: 8,
+})
+
+export function boneyardLanternBodies(
+  position: Readonly<BoneyardPoint> | null,
+): ActorPhysicsBody[] {
+  return position === null ? [] : [{
+    ...NATIVE_LANTERN_PHYSICS,
+    delta: { x: 0, y: 0 },
+    driven: false,
+    id: NATIVE_LANTERN_BODY_ID,
+    position: { ...position },
+  }]
+}
+
 export function boneyardCombatBodies(
   players: Readonly<Record<string, PlayerCharacterState>>,
   enemies: BoneyardEnemyStore,
   playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+  lanternPosition: Readonly<BoneyardPoint> | null,
 ): Map<string, ActorPhysicsBody> {
   return new Map([
     ...Object.entries(players)
@@ -434,10 +462,8 @@ export function boneyardCombatBodies(
           position: { ...player.position },
         },
       ]),
-    ...boneyardEnemyBodies(enemies).map((body): [string, ActorPhysicsBody] => [
-      body.id,
-      body,
-    ]),
+    ...[...boneyardEnemyBodies(enemies), ...boneyardLanternBodies(lanternPosition)]
+      .map((body): [string, ActorPhysicsBody] => [body.id, body]),
   ])
 }
 
@@ -515,5 +541,59 @@ export function enemyCollisionBody(
     pushResistance: 0,
     pushStrength: 0,
     radius,
+  }
+}
+
+export function createBoneyardSceneryTargets(
+  objects: LoadedBoneyard['scene']['objects'],
+): Pick<BoneyardWorldState, 'earthquakeSceneryTargets' | 'primarySceneryTargets' | 'scenerySpellTargets'> {
+  return {
+    earthquakeSceneryTargets: objects.map((object, id) => Object.freeze({
+      id,
+      position: Object.freeze({ ...object.pos }),
+      typeId: object.typeId,
+    })),
+    primarySceneryTargets: objects.flatMap((object, registrationOrder) => {
+      const bodyRadius = fireballSceneryRadius(object.typeId)
+      return bodyRadius === null ? [] : [Object.freeze({
+        active: true,
+        actorFlags: 0x4,
+        attachment: Object.freeze({ x: 0, y: 0 }),
+        bodyRadius,
+        cellBindingOrder: registrationOrder,
+        id: `scenery:${object.eid}`,
+        kind: object.typeId === 2029 ? 'gravestone' as const : 'scenery' as const,
+        nativePriority: 1000,
+        pendingRemove: false,
+        position: Object.freeze({ ...object.pos }),
+        registrationOrder,
+      })]
+    }),
+    scenerySpellTargets: objects.flatMap((object, registrationOrder) => (
+      object.typeId === 2029 ? [{
+        active: true,
+        actorFlags: 0x4,
+        attachment: { x: 0, y: 0 },
+        bodyRadius: 0,
+        cellBindingOrder: registrationOrder,
+        id: `scenery:${object.eid}`,
+        kind: 'gravestone' as const,
+        nativePriority: 1000,
+        pendingRemove: false,
+        position: { ...object.pos },
+        registrationOrder,
+      }] : []
+    )),
+  }
+}
+
+function fireballSceneryRadius(typeId: number): number | null {
+  switch (typeId) {
+    case 2001: return 8
+    case 2009: return 1
+    case 2029: return 0.01
+    case 2040: return 1
+    case 2061: return 20
+    default: return null
   }
 }

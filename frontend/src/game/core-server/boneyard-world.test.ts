@@ -37,6 +37,8 @@ import {
   stepBoneyardWorldTick,
 } from './boneyard-world.ts'
 import {
+  applyBoneyardPlayerKnockbacks,
+  applyBoneyardSecondaryEnemyKnockbacks,
   spawnPlayerCharacterInBoneyard,
 } from './boneyard-world-placement.ts'
 import {
@@ -2012,3 +2014,87 @@ function clampCameraAxis(position: number, start: number, size: number, halfView
   if (size <= halfView * 2) return start + size / 2
   return Math.min(start + size - halfView, Math.max(start + halfView, position))
 }
+
+for (const direction of [{ x: 1, y: 0 }, { x: 0.6, y: 0.8 }]) {
+  test(`the passive Lantern is pushed through shared actor physics (${direction.x},${direction.y})`, () => {
+    let world = { ...createBoneyardWorld(gatedBoneyard()), lanternPosition: { x: 220, y: 300 } }
+    const originalLantern = world.lanternPosition
+    let player = {
+      ...spawnPlayerCharacterInBoneyard({
+        discipline: 'arcane', displayName: 'Lantern pusher', element: 'fire',
+      }, world),
+      position: { x: 220 - direction.x * 50, y: 300 - direction.y * 50 },
+    }
+    for (let tick = 0; tick < 90; tick += 1) {
+      const result = stepWorld(world, { player }, { player: movementInput(direction.x, direction.y) }, tick)
+      assert.ok(result.world.lanternPosition)
+      world = { ...result.world, lanternPosition: result.world.lanternPosition }
+      player = result.players.player
+    }
+    assert.ok(Math.hypot(world.lanternPosition.x - 220, world.lanternPosition.y - 300) > 40)
+    assert.ok(Math.hypot(world.lanternPosition.x - player.position.x,
+      world.lanternPosition.y - player.position.y) > 32)
+    assert.deepEqual(originalLantern, { x: 220, y: 300 }, 'previous snapshots must remain immutable')
+    const idle = stepWorld(world, {}, {}, 100)
+    assert.deepEqual(idle.world.lanternPosition, world.lanternPosition, 'Lantern has no autonomous movement')
+  })
+}
+
+test('Lantern pushing respects authored walls rather than tunnelling through them', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = [{ eid: 'wall', typeId: 3005, segmentCode: 0,
+    points: [{ x: 300, y: 0 }, { x: 300, y: 500 }] }]
+  let world = { ...createBoneyardWorld(loaded), lanternPosition: { x: 240, y: 300 } }
+  let player = {
+    ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Wall pusher', element: 'fire' }, world),
+    position: { x: 190, y: 300 },
+  }
+  for (let tick = 0; tick < 180; tick += 1) {
+    const result = stepWorld(world, { player }, { player: movementInput(1, 0) }, tick)
+    assert.ok(result.world.lanternPosition)
+    world = { ...result.world, lanternPosition: result.world.lanternPosition }
+    player = result.players.player
+  }
+  assert.ok(world.lanternPosition.x > 260, 'the lantern must move before it reaches the wall')
+  assert.ok(world.lanternPosition.x < 300)
+  assert.ok(canPlaceBoneyardBody(world.lanternPosition, world.bounds, world.collision, 8))
+  assert.ok(player.position.x < world.lanternPosition.x)
+})
+
+test('player knockback carries the Lantern through the same shared collision path', () => {
+  const world = createBoneyardWorld(gatedBoneyard())
+  let lanternPosition = { x: 220, y: 300 }
+  let player = {
+    ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane', displayName: 'Pusher', element: 'fire' }, world),
+    position: { x: 170, y: 300 },
+  }
+  for (let tick = 0; tick < 24; tick++) {
+    const result = applyBoneyardPlayerKnockbacks(
+      { player }, world.enemies,
+      [{ actorId: 1, delta: { x: 5, y: 0 }, eventId: tick, playerId: 'player' }],
+      {}, world.bounds, world.collision, lanternPosition,
+    )
+    assert.ok(result.lanternPosition)
+    lanternPosition = result.lanternPosition
+    player = result.players.player!
+  }
+  assert.ok(lanternPosition.x > 250)
+  assert.ok(lanternPosition.x - player.position.x > 32)
+  assert.equal(lanternPosition.y, 300)
+})
+
+test('a knocked-back enemy separates from the Lantern without pushing it', () => {
+  const initial = { ...createBoneyardWorld(gatedBoneyard()), lanternPosition: { x: 220, y: 300 } }
+  let world = stepWorld(initial, {}, {}, 0, [{
+    enemyToken: 'SKELETON', flags: [], id: 1, locationPolicy: 'anywhere',
+    nativeTypeId: 1001, position: { x: 170, y: 300 }, spawnTick: 0, waveOrdinal: 1,
+  }]).world
+  for (let tick = 0; tick < 24; tick++) {
+    world = applyBoneyardSecondaryEnemyKnockbacks(world, {}, [{
+      delta: { x: 5, y: 0 }, sourceActorId: 2, targetId: 1,
+    }], {})
+  }
+  assert.deepEqual(world.lanternPosition, { x: 220, y: 300 })
+  assert.ok(world.enemies.actors[0]!.position.x > 170)
+  assert.ok(world.enemies.actors[0]!.position.x < 212)
+})

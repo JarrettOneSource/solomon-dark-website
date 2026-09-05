@@ -266,6 +266,9 @@ function interpolateSnapshot(
       lanternLightRegistration: copyLightRegistration(
         (blend < 1 ? older : newer).world.lanternLightRegistration,
       ),
+      lanternPosition: interpolateLanternPosition(
+        older.world.lanternPosition, newer.world.lanternPosition, blend,
+      ),
       loot: interpolateLoot(older.world.loot, newer.world.loot, blend),
       lootEvents: (blend < 1 ? older.world.lootEvents : newer.world.lootEvents)
         .map(copyLootEvent),
@@ -475,6 +478,7 @@ function presentationCopy(
       lanternLightRegistration: copyLightRegistration(
         snapshot.world.lanternLightRegistration,
       ),
+      lanternPosition: copyLanternPosition(snapshot.world.lanternPosition),
       loot: snapshot.world.loot.map(copyLoot),
       lootEvents: snapshot.world.lootEvents.map(copyLootEvent),
       mageLightningPulses: mergeMageLightningPulses(
@@ -491,6 +495,21 @@ function presentationCopy(
       waves: copyWaves(snapshot.world.waves),
     },
   }
+}
+
+function copyLanternPosition(
+  position: BoneyardWorldSnapshot['lanternPosition'],
+): BoneyardWorldSnapshot['lanternPosition'] {
+  return position === null ? null : { ...position }
+}
+
+function interpolateLanternPosition(
+  older: BoneyardWorldSnapshot['lanternPosition'],
+  newer: BoneyardWorldSnapshot['lanternPosition'],
+  blend: number,
+): BoneyardWorldSnapshot['lanternPosition'] {
+  if (older === null || newer === null) return copyLanternPosition(blend < 1 ? older : newer)
+  return { x: lerp(older.x, newer.x, blend), y: lerp(older.y, newer.y, blend) }
 }
 
 function copyTutorial(

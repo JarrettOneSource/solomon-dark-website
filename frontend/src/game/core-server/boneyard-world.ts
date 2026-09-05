@@ -134,10 +134,13 @@ import {
   resolveSolomonEscapeMovement,
   solomonEscapeTraversalBounds,
   boneyardSpawnLightSources,
+  createBoneyardSceneryTargets,
   createNativeLootPlacement,
   nearbyNativeMaskTwoCount,
   applyBoneyardPlayerKnockbacks,
   boneyardCombatBodies,
+  boneyardLanternBodies,
+  NATIVE_LANTERN_BODY_ID,
   boneyardEnemyBodies,
   commitBoneyardEnemyCollisionPositions,
   enemyCollisionBody,
@@ -225,27 +228,7 @@ export function createBoneyardWorld(
       : null,
     bounds: { ...loaded.scene.bounds },
     collision: createBoneyardCollisionWorld(loaded.scene),
-    earthquakeSceneryTargets: loaded.scene.objects.map((object, id) => Object.freeze({
-      id,
-      position: Object.freeze({ ...object.pos }),
-      typeId: object.typeId,
-    })),
-    primarySceneryTargets: loaded.scene.objects.flatMap((object, registrationOrder) => {
-      const bodyRadius = fireballSceneryRadius(object.typeId)
-      return bodyRadius === null ? [] : [Object.freeze({
-        active: true,
-        actorFlags: 0x4,
-        attachment: Object.freeze({ x: 0, y: 0 }),
-        bodyRadius,
-        cellBindingOrder: registrationOrder,
-        id: `scenery:${object.eid}`,
-        kind: object.typeId === 2029 ? 'gravestone' as const : 'scenery' as const,
-        nativePriority: 1000,
-        pendingRemove: false,
-        position: Object.freeze({ ...object.pos }),
-        registrationOrder,
-      })]
-    }),
+    ...createBoneyardSceneryTargets(loaded.scene.objects),
     encounter: ownsSolomonEncounter
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed, tutorial
           ? { dialogueMode: 'tutorial', tutorialDialogueTicks: nativeTutorialDialogueTicks() }
@@ -275,21 +258,6 @@ export function createBoneyardWorld(
     lootEvents: [],
     playerOuchDeadlineTick: 0,
     runId: loaded.runId,
-    scenerySpellTargets: loaded.scene.objects.flatMap((object, registrationOrder) => (
-      object.typeId === 2029 ? [{
-        active: true,
-        actorFlags: 0x4,
-        attachment: { x: 0, y: 0 },
-        bodyRadius: 0,
-        cellBindingOrder: registrationOrder,
-        id: `scenery:${object.eid}`,
-        kind: 'gravestone' as const,
-        nativePriority: 1000,
-        pendingRemove: false,
-        position: { ...object.pos },
-        registrationOrder,
-      }] : []
-    )),
     solomonPainterRegistration,
     spawn: { ...loaded.scene.spawn },
     tutorial: tutorial
@@ -335,17 +303,6 @@ export function boneyardWorldNavigationIsPrepared(world: BoneyardWorldState): bo
 export function prepareBoneyardWorldNavigation(world: BoneyardWorldState): void {
   for (const { bounds, clearance } of boneyardWorldNavigationPreparations(world)) {
     prepareBoneyardNavigationMesh(bounds, world.collision, clearance)
-  }
-}
-
-function fireballSceneryRadius(typeId: number): number | null {
-  switch (typeId) {
-    case 2001: return 8
-    case 2009: return 1
-    case 2029: return 0.01
-    case 2040: return 1
-    case 2061: return 20
-    default: return null
   }
 }
 
@@ -481,6 +438,7 @@ export function stepBoneyardWorldTick(
         ...PLAYER_CHARACTER_PHYSICS,
       })),
       ...boneyardEnemyBodies(world.enemies),
+      ...boneyardLanternBodies(world.lanternPosition),
     ],
     {
       canPlace: (_bodyId, position, radius) => (
@@ -509,6 +467,7 @@ export function stepBoneyardWorldTick(
   const resolvedPositions = new Map(
     resolvedBodies.map((body) => [body.id, body.position]),
   )
+  const lanternPosition = resolvedPositions.get(NATIVE_LANTERN_BODY_ID) ?? world.lanternPosition
 
   const nextPlayers = Object.fromEntries(plans.map(({
     collisionEnabled,
@@ -626,6 +585,7 @@ export function stepBoneyardWorldTick(
     nextPlayers,
     collisionResolvedEnemies,
     playerCombat,
+    lanternPosition,
   ).values()]
   const dynamicBodyIndices = new Map(dynamicBodies.map((body, index) => [body.id, index]))
   const enemyPhysicsWorld = {
@@ -646,7 +606,7 @@ export function stepBoneyardWorldTick(
     ),
   }
   const spawnLightSources = boneyardSpawnLightSources(
-    world,
+    { ...world, lanternPosition },
     nextPlayers,
     collisionResolvedEnemies,
   )
@@ -938,6 +898,7 @@ export function stepBoneyardWorldTick(
     playerCombat,
     activeBounds,
     collision,
+    lanternPosition,
   )
   const cleanupBounds = arenaTransition?.phase === 'sealed'
     ? arenaTransition.combatBounds
@@ -982,6 +943,7 @@ export function stepBoneyardWorldTick(
       earthquakeSceneryTargets,
       encounter,
       enemies: knockback.enemies,
+      lanternPosition: knockback.lanternPosition,
       enemyWorldFeedback,
       gateLeaves,
       loot,

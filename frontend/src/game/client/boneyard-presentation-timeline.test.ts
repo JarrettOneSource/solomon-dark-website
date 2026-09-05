@@ -279,6 +279,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
       },
       kind: 'boneyard',
       lanternLightRegistration: { managerLane: 'actor', registrationOrdinal: 2 },
+      lanternPosition: { x: 120, y: 160 },
       loot: [],
       lootEvents: [],
       mageLightningPulses: [],
@@ -1244,3 +1245,35 @@ test('does not rewind a displayed Air lifetime for a sub-interval Boneyard snaps
   assert.equal(atEventReceipt.primarySpells.transients[0]?.ageTicks, 4)
   assert.deepEqual(timeline.sample(61).primarySpells.transients, [])
 })
+
+test('Lantern position interpolates independently of Solomon and copies the snapshot', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  older.world.lanternPosition = { x: 100, y: 200 }
+  newer.world.lanternPosition = { x: 140, y: 260 }
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0, initialSnapshot: older, serverTickRate: 100, snapshotRate: 20,
+  })
+  const first = timeline.sample(0)
+  assert.deepEqual(first.world.lanternPosition, older.world.lanternPosition)
+  assert.notEqual(first.world.lanternPosition, older.world.lanternPosition)
+  timeline.push(newer, 50)
+  assert.deepEqual(timeline.sample(75).world.lanternPosition, { x: 120, y: 230 })
+  assert.deepEqual(timeline.sample(100).world.lanternPosition, { x: 140, y: 260 })
+})
+
+for (const appearing of [true, false]) {
+  test(`Lantern ${appearing ? 'appearance' : 'removal'} changes at the authoritative snapshot`, () => {
+    const older = snapshotAt(100, 10, 100)
+    const newer = snapshotAt(105, 20, 120)
+    older.world.lanternPosition = appearing ? null : { x: 140, y: 260 }
+    newer.world.lanternPosition = appearing ? { x: 140, y: 260 } : null
+    const timeline = createBoneyardPresentationTimeline({
+      initialReceivedAtMs: 0, initialSnapshot: older, serverTickRate: 100, snapshotRate: 20,
+    })
+    assert.deepEqual(timeline.sample(0).world.lanternPosition, older.world.lanternPosition)
+    timeline.push(newer, 50)
+    assert.deepEqual(timeline.sample(75).world.lanternPosition, older.world.lanternPosition)
+    assert.deepEqual(timeline.sample(100).world.lanternPosition, newer.world.lanternPosition)
+  })
+}

@@ -2559,3 +2559,28 @@ function downgradePlayerBeltsToLegacyQuickbar(playerStore: {
   }
   delete playerStore.belts
 }
+
+test('a moved Lantern survives save restore and network snapshot creation', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 7),
+  )
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard' || initial.world.lanternPosition === null) {
+    throw new Error('fixture must contain the native Lantern')
+  }
+  const moved = { x: initial.world.lanternPosition.x + 35, y: initial.world.lanternPosition.y + 20 }
+  const state = { ...initial, world: { ...initial.world, lanternPosition: moved } }
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state,
+  })
+  const restored = restoreGameSaveDocument(document)
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') return
+  assert.deepEqual(restored.state.world.lanternPosition, moved)
+  const snapshot = createGameSnapshot(restored.state, restored.loadedBoneyard)
+  assert.equal(snapshot.world.kind, 'boneyard')
+  if (snapshot.world.kind !== 'boneyard') return
+  assert.deepEqual(snapshot.world.lanternPosition, moved)
+  assert.notEqual(snapshot.world.lanternPosition, restored.state.world.lanternPosition)
+})

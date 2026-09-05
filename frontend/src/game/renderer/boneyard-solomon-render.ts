@@ -40,12 +40,13 @@ export function boneyardSolomonPainterLayers(
   encounter: BoneyardSolomonSnapshot | null,
   lanternRegistration: NativeWorldManagerRegistration,
   solomonRegistration: NativeWorldManagerRegistration,
+  lanternPosition: SolomonDigState['lanternPosition'] | null,
 ): readonly DynamicPainterLayer[] {
-  const layers: DynamicPainterLayer[] = [{
+  const layers: DynamicPainterLayer[] = lanternPosition === null ? [] : [{
     id: 'lantern',
     queueFamily: 'ordinary-dynamic',
     registration: lanternRegistration,
-    worldY: dig.lanternPosition.y,
+    worldY: lanternPosition.y,
     sortBias: 0,
   }]
   if (encounter?.phase !== 'gone') {

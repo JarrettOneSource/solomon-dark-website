@@ -739,3 +739,83 @@ test('unmapped raw pads do not guess the standard button and axis layout', () =>
   })
   input.destroy()
 })
+
+for (const key of ['Digit1', 'Digit4', 'Digit7']) {
+  test(`idle cursor is sampled by ${key} without an earlier mouse cast`, () => {
+    const mouseTarget = new EventTarget()
+    const target = new EventTarget()
+    const published: PlayerCharacterInput[] = []
+    let cameraX = 1000
+    const input = createBrowserGameplayInput({
+      getGamepads: () => [], mouseTarget, target,
+      visibilityTarget: new FakeVisibilityTarget(),
+      onInput: (state) => published.push(state),
+      projectDirection: (direction) => direction,
+      projectPointer: ({ x, y }) => ({ x: cameraX + x, y: 2000 + y }),
+    })
+    target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 50, 80))
+    assert.equal(published.length, 0, 'hover must not issue gameplay input')
+    assert.equal(input.sample().input.aim, null, 'hover must not turn the wizard')
+    target.dispatchEvent(new FakeKeyboardEvent('keydown', key))
+    assert.deepEqual(published.at(-1)?.aim, { x: 1050, y: 2080 })
+    cameraX = 1200
+    assert.deepEqual(input.sample().input.aim, { x: 1250, y: 2080 },
+      'a held keyboard cast must reproject a stationary screen cursor as the camera moves')
+    target.dispatchEvent(new FakeKeyboardEvent('keyup', key))
+    target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 300, 120))
+    target.dispatchEvent(new FakeKeyboardEvent('keydown', key))
+    assert.deepEqual(published.at(-1)?.aim, { x: 1500, y: 2120 })
+    input.destroy()
+  })
+}
+
+test('keyboard secondary uses the same non-pointer fallback as a mouse secondary', () => {
+  const target = new EventTarget()
+  let forward = { x: 30, y: 60 }
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [], mouseTarget: new EventTarget(), target,
+    visibilityTarget: new FakeVisibilityTarget(), onInput: () => {},
+    projectDirection: (direction) => direction,
+    projectPointer: () => ({ x: 999, y: 999 }),
+    projectSecondaryAim: () => forward,
+    secondaryAtPointer: () => false,
+  })
+  target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 40, 50))
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1'))
+  assert.deepEqual(input.sample().input.aim, forward)
+  forward = { x: 70, y: 80 }
+  assert.deepEqual(input.sample().input.aim, forward)
+  input.destroy()
+})
+
+for (const interruption of ['blur', 'blocked'] as const) {
+  test(`a fresh keyboard cast samples the retained cursor after ${interruption} without retaining held input`, () => {
+    const target = new EventTarget()
+    const published: PlayerCharacterInput[] = []
+    let cameraX = 100
+    const input = createBrowserGameplayInput({
+      getGamepads: () => [], mouseTarget: new EventTarget(), target,
+      visibilityTarget: new FakeVisibilityTarget(),
+      onInput: (state) => published.push(state),
+      projectDirection: (direction) => direction,
+      projectPointer: ({ x, y }) => ({ x: cameraX + x, y }),
+    })
+    target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 50, 80))
+    target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1'))
+    if (interruption === 'blur') target.dispatchEvent(new Event('blur'))
+    else input.setBlocked(true)
+    assert.deepEqual(published.at(-1), expectedInput(null, false, null))
+    if (interruption === 'blocked') {
+      const before = published.length
+      target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 70, 90))
+      assert.equal(published.length, before)
+      input.setBlocked(false)
+    }
+    assert.deepEqual(input.sample().input, expectedInput(null, false, null))
+    cameraX = 300
+    target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1'))
+    assert.deepEqual(input.sample().input.aim,
+      interruption === 'blur' ? { x: 350, y: 80 } : { x: 370, y: 90 })
+    input.destroy()
+  })
+}

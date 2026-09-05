@@ -652,6 +652,7 @@ try {
         hallOfFameRuns: {},
         kind: 'boneyard',
         lanternLightRegistration: null,
+        lanternPosition: null,
         loot: [],
         lootEvents: [],
         mageLightningPulses,

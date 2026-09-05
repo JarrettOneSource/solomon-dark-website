@@ -225,6 +225,7 @@ try {
           goodies: [],
           kind: 'boneyard',
           lanternLightRegistration: null,
+          lanternPosition: null,
           solomonPainterRegistration: null,
           loot: [],
           lootEvents: [],
@@ -501,6 +502,7 @@ try {
         gateLeaves: [],
         goodies: [],
         kind: 'boneyard',
+        lanternPosition: encounter ? template.scene.solomonDig.lanternPosition : null,
         lanternLightRegistration: encounter
           ? { managerLane: 'actor', registrationOrdinal: 2 }
           : null,

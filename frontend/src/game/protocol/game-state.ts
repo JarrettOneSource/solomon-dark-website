@@ -251,6 +251,7 @@ export interface BoneyardWorldSnapshot {
   hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunSnapshot>>
   kind: 'boneyard'
   lanternLightRegistration: NativeWorldManagerRegistration | null
+  lanternPosition: Readonly<Vector2> | null
   loot: readonly BoneyardLootSnapshot[]
   lootEvents: readonly BoneyardLootEventSnapshot[]
   runId: string
@@ -825,6 +826,7 @@ export interface BoneyardWorldSnapshotFrame {
   hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunSnapshot>>
   kind: 'boneyard'
   lanternLightRegistration: NativeWorldManagerRegistration | null
+  lanternPosition: Readonly<Vector2> | null
   lootEvents: readonly BoneyardLootEventSnapshot[]
   mageLightningPulses: readonly BoneyardMageLightningPulseFrame[]
   runId: string

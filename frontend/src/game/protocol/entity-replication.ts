@@ -351,6 +351,8 @@ export function createGameSnapshotFrame(
       hallOfFameRuns: snapshot.world.hallOfFameRuns,
       kind: 'boneyard',
       lanternLightRegistration: snapshot.world.lanternLightRegistration,
+      lanternPosition: snapshot.world.lanternPosition === null
+        ? null : { ...snapshot.world.lanternPosition },
       solomonPainterRegistration: snapshot.world.solomonPainterRegistration,
       mageLightningPulses: snapshot.world.mageLightningPulses.map(
         boneyardMageLightningPulseFrame,
@@ -544,6 +546,8 @@ export class EntityReplicationReconstructor {
         hallOfFameRuns: frame.world.hallOfFameRuns,
         kind: 'boneyard',
         lanternLightRegistration: frame.world.lanternLightRegistration,
+        lanternPosition: frame.world.lanternPosition === null
+          ? null : { ...frame.world.lanternPosition },
         solomonPainterRegistration: frame.world.solomonPainterRegistration,
         loot,
         lootEvents: frame.world.lootEvents,

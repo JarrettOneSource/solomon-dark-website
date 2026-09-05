@@ -90,6 +90,7 @@ test('registers the Lantern before Solomon with exact roots and zero biases', ()
     ENCOUNTER,
     { managerLane: 'actor', registrationOrdinal: 7 },
     { managerLane: 'actor', registrationOrdinal: 8 },
+    DIG.lanternPosition,
   ), [
     {
       id: 'lantern',
@@ -114,7 +115,7 @@ test('preserves the stock Lantern-then-Solomon order on an exact painter-row tie
     position: { x: ENCOUNTER.position.x, y: DIG.lanternPosition.y },
   },
   { managerLane: 'actor', registrationOrdinal: 0 },
-  { managerLane: 'actor', registrationOrdinal: 1 })
+  { managerLane: 'actor', registrationOrdinal: 1 }, DIG.lanternPosition)
   const order = buildBoneyardPainterOrder({
     dynamicLayers: layers,
     referenceY: 0,
@@ -133,7 +134,7 @@ test('keeps the independent Lantern resident after Solomon is gone', () => {
     phase: 'gone',
   },
   { managerLane: 'actor', registrationOrdinal: 3 },
-  { managerLane: 'actor', registrationOrdinal: 4 }), [{
+  { managerLane: 'actor', registrationOrdinal: 4 }, DIG.lanternPosition), [{
     id: 'lantern',
     queueFamily: 'ordinary-dynamic',
     registration: { managerLane: 'actor', registrationOrdinal: 3 },
@@ -232,4 +233,19 @@ test('selects the six-pose escape bank and hides Solomon only after expiry', () 
     phase: 'gone',
   }, DIG, 0)
   assert.equal(gone.visible, false)
+})
+
+test('pushed Lantern painter depth follows its own position after Solomon leaves', () => {
+  const registration = { managerLane: 'actor', registrationOrdinal: 1 } as const
+  const moved = { x: 300, y: 777 }
+  const layers = boneyardSolomonPainterLayers(
+    DIG, { ...ENCOUNTER, phase: 'gone' }, registration, registration, moved,
+  )
+  assert.deepEqual(layers.map(({ id, worldY }) => ({ id, worldY })), [
+    { id: 'lantern', worldY: 777 },
+  ])
+  assert.deepEqual(boneyardSolomonPainterLayers(
+    DIG, { ...ENCOUNTER, phase: 'gone' }, registration, registration, null,
+  ), [])
+  assert.deepEqual(DIG.lanternPosition, { x: -45, y: 93 })
 })

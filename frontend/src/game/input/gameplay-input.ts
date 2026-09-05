@@ -122,7 +122,7 @@ export function createBrowserGameplayInput({
       mousePrimary = false
       heldQuickbarInputs = []
       touchPrimaryDirection = null
-      capturedPointer = null
+      // Screen position is not held input. Keep it for a fresh keyboard cast.
       onInput(createIdlePlayerCharacterInput())
     },
     target,
@@ -156,18 +156,7 @@ export function createBrowserGameplayInput({
     }
     syncGamepadQuickbar(controller.quickbar)
 
-    if (touchPrimaryDirection) {
-      aim = projectDirection(touchPrimaryDirection) ?? aim
-    } else if (capturedPointer && (
-      mousePrimary
-      || (mouseQuickbarHeld() && secondaryAtPointer())
-    )) {
-      aim = projectPointer(capturedPointer) ?? aim
-    } else if (aimOwner === 'gamepad' && gamepadAimDirection) {
-      aim = projectDirection(gamepadAimDirection) ?? aim
-    } else if (mouseQuickbarHeld()) {
-      aim = projectSecondaryAim() ?? aim
-    }
+    refreshAim()
     const movementSample = movement.sample(controller.gamepad ? [controller.gamepad] : [])
     const currentViewportHeight = viewportHeight()
     const currentViewportWidth = viewportWidth()
@@ -191,6 +180,21 @@ export function createBrowserGameplayInput({
       },
     }
   }
+  function refreshAim(): void {
+    if (touchPrimaryDirection) {
+      aim = projectDirection(touchPrimaryDirection) ?? aim
+    } else if (capturedPointer && (
+      mousePrimary
+      || (desktopQuickbarHeld() && secondaryAtPointer())
+    )) {
+      aim = projectPointer(capturedPointer) ?? aim
+    } else if (desktopQuickbarHeld()) {
+      aim = projectSecondaryAim() ?? aim
+    } else if (aimOwner === 'gamepad' && gamepadAimDirection) {
+      aim = projectDirection(gamepadAimDirection) ?? aim
+    }
+  }
+
   const publish = () => onInput(sample().input)
   const mouseDown: EventListener = (event) => {
     if (blocked) return
@@ -225,11 +229,12 @@ export function createBrowserGameplayInput({
     publish()
   }
   const mouseMove: EventListener = (event) => {
-    if (blocked) return
-    if (!mousePrimary && heldQuickbarInputs.length === 0) return
     const mouse = mouseEvent(event)
     if (!mouse) return
+    // Retain screen coordinates even while idle. Hover must not publish a cast
+    // or take aim ownership, but the next keyboard belt press needs this point.
     capturedPointer = mouse
+    if (blocked || (!mousePrimary && heldQuickbarInputs.length === 0)) return
     aimOwner = 'mouse'
     aim = mousePrimary || secondaryAtPointer()
       ? projectPointer(mouse) ?? aim
@@ -297,8 +302,10 @@ export function createBrowserGameplayInput({
     ))
   }
 
-  function mouseQuickbarHeld(): boolean {
-    return heldQuickbarInputs.some(({ source }) => source.startsWith('mouse:'))
+  function desktopQuickbarHeld(): boolean {
+    return heldQuickbarInputs.some(({ source }) => (
+      source.startsWith('mouse:') || source.startsWith('keyboard:')
+    ))
   }
 
   function syncGamepadQuickbar(slot: number | null): void {

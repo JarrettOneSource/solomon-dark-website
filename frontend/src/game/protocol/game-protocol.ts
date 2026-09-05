@@ -424,7 +424,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 121
+export const GAME_PROTOCOL_VERSION = 122
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -9951,6 +9951,7 @@ function gameWorldSnapshot(
       'hallOfFameRuns',
       'kind',
       'lanternLightRegistration',
+      'lanternPosition',
       'loot',
       'lootEvents',
       'mageLightningPulses',
@@ -10129,6 +10130,8 @@ function gameWorldSnapshot(
       goodies,
       hallOfFameRuns,
       kind: 'boneyard',
+      lanternPosition: source.lanternPosition === null
+        ? null : vector(source.lanternPosition, `${field}.lanternPosition`),
       lanternLightRegistration: nullableNativeWorldManagerRegistration(
         source.lanternLightRegistration,
         `${field}.lanternLightRegistration`,
@@ -12072,6 +12075,7 @@ function gameWorldSnapshotFrame(
       'hallOfFameRuns',
       'kind',
       'lanternLightRegistration',
+      'lanternPosition',
       'lootEvents',
       'mageLightningPulses',
       'runId',
@@ -12131,6 +12135,8 @@ function gameWorldSnapshotFrame(
         snapshotTick,
       ),
       kind: 'boneyard',
+      lanternPosition: source.lanternPosition === null
+        ? null : vector(source.lanternPosition, `${field}.lanternPosition`),
       lanternLightRegistration: nullableNativeWorldManagerRegistration(
         source.lanternLightRegistration,
         `${field}.lanternLightRegistration`,

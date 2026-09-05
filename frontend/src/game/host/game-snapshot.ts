@@ -183,6 +183,8 @@ export function createGameSnapshot(
           }])),
           kind: 'boneyard',
           lanternLightRegistration: state.world.lanternLightRegistration,
+          lanternPosition: state.world.lanternPosition === null
+            ? null : { ...state.world.lanternPosition },
           loot: state.world.loot.actors.map((actor) => ({
             activationDelayTicks: actor.activationDelayTicks,
             ageTicks: actor.ageTicks,
