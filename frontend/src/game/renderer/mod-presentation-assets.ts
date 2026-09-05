@@ -176,3 +176,15 @@ export async function loadModPresentationTextures(
 function assetKey(modId: string, path: string): string {
   return `${modId.toLowerCase()}\0${path.toLowerCase()}`
 }
+
+export function modWearableFrame(
+  textures: ModWearableTextureFrames,
+  layer: 'primary' | 'secondary',
+  heading: number,
+  pose: number,
+): Texture {
+  const bank = layer === 'primary' ? textures.primary : textures.secondary
+  const poses = bank?.[heading]
+  if (!poses || poses.length === 0) throw new RangeError(`Missing mod wearable ${layer} frame`)
+  return poses[Math.min(pose, poses.length - 1)]!
+}

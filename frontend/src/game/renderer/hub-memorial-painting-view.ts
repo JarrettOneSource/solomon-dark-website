@@ -5,7 +5,9 @@ import type { HubMemorialPortrait, HubMemorialSlot } from '../core-kernels/hub-m
 import {
   playerCharacterFrontAttachmentOffset,
   playerCharacterHeadOffset,
+  playerCharacterRobeFixedPose,
   playerCharacterStaffOrbOffset,
+  playerDeathEquipmentAppearance,
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
@@ -85,6 +87,12 @@ export class HubMemorialPaintingView {
     const heading = ((Math.round(portrait.headingIndex) % 24) + 24) % 24
     const player = this.textures.players[element]
     const appearance = portrait.equipment
+    const robeAppearance = appearance.robe ?? playerDeathEquipmentAppearance(
+      element, { hat: null, robe: null, weapon: null },
+    ).robe
+    const fixedPose = playerCharacterRobeFixedPose(
+      0, false, appearance.robe !== null, appearance.weapon?.kind === 'wand' ? 0 : null,
+    )
     const wizard = new Container({ label: `memorial-wizard:${portrait.config.displayName}` })
     wizard.sortableChildren = true
     wizard.eventMode = 'none'
@@ -103,31 +111,21 @@ export class HubMemorialPaintingView {
       1,
     )
     const robe = actorSprite(
-      appearance.robe === null
-        ? player.robe[heading]![0]!
-        : this.textures.equipment.robes[appearance.robe.selector]!.primary[heading]![0]!,
+      this.textures.equipment.robes[robeAppearance.selector]!.primary[heading]![0]!,
       3,
     )
     const robeSecondary = actorSprite(
-      appearance.robe === null
-        ? player.robe[heading]![0]!
-        : this.textures.equipment.robes[appearance.robe.selector]!.secondary[heading]![0]!,
+      this.textures.equipment.robes[robeAppearance.selector]!.secondary[heading]![0]!,
       3,
     )
-    robeSecondary.visible = appearance.robe !== null
     const fixed = actorSprite(
-      appearance.robe === null
-        ? player.fixed[heading]![0]!
-        : this.textures.equipment.robeFixed.primary[heading]![0]!,
+      this.textures.equipment.robeFixed.primary[heading]![fixedPose]!,
       4,
     )
     const fixedSecondary = actorSprite(
-      appearance.robe === null
-        ? player.fixed[heading]![0]!
-        : this.textures.equipment.robeFixed.secondary[heading]![0]!,
+      this.textures.equipment.robeFixed.secondary[heading]![fixedPose]!,
       4,
     )
-    fixedSecondary.visible = appearance.robe !== null
     const staffFront = actorSprite(
       weapon?.front[heading]?.[0] ?? player.staffFront[heading]![0]!,
       5,
@@ -148,12 +146,10 @@ export class HubMemorialPaintingView {
     )
     headSecondary.visible = appearance.hat !== null
 
-    if (appearance.robe !== null) {
-      robe.tint = appearance.robe.primaryTint
-      fixed.tint = appearance.robe.primaryTint
-      robeSecondary.tint = appearance.robe.secondaryTint
-      fixedSecondary.tint = appearance.robe.secondaryTint
-    }
+    robe.tint = robeAppearance.primaryTint
+    fixed.tint = robeAppearance.primaryTint
+    robeSecondary.tint = robeAppearance.secondaryTint
+    fixedSecondary.tint = robeAppearance.secondaryTint
     if (appearance.hat !== null) {
       head.tint = appearance.hat.primaryTint
       headSecondary.tint = appearance.hat.secondaryTint

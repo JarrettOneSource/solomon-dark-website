@@ -44,7 +44,8 @@ import GameHud from './GameHud.tsx'
 import CollegeIntroOverlay from './CollegeIntroOverlay.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
-import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
+import HubInventoryUi from './HubInventoryUi.tsx'
+import type { HubUiSurface } from './hub-inventory-ui-model.ts'
 import {
   HUB_HUD_SHORTCUTS,
   hubInteractionAtPoint,

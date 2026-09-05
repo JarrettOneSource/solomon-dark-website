@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import type { NativePlayerWeaponKind } from './native-player-weapon.ts'
 
 import {
   createIdlePlayerCharacterInput,
@@ -96,6 +97,14 @@ import {
   updateNativeWeldPersistentActor,
 } from './native-weld-primary-runtime.ts'
 import { createNativeEtherBlastParticleProgram } from './native-ether-blast.ts'
+
+test('Wand primary origin follows its own hand tip before and after the cast windup', () => {
+  assert.deepEqual(primarySpellEmitterOffset(6, 14, false, 'ether', 'wand'), { x: 28.5, y: -11 })
+  assert.deepEqual(primarySpellEmitterOffset(6, 20, false, 'ether', 'wand'), { x: 39.5, y: -5 })
+  assert.deepEqual(primarySpellEmitterOffset(6, 1, true, 'water', 'wand'), { x: 39.5, y: -5 })
+  assert.deepEqual(primarySpellEmitterOffset(6, 1, false, 'ether', null), { x: 14, y: -18 })
+  assert.deepEqual(primarySpellEmitterOffset(30, 20, false, 'fire', null), { x: 14, y: -18 })
+})
 
 const PLAYER_ID = 'caster'
 const INTEGRATION_VIEW_SCALE = 1.35
@@ -207,6 +216,7 @@ function earthChargeAfter(updateCount: number): number {
 }
 
 interface DirectSpellHarness {
+  weaponKind: NativePlayerWeaponKind
   players: Readonly<Record<string, PlayerCharacterState>>
   primarySkill: NativePrimarySkillProfile
   rng: NativeRngState
@@ -252,9 +262,12 @@ function primarySkillWithRanks(
   )
 }
 
-function directSpellHarness(element: WizardElement, rank = 1): DirectSpellHarness {
+function directSpellHarness(
+  element: WizardElement, rank = 1, weaponKind: NativePlayerWeaponKind = 'staff',
+): DirectSpellHarness {
   const state = simulation(element)
   return {
+    weaponKind,
     players: { [PLAYER_ID]: getPlayerCharacter(state, PLAYER_ID) },
     primarySkill: primarySkillRankStats(element, rank),
     rng: createNativeRng(0),
@@ -288,6 +301,7 @@ function stepSpellKernel(
     castAuthority: {
       [PLAYER_ID]: {
         alive: true,
+        weaponKind: state.weaponKind,
         availableMana,
         castProgressFactor,
         eligible,
@@ -316,6 +330,7 @@ function stepSpellKernel(
     manaUnderflow: result.manaUnderflowPlayerIds.includes(PLAYER_ID),
     manaSpent: result.manaSpent[PLAYER_ID]!,
     state: {
+      weaponKind: state.weaponKind,
       players: result.players,
       primarySkill,
       rng: result.rng,
@@ -330,6 +345,22 @@ test('one-shot clocks use insertion-relative native marker and repeat ticks', ()
   assert.equal(PRIMARY_CAST_ETHER_ACTION_END_TICK, 55)
   assert.equal(PRIMARY_CAST_EMISSION_TICK, 18)
   assert.equal(PRIMARY_CAST_ACTION_END_TICK, 73)
+})
+
+test('an emitted Wand missile starts at the native tip plus the existing launch shift', () => {
+  let state = directSpellHarness('ether', 1, 'wand')
+  const origin = state.players[PLAYER_ID]!.position
+  for (let tick = 0; tick < 20 && state.spells.projectiles.length === 0; tick += 1) {
+    state = stepSpellKernel(
+      state, true, 1_000_000, true, () => true, state.primarySkill, () => true, 1,
+      { x: origin.x + 200, y: origin.y },
+    ).state
+  }
+  const missile = state.spells.projectiles[0]
+  assert.ok(missile?.kind === 'ether')
+  // The public tick result includes the missile's first float32 flight step.
+  assert.ok(Math.abs(missile.position.x - missile.velocity.x - (origin.x + 28.5)) < 0.00002)
+  assert.ok(Math.abs(missile.position.y - missile.velocity.y - (origin.y - 1)) < 0.00002)
 })
 
 test('one-shot cadence matches the float32 native recurrence at every Faster Caster factor', () => {
@@ -1298,6 +1329,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   const castAuthority = {
     [PLAYER_ID]: {
       availableMana: 1_000_000,
+      weaponKind: 'staff' as const,
       eligible: true,
       primarySkill: primarySkillRankStats('ether', 1),
     },
@@ -1592,6 +1624,7 @@ test('Fire blocked birth replaces the spawned actor before its first trail tick'
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
+        weaponKind: 'staff',
         eligible: true,
         primarySkill: primarySkillRankStats('fire', 1),
       },
@@ -2429,6 +2462,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
+        weaponKind: 'staff',
         eligible: true,
         primarySkill: primarySkillRankStats('earth', 1),
       },
@@ -2474,6 +2508,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
+        weaponKind: 'staff',
         eligible: true,
         primarySkill: primarySkillRankStats('earth', 1),
       },
@@ -2498,6 +2533,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
       castAuthority: {
         [PLAYER_ID]: {
           availableMana: 1_000_000,
+          weaponKind: 'staff',
           eligible: true,
           primarySkill: primarySkillRankStats('earth', 1),
         },
@@ -2543,6 +2579,7 @@ test('Earth tests the advanced-to-next native capsule and breaks at the advanced
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
+        weaponKind: 'staff',
         eligible: true,
         primarySkill: primarySkillRankStats('earth', 1),
       },
@@ -2611,6 +2648,7 @@ test('Earth release enters its first 75-charge flight capsule without a 45-charg
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
+        weaponKind: 'staff',
         eligible: true,
         primarySkill: primarySkillRankStats('earth', 1),
       },
@@ -2856,6 +2894,7 @@ test('Ethereal Boulder solid contact uses its advanced capsule and full terminal
       [PLAYER_ID]: {
         alive: true,
         availableMana: 100,
+        weaponKind: 'staff',
         castProgressFactor: 1,
         eligible: true,
         primarySkill: primarySkillRankStats('earth', 1),
@@ -2939,6 +2978,7 @@ test('released Hail terrain obstruction replaces its carrier with every native c
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 100,
+        weaponKind: 'staff',
         castProgressFactor: 1,
         eligible: true,
         primarySkill: profile,
@@ -3025,6 +3065,7 @@ test('Meteor impact transition registers its additive flash as an independent ac
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 100,
+        weaponKind: 'staff',
         castProgressFactor: 1,
         eligible: true,
         primarySkill: harness.primarySkill,

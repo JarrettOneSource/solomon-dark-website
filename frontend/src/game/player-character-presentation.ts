@@ -3,14 +3,10 @@ import type {
   WizardElement,
 } from './core-kernels/player-character.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
+import type { NativeSecondaryCastAction } from './core-kernels/native-secondary-cast-action.ts'
 import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-action.ts'
-import {
-  primaryCastPresentationPose,
-  primarySpellEmitterOffset,
-  playerStaffAttachmentOffset,
-  type PlayerStaffAttachmentPose,
-  type PrimarySpellTransientState,
-} from './core-kernels/primary-spells.ts'
+import { primaryCastPresentationPose, primarySpellEmitterOffset, type PrimarySpellTransientState } from './core-kernels/primary-spells.ts'
+import { playerStaffAttachmentOffset, playerWandPrimaryPose, type PlayerStaffAttachmentPose, type PlayerWandAttachmentPose } from './core-kernels/native-player-weapon.ts'
 
 export {
   isPlayerModEquipmentAppearance,
@@ -53,6 +49,7 @@ const MELEE_ALT_STAFF_FRONT: readonly boolean[] = [
 
 export interface PlayerCharacterDrawPlan {
   attachmentPose: PlayerStaffAttachmentPose
+  wandAttachmentPose: PlayerWandAttachmentPose
   bareAttachmentPose: 0 | null
   fixedRobeOffset: Vector2
   frontAttachmentOffset: Vector2
@@ -111,16 +108,25 @@ export function createPlayerCharacterDrawPlan(
   >,
   scale = 1,
   staffActionPose: PlayerStaffAttachmentPose | null = null,
-  secondaryCastActive = false,
+  secondaryCast: NativeSecondaryCastAction | 'spin' | null = null,
   elementEffectPhase = state.primaryCast.weaponPulse,
 ): PlayerCharacterDrawPlan {
   const castElement = selectedPrimaryCastElement(
     state.primaryCast.selectedPrimaryId,
     state.config.element,
   )
+  const secondaryCastActive = secondaryCast !== null
   const attachmentPose = secondaryCastActive
     ? 9
     : staffActionPose ?? primaryCastPresentationPose(state.primaryCast, castElement)
+  let wandAttachmentPose: PlayerWandAttachmentPose = playerWandPrimaryPose(
+    state.primaryCast.actionTick, state.primaryCast.channelActive, castElement,
+  )
+  if (secondaryCast === 'spin' || (secondaryCast !== null && secondaryCast.weaponKind !== 'wand')) {
+    wandAttachmentPose = 0
+  } else if (secondaryCast !== null && secondaryCast.progress > 0) {
+    wandAttachmentPose = secondaryCast.progress < 1 ? 1 : 2
+  }
   const unselectedPrimaryAttachment = state.primaryCast.selectedPrimaryId === -1
   const bareAttachmentPose: 0 | null = !unselectedPrimaryAttachment
     && staffActionPose === null
@@ -133,6 +139,7 @@ export function createPlayerCharacterDrawPlan(
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
     attachmentPose,
+    wandAttachmentPose,
     bareAttachmentPose,
     fixedRobeOffset: playerCharacterFixedRobeOffset(state.gaitDegrees, scale),
     frontAttachmentOffset: playerCharacterFrontAttachmentOffset(
@@ -239,10 +246,10 @@ export function playerCharacterRobeFixedPose(
   attachmentPose: PlayerStaffAttachmentPose,
   unselectedPrimaryAttachment: boolean,
   nativeRobe: boolean,
+  wandPose: PlayerWandAttachmentPose | null = null,
 ): PlayerRobeFixedPose {
-  return unselectedPrimaryAttachment && nativeRobe
-    ? NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE
-    : attachmentPose
+  if (unselectedPrimaryAttachment && nativeRobe) return NATIVE_UNSELECTED_PRIMARY_ROBE_FIXED_POSE
+  return wandPose === null ? attachmentPose : ([14, 15, 16] as const)[wandPose]
 }
 
 export function playerCharacterFixedRobeOffset(

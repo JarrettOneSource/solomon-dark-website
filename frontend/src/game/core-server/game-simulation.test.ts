@@ -970,7 +970,7 @@ test('a secondary edge is admitted while primary remains held, then the native a
   }
   state = stepGameSimulationTick(state, { caster: held })
   assert.equal(state.secondaryAbilities.players.caster?.castSequence, 1)
-  assert.ok((state.secondaryAbilities.players.caster?.staffCastTicksRemaining ?? 0) > 0)
+  assert.ok(state.secondaryAbilities.players.caster?.castAction)
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.castSequence, 0)
 
   for (let tick = 0; tick < 80
@@ -979,7 +979,7 @@ test('a secondary edge is admitted while primary remains held, then the native a
       caster: { ...held, cast: { primary: true, quickbar: null } },
     })
   }
-  assert.equal(state.secondaryAbilities.players.caster?.staffCastTicksRemaining, 0)
+  assert.equal(state.secondaryAbilities.players.caster?.castAction, null)
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.castSequence, 1)
 })
 

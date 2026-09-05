@@ -113,7 +113,7 @@ export function buildInventory(
   addInventorySidePanelBackdrop(context, layer, 'right', companion)
   if (model.leftPane === 'hagatha') addHagathaInventoryPane(context, layer, economy)
   else addStats(context, layer, model, companion, model.statsPage)
-  const playerPreview = companion ? null : addPlayerPreview(context, layer, model.config.element)
+  const playerPreview = companion ? null : addPlayerPreview(context, layer, model.config.element, model.economy)
   addEquipment(
     context,
     layer,

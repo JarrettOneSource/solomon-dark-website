@@ -6,17 +6,15 @@ import {
 } from '../../core-kernels/native-belt.ts'
 import { type WizardElement } from '../../core-kernels/player-character.ts'
 import { nativeSkillIconRecord } from '../../core-kernels/player-progression.ts'
-import { equipmentSlotsForItem } from '../../hub-inventory-presentation.ts'
+import { equipmentSlotsForItem, hubEquipmentItemForAlias } from '../../hub-inventory-presentation.ts'
+import { EQUIPMENT_SLOT_ORDER, itemAtEquipmentSlot } from '../../hub-inventory-equipment.ts'
+import { addPlayerEquipmentPreview } from '../player-equipment-preview.ts'
 import {
   NATIVE_HUD_BACKBUFFER,
   type NativeHudControlLayout,
   nativeHudModalSlideLayout,
   nativeHudRectCenter,
 } from '../../native-hud-layout.ts'
-import {
-  playerCharacterStaffIsFront,
-  playerCharacterStaffOrbOffset,
-} from '../../player-character-presentation.ts'
 import {
   type ProtocolPlayerEconomy,
   type ProtocolPlayerProgression,
@@ -27,7 +25,6 @@ import {
   hubInventoryEquipmentSlotRects,
 } from '../hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from '../native-element-vfx-view.ts'
-import { PLAYER_CHARACTER_SHEETS } from '../player-character-atlas.ts'
 import { addPrimitiveFrame } from './chrome.ts'
 import {
   addAtlasSprite,
@@ -38,7 +35,6 @@ import {
   addClippedItemIcon,
   addInventorySelection,
   addItemIcon,
-  itemAtEquipmentSlot,
 } from './items.ts'
 import {
   type HubInventoryDragModel,
@@ -48,55 +44,24 @@ import {
 import {
   Container,
   Graphics,
-  Sprite,
-  Texture,
 } from 'pixi.js'
 
-export function addPlayerPreview(context: RenderContext, layer: Container, element: WizardElement): NativeElementVfxView {
+export function addPlayerPreview(
+  context: RenderContext,
+  layer: Container,
+  element: WizardElement,
+  economy: ProtocolPlayerEconomy,
+): NativeElementVfxView | null {
   const seal = addAtlasSprite(context, layer, 'UI', 62, 800, 249, { anchor: 0.5, scale: 1.25 })
   seal.alpha = 0.32
   seal.label = 'native-seal:0'
-  const heading = 9
-  const centerX = 800
-  const centerY = 249
-  const actor = new Container({ label: 'native-inventory-player-preview' })
-  actor.sortableChildren = true
-  actor.position.set(centerX, centerY)
-  actor.scale.set(1.25)
-  layer.addChild(actor)
-  const staffFront = playerCharacterStaffIsFront(heading)
-  const layers = [
-    [PLAYER_CHARACTER_SHEETS.staffBack, 0, staffFront ? -1 : 1],
-    [PLAYER_CHARACTER_SHEETS.robeDynamic[element], 0, 3],
-    [PLAYER_CHARACTER_SHEETS.robeFixed[element], 0, 4],
-    [PLAYER_CHARACTER_SHEETS.staffFront, 0, staffFront ? 5 : -1],
-    [PLAYER_CHARACTER_SHEETS.head[element], null, 7],
-  ] as const
-  for (const [source, column, zIndex] of layers) {
-    if (zIndex < 0) continue
-    const sprite = new Sprite(actorFrameTexture(context, source, heading, column))
-    sprite.anchor.set(0.5)
-    sprite.zIndex = zIndex
-    actor.addChild(sprite)
-  }
-  const vfx = new NativeElementVfxView(element, context.elementVfxTextures)
-  const orbOffset = playerCharacterStaffOrbOffset(heading)
-  vfx.container.position.set(orbOffset.x, orbOffset.y)
-  vfx.container.zIndex = staffFront ? 6 : 2
-  actor.addChild(vfx.container)
-  vfx.update(0, 1)
+  const vfx = addPlayerEquipmentPreview(
+    layer, context.playerCharacterAtlas, context.elementVfxTextures, context.modTextures,
+    element, economy.equipment,
+  )
   addBitmapText(context, layer, 'KILLS: 0', 'medium', 800, 337, { tint: 0xe7cc71 })
   addBitmapText(context, layer, 'AWESOMENESS: 0', 'medium', 800, 359, { tint: 0xe7cc71 })
   return vfx
-}
-
-function actorFrameTexture(
-  context: RenderContext,
-  sheet: string,
-  heading: number,
-  column: number | null,
-): Texture {
-  return context.playerCharacterAtlas.frame(sheet, column ?? 0, heading)
 }
 
 export function addEquipment(
@@ -119,15 +84,17 @@ export function addEquipment(
     : null
   const targetItem = draggedBackpack
   const acceptingSlots = new Set(targetItem ? equipmentSlotsForItem(targetItem, thirdRingUnlocked) : [])
-  for (const slot of ['amulet', 'hat', 'weapon', 'robe', 'ring-0', 'ring-1', 'ring-2'] as const) {
+  for (const slot of EQUIPMENT_SLOT_ORDER) {
     if (slot === 'ring-2' && !thirdRingUnlocked) continue
     const item = itemAtEquipmentSlot(economy, slot)
     const held = hiddenItemIds.has(item?.id ?? -1)
       || (dragging?.owner === 'equipment' && dragging.equipmentSlot === slot)
-    const selected = acceptingSlots.has(slot)
-      || (selection?.owner === 'equipment' && selection.equipmentSlot === slot && selection.id === item?.id)
-    for (const rect of hubInventoryEquipmentSlotRects(slot, companion)) {
-      addEquipmentSlot(context, layer, rect, item, held, selected, element)
+    for (const [aliasIndex, rect] of hubInventoryEquipmentSlotRects(slot, companion).entries()) {
+      const displayedItem = hubEquipmentItemForAlias(item, aliasIndex)
+      const selected = (acceptingSlots.has(slot) && hubEquipmentItemForAlias(targetItem, aliasIndex) !== null)
+        || (selection?.owner === 'equipment' && selection.equipmentSlot === slot
+          && selection.id === displayedItem?.id)
+      addEquipmentSlot(context, layer, rect, displayedItem, held, selected, element)
     }
   }
 }

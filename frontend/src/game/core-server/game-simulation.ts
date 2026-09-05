@@ -2318,7 +2318,7 @@ export function stepGameSimulationTick(
           levelUpPending: state.levelUpBarrier !== null,
           maximumHealth: tutorialProgression.maximumHealth,
           playerActionIdle: !tutorialPlayer.primaryCast.held
-            && (tutorialSecondary?.staffCastTicksRemaining ?? 0) === 0,
+            && !tutorialSecondary?.castAction,
           playerPosition: tutorialPlayer.position,
           primaryCastSequence: tutorialPlayer.primaryCast.castSequence,
           solomonPhase: boneyardWorld.encounter?.phase ?? null,
@@ -3225,6 +3225,7 @@ function finishGameSimulationTick(
     ),
     players: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
       const character = resolvedPlayers[playerId]
+      const weaponType = playerEntities.economies[index]!.equipment.weapon?.equipmentType
       const progression = playerEntities.progressions[index]!
       const skillBook = playerEntities.skillBooks[index]!
       const statBook = playerEntities.statBooks[index]!
@@ -3240,6 +3241,7 @@ function finishGameSimulationTick(
         manaCost: derived.offensiveManaCostFactor,
       }
       return [playerId, {
+        weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
         belt: playerEntities.belts[index]!,
         character,
         coldSlowFactor: Math.fround(Math.max(0, 0.5 / (
@@ -3475,7 +3477,7 @@ function finishGameSimulationTick(
   const primaryInputs = Object.fromEntries(Object.entries(postStaffInputs).map(([playerId, input]) => [
     playerId,
     primaryOverridePlayerIds.has(playerId)
-      || (secondaryAbilities.players[playerId]?.staffCastTicksRemaining ?? 0) > 0
+      || secondaryAbilities.players[playerId]?.castAction != null
       || (secondaryAbilities.players[playerId]?.castSpinTicksRemaining ?? 0) > 0
       ? { ...input, cast: { ...input.cast, primary: false } }
       : input,
@@ -3579,6 +3581,7 @@ function finishGameSimulationTick(
       : {}),
     castAuthority: Object.fromEntries(playerEntities.identities.flatMap(({ playerId }, index) => {
       if (gameSimulationHubCollegePrimaryUnset(result.world, playerEntities, playerId)) return []
+      const weaponType = playerEntities.economies[index]!.equipment.weapon?.equipmentType
       const progression = playerEntities.progressions[index]!
       const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
       const runtime = playerSkillRuntimeAt(playerEntities, playerId)
@@ -3602,6 +3605,7 @@ function finishGameSimulationTick(
           alive: progression.lifeState === 'alive',
           availableMana: progression.currentMana,
           castProgressFactor: derived.castProgressFactor,
+          weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
           eligible: playerEntityCanCast(playerEntities, playerId)
             && progression.pendingOffer === null,
           planeActive: (

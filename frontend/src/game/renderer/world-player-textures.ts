@@ -398,12 +398,12 @@ export function createPlayerWorldTextures(
     wand: {
       back: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.wand.back,
-        ACTOR_STAFF_ATTACHMENT_POSES,
+        3,
         ACTOR_HEADINGS,
       ),
       front: playerCharacterAtlas.grid(
         PLAYER_CHARACTER_SHEETS.wand.front,
-        ACTOR_STAFF_ATTACHMENT_POSES,
+        3,
         ACTOR_HEADINGS,
       ),
     },

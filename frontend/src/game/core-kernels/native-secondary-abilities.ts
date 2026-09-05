@@ -9,6 +9,10 @@ import {
 } from './native-rng.ts'
 import type { PlayerBeltComponent } from './native-belt.ts'
 import {
+  stepNativeSecondaryCastAction,
+  type NativeSecondaryCastAction,
+} from './native-secondary-cast-action.ts'
+import {
   type PlayerCharacterInput,
   type PlayerCharacterState,
   type WizardElement,
@@ -231,6 +235,7 @@ type NativeSecondaryEventSeed = Omit<
 }
 
 export interface NativeSecondaryPlayerState {
+  readonly castAction: NativeSecondaryCastAction | null
   readonly castSequence: number
   readonly castSpinTicksRemaining: number
   readonly cooldownMaximumTicksBySkill: readonly number[]
@@ -249,7 +254,6 @@ export interface NativeSecondaryPlayerState {
   readonly planewalkerTicksRemaining: number
   readonly regenerate: boolean
   readonly reservedMana: number
-  readonly staffCastTicksRemaining: number
   readonly stoneskinTicksRemaining: number
 }
 
@@ -336,6 +340,7 @@ export interface NativeSecondarySceneryTarget {
 }
 
 export interface NativeSecondaryPlayerAuthority {
+  readonly weaponKind: NativeSecondaryCastAction['weaponKind']
   readonly belt: PlayerBeltComponent
   readonly character: PlayerCharacterState
   readonly coldSlowFactor: number
@@ -943,7 +948,7 @@ export function createNativeSecondaryPlayerState(): NativeSecondaryPlayerState {
     planewalkerTicksRemaining: 0,
     regenerate: false,
     reservedMana: 0,
-    staffCastTicksRemaining: 0,
+    castAction: null,
     stoneskinTicksRemaining: 0,
   }
 }
@@ -992,21 +997,6 @@ export function nativeSecondaryManaReserve(
     reservedMana += authority.maximumMana * (stats.mHoard ?? 0) / 100
   }
   return reservedMana
-}
-
-export function nativeSecondaryStaffCastDurationTicks(
-  skillBook: PlayerSkillBookComponent,
-): number {
-  const fasterCaster = effectiveSkillNumericValue(skillBook, 70, 'mValue')
-  const progressFactor = Math.fround(1 + fasterCaster / 100)
-  const progressPerTick = Math.fround(Math.fround(0.1) * progressFactor)
-  let progress = Math.fround(0)
-  let ticks = 0
-  do {
-    progress = Math.fround(progress + progressPerTick)
-    ticks += 1
-  } while (progress <= 5)
-  return ticks
 }
 
 export function nativeSecondaryCooldownCapacityTicks(
@@ -3637,10 +3627,7 @@ export function stepNativeSecondaryAbilities(
     let player = state.players[playerId] ?? createNativeSecondaryPlayerState()
     if (
       authority.eligible
-      && player.staffCastTicksRemaining > 0
-      && player.staffCastTicksRemaining === nativeSecondaryStaffCastDurationTicks(
-        authority.skillBook,
-      )
+      && player.castAction?.progress === 0
       && source.events.some((event) => (
         event.ownerId === playerId
         && event.tick === context.tick - 1
@@ -3911,7 +3898,7 @@ function castAbility(
     })
   }
   if (
-    player.staffCastTicksRemaining > 0
+    player.castAction !== null
     || player.castSpinTicksRemaining > 0
     || player.globalCooldownTicks > 0
   ) return none()
@@ -4026,7 +4013,7 @@ function castAbility(
           'toggle-off',
           'planewalker-off',
         ))
-        nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+        nextPlayer = startSecondaryCast(nextPlayer, authority.weaponKind)
         ;({ player: nextPlayer, state } = withCooldown(
           state,
           nextPlayer,
@@ -4052,7 +4039,7 @@ function castAbility(
       const phasingDirection = actorHeadingVector(authority.character.headingIndex)
       relocated = context.phasingDestination(playerId, origin, phasingDirection)
       if (!relocated) {
-        nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+        nextPlayer = startSecondaryCast(nextPlayer, authority.weaponKind)
         ;({ player: nextPlayer, state } = withCooldown(
           state,
           nextPlayer,
@@ -4159,7 +4146,7 @@ function castAbility(
       nextPlayer = recalculateReserve(nextPlayer, authority)
       if (active) {
         state = spawnFirewalkerPatch(state, playerId, authority, true)
-        nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+        nextPlayer = startSecondaryCast(nextPlayer, authority.weaponKind)
         ;({ player: nextPlayer, state } = withCooldown(
           state,
           nextPlayer,
@@ -4756,7 +4743,7 @@ function castAbility(
     authority,
   ))
   if (skillId !== 51) {
-    nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+    nextPlayer = startSecondaryCast(nextPlayer, authority.weaponKind)
   }
   state = emitNativeSecondaryEvent(state, castEvent(playerId, skillId, authority, context.tick, 'cast', castCue(skillId)))
   if (postCastCue !== null) {
@@ -5952,7 +5939,9 @@ function stepPlayerState(
     magicShieldPulseTicks: Math.max(0, source.magicShieldPulseTicks - 1),
     planewalkerTicksRemaining: Math.max(0, source.planewalkerTicksRemaining - 1),
     stoneskinTicksRemaining: Math.max(0, source.stoneskinTicksRemaining - 1),
-    staffCastTicksRemaining: Math.max(0, source.staffCastTicksRemaining - 1),
+    castAction: stepNativeSecondaryCastAction(
+      source.castAction, effectiveSkillNumericValue(authority.skillBook, 70, 'mValue'),
+    ),
   }
 }
 
@@ -6031,13 +6020,13 @@ function withCooldown(
   })
 }
 
-function startStaffCast(
+function startSecondaryCast(
   source: NativeSecondaryPlayerState,
-  skillBook: PlayerSkillBookComponent,
+  weaponKind: NativeSecondaryCastAction['weaponKind'],
 ): NativeSecondaryPlayerState {
   return {
     ...source,
-    staffCastTicksRemaining: nativeSecondaryStaffCastDurationTicks(skillBook),
+    castAction: { weaponKind, progress: 0 },
   }
 }
 

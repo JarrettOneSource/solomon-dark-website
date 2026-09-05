@@ -11,6 +11,7 @@ import {
   resolveNativeStaffPhysicalContacts,
 } from '../core-kernels/native-player-staff-action.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createEquipmentInventoryItem, DOWSING_EQUIPMENT_RECIPES } from '../core-kernels/hub-economy.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
 import {
@@ -136,6 +137,29 @@ test('automatic staff admission requires the exact equipped Staff and emits one 
   assert.equal(result.enemies.actors[0]!.currentHealth, initialHealth - 1)
   assert.equal(result.enemies.actors[0]!.lastDamagedByPlayerId, PLAYER_ID)
   assert.ok(result.events.some(({ sound }) => sound === 'bone-crack'))
+})
+
+test('every authored Wand and generated Wand selector remains unable to melee on hostile contact', () => {
+  const context = staffFixture()
+  const economy = playerEconomyAt(context.playerEntities, PLAYER_ID)!
+  const wands = DOWSING_EQUIPMENT_RECIPES.filter(({ type }) => type === 'wand')
+    .map((recipe, index) => createEquipmentInventoryItem(recipe, index + 100))
+  assert.equal(wands.length, 8)
+  for (let selector = 0; selector < 6; selector += 1) {
+    wands.push({ ...wands[0]!, recipeIndex: null, nativeSelector: selector })
+  }
+  for (const weapon of wands) {
+    const result = stepPlayerStaffCombatSystem({
+      ...context,
+      movementContactsByPlayerId: { [PLAYER_ID]: [{ bodyId: 'enemy-1', staffHostile: true }] },
+      playerEntities: replacePlayerEconomy(context.playerEntities, PLAYER_ID, {
+        ...economy, equipment: { ...economy.equipment, weapon },
+      }),
+    })
+    assert.deepEqual(result.spells.transients, [], weapon.name)
+    assert.deepEqual([...result.actingPlayerIds], [], weapon.name)
+    assert.deepEqual(result.rng, context.rng, weapon.name)
+  }
 })
 
 test('a risen Coffin receives Staff damage when the native root shape reaches it', () => {

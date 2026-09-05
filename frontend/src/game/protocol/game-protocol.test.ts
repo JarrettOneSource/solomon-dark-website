@@ -1637,6 +1637,27 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     ...createNativeSecondaryPlayerState(),
     globalCooldownTicks: 148.75,
   }
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    const message = structuredClone(fractionalGlobalCooldown)
+    message.snapshot.secondaryAbilities.players['player-1'].castAction = {
+      weaponKind, progress: weaponKind === 'staff' ? 5 : 6,
+    }
+    assert.deepEqual(decodeServerGameMessage(JSON.stringify(message)), message)
+    message.snapshot.secondaryAbilities.players['player-1'].castAction.progress += 0.01
+    assert.throws(
+      () => decodeServerGameMessage(JSON.stringify(message)),
+      /castAction.progress exceeds the native action end/,
+    )
+  }
+  for (const invalidAction of [
+    { weaponKind: 'wand', progress: -1 },
+    { weaponKind: 'sword', progress: 0 },
+    { weaponKind: 'wand', progress: 0, obsolete: true },
+  ]) {
+    const message = structuredClone(fractionalGlobalCooldown)
+    message.snapshot.secondaryAbilities.players['player-1'].castAction = invalidAction
+    assert.throws(() => decodeServerGameMessage(JSON.stringify(message)), /castAction/)
+  }
   assert.deepEqual(
     decodeServerGameMessage(JSON.stringify(fractionalGlobalCooldown)),
     fractionalGlobalCooldown,

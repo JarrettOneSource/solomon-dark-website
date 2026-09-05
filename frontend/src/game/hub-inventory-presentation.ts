@@ -400,6 +400,13 @@ export function equipmentSlotsForItem(
   }
 }
 
+export function hubEquipmentItemForAlias<T extends Pick<HubInventoryItem, 'equipmentType'>>(
+  item: T | null,
+  aliasIndex: number,
+): T | null {
+  return aliasIndex === 1 && item?.equipmentType === 'wand' ? null : item
+}
+
 export function hubEquipmentClickAction(
   item: Pick<HubInventoryItem, 'equipmentType' | 'id'>,
   slot: EquipmentSlot,

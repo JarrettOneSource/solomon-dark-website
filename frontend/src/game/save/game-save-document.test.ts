@@ -847,6 +847,22 @@ test('host save documents round-trip the complete owner state and revive Hub run
   )
 
   const schemaSeventeen = JSON.parse(document)
+  const oldSecondaryPlayer = schemaSeventeen.continuation.simulation.secondaryAbilities.players.owner
+  oldSecondaryPlayer.staffCastTicksRemaining = 41
+  delete oldSecondaryPlayer.castAction
+  const newSecondaryPlayer = JSON.parse(document)
+  newSecondaryPlayer.continuation.simulation.secondaryAbilities.players.owner.castAction = {
+    weaponKind: 'wand', progress: 0.95,
+  }
+  assert.equal(
+    restoreGameSaveDocument(JSON.stringify(newSecondaryPlayer))
+      .state.secondaryAbilities.players.owner?.castAction,
+    null,
+  )
+  const oldActionRestored = restoreGameSaveDocument(JSON.stringify(schemaSeventeen))
+    .state.secondaryAbilities.players.owner!
+  assert.equal(oldActionRestored.castAction, null)
+  assert.equal('staffCastTicksRemaining' in oldActionRestored, false)
   schemaSeventeen.schemaVersion = 17
   downgradePlayerBeltsToLegacyQuickbar(
     schemaSeventeen.continuation.simulation.playerEntities,

@@ -247,3 +247,148 @@ evidence is decisive without relying on subjective frame matching.
 Unknowns: `+0x224` may feed another presentation or gameplay subsystem outside
 `0x0054BA80`. The fixed-bank selector membership is no longer unknown: raw
 instructions and the Hand/Wand action arrays account for every pose `0..16`.
+
+## 2026-09-04 — Wand equipment and one-handed presentation reopening
+
+The supplied `SDB - Wand Incorrect Features.mp4` (Windows Downloads,
+1920 by 1080, 15.043011 seconds) shows a Wand of Searing in both equipment
+hand boxes and a Staff-shaped player pose. The absence of Wand melee is
+correct. This reopens the weapon presentation portion of this entry: the
+earlier extraction knew that Wand fixed-Robe poses were `14..16`, but neither
+selected them nor extracted their separate hand and endpoint banks.
+
+### Evidence and system boundary
+
+The target remains retail `SolomonDark.exe` 0.72.5, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base `0x00400000`. Evidence comes from the canonical Ghidra project through
+the read-only Mod Loader replica wrapper, and the stock Clothes bundle.
+Wrapper SHA-256:
+`b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`.
+No injected observation is presented as a clean-stock capture.
+
+The Mac Chrome reproduction on Website
+`a2197bf4a6b8bf8a5328030c63b555b269c65e65` granted and equipped recipe 13
+(Bug-Master's Wand) through the existing developer and inventory interfaces.
+Both hand controls referenced the same item ID, and the live shared player
+renderer reported fixed-Robe pose `0`. The assertion that a Wand occupies one
+hand failed with `2 !== 1`. Page, console, and request-failure arrays were
+empty. This is the original failing browser scenario for the correction.
+
+Native system: **equipped weapon presentation**, from the single weapon sink
+and existing authoritative action state to inventory hand occupancy, living
+wizard hand/body composition, Inventory preview, and Memorial portrait.
+Spell damage, costs, grants, loot weighting, and cast admission are separate
+owners. In particular, the quoted speculation about a future off-hand item
+does not establish a second native equipment sink or authorize a new item
+system. Staff's documented held-pose Website override in entry 163 remains
+its own contract.
+
+| Member | Source | Disposition and proof contract |
+| --- | --- | --- |
+| Staff selectors `0..5` | Item_Staff `7004` / `0x1B5C`, renderer `0x00578D20` | `verified-already-at-parity`; retain both hand icons, ten action poses, Staff hand banks, shaft, orb, and melee |
+| Wand selectors `0..5` | Item_Wand `7011` / `0x1B63`, renderer `0x00579820` | `exact-ported`; one held item, common Clothes 15 material and three authored poses for all selectors |
+| Cosmofluxic Wand, Bug-Master's Wand, Kiln | recipe indices `2`, `13`, `28` | `exact-ported`; item identity selects the shared Wand presentation |
+| Qubar's Ether, Fire, Air, Water, Earth | recipe indices `41..45` | `exact-ported`; same presentation with unchanged recipe FX and level requirements |
+| Wand idle, travel, and Constant cast | `0x0054BF02..0x0054BF7E`, `0x0044E260/0x0044C810` | `exact-ported`; fixed-Robe pose 14, attachment pose 0, independent five-frame walking body |
+| Wand Cast 1 and Cast 2 | `0x0044DF60/0x0044E0D0`, action tick `0x0044B580/0x0044B770` | `exact-ported`; select Wand action art rather than indexing a Staff sheet |
+| All 24 headings, three Wand poses, both hand records and endpoints | Clothes `604..675` and `796..867`; `0x004E4CA0`, `0x00539424..0x00539635` | `exact-ported`; drain all 72 rows, both banks, and both endpoint coordinates |
+| All three native Robe styles and item colors | Clothes fixed banks `1612`, `2428`, `2020`, `2836`, each 17 by 24 | `exact-ported`; same Wand fixed pose with each equipped Robe's existing tints |
+| Empty weapon and unselected primary | `0x00538B80` fallback and selected-primary `-1` branch | `verified-already-at-parity`; preserve the existing bare/prop distinction |
+| Mod Staff wearables | Website wearable slot `staff` | `verified-already-at-parity`; retain the Staff contract |
+| Local and remote players in College, Tutorial, and Boneyard | shared living player renderer and strict equipment snapshots | `exact-ported`; no client-owned equipment state |
+| Standalone/companion Inventory, selection, hover, drag, swap | InventoryScreen and one weapon sink | `exact-ported`; drawing and pointer ownership agree about the occupied hand |
+| Inventory preview and Memorial portrait | equipment-derived static wizard composition | `exact-ported`; display the equipped Wand and the same idle body pose |
+| Death and weapon bouncers | separate four-frame death bank and Clothes 15 bouncer | `verified-already-at-parity`; living pose changes do not alter death assets |
+| Wand/no-weapon automatic melee | Staff admission `0x00537AA0` checks `0x1B5C` | `verified-already-at-parity`; existing negative movement-contact tests must stay green |
+
+The `exact-ported` rows above are the implementation targets; the final
+validation receipt must establish them before this entry is closed.
+
+### Recovered native composition
+
+`0x0054BA80` calls the local attachment compositor `0x00538B80` before and
+after the body (third call in the hit-overlay path). The equipped Wand branch
+clamps the fixed Robe selector to `14..16`. Raw constants are double
+`0x0078C560 = 14`, double `0x007870D8 = 16`, float `0x00784C0C = 14`, and
+float `0x00784B20 = 16`.
+
+The Wand attachment branch subtracts 14 from actor `+0x238`, clamps to `0..2`,
+and indexes the two three-pose hand banks at Clothes `604..675` and
+`796..867`. It draws those hand records and builds the Wand quad from points
+0 and 1 of the latter bank. `Item_Wand::RenderAttachment 0x00579820` uses
+Clothes 15, logical width 4, and the normalized perpendicular to those exact
+endpoints. It does not use Staff points 1/2, Staff depth membership, or either
+Staff hand bank. All six Wand inventory selectors share this held material.
+At heading 6, idle endpoint coordinates are `(24.5,-3.5)` and `(39.5,-5)`;
+the first-cast row uses `(22,-2.5)` and `(28.5,-11)`; the second-cast row uses
+`(8.5,4)` and `(9.5,-2)`.
+
+The Wand Cast 1 constructor's authored phase rows are
+`[15,15,14,14,14,14]`; Cast 2 rows are `[15,16,16,16,16,16,16]`; Constant
+writes 0, which the Wand renderer clamps to idle 14. These facts identify
+the native art program; the authoritative Website spell clock and existing
+Staff-only held-burst override remain separate from equipment drawing.
+
+Fresh equipment-pane evidence closes the mirrored-hand rule:
+`InventoryScreen -> Equip_Render 0x00561300`, specifically
+`0x00561AB6..0x00561B41`, checks the current weapon for type `0x1B63` before
+the translated second-hand pass. A Wand takes empty-sink renderer
+`0x005756F0`; every other weapon/empty branch uses ordinary sink renderer
+`0x00575450`. The empty renderer keeps the frame and omits the item.
+The Website must therefore retain the second hand's empty frame and make its
+item, selection, hover, and drag source empty. Removing the hand box itself
+would be a different behavior.
+
+### Review closure: action phase and missing garment
+
+Fresh raw instructions recover distinct Wand clocks: Cast 1 starts with
+float32 rate `0.1` (Fire applies the same `0.75` family modifier), Cast 2
+uses float32 rate `0.095`, marker 1, and strict end above 6. The shared action
+tick advances `p = f32(p + liveFactor * storedRate)` before selecting the
+pose table. Neutral Wand Cast 2 therefore shows pose 15 on updates 1..10 and
+pose 16 starting at update 11. A countdown inferred from the current skill
+rank loses this information if equipment changes the factor during the cast.
+The secondary action must retain its weapon kind and float32 progress at
+authority and replicate that state; the former Staff-only remaining-ticks
+field is superseded, not retained as a second clock.
+
+CastSpin/Dampen is a separate action: mode 21, constructor `0x00448860`,
+tick `0x00448DF0`, writes raw K=9 with any held weapon and K=3 without one.
+The Wand renderer clamps K=9 to its idle pose 14. It must never reuse Wand
+Cast 2 pose 16. Its existing 73-update lifetime remains independent.
+Constructors do not write K, so an insertion frame retains the prior pose;
+the first action update supplies the new pose.
+
+Removing a mod robe package can leave the robe slot empty while retaining a
+native Wand. That valid state must use the complete, tinted native fixed-Robe
+banks for poses 14..16 in gameplay and Memorial, rather than indexing the
+older ten-frame precolored fallback. Inventory's living preview must consume
+custom wearable artwork; native death-shape selectors remain the separate
+Memorial/death contract.
+
+The shared spell origin also consumes this equipment choice. Fresh
+`0x0053B830` instructions select Staff virtual slot `+0x24`, Wand endpoint
+point 1 from Clothes `796 + heading + 24 * clamp(K-14,0,2)`, or point 1
+from the heading-only bare-hand bank `484..507`. Ether and Fire call it at
+`0x0053DA5E` and `0x0053E50C` before their separate `(0,+10)` launch shift.
+The Website's former Staff-only socket assumption must therefore be removed
+for Wand and empty-hand emitters while retaining the per-spell launch shift.
+All 72 Wand endpoint rows and 24 bare-hand origins are extracted into the
+shared weapon attachment program.
+
+Hand Cast 2 constructor `0x0044B5E0` shares Wand's `0.095`, end 6 clock;
+only Staff Cast 2 retains `0.1`, end 5. The new authoritative action state
+and its wire validation use these distinct limits, including live speed
+changes. Saved action state remains transient and resets on disk restoration.
+
+### Validation contract
+
+Re-run the original Mac browser journey after the change. Cover Staff and
+Wand swaps, empty weapon, generated selectors and all eight Wand recipes,
+idle/travel/primary/secondary pose selection, each heading, both Inventory
+modes, and the equipment-derived previews. Run the focused presentation and
+equipment tests, the existing no-melee Wand contact regression, generated
+atlas checks, and the complete Mac `./scripts/validate.sh` gate on the same
+candidate. Record browser page/console/failed-response arrays and the final
+changed-file manifest match here.

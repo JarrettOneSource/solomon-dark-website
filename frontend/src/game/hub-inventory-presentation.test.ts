@@ -16,6 +16,7 @@ import {
   HUB_TRADER_NATIVE_UI_RECORDS,
   equipmentSlotsForItem,
   hubEquipmentClickAction,
+  hubEquipmentItemForAlias,
   hubPotionBeltShortcut,
   hubInteractionAtPoint,
   hubNpcHintAcknowledgementAction,
@@ -28,6 +29,17 @@ import {
   nearestHubInteraction,
   nearestHubTrader,
 } from './hub-inventory-presentation.ts'
+
+test('a Wand leaves the mirrored hand empty while a Staff occupies both hand boxes', () => {
+  const wand = { equipmentType: 'wand' as const }
+  const staff = { equipmentType: 'staff' as const }
+  assert.equal(hubEquipmentItemForAlias(wand, 0), wand)
+  assert.equal(hubEquipmentItemForAlias(wand, 1), null)
+  assert.equal(hubEquipmentItemForAlias(staff, 0), staff)
+  assert.equal(hubEquipmentItemForAlias(staff, 1), staff)
+  assert.equal(hubEquipmentItemForAlias(null, 0), null)
+  assert.equal(hubEquipmentItemForAlias(null, 1), null)
+})
 
 test('Painting eulogies follow the current shared memorial portrait id', () => {
   const initial = createHubMemorialState()

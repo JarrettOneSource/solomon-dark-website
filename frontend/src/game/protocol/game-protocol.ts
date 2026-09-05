@@ -423,7 +423,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 119
+export const GAME_PROTOCOL_VERSION = 120
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -6220,6 +6220,20 @@ function nativeSecondaryScreenFlash(
 
 function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPlayerState {
   const source = record(value, field)
+  let castAction: NativeSecondaryPlayerState['castAction'] = null
+  if (source.castAction !== null) {
+    const action = record(source.castAction, `${field}.castAction`)
+    onlyKeys(action, `${field}.castAction`, ['weaponKind', 'progress'])
+    const weaponKind = action.weaponKind
+    if (weaponKind !== null && weaponKind !== 'staff' && weaponKind !== 'wand') {
+      throw new GameProtocolError(`${field}.castAction.weaponKind is not supported`)
+    }
+    const progress = nonnegativeFinite(action.progress, `${field}.castAction.progress`)
+    if (progress > (weaponKind === 'staff' ? 5 : 6)) {
+      throw new GameProtocolError(`${field}.castAction.progress exceeds the native action end`)
+    }
+    castAction = { weaponKind, progress }
+  }
   onlyKeys(source, field, [
     'castSequence', 'castSpinTicksRemaining', 'cooldownTicksBySkill', 'firewalker',
     'cooldownMaximumTicksBySkill',
@@ -6227,7 +6241,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     'magicShieldExplosionDamage',
     'magicShieldMaximum', 'magicShieldPulseTicks', 'mindstar', 'planeOrbHeld',
     'planewalkerTicksRemaining', 'regenerate', 'reservedMana',
-    'staffCastTicksRemaining', 'stoneskinTicksRemaining',
+    'castAction', 'stoneskinTicksRemaining',
   ])
   const cooldownMaximumTicksBySkill = limitedArray(
     source.cooldownMaximumTicksBySkill,
@@ -6314,10 +6328,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     ),
     regenerate: boolean(source.regenerate, `${field}.regenerate`),
     reservedMana: nonnegativeFinite(source.reservedMana, `${field}.reservedMana`),
-    staffCastTicksRemaining: nonnegativeInteger(
-      source.staffCastTicksRemaining,
-      `${field}.staffCastTicksRemaining`,
-    ),
+    castAction,
     stoneskinTicksRemaining: nonnegativeInteger(
       source.stoneskinTicksRemaining,
       `${field}.stoneskinTicksRemaining`,

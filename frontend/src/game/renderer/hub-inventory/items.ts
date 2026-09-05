@@ -1,6 +1,6 @@
+import { itemAtEquipmentSlot } from '../../hub-inventory-equipment.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
-  type EquipmentSlot,
   type HubInventoryItem,
   findInventoryItem,
   inventoryItemsAtSackPath,
@@ -103,21 +103,6 @@ export function inventorySelectionCenter(
   const [rect] = hubInventoryEquipmentSlotRects(selection.equipmentSlot, companion)
   if (!rect) return null
   return { x: rect[0] + rect[2] / 2, y: rect[1] + rect[3] / 2 }
-}
-
-export function itemAtEquipmentSlot(
-  economy: ProtocolPlayerEconomy,
-  slot: EquipmentSlot,
-): HubInventoryItem | null {
-  switch (slot) {
-    case 'amulet': return economy.equipment.amulet
-    case 'hat': return economy.equipment.hat
-    case 'ring-0': return economy.equipment.rings[0]
-    case 'ring-1': return economy.equipment.rings[1]
-    case 'ring-2': return economy.equipment.rings[2]
-    case 'robe': return economy.equipment.robe
-    case 'weapon': return economy.equipment.weapon
-  }
 }
 
 export function addInventoryItemInfo(

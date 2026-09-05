@@ -75,7 +75,7 @@ export function observeMlBotPolicyPlayerState(
   const secondary = state.secondaryAbilities.players[playerId]
     ?? createNativeSecondaryPlayerState()
   const castActive = playerPrimaryCastOwnsFacing(player.primaryCast)
-    || secondary.staffCastTicksRemaining > 0
+    || secondary.castAction !== null
     || secondary.castSpinTicksRemaining > 0
   const castReady = playerCanCast(progression)
     && !castActive

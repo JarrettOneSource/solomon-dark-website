@@ -1,7 +1,7 @@
 import { Container, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
-import type { PlayerStaffAttachmentPose } from '../core-kernels/primary-spells.ts'
+import type { PlayerStaffAttachmentPose } from '../core-kernels/native-player-weapon.ts'
 import { playerHitOverlayAlpha } from '../core-kernels/player-combat.ts'
 import type { NativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import {
@@ -39,7 +39,7 @@ import {
   NATIVE_PLAYER_MAGIC_SHIELD,
   nativePlayerMaterialTint,
 } from './native-secondary-presentation.ts'
-import type { ModPresentationTextures, ModWearableTextureFrames } from './mod-presentation-assets.ts'
+import { modWearableFrame, type ModPresentationTextures } from './mod-presentation-assets.ts'
 import {
   advanceActorMovementFacing,
   createActorMovementFacingState,
@@ -247,8 +247,8 @@ export class PlayerWorldView {
       player,
       1,
       staffActionPose,
-      (this.secondaryState?.staffCastTicksRemaining ?? 0) > 0
-        || (this.secondaryState?.castSpinTicksRemaining ?? 0) > 0,
+      this.secondaryState?.castAction
+        ?? ((this.secondaryState?.castSpinTicksRemaining ?? 0) > 0 ? 'spin' : null),
       elementEffectPhase,
     )
     const heading = spriteFrameIndex(
@@ -257,7 +257,9 @@ export class PlayerWorldView {
     )
     this.currentHeadingIndex = heading
     const pose = spriteFrameIndex(plan.robePose, 5)
-    const attachmentPose = plan.attachmentPose
+    const attachmentPose = player.economy.equipment.weapon?.equipmentType === 'wand'
+      ? plan.wandAttachmentPose
+      : plan.attachmentPose
     this.currentAttachmentPose = attachmentPose
     this.currentWalkPose = pose
     const fixedOffset = plan.fixedRobeOffset
@@ -331,14 +333,14 @@ export class PlayerWorldView {
       attachmentPose,
       plan.unselectedPrimaryAttachment,
       nativeRobe,
+      livingAppearance.weapon?.kind === 'wand' ? plan.wandAttachmentPose : null,
     )
     const selectedPrimaryAvailable = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       || player.primaryCast.selectedPrimaryId >= 0
     const modStaffFront = modWeaponTextures
       ? playerCharacterStaffIsFront(heading, attachmentPose)
       : null
-    const robeHasSecondary = livingAppearance.robe !== null
-      && (modRobeTextures ? modRobeTextures.secondary !== null : true)
+    const robeHasSecondary = modRobeTextures ? modRobeTextures.secondary !== null : true
     const hatHasSecondary = livingAppearance.hat !== null
       && (modHatTextures ? modHatTextures.secondary !== null : true)
     this.currentDeathFrame = death.visible ? death.frame : null
@@ -427,7 +429,7 @@ export class PlayerWorldView {
       this.hitStaffBack.texture = back
       this.hitStaffFront.texture = front
     } else if (modWeaponTextures !== null) {
-      const texture = wearableFrame(modWeaponTextures, 'primary', heading, attachmentPose)
+      const texture = modWearableFrame(modWeaponTextures, 'primary', heading, attachmentPose)
       this.staffBack.texture = texture
       this.staffFront.texture = texture
       this.hitStaffBack.texture = texture
@@ -441,34 +443,30 @@ export class PlayerWorldView {
     this.unselectedRobeAttachment.texture =
       this.textures.equipment.unselectedAttachment.robe[heading]!
     this.unselectedRobeAttachment.position.set(fixedOffset.x, fixedOffset.y)
-    if (livingAppearance.robe === null) {
-      this.robe.texture = playerTextures.robe[heading]![pose]!
-      this.fixed.texture = playerTextures.fixed[heading]![robeFixedPose]!
-      this.robePrimaryTint = 0xffffff
-      this.robeSecondaryTint = 0xffffff
-    } else if (modRobeTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
-      this.robe.texture = wearableFrame(modRobeTextures, 'primary', heading, pose)
+    if (modRobeTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
+      this.robe.texture = modWearableFrame(modRobeTextures, 'primary', heading, pose)
       if (modRobeTextures.secondary) {
-        this.robeSecondary.texture = wearableFrame(modRobeTextures, 'secondary', heading, pose)
+        this.robeSecondary.texture = modWearableFrame(modRobeTextures, 'secondary', heading, pose)
       }
       this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![robeFixedPose]!
       this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![robeFixedPose]!
       this.robePrimaryTint = livingAppearance.robe.primaryTint
       this.robeSecondaryTint = livingAppearance.robe.secondaryTint
     } else {
-      if (isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
+      const robeAppearance = livingAppearance.robe ?? deathAppearance.robe
+      if (isPlayerModEquipmentAppearance(robeAppearance)) {
         throw new RangeError('Missing mod robe wearable textures')
       }
-      const robeTextures = this.textures.equipment.robes[livingAppearance.robe.selector]
+      const robeTextures = this.textures.equipment.robes[robeAppearance.selector]
       if (robeTextures === undefined) {
-        throw new RangeError(`Missing native robe selector ${livingAppearance.robe.selector}`)
+        throw new RangeError(`Missing native robe selector ${robeAppearance.selector}`)
       }
       this.robe.texture = robeTextures.primary[heading]![pose]!
       this.robeSecondary.texture = robeTextures.secondary[heading]![pose]!
       this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![robeFixedPose]!
       this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![robeFixedPose]!
-      this.robePrimaryTint = livingAppearance.robe.primaryTint
-      this.robeSecondaryTint = livingAppearance.robe.secondaryTint
+      this.robePrimaryTint = robeAppearance.primaryTint
+      this.robeSecondaryTint = robeAppearance.secondaryTint
     }
     this.fixed.position.set(fixedOffset.x, fixedOffset.y)
     this.fixedSecondary.position.set(fixedOffset.x, fixedOffset.y)
@@ -501,9 +499,9 @@ export class PlayerWorldView {
       this.headPrimaryTint = 0xffffff
       this.headSecondaryTint = 0xffffff
     } else if (modHatTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.hat!)) {
-      this.head.texture = wearableFrame(modHatTextures, 'primary', heading, 0)
+      this.head.texture = modWearableFrame(modHatTextures, 'primary', heading, 0)
       if (modHatTextures.secondary) {
-        this.headSecondary.texture = wearableFrame(modHatTextures, 'secondary', heading, 0)
+        this.headSecondary.texture = modWearableFrame(modHatTextures, 'secondary', heading, 0)
       }
       this.headPrimaryTint = livingAppearance.hat.primaryTint
       this.headSecondaryTint = livingAppearance.hat.secondaryTint
@@ -934,18 +932,6 @@ export function actorSprite(texture: Texture, zIndex: number): Sprite {
   sprite.zIndex = zIndex
   sprite.eventMode = 'none'
   return sprite
-}
-
-function wearableFrame(
-  textures: ModWearableTextureFrames,
-  layer: 'primary' | 'secondary',
-  heading: number,
-  pose: number,
-): Texture {
-  const bank = layer === 'primary' ? textures.primary : textures.secondary
-  const poses = bank?.[heading]
-  if (!poses || poses.length === 0) throw new RangeError(`Missing mod wearable ${layer} frame`)
-  return poses[Math.min(pose, poses.length - 1)]!
 }
 
 function createDeathLayers(

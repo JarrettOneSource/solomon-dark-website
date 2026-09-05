@@ -24,7 +24,6 @@ import {
   nativeSecondaryCooldownCapacityTicks,
   nativeSecondaryManaCeiling,
   nativeSecondaryManaReserve,
-  nativeSecondaryStaffCastDurationTicks,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
   stepNativeSecondaryAbilities,
@@ -177,6 +176,7 @@ function context(
     phasingDestination: () => ({ x: 20, y: 0 }),
     players: {
       player: {
+        weaponKind: 'staff',
         belt: bindNativeBeltSkill(
           createNativePlayerBelt(skillBook),
           skillBook,
@@ -532,7 +532,7 @@ function finishCommonCastGate(state: NativeSecondarySimulationState): NativeSeco
         ...player,
         cooldownTicksBySkill: player.cooldownTicksBySkill.map(() => 0),
         globalCooldownTicks: 0,
-        staffCastTicksRemaining: 0,
+        castAction: null,
       },
     },
   }
@@ -655,7 +655,7 @@ test('all 23 category-2 rows admit their edge while one-shot or sustained primar
 test('every Cast 2 owner writes one player phase pulse and actionless siblings write none', () => {
   for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
     const accepted = cast(skillId)
-    const ownsCastTwo = (accepted.state.players.player?.staffCastTicksRemaining ?? 0) > 0
+    const ownsCastTwo = accepted.state.players.player?.castAction !== null
     const firstActionUpdate = stepNativeSecondaryAbilities(
       accepted.state,
       context(skillId, 2, null),
@@ -998,14 +998,12 @@ test('Teleport owns two exact FadeScale bursts, two sound requests, and uncondit
 })
 
 test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster timing', () => {
-  assert.equal(nativeSecondaryStaffCastDurationTicks(book(11)), 51)
-  assert.equal(nativeSecondaryStaffCastDurationTicks(book(11, [70])), 46)
 
   const castResult = stepNativeSecondaryAbilities(
     createNativeSecondarySimulation(123),
     context(11, 1, 0),
   )
-  assert.equal(castResult.state.players.player?.staffCastTicksRemaining, 51)
+  assert.deepEqual(castResult.state.players.player?.castAction, { weaponKind: 'staff', progress: 0 })
   assert.equal(castResult.state.players.player?.globalCooldownTicks, 150)
   assert.deepEqual(castResult.staffCastPulsePlayerIds, [])
 
@@ -1013,7 +1011,7 @@ test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster ti
     castResult.state,
     context(11, 2, null),
   )
-  assert.equal(released.state.players.player?.staffCastTicksRemaining, 50)
+  assert.deepEqual(released.state.players.player?.castAction, { weaponKind: 'staff', progress: Math.fround(0.1) })
   assert.deepEqual(released.staffCastPulsePlayerIds, ['player'])
   const blocked = stepNativeSecondaryAbilities(
     released.state,
@@ -1028,7 +1026,7 @@ test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster ti
   for (let tick = 4; tick <= 151; tick += 1) {
     state = stepNativeSecondaryAbilities(state, context(11, tick, null)).state
   }
-  assert.equal(state.players.player?.staffCastTicksRemaining, 0)
+  assert.equal(state.players.player?.castAction, null)
   assert.equal(state.players.player?.globalCooldownTicks, 0)
   const rowBlocked = stepNativeSecondaryAbilities(state, context(11, 152, 0))
   assert.equal(rowBlocked.state.players.player?.castSequence, 1)
@@ -1040,7 +1038,27 @@ test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster ti
   assert.equal(state.players.player?.cooldownTicksBySkill[11], 0)
   const ready = stepNativeSecondaryAbilities(state, context(11, 835, 0))
   assert.equal(ready.state.players.player?.castSequence, 2)
-  assert.equal(ready.state.players.player?.staffCastTicksRemaining, 51)
+  assert.deepEqual(ready.state.players.player?.castAction, { weaponKind: 'staff', progress: 0 })
+})
+
+test('Wand secondary casting retains its native opening phase and weapon ownership', () => {
+  const base = context(11, 1, 0)
+  const wandContext = {
+    ...base,
+    players: { player: { ...base.players.player!, weaponKind: 'wand' as const } },
+  }
+  const cast = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), wandContext)
+  assert.deepEqual(cast.state.players.player?.castAction, { weaponKind: 'wand', progress: 0 })
+  let state = cast.state
+  for (let update = 1; update <= 11; update += 1) {
+    state = stepNativeSecondaryAbilities(state, {
+      ...wandContext,
+      tick: update + 1,
+      players: { player: { ...wandContext.players.player, input: input(null) } },
+    }).state
+    assert.equal(state.players.player?.castAction?.weaponKind, 'wand')
+    assert.equal(state.players.player!.castAction!.progress < 1, update < 11)
+  }
 })
 
 test('Focus drains every row and the progression-wide cooldown at the stock rate', () => {
@@ -1097,7 +1115,7 @@ test('the fixed common cooldown silently blocks otherwise-ready secondary rows',
       player: {
         ...teleportedPlayer,
         heldSlot: null,
-        staffCastTicksRemaining: 0,
+        castAction: null,
       },
     },
   }
@@ -1113,12 +1131,12 @@ test('the fixed common cooldown silently blocks otherwise-ready secondary rows',
 test('state-only toggles stay actionless while accepted Planewalker and Dampen retain their owners', () => {
   for (const skillId of [78, 79] as const) {
     const result = cast(skillId)
-    assert.equal(result.state.players.player?.staffCastTicksRemaining, 0)
+    assert.equal(result.state.players.player?.castAction, null)
     assert.equal(result.state.players.player?.castSpinTicksRemaining, 0)
   }
 
   const firewalkerOn = cast(23)
-  assert.equal(firewalkerOn.state.players.player?.staffCastTicksRemaining, 51)
+  assert.deepEqual(firewalkerOn.state.players.player?.castAction, { weaponKind: 'staff', progress: 0 })
   const activeFirewalker = firewalkerOn.state.players.player!
   const firewalkerOff = stepNativeSecondaryAbilities({
     ...firewalkerOn.state,
@@ -1127,12 +1145,12 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
         ...activeFirewalker,
         globalCooldownTicks: 0,
         heldSlot: null,
-        staffCastTicksRemaining: 0,
+        castAction: null,
       },
     },
   }, context(23, 2, 0))
   assert.equal(firewalkerOff.state.players.player?.firewalker, false)
-  assert.equal(firewalkerOff.state.players.player?.staffCastTicksRemaining, 0)
+  assert.equal(firewalkerOff.state.players.player?.castAction, null)
 
   const planewalkerOn = cast(12)
   const activePlanewalker = planewalkerOn.state.players.player!
@@ -1146,16 +1164,16 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
         )),
         globalCooldownTicks: 0,
         heldSlot: null,
-        staffCastTicksRemaining: 0,
+        castAction: null,
       },
     },
   }, context(12, 2, 0))
   assert.equal(planewalkerOff.state.players.player?.planewalkerTicksRemaining, 0)
-  assert.equal(planewalkerOff.state.players.player?.staffCastTicksRemaining, 51)
+  assert.deepEqual(planewalkerOff.state.players.player?.castAction, { weaponKind: 'staff', progress: 0 })
   assert.equal(planewalkerOff.state.players.player?.cooldownTicksBySkill[12], 2_500)
 
   const dampen = cast(51)
-  assert.equal(dampen.state.players.player?.staffCastTicksRemaining, 0)
+  assert.equal(dampen.state.players.player?.castAction, null)
   assert.equal(dampen.state.players.player?.castSpinTicksRemaining, 73)
   assert.deepEqual(dampen.staffCastPulsePlayerIds, [])
   assert.equal(dampen.state.players.player?.globalCooldownTicks, 150)
@@ -1178,7 +1196,7 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
     planewalkerTicksRemaining: 0,
     regenerate: false,
     reservedMana: 0,
-    staffCastTicksRemaining: 0,
+    castAction: null,
     stoneskinTicksRemaining: 0,
   })
 })
@@ -2635,7 +2653,7 @@ test('Focus accelerates retained cooldowns and its concentration owns one instan
   assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 0)
   assert.equal(result.state.players.player?.cooldownMaximumTicksBySkill[48], 6_000)
   assert.equal(result.state.players.player?.globalCooldownTicks, 0)
-  assert.equal(result.state.players.player?.staffCastTicksRemaining, 51)
+  assert.deepEqual(result.state.players.player?.castAction, { weaponKind: 'staff', progress: 0 })
   assert.deepEqual(result.state.rng, chance.state)
 })
 

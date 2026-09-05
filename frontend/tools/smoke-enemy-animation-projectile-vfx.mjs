@@ -613,7 +613,7 @@ try {
             planewalkerTicksRemaining: 0,
             regenerate: false,
             reservedMana: 0,
-            staffCastTicksRemaining: 0,
+            castAction: null,
             stoneskinTicksRemaining: 0,
           },
         },

@@ -670,7 +670,7 @@ try {
         await waitUntil(() => {
           const player = host.state().secondaryAbilities.players[playerId]
           const row = player?.cooldownTicksBySkill[45] ?? 0
-          return (player?.staffCastTicksRemaining ?? 0) === 0
+          return !player?.castAction
             && (player?.globalCooldownTicks ?? 0) === 0
             && row > 0
             && row <= 1_250
@@ -779,7 +779,7 @@ try {
       } else if (!golemCooldownTiming) {
         await waitUntil(() => {
           const player = host.state().secondaryAbilities.players[playerId]
-          return (player?.staffCastTicksRemaining ?? 0) === 0
+          return !player?.castAction
             && (player?.castSpinTicksRemaining ?? 0) === 0
             && (player?.globalCooldownTicks ?? 0) === 0
         }, 'Raise Golem cast gates did not release before the second cast')
@@ -1658,7 +1658,7 @@ async function castSecondGolem(page, host, playerId, target) {
     clearSecondaryCooldown(host, playerId, 45)
     await waitUntil(() => {
       const player = host.state().secondaryAbilities.players[playerId]
-      return (player?.staffCastTicksRemaining ?? 0) === 0
+      return !player?.castAction
         && (player?.castSpinTicksRemaining ?? 0) === 0
         && (player?.globalCooldownTicks ?? 0) === 0
     }, 'Raise Golem retry gates did not release')

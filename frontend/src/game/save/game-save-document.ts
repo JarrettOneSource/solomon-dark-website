@@ -491,7 +491,7 @@ function diskSecondaryProjection(
         planeOrbHeld: false,
         regenerate: false,
         reservedMana: player.firewalker ? 50 : 0,
-        staffCastTicksRemaining: 0,
+        castAction: null,
       })]),
     )),
   }
@@ -1547,7 +1547,9 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): Ga
         }))
       : source.events,
     players: Object.fromEntries(Object.entries(players).map(([playerId, value]) => {
-      const player = record(value, `game save secondary player ${playerId}`)
+      const player = { ...record(value, `game save secondary player ${playerId}`) }
+      // Saved action clocks are transient, including the former Staff countdown.
+      delete player.staffCastTicksRemaining
       return [playerId, {
         ...player,
         castSpinTicksRemaining: 0,
@@ -1557,7 +1559,7 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number): Ga
         planeOrbHeld: false,
         regenerate: false,
         reservedMana: player.firewalker === true ? 50 : 0,
-        staffCastTicksRemaining: 0,
+        castAction: null,
       }]
     })),
   } as unknown as GameSimulationState['secondaryAbilities']

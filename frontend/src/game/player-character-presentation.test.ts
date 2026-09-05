@@ -49,6 +49,61 @@ test('player death draw plan uses the native four-frame six-facing bank', () => 
   })
 })
 
+test('Wand presentation uses its three hand poses and fixed Robe poses 14 through 16', () => {
+  const state = {
+    config: { discipline: 'arcane', displayName: 'Wand', element: 'fire' } as const,
+    gaitDegrees: 0,
+    headingIndex: 6,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId: 16 },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  }
+  const idle = createPlayerCharacterDrawPlan(state)
+  assert.equal(idle.wandAttachmentPose, 0)
+  assert.equal(playerCharacterRobeFixedPose(idle.attachmentPose, false, true, 0), 14)
+  for (const headingIndex of Array.from({ length: 24 }, (_, heading) => heading)) {
+    const moving = createPlayerCharacterDrawPlan({
+      ...state, headingIndex, velocity: { x: 1, y: 0 }, walkCyclePrimary: 3.5,
+    })
+    assert.equal(moving.wandAttachmentPose, 0)
+    assert.equal(moving.robePose, 3)
+  }
+  for (const [actionTick, expected] of [[1, 1], [20, 1], [40, 0], [-1, 0]] as const) {
+    const plan = createPlayerCharacterDrawPlan({
+      ...state, primaryCast: { ...state.primaryCast, actionTick, oneShotAttackPoseHeld: true },
+    })
+    assert.equal(plan.wandAttachmentPose, expected, `action tick ${actionTick}`)
+    assert.equal(
+      playerCharacterRobeFixedPose(plan.attachmentPose, false, true, plan.wandAttachmentPose),
+      expected + 14,
+    )
+  }
+  const channel = createPlayerCharacterDrawPlan({
+    ...state, primaryCast: { ...state.primaryCast, actionTick: 1, channelActive: true },
+  })
+  assert.equal(channel.wandAttachmentPose, 0)
+  const secondary = createPlayerCharacterDrawPlan(state, 1, null, { weaponKind: 'wand', progress: 1 })
+  assert.equal(secondary.wandAttachmentPose, 2)
+  assert.equal(playerCharacterRobeFixedPose(secondary.attachmentPose, false, true, 2), 16)
+  for (const [progress, expected] of [[0, 0], [0.95, 1], [1.045, 2], [6, 2]] as const) {
+    assert.equal(createPlayerCharacterDrawPlan(state, 1, null, {
+      weaponKind: 'wand', progress,
+    }).wandAttachmentPose, expected)
+  }
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, 'spin').wandAttachmentPose, 0)
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, {
+    weaponKind: 'staff', progress: 3,
+  }).wandAttachmentPose, 0)
+  for (const [selectedPrimaryId, actionTick, expected] of [
+    [8, 19, 1], [8, 20, 0], [16, 26, 1], [16, 27, 0],
+  ] as const) {
+    assert.equal(createPlayerCharacterDrawPlan({
+      ...state, primaryCast: { ...state.primaryCast, selectedPrimaryId, actionTick },
+    }).wandAttachmentPose, expected)
+  }
+  assert.equal(playerCharacterRobeFixedPose(0, true, true, 0), 13)
+})
+
 function equipmentItem(recipeIndex: number, equipmentType: 'hat' | 'robe' | 'staff' | 'wand') {
   return {
     equipmentType,
@@ -445,7 +500,7 @@ test('ordinary no-weapon art never reuses a Staff action pose as a Hand-bank ind
     primaryCast: { ...state.primaryCast, actionTick: 19 },
   }).bareAttachmentPose, null)
   assert.equal(createPlayerCharacterDrawPlan(state, 1, 4).bareAttachmentPose, null)
-  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, true).bareAttachmentPose, null)
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, { weaponKind: 'staff', progress: 1 }).bareAttachmentPose, null)
 })
 
 test('Staff element effects preserve exact native call membership across every heading and pose', () => {
@@ -558,7 +613,7 @@ test('player draw plan holds one-shot release pose across successor action clock
   assert.deepEqual(plan.orbOffset, { x: 8.5, y: -47.5 })
 
   assert.equal(createPlayerCharacterDrawPlan(heldBurst, 1, 4).attachmentPose, 4)
-  assert.equal(createPlayerCharacterDrawPlan(heldBurst, 1, null, true).attachmentPose, 9)
+  assert.equal(createPlayerCharacterDrawPlan(heldBurst, 1, null, { weaponKind: 'staff', progress: 1 }).attachmentPose, 9)
 })
 
 test('player draw plan holds native Staff Cast 2 pose nine during a secondary action', () => {
@@ -569,7 +624,7 @@ test('player draw plan holds native Staff Cast 2 pose nine during a secondary ac
     primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
-  }, 1, null, true)
+  }, 1, null, { weaponKind: 'staff', progress: 1 })
   assert.equal(plan.attachmentPose, 9)
   assert.deepEqual(plan.orbOffset, { x: 32.5, y: -55 })
   assert.equal(plan.staffFront, false)
