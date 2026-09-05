@@ -4,7 +4,9 @@ import { HUB_INTERACTION_DIALOGUES, hubInteractionDialogue } from './hub-invento
 import type { HubNpcChatPresentation, HubUiSurface } from './hub-inventory-ui-model.ts'
 import { serviceInspectionTooltipText } from './hub-inventory-service-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
-import { hubStandardNoticeLayout } from './renderer/hub-inventory-render-contract.ts'
+import {
+  hubStandardNoticeLayout,
+} from './renderer/hub-inventory-render-contract.ts'
 import type {
   HubInventoryDragModel,
   HubInventoryDyeModalModel,

@@ -126,6 +126,7 @@ export default function NativeUiDomWorkbenchPreview() {
       </div>
       {selectedTab === 'boasts' ? (
         <NativeUiBoastMenu
+          gold={83}
           items={NATIVE_BOASTS.map(boast => ({
             detail: boast.statement,
             id: `native:${boast.id}`,

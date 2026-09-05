@@ -18,15 +18,16 @@ import {
   clampNativeUiSwipeBoxOffset,
   dragNativeUiSwipeBoxOffset,
   planNativeUiBoastMenu,
-} from './native-ui/core.ts'
-import {
   HUB_CHAT_PANEL,
-  HUB_NATIVE_UI_SIZE,
   HUB_NPC_SELECTOR,
   hubNpcSelectorClampScroll,
   hubNpcSelectorDragScroll,
   hubNpcSelectorVisibleRows,
   hubNpcSelectorWheelScroll,
+} from './native-ui/core.ts'
+
+import {
+  HUB_NATIVE_UI_SIZE,
 } from './renderer/hub-inventory-render-contract.ts'
 import type { HubNpcChatPresentation } from './hub-inventory-ui-model.ts'
 import { NativeAction } from './HubNativeAction.tsx'
@@ -100,6 +101,7 @@ export function DialogueActions({
     const selector = chat.content.selector
     if (selector === 'boast') return (
       <BoastSelectorActions
+        gold={gold}
         onDone={onSelectorDone}
         onHighlight={onSelectorHighlight}
         onScrollY={onSelectorScroll}
@@ -250,6 +252,7 @@ export function DialogueActions({
 }
 
 function BoastSelectorActions({
+  gold,
   onDone,
   onHighlight,
   onScrollY,
@@ -263,6 +266,7 @@ function BoastSelectorActions({
   onScrollY: (scrollY: number) => void
   onSelect: (id: number | ModBoastSelection) => void
   pendingSelection: boolean
+  gold: number
   rows: readonly HubNpcSelectorRow[]
   scrollY: number
 }>) {
@@ -275,6 +279,7 @@ function BoastSelectorActions({
   } | null>(null)
   const suppressClickRef = useRef(false)
   const plan = planNativeUiBoastMenu({
+    gold,
     height: HUB_NATIVE_UI_SIZE.height,
     rows: rows.map(row => ({
       detail: row.detail,

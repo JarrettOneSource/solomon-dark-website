@@ -128,9 +128,16 @@ try {
   await page.locator('#native-ui-stage').screenshot({ path: boastScreenshotPath })
   const scaleX = boastBounds.width / 1_600
   const scaleY = boastBounds.height / 900
-  await page.mouse.move(boastBounds.x + 800 * scaleX, boastBounds.y + 650 * scaleY)
+  const firstRow = await boastMenu.locator('[data-native-ui-boast-action="native:0"]').boundingBox()
+  assert.ok(firstRow)
+  assert.ok(Math.abs((firstRow.y - boastBounds.y) / scaleY - 131) < 0.01)
+  const gold = boastMenu.locator('[data-native-ui-node="selector:gold-balance"]')
+  assert.equal(await gold.getAttribute('data-native-ui-text-lines'), '83')
+  assert.equal(await boastMenu.locator('[data-native-ui-node="selector:gold-icon"] [data-native-ui-record="UI.21"]').count(), 1)
+  const goldBounds = await gold.boundingBox()
+  await page.mouse.move(boastBounds.x + 800 * scaleX, boastBounds.y + 430 * scaleY)
   await page.mouse.down()
-  await page.mouse.move(boastBounds.x + 800 * scaleX, boastBounds.y + 450 * scaleY, { steps: 4 })
+  await page.mouse.move(boastBounds.x + 800 * scaleX, boastBounds.y + 230 * scaleY, { steps: 4 })
   await page.mouse.up()
   await page.waitForFunction(() => (
     document.querySelector('[data-native-ui-boast-menu]')
@@ -138,6 +145,7 @@ try {
   ))
   assert.ok(Math.abs(await logicalActionHeight('native:0') - 15) < 0.01)
   assert.ok(Math.abs(await logicalActionHeight('native:4') - 85) < 0.01)
+  assert.deepEqual(await gold.boundingBox(), goldBounds)
   await page.locator('#native-ui-stage').screenshot({ path: boastScrolledScreenshotPath })
   await boastMenu.locator('[data-native-ui-boast-action="native:3"]').click()
   assert.equal(

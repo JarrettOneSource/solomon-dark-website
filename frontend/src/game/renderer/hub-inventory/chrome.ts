@@ -5,10 +5,11 @@ import {
   measureNativeUiText,
   nativeUiRect,
   planNativeUiButtonChrome,
+  HUB_CHAT_PANEL,
 } from '../../native-ui/core.ts'
 import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
+
 import {
-  HUB_CHAT_PANEL,
   HUB_DOWSING_PREROLL,
   HUB_INVENTORY_INFO_FRAME,
   HUB_INVENTORY_ROOT_CHROME,

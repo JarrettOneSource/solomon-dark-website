@@ -1,5 +1,6 @@
 import { NATIVE_BOAST_PRESENTATION } from '../core-kernels/native-hub-npc.ts'
 import { nativeUiRecord } from './native-ui-catalog.ts'
+import { HUB_NPC_SELECTOR, planNativeUiSelectorGold } from './native-ui-hub-dialogue.ts'
 import {
   intersectNativeUiRects,
   nativeUiRect,
@@ -22,6 +23,7 @@ export interface NativeUiBoastMenuRow {
 }
 
 export interface NativeUiBoastMenuSpec {
+  readonly gold: number
   readonly height: number
   readonly rows: readonly NativeUiBoastMenuRow[]
   readonly scrollY?: number
@@ -64,7 +66,7 @@ export function planNativeUiBoastMenu(spec: NativeUiBoastMenuSpec): NativeUiBoas
 
   const outer = nativeUiRect(
     (spec.width - presentation.outer.width) / 2,
-    (spec.height - presentation.outer.height) / 2 + presentation.outer.centerYOffset,
+    HUB_NPC_SELECTOR.panelRect[1],
     presentation.outer.width,
     presentation.outer.height,
   )
@@ -134,6 +136,7 @@ export function planNativeUiBoastMenu(spec: NativeUiBoastMenuSpec): NativeUiBoas
     },
   )
   actions.push({ bounds: doneBounds, disabled: false, id: 'done', role: 'button' })
+  nodes.push(...planNativeUiSelectorGold(spec.gold, outer).nodes)
 
   for (let index = 0; index < spec.rows.length; index += 1) {
     const row = spec.rows[index]!

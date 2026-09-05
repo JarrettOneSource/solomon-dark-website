@@ -22,6 +22,9 @@ import {
 } from './game-webgl.ts'
 import {
   HUB_CHAT_PANEL,
+  hubNpcSelectorClampScroll,
+} from '../native-ui/core.ts'
+import {
   HUB_INVENTORY_INTERACTION,
   HUB_INVENTORY_PARENT_HOLDER,
   HUB_NATIVE_UI_SIZE,
@@ -35,7 +38,6 @@ import {
   hubInventoryPrimarySpellLines,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
-  hubNpcSelectorClampScroll,
   hubSackPageOffsets,
   hubShopSlideOffset,
   hubUnforgeTargetTint,

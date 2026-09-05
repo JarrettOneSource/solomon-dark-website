@@ -13,7 +13,7 @@ import type {
 import {
   hubHagathaTooltipLines,
   hubItemTooltipLines,
-} from './renderer/hub-inventory-render-contract.ts'
+} from './renderer/hub-inventory-item-text.ts'
 
 export function dowsingItems(economy: ProtocolPlayerEconomy): readonly HubShopItem[] {
   return economy.dowsingOffers.map((offer) => {

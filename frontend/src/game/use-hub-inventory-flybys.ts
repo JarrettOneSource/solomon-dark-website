@@ -5,7 +5,9 @@ import type {
   HubInventoryFlybyLaneModel,
   HubInventoryFlybyModel,
 } from './renderer/hub-inventory/model.ts'
-import { HUB_INVENTORY_FLYBY } from './renderer/hub-inventory-render-contract.ts'
+import {
+  HUB_INVENTORY_FLYBY,
+} from './renderer/hub-inventory-render-contract.ts'
 import type { InventoryMoveAction } from './hub-inventory-ui-model.ts'
 
 export interface InventoryFlybyRequest {

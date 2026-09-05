@@ -1,5 +1,7 @@
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react'
-import { HUB_NATIVE_UI_SIZE } from './renderer/hub-inventory-render-contract.ts'
+import {
+  HUB_NATIVE_UI_SIZE,
+} from './renderer/hub-inventory-render-contract.ts'
 import type { HubServiceSelection } from './hub-inventory-ui-model.ts'
 
 export function pointerStagePosition(

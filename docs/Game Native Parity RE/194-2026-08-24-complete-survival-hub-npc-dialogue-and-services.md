@@ -1120,3 +1120,199 @@ No member is blocked by the browser platform.
   empty page/console/failed-response arrays.
 - Exact candidate must pass `/opt/homebrew/bin/bash ./scripts/validate.sh` on
   the Mac mini. Publication/deployment require separate authorization.
+
+## 2026-09-05 — ChatExtend placement and Boast balance reopening
+
+### Reported discrepancy and failed assumption
+
+The supplied `SWP Boast - image.png` shows the Boast frame roughly 275 display
+pixels below the same-sized spell selector in `SD Boast - image.png`. The latter
+is a spell-shop comparison, not a native Boast capture. At the Website's
+1600x900 logical stage, the current Boast plan starts at `(450,240)` while the
+other selectors start at `(450,27)`. A Mac invocation of the public planner
+reproduced the mismatch (`240 !== 27`) before source changes. A second probe
+confirmed that its plan has no UI.21 gold sprite.
+
+The earlier pass incorrectly substituted the entire 1600x900 viewport for the
+owning Chat rectangle in the factory equation. The subsequent SwipeBox pass
+marked the outer frame `verified-already-at-parity` without rechecking that
+parent. Both conclusions are withdrawn. This reopening follows the shared
+factory and all three ChatExtend render/layout consumers. It also replaces the
+other selectors' observed one-pixel approximation with the instruction-derived
+position.
+
+### Evidence and provenance
+
+| Evidence | Source | Finding | Confidence |
+| --- | --- | --- | --- |
+| Supplied web comparison | Windows Downloads `SWP Boast - image.png`, SHA-256 `3effabcaa857ef7576bd558e6e640d98c29ff056b7aa7afecd814ee803cc37c4`; `SD Boast - image.png`, SHA-256 `15f66ed837487b401f0ba3086f7405b4b703b462b2ded5266a9f4e78b082f992` | Same-sized frames, displaced Boast, gold displayed under the spell selector. | direct observation |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000` | Binary rehashed for this reopening. | high |
+| Read-only Ghidra | canonical `SolomonDark/SolomonDark.exe`, leased replicas; Mod Loader revision `08bfba9ef367f7b863848030d0a289dc31e33192`, wrapper SHA-256 `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`, `decompile_targets.py` SHA-256 `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`; also `refs_to_addr_decompile.py` and `dump_function_instructions.py` | Existing tools executed without changing the Mod Loader or canonical project. | high |
+| Chat construction | `0x004F5D90`; floats `0x00786C38=26`, `0x00790610=647`, `0x00790614=420` | Chat owns `(viewportWidth/2 - 323.5,26,647,420)` at fields `+0x80..+0x8C`. Vertical position is independent of viewport height. | instructions and static data |
+| Selector construction | `0x004FB890`, Boast branch `0x004FBDC3..0x004FBE91`, sibling BookReview/SellSpell branches | All three children use `parent.left + parent.width/2 - 350`, `parent.top + parent.height/2 + 70 - 280`. Scalars `0x00787C40=70` (double), `0x00791268=700`, `0x00791264=560` (floats). | instructions and static data |
+| Shared layout/render xrefs | `0x004F6150` called by `0x004F6210/0x004F62F0`, and base vtable `0x00790288`; `0x004F7BA0` called by `0x004F7DC0`, `0x004F80B0`, `0x004FA460`, and base vtable `0x00790290`; factory caller `0x004FFC40` | Complete three-member ChatExtend shell membership; embedded box, Done button and title follow the same outer rectangle. | high |
+| Gold ownership | SellSpell whole renderer `0x004FA460`, UI singleton `+0x104C` (UI.21), balance `0x0081A388`; Boast `0x004F7DC0`, BookReview `0x004F80B0`, shared `0x004F7BA0`, and parent `0x004F9380` | Gold is specific to native SellSpell. Native Boast and BookReview do not draw a balance; the requested web Boast balance is a Website addition, not a recovered retail feature. | high |
+
+### System boundary and complete membership
+
+System: **survival-Hub ChatExtend shell placement and balance presentation**,
+from the Chat command factory through Boast, BookReview and SellSpell frame,
+stationary title/Done/footer, clipped row coordinates and semantic hit regions.
+
+| Member / branch | Disposition | Contract / verification |
+| --- | --- | --- |
+| Chat parent `0x004F5D90`, command dispatcher `0x004FFC40 -> 0x004FB890` | verified-already-at-parity | Keep the existing parent rectangle, command routing and input ownership. |
+| Boast/BoastBox | exact-ported | Shared parent-derived `(450,26,700,560)` shell at 1600 width; `(540,106,520,400)` viewport; all five native rows, selected/hovered state and extended mod rows use the same translated/clipped geometry. |
+| BookReview/BookBox | exact-ported | Same shell/viewport, 26 authored book rows and one-shot Lace omission; no new balance. |
+| SellSpell/SellSpellBox | exact-ported | Same shell/viewport, eight spell rows, purchase omission, affordability and empty state; retain authoritative gold. |
+| Base ChatExtend frame/title/Done | exact-ported | UI.11 frame; title baseline `top+64=90`; Done bounds `(700,511,200,40)` and baseline `top+height-50=536`. No frame-animation correction. |
+| Native SellSpell gold | verified-already-at-parity except one-pixel icon position | UI.21 center `(570,539)` from outer `(left+130-10, top+height-35-12)`; keep the existing body-font text baseline convention. Gold stays outside the list clip. |
+| Requested web Boast gold | out-of-system: explicit Website presentation addition | Reuse the same balance art and placement, read current participant gold, preserve value zero and live updates, and keep it stationary during scrolling. |
+| Five Boast titles/statements, UI.90..94; dormant UI.95..97/custom mod icons | verified-already-at-parity | No change to the fully extracted authored rows/art or continuous content extent; test both stock and extended lists after moving the shell. |
+| Boast selection/failure/success, spell purchases, Book response, audio, authority/save/protocol, close/return lifecycle | verified-already-at-parity | Existing owners and content unchanged; real Hub journey covers selecting/scrolling/closing and sibling service behavior. |
+| Traders, inventory item text, other SwipeBox users | out-of-system | Their geometry and behavior do not derive from this ChatExtend factory. Item-text relocation is behavior-preserving file organization only. |
+
+No member is blocked by the browser platform. No extracted native fact remains
+unknown for the placement or native gold ownership question.
+
+### Implementation and validation contract
+
+Move the existing Chat/selector presentation contract into
+`native-ui/native-ui-hub-dialogue.ts`, shared by the Boast planner, sibling
+renderers and semantic controls. Derive child position from the recovered Chat
+parent and catalog dimensions. Remove the full-viewport centering assumption.
+Keep the original native `centerYOffset=70` fact as a parent-relative offset.
+
+The original inventory render-contract file exceeds 1,000 source lines. Move
+its item-description/tooltip responsibility, private helpers and related types
+into `renderer/hub-inventory-item-text.ts`, update all callers directly and
+remove the old definitions. Keep the remaining inventory geometry below the
+required limit; no compatibility export or alternative implementation.
+
+Use the established public plan/selector test interfaces for failing geometry
+regressions and a Mac Chrome journey for actual Pixi output and hit regions.
+Verify stationary gold including zero and changed balances, all three selector
+families, stock/mod clipping, and scrolling after the frame moves. Run the full
+Mac `scripts/validate.sh` gate and report configured/unavailable measurements
+separately. Publication is not part of this request.
+
+### Implementation validation receipt
+
+- Candidate base: Website `9005eb9933b01a4f5cd12dee59077752153425e1`;
+  local branch `codex/boast-menu-layout-20260905-root`, isolated worktree
+  `/home/user/.codex-worktrees/solomon-website-boast-menu-layout-20260905-root`.
+  Mac acceptance tree:
+  `/Users/jarrett/codex-acceptance/boast-menu-layout-20260905-root`.
+  The tracked/untracked source manifest matched byte-for-byte before the full
+  gate, and the final manifest includes the additional boundary tests and docs.
+- All three selectors now use the same Chat-derived placement. Boast title,
+  rows, clip, Done and hit regions move together; custom icon placement still
+  follows its row. The shared balance fragment is consumed by both the Boast
+  plan and spell-shop renderer; current participant gold reaches the Pixi and
+  DOM adapters and remains outside the clip. Removed the unused pre-kit
+  `hubNpcBoastArtRecord` and `boastArtInsetX` rather than preserving duplicate
+  art metadata. The UI Kit guide documents the required `gold` input.
+- Item-description/tooltip code, private helpers and associated types were
+  compared with the old implementation and are byte-identical after relocation.
+  Source sizes: shared dialogue 250 lines, item text 397 lines, remaining
+  inventory render contract 955 lines. No explicit `any` or `unknown` types
+  were introduced.
+- Mac red/green regressions: the geometry test failed at `top:240` versus
+  native `top:26`; the gold test failed because UI.21 was absent. Both now pass.
+  The Boast planner's measured Node/V8 coverage is **100% lines, 100% branches,
+  100% functions**, including changed stage dimensions, all five native rows,
+  clipped/mod-expanded lists, zero/nonzero balances, empty lists and invalid
+  stage dimensions. The final planner/native-UI run passed 44 tests.
+- Full Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` exited 0;
+  **20 backend tests and 2,892 Node tests**, backend formatting, frontend lint
+  and boundaries, TypeScript, production frontend/game-host builds, bundle
+  budget and media policy passed. Lint reported 11 existing warnings and zero
+  errors. The new empty-list and dimension-boundary tests also ran in this
+  gate's `test:hub-ui` phase.
+- Mac Chrome UI Kit journey passed with empty page/console/failed-response
+  arrays. It checks first-row top 131, UI.21 and balance 83, stationary footer
+  bounds while dragging, partial-row clipping, selection and keyboard scrolling.
+- Mac Chrome **built `/game`** journey passed on Apple M2 / ANGLE Metal WebGL.
+  It entered the actual Hub, opened Provokatus, checked row top 131, changed
+  gold through the authority to **0, 83 and 20,000**, scrolled/selected a Boast,
+  observed automatic skill choice and automatic Notebox expiry while moving,
+  bought all eight teacher spells (including an unaffordable branch), and
+  opened/scrolled the 26-book selector and removed Lace through its real action.
+  Final arrays: **0 page errors, 0 console errors, 0 failed HTTP responses**.
+  Screenshots were inspected directly: Boast and spell frames share the same
+  visible vertical extent; both 0 and 83 render beneath Boast with the coin art.
+- Coverage survey of the relocated pre-existing helpers (same focused suites):
+  shared dialogue **98.40% lines / 89.13% branches / 100% functions**;
+  unchanged item text **91.94% / 77.36% / 100%**. These pre-existing gaps are
+  recorded; this receipt does not claim 100% coverage across every relocated
+  helper or UI adapter. Statement coverage, cyclomatic/cognitive complexity,
+  Halstead Difficulty, CRAP, mutation survivors and automated dead-code/
+  duplication findings were **not measured** by the candidate's configured
+  toolchain. No analyzer dependencies, exclusions or metric suppressions were
+  added to manufacture compliance.
+- Final remote inspection found main had advanced independently to
+  `f9d736bf03e3d917ce1cf31dd3778a4423b40f94`, adding renderer changes and a
+  separate renderer-analysis workflow. The receipts above belong to the pinned
+  candidate base, not that newer main. Publication requires integration and
+  validation against the then-current main, including its configured gates.
+- At the initial implementation handoff, no commit, push or deployment had
+  been requested or performed. Local and Mac candidate worktrees were retained
+  for review/publication. The task's
+  browser, host and static server exited; disposable copies, screenshots,
+  Ghidra logs and acceptance scripts were removed after recording these results.
+  The supplied Windows Downloads images and concurrent work were preserved.
+
+
+### Publication validation after the main-push request
+
+The user subsequently requested publication to `main`. The focused change
+rebased cleanly onto the renderer and inventory-stat updates through
+`d1742a1df48e5d2ba6dc0aeb855ec43326bd7d9b`, producing candidate
+`a0df98d02188ad06fba4deed8685b0a42733d9c6`. Its complete Mac
+`/opt/homebrew/bin/bash ./scripts/validate.sh` run passed the application,
+backend, desktop, lint, type, build, bundle, media, static-analysis and coverage
+checks: 20 Python tests and 2,887 Node test executions before the quality stage.
+The command exited **1 solely for the existing strict renderer mutation gate**.
+
+The completed 544-case campaign reported **381 killed, 129 TypeScript
+rejections, five timeouts, and 29 survivors**. The surviving files and counts
+match main's documented diagnostic-label cases: Building 2, Arena 8,
+ground/roads 6, fixed-function pipeline 7, shared material 3, and Staff 3.
+Runtime progression and texture color have zero survivors. The configured
+scope retains 100% of 344 statements, 112 branches, 65 functions and 324
+executable lines, zero prohibited types/dead-code findings/duplicate blocks,
+and maxima of cyclomatic 20, cognitive 10, Halstead Difficulty 34.75, source
+size 267 and CRAP 20. No mutation threshold, exclusion, or synthetic label test
+was introduced; the strict mutation gate remains failed as disclosed.
+
+The now-installed source analyzer additionally measured the two Boast/dialogue
+modules. `planNativeUiBoastMenu` has cyclomatic **13**, cognitive **10**, and
+Halstead Difficulty **66.56153846153846**; the new shared gold fragment has
+**1**, **0**, and **9.658536585365855**, respectively. Both files are below
+1,000 lines (248 and 250) and contain no prohibited type nodes. This supersedes
+the initial handoff's unmeasured static-metric status for those two modules;
+it does not claim broader coverage or mutation completion for relocated helpers.
+
+While the run was active, main gained the Hat trim fix
+`36aba60e297fd5eb7ad9d3dd53fae5dc332cc58e`. The change rebased cleanly again,
+producing runtime candidate `5a56953d9bca08c27ead306f2e6df066d872a270`.
+All eight mutation targets, their tests, analyzer/runner/probe code, production
+TypeScript configuration and dependency lockfile are unchanged from the
+completed campaign. Its evidence remains applicable; the unrelated Hat asset
+update does not require replaying that same mutation campaign.
+
+The final Mac verification exercised the changed dependencies: backend build
+and formatting, **22 Python tests**, frontend lint/boundaries, **217 Hub/UI
+tests**, production frontend/game-host build, bundle budget and media policy.
+All passed. The Hat probe passed **192/192** pixel cases. The rebuilt `/game`
+journey again passed the five Boasts, live gold **0/83/20,000**, scrolling and
+selection, automatic choice/Notebox lifecycle, all eight spell purchases,
+affordability and the 26-book/Lace flow. The DOM UI Kit also passed its gold,
+geometry, clipping, pointer and keyboard checks. Every browser page/console/
+failed-response array is empty.
+
+The user-authorized publication preserves these recorded limitations and uses
+a normal fast-forward push. The final documentation update changes no tested
+runtime source. Task worktrees, processes and disposable verification artifacts
+are removed after remote-main verification; no production deployment is part
+of this request.

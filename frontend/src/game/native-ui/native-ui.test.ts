@@ -738,6 +738,7 @@ test('SimpleMenu is a reusable composition over the same stock primitives', () =
 
 test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirrored art', () => {
   const plan = planNativeUiBoastMenu({
+    gold: 83,
     height: 900,
     rows: NATIVE_BOASTS.map(boast => ({
       detail: boast.statement,
@@ -748,8 +749,8 @@ test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirro
     })),
     width: 1_600,
   })
-  assert.deepEqual(plan.outerBounds, nativeUiRect(450, 240, 700, 560))
-  assert.deepEqual(plan.viewportBounds, nativeUiRect(540, 320, 520, 400))
+  assert.deepEqual(plan.outerBounds, nativeUiRect(450, 26, 700, 560))
+  assert.deepEqual(plan.viewportBounds, nativeUiRect(540, 106, 520, 400))
   assert.equal(plan.contentHeight, 495)
   assert.equal(plan.maximumScrollY, 95)
   assert.equal(plan.scrollY, 0)
@@ -758,20 +759,20 @@ test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirro
     wheelStep: NATIVE_UI_SWIPE_BOX.wheelStep,
   })
   assert.deepEqual(plan.rowBounds.map(({ bounds }) => bounds), [
-    nativeUiRect(555, 345, 490, 85),
-    nativeUiRect(555, 435, 490, 85),
-    nativeUiRect(555, 525, 490, 85),
-    nativeUiRect(555, 615, 490, 85),
-    nativeUiRect(555, 705, 490, 85),
+    nativeUiRect(555, 131, 490, 85),
+    nativeUiRect(555, 221, 490, 85),
+    nativeUiRect(555, 311, 490, 85),
+    nativeUiRect(555, 401, 490, 85),
+    nativeUiRect(555, 491, 490, 85),
   ])
   assert.deepEqual(plan.rowBounds.map(({ visibleBounds }) => visibleBounds), [
-    nativeUiRect(555, 345, 490, 85),
-    nativeUiRect(555, 435, 490, 85),
-    nativeUiRect(555, 525, 490, 85),
-    nativeUiRect(555, 615, 490, 85),
-    nativeUiRect(555, 705, 490, 15),
+    nativeUiRect(555, 131, 490, 85),
+    nativeUiRect(555, 221, 490, 85),
+    nativeUiRect(555, 311, 490, 85),
+    nativeUiRect(555, 401, 490, 85),
+    nativeUiRect(555, 491, 490, 15),
   ])
-  assert.deepEqual(plan.doneBounds, nativeUiRect(700, 725, 200, 40))
+  assert.deepEqual(plan.doneBounds, nativeUiRect(700, 511, 200, 40))
   assert.deepEqual(NATIVE_BOASTS.map(({ iconRecord }) => iconRecord), [90, 91, 92, 93, 94])
   assert.deepEqual(NATIVE_BOAST_PRESENTATION.iconRecords, [90, 91, 92, 93, 94, 95, 96, 97])
   const viewport = plan.nodes.find(({ label }) => label === 'boast:swipe-box')
@@ -819,15 +820,16 @@ test('BoastMenu owns the exact stock BoastBox frame, five rows, fonts, and mirro
   const done = plan.nodes.find(({ label }) => label === 'boast:done-label')
   assert.ok(title?.kind === 'text' && done?.kind === 'text')
   assert.deepEqual([title.text.font, title.text.text, title.text.tint, title.text.x, title.text.y], [
-    'menu', 'Select a Boast', NATIVE_UI_BOAST_TEXT_TINT, 800, 304,
+    'menu', 'Select a Boast', NATIVE_UI_BOAST_TEXT_TINT, 800, 90,
   ])
   assert.deepEqual([done.text.font, done.text.text, done.text.x, done.text.y], [
-    'menu', 'DONE', 800, 750,
+    'menu', 'DONE', 800, 536,
   ])
 })
 
 test('BoastMenu scrolls one continuous clipped list and extends it for mod rows', () => {
   const plan = planNativeUiBoastMenu({
+    gold: 83,
     height: 900,
     rows: [
       ...NATIVE_BOASTS.map(boast => ({
@@ -844,16 +846,16 @@ test('BoastMenu scrolls one continuous clipped list and extends it for mod rows'
   assert.equal(plan.contentHeight, 585)
   assert.equal(plan.maximumScrollY, 185)
   assert.equal(plan.scrollY, 185)
-  assert.deepEqual(plan.rowBounds[0]?.bounds, nativeUiRect(555, 160, 490, 85))
+  assert.deepEqual(plan.rowBounds[0]?.bounds, nativeUiRect(555, -54, 490, 85))
   assert.equal(plan.rowBounds[0]?.visibleBounds, null)
-  assert.deepEqual(plan.rowBounds[1]?.visibleBounds, nativeUiRect(555, 320, 490, 15))
-  assert.deepEqual(plan.rowBounds[5]?.visibleBounds, nativeUiRect(555, 610, 490, 85))
+  assert.deepEqual(plan.rowBounds[1]?.visibleBounds, nativeUiRect(555, 106, 490, 15))
+  assert.deepEqual(plan.rowBounds[5]?.visibleBounds, nativeUiRect(555, 396, 490, 85))
   assert.deepEqual(plan.customIcons, [{
     id: 'mod:one',
     leftEdgeX: 570,
     rightEdgeX: 1_030,
     selected: false,
-    y: 652.5,
+    y: 438.5,
   }])
   assert.deepEqual(
     plan.actions.map(({ id }) => id),

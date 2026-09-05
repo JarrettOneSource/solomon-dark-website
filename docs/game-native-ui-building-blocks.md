@@ -221,6 +221,11 @@ stock content is five `490x85` rows at a 90-pixel pitch inside the inherited
 `520x400` SwipeBox. Its 495-pixel content extent produces a 95-pixel vertical
 range: four rows and the first 15 pixels of row five appear initially.
 
+The outer shell shares the parent-relative ChatExtend placement with the book
+and spell selectors. Its top remains 26 logical pixels as the viewport height
+changes. Pass the current player `gold`; the web Boast menu reuses the spell
+selector's stationary balance footer, including a visible zero balance.
+
 The plan returns the viewport, content height, clamped offset, maximum offset,
 full row bounds, clipped visible row bounds, and stationary Done action used by
 both renderers and semantic controls. It emits one nested clip node so frames,
@@ -233,6 +238,7 @@ the shared mod-texture catalog without teaching the UI Kit about package URLs.
 import { NativeUiBoastMenu } from './native-ui/react.ts'
 
 <NativeUiBoastMenu
+  gold={gold}
   items={rows}
   onDone={close}
   onScrollChange={setScrollY}

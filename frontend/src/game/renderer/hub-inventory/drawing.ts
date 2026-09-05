@@ -2,9 +2,10 @@ import {
   type NativeUiTextRun,
   nativeUiRecord,
   wrapNativeUiTextRuns,
+  hubChatTextRuns,
 } from '../../native-ui/core.ts'
 import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
-import { hubChatTextRuns } from '../hub-inventory-render-contract.ts'
+
 import {
   type AtlasName,
   type FontName,

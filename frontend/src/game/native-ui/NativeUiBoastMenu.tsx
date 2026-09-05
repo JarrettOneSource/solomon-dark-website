@@ -42,6 +42,7 @@ export interface NativeUiBoastMenuItem extends NativeUiBoastMenuRow {
 }
 
 export interface NativeUiBoastMenuProps {
+  readonly gold: number
   readonly height?: number
   readonly items: readonly NativeUiBoastMenuItem[]
   readonly onDone: () => void
@@ -54,6 +55,7 @@ export interface NativeUiBoastMenuProps {
 
 /** Semantic DOM adapter for the stock BoastBox plan. */
 export default function NativeUiBoastMenu({
+  gold,
   height = 900,
   items,
   onDone,
@@ -75,6 +77,7 @@ export default function NativeUiBoastMenu({
   const suppressClickRef = useRef(false)
   const requestedScrollY = controlledScrollY ?? localScrollY
   const plan = useMemo(() => planNativeUiBoastMenu({
+    gold,
     height,
     rows: items.map(item => ({
       ...item,
@@ -82,7 +85,7 @@ export default function NativeUiBoastMenu({
     })),
     scrollY: requestedScrollY,
     width,
-  }), [height, highlightedId, items, requestedScrollY, selectedId, width])
+  }), [gold, height, highlightedId, items, requestedScrollY, selectedId, width])
   const byId = new Map(items.map(item => [item.id, item]))
   const updateScrollY = (next: number) => {
     const clamped = clampNativeUiSwipeBoxOffset(

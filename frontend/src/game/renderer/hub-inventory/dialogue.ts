@@ -12,12 +12,9 @@ import {
 import {
   NATIVE_UI_BOAST_SELECTED_TINT,
   nativeUiRecord,
+  nativeUiRect,
   planNativeUiBoastMenu,
-} from '../../native-ui/core.ts'
-import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
-import {
   HUB_CHAT_PANEL,
-  HUB_NATIVE_UI_SIZE,
   HUB_NPC_SELECTOR,
   hubNpcBookArtRecord,
   hubNpcBookDisplayTitle,
@@ -25,6 +22,12 @@ import {
   hubNpcSelectorContentHeight,
   hubNpcSelectorPriceTint,
   hubNpcSelectorRowRect,
+  planNativeUiSelectorGold,
+} from '../../native-ui/core.ts'
+import { nativeUiPixiFor } from '../../native-ui/pixi.ts'
+
+import {
+  HUB_NATIVE_UI_SIZE,
 } from '../hub-inventory-render-contract.ts'
 import { skillPickerRootTint } from '../skill-picker-render-contract.ts'
 import { addChatPanel } from './chrome.ts'
@@ -168,6 +171,7 @@ export function planBoastDialogue(
 ) {
   const active = model.highlightedSelectorId ?? model.selectedSelectorId
   return planNativeUiBoastMenu({
+    gold: model.gold,
     height: HUB_NATIVE_UI_SIZE.height,
     rows: model.selectorRows.map(row => ({
       detail: row.detail,
@@ -285,21 +289,10 @@ function buildNpcSelector(
   })
 
   if (selector === 'teacher-spells') {
-    addCenteredAtlasSprite(
-      context,
-      layer,
-      'UI',
-      21,
-      ...HUB_NPC_SELECTOR.balanceIconCenter,
-    )
-    addBitmapText(
-      context,
-      layer,
-      `${model.gold}`,
-      'body',
-      ...HUB_NPC_SELECTOR.balanceTextBaseline,
-      { align: 'left', tint: 0xffffff },
-    )
+    layer.addChild(nativeUiPixiFor(context.textures).render(
+      planNativeUiSelectorGold(model.gold, nativeUiRect(...HUB_NPC_SELECTOR.panelRect)),
+      'native-selector-gold',
+    ))
   }
   addBitmapText(
     context,

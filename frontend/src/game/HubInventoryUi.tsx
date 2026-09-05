@@ -44,7 +44,9 @@ import {
   createRetainedRendererOwner,
   type RetainedRendererOwner,
 } from './renderer/retained-renderer-owner.ts'
-import { HUB_SACK_PAGE_TRANSITION } from './renderer/hub-inventory-render-contract.ts'
+import {
+  HUB_SACK_PAGE_TRANSITION,
+} from './renderer/hub-inventory-render-contract.ts'
 import './hub-inventory.css'
 import type { HubUiSurface } from './hub-inventory-ui-model.ts'
 import { NativeHubSurface } from './HubInventorySurface.tsx'

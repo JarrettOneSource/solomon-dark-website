@@ -21,11 +21,33 @@ import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   nativeTutorialAmuletItem,
 } from '../core-kernels/native-tutorial.ts'
-import { measureNativeUiText } from '../native-ui/core.ts'
 import {
-  HAGATHA_NATIVE_TOOLTIP_LINES,
+  measureNativeUiText,
   HUB_CHAT_PANEL,
   HUB_CHAT_INLINE_EMPHASIS,
+  HUB_NPC_SELECTOR,
+  hubChatTextRuns,
+  hubNpcBookArtRecord,
+  hubNpcBookDisplayTitle,
+  hubNpcBookTitleHash,
+  hubNpcSelectorClampScroll,
+  hubNpcSelectorContentHeight,
+  hubNpcSelectorDragScroll,
+  hubNpcSelectorMaximumScroll,
+  hubNpcSelectorPriceTint,
+  hubNpcSelectorRowRect,
+  hubNpcSelectorVisibleRows,
+  hubNpcSelectorWheelScroll,
+} from '../native-ui/core.ts'
+import {
+  HAGATHA_NATIVE_TOOLTIP_LINES,
+  hubInventoryItemInfoText,
+  hubHagathaTooltipLines,
+  hubItemTooltipLines,
+  hubNativeEquipmentEffectText,
+} from './hub-inventory-item-text.ts'
+
+import {
   HUB_DOWSING_FIELD,
   HUB_DYE_CLOTHING,
   HUB_DOWSING_PREROLL,
@@ -51,7 +73,6 @@ import {
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
-  HUB_NPC_SELECTOR,
   HUB_PRIMARY_SPELL_PANE,
   HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SACK_PAGE_TRANSITION,
@@ -76,31 +97,14 @@ import {
   hubHagathaOfferSlotPosition,
   hubHagathaPerkSlotAlpha,
   hubHagathaTonicPromptCenter,
-  hubChatTextRuns,
   hubInventoryPrimarySpellLines,
   hubInventoryPrimarySpellTint,
   hubInventoryWizardIdentityText,
   hubInventoryStatsArrowRect,
   hubInventoryStatsPage,
-  hubInventoryItemInfoText,
-  hubHagathaTooltipLines,
-  hubItemTooltipLines,
-  hubNativeEquipmentEffectText,
   hubNativeUiCloseReveal,
   hubNativeUiElapsedTicks,
   hubNativeUiReveal,
-  hubNpcBoastArtRecord,
-  hubNpcBookArtRecord,
-  hubNpcBookDisplayTitle,
-  hubNpcBookTitleHash,
-  hubNpcSelectorClampScroll,
-  hubNpcSelectorContentHeight,
-  hubNpcSelectorDragScroll,
-  hubNpcSelectorMaximumScroll,
-  hubNpcSelectorPriceTint,
-  hubNpcSelectorRowRect,
-  hubNpcSelectorVisibleRows,
-  hubNpcSelectorWheelScroll,
   hubOwnedPerkSlotRect,
   hubInventoryEquipmentSlotRects,
   hubInventoryFlybyFrame,
@@ -1263,9 +1267,9 @@ test('the port exports the complete stock UI membership', () => {
 })
 
 test('Hub NPC selectors own the native clipped SwipeBox geometry and continuous input', () => {
-  assert.deepEqual(HUB_NPC_SELECTOR.panelRect, [450, 27, 700, 560])
-  assert.deepEqual(HUB_NPC_SELECTOR.viewportRect, [540, 107, 520, 400])
-  assert.deepEqual(HUB_NPC_SELECTOR.doneRect, [700, 512, 200, 40])
+  assert.deepEqual(HUB_NPC_SELECTOR.panelRect, [450, 26, 700, 560])
+  assert.deepEqual(HUB_NPC_SELECTOR.viewportRect, [540, 106, 520, 400])
+  assert.deepEqual(HUB_NPC_SELECTOR.doneRect, [700, 511, 200, 40])
   assert.equal(HUB_NPC_SELECTOR.rowInsetX, 15)
   assert.equal(HUB_NPC_SELECTOR.rowInsetY, 25)
   assert.equal(HUB_NPC_SELECTOR.rowHeight, 85)
@@ -1292,29 +1296,27 @@ test('Hub NPC selectors own the native clipped SwipeBox geometry and continuous 
   assert.equal(hubNpcSelectorWheelScroll(25, 0, 8), 25)
   assert.equal(hubNpcSelectorDragScroll(100, -20, 8), 120)
   assert.equal(hubNpcSelectorDragScroll(100, 20, 8), 80)
-  assert.deepEqual(hubNpcSelectorRowRect(0, 0), [555, 132, 490, 85])
-  assert.deepEqual(hubNpcSelectorRowRect(4, 0), [555, 492, 490, 85])
+  assert.deepEqual(hubNpcSelectorRowRect(0, 0), [555, 131, 490, 85])
+  assert.deepEqual(hubNpcSelectorRowRect(4, 0), [555, 491, 490, 85])
   assert.deepEqual(hubNpcSelectorVisibleRows(8, 0), [
-    { index: 0, rect: [555, 132, 490, 85] },
-    { index: 1, rect: [555, 222, 490, 85] },
-    { index: 2, rect: [555, 312, 490, 85] },
-    { index: 3, rect: [555, 402, 490, 85] },
-    { index: 4, rect: [555, 492, 490, 15] },
+    { index: 0, rect: [555, 131, 490, 85] },
+    { index: 1, rect: [555, 221, 490, 85] },
+    { index: 2, rect: [555, 311, 490, 85] },
+    { index: 3, rect: [555, 401, 490, 85] },
+    { index: 4, rect: [555, 491, 490, 15] },
   ])
   assert.deepEqual(hubNpcSelectorVisibleRows(8, 365), [
-    { index: 3, rect: [555, 107, 490, 15] },
-    { index: 4, rect: [555, 127, 490, 85] },
-    { index: 5, rect: [555, 217, 490, 85] },
-    { index: 6, rect: [555, 307, 490, 85] },
-    { index: 7, rect: [555, 397, 490, 85] },
+    { index: 3, rect: [555, 106, 490, 15] },
+    { index: 4, rect: [555, 126, 490, 85] },
+    { index: 5, rect: [555, 216, 490, 85] },
+    { index: 6, rect: [555, 306, 490, 85] },
+    { index: 7, rect: [555, 396, 490, 85] },
   ])
   assert.throws(() => hubNpcSelectorContentHeight(-1), /nonnegative safe integer/)
   assert.throws(() => hubNpcSelectorClampScroll(Number.NaN, 8), /must be finite/)
 })
 
 test('each native selector row family retains its renderer-owned art and affordability rules', () => {
-  assert.deepEqual(Array.from({ length: 5 }, (_, id) => hubNpcBoastArtRecord(id)), [90, 91, 92, 93, 94])
-  assert.throws(() => hubNpcBoastArtRecord(5), /within \[0, 4\]/)
   assert.equal(hubNpcBookTitleHash("Merdalf's Hex Handbook Vol One: Elementus Ether"), 2_696_095)
   assert.equal(hubNpcBookArtRecord("Merdalf's Hex Handbook Vol One: Elementus Ether"), 16)
   assert.equal(hubNpcBookArtRecord('Wizards in History: The Mild Embarrassment'), 13)

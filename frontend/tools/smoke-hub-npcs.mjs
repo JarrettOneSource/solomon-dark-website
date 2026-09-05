@@ -469,9 +469,22 @@ async function exerciseProvokatus(canvas) {
   const boastActions = dialog.locator('[data-native-selector="boast"]')
   const boastBounds = await boastActions.boundingBox()
   assert.ok(boastBounds)
-  await page.mouse.move(boastBounds.x + 800, boastBounds.y + 650)
+  const firstRow = await dialog.locator('[data-native-selector-id="0"]').boundingBox()
+  assert.ok(firstRow)
+  assert.equal(firstRow.y - boastBounds.y, 131)
+  for (const gold of [0, 83, 20_000]) {
+    const result = await page.evaluate(value => window.solomonDark.lua.execute(
+      `sd.player.set_gold(${value})`,
+    ), gold)
+    assert.equal(result.ok, true, result.error)
+    await page.waitForFunction(value => (
+      document.querySelector('[data-player-gold]')?.getAttribute('data-player-gold') === `${value}`
+    ), gold)
+    await page.screenshot({ path: `${screenshotRoot}-provokatus-gold-${gold}.png` })
+  }
+  await page.mouse.move(boastBounds.x + 800, boastBounds.y + 430)
   await page.mouse.down()
-  await page.mouse.move(boastBounds.x + 800, boastBounds.y + 450, { steps: 4 })
+  await page.mouse.move(boastBounds.x + 800, boastBounds.y + 230, { steps: 4 })
   await page.mouse.up()
   await page.waitForFunction(() => (
     document.querySelector('.hub-inventory-native-canvas')

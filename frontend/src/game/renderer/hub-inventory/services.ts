@@ -34,13 +34,15 @@ import {
   hubHagathaOfferSlotPosition,
   hubHagathaPerkSlotAlpha,
   hubHagathaTonicPromptCenter,
-  hubHagathaTooltipLines,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
-  hubItemTooltipLines,
   hubOwnedPerkSlotRect,
   hubShopSlotPosition,
 } from '../hub-inventory-render-contract.ts'
+import {
+  hubHagathaTooltipLines,
+  hubItemTooltipLines,
+} from '../hub-inventory-item-text.ts'
 import {
   addDoneControl,
   addDowsingButton,

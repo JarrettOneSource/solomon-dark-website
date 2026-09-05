@@ -21,13 +21,15 @@ import {
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_NATIVE_UI_SIZE,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
-  type HubTooltipLine,
-  type HubTooltipOptions,
   hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
   hubInventoryVisibleSlot,
-  hubItemTooltipLines,
 } from '../hub-inventory-render-contract.ts'
+import {
+  type HubTooltipLine,
+  type HubTooltipOptions,
+  hubItemTooltipLines,
+} from '../hub-inventory-item-text.ts'
 import {
   addAtlasSprite,
   addBitmapText,
