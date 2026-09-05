@@ -622,3 +622,36 @@ deployment, or production restart was requested or performed.
 | Absent changelog | No changelog supplied. | No invented replacement text. |
 
 Arbitrary descriptions, changelogs, comments, and names are preserved.
+
+## 2026-09-05 — Publication validation
+
+Publication was requested after the quality limitations above were disclosed.
+The change was rebased onto `36aba60e`, preserving the intervening inventory
+progression and hat-bank fixes, then onto `802bb3a7` for the shared Boast
+selector and gold balance. The test-config conflict retained both the Boast
+and Dark Cloud suites; the focused native-UI command also includes Boast.
+
+- The first Mac canonical run stopped on four host/supervisor message timeouts
+  while the eight-core machine had a load average of 23.71 and other validation
+  jobs running. All four cases passed in isolation. The complete 1,921-test
+  Boneyard command then passed with test-file concurrency set to one; neither
+  assertions nor message timeouts were changed. The remaining canonical test,
+  build, media, and renderer-measurement commands completed.
+- The eight-file renderer sweep produced 544 mutants: 385 killed, 29 survived,
+  one timeout, and 129 compile errors. Its only failing gate remains mutation.
+  The measured sources, tests, GPU probes, and configuration are unchanged by
+  the subsequent main updates, so these fresh results remain applicable.
+- After the hat-bank integration, the Mac reran all 22 Python contracts/integration
+  tests, the complete 1,921-test Boneyard command with one test file at a time,
+  all 118 native-UI/related tests, frontend lint, production build/media checks,
+  the new player-hat journey, and the renderer pixel oracle. All passed.
+- After the Boast integration, all 122 native-UI tests, 104 hub-UI tests,
+  frontend lint, and production build/media checks passed on the Mac.
+- The final built Dark Cloud journeys, shared native-UI workbench, and real-API
+  subscription/comment/layout journey passed again. Desktop, portrait,
+  landscape, and 320-pixel phone checks have no unexpected browser errors or
+  layout problems; the intentional Parties 503/Retry cases remain explicit.
+
+The previously documented 33 UI diagnostic-label mutants and unmeasured full
+React coverage/CRAP remain open. Publication is not a claim that those gates
+passed or that a live deployment was verified.
