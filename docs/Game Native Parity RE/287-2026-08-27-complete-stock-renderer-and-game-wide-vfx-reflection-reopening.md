@@ -122,8 +122,10 @@ resource-lifecycle behavior. The scene labels occur only at their declarations
 in production, and Pixi's shader names supply diagnostic source labels rather
 than shader operations. The configuration keeps all 29 as survivors; no
 mutation exclusions, suppressed operators, or synthetic label assertions were
-added. The zero-survivor rule therefore remains unsatisfied, and main publication
-is pending the user's decision on documented diagnostic-name exceptions.
+added. The zero-survivor rule therefore remains unsatisfied. The user subsequently
+authorized publication to main with that recorded result. No mutation exception
+or threshold change was applied. The redundant direct assertion of the saturation
+constant was removed; numeric color-output tests continue to verify its effect.
 
 | Surviving-mutant owner | Count |
 | --- | ---: |

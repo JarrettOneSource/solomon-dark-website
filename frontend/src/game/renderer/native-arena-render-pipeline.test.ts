@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  NATIVE_ARENA_SATURATION,
-  nativeArenaSaturateSample,
-} from './native-arena-render-pipeline.ts'
+import { nativeArenaSaturateSample } from './native-arena-render-pipeline.ts'
 
 function assertRgbaClose(
   actual: readonly number[],
@@ -21,7 +18,6 @@ function assertRgbaClose(
 }
 
 test('mirrors the Arena HLSL separate texture and vertex grey product', () => {
-  assert.equal(NATIVE_ARENA_SATURATION, 0.65)
   assertRgbaClose(
     nativeArenaSaturateSample(
       [1, 1, 1, 1],
@@ -68,4 +64,3 @@ test('keeps identity saturation, grayscale invariants, and zero alpha finite', (
   assert.equal(transparent.every(Number.isFinite), true)
   assert.equal(transparent[3], 0)
 })
-
