@@ -11,6 +11,13 @@ defines where recovered behavior lives in the clean rebuild.
 
 ## Product topology
 
+Completed Boneyard runs and retired run segments have a separate, private
+[diagnostic archive](run-diagnostic-archives.md). The authoritative host retains
+whole-world checkpoints independently of owner saves; the process runner owns
+asynchronous storage and retention. Browser performance reports correlate by
+run ID through the existing diagnostic storage. This does not change gameplay,
+save continuation, leaderboard eligibility, or admission ownership.
+
 Every play mode is an authoritative client/server session. "Peer hosted" means
 that a player's desktop owns the authoritative server process; it does not mean
 distributed or lockstep simulation.

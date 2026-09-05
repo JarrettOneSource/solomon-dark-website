@@ -10,6 +10,8 @@ frontend/dist/
 
 # Runtime data (db, uploads, saves)
 backend/data/
+*.sdrrun.gz
+*.sdrrun.gz.*
 backend/wwwroot/
 runtime/ml-training/
 

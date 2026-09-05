@@ -43,6 +43,7 @@ import {
   verifyPartyRecoveryClaim,
 } from './party-recovery-claim.ts'
 import { startGameSocialBroker } from './game-social-broker.ts'
+import type { RunArchive } from './run-archive.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 export const GAME_HUB_PATH = '/game-hub'
@@ -55,6 +56,7 @@ const JOIN_INTENT_TIMEOUT_MS = 10 * 60 * 1000
 const MAX_PROVISION_REQUEST_BYTES = 48 * 1024 * 1024
 
 export interface GameSessionSupervisorOptions {
+  archiveRun?: (archive: RunArchive) => void
   adminSecret: string
   allowedOrigins: readonly string[]
   boneyards?: BoneyardCatalog
@@ -191,6 +193,7 @@ export async function startGameSessionSupervisor(
     return ticket.expiresAt > performance.now() ? ticket.admission : null
   }
   const hubHost = await startGameHost({
+    archiveRun: options.archiveRun,
     authentication: { kind: 'tickets', claim: claimHubTicket },
     heartbeatIntervalMs,
     log: options.log,
@@ -1062,6 +1065,7 @@ export async function startGameSessionSupervisor(
       expiresAt: performance.now() + unclaimedTimeoutMs,
     })
     const sessionHost = await startGameHost({
+      archiveRun: options.archiveRun,
       authentication: {
         kind: 'tickets',
         claim: candidate => claimHostTicket(tickets, candidate),

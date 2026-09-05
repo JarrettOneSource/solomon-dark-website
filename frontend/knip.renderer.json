@@ -1,6 +1,18 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["src/main.tsx!", "src/game/host/run-game-host.ts!"],
-  "project": ["src/**/*.ts!", "src/**/*.tsx!", "!src/**/*.test.ts!"],
+  "entry": [
+    "src/main.tsx!",
+    "src/game/host/run-game-host.ts!",
+    "src/game/host/run-game-session-supervisor.ts!",
+    "tools/replay-run-archive.mjs!"
+  ],
+  "paths": {"/src/*": ["./src/*"]},
+  "project": [
+    "src/**/*.ts!",
+    "src/**/*.tsx!",
+    "tools/replay-run-archive.mjs!",
+    "tools/render-run-archive.mjs!",
+    "!src/**/*.test.ts!"
+  ],
   "includeEntryExports": true
 }

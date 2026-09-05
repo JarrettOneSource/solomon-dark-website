@@ -1,5 +1,6 @@
 import { GAME_PROTOCOL_VERSION } from '../protocol/game-protocol.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'
+import type { BrowserRunPerformance } from './run-performance.ts'
 
 export type GameDiagnosticLevel = 'error' | 'info' | 'warning'
 
@@ -21,6 +22,7 @@ export interface BrowserGameDiagnosticFailure {
 }
 
 export interface BrowserGameDiagnosticReport {
+  performance?: BrowserRunPerformance
   clientLogId: string
   capturedAtUtc: string
   protocolVersion: number
@@ -66,6 +68,7 @@ interface GameClientDiagnosticsOptions {
 }
 
 interface BrowserGameDiagnosticSubmissionOptions {
+  keepalive?: boolean
   request?: typeof fetch
   token?: string | null
 }
@@ -200,9 +203,11 @@ export async function submitBrowserGameDiagnostics(
     'x-solomon-dark-diagnostics': 'browser-game',
   })
   if (options.token) headers.set('authorization', `Bearer ${options.token}`)
-  const response = await (options.request ?? fetch)('/api/game/diagnostics', {
+  const endpoint = report.performance ? '/api/game/run-performance' : '/api/game/diagnostics'
+  const response = await (options.request ?? fetch)(endpoint, {
     method: 'POST',
     credentials: 'same-origin',
+    keepalive: options.keepalive ?? false,
     headers,
     body: JSON.stringify(report),
   })

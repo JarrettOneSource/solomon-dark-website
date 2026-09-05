@@ -122,6 +122,7 @@ import {
   type GameServerLogSink,
 } from './game-server-logger.ts'
 import { GameSaveCheckpointScheduler } from './game-save-checkpoint-scheduler.ts'
+import { RunArchiveRecorder, type RunArchive } from './run-archive.ts'
 import {
   deriveGameActivityEvents,
   projectGameActivity,
@@ -287,6 +288,7 @@ interface PartyModRuntimeScope {
 }
 
 export interface GameHostOptions {
+  archiveRun?: (archive: RunArchive) => void
   allowedOrigins?: readonly string[]
   authentication: GameHostAuthentication
   boneyards?: BoneyardCatalog
@@ -677,6 +679,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     })),
   }
   const sharedHub = options.sharedHub ?? false
+  const runArchives = options.archiveRun ? new RunArchiveRecorder({
+    content,
+    revision: partyRecoveryRevision ?? '0'.repeat(40),
+    sessionId: String(options.logContext?.sessionId ?? 'standalone'),
+    write: options.archiveRun,
+  }) : null
   const sessionKind = options.sessionKind ?? (sharedHub ? 'global-hub' : 'standalone')
   const socialHostId = options.socialHostId
     ?? `game-host-${randomBytes(18).toString('base64url')}`
@@ -1927,6 +1935,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           replacedConnection: replacedClient !== null,
           role: authenticated.role,
         }
+        const archiveBoneyard = loadedBoneyardForPlayer(playerId)
+        if (archiveBoneyard) runArchives?.checkpoint(connectedState, archiveBoneyard)
         logGameServerEvent(
           options.log,
           'game-host',
@@ -3502,6 +3512,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
       }
       const disconnectedState = stateForClient(client)
+      const archiveBoneyard = loadedBoneyardForPlayer(client.playerId)
+      if (!closed && archiveBoneyard) runArchives?.checkpoint(disconnectedState, archiveBoneyard)
       const disconnectedRunId = disconnectedState.world.kind === 'boneyard'
         ? disconnectedState.run.runId
         : null
@@ -3767,6 +3779,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             memorialPlayerProfiles(),
             memorialEligiblePlayerIds(),
             options.onMemorialStateChanged,
+            runArchives ? observation => runArchives.observe({
+              ...observation,
+              behindMs: Math.max(0, performance.now() - observation.tickMs - nextTickAt),
+            }) : undefined,
           )
           state = sharedWorlds.hub
           sampleMlBotTelemetry()
@@ -3900,10 +3916,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           enemySpawnIntents.push(...applied.enemySpawnIntents)
           if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
         }
+        const archiveBefore = state
+        const simulationStartedAt = runArchives ? performance.now() : 0
         state = stepGameSimulationTick(state, inputs, {
           collegeIntroReadyPlayerIds,
           enemySpawnIntents,
           extensions: privateModHost?.extensions,
+        })
+        if (loadedBoneyard) runArchives?.observe({
+          before: archiveBefore,
+          after: state,
+          inputs,
+          loadedBoneyard,
+          enemySpawnIntents,
+          tickMs: performance.now() - simulationStartedAt,
+          behindMs: Math.max(0, simulationStartedAt - nextTickAt),
         })
         const pendingEvents = pendingLuaEvents.splice(0)
         if (privateModHost) {
@@ -4011,6 +4038,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'The authoritative simulation tick failed.',
         logDetails({ playerCount: clients.size, serverTick: state.tick, ...gameServerErrorDetails(error) }),
       )
+      runArchives?.close('server-error')
       for (const socket of clients.keys()) {
         disconnectCauses.set(socket, {
           reason: 'authoritative simulation failure',
@@ -4025,6 +4053,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }, 2)
   const partyAccessTimer = setInterval(() => {
     if (!closed && prunePartyAccess()) broadcastPartyState()
+    runArchives?.retain(new Set(sharedWorlds
+      ? sharedWorlds.runs.map(run => run.loadedBoneyard.runId)
+      : state.world.kind === 'boneyard' ? [state.world.runId] : []))
   }, 1_000)
   partyAccessTimer.unref()
 
@@ -4416,6 +4447,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     loadedBoneyard = selected
     const previousState = state
     state = enterBoneyardWorld(state, selected)
+    runArchives?.checkpoint(state, selected)
     if (!await preparePrivateNavigation(state)) return
     if (closed || !clients.has(socket) || loadedBoneyard?.runId !== selected.runId) return
 
@@ -7176,6 +7208,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         publishPlayerActivity(leader, 'searching-solomon')
       }
       let run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
+      runArchives?.checkpoint(run.state, selected)
       if (run.state.world.kind !== 'boneyard') {
         throw new Error('started party run did not enter a Boneyard')
       }
@@ -7407,6 +7440,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     async close(reason: GameHostCloseReason = 'server-shutdown') {
       if (closed) return
       closed = true
+      if (sharedWorlds) {
+        for (const run of sharedWorlds.runs) runArchives?.checkpoint(run.state, run.loadedBoneyard)
+      } else if (loadedBoneyard) runArchives?.checkpoint(state, loadedBoneyard)
+      runArchives?.close()
       clearInterval(timer)
       saveCheckpointScheduler.close()
       deploymentRestart?.resolveReady()

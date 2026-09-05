@@ -13,6 +13,7 @@ import type { GameSaveIntent } from './save/game-save-contract.ts'
 import type { PlayerSocialProfile } from './protocol/party-state.ts'
 import type { GameConnectionFailure } from './client/game-connection-failure.ts'
 import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
+import { attachRunPerformanceCapture } from './client/run-performance.ts'
 import {
   DEFAULT_GAME_ONLINE_PREFERENCES,
   type GameOnlinePreferences,
@@ -123,6 +124,9 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
       : {}),
   })
   options.onProgress?.('receiving_host_checkpoint')
+  if (typeof window !== 'undefined' && options.endpoint.kind === 'remote' && options.diagnostics) {
+    attachRunPerformanceCapture(session, transport, options.diagnostics)
+  }
   options.diagnostics?.info(
     'connection.ready',
     'The game session is ready.',

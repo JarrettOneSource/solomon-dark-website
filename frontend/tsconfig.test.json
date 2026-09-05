@@ -5,6 +5,8 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
+    "src/game/host/run-archive.test.ts",
+    "src/game/client/run-performance.test.ts",
     "src/boneyard/model.ts",
     "src/boneyard/parser.ts",
     "src/boneyard/parser.test.ts",

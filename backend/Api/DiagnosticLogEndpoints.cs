@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SolomonDarkRevived.Data;
@@ -20,6 +21,10 @@ public static class DiagnosticLogEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("diagnostic-logs")
             .WithMetadata(new RequestSizeLimitAttribute(BrowserGameRequestLimit));
+        app.MapPost("/api/game/run-performance", SubmitBrowserGameAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting("run-performance")
+            .WithMetadata(new RequestSizeLimitAttribute(64 * 1024));
     }
 
     private static async Task<IResult> SubmitBrowserGameAsync(
@@ -64,6 +69,10 @@ public static class DiagnosticLogEndpoints
         if (validationError is not null)
         {
             return ApiErrors.BadRequest(validationError);
+        }
+        if (context.Request.Path == "/api/game/run-performance" && report!.Performance is null)
+        {
+            return ApiErrors.BadRequest("Run performance samples are required.");
         }
 
         var clientLogId = report!.ClientLogId.ToString("D");
@@ -122,7 +131,7 @@ public static class DiagnosticLogEndpoints
                 "Stored browser game diagnostics {DiagnosticLogId} for session {GameSessionId} after {FailureCode}.",
                 publicId,
                 report.SessionId ?? "none",
-                report.Failure!.Code);
+                report.Failure?.Code ?? "run-performance");
             return Results.Json(ToReceipt(log), statusCode: StatusCodes.Status201Created);
         }
         catch (Exception exception)
@@ -159,12 +168,20 @@ public static class DiagnosticLogEndpoints
         {
             return "Browser game diagnostic environment metadata is invalid.";
         }
-        if (report.Failure is null ||
-            !IsBrowserEventName(report.Failure.Code, 64) ||
+        if (report.Performance is not null && !IsRunPerformance(report.Performance))
+        {
+            return "Browser run performance metadata is invalid.";
+        }
+        if (report.Failure is null && report.Performance is null)
+        {
+            return "Browser game diagnostics require a failure or run performance.";
+        }
+        if (report.Failure is not null &&
+            (!IsBrowserEventName(report.Failure.Code, 64) ||
             !IsBrowserText(report.Failure.Explanation, 512) ||
             !IsOptionalBrowserText(report.Failure.TechnicalDetail, 2_048) ||
             report.Failure.TransportCode is < 1 or > 4_999 ||
-            !IsOptionalBrowserText(report.Failure.TransportReason, 512))
+            !IsOptionalBrowserText(report.Failure.TransportReason, 512)))
         {
             return "Browser game diagnostic failure metadata is invalid.";
         }
@@ -245,8 +262,32 @@ public static class DiagnosticLogEndpoints
         value.All(character =>
             !char.IsControl(character) || character is '\r' or '\n' or '\t');
 
-    private static bool IsShortValue(string? value, int maximumLength) =>
-        !string.IsNullOrWhiteSpace(value) && value.Length <= maximumLength;
+    private static bool IsRunPerformance(BrowserRunPerformance performance) =>
+        performance.RunId is { Length: 32 } && performance.RunId.All(char.IsAsciiHexDigit) &&
+        IsBrowserEventName(performance.PlayerId, 128) &&
+        (performance.Revision is null ||
+            (performance.Revision.Length == 40 && performance.Revision.All(char.IsAsciiHexDigit))) &&
+        performance.EndReason is "game-over" or "player-died" or "world-ended" or "connection-closed" or "page-hidden" &&
+        performance.Width is > 0 and <= 32768 && performance.Height is > 0 and <= 32768 &&
+        double.IsFinite(performance.PixelRatio) && performance.PixelRatio is > 0 and <= 32 &&
+        performance.Samples is { Length: > 0 and <= 60 } &&
+        performance.Samples.All(IsRunPerformanceSample);
+
+    private static bool IsRunPerformanceSample(RunPerformanceSample? sample) =>
+        sample is not null &&
+        sample.ServerTick is >= 0 and <= 9_007_199_254_740_991 &&
+        IsRunDuration(sample.DurationMs) && sample.Frames is >= 0 and <= 1000 &&
+        sample.SlowFrames >= 0 && sample.SlowFrames <= sample.Frames &&
+        IsRunDuration(sample.MaximumFrameMs) && IsRunDuration(sample.FrameP95Ms) &&
+        sample.FrameP95Ms <= sample.MaximumFrameMs &&
+        IsRunDuration(sample.FrameP99Ms) && sample.FrameP99Ms >= sample.FrameP95Ms &&
+        sample.FrameP99Ms <= sample.MaximumFrameMs &&
+        sample.Snapshots is >= 0 and <= 10000 && IsRunDuration(sample.MaximumSnapshotGapMs) &&
+        sample.MessageCharacters is >= 0 and <= 1_000_000_000 &&
+        (sample.PingMs is null || IsRunDuration(sample.PingMs.Value));
+
+    private static bool IsRunDuration(double value) =>
+        double.IsFinite(value) && value is >= 0 and <= 86_400_000;
 
 
     private static object ToReceipt(DiagnosticLog log) => new
@@ -266,7 +307,19 @@ public static class DiagnosticLogEndpoints
         string? UserAgent,
         int DroppedEntries,
         BrowserGameDiagnosticFailure? Failure,
-        BrowserGameDiagnosticEntry[]? Entries);
+        BrowserGameDiagnosticEntry[]? Entries,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        BrowserRunPerformance? Performance);
+
+    private sealed record BrowserRunPerformance(
+        string? RunId, string? PlayerId, string? Revision, string? EndReason,
+        int Width, int Height, double PixelRatio, RunPerformanceSample[]? Samples);
+
+    private sealed record RunPerformanceSample(
+        long ServerTick, double DurationMs, int Frames, int SlowFrames,
+        double MaximumFrameMs, double FrameP95Ms, double FrameP99Ms, int Snapshots,
+        double MaximumSnapshotGapMs, long MessageCharacters, double? PingMs,
+        bool Hidden, bool Paused);
 
     private sealed record BrowserGameDiagnosticFailure(
         string? Code,

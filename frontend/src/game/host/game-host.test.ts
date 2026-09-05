@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import type { RunArchive } from './run-archive.ts'
 import { createRequire } from 'node:module'
 import test, { type TestContext } from 'node:test'
 
@@ -1101,7 +1102,9 @@ test('expired external join requests disappear from the leader projection', asyn
 })
 
 test('shared-host Global crosses Hub and Boneyard while match chat stays run-scoped', async (context) => {
+  const archives: RunArchive[] = []
   const host = await startGameHost({
+    archiveRun: archive => { archives.push(archive) },
     authentication: SHARED_HUB_AUTHENTICATION,
     sharedHub: true,
     snapshotRate: 100,
@@ -1327,6 +1330,16 @@ test('shared-host Global crosses Hub and Boneyard while match chat stays run-sco
     message.type === 'server-chat'
     && message.text === 'Cassia has left the game.'
   )), true)
+  await host.close()
+  assert.equal(archives.length, 2)
+  const memberships = archives.map(archive => (
+    archive.finalState.playerEntities.identities.map(player => player.playerId).sort()
+  )).sort((first, second) => first.length - second.length)
+  assert.deepEqual(memberships, [
+    [outsider.welcome.playerId],
+    [first.welcome.playerId, second.welcome.playerId].sort(),
+  ])
+  assert.equal(JSON.stringify(archives).includes('Boneyard route'), false)
 })
 
 test('activity and Global preferences gate both emission and receipt across disconnects', async (context) => {
@@ -1706,6 +1719,26 @@ test('every crafted Hub gameplay-pause source is rejected without suspending the
   await waitFor(() => host.state().tick >= initialTick + 5)
 
   assert.deepEqual(pauseMessages, [])
+})
+
+for (const sharedHub of [false, true]) test(`archives preserve ${sharedHub ? 'shared' : 'private'} runs closed during loading`, async context => {
+  const archives: RunArchive[] = []
+  const host = await startGameHost({
+    archiveRun: archive => { archives.push(archive) },
+    authentication: sharedHub ? SHARED_HUB_AUTHENTICATION : SHARED_AUTHENTICATION,
+    sharedHub,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, sharedHub ? 'ticket-first' : 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId: 'default-random' }))
+  await loaded
+  await host.close()
+  assert.equal(archives.length, 1)
+  assert.equal(archives[0]?.performance.tickCount, 0)
+  assert.equal(archives[0]?.lastAlive?.state.world.kind, 'boneyard')
+  assert.equal(archives[0]?.lastAlive?.state.playerEntities.identities[0]?.playerId, client.welcome.playerId)
 })
 
 test('initial multiplayer Boneyard waits for every renderer then enters resume progress', async (context) => {
@@ -4868,7 +4901,12 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
 })
 
 test('host retains the profile and removes only the continuation on Game Over', async (context) => {
-  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  const archives: RunArchive[] = []
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    archiveRun: archive => { archives.push(archive) },
+    snapshotRate: 100,
+  })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   context.after(() => client.socket.close())
@@ -4905,6 +4943,9 @@ test('host retains the profile and removes only the continuation on Game Over', 
     'Staff',
   ])
   assert.equal(host.state().run.phase, 'game-over')
+  assert.equal(archives.length, 1)
+  assert.equal(archives[0]?.endReason, 'game-over')
+  assert.equal(archives[0]?.loadedBoneyard.runId, host.loadedBoneyard()?.runId)
 
   let laterProgress = 0
   const countProgress = (data: WebSocket.RawData) => {

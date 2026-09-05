@@ -147,3 +147,9 @@ _Avoid_: polling callback, collision patch
 **Portal**:
 A trigger whose accepted intent transitions a player or party to a destination room or scene.
 _Avoid_: teleporter script, raw region switch
+
+**Run Diagnostic Archive**:
+A private capture of a Boneyard run's whole authoritative world and performance
+measurements, used to reproduce a captured workload. It is separate from a
+player-owned continuation save or a recording of the entire match.
+_Avoid_: cloud save, full replay, player backup

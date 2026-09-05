@@ -802,7 +802,42 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
 
 
-    def test_browser_game_diagnostics_are_consent_driven_bounded_and_guest_capable(self) -> None:
+    def test_run_performance_accepts_error_free_runs_and_rejects_unbounded_samples(self) -> None:
+        captured_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        sample = {
+            "serverTick": 420, "durationMs": 1000, "frames": 59, "slowFrames": 2,
+            "maximumFrameMs": 88, "frameP95Ms": 35, "frameP99Ms": 88, "snapshots": 20,
+            "maximumSnapshotGapMs": 60, "messageCharacters": 16000,
+            "pingMs": 50, "hidden": False, "paused": False,
+        }
+        report = {
+            "clientLogId": str(uuid.uuid4()), "capturedAtUtc": captured_at,
+            "protocolVersion": 84, "pageUrl": "https://solomondarker.com/game",
+            "sessionId": "shared-hub", "online": True, "userAgent": "Contract Browser/1.0",
+            "droppedEntries": 0, "failure": None,
+            "entries": [{"atUtc": captured_at, "level": "info", "event": "run.performance",
+                         "message": "Run performance captured.", "detail": None}],
+            "performance": {
+                "runId": "a" * 32, "playerId": "player-1", "revision": "b" * 40,
+                "endReason": "game-over", "width": 1600, "height": 900,
+                "pixelRatio": 1, "samples": [sample],
+            },
+        }
+        headers = {"X-Solomon-Dark-Diagnostics": "browser-game"}
+        status, receipt = self.request("POST", "/api/game/run-performance", headers=headers, json_body=report)
+        self.assertEqual(status, 201, receipt)
+        death_report = {**report, "clientLogId": str(uuid.uuid4()),
+                        "performance": {**report["performance"], "endReason": "player-died"}}
+        status, _ = self.request("POST", "/api/game/run-performance", headers=headers, json_body=death_report)
+        self.assertEqual(status, 201)
+        for samples in ([], [sample] * 61, [{**sample, "frameP95Ms": 100}],
+                        [{**sample, "maximumSnapshotGapMs": -1}]):
+            invalid = {**report, "clientLogId": str(uuid.uuid4()),
+                       "performance": {**report["performance"], "samples": samples}}
+            status, _ = self.request("POST", "/api/game/run-performance", headers=headers, json_body=invalid)
+            self.assertEqual(status, 400)
+
+    def test_manual_browser_error_diagnostics_are_bounded_and_guest_capable(self) -> None:
         client_log_id = str(uuid.uuid4())
         captured_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         report = {

@@ -46,6 +46,7 @@ import {
   type PartySystemState,
 } from './party-system.ts'
 import { createGameSnapshot } from './game-snapshot.ts'
+import type { RunArchiveObservation } from './run-archive.ts'
 
 export interface SharedPartyRun {
   readonly loadedBoneyard: LoadedBoneyard
@@ -456,6 +457,7 @@ export function stepSharedGameWorlds(
   memorialProfiles: ReadonlyMap<PlayerId, HubMemorialPlayerProfile> = new Map(),
   memorialEligiblePlayerIds: ReadonlySet<PlayerId> | null = null,
   onMemorialStateChanged?: (state: HubMemorialState) => void,
+  onRunStep?: (observation: RunArchiveObservation) => void,
 ): SharedGameWorldsState {
   if (state.hub.world.kind !== 'hub') {
     throw new Error('shared-game Hub owner is not a Hub world')
@@ -470,9 +472,11 @@ export function stepSharedGameWorlds(
   const runs = state.runs.map((run): SharedPartyRun => {
     if (pausedPartyIds.has(run.partyId)) return run
     const previous = run.state
+    const stepStartedAt = onRunStep ? performance.now() : 0
+    const runInputs = inputsForState(previous, inputs)
     let next = stepGameSimulationTick(
       previous,
-      inputsForState(previous, inputs),
+      runInputs,
       {
         ...(collegeIntroReadyPlayerIds === null ? {} : { collegeIntroReadyPlayerIds }),
         enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [],
@@ -530,6 +534,15 @@ export function stepSharedGameWorlds(
         }
       }
     }
+    onRunStep?.({
+      before: previous,
+      after: next,
+      inputs: runInputs,
+      loadedBoneyard: run.loadedBoneyard,
+      enemySpawnIntents: enemySpawnIntents.get(run.partyId),
+      tickMs: performance.now() - stepStartedAt,
+      behindMs: 0,
+    })
     return { ...run, state: next }
   })
   const nextState = {

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
@@ -13,6 +14,7 @@ import { readDeployedRevision } from './deployed-revision.ts'
 import { MlBotPolicyInferenceWorker } from './ml-bot-host-controller.ts'
 import { createRuntimeEventPublisher } from './runtime-event-publisher.ts'
 import { openGameMemorialPersistence } from './game-memorial-persistence.ts'
+import { RunArchiveStore } from './run-archive-store.ts'
 
 const log = createJsonGameServerLogSink(
   parseGameServerLogLevel(process.env.SDR_GAME_LOG_LEVEL),
@@ -42,6 +44,19 @@ process.on('warning', (warning) => {
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
 const revision = await readDeployedRevision()
 const memorial = openGameMemorialPersistence(requiredEnvironment('SDR_GAME_MEMORIAL_PATH'))
+const runArchives = new RunArchiveStore(join(
+  dirname(requiredEnvironment('SDR_GAME_MEMORIAL_PATH')),
+  'run-archives',
+))
+const archiveError = (error: Error): void => logGameServerEvent(
+  log, 'session-supervisor', 'error', 'run_archive.failed',
+  'A run diagnostic archive operation failed.', gameServerErrorDetails(error),
+)
+await runArchives.prune().catch(archiveError)
+const archiveRetentionTimer = setInterval(() => {
+  void runArchives.prune().catch(archiveError)
+}, 60 * 60 * 1_000)
+archiveRetentionTimer.unref()
 const runtimeEventEndpoint = process.env.SDR_RUNTIME_EVENT_ENDPOINT?.trim() || ''
 const runtimeEventSecret = process.env.SDR_RUNTIME_EVENT_SECRET?.trim() || ''
 if (Boolean(runtimeEventEndpoint) !== Boolean(runtimeEventSecret)) {
@@ -58,6 +73,15 @@ const allowedOrigins = requiredEnvironment('SDR_GAME_ALLOWED_ORIGINS')
   .map((origin) => origin.trim())
   .filter(Boolean)
 const supervisor = await startGameSessionSupervisor({
+  archiveRun: archive => {
+    void runArchives.save(archive).then(receipt => {
+      logGameServerEvent(log, 'session-supervisor', 'info', 'run_archive.saved',
+        'A completed run diagnostic archive was saved.', {
+          ...receipt, runId: archive.runId, sessionId: archive.sessionId,
+          endReason: archive.endReason,
+        })
+    }).catch(archiveError)
+  },
   adminSecret,
   allowedOrigins,
   deploymentSaveTimeoutMs: parseInteger(
@@ -105,6 +129,8 @@ async function stop(): Promise<void> {
   if (stopping) return
   stopping = true
   await supervisor.close()
+  clearInterval(archiveRetentionTimer)
+  await runArchives.close()
   await runtimeEvents?.close()
   await mlBotPolicy.close()
   process.exitCode = 0
