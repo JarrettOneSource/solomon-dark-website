@@ -392,3 +392,97 @@ equipment tests, the existing no-melee Wand contact regression, generated
 atlas checks, and the complete Mac `./scripts/validate.sh` gate on the same
 candidate. Record browser page/console/failed-response arrays and the final
 changed-file manifest match here.
+
+### 2026-09-05 implementation and validation receipt
+
+The implementation candidate is
+`5378997c7326a324f39daeb7085d9d9839367a73`, based on main
+`1c75c829813b6c9f54bec7f702bd174db636383d`. This receipt is a subsequent
+documentation-only change. All 66 changed files matched byte-for-byte in the
+authoring worktree and the detached Mac acceptance worktree; the manifest's
+SHA-256 was
+`3a2d223232ca76310ff89c9708a1eb7dfd6c74dae70ae9c2f53e8826df59aa09`.
+
+Inventory rendering, selection, hover, and dragging now share the occupied-hand
+rule. The second Wand hand frame stays empty. Living players and equipment
+previews use the recovered Wand banks, fixed-Robe poses, and item colors;
+the empty-Robe case uses the complete native fixed bank. Primary spell
+authority selects the equipped weapon's extracted emitter. Secondary casting
+replicates the weapon kind and native float32 action progress under protocol
+120, with transient action state discarded when restoring a save. Staff and
+bare-hand behavior keep their separate native contracts, including Wand's
+existing inability to melee.
+
+The inventory action/surface responsibilities and asset extractor were split
+into cohesive owners. The inventory renderer uses main's current typography
+modules and canvas lifecycle. Mod wearable frame selection has one shared
+implementation, and previews consume the equipped living wearable art.
+Obsolete inventory renderer copies and the retired HUD font-subset extraction
+path were removed. The maintained weapon smoke fixture loads the packed
+combat atlas and supplies the current renderer constructor arguments.
+
+Final Mac results:
+
+- `/opt/homebrew/bin/bash ./scripts/validate.sh`: exit 0; 20 Python
+  backend/contract tests and 2,837 Node frontend/desktop tests passed, with
+  zero failures or skips. Backend formatting/build, frontend lint/type checks,
+  production frontend and game-host builds, bundle budget, and production
+  media policy passed. Oxlint reported 10 existing warnings and zero errors.
+- Chrome `152.0.7977.76`, built client and supervisor, protocol
+  `solomon-dark/120`: all eight named Wands occupied one hand; Staff occupied
+  both aliases; Wand drag/unequip/swap, standalone and Fomentius companion
+  Inventory, equipment preview, and Hub travel passed. The journey crossed
+  the native entry gate, approached Solomon, and entered active Boneyard
+  combat. Frost held fixed pose 14; primary casting produced 14/15;
+  Call Leviathan produced 14/15/16; Dampen held 14 through its spin, with 73
+  remaining spin ticks observed. Page errors, console errors, failed requests,
+  and failed responses were all empty. The final journey exited 0 and
+  completed browser, socket, supervisor, server, and temporary-file teardown.
+- `smoke:game:player-weapon`: exit 0; all 1,728 combinations of six Wand
+  selectors, three native Robe styles plus no Robe, 24 headings, and three
+  action poses matched their rendered body/attachment frames. All 1,728 damage
+  overlays used the matching frames. Screenshots were inspected; all error
+  arrays were empty.
+- Two-client Web Lua wearable smoke: exit 0; custom Hat, Robe, and Staff
+  equipped through Inventory and rendered to the observer. The observer image
+  contained 4,713 primary and 934 trim pixels; all five walking poses appeared.
+  Page, console, and failed-response assertions passed.
+- Production Inventory tooltip smoke: exit 0; College and Boneyard covered
+  all nine occupied cells, 27/8 perk variants, overlay pixels, and modal
+  teardown. Page, console, and network error arrays were empty.
+- The focused regression includes every named Wand and all six generated
+  selectors making hostile movement contact without starting melee, emitting
+  a melee transient, or consuming melee RNG. Cast boundary, live Faster
+  Caster, extracted emitter, strict wire decoding, and save restoration
+  assertions run in the canonical gate.
+- The extractor/packed-atlas check passed: 12,067 frames, 100 sheets, three
+  2048-pixel pages. The extractor split was also compared with the original:
+  249 outputs were identical and only the two intended Wand sheets changed
+  before the separate retirement of unused font subsets. Existing Staff
+  extraction differences appeared in both versions; committed Staff art was
+  retained.
+
+Measured quality limits: Oxlint's cyclomatic-complexity rule at maximum 21
+passed for 23 new/refactored TypeScript owners and the selected presentation
+modules, with zero warnings/errors in that scoped run. New owners and the
+substantially reorganized Inventory/extractor files are below 1,000 source
+lines. Existing large simulation, protocol, and save integration files received
+the required wiring changes and remain above that size; this is not a claim
+that every touched file meets the file-size gate. No explicit `any` or
+`unknown` type was introduced in the new owners.
+
+V8 measured `native-player-weapon.ts` and `native-secondary-cast-action.ts` at
+100% lines, branches, and functions. The broader existing
+`hub-inventory-presentation.ts` measured 97.36% lines, 94.83% branches, and
+91.43% functions; `player-character-presentation.ts` measured 100% lines,
+97.59% branches, and 100% functions. Those broader-file gaps remain; full
+statement and browser/UI coverage were not measured. Cognitive complexity,
+Halstead Difficulty, CRAP, mutation, general dead-code/export analysis, and
+duplication analysis remain unmeasured because their analyzers were not
+configured/available. No analyzer dependencies or exclusions were added.
+
+The recovered equipment-presentation members above are implemented and have
+the stated behavioral evidence. The quantitative limitations are separate
+from that parity result. Publication does not deploy or restart production.
+Task-owned captures, raw probes, test outputs, and worktrees are disposable
+after verified publication; the original supplied video is retained.
