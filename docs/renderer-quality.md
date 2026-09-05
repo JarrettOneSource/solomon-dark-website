@@ -1,5 +1,10 @@
 # Renderer quality checks
 
+The [2026-09-05 candidate measurements](Game%20Native%20Parity%20RE/287-2026-08-27-complete-stock-renderer-and-game-wide-vfx-reflection-reopening.md#current-implementation-acceptance--candidate-480bfde6)
+pass every source, coverage, and runtime check. The strict mutation gate remains
+failing with 29 diagnostic-name/label survivors. These are recorded without
+exclusions, and the follow-up has not been pushed to main.
+
 The lighting/material follow-up measures the complete runtime owners listed in
 [`scope.mjs`](../frontend/tools/quality/scope.mjs). The scope includes the four
 original files and their shared batch, surface, and texture-color responsibilities.
@@ -65,7 +70,8 @@ disabled because its command runner cannot track changes to the browser probes.
 The TypeScript checker uses the production tsconfig and its accurate strategy.
 Invalid typed programs remain visible as `CompileError`; they are not counted
 as killed. Stryker 9.6.1 uses Babel 7 and supports the pinned Node 22.17.0;
-Stryker 10's Babel 8 dependency requires Node 22.18.0 or newer.
+Stryker 10's Babel 8 dependency requires at least Node 22.18.0 on the Node 22
+release line.
 All mutation statuses remain visible, including equivalent mutations such as
 changes to required shader diagnostic names. These are not suppressed or
 credited as killed. A surviving mutant still fails the configured strict gate.

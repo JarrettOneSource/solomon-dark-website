@@ -8,7 +8,7 @@ moved during cleanup. This is a quality/tooling follow-up to the already
 recovered native material contract below; shader arithmetic, packed ARGB,
 atlas sampling, painter order, and simulation ownership remain unchanged.
 
-On current base `ad99a4ac`, the initial Mac measurement is 78.93% statements,
+On the initial base `ad99a4ac`, the Mac measurement was 78.93% statements,
 76.76% branches, 70.58% functions, and 80.50% lines. The ground/road surface
 owner has no direct runtime coverage in the selected material tests. jscpd
 reports nine duplicate blocks, 80 duplicate lines / 733 duplicate tokens.
@@ -22,8 +22,8 @@ identical geometry layout, vertex packing, packed-color multiplication,
 texture-alpha flag and shader lifetime. Fixed and Arena callers retain their
 distinct fragment programs and renderer setup; callers use one canonical color
 registry instead of storing identical Staff colors twice. Surface construction
-will likewise share its actual mesh/buffer responsibility. Removed test-only
-exports must not become alternate production implementations. The existing GPU
+shares its mesh/buffer responsibility. Unused test-only exports and their
+alternate CPU implementations were removed. The existing GPU
 pixel seam, source upload behavior, retained resource lifetime, and surface
 updates are the regression interfaces. Every moved production file remains in
 the analyzer scope, with no metric exclusions or weakened thresholds.
@@ -73,6 +73,109 @@ The shared batcher now uses Pixi's `Batcher` base directly; the fully overridden
 Analyzer definitions, pinned primary sources, callable boundaries, and the
 line-coverage CRAP variant are documented in
 [`renderer-quality-analyzers-research.md`](../renderer-quality-analyzers-research.md).
+
+### Current implementation acceptance — candidate `480bfde6`
+
+The configured analyzers measured all seven runtime owners and 71 static
+implementation units, including 62 explicit callables. No corresponding gate
+is left unmeasured for this TypeScript scope.
+
+| Source gate | Measured result | Required result |
+| --- | --- | --- |
+| Cyclomatic complexity | Maximum **18** | `< 22` |
+| Cognitive complexity | Maximum **10** | `< 22` |
+| Halstead Difficulty | Maximum **34.74545454545454** | `< 80` |
+| Handwritten source size | Largest file **291 lines** | `< 1000` |
+| Statements | **343 / 343**, 100% | 100% |
+| Branches | **84 / 84**, 100% | 100% |
+| Functions | **62 / 62**, 100% | 100% |
+| Lines | **324 / 324**, 100% | 100% |
+| CRAP, line-coverage variant | Maximum **18** | `< 25` |
+| Scoped Knip findings | **0** | 0 |
+| jscpd duplicate blocks | **0** | 0 |
+| Explicit `any` / `unknown` | **0 / 0** | 0 |
+
+Coverage combines the 16 renderer Node cases with the real browser/GPU probes.
+All four analyzer contract tests passed. Mutation results remain a separate,
+strict gate; the configuration does not suppress equivalent diagnostic-name
+mutations. The [measurement guide](../renderer-quality.md) defines each tool's
+scope, outputs, and reproduction commands.
+
+The complete Mac `./scripts/validate.sh` run passed the backend, 20 Python
+contracts/integration tests, frontend and desktop suites, lint/boundary checks,
+TypeScript checks, production builds, bundle budget, and media policy. It
+exited **1 solely because the strict mutation gate failed**:
+
+| Mutation result | Count |
+| --- | ---: |
+| Killed by tests | **301** |
+| Timed out | **1** |
+| Rejected by TypeScript | **122** |
+| Survived | **29** |
+| Uncovered / ignored / runtime errors | **0 / 0 / 0** |
+
+The valid-mutant score is **302 / 331 = 91.24%**. Review of every survivor
+found **19 shader/program/bit diagnostic-name changes** and **10 buffer or
+scene-label changes**, including deletion of label-only options objects. No
+remaining survivor changes the sampled rendering arithmetic or the exercised
+resource-lifecycle behavior. The scene labels occur only at their declarations
+in production, and Pixi's shader names supply diagnostic source labels rather
+than shader operations. The configuration keeps all 29 as survivors; no
+mutation exclusions, suppressed operators, or synthetic label assertions were
+added. The zero-survivor rule therefore remains unsatisfied, and main publication
+is pending the user's decision on documented diagnostic-name exceptions.
+
+| Surviving-mutant owner | Count |
+| --- | ---: |
+| Building surface | 2 |
+| Arena pipeline | 8 |
+| Ground/roads surface | 6 |
+| Fixed-function pipeline | 7 |
+| Shared batch material | 3 |
+| Staff attachment | 3 |
+
+The complete JSON/HTML mutation report remains in the generated report
+directory. SHA-256 receipts for this exact candidate are:
+
+- Canonical validation log: `ee98625aa9ba084c8ef9dfd6662da996a40888488163b7468cfa97ed79f18f3f`.
+- Aggregate quality JSON: `1d7922dea34f4eafb4aca06bdc72d743f7e7fd4cf994a53e3d5fea10c6a22a9c`.
+- Complete mutation JSON: `a4456483c66b7c5cf5d4a3fd3260184c8e7d9381a1531a6e12eb01351cf45b7c`.
+
+The exact committed candidate was transferred to the Mac after integration on
+`84e32576`. Its production build passed, including the frontend and game host;
+the game entry is `Game-BMiTz6BV.js`, **252,765 raw / 76,595 gzip bytes**, within
+the configured bundle budget.
+
+Built `/game` acceptance entered the Water discipline and the Boneyard through
+the normal UI. Rank-one and rank-eleven casts rendered **49 / 237 / 245**
+particle records in the sampled frames. The wall trial observed **4,848**
+contacts and **3,651** splays; the grave trials had no contacts. The three loop
+audio starts each stopped, and page, console, response, request, and wire error
+arrays were empty. The inspected wall frame shows the expected floor lighting,
+water plume, and collision spray. This uses the production bundle and the real
+localhost game host with a deterministic test arena.
+The acceptance log SHA-256 is
+`5982eed683b85725c6fc239e62880a2c3b4eca3aaeb5d49859037bc7fa00796d`;
+the inspected frame is
+`6f3b98d31d8b3e7897a69c9b4f4d49e3205890758ec74413b73860c11cbeee64`.
+
+The isolated, warmed material benchmark ran at **1600×900** on
+**ANGLE Metal / Apple M2**, with 40 warmup frames and three-second measurement
+intervals per phase. These are JavaScript render-submission times and observed
+animation-frame pacing, not GPU timer-query durations.
+
+| Phase | Meshes | Submission p50 / p95 / p99 / max, ms | Frame-gap p95 / max, ms |
+| --- | ---: | --- | --- |
+| Baseline | 64 | 0.4 / 0.6 / 0.7 / 0.7 | 16.8 / 16.8 |
+| Stress | 4,096 | 1.9 / 2.0 / 2.3 / 3.0 | 16.8 / 16.8 |
+| Reordered each frame | 4,096 | 2.2 / 2.3 / 2.5 / 2.5 | 16.8 / 16.8 |
+| Restored baseline | 64 | 0.3 / 0.4 / 0.5 / 0.5 | 16.7 / 16.8 |
+
+Each phase recorded **zero** new buffer, program, or texture allocations during
+measurement and no observed long tasks. The benchmark had no concurrent
+mutation campaign. Full analyzer results and publication status are recorded
+separately from this runtime acceptance. The measurement log SHA-256 is
+`80e886c494460459427c4f5a13f8b97925f9dd31185bbfb69ae2529c3c171d9a`.
 
 ## 2026-09-04 — Lighting, shadows, and particle material audit
 
