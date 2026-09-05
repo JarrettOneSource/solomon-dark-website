@@ -127,6 +127,16 @@ authorized publication to main with that recorded result. No mutation exception
 or threshold change was applied. The redundant direct assertion of the saturation
 constant was removed; numeric color-output tests continue to verify its effect.
 
+The subsequent test-value audit traced that CPU color helper's consumer one
+level further. `nativeWaterMeshComposite` was itself used only by a test, so
+both it and `nativeArenaSaturateSample` duplicated shader arithmetic without
+exercising the live renderer. Both unused helpers, their exclusive RGBA type,
+and the three tests of those helpers were removed. The Water-run label-only
+assertion now checks the actual child count; its geometry, UV, painter-order,
+reuse, and input-contract assertions remain. The independent GPU pixel tests
+and built Water-particle acceptance provide rendering evidence. Shader
+operations and the live Water implementation are unchanged by this removal.
+
 | Surviving-mutant owner | Count |
 | --- | ---: |
 | Building surface | 2 |

@@ -26,11 +26,7 @@ import {
   waterFrostJetPlan,
   type WaterFrostJetPlan,
 } from '../core-kernels/primary-spell-water.ts'
-import {
-  NATIVE_ARENA_SATURATION,
-  nativeArenaSaturateSample,
-  type NativeArenaRgba,
-} from './native-arena-render-pipeline.ts'
+import { NATIVE_ARENA_SATURATION } from './native-arena-render-pipeline.ts'
 import {
   NATIVE_AIR_WATER_SPRITES,
   nativeWaterAuraVisualPlan,
@@ -371,33 +367,6 @@ export function isNativeWaterMeshActorState(
   return state.kind === 'water-aura'
     || state.kind === 'water-hail'
     || (state.kind === 'water' && waterFrostJetKind(state.id, state.underpowered) === 'normal')
-}
-
-export function nativeWaterMeshComposite(
-  background: NativeArenaRgba,
-  texture: NativeArenaRgba,
-  tint: NativeArenaRgba,
-  additive: boolean,
-  texturePremultiplied: boolean,
-): NativeArenaRgba {
-  const sampled: NativeArenaRgba = texturePremultiplied && texture[3] > 0
-    ? [texture[0] / texture[3], texture[1] / texture[3], texture[2] / texture[3], texture[3]]
-    : texture
-  const color = nativeArenaSaturateSample(sampled, tint)
-  const alpha = texture[3] * tint[3]
-  return additive
-    ? [
-        color[0] * alpha + background[0],
-        color[1] * alpha + background[1],
-        color[2] * alpha + background[2],
-        background[3],
-      ]
-    : [
-        color[0] * alpha + background[0] * (1 - alpha),
-        color[1] * alpha + background[1] * (1 - alpha),
-        color[2] * alpha + background[2] * (1 - alpha),
-        alpha + background[3] * (1 - alpha),
-      ]
 }
 
 function nativeWaterMeshPainterRegistration(

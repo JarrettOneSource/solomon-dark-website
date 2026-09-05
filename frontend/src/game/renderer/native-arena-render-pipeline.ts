@@ -29,13 +29,6 @@ import {
 
 export const NATIVE_ARENA_SATURATION = 0.65
 
-export type NativeArenaRgba = readonly [
-  red: number,
-  green: number,
-  blue: number,
-  alpha: number,
-]
-
 const NATIVE_ARENA_FRAGMENT_SHADER_SOURCE = `
   float textureAlpha = outColor.a;
   float vertexAlpha = vColor.a;
@@ -167,23 +160,6 @@ export function createNativeArenaUnpremultipliedParticleShader(): Shader {
       uniforms: {},
     },
   })
-}
-
-export function nativeArenaSaturateSample(
-  texture: NativeArenaRgba,
-  vertex: NativeArenaRgba,
-  saturation = NATIVE_ARENA_SATURATION,
-): NativeArenaRgba {
-  const textureGrey = (texture[0] + texture[1] + texture[2]) / 3
-  const vertexGrey = (vertex[0] + vertex[1] + vertex[2]) / 3
-  const grey = textureGrey * vertexGrey
-  const inverse = 1 - saturation
-  return [
-    grey * inverse + texture[0] * vertex[0] * saturation,
-    grey * inverse + texture[1] * vertex[1] * saturation,
-    grey * inverse + texture[2] * vertex[2] * saturation,
-    texture[3] * vertex[3],
-  ]
 }
 
 function createNativeArenaGraphicsShader(maxTextures: number): Shader {

@@ -20,7 +20,6 @@ import { waterFrostJetKind } from '../core-kernels/primary-spell-water.ts'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
 import {
   isNativeWaterMeshActorState,
-  nativeWaterMeshComposite,
   NativeWaterMeshRuns,
 } from './primary-spell-water-mesh-runs.ts'
 
@@ -66,10 +65,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
     managerLane: 'transient',
     registrationOrdinal: firstFrost + 1_000,
   })
-  assert.deepEqual(root.children.map(({ label }) => label), [
-    'primary-water-mesh-run:0',
-    'primary-water-mesh-run:1',
-  ])
+  assert.equal(root.children.length, 2)
   const first = root.children[0]
   assert.ok(first instanceof Mesh)
   assert.equal(first.zIndex, 10)
@@ -249,45 +245,6 @@ test('combined Water mesh admits Aura, Hail, and normal Frost but leaves Frost-o
   assert.equal(isNativeWaterMeshActorState(hail(1)), true)
   assert.equal(isNativeWaterMeshActorState(normal), true)
   assert.equal(isNativeWaterMeshActorState(over), false)
-})
-
-test('zero-alpha affine additive encoding matches native Add on the opaque Arena target', () => {
-  const background = [0.1, 0.2, 0.3, 1] as const
-  const tint = [1, 0.5, 0.25, 0.75] as const
-  const straight = [0.8, 0.6, 0.4, 0.5] as const
-  const premultiplied = [0.4, 0.3, 0.2, 0.5] as const
-  const straightResult = nativeWaterMeshComposite(
-    background,
-    straight,
-    tint,
-    true,
-    false,
-  )
-  const premultipliedResult = nativeWaterMeshComposite(
-    background,
-    premultiplied,
-    tint,
-    true,
-    true,
-  )
-  assertClose(straightResult, premultipliedResult)
-  assert.equal(straightResult[3], 1)
-  const normalThenAdd = nativeWaterMeshComposite(
-    nativeWaterMeshComposite(background, straight, tint, false, false),
-    straight,
-    tint,
-    true,
-    false,
-  )
-  const finalNormal = nativeWaterMeshComposite(
-    normalThenAdd,
-    [0.2, 0.4, 0.6, 0.25],
-    [0.7, 0.8, 0.9, 0.5],
-    false,
-    false,
-  )
-  assert.ok(finalNormal.every(Number.isFinite))
-  assert.equal(finalNormal[3], 1)
 })
 
 function water(id: number): PrimarySpellWaterTransientState {

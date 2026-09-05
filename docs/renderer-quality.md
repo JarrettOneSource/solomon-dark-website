@@ -6,6 +6,10 @@ failing with 29 diagnostic-name/label survivors. These are recorded without
 exclusions. The user authorized main publication with this recorded gate result;
 the threshold and raw survivor counts remain unchanged.
 
+The test cleanup removes unused CPU shader-math copies and their tests. GPU
+pixel checks and the Water mesh's geometry, ordering, and lifecycle tests remain;
+diagnostic labels are not asserted merely to increase the mutation score.
+
 The lighting/material follow-up measures the complete runtime owners listed in
 [`scope.mjs`](../frontend/tools/quality/scope.mjs). The scope includes the four
 original files and their shared batch, surface, and texture-color responsibilities.
