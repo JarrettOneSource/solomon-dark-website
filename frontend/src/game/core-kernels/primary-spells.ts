@@ -78,7 +78,7 @@ import {
 import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
-  NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+  NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
   NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryTracking,
@@ -551,8 +551,8 @@ export interface PrimarySpellTickContext {
     ownerId: string,
     start: Vector2,
     end: Vector2,
-    excludedSourceId?: string,
-    nativeExclusionMask?: number,
+    excludedSourceId: string | undefined,
+    nativeExclusionMask: number,
   ) => Vector2 | null
   spellRangeEndpoint: (
     ownerId: string,
@@ -598,9 +598,9 @@ export function nativePrimaryBirthTerrainExclusionMask(
   spell: PrimarySpellProjectileState,
 ): number {
   if (spell.kind === 'fire') return NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
-  if (spell.kind === 'ether') return NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK
+  if (spell.kind === 'ether') return NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK
   if (spell.kind === 'weld' && isMagicMissileDerivedWeldBuild(spell.buildId)) {
-    return NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK
+    return NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK
   }
   return 0
 }
@@ -1041,7 +1041,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             effect.origin.y + effect.direction.y * NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
           ),
         }
-        if (context.spellObstructionPoint(effect.ownerId, effect.origin, lookahead) !== null) {
+        if (context.spellObstructionPoint(
+          effect.ownerId,
+          effect.origin,
+          lookahead,
+          undefined,
+          NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK,
+        ) !== null) {
           const impact = createNativeWeldHailTerrainImpact({
             actor: effect,
             enhancedEffects: true,
@@ -1056,15 +1062,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         }
       }
       const stepped = stepNativeWeldWorldActor(effect, rng, (actor, from, to) => (
-        actor.buildId === 1006
-          ? context.canTraverseProjectile(
-              actor,
-              from,
-              to,
-              actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
-            )
-          : actor.buildId === 1008
-            || context.spellObstructionPoint(actor.ownerId, from, to) === null
+        actor.buildId !== 1006 || context.canTraverseProjectile(
+          actor,
+          from,
+          to,
+          actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
+        )
       ))
       rng = stepped.rng
       if (stepped.terrainContact) {
@@ -1859,7 +1862,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 nextPlayer.position,
                 viewEndpoint,
                 undefined,
-                NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+                NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
               )
               endpoint = obstruction ?? viewEndpoint
               terrainContact = obstruction !== null
@@ -1900,6 +1903,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   playerId,
                   start,
                   end,
+                  undefined,
+                  NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
                 ),
               })
               rng = steam.rng
@@ -2128,6 +2133,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   playerId,
                   meteorCenter!,
                   candidate,
+                  undefined,
+                  0,
                 ) ?? candidate,
                 rng,
                 underpowered,
@@ -2286,7 +2293,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 born,
                 nextPlayer.position,
                 id,
-                (start, end) => context.spellObstructionPoint(playerId, start, end),
+                (start, end) => context.spellObstructionPoint(
+                  playerId,
+                  start,
+                  end,
+                  undefined,
+                  NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
+                ),
                 underpowered,
               )
               return {
@@ -2656,7 +2669,7 @@ function createAirTransient(
     player.position,
     rangeEndpoint,
     undefined,
-    NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+    NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
   ) ?? rangeEndpoint
   const maxRange = Math.hypot(
     rangeEndpoint.x - player.position.x,
@@ -2669,7 +2682,7 @@ function createAirTransient(
       player.position,
       candidate.position,
       candidate.id,
-      NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+      NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
     ) === null,
     maxRange,
     origin: player.position,
@@ -2687,7 +2700,7 @@ function createAirTransient(
       player.position,
       attachment,
       target.id,
-      NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+      NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK,
     ) ?? attachment
     endpoint = { x: clipped.x, y: clipped.y + AIR_PRIMARY_TARGET_Y_OFFSET }
   }

@@ -2927,8 +2927,8 @@ function finishGameSimulationTick(
     playerId: string,
     start: Vector2,
     end: Vector2,
-    excludedSourceId?: string,
-    nativeExclusionMask = 0,
+    excludedSourceId: string | undefined,
+    nativeExclusionMask: number,
   ): Vector2 | null => {
     if (result.world.kind === 'boneyard') {
       return firstBoneyardLineObstruction(

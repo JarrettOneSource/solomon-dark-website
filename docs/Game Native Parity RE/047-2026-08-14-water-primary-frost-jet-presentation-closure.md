@@ -1,5 +1,173 @@
 # 2026-08-14 — Water primary Frost Jet presentation closure
 
+## 2026-09-04 — Reopened: particle barrier exclusion at the spell caller
+
+The supplied `SDB - Particles affected by barriers.mp4` shows Water splitting
+sideways beside a Gravestone. The earlier closure recovered the Normal splay
+recurrence but failed to carry the native line-exclusion operand through the
+production caller. Its synthetic hit-point tests could not detect that omission.
+Entry 077 already recorded the correct `0x380` operand; the implementation
+continued to invoke `spellObstructionPoint` without it.
+
+### Evidence and causal trace
+
+- User capture: Windows Downloads, 1920 x 1080, 456 frames, 15.213044 seconds,
+  SHA-256 `6c6c0ffeb87c0c12d2ea8f12cec3969706fe85f3dc8473a97ee319ec55270801`.
+  Frames around seconds 6..10 show the grave beside the split plume. This is
+  reported web behavior, not a clean-stock reference.
+- Candidate baseline: Website `a2197bf4a6b8bf8a5328030c63b555b269c65e65`.
+  A Mac `stepGameSimulationTick` regression using an authored overlay-8 grave
+  fails on tick 1 with `Gravestone deflected Frost at tick 1`.
+- Retail source was rehashed: 4,723,200 bytes, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred image base `0x00400000`. Fresh read-only Ghidra 12.0.3 queries used
+  the canonical `SolomonDark/SolomonDark.exe` replica pool. No injected process
+  or runtime address is used as evidence.
+- Raw instructions: Water pushes `0x380` at `0x00543D1B` before the Normal
+  prediction clip at `0x00543D8F`. The gameplay LOS call independently pushes
+  `0x380` at `0x00544194` before `0x005441D6`.
+- `0x00524D70` accepts a primitive only when its stored line flags AND the
+  exclusion operand equal zero. With a hit-output pointer it retains the
+  nearest hit; without one it can return on the first obstruction.
+- Fresh Gravestone setup `0x005F2EB0` registers the promoted overlay polygon
+  with line mask `0x600`. The existing authored collision catalog already
+  carries that mask. The geometry producer is not the cause.
+- Shared Frost update `0x00453670` matches the retained distance, snap,
+  signed perpendicular half-speed, and remaining-life recurrence above.
+  Over skips prediction; Chaining invokes the shared update without installing
+  a pending obstruction. No new art, sound, clock, or replicated field is needed.
+- Steam has the same omitted operand: raw `0x005432D1` pushes `0x380` before
+  particle prediction `0x00543341`; its separate contact LOS also pushes
+  `0x380` at `0x00543539` before `0x0054357C`.
+- Released Hailstones has a third omitted operand. Constructor `0x005FAC20`
+  calls Boulder construction and explicitly stores `0x700` at actor `+0x38`.
+  Release update `0x005FBDE0` reads that field at `0x005FBE37`, pushes it at
+  `0x005FBE41`, and calls line clip at `0x005FBEBB`. The Mac regression proves
+  the current zero-mask query incorrectly destroys the released carrier on
+  excluded scenery.
+- Tool provenance: read-only Mod Loader wrapper SHA-256
+  `b02530616ecc07c2e5be468d481778e84eeab35c4032a70005a51920973e9d49`;
+  `decompile_targets.py` SHA-256
+  `899167ca42624e09f26d22233365631a6ee8b3d106e337e20b77574894e97465`.
+
+### System boundary and membership
+
+System: primary-spell presentation line queries passed through
+`PrimarySpellTickContext.spellObstructionPoint`, including the shared native
+Frost constructor/update family. Actor damage queries and player movement have
+independent masks and remain separate owners.
+
+| Member | Native source | Disposition and validation contract |
+| --- | --- | --- |
+| Water Normal, powered and weak, every Cone rank | `0x00543860`, clip `0x00543D8F` | `exact-ported`: explicit `0x380`; real grave/prop/fence and solid-wall regressions |
+| Water Over | `0x00453840`, caller `0x00543A57` | `verified-already-at-parity`: no predicted obstruction, including at solid walls |
+| Chaining Frost | ctor caller `0x00542887`, wrapper `0x00453870` | `verified-already-at-parity`: no birth clip; inherited update and independent lifetime |
+| Steam Normal/Over, powered and weak | `0x00542D20`, clip `0x00543341` | `exact-ported`: explicit `0x380`, terminal and motion regression |
+| Lightning and Flame Lash | `0x0053F9C0`, `0x005408F0` | `verified-already-at-parity`: shared Air endpoint already passes `0x380` |
+| Blizzard endpoint | `0x00541870`, clip `0x00541C16` | `verified-already-at-parity`: explicit `0x380` |
+| Released Hailstones carrier | `0x005FAC20`, `0x005FBDE0` | `exact-ported`: explicit `0x700`, retained rocks through excluded props and existing solid-wall breakup regression |
+| Ethereal Boulder flight | separate radius-aware traversal callback | `verified-already-at-parity`: keeps its existing solid-body policy; the shared callback has no third actor branch |
+| Meteor placement | `0x0052BB60 -> 0x005238C0/0x00645910` | `out-of-system`: separate point-placement search, not a Frost-family line-prediction particle; existing zero-mask adapter remains explicit |
+| Magic Missile and welded missile births | `0x0053CFE0/0x0053E6A0/0x0053EDB0/0x0053F3C0` | `out-of-system`: separate projectile traversal callback, already explicit `0x380` |
+| Fire birth and primary projectile flight | `0x0053DC60`, `0x005FD270/0x005FDD90` | `out-of-system`: separate projectile traversal callback, explicit `0x700` |
+| Boneyard grave root/promoted polygon | `0x005F2EB0`, catalog mask `0x600` | `verified-already-at-parity`: excluded from Frost/Steam line prediction |
+| Trees, goodies, fence posts | existing authored collision catalog, mask `0x700` | `verified-already-at-parity`: excluded from Frost/Steam line prediction |
+| Fence spans and moving gate leaves | existing authored collision catalog, mask `0x100` | `verified-already-at-parity`: excluded from Frost/Steam line prediction |
+| Solid walls, monuments, buildings | existing authored collision catalog, mask `0` | `verified-already-at-parity`: retain native Frost splay and Steam terminal |
+| Hub | noncombat admission; common primary kernel | `out-of-system` for natural casts; no new Hub admission policy |
+| Learned Water Hail, Aura, weather, impact bouncers | separate constructors/update owners | `out-of-system`: no shared Frost prediction constructor |
+
+The constructor xref inventory is complete: `0x00453550` is called by
+`0x00453843`, `0x00542887`, and `0x00543C23`; `0x00453840` is called only at
+`0x00543A57`; update `0x00453670` is referenced by wrapper `0x00453873` and
+vtable slots `0x00784E8C/0x00784EBC`. There is no omitted Frost variant.
+The line primitive's other consumers belong to actor AI, movement, secondary
+abilities, projectiles, or Meteor placement; sharing the geometry helper does
+not make their caller-selected masks interchangeable.
+
+### Implementation consequence and acceptance
+
+Pass the recovered mask at both Frost and Steam births and Hailstones flight.
+Give the existing `0x380` constant a name covering primary casts, since Lightning and Blizzard
+already use it beyond Magic Missile construction. Make the primary line-query
+mask required so another caller cannot silently select movement collision.
+Keep the general collision helper's explicit-zero contract for movement.
+
+Authority continues to snapshot the hit and remaining distance once at birth;
+clients replay the same motion. Release, owner removal, and world teardown keep
+their existing lifetimes. Obstacles must not change a clear Frost plume's
+particle count, spread, or velocity; solid walls must still produce a native
+Normal splay. Steam must preserve its full terminal distance through excluded
+props. Validation uses the exact Mac candidate, the existing kernel and world
+interfaces, the canonical gate, and a built-client grave/solid-wall journey.
+
+### Mac implementation receipt
+
+- Production correction: Frost and Steam request `0x380`; released Hailstones
+  requests `0x700`. The primary query signature requires an explicit mask,
+  its world adapter has no zero default, and the unreachable third branch of
+  the retained-weld movement callback is removed. Existing callers use the
+  renamed `NATIVE_PRIMARY_CAST_TERRAIN_EXCLUSION_MASK`; no alias remains.
+- Failing-first evidence: the full game-tick grave regression failed at tick
+  1; the kernel/real-collision matrix and Hail release regression also failed
+  before the operand correction. All three pass afterward.
+- Regression membership: all 12 Cone rows, full and weak Frost/Steam, authored
+  Tree/Gravestone/Goodie primitives, all relevant individual line bits
+  `0x80/0x100/0x200/0x400`, combined `0x600/0x700`, and solid zero flags.
+  Hail separately preserves its rocks through excluded flags and still
+  materializes terrain children for blocking flags. The bit-specific cases
+  distinguish the `0x380` and `0x700` operands.
+- Focused Mac suite: 207 tests passed across primary spells, Frost planning,
+  Steam, targeting, world collision, and game simulation.
+- Canonical Mac gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` passed
+  all 2,678 frontend tests and 19 backend/integration tests, formatting, lint,
+  TypeScript, production backend/frontend/host builds, bundle budgets, and
+  media policy. The receipt-bearing source uses Node `v22.17.0`.
+- Production browser command:
+  `node --experimental-strip-types tools/smoke-primary-particle-barriers.mjs`.
+  Chrome, 1920 x 1080, entered the Hub and the authored barrier fixture through
+  the normal UI. The fixture waits for gameplay input admission before the
+  first mouse press and separates the solid wall from the maximum Cone's
+  complete prediction radius.
+- Grave/base Frost: 2,033 replicated particle samples, speed 4, zero stored
+  contacts and zero splays. Grave/Cone rank 11: 9,210 samples, speed 10,
+  zero stored contacts and zero splays. Solid-wall/Cone rank 11: 9,339 samples,
+  4,688 stored contacts and 3,537 completed splays. These are samples across
+  snapshots, not counts of distinct particle identities.
+- The built client rendered both Normal and Over families and retired the
+  particles after release. Its audio probe recorded three loop starts and
+  three loop stops. Page, console, failed-response, failed-request, and wire
+  error arrays were empty. This is behavioral browser evidence, not a new
+  clean-retail pixel comparison or a performance measurement.
+- Visually inspected screenshot SHA-256 values: base grave
+  `e8c89e6f787c69587812d800207e9bed95f07ea0c6509bf1620ecb8154d292e2`;
+  maximum Cone grave
+  `ab74c76c4d3dab10a9500ddcedbc7204da69a3c81540ab0647ccbc2d9b34cccd`;
+  solid-wall Cone
+  `031d67d2f67ba6687ea7d658e515f24c19903c1a1182a27269e130db77cc1ff2`.
+  Captures and raw logs are disposable; the maintained regression tool and
+  this receipt retain the relevant evidence.
+
+Quality measurements and limits:
+
+| Existing production file | Node line coverage | Branch coverage | Function coverage | Source lines |
+| --- | ---: | ---: | ---: | ---: |
+| `primary-spell-targeting.ts` | 94.39% | 93.33% | 95.12% | 659 |
+| `primary-spells.ts` | 87.57% | 92.47% | 87.06% | 3645 |
+| `game-simulation.ts` | 81.36% | 75.21% | 74.07% | 5021 |
+
+These are honest full-file measurements from the focused Node coverage run,
+not a claim of 100% coverage. The two large existing owners remain above the
+file-size threshold; this correction changes call-site operands/signatures
+and removes an unreachable callback branch without restructuring those
+owners. No new production function, dependency, compatibility layer, or
+explicit `any`/`unknown` type was added. The configured lint/type checks pass.
+Statement coverage, cyclomatic/cognitive complexity, Halstead Difficulty,
+CRAP, mutation survivors, and automated dead-code/duplication counts remain
+unmeasured because the repository has no configured analyzers for them.
+
+No browser-platform exception is needed for the recovered barrier masks.
+
 ## Reported mismatch and correction boundary
 
 - Reported web behavior: Water looks closer than the other unfinished

@@ -84,6 +84,11 @@ import {
 import type { LoadedBoneyard } from './boneyard.ts'
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 import {
+  createBoneyardCollisionWorld,
+  firstBoneyardLineObstruction,
+  type BoneyardCollisionWorld,
+} from '../core-server/boneyard-collision.ts'
+import {
   createNativeWeldHailRockFadeActor,
   createNativeWeldMeteor,
   createNativeWeldPersistentActor,
@@ -268,6 +273,7 @@ function stepSpellKernel(
   canTraverseProjectile: PrimarySpellTickContext['canTraverseProjectile'] = canPlaceProjectile,
   castProgressFactor = 1,
   aimPoint: { x: number; y: number } | null = null,
+  spellObstructionPoint: PrimarySpellTickContext['spellObstructionPoint'] = EMPTY_SPELL_WORLD.spellObstructionPoint,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   manaUnderflow: boolean
@@ -299,6 +305,7 @@ function stepSpellKernel(
     players: state.players,
     previousPlayers: state.players,
     rng: state.rng,
+    spellObstructionPoint,
     spells: state.spells,
     tick: state.tick + 1,
     viewScale: 1.35,
@@ -2115,6 +2122,126 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
   state = step(state, false, 32)
   assert.equal(state.primarySpells.transients.length, 0)
+})
+
+test('a Gravestone does not split the held Frost plume into sideways particles', () => {
+  const boneyard = primarySpellBoneyard()
+  boneyard.scene.objects = [{
+    eid: 'grave-in-stream',
+    typeId: 2029,
+    pos: { x: 250, y: 180 },
+    overlayVariant: 8,
+  }]
+  let state = enterBoneyardWorld(createGameSimulation({
+    [PLAYER_ID]: { discipline: 'arcane', displayName: 'Caster', element: 'water' },
+  }), boneyard)
+  for (let tick = 0; tick < 30; tick += 1) {
+    state = step(state, true)
+    const particles = state.primarySpells.transients.filter((effect) => effect.kind === 'water')
+    assert.ok(particles.length > 0)
+    assert.ok(particles.every((particle) => particle.obstructionPoint === null),
+      `Gravestone deflected Frost at tick ${tick + 1}`)
+  }
+})
+
+function spellBarrierQuery(world: BoneyardCollisionWorld): PrimarySpellTickContext['spellObstructionPoint'] {
+  return (_ownerId, start, end, excludedSourceId, mask) => firstBoneyardLineObstruction(
+    start, end, { x: -1000, y: -1000, w: 3000, h: 3000 }, world, excludedSourceId, mask,
+  )
+}
+
+test('Frost and Steam pass excluded scenery while solid walls retain their particle response', () => {
+  const scenery = primarySpellBoneyard().scene
+  scenery.objects = [
+    { eid: 'tree', typeId: 2001, pos: { x: 250, y: 170 }, variant: 1 },
+    { eid: 'grave', typeId: 2029, pos: { x: 250, y: 70 }, overlayVariant: 8 },
+    { eid: 'goodie', typeId: 2061, pos: { x: 250, y: 130 } },
+  ]
+  const sceneryWorld = createBoneyardCollisionWorld(scenery)
+  const barriers = [
+    { blocked: false, name: 'authored scenery', world: sceneryWorld },
+    ...[
+      { mask: 0, blocked: true },
+      { mask: 0x80, blocked: false },
+      { mask: 0x100, blocked: false },
+      { mask: 0x200, blocked: false },
+      { mask: 0x400, blocked: true },
+      { mask: 0x600, blocked: false },
+      { mask: 0x700, blocked: false },
+    ].map(({ mask, blocked }) => ({
+      blocked,
+      name: `line flags ${mask}`,
+      world: {
+        circles: [],
+        polygons: [],
+        segments: [{
+          start: { x: -500, y: 180 }, end: { x: 1000, y: 180 }, radius: 0, nativeLineMask: mask,
+        }],
+      },
+    })),
+  ]
+  const profiles = [
+    ...Array.from({ length: 12 }, (_, rank) => primarySkillWithRanks('water', { 34: rank })),
+    weldedProfile(1005, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3]),
+  ]
+  for (const profile of profiles) {
+    for (const underpowered of [false, true]) {
+      for (const { name, world, blocked } of barriers) {
+        let state = { ...directSpellHarness('water'), primarySkill: profile }
+        let contacts = 0
+        let particles = 0
+        for (let tick = 0; tick < 30; tick += 1) {
+          state = stepSpellKernel(
+            state, true, underpowered ? 0 : 1000, true, () => true,
+            profile, () => true, 1, null, spellBarrierQuery(world),
+          ).state
+          for (const particle of state.spells.transients) {
+            if (particle.kind === 'water') {
+              particles += 1
+              if (particle.obstructionPoint !== null) contacts += 1
+            } else if (particle.kind === 'weld-steam') {
+              particles += 1
+              if (particle.remainingDistance < 1000) contacts += 1
+            }
+          }
+        }
+        assert.ok(particles > 0)
+        assert.equal(contacts > 0, blocked, `${profile.skillId}, weak=${underpowered}, ${name}`)
+      }
+    }
+  }
+})
+
+test('released Hail passes excluded scenery and retains solid-wall breakup', () => {
+  const profile = weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5])
+  let state = { ...directSpellHarness('earth'), primarySkill: profile }
+  state = stepSpellKernel(state, true, 100).state
+  state = stepSpellKernel(state, true, 100).state
+  state = stepSpellKernel(state, false, 100).state
+  const hail = state.spells.transients.find((effect) => (
+    effect.kind === 'weld-persistent' && effect.buildId === 1008
+  ))
+  assert.ok(hail?.kind === 'weld-persistent' && hail.buildId === 1008)
+  for (const nativeLineMask of [0, 0x80, 0x100, 0x200, 0x400, 0x600, 0x700]) {
+    const world: BoneyardCollisionWorld = {
+      circles: [{
+        center: { x: hail.origin.x, y: hail.origin.y - 10 }, radius: 8, nativeLineMask,
+      }],
+      polygons: [],
+      segments: [],
+    }
+    const stepped = stepSpellKernel(
+      state, false, 100, true, () => true, profile, () => true, 1, null, spellBarrierQuery(world),
+    ).state
+    const blocked = nativeLineMask === 0 || nativeLineMask === 0x80
+    const flying = stepped.spells.transients.find(({ id }) => id === hail.id)
+    assert.equal(flying === undefined, blocked, `Hail line flags ${nativeLineMask}`)
+    if (flying) {
+      assert.ok(flying.kind === 'weld-persistent' && flying.buildId === 1008)
+      assert.equal(flying.rocks.length, hail.rocks.length)
+    }
+    assert.equal(stepped.spells.transients.some(({ kind }) => kind === 'weld-hail-terrain-particle'), blocked)
+  }
 })
 
 test('Cone of Ice drains every authored row into Frost density and snapshotted speed', () => {
