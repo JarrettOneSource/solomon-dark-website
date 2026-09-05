@@ -92,7 +92,7 @@ function SectionTitle({ text }: { text: string }) {
   return <h3 className="font-display text-[11px] font-bold uppercase tracking-[0.2em] text-gold">{text}</h3>
 }
 
-function EvictButton({ label, dispatch }: { label: string; dispatch: Dispatch<EditorAction> }) {
+function DeleteButton({ label, dispatch }: { label: string; dispatch: Dispatch<EditorAction> }) {
   return (
     <button
       type="button"
@@ -133,12 +133,12 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden border-l border-gold/15 bg-abyss/70">
       <div className="flex items-center justify-between border-b border-gold/15 px-4 py-3">
-        <div className="kicker">The ledger</div>
+        <div className="kicker">Inspector</div>
         {onCollapse && (
           <button
             type="button"
-            title="Tuck the ledger away"
-            aria-label="Collapse the ledger"
+            title="Collapse inspector"
+            aria-label="Collapse inspector"
             className="rounded px-1.5 py-0.5 text-xs text-bone-dim hover:bg-gold/10 hover:text-gold-bright"
             onClick={onCollapse}
           >
@@ -156,7 +156,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
             <p className="text-fell mt-0.5 text-[11px] text-bone-dim/70">
               {(() => {
                 const it = (selObject ?? selSprite)!
-                if (!it.sprite) return 'Papers pending.'
+                if (!it.sprite) return 'No object details available.'
                 const label = sceneryLabel(it.sprite.atlas, it.sprite.entry)
                 const variant = selObject?.variant !== undefined ? ` · variant ${selObject.variant}` : ''
                 return `${label ? `${label} · ` : ''}${it.sprite.atlas} ${it.sprite.entry}${variant}`
@@ -200,7 +200,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
                 />
               </div>
             )}
-            <EvictButton label="Evict" dispatch={dispatch} />
+            <DeleteButton label="Delete" dispatch={dispatch} />
           </section>
         ) : heldRoads.length > 0 ? (
           <section>
@@ -229,7 +229,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
                 ))}
               </div>
             </div>
-            <EvictButton label="Tear out" dispatch={dispatch} />
+            <DeleteButton label="Delete" dispatch={dispatch} />
           </section>
         ) : heldFences.length > 0 ? (
           <section>
@@ -258,7 +258,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
                 ))}
               </div>
             </div>
-            <EvictButton label="Tear out" dispatch={dispatch} />
+            <DeleteButton label="Delete" dispatch={dispatch} />
           </section>
         ) : heldTerrain.length > 0 ? (
           <section>
@@ -290,11 +290,11 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
                 ))}
               </div>
             </div>
-            <EvictButton label="Fill in" dispatch={dispatch} />
+            <DeleteButton label="Delete" dispatch={dispatch} />
           </section>
         ) : selection.length > 1 ? (
           <section>
-            <SectionTitle text="The held" />
+            <SectionTitle text="Selection" />
             <div className="mt-3 space-y-1.5">
               <Row k="Pieces" v={selection.length} />
               {(['object', 'sprite', 'road', 'fence', 'terrain'] as const).map((k) => {
@@ -324,14 +324,14 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
             </div>
             {anyGrouped && (
               <p className="text-fell mt-2 text-[11px] text-bone-dim/60">
-                Bound together: picking one holds the lot.
+                Selecting one piece selects the whole group.
               </p>
             )}
-            <EvictButton label="Evict all" dispatch={dispatch} />
+            <DeleteButton label="Delete selected" dispatch={dispatch} />
           </section>
         ) : (
           <section>
-            <SectionTitle text="The plot" />
+            <SectionTitle text="Map" />
             <label className="mt-3 block">
               <span className="label">Name</span>
               <input
@@ -362,7 +362,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
               />
             </div>
             <p className="text-fell mt-1.5 text-[11px] text-bone-dim/60">
-              The plot stays centred on the origin, as the stock grounds are.
+              Map dimensions are centered on (0, 0).
             </p>
 
             <div className="mt-4 border-t border-gold/10 pt-3">
@@ -372,7 +372,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
                   <button
                     type="button"
                     className="font-mono text-[10px] uppercase text-bone-dim/70 hover:text-blood"
-                    title="Forget the authored spawn; the envelope's own point returns"
+                    title="Restore the default spawn point"
                     onClick={() => dispatch({ type: 'set-spawn', spawn: undefined })}
                   >
                     clear
@@ -405,8 +405,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
                 </div>
               ) : (
                 <p className="text-fell mt-1.5 text-[11px] leading-relaxed text-bone-dim/60">
-                  Not placed; the plot keeps its envelope's own spawn point. Take the spawn
-                  tool (S) and click the grounds to set one.
+                  Using the default spawn point. Select the spawn tool (S) to place your own.
                 </p>
               )}
             </div>
@@ -422,13 +421,13 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
         )}
 
         <section className="border-t border-gold/10 pt-4">
-          <SectionTitle text="The waves" />
+          <SectionTitle text="Waves" />
           <p className="text-fell mt-1.5 text-[11px] leading-relaxed text-bone-dim/70">
             {(doc.waves?.length ?? 0) > 0
-              ? `A schedule of ${doc.waves!.length} authored wave${doc.waves!.length === 1 ? '' : 's'} publishes with this plot as data/wave.txt.`
-              : 'The plot plays the stock waves until you author a schedule of your own.'}
+              ? `${doc.waves!.length} custom wave${doc.waves!.length === 1 ? '' : 's'} included when published.`
+              : 'Uses the default waves.'}
             {recipes > 0 &&
-              ` ${recipes} native spawn ${recipes === 1 ? 'recipe rides' : 'recipes ride'} along untouched.`}
+              ` ${recipes} original spawn ${recipes === 1 ? 'recipe' : 'recipes'} preserved.`}
           </p>
           {onEditWaves && (
             <button
@@ -436,7 +435,7 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
               className="btn btn-stone mt-2 !px-2.5 !py-1.5 !text-[10px]"
               onClick={onEditWaves}
             >
-              Edit the waves
+              Edit waves
             </button>
           )}
         </section>

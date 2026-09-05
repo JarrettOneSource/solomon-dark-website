@@ -2,7 +2,7 @@
   "id": "/game",
   "name": "Solomon Darker",
   "short_name": "Solomon Darker",
-  "description": "Play Solomon Darker in an app-like landscape window.",
+  "description": "Solomon Darker: a community revival of Raptisoft’s unfinished game.",
   "start_url": "/game",
   "scope": "/",
   "display": "fullscreen",

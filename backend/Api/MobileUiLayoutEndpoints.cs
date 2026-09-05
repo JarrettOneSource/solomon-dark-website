@@ -61,7 +61,7 @@ public static class MobileUiLayoutEndpoints
             .SingleOrDefaultAsync(user => user.Id == authorId.Value, cancellationToken);
         if (author is null)
         {
-            return ApiErrors.Unauthorized("This enrollment no longer exists.");
+            return ApiErrors.Unauthorized("This account no longer exists.");
         }
 
         if (!TryCanonicalize(request.Layout, out var document, out var validationError))

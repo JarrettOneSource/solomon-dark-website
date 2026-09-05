@@ -1,13 +1,11 @@
-# Solomon Dark web-port mod package format
+# Solomon Darker mod packages
 
 Library mods are ZIP archives with `manifest.json` at the root. A package may
-contain sandboxed Lua, typed Boneyards, or both. DLLs, native `images/`
-replacement trees, and arbitrary native `data/` overlays are not web-port
-content and are rejected.
+contain Lua scripts, Boneyard maps, or both. Native DLLs, `images/`
+replacement trees, and arbitrary native `data/` overlays are not supported.
 
-The Website validates every upload, calculates package and extracted-content
-SHA-256 values itself, and requires the submitted version to exactly match
-`manifest.version`.
+The version entered on the upload form must match `manifest.version`.
+The website validates the package and calculates its SHA-256 hashes.
 
 ## Package layouts
 
@@ -34,8 +32,8 @@ audio/
 ```
 
 Use the [Lua example](/examples/lua-only-manifest.json).
-The repository also ships the complete canonical
-`frontend/examples/web-lua/invincibility-potion` package.
+For a complete example, see
+`frontend/examples/web-lua/invincibility-potion` in the repository.
 
 ### Combined
 
@@ -53,10 +51,10 @@ Use the [combined example](/examples/combined-manifest.json).
 
 - `id` is the permanent, case-insensitively unique package identity. It must
   remain the same across versions.
-- `name` is the player-facing name shown in the Library and Dark Cloud.
+- `name` is the name shown in the Library and Dark Cloud.
 - `version` is the exact session and save identity.
 - `priority` orders independent mods and Boneyard target overrides. Higher
-  values materialize later.
+  values load later.
 - `overlays` may target only `data/levels/*.boneyard` or
   `sandbox/DarkCloud/mylevels/*.boneyard`. Every source must be an existing
   `.boneyard` under `files/`.
@@ -68,34 +66,29 @@ Use the [combined example](/examples/combined-manifest.json).
 Paths use `/`, are relative, and must match archive case. Do not wrap the
 package in another top-level directory.
 
-Typed files may live under `art/`, `audio/`, `levels/`, `scenes/`, or the
-retained `sprites/` import directory. The 1.0 definition graph must claim every
-asset it uses; admission verifies bytes, type, dimensions, frames, ownership,
-references, graph budgets, and the canonical graph digest before play.
+Assets may live under `art/`, `audio/`, `levels/`, `scenes/`, or `sprites/`.
+Declare every asset your mod uses in its definition. Before play, the host
+checks file contents, types, dimensions, frames, ownership, references,
+definition limits, and the definition digest.
 
-Every Boneyard is parsed during upload with the native SyncBuffer grammar and
-again when a session is provisioned. Empty, malformed, trailing, oversized, or
-path-conflicting content fails closed.
+Boneyards are checked at upload and before play. The website rejects empty
+or malformed files, trailing data, files over the size limit, and conflicting paths.
 
 The complete machine-readable contract is
 [mod-manifest.schema.json](/mod-manifest.schema.json).
 
 ## Subscription, launch, and multiplayer
 
-Subscribe on the Library page. Explore the Dark Cloud in `/game` to enable or
-disable each subscribed mod. Starting a game freezes the account's enabled set,
-reopens and hash-verifies every exact latest package, validates the complete
-dependency graph, and provisions only that immutable set.
+Subscribe in the Library, then enable your mods in **Explore the Dark Cloud**
+in the game. A new game uses the latest version of each enabled mod and checks
+its files and dependencies. Those versions stay fixed for that session.
 
-Each Lua entry script runs once in an isolated bounded definition VM. Advanced
-reducers remain server-only inside the prepared session; browsers receive only
-trusted catalogs and presentation models. Boneyards enter only that party run's
-catalog. Each shared-Hub admission carries that account's immutable
-ordered `id`/`version`/content-hash manifest. A party may launch only when every
-member has the same exact manifest; there is no browser lobby directory or
-join-by-lobby URL.
+Lua runs on the game server. Each entry script defines the mod once; advanced
+reducers also run on the server. Custom Boneyards are available only within
+that party's run. Everyone in a party must have matching mod IDs, versions,
+file hashes, and load order before starting.
 
-Browser save schema 9 stores the exact manifest plus graph-bound reducer cells,
-statuses, powerups, spell cooldowns, skills, shops, enemies, and scene epochs.
-A changed save manifest requires explicit Continue or Cancel. State restores
-only for an exact active package and graph match; mismatched state is retired.
+Saves record the mod list and modded game state. If the mod list has changed,
+you must choose whether to continue loading or cancel. Mod state is restored
+only when the active package and definition match the save; incompatible state
+is discarded.

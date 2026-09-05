@@ -28,7 +28,6 @@ export default function About() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
       <Reveal>
-        <div className="kicker mb-1.5">Dossier · mostly declassified</div>
         <h1 className="h-display text-3xl">The Revival Story</h1>
       </Reveal>
 
@@ -41,42 +40,40 @@ export default function About() {
 
           <h2>The game that never shipped</h2>
           <p>
-            In April 2010, Raptisoft’s <em>Solomon’s Keep</em> put a wizard college, a
-            dread tower, and a necromancer named Solomon Dark into pockets everywhere.{' '}
-            <em>Solomon’s Boneyard</em> followed that September — leaner, meaner,
-            endless. Then came the promise of a third game: <em>Solomon Dark</em>, the
-            big one, where the College finally sends a fourth-circle wizard of its own
-            faculty to settle the matter.
+            Raptisoft released <em>Solomon’s Keep</em> in April 2010 and{' '}
+            <em>Solomon’s Boneyard</em> that September. A third game,{' '}
+            <em>Solomon Dark</em>, would send a fourth-circle wizard from the
+            College to confront Solomon on Mount Awful.
           </p>
           <p>
-            It never arrived. A year-long patent problem drained the joy out of the
-            project, and in February 2015 Raptisoft declared it dead. On Halloween
-            2016 the unfinished Windows build was briefly released — fans mirrored
-            it, and a community archive now preserves builds 0.71.0, 0.72.0, and
-            0.72.5 while the tower on Mount Awful stands dark.
+            In 2015, Raptisoft confirmed it had stopped work on the game after a
+            patent dispute. The unfinished Windows beta was briefly released on
+            Halloween 2016. Fans saved
+            copies, and the preservation archive holds builds 0.71.0, 0.72.0, and
+            0.72.5.
           </p>
 
-          <h2>The resurrection</h2>
+          <h2>Solomon Darker</h2>
           <p>
-            Solomon Darker is a community web port that raises the unfinished game
-            in the browser with multiplayer, community Lua mods, cloud saves, and
-            the Dark Cloud the beta only hinted at.
+            Solomon Darker is a community project rebuilding the game for browsers.
+            Play with other wizards, share Lua mods and custom Boneyards through the
+            Dark Cloud, and keep your progress with cloud saves.
           </p>
-          <ul>
-            <li><strong>Play</strong> — Solomon Dark running directly in the browser.</li>
-            <li><strong>The Dark Cloud</strong> — mods, Boneyards, and parties in the stock game’s own style.</li>
-            <li><strong>The Library</strong> — publish and subscribe to community web mods.</li>
-            <li><strong>Cloud saves</strong> — sync saves and active mods across machines.</li>
-          </ul>
 
           <h2>Credits &amp; thanks</h2>
           <ul>
-            <li><strong>Raptisoft</strong> — for the games. This is a love letter, not a heist.</li>
+            <li><strong>Raptisoft</strong> — for creating the Solomon games.</li>
             <li><strong>The preservation community</strong> — for keeping the builds alive.</li>
             <li><strong>The Solomon Darker project</strong> — for rebuilding the game and its community tools.</li>
           </ul>
           <p>
             Sources:{' '}
+            <a href="https://www.raptisoft-forums.com/discussion/2/new-forums" target="_blank" rel="noreferrer">
+              Raptisoft’s 2015 update
+            </a>,{' '}
+            <a href="https://www.raptisoft-forums.com/discussion/230/solomon-dark-beta" target="_blank" rel="noreferrer">
+              the beta announcement
+            </a>, and{' '}
             <a href="https://github.com/JayMcArthur/Raptisoft-Solomon" target="_blank" rel="noreferrer">
               the preservation archive
             </a>
@@ -87,8 +84,8 @@ export default function About() {
             <div className="kicker mb-1.5">The revival’s Hall of Fame</div>
             <div className="h-display text-lg">The Most Dedicated Students</div>
             <p className="text-fell mt-2 text-sm text-bone-dim">
-              Beta testers, bug reporters, and the students who kept attending a
-              cancelled class. Remembered here.
+              Thanks to the players who tested builds, reported bugs, and kept
+              the community going.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               {HALL_OF_FAME.map((name) => (
@@ -114,8 +111,7 @@ export default function About() {
           <p>
             Solomon Darker is a fan preservation project and is not affiliated
             with or endorsed by Raptisoft. All original game content remains ©
-            Raptisoft. If you are Raptisoft and would like anything changed, removed,
-            or personally apologized for, we will comply with unseemly haste.
+            Raptisoft.
           </p>
         </div>
       </Reveal>
@@ -124,7 +120,6 @@ export default function About() {
         <div className="mt-12 flex flex-wrap items-center justify-between gap-6 rounded border border-gold/15 bg-[#0b0910] p-6">
           <div>
             <div className="h-display text-base">Ready to dig?</div>
-            <p className="text-fell mt-1 text-sm text-bone-dim">The dead are waiting. They’re patient like that.</p>
           </div>
           <div className="flex flex-none gap-3">
             <Link

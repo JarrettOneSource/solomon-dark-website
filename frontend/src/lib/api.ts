@@ -300,7 +300,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(path, { ...init, headers })
   } catch {
-    throw new ApiError(0, 'The College is unreachable — check your connection.')
+    throw new ApiError(0, 'Cannot reach the server. Check your connection.')
   }
 
   if (!res.ok) {

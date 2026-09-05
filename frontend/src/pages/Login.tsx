@@ -32,9 +32,9 @@ export default function Login() {
       <Reveal>
         <div className="mb-8 text-center">
           <img src={art.skullGold} alt="" className="mx-auto mb-4 h-12 drop-shadow-[0_0_12px_rgba(200,168,98,.5)]" />
-          <h1 className="h-display text-2xl">Return to Your Studies</h1>
+          <h1 className="h-display text-2xl">Sign In</h1>
           <p className="text-fell mt-2 text-sm text-bone-dim">
-            The College kept your desk exactly as you left it. Dusty.
+            Your desk at the College is gathering dust.
           </p>
         </div>
 

@@ -53,12 +53,12 @@ public static class AuthEndpoints
 
         if (await db.Users.AnyAsync(user => user.Username == username, cancellationToken))
         {
-            return ApiErrors.Conflict("That name is already written in the Annals.");
+            return ApiErrors.Conflict("That username is already taken.");
         }
 
         if (await db.Users.AnyAsync(user => user.Email == email, cancellationToken))
         {
-            return ApiErrors.Conflict("That email is already enrolled.");
+            return ApiErrors.Conflict("That email is already registered.");
         }
 
         var user = new User
@@ -76,7 +76,7 @@ public static class AuthEndpoints
         }
         catch (DbUpdateException)
         {
-            return ApiErrors.Conflict("That name or email is already enrolled.");
+            return ApiErrors.Conflict("That username or email is already registered.");
         }
 
         return Results.Json(
@@ -101,7 +101,7 @@ public static class AuthEndpoints
         if (user is null ||
             passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password) == PasswordVerificationResult.Failed)
         {
-            return ApiErrors.Unauthorized("Wrong name or password. The Annals are unforgiving.");
+            return ApiErrors.Unauthorized("Incorrect username, email, or password.");
         }
 
         return Results.Ok(new
@@ -120,14 +120,14 @@ public static class AuthEndpoints
         var userId = TokenService.GetUserId(context.User);
         if (userId is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this bearer.");
+            return ApiErrors.Unauthorized("Sign in to continue.");
         }
 
         var user = await db.Users.AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.Id == userId.Value, cancellationToken);
         if (user is null)
         {
-            return ApiErrors.Unauthorized("This enrollment no longer exists.");
+            return ApiErrors.Unauthorized("This account no longer exists.");
         }
 
         var modCount = await db.Mods.CountAsync(mod => mod.AuthorId == user.Id, cancellationToken);
@@ -147,20 +147,20 @@ public static class AuthEndpoints
     {
         if (!IsValidSchool(request.School))
         {
-            return ApiErrors.BadRequest("The College recognizes five schools. That is not one of them.");
+            return ApiErrors.BadRequest("Choose fire, air, water, ether, or earth.");
         }
 
         var userId = TokenService.GetUserId(context.User);
         if (userId is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this bearer.");
+            return ApiErrors.Unauthorized("Sign in to continue.");
         }
 
         var user = await db.Users
             .SingleOrDefaultAsync(candidate => candidate.Id == userId.Value, cancellationToken);
         if (user is null)
         {
-            return ApiErrors.Unauthorized("This enrollment no longer exists.");
+            return ApiErrors.Unauthorized("This account no longer exists.");
         }
 
         user.School = request.School;

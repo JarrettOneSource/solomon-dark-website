@@ -46,7 +46,8 @@ export function openGameMemorialPersistence(path: string): GameMemorialPersisten
         closeSync(file)
       }
       renameSync(temporaryPath, path)
-      const directoryHandle = openSync(directory, 'r')
+      // Windows requires write access to flush a directory handle.
+      const directoryHandle = openSync(directory, process.platform === 'win32' ? 'r+' : 'r')
       try {
         fsyncSync(directoryHandle)
       } finally {

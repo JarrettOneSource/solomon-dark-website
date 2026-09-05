@@ -118,8 +118,8 @@ export function classVariantEntries(classId: number): { atlas: string; ids: numb
 }
 
 const CLASS_GROUPS: { id: number; title: string; note: string }[] = [
-  { id: NATIVE.gravestone, title: 'Gravestones', note: 'The genuine article: diggable, lootable, load-registered.' },
-  { id: NATIVE.tree, title: 'Trees', note: 'Real trees, with collision and opinions.' },
+  { id: NATIVE.gravestone, title: 'Gravestones', note: 'Diggable gravestones.' },
+  { id: NATIVE.tree, title: 'Trees', note: 'Trees with collision.' },
   { id: NATIVE.monument, title: 'Monuments', note: 'Sixteen ways to be remembered.' },
   { id: NATIVE.building, title: 'Buildings', note: 'Four floor plans, all condemned.' },
   { id: NATIVE.goodie, title: 'Goodies', note: 'Coffers in their several tempers.' },

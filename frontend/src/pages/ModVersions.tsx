@@ -18,7 +18,7 @@ function AddVersionForm({ slug, onDone }: { slug: string; onDone: () => void }) 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!file || !version.trim()) {
-      setError('A version number and a zip are both required. Pedantry is policy.')
+      setError('Enter a version number and choose a ZIP file.')
       return
     }
     setBusy(true)
@@ -43,7 +43,7 @@ function AddVersionForm({ slug, onDone }: { slug: string; onDone: () => void }) 
   return (
     <form onSubmit={submit} className="mt-4 space-y-3 border-t border-gold/15 pt-4">
       <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
-        <Field label="Version" hint="Must exactly match manifest.version.">
+        <Field label="Version" hint="Must match the version in manifest.json.">
           <input
             className="input"
             value={version}
@@ -51,7 +51,7 @@ function AddVersionForm({ slug, onDone }: { slug: string; onDone: () => void }) 
             placeholder="1.1.0"
           />
         </Field>
-        <Field label="Zip file">
+        <Field label="ZIP file">
           <input
             type="file"
             accept=".zip"
@@ -65,12 +65,12 @@ function AddVersionForm({ slug, onDone }: { slug: string; onDone: () => void }) 
           className="input min-h-20"
           value={changelog}
           onChange={(e) => setChangelog(e.target.value)}
-          placeholder="Fixed the golem. The golem is fine now."
+          placeholder="Describe what changed in this version."
         />
       </Field>
       {error && <ErrorNote message={error} />}
       <button type="submit" className="btn btn-stone w-full" disabled={busy}>
-        {busy ? 'Cataloguing…' : 'Publish version'}
+        {busy ? 'Uploading…' : 'Publish version'}
       </button>
     </form>
   )
@@ -81,14 +81,14 @@ export default function ModVersions() {
   const { user } = useAuth()
   const mod = useApi(() => api.mods.get(slug), [slug])
 
-  if (mod.loading) return <Spinner label="Opening the catalogue…" />
+  if (mod.loading) return <Spinner label="Loading versions…" />
   if (mod.error || !mod.data) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <img src={art.skullWhite} alt="" className="mx-auto mb-4 h-12 opacity-60" />
-        <h1 className="h-display text-xl">This catalogue is missing</h1>
+        <h1 className="h-display text-xl">Could Not Load Versions</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          {mod.error ?? 'Checked out, burned, or never written.'}
+          {mod.error ?? 'This mod could not be found.'}
         </p>
         <Link to="/mods" className="btn btn-stone mt-6">
           ← Back to the Library
@@ -110,18 +110,17 @@ export default function ModVersions() {
         >
           ← {m.name}
         </Link>
-        <div className="kicker mb-1.5 mt-5">The catalogue · every recorded edition</div>
-        <h1 className="h-display text-3xl">Editions</h1>
+        <h1 className="h-display mt-5 text-3xl">Versions</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          {m.versions.length} edition{m.versions.length === 1 ? '' : 's'} of {m.name} ·{' '}
-          {formatCount(m.downloads)} downloads all told
+          {m.versions.length} version{m.versions.length === 1 ? '' : 's'} of {m.name} ·{' '}
+          {formatCount(m.downloads)} downloads
         </p>
       </Reveal>
 
       {isOwner && (
         <Reveal delay={60}>
           <div className="panel mt-8 p-6">
-            <div className="kicker">Author’s desk · publish a new edition</div>
+            <div className="kicker">Publish a new version</div>
             <AddVersionForm slug={m.slug} onDone={mod.reload} />
           </div>
         </Reveal>
@@ -130,7 +129,7 @@ export default function ModVersions() {
       {latest && (
         <Reveal delay={100}>
           <section className="panel panel-ornate mt-8 p-6 sm:p-7">
-            <div className="kicker mb-4">Current edition</div>
+            <div className="kicker mb-4">Latest version</div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <span className="badge badge-gold !text-[13px]">v{latest.version}</span>
               <span className="text-xs text-bone-dim">{formatDate(latest.createdAtUtc)}</span>
@@ -139,7 +138,7 @@ export default function ModVersions() {
               <span className="ml-auto text-xs text-bone-dim">Used by subscribers on their next launch</span>
             </div>
             <p className="mt-4 whitespace-pre-wrap text-[15px] leading-relaxed text-bone/90">
-              {latest.changelog || 'No changelog. The scribe was terse.'}
+              {latest.changelog || 'No changelog provided.'}
             </p>
           </section>
         </Reveal>
@@ -148,7 +147,7 @@ export default function ModVersions() {
       {earlier.length > 0 ? (
         <Reveal delay={140}>
           <section className="mt-10">
-            <div className="kicker mb-3">Earlier editions</div>
+            <div className="kicker mb-3">Earlier versions</div>
             <div className="space-y-2">
               {earlier.map((v) => (
                 <div
@@ -171,7 +170,7 @@ export default function ModVersions() {
         </Reveal>
       ) : (
         <p className="text-fell mt-6 text-sm text-bone-dim">
-          No earlier editions. The first printing stands alone.
+          No earlier versions.
         </p>
       )}
     </div>

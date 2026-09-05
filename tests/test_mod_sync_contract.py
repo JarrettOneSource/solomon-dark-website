@@ -1874,7 +1874,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 201, subscribed)
 
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database:
             file_name = database.execute(
                 "SELECT FileName FROM ModVersions WHERE ModId = ?",
                 (created["id"],),

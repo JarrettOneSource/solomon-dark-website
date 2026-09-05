@@ -81,13 +81,13 @@ builder.Services
                 context.HandleResponse();
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(
-                    new { error = "A valid bearer token is required." });
+                    new { error = "Sign in to continue." });
             },
             OnForbidden = async context =>
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsJsonAsync(
-                    new { error = "This bearer may not enter here." });
+                    new { error = "You do not have access to this resource." });
             }
         };
     });
@@ -286,7 +286,7 @@ app.UseExceptionHandler(errorApp =>
         await context.Response.WriteAsJsonAsync(new
         {
             error = statusCode == StatusCodes.Status500InternalServerError
-                ? "The server lost its place in the Annals."
+                ? "The server could not complete this request."
                 : "The request could not be read."
         });
     });
@@ -303,8 +303,8 @@ app.UseStatusCodePages(async statusContext =>
     var message = context.Response.StatusCode switch
     {
         StatusCodes.Status400BadRequest => "The request could not be read.",
-        StatusCodes.Status401Unauthorized => "A valid bearer token is required.",
-        StatusCodes.Status403Forbidden => "This bearer may not enter here.",
+        StatusCodes.Status401Unauthorized => "Sign in to continue.",
+        StatusCodes.Status403Forbidden => "You do not have access to this resource.",
         StatusCodes.Status404NotFound => "No such API route exists.",
         StatusCodes.Status405MethodNotAllowed => "That method is not allowed here.",
         StatusCodes.Status413PayloadTooLarge => "The request body is too large.",

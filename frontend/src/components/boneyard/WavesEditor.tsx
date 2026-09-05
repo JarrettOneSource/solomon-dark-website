@@ -141,7 +141,6 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
       >
         <div className="flex items-center justify-between border-b border-gold/15 px-5 py-4">
           <div>
-            <div className="kicker">The night's arithmetic</div>
             <h2 className="h-display mt-0.5 text-lg">Wave schedule</h2>
           </div>
           <div className="flex items-center gap-2">
@@ -182,10 +181,8 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
           {notice && <p className="text-fell text-xs text-gold/90">{notice}</p>}
           {waves.length === 0 && (
             <p className="text-fell text-xs leading-relaxed text-bone-dim/70">
-              No schedule of your own yet: the plot plays the game's stock waves. Add a wave to
-              take over the whole night — a custom schedule replaces data/wave.txt for everyone
-              in the session, waves are numbered from 0, and NEXT decides what may come after
-              each one.
+              Add a custom schedule to replace the default waves for everyone in the party.
+              Waves start at 0. Next offsets choose which waves can follow.
             </p>
           )}
 
@@ -229,7 +226,7 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
                     className="input !w-20 !px-2 !py-1 font-mono !text-xs"
                     value={wave.spawn}
                     min={1}
-                    title="Native group-cost budget consumed by the wave compiler"
+                    title="Spawn budget for the enemy groups in this wave"
                     onChange={(e) => patchWave(wi, { spawn: Math.round(Number(e.target.value)) || 0 })}
                   />
                 </label>
@@ -240,7 +237,7 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
                     className="input !w-20 !px-2 !py-1 font-mono !text-xs"
                     value={wave.maxEnemies}
                     min={1}
-                    title="Stock wave.txt field retained for round-trip parity; the retail compiler parses but does not consume it"
+                    title="Preserved in exported files; the game does not use this value"
                     onChange={(e) => patchWave(wi, { maxEnemies: Math.round(Number(e.target.value)) || 0 })}
                   />
                 </label>
@@ -386,8 +383,8 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
         <div className="flex items-center justify-between gap-2 border-t border-gold/15 px-5 py-4">
           <p className="text-fell text-[11px] text-bone-dim/70">
             {waves.length === 0
-              ? 'Keeping an empty schedule publishes the plot with the stock waves.'
-              : `${waves.length} wave${waves.length === 1 ? '' : 's'} will publish as a data/wave.txt overlay.`}
+              ? 'An empty schedule uses the default waves.'
+              : `${waves.length} custom wave${waves.length === 1 ? '' : 's'} will be included when published.`}
           </p>
           <div className="flex gap-2">
             <button type="button" className="btn btn-stone" onClick={onClose}>
@@ -397,10 +394,10 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
               type="button"
               className="btn btn-gold"
               disabled={problems.length > 0}
-              title={problems.length > 0 ? 'Settle the ledger problems first.' : undefined}
+              title={problems.length > 0 ? 'Fix the wave errors before saving.' : undefined}
               onClick={() => onKeep(waves)}
             >
-              Keep the schedule
+              Save schedule
             </button>
           </div>
         </div>

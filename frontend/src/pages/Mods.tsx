@@ -69,7 +69,7 @@ export default function Mods() {
       await api.mods.subscriptions.subscribe(mod.slug)
       await subscriptions.reload()
     } catch (error) {
-      setSubscriptionError(error instanceof Error ? error.message : 'The subscription failed.')
+      setSubscriptionError(error instanceof Error ? error.message : 'Could not subscribe to this mod.')
     } finally {
       setSubscribing(null)
     }
@@ -82,7 +82,7 @@ export default function Mods() {
       await api.mods.subscriptions.unsubscribe(mod.slug)
       await subscriptions.reload()
     } catch (error) {
-      setUnsubscribeError(error instanceof Error ? error.message : 'The unsubscribe failed.')
+      setUnsubscribeError(error instanceof Error ? error.message : 'Could not unsubscribe from this mod.')
     } finally {
       setUnsubscribing(null)
     }
@@ -101,24 +101,20 @@ export default function Mods() {
       <Reveal>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="kicker mb-1.5">Restricted section · mostly</div>
             <h1 className="h-display text-3xl">The Library</h1>
             <p className="text-fell mt-2 max-w-xl text-bone-dim">
-              Tomes contributed by the community, one click from being yours. Professor
-              Semicus keeps the shelves; Machinimbus rates the cataloguing “almost
-              completely nearly safe.”
+              Lua mods and Boneyards made by the community.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <Link
               to="/boneyard"
               className="btn btn-stone"
-              title="Open the drafting table and lay out an acre of your own"
             >
-              ⚒ Draft a Boneyard
+              ⚒ Create a Boneyard
             </Link>
             <Link to={user ? '/mods/upload' : '/login'} className="btn btn-gold">
-              ✦ Contribute a Tome
+              ✦ Upload a mod
             </Link>
           </div>
         </div>
@@ -127,10 +123,9 @@ export default function Mods() {
       <section className="mt-9" aria-labelledby="subscribed-mods-heading">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="kicker mb-1">Your collection</div>
             <h2 id="subscribed-mods-heading" className="h-display text-xl">Subscribed Mods</h2>
             <p className="text-fell mt-1 max-w-xl text-sm text-bone-dim">
-              Your saved tomes. Enable or disable them from Explore the Dark Cloud before play.
+              Enable your subscribed mods in Explore the Dark Cloud before playing.
             </p>
           </div>
           {user && subscribedMods.length > 0 ? (
@@ -143,18 +138,18 @@ export default function Mods() {
         {!user ? (
           <div className="panel flex flex-wrap items-center justify-between gap-4 p-5">
             <p className="text-fell text-sm text-bone-dim">
-              Sign in to keep a personal list of subscribed mods.
+              Sign in to subscribe to mods.
             </p>
             <Link to="/login" className="btn btn-stone">Sign in</Link>
           </div>
         ) : subscriptions.loading ? (
-          <Spinner label="Reading your subscriptions…" />
+          <Spinner label="Loading subscriptions…" />
         ) : subscriptions.error ? (
           <ErrorNote message={subscriptions.error} />
         ) : subscribedMods.length === 0 ? (
           <EmptyState
             title="No subscribed mods"
-            line="Choose Subscribe on a tome below and it will appear here."
+            line="Subscribe to a mod below to add it to your collection."
           />
         ) : (
           <>
@@ -179,7 +174,7 @@ export default function Mods() {
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <input
           className="input max-w-xs"
-          placeholder="Search the shelves…"
+          placeholder="Search mods…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -187,16 +182,16 @@ export default function Mods() {
           className="input w-auto"
           value={sort}
           onChange={(e) => setSort(e.target.value as ModSort)}
-          aria-label="Sort the shelves"
+          aria-label="Sort mods"
         >
           <option value="newest">Newest</option>
-          <option value="downloads">Most taken</option>
-          <option value="updated">Recently revised</option>
+          <option value="downloads">Most downloaded</option>
+          <option value="updated">Recently updated</option>
           <option value="name">Alphabetical</option>
         </select>
         {total > 0 && (
           <span className="ml-auto font-mono text-xs text-bone-dim/60">
-            {total} tome{total === 1 ? '' : 's'}
+            {total} mod{total === 1 ? '' : 's'}
           </span>
         )}
       </div>
@@ -204,7 +199,7 @@ export default function Mods() {
       {(indexed.length > 0 || phantoms.length > 0) && (
         <div className="mt-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by tag">
           <span className="mr-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-bone-dim/70">
-            Filed under
+            Tags
           </span>
           {indexed.map(({ tag, count }) => (
             <TagBadge
@@ -233,7 +228,7 @@ export default function Mods() {
       <div className="mt-6">
         {subscriptionError ? <ErrorNote message={subscriptionError} /> : null}
         {mods.loading ? (
-          <Spinner label="Consulting the index…" />
+          <Spinner label="Loading mods…" />
         ) : mods.error ? (
           <ErrorNote message={mods.error} />
         ) : (mods.data?.items.length ?? 0) === 0 ? (
@@ -241,10 +236,10 @@ export default function Mods() {
             title="The shelves are bare"
             line={
               debounced
-                ? 'Nothing matches. The Librarian suggests spelling it differently, or wanting something else.'
+                ? 'No mods match your search. Try a different name or tag.'
                 : selected.length > 0
-                  ? `Nothing is filed under ${selected.join(' + ')}. The Librarian admires your specificity.`
-                  : 'No tomes yet. Contribute the first and enjoy a brief, glorious monopoly.'
+                  ? `No mods match these tags: ${selected.join(', ')}.`
+                  : 'No mods have been published yet.'
             }
           />
         ) : (

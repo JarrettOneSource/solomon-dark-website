@@ -35,7 +35,7 @@ public static class BoneyardEndpoints
         var userId = TokenService.GetUserId(context.User);
         if (userId is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this draft owner.");
+            return ApiErrors.Unauthorized("Sign in to manage your drafts.");
         }
 
         var drafts = await db.BoneyardDrafts.AsNoTracking()
@@ -56,7 +56,7 @@ public static class BoneyardEndpoints
         var userId = TokenService.GetUserId(context.User);
         if (userId is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this draft owner.");
+            return ApiErrors.Unauthorized("Sign in to manage your drafts.");
         }
 
         var nameError = ValidateDraftName(request.Name, out var name);
@@ -315,7 +315,7 @@ public static class BoneyardEndpoints
         var userId = TokenService.GetUserId(context.User);
         if (userId is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this draft owner.");
+            return ApiErrors.Unauthorized("Sign in to manage your drafts.");
         }
 
         if (request.Name is null || request.Summary is null || request.Description is null)

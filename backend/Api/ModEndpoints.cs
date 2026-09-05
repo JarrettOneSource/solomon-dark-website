@@ -17,12 +17,12 @@ public static class ModEndpoints
     private const string InvalidTagError =
         "Tags are 2–24 plain characters: letters, numbers, spaces, hyphens. The filing system predates punctuation.";
     private const string TooManyTagsError =
-        "A tome carries at most five tags. The Librarian's patience is finite.";
+        "Use up to five tags.";
 
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/uploads/screenshots/{**path}", () =>
-            ApiErrors.NotFound("That plate is no longer served from public storage."));
+            ApiErrors.NotFound("This screenshot is no longer public."));
         app.MapGet("/api/mods", ListAsync);
         app.MapGet("/api/mods/subscriptions", ListSubscriptionsAsync)
             .RequireAuthorization();
@@ -79,7 +79,7 @@ public static class ModEndpoints
         var userId = TokenService.GetUserId(context.User);
         if (mine && userId is null)
         {
-            return ApiErrors.Unauthorized("Sign in to open your authored tomes.");
+            return ApiErrors.Unauthorized("Sign in to view your mods.");
         }
         var search = request.Query["search"].ToString().Trim();
         var tagFilters = request.Query["tag"]
@@ -212,7 +212,7 @@ public static class ModEndpoints
         return mod is null || !ModVisibilityContract.CanView(
             mod,
             TokenService.GetUserId(context.User))
-            ? ApiErrors.NotFound("That tome is missing from the library.")
+            ? ApiErrors.NotFound("This mod could not be found.")
             : Results.Ok(ToDetail(mod));
     }
 
@@ -232,13 +232,13 @@ public static class ModEndpoints
                 mod,
                 TokenService.GetUserId(context.User)))
         {
-            return ApiErrors.NotFound("That plate is missing from the tome.");
+            return ApiErrors.NotFound("This screenshot could not be found.");
         }
 
         var path = storage.GetScreenshotPath(screenshot.FileName);
         if (!File.Exists(path))
         {
-            return ApiErrors.NotFound("That plate is missing from the tome.");
+            return ApiErrors.NotFound("This screenshot could not be found.");
         }
         context.Response.Headers.CacheControl = "no-store";
         var contentType = string.Equals(
@@ -433,11 +433,11 @@ public static class ModEndpoints
                 cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
         if (LatestVersion(mod) is null || string.IsNullOrWhiteSpace(mod.PackageId))
         {
-            return Results.Conflict(new { error = "That mod has no web-port package to subscribe to." });
+            return Results.Conflict(new { error = "This mod has no browser-compatible package." });
         }
 
         var subscription = await db.ModSubscriptions.SingleOrDefaultAsync(
@@ -494,7 +494,7 @@ public static class ModEndpoints
                 cancellationToken);
         if (subscription is null)
         {
-            return ApiErrors.NotFound("Subscribe to that mod before changing its Dark Cloud state.");
+            return ApiErrors.NotFound("Subscribe to this mod before enabling or disabling it.");
         }
         subscription.Enabled = request.Enabled;
         subscription.UpdatedAtUtc = DateTime.UtcNow;
@@ -535,7 +535,7 @@ public static class ModEndpoints
                 mod,
                 TokenService.GetUserId(context.User)))
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var query = db.ModComments.AsNoTracking()
@@ -567,13 +567,13 @@ public static class ModEndpoints
             cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var userId = TokenService.GetUserId(context.User);
         if (!ModVisibilityContract.CanView(mod, userId))
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var body = request.Body?.Trim() ?? string.Empty;
@@ -594,7 +594,7 @@ public static class ModEndpoints
                 cancellationToken);
         if (author is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this scribe.");
+            return ApiErrors.Unauthorized("Sign in to leave a comment.");
         }
 
         var comment = new ModComment
@@ -625,17 +625,17 @@ public static class ModEndpoints
                 cancellationToken);
         if (comment is null)
         {
-            return ApiErrors.NotFound("That marginal note is missing from the tome.");
+            return ApiErrors.NotFound("This comment could not be found.");
         }
 
         var userId = TokenService.GetUserId(context.User);
         if (!ModVisibilityContract.CanView(comment.Mod, userId))
         {
-            return ApiErrors.NotFound("That marginal note is missing from the tome.");
+            return ApiErrors.NotFound("This comment could not be found.");
         }
         if (userId != comment.AuthorId && userId != comment.Mod.AuthorId)
         {
-            return ApiErrors.Forbidden("Only the note's author or the tome's owner may erase it.");
+            return ApiErrors.Forbidden("Only the comment author or mod author can delete this comment.");
         }
 
         db.ModComments.Remove(comment);
@@ -652,7 +652,7 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Username == username, cancellationToken);
         if (user is null)
         {
-            return ApiErrors.NotFound("No wizard by that name appears in the Annals.");
+            return ApiErrors.NotFound("No player has that username.");
         }
 
         var authoredMods = db.Mods.AsNoTracking().Where(mod =>
@@ -747,7 +747,7 @@ public static class ModEndpoints
         var screenshots = form.Files.GetFiles("screenshots").ToArray();
         if (screenshots.Length > MaxScreenshotsPerMod)
         {
-            return ApiErrors.BadRequest($"A tome may display at most {MaxScreenshotsPerMod} screenshots.");
+            return ApiErrors.BadRequest($"A mod can have up to {MaxScreenshotsPerMod} screenshots.");
         }
 
         var screenshotValidationError = ValidateScreenshots(screenshots);
@@ -759,7 +759,7 @@ public static class ModEndpoints
         var userId = TokenService.GetUserId(context.User);
         if (userId is null)
         {
-            return ApiErrors.Unauthorized("The Annals could not identify this mod author.");
+            return ApiErrors.Unauthorized("Sign in to manage your mods.");
         }
 
         try
@@ -821,13 +821,13 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var accessError = AuthorAccessError(
             mod,
             TokenService.GetUserId(context.User),
-            "Only the tome's author may add screenshots.");
+            "Only the mod author can add screenshots.");
         if (accessError is not null) return accessError;
 
         var screenshots = form.Files.GetFiles("screenshots").ToArray();
@@ -838,7 +838,7 @@ public static class ModEndpoints
 
         if (mod.Screenshots.Count + screenshots.Length > MaxScreenshotsPerMod)
         {
-            return ApiErrors.BadRequest($"A tome may display at most {MaxScreenshotsPerMod} screenshots.");
+            return ApiErrors.BadRequest($"A mod can have up to {MaxScreenshotsPerMod} screenshots.");
         }
 
         var validationError = ValidateScreenshots(screenshots);
@@ -900,19 +900,19 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var accessError = AuthorAccessError(
             mod,
             TokenService.GetUserId(context.User),
-            "Only the tome's author may remove screenshots.");
+            "Only the mod author can delete screenshots.");
         if (accessError is not null) return accessError;
 
         var screenshot = mod.Screenshots.SingleOrDefault(candidate => candidate.Id == id);
         if (screenshot is null)
         {
-            return ApiErrors.NotFound("That screenshot is missing from the tome.");
+            return ApiErrors.NotFound("This screenshot could not be found.");
         }
 
         db.ModScreenshots.Remove(screenshot);
@@ -943,13 +943,13 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var accessError = AuthorAccessError(
             mod,
             TokenService.GetUserId(context.User),
-            "Only the tome's author may reorder screenshots.");
+            "Only the mod author can reorder screenshots.");
         if (accessError is not null) return accessError;
 
         var ids = request.Ids;
@@ -959,7 +959,7 @@ public static class ModEndpoints
             ids.Distinct().Count() != ids.Length ||
             !currentIds.SetEquals(ids))
         {
-            return ApiErrors.BadRequest("The screenshot order must name every plate exactly once.");
+            return ApiErrors.BadRequest("Include each screenshot exactly once in the order.");
         }
 
         var screenshotsById = mod.Screenshots.ToDictionary(screenshot => screenshot.Id);
@@ -1000,13 +1000,13 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var accessError = AuthorAccessError(
             mod,
             TokenService.GetUserId(context.User),
-            "Only the tome's author may add a version.");
+            "Only the mod author can publish a version.");
         if (accessError is not null) return accessError;
 
         var versionName = form["version"].ToString().Trim();
@@ -1130,13 +1130,13 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var accessError = AuthorAccessError(
             mod,
             TokenService.GetUserId(context.User),
-            "Only the tome's author may revise it.");
+            "Only the mod author can edit this mod.");
         if (accessError is not null) return accessError;
 
         var name = request.Name?.Trim();
@@ -1225,13 +1225,13 @@ public static class ModEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
-            return ApiErrors.NotFound("That tome is missing from the library.");
+            return ApiErrors.NotFound("This mod could not be found.");
         }
 
         var accessError = AuthorAccessError(
             mod,
             TokenService.GetUserId(context.User),
-            "Only the tome's author may remove it.");
+            "Only the mod author can delete this mod.");
         if (accessError is not null) return accessError;
 
         var screenshotNames = mod.Screenshots.Select(screenshot => screenshot.FileName).ToArray();
@@ -1357,7 +1357,7 @@ public static class ModEndpoints
     {
         if (mod.AuthorId == userId) return null;
         return mod.Visibility == ModVisibility.Private
-            ? ApiErrors.NotFound("That tome is missing from the library.")
+            ? ApiErrors.NotFound("This mod could not be found.")
             : ApiErrors.Forbidden(forbiddenMessage);
     }
 

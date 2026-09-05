@@ -13,7 +13,7 @@ function normalizeTag(raw: string): string {
 function tagProblem(tag: string): string | null {
   return /^[a-z0-9][a-z0-9 -]{0,22}[a-z0-9]$/.test(tag)
     ? null
-    : 'Tags are 2–24 plain characters — letters, numbers, spaces, hyphens.'
+    : 'Use 2–24 characters: letters, numbers, spaces, or hyphens.'
 }
 
 /** Chip editor for a tome's tags: type and press Enter (or comma) to file,
@@ -40,7 +40,7 @@ export default function TagsInput({
       return
     }
     if (tags.length >= MAX_TAGS) {
-      setError('A tome carries at most five tags. The Librarian’s patience is finite.')
+      setError('Use up to five tags.')
       return
     }
     const problem = tagProblem(tag)
@@ -65,7 +65,7 @@ export default function TagsInput({
             {tag}
             <button
               type="button"
-              aria-label={`Unfile ${tag}`}
+              aria-label={`Remove tag ${tag}`}
               disabled={disabled}
               className="text-gold/60 transition-colors hover:text-blood"
               onClick={() => remove(tag)}
@@ -102,10 +102,10 @@ export default function TagsInput({
       {open.length > 0 && tags.length < MAX_TAGS && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-bone-dim/60">
-            From the index:
+            Suggestions:
           </span>
           {open.map((s) => (
-            <TagBadge key={s} tag={s} title="File under this tag" onClick={() => add(s)} />
+            <TagBadge key={s} tag={s} title="Add this tag" onClick={() => add(s)} />
           ))}
         </div>
       )}

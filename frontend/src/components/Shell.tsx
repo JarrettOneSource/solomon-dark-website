@@ -243,7 +243,7 @@ export default function Shell() {
             </div>
             <Link
               to="/game"
-              className="btn btn-gold hidden !px-3.5 !py-2.5 !text-[11px] sm:inline-flex"
+              className="btn btn-gold hidden !px-3.5 !py-2.5 !text-[11px] sm:inline-flex md:hidden"
             >
               Play
             </Link>
@@ -302,12 +302,6 @@ export default function Shell() {
               ) : (
                 <NavItem to="/login" label="Sign in" />
               )}
-              <Link
-                to="/game"
-                className="btn btn-gold w-fit !text-[11px]"
-              >
-                Play
-              </Link>
             </div>
           </nav>
         )}
@@ -327,14 +321,13 @@ export default function Shell() {
               </span>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-bone-dim">
-              A fan preservation project — not affiliated with Raptisoft. Original game content
-              © Raptisoft. Please keep any property damage down to an absolute minimum.
+              A community revival of Solomon Dark. Original game content © Raptisoft.
             </p>
           </div>
           <div>
             <div className="kicker mb-3">Passages</div>
             <ul className="space-y-2 text-sm">
-              <li><Link to="/boneyard" className="link-arcane">The Boneyard</Link></li>
+              <li><Link to="/boneyard" className="link-arcane">Boneyard Editor</Link></li>
               <li><Link to="/boneyards" className="link-arcane">Boneyard Viewer</Link></li>
               <li><Link to="/about" className="link-arcane">The Revival Story</Link></li>
               <li>
@@ -353,10 +346,10 @@ export default function Shell() {
             <p className="text-fell text-sm leading-relaxed text-gold/70">
               “Find Solomon Dark, and deal with him.”
               <br />
-              <span className="text-bone-dim">— the Archchancellor, over brandy</span>
+              <span className="text-bone-dim">— the Archchancellor</span>
             </p>
             <p className="mt-6 font-mono text-[11px] text-bone-dim/60">
-              beta 0.72.5 · web port
+              Based on Solomon Dark beta 0.72.5
             </p>
           </div>
         </div>

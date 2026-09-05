@@ -63,7 +63,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
       playSound('tomeGet', 0.16)
       navigate(`/mods/${mod.slug}`)
     } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : 'The Librarian declined, without elaboration.')
+      setError(err instanceof ApiError || err instanceof Error ? err.message : 'Could not publish this Boneyard.')
       setBusy(false)
     }
   }
@@ -73,13 +73,12 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
       <div
         className="panel panel-ornate w-full max-w-lg overflow-hidden"
         role="dialog"
-        aria-label="Publish this boneyard"
+        aria-label="Publish Boneyard"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gold/15 px-5 py-4">
           <div>
-            <div className="kicker">Publication papers</div>
-            <h2 className="h-display mt-0.5 text-lg">Enter the Library</h2>
+            <h2 className="h-display mt-0.5 text-lg">Publish Boneyard</h2>
           </div>
           <button type="button" className="text-bone-dim hover:text-blood" aria-label="Close" onClick={onClose}>
             ✕
@@ -87,13 +86,13 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
         </div>
 
         <div className="space-y-4 px-5 py-4">
-          <Field label="Title">
-            <input className="input" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+          <Field label="Title" hint="3–60 characters.">
+            <input className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Summary" hint="One line for the shelf card.">
+          <Field label="Summary" hint="Shown on your Library card.">
             <input className="input" value={summary} maxLength={160} onChange={(e) => setSummary(e.target.value)} />
           </Field>
-          <Field label="Description" hint="What awaits the residents. Markdown-ish.">
+          <Field label="Description" hint="Describe the map and its challenges. Plain text only.">
             <textarea
               className="input min-h-28 resize-y"
               value={description}
@@ -103,16 +102,15 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
           <ModVisibilityField disabled={busy} onChange={setVisibility} value={visibility} />
           {error && <ErrorNote message={error} />}
           <p className="text-fell text-xs text-bone-dim/70">
-            Publishing compiles the plot to a native .boneyard, validates the container,
-            and shelves it as a tome under your name. The draft stays in the Annals.
+            Publishes this Boneyard as a mod and saves a copy of the draft to the cloud.
             {waveCount > 0 &&
-              ` An authored schedule of ${waveCount} wave${waveCount === 1 ? '' : 's'} ships alongside as data/wave.txt.`}
+              ` Includes your schedule of ${waveCount} wave${waveCount === 1 ? '' : 's'}.`}
           </p>
         </div>
 
         <div className="flex justify-end gap-2 border-t border-gold/15 px-5 py-4">
           <button type="button" className="btn btn-stone" onClick={onClose} disabled={busy}>
-            Not yet
+            Cancel
           </button>
           <button
             type="button"
@@ -120,7 +118,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
             onClick={submit}
             disabled={busy || !name.trim() || !summary.trim()}
           >
-            {busy ? 'Binding…' : 'Publish the plot'}
+            {busy ? 'Publishing…' : 'Publish Boneyard'}
           </button>
         </div>
       </div>

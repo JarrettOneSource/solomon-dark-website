@@ -40,15 +40,15 @@ interface Props {
 }
 
 const TOOL_HINT: Record<Tool, string> = {
-  select: 'click holds · drag moves · drag empty ground lassos · space surveys',
-  place: 'click plants · esc or right-click puts it down',
-  brush: 'drag to scatter · esc or right-click puts it down',
-  erase: 'click or drag to evict',
-  pan: 'drag to survey · arrows walk the view when nothing is held',
-  road: 'click to lay · double-click or enter ends the road',
-  fence: 'click to post · double-click or enter ends the run',
-  terrain: 'click to carve · double-click or enter ends the cut',
-  spawn: 'click sets where the wizards materialize · esc returns to select',
+  select: 'click to select · drag to move · drag empty ground to select a group · hold Space to pan',
+  place: 'click to place · Esc or right-click to cancel',
+  brush: 'drag to scatter · Esc or right-click to cancel',
+  erase: 'click or drag to erase',
+  pan: 'drag to pan · arrow keys pan when nothing is selected',
+  road: 'click to place road points · double-click or Enter to finish',
+  fence: 'click to place fence posts · double-click or Enter to finish',
+  terrain: 'click to draw terrain · double-click or Enter to finish',
+  spawn: 'click to set the player spawn · Esc to return to selection',
 }
 
 type Gesture =
@@ -649,7 +649,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
       <div className="absolute bottom-9 right-3 flex items-center gap-0.5 rounded border border-gold/20 bg-abyss/85 p-1 shadow-[0_2px_12px_rgba(0,0,0,.5)] backdrop-blur-sm">
         <button
           type="button"
-          title="Step back"
+          title="Zoom out"
           aria-label="Zoom out"
           className="flex h-7 w-7 items-center justify-center rounded-sm font-display text-sm text-bone hover:bg-gold/15 hover:text-gold-bright"
           onClick={() => zoomBy(1 / 1.25)}
@@ -658,7 +658,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         </button>
         <button
           type="button"
-          title="True scale (100%)"
+          title="Reset zoom to 100%"
           aria-label="Reset zoom to 100%"
           className="flex h-7 min-w-12 items-center justify-center rounded-sm px-1 font-mono text-[11px] text-gold/90 hover:bg-gold/15 hover:text-gold-bright"
           onClick={() => zoomTo(1)}
@@ -667,7 +667,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         </button>
         <button
           type="button"
-          title="Lean in"
+          title="Zoom in"
           aria-label="Zoom in"
           className="flex h-7 w-7 items-center justify-center rounded-sm font-display text-sm text-bone hover:bg-gold/15 hover:text-gold-bright"
           onClick={() => zoomBy(1.25)}
@@ -677,8 +677,8 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         <span className="mx-0.5 h-5 w-px bg-gold/15" />
         <button
           type="button"
-          title="Fit the whole plot"
-          aria-label="Fit the whole plot"
+          title="Fit map"
+          aria-label="Fit map"
           className="flex h-7 w-7 items-center justify-center rounded-sm font-display text-sm text-bone hover:bg-gold/15 hover:text-gold-bright"
           onClick={fit}
         >
@@ -691,7 +691,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         <span ref={coordsRef} className="min-w-20">·</span>
         <span className={snap ? 'text-gold/80' : 'text-bone-dim/40'}>{snap ? 'snap 16' : 'snap off'}</span>
         {selection.length > 0 && (
-          <span className="text-gold/80">{selection.length} held</span>
+          <span className="text-gold/80">{selection.length} selected</span>
         )}
         <span className="ml-auto hidden uppercase tracking-wider text-bone-dim/50 sm:block">{TOOL_HINT[tool]}</span>
       </div>

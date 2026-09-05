@@ -18,26 +18,6 @@ export function Spinner({ size = 56, label }: { size?: number; label?: string })
   )
 }
 
-export function SectionHead({
-  kicker,
-  title,
-  action,
-}: {
-  kicker: string
-  title: string
-  action?: ReactNode
-}) {
-  return (
-    <div className="mb-6 flex items-end justify-between gap-4">
-      <div>
-        <div className="kicker mb-1.5">{kicker}</div>
-        <h2 className="h-display text-xl sm:text-2xl">{title}</h2>
-      </div>
-      {action && <div className="shrink-0 pb-1">{action}</div>}
-    </div>
-  )
-}
-
 export function EmptyState({ title, line, icon }: { title: string; line?: string; icon?: string }) {
   return (
     <div className="panel panel-ornate flex flex-col items-center gap-3 px-6 py-14 text-center">
@@ -127,9 +107,9 @@ export function StatTile({
   loading?: boolean
 }) {
   return (
-    <div className="panel panel-ornate flex items-center gap-4 px-5 py-4">
+    <div className="panel panel-ornate flex items-center gap-4 px-4 py-4 sm:px-5">
       <div
-        className="flex h-12 w-12 flex-none items-center justify-center rounded-sm border border-gold/30 bg-[#0d0b12]"
+        className="hidden h-12 w-12 flex-none items-center justify-center rounded-sm border border-gold/30 bg-[#0d0b12] sm:flex"
         style={{ boxShadow: 'inset 0 0 12px rgba(0,0,0,.8), 0 0 10px rgba(200,168,98,.12)' }}
       >
         <img src={icon} alt="" className="h-8 w-8 object-contain" />
@@ -138,7 +118,7 @@ export function StatTile({
         <div className="h-display text-2xl leading-none">
           {loading || value === null ? <span className="text-gold/40">—</span> : value}
         </div>
-        <div className="mt-1 truncate text-[11px] uppercase tracking-[0.18em] text-bone-dim">
+        <div className="mt-1 text-[11px] uppercase leading-snug tracking-[0.18em] text-bone-dim">
           {label}
         </div>
       </div>

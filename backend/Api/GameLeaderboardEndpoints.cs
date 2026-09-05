@@ -95,7 +95,7 @@ public static partial class GameLeaderboardEndpoints
             .SingleOrDefaultAsync(candidate => candidate.Id == userId.Value, cancellationToken);
         if (user is null)
         {
-            return ApiErrors.Unauthorized("This enrollment no longer exists.");
+            return ApiErrors.Unauthorized("This account no longer exists.");
         }
 
         var runId = receipt.RunId!.Trim();

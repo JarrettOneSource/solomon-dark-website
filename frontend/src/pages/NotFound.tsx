@@ -20,12 +20,13 @@ export default function NotFound() {
         className="w-64 max-w-full drop-shadow-[0_4px_20px_rgba(0,0,0,.9)]"
         onClick={() => playSound('youGetNothing', 0.3)}
       />
-      <p className="text-fell mt-8 text-lg text-bone-dim">
+      <h1 className="h-display mt-8 text-xl">Page Not Found</h1>
+      <p className="text-fell mt-3 text-lg text-bone-dim">
         “I’ve never heard of you, and nobody else will either.”{' '}
-        <span className="text-bone-dim/50">— Solomon Dark, re: your URL</span>
+        <span className="text-bone-dim/50">— Solomon Dark</span>
       </p>
       <Link to="/" className="btn btn-stone mt-10">
-        ← Return to the College
+        ← Home
       </Link>
     </div>
   )

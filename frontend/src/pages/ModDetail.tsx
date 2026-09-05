@@ -33,7 +33,7 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
       setBody('')
       comments.reload()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The margin rejected your note.')
+      setError(err instanceof ApiError ? err.message : 'Could not post your comment.')
     } finally {
       setBusy(false)
     }
@@ -44,7 +44,7 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
       await api.mods.comments.remove(mod.slug, id)
       comments.reload()
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to erase the note')
+      alert(err instanceof ApiError ? err.message : 'Could not delete your comment.')
     }
   }
 
@@ -60,11 +60,10 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
       </div>
 
       <div className="mt-6 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="h-display text-lg">Marginalia</h2>
-        <span className="text-fell text-sm text-bone-dim">notes left in the margins</span>
+        <h2 className="h-display text-lg">Comments</h2>
         {comments.data && (
           <span className="ml-auto font-mono text-xs text-bone-dim/70">
-            {total} {total === 1 ? 'note' : 'notes'}
+            {total} {total === 1 ? 'comment' : 'comments'}
           </span>
         )}
       </div>
@@ -76,13 +75,13 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             maxLength={1000}
-            placeholder="Leave a note in the margin…"
+            placeholder="Leave a comment…"
           />
           {error && <ErrorNote message={error} />}
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-[11px] text-bone-dim/50">{body.length}/1000</span>
             <button type="submit" className="btn btn-stone" disabled={busy || !body.trim()}>
-              {busy ? 'Inscribing…' : 'Inscribe'}
+              {busy ? 'Posting…' : 'Post comment'}
             </button>
           </div>
         </form>
@@ -91,16 +90,16 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
           <Link to="/login" className="link-arcane">
             Sign in
           </Link>{' '}
-          to leave a note. The Librarian checks signatures.
+          to leave a comment.
         </p>
       )}
 
       {comments.loading ? (
-        <Spinner label="Deciphering handwriting…" />
+        <Spinner label="Loading comments…" />
       ) : items.length === 0 ? (
         <div className="mt-5 rounded border border-dashed border-gold/20 px-5 py-8 text-center">
           <p className="text-fell text-sm text-bone-dim">
-            No notes yet. The margins are pristine, suspiciously so.
+            No comments yet.
           </p>
         </div>
       ) : (
@@ -135,7 +134,7 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
                     onClick={() => remove(c.id)}
                     className="ml-auto text-[11px] uppercase tracking-wider text-blood/70 hover:text-blood"
                   >
-                    erase
+                    Delete
                   </button>
                 )}
               </div>
@@ -163,7 +162,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
       await action()
       onChanged()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The plate press jammed.')
+      setError(err instanceof ApiError ? err.message : 'Could not update screenshots.')
     } finally {
       setBusy(false)
     }
@@ -187,7 +186,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
 
   return (
     <div className="mt-4 border-t border-gold/15 pt-4">
-      <div className="kicker mb-3">Plates · {plates.length}/10 bound</div>
+      <div className="kicker mb-3">Screenshots · {plates.length}/10</div>
       {plates.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {plates.map((p, n) => (
@@ -195,10 +194,10 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
               <AuthenticatedImage src={p.url} alt="" className="h-14 w-full object-cover" />
               <button
                 type="button"
-                aria-label="Unbind this plate"
+                aria-label="Delete screenshot"
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm('Unbind this plate from the tome?')) {
+                  if (window.confirm('Delete this screenshot?')) {
                     void run(() => api.mods.screenshots.remove(mod.slug, p.id))
                   }
                 }}
@@ -209,7 +208,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
               {n > 0 && (
                 <button
                   type="button"
-                  aria-label="Move plate earlier"
+                  aria-label="Move screenshot earlier"
                   disabled={busy}
                   onClick={() => move(n, -1)}
                   className={`${smallButton} bottom-0.5 left-0.5 text-gold/80 hover:text-gold-bright`}
@@ -220,7 +219,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
               {n < plates.length - 1 && (
                 <button
                   type="button"
-                  aria-label="Move plate later"
+                  aria-label="Move screenshot later"
                   disabled={busy}
                   onClick={() => move(n, 1)}
                   className={`${smallButton} bottom-0.5 right-0.5 text-gold/80 hover:text-gold-bright`}
@@ -236,7 +235,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
         className={`mt-3 block ${plates.length >= 10 ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'}`}
       >
         <span className="btn btn-stone pointer-events-none w-full !py-2 !text-[11px]">
-          {busy ? 'Pressing…' : 'Bind new plates'}
+          {busy ? 'Uploading…' : 'Add screenshots'}
         </span>
         <input
           type="file"
@@ -251,7 +250,7 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
         />
       </label>
       <p className="mt-2 text-[11px] leading-relaxed text-bone-dim/70">
-        png/jpg · 2MB each · the first plate faces the Library.
+        PNG/JPG · 2 MB each. The first screenshot is your Library thumbnail.
       </p>
       {error && (
         <div className="mt-2">
@@ -276,14 +275,14 @@ function TagEditor({ mod, onChanged }: { mod: ModDetailShape; onChanged: () => v
       await api.mods.update(mod.slug, { tags })
       onChanged()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The filing system rejected it.')
+      setError(err instanceof ApiError ? err.message : 'Could not save tags.')
       setBusy(false)
     }
   }
 
   return (
     <div className="mt-4 border-t border-gold/15 pt-4">
-      <div className="kicker mb-3">Filing · {tags.length}/5 tags</div>
+      <div className="kicker mb-3">Tags · {tags.length}/5</div>
       <TagsInput tags={tags} onChange={setTags} disabled={busy} />
       {error && (
         <div className="mt-2">
@@ -297,7 +296,7 @@ function TagEditor({ mod, onChanged }: { mod: ModDetailShape; onChanged: () => v
           disabled={busy}
           onClick={save}
         >
-          {busy ? 'Refiling…' : 'Save the filing'}
+          {busy ? 'Saving…' : 'Save tags'}
         </button>
       )}
     </div>
@@ -316,7 +315,7 @@ function VisibilityEditor({ mod, onChanged }: { mod: ModDetailShape; onChanged: 
       await api.mods.update(mod.slug, { visibility })
       onChanged()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'The visibility change was rejected.')
+      setError(err instanceof ApiError ? err.message : 'Could not save visibility.')
       setBusy(false)
     }
   }
@@ -364,14 +363,14 @@ export default function ModDetail() {
   const [subscribing, setSubscribing] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
 
-  if (mod.loading) return <Spinner label="Fetching the tome…" />
+  if (mod.loading) return <Spinner label="Loading mod…" />
   if (mod.error || !mod.data) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <img src={art.skullWhite} alt="" className="mx-auto mb-4 h-12 opacity-60" />
-        <h1 className="h-display text-xl">This tome is missing</h1>
+        <h1 className="h-display text-xl">Could Not Load Mod</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          {mod.error ?? 'Checked out, burned, or never written.'}
+          {mod.error ?? 'This mod could not be found.'}
         </p>
         <Link to="/mods" className="btn btn-stone mt-6">
           ← Back to the Library
@@ -400,20 +399,20 @@ export default function ModDetail() {
       setStamp((count) => count + 1)
       playSound('tomeGet', 0.3)
     } catch (error) {
-      setSubscriptionError(error instanceof Error ? error.message : 'The subscription failed.')
+      setSubscriptionError(error instanceof Error ? error.message : 'Could not subscribe to this mod.')
     } finally {
       setSubscribing(false)
     }
   }
 
   const remove = async () => {
-    if (!window.confirm(`Burn “${m.name}” from the Library? This cannot be undone.`)) return
+    if (!window.confirm(`Delete “${m.name}” from the Library? This cannot be undone.`)) return
     setDeleting(true)
     try {
       await api.mods.remove(m.slug)
       navigate('/mods')
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : 'Failed to delete')
+      alert(e instanceof ApiError ? e.message : 'Could not delete this mod.')
       setDeleting(false)
     }
   }
@@ -433,7 +432,7 @@ export default function ModDetail() {
                 <TagBadge
                   key={tag}
                   tag={tag}
-                  title={`Everything filed under ${tag}`}
+                  title={`Browse mods tagged ${tag}`}
                   onClick={() => navigate(`/mods?tag=${encodeURIComponent(tag)}`)}
                 />
               ))}
@@ -458,7 +457,6 @@ export default function ModDetail() {
               className="h-4"
             />
           )}
-          <span>· updated {timeAgo(m.updatedAtUtc)}</span>
         </p>
         <p className="text-fell mt-3 max-w-2xl text-[16px] text-bone/85">{m.summary}</p>
       </Reveal>
@@ -471,14 +469,16 @@ export default function ModDetail() {
             </Reveal>
           )}
 
-          <Reveal delay={100} className={m.screenshots.length > 0 ? 'mt-8' : ''}>
-            <div className="panel panel-ornate p-6 sm:p-8">
-              <div className="kicker mb-3">From the tome’s preface</div>
-              <div className="prose-sdr whitespace-pre-wrap text-[15px]">
-                {m.description || m.summary}
+          {m.description && (
+            <Reveal delay={100} className={m.screenshots.length > 0 ? 'mt-8' : ''}>
+              <div className="panel panel-ornate p-6 sm:p-8">
+                <div className="kicker mb-3">Description</div>
+                <div className="prose-sdr whitespace-pre-wrap text-[15px]">
+                  {m.description}
+                </div>
               </div>
-            </div>
-          </Reveal>
+            </Reveal>
+          )}
 
           <Marginalia mod={m} />
         </div>
@@ -489,7 +489,6 @@ export default function ModDetail() {
               type="button"
               className="btn btn-gold relative w-full !py-4 !text-sm"
               disabled={subscribed || subscribing}
-              title="Adds this mod to your account; enable it from Explore the Dark Cloud"
               onClick={() => { void subscribe() }}
             >
               {subscribed ? '✓ Subscribed' : subscribing ? 'Subscribing…' : '⬩ Subscribe'}
@@ -507,18 +506,14 @@ export default function ModDetail() {
             {subscriptionError ? <ErrorNote message={subscriptionError} /> : null}
             <p className="mt-3 text-xs text-bone-dim">
               {subscribed
-                ? 'Manage activation from Explore the Dark Cloud before starting a game.'
-                : 'Subscribed mods are downloaded and verified when your next game starts.'}
-            </p>
-            <p className="mt-3 font-mono text-xs text-bone-dim">
-              v{latest?.version ?? m.latestVersion} · {latest ? formatBytes(latest.fileSize) : ''} ·
-              ↓ {formatCount(m.downloads)} total
+                ? 'Enable this mod in Explore the Dark Cloud before playing.'
+                : 'Subscribe to add this mod to your collection in the Dark Cloud.'}
             </p>
           </div>
 
           {latest && (
             <div className="panel p-6">
-              <div className="kicker mb-3">Latest edition</div>
+              <div className="kicker mb-3">Latest version</div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <span className="badge badge-gold">v{latest.version}</span>
                 <span className="text-xs text-bone-dim">{formatDate(latest.createdAtUtc)}</span>
@@ -527,33 +522,25 @@ export default function ModDetail() {
                 </span>
               </div>
               <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-bone-dim/90">
-                {latest.changelog || 'No changelog. The scribe was terse.'}
+                {latest.changelog || 'No changelog provided.'}
               </p>
               <Link
                 to={`/mods/${m.slug}/versions`}
                 className="btn btn-stone mt-4 w-full !py-2.5 !text-[11px]"
               >
                 {m.versions.length > 1
-                  ? `Browse all ${m.versions.length} editions`
-                  : 'Open the catalogue'}
+                  ? `View all ${m.versions.length} versions`
+                  : 'View version'}
               </Link>
             </div>
           )}
 
           <div className="panel p-6">
-            <div className="kicker mb-2">Tome record</div>
+            <div className="kicker mb-2">Mod details</div>
             <div className="divide-y divide-gold/10">
-              <RecordRow label="Author">
-                <Link
-                  to={`/wizards/${encodeURIComponent(m.author.username)}`}
-                  className="text-gold hover:text-gold-bright"
-                >
-                  {m.author.username}
-                </Link>
-              </RecordRow>
-              <RecordRow label="Shelved">{formatDate(m.createdAtUtc)}</RecordRow>
-              <RecordRow label="Revised">{timeAgo(m.updatedAtUtc)}</RecordRow>
-              <RecordRow label="Editions">{m.versions.length}</RecordRow>
+              <RecordRow label="Published">{formatDate(m.createdAtUtc)}</RecordRow>
+              <RecordRow label="Updated">{timeAgo(m.updatedAtUtc)}</RecordRow>
+              <RecordRow label="Versions">{m.versions.length}</RecordRow>
               <RecordRow label="Downloads">{formatCount(m.downloads)}</RecordRow>
               <RecordRow label="Visibility">{m.visibility}</RecordRow>
             </div>
@@ -570,7 +557,7 @@ export default function ModDetail() {
                   to={`/mods/${m.slug}/versions`}
                   className="btn btn-stone w-full !py-2.5 !text-[11px]"
                 >
-                  Publish a new edition →
+                  Publish a new version →
                 </Link>
                 <button
                   type="button"
@@ -578,7 +565,7 @@ export default function ModDetail() {
                   disabled={deleting}
                   className="btn btn-blood mt-3 w-full !py-2.5 !text-[11px]"
                 >
-                  {deleting ? 'Burning…' : 'Burn this tome'}
+                  {deleting ? 'Deleting…' : 'Delete mod'}
                 </button>
               </div>
             </div>

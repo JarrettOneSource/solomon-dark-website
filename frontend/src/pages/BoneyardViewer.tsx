@@ -204,7 +204,7 @@ export default function BoneyardViewer() {
               <div className="max-w-md text-center">
                 <img src={art.bannerFetching} alt="" className="mx-auto max-w-full opacity-80" />
                 <p className="text-fell mt-5 text-lg text-bone-dim">
-                  {busy ? 'Fetching the grounds…' : 'Drop a Boneyard here, or open one from your machine.'}
+                  {busy ? 'Loading Boneyard…' : 'Drop a .boneyard file here to open it.'}
                 </p>
                 {!busy && (
                   <button type="button" className="btn btn-gold mt-5" onClick={() => inputRef.current?.click()}>
@@ -217,7 +217,7 @@ export default function BoneyardViewer() {
 
           {busy && loaded && (
             <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-abyss/65 backdrop-blur-sm">
-              <div className="gold-banner animate-pulse">Reading SyncBuffer</div>
+              <div className="gold-banner animate-pulse">Reading Boneyard…</div>
             </div>
           )}
           {error && (
@@ -260,7 +260,7 @@ export default function BoneyardViewer() {
           <div className="text-center">
             <div className="text-5xl text-arcane">⌖</div>
             <div className="mt-4 font-display text-lg font-bold uppercase tracking-[0.2em] text-arcane">
-              Open these grounds
+              Open Boneyard
             </div>
             <div className="mt-2 text-sm text-bone-dim">The file stays in your browser.</div>
           </div>

@@ -36,12 +36,12 @@ export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Prop
     <aside className="flex min-h-0 flex-col overflow-hidden border-r border-gold/15 bg-abyss/70">
       <div className="space-y-2.5 border-b border-gold/15 px-4 py-3">
         <div className="flex items-center justify-between">
-          <div className="kicker">The catalogue</div>
+          <div className="kicker">Palette</div>
           {onCollapse && (
             <button
               type="button"
-              title="Tuck the catalogue away"
-              aria-label="Collapse the catalogue"
+              title="Collapse palette"
+              aria-label="Collapse palette"
               className="rounded px-1.5 py-0.5 text-xs text-bone-dim hover:bg-gold/10 hover:text-gold-bright"
               onClick={onCollapse}
             >
@@ -49,7 +49,7 @@ export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Prop
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-1.5" role="tablist" aria-label="Catalogue drawers">
+        <div className="grid grid-cols-2 gap-1.5" role="tablist" aria-label="Object categories">
           {(
             [
               { id: 'classes', label: 'Classes' },
@@ -74,7 +74,7 @@ export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Prop
         </div>
         <input
           className="input !py-1.5 !text-xs"
-          placeholder="Search the drawers…"
+          placeholder="Search objects…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -83,7 +83,7 @@ export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Prop
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
         {groups.length === 0 && (
           <p className="text-fell py-6 text-center text-xs text-bone-dim">
-            Nothing answers to that name.
+            No matching objects.
           </p>
         )}
         {groups.map((group) => (
@@ -102,7 +102,7 @@ export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Prop
                   <button
                     key={item.key}
                     type="button"
-                    title={`${item.label} · click toggles planting, or drag onto the plot`}
+                    title={`${item.label} · select to place, or drag onto the map`}
                     aria-pressed={active}
                     draggable
                     onDragStart={(e) => {
@@ -131,8 +131,7 @@ export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Prop
           </section>
         ))}
         <p className="text-fell border-t border-gold/10 pt-3 text-[11px] leading-relaxed text-bone-dim/60">
-          Every piece here is cut from the 0.72.5 atlases. Classes carry game
-          behaviour; scenery is set dressing the engine leaves in peace.
+          Classes have game behavior. Scenery is decorative.
         </p>
       </div>
     </aside>

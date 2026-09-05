@@ -7,18 +7,17 @@ import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
 import mageNames from '../assets/magenames.json'
 
-// Some names are spoken for. The Annals are firm about this.
-const RESERVED_NAMES: Record<string, string> = {
-  solomon: 'That name is taken. Permanently. The plot beside it is not.',
-  solomondark: 'That name is taken. Permanently. The plot beside it is not.',
-  raptisoft: 'The Archchancellor’s name may not be borrowed. It barely fits him.',
-  generic: 'That name belongs to the Archivist. He is watching this form.',
-  librarian: 'There is only one Librarian. Do not make eye contact.',
-  semicus: 'Professor Semicus shelved his own name long ago. Choose another.',
-  dean: 'Titles are earned, not enrolled.',
-  headmaster: 'Titles are earned, not enrolled.',
-  archchancellor: 'Titles are earned, not enrolled.',
-}
+const RESERVED_NAMES = new Set([
+  'solomon',
+  'solomondark',
+  'raptisoft',
+  'generic',
+  'librarian',
+  'semicus',
+  'dean',
+  'headmaster',
+  'archchancellor',
+])
 
 export default function Register() {
   const { register } = useAuth()
@@ -36,9 +35,8 @@ export default function Register() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const reserved = RESERVED_NAMES[username.trim().toLowerCase()]
-    if (reserved) {
-      setError(reserved)
+    if (RESERVED_NAMES.has(username.trim().toLowerCase())) {
+      setError('That name is reserved. Choose another.')
       return
     }
     setBusy(true)
@@ -64,7 +62,7 @@ export default function Register() {
         </div>
 
         <form onSubmit={submit} className="panel panel-ornate space-y-5 p-6 sm:p-8">
-          <Field label="Mage name" hint="3–24 characters. Letters, numbers, - and _.">
+          <Field label="Username" hint="3–24 characters. Letters, numbers, - and _.">
             <div className="flex gap-2">
               <input
                 className="input"
@@ -83,7 +81,7 @@ export default function Register() {
               </button>
             </div>
           </Field>
-          <Field label="Email" hint="For recovering your account. No owls, no spam.">
+          <Field label="Email">
             <input
               type="email"
               className="input"
@@ -93,7 +91,7 @@ export default function Register() {
               autoComplete="email"
             />
           </Field>
-          <Field label="Password" hint="At least 8 characters. “password123” is technically legal.">
+          <Field label="Password" hint="At least 8 characters.">
             <input
               type="password"
               className="input"
@@ -112,7 +110,7 @@ export default function Register() {
           <p className="text-center text-xs text-bone-dim">
             Already have an account?{' '}
             <Link to="/login" className="link-arcane">
-              Return to your studies
+              Sign in
             </Link>
           </p>
         </form>

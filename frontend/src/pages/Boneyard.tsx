@@ -273,7 +273,7 @@ export default function Boneyard() {
   const openDraft = useCallback((id: string) => {
     const doc = loadDraft(id)
     if (!doc) {
-      say('That draft would not open. The chest keeps its secrets.')
+      say('Could not open this draft.')
       return
     }
     dispatch({ type: 'load-doc', doc, draftId: id })
@@ -290,7 +290,7 @@ export default function Boneyard() {
     dispatch({ type: 'load-doc', doc, draftId: id })
     setCloudId(id, cloudId)
     setChestOpen(false)
-    say(`${name} came down from the Annals.`)
+    say(`Opened ${name} from the cloud.`)
   }, [say])
 
   // Lodge the current draft in the Annals: create once, then last-write-wins.
@@ -317,9 +317,9 @@ export default function Boneyard() {
         document: docFileValue(state.doc),
         ...(compiled !== undefined ? { compiledBoneyard: compiled } : {}),
       })
-      say('The Annals hold it now. The chronicler sends regards.')
+      say('Draft saved to the cloud.')
     } catch (err) {
-      say(err instanceof Error ? err.message : 'The Annals are not answering.')
+      say(err instanceof Error ? err.message : 'Could not save this draft to the cloud.')
     } finally {
       setAnnalsBusy(false)
     }
@@ -330,14 +330,14 @@ export default function Boneyard() {
       if (file.name.endsWith('.boneyard')) {
         const doc = importNative(new Uint8Array(await file.arrayBuffer()))
         dispatch({ type: 'load-doc', doc, draftId: newDraftId() })
-        say(`Opened ${file.name}. Handle with the respect the dead prefer.`)
+        say(`Opened ${file.name}.`)
       } else {
         const doc = importDocJson(await file.text())
         dispatch({ type: 'load-doc', doc, draftId: newDraftId() })
-        say(`Draft ${file.name} restored from paper.`)
+        say(`Imported ${file.name}.`)
       }
     } catch (err) {
-      say(err instanceof Error ? err.message : 'That file declined to be read.')
+      say(err instanceof Error ? err.message : 'Could not read this file.')
     }
   }, [say])
 
@@ -354,7 +354,7 @@ export default function Boneyard() {
       downloadBlob(`${name}.boneyard`, bytes, 'application/octet-stream')
       playSound('tomeGet', 0.14)
     } catch (err) {
-      say(err instanceof Error ? err.message : 'The compiler declined.')
+      say(err instanceof Error ? err.message : 'Could not export this Boneyard.')
     }
   }, [state.doc, say])
 
@@ -390,10 +390,10 @@ export default function Boneyard() {
   const onEditWaves = useCallback(() => setWavesOpen(true), [])
 
   const publishTitle = !user
-    ? 'Publishing wants a signed-in wizard.'
+    ? 'Sign in to publish a Boneyard.'
     : !formatReady()
-      ? 'Publishing opens when the native compiler leaves the vault.'
-      : 'Publish this plot to the Library.'
+      ? 'The Boneyard exporter is unavailable.'
+      : 'Publish this Boneyard to the Library.'
 
   const groups = state.doc.groups ?? {}
   const selectionGrouped = state.selection.some((e) => groups[e.eid])
@@ -405,14 +405,14 @@ export default function Boneyard() {
         <Link
           to="/"
           className="btn btn-stone flex shrink-0 items-center gap-2 !px-2.5 !py-1.5 !text-[10px]"
-          title="Back to the College"
+          title="Home"
         >
           <img src={art.skullGold} alt="" className="h-3.5 w-auto" />
-          The College
+          Home
         </Link>
         <span className="h-5 w-px shrink-0 bg-gold/15" />
         <div className="flex min-w-0 items-baseline gap-3">
-          <h1 className="h-display text-base leading-tight">The Boneyard</h1>
+          <h1 className="h-display text-base leading-tight">Boneyard Editor</h1>
           <span className="hidden truncate font-mono text-xs text-bone-dim/70 md:inline">
             {state.doc.meta.name || 'Untitled acre'}
           </span>
@@ -420,9 +420,9 @@ export default function Boneyard() {
             className={`font-mono text-[10px] uppercase tracking-wider ${
               state.dirty ? 'text-gold/80' : 'text-bone-dim/50'
             }`}
-            title={state.savedAt ? `Last inked ${new Date(state.savedAt).toLocaleTimeString()}` : 'Not yet inked'}
+            title={state.savedAt ? `Saved locally at ${new Date(state.savedAt).toLocaleTimeString()}` : 'Not saved'}
           >
-            {state.dirty ? 'inking…' : state.savedAt ? 'inked' : 'unwritten'}
+            {state.dirty ? 'Saving…' : state.savedAt ? 'Saved locally' : 'Not saved'}
           </span>
         </div>
 
@@ -437,18 +437,18 @@ export default function Boneyard() {
               aria-expanded={deskOpen}
               onClick={() => setDeskOpen((v) => !v)}
             >
-              The desk ▾
+              File ▾
             </button>
             {deskOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setDeskOpen(false)} />
                 <div className="panel absolute right-0 top-full z-50 mt-1.5 w-52 py-1.5" role="menu">
-                  <MenuItem label="Drafts…" hint="The chest of drafts, local and cloud" onClick={() => { setDeskOpen(false); setChestOpen(true) }} />
+                  <MenuItem label="Drafts…" hint="Open local and cloud drafts" onClick={() => { setDeskOpen(false); setChestOpen(true) }} />
                   <MenuItem label="Import…" hint="Open a .boneyard or a JSON draft" onClick={() => { setDeskOpen(false); fileRef.current?.click() }} />
                   <MenuItem label="Export draft" hint="Save the draft as JSON" onClick={() => { setDeskOpen(false); exportJson() }} />
                   <MenuItem
                     label="Download .boneyard"
-                    hint={formatReady() ? 'Compile a native .boneyard' : 'The native compiler is still in the vault.'}
+                    hint={formatReady() ? 'Export a .boneyard file' : 'The Boneyard exporter is unavailable.'}
                     disabled={!formatReady()}
                     onClick={() => { setDeskOpen(false); exportBoneyard() }}
                   />
@@ -472,16 +472,16 @@ export default function Boneyard() {
             className="btn btn-stone !px-3 !py-2 !text-[11px]"
             onClick={sendToAnnals}
             disabled={!user || annalsBusy}
-            title={user ? 'Lodge this draft in the Annals (cloud)' : 'The Annals take drafts from signed-in wizards.'}
+            title={user ? 'Save this draft to the cloud' : 'Sign in to save drafts to the cloud.'}
           >
-            {annalsBusy ? 'Lodging…' : 'To the Annals'}
+            {annalsBusy ? 'Lodging…' : 'Save to cloud'}
           </button>
           {user && formatReady() ? (
             <button
               type="button"
               className="btn btn-gold !px-3.5 !py-2 !text-[11px]"
               onClick={() => setPublishOpen(true)}
-              title="Publish this plot to the Library"
+              title="Publish this Boneyard to the Library"
             >
               Publish
             </button>
@@ -506,7 +506,7 @@ export default function Boneyard() {
           )}
           <div
             className="cursor-col-resize bg-black/30 transition-colors hover:bg-gold/25"
-            title="Drag to size the catalogue · double-click resets"
+            title="Drag to resize the palette · double-click to reset"
             onPointerDown={startRailDrag('left')}
             onDoubleClick={() => setLeftW(RAIL_L_DEFAULT)}
           />
@@ -549,7 +549,7 @@ export default function Boneyard() {
           </div>
           <div
             className="cursor-col-resize bg-black/30 transition-colors hover:bg-gold/25"
-            title="Drag to size the ledger · double-click resets"
+            title="Drag to resize the inspector · double-click to reset"
             onPointerDown={startRailDrag('right')}
             onDoubleClick={() => setRightW(RAIL_R_DEFAULT)}
           />
@@ -567,8 +567,8 @@ export default function Boneyard() {
           {leftW === 0 && (
             <button
               type="button"
-              title="Open the catalogue"
-              aria-label="Open the catalogue"
+              title="Open palette"
+              aria-label="Open palette"
               className="absolute left-1.5 top-2 z-10 rounded border border-gold/25 bg-abyss/85 px-2 py-1.5 text-xs text-bone-dim backdrop-blur-sm hover:border-gold/60 hover:text-gold-bright"
               onClick={() => setLeftW(RAIL_L_DEFAULT)}
             >
@@ -578,8 +578,8 @@ export default function Boneyard() {
           {rightW === 0 && (
             <button
               type="button"
-              title="Open the ledger"
-              aria-label="Open the ledger"
+              title="Open inspector"
+              aria-label="Open inspector"
               className="absolute right-1.5 top-2 z-10 rounded border border-gold/25 bg-abyss/85 px-2 py-1.5 text-xs text-bone-dim backdrop-blur-sm hover:border-gold/60 hover:text-gold-bright"
               onClick={() => setRightW(RAIL_R_DEFAULT)}
             >
@@ -592,8 +592,8 @@ export default function Boneyard() {
       {/* narrow contraptions get a polite refusal */}
       <div className="p-6 md:hidden">
         <EmptyState
-          title="The drafting table wants a desk"
-          line="Surveying sixty acres through a keyhole helps no one. Return on a wider contraption."
+          title="Use a Wider Screen"
+          line="The Boneyard editor needs more screen space. Rotate your device or use a larger screen."
         />
       </div>
 
@@ -615,8 +615,8 @@ export default function Boneyard() {
             setWavesOpen(false)
             say(
               waves.length === 0
-                ? 'The stock waves resume their watch.'
-                : `The schedule holds ${waves.length} wave${waves.length === 1 ? '' : 's'}.`,
+                ? 'Default waves restored.'
+                : `${waves.length} wave${waves.length === 1 ? '' : 's'} saved.`,
             )
           }}
           onClose={() => setWavesOpen(false)}

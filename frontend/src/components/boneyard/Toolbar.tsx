@@ -308,8 +308,8 @@ const ROAD_WIDTHS = [
 const HAND_TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
   { tool: 'select', icon: 'select', label: 'Select, lasso, move (V)' },
   { tool: 'brush', icon: 'brush', label: 'Scatter brush (P)' },
-  { tool: 'erase', icon: 'erase', label: 'Evict, drag sweeps (E)' },
-  { tool: 'pan', icon: 'pan', label: 'Survey the view (H, or hold Space from any tool)' },
+  { tool: 'erase', icon: 'erase', label: 'Erase (E) · drag to erase an area' },
+  { tool: 'pan', icon: 'pan', label: 'Pan (H or hold Space)' },
 ]
 
 const DRAW_TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
@@ -326,7 +326,7 @@ export default memo(function Toolbar(p: Props) {
       case 'place':
         return (
           <span className="text-fell px-1 text-[11px] text-bone-dim/80">
-            Planting {p.placeLabel ? <span className="text-gold/90">{p.placeLabel}</span> : 'from the catalogue'} · V returns to the hand
+            Placing {p.placeLabel ? <span className="text-gold/90">{p.placeLabel}</span> : 'from the palette'} · V to select
           </span>
         )
       case 'road':
@@ -415,12 +415,12 @@ export default memo(function Toolbar(p: Props) {
       {p.selectionCount > 0 && (
         <div className={`absolute right-10 ${options ? 'top-14' : 'top-2'} z-10 flex items-center gap-0.5 px-1.5 py-1 ${PANEL}`}>
           <span className="mr-1 px-1 font-mono text-[10px] uppercase tracking-wider text-gold/80">
-            {p.selectionCount} held
+            {p.selectionCount} selected
           </span>
-          <PillButton label="Group" title="Bind the held pieces into one (Ctrl+G)" disabled={p.selectionCount < 2} onClick={p.onGroup} />
-          <PillButton label="Ungroup" title="Release the binding (Ctrl+Shift+G)" disabled={!p.selectionGrouped} onClick={p.onUngroup} />
-          <PillButton label="Duplicate" title="Copy the held pieces a step over (Ctrl+D)" onClick={p.onDuplicate} />
-          <PillButton label="Evict" title="Delete the held pieces (Del)" tone="blood" onClick={p.onDelete} />
+          <PillButton label="Group" title="Group selected pieces (Ctrl+G)" disabled={p.selectionCount < 2} onClick={p.onGroup} />
+          <PillButton label="Ungroup" title="Ungroup selected pieces (Ctrl+Shift+G)" disabled={!p.selectionGrouped} onClick={p.onUngroup} />
+          <PillButton label="Duplicate" title="Duplicate selected pieces (Ctrl+D)" onClick={p.onDuplicate} />
+          <PillButton label="Delete" title="Delete selected pieces (Del)" tone="blood" onClick={p.onDelete} />
         </div>
       )}
     </>

@@ -98,7 +98,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         {
             throw new ModPublishingException(
                 StatusCodes.Status401Unauthorized,
-                "The Annals could not identify this mod author.");
+                "Sign in to manage your mods.");
         }
 
         var slug = await ResolveSlugAsync(request.Slug, name, cancellationToken);
@@ -295,7 +295,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         {
             throw new ModPublishingException(
                 StatusCodes.Status400BadRequest,
-                "A tome carries at most five tags. The Librarian's patience is finite.");
+                "Use up to five tags.");
         }
 
         if (tags.Any(tag => !IsValidTag(tag)))

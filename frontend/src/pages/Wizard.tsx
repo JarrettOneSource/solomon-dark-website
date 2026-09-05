@@ -12,14 +12,14 @@ export default function Wizard() {
   const { username = '' } = useParams()
   const profile = useApi(() => api.users.get(username), [username])
 
-  if (profile.loading) return <Spinner label="Consulting the Annals…" />
+  if (profile.loading) return <Spinner label="Loading profile…" />
   if (profile.error || !profile.data) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <img src={art.skullWhite} alt="" className="mx-auto mb-4 h-12 opacity-60" />
-        <h1 className="h-display text-xl">No such wizard</h1>
+        <h1 className="h-display text-xl">Could Not Load Profile</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          {profile.error ?? 'The Annals contain no one by that name. Perhaps they never enrolled. Perhaps worse.'}
+          {profile.error ?? 'No player has that username.'}
         </p>
         <Link to="/mods" className="btn btn-stone mt-6">
           ← Back to the Library
@@ -41,7 +41,6 @@ export default function Wizard() {
             <img src={art.skullWhite} alt="" className="h-12 opacity-80" />
           </div>
           <div className="min-w-0">
-            <div className="kicker mb-1">From the Annals</div>
             <div className="flex items-center gap-3">
               <h1 className="h-display text-2xl">{user.username}</h1>
               {user.school && (
@@ -53,18 +52,18 @@ export default function Wizard() {
                 />
               )}
             </div>
-            <p className="mt-1 text-sm text-bone-dim">Enrolled {formatDate(user.createdAtUtc)}</p>
+            <p className="mt-1 text-sm text-bone-dim">Joined {formatDate(user.createdAtUtc)}</p>
           </div>
           <div className="ml-auto flex gap-6 text-right">
             <div>
               <div className="h-display text-2xl leading-none">{modCount}</div>
               <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-bone-dim">
-                tome{modCount === 1 ? '' : 's'}
+                mod{modCount === 1 ? '' : 's'}
               </div>
             </div>
             <div>
               <div className="h-display text-2xl leading-none">{formatCount(downloadsTotal)}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-bone-dim">taken</div>
+              <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-bone-dim">downloads</div>
             </div>
           </div>
         </div>
@@ -72,14 +71,12 @@ export default function Wizard() {
 
       <section className="mt-12">
         <Reveal>
-          <div className="kicker mb-1.5">Shelved under their name</div>
           <h2 className="h-display text-xl">Contributions to the Library</h2>
         </Reveal>
         <div className="mt-6">
           {mods.length === 0 ? (
             <EmptyState
-              title="No tomes yet"
-              line="A wizard of theory, not practice. The Librarian reserves judgment."
+              title="No mods yet"
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

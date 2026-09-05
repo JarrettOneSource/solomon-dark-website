@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import Hero from './Hero'
 import Reveal from '../fx/Reveal'
 import PopularStrip from '../components/PopularStrip'
-import { SectionHead, StatTile } from '../components/ui'
+import { StatTile } from '../components/ui'
 import { api } from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
@@ -12,27 +12,27 @@ import { formatCount } from '../lib/format'
 const FEATURES = [
   {
     icon: skillIcons.door,
-    title: 'Search Parties',
+    title: 'Multiplayer',
     body:
-      'Live browser co-op in one shared hub. Meet in the Courtyard, inspect another player, and form a party before taking on Solomon Dark.',
+      'Meet other wizards in the Courtyard and form a party to take on Solomon Dark.',
     to: '/game',
-    label: 'Enter the Hub',
+    label: 'Play',
   },
   {
     icon: skillIcons.book,
     title: 'Lua Modding',
     body:
-      'Build, browse, and play community Lua mods through the Dark Cloud.',
-    to: '/game',
-    label: 'Open the Dark Cloud',
+      'Create Lua mods and custom Boneyards, or try what other players have made.',
+    to: '/mods',
+    label: 'Browse mods',
   },
   {
     icon: skillIcons.bag,
     title: 'Cloud Saves',
     body:
-      'A Solomon Darker account syncs save slots across machines, so no run dies of a misplaced hard drive.',
+      'Keep your progress across devices with a Solomon Darker account.',
     to: '/account',
-    label: 'Manage your account',
+    label: 'Your account',
   },
 ]
 
@@ -49,7 +49,7 @@ export default function Home() {
           less than the menu column's pb-16, so it can never cover a plaque */}
       <div className="relative z-20 mx-auto mt-6 max-w-6xl px-4 sm:-mt-14 sm:px-6">
         <Reveal>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatTile
               icon={skillIcons.door}
               value={stats.data?.matchesLive ?? null}
@@ -80,7 +80,7 @@ export default function Home() {
 
       {/* the revival */}
       <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
-        <SectionHead kicker="What this is" title="The Revival" />
+        <h2 className="h-display mb-6 text-xl sm:text-2xl">Back from the Dead</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {FEATURES.map((f, i) => (
             <Reveal key={f.title} delay={i * 90}>
@@ -105,66 +105,24 @@ export default function Home() {
         </div>
       </section>
 
-      {/* search parties */}
-      <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
-        <Reveal>
-          <SectionHead kicker="Live right now" title="Search Parties" />
-          <div className="panel panel-ornate flex flex-wrap items-center gap-5 p-6">
-            <img src={skillIcons.door} alt="" className="h-12 w-12" />
-            <p className="text-fell min-w-0 flex-1 text-bone-dim">
-              Browse parties in Play or the Dark Cloud, enter a Party ID, or invite
-              the player standing beside you in the Courtyard.
-            </p>
-            <Link to="/game" className="btn btn-gold">Join Party</Link>
-          </div>
-        </Reveal>
-      </section>
-
       {/* in heavy circulation */}
       <PopularStrip className="mx-auto mt-24 max-w-6xl px-4 sm:px-6" />
 
       {/* the story so far */}
       <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
-        <div className="panel panel-ornate overflow-hidden">
-          <div className="grid gap-8 p-8 sm:p-10 md:grid-cols-[1.2fr_1fr]">
-            <Reveal>
-              <div>
-                <div className="kicker mb-1.5">Ten. Dead. Mages.</div>
-                <h2 className="h-display text-xl sm:text-2xl">The Story So Far</h2>
-                <div className="prose-sdr mt-2 text-[15px]">
-                  <p>
-                    In 2015, after years of anticipation, Raptisoft confirmed{' '}
-                    <em>Solomon Dark</em> — the third Solomon game — would never be
-                    finished. On Halloween 2016 the unfinished beta escaped for a
-                    single day, and fans mirrored it before midnight. This project
-                    turns the preserved evidence into an authoritative web port with
-                    subscribed Lua mods, browser multiplayer, and this hall of records.
-                  </p>
-                </div>
-                <Link to="/about" className="btn btn-stone mt-6">
-                  The Full Revival Story
-                </Link>
-              </div>
-            </Reveal>
-            <Reveal delay={120}>
-              <ul className="space-y-4 border-l border-gold/20 pl-6 text-sm">
-                {[
-                  ['2010', 'Solomon’s Keep enchants the App Store in April; Solomon’s Boneyard rises that September.'],
-                  ['2015', 'Raptisoft confirms Solomon Dark will never be finished. The tower goes quiet.'],
-                  ['2016', 'The unfinished beta escapes for one Halloween. Fans preserve it before midnight.'],
-                  ['2022', 'A community archive gathers the surviving builds — 0.71.0, 0.72.0, 0.72.5.'],
-                  ['2026', 'The Solomon Darker web port awakens: subscribed mods, browser multiplayer, and cloud saves. You are here.'],
-                ].map(([year, line]) => (
-                  <li key={year} className="relative">
-                    <span className="absolute -left-[27px] top-1.5 h-2 w-2 rounded-full bg-gold shadow-[0_0_8px_rgba(200,168,98,.8)]" />
-                    <span className="font-mono text-xs text-gold">{year}</span>
-                    <p className="mt-0.5 leading-snug text-bone-dim">{line}</p>
-                  </li>
-                ))}
-              </ul>
-            </Reveal>
+        <Reveal>
+          <div className="panel panel-ornate p-8 sm:p-10">
+            <div className="kicker mb-1.5">Ten. Dead. Mages.</div>
+            <h2 className="h-display text-xl sm:text-2xl">The Revival Story</h2>
+            <p className="text-fell mt-3 max-w-2xl text-bone-dim">
+              Raptisoft left <em>Solomon Dark</em> unfinished. Fans preserved the
+              beta. Solomon Darker brings it back to the browser.
+            </p>
+            <Link to="/about" className="btn btn-stone mt-6">
+              Read the story
+            </Link>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* enroll CTA */}
@@ -174,9 +132,6 @@ export default function Home() {
           {user ? (
             <>
               <h2 className="h-display text-xl">Welcome back, {user.username}</h2>
-              <p className="text-fell mx-auto mt-3 max-w-md text-bone-dim">
-                Your saves and mods are right where you left them.
-              </p>
               <Link to="/account" className="btn btn-gold mt-6">
                 Open your account
               </Link>
@@ -185,9 +140,7 @@ export default function Home() {
             <>
               <h2 className="h-display text-xl">Create an Account</h2>
               <p className="text-fell mx-auto mt-3 max-w-md text-bone-dim">
-                A Solomon Darker account gets you cloud saves synced across machines and
-                the right to publish your own mods. It costs nothing. Survival is
-                not guaranteed.
+                Save your progress and publish your own mods.
               </p>
               <Link to="/register" className="btn btn-gold mt-6">
                 Create account

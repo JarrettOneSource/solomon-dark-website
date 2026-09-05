@@ -1,4 +1,4 @@
-// The plan chest: local drafts in the browser, plus whatever the Annals hold
+// Local and cloud saves: local drafts in the browser, plus whatever the Annals hold
 // for signed-in wizards. Open one, start fresh, or let one go.
 
 import { useEffect, useState } from 'react'
@@ -44,7 +44,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
         if (!stale) setCloud(items)
       })
       .catch((err) => {
-        if (!stale) setCloudNote(err instanceof Error ? err.message : 'The Annals are not answering.')
+        if (!stale) setCloudNote(err instanceof Error ? err.message : 'Could not load cloud drafts.')
       })
     return () => {
       stale = true
@@ -61,7 +61,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
       setCloudNote(
         err instanceof Error
           ? `${item.name}: ${err.message}`
-          : `${item.name} would not open.`,
+          : `Could not open ${item.name}.`,
       )
     }
   }
@@ -79,7 +79,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
       >
         <div className="flex items-center justify-between border-b border-gold/15 px-5 py-4">
           <div>
-            <div className="kicker">The plan chest</div>
+            <div className="kicker">Local and cloud saves</div>
             <h2 className="h-display mt-0.5 text-lg">Drafts</h2>
           </div>
           <button
@@ -95,7 +95,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {drafts.length === 0 ? (
             <p className="text-fell py-4 text-center text-sm text-bone-dim">
-              The chest is empty. How refreshingly tidy.
+              No drafts saved on this device.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -110,7 +110,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
                     <span className="block truncate text-sm text-bone">
                       {d.name || 'Untitled acre'}
                       {d.id === currentId && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wider text-gold/70">on the table</span>
+                        <span className="ml-2 text-[10px] uppercase tracking-wider text-gold/70">open</span>
                       )}
                     </span>
                     <span className="mt-0.5 block font-mono text-[10px] text-bone-dim/70">
@@ -127,16 +127,16 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
                         setCondemned(null)
                       }}
                     >
-                      Certain?
+                      Delete permanently
                     </button>
                   ) : (
                     <button
                       type="button"
                       className="text-xs text-bone-dim/60 hover:text-blood"
-                      title="Burn this draft"
+                      title="Delete this local draft"
                       onClick={() => setCondemned(d.id)}
                     >
-                      burn
+                      Delete
                     </button>
                   )}
                 </li>
@@ -147,14 +147,14 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
           {user && (
             <section className="mt-5 border-t border-gold/10 pt-4">
               <h3 className="font-display text-[11px] font-bold uppercase tracking-[0.2em] text-gold">
-                The Annals hold
+                Cloud drafts
               </h3>
               {cloudNote && <p className="text-fell mt-2 text-xs text-blood/90">{cloudNote}</p>}
               {cloud === null && !cloudNote ? (
                 <Spinner size={30} />
               ) : cloud && cloud.length === 0 ? (
                 <p className="text-fell mt-2 text-xs text-bone-dim/70">
-                  Nothing lodged yet. Send a draft up and the chronicler will make room.
+                  No drafts saved to the cloud.
                 </p>
               ) : (
                 <ul className="mt-2 space-y-2">
@@ -164,7 +164,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
                         type="button"
                         className="min-w-0 flex-1 text-left"
                         onClick={() => openCloud(c)}
-                        title="Open a copy from the Annals"
+                        title="Open a copy of this cloud draft"
                       >
                         <span className="block truncate text-sm text-bone">{c.name}</span>
                         <span className="mt-0.5 block font-mono text-[10px] text-bone-dim/70">
@@ -181,21 +181,21 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
                               await api.boneyards.remove(c.id)
                               setCloud((prev) => (prev ?? []).filter((x) => x.id !== c.id))
                             } catch (err) {
-                              setCloudNote(err instanceof Error ? err.message : 'The Annals refused.')
+                              setCloudNote(err instanceof Error ? err.message : 'Could not delete this cloud draft.')
                             }
                             setCloudCondemned(null)
                           }}
                         >
-                          Certain?
+                          Delete permanently
                         </button>
                       ) : (
                         <button
                           type="button"
                           className="text-xs text-bone-dim/60 hover:text-blood"
-                          title="Strike this draft from the Annals"
+                          title="Delete this cloud draft"
                           onClick={() => setCloudCondemned(c.id)}
                         >
-                          strike
+                          Delete
                         </button>
                       )}
                     </li>
@@ -208,7 +208,7 @@ export default function DraftsDrawer({ currentId, onOpen, onOpenCloud, onNew, on
 
         <div className="border-t border-gold/15 px-5 py-4">
           <button type="button" className="btn btn-gold w-full" onClick={onNew}>
-            Break new ground
+            New Boneyard
           </button>
         </div>
       </div>

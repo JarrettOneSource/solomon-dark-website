@@ -47,12 +47,10 @@ function SchoolPicker() {
   return (
     <section className="mt-12">
       <Reveal>
-        <div className="kicker mb-1.5">Declared to the faculty</div>
         <h2 className="h-display text-xl">School of Magic</h2>
         <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
-          Declare a school and your wand follows you around the site — cursor, click,
-          and all. Other players will see it beside your name. Click your school again
-          to renounce it.
+          Your school appears beside your name and sets your cursor effects.
+          Select it again to clear your choice.
         </p>
       </Reveal>
       <div className="mt-6 flex flex-wrap gap-3">
@@ -182,7 +180,7 @@ function BrowserGameSaveSlot({
         Browser Game
       </div>
       <div className="mt-0.5 text-xs text-bone-dim">
-        {save ? 'Saved' : 'Unwritten'}
+        {save ? 'Saved' : 'Empty'}
       </div>
       {save ? (
         <button
@@ -235,7 +233,7 @@ function BrowserGameSaveSlot({
             {' / '}{pendingImport.discipline} · {pendingImport.gold} gold
           </div>
           <div className="mt-1">
-            {pendingImport.learnedRows} learned rows · {pendingImport.hagathaPerks} Hagatha perks
+            {pendingImport.learnedRows} learned skills · {pendingImport.hagathaPerks} Hagatha perks
           </div>
           <p className="mt-2">{pendingImport.source === 'browser'
             ? 'Browser save: inventory, equipment, and the saved run will be restored.'
@@ -250,7 +248,7 @@ function BrowserGameSaveSlot({
               disabled={busy}
               onClick={() => { void applySaveImport() }}
             >
-              {save ? 'replace slot I' : 'write slot I'}
+              {save ? 'replace slot I' : 'save to slot I'}
             </button>
             <button
               type="button"
@@ -318,7 +316,6 @@ export default function Account() {
       {/* Memoratorium — cloud saves */}
       <section className="mt-12">
         <Reveal>
-          <div className="kicker mb-1.5">Runs on record</div>
           <h2 className="h-display text-xl">Cloud Saves</h2>
           <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
             The browser game writes slot I automatically while you play.
@@ -340,7 +337,6 @@ export default function Account() {
         <Reveal>
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="kicker mb-1.5">Authored works</div>
               <h2 className="h-display text-xl">My Mods</h2>
             </div>
             <Link to="/mods/upload" className="btn btn-gold !py-2.5 !text-[11px]">

@@ -17,7 +17,7 @@ function Arrow({
   return (
     <button
       type="button"
-      aria-label={dir === 1 ? 'Next plate' : 'Previous plate'}
+      aria-label={dir === 1 ? 'Next screenshot' : 'Previous screenshot'}
       onClick={onClick}
       className={`flex h-10 w-10 items-center justify-center rounded-full border border-gold/30 bg-black/60 pb-0.5 font-display text-xl leading-none text-gold backdrop-blur-sm transition-all hover:border-gold/70 hover:text-gold-bright hover:shadow-[0_0_14px_rgba(200,168,98,.35)] ${className}`}
     >
@@ -70,7 +70,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
     <div>
       <figure
         tabIndex={0}
-        aria-label={`${name} — plate ${i + 1} of ${count}`}
+        aria-label={`${name} — screenshot ${i + 1} of ${count}`}
         onKeyDown={(e) => {
           if (open) return // the lightbox's window listener owns the keys
           if (e.key === 'ArrowRight') {
@@ -94,7 +94,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
       >
         <button
           type="button"
-          aria-label="Study this plate up close"
+          aria-label="Enlarge screenshot"
           onClick={() => {
             setOpen(true)
             playSound('attune', 0.12)
@@ -104,7 +104,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
           <AuthenticatedImage
             key={plate.id}
             src={plate.url}
-            alt={`${name} — plate ${i + 1}`}
+            alt={`${name} — screenshot ${i + 1}`}
             className="aspect-video w-full object-contain [animation:plate-in_.35s_ease_both]"
           />
         </button>
@@ -136,7 +136,7 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
               type="button"
               ref={n === i ? activeThumb : undefined}
               onClick={() => setIndex(n)}
-              aria-label={`Plate ${n + 1}`}
+              aria-label={`Screenshot ${n + 1}`}
               aria-current={n === i}
               className={`h-16 w-28 flex-none overflow-hidden rounded border transition-all ${
                 n === i
@@ -156,14 +156,14 @@ export default function PlatesGallery({ plates, name }: { plates: Plate[]; name:
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={`${name} — plate ${i + 1} of ${count}`}
+            aria-label={`${name} — screenshot ${i + 1} of ${count}`}
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm sm:p-10"
           >
             <AuthenticatedImage
               key={plate.id}
               src={plate.url}
-              alt={`${name} — plate ${i + 1}`}
+              alt={`${name} — screenshot ${i + 1}`}
               onClick={(e) => e.stopPropagation()}
               className="max-h-full max-w-full rounded border border-gold/30 object-contain shadow-[0_0_80px_rgba(0,0,0,.9)] [animation:plate-in_.25s_ease_both]"
             />

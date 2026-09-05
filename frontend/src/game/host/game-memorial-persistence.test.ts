@@ -39,7 +39,8 @@ test('atomically persists and reopens the exact shared-Hub memorial state', () =
     persistence.persist(completed)
 
     assert.deepEqual(openGameMemorialPersistence(path).initialState, completed)
-    assert.equal(statSync(path).mode & 0o777, 0o600)
+    // Windows exposes a shared read/write bit instead of POSIX owner permissions.
+    assert.equal(statSync(path).mode & 0o777, process.platform === 'win32' ? 0o666 : 0o600)
     assert.deepEqual(readdirSync(directory), ['memoratorium.json'])
   } finally {
     rmSync(directory, { force: true, recursive: true })

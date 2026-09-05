@@ -36,11 +36,11 @@ export default function ModUpload() {
   const pickZip = (f: File | undefined | null) => {
     if (!f) return
     if (!f.name.toLowerCase().endsWith('.zip')) {
-      setError('The Library accepts zips only.')
+      setError('Choose a ZIP file.')
       return
     }
     if (f.size > MAX_ZIP_MB * 1024 * 1024) {
-      setError(`That tome is over ${MAX_ZIP_MB}MB. Abridge it.`)
+      setError(`The ZIP must be ${MAX_ZIP_MB} MB or smaller.`)
       return
     }
     setError(null)
@@ -50,11 +50,11 @@ export default function ModUpload() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!file) {
-      setError('No zip attached. The Librarian refuses to catalogue thin air.')
+      setError('Choose a ZIP file to upload.')
       return
     }
     if (name.trim().length < 3) {
-      setError('Name your tome (3+ characters).')
+      setError('Enter a mod name with at least 3 characters.')
       return
     }
     setBusy(true)
@@ -80,11 +80,10 @@ export default function ModUpload() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
       <Reveal>
-        <div className="kicker mb-1.5">Acquisitions department</div>
-        <h1 className="h-display text-3xl">Contribute a Tome</h1>
+        <h1 className="h-display text-3xl">Upload a Mod</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          Upload a web-port package with <code>manifest.json</code> at the ZIP root. Packages may
-          contain typed Boneyards, sandboxed Lua, or both.{' '}
+          Upload a ZIP containing Lua scripts, Boneyards, or both, with{' '}
+          <code>manifest.json</code> at the root.{' '}
           <a href="/mod-package-format.md" className="link-arcane">Read the package format</a>
           {' '}or <a href="/mod-manifest.schema.json" className="link-arcane">open the JSON Schema</a>.
         </p>
@@ -112,7 +111,7 @@ export default function ModUpload() {
             <>
               <div className="font-mono text-sm text-moss">{file.name}</div>
               <div className="font-mono text-xs text-bone-dim">
-                {(file.size / (1024 * 1024)).toFixed(2)} MB — looks tome-shaped
+                {(file.size / (1024 * 1024)).toFixed(2)} MB
               </div>
               <button type="button" className="link-arcane text-xs uppercase tracking-wider" onClick={() => setFile(null)}>
                 choose another
@@ -121,14 +120,14 @@ export default function ModUpload() {
           ) : (
             <>
               <div className="font-display text-sm font-bold uppercase tracking-[0.15em] text-bone">
-                Drop your mod zip here
+                Drop your mod ZIP here
               </div>
               <div className="text-xs text-bone-dim">or</div>
               <label className="btn btn-stone cursor-pointer !py-2 !text-[11px]">
-                Browse for zip
+                Choose ZIP
                 <input type="file" accept=".zip" className="hidden" onChange={(e) => pickZip(e.target.files?.[0])} />
               </label>
-              <div className="text-[11px] text-bone-dim/60">.zip up to {MAX_ZIP_MB}MB</div>
+              <div className="text-[11px] text-bone-dim/60">ZIP · up to {MAX_ZIP_MB} MB</div>
             </>
           )}
         </div>
@@ -136,7 +135,7 @@ export default function ModUpload() {
         <ModVisibilityField disabled={busy} onChange={setVisibility} value={visibility} />
 
         <div>
-          <span className="label">Filing tags</span>
+          <span className="label">Tags</span>
           <TagsInput
             tags={tags}
             onChange={setTags}
@@ -144,22 +143,21 @@ export default function ModUpload() {
             disabled={busy}
           />
           <span className="mt-1.5 block text-xs text-bone-dim/70">
-            Up to five — how the Library files it. Boneyard runs tag themselves
-            “boneyard”.
+            Up to five tags. Boneyards get the “boneyard” tag automatically.
           </span>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Tome name">
+          <Field label="Mod name">
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Shock Nova Rework" maxLength={60} />
           </Field>
-          <Field label="First version" hint="Must exactly match manifest.version.">
+          <Field label="First version" hint="Must match the version in manifest.json.">
             <input className="input" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.0" />
           </Field>
         </div>
 
-        <Field label="Summary" hint="One line on the card in the Library. ≤140 characters.">
-          <input className="input" value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={140} placeholder="Certified by no one. Works on my machine." />
+        <Field label="Summary" hint="Shown on your Library card. Up to 140 characters.">
+          <input className="input" value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={140} placeholder="Describe what your mod changes." />
         </Field>
 
         <Field label="Description">
@@ -168,11 +166,11 @@ export default function ModUpload() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={10000}
-            placeholder={'What it does, how to configure it, what it breaks.\nPlain text is fine.'}
+            placeholder={'Describe features, setup, and known issues.\nPlain text only.'}
           />
         </Field>
 
-        <Field label="Screenshots" hint="Up to 10 · png/jpg · 2MB each">
+        <Field label="Screenshots" hint="Up to 10 · PNG/JPG · 2 MB each">
           <input
             type="file"
             accept="image/png,image/jpeg"
@@ -185,7 +183,7 @@ export default function ModUpload() {
         {error && <ErrorNote message={error} />}
 
         <button type="submit" className="btn btn-gold w-full !py-4" disabled={busy}>
-          {busy ? 'Cataloguing… do not reshelve' : '✦ Submit to the Library'}
+          {busy ? 'Uploading…' : 'Publish mod'}
         </button>
       </form>
     </div>

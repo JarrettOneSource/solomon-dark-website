@@ -200,9 +200,7 @@ export default function Hero() {
         }}
       />
 
-      {/* L3 — gravestones across the field, each with its resident (the cowl
-          returns once we've decompiled how the game assembles its menu
-          composite) */}
+      {/* L3 — gravestones and their epitaphs */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-56" style={layer(-7)}>
         <Grave className="absolute bottom-2 left-[3%]" src={art.graveCeltic} imgClass="h-28 opacity-70" filter="brightness(0.4) blur(1px)"
           epitaph={<>Lucritius the Fire Mage<br />burned bright. Then just burned.</>} onTip={setTip} />
@@ -293,7 +291,7 @@ export default function Hero() {
           around the menu rather than clipping it */}
       <div className="pointer-events-none relative z-10 mx-auto flex min-h-[92vh] max-w-6xl items-center justify-center px-4 sm:px-6">
         <div className="pointer-events-auto flex w-full max-w-[560px] flex-col items-center pb-16 pt-8 text-center lg:max-xl:scale-[0.94]">
-          <p className="kicker mb-5">Raptisoft’s lost game · raised from the dead</p>
+          <p className="kicker mb-5">Raptisoft’s unfinished game, back in the browser</p>
 
           {/* the real title-screen logo, with a one-time shimmer sweep */}
           <div className="relative w-full max-w-[300px] sm:max-w-[440px]">
@@ -335,7 +333,7 @@ export default function Hero() {
                 to="/game"
                 className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
-                Play Now
+                Play
               </Link>
               <a
                 href="https://discord.gg/HGHxZgyM2p"

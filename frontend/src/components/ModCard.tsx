@@ -132,7 +132,7 @@ export default function ModCard({
                 <TagBadge
                   key={tag}
                   tag={tag}
-                  title={`Everything filed under ${tag}`}
+                  title={`Browse mods tagged ${tag}`}
                   onClick={(e) => {
                     // chips live inside the card's Link — don't open the tome
                     e.preventDefault()
