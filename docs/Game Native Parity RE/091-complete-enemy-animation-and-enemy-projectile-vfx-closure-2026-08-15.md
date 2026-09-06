@@ -1630,7 +1630,7 @@ browser seed policy, with the recovered native random domains and ranges.
 The separate Terrain-mask producer and party-count changes between enemy birth
 and reward credit remain the named neighboring follow-ups above.
 
-### Final canonical receipt — 2026-09-06
+### Pre-projectile-integration canonical receipt — 2026-09-06
 
 The exact committed candidate `024e61cf6860a4f5a69a5b116e5d6ee3022a7cee`,
 rebased onto `d31c155b`, passed `/opt/homebrew/bin/bash ./scripts/validate.sh`
@@ -1656,5 +1656,22 @@ and actual audio playback. Page, console, wire, and HTTP error checks passed;
 the command and its owned browser/servers exited normally. The eight compact
 mask cases and four Dark Cloud viewport scenarios also passed; their renderer,
 scene, and probe sources are unchanged by the subsequent Lua integrations.
-This receipt is a documentation-only follow-up to that candidate; runtime
-sources, tests, and quality configuration are unchanged.
+This receipt covers the earlier candidate only. The subsequent integration
+below requires a new complete gate and browser receipt before publication.
+
+### Integration with hostile projectile and New Game changes — 2026-09-06
+
+The candidate now includes main through `ce13acd0`. Spider actors use the
+canonical enemy store and target-binding owner introduced by the hostile
+projectile work. Normal, paused, damage-only, and finished transactions retain
+both projectile knockback/target-grid state and Spider restraint/effect state.
+The authoritative Spider light query shares the recovered Demonfire,
+explosion, and Fire Patch light sources with presentation.
+
+Protocol 124 and save schema 33 distinguish this combined contract from the
+published projectile protocol 123 and schema 32. A schema-32 regression retains
+nonempty projectile knockbacks and target bindings while initializing only
+future Spider wave phases; it does not replay completed phases. Type checking
+and 431 focused Mac tests pass across actors, projectiles, spell combat,
+restraints, saves, protocol, and presentation. The complete combined-candidate
+validation and browser checks remain pending.
