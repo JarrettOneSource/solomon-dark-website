@@ -637,6 +637,10 @@ try {
         encounter: null,
         enemies: enemiesAt(advanced),
         enemyEvents: [],
+        spiderSilks: [],
+        silkFragments: [],
+        spiderRemains: [],
+        webbedPlayers: {},
         enemyWorldFeedback: { accumulator: 0, magnitude: 0 },
         enemyProjectileEffects,
         enemyProjectiles: enemyProjectiles.map((source) => ({
